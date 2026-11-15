@@ -99,6 +99,8 @@ object VoiciCallCenter {
         update { Ui(phase = Phase.Ringing, callId = push.callId, name = FSStrings.get(R.string.voici_call_someone)) }
         scope.launch {
             val keys = runCatching { VoiciCenter.shared?.callKeys() }.getOrNull()
+                // "Answer calls while Flagship is locked" is on: the call key answers; the caller stays "Someone on voi.ci".
+                ?: runCatching { VoiciCenter.shared?.lockedCallKeys() }.getOrNull()
             if (keys != null) startSession(push, keys) else update { it.copy(phase = Phase.NeedsUnlock) }
             ring(push)
         }

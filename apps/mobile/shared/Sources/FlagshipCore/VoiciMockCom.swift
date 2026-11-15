@@ -150,6 +150,31 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
         return w { missedCallItems[username.lowercased()] ?? [] }
     }
 
+    public private(set) var callKeys: [String: JSONValue] = [:]
+    public private(set) var callKeyRevokes: [JSONValue] = []
+
+    public func registerCallKey(username: String, proof: JSONValue, device: VoiciDeviceSigner) async throws {
+        try down()
+        let u = username.lowercased()
+        guard let idx = w({ pages[u] }).flatMap({ VoiciPage.parseVoiciPageIndex($0) }),
+              VoiciCalls.verifyCallKeyBinding(proof, ownerSignPub: idx.ownerSignPub, username: u),
+              let d = proof["binding"]?["deviceId"]?.string else { throw VoiciComError(status: 403, code: "bad-signature") }
+        w { callKeys["\(u)|\(d)"] = proof }
+    }
+
+    public func revokeCallKey(username: String, revoke: JSONValue, signature: String) async throws {
+        try down()
+        let u = username.lowercased()
+        let owner = w({ pages[u] }).flatMap({ VoiciPage.parseVoiciPageIndex($0) })?.ownerSignPub ?? ""
+        guard let d = revoke["deviceId"]?.string, let k = revoke["callKeyPub"]?.string, let at = revoke["revokedAt"]?.time, revoke["username"]?.string == u,
+              VoiciCalls.verifyCallKeyRevoke(username: u, deviceId: d, callKeyPub: k, revokedAt: at, signature: signature, ownerSignPub: owner)
+        else { throw VoiciComError(status: 403, code: "bad-signature") }
+        w {
+            callKeyRevokes.append(revoke)
+            if callKeys["\(u)|\(d)"]?["binding"]?["callKeyPub"]?.string == k { callKeys["\(u)|\(d)"] = nil }
+        }
+    }
+
     public func callAllow(username: String, allow: JSONValue, signature: String) async throws {
         try down()
         let u = username.lowercased()

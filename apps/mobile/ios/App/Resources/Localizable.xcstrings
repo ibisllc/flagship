@@ -153573,6 +153573,88 @@
           }
         }
       }
+    },
+    "Answer calls while Flagship is locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contestar llamadas con Flagship bloqueado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Répondre aux appels quand Flagship est verrouillé"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anrufe annehmen, während Flagship gesperrt ist"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atender chamadas com o Flagship bloqueado"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship がロック中でも通話に応答"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Flagship 锁定时接听来电"
+          }
+        }
+      }
+    },
+    "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo guarda una clave que solo sirve para contestar llamadas, así puedes contestar desde la pantalla de bloqueo. Quien llama aparece como “Alguien en voi.ci” hasta que desbloquees."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil garde une clé qui ne sert qu'à répondre aux appels : vous pouvez ainsi répondre depuis l'écran verrouillé. L'appelant s'affiche comme « Quelqu'un sur voi.ci » jusqu'au déverrouillage."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät behält einen Schlüssel, der nur Anrufe annehmen kann, damit du vom Sperrbildschirm aus annehmen kannst. Der Anrufer erscheint als „Jemand auf voi.ci“, bis du entsperrst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo guarda uma chave que só serve para atender chamadas, para você atender pela tela de bloqueio. Quem liga aparece como “Alguém no voi.ci” até você desbloquear."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスは通話への応答にしか使えない鍵を保持するので、ロック画面から応答できます。ロックを解除するまで、発信者は「voi.ci のユーザー」と表示されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备保存一个只能用于接听来电的密钥，因此可以在锁定屏幕上接听。在你解锁之前，来电者显示为“voi.ci 上的某人”。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

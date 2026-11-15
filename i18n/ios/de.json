@@ -3745,5 +3745,7 @@
   "Directory key": "Verzeichnisschlüssel",
   "Backup keys of %@": "Sicherungsschlüssel von %@",
   "Disk key of %@": "Festplattenschlüssel von %@",
-  "A disk key changes when its server is re-keyed, which isn't available yet.": "Ein Festplattenschlüssel ändert sich, wenn sein Server neu verschlüsselt wird. Das ist noch nicht verfügbar."
+  "A disk key changes when its server is re-keyed, which isn't available yet.": "Ein Festplattenschlüssel ändert sich, wenn sein Server neu verschlüsselt wird. Das ist noch nicht verfügbar.",
+  "Answer calls while Flagship is locked": "Anrufe annehmen, während Flagship gesperrt ist",
+  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "Dieses Gerät behält einen Schlüssel, der nur Anrufe annehmen kann, damit du vom Sperrbildschirm aus annehmen kannst. Der Anrufer erscheint als „Jemand auf voi.ci“, bis du entsperrst."
 }

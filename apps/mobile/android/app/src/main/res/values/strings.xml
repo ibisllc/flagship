@@ -4028,4 +4028,7 @@
     <string name="org_key_archive">Backup keys of %1$s</string>
     <string name="org_key_disk">Disk key of %1$s</string>
     <string name="org_disk_key_later">A disk key changes when its server is re-keyed, which isn\'t available yet.</string>
+    <string name="voici_calls_answer_locked">Answer calls while Flagship is locked</string>
+    <string name="voici_calls_answer_locked_footer">This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.</string>
+    <string name="voici_calls_answer_locked_unlock">Unlock Flagship and try again.</string>
 </resources>

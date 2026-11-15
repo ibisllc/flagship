@@ -4020,5 +4020,8 @@
   "org_key_directory": "Clave del directorio",
   "org_key_archive": "Claves de copia de seguridad de %1$s",
   "org_key_disk": "Clave del disco de %1$s",
-  "org_disk_key_later": "La clave de un disco cambia cuando su servidor se vuelve a cifrar, algo que aún no está disponible."
+  "org_disk_key_later": "La clave de un disco cambia cuando su servidor se vuelve a cifrar, algo que aún no está disponible.",
+  "voici_calls_answer_locked": "Contestar llamadas con Flagship bloqueado",
+  "voici_calls_answer_locked_footer": "Este dispositivo guarda una clave que solo sirve para contestar llamadas, así puedes contestar desde la pantalla de bloqueo. Quien llama aparece como “Alguien en voi.ci” hasta que desbloquees.",
+  "voici_calls_answer_locked_unlock": "Desbloquea Flagship y vuelve a intentarlo."
 }

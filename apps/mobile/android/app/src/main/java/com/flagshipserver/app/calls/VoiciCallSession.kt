@@ -30,13 +30,18 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.security.SecureRandom
 
-/** What a call needs from this device's keys (VoiciCenter.callKeys). */
+/**
+ * What a call needs from this device's keys (VoiciCenter.callKeys). Unlocked, it signs with the account device key and
+ * the owner messages key; locked (the setting "Answer calls while Flagship is locked"), only [callKey] signs, and
+ * nothing else of the account is at hand: no inbox key (the caller is "Someone on voi.ci"), no local block list
+ * (`.com` refuses blocked callers before it rings).
+ */
 class VoiciCallKeys(
     val username: String,
-    val device: VoiciDeviceSigner,
+    val device: VoiciDeviceSigner?,
     val pageId: String,
     val acceptsCalls: Boolean,
-    val ownerSignSeed: ByteArray,
+    val ownerSignSeed: ByteArray?,
     val ownerSignPub: String,
     /** The page's inbox seeds, newest epoch first (a push sealed before a rotation still opens). */
     val inboxSeeds: List<ByteArray>,
@@ -45,8 +50,24 @@ class VoiciCallKeys(
     val blocked: Set<String>,
     val revoked: Set<String>,
     val nicknames: Map<String, String>,
+    val callKey: VoiciCallKey? = null,
 ) {
-    val deviceRef: String get() = VoiciCalls.deviceRef(device.pubHex)
+    val deviceRef: String get() = callKey?.deviceRef ?: VoiciCalls.deviceRef(device!!.pubHex)
+
+    fun signAnswer(body: VoiciCallAnswerBody): JsonObject =
+        callKey?.let { k -> VoiciCalls.signAnswerWithCallKey(body, k.proof) { k.signer.sign(it) } } ?: VoiciCalls.signAnswer(body, ownerSignSeed!!)
+
+    fun signEnd(callId: String, reason: String, at: Long): JsonObject? =
+        callKey?.let { k -> runCatching { VoiciCalls.signEndOwnerWithCallKey(callId, reason, at) { k.signer.sign(it) } }.getOrNull() }
+            ?: ownerSignSeed?.let { VoiciCalls.signEndOwner(callId, reason, at, it) }
+
+    companion object {
+        /** What a locked device has: its call key and the public facts kept with it. */
+        fun locked(k: VoiciCallKey, caKeys: List<String>, origin: String) = VoiciCallKeys(
+            username = k.username, device = null, pageId = k.pageId, acceptsCalls = true, ownerSignSeed = null, ownerSignPub = k.ownerSignPub,
+            inboxSeeds = emptyList(), caKeys = caKeys, origin = origin, blocked = emptySet(), revoked = emptySet(), nicknames = emptyMap(), callKey = k,
+        )
+    }
 
     /** The caller in a push, opened under the inbox keys: (pageId, conv, pseudonymPub) or null. */
     fun openPush(callId: String, sealed: ByteArray): Triple<String, String, String>? =
@@ -87,16 +108,23 @@ class VoiciCallSession(
         val path = "/api/voici/calls/${push.callId}/device"
         val requestId = randHex(16)
         val at = now()
+        val b = Request.Builder().url("wss://${push.room}$path?u=${keys.username}")
+        val k = keys.callKey
         val d = keys.device
-        val sig = d.signer.sign(AccountMetadata.canonicalDirectoryRequest(keys.username, d.deviceId, d.pubHex, "GET", path, requestId, at))
-        val req = Request.Builder()
-            .url("wss://${push.room}$path?u=${keys.username}")
-            .header("x-flagship-device-id", d.deviceId)
-            .header("x-flagship-device-pub", d.pubHex)
-            .header("x-flagship-request-id", requestId)
-            .header("x-flagship-issued-at", at.toString())
-            .header("x-flagship-signature", HexUtil.encode(sig))
-            .build()
+        if (k != null) {
+            // Locked: the call key's join (flagship/voici-call-join/v1) instead of device headers.
+            k.joinHeaders(push.callId, at).forEach { (h, v) -> b.header(h, v) }
+        } else if (d != null) {
+            val sig = d.signer.sign(AccountMetadata.canonicalDirectoryRequest(keys.username, d.deviceId, d.pubHex, "GET", path, requestId, at))
+            b.header("x-flagship-device-id", d.deviceId)
+                .header("x-flagship-device-pub", d.pubHex)
+                .header("x-flagship-request-id", requestId)
+                .header("x-flagship-issued-at", at.toString())
+                .header("x-flagship-signature", HexUtil.encode(sig))
+        } else {
+            return end("failed")
+        }
+        val req = b.build()
         media.onLocalIce = { c -> send(JsonObject(mapOf("t" to JsonPrimitive("ice"), "candidate" to (c?.let { JsonPrimitive(it) } ?: JsonNull)))) }
         media.onConnected = { listener.onConnected() }
         media.onFailed = { end("failed") }
@@ -168,7 +196,7 @@ class VoiciCallSession(
             xwingCiphertext = HexUtil.encode(ct), answerSdp = sdp, turnUser = turn.user, turnSecret = turn.secret, issuedAt = now(),
             media = if (r.hasVideo) (if (cameraAble) VoiciCalls.MEDIA_VIDEO else VoiciCalls.MEDIA_AUDIO) else null,
         )
-        val signed = VoiciCalls.signAnswer(body, keys.ownerSignSeed)
+        val signed = runCatching { keys.signAnswer(body) }.getOrElse { ss.fill(0); return "failed" }
         pending = Triple(ss, reqBytes, VoiciCalls.canonicalAnswer(body))
         // The caller's TURN stream may reach this device's bare name only for this answer's one-time credential.
         com.flagshipserver.app.phoneroute.CallTurnGate.arm(com.flagshipserver.app.phoneroute.CallTurnGate.Credential(turn.user, turn.secret))
@@ -194,11 +222,10 @@ class VoiciCallSession(
         end("decline")
     }
 
-    /** Hang up an answered call: the end order is signed by the owner messages key. */
+    /** Hang up an answered call: the end order is signed by the owner messages key, or the call key that answered. */
     fun hangUp() {
         scope.launch {
-            val order = VoiciCalls.signEndOwner(push.callId, "hangup", now(), keys.ownerSignSeed)
-            send(JsonObject(mapOf("t" to JsonPrimitive("end"), "end" to order)))
+            keys.signEnd(push.callId, "hangup", now())?.let { order -> send(JsonObject(mapOf("t" to JsonPrimitive("end"), "end" to order))) }
             end("hangup")
         }
     }

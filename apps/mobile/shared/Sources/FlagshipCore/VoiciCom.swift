@@ -117,11 +117,17 @@ public protocol VoiciComClient: Sendable {
     func missedCalls(username: String) async throws -> [VoiciMissedCallItem]
     /// The owner's signed "may call" / "may not call" for one conversation (`POST /api/voici/pages/<u>/call-allow`).
     func callAllow(username: String, allow: JSONValue, signature: String) async throws
+    /// Binds this device's call-only key (`POST /api/accounts/<u>/voici-call-key`, device headers, `{binding, signature}`).
+    func registerCallKey(username: String, proof: JSONValue, device: VoiciDeviceSigner) async throws
+    /// A signed revocation (`POST /api/accounts/<u>/voici-call-key/revoke`, `{revoke, signature}`).
+    func revokeCallKey(username: String, revoke: JSONValue, signature: String) async throws
 }
 
 public extension VoiciComClient {
     func missedCalls(username: String) async throws -> [VoiciMissedCallItem] { [] }
     func callAllow(username: String, allow: JSONValue, signature: String) async throws { throw VoiciComError(status: 0, code: "unsupported") }
+    func registerCallKey(username: String, proof: JSONValue, device: VoiciDeviceSigner) async throws { throw VoiciComError(status: 0, code: "unsupported") }
+    func revokeCallKey(username: String, revoke: JSONValue, signature: String) async throws { throw VoiciComError(status: 0, code: "unsupported") }
 }
 
 public enum VoiciComPaths {
@@ -134,6 +140,7 @@ public enum VoiciComPaths {
     public static func block(_ u: String) -> String { page(u) + "/block" }
     public static func calls(_ u: String) -> String { page(u) + "/calls" }
     public static func callAllow(_ u: String) -> String { page(u) + "/call-allow" }
+    public static func callKey(_ u: String) -> String { "/api/accounts/\(seg(u))/voici-call-key" }
     public static func drafts(_ u: String) -> String { "/api/accounts/\(seg(u))/voici-drafts" }
     public static func consume(_ u: String) -> String { drafts(u) + "/consume" }
     public static func state(_ u: String) -> String { "/api/accounts/\(seg(u))/messages-state" }
@@ -362,6 +369,16 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
 
     public func callAllow(username: String, allow: JSONValue, signature: String) async throws {
         try await call(try json("POST", VoiciComPaths.callAllow(username), ["allow": allow, "signature": .string(signature)]))
+    }
+
+    public func registerCallKey(username: String, proof: JSONValue, device: VoiciDeviceSigner) async throws {
+        let path = VoiciComPaths.callKey(username)
+        guard let a = await device("POST", path) else { throw VoiciComError(status: 0, code: "no-device-key") }
+        try await call(try json("POST", path, proof, headers: Self.deviceHeaders(a)))
+    }
+
+    public func revokeCallKey(username: String, revoke: JSONValue, signature: String) async throws {
+        try await call(try json("POST", VoiciComPaths.callKey(username) + "/revoke", ["revoke": revoke, "signature": .string(signature)]))
     }
 }
 

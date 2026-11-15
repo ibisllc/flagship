@@ -4023,4 +4023,7 @@
     <string name="org_key_archive">Clés de sauvegarde de %1$s</string>
     <string name="org_key_disk">Clé du disque de %1$s</string>
     <string name="org_disk_key_later">Une clé de disque change quand son serveur est rechiffré, ce qui n\'est pas encore disponible.</string>
+    <string name="voici_calls_answer_locked">Répondre aux appels quand Flagship est verrouillé</string>
+    <string name="voici_calls_answer_locked_footer">Cet appareil garde une clé qui ne sert qu\'à répondre aux appels : vous pouvez ainsi répondre depuis l\'écran verrouillé. L\'appelant s\'affiche comme « Quelqu\'un sur voi.ci » jusqu\'au déverrouillage.</string>
+    <string name="voici_calls_answer_locked_unlock">Déverrouillez Flagship et réessayez.</string>
 </resources>

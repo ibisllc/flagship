@@ -9,6 +9,12 @@ import com.flagshipserver.app.core.FSStrings
 object VoiciCopy {
     private val TEXT_CODES = setOf("too-long", "too-short", "control", "bidi", "bom", "edge-invisible", "not-nfc", "surrogate", "not-string")
 
+    /** Turning "Answer calls while Flagship is locked" on or off failed. */
+    fun callKeyError(code: String): String = when (code) {
+        "locked", "not-found" -> FSStrings.get(R.string.voici_calls_answer_locked_unlock)
+        else -> publishError(code)
+    }
+
     fun publishError(code: String?): String = FSStrings.get(
         when (code) {
             null -> R.string.voici_err_network

@@ -3745,5 +3745,7 @@
   "Directory key": "Clave del directorio",
   "Backup keys of %@": "Claves de copia de seguridad de %@",
   "Disk key of %@": "Clave del disco de %@",
-  "A disk key changes when its server is re-keyed, which isn't available yet.": "La clave de un disco cambia cuando su servidor se vuelve a cifrar, algo que aún no está disponible."
+  "A disk key changes when its server is re-keyed, which isn't available yet.": "La clave de un disco cambia cuando su servidor se vuelve a cifrar, algo que aún no está disponible.",
+  "Answer calls while Flagship is locked": "Contestar llamadas con Flagship bloqueado",
+  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "Este dispositivo guarda una clave que solo sirve para contestar llamadas, así puedes contestar desde la pantalla de bloqueo. Quien llama aparece como “Alguien en voi.ci” hasta que desbloquees."
 }

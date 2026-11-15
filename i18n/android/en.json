@@ -16562,5 +16562,17 @@
   "org_disk_key_later": {
     "en": "A disk key changes when its server is re-keyed, which isn't available yet.",
     "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "voici_calls_answer_locked": {
+    "en": "Answer calls while Flagship is locked",
+    "ctx": "voi.ci calls: answering while locked setting"
+  },
+  "voici_calls_answer_locked_footer": {
+    "en": "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.",
+    "ctx": "voi.ci calls: answering while locked setting"
+  },
+  "voici_calls_answer_locked_unlock": {
+    "en": "Unlock Flagship and try again.",
+    "ctx": "voi.ci calls: the locked-answer setting needs an unlocked account"
   }
 }

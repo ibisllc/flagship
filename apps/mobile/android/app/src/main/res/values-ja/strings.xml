@@ -4023,4 +4023,7 @@
     <string name="org_key_archive">%1$s のバックアップの鍵</string>
     <string name="org_key_disk">%1$s のディスクの鍵</string>
     <string name="org_disk_key_later">ディスクの鍵はサーバーの再暗号化で変わります。この機能はまだ使えません。</string>
+    <string name="voici_calls_answer_locked">Flagship がロック中でも通話に応答</string>
+    <string name="voici_calls_answer_locked_footer">このデバイスは通話への応答にしか使えない鍵を保持するので、ロック画面から応答できます。ロックを解除するまで、発信者は「voi.ci のユーザー」と表示されます。</string>
+    <string name="voici_calls_answer_locked_unlock">Flagship のロックを解除して、もう一度お試しください。</string>
 </resources>

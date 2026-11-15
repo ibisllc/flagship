@@ -4020,5 +4020,8 @@
   "org_key_directory": "Clé de l'annuaire",
   "org_key_archive": "Clés de sauvegarde de %1$s",
   "org_key_disk": "Clé du disque de %1$s",
-  "org_disk_key_later": "Une clé de disque change quand son serveur est rechiffré, ce qui n'est pas encore disponible."
+  "org_disk_key_later": "Une clé de disque change quand son serveur est rechiffré, ce qui n'est pas encore disponible.",
+  "voici_calls_answer_locked": "Répondre aux appels quand Flagship est verrouillé",
+  "voici_calls_answer_locked_footer": "Cet appareil garde une clé qui ne sert qu'à répondre aux appels : vous pouvez ainsi répondre depuis l'écran verrouillé. L'appelant s'affiche comme « Quelqu'un sur voi.ci » jusqu'au déverrouillage.",
+  "voici_calls_answer_locked_unlock": "Déverrouillez Flagship et réessayez."
 }

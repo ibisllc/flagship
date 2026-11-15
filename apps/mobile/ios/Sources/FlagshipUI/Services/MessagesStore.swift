@@ -56,6 +56,8 @@ public final class MessagesStore {
     public private(set) var lastError: String?
     /// Missed calls opened and checked here (docs/voici-calls.md §6), shown in their conversation's thread.
     public private(set) var missedCalls: [VoiciMissedCallRow] = []
+    /// "Answer calls while Flagship is locked" is on here: this device holds a bound call key.
+    public private(set) var answersWhileLocked = false
     /// A calls change being published (`setCalls`); nil: every publish carries the index's own calls setting.
     @ObservationIgnored private var pendingCalls: (on: Bool, from: String)?
 
@@ -94,6 +96,8 @@ public final class MessagesStore {
         state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
         local = Local()
         guard !u.isEmpty else { return }
+        VoiciCallKeyStore.rememberAccount(u)
+        answersWhileLocked = VoiciCallKeyStore.load(username: u) != nil
         // A sample account's example page is read from `.com` each time; no copy of it is kept on the device.
         if !isSampleReadOnly { load() }
     }
@@ -264,6 +268,7 @@ public final class MessagesStore {
             await loadLane(client, keys)
             await loadInbox(client)
             await loadMissedCalls(client)
+            await rebindCallKeyIfNeeded(client)
             settleHanded()
             await checkReplies()
             phase = .ready
@@ -634,6 +639,59 @@ public final class MessagesStore {
         defer { pendingCalls = nil }
         await publish(signer: s, only: [])
         return publishError == nil
+    }
+
+    // MARK: answering while locked (docs/voici-calls.md, owner decisions 2026-11-15)
+
+    /// Settings → Messages → "Answer calls while Flagship is locked" (off by default). On: an unlocked admin device makes
+    /// its call-only key, binds it under the owner messages key and registers the binding with `.com`. Off: a signed
+    /// revocation, then the key is deleted. Nil on success, else a sentence.
+    public func setAnswerWhileLocked(_ on: Bool) async -> String? {
+        if !on { await revokeCallKey(); return nil }
+        guard isAdmin, let client, let idx = index, !isRemoved, let k = keys(epoch: idx.inboxEpoch), let device else {
+            return String(localized: "Unlock Flagship and try again.")
+        }
+        do {
+            let g = try VoiciCallKeyStore.generate()
+            let proof = try VoiciCalls.signCallKeyBinding(username: username, deviceId: deviceId, callKeyPub: g.pubHex, createdAt: now(), ownerSignSeed: k.sign.seed)
+            try await client.registerCallKey(username: username, proof: proof, device: device)
+            let key = VoiciCallKeyStore.key(username: username, deviceId: deviceId, pageId: idx.pageId, ownerSignPub: k.signPub,
+                                            secret: g.secret, enclave: g.enclave, pubHex: g.pubHex, proof: proof)
+            if let old = VoiciCallKeyStore.load(username: username), old.pubHex != g.pubHex { await revoke(old, client: client) }
+            try VoiciCallKeyStore.save(key)
+            answersWhileLocked = true
+            return nil
+        } catch {
+            return Self.sentence(error)
+        }
+    }
+
+    /// Off, sign-out or removal: a revocation signed by the owner key when this device holds it, else by the call key.
+    func revokeCallKey() async {
+        guard let k = VoiciCallKeyStore.load(username: username) else { answersWhileLocked = false; return }
+        if let client { await revoke(k, client: client) }
+        VoiciCallKeyStore.delete(username: username)
+        answersWhileLocked = false
+    }
+
+    private func revoke(_ k: VoiciCallKey, client: any VoiciComClient) async {
+        let at = now()
+        if let owner = keys(epoch: index?.inboxEpoch), owner.signPub == k.ownerSignPub,
+           let bytes = try? VoiciCalls.canonicalCallKeyRevoke(username: k.username, deviceId: k.deviceId, callKeyPub: k.pubHex, revokedAt: at),
+           let sig = try? CanonicalJson.ed25519SignHex(bytes, seed: owner.sign.seed) {
+            try? await client.revokeCallKey(username: k.username, revoke: VoiciCalls.revokeJson(username: k.username, deviceId: k.deviceId, callKeyPub: k.pubHex, revokedAt: at), signature: sig)
+        } else if let r = k.selfRevoke(at: at) {
+            try? await client.revokeCallKey(username: k.username, revoke: r.revoke, signature: r.signature)
+        }
+    }
+
+    /// The inbox key was rotated (a new ownerSignPub): the binding no longer verifies, so bind the same key again.
+    private func rebindCallKeyIfNeeded(_ client: any VoiciComClient) async {
+        guard let k = VoiciCallKeyStore.load(username: username), let idx = index, !isRemoved, idx.ownerSignPub != k.ownerSignPub,
+              let owner = keys(epoch: idx.inboxEpoch), let device,
+              let proof = try? VoiciCalls.signCallKeyBinding(username: k.username, deviceId: k.deviceId, callKeyPub: k.pubHex, createdAt: now(), ownerSignSeed: owner.sign.seed),
+              (try? await client.registerCallKey(username: username, proof: proof, device: device)) != nil else { return }
+        try? VoiciCallKeyStore.save(k.rebound(pageId: idx.pageId, ownerSignPub: owner.signPub, proof: proof))
     }
 
     /// Rotate the inbox key: the next index names `inboxEpoch + 1`; messages sealed to the old key stay readable here.
@@ -1171,7 +1229,16 @@ public final class MessagesStore {
         Keystore.onWipe = { all in
             let u = currentUsername
             forgetLocal(username: u, allProfiles: all)
-            Task { @MainActor in shared.forgetInMemory() }
+            Task { @MainActor in
+                // Sign-out or removal: the call key goes too, revoked first (the owner key may be gone: it signs itself).
+                if let u, let k = VoiciCallKeyStore.load(username: u) {
+                    if let client = shared.client, let r = k.selfRevoke(at: Int64(Date().timeIntervalSince1970 * 1000)) {
+                        try? await client.revokeCallKey(username: u, revoke: r.revoke, signature: r.signature)
+                    }
+                    VoiciCallKeyStore.delete(username: u)
+                }
+                shared.forgetInMemory()
+            }
         }
     }
 

@@ -5,13 +5,16 @@ import FlagshipAPI
 import FlagshipCore
 
 /// What a voi.ci call needs from this device's keys (MessagesStore.callKeys).
+/// Unlocked, it signs with the account device key and the owner messages key; locked (the setting "Answer calls while
+/// Flagship is locked"), only `callKey` signs, and nothing else of the account is at hand: no inbox key (the caller is
+/// "Someone on voi.ci"), no local block list (`.com` refuses blocked callers before it rings).
 struct VoiciCallKeys: @unchecked Sendable {
     let username: String
     let deviceId: String
-    let deviceKey: Curve25519.Signing.PrivateKey
+    let deviceKey: Curve25519.Signing.PrivateKey?
     let pageId: String
     let acceptsCalls: Bool
-    let ownerSignSeed: [UInt8]
+    let ownerSignSeed: [UInt8]?
     let ownerSignPub: String
     /// The page's inbox seeds, newest epoch first (a push sealed before a rotation still opens).
     let inboxSeeds: [[UInt8]]
@@ -20,9 +23,37 @@ struct VoiciCallKeys: @unchecked Sendable {
     let blocked: Set<String>
     let revoked: Set<String>
     let nicknames: [String: String]
+    var callKey: VoiciCallKey? = nil
 
-    var devicePubHex: String { HexUtil.encode(deviceKey.publicKey.rawRepresentation) }
-    var deviceRef: String? { try? VoiciCalls.deviceRef(devicePubHex: devicePubHex) }
+    /// What a locked device has: its call key and the public facts kept with it.
+    static func locked(_ k: VoiciCallKey, caKeys: [String], origin: String) -> VoiciCallKeys {
+        VoiciCallKeys(username: k.username, deviceId: k.deviceId, deviceKey: nil, pageId: k.pageId, acceptsCalls: true, ownerSignSeed: nil,
+                      ownerSignPub: k.ownerSignPub, inboxSeeds: [], caKeys: caKeys, origin: origin, blocked: [], revoked: [], nicknames: [:], callKey: k)
+    }
+
+    var devicePubHex: String? { deviceKey.map { HexUtil.encode($0.publicKey.rawRepresentation) } }
+    var deviceRef: String? {
+        if let callKey { return callKey.deviceRef }
+        return devicePubHex.flatMap { try? VoiciCalls.deviceRef(devicePubHex: $0) }
+    }
+
+    /// The room WebSocket's auth: the call key's join while locked, else device headers.
+    func roomHeaders(callId: String, path: String) -> [String: String]? {
+        if let callKey { return callKey.joinHeaders(callId: callId, now: Int64(Date().timeIntervalSince1970 * 1000)) }
+        return deviceHeaders(method: "GET", path: path)
+    }
+
+    func signAnswer(_ body: VoiciCallAnswerBody) throws -> JSONValue {
+        if let callKey { return try VoiciCalls.signAnswerWithCallKey(body, proof: callKey.proof, sign: callKey.sign) }
+        guard let ownerSignSeed else { throw CanonicalJsonError("locked") }
+        return try VoiciCalls.signAnswer(body, ownerSignSeed: ownerSignSeed)
+    }
+
+    func signEnd(callId: String, reason: String, issuedAt: Int64) -> JSONValue? {
+        if let callKey { return try? VoiciCalls.signEndOwnerWithCallKey(callId: callId, reason: reason, issuedAt: issuedAt, sign: callKey.sign) }
+        guard let ownerSignSeed else { return nil }
+        return try? VoiciCalls.signEndOwner(callId: callId, reason: reason, issuedAt: issuedAt, ownerSignSeed: ownerSignSeed)
+    }
 
     /// The caller in a push, opened under the inbox keys.
     func openPush(_ push: VoiciCallPush) -> (pageId: String, conv: String, from: String)? {
@@ -33,7 +64,7 @@ struct VoiciCallKeys: @unchecked Sendable {
 
     /// Device headers for one `.com` request (the `/profile` scheme), signed by this device's account key.
     func deviceHeaders(method: String, path: String) -> [String: String]? {
-        let pub = devicePubHex
+        guard let deviceKey, let pub = devicePubHex else { return nil }
         guard let requestId = try? AccountMetadata.generateDeviceId() else { return nil }
         let at = Int64(Date().timeIntervalSince1970 * 1000)
         guard let bytes = try? AccountMetadata.canonicalDirectoryRequest(accountId: username, deviceId: deviceId, signerPubHex: pub, method: method,
@@ -77,7 +108,7 @@ final class VoiciCallSession {
 
     func connect() {
         let path = "/api/voici/calls/\(push.callId)/device"
-        guard let url = URL(string: "wss://\(push.room)\(path)?u=\(keys.username)"), let headers = keys.deviceHeaders(method: "GET", path: path) else {
+        guard let url = URL(string: "wss://\(push.room)\(path)?u=\(keys.username)"), let headers = keys.roomHeaders(callId: push.callId, path: path) else {
             return end("failed")
         }
         var req = URLRequest(url: url, timeoutInterval: 20)
@@ -156,7 +187,7 @@ final class VoiciCallSession {
         let body = VoiciCallAnswerBody(callId: r.callId, deviceRef: deviceRef, requestHash: requestHash, xwingCiphertext: CanonicalJson.hex(ct),
                                        answerSdp: sdp, turnUser: turn.user, turnSecret: turn.secret, issuedAt: Self.now(),
                                        media: r.hasVideo ? (cameraAble ? VoiciCalls.mediaVideo : VoiciCalls.mediaAudio) : nil)
-        guard let signed = try? VoiciCalls.signAnswer(body, ownerSignSeed: keys.ownerSignSeed), let ansBytes = try? VoiciCalls.canonicalAnswer(body) else {
+        guard let signed = try? keys.signAnswer(body), let ansBytes = try? VoiciCalls.canonicalAnswer(body) else {
             wipe(&ss)
             return "failed"
         }
@@ -187,7 +218,7 @@ final class VoiciCallSession {
 
     /// Hang up an answered call: the end order is signed by the owner messages key.
     func hangUp() {
-        if let order = try? VoiciCalls.signEndOwner(callId: push.callId, reason: "hangup", issuedAt: Self.now(), ownerSignSeed: keys.ownerSignSeed) {
+        if let order = keys.signEnd(callId: push.callId, reason: "hangup", issuedAt: Self.now()) {
             send(["t": "end", "end": order])
         }
         end("hangup")

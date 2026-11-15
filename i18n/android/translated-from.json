@@ -3957,5 +3957,8 @@
   "org_key_directory": "b5b3d106070c",
   "org_key_archive": "e8ee9bb3003c",
   "org_key_disk": "c23a361c0531",
-  "org_disk_key_later": "63baa7098a0c"
+  "org_disk_key_later": "63baa7098a0c",
+  "voici_calls_answer_locked": "c35ce2df1380",
+  "voici_calls_answer_locked_footer": "188fb4d85ab5",
+  "voici_calls_answer_locked_unlock": "e8b551090dd7"
 }

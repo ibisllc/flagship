@@ -159,6 +159,29 @@ class MockVoiciClient(
 
     override suspend fun missedCalls(username: String): List<VoiciMissedCallItem> = synchronized(this) { missedCallItems[username].orEmpty().toList() }
 
+    val callKeys = HashMap<String, JsonObject>()
+    val callKeyRevokes = mutableListOf<JsonObject>()
+
+    override suspend fun registerCallKey(username: String, device: VoiciDeviceSigner, proof: JsonObject) = synchronized(this) {
+        val idx = VoiciPage.parseVoiciPageIndex(pages[username]) ?: refuse(404, "not-found")
+        if (!VoiciCalls.verifyCallKeyBinding(proof, idx.body.ownerSignPub, username)) refuse(403, "bad-signature")
+        val deviceId = VoiciJs.str((proof["binding"] as JsonObject)["deviceId"]) ?: refuse(400, "malformed")
+        if (deviceId != device.deviceId) refuse(403, "wrong-device")
+        callKeys["$username|$deviceId"] = proof
+    }
+
+    override suspend fun revokeCallKey(username: String, body: JsonObject) = synchronized(this) {
+        val r = body["revoke"] as? JsonObject ?: refuse(400, "malformed")
+        val sig = VoiciJs.str(body["signature"]) ?: refuse(400, "malformed")
+        val owner = VoiciPage.parseVoiciPageIndex(pages[username])?.body?.ownerSignPub ?: ""
+        val d = VoiciJs.str(r["deviceId"]) ?: refuse(400, "malformed")
+        val k = VoiciJs.str(r["callKeyPub"]) ?: refuse(400, "malformed")
+        val at = VoiciJs.time(r["revokedAt"]) ?: refuse(400, "malformed")
+        if (VoiciJs.str(r["username"]) != username || !VoiciCalls.verifyCallKeyRevoke(username, d, k, at, sig, owner)) refuse(403, "bad-signature")
+        callKeyRevokes += r
+        if (VoiciJs.str((callKeys["$username|$d"]?.get("binding") as? JsonObject)?.get("callKeyPub")) == k) callKeys.remove("$username|$d")
+    }
+
     override suspend fun callAllow(username: String, body: JsonObject) {
         val a = body["allow"] as? JsonObject ?: refuse(400, "malformed")
         val sig = VoiciJs.str(body["signature"]) ?: refuse(400, "malformed")
