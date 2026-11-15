@@ -14,7 +14,7 @@
  *
  * Version 2 (voi.ci calls, docs/voici-calls.md §6) adds the call setting after acceptsMessages:
  *   flagship/voici-page/v2|<username>|<pageId>|<seq>|<issuedAt>|<acceptsMessages>|<acceptsCalls 0|1>
- *     |<callsFrom accepted|signed-in>|<inboxEpoch>|<inboxPub>|<ownerSignPub>|<pieces>|<signerKind>|<signerPub>
+ *     |<callsFrom accepted|signed-in|anyone|callback>|<inboxEpoch>|<inboxPub>|<ownerSignPub>|<pieces>|<signerKind>|<signerPub>
  * with `version: 2, acceptsCalls, callsFrom` in the envelope. A v1 index means calls are off. Writers sign v2 only
  * while calls are on, so pages without calls stay readable by v1 readers.
  *
@@ -41,7 +41,10 @@ import { canonicalJson, ed25519VerifyHex, isLowerHex } from "./webEnvelope.js";
 
 export const TAG_VOICI_PAGE = "flagship/voici-page/v1";
 export const TAG_VOICI_PAGE_V2 = "flagship/voici-page/v2";
-export const VOICI_CALLS_FROM_VALUES = ["accepted", "signed-in"] as const;
+/** "anyone": anyone on the internet, no account needed; "callback": signed-in callers who allow a ring-back in their
+ *  conversation (owner decision, docs/voici-calls.md "Who may call a page"). "accepted" and "signed-in" are the
+ *  earlier rules, still read. */
+export const VOICI_CALLS_FROM_VALUES = ["accepted", "signed-in", "anyone", "callback"] as const;
 export type VoiciPageCallsFrom = (typeof VOICI_CALLS_FROM_VALUES)[number];
 export const TAG_VOICI_PIECE_UPLOAD = "flagship/voici-piece-upload/v1";
 

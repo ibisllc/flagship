@@ -162,7 +162,7 @@ function piecesProblem(pieces) {
 }
 
 const TAG_VOICI_PAGE_V2 = "flagship/voici-page/v2";
-const CALLS_FROM = ["accepted", "signed-in"];
+const CALLS_FROM = ["accepted", "signed-in", "anyone", "callback"];
 // Version 2 (docs/voici-calls.md §6): acceptsCalls and callsFrom after acceptsMessages; a v1 index takes no calls.
 const isV2 = (b) => b.acceptsCalls !== undefined || b.callsFrom !== undefined;
 export const voiciPageAcceptsCalls = (b) => b.acceptsCalls === 1;

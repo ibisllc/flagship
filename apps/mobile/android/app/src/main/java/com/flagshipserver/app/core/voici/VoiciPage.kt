@@ -311,7 +311,7 @@ object VoiciPage {
         if (!PAGE_ID.matches(b.pageId)) bad("pageId")
         if (!isTime(b.seq) || b.seq < 1 || !isTime(b.issuedAt)) bad("seq/issuedAt")
         if (b.acceptsMessages != 0 && b.acceptsMessages != 1) bad("acceptsMessages")
-        if (b.isV2 && ((b.acceptsCalls != 0 && b.acceptsCalls != 1) || (b.callsFrom != "accepted" && b.callsFrom != "signed-in"))) bad("calls")
+        if (b.isV2 && ((b.acceptsCalls != 0 && b.acceptsCalls != 1) || b.callsFrom !in listOf("accepted", "signed-in", "anyone", "callback"))) bad("calls")
         if (!isTime(b.inboxEpoch) || b.inboxEpoch < 1) bad("inboxEpoch")
         if (!hex(b.inboxPub, 1216) || !hex(b.ownerSignPub, 32)) bad("keys")
         piecesProblem(b.pieces)?.let { bad(it) }
