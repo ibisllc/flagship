@@ -19,6 +19,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Usb
 import androidx.compose.material3.MaterialTheme
@@ -121,7 +122,7 @@ import kotlinx.serialization.json.Json
 // Design → DeliveryChooser fans into the delivery methods: Pair (builder app),
 // Burn (on-device USB-OTG), Save, or Copy.
 // Save/Copy mint inline and route straight to onDelivered.
-private enum class Phase { Design, DeliveryChooser, Scan, Match, Pair, Burn }
+private enum class Phase { Design, DeliveryChooser, Scan, Match, Pair, Burn, Retail }
 
 /** A server made with settings decided elsewhere (Import a backup,
  *  docs/server-backup-and-clone.md): the screen opens at the delivery chooser,
@@ -169,6 +170,9 @@ fun CreateServerScreen(
      *  server is designed, pairing starts with it instead of the scanner. */
     builderLink: String? = null,
     preset: CreateServerPreset? = null,
+    /** "Set up a box from a store" (docs/retail-box-setup.md §4): after the design the recipe goes
+     *  to a retail box over Bluetooth instead of a builder. */
+    retailBox: Boolean = false,
 ) {
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
@@ -273,7 +277,10 @@ fun CreateServerScreen(
     // Mint the recipe + pre-publish the auth-code/RCK on .com (the box needs them
     // to register when it phones home, regardless of delivery channel), reusing
     // the shared minter so the recipe is byte-identical across delivery methods.
-    suspend fun mintAndRegister(forStudio: Boolean = false): MintedBundle {
+    suspend fun mintAndRegister(
+        forStudio: Boolean = false,
+        keepSigner: ((com.flagshipserver.app.core.RetailClaimSigner) -> Unit)? = null,
+    ): MintedBundle {
         com.flagshipserver.app.core.ErrorLog.step("create-server", FSStrings.get(R.string.mint_start))
         val username = app.currentUser.value ?: throw IllegalStateException("not paired yet")
         val minted = mintRecipeBundle(
@@ -303,6 +310,7 @@ fun CreateServerScreen(
             flagshipServer = flagshipServer,
             bundle = minted.bundle,
             authCodeUserSig = minted.bundle.blob.authCodeUserSignature,
+            keepSigner = keepSigner,
         )
         com.flagshipserver.app.core.ErrorLog.step("create-server", "registered")
         return minted
@@ -363,6 +371,34 @@ fun CreateServerScreen(
         } else {
             LaunchedEffect(Unit) { phase = Phase.DeliveryChooser }
         }
+        return
+    }
+    if (phase == Phase.Retail) {
+        RetailClaimContainer(
+            mintRecipe = {
+                var signer: com.flagshipserver.app.core.RetailClaimSigner? = null
+                try {
+                    val minted = mintAndRegister(keepSigner = { signer = it })
+                    recordDelivered(minted.serverDomain)
+                    val held = signer ?: throw IllegalStateException("no signer")
+                    com.flagshipserver.app.core.RetailClaimRecipe(
+                        Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle),
+                        minted.serverDomain,
+                        minted.serial,
+                        held,
+                    )
+                } catch (t: Throwable) {
+                    signer?.discard()
+                    throw t
+                }
+            },
+            onClaimed = { domain, serial -> onDeliveredVisible(domain, serial, name, description) },
+            onClose = { if (retailBox) onCancel() else phase = Phase.DeliveryChooser },
+            onOpenServer = { domain ->
+                val serial = app.pods.value.firstOrNull { it.fqdn.equals(domain, ignoreCase = true) }?.pendingAuthCodeSerial.orEmpty()
+                onDelivered(domain, serial, name, description)
+            },
+        )
         return
     }
     if (phase == Phase.Burn) {
@@ -478,12 +514,15 @@ fun CreateServerScreen(
                 onContinue = {
                     error = null
                     // Studio is already waiting on a scanned QR: pair with it.
-                    if (pendingBuilderLink != null) startPair() else phase = Phase.DeliveryChooser
+                    if (pendingBuilderLink != null) startPair()
+                    else if (retailBox) phase = Phase.Retail
+                    else phase = Phase.DeliveryChooser
                 },
                 onCancel = onCancel,
             )
             Phase.DeliveryChooser -> DeliveryChooserPhase(
                 busy = working,
+                onRetail = { phase = Phase.Retail },
                 onPair = { startPair() },
                 onShare = {
                     if (working) return@DeliveryChooserPhase
@@ -543,7 +582,7 @@ fun CreateServerScreen(
                 error = error,
                 onCancel = onCancel,
             )
-            Phase.Pair, Phase.Burn -> Unit // handled by an early return above
+            Phase.Pair, Phase.Burn, Phase.Retail -> Unit // handled by an early return above
             Phase.Scan -> ScanPhase(
                 qrText = qrText,
                 onQrText = { qrText = it },
@@ -1149,6 +1188,7 @@ private fun MatchPhase(
 @Composable
 private fun DeliveryChooserPhase(
     busy: Boolean,
+    onRetail: () -> Unit,
     onPair: () -> Unit,
     onShare: () -> Unit,
     onCopy: () -> Unit,
@@ -1156,6 +1196,15 @@ private fun DeliveryChooserPhase(
     error: String?,
     onCancel: () -> Unit,
 ) {
+    DeliveryCard(
+        icon = Icons.Outlined.Inventory2,
+        title = stringResource(R.string.retail_set_up_a_box_from_a_store),
+        body = stringResource(R.string.retail_delivery_body),
+        enabled = !busy,
+        testTag = "cs-delivery-retail",
+        onClick = onRetail,
+    )
+    Spacer(Modifier.height(FS.space.s3))
     DeliveryCard(
         icon = Icons.Outlined.QrCodeScanner,
         title = stringResource(R.string.pair_with_the_builder_app),
@@ -1682,6 +1731,8 @@ internal suspend fun registerControlPlane(
     flagshipServer: FlagshipServerClient,
     bundle: InstallBlobBundle,
     authCodeUserSig: String,
+    /** A retail claim keeps the key that signs here for the box key registration (one biometric). */
+    keepSigner: ((com.flagshipserver.app.core.RetailClaimSigner) -> Unit)? = null,
 ) {
     val now = System.currentTimeMillis()
     val wire = bundle.blob.authCode
@@ -1744,6 +1795,13 @@ internal suspend fun registerControlPlane(
             signature = rckSig,
         ),
     )
+    if (keepSigner != null) {
+        val seed = if (Keystore.hasAdminRoot()) Keystore.adminRootSeed() else null
+        keepSigner(
+            if (seed != null) com.flagshipserver.app.core.RetailClaimSigner.fromSeed(seed)
+            else com.flagshipserver.app.core.RetailClaimSigner({ m -> rckSigner.sign(m) }),
+        )
+    }
     // `.com` took this new recipe: it is the explicit re-trust (docs/first-contact.md). The box built
     // from it makes a new key, which its enrollment proof and the code then pin; an old pin for the
     // name must not refuse it.

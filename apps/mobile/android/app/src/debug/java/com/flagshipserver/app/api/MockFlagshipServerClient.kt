@@ -44,6 +44,17 @@ class MockFlagshipServerClient(
     var accountTierAnswer: String? = null
     override suspend fun accountTier(username: String): String? = accountTierAnswer
 
+    /** Box keys registered through [registerBoxClaimKey], by AuthCode serial (first one wins, as `.com`). */
+    val boxClaimKeys = java.util.concurrent.ConcurrentHashMap<String, BoxClaimKeyRequest>()
+
+    override suspend fun registerBoxClaimKey(req: BoxClaimKeyRequest) {
+        val held = boxClaimKeys[req.key.serial]
+        if (held != null && held.key.stkPubHex != req.key.stkPubHex) {
+            throw com.flagshipserver.app.core.HttpException(409, """{"error":"another box key is already registered for this server","code":"box-key-already-registered"}""")
+        }
+        boxClaimKeys.putIfAbsent(req.key.serial, req)
+    }
+
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
 
     /** Mirror of the Worker's webauthn_recovery row, keyed by lowercased

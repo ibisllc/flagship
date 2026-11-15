@@ -81,6 +81,7 @@ class BoxKeyPins(private val store: ServerKeyPins? = null, private val now: () -
      *  has not pinned the server yet ("first" never pins here). */
     fun require(username: String, serverDomain: String, reportedHex: String): String {
         val domain = serverDomain.lowercase()
+        if (UntrustedServers.shared.contains(domain)) throw ServerUntrustedException(domain)
         val reported = reportedHex.lowercase()
         val pin = pins.pinnedHex(domain)
         when (decide(pin, reported)) {

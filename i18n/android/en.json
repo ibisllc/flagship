@@ -15348,5 +15348,437 @@
   "activity_retail_wipe_started": {
     "en": "This server is being wiped for a new owner",
     "ctx": "core/BoxEventLabels.kt (Activity)"
+  },
+  "retail_set_up_a_box_from_a_store": {
+    "en": "Set up a box from a store",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_delivery_body": {
+    "en": "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_menu_subtitle": {
+    "en": "A Flagship box with nothing to install. This phone finds it over Bluetooth when you plug it in.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_title_more_than_one": {
+    "en": "More than one box nearby",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_title_dont_continue": {
+    "en": "Don't continue",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_title_contention": {
+    "en": "Someone else tried at the same moment",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_title_bluetooth": {
+    "en": "Bluetooth is needed",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_title_key_taken": {
+    "en": "This server already has a box",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_title_not_admin": {
+    "en": "Only an admin device can do this",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_title_stopped": {
+    "en": "Setup stopped",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_another_box": {
+    "en": "Another Flagship box nearby is waiting to be set up. If it is yours, unplug it and start again. If not, set this box up somewhere else or use a network cable and a screen.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_two_boxes": {
+    "en": "A second Flagship box appeared during setup. Make sure only your box is switched on nearby, unplug it, and start again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_early": {
+    "en": "This box reported a press before you were asked. Don't continue.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_late": {
+    "en": "The press came too late. Tap Try again and press the power button as soon as you are asked.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_burst": {
+    "en": "The box saw more than one press, or a long one. Press the power button once, briefly, when you are asked.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_contention": {
+    "en": "Another phone tried to set up this box at the same moment. Make sure nobody nearby is setting up a Flagship box, then try again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_no_press": {
+    "en": "The box saw no press. Tap Try again and press the power button once when you are asked.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_busy": {
+    "en": "The box is busy with another setup. Wait a minute and try again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_window_closed": {
+    "en": "The box stopped listening. Unplug it, plug it back in and start again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_already_claimed": {
+    "en": "This box is already set up. Press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_recipe_refused": {
+    "en": "The box refused this server's recipe. Start again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_out_of_order": {
+    "en": "The box and this phone got out of step. Start again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_entropy": {
+    "en": "The box can't make safe keys yet. Leave it switched on for a minute and try again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_bad_receipt": {
+    "en": "The box's answer did not belong to this setup. Someone nearby may be intercepting it. Unplug the box and set it up with a screen instead.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_key_taken": {
+    "en": "Another box is already registered for this server. Delete this server and set the box up again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_not_admin": {
+    "en": "Only an admin device of this account can set up a server.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_bluetooth_off": {
+    "en": "Turn on Bluetooth to find the box, then try again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_bluetooth_not_allowed": {
+    "en": "Flagship needs Bluetooth to find the box. Allow it in Settings, then try again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_bluetooth_unsupported": {
+    "en": "This device can't use Bluetooth to set up a box.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_link_lost": {
+    "en": "The connection to the box was lost. Start again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_wrong_code": {
+    "en": "The box did not accept this setup code. Ask for a new one: press the box's power button 3 times with the screen attached.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_no_answer": {
+    "en": "No box answered this setup code. It may have expired or been used. Ask for a new one.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_stop_bad_link": {
+    "en": "This isn't a Flagship setup code.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_alarm_key_mismatch": {
+    "en": "The server that came online is not the box you paired with. Someone may have intercepted the setup. Don't use it. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi password, change it.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_alarm_never_online": {
+    "en": "The box you paired with never came online. Someone may have intercepted the setup. Press the box's power button 5 times and set it up again, with a network cable. If you sent your Wi-Fi password, change it.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_no_link": {
+    "en": "The box has no network. Plug the cable into your router, or choose Wi-Fi.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_not_found": {
+    "en": "The box can't see that Wi-Fi network. Move the box closer to the router, or use a cable.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_wrong_password": {
+    "en": "The Wi-Fi password was wrong. Check it and try again.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_unsupported_security": {
+    "en": "The box can't join this kind of Wi-Fi. It needs WPA2 or WPA3 with a password. Use a cable instead.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_no_dhcp": {
+    "en": "The network gave the box no address. Check that your router hands out addresses (DHCP).",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_no_dns": {
+    "en": "The box got an address but can't look up names. Check your router's internet connection.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_captive_portal": {
+    "en": "This network wants a sign-in page, which the box can't use. Use a home network or a cable.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_relay_unreachable": {
+    "en": "The box is online but can't reach Flagship. Your network may block outgoing connections on port 443.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_wifi_warning": {
+    "en": "Your Wi-Fi password goes to the box over Bluetooth. If someone nearby is intercepting this setup, they could read it. A network cable avoids this.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_reset_instructions": {
+    "en": "If this box was set up before, press its power button 5 times, quickly, then tap Try again. Setting it up erases everything on it.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_alarm_reset_instructions": {
+    "en": "To set the box up again: press its power button 5 times, quickly, and wait for it to restart. Then start again from Add / Restore a server, with a network cable.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_certificate_slow": {
+    "en": "The box is online but has no security certificate yet. This usually takes a few minutes. Keep it plugged in and connected; you can close this and the server stays on Home as setting up.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_untrusted_refused": {
+    "en": "This phone doesn't trust this server: it is not the box you set up. Delete it from Home.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_untrusted": {
+    "en": "Untrusted",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_permission_title": {
+    "en": "Allow Bluetooth",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_permission_body": {
+    "en": "Flagship uses Bluetooth to find the box you bought and set it up. It looks only while you set up a box and never uses your location.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_permission_body_location": {
+    "en": "Flagship uses Bluetooth to find the box you bought and set it up. On this Android version, finding Bluetooth devices needs the location permission and location turned on. Flagship looks only while you set up a box and never records where you are.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_turn_on_location": {
+    "en": "Turn on location",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_continue": {
+    "en": "Continue",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_intro_title": {
+    "en": "Keep the box unplugged for now",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_intro_body": {
+    "en": "This phone looks for the box over Bluetooth. Start here, and plug the box in only when the app asks.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_cable_tip_title": {
+    "en": "Use the network cable if you can",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_cable_tip_body": {
+    "en": "Plug it into your router before the power. Then your Wi-Fi password never has to travel over the air.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_start": {
+    "en": "Start",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_have_setup_code": {
+    "en": "I have a setup code from the box's screen",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_scan_title": {
+    "en": "Scan the setup code",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_scan_body": {
+    "en": "Scan the QR code the box shows on its screen, or the photo someone sent you. The box must be on a network cable.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_type_code": {
+    "en": "Or type the 20-character code",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_checking_title": {
+    "en": "Checking for other boxes",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_checking_body": {
+    "en": "Keep the box unplugged for a moment.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_plug_in_title": {
+    "en": "Plug in the box",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_plug_in_body": {
+    "en": "Plug the network cable into your router if you can. Then plug in the power. The box starts by itself.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_press_once_hint": {
+    "en": "If the box stays off, press the power button once.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_no_new_box": {
+    "en": "No new box appeared",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_try_again": {
+    "en": "Try again",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_found_title": {
+    "en": "Found your box",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_found_body": {
+    "en": "Opening an encrypted connection…",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_get_ready_title": {
+    "en": "Get ready",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_get_ready_body": {
+    "en": "Put your finger near the box's power button. Don't press it yet.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_press_now_title": {
+    "en": "Press the power button now",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_press_now_body": {
+    "en": "Once, briefly. A short press does not switch the box off.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_signing_title": {
+    "en": "Approve the new server",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_signing_body": {
+    "en": "Confirm with your fingerprint, face or screen lock to sign this server's recipe.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_registering_title": {
+    "en": "Registering the box",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_registering_body": {
+    "en": "Telling Flagship which box this server is…",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_network_title": {
+    "en": "How does the box reach the internet?",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_on_cable": {
+    "en": "It's on a network cable",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_use_wifi": {
+    "en": "Use Wi-Fi",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_wifi_scanning_title": {
+    "en": "Looking for Wi-Fi networks",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_wifi_scanning_body": {
+    "en": "The box is listing the networks it can see…",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_choose_wifi": {
+    "en": "Choose your Wi-Fi",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_no_wifi": {
+    "en": "The box sees no Wi-Fi networks. Use a network cable instead.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_not_supported": {
+    "en": "Not supported",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_use_cable_instead": {
+    "en": "Use a cable instead",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_wifi_password": {
+    "en": "Wi-Fi password",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_password": {
+    "en": "Password",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_password_length": {
+    "en": "A Wi-Fi password has 8 to 63 characters.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_before_you_send": {
+    "en": "Before you send it",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_send_it": {
+    "en": "Send it",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_connecting_title": {
+    "en": "Connecting the box",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_connecting_body": {
+    "en": "The box is joining the network…",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_net_failed_title": {
+    "en": "The box couldn't get online",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_checking_online_title": {
+    "en": "Checking the box online",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_checking_online_body": {
+    "en": "Making sure the server that comes online is the box you paired with. This can take a few minutes.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_certificate_title": {
+    "en": "Getting its security certificate…",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_certificate_body": {
+    "en": "The right box is online. It is getting the certificate that keeps every connection to it private. This usually takes a minute or two.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_certificate_slow_title": {
+    "en": "This is taking longer than usual",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_check_again": {
+    "en": "Check again",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_done_title": {
+    "en": "Your box is set up",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_done_body": {
+    "en": "The server that came online is the box you paired with, and its connection is private.",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_open_server": {
+    "en": "Open the server",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_alarm_title": {
+    "en": "Don't use this server",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_delete_this_server": {
+    "en": "Delete this server",
+    "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
   }
 }

@@ -383,6 +383,7 @@ fun HomeTab() {
                 onBuildService = { deepLinker.enqueue(DeepLink.StartBuild) },
                 onRestoreBackup = { nav.navigate("restore-backup") },
                 onCoManage = { nav.navigate("share-accept") },
+                onRetailBox = { nav.navigate("create-server?retail=true") },
                 onMakeLeader = { pod -> saveOrder { orderSaver.makeLeader(pod.podId) } },
                 onReorder = { ids -> saveOrder { orderSaver.reorder(ids) } },
                 onDeleteServer = { pod ->
@@ -644,8 +645,11 @@ fun HomeTab() {
             TransferAcquirerScreen(vm = acquirerVm, preIngestedOffer = offer, onBack = { nav.popBackStack() })
         }
         composable(
-            route = "create-server?builder={builder}",
-            arguments = listOf(navArgument("builder") { type = NavType.StringType; defaultValue = "" }),
+            route = "create-server?builder={builder}&retail={retail}",
+            arguments = listOf(
+                navArgument("builder") { type = NavType.StringType; defaultValue = "" },
+                navArgument("retail") { type = NavType.BoolType; defaultValue = false },
+            ),
         ) { entry ->
             if (!AddServerGate.allows(app)) {
                 AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
@@ -655,6 +659,7 @@ fun HomeTab() {
                 ?.let { URLDecoder.decode(it, "UTF-8") }?.takeIf { it.isNotEmpty() }
             CreateServerScreen(
                 builderLink = builderLink,
+                retailBox = entry.arguments?.getBoolean("retail") == true,
                 onDeliveredVisible = { serverDomain, serial, name, description ->
                     // The recipe is out (builder-pair delivered) but the pairing
                     // screen stays open for consent prompts — surface the pending

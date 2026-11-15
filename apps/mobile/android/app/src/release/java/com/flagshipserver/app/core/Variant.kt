@@ -28,6 +28,8 @@ object Variant : AppVariant {
 
     override fun rescueEnvironment(context: android.content.Context, username: String): com.flagshipserver.app.viewmodels.OfflineControlEnvironment? = null
 
+    override fun retailClaimGym(): RetailClaimGym? = null
+
     override val usesMockClients: Boolean get() = false
     override val forceAdminRoot: Boolean get() = false
     override val bypassBiometricGates: Boolean get() = false

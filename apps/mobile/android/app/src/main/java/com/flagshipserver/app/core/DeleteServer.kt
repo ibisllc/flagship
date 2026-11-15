@@ -132,6 +132,7 @@ suspend fun deleteServer(
         }
         is DeleteServerFlow.Outcome.Deleted -> {
             onDeleted()
+            UntrustedServers.shared.forget(pod.fqdn)
             app.removePod(pod.podId)
             val message = DeleteServerFlow.deletedMessage(pod.name, outcome.erasureRequested)
             if (outcome.erasureRequested) toasts.success(message) else toasts.warning(message)

@@ -96,6 +96,10 @@ object GymSeams {
     @Volatile
     var rescueScenario: String? = null
 
+    /** "Set up a box from a store" against a scripted box (SmokeModeConfig.retail); null: the radio. */
+    @Volatile
+    var retail: String? = null
+
     /** Back to production behaviour (a launch without the gym's extras). */
     fun reset() {
         forceAdminRoot = false
@@ -110,5 +114,6 @@ object GymSeams {
         noticeClockOffsetMs = 0
         noticeFetcher = null
         rescueScenario = null
+        retail = null
     }
 }

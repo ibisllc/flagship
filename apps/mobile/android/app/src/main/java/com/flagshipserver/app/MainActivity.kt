@@ -145,6 +145,8 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.ServerKeyPins.shared =
             com.flagshipserver.app.core.ServerKeyPins(com.flagshipserver.app.keystore.KeystoreServerKeyPinStore)
         com.flagshipserver.app.core.FirstContact.shared = com.flagshipserver.app.keystore.KeystoreEnrollmentSecretStore
+        com.flagshipserver.app.core.UntrustedServers.shared =
+            com.flagshipserver.app.core.UntrustedServers(com.flagshipserver.app.keystore.KeystoreUntrustedServerStore)
         // Offline control (docs/data-sovereignty.md 4.9): where each server was last seen on a LAN.
         com.flagshipserver.app.core.RescueServerBook.shared =
             com.flagshipserver.app.core.RescueServerBook(com.flagshipserver.app.keystore.KeystoreRescueBookStore)

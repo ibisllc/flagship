@@ -54,3 +54,10 @@ object KeystoreWildcardGrantOutbox : WildcardGrantOutbox {
 
     override fun remove(serverDomain: String) = Keystore.setDeviceLocalValue(NAME, serverDomain, null)
 }
+
+/** Servers this device stopped trusting (UntrustedServers), device-local and dropped with the profile. */
+object KeystoreUntrustedServerStore : com.flagshipserver.app.core.UntrustedServerStore {
+    private const val NAME = "untrusted.servers"
+    override fun all(): Set<String> = runCatching { Keystore.deviceLocalAll(NAME).keys }.getOrDefault(emptySet())
+    override fun put(serverDomain: String, untrusted: Boolean) = Keystore.setDeviceLocalValue(NAME, serverDomain, if (untrusted) "1" else null)
+}

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PauseCircle
@@ -72,6 +73,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -138,6 +140,8 @@ fun HomeScreen(
     /** "Co-manage a running server": accept a server another account
      *  shares (docs/share-a-server.md), from the Add/Restore menu. */
     onCoManage: () -> Unit = {},
+    /** "Set up a box from a store" (docs/retail-box-setup.md §4): a preinstalled box claimed over Bluetooth. */
+    onRetailBox: () -> Unit = {},
     /** Only an admin device of the account sees "Add/Restore server", in
      *  the list and on the empty state ([showsAddServer]). */
     canAddServers: Boolean = true,
@@ -227,6 +231,7 @@ fun HomeScreen(
             onDismiss = { showAddOrImport = false },
             onCreate = { showAddOrImport = false; onAddServer() },
             onCoManage = { showAddOrImport = false; onCoManage() },
+            onRetailBox = { showAddOrImport = false; onRetailBox() },
             onRestore = { showAddOrImport = false; onRestoreBackup() },
         )
     }
@@ -435,6 +440,7 @@ private fun AddOrImportSheet(
     onDismiss: () -> Unit,
     onCreate: () -> Unit,
     onCoManage: () -> Unit,
+    onRetailBox: () -> Unit,
     onRestore: () -> Unit,
 ) {
     com.flagshipserver.app.ui.components.ModalBottomSheet(
@@ -454,6 +460,14 @@ private fun AddOrImportSheet(
             iconTint = FS.colors.accent,
             onClick = onCreate,
             modifier = Modifier.testTag("home-add-new-server"),
+        )
+        FSRow(
+            title = stringResource(R.string.retail_set_up_a_box_from_a_store),
+            subtitle = stringResource(R.string.retail_menu_subtitle),
+            icon = Icons.Outlined.Inventory2,
+            iconTint = FS.colors.accent,
+            onClick = onRetailBox,
+            modifier = Modifier.testTag("home-retail-box"),
         )
         FSRow(
             title = stringResource(R.string.co_manage_a_running_server),
@@ -832,6 +846,15 @@ fun ServerRow(
                         horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                         verticalArrangement = Arrangement.spacedBy(FS.space.s1),
                     ) {
+                        val untrustedVersion by com.flagshipserver.app.core.UntrustedServers.shared.version.collectAsState()
+                        val untrusted = remember(untrustedVersion, pod.fqdn) { com.flagshipserver.app.core.UntrustedServers.shared.contains(pod.fqdn) }
+                        if (untrusted) {
+                            FSPill(
+                                label = stringResource(R.string.retail_untrusted),
+                                kind = FSPillKind.Offline,
+                                modifier = Modifier.testTag("pod-card-untrusted"),
+                            )
+                        }
                         if (leader != null) LeaderPill(confirmed = leaderConfirmed)
                         if (shownBackupWait != null) {
                             FSPill(
