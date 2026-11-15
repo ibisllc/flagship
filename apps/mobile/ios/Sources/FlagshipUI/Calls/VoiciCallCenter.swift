@@ -120,7 +120,7 @@ public final class VoiciCallCenter: NSObject {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
-        req.httpBody = Data((try? CanonicalJson.canonicalJson(.object(["token": token.map { .string($0) } ?? .null]))) ?? "{}".utf8)
+        req.httpBody = Data(((try? CanonicalJson.canonicalJson(.object(["token": token.map { .string($0) } ?? .null]))) ?? "{}").utf8)
         _ = try? await URLSession.shared.gatedData(for: req)
     }
 
