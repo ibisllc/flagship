@@ -14,6 +14,7 @@
 // Custody label, the same everywhere it is shown or signed: "browser-passkey" =
 // "Browser: software key, unlocked with a passkey".
 
+import { tr } from "./i18n.js";
 import { adminRootRecordKey, activeProfileId, hkdf32, kvGet, kvPut, loadAdminRootSeed, adminRootPubHex, bytesToHex, hexToBytes } from "../keystore.js";
 
 // Loaded on first use, so the unlock path stays light.
@@ -28,7 +29,10 @@ const UMK_INFO = "flagship/web-key-custody/umk/v1";
 const AAD_TAG = "flagship/web-key-custody/v1|admin-root";
 
 function fail(code, message = code) {
-  return Object.assign(new Error(message), { code });
+  const e = Object.assign(new Error(message), { code });
+  // Every caller's humanError() shows this sentence (lib/humanError.js reads userMessage).
+  if (code.startsWith("custody-")) e.userMessage = custodyErrorText(e);
+  return e;
 }
 
 const b64u = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -73,7 +77,7 @@ async function webauthnGet({ credentialId, salt }) {
 async function webauthnCreate({ salt, userName }) {
   const cred = await navigator.credentials.create({
     publicKey: {
-      rp: { name: "Flagship", id: location.hostname },
+      rp: { name: tr("Flagship"), id: location.hostname },
       user: { id: random(16), name: userName, displayName: userName },
       challenge: random(32),
       pubKeyCredParams: [
@@ -352,4 +356,27 @@ export async function adminKeyCustody(profileId = activeProfileId()) {
   if (!record) return null;
   if (isCustodyRecord(record)) return { custody: CUSTODY_BROWSER, pqBound: record.pqBound === true, createdAt: record.createdAt ?? null };
   return { custody: "browser-passphrase", pqBound: false, createdAt: null };
+}
+
+/** A custody failure as a sentence (a cancelled prompt included). */
+export function custodyErrorText(e) {
+  switch (e?.code) {
+    case "custody-cancelled":
+      return tr("The passkey prompt was closed. Nothing was signed.");
+    case "custody-unsupported":
+    case "custody-no-prf":
+      return tr("This browser or passkey can't protect keys (it lacks the passkey PRF extension). Use a current Chrome, Edge, Safari or Firefox with a platform passkey or a security key.");
+    case "custody-no-uv":
+      return tr("The passkey didn't verify you (no fingerprint, face or PIN). Nothing was signed.");
+    case "custody-wrong-passkey":
+      return tr("That passkey doesn't unlock this browser's admin key. Use the passkey you set up for it on this browser.");
+    case "custody-key-changed":
+      return tr("This browser's admin key changed. Reload the page and try again.");
+    case "custody-locked":
+      return tr("Unlock the webapp first.");
+    case "custody-shell-unsigned":
+      return tr("This version of the webapp isn't signed by Flagship, so it can't use your admin key. Reload to get a signed version.");
+    default:
+      return tr("This browser couldn't open its admin key. Try again.");
+  }
 }

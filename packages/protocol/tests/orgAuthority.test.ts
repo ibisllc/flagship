@@ -7,6 +7,10 @@ import {
   canonicalOrgSeatInvite,
   canonicalOrgSeatRoles,
   checkOrgAuthorityShape,
+  checkOrgQuorumCustody,
+  canonicalOrgAdmins,
+  canonicalOrgBylaws,
+  canonicalOrgSeatAccept,
   orgBylawsThreshold,
   orgFounderRemovalOf,
   orgOverturnThreshold,
@@ -87,5 +91,42 @@ describe("seats", () => {
     expect(code(() => canonicalOrgSeatRoles([{ role: "service-admin", apps: ["x", "x"] }]))).toBe("malformed");
     expect(code(() => canonicalOrgSeatRoles([{ role: "member" }, { role: "member" }]))).toBe("malformed");
     expect(code(() => canonicalOrgSeatRoles([]))).toBe("malformed");
+  });
+});
+
+describe("custody labels and the bylaws' custody rules (docs/webapp-key-custody.md items 1 and 3)", () => {
+  const dec = (b: Uint8Array) => new TextDecoder().decode(b);
+  it("leaves every record without a browser key byte for byte as before", () => {
+    const r = base();
+    const withHardware = { ...r, admins: r.admins.map((a) => ({ ...a, custody: "hardware" as const })), bylaws: { ...r.bylaws, adminCustody: "any" as const, quorumHardware: true } };
+    expect(dec(canonicalOrgAdmins(withHardware.admins))).toBe(dec(canonicalOrgAdmins(r.admins)));
+    expect(dec(canonicalOrgBylaws(withHardware.bylaws))).toBe(dec(canonicalOrgBylaws(r.bylaws)));
+  });
+  it("signs a browser key's custody into the record, the accept and the grant", () => {
+    const r = base();
+    r.admins[1] = { ...r.admins[1]!, custody: "browser" };
+    expect(dec(canonicalOrgAdmins(r.admins))).toContain(":browser");
+    const accept = { orgId: V.orgId, seatId: V.keys["B admin"].seatId, inviteSha256: "aa".repeat(32), memberKeyId: "bb".repeat(32), adminKeyId: "cc".repeat(32), issuedAt: 5 };
+    expect(dec(canonicalOrgSeatAccept({ ...accept, custody: "browser" }))).toBe(dec(canonicalOrgSeatAccept(accept)) + "|browser");
+    expect(code(() => canonicalOrgSeatAccept({ ...accept, adminKeyId: "", custody: "browser" }))).toBe("malformed");
+    expect(code(() => canonicalOrgAdmins([{ ...r.admins[0]!, custody: "phone" as never }]))).toBe("malformed");
+  });
+  it("bylaws can refuse browser admins", () => {
+    const r = base();
+    r.admins[1] = { ...r.admins[1]!, custody: "browser" };
+    expect(code(() => checkOrgAuthorityShape(r))).toBe("ok");
+    expect(code(() => checkOrgAuthorityShape({ ...r, bylaws: { ...r.bylaws, adminCustody: "hardware" } }))).toBe("custody");
+    expect(dec(canonicalOrgBylaws({ ...r.bylaws, adminCustody: "hardware" }))).toMatch(/\|hardware-admins$/);
+  });
+  it("a quorum of two or more needs a hardware approval unless the bylaws turn it off", () => {
+    const r = base();
+    const browserOnly = () => "browser" as const;
+    const B = V.keys["B admin"].seatId;
+    const C = V.keys["C admin"].seatId;
+    expect(code(() => checkOrgQuorumCustody(r, 2, [B, C], browserOnly))).toBe("custody");
+    expect(code(() => checkOrgQuorumCustody(r, 2, [B, C], (s: string) => (s === C ? "hardware" : "browser")))).toBe("ok");
+    expect(code(() => checkOrgQuorumCustody(r, 1, [B], browserOnly))).toBe("ok");
+    expect(code(() => checkOrgQuorumCustody({ ...r, bylaws: { ...r.bylaws, quorumHardware: false } }, 2, [B, C], browserOnly))).toBe("ok");
+    expect(dec(canonicalOrgBylaws({ ...r.bylaws, quorumHardware: false }))).toMatch(/\|browser-quorums$/);
   });
 });

@@ -33,6 +33,7 @@ import { runRotateAdminRoot } from "../lib/adminRootRotation.js";
 import { setupCloudRecovery, hasCloudRecovery } from "../lib/recovery.js";
 
 import { tr } from "../lib/i18n.js";
+import { adminKeyCustody, custodyErrorText, isLockedKey, withAdminRoot } from "../lib/keyCustody.js";
 registerView("view-account-security");
 
 // Slice D (§5) — the type-to-confirm phrase for the destructive "Rotate admin
@@ -242,6 +243,31 @@ function renderRotateAdminRoot() {
   `;
 }
 
+/** Where this browser's admin key lives (docs/webapp-key-custody.md items 1 and 2). Exported for tests. */
+export function renderAdminKeyCustody(custody = state.custody) {
+  if (!custody) return "";
+  if (custody.custody === "browser-passkey") {
+    const pq = custody.pqBound
+      ? tr("Its quantum-safe half is the one on record, so servers that need quantum-safe signatures accept this browser's orders.")
+      : tr("Another device holds the admin key's quantum-safe half, so this browser signs classically. Servers that need quantum-safe signatures refuse its orders.");
+    return `
+      <div class="card mt-3" data-account-security-custody="passkey">
+        <h3>${tr("This browser's admin key")}</h3>
+        <p><strong>${escapeHtml(CUSTODY_LABEL)}</strong></p>
+        <p class="note small">${tr("Each admin action asks for your passkey, and the key is locked again right after.")}</p>
+        <p class="note small">${pq}</p>
+      </div>`;
+  }
+  return `
+    <div class="card mt-3" data-account-security-custody="passphrase">
+      <h3>${tr("This browser's admin key")}</h3>
+      <p class="note small">${tr("This browser's admin key is protected by its passphrase only. Protect it with a passkey (Touch ID, Windows Hello or a security key) before it signs anything.")}</p>
+      <button id="account-security-protect-key" ${state.busy ? "disabled" : ""}>${tr("Protect with a passkey")}</button>
+    </div>`;
+}
+
+export const CUSTODY_LABEL = tr("Browser: software key, unlocked with a passkey");
+
 function renderFailure() {
   if (!state.failureMessage) return "";
   return `
@@ -257,12 +283,14 @@ async function renderAccountSecurity() {
   root.innerHTML = `<div class="card placeholder">${tr("Loading…")}</div>`;
   try {
     await fetchAccountType();
+    state.custody = getSession().adminRootSeed ? await adminKeyCustody().catch(() => null) : null;
     root.innerHTML = [
       renderBadge(),
       renderExplainer(),
       renderStagedSecret(),
       renderRecoveryCodes(),
       renderActions(),
+      renderAdminKeyCustody(),
       renderRotateAdminRoot(),
       renderFailure(),
     ].join("");
@@ -273,6 +301,18 @@ async function renderAccountSecurity() {
 }
 
 function bindHandlers() {
+  document.getElementById("account-security-protect-key")?.addEventListener("click", async () => {
+    const key = getSession().adminRootSeed;
+    if (!isLockedKey(key)) return;
+    try {
+      // Opening the key once moves it under a new passkey (lib/keyCustody.js).
+      await withAdminRoot(key, async () => {});
+      toast(tr("This browser's admin key is now protected by a passkey."), "ok");
+    } catch (e) {
+      state.failureMessage = custodyErrorText(e);
+    }
+    await renderAccountSecurity();
+  });
   document.getElementById("account-security-enable")?.addEventListener("click", async () => {
     const session = getSession();
     if (!session.umk) {

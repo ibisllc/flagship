@@ -14781,5 +14781,89 @@
   "This server needs a quantum-safe signature, which the webapp can't make. Restore it from the Flagship app on an admin phone.": {
     "en": "This server needs a quantum-safe signature, which the webapp can't make. Restore it from the Flagship app on an admin phone.",
     "ctx": "webapp/lib/restoreMerge.js"
+  },
+  "The passkey prompt was closed. Nothing was signed.": {
+    "en": "The passkey prompt was closed. Nothing was signed.",
+    "ctx": "webapp/lib/keyCustody.js:365"
+  },
+  "This browser or passkey can't protect keys (it lacks the passkey PRF extension). Use a current Chrome, Edge, Safari or Firefox with a platform passkey or a security key.": {
+    "en": "This browser or passkey can't protect keys (it lacks the passkey PRF extension). Use a current Chrome, Edge, Safari or Firefox with a platform passkey or a security key.",
+    "ctx": "webapp/lib/keyCustody.js:368"
+  },
+  "The passkey didn't verify you (no fingerprint, face or PIN). Nothing was signed.": {
+    "en": "The passkey didn't verify you (no fingerprint, face or PIN). Nothing was signed.",
+    "ctx": "webapp/lib/keyCustody.js:370"
+  },
+  "That passkey doesn't unlock this browser's admin key. Use the passkey you set up for it on this browser.": {
+    "en": "That passkey doesn't unlock this browser's admin key. Use the passkey you set up for it on this browser.",
+    "ctx": "webapp/lib/keyCustody.js:372"
+  },
+  "This browser's admin key changed. Reload the page and try again.": {
+    "en": "This browser's admin key changed. Reload the page and try again.",
+    "ctx": "webapp/lib/keyCustody.js:374"
+  },
+  "This version of the webapp isn't signed by Flagship, so it can't use your admin key. Reload to get a signed version.": {
+    "en": "This version of the webapp isn't signed by Flagship, so it can't use your admin key. Reload to get a signed version.",
+    "ctx": "webapp/lib/keyCustody.js:378"
+  },
+  "This browser couldn't open its admin key. Try again.": {
+    "en": "This browser couldn't open its admin key. Try again.",
+    "ctx": "webapp/lib/keyCustody.js:380"
+  },
+  "This server needs a quantum-safe signature, and this browser's admin key has no quantum-safe half that the server accepts. Release it from the Flagship app on the admin phone that set the account up.": {
+    "en": "This server needs a quantum-safe signature, and this browser's admin key has no quantum-safe half that the server accepts. Release it from the Flagship app on the admin phone that set the account up.",
+    "ctx": "webapp/lib/releaseThisBox.js:72"
+  },
+  "This server needs a quantum-safe signature, and this browser's admin key has no quantum-safe half that the server accepts. Restore it from the Flagship app on the admin phone that set the account up.": {
+    "en": "This server needs a quantum-safe signature, and this browser's admin key has no quantum-safe half that the server accepts. Restore it from the Flagship app on the admin phone that set the account up.",
+    "ctx": "webapp/lib/restoreMerge.js:85"
+  },
+  "{0} admin key (this browser)": {
+    "en": "{0} admin key (this browser)",
+    "ctx": "webapp/lib/state.js:56"
+  },
+  "Flagship admin key (this browser)": {
+    "en": "Flagship admin key (this browser)",
+    "ctx": "webapp/lib/state.js:56"
+  },
+  "This version of the webapp isn't signed by Flagship.": {
+    "en": "This version of the webapp isn't signed by Flagship.",
+    "ctx": "webapp/lib/swRegister.js:16"
+  },
+  "Its quantum-safe half is the one on record, so servers that need quantum-safe signatures accept this browser's orders.": {
+    "en": "Its quantum-safe half is the one on record, so servers that need quantum-safe signatures accept this browser's orders.",
+    "ctx": "webapp/views/account-security.js:251"
+  },
+  "Another device holds the admin key's quantum-safe half, so this browser signs classically. Servers that need quantum-safe signatures refuse its orders.": {
+    "en": "Another device holds the admin key's quantum-safe half, so this browser signs classically. Servers that need quantum-safe signatures refuse its orders.",
+    "ctx": "webapp/views/account-security.js:252"
+  },
+  "This browser's admin key": {
+    "en": "This browser's admin key",
+    "ctx": "webapp/views/account-security.js:255"
+  },
+  "Each admin action asks for your passkey, and the key is locked again right after.": {
+    "en": "Each admin action asks for your passkey, and the key is locked again right after.",
+    "ctx": "webapp/views/account-security.js:257"
+  },
+  "This browser's admin key is protected by its passphrase only. Protect it with a passkey (Touch ID, Windows Hello or a security key) before it signs anything.": {
+    "en": "This browser's admin key is protected by its passphrase only. Protect it with a passkey (Touch ID, Windows Hello or a security key) before it signs anything.",
+    "ctx": "webapp/views/account-security.js:264"
+  },
+  "Protect with a passkey": {
+    "en": "Protect with a passkey",
+    "ctx": "webapp/views/account-security.js:265"
+  },
+  "Browser: software key, unlocked with a passkey": {
+    "en": "Browser: software key, unlocked with a passkey",
+    "ctx": "webapp/views/account-security.js:269"
+  },
+  "This browser's admin key is now protected by a passkey.": {
+    "en": "This browser's admin key is now protected by a passkey.",
+    "ctx": "webapp/views/account-security.js:310"
+  },
+  "This browser signs admin orders quantum-safe when its admin key's quantum-safe half is the one on record, but it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.": {
+    "en": "This browser signs admin orders quantum-safe when its admin key's quantum-safe half is the one on record, but it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.",
+    "ctx": "webapp/views/quantum-safety.js:25"
   }
 }

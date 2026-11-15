@@ -105,6 +105,7 @@ export type OrgErrorCode =
   | "frozen-signer"
   | "duplicate-signer"
   | "threshold"
+  | "custody"
   | "scope"
   | "consent-missing"
   | "removed-signer"
@@ -157,9 +158,18 @@ function match(name: string, re: RegExp, v: unknown): string {
 /** `admin` holds authority; `board` counts only for overturns and vetoes; `recovery` only for delayed OAR changes. */
 export type OrgAdminKind = "admin" | "board" | "recovery";
 
+/**
+ * Where a seat's admin key lives (docs/webapp-key-custody.md items 1 and 3). `hardware`: a phone's
+ * hardware-wrapped key (the default, and what every record before custody labels means). `browser`:
+ * "Browser: software key, unlocked with a passkey". Signed into the record, grant and accept, so
+ * every box and admin sees it; encoded only when `browser`, so older records keep their bytes.
+ */
+export type OrgCustody = "hardware" | "browser";
+
 export interface OrgAdminEntry {
   seatId: string;
   kind: OrgAdminKind;
+  custody?: OrgCustody;
   /** The seat admin key's binding: role `org-seat-admin`, subject `<orgId>:<seatId>`. */
   binding: PqKeyBindingWire;
 }
@@ -171,7 +181,18 @@ export interface OrgBylaws {
   overturnK: number;
   /** How many other admins veto a founder's removal notice. */
   vetoK: number;
+  /** `hardware`: admin keys must be hardware custody (no browser admins). Default `any`. */
+  adminCustody?: "any" | "hardware";
+  /** Default true: a quorum of two or more needs at least one hardware-custody approval. */
+  quorumHardware?: boolean;
 }
+
+const custodyOf = (c: unknown): OrgCustody => {
+  if (c === undefined || c === "hardware") return "hardware";
+  if (c === "browser") return "browser";
+  return fail("malformed", "custody");
+};
+const custodySuffix = (c: unknown): string => (custodyOf(c) === "browser" ? "|browser" : "");
 
 export interface OrgAuthorityRecord {
   orgId: string;
@@ -197,7 +218,7 @@ export function canonicalOrgAdmins(admins: readonly OrgAdminEntry[]): Bytes {
     if (a.kind !== "admin" && a.kind !== "board" && a.kind !== "recovery") fail("malformed", "kind");
     match("ed25519PubHex", HEX32, a.binding?.ed25519PubHex);
     match("mldsaPubHex", /^[0-9a-f]{3904}$/, a.binding?.mldsaPubHex);
-    return `${a.seatId}:${a.kind}:${a.binding.ed25519PubHex}:${a.binding.mldsaPubHex}`;
+    return `${a.seatId}:${a.kind}:${a.binding.ed25519PubHex}:${a.binding.mldsaPubHex}${custodyOf(a.custody) === "browser" ? ":browser" : ""}`;
   });
   return enc(`${TAG_ORG_ADMINS}|${[...lines].sort().join(",")}`);
 }
@@ -212,7 +233,10 @@ export function canonicalOrgBylaws(b: OrgBylaws): Bytes {
     for (const s of b.overturnSeats) match("overturnSeats", HEX16, s);
     seats = [...b.overturnSeats].sort().join(",");
   }
-  return enc(`${TAG_ORG_BYLAWS}|${b.overturnK}|${seats}|${b.vetoK}`);
+  if (b.adminCustody !== undefined && b.adminCustody !== "any" && b.adminCustody !== "hardware") fail("bylaws", "adminCustody");
+  if (b.quorumHardware !== undefined && typeof b.quorumHardware !== "boolean") fail("bylaws", "quorumHardware");
+  const extra = (b.adminCustody === "hardware" ? "|hardware-admins" : "") + (b.quorumHardware === false ? "|browser-quorums" : "");
+  return enc(`${TAG_ORG_BYLAWS}|${b.overturnK}|${seats}|${b.vetoK}${extra}`);
 }
 
 export function canonicalOrgAuthority(r: OrgAuthorityRecord): Bytes {
@@ -293,7 +317,21 @@ export function checkOrgAuthorityShape(r: OrgAuthorityRecord): void {
   const setSize = orgOverturnSet(r).length;
   if (setSize === 0 || orgOverturnThreshold(r) > setSize || orgOverturnThreshold(r) > ORG_K_MAX) fail("bylaws", "overturnK");
   if (r.bylaws.vetoK < 1 || r.bylaws.vetoK > ORG_K_MAX) fail("bylaws", "vetoK");
+  if (r.bylaws.adminCustody === "hardware") {
+    for (const a of r.admins) if (custodyOf(a.custody) === "browser") fail("custody", `${a.seatId}: the bylaws need hardware custody for admins`);
+  }
 }
+
+/**
+ * The bylaws' quorum rule: a quorum of two or more needs at least one approval by a hardware-custody
+ * key, unless the bylaws turned it off. `custodyOfSigner` answers for each counted signer.
+ */
+export function checkOrgQuorumCustody(r: OrgAuthorityRecord, k: number, signers: readonly string[], custodyOfSigner: (seatId: string) => OrgCustody): void {
+  if (r.bylaws.quorumHardware === false || k < 2 || signers.length === 0) return;
+  if (!signers.some((s) => custodyOfSigner(s) === "hardware")) fail("custody", "a quorum of two or more needs a hardware approval");
+}
+
+const adminCustody = (r: OrgAuthorityRecord) => (s: string): OrgCustody => custodyOf(r.admins.find((a) => a.seatId === s)?.custody);
 
 // ── approvals ────────────────────────────────────────────────────────────
 
@@ -672,6 +710,7 @@ function verifyTransition(
       }
       const k = bylawsChanged || founderMoved ? orgBylawsThreshold(p) : p.kGov;
       if (signers.length < k) fail("threshold", `${signers.length} of ${k}`);
+      checkOrgQuorumCustody(p, k, signers, adminCustody(p));
       return;
     }
     case "founder-removal": {
@@ -704,6 +743,7 @@ function verifyTransition(
       if (!signers.some((s) => kindOf(s) === "recovery")) fail("notice-invalid", "no recovery seat");
       const k = bylawsChanged || founderMoved ? orgBylawsThreshold(p) : p.kGov;
       if (signers.length < k) fail("threshold", `${signers.length} of ${k}`);
+      checkOrgQuorumCustody(p, k, signers, adminCustody(p));
       const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(n!.body));
       const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && !signers.includes(a.seatId)).map((a) => a.seatId));
       for (const v of opts.vetoes ?? []) {
@@ -737,6 +777,7 @@ function verifyTransition(
       const counted = signers.filter((s) => set.has(s));
       if (counted.length !== signers.length) fail("not-an-admin", "outside the overturn set");
       if (counted.length < orgOverturnThreshold(p)) fail("threshold", `${counted.length} of ${orgOverturnThreshold(p)}`);
+      checkOrgQuorumCustody(p, orgOverturnThreshold(p), counted, adminCustody(p));
       return;
     }
     default:
@@ -922,6 +963,8 @@ export interface OrgSeatAccept {
   memberKeyId: string;
   adminKeyId: string;
   issuedAt: number;
+  /** Where the seat's admin key lives (`browser` only with an admin key). */
+  custody?: OrgCustody;
 }
 
 export function canonicalOrgSeatAccept(a: OrgSeatAccept): Bytes {
@@ -931,7 +974,8 @@ export function canonicalOrgSeatAccept(a: OrgSeatAccept): Bytes {
   match("memberKeyId", HEX32, a.memberKeyId);
   if (a.adminKeyId !== "") match("adminKeyId", HEX32, a.adminKeyId);
   uint("issuedAt", a.issuedAt);
-  return enc([TAG_ORG_SEAT_ACCEPT, a.orgId, a.seatId, a.inviteSha256, a.memberKeyId, a.adminKeyId, a.issuedAt].join("|"));
+  if (custodyOf(a.custody) === "browser" && a.adminKeyId === "") fail("malformed", "custody without an admin key");
+  return enc([TAG_ORG_SEAT_ACCEPT, a.orgId, a.seatId, a.inviteSha256, a.memberKeyId, a.adminKeyId, a.issuedAt].join("|") + custodySuffix(a.custody));
 }
 
 /** The 6-digit code both phones show before the admin approves a seat (defeats a leaked link). */
@@ -954,6 +998,8 @@ export interface OrgSeatGrant {
   oarVersion: number;
   issuedAt: number;
   expiresAt: number;
+  /** The custody the seat's accept signed for its admin key; admins see it before they approve. */
+  custody?: OrgCustody;
 }
 
 export function canonicalOrgSeatGrant(g: OrgSeatGrant): Bytes {
@@ -966,7 +1012,7 @@ export function canonicalOrgSeatGrant(g: OrgSeatGrant): Bytes {
   for (const [k, v] of Object.entries({ oarVersion: g.oarVersion, issuedAt: g.issuedAt, expiresAt: g.expiresAt })) uint(k, v);
   if (g.expiresAt <= g.issuedAt || g.expiresAt - g.issuedAt > ORG_GRANT_MAX_LIFETIME_MS) fail("malformed", "expiresAt");
   return enc(
-    [TAG_ORG_SEAT_GRANT, g.orgId, g.seatId, g.labelSha256, g.memberKeyId, g.adminKeyId, g.rolesHash, g.oarVersion, g.issuedAt, g.expiresAt].join("|"),
+    [TAG_ORG_SEAT_GRANT, g.orgId, g.seatId, g.labelSha256, g.memberKeyId, g.adminKeyId, g.rolesHash, g.oarVersion, g.issuedAt, g.expiresAt].join("|") + custodySuffix(g.custody),
   );
 }
 
@@ -1094,9 +1140,14 @@ export function verifyOrgSeatGrant(st: OrgAuthorityState, b: OrgSeatGrantBundle,
     admin = verifySeatBinding(b.adminBinding!, "org-seat-admin", g.orgId, g.seatId, now);
     if (admin.keyIdHex !== g.adminKeyId) fail("binding", "admin key id");
   } else if (orgRolesRaiseAdmin(b.roles)) fail("binding", "an admin role needs an admin key");
+  if (custodyOf(g.custody) === "browser") {
+    if (g.adminKeyId === "") fail("malformed", "custody without an admin key");
+    if (r!.bylaws.adminCustody === "hardware" && orgRolesRaiseAdmin(b.roles)) fail("custody", "the bylaws need hardware custody for admins");
+  }
   const signers = checkApprovals(b.approvals, { orgId: g.orgId, oarVersion: g.oarVersion, order, now }, (s) => st.bindings.get(bindingKey(g.oarVersion, s)), frozen);
   for (const s of signers) if (r!.admins.find((a) => a.seatId === s)?.kind !== "admin") fail("not-an-admin", s);
   if (signers.length < orgGrantThreshold(r!, b.roles)) fail("threshold", `${signers.length} of ${orgGrantThreshold(r!, b.roles)}`);
+  checkOrgQuorumCustody(r!, orgGrantThreshold(r!, b.roles), signers, adminCustody(r!));
   return { seatId: g.seatId, roles: b.roles, member, admin, grant: g };
 }
 
@@ -1261,6 +1312,7 @@ export function authorizeOrgOrder(input: OrgAuthorizeInput): OrgAuthorizeResult 
   const need = (k: number): OrgAuthorizeResult => {
     if (others.length > 0) fail("scope", "a seat outside the org admins");
     if (orgAdmins.length < k) fail("threshold", `${orgAdmins.length} of ${k}`);
+    checkOrgQuorumCustody(at, k, orgAdmins, adminCustody(at));
     return { signers, scopedSeat: null };
   };
   switch (action.kind) {
