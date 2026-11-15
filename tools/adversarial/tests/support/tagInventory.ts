@@ -42,6 +42,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/org-seat-kem/v1": "bespoke AT-ENV-42 (orgForgery.test.ts: statement moved to another seat, KEM key swapped, departed seat); vectors test-vectors/org-servers",
   "flagship/org-box-kem/v1": "bespoke AT-ENV-42 (orgForgery.test.ts: another STK, KEM key swapped); vectors test-vectors/org-servers",
   "flagship/org-key-ring/v1": "bespoke AT-ENV-43 (orgForgery.test.ts: recipient spliced in after approval, retired seat dropped, commitment swap, scope swap, outsider approval); vectors test-vectors/org-servers",
+  "flagship/org-install-blob/v1": "bespoke AT-ENV-45 (orgForgery.test.ts: installer commit, registration URL, unlock mode or disk encryption changed after approval; the code's approval reused); vectors test-vectors/org-servers",
   "flagship/org-audit-export/v1": "bespoke AT-ENV-44 (orgForgery.test.ts: log head swap, record hash swap, outsider); vectors test-vectors/org-servers",
   "flagship/org-key-recipients/v1": "hash: a key-ring version's recipients digest (committed by the approved ring statement)",
   "flagship/org-key-commit/v1": "hash: the key commitment every opener checks its copy against",

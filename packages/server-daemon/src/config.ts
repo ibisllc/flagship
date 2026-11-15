@@ -40,12 +40,17 @@ export async function loadConfig(path: string): Promise<ServerConfig> {
 
 export function parseConfig(data: unknown): ServerConfig {
   if (typeof data !== "object" || data === null) throw new Error("config must be an object");
-  const d = data as Record<string, unknown>;
+  const d = { ...(data as Record<string, unknown>) };
   if (typeof d.serverId !== "string") throw new Error("config.serverId must be a string");
   if (typeof d.userId !== "string") throw new Error("config.userId must be a string");
   if (typeof d.bakPublicKey !== "string" || !/^[0-9a-f]{64}$/.test(d.bakPublicKey)) {
     throw new Error("config.bakPublicKey must be 32-byte hex");
   }
+  const orgBox = typeof d.orgId === "string" && /^[0-9a-f]{32}$/.test(d.orgId) && typeof d.orgGenesisHash === "string" && /^[0-9a-f]{64}$/.test(d.orgGenesisHash);
+  // An org server has no owner IRK (docs/enterprise-accounts.md "Org servers"): its authority is
+  // the org chain it pins. Its IRK slot holds 32 zero bytes, a key nobody holds and a strict
+  // verifier refuses, so every owner-IRK path fails closed on an org box.
+  if (orgBox && d.irkPublicKey === undefined) d.irkPublicKey = "0".repeat(64);
   if (typeof d.irkPublicKey !== "string" || !/^[0-9a-f]{64}$/.test(d.irkPublicKey)) {
     throw new Error("config.irkPublicKey must be 32-byte hex");
   }

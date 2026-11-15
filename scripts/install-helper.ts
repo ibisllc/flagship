@@ -56,6 +56,9 @@ import {
   signPutSealedLuksKey,
   signServerRegister,
   signServerWildcardGrant,
+  canonicalOrgServerRegister,
+  orgServerCodeSha256,
+  type OrgServerCode,
   type AuthCode,
   type Keypair,
   type PutSealedLuksKey,
@@ -187,9 +190,33 @@ function pkcs8FromHex(argv: string[]): void {
   process.stdout.write(pkcs8PemFromRaw(hexToBytes(privHex)));
 }
 
+/**
+ * An org server registers with its server code (docs/enterprise-accounts.md "Org servers"):
+ * `flagship/org-server-register/v1` over the code's hash, signed with the box's STK, posted to
+ * the recipe's registrationUrl (`/api/orgs/<orgId>/servers/register`).
+ */
+async function signOrgRegister(argv: string[], blob: { orgId: string; serverDomain: string; code: OrgServerCode }, privHex: string | undefined): Promise<void> {
+  const identity = await identityFor(argv, privHex);
+  const nonce = new Uint8Array(16);
+  crypto.getRandomValues(nonce);
+  const request = {
+    orgId: blob.orgId,
+    serial: blob.code.serial,
+    serverDomain: blob.serverDomain,
+    codeSha256: orgServerCodeSha256(blob.code),
+    serverIdentityPubKeyHex: bytesToHex(identity.publicKey),
+    issuedAt: Date.now(),
+    nonceHex: bytesToHex(nonce),
+  };
+  const signature = bytesToHex(ed.sign(canonicalOrgServerRegister(request), identity.privateKey));
+  process.stdout.write(JSON.stringify({ request, signature }));
+}
+
 async function signRegister(argv: string[]): Promise<void> {
   const privHex = optArg(argv, "--priv-hex");
   const blobPath = arg(argv, "--auth-code-blob");
+  const raw = JSON.parse(readFileSync(blobPath, "utf8")) as { kind?: string };
+  if (raw.kind === "org") return signOrgRegister(argv, raw as never, privHex);
   const blob = JSON.parse(readFileSync(blobPath, "utf8")) as {
     authCode: {
       version: 1;

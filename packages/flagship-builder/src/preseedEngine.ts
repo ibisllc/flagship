@@ -18,7 +18,7 @@
  * bare JSContext / Rhino scope (which has no module loader) can reach it after
  * evaluating the bundle.
  */
-import { parseInstallBlob } from "./installBlobParse.js";
+import { parseInstallBlob, parseOrgInstallBlob } from "./installBlobParse.js";
 import type { LoadedBlob } from "./loadBlob.js";
 import { readProxySiblings } from "./proxySiblings.js";
 import { buildDebianPreseed } from "./preseed.js";
@@ -56,6 +56,23 @@ export function optionsFromRecipeJson(recipeJson: string, burn: EngineBurnOption
   let obj = parsed;
   if (parsed.blob && typeof parsed.blob === "object" && typeof parsed.blobSignature === "string") {
     obj = { ...(parsed.blob as Record<string, unknown>), blobSignatureHex: parsed.blobSignature };
+  }
+  if (obj.kind === "org" || (parsed.blob as Record<string, unknown> | undefined)?.kind === "org") {
+    // An org recipe carries org approvals instead of an IRK signature (the box verifies them).
+    const org = parseOrgInstallBlob((parsed.blob as Record<string, unknown> | undefined) ?? obj);
+    if (!org) throw new Error("org InstallBlob fields incomplete/malformed");
+    return {
+      blob: org.view,
+      blobSignatureHex: "",
+      orgBlob: org.json,
+      ...(burn.encryptRoot !== undefined ? { encryptRoot: burn.encryptRoot } : {}),
+      ...(burn.wifiSSID ? { wifiSSID: burn.wifiSSID } : {}),
+      ...(burn.wifiPassword ? { wifiPassword: burn.wifiPassword } : {}),
+      ...(burn.installerGitRef ? { installerGitRef: burn.installerGitRef } : {}),
+      ...(burn.flagshipRepoUrl ? { flagshipRepoUrl: burn.flagshipRepoUrl } : {}),
+      ...(burn.bootHost ? { bootHost: burn.bootHost } : {}),
+      ...(burn.targetDisk ? { targetDisk: burn.targetDisk } : {}),
+    };
   }
   const sigHex = obj.blobSignatureHex;
   if (typeof sigHex !== "string") throw new Error("missing blobSignatureHex");
@@ -127,6 +144,7 @@ export function buildBootstrapFromRecipe(recipeJson: string, burnOptsJson?: stri
  * every field null and the guest refused to re-key its disk. */
 export function buildInstallBlobJsonFromRecipe(recipeJson: string): string {
   const opts = optionsFromRecipeJson(recipeJson);
+  if (opts.orgBlob) return JSON.stringify(opts.orgBlob);
   return JSON.stringify(
     installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingOrder, opts.swkHex, opts.debugGrant, opts.offlineSecrets, opts.enrollmentKeyHex, {
       outboundProxy: opts.outboundProxy,

@@ -41,10 +41,10 @@ export function rootConfigFromBlob(b: unknown): Record<string, string> | null {
   };
 }
 
-/** The bootstrap's `CONTROL_PLANE_BASE` (sed 's|/api/server/register$||', then http(s) only), or null. */
+/** The bootstrap's `CONTROL_PLANE_BASE` (personal or org registration route stripped, then http(s) only), or null. */
 export function controlPlaneBaseFromRegistrationUrl(url: unknown): string | null {
   if (typeof url !== "string" || !/^[\x21-\x7e]+$/.test(url)) return null;
-  const base = url.replace(/\/api\/server\/register$/, "");
+  const base = url.replace(/\/api\/(?:server|orgs\/[0-9a-f]{32}\/servers)\/register$/, "");
   return /^https?:\/\//.test(base) ? base : null;
 }
 

@@ -1334,7 +1334,9 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Re-pinned 2026-11-13 (feat/outbound-proxy folded into release/0.4): setup POSTs go through
       // flagship_post, which uses the private relay (OHTTP, via flagship-tsx) when the recipe
       // names an outbound proxy.
-      "99140f1171caf4cb0271435a14ff3809353c3210d7f862e95b452079a64a3cf3",
+      // Re-pinned 2026-11-15 (org servers + retail first boot): the bootstrap reads an org recipe's code serial, strips
+      // the org registration route and writes an org config (orgId + genesis, no IRK).
+      "9c28a766feaa37a44cbe94a9cc87bde4896e87fbaa613ecb37117e3b75ce7077",
     );
   });
 

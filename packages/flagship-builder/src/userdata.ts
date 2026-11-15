@@ -47,6 +47,11 @@ import {
  */
 export interface UserDataOptions {
   blob: InstallBlob;
+  /**
+   * An org server's recipe JSON (`kind: "org"`, installBlobParse.ts parseOrgInstallBlob). When set,
+   * it is what install-blob.json holds; `blob` is then only the view the generators read.
+   */
+  orgBlob?: Record<string, unknown>;
   /** Hex signature over canonical blob bytes (from build-ticket redeem). */
   blobSignatureHex: string;
   /** Repo to clone for the daemon source. */
@@ -231,7 +236,7 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
   return {
     blobB64: utf8ToBase64(
       JSON.stringify(
-        installBlobToJson(
+        opts.orgBlob ?? installBlobToJson(
           opts.blob,
           opts.blobSignatureHex,
           opts.pairingOrder,
@@ -642,7 +647,8 @@ USERNAME="$(jq -r .username "$BLOB_JSON")"
 SERVER_NAME="$(jq -r .serverName "$BLOB_JSON")"
 REGISTRATION_URL="$(jq -r .registrationUrl "$BLOB_JSON")"
 PHONE_DELEGATED_PUBKEY="$(jq -r .phoneDelegatedPubKey "$BLOB_JSON")"
-AUTH_CODE_SERIAL="$(jq -r .authCode.serial "$BLOB_JSON")"
+# An org server's recipe (kind "org") carries a server code instead of an AuthCode.
+AUTH_CODE_SERIAL="$(jq -r '.authCode.serial // .code.serial' "$BLOB_JSON")"
 echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
 
 # ── Brand the box. /etc/issue is shown by getty ABOVE the login prompt (where
@@ -678,7 +684,7 @@ FLAGSHIP_MOTD
 # Best-effort: a failed report NEVER fails the install. (The Alpine live
 # installer can also report the earlier downloading/partitioning phases; the
 # d-i late_command can only report from here on — clone/build onward.)
-CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed -E 's#/api/(server|orgs/[0-9a-f]{32}/servers)/register$##')"
 ${SETUP_POST_FN}
 report_phase() {
     # $1 = canonical ProvisionStatusPhase, $2 = optional detail (error string)
@@ -830,7 +836,14 @@ case "$CONTROL_PLANE_BASE" in
     *) echo "[flagship-bootstrap] FATAL: cannot derive the control plane from $REGISTRATION_URL"; exit 1 ;;
 esac
 mkdir -p /etc/flagship
+# An org server pins its org (orgId + the authority genesis) in place of an IRK and an admin root.
 jq -ce 'def hex64: type == "string" and test("^[0-9a-fA-F]{64}$");
+    if .kind == "org" then
+    select((.serverDomain | type) == "string" and (.orgName | type) == "string" and (.phoneDelegatedPubKey | hex64)
+        and (.orgId | type) == "string" and (.orgId | test("^[0-9a-f]{32}$")) and (.genesisHash | hex64))
+    | {serverId: .serverDomain, userId: .orgName, bakPublicKey: (.phoneDelegatedPubKey | ascii_downcase),
+       orgId: .orgId, orgGenesisHash: (.genesisHash | ascii_downcase)}
+    else
     select((.serverDomain | type) == "string" and (.username | type) == "string"
         and (.phoneDelegatedPubKey | hex64) and (.authCode.userPubKey | hex64))
     | (if (.authCode.adminRootPubKey | hex64) then .authCode.adminRootPubKey
@@ -839,7 +852,8 @@ jq -ce 'def hex64: type == "string" and test("^[0-9a-fA-F]{64}$");
        bakPublicKey: (.phoneDelegatedPubKey | ascii_downcase),
        irkPublicKey: (.authCode.userPubKey | ascii_downcase)}
     + (if (.ownerAidPubHex | hex64) then {ownerAidPubHex: (.ownerAidPubHex | ascii_downcase)} else {} end)
-    + (if $root then {adminRootPubHex: ($root | ascii_downcase)} else {} end)' \\
+    + (if $root then {adminRootPubHex: ($root | ascii_downcase)} else {} end)
+    end' \\
     "$BLOB_JSON" > /etc/flagship/config.json \\
     || { echo "[flagship-bootstrap] FATAL: the install blob has no usable owner keys"; exit 1; }
 chmod 600 /etc/flagship/config.json
@@ -900,7 +914,7 @@ cd /opt/flagship
 # plain path the deferred register is where the registering phase first fires —
 # the encrypted path already reported it inline before its in-target register,
 # so its registered.flag makes this unit skip (no double-emit). Best-effort.
-CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed -E 's#/api/(server|orgs/[0-9a-f]{32}/servers)/register$##')"
 ${SETUP_POST_FN}
 report_phase() {
     flagship_post "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" '{"phase":"'"$1"'"}' 8 >/dev/null 2>&1 || true
@@ -1386,7 +1400,7 @@ flagship-tsx scripts/install-helper.ts sign-sealed-key "\${SEAL_ID_ARGS[@]}" \\
     --sealed-hex "$SEALED_LUKS_KEY_HEX" \\
     --issued-at "$NOW_MS" \\
     > /run/sealed-key-payload.json
-CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed -E 's#/api/(server|orgs/[0-9a-f]{32}/servers)/register$##')"
 if ! flagship_post "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/sealed-luks-key" @/run/sealed-key-payload.json 120; then
     echo "[flagship-bootstrap] FATAL: sealed-key upload failed — keeping the install-time key (recoverable), aborting"
     exit 1

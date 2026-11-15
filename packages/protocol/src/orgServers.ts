@@ -14,7 +14,7 @@
  */
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hex } from "./canonicalBase.js";
-import { OrgAuthorityError, authorizeOrgOrder, orgSha256Hex, type OrgApproval, type OrgAuthorityState, type OrgSeatBook } from "./orgAuthority.js";
+import { OrgAuthorityError, authorizeOrgOrder, orgSha256Hex, verifyOrgRecordedApprovals, type OrgApproval, type OrgAuthorityState, type OrgSeatBook } from "./orgAuthority.js";
 import { ed25519VerifyStrict } from "./pqHybrid.js";
 import type { Bytes } from "./types.js";
 
@@ -131,4 +131,85 @@ export function verifyOrgServerRegister(r: OrgServerRegister, signatureHex: stri
   } catch {
     return false;
   }
+}
+
+export const TAG_ORG_INSTALL_BLOB = "flagship/org-install-blob/v1";
+
+/**
+ * The recipe of an org server (`install-blob.json` with `kind: "org"`). A personal recipe is signed
+ * by the owner's IRK; an org has none, so the recipe carries org approvals over its canonical bytes
+ * (the same `add-server` authority as the code), and the server code with its own approvals. The
+ * box pins `orgId` + `genesisHash` from it and, once it has replayed the chain, checks both sets of
+ * approvals itself (`verifyOrgInstallBlob`).
+ *
+ *   flagship/org-install-blob/v1|<orgId>|<genesisHash>|<orgName>|<serverName>|<serverDomain>|<registrationUrl>|<installerGitRef>|<phoneDelegatedPubKey>|<codeSha256>|<bootUnlockMode>|<diskEncryption>
+ */
+export interface OrgInstallBlob {
+  kind: "org";
+  version: 1;
+  orgId: string;
+  genesisHash: string;
+  orgName: string;
+  /** The org's name again, under the field every bootstrap reads (`jq .username`). */
+  username: string;
+  serverName: string;
+  serverDomain: string;
+  registrationUrl: string;
+  installerGitRef: string;
+  phoneDelegatedPubKey: string;
+  bootUnlockMode: "auto" | "approve";
+  diskEncryption: "luks" | "none";
+  code: OrgServerCode;
+  codeApprovals: OrgApproval[];
+  approvals: OrgApproval[];
+}
+
+const URL_RE = /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?\/api\/orgs\/[0-9a-f]{32}\/servers\/register$/;
+const GIT_REF = /^[0-9a-f]{40}$/;
+
+export function canonicalOrgInstallBlob(b: Omit<OrgInstallBlob, "approvals" | "codeApprovals">): Bytes {
+  if (b.kind !== "org" || b.version !== 1) fail("kind");
+  match("orgId", HEX16, b.orgId);
+  match("genesisHash", HEX32, b.genesisHash);
+  match("orgName", LABEL, b.orgName);
+  if (b.username !== b.orgName) fail("username");
+  match("serverName", LABEL, b.serverName);
+  match("serverDomain", DOMAIN, b.serverDomain);
+  match("registrationUrl", URL_RE, b.registrationUrl);
+  if (!b.registrationUrl.includes(`/api/orgs/${b.orgId}/`)) fail("registrationUrl");
+  match("installerGitRef", GIT_REF, b.installerGitRef);
+  match("phoneDelegatedPubKey", HEX32, b.phoneDelegatedPubKey);
+  if (b.bootUnlockMode !== "auto" && b.bootUnlockMode !== "approve") fail("bootUnlockMode");
+  if (b.diskEncryption !== "luks" && b.diskEncryption !== "none") fail("diskEncryption");
+  const c = b.code;
+  canonicalOrgServerCode(c);
+  if (c.orgId !== b.orgId || c.genesisHash !== b.genesisHash || c.serverName !== b.serverName || c.serverDomain !== b.serverDomain) fail("code names another server");
+  if (b.serverDomain !== `${b.serverName}.${b.orgName}.${b.serverDomain.split(".").slice(2).join(".")}`) fail("serverDomain");
+  return enc(
+    [
+      TAG_ORG_INSTALL_BLOB,
+      b.orgId,
+      b.genesisHash,
+      b.orgName,
+      b.serverName,
+      b.serverDomain,
+      b.registrationUrl,
+      b.installerGitRef,
+      b.phoneDelegatedPubKey,
+      orgServerCodeSha256(c),
+      b.bootUnlockMode,
+      b.diskEncryption,
+    ].join("|"),
+  );
+}
+
+/** Checks an org recipe under the chain and seat book the box replayed from the recipe's genesis. */
+export function verifyOrgInstallBlob(state: OrgAuthorityState, book: OrgSeatBook, b: OrgInstallBlob, now: number): { signers: string[] } {
+  const order = canonicalOrgInstallBlob(b);
+  if (b.orgId !== state.orgId || b.genesisHash !== state.genesisHash) throw new OrgAuthorityError("wrong-org");
+  // As of the record the approvals name: a box may install days after the ceremony.
+  const at = (a: readonly OrgApproval[]) => (Array.isArray(a) && a[0] ? a[0].oarVersion : -1);
+  const code = verifyOrgRecordedApprovals(state, book, canonicalOrgServerCode(b.code), b.codeApprovals, at(b.codeApprovals), now, { kind: "add-server" });
+  const blob = verifyOrgRecordedApprovals(state, book, order, b.approvals, at(b.approvals), now, { kind: "add-server" });
+  return { signers: [...new Set([...code.signers, ...blob.signers])] };
 }

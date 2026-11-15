@@ -60,3 +60,50 @@ export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null
       : {}),
   };
 }
+
+/**
+ * An org server's recipe (`kind: "org"`, docs/enterprise-accounts.md "Org servers"): checked for
+ * shape only (the box verifies the org approvals once it has replayed the org's chain). Returns the
+ * JSON the box gets as install-blob.json and the fields the bootstrap generators read, as an
+ * InstallBlob view: an org has no IRK and no RCK, so those keys are all-zero placeholders no one
+ * holds (the generated config names the org instead of an IRK).
+ */
+export function parseOrgInstallBlob(o: Record<string, unknown>): { json: Record<string, unknown>; view: InstallBlob } | null {
+  const hex32 = (v: unknown) => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
+  const code = o.code as Record<string, unknown> | undefined;
+  if (o.kind !== "org" || o.version !== 1 || !code || typeof code !== "object") return null;
+  if (typeof o.orgId !== "string" || !/^[0-9a-f]{32}$/.test(o.orgId) || !hex32(o.genesisHash) || !hex32(o.phoneDelegatedPubKey)) return null;
+  for (const k of ["orgName", "serverName", "serverDomain", "registrationUrl", "installerGitRef"]) if (typeof o[k] !== "string") return null;
+  if (o.username !== o.orgName || code.orgId !== o.orgId || code.genesisHash !== o.genesisHash || code.serverDomain !== o.serverDomain) return null;
+  if (!Array.isArray(o.approvals) || o.approvals.length === 0 || !Array.isArray(o.codeApprovals) || o.codeApprovals.length === 0) return null;
+  if (o.bootUnlockMode !== "auto" && o.bootUnlockMode !== "approve") return null;
+  if (o.diskEncryption !== "luks" && o.diskEncryption !== "none") return null;
+  if (typeof code.serial !== "string" || typeof code.issuedAt !== "number" || typeof code.expiresAt !== "number") return null;
+  const zero = new Uint8Array(32);
+  const json = { ...o };
+  const view: InstallBlob = {
+    version: 2,
+    serverDomain: String(o.serverDomain),
+    username: String(o.orgName),
+    serverName: String(o.serverName),
+    phoneDelegatedPubKey: hexToBytes(o.phoneDelegatedPubKey)!,
+    registrationUrl: String(o.registrationUrl),
+    authCode: {
+      version: 1,
+      serial: code.serial,
+      username: String(o.orgName),
+      serverName: String(o.serverName),
+      serverDomain: String(o.serverDomain),
+      delegatedPubKey: hexToBytes(String(code.delegatedPubKeyHex)) ?? zero,
+      userPubKey: zero,
+      issuedAt: code.issuedAt,
+      expiresAt: code.expiresAt,
+    },
+    authCodeUserSignature: new Uint8Array(64),
+    installerGitRef: String(o.installerGitRef),
+    rckPubKey: zero,
+    bootUnlockMode: o.bootUnlockMode,
+    diskEncryption: o.diskEncryption,
+  };
+  return { json, view };
+}

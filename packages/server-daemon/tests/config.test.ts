@@ -68,4 +68,11 @@ describe("parseConfig", () => {
     expect(cfg.ownerAidPub).toBeUndefined(); // dropped, but the config still loads
     expect(cfg.serverId).toBe("srv-1");
   });
+
+  it("an org server's config pins the org and holds no IRK (a zero key nobody holds)", () => {
+    const c = parseConfig({ serverId: "home.acme.flagship.services", userId: "acme", bakPublicKey: "d1".repeat(32), orgId: "0a".repeat(16), orgGenesisHash: "9e".repeat(32) });
+    expect(c.orgId).toBe("0a".repeat(16));
+    expect(Buffer.from(c.irkPublicKey).toString("hex")).toBe("00".repeat(32));
+    expect(() => parseConfig({ serverId: "x", userId: "y", bakPublicKey: "d1".repeat(32) })).toThrow(/irkPublicKey/);
+  });
 });
