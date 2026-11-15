@@ -12,7 +12,7 @@ export PATH="$work/depot_tools:$PATH" DEPOT_TOOLS_UPDATE=0
 python3 "$here/apply-overlay.py" "$work/src"
 cd "$work/src"
 python3 tools_webrtc/android/build_aar.py \
-  --build-dir "$work/out-android" \
+  --build-dir "$work/src/out/android" \
   --output "$out/libwebrtc.aar" \
   --arch arm64-v8a armeabi-v7a x86_64 \
   --extra-gn-args $(grep -v "^#" "$here/gn-args.txt")
