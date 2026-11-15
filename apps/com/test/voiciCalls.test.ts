@@ -54,7 +54,7 @@ describe("voi.ci call routes", () => {
   afterEach(() => vi.useRealTimers());
 
   it("are voi.ci paths, metered by their own buckets", () => {
-    for (const p of ["/api/voici/calls", `/api/voici/calls/${"ab".repeat(16)}/caller`, "/api/voici/pages/alice/calls", "/api/voici/pages/alice/call-allow", "/api/accounts/alice/voici-voip-token"]) {
+    for (const p of ["/api/voici/calls", `/api/voici/calls/${"ab".repeat(16)}/caller`, "/api/voici/pages/alice/calls", "/api/voici/pages/alice/call-allow", "/api/accounts/alice/voici-voip-token", "/api/accounts/alice/voici-call-key", "/api/accounts/alice/voici-call-key/revoke"]) {
       expect(isVoiciApiPath(p), p).toBe(true);
       expect(endpointFor("POST", p)).toBeNull();
     }

@@ -5,9 +5,12 @@
  *
  *   POST /api/voici/calls                          the caller's signed request (CORS: the voi.ci origin)
  *   GET  /api/voici/calls/<callId>/caller?t=       the caller's room WebSocket (Origin: the voi.ci origin)
- *   GET  /api/voici/calls/<callId>/device?u=<u>    a ringing admin device's room WebSocket (device headers)
+ *   GET  /api/voici/calls/<callId>/device?u=<u>    a ringing admin device's room WebSocket (device headers, or a locked
+ *                                                  device's join signed by its bound call key: x-flagship-call-key-*)
  *   POST /api/voici/pages/<u>/call-allow           the owner's call-allow order
  *   GET  /api/voici/pages/<u>/calls?since=         sealed missed calls (read token)
+ *   POST /api/accounts/<u>/voici-call-key          an admin device binds its call-only key (device headers)
+ *   POST /api/accounts/<u>/voici-call-key/revoke   a signed revocation (owner messages key or the call key)
  *   POST /api/accounts/<u>/voici-voip-token        an iPhone's / iPad's PushKit token (device headers)
  */
 import {
@@ -20,6 +23,10 @@ import {
   handleVoiciVoipToken,
   voiciRefusal,
   type HandlerResponseWithHeaders,
+  authorizeVoiciCallKeyDevice,
+  handleVoiciCallKey,
+  handleVoiciCallKeyRevoke,
+  type VoiciCallKeyJoinAuth,
 } from "@flagship/control-plane";
 import { D1NonceStore } from "@flagship/boot-core";
 import { D1Storage, RequestD1, type D1Database } from "@flagship/storage";
@@ -49,11 +56,12 @@ export interface VoiciCallEnv extends RateLimitEnv {
 const CALL_PATH = /^\/api\/voici\/calls\/([0-9a-f]{32})\/(caller|device)$/;
 const PAGE_CALLS = /^\/api\/voici\/pages\/([^/]+)\/(call-allow|calls)$/;
 const VOIP_TOKEN = /^\/api\/accounts\/([^/]+)\/voici-voip-token$/;
+const CALL_KEY = /^\/api\/accounts\/([^/]+)\/voici-call-key(\/revoke)?$/;
 
 export const voiciCallsEnabled = (env: VoiciCallEnv) => env.VOICI_ENABLED === "on" && env.VOICI_CALLS === "on" && !!env.VOICI_CALL_ROOM && !!env.DB;
 
 export function isVoiciCallPath(pathname: string): boolean {
-  return pathname === "/api/voici/calls" || CALL_PATH.test(pathname) || PAGE_CALLS.test(pathname) || VOIP_TOKEN.test(pathname);
+  return pathname === "/api/voici/calls" || CALL_PATH.test(pathname) || PAGE_CALLS.test(pathname) || VOIP_TOKEN.test(pathname) || CALL_KEY.test(pathname);
 }
 
 function toResponse(r: HandlerResponseWithHeaders): Response {
@@ -76,6 +84,16 @@ function deviceAuth(request: Request, accountId: string, path: string) {
     request: { accountId: accountId.toLowerCase(), deviceId: deviceId.toLowerCase(), signerPubHex: signerPubHex.toLowerCase(), method: request.method.toUpperCase(), path, requestId, issuedAt },
     signature,
   };
+}
+
+/** A locked device's room join, signed by its bound call key (flagship/voici-call-join/v1). */
+function callKeyJoin(request: Request): VoiciCallKeyJoinAuth | undefined {
+  const deviceId = request.headers.get("x-flagship-call-key-device");
+  const callKeyPub = request.headers.get("x-flagship-call-key-pub");
+  const issuedAt = Number(request.headers.get("x-flagship-call-key-at"));
+  const signature = request.headers.get("x-flagship-call-key-sig");
+  if (!deviceId || !callKeyPub || !Number.isSafeInteger(issuedAt) || !signature) return undefined;
+  return { deviceId, callKeyPub, issuedAt, signature };
 }
 
 async function sha256Hex(b: Uint8Array): Promise<string> {
@@ -149,10 +167,15 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
     }
     const u = (url.searchParams.get("u") ?? "").toLowerCase();
     if (!u) return toResponse(voiciRefusal(400, "malformed"));
-    const dev = await authorizeVoiciCallDevice({ usernames: storage.usernames, grants: storage.deviceCapabilityGrants, directory }, u, callId, deviceAuth(request, u, path));
+    const join = callKeyJoin(request);
+    const dev = join
+      ? await authorizeVoiciCallKeyDevice({ voici: storage.voici, calls: storage.voiciCalls, usernames: storage.usernames, grants: storage.deviceCapabilityGrants }, u, callId, join)
+      : await authorizeVoiciCallDevice({ usernames: storage.usernames, grants: storage.deviceCapabilityGrants, directory }, u, callId, deviceAuth(request, u, path));
     if (!dev) return toResponse(voiciRefusal(403, "forbidden"));
     const headers = new Headers(request.headers);
+    headers.delete("x-voici-call-key-pub");
     headers.set("x-voici-device-ref", dev.deviceRef);
+    if ("callKeyPub" in dev) headers.set("x-voici-call-key-pub", dev.callKeyPub);
     return room(callId).fetch(new Request("https://room/device", { method: "GET", headers }));
   }
 
@@ -193,6 +216,27 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
       body = undefined;
     }
     return toResponse(await handleVoiciVoipToken({ calls: storage.voiciCalls, directory }, username, deviceAuth(request, username, path), body));
+  }
+
+  if ((m = path.match(CALL_KEY)) && method === "POST") {
+    const username = decodeURIComponent(m[1]!).toLowerCase();
+    const w = await wait(env, "voici-owner", request, undefined, ctx);
+    if (w !== null) return toResponse(voiciRefusal(429, "rate-limited", { retryAfterSec: w }));
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      body = undefined;
+    }
+    if (m[2]) return toResponse(await handleVoiciCallKeyRevoke({ voici: storage.voici, calls: storage.voiciCalls }, username, body));
+    return toResponse(
+      await handleVoiciCallKey(
+        { voici: storage.voici, calls: storage.voiciCalls, usernames: storage.usernames, grants: storage.deviceCapabilityGrants, directory },
+        username,
+        deviceAuth(request, username, path),
+        body,
+      ),
+    );
   }
 
   return toResponse(voiciRefusal(404, "not-found"));
