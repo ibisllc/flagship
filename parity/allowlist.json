@@ -875,6 +875,26 @@
       "check": "test-vectors",
       "key": "web:org-directory",
       "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/web-key-custody/v1",
+      "reason": "Browser-only: the webapp seals its admin root and ML-DSA seed under a passkey PRF output (docs/webapp-key-custody.md item 2). Phones keep keys in the Secure Enclave / Keystore and never use this wrap."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/web-key-custody/v1",
+      "reason": "Browser-only: the webapp seals its admin root and ML-DSA seed under a passkey PRF output (docs/webapp-key-custody.md item 2). Phones keep keys in the Secure Enclave / Keystore and never use this wrap."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/webapp-shell/v1",
+      "reason": "Browser-only: the signed manifest of the webapp shell that its service worker checks (docs/webapp-key-custody.md item 5). The native apps ship as signed store builds and have no shell to verify."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/webapp-shell/v1",
+      "reason": "Browser-only: the signed manifest of the webapp shell that its service worker checks (docs/webapp-key-custody.md item 5). The native apps ship as signed store builds and have no shell to verify."
     }
   ]
 }
