@@ -1,4 +1,4 @@
-# Task 1: release/0.4 full suite (cloud session). PARTIAL (vitest done; cargo test + Android full suite pending)
+# Task 1: release/0.4 full suite (cloud session). COMPLETE
 
 Tested commit: `2785968307fbf7ba03ab7fbc5b5b65e00a1aed9a` (release/0.4 tip at fetch, "Calls: the Kotlin port of the call records and page index v2")
 
@@ -49,5 +49,24 @@ No load flakes: everything that failed on the full run and passed alone is expla
   - web-gym: `home-demo-account`, `home-add-import-choices` and `home-lock-closes-menus` fail.
 - Scheduled jobs on main (DNS canary, D1 backup, iso-manifest URLs, release catalog, model table) are all green.
 
-## (e) Rust
-`cargo fmt --all --check` fails locally too, same as CI: `flagship-keyd/src/policy.rs:161,175,268,885` and `flagship-keyd/tests/reset.rs:12,25`. `cargo test --workspace --locked` is pending.
+## (e) Rust (`cd rust && cargo test --workspace --locked`, toolchain 1.99.1)
+**PASS**: 117 test binaries, **837 passed, 0 failed, 4 ignored** (5m07s).
+`cargo fmt --all --check` **fails** locally too, same as CI: `flagship-keyd/src/policy.rs:161,175,268,885` and `flagship-keyd/tests/reset.rs:12,25`. `cargo fmt --all` would fix it. I didn't push a fix because nobody asked for one.
+
+## (f) Android on release/0.4 (`:app:assembleDebug :app:testDebugUnitTest`, JDK 17, SDK 36)
+- assembleDebug: **PASS** (`app-debug.apk` built)
+- testDebugUnitTest: 430 classes, 2970 tests, **1 failure, then green on rerun → FLAKY**: `ModelMenuComposeTest > stagedAttachmentsWithNotice`, `androidx.test.espresso.AppNotIdleException at ModelMenuComposeTest.kt:94`. It passed when rerun alone and also passed in the full suite on 0.4/enterprise-build. It's probably a Compose idling race under load.
+
+## (g) Postgres integration (PostgreSQL **18.7** from apt.postgresql.org + pgvector)
+`FLAGSHIP_TEST_PG_URL=postgres://postgres:quota@127.0.0.1:5432/postgres npx vitest run packages/server-daemon/tests/appQuotaPg.integration.test.ts`: **11/11 PASS.**
+
+## Summary of REAL issues on release/0.4
+1. Migration ledger drift: `0141` and `0146` aren't in `KNOWN_MIGRATIONS` (schemaStatus; probably also release-manifest).
+2. accountRename coverage: `voici_live_calls.username` and `voici_voip_tokens.username`.
+3. envelopeForgery: `BoxClaimKey` canonical fields can shift across separators (AT-ENV-09), plus 17 unclassified tags (AT-ENV-10).
+4. compat-matrix shell number 208 ≠ 210.
+5. gym-refresh-acme: empty `ISSUANCE_ACME_DIRECTORY` in the gym Worker config.
+6. ios-release-clean: `MockScreensClient+RestoreMerge.swift` is compiled into Release.
+7. Rust: `cargo fmt` drift in flagship-keyd; cargo-deny RUSTSEC-2026-0459 (libsqlite3-sys → rusqlite 0.41) and RUSTSEC-2026-0486 (rustix → ≥1.1.6).
+8. parity: 23 reds (the org-* ones are closed by 0.4/enterprise-build; voici-call push handlers + web voici-call tags remain).
+9. CI hygiene: `cancel-in-progress: true` on `ci.yml` means release/0.4 rarely gets a completed CI run under rapid pushes.
