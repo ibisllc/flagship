@@ -3540,5 +3540,19 @@
   "Allow calls from them": "Anrufe von dieser Person erlauben",
   "Don't allow calls from them": "Anrufe von dieser Person nicht erlauben",
   "They can call you now.": "Diese Person kann dich jetzt anrufen.",
-  "They can't call you any more.": "Diese Person kann dich nicht mehr anrufen."
+  "They can't call you any more.": "Diese Person kann dich nicht mehr anrufen.",
+  "Release this box": "Diese Box freigeben",
+  "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": "Freigeben löscht alles auf dieser Box: ihre Apps, deren Daten und ihre Schlüssel. Das lässt sich nicht rückgängig machen. Die Box ist danach wie neu, bereit für den nächsten Besitzer.",
+  "To keep your data, make a backup first, or transfer the server to its new owner instead.": "Um deine Daten zu behalten, erstelle zuerst ein Backup oder übertrage den Server stattdessen an den neuen Besitzer.",
+  "Only an admin device of this account can release this box.": "Nur ein Admin-Gerät dieses Kontos kann diese Box freigeben.",
+  "The box is being wiped. It restarts as a new box.": "Die Box wird gelöscht. Sie startet als neue Box neu.",
+  "Only this account's admin key can release this box.": "Nur der Admin-Schlüssel dieses Kontos kann diese Box freigeben.",
+  "That order is for another server. Refresh this page and try again.": "Dieser Auftrag gilt für einen anderen Server. Lade diese Seite neu und versuche es erneut.",
+  "This device's clock is too far from the server's. Check the time and try again.": "Die Uhr dieses Geräts weicht zu stark von der des Servers ab. Prüfe die Uhrzeit und versuche es erneut.",
+  "That order was already used. Try again.": "Dieser Auftrag wurde schon verwendet. Versuche es erneut.",
+  "This box is already released.": "Diese Box ist bereits freigegeben.",
+  "The box couldn't be released. Try again in a moment.": "Die Box konnte nicht freigegeben werden. Versuche es gleich noch einmal.",
+  "Release this box?": "Diese Box freigeben?",
+  "Wipe and release": "Löschen und freigeben",
+  "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.": "Dieser Server braucht eine quantensichere Signatur, die die Webapp nicht erstellen kann. Gib ihn in der Flagship-App auf einem Admin-Telefon frei."
 }

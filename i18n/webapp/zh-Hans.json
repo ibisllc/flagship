@@ -3540,5 +3540,19 @@
   "Allow calls from them": "允许对方来电",
   "Don't allow calls from them": "不允许对方来电",
   "They can call you now.": "对方现在可以给你打电话了。",
-  "They can't call you any more.": "对方不能再给你打电话了。"
+  "They can't call you any more.": "对方不能再给你打电话了。",
+  "Release this box": "释放此主机",
+  "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": "释放会清除此主机上的所有内容：应用、应用数据和密钥。无法撤销。主机会恢复为全新状态，等待下一位所有者。",
+  "To keep your data, make a backup first, or transfer the server to its new owner instead.": "如需保留数据，请先进行备份，或改为将服务器转移给新所有者。",
+  "Only an admin device of this account can release this box.": "只有此账户的管理员设备可以释放此主机。",
+  "The box is being wiped. It restarts as a new box.": "正在清除主机。它将以全新主机的状态重启。",
+  "Only this account's admin key can release this box.": "只有此账户的管理员密钥可以释放此主机。",
+  "That order is for another server. Refresh this page and try again.": "该指令针对的是另一台服务器。请刷新此页面后重试。",
+  "This device's clock is too far from the server's. Check the time and try again.": "此设备的时钟与服务器相差太大。请检查时间后重试。",
+  "That order was already used. Try again.": "该指令已被使用。请重试。",
+  "This box is already released.": "此主机已被释放。",
+  "The box couldn't be released. Try again in a moment.": "无法释放主机。请稍后重试。",
+  "Release this box?": "要释放此主机吗？",
+  "Wipe and release": "清除并释放",
+  "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.": "此服务器需要抗量子签名，而 webapp 无法生成。请在管理员手机上的 Flagship 应用中释放它。"
 }

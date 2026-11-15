@@ -3540,5 +3540,19 @@
   "Allow calls from them": "Autoriser ses appels",
   "Don't allow calls from them": "Ne pas autoriser ses appels",
   "They can call you now.": "Cette personne peut maintenant vous appeler.",
-  "They can't call you any more.": "Cette personne ne peut plus vous appeler."
+  "They can't call you any more.": "Cette personne ne peut plus vous appeler.",
+  "Release this box": "Libérer ce boîtier",
+  "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": "Libérer efface tout sur ce boîtier : ses apps, leurs données et ses clés. C’est irréversible. Le boîtier redevient neuf, prêt pour son prochain propriétaire.",
+  "To keep your data, make a backup first, or transfer the server to its new owner instead.": "Pour garder vos données, faites d’abord une sauvegarde, ou transférez plutôt le serveur à son nouveau propriétaire.",
+  "Only an admin device of this account can release this box.": "Seul un appareil administrateur de ce compte peut libérer ce boîtier.",
+  "The box is being wiped. It restarts as a new box.": "Le boîtier est en cours d’effacement. Il redémarrera comme un boîtier neuf.",
+  "Only this account's admin key can release this box.": "Seule la clé administrateur de ce compte peut libérer ce boîtier.",
+  "That order is for another server. Refresh this page and try again.": "Cet ordre concerne un autre serveur. Actualisez cette page et réessayez.",
+  "This device's clock is too far from the server's. Check the time and try again.": "L’horloge de cet appareil est trop éloignée de celle du serveur. Vérifiez l’heure et réessayez.",
+  "That order was already used. Try again.": "Cet ordre a déjà été utilisé. Réessayez.",
+  "This box is already released.": "Ce boîtier est déjà libéré.",
+  "The box couldn't be released. Try again in a moment.": "Le boîtier n’a pas pu être libéré. Réessayez dans un instant.",
+  "Release this box?": "Libérer ce boîtier ?",
+  "Wipe and release": "Effacer et libérer",
+  "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.": "Ce serveur exige une signature résistante au quantique, que la webapp ne peut pas produire. Libérez-le depuis l’app Flagship sur un téléphone administrateur."
 }

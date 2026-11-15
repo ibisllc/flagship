@@ -3540,5 +3540,19 @@
   "Allow calls from them": "Permitir sus llamadas",
   "Don't allow calls from them": "No permitir sus llamadas",
   "They can call you now.": "Ahora puede llamarte.",
-  "They can't call you any more.": "Ya no puede llamarte."
+  "They can't call you any more.": "Ya no puede llamarte.",
+  "Release this box": "Liberar este equipo",
+  "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.": "Liberar borra todo lo que hay en este equipo: sus apps, sus datos y sus claves. No se puede deshacer. El equipo vuelve a estar como nuevo, listo para su próximo propietario.",
+  "To keep your data, make a backup first, or transfer the server to its new owner instead.": "Para conservar tus datos, haz primero una copia de seguridad o transfiere el servidor a su nuevo propietario.",
+  "Only an admin device of this account can release this box.": "Solo un dispositivo administrador de esta cuenta puede liberar este equipo.",
+  "The box is being wiped. It restarts as a new box.": "El equipo se está borrando. Se reiniciará como un equipo nuevo.",
+  "Only this account's admin key can release this box.": "Solo la clave de administrador de esta cuenta puede liberar este equipo.",
+  "That order is for another server. Refresh this page and try again.": "Esa orden es para otro servidor. Actualiza esta página y vuelve a intentarlo.",
+  "This device's clock is too far from the server's. Check the time and try again.": "El reloj de este dispositivo difiere demasiado del del servidor. Revisa la hora y vuelve a intentarlo.",
+  "That order was already used. Try again.": "Esa orden ya se usó. Vuelve a intentarlo.",
+  "This box is already released.": "Este equipo ya está liberado.",
+  "The box couldn't be released. Try again in a moment.": "No se pudo liberar el equipo. Vuelve a intentarlo en un momento.",
+  "Release this box?": "¿Liberar este equipo?",
+  "Wipe and release": "Borrar y liberar",
+  "This server needs a quantum-safe signature, which the webapp can't make. Release it from the Flagship app on an admin phone.": "Este servidor necesita una firma resistente a la computación cuántica, que la webapp no puede hacer. Libéralo desde la app Flagship en un teléfono de administrador."
 }
