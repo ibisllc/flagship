@@ -521,9 +521,16 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   UIKit on the Mac host): RestoreMergeViewModelTests + ReleaseThisBoxViewModelTests **13/13**. No view-model tests
   exist yet for the iOS org join screen or the call screens. Next round: enterprise tranche 3 and calls tranche 2.
 
+- 2026-11-15: Two builder agents started from `ddfc77100`: **enterprise-3** (Android org join screen + `/org-join`
+  claim, iOS/Android "Rotate keys", keyd adopting a rotated CGK via a verified ring version (TS + Rust), org install
+  timeline, box-signed log heads in the audit export, view-model tests) and **calls-2** (calls settings + missed-call
+  rows on iOS/Android, phone TURN responder / endpoint demux / relay bare-name forwarding where no libwebrtc is
+  needed, view-model tests, mock gym lanes). Load is low, so agents compile natively, serialised by the lock
+  `/private/tmp/claude-501/flagship-locks/native-build.lock`.
+
 ## Resume point
 
-1. Merge agent branches as they report (calls-phone, restore-ui, enterprise-servers tranche 2, retail-image tranche 2, cloud-fixes). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
+1. Merge agent branches as they report (enterprise-3, calls-2; worktrees ~/flagship-0.4-<slug>). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
    `cloud-reports/*.md`; fix real failures it lists.
 2. Enterprise Kotlin port: merged (f871219ca). Owner to answer: deploy `.com` from main for the terms change?: compile + test
    (`--tests '*OrgAuthorityVectorsTest*' --tests '*VoiciCallsVector*'`), commit, merge, push.
