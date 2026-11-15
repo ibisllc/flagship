@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// The mock box's restore into a running server: a stage opens a fixed backup whose preview has one
@@ -103,3 +104,4 @@ extension MockScreensClient {
         return restoreMergeSavedFiles[archiveId] ?? Data("{}".utf8)
     }
 }
+#endif
