@@ -202,7 +202,7 @@ export function startVoiciCall(o) {
       const code = typeof j?.code === "string" && /^[a-z0-9-]{1,40}$/.test(j.code) ? j.code : "unavailable";
       return set("failed", { code, ...(Number.isSafeInteger(j?.retryAfterSec) ? { retryAfterSec: j.retryAfterSec } : {}) });
     }
-    if (j.room !== `wss://${cfg.apex}/api/voici/calls/${callId}/caller`) return set("failed", { code: "unavailable" });
+    if (j.room !== `${cfg.secure === false ? "ws" : "wss"}://${cfg.apex}/api/voici/calls/${callId}/caller`) return set("failed", { code: "unavailable" });
     if (state !== "requesting") return;
     ws = new deps.WebSocket(`${j.room}?t=${j.token}`);
     ws.onmessage = (e) => {
