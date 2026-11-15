@@ -243,7 +243,11 @@ Both are out of v1. The choice screen doesn't mention merging.
 All signed with the sensitive-order key and checked with `authorizeSensitiveOrder`: on a box with an
 admin root pinned, only that root (the IRK is refused); the IRK only on a box with none (demo). Shares
 and companions are refused (the archive routes already refuse them). On a strict (quantum-safe) box
-they join the set that needs the hybrid signature. Vectors in
+they join the set that needs the hybrid signature: each body carries `pqSignature: {suite, signature}`, the
+signer's hybrid-ed25519-mldsa65/v1 half over the same canonical bytes (purpose = the tag). iOS and Android send
+it while a server of the account is strict; an admin-signed order without it is refused `403 code needs-hybrid`
+(not `not-admin`), which the phones answer with "turn on Quantum-safe protection" and the webapp, which holds no
+ML-DSA key, with "restore it from the Flagship app on an admin phone" (`serverArchive/merge/authorize.ts`). Vectors in
 `packages/protocol/test-vectors/server-restore-merge/` (TS, webapp, Swift, Kotlin).
 
 ### 4.1 Stage (lets the box take and open a backup, changes no app)

@@ -82,6 +82,13 @@ describe("webapp restore-into-server choices", () => {
     expect(offsets).toEqual([0, 4, 8]);
   });
 
+  it("a quantum-safe server's refusal points to the phone app (the webapp holds no ML-DSA key)", () => {
+    const fallback = () => "fallback";
+    expect(RM.restoreErrorText({ status: 403, body: { code: "needs-hybrid", error: "x" } }, fallback)).toBe(RM.RESTORE_NEEDS_PHONE);
+    expect(RM.RESTORE_NEEDS_PHONE).toContain("Flagship app on an admin phone");
+    expect(RM.restoreErrorText({ status: 403, body: { code: "not-admin" } }, fallback)).toBe("fallback");
+  });
+
   it("says what each choice does in one line", () => {
     expect(RM.comparisonText(APPS[0])).toBe("The backup is older: 1.2.0 vs 1.4.0");
     expect(RM.comparisonText(APPS[2])).toBe("Runs on home2 (its data is likely newer)");

@@ -28,6 +28,7 @@ import {
   notesFor,
   planLines,
   refusalText,
+  restoreErrorText,
   sendMergeData,
   sendPlan,
   sendUndo,
@@ -98,7 +99,7 @@ export function wireUndoList(root, { client, serverDomain, points, onChanged, on
       await onChanged?.();
     } catch (e) {
       btn.disabled = false;
-      onError?.(boxErrorText(e));
+      onError?.(restoreErrorText(e, boxErrorText));
     }
   });
 }
@@ -214,7 +215,7 @@ export async function openRestoreMerge({ client, serverDomain, source, onClose }
   };
   const fail = (e) => {
     if (e?.code === "cancelled") return;
-    ui.error.textContent = boxErrorText(e);
+    ui.error.textContent = restoreErrorText(e, boxErrorText);
     show(ui.error);
   };
   const failPhase = (e) => {
@@ -223,7 +224,7 @@ export async function openRestoreMerge({ client, serverDomain, source, onClose }
     show(ui.bar, false);
     setStatus("");
     show(ui.choose, false);
-    ui.error.textContent = boxErrorText(e);
+    ui.error.textContent = restoreErrorText(e, boxErrorText);
     show(ui.error);
     ui.error.setAttribute("data-rm-failed", "");
   };

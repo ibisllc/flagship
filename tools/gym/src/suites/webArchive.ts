@@ -396,6 +396,17 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-restore-merge-needs-phone",
+    "On a quantum-safe (strict) server the webapp's admin-root stage order carries no hybrid half (a browser holds no ML-DSA key); the box refuses it as needs-hybrid and the dialog says the webapp can't make the signature and to restore from the Flagship app on an admin phone.",
+    "gym restore-merge a quantum-safe server refuses the webapp's classical order and the page points to the phone",
+    {
+      steps: [{ kind: "tap", describe: "Restore into this server… on a saved backup.", handle: "[data-bk-restore]" }],
+      assertions: [{ describe: "Points to the phone", handle: "[data-rm-error]", expect: "text", text: "Flagship app on an admin phone" }],
+      screenshots: [shot("restore-merge-needs-phone", "A quantum-safe server.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
     "web-total-restore-merge-non-admin",
     "On a non-admin device the restore buttons are disabled with 'Only an admin device of this account can restore a backup.' and no restore order is sent.",
     "gym restore-merge a non-admin device sees why and sends no order",
