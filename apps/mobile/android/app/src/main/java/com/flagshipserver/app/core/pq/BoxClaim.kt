@@ -565,9 +565,19 @@ object BoxClaim {
 
     // ── the phone's key pre-registration at `.com` (§4 step 8) ──
 
+    private val CLAIM_USERNAME = Regex("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+    private val CLAIM_STK = Regex("^[0-9a-fA-F]{64}$")
+
+    /** Every field's charset excludes "|", so no value can shift into its neighbour under one signature
+     *  (AT-ENV-09): [canonical] throws `bad-claim-key` on anything else, and [verify] fails it. */
     data class ClaimKey(val username: String, val serial: String, val serverDomain: String, val stkPubHex: String, val issuedAt: Long) {
-        val canonical: ByteArray get() = utf8(listOf(TAG_KEY, username, serial, serverDomain, stkPubHex.lowercase(), issuedAt.toString()).joinToString("|"))
-        fun verify(signature: ByteArray, publicKey: ByteArray) = PqHybrid.ed25519VerifyStrict(signature, canonical, publicKey)
+        val isWellFormed: Boolean get() = CLAIM_USERNAME.matches(username) && SERIAL.matches(serial) &&
+            DOMAIN.matches(serverDomain) && CLAIM_STK.matches(stkPubHex) && issuedAt >= 0
+        val canonical: ByteArray get() {
+            if (!isWellFormed) fail("bad-claim-key")
+            return utf8(listOf(TAG_KEY, username, serial, serverDomain, stkPubHex.lowercase(), issuedAt.toString()).joinToString("|"))
+        }
+        fun verify(signature: ByteArray, publicKey: ByteArray) = isWellFormed && PqHybrid.ed25519VerifyStrict(signature, canonical, publicKey)
     }
 
     // ── frames for small-MTU transports (BLE) ──

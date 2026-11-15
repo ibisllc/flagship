@@ -551,7 +551,79 @@
       "issuedAt": 1790000000000
     },
     "canonical": "flagship/box-claim-key/v1|alice|retail-serial-0001|home.alice.flagship.services|e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb|1790000000000",
-    "signatureHex": "785f51a268a2e008c92a38757263bfc0caa732205ba8107fb5e5eebfb1a802f237917efd3d23408d464cfa56dff07eeb475953e38554cac338a4963478ef0805"
+    "signatureHex": "785f51a268a2e008c92a38757263bfc0caa732205ba8107fb5e5eebfb1a802f237917efd3d23408d464cfa56dff07eeb475953e38554cac338a4963478ef0805",
+    "refuse": [
+      {
+        "name": "separator moved from serial into username",
+        "fields": {
+          "username": "alice|retail-serial-0001",
+          "serial": "retail-serial-0001",
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+          "issuedAt": 1790000000000
+        }
+      },
+      {
+        "name": "separator moved from serverDomain into serial",
+        "fields": {
+          "username": "alice",
+          "serial": "retail-serial-0001|home.alice.flagship.services",
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+          "issuedAt": 1790000000000
+        }
+      },
+      {
+        "name": "separator moved from stkPubHex into serverDomain",
+        "fields": {
+          "username": "alice",
+          "serial": "retail-serial-0001",
+          "serverDomain": "home.alice.flagship.services|e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+          "stkPubHex": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+          "issuedAt": 1790000000000
+        }
+      },
+      {
+        "name": "upper-case username",
+        "fields": {
+          "username": "Alice",
+          "serial": "retail-serial-0001",
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+          "issuedAt": 1790000000000
+        }
+      },
+      {
+        "name": "short serial",
+        "fields": {
+          "username": "alice",
+          "serial": "abc",
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+          "issuedAt": 1790000000000
+        }
+      },
+      {
+        "name": "short stkPubHex",
+        "fields": {
+          "username": "alice",
+          "serial": "retail-serial-0001",
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+          "issuedAt": 1790000000000
+        }
+      },
+      {
+        "name": "negative issuedAt",
+        "fields": {
+          "username": "alice",
+          "serial": "retail-serial-0001",
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+          "issuedAt": -1
+        }
+      }
+    ]
   },
   "frames": {
     "mtu": 23,

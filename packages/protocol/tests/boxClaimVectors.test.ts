@@ -220,6 +220,12 @@ describe("box-claim key pre-registration", () => {
     expect(hex(signBoxClaimKey(k.fields, { publicKey: pub, privateKey: unhex(k.signerSeedHex) }))).toBe(k.signatureHex);
     expect(verifyBoxClaimKey(k.fields, unhex(k.signatureHex), pub)).toBe(true);
     expect(verifyBoxClaimKey({ ...k.fields, stkPubHex: "00".repeat(32) }, unhex(k.signatureHex), pub)).toBe(false);
+    expect(k.refuse.length).toBeGreaterThan(0);
+    for (const c of k.refuse) {
+      expect(() => canonicalBoxClaimKey(c.fields), c.name).toThrow();
+      expect(() => signBoxClaimKey(c.fields, { publicKey: pub, privateKey: unhex(k.signerSeedHex) }), c.name).toThrow();
+      expect(verifyBoxClaimKey(c.fields, unhex(k.signatureHex), pub), c.name).toBe(false);
+    }
   });
 });
 
