@@ -449,3 +449,38 @@ Owner decision 2026-11-15, built as designed above. Off by default; on the Socia
   `onWipe` runs skips the self-revocation (same effect). The answer is still classical-only (P-256), as the owner
   answer is Ed25519-only today.
 
+
+## Owner decisions, 2026-11-15 (second round)
+
+- **Everything lands in 0.4**, including our own build of Google's libwebrtc (option A in
+  `docs/voici-calls-webrtc-options.md`; no vendor prebuilt) and the webapp safety upgrades
+  (`docs/webapp-key-custody.md` 1-6).
+- **Calls must work from the voi.ci page in any browser** (the visitor side, audio and video) **and the owner must
+  be able to call back from the Social page in the app.**
+- Release-manager calls on the locked-answer questions: the extra `flagship/voici-call-join/v1` record is accepted
+  (narrower than keeping the account device key available while locked); `.com` deletes a device's call-key
+  binding when that device's grant is revoked.
+
+## Calling back (design, 2026-11-15)
+
+1. **Who can be called back:** the other side of a Messages conversation, who is a signed-in Flagship account with a
+   voi.ci page. Their page's call settings apply as usual. An accepted conversation counts for "accepted
+   conversations"; their own block list and Do Not Disturb apply.
+2. **Same protocol, roles reversed:** the calling app signs the call request as an attested caller with its owner
+   messages key; the callee's devices ring through their own push or VoIP path (the app) or show in an open voi.ci
+   tab. The X-Wing frame layer, signed SDP hashes and TURNS-to-bare-name are unchanged; the callee's answering
+   device is the media endpoint.
+3. **Where the media runs:**
+   - **In the app (default):** our libwebrtc build through `CallMediaEngine`, from a "Call" / "Video call" button
+     in the thread header and on the missed-call row ("Call back").
+   - **In the phone's browser (fallback):** if the app's media engine is unavailable (a build without libwebrtc,
+     or a failure starting it), "Call back" opens `https://voi.ci/<them>#call=<one-time handoff>` in the system
+     browser. The handoff is a short-lived, one-use ticket the app seals to a browser key, like the remote QR
+     flow. It signs the browser in as the same account for this one call, and the browser places the call with
+     its built-in WebRTC.
+   - **The webapp** calls back with the browser's WebRTC.
+4. **Missed calls the other way:** an unanswered call back becomes a missed call on the callee's side
+   (`flagship/voici-missed-call/v1`), with the caller's name sealed as today.
+5. **Strings, settings and tests:** every new string through i18n. View-model tests, mock gym scenarios, a
+   browser-to-browser Playwright test against a local `.com` with two voi.ci pages, and a media CI lane once the
+   libwebrtc build exists.
