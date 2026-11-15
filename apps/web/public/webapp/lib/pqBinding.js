@@ -4,8 +4,8 @@
 // A box's STK binds its ML-DSA-65 key: both keys sign
 //   flagship/pq-key-binding/v1|box-stk|<serverDomain>|<stkHex>|<mldsaHex>|<issuedAt>
 // with the hybrid suite flagship/hybrid-sig/ed25519-mldsa65/v1. This browser checks it under
-// the STK it PINNED (boxKeyPins.js) and then pins the ML-DSA key too. It never signs: the
-// keyless-web rule keeps private keys out of website JavaScript.
+// the STK it PINNED (boxKeyPins.js) and then pins the ML-DSA key too. Signing lives in lib/pqSign.js
+// (ML-DSA in WebAssembly, docs/webapp-key-custody.md item 4).
 
 import { ed25519, ml_dsa65 } from "../vendor/noble-post-quantum/pq-verify.js";
 import { strictInForce } from "./assurancePolicy.js";
@@ -14,7 +14,7 @@ export const TAG_PQ_KEY_BINDING = "flagship/pq-key-binding/v1";
 export const TAG_BOOT_KEY_BINDING_V2 = "flagship/boot-key-binding/v2";
 const SUITE_TAG = "flagship/hybrid-sig/ed25519-mldsa65/v1";
 const SUITE_ID = 0x0002;
-const ROLES = ["account-irk", "admin-root", "device", "box-stk", "boot-key", "release-key"];
+const ROLES = ["account-irk", "admin-root", "device", "box-stk", "boot-key", "release-key", "org-seat-admin", "org-seat-member"];
 const SUBJECT = /^[a-z0-9][a-z0-9._:@-]{0,252}$/;
 const HEX32 = /^[0-9a-f]{64}$/;
 const HEX_MLDSA = /^[0-9a-f]{3904}$/;
@@ -61,7 +61,7 @@ function strictPoint(b) {
 }
 
 /** M' of the hybrid suite (pq-suites.md §5.2). */
-function hybridMessage(pk, purpose, payload) {
+export function hybridMessage(pk, purpose, payload) {
   const tag = enc(SUITE_TAG);
   const p = enc(purpose);
   const n = payload.length;
