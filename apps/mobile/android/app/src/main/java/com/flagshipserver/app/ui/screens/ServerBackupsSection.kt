@@ -56,6 +56,12 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.ServerBackupsViewModel
+import com.flagshipserver.app.viewmodels.RestoreMergeViewModel
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -71,11 +77,14 @@ internal fun ServerBackupsSection(serverDomain: String) {
     val podClients = LocalPodClients.current
     val screens = LocalScreensClient.current
     val isAdmin = AdminOrderGate.allows(app)
-    val vm = remember(serverDomain, isAdmin) {
+    val client = remember(serverDomain) {
         val pod = app.pods.value.firstOrNull { it.fqdn.equals(serverDomain, ignoreCase = true) }
+        pod?.let { podClients.screens(it) } ?: screens
+    }
+    val vm = remember(serverDomain, isAdmin) {
         ServerBackupsViewModel(
             serverFqdn = serverDomain,
-            client = pod?.let { podClients.screens(it) } ?: screens,
+            client = client,
             isAdmin = isAdmin,
             sign = { bytes -> Keystore.adminSigningKey(FSStrings.get(R.string.approve_backups_for, serverDomain)).sign(bytes) },
             mintKeys = { n -> Keystore.mintServerArchiveKeys(n, FSStrings.get(R.string.approve_backups_for, serverDomain)) },
@@ -83,13 +92,50 @@ internal fun ServerBackupsSection(serverDomain: String) {
             downloadDir = { File(context.cacheDir, "saved-backups") },
         )
     }
+    val restoreVm = remember(serverDomain, isAdmin) { restoreMergeViewModel(serverDomain, client, isAdmin) }
     LaunchedEffect(vm) { vm.load() }
-    ServerBackupsContent(vm = vm, copies = remember { PhoneBackupCopies.from(context) }, phoneFreeBytes = remember { phoneFreeBytes(context) })
+    LaunchedEffect(restoreVm) { restoreVm.loadUndoPoints() }
+    ServerBackupsContent(
+        vm = vm,
+        copies = remember { PhoneBackupCopies.from(context) },
+        phoneFreeBytes = remember { phoneFreeBytes(context) },
+        restoreVm = restoreVm,
+        newRestore = { restoreMergeViewModel(serverDomain, client, isAdmin) },
+    )
 }
 
+/** Restore into a running server: every order is signed with the admin root behind the biometric. */
+internal fun restoreMergeViewModel(serverDomain: String, client: com.flagshipserver.app.api.ScreensClient, isAdmin: Boolean) =
+    RestoreMergeViewModel(
+        serverFqdn = serverDomain,
+        client = client,
+        isAdmin = isAdmin,
+        sign = { reason, bytes -> Keystore.adminSigningKey(reason).sign(bytes) },
+        accountKek = { id -> Keystore.deriveServerArchiveKey(id, FSStrings.get(R.string.rm_reason_open)) },
+    )
+
 @Composable
-internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBackupCopies?, phoneFreeBytes: Long) {
+internal fun ServerBackupsContent(
+    vm: ServerBackupsViewModel,
+    copies: PhoneBackupCopies?,
+    phoneFreeBytes: Long,
+    /** The server's earlier copies a restore kept (Undo, Delete now). */
+    restoreVm: RestoreMergeViewModel? = null,
+    /** A fresh flow for each restore into this server. */
+    newRestore: (() -> RestoreMergeViewModel)? = null,
+) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var restoring by remember { mutableStateOf<Pair<RestoreMergeViewModel, RestoreMergeViewModel.Source>?>(null) }
+    val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        val make = newRestore
+        if (uri != null && make != null) {
+            scope.launch {
+                val file = withContext(Dispatchers.IO) { SafPickedFile(context, uri) }
+                restoring = make() to RestoreMergeViewModel.Source.FileSource(file)
+            }
+        }
+    }
     var editSchedule by remember { mutableStateOf(false) }
     var editPolicy by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<SavedBackup?>(null) }
@@ -236,6 +282,13 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                                     modifier = Modifier.testTag("sd-backups-save-${b.archiveId}"),
                                 ) { Text(if (saving) stringResource(R.string.saving) else stringResource(R.string.save_3)) }
                             }
+                            if (newRestore != null) {
+                                TextButton(
+                                    onClick = { restoring = newRestore() to RestoreMergeViewModel.Source.Saved(b.archiveId) },
+                                    enabled = vm.isAdmin,
+                                    modifier = Modifier.testTag("sd-backups-restore-${b.archiveId}"),
+                                ) { Text(stringResource(R.string.rm_restore_into_this_server)) }
+                            }
                             TextButton(
                                 onClick = { confirmDelete = b },
                                 enabled = vm.isAdmin,
@@ -248,6 +301,23 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                 }
                 saveNote?.let { Text(it, color = FS.colors.textMuted, style = caption) }
                 Text(BackupsText.LIST_NOTE, color = FS.colors.textMuted, style = caption, modifier = Modifier.testTag("sd-backups-note"))
+
+                // ── Restore apps from a backup into this server ──
+                if (newRestore != null) {
+                    FSSecondaryButton(
+                        label = stringResource(R.string.rm_restore_from_file),
+                        onClick = {
+                            val gymFile = com.flagshipserver.app.core.Variant.gymImportBackupFile
+                            if (gymFile != null) restoring = newRestore() to RestoreMergeViewModel.Source.FileSource(com.flagshipserver.app.viewmodels.LocalPickedFile(gymFile))
+                            else pickBackup.launch(arrayOf("*/*"))
+                        },
+                        enabled = vm.isAdmin,
+                        block = true,
+                        modifier = Modifier.testTag("sd-restore-merge-file"),
+                    )
+                    if (!vm.isAdmin) Text(stringResource(R.string.rm_admin_only), color = FS.colors.textMuted, style = caption, modifier = Modifier.testTag("sd-restore-admin-only"))
+                }
+                restoreVm?.let { RestoreUndoPointsList(it) }
 
                 // ── This phone's copy (phone-side backups) ──
                 val kind = vm.policy?.policy?.policy ?: "unset"
@@ -292,6 +362,12 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
     }
     }
 
+    restoring?.let { (rvm, source) ->
+        RestoreMergeDialog(rvm, source, onClose = {
+            restoring = null
+            restoreVm?.let { scope.launch { it.loadUndoPoints() } }
+        })
+    }
     if (editSchedule) {
         vm.view?.let { v -> ScheduleEditor(vm, v.schedule, onDismiss = { editSchedule = false }) }
     }

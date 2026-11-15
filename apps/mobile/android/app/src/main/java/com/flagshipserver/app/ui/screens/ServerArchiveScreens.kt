@@ -297,7 +297,7 @@ internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: ()
 /** A file picked through the system picker (SAF), read where it is: on this
  *  phone, a cloud drive or a USB drive. Its read permission is kept while the
  *  restore needs it and given back after. */
-private class SafPickedFile(private val context: Context, private val uri: Uri) : PickedFile {
+internal class SafPickedFile(private val context: Context, private val uri: Uri) : PickedFile {
     override val name: String
     override val size: Long
 

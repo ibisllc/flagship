@@ -2131,6 +2131,132 @@ class MockScreensClient(
         return savedView()
     }
 
+    // ── Restore into a running server (docs/restore-into-server.md): a stage opens a fixed
+    // backup whose preview has one app of each kind, a plan runs at once, and every replace
+    // leaves an undo point. MIRRORS the iOS MockScreensClient+RestoreMerge. ──
+
+    var restoreMergeState = RestoreMergeView()
+    var restoreMergeApps: List<RestoreMergeApp> = RestoreMergeDemo.apps()
+    val restoreMergeStages = mutableListOf<RestoreMergeStageRequest>()
+    val restoreMergeCommits = mutableListOf<String>()
+    val restoreMergePlans = mutableListOf<RestoreMergePlanRequest>()
+    val restoreMergeUndos = mutableListOf<RestoreMergeUndoRequest>()
+    var restoreMergeCancels = 0
+    /** The next plan is refused with this code and sentence. */
+    var restoreMergeNextRefusal: Pair<String, String>? = null
+    /** A saved backup's backup file by archive id (a sealed file the account key opens). */
+    val restoreMergeSavedFiles = mutableMapOf<String, ByteArray>()
+
+    override suspend fun restoreMergeStatus(): RestoreMergeView {
+        tick()
+        return restoreMergeState
+    }
+
+    override suspend fun restoreMergeStage(req: RestoreMergeStageRequest): RestoreMergeStarted {
+        tick()
+        restoreMergeStages += req
+        val id = "0123456789abcdef0123456789abcdef"
+        val ready = req.order.source == "saved"
+        restoreMergeState = restoreMergeState.copy(
+            stage = RestoreMergeStage(id, req.order.archiveId, req.order.source, req.order.bytes, if (ready) req.order.bytes else 0, if (ready) "ready" else "receiving"),
+            preview = null,
+        )
+        return RestoreMergeStarted(id, if (ready) req.order.bytes else 0)
+    }
+
+    override suspend fun restoreMergeChunk(offset: Long, data: ByteArray) {
+        tick()
+        val s = restoreMergeState.stage ?: throw boxRefusal(409, "This server isn't waiting for backup data.", "not-receiving")
+        if (offset != s.received) throw boxRefusal(409, "chunk out of order", "offset")
+        val received = offset + data.size
+        restoreMergeState = restoreMergeState.copy(stage = s.copy(received = received, state = if (received >= s.bytes) "ready" else "receiving"))
+    }
+
+    override suspend fun restoreMergeCommit(keyHex: String) {
+        tick()
+        val s = restoreMergeState.stage
+        if (s == null || s.state != "ready") throw boxRefusal(409, "Send the whole backup file first.", "not-ready")
+        restoreMergeCommits += keyHex
+        restoreMergeState = restoreMergeState.copy(
+            stage = s.copy(received = s.bytes, state = "previewed"),
+            preview = RestoreMergePreview(s.restoreId, RestoreMergePreview.Backup(1_793_700_000_000, "home.demo.flagship.services"), restoreMergeApps),
+            run = null,
+        )
+    }
+
+    override suspend fun restoreMergePlan(req: RestoreMergePlanRequest) {
+        tick()
+        restoreMergeNextRefusal?.let { (code, sentence) ->
+            restoreMergeNextRefusal = null
+            throw boxRefusal(409, sentence, code)
+        }
+        restoreMergePlans += req
+        val apps = req.lines.map { l ->
+            val p = restoreMergeApps.firstOrNull { it.archivedServiceId == l.archivedServiceId }
+            val step = when (l.action) { "keep" -> "kept"; "skip" -> "skipped"; else -> "done" }
+            RestoreMergeRun.App(l.archivedServiceId, l.action, l.targetServiceId ?: p?.targetServiceId ?: l.archivedServiceId, step)
+        }
+        val at = 1_794_000_000_000L
+        val undo = req.lines.filter { it.action == "replace" || it.action == "replace-data" }.map { l ->
+            val p = restoreMergeApps.firstOrNull { it.archivedServiceId == l.archivedServiceId }
+            RestoreMergeUndoPoint(p?.targetServiceId ?: l.archivedServiceId, p?.name ?: l.archivedServiceId, req.order.restoreId, at, at + 7 * 86_400_000L)
+        }
+        restoreMergeState = RestoreMergeView(null, null, RestoreMergeRun(req.order.restoreId, "done", apps), restoreMergeState.undo + undo)
+    }
+
+    override suspend fun restoreMergeCancel() {
+        tick()
+        restoreMergeCancels += 1
+        restoreMergeState = restoreMergeState.copy(stage = null, preview = null)
+    }
+
+    override suspend fun restoreMergeUndo(req: RestoreMergeUndoRequest) {
+        tick()
+        val o = req.order
+        if (restoreMergeState.undo.none { it.serviceId == o.serviceId && it.restoreId == o.restoreId }) {
+            throw boxRefusal(404, "There is no earlier copy of that app to put back.", "no-undo")
+        }
+        restoreMergeUndos += req
+        restoreMergeState = restoreMergeState.copy(undo = restoreMergeState.undo.filterNot { it.serviceId == o.serviceId && it.restoreId == o.restoreId })
+    }
+
+    override suspend fun savedBackupFile(archiveId: String): ByteArray {
+        tick()
+        if (savedBackupsList.none { it.archiveId == archiveId }) throw boxRefusal(404, "That backup isn't saved on this server.", "no-saved-backup")
+        return restoreMergeSavedFiles[archiveId] ?: "{}".toByteArray()
+    }
+
+    object RestoreMergeDemo {
+        fun apps(): List<RestoreMergeApp> {
+            val g = RestoreMergeApp.Guards("tree:" + "a".repeat(64), "b".repeat(64), 0)
+            return listOf(
+                RestoreMergeApp(
+                    "demo--notes", "notes", "demo--notes", "same", "backup-older", false, "backup-older",
+                    RestoreMergeApp.Side("1.2.0", 4_000_000, hasDatabase = true, hasFiles = true), RestoreMergeApp.Side("1.4.0", 6_000_000, installedAt = 1_790_000_000_000),
+                    allowed = listOf("keep", "replace", "replace-data", "copy"), disallowed = mapOf("install" to "already-on-server", "skip" to "already-on-server"),
+                    recommended = "keep", copyServiceId = "demo--notes-restored", guards = g,
+                ),
+                RestoreMergeApp(
+                    "demo--todo", "todo", "demo--todo", "new", "unknown", false, null,
+                    RestoreMergeApp.Side("1.0.0", 1_000_000, hasDatabase = true, hasFiles = false), null,
+                    allowed = listOf("install", "skip", "copy"), disallowed = mapOf("keep" to "not-on-server", "replace" to "not-on-server", "replace-data" to "not-on-server"),
+                    recommended = "install", copyServiceId = "demo--todo-restored",
+                ),
+                RestoreMergeApp(
+                    "demo--chess", "chess", "demo--chess", "runs-elsewhere", "unknown", false, null,
+                    RestoreMergeApp.Side("2.0.0", 2_000_000), null, alsoOn = listOf("home2"), addressMoves = true,
+                    allowed = listOf("install", "skip", "copy"), disallowed = mapOf("keep" to "not-on-server"), recommended = "skip", copyServiceId = "demo--chess-restored",
+                ),
+                RestoreMergeApp(
+                    "sam--blog", "blog", "demo--blog", "clash", "diverged", false, "diverged",
+                    RestoreMergeApp.Side("0.3.0", 500_000), RestoreMergeApp.Side("1.0.0", 800_000, installedAt = 1_790_000_000_000),
+                    allowed = listOf("keep", "copy"), disallowed = mapOf("replace" to "different-app", "replace-data" to "different-app"),
+                    recommended = "copy", copyServiceId = "demo--blog-restored",
+                ),
+            )
+        }
+    }
+
     private fun gbText(n: Long) = com.flagshipserver.app.core.BackupsText.gb(n)
 
     private fun backupLimit(p: BackupPolicyState): Long? = when (p.policy) {
