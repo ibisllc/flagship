@@ -3318,7 +3318,7 @@
     <string name="voici_delete_post">投稿を削除</string>
     <string name="voici_delete_post_title">この投稿を削除しますか？</string>
     <string name="voici_rules_title">ページとメッセージのルール</string>
-    <string name="voici_rules_body">違法なもの、憎悪表現、暴力的な脅し、嫌がらせ、ヌードや性的なコンテンツ、現実の生々しい暴力、スパム、他人の個人情報を投稿・送信しないでください。Flagship はこれらのルールに違反したページを削除し、アカウントをブロックします。報告は Flagship のスタッフが確認します。</string>
+    <string name="voici_rules_body">ページやメッセージを違法な目的に使わないでください。法律で求められる場合、Flagship はコンテンツを削除し、アカウントからのメッセージ送信を停止します。</string>
     <string name="voici_rules_agree">同意する</string>
     <string name="voici_sites">サインイン中のウェブサイト</string>
     <string name="voici_sites_none">どのページにもサインインしていません。</string>
