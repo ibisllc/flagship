@@ -132,29 +132,42 @@ class VoiciCallActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun statusLine(ui: VoiciCallCenter.Ui): String = when (ui.phase) {
-        VoiciCallCenter.Phase.Ringing -> stringResource(R.string.voici_call_incoming_title)
-        VoiciCallCenter.Phase.NeedsUnlock -> stringResource(R.string.voici_call_unlock)
-        VoiciCallCenter.Phase.Connecting -> stringResource(R.string.voici_call_connecting)
-        VoiciCallCenter.Phase.Connected -> stringResource(R.string.voici_call_connected)
-        VoiciCallCenter.Phase.Idle, VoiciCallCenter.Phase.Ended -> when (ui.endCode) {
-            "answered-elsewhere" -> stringResource(R.string.voici_call_answered_elsewhere)
-            "media-unavailable" -> stringResource(R.string.voici_call_media_unavailable)
-            "failed" -> stringResource(R.string.voici_call_failed)
-            "limit" -> stringResource(R.string.voici_call_limit)
-            else -> stringResource(R.string.voici_call_ended)
-        }
-    }
+    private fun statusLine(ui: VoiciCallCenter.Ui): String = stringResource(VoiciCallScreenModel.status(ui))
 
     @Composable
-    private fun remoteCameraLine(ui: VoiciCallCenter.Ui): String? = when {
-        ui.phase != VoiciCallCenter.Phase.Connected -> null
-        ui.remoteCamera == "on" -> fsString(R.string.voici_call_remote_camera_on, ui.name)
-        ui.remoteCamera == "paused" -> stringResource(R.string.voici_call_camera_paused)
-        else -> null
+    private fun remoteCameraLine(ui: VoiciCallCenter.Ui): String? = when (VoiciCallScreenModel.remoteCamera(ui)) {
+        VoiciCallScreenModel.RemoteCamera.On -> fsString(R.string.voici_call_remote_camera_on, ui.name)
+        VoiciCallScreenModel.RemoteCamera.Paused -> stringResource(R.string.voici_call_camera_paused)
+        null -> null
     }
 
     companion object {
         const val ACTION_ANSWER = "com.flagshipserver.app.calls.ANSWER"
+    }
+}
+
+/** What the call screen shows for a state (pure, so the unit tests can pin it). */
+object VoiciCallScreenModel {
+    enum class RemoteCamera { On, Paused }
+
+    fun status(ui: VoiciCallCenter.Ui): Int = when (ui.phase) {
+        VoiciCallCenter.Phase.Ringing -> R.string.voici_call_incoming_title
+        VoiciCallCenter.Phase.NeedsUnlock -> R.string.voici_call_unlock
+        VoiciCallCenter.Phase.Connecting -> R.string.voici_call_connecting
+        VoiciCallCenter.Phase.Connected -> R.string.voici_call_connected
+        VoiciCallCenter.Phase.Idle, VoiciCallCenter.Phase.Ended -> when (ui.endCode) {
+            "answered-elsewhere" -> R.string.voici_call_answered_elsewhere
+            "media-unavailable" -> R.string.voici_call_media_unavailable
+            "failed" -> R.string.voici_call_failed
+            "limit" -> R.string.voici_call_limit
+            else -> R.string.voici_call_ended
+        }
+    }
+
+    fun remoteCamera(ui: VoiciCallCenter.Ui): RemoteCamera? = when {
+        ui.phase != VoiciCallCenter.Phase.Connected -> null
+        ui.remoteCamera == "on" -> RemoteCamera.On
+        ui.remoteCamera == "paused" -> RemoteCamera.Paused
+        else -> null
     }
 }

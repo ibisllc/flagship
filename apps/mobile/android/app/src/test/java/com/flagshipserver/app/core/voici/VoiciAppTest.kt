@@ -94,6 +94,54 @@ class VoiciAppTest {
         assertNull(again.first { it.role == "avatar" }.bytes)
     }
 
+    @Test fun callsSettingIsPublishedAndEveryLaterPublishKeepsIt() = runBlocking {
+        val mock = mock()
+        val a = center(mock, admin())
+        a.refresh()
+        a.acceptRules()
+        assertTrue(a.publish("test"))
+        assertEquals(1, published(mock).first.body.let { if (it.isV2) 2 else 1 })
+        assertTrue(a.setCalls(true, "signed-in", "test"))
+        published(mock).first.body.let {
+            assertEquals(1, it.acceptsCalls)
+            assertEquals("signed-in", it.callsFrom)
+        }
+        assertTrue(a.page.value.callsOn)
+        assertEquals("signed-in", a.page.value.callsFrom)
+        // A post publishes on top: calls stay on.
+        a.edit("post-add", post = post("Hello"))
+        assertTrue(a.publish("test"))
+        published(mock).first.body.let {
+            assertEquals(3L, it.seq)
+            assertEquals(1, it.acceptsCalls)
+            assertEquals("signed-in", it.callsFrom)
+        }
+        // Off is a v1 index again.
+        assertTrue(a.setCalls(false, "signed-in", "test"))
+        published(mock).first.body.let {
+            assertFalse(it.isV2)
+            assertNull(it.acceptsCalls)
+        }
+        assertFalse(a.page.value.callsOn)
+        // A device that can't sign the page can't change it.
+        val b = center(mock, FakeKeyring("alice", umk, root, false, ByteArray(32) { 5 }))
+        b.refresh()
+        assertFalse(b.setCalls(true, "accepted", "test"))
+    }
+
+    @Test fun callAllowIsSignedByTheOwnerKey() = runBlocking {
+        val mock = mock()
+        val a = center(mock, admin())
+        a.refresh()
+        a.acceptRules()
+        assertTrue(a.publish("test"))
+        val conv = "ab".repeat(32)
+        assertNull(a.callAllow(conv, true))
+        assertNull(a.callAllow(conv, false))
+        assertEquals(listOf("allow", "disallow"), mock.callAllows.map { VoiciJs.str(it["op"]) })
+        assertEquals(conv, VoiciJs.str(mock.callAllows.first()["conv"]))
+    }
+
     @Test fun adminPublishesAndASecondAdminWinsTheSeqRaceByMerging() = runBlocking {
         val mock = mock()
         val a = center(mock, admin())

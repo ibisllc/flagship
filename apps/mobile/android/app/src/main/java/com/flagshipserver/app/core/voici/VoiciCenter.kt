@@ -86,6 +86,10 @@ data class VoiciPageUi(
     val removed: Boolean = false,
     /** The one-time public warning was accepted on this device. */
     val publicWarned: Boolean = false,
+    /** Calls are on in the published index (docs/voici-calls.md §6; only while the page is public). */
+    val callsOn: Boolean = false,
+    /** Who may call while calls are on: "accepted" or "signed-in". */
+    val callsFrom: String = "accepted",
 )
 
 data class VoiciMessagesUi(
@@ -93,6 +97,8 @@ data class VoiciMessagesUi(
     val state: MessagesState = MessagesState(),
     val loading: Boolean = false,
     val error: String? = null,
+    /** Missed calls opened and checked here (docs/voici-calls.md §6), shown in their conversation's thread. */
+    val missedCalls: List<com.flagshipserver.app.calls.VoiciMissedCallRow> = emptyList(),
 ) {
     fun isRequest(c: StoredVoiciConversation) = c.conv !in state.accepted && c.messages.none { it.mine }
     val visible: List<StoredVoiciConversation> get() = conversations.filter { it.conv !in state.archived && it.pseudonymPub !in state.blocks }.sortedByDescending { it.lastAt }
@@ -203,6 +209,8 @@ class VoiciCenter(
             isPublic = idx != null && !local.removed,
             removed = local.removed,
             publicWarned = local.publicWarned,
+            callsOn = idx != null && !local.removed && idx.body.takesCalls,
+            callsFrom = com.flagshipserver.app.calls.VoiciCallSettings.read(idx?.body?.acceptsCalls, idx?.body?.callsFrom).second,
         )
         val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
         _messages.value = _messages.value.copy(conversations = local.conversations, state = state)
@@ -399,7 +407,7 @@ class VoiciCenter(
      * other draft stays a draft; null publishes every pending change. [mayRepublish]: only the Public switch (after its
      * warning) brings back a page another device took down; any other publish that learns of it from a 409 stops.
      */
-    suspend fun publish(reason: String?, only: List<VoiciDraftOp>? = null, mayRepublish: Boolean = false): Boolean {
+    suspend fun publish(reason: String?, only: List<VoiciDraftOp>? = null, mayRepublish: Boolean = false, calls: Pair<Boolean, String>? = null): Boolean {
         val u = user() ?: return false
         val umk = keyring.umk() ?: return false
         val acc = account ?: refreshAccount() ?: return fail("not-found")
@@ -429,9 +437,13 @@ class VoiciCenter(
                     client.uploadPiece(u, pageId, p.sha256, p.size, at, VoiciJs.hex(VoiciJs.edPub(seed)), sig, p.bytes, p.contentType)
                 }
                 val seq = maxOf(idx?.body?.seq ?: 0, local.ladderSeq) + 1
+                // Every publish carries the calls setting of the index it replaces (a profile edit never turns calls off).
+                val current = com.flagshipserver.app.calls.VoiciCallSettings.read(if (local.removed) null else idx?.body?.acceptsCalls, idx?.body?.callsFrom)
+                val (callsOn, callsFrom) = calls ?: current
+                val fields = com.flagshipserver.app.calls.VoiciCallSettings.indexFields(callsOn, callsFrom)
                 val body = VoiciPageIndexBody(
                     u, pageId, seq, now(), working.acceptsMessages, keys.epoch, keys.inboxPub, keys.signPub,
-                    plan.map { it.ref }, kind,
+                    plan.map { it.ref }, kind, acceptsCalls = fields.first, callsFrom = fields.second,
                 )
                 val signed = VoiciPage.signVoiciPageIndex(body, seed)
                 try {
@@ -644,6 +656,17 @@ class VoiciCenter(
         }
     }
 
+    /**
+     * Settings → Messages → Calls: on/off and who may call, published at once in the index by an admin device
+     * (docs/voici-calls.md §6, §8). Drafts stay drafts. False when it couldn't be published (`page.error` says why).
+     */
+    suspend fun setCalls(on: Boolean, from: String, reason: String): Boolean {
+        val p = _page.value
+        if (!p.isPublic || !p.canPublish || from !in com.flagshipserver.app.calls.VoiciCallSettings.FROM_VALUES) return false
+        if (on == p.callsOn && (!on || from == p.callsFrom)) return true
+        return publish(reason, only = emptyList(), calls = on to from)
+    }
+
     /** Settings → Messages → Rotate inbox key: a new inbox epoch, published at once (§10.2). Drafts stay drafts. */
     suspend fun rotateInbox(reason: String): Boolean {
         if (!_page.value.isPublic) return false
@@ -686,10 +709,41 @@ class VoiciCenter(
             }
             update { it.copy(conversations = convs.values.toList(), inboxCursor = cursor, inboxBlocks = blocks, revoked = revoked) }
             _messages.value = _messages.value.copy(loading = false, error = null)
+            refreshMissedCalls(u, umk, idx, ca)
         } catch (e: VoiciHttpError) {
             _messages.value = _messages.value.copy(loading = false, error = e.code ?: "network")
         } catch (e: Exception) {
             _messages.value = _messages.value.copy(loading = false, error = "network")
+        }
+    }
+
+    /** Every missed call `.com` holds for the page, opened under each inbox epoch and checked; a failed read keeps what was shown. */
+    private suspend fun refreshMissedCalls(u: String, umk: ByteArray, idx: VoiciPageIndex, ca: List<String>) {
+        val items = runCatching { client.missedCalls(u) }.getOrNull() ?: return
+        val seeds = (idx.body.inboxEpoch downTo 1L).map { VoiciMessages.deriveVoiciInboxKey(umk, idx.body.pageId, it).seed }
+        _messages.value = _messages.value.copy(missedCalls = com.flagshipserver.app.calls.VoiciMissedCalls.open(items, seeds, idx.body.pageId, origin(), ca))
+    }
+
+    /** The thread menu's "Allow calls from them" / "Don't allow calls from them" (`flagship/voici-call-allow/v1`). Null on success, else a code. */
+    suspend fun callAllow(conv: String, allow: Boolean): String? {
+        val u = user() ?: return "not-found"
+        val umk = keyring.umk() ?: return "not-found"
+        val local = withLocal { _, _, l -> l } ?: return "not-found"
+        val keys = ownerKeys(local, umk) ?: return "not-found"
+        val pageId = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex)?.body?.pageId ?: return "not-found"
+        val op = if (allow) "allow" else "disallow"
+        val at = now()
+        return try {
+            val sig = VoiciCalls.signAllow(pageId, conv, op, at, keys.sign.seed)
+            client.callAllow(u, kotlinx.serialization.json.buildJsonObject {
+                put("allow", VoiciCalls.allowJson(pageId, conv, op, at))
+                put("signature", kotlinx.serialization.json.JsonPrimitive(sig))
+            })
+            null
+        } catch (e: VoiciHttpError) {
+            e.code ?: "network"
+        } catch (e: Exception) {
+            "network"
         }
     }
 

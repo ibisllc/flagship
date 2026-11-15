@@ -3954,4 +3954,22 @@
     <string name="rm_step_failed">Konnte nicht wiederhergestellt werden. Sie ist wieder wie vorher.</string>
     <string name="rm_step_refused">Seit deiner Wahl geändert. Bleibt, wie sie ist.</string>
     <string name="rm_step_waiting">Wartet</string>
+    <string name="voici_calls_header">Anrufe</string>
+    <string name="voici_calls_accept">Anrufe annehmen</string>
+    <string name="voici_calls_who">Wer anrufen darf</string>
+    <string name="voici_calls_from_accepted">Personen, deren Unterhaltung du angenommen hast</string>
+    <string name="voici_calls_from_signed_in">Alle, die mit Flagship angemeldet sind</string>
+    <string name="voici_calls_publish_first">Veröffentliche deine Seite, um Anrufe anzunehmen.</string>
+    <string name="voici_calls_footer">Mit Flagship angemeldete Besucher können dich von deiner Seite aus anrufen. Deine Administratorgeräte klingeln.</string>
+    <string name="voici_calls_dnd">Nicht stören</string>
+    <string name="voici_calls_dnd_from">Von</string>
+    <string name="voici_calls_dnd_until">Bis</string>
+    <string name="voici_calls_dnd_footer">Dieses Gerät klingelt in diesen Stunden nicht. Deine anderen Geräte behalten ihre eigene Einstellung.</string>
+    <string name="voici_calls_allow">Anrufe von dieser Person erlauben</string>
+    <string name="voici_calls_disallow">Anrufe von dieser Person nicht erlauben</string>
+    <string name="voici_calls_allowed">Diese Person kann dich jetzt anrufen.</string>
+    <string name="voici_calls_disallowed">Diese Person kann dich nicht mehr anrufen.</string>
+    <string name="voici_calls_missed_video">Verpasster Videoanruf</string>
+    <string name="voici_calls_missed">Verpasster Anruf</string>
+    <string name="voici_calls_admin_only">Nur ein Administratorgerät kann das ändern.</string>
 </resources>

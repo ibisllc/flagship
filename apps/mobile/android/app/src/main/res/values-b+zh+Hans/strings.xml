@@ -3954,4 +3954,22 @@
     <string name="rm_step_failed">无法恢复。它已恢复原样。</string>
     <string name="rm_step_refused">在你选择之后有变化。保持原样。</string>
     <string name="rm_step_waiting">等待中</string>
+    <string name="voici_calls_header">通话</string>
+    <string name="voici_calls_accept">接受来电</string>
+    <string name="voici_calls_who">谁可以来电</string>
+    <string name="voici_calls_from_accepted">你已接受其对话的人</string>
+    <string name="voici_calls_from_signed_in">任何用 Flagship 登录的人</string>
+    <string name="voici_calls_publish_first">发布你的页面后才能接听来电。</string>
+    <string name="voici_calls_footer">用 Flagship 登录的访客可以从你的页面给你打电话。你的管理员设备会响铃。</string>
+    <string name="voici_calls_dnd">勿扰模式</string>
+    <string name="voici_calls_dnd_from">开始</string>
+    <string name="voici_calls_dnd_until">结束</string>
+    <string name="voici_calls_dnd_footer">此设备在这些时段不会响铃。你的其他设备保留各自的设置。</string>
+    <string name="voici_calls_allow">允许对方来电</string>
+    <string name="voici_calls_disallow">不允许对方来电</string>
+    <string name="voici_calls_allowed">对方现在可以给你打电话了。</string>
+    <string name="voici_calls_disallowed">对方不能再给你打电话了。</string>
+    <string name="voici_calls_missed_video">未接视频通话</string>
+    <string name="voici_calls_missed">未接来电</string>
+    <string name="voici_calls_admin_only">只有管理员设备可以更改此项。</string>
 </resources>
