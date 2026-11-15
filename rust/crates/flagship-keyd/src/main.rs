@@ -71,7 +71,7 @@ fn run() -> Result<(), String> {
         }
         let state = env_path("FLAGSHIP_KEYD_STATE", "/var/lib/flagship-keyd");
         flagship_keyd::files::reset_state(&state).map_err(|e| format!("reset: {e}"))?;
-        println!("{{\"reset\":true}}");
+        let _ = writeln!(std::io::stdout(), "{{\"reset\":true}}");
         return Ok(());
     }
     if cmd != "serve" {
