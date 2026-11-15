@@ -732,6 +732,16 @@
       "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
     },
     {
+      "check": "signed-tags",
+      "key": "android:flagship/org-seat-key-wrap/v1",
+      "reason": "Not a wire message: the AAD iOS uses to wrap its own seat admin key at rest (OrgSeatKeys.swift, Secure Enclave). Android's seat key store (Settings, Organizations) is not built yet; it will pick its own Keystore wrapping, which need not share the tag."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-seat-key-wrap/v1",
+      "reason": "Not a wire message: the AAD iOS uses to wrap its own seat admin key at rest (OrgSeatKeys.swift). The webapp holds no org keys (docs/enterprise-accounts.md E4)."
+    },
+    {
       "check": "test-vectors",
       "key": "web:org-authority",
       "reason": "The webapp holds no org keys and has no org console yet (docs/enterprise-accounts.md E4: web is view-and-collect, after iOS and Android); TS, Swift and Kotlin read the vectors."
