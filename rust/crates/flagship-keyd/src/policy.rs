@@ -740,6 +740,20 @@ pub const DEFAULT_RATE_LIMITS: &[(&str, Limit)] = &[
         },
     ),
     (
+        "org.pin",
+        Limit {
+            per_second: 0.1,
+            burst: 3.0,
+        },
+    ),
+    (
+        "cgk.orgAdopt",
+        Limit {
+            per_second: 0.1,
+            burst: 10.0,
+        },
+    ),
+    (
         "policy.rename",
         Limit {
             per_second: 0.1,

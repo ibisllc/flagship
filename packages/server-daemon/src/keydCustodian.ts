@@ -243,6 +243,19 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
     this.#client.call("provision.cgk", { sealed: hex(sealed), ...proofArgs(proof) });
     this.#hasCgk = true;
   }
+  /** Pin this box's org in keyd (`org.json`), with the boot ceremony's token; keyd refuses another org later. */
+  pinOrg(pin: { orgId: string; genesisHash: string; serverDomain: string; cgkVersion: number }, ceremonyToken: string): void {
+    this.#client.call("org.pin", { ...pin, ceremony: ceremonyToken });
+  }
+  /**
+   * A rotated org CGK: keyd replays the org chain from the genesis it pinned, checks the ring's org
+   * approval, version and commitment itself (packages/keyd/src/orgCgk.ts), then switches.
+   */
+  adoptOrgCgk(args: { chain: unknown[]; ring: unknown; recipients: unknown[]; approvals: unknown[]; key: Bytes }): number {
+    const r = this.#client.call("cgk.orgAdopt", { ...args, key: hex(args.key) }) as { version?: number };
+    this.#hasCgk = true;
+    return Number(r.version);
+  }
 
   // ── Narrowing accessors ───────────────────────────────────────────────
   asBoxSigner(): BoxSigner {

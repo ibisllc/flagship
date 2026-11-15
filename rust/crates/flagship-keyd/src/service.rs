@@ -68,6 +68,9 @@ pub struct KeydService {
     ca_keys_path: Option<PathBuf>,
     list_path: Option<PathBuf>,
     list_at: Option<i64>,
+    /// TS `orgPinPath`: the org this box belongs to and the org CGK version keyd holds (`org.json`).
+    org_pin_path: Option<PathBuf>,
+    org_pin: Option<crate::org_cgk::OrgCgkPin>,
 }
 
 impl std::fmt::Debug for KeydService {
@@ -144,7 +147,31 @@ impl KeydService {
             ca_keys_path: None,
             list_path: None,
             list_at: None,
+            org_pin_path: None,
+            org_pin: None,
         }
+    }
+
+    /// Where `org.json` lives (TS `orgPinPath`); a missing or damaged one pins nothing.
+    #[must_use]
+    pub fn with_org_pin(mut self, path: PathBuf) -> Self {
+        self.org_pin = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| crate::org_cgk::check_pin(&v).ok());
+        self.org_pin_path = Some(path);
+        self
+    }
+
+    fn save_org_pin(&mut self, pin: crate::org_cgk::OrgCgkPin) -> KeydResult<()> {
+        if let Some(path) = &self.org_pin_path {
+            let tmp = path.with_extension("json.tmp");
+            std::fs::write(&tmp, crate::org_cgk::pin_json(&pin))
+                .and_then(|()| std::fs::rename(&tmp, path))
+                .map_err(|_| KeydError::failed("internal error"))?;
+        }
+        self.org_pin = Some(pin);
+        Ok(())
     }
 
     /// Where root's CA keys (`ca-keys.json`) and the newest list's time (`revocation-list.json`) live.
@@ -1019,6 +1046,71 @@ impl KeydService {
                     self.ceremony = None;
                 }
                 done(obj! { "stored" => true })
+            }
+            "org.pin" => {
+                // TS `org.pin`: the org this box belongs to, set once with the boot ceremony's token.
+                no_extra_args(
+                    a,
+                    &[
+                        "orgId",
+                        "genesisHash",
+                        "serverDomain",
+                        "cgkVersion",
+                        "ceremony",
+                    ],
+                )?;
+                let token = hex_arg(a, "ceremony", HexBounds::exact(32))?;
+                let now = (self.clock)();
+                let let_in = self.ceremony.as_ref().is_some_and(|(t, not_after)| {
+                    now <= *not_after && crate::crypto::ct_eq(t.as_ref(), &token)
+                });
+                if !let_in {
+                    return Err(KeydError::forbidden(
+                        "an org is pinned only during the boot ceremony",
+                    ));
+                }
+                let mut fields = a.clone();
+                fields.remove("ceremony");
+                let pin = crate::org_cgk::check_pin(&Value::Object(fields))
+                    .map_err(|e| KeydError::bad_request(e.to_string()))?;
+                if let Some(cur) = &self.org_pin {
+                    if cur.org_id == pin.org_id
+                        && cur.genesis_hash == pin.genesis_hash
+                        && cur.server_domain == pin.server_domain
+                    {
+                        return done(obj! { "stored" => false, "already" => true });
+                    }
+                    return Err(KeydError::forbidden("this box is already pinned to an org"));
+                }
+                self.save_org_pin(pin)?;
+                done(obj! { "stored" => true })
+            }
+            "cgk.orgAdopt" => {
+                // TS `cgk.orgAdopt`: a rotated org CGK, only on evidence keyd checks itself.
+                no_extra_args(a, &["chain", "ring", "recipients", "approvals", "key"])?;
+                let Some(pin) = self.org_pin.clone() else {
+                    return Err(KeydError::forbidden("no org is pinned for this box"));
+                };
+                let now = u64::try_from((self.clock)()).unwrap_or(0);
+                let (key, version) =
+                    crate::org_cgk::verify_adoption(a, &pin, now).map_err(|e| {
+                        if e.code == "malformed" {
+                            KeydError::bad_request(e.to_string())
+                        } else {
+                            KeydError::forbidden(e.to_string())
+                        }
+                    })?;
+                let key = key32(&Zeroizing::new(key.to_vec()));
+                if let Some(dir) = &self.store {
+                    save_key_file(dir, "cgk", &key)
+                        .map_err(|_| KeydError::failed("internal error"))?;
+                }
+                self.cgk = Some(key);
+                self.save_org_pin(crate::org_cgk::OrgCgkPin {
+                    cgk_version: version,
+                    ..pin
+                })?;
+                done(obj! { "version" => version })
             }
             "archive.pool.add" | "archive.pool.list" | "archive.create" | "archive.import"
             | "archive.sealFrame" | "archive.openFrame" | "archive.sealBody"
