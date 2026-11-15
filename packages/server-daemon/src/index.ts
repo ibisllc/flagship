@@ -834,22 +834,13 @@ async function main(): Promise<void> {
   const env = envFromProcess();
 
   // A retail box with no owner yet serves nothing and installs nothing: an unclaimed or locked box,
-  // or a claimed one whose first boot has not finished, runs only the claim service (keyd, which
-  // the image starts, holds its key) until a claim restarts it into its first boot
-  // (retailClaim/daemon.ts, firstBoot.ts). This comes before the host components on purpose.
+  // or a claimed one whose first boot has not finished. Its claim service is not this process: it runs
+  // unprivileged in flagship-claim.service (retailClaim/claimMain.ts), and the image keeps this unit
+  // off until a first boot is done. Started anyway, the daemon waits and does nothing.
   const retailImage = await readRetailImage();
   if (retailImage) await ensureRetailHostConfig((m) => console.log(m));
   if (retailImage && retailBootMode(await retailLifecycle(), existsSync(retailPaths(RETAIL_STATE_DIR).firstBootDone)) === "claim-only") {
-    console.log("[retail] this box has no owner yet: running the claim service only");
-    const claim = await startRetailClaim({
-      image: retailImage,
-      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
-      identity: () => freshKeydIdentity(() => new KeydCustodian({ socketPath: process.env.FLAGSHIP_KEYD_SOCKET ?? KEYD_SOCKET_DEFAULT, component: "retail-claim" })),
-      restart: () => new SystemctlPowerRunner().power("restart"),
-    });
-    const stop = () => void claim.stop().finally(() => process.exit(0));
-    process.once("SIGTERM", stop);
-    process.once("SIGINT", stop);
+    console.log("[retail] this box has no owner yet: the claim service runs in flagship-claim.service; the daemon waits");
     await new Promise<never>(() => {});
   }
 

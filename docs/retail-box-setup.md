@@ -615,11 +615,22 @@ unique is printed per box.
   factory chroot after the appliance prepare step: installs `bluez`, the claim service's host files, keyd's unit, the
   daemon's unit, the specializer's retail drop-in, writes the marker, and refuses to finish if any box key, owner
   file, claim state or Bluetooth identity is on the image (`RETAIL_FORBIDDEN_PATHS`).
-- **The daemon on an unclaimed image.** The image's `flagship-daemon.service` reads `daemon.env` only if it exists
-  (`daemonUnit.ts`, `EnvironmentFile=-`). The daemon decides first thing, before installing any host component
-  (`index.ts`, `retailClaim/firstBoot.ts` `retailBootMode`): an unclaimed or locked box, or a claimed one whose
-  first boot has not finished, runs the claim service alone (so the 5-press reset works throughout). keyd holds the
-  claim key. With no owner yet the daemon runs as root (privd comes with the owner's first boot); it holds nothing.
+- **A box with no owner yet runs the claim service alone, unprivileged.** `flagship-claim.service`
+  (`retailClaim/claimMain.ts`, unit text in `retailHost.ts`) runs as its own account, `flagship-claim`: no
+  capabilities, `NoNewPrivileges`, `ProtectSystem=strict` with only `/var/lib/flagship-retail` writable,
+  `PrivateTmp`, a closed device list (the power button's input nodes, `/dev/tty1` for the monitor code),
+  `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_BLUETOOTH`, a system-call filter, and groups
+  `flagship-keyd-clients` (keyd holds the claim key) and `flagship-powerkey`. The D-Bus policy gives it the same
+  seven BlueZ calls as the daemon's account. Its only root steps go to the **claim helper**,
+  `flagship-claim-helper.service`: flagship-privd started with `--profile retail-claim`, which answers two
+  `setup.js` steps and nothing else (`policy.ts` `validateRetailClaimRequest`; no power, docker, host or file
+  operation), on a socket only the claim account's group opens. Each step checks its own preconditions as root:
+  `retail-wipe` only with the reset marker on disk; `retail-first-boot` only on a retail image the claim state
+  calls claimed, with no first boot done and a claimed recipe whose signature verifies
+  (`firstBoot.ts` `firstBootRestartRefusal`), then it restarts the box. Both units stay off once
+  `first-boot-done` exists; the daemon's retail drop-in keeps it off until then (it also hands the retail folder
+  to its own account). Wi-Fi join through `nmcli` as the claim account needs a polkit rule, which comes with the
+  Wi-Fi stack (16.2).
 - **The retail first boot after a claim.** The appliance specializer is it (`appliance.ts`, `RETAIL=1`): its retail
   drop-in runs it only once a claim left `/var/lib/flagship-retail/claimed-recipe.json`, before the daemon. It makes
   the seed on the box from that recipe with the release's own preseed engine (`retailClaim/seedCli.js`, the bootstrap
@@ -651,7 +662,8 @@ unique is printed per box.
   `pwr_button`. Each SKU must pass H1 to H3 (§10); a SKU that names its button differently adds the name to both.
   Firmware defaults (AC-loss power on, short press reported to the OS) are set per SKU.
 - **Wi-Fi chipset and stack** (owner, §15.3). Firmware packages (`non-free-firmware`) and the stack the claim's Wi-Fi
-  join uses (`network.ts` speaks `nmcli` today) are chosen with the SKU, and with them the privileges the join needs.
+  join uses (`network.ts` speaks `nmcli` today) are chosen with the SKU, and with them the privileges the join needs
+  (the claim service is unprivileged: a polkit rule for its account, or a third helper step).
 - **Bluetooth controller firmware** (H4) and the per-SKU metal build in CI. No workflow runs the retail layer yet.
 
 ### 16.3 Still open, not hardware-bound
@@ -666,8 +678,9 @@ For a cloud machine with KVM (Linux x86-64; `qemu-system-x86`, `qemu-utils`, `cl
 Node 24): from a checkout of the branch, `bash tools/retail-vm/run.sh [workdir]`. It builds the tree, boots Debian
 13's generic cloud image (the cloud kernel has no Bluetooth), gives the guest the tree on a raw tar disk, and the
 guest (`guest.sh`) applies the retail layer, starts two linked virtual controllers (`btvirt -l2` over `hci_vhci`),
-then checks: no box key on the image; keyd makes one at its first start and keeps it on restart; the daemon starts
-with no `daemon.env` and runs the claim service only; hci0 has an active advertising instance; a scan from hci1
+then checks: no box key on the image; keyd makes one at its first start and keeps it on restart; the claim
+service runs as `flagship-claim` (its uid from `/proc`) with no capabilities, the daemon stays off, and the claim
+helper refuses a power request from the claim account; hci0 has an active advertising instance; a scan from hci1
 finds the claim service UUID. Verdict lines start `RETAIL-VM:` in `<workdir>/serial.log`; exit 0 on PASS. It does
 not install the signed box release (the guest gets the tree) and has no LUKS factory key, radio or button. First
 run, confirm that Debian ships `btvirt` in `bluez-test-tools`.

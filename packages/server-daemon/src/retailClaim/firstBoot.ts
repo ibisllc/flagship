@@ -60,3 +60,25 @@ export type RetailBootMode = "claim-only" | "serve";
 export function retailBootMode(lifecycle: ClaimLifecycle, firstBootDone: boolean): RetailBootMode {
   return lifecycle === "claimed" && firstBootDone ? "serve" : "claim-only";
 }
+
+/**
+ * Why the claim helper must not restart the box into a first boot now, or null. The claim service
+ * runs unprivileged and its folder is its own, so root checks everything it relies on again: a
+ * retail image, a box the claim state calls claimed, no first boot done yet, and a claimed recipe
+ * whose signature verifies under the account key it names (its expiry is `.com`'s to judge at
+ * registration). Then the specializer, as root, runs only a recipe a real claim could have left.
+ */
+export function firstBootRestartRefusal(s: {
+  retailImage: boolean;
+  lifecycle: ClaimLifecycle;
+  firstBootDone: boolean;
+  recipeText: string | null;
+  verify: (text: string) => boolean;
+}): string | null {
+  if (!s.retailImage) return "not a retail image";
+  if (s.lifecycle !== "claimed") return "the box is not claimed";
+  if (s.firstBootDone) return "the first boot already ran";
+  if (!s.recipeText) return "no claimed recipe";
+  if (!s.verify(s.recipeText)) return "the claimed recipe does not verify";
+  return null;
+}

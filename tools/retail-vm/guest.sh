@@ -55,9 +55,25 @@ wait_for 60 test -S /run/flagship-keyd/keyd.sock || fail "keyd did not restart"
 say "keyd made its own identity at first start and kept it"
 
 [ ! -e /etc/flagship/daemon.env ] || fail "daemon.env on an unclaimed image"
-systemctl start flagship-daemon.service
-wait_for 120 sh -c 'journalctl -u flagship-daemon --no-pager | grep -q "running the claim service only"' || fail "the daemon did not run the claim service"
-say "daemon runs the claim service only (no daemon.env)"
+systemctl start flagship-claim-helper.service flagship-claim.service
+wait_for 120 sh -c 'journalctl -u flagship-claim --no-pager | grep -q "this box has no owner yet: claim service as uid"' || fail "the claim service did not start"
+pid="$(systemctl show -p MainPID --value flagship-claim.service)"
+[ "$pid" -gt 0 ] || fail "the claim service has no process"
+claim_uid="$(awk '/^Uid:/ {print $2}' "/proc/$pid/status")"
+[ "$claim_uid" = "$(id -u flagship-claim)" ] && [ "$claim_uid" != 0 ] || fail "the claim service runs as uid $claim_uid, not flagship-claim"
+grep -q '^CapEff:[[:space:]]*0000000000000000$' "/proc/$pid/status" || fail "the claim service holds capabilities"
+say "claim service runs as flagship-claim (uid $claim_uid), no capabilities"
+systemctl start flagship-daemon.service || true
+[ "$(systemctl show -p ActiveState --value flagship-daemon.service)" != active ] || fail "the daemon runs on a box with no owner"
+say "daemon stays off until a claim's first boot"
+# The helper answers only the claim's own steps: power, as the claim account, is refused.
+refusal="$(runuser -u flagship-claim -- /usr/local/bin/node --input-type=module -e '
+import { PrivdClient } from "/opt/flagship/packages/privd/dist/index.js";
+const c = new PrivdClient("/run/flagship-claim-helper/helper.sock");
+try { await c.power("reboot"); console.log("ALLOWED"); } catch (e) { console.log(e.code ?? e.message); } finally { c.close(); }
+' 2>&1 | tail -n1)"
+[ "$refusal" = forbidden ] || fail "the claim helper answered power with: $refusal"
+say "claim helper refuses anything but the claim steps"
 
 hci0="$(cat /sys/class/bluetooth/hci0/address 2>/dev/null || true)"
 advertising() {

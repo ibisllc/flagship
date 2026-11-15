@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ed, signAuthCode, signInstallBlob, type AuthCode, type InstallBlob, type Keypair } from "@flagship/protocol";
-import { retailBootMode, retailSeedFromRecipe } from "../../src/retailClaim/firstBoot.js";
+import { firstBootRestartRefusal, retailBootMode, retailSeedFromRecipe } from "../../src/retailClaim/firstBoot.js";
 import { verifyClaimRecipe } from "../../src/retailClaim/recipe.js";
 
 const ENGINE = readFileSync(fileURLToPath(new URL("../../../flagship-builder/engine/preseed-engine.js", import.meta.url)), "utf8");
@@ -87,5 +87,26 @@ describe("retail boot mode", () => {
     expect(retailBootMode("locked", true)).toBe("claim-only");
     expect(retailBootMode("claimed", false)).toBe("claim-only");
     expect(retailBootMode("claimed", true)).toBe("serve");
+  });
+});
+
+describe("the claim helper's restart into a first boot", () => {
+  const verify = (t: string) => verifyClaimRecipe(t, 0).ok;
+  const ok = { retailImage: true, lifecycle: "claimed" as const, firstBootDone: false, recipeText: claimedRecipe(), verify };
+
+  it("restarts only a claimed retail box with a recipe that verifies and no first boot yet", () => {
+    expect(firstBootRestartRefusal(ok)).toBeNull();
+    expect(firstBootRestartRefusal({ ...ok, retailImage: false })).toBe("not a retail image");
+    expect(firstBootRestartRefusal({ ...ok, lifecycle: "unclaimed" })).toBe("the box is not claimed");
+    expect(firstBootRestartRefusal({ ...ok, lifecycle: "locked" })).toBe("the box is not claimed");
+    expect(firstBootRestartRefusal({ ...ok, firstBootDone: true })).toBe("the first boot already ran");
+    expect(firstBootRestartRefusal({ ...ok, recipeText: null })).toBe("no claimed recipe");
+  });
+
+  it("a recipe the claim account wrote itself, or changed, does not verify", () => {
+    const r = JSON.parse(claimedRecipe());
+    r.blob.serverName = "other";
+    expect(firstBootRestartRefusal({ ...ok, recipeText: JSON.stringify(r) })).toBe("the claimed recipe does not verify");
+    expect(firstBootRestartRefusal({ ...ok, recipeText: "{}" })).toBe("the claimed recipe does not verify");
   });
 });

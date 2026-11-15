@@ -12,7 +12,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { PrivdServer, SETUP_STEPS, dockerExec, dockerFileExec, iccTable, podmanArgv, type Exec, type RunResult } from "@flagship/privd";
+import { PrivdServer, RETAIL_CLAIM_STEPS, SETUP_STEPS, dockerExec, dockerFileExec, iccTable, podmanArgv, type Exec, type RunResult } from "@flagship/privd";
 import { dockerBuildArgs } from "../src/serviceRunner.js";
 import { filesArchiveDockerArgs, filesSizeDockerArgs } from "../src/volumeDump.js";
 import { DAEMON_HARDENING_DROPIN_PATH, PRIVD_DAEMON_DROPIN_PATH, PRIVD_UNIT_PATH, daemonPrivdDropIn, privdUnit } from "@flagship/privd/unit";
@@ -220,7 +220,9 @@ describe("the Rust units without root", () => {
   });
 
   it("are one of the release's root steps, named the same in the broker and in setup.js", () => {
-    expect(Object.keys(STEPS).sort()).toEqual([...SETUP_STEPS].sort());
+    // The claim helper's own steps are setup.js steps too; the full broker carries only the wipe of them.
+    expect(Object.keys(STEPS).sort()).toEqual([...new Set([...SETUP_STEPS, ...RETAIL_CLAIM_STEPS])].sort());
+    expect(SETUP_STEPS).not.toContain("retail-first-boot");
     expect(SETUP_STEPS).toContain("rust-stack");
   });
 
