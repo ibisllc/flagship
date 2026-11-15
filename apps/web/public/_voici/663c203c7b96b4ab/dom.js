@@ -55,7 +55,7 @@ export function setAttr(el, k, v) {
   } else if (k === "src") {
     const u = safeImageSrc(v);
     if (u) el.setAttribute("src", u);
-  } else if (k === "disabled" || k === "hidden" || k === "required" || k === "checked" || k === "selected" || k === "open") {
+  } else if (k === "disabled" || k === "hidden" || k === "required" || k === "checked" || k === "selected" || k === "open" || k === "autoplay" || k === "playsinline" || k === "muted") {
     if (v) el.setAttribute(k, "");
   } else {
     throw new Error(`dom: attribute not allowed: ${k}`);

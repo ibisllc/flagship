@@ -121,6 +121,48 @@ describe("voici-calls vectors", () => {
     expect(P.voiciPageAcceptsCalls(V.pageV2.signed)).toBe(true);
   });
 
+  it("video: the SDP, media in request and answer, keys, frames, buckets", () => {
+    const X = V.video;
+    expect(X.buckets).toEqual(P.VOICI_CALL_VIDEO_BUCKETS);
+    expect(P.mungeVoiciCallSdp(X.sdp.offerRaw)).toBe(X.sdp.offer);
+    expect(P.mungeVoiciCallSdp(X.sdp.answerRaw)).toBe(X.sdp.answer);
+    for (const c of X.sdp.checks) expect(P.checkVoiciCallSdp(c.sdp, c.media), c.name).toBe(c.expected);
+    expect(dec(P.canonicalVoiciCallRequest(X.request.signed))).toBe(X.request.canonical);
+    expect(P.voiciCallRequestHash(X.request.signed)).toBe(X.request.hash);
+    for (const c of X.request.checks) expect(code(P.checkVoiciCallRequest(c.request, requestCtx(X.request.ctx))), c.name).toBe(c.expected);
+    expect(dec(P.canonicalVoiciCallAnswer(X.answer.signed))).toBe(X.answer.canonical);
+    expect(P.signVoiciCallAnswer(X.answer.body, h(V.keys.ownerSignSeed))).toEqual(X.answer.signed);
+    for (const c of X.answer.checks) expect(code(P.checkVoiciCallAnswer(c.answer, { request: c.request, ownerSignPub: V.keys.ownerSignPub, now: V.now })), c.name).toBe(c.expected);
+    const rb = P.canonicalVoiciCallRequest(X.request.signed);
+    const ab = P.canonicalVoiciCallAnswer(X.answer.signed);
+    const vk = P.deriveVoiciCallVideoFrameKeys(h(X.keys.sharedSecret), rb, ab);
+    const ak = P.deriveVoiciCallFrameKeys(h(X.keys.sharedSecret), rb, ab);
+    expect([H(vk.c2p), H(vk.p2c), H(ak.c2p), H(ak.p2c)]).toEqual([X.keys.c2p, X.keys.p2c, X.keys.audioC2p, X.keys.audioP2c]);
+    const callId = X.request.signed.callId;
+    for (const c of X.frames.cases) {
+      const sealed = P.sealVoiciCallVideoFrameWithKey(h(c.key), callId, c.dir, c.ctr, h(c.frame));
+      expect([H(sealed), sealed.length, P.voiciCallVideoClearLen(h(c.frame))]).toEqual([c.sealed, c.sealedLen, c.clearLen]);
+      expect(H(P.openVoiciCallVideoFrameWithKey(h(c.key), callId, c.dir, sealed)!.frame)).toBe(c.frame);
+    }
+    for (const c of X.frames.refusals) expect(P.openVoiciCallVideoFrameWithKey(h(c.key), callId, c.dir, h(c.sealed)), c.name).toBeNull();
+    for (const c of X.frames.seal) {
+      const f = new Uint8Array(c.frameLen);
+      if (c.frameLen) f[0] = c.firstByte;
+      let got = "ok";
+      try {
+        P.sealVoiciCallVideoFrameWithKey(vk.c2p, callId, "c2p", 0, f);
+      } catch {
+        got = "refused";
+      }
+      expect(got, c.name).toBe(c.expected);
+    }
+    const r = new P.VoiciCallFrameReceiver(vk.c2p, callId, "c2p", "video");
+    for (const s of X.frames.receiver) {
+      const got = r.open(h(s.sealed));
+      expect(got ? H(got) : null).toBe(s.frame);
+    }
+  });
+
   it("the vectors file is fresh", () => {
     execFileSync("npx", ["tsx", join(import.meta.dirname, "..", "..", "..", "tools", "voici-calls-vectors.ts"), "--check"], { stdio: "pipe" });
   }, 60_000);

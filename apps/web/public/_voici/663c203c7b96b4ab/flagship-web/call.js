@@ -8,6 +8,10 @@
 //                               (a module Worker of callWorker.js), onState(state, detail), deps? (fetch, WebSocket,
 //                               RTCPeerConnection, RTCRtpScriptTransform, now)}
 //   call.hangUp(), call.setMuted(bool), call.remoteStream
+//   call.setCamera(on, getUserMedia) -> Promise<bool>   video as an upgrade of the audio call (voici-calls-v2.md §1.4):
+//                               only when o.videoAble (this browser has a camera) made the offer carry a video section;
+//                               the camera is asked for on the tap that calls it. onCamera(state) reports the other
+//                               side's camera: "on", "off" or "paused".
 //
 // States: "requesting", "ringing", "connecting", "connected", "ended" with detail {reason} or "failed" {code,
 // retryAfterSec?}. The offer is made before the request (its hash is signed) and applied only once the answer brings
@@ -19,11 +23,13 @@ import {
   canonicalVoiciCallRequest,
   checkVoiciCallAnswer,
   deriveVoiciCallFrameKeys,
+  deriveVoiciCallVideoFrameKeys,
   hex,
   hexToBytes,
   mungeVoiciCallSdp,
   voiciCallDecapsulate,
   voiciCallKeygen,
+  VOICI_CALL_CAMERA_STATES,
   VOICI_CALL_MAX_MS,
 } from "./callProtocol.js";
 import { messageCred, randomHex, signP256 } from "./envelope.js";
@@ -35,6 +41,18 @@ const AUDIO = { echoCancellation: true, noiseSuppression: true, autoGainControl:
 /** The getUserMedia constraints of a call (echo cancellation, noise suppression and auto gain on). */
 export const VOICI_CALL_AUDIO = { audio: AUDIO, video: false };
 
+/** The camera constraints of a call's video (360p by default, voici-calls-v2.md §1.3). */
+export const VOICI_CALL_VIDEO = { video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24, max: 24 }, facingMode: "user" }, audio: false };
+
+/** Whether this browser has a camera at all (no permission asked): decides whether the request offers video. */
+export async function voiciCallVideoAble(mediaDevices = globalThis.navigator?.mediaDevices) {
+  try {
+    return (await mediaDevices.enumerateDevices()).some((d) => d.kind === "videoinput");
+  } catch {
+    return false;
+  }
+}
+
 /** The ICE server of a call: the owner's phone on its bare name, TURN over TLS on 443, with the answer's credential. */
 export function voiciCallIceServer(username, services, answer) {
   return { urls: `turns:${username}.${services}:443?transport=tcp`, username: answer.turnUser, credential: answer.turnSecret };
@@ -43,7 +61,7 @@ export function voiciCallIceServer(username, services, answer) {
 /** The signed request body for POST /api/voici/calls. */
 export async function buildVoiciCallRequest(session, o) {
   const conv = voiciConv(session.pageId, session.pseudonymPub);
-  const body = { pageId: session.pageId, conv, callId: o.callId, from: session.pseudonymPub, callerXwingPub: hex(o.callerXwingPub), offerSdp: o.offerSdp, issuedAt: o.issuedAt, cred: messageCred(session) };
+  const body = { pageId: session.pageId, conv, callId: o.callId, from: session.pseudonymPub, callerXwingPub: hex(o.callerXwingPub), offerSdp: o.offerSdp, issuedAt: o.issuedAt, cred: messageCred(session), ...(o.media ? { media: o.media } : {}) };
   const sig = await signP256(session.privateKey, canonicalVoiciCallRequest(body), o.subtle);
   return { v: 1, kind: "voici-call-request", ...body, sig };
 }
@@ -53,14 +71,14 @@ async function signEnd(session, callId, reason, issuedAt) {
   return { v: 1, kind: "voici-call-end", ...body, sig: await signP256(session.privateKey, canonicalVoiciCallEnd(body)) };
 }
 
-function attachTransform(deps, worker, target, side) {
+function attachTransform(deps, worker, target, side, track = "audio") {
   if (deps.RTCRtpScriptTransform) {
-    target.transform = new deps.RTCRtpScriptTransform(worker, { side });
+    target.transform = new deps.RTCRtpScriptTransform(worker, { side, track });
     return true;
   }
   if (typeof target.createEncodedStreams === "function") {
     const { readable, writable } = target.createEncodedStreams();
-    worker.postMessage({ kind: "streams", side, readable, writable }, [readable, writable]);
+    worker.postMessage({ kind: "streams", side, track, readable, writable }, [readable, writable]);
     return true;
   }
   return false;
@@ -86,6 +104,9 @@ export function startVoiciCall(o) {
   let limitTimer = null;
   const pendingIce = [];
   const track = o.stream.getAudioTracks()[0];
+  const videoAble = !!o.videoAble;
+  let video = null;
+  let camera = null;
 
   const set = (s, detail = {}) => {
     if (state === "ended" || state === "failed") return;
@@ -107,6 +128,7 @@ export function startVoiciCall(o) {
     }
     o.worker.postMessage({ kind: "stop" });
     for (const t of o.stream.getTracks()) t.stop();
+    camera?.stop();
     if (callerKey) callerKey.seed.fill(0);
   };
   const send = (m) => {
@@ -116,10 +138,15 @@ export function startVoiciCall(o) {
   const sender = pc.addTrack(track, o.stream);
   if (!attachTransform(deps, o.worker, sender, "send")) {
     queueMicrotask(() => set("failed", { code: "unsupported" }));
-    return { hangUp() {}, setMuted() {}, remoteStream };
+    return { hangUp() {}, setMuted() {}, async setCamera() { return false; }, remoteStream };
+  }
+  if (videoAble) {
+    // Negotiated now, sending nothing until the camera is turned on: no new offer when it is (voici-calls-v2.md §1.4).
+    video = pc.addTransceiver("video", { direction: "sendrecv" });
+    attachTransform(deps, o.worker, video.sender, "send", "video");
   }
   pc.ontrack = (e) => {
-    attachTransform(deps, o.worker, e.receiver, "receive");
+    attachTransform(deps, o.worker, e.receiver, "receive", e.track.kind === "video" ? "video" : "audio");
     remoteStream.addTrack(e.track);
   };
   pc.onicecandidate = (e) => {
@@ -135,11 +162,13 @@ export function startVoiciCall(o) {
     if (!r.ok) return set("failed", { code: "bad-answer" });
     set("connecting");
     const ss = voiciCallDecapsulate(hexToBytes(answer.xwingCiphertext), callerKey.seed);
-    const k = deriveVoiciCallFrameKeys(ss, canonicalVoiciCallRequest(request), canonicalVoiciCallAnswer(answer));
+    const rb = canonicalVoiciCallRequest(request);
+    const ab = canonicalVoiciCallAnswer(answer);
+    const k = deriveVoiciCallFrameKeys(ss, rb, ab);
+    const vk = videoAble ? deriveVoiciCallVideoFrameKeys(ss, rb, ab) : null;
     ss.fill(0);
-    o.worker.postMessage({ kind: "keys", callId, c2p: hex(k.c2p), p2c: hex(k.p2c) });
-    k.c2p.fill(0);
-    k.p2c.fill(0);
+    o.worker.postMessage({ kind: "keys", callId, c2p: hex(k.c2p), p2c: hex(k.p2c), ...(vk ? { vc2p: hex(vk.c2p), vp2c: hex(vk.p2c) } : {}) });
+    for (const key of [k.c2p, k.p2c, vk?.c2p, vk?.p2c]) key?.fill(0);
     pc.setConfiguration({ iceServers: [voiciCallIceServer(o.username, cfg.services, answer)], iceTransportPolicy: "relay", bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
     await pc.setLocalDescription({ type: "offer", sdp: request.offerSdp });
     await pc.setRemoteDescription({ type: "answer", sdp: answer.answerSdp });
@@ -154,13 +183,14 @@ export function startVoiciCall(o) {
     else if (msg.t === "ice" && (msg.candidate === null || typeof msg.candidate === "string")) {
       if (pc.remoteDescription) pc.addIceCandidate(msg.candidate === null ? null : { candidate: msg.candidate, sdpMid: "0" }).catch(() => {});
       else pendingIce.push(msg.candidate);
-    } else if (msg.t === "ended") set("ended", { reason: typeof msg.reason === "string" ? msg.reason : "hangup" });
+    } else if (msg.t === "camera" && VOICI_CALL_CAMERA_STATES.includes(msg.state)) o.onCamera?.(msg.state);
+    else if (msg.t === "ended") set("ended", { reason: typeof msg.reason === "string" ? msg.reason : "hangup" });
   }
 
   (async () => {
     callerKey = voiciCallKeygen();
     const offer = await pc.createOffer({ offerToReceiveAudio: true });
-    request = await buildVoiciCallRequest(session, { callId, callerXwingPub: callerKey.publicKey, offerSdp: mungeVoiciCallSdp(offer.sdp), issuedAt: deps.now() });
+    request = await buildVoiciCallRequest(session, { callId, callerXwingPub: callerKey.publicKey, offerSdp: mungeVoiciCallSdp(offer.sdp), issuedAt: deps.now(), ...(videoAble ? { media: "audio,video" } : {}) });
     const res = await deps.fetch(`${cfg.apiBase}/api/voici/calls`, { ...NO_CREDS, method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request }) });
     let j = null;
     try {
@@ -200,6 +230,40 @@ export function startVoiciCall(o) {
     },
     setMuted(m) {
       track.enabled = !m;
+    },
+    /** Turns this side's camera on (asking for it now, on the person's tap) or off; false when it can't. */
+    async setCamera(on, getUserMedia) {
+      if (!video || (state !== "connecting" && state !== "connected")) return false;
+      if (!on) {
+        camera?.stop();
+        camera = null;
+        await video.sender.replaceTrack(null);
+        send({ t: "camera", state: "off" });
+        return true;
+      }
+      if (camera) return true;
+      let s;
+      try {
+        s = await getUserMedia(VOICI_CALL_VIDEO);
+      } catch {
+        return false;
+      }
+      camera = s.getVideoTracks()[0] ?? null;
+      if (!camera) return false;
+      try {
+        const p = video.sender.getParameters();
+        p.degradationPreference = "maintain-framerate";
+        if (p.encodings?.[0]) p.encodings[0].maxBitrate = 600_000;
+        await video.sender.setParameters(p);
+      } catch {
+        /* defaults are fine */
+      }
+      await video.sender.replaceTrack(camera);
+      send({ t: "camera", state: "on" });
+      return true;
+    },
+    get cameraTrack() {
+      return camera;
     },
   };
 }

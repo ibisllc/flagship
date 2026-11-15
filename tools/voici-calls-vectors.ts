@@ -415,11 +415,170 @@ const pageV2Checks = (
 want("v1 has no calls", P.voiciPageAcceptsCalls(VP.index.signed), false);
 want("v2 calls on", P.voiciPageAcceptsCalls(pageV2), true);
 
+// ── video (docs/voici-calls-v2.md §1) ─────────────────────────────────────
+
+const videoSection = (fp: string, setup: string) =>
+  [
+    "m=video 9 UDP/TLS/RTP/SAVPF 96 97 98 102 125 127",
+    "c=IN IP4 0.0.0.0",
+    "a=rtcp:9 IN IP4 0.0.0.0",
+    "a=ice-ufrag:Wq3t",
+    "a=ice-pwd:5c1Jd2rS9cVb4yAqLx0pE7kT",
+    "a=ice-options:trickle",
+    `a=fingerprint:${fp}`,
+    `a=setup:${setup}`,
+    "a=mid:1",
+    "a=extmap:14 urn:ietf:params:rtp-hdrext:toffset",
+    "a=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+    "a=extmap:13 urn:3gpp:video-orientation",
+    "a=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+    "a=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid",
+    "a=sendrecv",
+    "a=msid:- 9a0e1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b",
+    "a=rtcp-mux",
+    "a=rtcp-rsize",
+    "a=rtpmap:96 VP8/90000",
+    "a=rtcp-fb:96 goog-remb",
+    "a=rtcp-fb:96 transport-cc",
+    "a=rtcp-fb:96 ccm fir",
+    "a=rtcp-fb:96 nack",
+    "a=rtcp-fb:96 nack pli",
+    "a=rtpmap:97 rtx/90000",
+    "a=fmtp:97 apt=96",
+    "a=rtpmap:98 VP9/90000",
+    "a=fmtp:98 profile-id=0",
+    "a=rtpmap:102 H264/90000",
+    "a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f",
+    "a=rtpmap:125 red/90000",
+    "a=rtpmap:127 ulpfec/90000",
+    "a=ssrc-group:FID 2001 2002",
+    "a=ssrc:2001 cname:q8Xl1xVb4c2r3Yz5",
+    "a=ssrc:2001 msid:- 9a0e1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b",
+    "a=ssrc:2002 cname:q8Xl1xVb4c2r3Yz5",
+    "a=ssrc:2002 msid:- 9a0e1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b",
+    "",
+  ].join("\r\n");
+const videoOfferRaw = offerRaw.replace("a=group:BUNDLE 0", "a=group:BUNDLE 0 1") + videoSection(FP, "actpass");
+const videoAnswerRaw = answerRaw.replace("a=group:BUNDLE 0", "a=group:BUNDLE 0 1") + videoSection(FP2, "active");
+const videoOffer = P.mungeVoiciCallSdp(videoOfferRaw);
+const videoAnswer = P.mungeVoiciCallSdp(videoAnswerRaw);
+want("video munge idempotent", P.mungeVoiciCallSdp(videoOffer), videoOffer);
+const AV = "audio,video" as const;
+const videoSdpChecks = (
+  [
+    ["munged video offer", videoOffer, AV, null],
+    ["munged video answer", videoAnswer, AV, null],
+    ["audio-only SDP for a video call", offer, AV, "bad-media"],
+    ["video SDP for an audio call", videoOffer, "audio", "not-audio-only"],
+    ["raw video offer (several codecs)", P.mungeVoiciCallSdp(offerRaw).replace("a=group:BUNDLE 0", "a=group:BUNDLE 0 1") + videoSection(FP, "actpass"), AV, "not-vp8"],
+    ["H.264 instead of VP8", videoOffer.replaceAll("VP8/90000", "H264/90000"), AV, "not-vp8"],
+    ["video orientation header", videoOffer.replace("a=mid:1\r\n", "a=mid:1\r\na=extmap:13 urn:3gpp:video-orientation\r\n"), AV, "video-extension"],
+    ["video before audio", (() => { const i = videoOffer.indexOf("m=audio"); const j = videoOffer.indexOf("m=video"); return videoOffer.slice(0, i) + videoOffer.slice(j) + videoOffer.slice(i, j); })(), AV, "bad-media"],
+    ["audio of a video call with dtx", videoOffer.replace("usedtx=0", "usedtx=1"), AV, "dtx"],
+  ] as const
+).map(([name, sdp, media, expected]) => ({ name, sdp, media, expected: want(`video sdp ${name}`, P.checkVoiciCallSdp(sdp, media), expected) }));
+
+const videoRequestBody: P.VoiciCallRequestBody = { ...requestBody, offerSdp: videoOffer, media: AV };
+const videoRequest = P.signVoiciCallRequestP256(videoRequestBody, browserPriv);
+const videoRequestBytes = P.canonicalVoiciCallRequest(videoRequest);
+const vreqT = (f: (r: R) => void, resign = false) => {
+  const r = clone(videoRequest) as unknown as R;
+  f(r);
+  return resign ? P.signVoiciCallRequestP256(r as unknown as P.VoiciCallRequestBody, browserPriv) : r;
+};
+const videoRequestChecks = (
+  [
+    ["video request", videoRequest, "ok"],
+    ["audio request naming media audio", P.signVoiciCallRequestP256({ ...requestBody, media: "audio" }, browserPriv), "ok"],
+    ["media stripped after signing", vreqT((r) => delete r.media), "bad-sdp"],
+    ["media added after signing", { ...request, media: AV }, "bad-sdp"],
+    ["unknown media", vreqT((r) => (r.media = "video")), "malformed"],
+    ["video media with an audio SDP", vreqT((r) => (r.offerSdp = offer), true), "bad-sdp"],
+    ["audio media with a video SDP", vreqT((r) => delete r.media, true), "bad-sdp"],
+  ] as const
+).map(([name, r, expected]) => ({ name, request: r, expected: want(`video request ${name}`, code(P.checkVoiciCallRequest(r, ctx)), expected) }));
+
+const videoAnswerBody: P.VoiciCallAnswerBody = { ...answerBody, requestHash: P.voiciCallRequestHash(videoRequest), answerSdp: videoAnswer, media: AV };
+const videoAnswerSigned = P.signVoiciCallAnswer(videoAnswerBody, ownerSignSeed);
+const videoAnswerBytes = P.canonicalVoiciCallAnswer(videoAnswerSigned);
+const videoAnswerChecks = (
+  [
+    ["video answer", videoAnswerSigned, videoRequest, "ok"],
+    ["audio answer to a video request", P.signVoiciCallAnswer({ ...videoAnswerBody, media: "audio" }, ownerSignSeed), videoRequest, "ok"],
+    ["video answer to an audio request", P.signVoiciCallAnswer({ ...answerBody, media: AV }, ownerSignSeed), request, "bad-sdp"],
+    ["media stripped after signing", (() => { const x = clone(videoAnswerSigned) as R; delete x.media; return x; })(), videoRequest, "bad-signature"],
+    ["unknown media", { ...videoAnswerSigned, media: "video" }, videoRequest, "malformed"],
+  ] as const
+).map(([name, a, rq, expected]) => ({ name, answer: a, request: rq, expected: want(`video answer ${name}`, code(P.checkVoiciCallAnswer(a, { request: rq, ...answerCtx })), expected) }));
+
+const vss = P.voiciCallDecapsulate(h(videoAnswerSigned.xwingCiphertext), callerSeed);
+const vk = P.deriveVoiciCallVideoFrameKeys(vss, videoRequestBytes, videoAnswerBytes);
+const ak = P.deriveVoiciCallFrameKeys(vss, videoRequestBytes, videoAnswerBytes);
+want("video keys differ from audio", H(vk.c2p) !== H(ak.c2p) && H(vk.p2c) !== H(ak.p2c), true);
+const vp8 = (key: boolean, n: number) => Uint8Array.from({ length: n }, (_, i) => (i === 0 ? (key ? 0x10 : 0x11) : (i * 31 + 7) & 0xff));
+const vEpoch1 = P.nextVoiciCallFrameKey(vk.c2p);
+const videoCases = (
+  [
+    ["c2p", 0, vp8(true, 900), vk.c2p],
+    ["c2p", 1, vp8(false, 120), vk.c2p],
+    ["p2c", 0, vp8(true, 3000), vk.p2c],
+    ["c2p", 2, vp8(false, 3), vk.c2p],
+    ["c2p", 3, vp8(true, 1024 - 38), vk.c2p],
+    ["c2p", 4, vp8(true, 1024 - 37), vk.c2p],
+    ["c2p", 30_000, vp8(false, 5000), vEpoch1],
+  ] as const
+).map(([dir, ctr, frame, key]) => {
+  const sealed = P.sealVoiciCallVideoFrameWithKey(key, CALL_ID, dir, ctr, frame);
+  want("video bucket", P.VOICI_CALL_VIDEO_BUCKETS.includes(sealed.length), true);
+  want(`video open ${dir} ${ctr}`, H(P.openVoiciCallVideoFrameWithKey(key, CALL_ID, dir, sealed)!.frame), H(frame));
+  return { dir, ctr, key: H(key), frame: H(frame), clearLen: P.voiciCallVideoClearLen(frame), sealedLen: sealed.length, sealed: H(sealed) };
+});
+const v0 = h(videoCases[0]!.sealed);
+const videoRefusals = (
+  [
+    ["clear header changed", "c2p", flip(v0, 5), vk.c2p],
+    ["key frame flag flipped", "c2p", flip(v0, 0), vk.c2p],
+    ["counter changed", "c2p", flip(v0, 17), vk.c2p],
+    ["body changed", "c2p", flip(v0, 40), vk.c2p],
+    ["not a bucket size", "c2p", v0.subarray(0, v0.length - 1), vk.c2p],
+    ["audio key", "c2p", v0, ak.c2p],
+    ["wrong direction", "p2c", v0, vk.c2p],
+  ] as const
+).map(([name, dir, sealed, key]) => ({ name, dir, key: H(key), sealed: H(sealed), expected: want(`video frame ${name}`, P.openVoiciCallVideoFrameWithKey(key, CALL_ID, dir, sealed), null) }));
+const sealRefusal = (f: Uint8Array) => {
+  try {
+    P.sealVoiciCallVideoFrameWithKey(vk.c2p, CALL_ID, "c2p", 0, f);
+    return "ok";
+  } catch {
+    return "refused";
+  }
+};
+const videoSealChecks = (
+  [
+    ["empty frame", new Uint8Array(0), "refused"],
+    ["key frame shorter than its header", vp8(true, 9), "refused"],
+    ["larger than the last bucket", vp8(false, P.VOICI_CALL_VIDEO_BUCKETS.at(-1)!), "refused"],
+    ["largest that fits", vp8(false, P.VOICI_CALL_VIDEO_BUCKETS.at(-1)! - 28), "ok"],
+  ] as const
+).map(([name, frame, expected]) => ({ name, frameLen: frame.length, firstByte: frame[0] ?? null, expected: want(`video seal ${name}`, sealRefusal(frame), expected) }));
+// A video receiver: the same window and epochs as audio, on its own counters.
+const vsender = new P.VoiciCallFrameSender(vk.c2p, CALL_ID, "c2p", "video");
+const vsent = [0, 1, 2].map((i) => vsender.seal(vp8(i === 0, 200 + i)));
+for (let i = 0; i < 3; i++) want(`video sender ${i}`, H(vsent[i]!), H(P.sealVoiciCallVideoFrameWithKey(vk.c2p, CALL_ID, "c2p", i, vp8(i === 0, 200 + i))));
+const vrecv = new P.VoiciCallFrameReceiver(vk.c2p, CALL_ID, "c2p", "video");
+const videoReceiverRun = ([[0, true], [2, true], [1, true], [1, false]] as const).map(([i, ok]) => {
+  const got = vrecv.open(vsent[i]!);
+  want(`video receiver ${i}`, got !== null, ok);
+  return { sealed: H(vsent[i]!), frame: got ? H(got) : null };
+});
+const videoAudioCross = new P.VoiciCallFrameReceiver(ak.c2p, CALL_ID, "c2p").open(vsent[0]!);
+want("an audio receiver drops a video frame", videoAudioCross, null);
+
 // ── write ──────────────────────────────────────────────────────────────────
 
 const doc = {
   description:
-    "voi.ci calls (docs/voici-calls.md §2-§3): SDP profile, signed request / answer / receipt / end / allow, per-call X-Wing keys, frame keys, sealed frames, a scripted receiver, the sealed push and missed call. Generated by tools/voici-calls-vectors.ts from packages/protocol/src/voiciCalls.ts. Keys and the request's cred are those of test-vectors/messages/.",
+    "voi.ci calls (docs/voici-calls.md §2-§3, voici-calls-v2.md §1 video): SDP profile, signed request / answer / receipt / end / allow, per-call X-Wing keys, frame keys, sealed frames, a scripted receiver, the sealed push and missed call. Generated by tools/voici-calls-vectors.ts from packages/protocol/src/voiciCalls.ts. Keys and the request's cred are those of test-vectors/messages/.",
   t0: M.t0,
   now: NOW,
   constants: {
@@ -477,6 +636,14 @@ const doc = {
   push: { payload: { v: 1, callId: CALL_ID, pageId: PAGE_ID, conv: CONV, from: PPUB }, issuedAt: M.t0 + 1_000, eseed: H(pushEseed), sealed: P.b64Encode(pushSealed), badConvSealed: P.b64Encode(pushBadConv) },
   pageV2: { body: pageV2Body, signed: pageV2, canonical: new TextDecoder().decode(P.canonicalVoiciPageIndex(pageV2)), ctx: pctx, checks: pageV2Checks },
   missedCall: { entry: missed, eseed: H(missedEseed), sealed: P.b64Encode(missedSealed), forgedSealed: P.b64Encode(missedForged) },
+  video: {
+    buckets: P.VOICI_CALL_VIDEO_BUCKETS,
+    sdp: { offerRaw: videoOfferRaw, offer: videoOffer, answerRaw: videoAnswerRaw, answer: videoAnswer, checks: videoSdpChecks },
+    request: { body: videoRequestBody, signed: videoRequest, canonical: new TextDecoder().decode(videoRequestBytes), hash: P.voiciCallRequestHash(videoRequest), ctx, checks: videoRequestChecks },
+    answer: { body: videoAnswerBody, signed: videoAnswerSigned, canonical: new TextDecoder().decode(videoAnswerBytes), checks: videoAnswerChecks },
+    keys: { sharedSecret: H(vss), c2p: H(vk.c2p), p2c: H(vk.p2c), audioC2p: H(ak.c2p), audioP2c: H(ak.p2c), c2pEpoch1: H(vEpoch1) },
+    frames: { cases: videoCases, refusals: videoRefusals, seal: videoSealChecks, receiver: videoReceiverRun },
+  },
 };
 
 const text = JSON.stringify(doc, null, 2) + "\n";

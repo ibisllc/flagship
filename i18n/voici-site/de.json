@@ -121,5 +121,10 @@
   "Ringing…": "Es klingelt…",
   "Connecting…": "Verbinden…",
   "Call": "Anrufen",
-  "Private messages and quantum-safe calls, with your Flagship app.": "Private Nachrichten und quantensichere Anrufe, mit deiner Flagship-App."
+  "Private messages and quantum-safe calls, with your Flagship app.": "Private Nachrichten und quantensichere Anrufe, mit deiner Flagship-App.",
+  "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.": "voi.ci braucht deine Kamera, um dein Video zu zeigen. Erlaube sie in deinem Browser oder sprich ohne sie weiter.",
+  "Camera": "Kamera",
+  "Camera off": "Kamera aus",
+  "{0} turned on their camera.": "{0} hat die Kamera eingeschaltet.",
+  "Camera paused": "Kamera pausiert"
 }

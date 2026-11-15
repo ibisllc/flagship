@@ -41,7 +41,11 @@ data class VoiciCallRequest(
     val issuedAt: Long,
     val delegatePub: String,
     val json: JsonObject,
-)
+    /** What the caller is able to send: "audio" or "audio,video" (voici-calls-v2.md §1.1; absent on the wire = audio). */
+    val media: String = VoiciCalls.MEDIA_AUDIO,
+) {
+    val hasVideo: Boolean get() = media == VoiciCalls.MEDIA_VIDEO
+}
 
 data class VoiciCallAnswerBody(
     val callId: String,
@@ -52,6 +56,8 @@ data class VoiciCallAnswerBody(
     val turnUser: String,
     val turnSecret: String,
     val issuedAt: Long,
+    /** What the answering device is able to send; null = not on the wire (audio). */
+    val media: String? = null,
 )
 
 data class VoiciMissedCall(val request: VoiciCallRequest, val ringingAt: Long, val endedAt: Long, val reason: String)
@@ -81,6 +87,14 @@ object VoiciCalls {
     const val MAX_CTR = 1L shl 32
     val END_REASONS = setOf("hangup", "cancel", "decline", "busy", "no-answer", "limit", "failed")
     val MISSED_REASONS = setOf("no-answer", "busy", "cancel", "decline")
+    const val MEDIA_AUDIO = "audio"
+    const val MEDIA_VIDEO = "audio,video"
+    val MEDIA_VALUES = setOf(MEDIA_AUDIO, MEDIA_VIDEO)
+    /** Sealed video frame sizes (voici-calls-v2.md §1.6): 1 KiB doubling to 1 MiB. */
+    val VIDEO_BUCKETS: List<Int> = (0 until 11).map { 1024 shl it }
+    val CAMERA_STATES = setOf("on", "off", "paused")
+    private val VIDEO_EXTMAPS = listOf("urn:ietf:params:rtp-hdrext:sdes:mid", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01")
+    private val VP8 = Regex("^a=rtpmap:\\d+ VP8/90000$", RegexOption.IGNORE_CASE)
 
     private val PAGE_ID = Regex("^[0-9a-f]{32}$")
     private val USERNAME = Regex("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
@@ -103,11 +117,28 @@ object VoiciCalls {
     private fun lines(sdp: String) = sdp.split(Regex("\r?\n"))
 
     /** The SDP rules (§0.3); null for a call description, else the refusal. */
-    fun checkSdp(sdp: String): String? {
+    private fun sections(ls: List<String>): List<Pair<String, MutableList<String>>> {
+        val out = ArrayList<Pair<String, MutableList<String>>>()
+        for (l in ls) {
+            if (l.startsWith("m=")) out.add(l.removePrefix("m=").split(" ")[0] to mutableListOf(l))
+            else out.lastOrNull()?.second?.add(l)
+        }
+        return out
+    }
+
+    private fun isVideoExtmap(l: String) = VIDEO_EXTMAPS.any { l.endsWith(" $it") }
+
+    fun checkSdp(sdp: String, media: String = MEDIA_AUDIO): String? {
         if (VoiciJs.utf8(sdp).size > MAX_SDP_BYTES) return "too-large"
         val ls = lines(sdp)
-        val media = ls.filter { it.startsWith("m=") }
-        if (media.size != 1 || !media[0].startsWith("m=audio ")) return "not-audio-only"
+        val secs = sections(ls)
+        if (media == MEDIA_VIDEO) {
+            if (secs.size != 2 || secs[0].first != "audio" || secs[1].first != "video") return "bad-media"
+            val v = secs[1].second
+            val maps = v.filter { it.startsWith("a=rtpmap:") }
+            if (maps.size != 1 || !VP8.matches(maps[0])) return "not-vp8"
+            if (v.any { it.startsWith("a=extmap:") && !isVideoExtmap(it) }) return "video-extension"
+        } else if (secs.size != 1 || secs[0].first != "audio") return "not-audio-only"
         val rtpmap = ls.firstOrNull { OPUS.matches(it) } ?: return "no-opus"
         val pt = rtpmap.removePrefix("a=rtpmap:").split(" ")[0]
         val fmtp = ls.firstOrNull { it.startsWith("a=fmtp:$pt ") }
@@ -132,15 +163,28 @@ object VoiciCalls {
         val rtpmap = ls.firstOrNull { OPUS.matches(it) } ?: return sdp
         val pt = rtpmap.removePrefix("a=rtpmap:").split(" ")[0]
         val hasFmtp = ls.any { it.startsWith("a=fmtp:$pt ") }
+        val vpt = ls.firstOrNull { VP8.matches(it) }?.removePrefix("a=rtpmap:")?.split(" ")?.get(0)
+        val rtx = ls.filter { it.startsWith("a=ssrc-group:FID ") }.mapNotNull { it.split(" ").getOrNull(2) }.toSet()
         val out = ArrayList<String>()
         var inAudio = false
+        var inVideo = false
         for (l in ls) {
             if (l.startsWith("m=")) {
                 inAudio = l.startsWith("m=audio ")
-                if (inAudio) {
-                    out.add((l.split(" ").take(3) + pt).joinToString(" "))
+                inVideo = l.startsWith("m=video ") && vpt != null
+                if (inAudio || inVideo) {
+                    out.add((l.split(" ").take(3) + (if (inAudio) pt else vpt!!)).joinToString(" "))
                     continue
                 }
+            }
+            if (inVideo) {
+                if (l.startsWith("a=extmap:") && !isVideoExtmap(l)) continue
+                if (l == "a=extmap-allow-mixed" || l.startsWith("a=ssrc-group:FID ")) continue
+                val m = PT_ATTR.find(l)
+                if (m != null && m.groupValues[2] != vpt) continue
+                if (l.startsWith("a=ssrc:") && l.removePrefix("a=ssrc:").split(" ")[0] in rtx) continue
+                out.add(l)
+                continue
             }
             if (inAudio) {
                 if ((l.startsWith("a=extmap:") && !l.endsWith(" urn:ietf:params:rtp-hdrext:sdes:mid")) || l == "a=extmap-allow-mixed") continue
@@ -164,29 +208,37 @@ object VoiciCalls {
 
     // ── request ──
 
-    fun canonicalRequest(pageId: String, conv: String, callId: String, callerXwingPub: String, offerSdp: String, issuedAt: Long): ByteArray {
-        if (!(PAGE_ID.matches(pageId) && hex(conv, 32) && hex(callId, 16) && hex(callerXwingPub, PqHybrid.HYBRID_SEAL_PUBLIC_KEY_LEN) && isTime(issuedAt))) badField(TAG_REQUEST)
-        return join(TAG_REQUEST, pageId, conv, callId, callerXwingPub, sdpHash(offerSdp), issuedAt)
+    /** [media] null = not on the wire (audio); present, it is appended (voici-calls-v2.md §1.1). */
+    fun canonicalRequest(pageId: String, conv: String, callId: String, callerXwingPub: String, offerSdp: String, issuedAt: Long, media: String? = null): ByteArray {
+        if (!(PAGE_ID.matches(pageId) && hex(conv, 32) && hex(callId, 16) && hex(callerXwingPub, PqHybrid.HYBRID_SEAL_PUBLIC_KEY_LEN) && isTime(issuedAt) &&
+                (media == null || media in MEDIA_VALUES))) badField(TAG_REQUEST)
+        val parts = mutableListOf<Any>(TAG_REQUEST, pageId, conv, callId, callerXwingPub, sdpHash(offerSdp), issuedAt)
+        if (media != null) parts.add(media)
+        return join(*parts.toTypedArray())
     }
 
     private val REQUEST_KEYS = listOf("v", "kind", "pageId", "conv", "callId", "from", "callerXwingPub", "offerSdp", "issuedAt", "cred", "sig")
 
-    private class Fields(val o: JsonObject, val pageId: String, val conv: String, val callId: String, val from: String, val xpub: String, val sdp: String, val at: Long, val sig: String, val cred: JsonObject) {
-        fun bytes() = canonicalRequest(pageId, conv, callId, xpub, sdp, at)
+    private class Fields(val o: JsonObject, val pageId: String, val conv: String, val callId: String, val from: String, val xpub: String, val sdp: String, val at: Long, val sig: String, val cred: JsonObject, val media: String?) {
+        fun bytes() = canonicalRequest(pageId, conv, callId, xpub, sdp, at, media)
     }
 
     private fun fields(v: JsonElement?): Fields? {
         val o = VoiciJs.obj(v) ?: return null
-        if (!VoiciJs.exactKeys(o, REQUEST_KEYS) || !VoiciJs.isNumEq(o["v"], 1) || str(o["kind"]) != "voici-call-request") return null
+        if (!(VoiciJs.exactKeys(o, REQUEST_KEYS) || VoiciJs.exactKeys(o, REQUEST_KEYS + "media")) || !VoiciJs.isNumEq(o["v"], 1) || str(o["kind"]) != "voici-call-request") return null
+        val media = if (o.containsKey("media")) (str(o["media"]) ?: return null) else null
         val sig = str(o["sig"]).takeIf { hex(it, 64) } ?: return null
         val cred = VoiciJs.obj(o["cred"]) ?: return null
         val from = str(o["from"]).takeIf { hex(it, 32) } ?: return null
         val f = Fields(o, str(o["pageId"]) ?: return null, str(o["conv"]) ?: return null, str(o["callId"]) ?: return null, from,
-            str(o["callerXwingPub"]) ?: return null, str(o["offerSdp"]) ?: return null, VoiciJs.time(o["issuedAt"]) ?: return null, sig, cred)
+            str(o["callerXwingPub"]) ?: return null, str(o["offerSdp"]) ?: return null, VoiciJs.time(o["issuedAt"]) ?: return null, sig, cred, media)
         return try { f.bytes(); f } catch (_: IllegalArgumentException) { null }
     }
 
     fun requestHash(request: JsonElement): String? = fields(request)?.let { WebEnvelopes.sha256Hex(it.bytes()) }
+
+    /** The canonical bytes of a wire request (the frame keys' transcript), null when it doesn't parse. */
+    fun requestBytes(request: JsonElement): ByteArray? = fields(request)?.bytes()
 
     /**
      * The request checks, cheapest first (§6): size, shape, page, calls on, blocked, revoked, rate limits, attestation,
@@ -222,12 +274,12 @@ object VoiciCalls {
         if (ts == null || ts.pageId != ctx.pageId || ts.pseudonymPub != f.from || threadSig == null ||
             !WebEnvelopes.ed25519VerifyHex(threadSig, VoiciMessages.canonicalVoiciThreadStatement(ts), f.from)) return no("bad-thread")
         if (f.conv != VoiciMessages.voiciConv(ctx.pageId, f.from)) return no("wrong-conv")
-        if (checkSdp(f.sdp) != null) return no("bad-sdp")
+        if (checkSdp(f.sdp, f.media ?: MEDIA_AUDIO) != null) return no("bad-sdp")
         try { PqHybrid.parseHybridSealPublicKey(WebEnvelopes.hexToBytes(f.xpub)) } catch (_: Exception) { return no("bad-key") }
         if (!WebEnvelopes.p256VerifyP1363(f.sig, f.bytes(), del.delegatePub)) return no("bad-signature")
         if (!ctx.skipFresh && Math.abs(f.at - ctx.now) > SKEW_MS) return no("stale")
         if (ctx.allowed != null && !ctx.allowed.invoke(f.o)) return no("not-allowed")
-        return VoiciOutcome.Ok(VoiciCallRequest(f.pageId, f.conv, f.callId, f.from, f.xpub, f.sdp, f.at, del.delegatePub, f.o))
+        return VoiciOutcome.Ok(VoiciCallRequest(f.pageId, f.conv, f.callId, f.from, f.xpub, f.sdp, f.at, del.delegatePub, f.o, f.media ?: MEDIA_AUDIO))
     }
 
     // ── per-call keys ──
@@ -253,6 +305,12 @@ object VoiciCalls {
     fun frameKeys(sharedSecret: ByteArray, requestBytes: ByteArray, answerBytes: ByteArray): Pair<ByteArray, ByteArray> {
         val th = VoiciJs.sha256(requestBytes + answerBytes)
         return hkdf(sharedSecret, th, "$TAG_FRAME|c2p") to hkdf(sharedSecret, th, "$TAG_FRAME|p2c")
+    }
+
+    /** The video keys (voici-calls-v2.md §1.5): their own directional keys from the same secret. */
+    fun videoFrameKeys(sharedSecret: ByteArray, requestBytes: ByteArray, answerBytes: ByteArray): Pair<ByteArray, ByteArray> {
+        val th = VoiciJs.sha256(requestBytes + answerBytes)
+        return hkdf(sharedSecret, th, "$TAG_FRAME|c2p|video") to hkdf(sharedSecret, th, "$TAG_FRAME|p2c|video")
     }
 
     fun nextFrameKey(k: ByteArray): ByteArray = hkdf(k, ByteArray(0), "$TAG_FRAME|next")
@@ -290,34 +348,87 @@ object VoiciCalls {
         return ctr to pt.copyOfRange(1, 1 + len)
     }
 
+    // ── video frames (voici-calls-v2.md §1.5, §1.6) ──
+
+    /** The VP8 payload header that stays clear: 10 bytes on a key frame (bit 0 of byte 0 clear), else 3. */
+    fun videoClearLen(frame: ByteArray): Int = if (frame.isEmpty()) 0 else if ((frame[0].toInt() and 1) == 0) 10 else 3
+
+    fun videoBucket(n: Int): Int? = VIDEO_BUCKETS.firstOrNull { it >= n }
+
+    private const val VIDEO_OVERHEAD = 8 + 4 + 16
+    private fun videoAad(callId: String, dir: VoiciCallDir, ctr: Long, clear: ByteArray) = VoiciJs.utf8("$callId|${dir.name}|video|$ctr|") + clear
+    private fun be32(n: Int) = ByteArray(4) { ((n ushr (8 * (3 - it))) and 0xff).toByte() }
+
+    fun sealVideoFrame(key: ByteArray, callId: String, dir: VoiciCallDir, ctr: Long, frame: ByteArray): ByteArray {
+        require(ctr in 0 until MAX_CTR) { "voici-call: counter" }
+        val c = videoClearLen(frame)
+        require(c > 0 && frame.size >= c) { "voici-call: video frame too short" }
+        val clear = frame.copyOfRange(0, c)
+        val bodyLen = frame.size - c
+        val total = videoBucket(c + VIDEO_OVERHEAD + bodyLen) ?: throw IllegalArgumentException("voici-call: video frame too long")
+        val pt = ByteArray(total - c - 8 - 16)
+        be32(bodyLen).copyInto(pt, 0)
+        frame.copyInto(pt, 4, c, frame.size)
+        return clear + be64(ctr) + VoiciJs.gcmEncrypt(key, nonce(dir, ctr), videoAad(callId, dir, ctr, clear), pt)
+    }
+
+    internal fun videoCtr(sealed: ByteArray): Long? {
+        if (sealed.size !in VIDEO_BUCKETS) return null
+        val c = videoClearLen(sealed)
+        if (c == 0 || sealed.size < c + VIDEO_OVERHEAD) return null
+        return (c until c + 8).fold(0L) { acc, i -> (acc shl 8) or (sealed[i].toLong() and 0xff) }
+    }
+
+    fun openVideoFrame(key: ByteArray, callId: String, dir: VoiciCallDir, sealed: ByteArray): Pair<Long, ByteArray>? {
+        val ctr = videoCtr(sealed) ?: return null
+        if (ctr < 0 || ctr >= MAX_CTR) return null
+        val c = videoClearLen(sealed)
+        val clear = sealed.copyOfRange(0, c)
+        val pt = try {
+            VoiciJs.gcmDecrypt(key, nonce(dir, ctr), videoAad(callId, dir, ctr, clear), sealed.copyOfRange(c + 8, sealed.size))
+        } catch (_: Exception) {
+            return null
+        }
+        val len = (0 until 4).fold(0L) { acc, i -> (acc shl 8) or (pt[i].toLong() and 0xff) }
+        if (len > pt.size - 4) return null
+        val end = 4 + len.toInt()
+        for (i in end until pt.size) if (pt[i] != 0.toByte()) return null
+        return ctr to (clear + pt.copyOfRange(4, end))
+    }
+
     // ── answer ──
 
     fun canonicalAnswer(a: VoiciCallAnswerBody): ByteArray {
         if (!(hex(a.callId, 16) && hex(a.deviceRef, 32) && hex(a.requestHash, 32) && hex(a.xwingCiphertext, PqHybrid.HYBRID_SEAL_ENC_LEN) &&
-            hex(a.turnUser, 16) && hex(a.turnSecret, 32) && isTime(a.issuedAt))) badField(TAG_ANSWER)
-        return join(TAG_ANSWER, a.callId, a.deviceRef, a.requestHash, a.xwingCiphertext, sdpHash(a.answerSdp), a.turnUser, WebEnvelopes.sha256Hex(a.turnSecret), a.issuedAt)
+            hex(a.turnUser, 16) && hex(a.turnSecret, 32) && isTime(a.issuedAt) && (a.media == null || a.media in MEDIA_VALUES))) badField(TAG_ANSWER)
+        val parts = mutableListOf<Any>(TAG_ANSWER, a.callId, a.deviceRef, a.requestHash, a.xwingCiphertext, sdpHash(a.answerSdp), a.turnUser, WebEnvelopes.sha256Hex(a.turnSecret), a.issuedAt)
+        if (a.media != null) parts.add(a.media)
+        return join(*parts.toTypedArray())
     }
 
     /** The wire answer, signed by the page's owner messages signing key. */
     fun signAnswer(a: VoiciCallAnswerBody, ownerSignSeed: ByteArray): JsonObject {
         val sig = VoiciJs.hex(VoiciJs.edSign(ownerSignSeed, canonicalAnswer(a)))
-        return JsonObject(mapOf(
+        val m = linkedMapOf<String, JsonElement>(
             "v" to JsonPrimitive(1), "kind" to JsonPrimitive("voici-call-answer"), "callId" to JsonPrimitive(a.callId),
             "deviceRef" to JsonPrimitive(a.deviceRef), "requestHash" to JsonPrimitive(a.requestHash), "xwingCiphertext" to JsonPrimitive(a.xwingCiphertext),
             "answerSdp" to JsonPrimitive(a.answerSdp), "turnUser" to JsonPrimitive(a.turnUser), "turnSecret" to JsonPrimitive(a.turnSecret),
             "issuedAt" to JsonPrimitive(a.issuedAt), "sig" to JsonPrimitive(sig),
-        ))
+        )
+        if (a.media != null) m["media"] = JsonPrimitive(a.media)
+        return JsonObject(m)
     }
 
     private val ANSWER_KEYS = listOf("v", "kind", "callId", "deviceRef", "requestHash", "xwingCiphertext", "answerSdp", "turnUser", "turnSecret", "issuedAt", "sig")
 
     fun parseAnswer(v: JsonElement?): Pair<VoiciCallAnswerBody, String>? {
         val o = VoiciJs.obj(v) ?: return null
-        if (!VoiciJs.exactKeys(o, ANSWER_KEYS) || !VoiciJs.isNumEq(o["v"], 1) || str(o["kind"]) != "voici-call-answer") return null
+        if (!(VoiciJs.exactKeys(o, ANSWER_KEYS) || VoiciJs.exactKeys(o, ANSWER_KEYS + "media")) || !VoiciJs.isNumEq(o["v"], 1) || str(o["kind"]) != "voici-call-answer") return null
+        val media = if (o.containsKey("media")) (str(o["media"]) ?: return null) else null
         val sig = str(o["sig"]).takeIf { hex(it, 64) } ?: return null
         val b = VoiciCallAnswerBody(str(o["callId"]) ?: return null, str(o["deviceRef"]) ?: return null, str(o["requestHash"]) ?: return null,
             str(o["xwingCiphertext"]) ?: return null, str(o["answerSdp"]) ?: return null, str(o["turnUser"]) ?: return null,
-            str(o["turnSecret"]) ?: return null, VoiciJs.time(o["issuedAt"]) ?: return null)
+            str(o["turnSecret"]) ?: return null, VoiciJs.time(o["issuedAt"]) ?: return null, media)
         return try { canonicalAnswer(b); b to sig } catch (_: IllegalArgumentException) { null }
     }
 
@@ -326,7 +437,9 @@ object VoiciCalls {
         val rf = fields(request) ?: return no("malformed")
         if (a.callId != rf.callId) return no("wrong-call")
         if (a.requestHash != WebEnvelopes.sha256Hex(rf.bytes())) return no("wrong-request")
-        if (checkSdp(a.answerSdp) != null) return no("bad-sdp")
+        val reqMedia = rf.media ?: MEDIA_AUDIO
+        if (a.media == MEDIA_VIDEO && reqMedia != MEDIA_VIDEO) return no("bad-sdp")
+        if (checkSdp(a.answerSdp, reqMedia) != null) return no("bad-sdp")
         if (!WebEnvelopes.ed25519VerifyHex(sig, canonicalAnswer(a), ownerSignPub)) return no("bad-signature")
         if (now != null && Math.abs(a.issuedAt - now) > SKEW_MS) return no("stale")
         return VoiciOutcome.Ok(a)
@@ -431,7 +544,7 @@ object VoiciCalls {
 }
 
 /** The sending half of one direction of a call: a counter from 0 and the current epoch key. */
-class VoiciCallFrameSender(baseKey: ByteArray, private val callId: String, private val dir: VoiciCallDir) {
+class VoiciCallFrameSender(baseKey: ByteArray, private val callId: String, private val dir: VoiciCallDir, private val video: Boolean = false) {
     private var ctr = 0L
     private var epoch = 0L
     private var key = baseKey.copyOf()
@@ -444,20 +557,19 @@ class VoiciCallFrameSender(baseKey: ByteArray, private val callId: String, priva
             key = next
             epoch++
         }
-        return VoiciCalls.sealFrame(key, callId, dir, ctr++, frame)
+        return if (video) VoiciCalls.sealVideoFrame(key, callId, dir, ctr++, frame) else VoiciCalls.sealFrame(key, callId, dir, ctr++, frame)
     }
 }
 
 /** The receiving half: a 128-frame replay window, a 3,000-frame gap limit, the newest two epochs' keys only. */
-class VoiciCallFrameReceiver(baseKey: ByteArray, private val callId: String, private val dir: VoiciCallDir) {
+class VoiciCallFrameReceiver(baseKey: ByteArray, private val callId: String, private val dir: VoiciCallDir, private val video: Boolean = false) {
     private var highest = -1L
     private val seen = HashSet<Long>()
     private val keys = HashMap<Long, ByteArray>().apply { put(0L, baseKey.copyOf()) }
     private var top = 0L
 
     fun open(sealed: ByteArray): ByteArray? {
-        if (sealed.size != VoiciCalls.SEALED_FRAME) return null
-        val ctr = VoiciCalls.readCtr(sealed)
+        val ctr = (if (video) VoiciCalls.videoCtr(sealed) else if (sealed.size == VoiciCalls.SEALED_FRAME) VoiciCalls.readCtr(sealed) else null) ?: return null
         if (ctr < 0 || ctr >= VoiciCalls.MAX_CTR || ctr > highest + VoiciCalls.MAX_GAP_FRAMES) return null
         if (ctr <= highest - VoiciCalls.REPLAY_WINDOW || ctr in seen) return null
         val e = VoiciCalls.epoch(ctr)
@@ -469,7 +581,7 @@ class VoiciCallFrameReceiver(baseKey: ByteArray, private val callId: String, pri
             for (i in top until e) { cur = VoiciCalls.nextFrameKey(cur); pending.add(cur) }
             k = cur
         }
-        val opened = k?.let { VoiciCalls.openFrame(it, callId, dir, sealed) }
+        val opened = k?.let { if (video) VoiciCalls.openVideoFrame(it, callId, dir, sealed) else VoiciCalls.openFrame(it, callId, dir, sealed) }
         if (opened == null) {
             pending.forEach { it.fill(0) }
             return null

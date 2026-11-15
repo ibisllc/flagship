@@ -121,5 +121,10 @@
   "Ringing…": "正在响铃…",
   "Connecting…": "正在连接…",
   "Call": "呼叫",
-  "Private messages and quantum-safe calls, with your Flagship app.": "通过 Flagship 应用发送私密消息并进行抗量子通话。"
+  "Private messages and quantum-safe calls, with your Flagship app.": "通过 Flagship 应用发送私密消息并进行抗量子通话。",
+  "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.": "voi.ci 需要使用你的摄像头来显示你的视频。请在浏览器中允许，或者不开摄像头继续通话。",
+  "Camera": "摄像头",
+  "Camera off": "关闭摄像头",
+  "{0} turned on their camera.": "{0} 打开了摄像头。",
+  "Camera paused": "摄像头已暂停"
 }

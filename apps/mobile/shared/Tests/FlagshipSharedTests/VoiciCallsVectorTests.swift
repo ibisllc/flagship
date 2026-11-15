@@ -131,6 +131,62 @@ final class VoiciCallsVectorTests: XCTestCase {
                                                pageId: S.s(k["pageId"]), origin: origin, caKeys: [S.s(k["caPub"])]))
     }
 
+    func testVideo() throws {
+        let v = try vectors(), x = try XCTUnwrap(v["video"]), k = try XCTUnwrap(v["keys"])
+        XCTAssertEqual(S.a(x["buckets"]).map { Int(S.i($0)) }, VoiciCalls.videoBuckets)
+        let sdp = try XCTUnwrap(x["sdp"])
+        XCTAssertEqual(VoiciCalls.mungeSdp(S.s(sdp["offerRaw"])), S.s(sdp["offer"]))
+        XCTAssertEqual(VoiciCalls.mungeSdp(S.s(sdp["answerRaw"])), S.s(sdp["answer"]))
+        for t in S.a(sdp["checks"]) { XCTAssertEqual(VoiciCalls.checkSdp(S.s(t["sdp"]), media: S.s(t["media"])), S.optS(t["expected"]), S.s(t["name"])) }
+
+        let r = try XCTUnwrap(x["request"]), signed = try XCTUnwrap(r["signed"])
+        let reqBytes = try XCTUnwrap(VoiciCalls.requestBytes(signed))
+        XCTAssertEqual(S.text(reqBytes), S.s(r["canonical"]))
+        XCTAssertEqual(VoiciCalls.requestHash(signed), S.s(r["hash"]))
+        let c = try XCTUnwrap(r["ctx"])
+        let ctx = VoiciCallRequestCheckContext(pageId: S.s(c["pageId"]), acceptsCalls: true, origin: S.s(c["origin"]),
+                                               caKeys: S.a(c["caKeys"]).map { $0.string! }, now: S.i(c["now"]))
+        for t in S.a(r["checks"]) { XCTAssertEqual(VoiciCalls.checkRequest(t["request"]!, ctx).code, S.s(t["expected"]), S.s(t["name"])) }
+        if case .ok(let checked) = VoiciCalls.checkRequest(signed, ctx) { XCTAssertTrue(checked.hasVideo) } else { XCTFail("video request") }
+
+        let a = try XCTUnwrap(x["answer"]), body = try XCTUnwrap(VoiciCalls.parseAnswer(a["signed"])).body
+        XCTAssertEqual(body.media, VoiciCalls.mediaVideo)
+        let ansBytes = try VoiciCalls.canonicalAnswer(body)
+        XCTAssertEqual(S.text(ansBytes), S.s(a["canonical"]))
+        let mine = try VoiciCalls.signAnswer(body, ownerSignSeed: S.h(k["ownerSignSeed"]))
+        XCTAssertEqual(VoiciCalls.checkAnswer(mine, request: signed, ownerSignPub: S.s(k["ownerSignPub"])).code, "ok")
+        for t in S.a(a["checks"]) {
+            XCTAssertEqual(VoiciCalls.checkAnswer(t["answer"]!, request: t["request"]!, ownerSignPub: S.s(k["ownerSignPub"]), now: v["now"]?.safeInt).code,
+                           S.s(t["expected"]), S.s(t["name"]))
+        }
+
+        let vk = try XCTUnwrap(x["keys"])
+        let video = VoiciCalls.videoFrameKeys(sharedSecret: S.h(vk["sharedSecret"]), requestBytes: reqBytes, answerBytes: ansBytes)
+        let audio = VoiciCalls.frameKeys(sharedSecret: S.h(vk["sharedSecret"]), requestBytes: reqBytes, answerBytes: ansBytes)
+        XCTAssertEqual([video.c2p, video.p2c, audio.c2p, audio.p2c].map(CanonicalJson.hex),
+                       [S.s(vk["c2p"]), S.s(vk["p2c"]), S.s(vk["audioC2p"]), S.s(vk["audioP2c"])])
+        let callId = S.s(signed["callId"]), f = try XCTUnwrap(x["frames"])
+        for t in S.a(f["cases"]) {
+            let dir = VoiciCallDir(rawValue: S.s(t["dir"]))!, frame = S.h(t["frame"])
+            let sealed = try VoiciCalls.sealVideoFrame(key: S.h(t["key"]), callId: callId, dir: dir, ctr: UInt64(S.i(t["ctr"])), frame: frame)
+            XCTAssertEqual(CanonicalJson.hex(sealed), S.s(t["sealed"]))
+            XCTAssertEqual(sealed.count, Int(S.i(t["sealedLen"])))
+            XCTAssertEqual(VoiciCalls.videoClearLen(frame), Int(S.i(t["clearLen"])))
+            XCTAssertEqual(VoiciCalls.openVideoFrame(key: S.h(t["key"]), callId: callId, dir: dir, sealed: sealed)?.frame, frame)
+        }
+        for t in S.a(f["refusals"]) {
+            XCTAssertNil(VoiciCalls.openVideoFrame(key: S.h(t["key"]), callId: callId, dir: VoiciCallDir(rawValue: S.s(t["dir"]))!, sealed: S.h(t["sealed"])), S.s(t["name"]))
+        }
+        for t in S.a(f["seal"]) {
+            var frame = [UInt8](repeating: 0, count: Int(S.i(t["frameLen"])))
+            if !frame.isEmpty { frame[0] = UInt8(S.i(t["firstByte"])) }
+            let got = (try? VoiciCalls.sealVideoFrame(key: video.c2p, callId: callId, dir: .c2p, ctr: 0, frame: frame)) != nil ? "ok" : "refused"
+            XCTAssertEqual(got, S.s(t["expected"]), S.s(t["name"]))
+        }
+        let rx = VoiciCallFrameReceiver(baseKey: video.c2p, callId: callId, dir: .c2p, video: true)
+        for t in S.a(f["receiver"]) { XCTAssertEqual(rx.open(S.h(t["sealed"])).map(CanonicalJson.hex), S.optS(t["frame"])) }
+    }
+
     func testPageIndexV2() throws {
         let p = try XCTUnwrap(try vectors()["pageV2"]), ctx = try XCTUnwrap(p["ctx"])
         let idx = try XCTUnwrap(VoiciPage.parseVoiciPageIndex(p["signed"]!))

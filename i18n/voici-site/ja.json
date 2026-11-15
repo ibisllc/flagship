@@ -121,5 +121,10 @@
   "Ringing…": "呼び出し中…",
   "Connecting…": "接続中…",
   "Call": "通話",
-  "Private messages and quantum-safe calls, with your Flagship app.": "Flagship アプリで、プライベートなメッセージと量子耐性のある通話。"
+  "Private messages and quantum-safe calls, with your Flagship app.": "Flagship アプリで、プライベートなメッセージと量子耐性のある通話。",
+  "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.": "ビデオを表示するには voi.ci にカメラへのアクセスが必要です。ブラウザで許可するか、カメラなしで通話を続けてください。",
+  "Camera": "カメラ",
+  "Camera off": "カメラをオフ",
+  "{0} turned on their camera.": "{0} さんがカメラをオンにしました。",
+  "Camera paused": "カメラ一時停止中"
 }

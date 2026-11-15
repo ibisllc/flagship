@@ -128,6 +128,62 @@ class VoiciCallsVectorsTest {
         assertNull(VoiciCalls.openMissedCall(inbox, callId, WebEnvelopes.b64Decode(V.o("missedCall").s("forgedSealed"))!!, k.s("pageId"), origin, listOf(k.s("caPub"))))
     }
 
+    @Test fun video() {
+        val x = V.o("video")
+        assertEquals(x.a("buckets").map { it.jsonPrimitive.content.toInt() }, VoiciCalls.VIDEO_BUCKETS)
+        val sdp = x.o("sdp")
+        assertEquals(sdp.s("offer"), VoiciCalls.mungeSdp(sdp.s("offerRaw")))
+        assertEquals(sdp.s("answer"), VoiciCalls.mungeSdp(sdp.s("answerRaw")))
+        for (c in sdp.a("checks").map { it.jsonObject }) assertEquals(c.s("name"), c.sOrNull("expected"), VoiciCalls.checkSdp(c.s("sdp"), c.s("media")))
+
+        val r = x.o("request")
+        val signed = r.o("signed")
+        val rb = VoiciCalls.requestBytes(signed)!!
+        assertEquals(r.s("canonical"), utf8(rb))
+        assertEquals(r.s("hash"), VoiciCalls.requestHash(signed))
+        val cx = r.o("ctx")
+        val ctx = VoiciCallRequestCheckContext(cx.s("pageId"), true, cx.s("origin"), cx.a("caKeys").map { it.jsonPrimitive.content }, cx.l("now"))
+        for (c in r.a("checks").map { it.jsonObject }) assertEquals(c.s("name"), c.s("expected"), code(VoiciCalls.checkRequest(c["request"], ctx)))
+        assertEquals(true, (VoiciCalls.checkRequest(signed, ctx) as VoiciOutcome.Ok).value.hasVideo)
+
+        val a = x.o("answer")
+        val body = VoiciCalls.parseAnswer(a["signed"])!!.first
+        assertEquals(VoiciCalls.MEDIA_VIDEO, body.media)
+        val ab = VoiciCalls.canonicalAnswer(body)
+        assertEquals(a.s("canonical"), utf8(ab))
+        assertEquals("ok", code(VoiciCalls.checkAnswer(VoiciCalls.signAnswer(body, h(k.s("ownerSignSeed"))), signed, k.s("ownerSignPub"))))
+        for (c in a.a("checks").map { it.jsonObject }) {
+            assertEquals(c.s("name"), c.s("expected"), code(VoiciCalls.checkAnswer(c["answer"], c["request"]!!, k.s("ownerSignPub"), V.l("now"))))
+        }
+
+        val keys = x.o("keys")
+        val (vc, vp) = VoiciCalls.videoFrameKeys(h(keys.s("sharedSecret")), rb, ab)
+        val (ac, ap) = VoiciCalls.frameKeys(h(keys.s("sharedSecret")), rb, ab)
+        assertEquals(listOf(keys.s("c2p"), keys.s("p2c"), keys.s("audioC2p"), keys.s("audioP2c")), listOf(H(vc), H(vp), H(ac), H(ap)))
+        val cid = signed.s("callId")
+        val f = x.o("frames")
+        for (c in f.a("cases").map { it.jsonObject }) {
+            val dir = VoiciCallDir.valueOf(c.s("dir"))
+            val frame = h(c.s("frame"))
+            val sealed = VoiciCalls.sealVideoFrame(h(c.s("key")), cid, dir, c.l("ctr"), frame)
+            assertEquals(c.s("sealed"), H(sealed))
+            assertEquals(c.l("sealedLen").toInt(), sealed.size)
+            assertEquals(c.l("clearLen").toInt(), VoiciCalls.videoClearLen(frame))
+            assertArrayEquals(frame, VoiciCalls.openVideoFrame(h(c.s("key")), cid, dir, sealed)!!.second)
+        }
+        for (c in f.a("refusals").map { it.jsonObject }) {
+            assertNull(c.s("name"), VoiciCalls.openVideoFrame(h(c.s("key")), cid, VoiciCallDir.valueOf(c.s("dir")), h(c.s("sealed"))))
+        }
+        for (c in f.a("seal").map { it.jsonObject }) {
+            val frame = ByteArray(c.l("frameLen").toInt())
+            if (frame.isNotEmpty()) frame[0] = c.l("firstByte").toByte()
+            val got = try { VoiciCalls.sealVideoFrame(vc, cid, VoiciCallDir.c2p, 0, frame); "ok" } catch (_: IllegalArgumentException) { "refused" }
+            assertEquals(c.s("name"), c.s("expected"), got)
+        }
+        val rx = VoiciCallFrameReceiver(vc, cid, VoiciCallDir.c2p, video = true)
+        for (c in f.a("receiver").map { it.jsonObject }) assertEquals(c.sOrNull("frame"), rx.open(h(c.s("sealed")))?.let(::H))
+    }
+
     @Test fun pageIndexV2() {
         val p = V.o("pageV2")
         val ctx = p.o("ctx")
