@@ -3954,4 +3954,22 @@
     <string name="rm_step_failed">復元できませんでした。元の状態に戻っています。</string>
     <string name="rm_step_refused">選んだ後に変更されました。そのまま保持します。</string>
     <string name="rm_step_waiting">待機中</string>
+    <string name="voici_calls_header">通話</string>
+    <string name="voici_calls_accept">通話を受け付ける</string>
+    <string name="voici_calls_who">通話できる人</string>
+    <string name="voici_calls_from_accepted">会話を承認した相手</string>
+    <string name="voici_calls_from_signed_in">Flagship でサインインしている全員</string>
+    <string name="voici_calls_publish_first">通話を受けるには、ページを公開してください。</string>
+    <string name="voici_calls_footer">Flagship でサインインした訪問者は、あなたのページから通話できます。管理者デバイスが着信します。</string>
+    <string name="voici_calls_dnd">おやすみモード</string>
+    <string name="voici_calls_dnd_from">開始</string>
+    <string name="voici_calls_dnd_until">終了</string>
+    <string name="voici_calls_dnd_footer">このデバイスはこの時間帯に着信音を鳴らしません。ほかのデバイスはそれぞれの設定に従います。</string>
+    <string name="voici_calls_allow">この人からの通話を許可</string>
+    <string name="voici_calls_disallow">この人からの通話を許可しない</string>
+    <string name="voici_calls_allowed">この人はあなたに通話できるようになりました。</string>
+    <string name="voici_calls_disallowed">この人はもうあなたに通話できません。</string>
+    <string name="voici_calls_missed_video">不在ビデオ通話</string>
+    <string name="voici_calls_missed">不在着信</string>
+    <string name="voici_calls_admin_only">変更できるのは管理者のデバイスだけです。</string>
 </resources>

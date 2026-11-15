@@ -3954,4 +3954,22 @@
     <string name="rm_step_failed">No se pudo restaurar. Está como estaba.</string>
     <string name="rm_step_refused">Cambió desde que elegiste. Se mantiene como está.</string>
     <string name="rm_step_waiting">En espera</string>
+    <string name="voici_calls_header">Llamadas</string>
+    <string name="voici_calls_accept">Aceptar llamadas</string>
+    <string name="voici_calls_who">Quién puede llamar</string>
+    <string name="voici_calls_from_accepted">Personas cuya conversación aceptaste</string>
+    <string name="voici_calls_from_signed_in">Cualquiera que haya iniciado sesión con Flagship</string>
+    <string name="voici_calls_publish_first">Publica tu página para recibir llamadas.</string>
+    <string name="voici_calls_footer">Los visitantes que iniciaron sesión con Flagship pueden llamarte desde tu página. Suenan tus dispositivos de administrador.</string>
+    <string name="voici_calls_dnd">No molestar</string>
+    <string name="voici_calls_dnd_from">Desde</string>
+    <string name="voici_calls_dnd_until">Hasta</string>
+    <string name="voici_calls_dnd_footer">Este dispositivo no suena durante estas horas. Tus otros dispositivos mantienen su propio ajuste.</string>
+    <string name="voici_calls_allow">Permitir sus llamadas</string>
+    <string name="voici_calls_disallow">No permitir sus llamadas</string>
+    <string name="voici_calls_allowed">Ahora puede llamarte.</string>
+    <string name="voici_calls_disallowed">Ya no puede llamarte.</string>
+    <string name="voici_calls_missed_video">Videollamada perdida</string>
+    <string name="voici_calls_missed">Llamada perdida</string>
+    <string name="voici_calls_admin_only">Solo un dispositivo administrador puede cambiar esto.</string>
 </resources>

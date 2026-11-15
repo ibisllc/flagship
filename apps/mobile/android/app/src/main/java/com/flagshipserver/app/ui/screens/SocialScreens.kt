@@ -759,6 +759,7 @@ private fun PageOptionsSheet(
                 )
             }
             Text(stringResource(R.string.voici_accept_messages_body), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = FS.space.s4))
+            VoiciCallsSettings(center, page, onError)
             val canRotate = page.canPublish && page.publishedSeq > 0
             FSGroup {
                 FSRow(title = stringResource(R.string.voici_sites), onClick = { onDismiss(); nav.navigate("signed-in-sites") }, modifier = Modifier.testTag("messages-settings-sites"))

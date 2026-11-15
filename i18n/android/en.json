@@ -16286,5 +16286,77 @@
   "rm_step_waiting": {
     "en": "Waiting",
     "ctx": "restore into a server (RestoreMergeScreen.kt)"
+  },
+  "voici_calls_header": {
+    "en": "Calls",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_accept": {
+    "en": "Accept calls",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_who": {
+    "en": "Who can call",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_from_accepted": {
+    "en": "People whose conversation you accepted",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_from_signed_in": {
+    "en": "Anyone signed in with Flagship",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_publish_first": {
+    "en": "Publish your page to take calls.",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_footer": {
+    "en": "Visitors signed in with Flagship can call you from your page. Your admin devices ring.",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_dnd": {
+    "en": "Do Not Disturb",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_dnd_from": {
+    "en": "From",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_dnd_until": {
+    "en": "Until",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_dnd_footer": {
+    "en": "This device doesn't ring during these hours. Your other devices keep their own setting.",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_allow": {
+    "en": "Allow calls from them",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_disallow": {
+    "en": "Don't allow calls from them",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_allowed": {
+    "en": "They can call you now.",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_disallowed": {
+    "en": "They can't call you any more.",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_missed_video": {
+    "en": "Missed video call",
+    "ctx": "voi.ci calls: settings, missed calls, thread menu"
+  },
+  "voici_calls_missed": {
+    "en": "Missed call",
+    "ctx": "voi.ci calls: a missed call in a thread"
+  },
+  "voici_calls_admin_only": {
+    "en": "Only an admin device can change this.",
+    "ctx": "voi.ci calls: settings footer on a device that is not an admin"
   }
 }

@@ -3954,4 +3954,22 @@
     <string name="rm_step_failed">Não foi possível restaurar. Está como estava.</string>
     <string name="rm_step_refused">Mudou desde que você escolheu. Mantido como está.</string>
     <string name="rm_step_waiting">Aguardando</string>
+    <string name="voici_calls_header">Chamadas</string>
+    <string name="voici_calls_accept">Aceitar chamadas</string>
+    <string name="voici_calls_who">Quem pode ligar</string>
+    <string name="voici_calls_from_accepted">Pessoas cuja conversa você aceitou</string>
+    <string name="voici_calls_from_signed_in">Qualquer pessoa conectada com o Flagship</string>
+    <string name="voici_calls_publish_first">Publique sua página para receber chamadas.</string>
+    <string name="voici_calls_footer">Visitantes conectados com o Flagship podem ligar para você a partir da sua página. Seus dispositivos de administrador tocam.</string>
+    <string name="voici_calls_dnd">Não perturbe</string>
+    <string name="voici_calls_dnd_from">De</string>
+    <string name="voici_calls_dnd_until">Até</string>
+    <string name="voici_calls_dnd_footer">Este dispositivo não toca nesses horários. Seus outros dispositivos mantêm a própria configuração.</string>
+    <string name="voici_calls_allow">Permitir chamadas dessa pessoa</string>
+    <string name="voici_calls_disallow">Não permitir chamadas dessa pessoa</string>
+    <string name="voici_calls_allowed">Essa pessoa já pode ligar para você.</string>
+    <string name="voici_calls_disallowed">Essa pessoa não pode mais ligar para você.</string>
+    <string name="voici_calls_missed_video">Videochamada perdida</string>
+    <string name="voici_calls_missed">Chamada perdida</string>
+    <string name="voici_calls_admin_only">Somente um dispositivo administrador pode alterar isto.</string>
 </resources>

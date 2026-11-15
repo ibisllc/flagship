@@ -508,6 +508,20 @@ object VoiciCalls {
     fun signAllow(pageId: String, conv: String, op: String, issuedAt: Long, ownerSignSeed: ByteArray): String =
         VoiciJs.hex(VoiciJs.edSign(ownerSignSeed, canonicalAllow(pageId, conv, op, issuedAt)))
 
+    fun verifyAllow(pageId: String, conv: String, op: String, issuedAt: Long, signature: String, ownerSignPub: String): Boolean = try {
+        WebEnvelopes.ed25519VerifyHex(signature, canonicalAllow(pageId, conv, op, issuedAt), ownerSignPub)
+    } catch (_: Exception) {
+        false
+    }
+
+    /** The allow order's body as `.com` reads it: `{pageId, conv, op, issuedAt}`. */
+    fun allowJson(pageId: String, conv: String, op: String, issuedAt: Long): kotlinx.serialization.json.JsonObject = kotlinx.serialization.json.buildJsonObject {
+        put("pageId", kotlinx.serialization.json.JsonPrimitive(pageId))
+        put("conv", kotlinx.serialization.json.JsonPrimitive(conv))
+        put("op", kotlinx.serialization.json.JsonPrimitive(op))
+        put("issuedAt", kotlinx.serialization.json.JsonPrimitive(issuedAt))
+    }
+
     // ── push, missed call ──
 
     private fun openCanonical(seed: ByteArray, purpose: String, callId: String, sealed: ByteArray): JsonObject? = try {

@@ -4,6 +4,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.calls.VoiciMissedCallRow
+import com.flagshipserver.app.calls.VoiciThreadEntry
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -211,6 +214,16 @@ fun ThreadScreen(nav: NavController, conv: String) {
                         onClick = { menu = false; if (blocked) scope.launch { center.block(conv, false) } else blocking = true },
                         modifier = Modifier.testTag("thread-block"),
                     )
+                    if (center.page.value.callsOn) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.voici_calls_allow)) }, onClick = {
+                            menu = false
+                            scope.launch { center.callAllow(conv, true).let { if (it == null) toasts.success(FSStrings.get(R.string.voici_calls_allowed)) else toasts.error(VoiciCopy.sendError(it)) } }
+                        }, modifier = Modifier.testTag("thread-allow-calls"))
+                        DropdownMenuItem(text = { Text(stringResource(R.string.voici_calls_disallow)) }, onClick = {
+                            menu = false
+                            scope.launch { center.callAllow(conv, false).let { if (it == null) toasts.success(FSStrings.get(R.string.voici_calls_disallowed)) else toasts.error(VoiciCopy.sendError(it)) } }
+                        }, modifier = Modifier.testTag("thread-disallow-calls"))
+                    }
                     val lastVisitor = ordered.lastOrNull { !it.mine }
                     if (lastVisitor != null) DropdownMenuItem(text = { Text(stringResource(R.string.voici_menu_report)) }, onClick = { menu = false; reporting = lastVisitor.msgId }, modifier = Modifier.testTag("thread-report"))
                     DropdownMenuItem(text = { Text(stringResource(R.string.voici_menu_delete)) }, onClick = { menu = false; deleting = true }, modifier = Modifier.testTag("thread-delete"))
@@ -253,8 +266,15 @@ fun ThreadScreen(nav: NavController, conv: String) {
             if (request) item { FSNote(stringResource(R.string.voici_request_banner), Modifier.testTag("thread-request-banner")) }
             if (c.hasGap) item { FSNote(stringResource(R.string.voici_thread_gap), Modifier.testTag("thread-gap")) }
             val lastMine = ordered.lastOrNull { it.mine }?.msgId
-            items(ordered, key = { it.msgId }) { m ->
-                Bubble(m, showStatus = m.msgId == lastMine, onLink = { u, h -> link = u to h }, onLongPress = { if (!m.mine) reporting = m.msgId })
+            val entries = VoiciThreadEntry.timeline(ordered, { it.msgId }, { it.sentAt }, ui.missedCalls, conv)
+            items(entries, key = { it.key }) { e ->
+                when (e) {
+                    is VoiciThreadEntry.Message -> {
+                        val m = e.message
+                        Bubble(m, showStatus = m.msgId == lastMine, onLink = { u, h -> link = u to h }, onLongPress = { if (!m.mine) reporting = m.msgId })
+                    }
+                    is VoiciThreadEntry.MissedCall -> MissedCallRow(e.call)
+                }
             }
         }
     }
@@ -336,6 +356,18 @@ private fun Bubble(m: StoredVoiciMessage, showStatus: Boolean, onLink: (String, 
                 modifier = Modifier.padding(top = 2.dp).testTag("bubble-status"),
             )
         }
+    }
+}
+
+@Composable
+private fun MissedCallRow(call: VoiciMissedCallRow) {
+    Row(Modifier.fillMaxWidth().testTag("thread-missed-call"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Text(
+            stringResource(if (call.video) R.string.voici_calls_missed_video else R.string.voici_calls_missed),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(shortTime(call.ringingAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

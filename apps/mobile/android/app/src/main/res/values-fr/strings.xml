@@ -3954,4 +3954,22 @@
     <string name="rm_step_failed">Restauration impossible. Elle est revenue comme avant.</string>
     <string name="rm_step_refused">Modifiée depuis votre choix. Gardée telle quelle.</string>
     <string name="rm_step_waiting">En attente</string>
+    <string name="voici_calls_header">Appels</string>
+    <string name="voici_calls_accept">Accepter les appels</string>
+    <string name="voici_calls_who">Qui peut appeler</string>
+    <string name="voici_calls_from_accepted">Les personnes dont vous avez accepté la conversation</string>
+    <string name="voici_calls_from_signed_in">Toute personne connectée avec Flagship</string>
+    <string name="voici_calls_publish_first">Publiez votre page pour recevoir des appels.</string>
+    <string name="voici_calls_footer">Les visiteurs connectés avec Flagship peuvent vous appeler depuis votre page. Vos appareils administrateurs sonnent.</string>
+    <string name="voici_calls_dnd">Ne pas déranger</string>
+    <string name="voici_calls_dnd_from">De</string>
+    <string name="voici_calls_dnd_until">Jusqu\'à</string>
+    <string name="voici_calls_dnd_footer">Cet appareil ne sonne pas pendant ces heures. Vos autres appareils gardent leur propre réglage.</string>
+    <string name="voici_calls_allow">Autoriser ses appels</string>
+    <string name="voici_calls_disallow">Ne pas autoriser ses appels</string>
+    <string name="voici_calls_allowed">Cette personne peut maintenant vous appeler.</string>
+    <string name="voici_calls_disallowed">Cette personne ne peut plus vous appeler.</string>
+    <string name="voici_calls_missed_video">Appel vidéo manqué</string>
+    <string name="voici_calls_missed">Appel manqué</string>
+    <string name="voici_calls_admin_only">Seul un appareil administrateur peut modifier ceci.</string>
 </resources>

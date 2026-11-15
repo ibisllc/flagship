@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.voici.VoiciCalls
+
 import com.flagshipserver.app.core.voici.MessagesAttestations
 import com.flagshipserver.app.core.voici.VoiciJs
 import com.flagshipserver.app.core.voici.VoiciMessages
@@ -150,6 +152,25 @@ class MockVoiciClient(
         val all = inbox[username].orEmpty()
         val from = since.toIntOrNull() ?: 0
         VoiciInboxPage(all.drop(from), all.size.toString(), blocks[username].orEmpty().toList(), revoked.toList())
+    }
+
+    val missedCallItems = HashMap<String, MutableList<VoiciMissedCallItem>>()
+    val callAllows = mutableListOf<JsonObject>()
+
+    override suspend fun missedCalls(username: String): List<VoiciMissedCallItem> = synchronized(this) { missedCallItems[username].orEmpty().toList() }
+
+    override suspend fun callAllow(username: String, body: JsonObject) {
+        val a = body["allow"] as? JsonObject ?: refuse(400, "malformed")
+        val sig = VoiciJs.str(body["signature"]) ?: refuse(400, "malformed")
+        synchronized(this) {
+            val idx = VoiciPage.parseVoiciPageIndex(pages[username]) ?: refuse(404, "not-found")
+            val pageId = VoiciJs.str(a["pageId"]) ?: refuse(400, "malformed")
+            val conv = VoiciJs.str(a["conv"]) ?: refuse(400, "malformed")
+            val op = VoiciJs.str(a["op"]) ?: refuse(400, "malformed")
+            val at = VoiciJs.time(a["issuedAt"]) ?: refuse(400, "malformed")
+            if (pageId != idx.body.pageId || !VoiciCalls.verifyAllow(pageId, conv, op, at, sig, idx.body.ownerSignPub)) refuse(403, "bad-signature")
+            callAllows += a
+        }
     }
 
     private fun ownerOf(pageId: String): String? = pages.entries.firstOrNull { VoiciJs.str(it.value["pageId"]) == pageId }?.key

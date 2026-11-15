@@ -3959,4 +3959,22 @@
     <string name="rm_step_failed">Couldn\'t restore. It is back as it was.</string>
     <string name="rm_step_refused">Changed since you chose. Kept as it is.</string>
     <string name="rm_step_waiting">Waiting</string>
+    <string name="voici_calls_header">Calls</string>
+    <string name="voici_calls_accept">Accept calls</string>
+    <string name="voici_calls_who">Who can call</string>
+    <string name="voici_calls_from_accepted">People whose conversation you accepted</string>
+    <string name="voici_calls_from_signed_in">Anyone signed in with Flagship</string>
+    <string name="voici_calls_publish_first">Publish your page to take calls.</string>
+    <string name="voici_calls_footer">Visitors signed in with Flagship can call you from your page. Your admin devices ring.</string>
+    <string name="voici_calls_dnd">Do Not Disturb</string>
+    <string name="voici_calls_dnd_from">From</string>
+    <string name="voici_calls_dnd_until">Until</string>
+    <string name="voici_calls_dnd_footer">This device doesn\'t ring during these hours. Your other devices keep their own setting.</string>
+    <string name="voici_calls_allow">Allow calls from them</string>
+    <string name="voici_calls_disallow">Don\'t allow calls from them</string>
+    <string name="voici_calls_allowed">They can call you now.</string>
+    <string name="voici_calls_disallowed">They can\'t call you any more.</string>
+    <string name="voici_calls_missed_video">Missed video call</string>
+    <string name="voici_calls_missed">Missed call</string>
+    <string name="voici_calls_admin_only">Only an admin device can change this.</string>
 </resources>

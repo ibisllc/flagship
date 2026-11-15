@@ -54,6 +54,9 @@ data class VoiciInboxPage(val items: List<VoiciInboxItem>, val cursor: String, v
 
 data class VoiciDraftItem(val envelope: JsonObject, val at: Long)
 
+/** One stored missed call, sealed to the page's inbox key (`flagship/voici-missed-call/v1`, docs/voici-calls.md §6). */
+data class VoiciMissedCallItem(val id: String, val callId: String, val sealed: String, val storedAt: Long)
+
 /** The account's public keys from `GET /api/username/<u>`: the sensitive key is the admin root, else the IRK. */
 data class VoiciAccountKeys(val irkPub: String, val adminRootPub: String?) {
     val sensitiveKind: String get() = if (adminRootPub != null) "admin-root" else "irk"
@@ -91,6 +94,10 @@ interface VoiciClient {
     suspend fun phoneLive(username: String): JsonObject?
     /** `POST https://<u>.<apex>/api/phone/deliver`: the ack JSON or null when the phone didn't take it. */
     suspend fun phoneDeliver(username: String, envelope: JsonObject): JsonObject?
+    /** Every page of the page's missed calls (`GET /api/voici/pages/<u>/calls?since=`, read token). */
+    suspend fun missedCalls(username: String): List<VoiciMissedCallItem> = emptyList()
+    /** The owner's signed "may call" / "may not call" (`POST /api/voici/pages/<u>/call-allow`, `{allow, signature}`). */
+    suspend fun callAllow(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
 }
 
 class LiveVoiciClient(
@@ -197,6 +204,27 @@ class LiveVoiciClient(
         }
     }
 
+    override suspend fun missedCalls(username: String): List<VoiciMissedCallItem> = call {
+        AccountReadTokens.authorize(username) { auth ->
+            val out = mutableListOf<VoiciMissedCallItem>()
+            var cursor = ""
+            for (round in 0 until 20) {
+                val r = transport.execute("GET", "${base()}/api/voici/pages/${enc(username)}/calls?since=${URLEncoder.encode(cursor, "UTF-8")}", extraHeaders = auth, accept = setOf(200, 404))
+                if (r.status == 404) break
+                val o = parse(r.body) ?: break
+                out += parseMissedCalls(o)
+                val next = (o["cursor"] as? JsonPrimitive)?.contentOrNull ?: cursor
+                if ((o["more"] as? JsonPrimitive)?.contentOrNull != "true" || next == cursor) break
+                cursor = next
+            }
+            out
+        }
+    }
+
+    override suspend fun callAllow(username: String, body: JsonObject) {
+        postJson("${base()}/api/voici/pages/${enc(username)}/call-allow", body)
+    }
+
     override suspend fun send(envelope: JsonObject, direct: Boolean) {
         val body = if (direct) JsonObject(mapOf("envelope" to envelope, "direct" to JsonPrimitive(true))) else JsonObject(mapOf("envelope" to envelope))
         postJson("${base()}/api/voici/web/send", body)
@@ -274,6 +302,14 @@ class LiveVoiciClient(
     }
 
     companion object {
+        fun parseMissedCalls(o: JsonObject): List<VoiciMissedCallItem> = (o["items"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val i = e as? JsonObject ?: return@mapNotNull null
+            val callId = (i["callId"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return@mapNotNull null
+            val sealed = (i["sealed"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return@mapNotNull null
+            val at = (i["storedAt"] as? JsonPrimitive)?.longOrNull ?: return@mapNotNull null
+            VoiciMissedCallItem((i["id"] as? JsonPrimitive)?.contentOrNull ?: callId, callId, sealed, at)
+        }
+
         fun parseInbox(o: JsonObject, since: String): VoiciInboxPage {
             fun strs(k: String) = (o[k] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
             val items = (o["items"] as? JsonArray).orEmpty().mapNotNull { e ->

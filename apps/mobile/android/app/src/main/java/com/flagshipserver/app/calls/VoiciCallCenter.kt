@@ -84,9 +84,16 @@ object VoiciCallCenter {
 
     // ── ringing ──
 
+    /**
+     * A call that arrives at [nowMs] rings here only while fresh and outside this device's Do Not Disturb hours. A
+     * quiet device stays out of the room, so another device can answer and an unanswered call becomes a missed call.
+     */
+    fun shouldRing(issuedAt: Long, nowMs: Long, quiet: CallQuietHours, calendar: java.util.Calendar = java.util.Calendar.getInstance()): Boolean =
+        nowMs - issuedAt <= VoiciCalls.RING_MS && !quiet.isQuiet(nowMs, calendar)
+
     fun onPush(context: Context, push: VoiciCallPush.Payload) {
         app = context.applicationContext
-        if (System.currentTimeMillis() - push.issuedAt > VoiciCalls.RING_MS) return
+        if (!shouldRing(push.issuedAt, System.currentTimeMillis(), CallSettingsStore(app).quietHours())) return
         if (session != null || pendingPush != null) return
         pendingPush = push
         update { Ui(phase = Phase.Ringing, callId = push.callId, name = FSStrings.get(R.string.voici_call_someone)) }
