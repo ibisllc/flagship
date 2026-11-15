@@ -6,7 +6,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { canonicalOrgBoxKem, signOrgApproval, canonicalOrgKeyRing, verifyOrgBoxKem } from "@flagship/protocol";
 import { checkSign } from "@flagship/keyd";
 import { verifyOrgPin, type OrgPinFile } from "../src/orgAuthorityPin.js";
-import { adoptOrgKeys, announceOrgBoxKem, orgBoxRotationDone, verifyServedRings } from "../src/orgBoxKeys.js";
+import { adoptOrgKeys, announceOrgBoxKem, orgBoxRotationDone, readOrgCgk, verifyServedRings } from "../src/orgBoxKeys.js";
 
 const dir = resolve(import.meta.dirname, "../../protocol/test-vectors");
 const A = JSON.parse(readFileSync(resolve(dir, "org-authority/vectors.json"), "utf8"));
@@ -105,5 +105,16 @@ describe("org key ring on the box", () => {
     expect(kemKeyId).toBe(V.kems.box[0].statement.kemKeyId);
     expect(verifyOrgBoxKem(sent, A.orgId, pub, NOW).recipient).toBe(`box:${SERVER}`);
     expect(new TextDecoder().decode(canonicalOrgBoxKem(sent.statement)).startsWith("flagship/org-box-kem/v1|")).toBe(true);
+  });
+
+  it("reads the org CGK gossip uses from org-keys.json, and nothing from a malformed file", async () => {
+    const d = boxDir();
+    expect(await readOrgCgk(d)).toBeNull();
+    writeFileSync(join(d, "org-keys.json"), JSON.stringify({ v: 1, keys: { "cgk|*": { version: 3, keyHex: "ab".repeat(32) } } }));
+    const k = await readOrgCgk(d);
+    expect(k?.version).toBe(3);
+    expect(Buffer.from(k!.key).toString("hex")).toBe("ab".repeat(32));
+    writeFileSync(join(d, "org-keys.json"), JSON.stringify({ v: 1, keys: { "cgk|*": { version: 3, keyHex: "zz" } } }));
+    expect(await readOrgCgk(d)).toBeNull();
   });
 });

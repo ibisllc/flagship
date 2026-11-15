@@ -355,7 +355,7 @@ import {
   type RotationPq,
 } from "./adminRootRotationConsumer.js";
 import { currentOrgPin, startOrgAuthoritySync } from "./orgAuthorityPin.js";
-import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxRotationDone, verifyServedRings } from "./orgBoxKeys.js";
+import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxRotationDone, readOrgCgk, verifyServedRings } from "./orgBoxKeys.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
 import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
 import {
@@ -1385,7 +1385,10 @@ async function main(): Promise<void> {
   // or the raw SWK: they hold a narrow interface slice (BoxSigner / SwkOps /
   // GossipOps) and call an operation. See keyCustodian.ts for the honest
   // in-process-boundary caveat.
-  const legacyCgk = (await resolveCgk({ cgkHexFilePath: "/var/flagship/cgk.hex" })) ?? undefined;
+  // An org box's gossip key is the org CGK it opened from the key ring (orgBoxKeys.ts); a new
+  // version restarts the daemon so gossip and access sync re-key (see the org sync below).
+  const orgCgk = cfg?.orgId ? await readOrgCgk(dataDir) : null;
+  const legacyCgk = (cfg?.orgId ? orgCgk?.key : await resolveCgk({ cgkHexFilePath: "/var/flagship/cgk.hex" })) ?? undefined;
   if (keyd) {
     // The first boot under keyd moves any key still on this side of the socket into it, once,
     // and removes the readable copy. After that the daemon never sees the bytes again.
@@ -1615,7 +1618,7 @@ async function main(): Promise<void> {
   // (cfg-absent) is a no-op.
   const cgkHexFilePath = "/var/flagship/cgk.hex";
   const hasCgk = keyd ? keyd.hasCgk : (await resolveCgk({ cgkHexFilePath })) !== null;
-  if (!hasCgk && cfg && env.controlPlaneBaseUrl) {
+  if (!hasCgk && cfg && !cfg.orgId && env.controlPlaneBaseUrl) {
     const cgkPoller = buildCgkDepositPoller({
       serverDomain: env.serverFqdn!,
       ownerIrkPub: cfg.irkPublicKey,
@@ -1689,7 +1692,12 @@ async function main(): Promise<void> {
       if (ringsCache && Date.now() - ringsCache.at < 60_000) return ringsCache.rings;
       const rings = verifyServedRings(pin, await fetchOrgRings(orgKeyDeps), cfg.serverId, Date.now());
       ringsCache = { at: Date.now(), rings };
-      await adoptOrgKeys(dataDir, rings, cfg.serverId).catch((e) => console.warn(`[org] keys not adopted: ${(e as Error).message}`));
+      const adopted = await adoptOrgKeys(dataDir, rings, cfg.serverId).catch((e) => {
+        console.warn(`[org] keys not adopted: ${(e as Error).message}`);
+        return null;
+      });
+      const cgkVersion = adopted?.keys["cgk|*"]?.version ?? 0;
+      if (cgkVersion > (orgCgk?.version ?? 0) && !keyd) restarts.request(`org CGK v${cgkVersion} opened; restarting so gossip and access sync use it`);
       return rings;
     };
     const notedPending = new Set<string>();
