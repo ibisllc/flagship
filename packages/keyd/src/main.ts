@@ -10,7 +10,7 @@ import { CEREMONY_TOKEN_FILE, CEREMONY_WINDOW_MS, handOverToKeydUser, legacyTlsF
 import { KEYD_CLIENT_GROUP, KEYD_USER } from "./unit.js";
 import { KeydClient } from "./client.js";
 import { signBoxHealth } from "./healthSign.js";
-import { KEYD_RESET_FLAG, resetKeydState } from "./reset.js";
+import { KEYD_RESET_FLAG, ensureRetailFirstIdentity, resetKeydState } from "./reset.js";
 
 const STATE = process.env.FLAGSHIP_KEYD_STATE ?? "/var/lib/flagship-keyd";
 const SOCKET = process.env.FLAGSHIP_KEYD_SOCKET ?? "/run/flagship-keyd/keyd.sock";
@@ -19,6 +19,8 @@ async function main(): Promise<void> {
   const cmd = process.argv[2] ?? "serve";
   if (cmd === "migrate") {
     const legacy = process.env.FLAGSHIP_KEYD_LEGACY_DIR ?? "/var/flagship";
+    const first = ensureRetailFirstIdentity({ keydDir: STATE, legacyDir: legacy });
+    if (first) console.log(JSON.stringify({ retailFirstIdentity: true, publicKey: first.publicKeyHex.slice(0, 16) }));
     const r = migrateKeyFiles({ legacyDir: legacy, keydDir: STATE });
     // Which names this box may have a certificate for, from its own recipe, once.
     const policy = writePolicyFromEnv("/etc/flagship/daemon.env", STATE);

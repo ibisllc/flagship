@@ -11,11 +11,11 @@
 
 import { open, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { KEYD_CLIENT_GROUP, KEYD_STATE_DIR, KEYD_USER, handOverToKeydUser, resetKeydState } from "@flagship/keyd";
+import { KEYD_CLIENT_GROUP, KEYD_STATE_DIR, KEYD_USER, RETAIL_IMAGE_MARKER_PATH, handOverToKeydUser, resetKeydState } from "@flagship/keyd";
 import { randomFillSync } from "node:crypto";
 import { verifyWipe, WIPE_READ_BYTES } from "./wipeVerifier.js";
 
-export const RETAIL_IMAGE_MARKER = "/etc/flagship/retail-image.json";
+export const RETAIL_IMAGE_MARKER = RETAIL_IMAGE_MARKER_PATH;
 
 export interface RetailImage {
   v: 1;
