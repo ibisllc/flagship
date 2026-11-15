@@ -474,6 +474,22 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   serve until the recovery partition exists (hardware). Cloud Task 3 sent: Android calls compile, retail VM, full suite.
   Restore-ui agent told to take shell v214.
 
+- 2026-11-15: **restore-ui merged** (`89e3441e9`..`f74ba2035`): webapp + Android restore-into-server screens, gym
+  `web-total-restore-merge-*`, shell **v214**; parity row present on all three. Android Kotlin NOT compiled (cloud).
+  Agent resumed: hybrid `pqSignature` on iOS/Android restore orders (strict boxes refuse classical), webapp points
+  to the phone on a strict box. Home "Into a server I have" entry deferred (no app has it).
+  **cloud-fixes**: all 9 REAL items fixed on `0.4/cloud-fixes` (ledger 0141/0146, call tables renamed with the
+  account, **BoxClaimKey field charset guards in TS/Swift/Kotlin + refuse vectors**, 17 tags classified + AT-ENV-31,
+  gym ACME test stdin bug, iOS mock `#if DEBUG`, cargo fmt + rusqlite 0.41 / rustix 1.1.6, CI no cancel on
+  main/release, deterministic wipe-verifier test). Release manager added `5cec6d383`: WEB_BUILD had stayed 210 through
+  four shell bumps; now 214 with a guard. After rebasing, AT-ENV-10 fails on tags from the enterprise/calls merges:
+  fixer resumed to classify them. Not merged yet.
+  **retail tranche 3 merged** (`5aace11c1`): claim service runs as `flagship-claim` with heavy systemd hardening and
+  no capabilities; root steps via privd `--profile retail-claim` (only `retail-wipe` and `retail-first-boot`, each
+  checks preconditions; first boot only for a claimed recipe whose signature verifies). 36 targeted tests green.
+  Accepted boundary (told the owner): a compromised claim process can fake a button press, but root only runs signed
+  recipes. Wi-Fi join privilege waits for the hardware choice.
+
 ## Resume point
 
 1. Merge agent branches as they report (calls-phone, restore-ui, enterprise-servers tranche 2, retail-image tranche 2, cloud-fixes). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
