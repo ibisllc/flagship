@@ -405,6 +405,9 @@ struct PageOptionsSheet: View {
                 } footer: {
                     Text("People with a Flagship account can write to you. They appear as visitors, not by name.")
                 }
+                #if os(iOS)
+                VoiciCallsSettingsSection()
+                #endif
                 Section {
                     NavigationLink { SignedInSitesScreen() } label: { Text("Websites you're signed in to") }
                         .accessibilityIdentifier("messages-settings-sites")

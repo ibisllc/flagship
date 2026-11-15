@@ -1,4 +1,9 @@
 {
+  "443": {
+    "en": "443",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:162",
+    "translatable": false
+  },
   "123456": {
     "en": "123456",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:437",
@@ -14448,11 +14453,6 @@
     "en": "Only an admin device can manage backups and restore servers.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift (under the \"Also make this device an admin\" switch, after the 14-day review line)"
   },
-  "443": {
-    "en": "443",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:162",
-    "translatable": false
-  },
   "Turn off direct access?": {
     "en": "Turn off direct access?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DirectAccessCard.swift:46"
@@ -15893,5 +15893,77 @@
   "Codes match: admit": {
     "en": "Codes match: admit",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Missed video call": {
+    "en": "Missed video call",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "They can call you now.": {
+    "en": "They can call you now.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "They can't call you any more.": {
+    "en": "They can't call you any more.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Allow calls from them": {
+    "en": "Allow calls from them",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Don't allow calls from them": {
+    "en": "Don't allow calls from them",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Unlock Flagship and try again.": {
+    "en": "Unlock Flagship and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Accept calls": {
+    "en": "Accept calls",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Who can call": {
+    "en": "Who can call",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "People whose conversation you accepted": {
+    "en": "People whose conversation you accepted",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Anyone signed in with Flagship": {
+    "en": "Anyone signed in with Flagship",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Calls": {
+    "en": "Calls",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Publish your page to take calls.": {
+    "en": "Publish your page to take calls.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Visitors signed in with Flagship can call you from your page. Your admin devices ring.": {
+    "en": "Visitors signed in with Flagship can call you from your page. Your admin devices ring.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "In your region, calls ring only while Flagship is open.": {
+    "en": "In your region, calls ring only while Flagship is open.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Do Not Disturb": {
+    "en": "Do Not Disturb",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "From": {
+    "en": "From",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "Until": {
+    "en": "Until",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
+  },
+  "This device doesn't ring during these hours. Your other devices keep their own setting.": {
+    "en": "This device doesn't ring during these hours. Your other devices keep their own setting.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
   }
 }

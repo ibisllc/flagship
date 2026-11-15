@@ -17,6 +17,8 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
     public var mailbox: [String: [VoiciInboxItem]] = [:]
     public var blocks: [String: [String]] = [:]
     public var states: [String: JSONValue] = [:]
+    public var missedCallItems: [String: [VoiciMissedCallItem]] = [:]
+    public private(set) var callAllows: [JSONValue] = []
     /// Pages taken down by their owner: the seq and pageId the ladder continues from.
     public var removed: [String: (seq: Int64, pageId: String)] = [:]
     public private(set) var removals: [JSONValue] = []
@@ -141,6 +143,21 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
             let items = from < all.count ? Array(all[from...]) : []
             return VoiciInbox(items: items, cursor: String(all.count), blocks: blocks[username.lowercased()] ?? [])
         }
+    }
+
+    public func missedCalls(username: String) async throws -> [VoiciMissedCallItem] {
+        try down()
+        return w { missedCallItems[username.lowercased()] ?? [] }
+    }
+
+    public func callAllow(username: String, allow: JSONValue, signature: String) async throws {
+        try down()
+        let u = username.lowercased()
+        guard let idx = w({ pages[u] }).flatMap({ VoiciPage.parseVoiciPageIndex($0) }), let pageId = allow["pageId"]?.string, pageId == idx.pageId,
+              let conv = allow["conv"]?.string, let op = allow["op"]?.string, let at = allow["issuedAt"]?.time,
+              VoiciCalls.verifyAllow(pageId: pageId, conv: conv, op: op, issuedAt: at, signature: signature, ownerSignPub: idx.ownerSignPub)
+        else { throw VoiciComError(status: 403, code: "bad-signature") }
+        w { callAllows.append(allow) }
     }
 
     /// The account whose page `pageId` names.

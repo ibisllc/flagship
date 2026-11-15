@@ -269,6 +269,9 @@ export async function buildVoiciIndex({ username, published, merged, images, sig
     seq: (published?.index.seq ?? 0) + 1,
     issuedAt: now,
     acceptsMessages: merged.acceptsMessages ? 1 : 0,
+    // Every publish carries the calls setting of the index it replaces (docs/voici-calls.md §6: v2 only while calls
+    // are on), so an edit from this device never turns calls off.
+    ...(published?.index.acceptsCalls === 1 ? { acceptsCalls: 1, callsFrom: published.index.callsFrom === "signed-in" ? "signed-in" : "accepted" } : {}),
     inboxEpoch,
     inboxPub: hex(keys.inbox.publicKey),
     ownerSignPub: hex(keys.sign.publicKey),
@@ -277,7 +280,7 @@ export async function buildVoiciIndex({ username, published, merged, images, sig
     signerPub: signer.pub,
   };
   const signature = await signer.sign(canonicalVoiciPageIndex(body));
-  return { index: { kind: "VoiciPage", version: 1, ...body, signature }, uploads };
+  return { index: { kind: "VoiciPage", version: body.acceptsCalls !== undefined ? 2 : 1, ...body, signature }, uploads };
 }
 
 function sortPieces(pieces) {

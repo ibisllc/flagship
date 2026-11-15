@@ -504,7 +504,8 @@
 //       "Restore into this server…" or a .flagship file): signed stage, per-app choices with the box's preview, a
 //       signed plan, progress, and the earlier copies a restore kept with Undo and Delete now (admin devices only).
 //  v215: a restore into a quantum-safe server says the webapp can't sign it and points to the phone app.
-const SHELL_VERSION = "v215";
+//  v216: a publish keeps the page's calls setting (a v2 index stays v2 while calls are on).
+const SHELL_VERSION = "v216";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

@@ -47,6 +47,17 @@ public struct VoiciInboxItem: Equatable, Sendable {
 }
 
 /// `GET /api/voici/pages/<u>/inbox?since=`.
+/// One stored missed call: sealed to the page's inbox key (`flagship/voici-missed-call/v1`, docs/voici-calls.md §6).
+public struct VoiciMissedCallItem: Equatable, Sendable {
+    public var id: String
+    public var callId: String
+    public var sealed: String
+    public var storedAt: Int64
+    public init(id: String, callId: String, sealed: String, storedAt: Int64) {
+        self.id = id; self.callId = callId; self.sealed = sealed; self.storedAt = storedAt
+    }
+}
+
 public struct VoiciInbox: Equatable, Sendable {
     public var items: [VoiciInboxItem]
     public var cursor: String
@@ -102,6 +113,15 @@ public protocol VoiciComClient: Sendable {
     func deviceGrants(username: String) async throws -> [JSONValue]
     /// The CA keys attestations may be signed by now (the maintainer chain, checked by the app).
     func caKeys() async -> [String]
+    /// Every page of the page's missed calls (`GET /api/voici/pages/<u>/calls?since=`, read token), sealed to its inbox key.
+    func missedCalls(username: String) async throws -> [VoiciMissedCallItem]
+    /// The owner's signed "may call" / "may not call" for one conversation (`POST /api/voici/pages/<u>/call-allow`).
+    func callAllow(username: String, allow: JSONValue, signature: String) async throws
+}
+
+public extension VoiciComClient {
+    func missedCalls(username: String) async throws -> [VoiciMissedCallItem] { [] }
+    func callAllow(username: String, allow: JSONValue, signature: String) async throws { throw VoiciComError(status: 0, code: "unsupported") }
 }
 
 public enum VoiciComPaths {
@@ -112,6 +132,8 @@ public enum VoiciComPaths {
     public static func remove(_ u: String) -> String { page(u) + "/remove" }
     public static func inbox(_ u: String) -> String { page(u) + "/inbox" }
     public static func block(_ u: String) -> String { page(u) + "/block" }
+    public static func calls(_ u: String) -> String { page(u) + "/calls" }
+    public static func callAllow(_ u: String) -> String { page(u) + "/call-allow" }
     public static func drafts(_ u: String) -> String { "/api/accounts/\(seg(u))/voici-drafts" }
     public static func consume(_ u: String) -> String { drafts(u) + "/consume" }
     public static func state(_ u: String) -> String { "/api/accounts/\(seg(u))/messages-state" }
@@ -318,6 +340,29 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
     }
 
     public func caKeys() async -> [String] { await trust() }
+
+    public func missedCalls(username: String) async throws -> [VoiciMissedCallItem] {
+        var out: [VoiciMissedCallItem] = []
+        var cursor = ""
+        for _ in 0..<20 {
+            var r = try json("GET", VoiciComPaths.calls(username), nil)
+            r.url = url(VoiciComPaths.calls(username), query: [URLQueryItem(name: "since", value: cursor)])
+            guard let v = try await read(r, username: username) else { return out }
+            out += (v["items"]?.array ?? []).compactMap { i -> VoiciMissedCallItem? in
+                guard let callId = i["callId"]?.string, let sealed = i["sealed"]?.string, let at = i["storedAt"]?.time else { return nil }
+                let id = i["id"]?.string ?? i["id"]?.time.map(String.init) ?? callId
+                return VoiciMissedCallItem(id: id, callId: callId, sealed: sealed, storedAt: at)
+            }
+            let next = v["cursor"]?.string ?? cursor
+            if v["more"] != .bool(true) || next == cursor { break }
+            cursor = next
+        }
+        return out
+    }
+
+    public func callAllow(username: String, allow: JSONValue, signature: String) async throws {
+        try await call(try json("POST", VoiciComPaths.callAllow(username), ["allow": allow, "signature": .string(signature)]))
+    }
 }
 
 /// `flagship/voici-thread-fetch/v1|<conv>|<since>|<issuedAt>`, signed by a delegated P-256 key (IEEE P1363). The

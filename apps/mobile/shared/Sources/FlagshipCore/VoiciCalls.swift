@@ -565,6 +565,16 @@ public enum VoiciCalls {
         try CanonicalJson.ed25519SignHex(try canonicalAllow(pageId: pageId, conv: conv, op: op, issuedAt: issuedAt), seed: ownerSignSeed)
     }
 
+    public static func verifyAllow(pageId: String, conv: String, op: String, issuedAt: Int64, signature: String, ownerSignPub: String) -> Bool {
+        guard let bytes = try? canonicalAllow(pageId: pageId, conv: conv, op: op, issuedAt: issuedAt) else { return false }
+        return CanonicalJson.ed25519VerifyHex(signature, bytes, ownerSignPub)
+    }
+
+    /// The allow order's body as `.com` reads it: `{pageId, conv, op, issuedAt}`.
+    public static func allowJson(pageId: String, conv: String, op: String, issuedAt: Int64) -> JSONValue {
+        ["pageId": .string(pageId), "conv": .string(conv), "op": .string(op), "issuedAt": .int(issuedAt)]
+    }
+
     // MARK: push, missed call
 
     static func openCanonical(_ seed: [UInt8], purpose: String, callId: String, sealed: [UInt8]) -> [String: JSONValue]? {

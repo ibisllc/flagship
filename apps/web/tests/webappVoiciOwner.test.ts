@@ -143,6 +143,22 @@ describe("publishing a page from the webapp", () => {
   });
 });
 
+describe("publishing keeps the calls setting (docs/voici-calls.md §6)", () => {
+  it("an edit on top of a v2 index signs v2 with the same calls fields; a v1 index stays v1", async () => {
+    const merged = { profile: defaultVoiciProfile(U), acceptsMessages: 1, chunks: [] };
+    const first = await buildVoiciIndex({ username: U, published: null, merged, images: new Map(), signer, umk: { seed: UMK }, now: NOW });
+    expect(first.index.version).toBe(1);
+    expect(first.index.acceptsCalls).toBeUndefined();
+    const v2 = { ...first.index, version: 2, acceptsCalls: 1, callsFrom: "signed-in" };
+    const next = await buildVoiciIndex({ username: U, published: { index: v2 }, merged, images: new Map(), signer, umk: { seed: UMK }, now: NOW + 1 });
+    expect(next.index.version).toBe(2);
+    expect(next.index.acceptsCalls).toBe(1);
+    expect(next.index.callsFrom).toBe("signed-in");
+    expect(P.parseVoiciPageIndex(next.index)).not.toBeNull();
+    expect(P.checkVoiciPageIndex(next.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB }).ok).toBe(true);
+  });
+});
+
 /** A signed-in visitor writing to the page: P, T, an attestation from CA_SEED, a P-256 browser key. */
 function visitor(pageId: string, inboxPub: string) {
   const secret = P.deriveMessagesSecret({ seed: new Uint8Array(32).fill(42) });
