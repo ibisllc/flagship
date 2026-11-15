@@ -410,5 +410,9 @@
   "URL:": {
     "en": "URL:",
     "ctx": "packages/server-daemon/src/serviceProxy.ts:157"
+  },
+  "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on.": {
+    "en": "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on.",
+    "ctx": "packages/server-daemon/src/serverArchive/merge/service.ts"
   }
 }

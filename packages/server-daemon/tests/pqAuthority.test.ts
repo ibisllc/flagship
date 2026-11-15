@@ -21,11 +21,15 @@ import {
   signDeviceCapabilityGrant,
   type AssurancePolicyChange,
   type PqBindingRole,
+  appRestoreUndoCanonicalBytes,
+  serverRestoreMergeCanonicalBytes,
+  serverRestoreStageCanonicalBytes,
 } from "@flagship/protocol";
 import { AccountDeviceBook } from "../src/accessPrincipals.js";
 import { AssurancePolicySync } from "../src/assurancePolicySync.js";
 import { authorizeSensitiveOrder } from "../src/adminAuthorityLocal.js";
 import { setPqAuthority } from "../src/pqAuthority.js";
+import { authorizeRestoreOrder } from "../src/serverArchive/merge/authorize.js";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const T = 1_790_000_000_000;
@@ -237,5 +241,29 @@ describe("sensitive orders under strict", () => {
     expect(authorizeSensitiveOrder({ ...base, signature: admin.edSign(order), hybrid })).toBe(true);
     // Another key's hybrid signature does not stand in for the signer's.
     expect(authorizeSensitiveOrder({ ...base, signature: admin.edSign(order), hybrid: { ...hybrid, envelope: { ...hybrid.envelope, signature: dev.hybrid(order) } } })).toBe(false);
+  });
+
+  it("restore-into-server orders: classical only until strict, then the admin root's hybrid half, else needs-hybrid", async () => {
+    const w = await world(() => [entry(change())]);
+    const pq = { policy: () => w.sync.policy(), bindingFor: (p: string) => w.b.pqBindingFor(p) };
+    const a = { ownerIrkPub: irk.pubBytes, adminRootPub: admin.pubBytes, username: U, verify, pq };
+    const orders = [
+      serverRestoreStageCanonicalBytes({ serverDomain: S, archiveId: "00".repeat(16), bytes: 10, sha256: "ab".repeat(32), source: "saved", issuedAt: T }),
+      serverRestoreMergeCanonicalBytes({ serverDomain: S, restoreId: "01".repeat(16), archiveId: "00".repeat(16), sha256: "ab".repeat(32), planSha256: "cd".repeat(32), issuedAt: T, expiresAt: T + 3_600_000 }),
+      appRestoreUndoCanonicalBytes({ serverDomain: S, restoreId: "01".repeat(16), serviceId: "alice--notes", action: "undo", issuedAt: T }),
+      appRestoreUndoCanonicalBytes({ serverDomain: S, restoreId: "01".repeat(16), serviceId: "alice--notes", action: "discard", issuedAt: T }),
+    ];
+    for (const o of orders) expect(authorizeRestoreOrder(a, o, admin.edSign(o), undefined)).toBe(true);
+    await w.sync.refresh();
+    for (const [i, o] of orders.entries()) {
+      const pqSignature = { suite: "hybrid-ed25519-mldsa65/v1", signature: admin.hybrid(o) };
+      expect(authorizeRestoreOrder(a, o, admin.edSign(o), undefined)).toBe("needs-hybrid");
+      expect(authorizeRestoreOrder(a, o, admin.edSign(o), pqSignature)).toBe(true);
+      // A hybrid half over another order (an undo for a discard) does not carry this one.
+      const other = orders[(i + 1) % orders.length]!;
+      expect(authorizeRestoreOrder(a, o, admin.edSign(o), { suite: "hybrid-ed25519-mldsa65/v1", signature: admin.hybrid(other) })).toBe("needs-hybrid");
+      // Someone else's signature is never the admin's, quantum-safe or not.
+      expect(authorizeRestoreOrder(a, o, dev.edSign(o), { suite: "hybrid-ed25519-mldsa65/v1", signature: dev.hybrid(o) })).toBe(false);
+    }
   });
 });

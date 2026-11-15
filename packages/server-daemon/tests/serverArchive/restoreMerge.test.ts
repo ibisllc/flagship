@@ -40,6 +40,9 @@ import { buildRestoreMergeService, MERGE_PATH } from "../../src/serverArchive/me
 import { guardsOf, lineFor, type PreviewApp } from "../../src/serverArchive/merge/preview.js";
 import { loadRun, runPlan, saveRun, type MergeRun } from "../../src/serverArchive/merge/run.js";
 
+/** A quantum-safe box in these tests: a classical order from the owner reads as needs-hybrid. */
+let strictBox = false;
+const pqSeen: unknown[] = [];
 const owner = deriveIRK({ seed: new Uint8Array(32).fill(42) });
 const stranger = deriveIRK({ seed: new Uint8Array(32).fill(43) });
 const box = testCustodian({ identityPriv: new Uint8Array(32).fill(3), swk: new Uint8Array(32).fill(4), cgk: new Uint8Array(32).fill(5) });
@@ -162,7 +165,11 @@ async function world() {
     runsDir: join(dir, "restore-merge"),
     undoDir: join(dir, "restore-undo"),
     clearUninstalled: async () => {},
-    authorize: (canonical, sig) => ed.verify(sig, canonical, owner.publicKey),
+    authorize: (canonical, sig, pq) => {
+      pqSeen.push(pq);
+      if (!ed.verify(sig, canonical, owner.publicKey)) return false;
+      return strictBox && pq === undefined ? "needs-hybrid" : true;
+    },
     busy: () => null,
     apps: async () =>
       platform.list().map((a) => ({
@@ -400,6 +407,26 @@ describe("restore into a running server", () => {
     const r = await callMerge(w, "POST", `${MERGE_PATH}/plan`, signed);
     expect(r.json.code).toBe("plan-guard-mismatch");
     expect(w.platform.byServiceId("harry--notes")!.dataGeneration).toBeUndefined();
+  });
+
+  it("on a quantum-safe box refuses the owner's classical-only orders as needs-hybrid and hands the box the hybrid half", async () => {
+    const { w, file } = await setUp();
+    const order = { serverDomain: HOST, archiveId: ARCHIVE_ID, bytes: file.length, sha256: "ab".repeat(32), source: "upload" as const, issuedAt: Date.now() };
+    const signatureHex = Buffer.from(signServerRestoreStage(order, owner)).toString("hex");
+    strictBox = true;
+    try {
+      const r = await callMerge(w, "POST", `${MERGE_PATH}/stage`, { order, signatureHex });
+      expect(r).toMatchObject({ status: 403, json: { code: "needs-hybrid" } });
+      expect(r.json.error).toContain("quantum-safe");
+      const pqSignature = { suite: "hybrid-ed25519-mldsa65/v1", signature: "ab".repeat(8) };
+      pqSeen.length = 0;
+      expect((await callMerge(w, "POST", `${MERGE_PATH}/stage`, { order, signatureHex, pqSignature })).status).toBe(202);
+      expect(pqSeen).toEqual([pqSignature]);
+      const u = { serverDomain: HOST, restoreId: "01".repeat(16), serviceId: "harry--notes", action: "undo" as const, issuedAt: Date.now() };
+      expect((await callMerge(w, "POST", `${MERGE_PATH}/undo`, { order: u, signatureHex: Buffer.from(signAppRestoreUndo(u, owner)).toString("hex") })).json.code).toBe("needs-hybrid");
+    } finally {
+      strictBox = false;
+    }
   });
 
   it("refuses a stage order the owner didn't sign, and a second restore while one is staged", async () => {

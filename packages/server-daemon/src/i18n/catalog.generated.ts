@@ -103,7 +103,8 @@ export const CATALOGS: Record<string, Record<string, string>> = {
     "Request access · Flagship": "Solicitar acceso · Flagship",
     "{0} is private": "{0} es privada",
     "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "Esta app de Flagship tiene el acceso restringido. Pide al anfitrión que te invite y acepta la invitación en tu app de Flagship.",
-    "URL:": "URL:"
+    "URL:": "URL:",
+    "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on.": "Este servidor es resistente a la computación cuántica, así que una restauración necesita una firma resistente a la computación cuántica. Usa la app Flagship en un teléfono administrador con la protección resistente a la computación cuántica activada."
   },
   "fr": {
     "That direct access order can't be read.": "Impossible de lire cet ordre d'accès direct.",
@@ -208,7 +209,8 @@ export const CATALOGS: Record<string, Record<string, string>> = {
     "Request access · Flagship": "Demander l’accès · Flagship",
     "{0} is private": "{0} est privée",
     "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "Cette app Flagship est protégée. Demandez à l’hôte de vous inviter, puis acceptez l’invitation dans votre app Flagship.",
-    "URL:": "URL :"
+    "URL:": "URL :",
+    "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on.": "Ce serveur est résistant au quantique : une restauration exige donc une signature résistante au quantique. Utilisez l’app Flagship sur un téléphone administrateur avec la protection résistante au quantique activée."
   },
   "de": {
     "That direct access order can't be read.": "Dieser Auftrag für den Direktzugriff kann nicht gelesen werden.",
@@ -313,7 +315,8 @@ export const CATALOGS: Record<string, Record<string, string>> = {
     "Request access · Flagship": "Zugriff anfragen · Flagship",
     "{0} is private": "{0} ist privat",
     "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "Diese Flagship-App ist geschützt. Bitte den Gastgeber, dich einzuladen, und nimm die Einladung dann in deiner Flagship-App an.",
-    "URL:": "URL:"
+    "URL:": "URL:",
+    "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on.": "Dieser Server ist quantensicher, daher braucht eine Wiederherstellung eine quantensichere Signatur. Nutze die Flagship-App auf einem Admin-Telefon mit eingeschaltetem quantensicheren Schutz."
   },
   "pt-BR": {
     "That direct access order can't be read.": "Não foi possível ler essa ordem de acesso direto.",
@@ -418,7 +421,8 @@ export const CATALOGS: Record<string, Record<string, string>> = {
     "Request access · Flagship": "Solicitar acesso · Flagship",
     "{0} is private": "{0} é privado",
     "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "Este app Flagship tem acesso restrito. Peça ao anfitrião que convide você e aceite o convite no seu app Flagship.",
-    "URL:": "URL:"
+    "URL:": "URL:",
+    "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on.": "Este servidor é resistente à computação quântica, então uma restauração precisa de uma assinatura resistente à computação quântica. Use o app Flagship em um celular de administrador com a proteção resistente à computação quântica ativada."
   },
   "ja": {
     "That direct access order can't be read.": "この直接アクセスの指示を読み取れません。",
@@ -523,7 +527,8 @@ export const CATALOGS: Record<string, Record<string, string>> = {
     "Request access · Flagship": "アクセスをリクエスト · Flagship",
     "{0} is private": "{0} は非公開です",
     "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "この Flagship アプリは制限されています。ホストに招待を依頼し、Flagship アプリで招待を承諾してください。",
-    "URL:": "URL："
+    "URL:": "URL：",
+    "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on.": "このサーバーは耐量子化されているため、復元には耐量子署名が必要です。耐量子保護をオンにした管理者のスマートフォンで Flagship アプリを使ってください。"
   },
   "zh-Hans": {
     "That direct access order can't be read.": "无法读取这条直接访问指令。",
@@ -628,6 +633,7 @@ export const CATALOGS: Record<string, Record<string, string>> = {
     "Request access · Flagship": "申请访问 · Flagship",
     "{0} is private": "{0} 是私有的",
     "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": "此 Flagship 应用已受限。请让主人邀请你，然后在你的 Flagship 应用中接受邀请。",
-    "URL:": "URL："
+    "URL:": "URL：",
+    "This server is quantum-safe, so a restore needs a quantum-safe signature. Use the Flagship app on an admin phone with Quantum-safe protection on.": "此服务器已启用抗量子保护，因此恢复需要抗量子签名。请在已开启抗量子保护的管理员手机上使用 Flagship 应用。"
   },
 };
