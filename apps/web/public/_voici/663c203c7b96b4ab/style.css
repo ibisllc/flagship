@@ -1260,3 +1260,30 @@ body.has-sheet {
     transition-duration: 0.01ms !important;
   }
 }
+.call-video {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  margin: 12px 0 0;
+  border-radius: 12px;
+  background: #000;
+  object-fit: contain;
+}
+.call-self {
+  display: block;
+  width: 96px;
+  margin: 8px 0 0 auto;
+  border-radius: 8px;
+  transform: scaleX(-1);
+  background: #000;
+}
+.call-video[hidden],
+.call-self[hidden],
+.call-camera-note[hidden] {
+  display: none;
+}
+.call-camera-note {
+  margin: 8px 0 0;
+  text-align: center;
+  color: var(--ink-muted);
+}

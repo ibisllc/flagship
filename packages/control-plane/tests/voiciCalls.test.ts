@@ -128,6 +128,10 @@ describe("the call room", () => {
     expect(sends(room.joined({ role: "device", deviceRef: other }))).toEqual([[{ deviceRef: other }, "answered-elsewhere"]]);
     expect(sends(room.message({ role: "caller" }, { t: "ice", candidate: "candidate:1 1 udp 1 127.0.0.1 9 typ host" }, NOW))).toEqual([[{ deviceRef: K.deviceRef }, "ice"]]);
     expect(room.message({ role: "device", deviceRef: other }, { t: "ice", candidate: "x" }, NOW)).toEqual([]);
+    expect(room.message({ role: "device", deviceRef: K.deviceRef }, { t: "camera", state: "paused" }, NOW)).toEqual([{ kind: "send", to: "caller", msg: { t: "camera", state: "paused" } }]);
+    expect(room.message({ role: "caller" }, { t: "camera", state: "on" }, NOW)).toEqual([{ kind: "send", to: { deviceRef: K.deviceRef }, msg: { t: "camera", state: "on" } }]);
+    expect(room.message({ role: "device", deviceRef: other }, { t: "camera", state: "on" }, NOW)).toEqual([]);
+    expect(room.message({ role: "caller" }, { t: "camera", state: "blurred" }, NOW)).toEqual([]);
     expect(room.callerLeft(NOW)).toEqual([]);
     const end = signVoiciCallEndOwner({ callId: init.callId, reason: "hangup", issuedAt: NOW }, hexToBytes(K.ownerSignSeed));
     expect(room.message({ role: "device", deviceRef: other }, { t: "end", end }, NOW)).toEqual([]);

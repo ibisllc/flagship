@@ -1,7 +1,8 @@
 // "Call" (docs/voici-calls.md §7): shown beside "Send me a message" only while the verified page index says calls are
 // on. The microphone is asked for on the tap, never on load. A visitor who isn't signed in to this page signs in
 // first (the Messages sign-in). The call itself is flagship-web's startVoiciCall: WebRTC to the owner's phone only,
-// every frame sealed again under the call's X-Wing keys.
+// every frame sealed again under the call's X-Wing keys. Video is an upgrade of the audio call (voici-calls-v2.md §1.4):
+// the call starts as audio, and the camera is asked for only when the visitor taps "Camera".
 
 import { h, replace } from "./dom.js";
 import { icon } from "./icons.js";
@@ -20,6 +21,8 @@ export function callRefusal(code, o = {}) {
       return t("They're on another call. Try again later, or send a message.");
     case "rate-limited":
       return o.retryAfterSec ? t("Too many calls. Try again in about {0} minutes.", Math.max(1, Math.ceil(o.retryAfterSec / 60))) : t("Too many calls. Try again later.");
+    case "camera":
+      return t("voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.");
     case "microphone":
       return t("voi.ci needs your microphone for the call. Allow it in your browser and try again.");
     case "unsupported":
@@ -61,12 +64,16 @@ async function startCall(ctx, session) {
   const status = h(doc, "p", { class: "call-status", role: "status" }, t("Calling {0}…", page.profile.displayName));
   const timer = h(doc, "p", { class: "call-timer", hidden: true }, "0:00");
   const audio = h(doc, "audio", { autoplay: true });
+  const remoteVideo = h(doc, "video", { class: "call-video", autoplay: true, playsinline: true, muted: true, hidden: true });
+  const selfView = h(doc, "video", { class: "call-self", autoplay: true, playsinline: true, muted: true, hidden: true });
+  const cameraNote = h(doc, "p", { class: "call-camera-note", role: "status", hidden: true });
   const mute = h(doc, "button", { class: "btn btn-secondary", type: "button", "aria-pressed": "false" }, t("Mute"));
+  const camera = h(doc, "button", { class: "btn btn-secondary", type: "button", "aria-pressed": "false", hidden: true }, t("Camera"));
   const hang = h(doc, "button", { class: "btn btn-danger", type: "button" }, icon(doc, "call"), h(doc, "span", {}, t("Hang up")));
   const why = h(doc, "details", { class: "alt-flow" }, h(doc, "summary", {}, t("Quantum-safe call")), h(doc, "p", { class: "fine" }, t("The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.")));
-  const controls = h(doc, "div", { class: "call-controls" }, mute, hang);
+  const controls = h(doc, "div", { class: "call-controls" }, mute, camera, hang);
   const sheet = openSheet(doc, { title: page.profile.displayName, onClose: () => call?.hangUp() });
-  replace(sheet.body, status, timer, audio, controls, why);
+  replace(sheet.body, status, timer, remoteVideo, selfView, cameraNote, audio, controls, why);
   let muted = false;
   let started = 0;
   let tick = null;
@@ -77,6 +84,38 @@ async function startCall(ctx, session) {
     replace(mute, muted ? t("Unmute") : t("Mute"));
   });
   hang.addEventListener("click", () => call?.hangUp());
+  let cameraOn = false;
+  camera.addEventListener("click", async () => {
+    if (!call) return;
+    const want = !cameraOn;
+    const ok = await call.setCamera(want, (c) => win.navigator.mediaDevices.getUserMedia(c));
+    if (!ok) {
+      if (want) {
+        cameraNote.hidden = false;
+        replace(cameraNote, callRefusal("camera"));
+      }
+      return;
+    }
+    cameraOn = want;
+    camera.setAttribute("aria-pressed", String(cameraOn));
+    replace(camera, cameraOn ? t("Camera off") : t("Camera"));
+    selfView.hidden = !cameraOn;
+    selfView.srcObject = cameraOn && call.cameraTrack ? new win.MediaStream([call.cameraTrack]) : null;
+  });
+  const onCamera = (st) => {
+    remoteVideo.hidden = st !== "on";
+    cameraNote.hidden = st === "off" && !remoteVideo.hidden;
+    if (st === "on") {
+      remoteVideo.srcObject = call?.remoteStream ?? null;
+      cameraNote.hidden = false;
+      replace(cameraNote, t("{0} turned on their camera.", page.profile.displayName));
+    } else if (st === "paused") {
+      cameraNote.hidden = false;
+      replace(cameraNote, t("Camera paused"));
+    } else {
+      cameraNote.hidden = true;
+    }
+  };
 
   const finish = (line) => {
     clearInterval(tick);
@@ -97,7 +136,10 @@ async function startCall(ctx, session) {
     for (const tr of stream.getTracks()) tr.stop();
     return finish(callRefusal("unsupported"));
   }
+  const videoAble = await lib.voiciCallVideoAble(win.navigator.mediaDevices);
   call = lib.startVoiciCall({
+    videoAble,
+    onCamera,
     session,
     index: page.index,
     username: page.username,
@@ -109,6 +151,7 @@ async function startCall(ctx, session) {
       else if (state === "connecting") replace(status, t("Connecting…"));
       else if (state === "connected") {
         audio.srcObject = call.remoteStream;
+        camera.hidden = !videoAble;
         replace(status, t("Quantum-safe call"));
         timer.hidden = false;
         started = Date.now();

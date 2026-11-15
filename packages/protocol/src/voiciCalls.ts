@@ -24,6 +24,17 @@
  *            aad UTF-8 "<callId>|<dir>|<ctr>", u8(len) ‖ frame ‖ zeros to 64 bytes): always 88 bytes
  *   A frame longer than 63 bytes is refused; a receiver drops replays (a 128-frame window), frames more than
  *   3000 ahead of the newest, frames of an epoch older than the newest minus one, and anything that fails to open.
+ *
+ * Video (docs/voici-calls-v2.md §1): request and answer may carry `media` ("audio" | "audio,video", what that side is
+ * able to send); when present it is appended to the canonical bytes as `|<media>`, so it cannot be added or changed,
+ * and a record without it reads as audio (stripping it only downgrades a call to audio). The answer's media must be
+ * within the request's. A video SDP has exactly m=audio then m=video, the video section VP8 only.
+ *   kv(dir)  HKDF-SHA256(ikm ss, salt th, info "flagship/voici-call-frame/v1|<c2p|p2c>|video", 32), own counters,
+ *            epochs as audio
+ *   clear    the VP8 payload header the RTP packetizer reads: 10 bytes on a key frame (bit 0 of byte 0 clear), else 3
+ *   sealed   clear ‖ u64be(ctr) ‖ AES-256-GCM(kv_e, nonce u32be(dir code) ‖ u64be(ctr),
+ *            aad UTF-8 "<callId>|<dir>|video|<ctr>|" ‖ clear, u32be(len) ‖ body ‖ zeros), its total length padded
+ *            up to the next size bucket: 1 KiB doubling to 1 MiB (a larger frame is refused)
  */
 import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
@@ -70,6 +81,13 @@ export const VOICI_CALL_END_REASONS = ["hangup", "cancel", "decline", "busy", "n
 export type VoiciCallEndReason = (typeof VOICI_CALL_END_REASONS)[number];
 export type VoiciCallDir = "c2p" | "p2c";
 export const VOICI_CALLS_FROM = ["accepted", "signed-in"] as const;
+/** What a side is able to send (§1.1 of voici-calls-v2.md); absent = audio. */
+export const VOICI_CALL_MEDIA = ["audio", "audio,video"] as const;
+export type VoiciCallMedia = (typeof VOICI_CALL_MEDIA)[number];
+/** Sealed video frame sizes (§1.6): 1 KiB doubling to 1 MiB. */
+export const VOICI_CALL_VIDEO_BUCKETS: readonly number[] = Array.from({ length: 11 }, (_, i) => 1024 * 2 ** i);
+/** Room messages that say what a side's camera is doing (UI only, unsigned). */
+export const VOICI_CALL_CAMERA_STATES = ["on", "off", "paused"] as const;
 export type VoiciCallsFrom = (typeof VOICI_CALLS_FROM)[number];
 
 const te = new TextEncoder();
@@ -107,17 +125,37 @@ export function voiciCallDeviceRef(devicePubHex: string): string {
 
 // ── SDP ────────────────────────────────────────────────────────────────────
 
-export type VoiciCallSdpRefusal = "too-large" | "not-audio-only" | "no-opus" | "not-cbr" | "dtx" | "audio-level" | "no-fingerprint";
+export type VoiciCallSdpRefusal = "too-large" | "not-audio-only" | "bad-media" | "no-opus" | "not-cbr" | "dtx" | "audio-level" | "not-vp8" | "video-extension" | "no-fingerprint";
+
+const isMedia = (m: unknown): m is VoiciCallMedia => typeof m === "string" && (VOICI_CALL_MEDIA as readonly string[]).includes(m);
+const hasVideo = (m: VoiciCallMedia | undefined) => m === "audio,video";
+const VIDEO_EXTMAPS = ["urn:ietf:params:rtp-hdrext:sdes:mid", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"];
+
+/** The lines of each m= section, keyed by its media kind, in order. */
+function sections(lines: string[]): { kind: string; lines: string[] }[] {
+  const out: { kind: string; lines: string[] }[] = [];
+  for (const l of lines) {
+    if (l.startsWith("m=")) out.push({ kind: l.slice(2).split(" ")[0]!, lines: [l] });
+    else if (out.length) out[out.length - 1]!.lines.push(l);
+  }
+  return out;
+}
 
 /**
  * The SDP rules both sides check before signing or accepting (§0.3): exactly one m=audio section and no other media,
  * Opus with cbr=1 and usedtx=0 in its fmtp, no audio-level header extension, a sha-256 DTLS fingerprint.
  */
-export function checkVoiciCallSdp(sdp: unknown): VoiciCallSdpRefusal | null {
+export function checkVoiciCallSdp(sdp: unknown, media: VoiciCallMedia = "audio"): VoiciCallSdpRefusal | null {
   if (typeof sdp !== "string" || utf8(sdp).length > VOICI_CALL_MAX_SDP_BYTES) return "too-large";
   const lines = sdp.split(/\r?\n/);
-  const media = lines.filter((l) => l.startsWith("m="));
-  if (media.length !== 1 || !media[0]!.startsWith("m=audio ")) return "not-audio-only";
+  const secs = sections(lines);
+  if (hasVideo(media)) {
+    if (secs.length !== 2 || secs[0]!.kind !== "audio" || secs[1]!.kind !== "video") return "bad-media";
+    const v = secs[1]!.lines;
+    const maps = v.filter((l) => l.startsWith("a=rtpmap:"));
+    if (maps.length !== 1 || !/^a=rtpmap:\d+ VP8\/90000$/i.test(maps[0]!)) return "not-vp8";
+    if (v.some((l) => l.startsWith("a=extmap:") && !VIDEO_EXTMAPS.some((u) => l.endsWith(" " + u)))) return "video-extension";
+  } else if (secs.length !== 1 || secs[0]!.kind !== "audio") return "not-audio-only";
   const rtpmap = lines.find((l) => /^a=rtpmap:\d+ opus\/48000(\/2)?$/i.test(l));
   if (!rtpmap) return "no-opus";
   const pt = rtpmap.slice("a=rtpmap:".length).split(" ")[0]!;
@@ -143,16 +181,36 @@ export function mungeVoiciCallSdp(sdp: string): string {
   const rtpmap = lines.find((l) => /^a=rtpmap:\d+ opus\/48000(\/2)?$/i.test(l));
   if (!rtpmap) return sdp;
   const pt = rtpmap.slice("a=rtpmap:".length).split(" ")[0]!;
+  const vp8 = lines.find((l) => /^a=rtpmap:\d+ VP8\/90000$/i.test(l));
+  const vpt = vp8?.slice("a=rtpmap:".length).split(" ")[0];
+  const rtx = new Set(lines.filter((l) => l.startsWith("a=ssrc-group:FID ")).map((l) => l.split(" ")[2]!));
   const out: string[] = [];
   let inAudio = false;
+  let inVideo = false;
   for (const l of lines) {
     if (l.startsWith("m=")) {
       inAudio = l.startsWith("m=audio ");
+      inVideo = l.startsWith("m=video ") && vpt !== undefined;
       if (inAudio) {
         const f = l.split(" ");
         out.push([...f.slice(0, 3), pt].join(" "));
         continue;
       }
+      if (inVideo) {
+        const f = l.split(" ");
+        out.push([...f.slice(0, 3), vpt].join(" "));
+        continue;
+      }
+    }
+    if (inVideo) {
+      if (l.startsWith("a=extmap:") && !VIDEO_EXTMAPS.some((u) => l.endsWith(" " + u))) continue;
+      if (l === "a=extmap-allow-mixed" || l.startsWith("a=ssrc-group:FID ")) continue;
+      const m = /^a=(rtpmap|fmtp|rtcp-fb):(\d+)[ ]/.exec(l);
+      if (m && m[2] !== vpt) continue;
+      const ss = /^a=ssrc:(\d+) /.exec(l);
+      if (ss && rtx.has(ss[1]!)) continue;
+      out.push(l);
+      continue;
     }
     if (inAudio) {
       if ((l.startsWith("a=extmap:") && !l.endsWith(" urn:ietf:params:rtp-hdrext:sdes:mid")) || l === "a=extmap-allow-mixed") continue;
@@ -192,6 +250,8 @@ export interface VoiciCallRequestBody {
   offerSdp: string;
   issuedAt: number;
   cred: VoiciMessageCred;
+  /** What the caller is able to send; absent = audio (voici-calls-v2.md §1.1). */
+  media?: VoiciCallMedia;
 }
 export interface VoiciCallRequest extends VoiciCallRequestBody {
   v: 1;
@@ -200,12 +260,15 @@ export interface VoiciCallRequest extends VoiciCallRequestBody {
 }
 const REQUEST_KEYS = ["v", "kind", "pageId", "conv", "callId", "from", "callerXwingPub", "offerSdp", "issuedAt", "cred", "sig"];
 
-export function canonicalVoiciCallRequest(r: Pick<VoiciCallRequestBody, "pageId" | "conv" | "callId" | "callerXwingPub" | "offerSdp" | "issuedAt">): Bytes {
-  if (!PAGE_ID.test(r.pageId) || !isLowerHex(r.conv, 32) || !isLowerHex(r.callId, 16) || !isLowerHex(r.callerXwingPub, HYBRID_SEAL_PUBLIC_KEY_LEN) || !isTime(r.issuedAt) || typeof r.offerSdp !== "string") {
+export function canonicalVoiciCallRequest(r: Pick<VoiciCallRequestBody, "pageId" | "conv" | "callId" | "callerXwingPub" | "offerSdp" | "issuedAt" | "media">): Bytes {
+  if (!PAGE_ID.test(r.pageId) || !isLowerHex(r.conv, 32) || !isLowerHex(r.callId, 16) || !isLowerHex(r.callerXwingPub, HYBRID_SEAL_PUBLIC_KEY_LEN) || !isTime(r.issuedAt) || typeof r.offerSdp !== "string" || (r.media !== undefined && !isMedia(r.media))) {
     throw new Error(`${TAG_VOICI_CALL_REQUEST}: bad field`);
   }
-  return join([TAG_VOICI_CALL_REQUEST, r.pageId, r.conv, r.callId, r.callerXwingPub, voiciCallSdpHash(r.offerSdp), r.issuedAt]);
+  return join([TAG_VOICI_CALL_REQUEST, r.pageId, r.conv, r.callId, r.callerXwingPub, voiciCallSdpHash(r.offerSdp), r.issuedAt, ...(r.media !== undefined ? [r.media] : [])]);
 }
+
+/** The media a request or answer names (absent = audio). */
+export const voiciCallMedia = (r: { media?: VoiciCallMedia }): VoiciCallMedia => r.media ?? "audio";
 
 /** Deterministic (RFC 6979, low-S) P-256 signature: for vectors and tests; browsers sign with WebCrypto. */
 export function signVoiciCallRequestP256(body: VoiciCallRequestBody, browserPriv: Bytes): VoiciCallRequest {
@@ -213,7 +276,7 @@ export function signVoiciCallRequestP256(body: VoiciCallRequestBody, browserPriv
 }
 
 export function parseVoiciCallRequest(v: unknown): VoiciCallRequest | null {
-  if (!isObj(v) || !exactKeys(v, REQUEST_KEYS) || v.v !== 1 || v.kind !== "voici-call-request" || !isLowerHex(v.sig, 64) || !isObj(v.cred) || !isLowerHex(v.from, 32)) return null;
+  if (!isObj(v) || !(exactKeys(v, REQUEST_KEYS) || exactKeys(v, [...REQUEST_KEYS, "media"])) || v.v !== 1 || v.kind !== "voici-call-request" || !isLowerHex(v.sig, 64) || !isObj(v.cred) || !isLowerHex(v.from, 32)) return null;
   try {
     canonicalVoiciCallRequest(v as unknown as VoiciCallRequest);
   } catch {
@@ -298,7 +361,7 @@ export function checkVoiciCallRequest(input: unknown, ctx: VoiciCallRequestCheck
   const ts = parseVoiciThreadStatement(c.threadStmt);
   if (!ts || ts.pageId !== ctx.pageId || ts.pseudonymPub !== r.from || typeof c.threadSig !== "string" || !ed25519VerifyHex(c.threadSig, canonicalVoiciThreadStatement(ts), r.from)) return no("bad-thread");
   if (r.conv !== voiciConv(ctx.pageId, r.from)) return no("wrong-conv");
-  if (checkVoiciCallSdp(r.offerSdp)) return no("bad-sdp");
+  if (checkVoiciCallSdp(r.offerSdp, voiciCallMedia(r))) return no("bad-sdp");
   try {
     parseHybridSealPublicKey(hexToBytes(r.callerXwingPub));
   } catch {
@@ -337,6 +400,15 @@ export function deriveVoiciCallFrameKeys(sharedSecret: Bytes, requestBytes: Byte
   return {
     c2p: hkdf(sha256, sharedSecret, th, utf8(`${TAG_VOICI_CALL_FRAME}|c2p`), 32),
     p2c: hkdf(sha256, sharedSecret, th, utf8(`${TAG_VOICI_CALL_FRAME}|p2c`), 32),
+  };
+}
+
+/** The video keys (voici-calls-v2.md §1.5): their own directional keys from the same secret. */
+export function deriveVoiciCallVideoFrameKeys(sharedSecret: Bytes, requestBytes: Bytes, answerBytes: Bytes): { c2p: Bytes; p2c: Bytes } {
+  const th = sha256(concat(requestBytes, answerBytes));
+  return {
+    c2p: hkdf(sha256, sharedSecret, th, utf8(`${TAG_VOICI_CALL_FRAME}|c2p|video`), 32),
+    p2c: hkdf(sha256, sharedSecret, th, utf8(`${TAG_VOICI_CALL_FRAME}|p2c|video`), 32),
   };
 }
 
@@ -382,6 +454,65 @@ export function openVoiciCallFrameWithKey(key: Bytes, callId: string, dir: Voici
 
 export const voiciCallEpoch = (ctr: number) => Math.floor(ctr / VOICI_CALL_FRAMES_PER_EPOCH);
 
+export type VoiciCallTrack = "audio" | "video";
+
+/** How many leading bytes of a VP8 frame stay clear: the payload header (10 on a key frame, 3 on a delta frame). */
+export function voiciCallVideoClearLen(frame: Bytes): number {
+  if (frame.length === 0) return 0;
+  return (frame[0]! & 1) === 0 ? 10 : 3;
+}
+
+/** The bucket a sealed video frame of `n` bytes is padded to, or null when larger than the last. */
+export function voiciCallVideoBucket(n: number): number | null {
+  return VOICI_CALL_VIDEO_BUCKETS.find((b) => b >= n) ?? null;
+}
+
+const videoAad = (callId: string, dir: VoiciCallDir, ctr: number, clear: Bytes) => concat(utf8(`${callId}|${dir}|video|${ctr}|`), clear);
+const VIDEO_OVERHEAD = 8 + 4 + 16;
+
+/** Seals one encoded VP8 frame (§1.5): the payload header clear and in the AAD, the rest padded to a size bucket. */
+export function sealVoiciCallVideoFrameWithKey(key: Bytes, callId: string, dir: VoiciCallDir, ctr: number, frame: Bytes): Bytes {
+  if (!Number.isSafeInteger(ctr) || ctr < 0 || ctr >= VOICI_CALL_MAX_CTR) throw new Error("voici-call: counter");
+  const c = voiciCallVideoClearLen(frame);
+  if (c === 0 || frame.length < c) throw new Error("voici-call: video frame too short");
+  const clear = frame.subarray(0, c);
+  const body = frame.subarray(c);
+  const total = voiciCallVideoBucket(c + VIDEO_OVERHEAD + body.length);
+  if (total === null) throw new Error("voici-call: video frame too long");
+  const pt = new Uint8Array(total - c - 8 - 16);
+  pt.set(u32be(body.length), 0);
+  pt.set(body, 4);
+  return concat(clear, u64be(ctr), gcm(key, frameNonce(dir, ctr), videoAad(callId, dir, ctr, clear)).encrypt(pt));
+}
+
+function videoCtr(sealed: Bytes): number | null {
+  if (!VOICI_CALL_VIDEO_BUCKETS.includes(sealed.length)) return null;
+  const c = voiciCallVideoClearLen(sealed);
+  if (c === 0 || sealed.length < c + VIDEO_OVERHEAD) return null;
+  return readU64(sealed.subarray(c, c + 8));
+}
+
+/** Opens one sealed video frame; null on any failure (bucket size, tag, length, padding). Returns the whole frame. */
+export function openVoiciCallVideoFrameWithKey(key: Bytes, callId: string, dir: VoiciCallDir, sealed: Bytes): { ctr: number; frame: Bytes } | null {
+  const ctr = videoCtr(sealed);
+  if (ctr === null || ctr >= VOICI_CALL_MAX_CTR) return null;
+  const c = voiciCallVideoClearLen(sealed);
+  const clear = sealed.subarray(0, c);
+  let pt: Bytes;
+  try {
+    pt = gcm(key, frameNonce(dir, ctr), videoAad(callId, dir, ctr, clear)).decrypt(sealed.subarray(c + 8));
+  } catch {
+    return null;
+  }
+  const len = readU64(concat(new Uint8Array(4), pt.subarray(0, 4)));
+  if (len > pt.length - 4) return null;
+  for (let i = 4 + len; i < pt.length; i++) if (pt[i] !== 0) return null;
+  return { ctr, frame: concat(clear, pt.subarray(4, 4 + len)) };
+}
+
+const peekCtr = (sealed: Bytes, track: VoiciCallTrack): number | null =>
+  track === "video" ? videoCtr(sealed) : sealed.length === VOICI_CALL_SEALED_FRAME ? readU64(sealed.subarray(0, 8)) : null;
+
 /** The sending half of one direction: a counter from 0 and the epoch keys, older ones wiped. */
 export class VoiciCallFrameSender {
   private ctr = 0;
@@ -391,6 +522,7 @@ export class VoiciCallFrameSender {
     baseKey: Bytes,
     private readonly callId: string,
     private readonly dir: VoiciCallDir,
+    private readonly track: VoiciCallTrack = "audio",
   ) {
     this.key = Uint8Array.from(baseKey);
   }
@@ -402,7 +534,8 @@ export class VoiciCallFrameSender {
       this.key = next;
       this.epoch++;
     }
-    return sealVoiciCallFrameWithKey(this.key, this.callId, this.dir, this.ctr++, frame);
+    const seal = this.track === "video" ? sealVoiciCallVideoFrameWithKey : sealVoiciCallFrameWithKey;
+    return seal(this.key, this.callId, this.dir, this.ctr++, frame);
   }
 }
 
@@ -416,13 +549,13 @@ export class VoiciCallFrameReceiver {
     baseKey: Bytes,
     private readonly callId: string,
     private readonly dir: VoiciCallDir,
+    private readonly track: VoiciCallTrack = "audio",
   ) {
     this.keys.set(0, Uint8Array.from(baseKey));
   }
   open(sealed: Bytes): Bytes | null {
-    if (sealed.length !== VOICI_CALL_SEALED_FRAME) return null;
-    const ctr = readU64(sealed.subarray(0, 8));
-    if (ctr >= VOICI_CALL_MAX_CTR || ctr > this.highest + VOICI_CALL_MAX_GAP_FRAMES) return null;
+    const ctr = peekCtr(sealed, this.track);
+    if (ctr === null || ctr >= VOICI_CALL_MAX_CTR || ctr > this.highest + VOICI_CALL_MAX_GAP_FRAMES) return null;
     if (ctr <= this.highest - VOICI_CALL_REPLAY_WINDOW || this.seen.has(ctr)) return null;
     const e = voiciCallEpoch(ctr);
     if (e < this.top - 1) return null;
@@ -433,7 +566,8 @@ export class VoiciCallFrameReceiver {
       for (let i = this.top; i < e; i++) pending.push((cur = nextVoiciCallFrameKey(cur)));
       k = cur;
     }
-    const opened = k ? openVoiciCallFrameWithKey(k, this.callId, this.dir, sealed) : null;
+    const openWith = this.track === "video" ? openVoiciCallVideoFrameWithKey : openVoiciCallFrameWithKey;
+    const opened = k ? openWith(k, this.callId, this.dir, sealed) : null;
     if (!opened) {
       for (const p of pending) p.fill(0);
       return null;
@@ -463,6 +597,8 @@ export interface VoiciCallAnswerBody {
   turnUser: string;
   turnSecret: string;
   issuedAt: number;
+  /** What the answering device is able to send; absent = audio. Within the request's. */
+  media?: VoiciCallMedia;
 }
 export interface VoiciCallAnswer extends VoiciCallAnswerBody {
   v: 1;
@@ -480,11 +616,12 @@ export function canonicalVoiciCallAnswer(a: VoiciCallAnswerBody): Bytes {
     typeof a.answerSdp !== "string" ||
     !isLowerHex(a.turnUser, 16) ||
     !isLowerHex(a.turnSecret, 32) ||
-    !isTime(a.issuedAt)
+    !isTime(a.issuedAt) ||
+    (a.media !== undefined && !isMedia(a.media))
   ) {
     throw new Error(`${TAG_VOICI_CALL_ANSWER}: bad field`);
   }
-  return join([TAG_VOICI_CALL_ANSWER, a.callId, a.deviceRef, a.requestHash, a.xwingCiphertext, voiciCallSdpHash(a.answerSdp), a.turnUser, sha256Hex(utf8(a.turnSecret)), a.issuedAt]);
+  return join([TAG_VOICI_CALL_ANSWER, a.callId, a.deviceRef, a.requestHash, a.xwingCiphertext, voiciCallSdpHash(a.answerSdp), a.turnUser, sha256Hex(utf8(a.turnSecret)), a.issuedAt, ...(a.media !== undefined ? [a.media] : [])]);
 }
 
 export function voiciCallRequestHash(r: VoiciCallRequestBody): string {
@@ -502,7 +639,7 @@ export function checkVoiciCallAnswer(
   ctx: { request: VoiciCallRequestBody; ownerSignPub: string; now?: number },
 ): { ok: true; answer: VoiciCallAnswer } | Fail<VoiciCallAnswerRefusal> {
   const no = (code: VoiciCallAnswerRefusal): Fail<VoiciCallAnswerRefusal> => ({ ok: false, code });
-  if (!isObj(v) || !exactKeys(v, ANSWER_KEYS) || v.v !== 1 || v.kind !== "voici-call-answer" || !isLowerHex(v.sig, 64)) return no("malformed");
+  if (!isObj(v) || !(exactKeys(v, ANSWER_KEYS) || exactKeys(v, [...ANSWER_KEYS, "media"])) || v.v !== 1 || v.kind !== "voici-call-answer" || !isLowerHex(v.sig, 64)) return no("malformed");
   const a = v as unknown as VoiciCallAnswer;
   let bytes: Bytes;
   try {
@@ -512,7 +649,8 @@ export function checkVoiciCallAnswer(
   }
   if (a.callId !== ctx.request.callId) return no("wrong-call");
   if (a.requestHash !== voiciCallRequestHash(ctx.request)) return no("wrong-request");
-  if (checkVoiciCallSdp(a.answerSdp)) return no("bad-sdp");
+  if (hasVideo(voiciCallMedia(a)) && !hasVideo(voiciCallMedia(ctx.request))) return no("bad-sdp");
+  if (checkVoiciCallSdp(a.answerSdp, voiciCallMedia(ctx.request))) return no("bad-sdp");
   if (!ed25519VerifyHex(a.sig, bytes, ctx.ownerSignPub)) return no("bad-signature");
   if (ctx.now !== undefined && Math.abs(a.issuedAt - ctx.now) > VOICI_CALL_SKEW_MS) return no("stale");
   return { ok: true, answer: a };

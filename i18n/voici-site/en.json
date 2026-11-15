@@ -73,91 +73,111 @@
   },
   "They aren't taking calls right now.": {
     "en": "They aren't taking calls right now.",
-    "ctx": "voici-site/call.js:16"
+    "ctx": "voici-site/call.js:17"
   },
   "They take calls only from people whose messages they accepted. Send a message first.": {
     "en": "They take calls only from people whose messages they accepted. Send a message first.",
-    "ctx": "voici-site/call.js:18"
+    "ctx": "voici-site/call.js:19"
   },
   "They're on another call. Try again later, or send a message.": {
     "en": "They're on another call. Try again later, or send a message.",
-    "ctx": "voici-site/call.js:20"
+    "ctx": "voici-site/call.js:21"
   },
   "Too many calls. Try again in about {0} minutes.": {
     "en": "Too many calls. Try again in about {0} minutes.",
-    "ctx": "voici-site/call.js:22"
+    "ctx": "voici-site/call.js:23"
   },
   "Too many calls. Try again later.": {
     "en": "Too many calls. Try again later.",
-    "ctx": "voici-site/call.js:22"
+    "ctx": "voici-site/call.js:23"
+  },
+  "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.": {
+    "en": "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.",
+    "ctx": "voici-site/call.js:25"
   },
   "voi.ci needs your microphone for the call. Allow it in your browser and try again.": {
     "en": "voi.ci needs your microphone for the call. Allow it in your browser and try again.",
-    "ctx": "voici-site/call.js:24"
+    "ctx": "voici-site/call.js:27"
   },
   "This browser can't make quantum-safe calls. Try a current Chrome, Safari or Firefox.": {
     "en": "This browser can't make quantum-safe calls. Try a current Chrome, Safari or Firefox.",
-    "ctx": "voici-site/call.js:26"
+    "ctx": "voici-site/call.js:29"
   },
   "The call couldn't connect. Check your connection and try again.": {
     "en": "The call couldn't connect. Check your connection and try again.",
-    "ctx": "voici-site/call.js:28"
+    "ctx": "voici-site/call.js:31"
   },
   "Couldn't reach Flagship. Check your connection and try again.": {
     "en": "Couldn't reach Flagship. Check your connection and try again.",
-    "ctx": "voici-site/call.js:30"
+    "ctx": "voici-site/call.js:33"
   },
   "No answer.": {
     "en": "No answer.",
-    "ctx": "voici-site/call.js:37"
+    "ctx": "voici-site/call.js:40"
   },
   "They can't take your call right now.": {
     "en": "They can't take your call right now.",
-    "ctx": "voici-site/call.js:39"
+    "ctx": "voici-site/call.js:42"
   },
   "Calls end after 60 minutes.": {
     "en": "Calls end after 60 minutes.",
-    "ctx": "voici-site/call.js:41"
+    "ctx": "voici-site/call.js:44"
   },
   "Call ended": {
     "en": "Call ended",
-    "ctx": "voici-site/call.js:43"
+    "ctx": "voici-site/call.js:46"
   },
   "Calling {0}…": {
     "en": "Calling {0}…",
-    "ctx": "voici-site/call.js:61"
+    "ctx": "voici-site/call.js:64"
   },
   "Mute": {
     "en": "Mute",
-    "ctx": "voici-site/call.js:64"
+    "ctx": "voici-site/call.js:70"
+  },
+  "Camera": {
+    "en": "Camera",
+    "ctx": "voici-site/call.js:71"
   },
   "Hang up": {
     "en": "Hang up",
-    "ctx": "voici-site/call.js:65"
+    "ctx": "voici-site/call.js:72"
   },
   "Quantum-safe call": {
     "en": "Quantum-safe call",
-    "ctx": "voici-site/call.js:66"
+    "ctx": "voici-site/call.js:73"
   },
   "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.": {
     "en": "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.",
-    "ctx": "voici-site/call.js:66"
+    "ctx": "voici-site/call.js:73"
   },
   "Unmute": {
     "en": "Unmute",
-    "ctx": "voici-site/call.js:77"
+    "ctx": "voici-site/call.js:84"
+  },
+  "Camera off": {
+    "en": "Camera off",
+    "ctx": "voici-site/call.js:101"
+  },
+  "{0} turned on their camera.": {
+    "en": "{0} turned on their camera.",
+    "ctx": "voici-site/call.js:111"
+  },
+  "Camera paused": {
+    "en": "Camera paused",
+    "ctx": "voici-site/call.js:114"
   },
   "Call again": {
     "en": "Call again",
-    "ctx": "voici-site/call.js:84"
+    "ctx": "voici-site/call.js:123"
   },
   "Ringing…": {
     "en": "Ringing…",
-    "ctx": "voici-site/call.js:108"
+    "ctx": "voici-site/call.js:150"
   },
   "Connecting…": {
     "en": "Connecting…",
-    "ctx": "voici-site/call.js:109"
+    "ctx": "voici-site/call.js:151"
   },
   "Visitor {0}": {
     "en": "Visitor {0}",

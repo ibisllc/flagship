@@ -58,6 +58,36 @@ describe("flagship-web call protocol (test-vectors/voici-calls)", () => {
     expect(H(tx.seal(h(V.frames.cases[0].frame)))).toBe(V.frames.cases[0].sealed);
   });
 
+  it("video: SDP, media, keys, frames and buckets (voici-calls-v2.md §1)", () => {
+    const X = V.video;
+    expect(C.VOICI_CALL_VIDEO_BUCKETS).toEqual(X.buckets);
+    expect(C.mungeVoiciCallSdp(X.sdp.offerRaw)).toBe(X.sdp.offer);
+    expect(C.mungeVoiciCallSdp(X.sdp.answerRaw)).toBe(X.sdp.answer);
+    for (const c of X.sdp.checks) expect(C.checkVoiciCallSdp(c.sdp, c.media), c.name).toBe(c.expected);
+    expect(dec(C.canonicalVoiciCallRequest(X.request.signed))).toBe(X.request.canonical);
+    expect(C.voiciCallRequestHash(X.request.signed)).toBe(X.request.hash);
+    expect(dec(C.canonicalVoiciCallAnswer(X.answer.signed))).toBe(X.answer.canonical);
+    for (const c of X.answer.checks) {
+      const r = C.checkVoiciCallAnswer(c.answer, { request: c.request, ownerSignPub: V.keys.ownerSignPub, now: V.now });
+      expect(r.ok ? "ok" : r.code, c.name).toBe(c.expected);
+    }
+    const rb = C.canonicalVoiciCallRequest(X.request.signed);
+    const ab = C.canonicalVoiciCallAnswer(X.answer.signed);
+    const vk = C.deriveVoiciCallVideoFrameKeys(h(X.keys.sharedSecret), rb, ab);
+    expect([H(vk.c2p), H(vk.p2c)]).toEqual([X.keys.c2p, X.keys.p2c]);
+    for (const c of X.frames.cases) {
+      const sealed = C.sealVoiciCallVideoFrameWithKey(h(c.key), callId, c.dir, c.ctr, h(c.frame));
+      expect([H(sealed), C.voiciCallVideoClearLen(h(c.frame))]).toEqual([c.sealed, c.clearLen]);
+      expect(H(C.openVoiciCallVideoFrameWithKey(h(c.key), callId, c.dir, sealed)!.frame)).toBe(c.frame);
+    }
+    for (const c of X.frames.refusals) expect(C.openVoiciCallVideoFrameWithKey(h(c.key), callId, c.dir, h(c.sealed)), c.name).toBeNull();
+    const r = new C.VoiciCallFrameReceiver(vk.c2p, callId, "c2p", "video");
+    for (const s of X.frames.receiver) {
+      const got = r.open(h(s.sealed));
+      expect(got ? H(got) : null).toBe(s.frame);
+    }
+  });
+
   it("page index v2 (the webapp port, copied here)", () => {
     expect(dec(P.canonicalVoiciPageIndex(V.pageV2.signed))).toBe(V.pageV2.canonical);
     expect(P.signVoiciPageIndex(V.pageV2.body, h("33".repeat(32)))).toEqual(V.pageV2.signed);

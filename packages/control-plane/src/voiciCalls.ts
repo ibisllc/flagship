@@ -37,6 +37,7 @@ import {
   VOICI_CALL_RECEIPT_TTL_MS,
   VOICI_CALL_RING_MS,
   VOICI_CALL_SKEW_MS,
+  VOICI_CALL_CAMERA_STATES,
   type VoiciCallAnswer,
   type VoiciCallEnd,
   type VoiciCallRequest,
@@ -311,6 +312,12 @@ export class VoiciCallRoomCore {
       if (s.phase !== "answered") return [];
       if (peer.role === "caller") return [{ kind: "send", to: { deviceRef: s.winner! }, msg: { t: "ice", candidate: c } }];
       return peer.deviceRef === s.winner ? [{ kind: "send", to: "caller", msg: { t: "ice", candidate: c } }] : [];
+    }
+    if (msg.t === "camera") {
+      // What a side's camera is doing (voici-calls-v2.md §1.4): UI only, relayed between the caller and the winner.
+      if (s.phase !== "answered" || typeof msg.state !== "string" || !(VOICI_CALL_CAMERA_STATES as readonly string[]).includes(msg.state)) return [];
+      if (peer.role === "caller") return [{ kind: "send", to: { deviceRef: s.winner! }, msg: { t: "camera", state: msg.state } }];
+      return peer.deviceRef === s.winner ? [{ kind: "send", to: "caller", msg: { t: "camera", state: msg.state } }] : [];
     }
     if (msg.t === "end") {
       const e = checkVoiciCallEnd(msg.end, { callId: s.init.callId, callerPub: s.init.callerPub, ownerSignPub: s.init.ownerSignPub });

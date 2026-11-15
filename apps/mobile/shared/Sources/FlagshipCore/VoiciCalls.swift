@@ -55,6 +55,9 @@ public struct VoiciCallRequest: Equatable, Sendable {
     public var issuedAt: Int64
     public var delegatePub: String
     public var json: JSONValue
+    /// What the caller is able to send: "audio" or "audio,video" (voici-calls-v2.md §1.1; absent on the wire = audio).
+    public var media: String = "audio"
+    public var hasVideo: Bool { media == VoiciCalls.mediaVideo }
 }
 
 public struct VoiciCallAnswerBody: Equatable, Sendable {
@@ -66,10 +69,12 @@ public struct VoiciCallAnswerBody: Equatable, Sendable {
     public var turnUser: String
     public var turnSecret: String
     public var issuedAt: Int64
+    /// What the answering device is able to send; nil = not on the wire (audio).
+    public var media: String?
     public init(callId: String, deviceRef: String, requestHash: String, xwingCiphertext: String, answerSdp: String,
-                turnUser: String, turnSecret: String, issuedAt: Int64) {
+                turnUser: String, turnSecret: String, issuedAt: Int64, media: String? = nil) {
         self.callId = callId; self.deviceRef = deviceRef; self.requestHash = requestHash; self.xwingCiphertext = xwingCiphertext
-        self.answerSdp = answerSdp; self.turnUser = turnUser; self.turnSecret = turnSecret; self.issuedAt = issuedAt
+        self.answerSdp = answerSdp; self.turnUser = turnUser; self.turnSecret = turnSecret; self.issuedAt = issuedAt; self.media = media
     }
 }
 
@@ -98,6 +103,13 @@ public enum VoiciCalls {
     public static let maxCtr: UInt64 = 1 << 32
     public static let endReasons: Set<String> = ["hangup", "cancel", "decline", "busy", "no-answer", "limit", "failed"]
     public static let missedReasons: Set<String> = ["no-answer", "busy", "cancel", "decline"]
+    public static let mediaAudio = "audio"
+    public static let mediaVideo = "audio,video"
+    public static let mediaValues: Set<String> = [mediaAudio, mediaVideo]
+    /// Sealed video frame sizes (voici-calls-v2.md §1.6): 1 KiB doubling to 1 MiB.
+    public static let videoBuckets: [Int] = (0..<11).map { 1024 << $0 }
+    public static let cameraStates: Set<String> = ["on", "off", "paused"]
+    static let videoExtmaps = ["urn:ietf:params:rtp-hdrext:sdes:mid", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"]
 
     static func isPageId(_ s: String) -> Bool { CanonicalJson.isLowerHex(s, bytes: 16) }
     static func isUsername(_ s: String) -> Bool {
@@ -138,11 +150,35 @@ public enum VoiciCalls {
     static func rtpmapPt(_ l: String) -> String { String(l.dropFirst("a=rtpmap:".count).split(separator: " ")[0]) }
 
     /// The SDP rules (§0.3); nil when the description is a call description, else the refusal.
-    public static func checkSdp(_ sdp: String) -> String? {
+    static func sections(_ ls: [String]) -> [(kind: String, lines: [String])] {
+        var out: [(kind: String, lines: [String])] = []
+        for l in ls {
+            if l.hasPrefix("m=") { out.append((String(l.dropFirst(2).split(separator: " ", omittingEmptySubsequences: false)[0]), [l])) }
+            else if !out.isEmpty { out[out.count - 1].lines.append(l) }
+        }
+        return out
+    }
+
+    static func isVp8Rtpmap(_ l: String) -> Bool {
+        let lw = l.lowercased()
+        guard lw.hasPrefix("a=rtpmap:"), lw.hasSuffix(" vp8/90000") else { return false }
+        let pt = lw.dropFirst("a=rtpmap:".count).dropLast(" vp8/90000".count)
+        return !pt.isEmpty && pt.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    static func isVideoExtmap(_ l: String) -> Bool { videoExtmaps.contains { l.hasSuffix(" " + $0) } }
+
+    public static func checkSdp(_ sdp: String, media: String = mediaAudio) -> String? {
         if sdp.utf8.count > maxSdpBytes { return "too-large" }
         let ls = lines(sdp)
-        let media = ls.filter { $0.hasPrefix("m=") }
-        if media.count != 1 || !media[0].hasPrefix("m=audio ") { return "not-audio-only" }
+        let secs = sections(ls)
+        if media == mediaVideo {
+            if secs.count != 2 || secs[0].kind != "audio" || secs[1].kind != "video" { return "bad-media" }
+            let v = secs[1].lines
+            let maps = v.filter { $0.hasPrefix("a=rtpmap:") }
+            if maps.count != 1 || !isVp8Rtpmap(maps[0]) { return "not-vp8" }
+            if v.contains(where: { $0.hasPrefix("a=extmap:") && !isVideoExtmap($0) }) { return "video-extension" }
+        } else if secs.count != 1 || secs[0].kind != "audio" { return "not-audio-only" }
         guard let rtpmap = ls.first(where: isOpusRtpmap) else { return "no-opus" }
         let pt = rtpmapPt(rtpmap)
         let fmtp = ls.first { $0.hasPrefix("a=fmtp:\(pt) ") }
@@ -180,16 +216,34 @@ public enum VoiciCalls {
         guard let rtpmap = ls.first(where: isOpusRtpmap) else { return sdp }
         let pt = rtpmapPt(rtpmap)
         let hasFmtp = ls.contains { $0.hasPrefix("a=fmtp:\(pt) ") }
+        let vpt = ls.first(where: isVp8Rtpmap).map(rtpmapPt)
+        let rtx = Set(ls.filter { $0.hasPrefix("a=ssrc-group:FID ") }.compactMap { l -> String? in
+            let f = l.split(separator: " ", omittingEmptySubsequences: false)
+            return f.count > 2 ? String(f[2]) : nil
+        })
         var out: [String] = []
         var inAudio = false
+        var inVideo = false
         for l in ls {
             if l.hasPrefix("m=") {
                 inAudio = l.hasPrefix("m=audio ")
-                if inAudio {
+                inVideo = l.hasPrefix("m=video ") && vpt != nil
+                if inAudio || inVideo {
                     let f = l.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
-                    out.append((Array(f.prefix(3)) + [pt]).joined(separator: " "))
+                    out.append((Array(f.prefix(3)) + [inAudio ? pt : vpt!]).joined(separator: " "))
                     continue
                 }
+            }
+            if inVideo {
+                if l.hasPrefix("a=extmap:") && !isVideoExtmap(l) { continue }
+                if l == "a=extmap-allow-mixed" || l.hasPrefix("a=ssrc-group:FID ") { continue }
+                if let p = ptAttribute(l), p != vpt { continue }
+                if l.hasPrefix("a=ssrc:") {
+                    let id = l.dropFirst("a=ssrc:".count).split(separator: " ", omittingEmptySubsequences: false)[0]
+                    if rtx.contains(String(id)) { continue }
+                }
+                out.append(l)
+                continue
             }
             if inAudio {
                 if (l.hasPrefix("a=extmap:") && !l.hasSuffix(" urn:ietf:params:rtp-hdrext:sdes:mid")) || l == "a=extmap-allow-mixed" { continue }
@@ -214,30 +268,40 @@ public enum VoiciCalls {
 
     // MARK: request
 
-    public static func canonicalRequest(pageId: String, conv: String, callId: String, callerXwingPub: String, offerSdp: String, issuedAt: Int64) throws -> [UInt8] {
+    /// `media` nil = not on the wire (audio); present, it is appended (voici-calls-v2.md §1.1).
+    public static func canonicalRequest(pageId: String, conv: String, callId: String, callerXwingPub: String, offerSdp: String, issuedAt: Int64,
+                                        media: String? = nil) throws -> [UInt8] {
         guard isPageId(pageId), CanonicalJson.isLowerHex(conv, bytes: 32), CanonicalJson.isLowerHex(callId, bytes: 16),
-              CanonicalJson.isLowerHex(callerXwingPub, bytes: PqHybrid.sealPublicKeyLen), CanonicalJson.isTime(issuedAt)
+              CanonicalJson.isLowerHex(callerXwingPub, bytes: PqHybrid.sealPublicKeyLen), CanonicalJson.isTime(issuedAt),
+              media.map(mediaValues.contains) ?? true
         else { throw CanonicalJsonError("\(tagRequest): bad field") }
-        return CanonicalJson.join([tagRequest, pageId, conv, callId, callerXwingPub, sdpHash(offerSdp), String(issuedAt)])
+        return CanonicalJson.join([tagRequest, pageId, conv, callId, callerXwingPub, sdpHash(offerSdp), String(issuedAt)] + (media.map { [$0] } ?? []))
     }
 
     static let requestKeys: Set<String> = ["v", "kind", "pageId", "conv", "callId", "from", "callerXwingPub", "offerSdp", "issuedAt", "cred", "sig"]
 
-    static func requestFields(_ v: JSONValue?) -> (pageId: String, conv: String, callId: String, from: String, xpub: String, sdp: String, at: Int64, sig: String, cred: [String: JSONValue])? {
-        guard let r = v?.object, Set(r.keys) == requestKeys, r["v"]?.isOne == true, r["kind"]?.string == "voici-call-request",
+    static func requestFields(_ v: JSONValue?) -> (pageId: String, conv: String, callId: String, from: String, xpub: String, sdp: String, at: Int64, sig: String, cred: [String: JSONValue], media: String?)? {
+        guard let r = v?.object, Set(r.keys) == requestKeys || Set(r.keys) == requestKeys.union(["media"]),
+              r["v"]?.isOne == true, r["kind"]?.string == "voici-call-request",
               CanonicalJson.isLowerHex(r["sig"], bytes: 64), let cred = r["cred"]?.object, CanonicalJson.isLowerHex(r["from"], bytes: 32),
               let pageId = r["pageId"]?.string, let conv = r["conv"]?.string, let callId = r["callId"]?.string,
-              let xpub = r["callerXwingPub"]?.string, let sdp = r["offerSdp"]?.string, let at = r["issuedAt"]?.time,
-              (try? canonicalRequest(pageId: pageId, conv: conv, callId: callId, callerXwingPub: xpub, offerSdp: sdp, issuedAt: at)) != nil
+              let xpub = r["callerXwingPub"]?.string, let sdp = r["offerSdp"]?.string, let at = r["issuedAt"]?.time
         else { return nil }
-        return (pageId, conv, callId, r["from"]!.string!, xpub, sdp, at, r["sig"]!.string!, cred)
+        var media: String?
+        if let m = r["media"] { guard let ms = m.string else { return nil }; media = ms }
+        guard (try? canonicalRequest(pageId: pageId, conv: conv, callId: callId, callerXwingPub: xpub, offerSdp: sdp, issuedAt: at, media: media)) != nil
+        else { return nil }
+        return (pageId, conv, callId, r["from"]!.string!, xpub, sdp, at, r["sig"]!.string!, cred, media)
+    }
+
+    /// The canonical bytes of a wire request (the frame keys' transcript), nil when it doesn't parse.
+    public static func requestBytes(_ request: JSONValue) -> [UInt8]? {
+        guard let f = requestFields(request) else { return nil }
+        return try? canonicalRequest(pageId: f.pageId, conv: f.conv, callId: f.callId, callerXwingPub: f.xpub, offerSdp: f.sdp, issuedAt: f.at, media: f.media)
     }
 
     public static func requestHash(_ request: JSONValue) -> String? {
-        guard let f = requestFields(request),
-              let b = try? canonicalRequest(pageId: f.pageId, conv: f.conv, callId: f.callId, callerXwingPub: f.xpub, offerSdp: f.sdp, issuedAt: f.at)
-        else { return nil }
-        return CanonicalJson.sha256Hex(b)
+        requestBytes(request).map(CanonicalJson.sha256Hex)
     }
 
     /// The request checks, cheapest first (§6): size, shape, page, calls on, blocked, revoked, rate limits, attestation,
@@ -271,14 +335,14 @@ public enum VoiciCalls {
               let tsBytes = try? VoiciMessages.canonicalVoiciThreadStatement(ts), CanonicalJson.ed25519VerifyHex(threadSig, tsBytes, f.from)
         else { return .refused(.badThread) }
         guard let conv = try? VoiciMessages.voiciConv(pageId: ctx.pageId, pseudonymPub: f.from), conv == f.conv else { return .refused(.wrongConv) }
-        if checkSdp(f.sdp) != nil { return .refused(.badSdp) }
+        if checkSdp(f.sdp, media: f.media ?? mediaAudio) != nil { return .refused(.badSdp) }
         guard let xpub = try? CanonicalJson.hexToBytes(f.xpub), (try? PqHybrid.parseHybridSealPublicKey(xpub)) != nil else { return .refused(.badKey) }
-        guard let bytes = try? canonicalRequest(pageId: f.pageId, conv: f.conv, callId: f.callId, callerXwingPub: f.xpub, offerSdp: f.sdp, issuedAt: f.at),
+        guard let bytes = try? canonicalRequest(pageId: f.pageId, conv: f.conv, callId: f.callId, callerXwingPub: f.xpub, offerSdp: f.sdp, issuedAt: f.at, media: f.media),
               CanonicalJson.p256VerifyP1363(f.sig, bytes, del.delegatePub) else { return .refused(.badSignature) }
         if !ctx.skipFresh && abs(f.at - ctx.now) > skewMs { return .refused(.stale) }
         if let allowed = ctx.allowed, !allowed(raw) { return .refused(.notAllowed) }
         return .ok(VoiciCallRequest(pageId: f.pageId, conv: f.conv, callId: f.callId, from: f.from, callerXwingPub: f.xpub,
-                                    offerSdp: f.sdp, issuedAt: f.at, delegatePub: del.delegatePub, json: raw))
+                                    offerSdp: f.sdp, issuedAt: f.at, delegatePub: del.delegatePub, json: raw, media: f.media ?? mediaAudio))
     }
 
     // MARK: per-call keys
@@ -304,6 +368,12 @@ public enum VoiciCalls {
     public static func frameKeys(sharedSecret: [UInt8], requestBytes: [UInt8], answerBytes: [UInt8]) -> (c2p: [UInt8], p2c: [UInt8]) {
         let th = CanonicalJson.sha256(requestBytes + answerBytes)
         return (hkdf(sharedSecret, salt: th, info: "\(tagFrame)|c2p"), hkdf(sharedSecret, salt: th, info: "\(tagFrame)|p2c"))
+    }
+
+    /// The video keys (voici-calls-v2.md §1.5): their own directional keys from the same secret.
+    public static func videoFrameKeys(sharedSecret: [UInt8], requestBytes: [UInt8], answerBytes: [UInt8]) -> (c2p: [UInt8], p2c: [UInt8]) {
+        let th = CanonicalJson.sha256(requestBytes + answerBytes)
+        return (hkdf(sharedSecret, salt: th, info: "\(tagFrame)|c2p|video"), hkdf(sharedSecret, salt: th, info: "\(tagFrame)|p2c|video"))
     }
 
     public static func nextFrameKey(_ k: [UInt8]) -> [UInt8] { hkdf(k, salt: [], info: "\(tagFrame)|next") }
@@ -338,34 +408,88 @@ public enum VoiciCalls {
         return (ctr, Array(pt[1..<(1 + len)]))
     }
 
+    // MARK: video frames (voici-calls-v2.md §1.5, §1.6)
+
+    /// The VP8 payload header that stays clear: 10 bytes on a key frame (bit 0 of byte 0 clear), else 3.
+    public static func videoClearLen(_ frame: [UInt8]) -> Int {
+        guard let b = frame.first else { return 0 }
+        return b & 1 == 0 ? 10 : 3
+    }
+
+    public static func videoBucket(_ n: Int) -> Int? { videoBuckets.first { $0 >= n } }
+
+    static let videoOverhead = 8 + 4 + 16
+    static func videoAad(_ callId: String, _ dir: VoiciCallDir, _ ctr: UInt64, _ clear: ArraySlice<UInt8>) -> [UInt8] {
+        Array("\(callId)|\(dir.rawValue)|video|\(ctr)|".utf8) + clear
+    }
+    static func be32(_ n: Int) -> [UInt8] { (0..<4).map { UInt8((n >> (8 * (3 - $0))) & 0xff) } }
+
+    public static func sealVideoFrame(key: [UInt8], callId: String, dir: VoiciCallDir, ctr: UInt64, frame: [UInt8]) throws -> [UInt8] {
+        guard ctr < maxCtr else { throw CanonicalJsonError("voici-call: counter") }
+        let c = videoClearLen(frame)
+        guard c > 0, frame.count >= c else { throw CanonicalJsonError("voici-call: video frame too short") }
+        let body = frame[c...]
+        guard let total = videoBucket(c + videoOverhead + body.count) else { throw CanonicalJsonError("voici-call: video frame too long") }
+        var pt = [UInt8](repeating: 0, count: total - c - 8 - 16)
+        pt.replaceSubrange(0..<4, with: be32(body.count))
+        pt.replaceSubrange(4..<(4 + body.count), with: body)
+        let box = try AES.GCM.seal(pt, using: SymmetricKey(data: key), nonce: AES.GCM.Nonce(data: nonce(dir, ctr)), authenticating: videoAad(callId, dir, ctr, frame[0..<c]))
+        return Array(frame[0..<c]) + be64(ctr) + Array(box.ciphertext) + Array(box.tag)
+    }
+
+    static func videoCtr(_ sealed: [UInt8]) -> UInt64? {
+        guard videoBuckets.contains(sealed.count) else { return nil }
+        let c = videoClearLen(sealed)
+        guard c > 0, sealed.count >= c + videoOverhead else { return nil }
+        return sealed[c..<(c + 8)].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+    }
+
+    public static func openVideoFrame(key: [UInt8], callId: String, dir: VoiciCallDir, sealed: [UInt8]) -> (ctr: UInt64, frame: [UInt8])? {
+        guard let ctr = videoCtr(sealed), ctr < maxCtr else { return nil }
+        let c = videoClearLen(sealed)
+        let tagAt = sealed.count - 16
+        guard let box = try? AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: nonce(dir, ctr)), ciphertext: sealed[(c + 8)..<tagAt], tag: sealed[tagAt...]),
+              let ptData = try? AES.GCM.open(box, using: SymmetricKey(data: key), authenticating: videoAad(callId, dir, ctr, sealed[0..<c])) else { return nil }
+        let pt = Array(ptData)
+        let len = pt[0..<4].reduce(0) { ($0 << 8) | Int($1) }
+        guard len <= pt.count - 4, pt[(4 + len)...].allSatisfy({ $0 == 0 }) else { return nil }
+        return (ctr, Array(sealed[0..<c]) + pt[4..<(4 + len)])
+    }
+
     // MARK: answer
 
     public static func canonicalAnswer(_ a: VoiciCallAnswerBody) throws -> [UInt8] {
         guard CanonicalJson.isLowerHex(a.callId, bytes: 16), CanonicalJson.isLowerHex(a.deviceRef, bytes: 32),
               CanonicalJson.isLowerHex(a.requestHash, bytes: 32), CanonicalJson.isLowerHex(a.xwingCiphertext, bytes: PqHybrid.sealEncLen),
-              CanonicalJson.isLowerHex(a.turnUser, bytes: 16), CanonicalJson.isLowerHex(a.turnSecret, bytes: 32), CanonicalJson.isTime(a.issuedAt)
+              CanonicalJson.isLowerHex(a.turnUser, bytes: 16), CanonicalJson.isLowerHex(a.turnSecret, bytes: 32), CanonicalJson.isTime(a.issuedAt),
+              a.media.map(mediaValues.contains) ?? true
         else { throw CanonicalJsonError("\(tagAnswer): bad field") }
         return CanonicalJson.join([tagAnswer, a.callId, a.deviceRef, a.requestHash, a.xwingCiphertext, sdpHash(a.answerSdp), a.turnUser,
-                                   CanonicalJson.sha256Hex(a.turnSecret), String(a.issuedAt)])
+                                   CanonicalJson.sha256Hex(a.turnSecret), String(a.issuedAt)] + (a.media.map { [$0] } ?? []))
     }
 
     /// The wire answer, signed by the page's owner messages signing key.
     public static func signAnswer(_ a: VoiciCallAnswerBody, ownerSignSeed: [UInt8]) throws -> JSONValue {
         let sig = try CanonicalJson.ed25519SignHex(try canonicalAnswer(a), seed: ownerSignSeed)
-        return .object(["v": .number(1), "kind": .string("voici-call-answer"), "callId": .string(a.callId), "deviceRef": .string(a.deviceRef),
+        var o: [String: JSONValue] = ["v": .number(1), "kind": .string("voici-call-answer"), "callId": .string(a.callId), "deviceRef": .string(a.deviceRef),
                         "requestHash": .string(a.requestHash), "xwingCiphertext": .string(a.xwingCiphertext), "answerSdp": .string(a.answerSdp),
-                        "turnUser": .string(a.turnUser), "turnSecret": .string(a.turnSecret), "issuedAt": .number(Double(a.issuedAt)), "sig": .string(sig)])
+                        "turnUser": .string(a.turnUser), "turnSecret": .string(a.turnSecret), "issuedAt": .number(Double(a.issuedAt)), "sig": .string(sig)]
+        if let m = a.media { o["media"] = .string(m) }
+        return .object(o)
     }
 
     static let answerKeys: Set<String> = ["v", "kind", "callId", "deviceRef", "requestHash", "xwingCiphertext", "answerSdp", "turnUser", "turnSecret", "issuedAt", "sig"]
 
     public static func parseAnswer(_ v: JSONValue?) -> (body: VoiciCallAnswerBody, sig: String)? {
-        guard let r = v?.object, Set(r.keys) == answerKeys, r["v"]?.isOne == true, r["kind"]?.string == "voici-call-answer",
+        guard let r = v?.object, Set(r.keys) == answerKeys || Set(r.keys) == answerKeys.union(["media"]),
+              r["v"]?.isOne == true, r["kind"]?.string == "voici-call-answer",
               let sig = r["sig"]?.string, CanonicalJson.isLowerHex(sig, bytes: 64),
               let callId = r["callId"]?.string, let dref = r["deviceRef"]?.string, let rh = r["requestHash"]?.string,
               let ct = r["xwingCiphertext"]?.string, let sdp = r["answerSdp"]?.string, let tu = r["turnUser"]?.string,
               let ts = r["turnSecret"]?.string, let at = r["issuedAt"]?.time else { return nil }
-        let b = VoiciCallAnswerBody(callId: callId, deviceRef: dref, requestHash: rh, xwingCiphertext: ct, answerSdp: sdp, turnUser: tu, turnSecret: ts, issuedAt: at)
+        var media: String?
+        if let m = r["media"] { guard let ms = m.string else { return nil }; media = ms }
+        let b = VoiciCallAnswerBody(callId: callId, deviceRef: dref, requestHash: rh, xwingCiphertext: ct, answerSdp: sdp, turnUser: tu, turnSecret: ts, issuedAt: at, media: media)
         return (try? canonicalAnswer(b)) != nil ? (b, sig) : nil
     }
 
@@ -373,7 +497,9 @@ public enum VoiciCalls {
         guard let (a, sig) = parseAnswer(v), let bytes = try? canonicalAnswer(a), let rf = requestFields(request) else { return .refused(.malformed) }
         if a.callId != rf.callId { return .refused(.wrongCall) }
         if a.requestHash != requestHash(request) { return .refused(.wrongRequest) }
-        if checkSdp(a.answerSdp) != nil { return .refused(.badSdp) }
+        let reqMedia = rf.media ?? mediaAudio
+        if a.media == mediaVideo && reqMedia != mediaVideo { return .refused(.badSdp) }
+        if checkSdp(a.answerSdp, media: reqMedia) != nil { return .refused(.badSdp) }
         if !CanonicalJson.ed25519VerifyHex(sig, bytes, ownerSignPub) { return .refused(.badSignature) }
         if let now, abs(a.issuedAt - now) > skewMs { return .refused(.stale) }
         return .ok(a)
@@ -482,9 +608,11 @@ public final class VoiciCallFrameSender {
     private var key: [UInt8]
     private let callId: String
     private let dir: VoiciCallDir
+    private let video: Bool
 
-    public init(baseKey: [UInt8], callId: String, dir: VoiciCallDir) {
-        self.key = baseKey; self.callId = callId; self.dir = dir
+    /// `video`: the video frame layer (voici-calls-v2.md §1.5) on its own counters, else audio.
+    public init(baseKey: [UInt8], callId: String, dir: VoiciCallDir, video: Bool = false) {
+        self.key = baseKey; self.callId = callId; self.dir = dir; self.video = video
     }
 
     public func seal(_ frame: [UInt8]) throws -> [UInt8] {
@@ -495,7 +623,8 @@ public final class VoiciCallFrameSender {
             key = next
             epoch += 1
         }
-        let out = try VoiciCalls.sealFrame(key: key, callId: callId, dir: dir, ctr: ctr, frame: frame)
+        let out = video ? try VoiciCalls.sealVideoFrame(key: key, callId: callId, dir: dir, ctr: ctr, frame: frame)
+                        : try VoiciCalls.sealFrame(key: key, callId: callId, dir: dir, ctr: ctr, frame: frame)
         ctr += 1
         return out
     }
@@ -509,15 +638,16 @@ public final class VoiciCallFrameReceiver {
     private var top: UInt64 = 0
     private let callId: String
     private let dir: VoiciCallDir
+    private let video: Bool
 
-    public init(baseKey: [UInt8], callId: String, dir: VoiciCallDir) {
-        self.keys = [0: baseKey]; self.callId = callId; self.dir = dir
+    public init(baseKey: [UInt8], callId: String, dir: VoiciCallDir, video: Bool = false) {
+        self.keys = [0: baseKey]; self.callId = callId; self.dir = dir; self.video = video
     }
 
     public func open(_ sealed: [UInt8]) -> [UInt8]? {
-        guard sealed.count == VoiciCalls.sealedFrame else { return nil }
-        let ctr = sealed[0..<8].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
-        guard ctr < VoiciCalls.maxCtr, Int64(ctr) <= highest + Int64(VoiciCalls.maxGapFrames) else { return nil }
+        let peeked: UInt64? = video ? VoiciCalls.videoCtr(sealed)
+            : (sealed.count == VoiciCalls.sealedFrame ? sealed[0..<8].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) } : nil)
+        guard let ctr = peeked, ctr < VoiciCalls.maxCtr, Int64(ctr) <= highest + Int64(VoiciCalls.maxGapFrames) else { return nil }
         if Int64(ctr) <= highest - Int64(VoiciCalls.replayWindow) || seen.contains(ctr) { return nil }
         let e = VoiciCalls.epoch(ctr)
         if e + 1 < top { return nil }
@@ -528,7 +658,10 @@ public final class VoiciCallFrameReceiver {
             for _ in top..<e { cur = VoiciCalls.nextFrameKey(cur); pending.append(cur) }
             k = cur
         }
-        guard let key = k, let opened = VoiciCalls.openFrame(key: key, callId: callId, dir: dir, sealed: sealed) else {
+        let opened = k.flatMap { key in
+            video ? VoiciCalls.openVideoFrame(key: key, callId: callId, dir: dir, sealed: sealed) : VoiciCalls.openFrame(key: key, callId: callId, dir: dir, sealed: sealed)
+        }
+        guard let opened else {
             for i in pending.indices { PqBin.zero(&pending[i]) }
             return nil
         }

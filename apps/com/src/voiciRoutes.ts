@@ -452,8 +452,9 @@ export function voiciSiteHeaders(env: VoiciEnv): [string, string][] {
     ["referrer-policy", "no-referrer"],
     ["strict-transport-security", "max-age=63072000; includeSubDomains"],
     ["cross-origin-opener-policy", "same-origin"],
-    // Calls (docs/voici-calls.md §7) need the microphone on voi.ci itself; asked for only on the Call tap.
-    ["permissions-policy", `camera=(), microphone=${env.VOICI_CALLS === "on" ? "(self)" : "()"}, geolocation=()`],
+    // Calls (docs/voici-calls.md §7) need the microphone on voi.ci itself, asked for only on the Call tap; video
+    // (voici-calls-v2.md §1.4) the camera, asked for only on the Camera tap.
+    ["permissions-policy", `camera=${env.VOICI_CALLS === "on" ? "(self)" : "()"}, microphone=${env.VOICI_CALLS === "on" ? "(self)" : "()"}, geolocation=()`],
   ];
 }
 
