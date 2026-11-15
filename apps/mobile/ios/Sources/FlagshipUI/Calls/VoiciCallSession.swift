@@ -85,7 +85,7 @@ final class VoiciCallSession {
         media.onLocalIce = { [weak self] c in Task { @MainActor in self?.send(["t": "ice", "candidate": c.map { .string($0) } ?? .null]) } }
         media.onConnected = { [weak self] in Task { @MainActor in self?.onEvent(.connected) } }
         media.onFailed = { [weak self] in Task { @MainActor in self?.end("failed") } }
-        let t = URLSession.shared.webSocketTask(with: req)
+        let t = VoiciCallNetwork.session.webSocketTask(with: req)
         task = t
         t.resume()
         receive()
