@@ -21,6 +21,10 @@ export const APPLIANCE_FACTORY_KEY = "flagship-appliance-factory-key-public-repl
 export const APPLIANCE_SEED_MAGIC = "FLSHSD01";
 export const APPLIANCE_SEED_HEADER_BYTES = 80;
 export const APPLIANCE_SEED_SIZE_BYTES = 8 * 1024 * 1024;
+/** A retail image's marker and the claim's files (server-daemon retailClaim/wipe.ts, daemon.ts retailPaths). */
+export const RETAIL_MARKER = "/etc/flagship/retail-image.json";
+export const RETAIL_CLAIMED_RECIPE = "/var/lib/flagship-retail/claimed-recipe.json";
+export const RETAIL_FIRST_BOOT_DONE = "/var/lib/flagship-retail/first-boot-done";
 
 export interface ApplianceSeedPayload {
   version: 1;
@@ -89,7 +93,18 @@ trap 'rc=$?; echo "[appliance] specialization failed line=$LINENO rc=$rc"; repor
 echo "[appliance] specialization start"
 [ -f /etc/flagship/appliance-ready ] || { echo "[appliance] generalized base readiness marker missing"; exit 1; }
 echo "[appliance] generalized base verified"
-
+# A retail box (retailImage.ts) has no seed disk: its recipe came over the claim, and the seed is
+# made from it on the box with the release's own engine (server-daemon retailClaim/firstBoot.ts).
+RETAIL=0
+if [ -f ${RETAIL_MARKER} ]; then RETAIL=1; fi
+mkdir -p /run/flagship-appliance /var/flagship
+if [ "$RETAIL" = 1 ]; then
+    [ -s ${RETAIL_CLAIMED_RECIPE} ] || { echo "[appliance] retail box with no claimed recipe"; exit 1; }
+    /usr/local/bin/node /opt/flagship/packages/server-daemon/dist/retailClaim/seedCli.js \\
+        ${RETAIL_CLAIMED_RECIPE} /opt/flagship/packages/flagship-builder/engine/preseed-engine.js \\
+        > /run/flagship-appliance/seed.json
+    echo "[appliance] retail seed made from the claimed recipe"
+else
 SEED_DEV=""
 for _dev in /dev/vd? /dev/sd? /dev/nvme*n1; do
     [ -b "$_dev" ] || continue
@@ -106,9 +121,9 @@ BODY_SHA="$(dd if="$SEED_DEV" bs=1 skip=16 count=64 status=none)"
 BODY_LEN=$((16#$LEN_HEX))
 [ "$BODY_LEN" -gt 0 ] && [ "$BODY_LEN" -le $(( ${APPLIANCE_SEED_SIZE_BYTES} - ${APPLIANCE_SEED_HEADER_BYTES} )) ] || { echo "[appliance] seed length out of range"; exit 1; }
 
-mkdir -p /run/flagship-appliance /var/flagship
 dd if="$SEED_DEV" of=/run/flagship-appliance/seed.json bs=1 skip=${APPLIANCE_SEED_HEADER_BYTES} count="$BODY_LEN" status=none
 echo "$BODY_SHA  /run/flagship-appliance/seed.json" | sha256sum -c -
+fi
 jq -e '.version == 1 and (.recipeBase64 | type == "string") and (.bootstrapBase64 | type == "string") and (.recipeSha256 | test("^[0-9a-f]{64}$"))' \
     /run/flagship-appliance/seed.json >/dev/null
 jq -r .recipeBase64 /run/flagship-appliance/seed.json | base64 -d > /var/flagship/install-blob.json
@@ -157,7 +172,7 @@ stage "Setting up this server's identity and disk key"
 # "|| rc=$?" keeps the ERR trap from firing, so the failure below is reported
 # with the bootstrap's own line instead of just "line 78".
 BOOTSTRAP_RC=0
-FLAGSHIP_APPLIANCE_PREINSTALLED=1 /usr/local/sbin/flagship-bootstrap.sh || BOOTSTRAP_RC=$?
+FLAGSHIP_APPLIANCE_PREINSTALLED=1 FLAGSHIP_BOX_KEY_IN_KEYD="$RETAIL" /usr/local/sbin/flagship-bootstrap.sh || BOOTSTRAP_RC=$?
 if [ "$BOOTSTRAP_RC" -ne 0 ]; then
     tail -n 25 /var/log/flagship-bootstrap.log 2>/dev/null | sed "s/^/[appliance] bootstrap log: /" || true
     SAFE_BOOTSTRAP_ERROR="$(grep -E '^\\[flagship-bootstrap\\] (FATAL|ERROR|WARN(ING)?):' /var/log/flagship-bootstrap.log 2>/dev/null | tail -n1 | tr -cd '[:print:]' | cut -c1-240 || true)"
@@ -187,10 +202,17 @@ sed -i -E 's|^(flagship_root[[:space:]]+[^[:space:]]+)[[:space:]]+[^[:space:]]+|
 rm -f /etc/cryptsetup-initramfs/conf-hook
 update-initramfs -u
 date > /var/flagship/appliance-specialized.flag
+if [ "$RETAIL" = 1 ]; then date > ${RETAIL_FIRST_BOOT_DONE}; fi
 sync
-echo "[appliance] specialization complete; powering off for sealed boot"
 report installed "Restarting into the sealed disk"
-systemctl poweroff
+# A VM powers off so its host restarts it sealed; a retail box has nobody to press the button.
+if [ "$RETAIL" = 1 ]; then
+    echo "[appliance] specialization complete; restarting for sealed boot"
+    systemctl reboot
+else
+    echo "[appliance] specialization complete; powering off for sealed boot"
+    systemctl poweroff
+fi
 `;
 }
 

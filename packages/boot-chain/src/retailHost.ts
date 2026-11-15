@@ -82,12 +82,19 @@ export const RETAIL_BLUEZ_CALLS: ReadonlyArray<readonly [iface: string, member: 
 ];
 
 export const RETAIL_DBUS_POLICY_PATH = "/etc/dbus-1/system.d/flagship-retail-claim.conf";
+/** Written out in full (one allow per RETAIL_BLUEZ_CALLS entry; a test keeps them equal). */
 export const RETAIL_DBUS_POLICY = `<!-- Flagship retail claim service: only the BlueZ calls it makes (boot-chain retailHost.ts). -->
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig>
-  <policy user="${RETAIL_CLAIM_USER}">
-${RETAIL_BLUEZ_CALLS.map(([i, m]) => `    <allow send_destination="org.bluez" send_interface="${i}" send_member="${m}"/>`).join("\n")}
+  <policy user="flagship">
+    <allow send_destination="org.bluez" send_interface="org.freedesktop.DBus.ObjectManager" send_member="GetManagedObjects"/>
+    <allow send_destination="org.bluez" send_interface="org.freedesktop.DBus.Properties" send_member="Set"/>
+    <allow send_destination="org.bluez" send_interface="org.bluez.GattManager1" send_member="RegisterApplication"/>
+    <allow send_destination="org.bluez" send_interface="org.bluez.GattManager1" send_member="UnregisterApplication"/>
+    <allow send_destination="org.bluez" send_interface="org.bluez.LEAdvertisingManager1" send_member="RegisterAdvertisement"/>
+    <allow send_destination="org.bluez" send_interface="org.bluez.LEAdvertisingManager1" send_member="UnregisterAdvertisement"/>
+    <allow send_destination="org.bluez" send_interface="org.bluez.Device1" send_member="Disconnect"/>
   </policy>
 </busconfig>
 `;
@@ -100,15 +107,15 @@ ${RETAIL_BLUEZ_CALLS.map(([i, m]) => `    <allow send_destination="org.bluez" se
  */
 export const RETAIL_POWER_KEY_UDEV_RULE_PATH = "/etc/udev/rules.d/70-flagship-power-key.rules";
 export const RETAIL_POWER_KEY_UDEV_RULE = `# Flagship retail box: the claim service reads the power button and no other input device.
-SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Power Button", GROUP="${RETAIL_POWER_KEY_GROUP}", MODE="0640"
-SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="pwr_button", GROUP="${RETAIL_POWER_KEY_GROUP}", MODE="0640"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Power Button", GROUP="flagship-powerkey", MODE="0640"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="pwr_button", GROUP="flagship-powerkey", MODE="0640"
 `;
 
 /** The daemon joins the power key group for its own process only (not in /etc/group). */
 export const RETAIL_DAEMON_DROP_IN_PATH = "/etc/systemd/system/flagship-daemon.service.d/50-retail-claim.conf";
 export const RETAIL_DAEMON_DROP_IN = `# Flagship retail box: read the power button (boot-chain retailHost.ts). No bluetooth or input group.
 [Service]
-SupplementaryGroups=${RETAIL_POWER_KEY_GROUP}
+SupplementaryGroups=flagship-powerkey
 `;
 
 export const RETAIL_HOST_FILES: readonly RetailHostFile[] = [

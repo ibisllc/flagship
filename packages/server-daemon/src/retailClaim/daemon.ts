@@ -38,6 +38,8 @@ export function retailPaths(dir = RETAIL_STATE_DIR) {
     code: join(dir, "setup-code.json"),
     release: join(dir, "box-release.json"),
     recipe: join(dir, "claimed-recipe.json"),
+    /** Written by the specializer once the claimed recipe's first boot finished (appliance.ts). */
+    firstBootDone: join(dir, "first-boot-done"),
   };
 }
 
