@@ -47,6 +47,8 @@ import type {
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
 import type { CaIssuer } from "./pubkeyCert.js";
+import { dropVoiciCallKeysOfRevokedDevices } from "./voiciCallKeyCleanup.js";
+import type { VoiciCallStorage } from "@flagship/storage";
 import {
   conflict,
   forbidden,
@@ -71,6 +73,8 @@ export interface DeviceCapabilityGrantsDeps {
    * master. The doorbell's digest reads the list without it, so its stamp stays stable.
    */
   ca?: CaIssuer;
+  /** voi.ci calls: a revoked device's call-key binding is dropped (dropVoiciCallKeysOfRevokedDevices). */
+  callKeys?: Pick<VoiciCallStorage, "deleteCallKeyForDevice">;
   now?: () => number;
 }
 
@@ -322,6 +326,7 @@ export async function handleRevokeDeviceGrant(
   }
 
   await deps.storage.revoke(r.grantId, now);
+  await dropVoiciCallKeysOfRevokedDevices({ grants: deps.storage, callKeys: deps.callKeys }, usernameNorm, [existing.deviceId]);
   return ok({ ok: true, grantId: r.grantId, revokedAt: now });
 }
 

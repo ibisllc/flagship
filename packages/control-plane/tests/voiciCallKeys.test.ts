@@ -12,6 +12,7 @@ import {
   ed,
   hexToBytes,
   signDeviceCapabilityGrant,
+  signRevokeDeviceCapabilityGrant,
   signVoiciCallEndOwnerWithCallKey,
   signVoiciCallJoin,
   signVoiciCallKeyBinding,
@@ -19,7 +20,7 @@ import {
   signVoiciCallKeyRevokeSelf,
   type DeviceCapabilityGrant,
 } from "@flagship/protocol";
-import { authorizeVoiciCallKeyDevice, handleVoiciCallKeyRevoke, VoiciCallRoomCore, type VoiciCallRoomInit } from "../src/index.js";
+import { authorizeVoiciCallKeyDevice, dropVoiciCallKeysOfRevokedDevices, handleRevokeDeviceGrant, handleVoiciCallKeyRevoke, VoiciCallRoomCore, type VoiciCallRoomInit } from "../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,9 +33,9 @@ const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const adminRoot = new Uint8Array(32).fill(51);
 const devicePriv = new Uint8Array(32).fill(52);
 
-async function world(o: { admin?: boolean } = {}) {
+async function world(o: { admin?: boolean; irkPubHex?: string } = {}) {
   const s = Object.assign(new InMemoryStorage(), { voiciCalls: new InMemoryVoiciCallStorage() });
-  await s.usernames.put({ username: USER, irkPubHex: "11".repeat(32), aidPubHex: "22".repeat(32), claimedAt: 1, adminRootPubHex: hex(ed.getPublicKey(adminRoot)) });
+  await s.usernames.put({ username: USER, irkPubHex: o.irkPubHex ?? "11".repeat(32), aidPubHex: "22".repeat(32), claimedAt: 1, adminRootPubHex: hex(ed.getPublicKey(adminRoot)) });
   if (o.admin !== false) {
     const grant: DeviceCapabilityGrant = { grantId: "g-1", username: USER, deviceId: C.deviceId, devicePubKey: ed.getPublicKey(devicePriv), scopes: ["admin"], issuedAt: NOW - 1000, expiresAt: NOW + 10_000_000 };
     await s.deviceCapabilityGrants.put({
@@ -138,5 +139,38 @@ describe("the room with a call-key device", () => {
     expect(room.message({ role: "device", deviceRef: K.deviceRef }, { t: "answer", answer: C.answer.signed }, NOW)).toEqual([
       { kind: "send", to: { deviceRef: K.deviceRef }, msg: { t: "error", code: "wrong-device" } },
     ]);
+  });
+});
+
+describe("a revoked device grant drops the call-key binding (release-manager call, 2026-11-15)", () => {
+  const irk = new Uint8Array(32).fill(53);
+
+  it("revoking the device's grant through /device-grants/revoke deletes its binding", async () => {
+    const w = await world({ irkPubHex: hex(ed.getPublicKey(irk)) });
+    const request = { grantId: "g-1", username: USER, reason: "lost" as const, issuedAt: NOW };
+    const signature = hex(signRevokeDeviceCapabilityGrant(request, { privateKey: irk, publicKey: ed.getPublicKey(irk) }));
+    const r = await handleRevokeDeviceGrant({ storage: w.s.deviceCapabilityGrants, identities: w.s.deviceIdentities, usernames: w.s.usernames, callKeys: w.s.voiciCalls, now: () => NOW }, { request, signature });
+    expect(r.status).toBe(200);
+    expect(await w.s.voiciCalls.getCallKey(USER, C.deviceId)).toBeNull();
+    // The device can no longer join a call with it either.
+    expect(await authorizeVoiciCallKeyDevice(w.deps, USER, callId, joinAt())).toBeNull();
+  });
+
+  it("without the call-key dep nothing changes; a refused revocation keeps the binding", async () => {
+    const w = await world({ irkPubHex: hex(ed.getPublicKey(irk)) });
+    const request = { grantId: "g-1", username: USER, reason: "lost" as const, issuedAt: NOW };
+    const forged = hex(signRevokeDeviceCapabilityGrant(request, { privateKey: new Uint8Array(32).fill(7), publicKey: ed.getPublicKey(new Uint8Array(32).fill(7)) }));
+    const refused = await handleRevokeDeviceGrant({ storage: w.s.deviceCapabilityGrants, identities: w.s.deviceIdentities, usernames: w.s.usernames, callKeys: w.s.voiciCalls, now: () => NOW }, { request, signature: forged });
+    expect(refused.status).toBe(403);
+    expect(await w.s.voiciCalls.getCallKey(USER, C.deviceId)).not.toBeNull();
+  });
+
+  it("keeps the binding of a device that still holds another active grant (a graceful re-pair re-signs it)", async () => {
+    const w = await world();
+    await dropVoiciCallKeysOfRevokedDevices({ grants: w.s.deviceCapabilityGrants, callKeys: w.s.voiciCalls }, USER, [C.deviceId]);
+    expect(await w.s.voiciCalls.getCallKey(USER, C.deviceId)).not.toBeNull();
+    await w.s.deviceCapabilityGrants.revoke("g-1", NOW);
+    await dropVoiciCallKeysOfRevokedDevices({ grants: w.s.deviceCapabilityGrants, callKeys: w.s.voiciCalls }, USER.toUpperCase(), [C.deviceId.toUpperCase()]);
+    expect(await w.s.voiciCalls.getCallKey(USER, C.deviceId)).toBeNull();
   });
 });

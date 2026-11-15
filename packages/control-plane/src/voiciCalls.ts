@@ -59,6 +59,7 @@ import { hexToBytes } from "./hex.js";
 import { adminDeviceIds, type InviteNoticeForward } from "./inviteNotice.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
 import { voiciRefusal } from "./voiciPages.js";
+export { dropVoiciCallKeysOfRevokedDevices } from "./voiciCallKeyCleanup.js";
 
 /** A page's rings per UTC day (D1 counter; the rate-limit buckets hold the per-hour and per-caller budgets). */
 export const VOICI_CALL_PAGE_DAILY_MAX = 100;

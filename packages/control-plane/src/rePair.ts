@@ -19,10 +19,12 @@ import type {
   PendingRePairStorage,
   PushTokenStorage,
   UsernameStorage,
+  VoiciCallStorage,
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
 import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
+import { dropVoiciCallKeysOfRevokedDevices } from "./voiciCallKeyCleanup.js";
 import { hexToBytes } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 import { computeDevicesEtag } from "./deviceDirectoryEtag.js";
@@ -228,6 +230,8 @@ export interface RePairDeps {
    * the rest of the cascade.
    */
   deviceCapabilityGrants?: DeviceCapabilityGrantStorage;
+  /** voi.ci calls: devices whose grants a strict re-pair revoked lose their call-key binding. */
+  voiciCallKeys?: Pick<VoiciCallStorage, "deleteCallKeyForDevice">;
   /**
    * Cloud-recovery escrow store. REQUIRED in production: it is how
    * `handleInitiateRePair` learns whether the account has a recovery
@@ -1474,6 +1478,7 @@ export async function handleCompleteRePair(
         await deps.deviceCapabilityGrants.revoke(g.grantId, now());
         wipedGrantIds.push(g.grantId);
       }
+      await dropVoiciCallKeysOfRevokedDevices({ grants: deps.deviceCapabilityGrants, callKeys: deps.voiciCallKeys }, username, active.map((g) => g.deviceId));
     } else if (wipePolicy === "graceful" && validatedPairs.length > 0) {
       // Two-step per pair: revoke the OLD first (so the storage
       // layer's duplicate-active guard for (username, deviceId)
