@@ -82,7 +82,11 @@ class PhoneTunnelClient(
     private val now: () -> Long = System::currentTimeMillis,
     private val onState: (PhoneTunnelState) -> Unit = {},
 ) {
-    private class Stream(val tls: TlsServerStream, val reader: HttpRequestReader = HttpRequestReader())
+    private class Stream(val tls: TlsServerStream, val reader: HttpRequestReader = HttpRequestReader()) {
+        /** Set by the first plaintext byte: null until then, else HTTP or a call's TURN stream (CallTurnGate). */
+        var route: CallTurnGate.Route? = null
+        var turn: CallTurnConnection? = null
+    }
 
     private val streams = ConcurrentHashMap<Int, Stream>()
     private val json = Json { ignoreUnknownKeys = true }
@@ -237,7 +241,26 @@ class PhoneTunnelClient(
         val t = TlsServerStream(
             engine,
             toNetwork = { b -> socket.send(TunnelFrames.encode(id, TunnelFrames.DATA, b).toByteString()) },
-            onPlain = { plain ->
+            onPlain = onPlain@{ plain ->
+                if (stream.route == null && plain.isNotEmpty()) {
+                    val (route, conn) = CallTurnGate.open(plain[0])
+                    stream.route = route
+                    stream.turn = conn
+                    if (route == CallTurnGate.Route.Close || (route == CallTurnGate.Route.Turn && conn == null)) {
+                        stream.tls.close()
+                        return@onPlain
+                    }
+                }
+                stream.turn?.let { turn ->
+                    val out = turn.onClientBytes(plain)
+                    if (out == null) {
+                        turn.close()
+                        stream.tls.close()
+                    } else {
+                        out.forEach { stream.tls.write(it) }
+                    }
+                    return@onPlain
+                }
                 val req = runCatching { stream.reader.push(plain) }.getOrElse {
                     stream.tls.close()
                     null
@@ -248,6 +271,7 @@ class PhoneTunnelClient(
                 }
             },
             onClosed = {
+                stream.turn?.close()
                 if (streams.remove(id) != null) socket.send(TunnelFrames.encode(id, TunnelFrames.CLOSE).toByteString())
             },
         )

@@ -179,9 +179,25 @@ final class PhoneTlsTerminator: @unchecked Sendable {
         }
         // A draft envelope may be 1 MiB (docs/voici-and-messages.md §5.2); the deliver handler applies each kind's cap.
         var reader = HttpRequestReader(maxBytes: VoiciMessages.draftMaxEnvelopeBytes + 16 * 1024)
+        var decided = false
         func read() {
             c.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [responder] data, _, done, err in
                 if let data, !data.isEmpty {
+                    // The first byte after TLS picks HTTP or a call's TURN stream (CallTurnGate, docs/voici-calls.md §4).
+                    if !decided, let first = data.first {
+                        decided = true
+                        let (route, conn) = CallTurnGate.shared.open(firstByte: first)
+                        switch route {
+                        case .http: break
+                        case .close:
+                            c.cancel()
+                            return
+                        case .turn:
+                            guard let conn else { c.cancel(); return }
+                            Self.pumpTurn(c, conn, first: data)
+                            return
+                        }
+                    }
                     do {
                         if let (head, body) = try reader.push(data) {
                             Task {
@@ -200,6 +216,23 @@ final class PhoneTlsTerminator: @unchecked Sendable {
         }
         c.start(queue: queue)
         read()
+    }
+
+    /// A call's TURN stream: every chunk to the responder, its answers back; the connection ends with either side.
+    private static func pumpTurn(_ c: NWConnection, _ conn: CallTurnConnection, first: Data) {
+        func feed(_ data: Data) -> Bool {
+            guard let out = conn.onClientBytes(data) else { return false }
+            for b in out { c.send(content: b, completion: .contentProcessed { _ in }) }
+            return true
+        }
+        guard feed(first) else { conn.close(); c.cancel(); return }
+        func next() {
+            c.receive(minimumIncompleteLength: 1, maximumLength: 16 * 1024) { data, _, done, err in
+                if let data, !data.isEmpty, !feed(data) { conn.close(); c.cancel(); return }
+                if done || err != nil { conn.close(); c.cancel() } else { next() }
+            }
+        }
+        next()
     }
 }
 
