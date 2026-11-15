@@ -602,7 +602,7 @@ unique is printed per box.
   as the LAN helper, the webapp as claimer and signer over native messaging, the console code by default, the press
   only on an isolated link, and air-gapped "site mode" as a later, D1-reopening build; questions Q-W1 to Q-W14).
 
-## 16. Retail image: built, and what waits for the hardware (2026-11-14)
+## 16. Retail image: built, and what waits for the hardware (2026-11-15)
 
 ### 16.1 Built (hardware-independent)
 
@@ -612,9 +612,23 @@ unique is printed per box.
   Test: two boxes written from one image get different keys, keep them across restarts, and a wiped box gets a new
   one (`packages/keyd/tests/reset.test.ts`).
 - **The retail layer** (`packages/flagship-builder/src/retailImage.ts`, `buildRetailImageLayerScript`), run in the
-  factory chroot after the appliance prepare step: installs `bluez`, the claim service's host files, keyd's unit,
-  masks the seed-disk specializer, writes the marker, and refuses to finish if any box key, owner file, claim state
-  or Bluetooth identity is on the image (`RETAIL_FORBIDDEN_PATHS`).
+  factory chroot after the appliance prepare step: installs `bluez`, the claim service's host files, keyd's unit, the
+  daemon's unit, the specializer's retail drop-in, writes the marker, and refuses to finish if any box key, owner
+  file, claim state or Bluetooth identity is on the image (`RETAIL_FORBIDDEN_PATHS`).
+- **The daemon on an unclaimed image.** The image's `flagship-daemon.service` reads `daemon.env` only if it exists
+  (`daemonUnit.ts`, `EnvironmentFile=-`). The daemon decides first thing, before installing any host component
+  (`index.ts`, `retailClaim/firstBoot.ts` `retailBootMode`): an unclaimed or locked box, or a claimed one whose
+  first boot has not finished, runs the claim service alone (so the 5-press reset works throughout). keyd holds the
+  claim key. With no owner yet the daemon runs as root (privd comes with the owner's first boot); it holds nothing.
+- **The retail first boot after a claim.** The appliance specializer is it (`appliance.ts`, `RETAIL=1`): its retail
+  drop-in runs it only once a claim left `/var/lib/flagship-retail/claimed-recipe.json`, before the daemon. It makes
+  the seed on the box from that recipe with the release's own preseed engine (`retailClaim/seedCli.js`, the bootstrap
+  every Studio and phone would make), runs the bootstrap with `FLAGSHIP_BOX_KEY_IN_KEYD=1`, re-keys the disk and
+  removes the factory key as on a VM, writes `first-boot-done` in the retail folder and restarts (a VM powers off).
+  In that mode the bootstrap writes no key file: it asks keyd for its public key (`install-helper.ts
+  keyd-public-key`), registers, uploads the sealed disk key and binds the boot key all through keyd, and stops if a
+  key file exists beside keyd's. Tests: `retailImage.test.ts` runs the bootstrap's identity block both ways,
+  `firstBoot.test.ts` makes a seed from a claimed recipe with the committed engine.
 - **Host files, least privilege** (`packages/boot-chain/src/retailHost.ts`, one definition for the image and the
   daemon's repair): `main.conf` (LE only, private address, generic name, `Experimental = true` for the scan
   response's service data, so bluetoothd's command line stays Debian's), the bluetoothd drop-in that forgets the
@@ -622,13 +636,17 @@ unique is printed per box.
   `bluez.ts` makes (a test keeps them equal), a udev rule that gives only the power button's event nodes to the
   `flagship-powerkey` group, and a daemon drop-in that joins that group for its process. The daemon is NOT added to
   `bluetooth` (any call on `org.bluez`, pairing agents included) or `input` (every keyboard).
-- **Parity row** `release-this-box`: iOS and Android present, webapp missing.
+- **Release this box on all three apps.** The webapp's server page has the card (admin devices; `lib/releaseThisBox.js`,
+  `views/release-this-box.js`, shared vectors). It signs classically (the webapp has no ML-DSA key), so a strict box
+  refuses it and the webapp says to use the phone.
 
 ### 16.2 Waits for the chosen hardware (Q1)
 
 - **Partition layout and recovery partition.** The marker's `dataLuksDevice` and `recoveryPartition` stay null, so a
   reset stops at the lock instead of guessing a device. Needs a layout that keeps the OS apart from the owner's
-  data volume, the factory image on a recovery partition, and the reimage path (§8.2, §13.3 item 10).
+  data volume, the factory image on a recovery partition, and the reimage path (§8.2, §13.3 item 10). Until then
+  only the first claim of a fresh image gets a first boot: after a wipe the factory key and a fresh OS are gone, so a
+  second claim leaves the box claimed with no first boot (it keeps running the claim service, and serves nothing).
 - **The physical power button.** The udev rule and `powerKey.ts` know the ACPI "Power Button" and the Pi 5's
   `pwr_button`. Each SKU must pass H1 to H3 (§10); a SKU that names its button differently adds the name to both.
   Firmware defaults (AC-loss power on, short press reported to the OS) are set per SKU.
@@ -638,11 +656,18 @@ unique is printed per box.
 
 ### 16.3 Still open, not hardware-bound
 
-- **The image starts keyd but not the daemon.** `flagship-daemon.service` is written by the bootstrap during
-  specialization, which a retail box never runs. To build: the daemon's unit on the image for an unclaimed box (no
-  `daemon.env`; the claim-only branch in `index.ts`), and the retail first boot after a claim. Run both once in a VM
-  with BlueZ's virtual controller.
-- **The retail first boot must keep keyd's identity.** The receipt named keyd's STK and the phone registered it at
-  `.com`; a bootstrap that writes a new key to `/var/flagship/identity` would be refused by `migrate`
-  ("exists and differs").
-- **Webapp "Release this box"** (parity row above).
+- **One run of the VM smoke test** (16.4) on a cloud machine; nothing of 16.1 has run in a VM yet.
+- **A claim end to end in a VM**: a phone stand-in claiming over the virtual controller, then the first boot through
+  registration at a gym `.com`. The VM test stops at the advert.
+
+### 16.4 The VM smoke test (`tools/retail-vm/`)
+
+For a cloud machine with KVM (Linux x86-64; `qemu-system-x86`, `qemu-utils`, `cloud-image-utils`, `curl`, `xz`,
+Node 24): from a checkout of the branch, `bash tools/retail-vm/run.sh [workdir]`. It builds the tree, boots Debian
+13's generic cloud image (the cloud kernel has no Bluetooth), gives the guest the tree on a raw tar disk, and the
+guest (`guest.sh`) applies the retail layer, starts two linked virtual controllers (`btvirt -l2` over `hci_vhci`),
+then checks: no box key on the image; keyd makes one at its first start and keeps it on restart; the daemon starts
+with no `daemon.env` and runs the claim service only; hci0 has an active advertising instance; a scan from hci1
+finds the claim service UUID. Verdict lines start `RETAIL-VM:` in `<workdir>/serial.log`; exit 0 on PASS. It does
+not install the signed box release (the guest gets the tree) and has no LUKS factory key, radio or button. First
+run, confirm that Debian ships `btvirt` in `bluez-test-tools`.
