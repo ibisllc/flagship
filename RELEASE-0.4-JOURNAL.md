@@ -495,6 +495,21 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `pqSignature` while any server is strict (uncompiled), webapp says to use the phone (shell **v215**). 72 targeted
   tests, i18n, parity 0 red. cloud-fixes must set WEB_BUILD 215 when it rebases.
 
+- 2026-11-15: **cloud-fixes merged** (`..eb2b4c5ae`, 15 commits): the 9 REAL items, plus all new org tags classified
+  with bespoke forgery tests AT-ENV-32..36 and a **second separator fix**: `orgLogEntryHash` and `orgKeyCommitment`
+  hashed unchecked fields joined by `|` (`.com` could shift a field and keep the chained hash); now strict formats.
+  WEB_BUILD/compat at 215 with a guard. 1134 targeted tests, parity 0 red.
+  **enterprise tranche 2 merged** (`..569632620`): one namespace for usernames and org names; AT-ENV-40..45 org
+  forgery tests; client rotations (`rotateOrgKey`) + offline auditor CLI `tools/org-audit/verify.ts`; org gossip on
+  the ring's CGK (keyd boxes take only the first version); org install path (`flagship/org-install-blob/v1`, box
+  config with orgId + genesis and a zero IRK nobody holds); Swift/Kotlin ports; iOS join screen + admin "codes match:
+  admit". Rebase conflict was only the generated preseed engine/goldens/bootstrap pin (retail + org both changed the
+  bootstrap): regenerated with `scripts/box-release-regen.mjs`, 112 installer tests green; 1255 targeted tests,
+  i18n, parity 0 red. Swift/Kotlin uncompiled. Open: LUKS re-key, Android join screen, iOS "Rotate keys" button,
+  keyd adopting a rotated CGK, pseudonyms for admins (needs the org directory key), org install timeline, box log
+  heads in the export. Owner Qs: webapp seat keys (design says view-and-collect only: kept), where admins see
+  pseudonyms. Housekeeping: killed two orphaned Kotlin daemons (one ran 28 h, ~8 cores).
+
 ## Resume point
 
 1. Merge agent branches as they report (calls-phone, restore-ui, enterprise-servers tranche 2, retail-image tranche 2, cloud-fixes). Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
