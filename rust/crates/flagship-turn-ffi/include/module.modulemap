@@ -1,0 +1,4 @@
+module FlagshipTurn {
+  header "flagship_turn.h"
+  export *
+}

@@ -105,3 +105,8 @@ apps/builder-linux/locale/
 store/out/
 store/captures/
 store/.capture-output/
+
+# voi.ci call media from .github/workflows/libwebrtc.yml (tools/libwebrtc/use-artifacts.sh): never committed, deleted after use.
+apps/mobile/android/vendor/webrtc/
+apps/mobile/ios/Vendor/WebRTC/
+tools/libwebrtc/.artifacts/

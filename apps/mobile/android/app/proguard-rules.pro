@@ -67,3 +67,10 @@
 # Rhino 1.9.1 (the on-device preseed engine) references java.beans in JavaToJSONConverters, a path the app never
 # takes; Android has no java.beans, so R8 must not stop the release build on it.
 -dontwarn java.beans.**
+
+# ── voi.ci call media (src/webrtc, tools/libwebrtc) ─────────────────
+# libwebrtc's native code finds its Java classes and methods by name (JNI), and so does flagship-turn-ffi's
+# TurnResponder natives.
+-keep class org.webrtc.** { *; }
+-dontwarn org.webrtc.**
+-keepclasseswithmembernames class com.flagshipserver.app.calls.TurnResponder { native <methods>; }
