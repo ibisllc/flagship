@@ -8,6 +8,10 @@ import {
   canonicalOrgSeatGrant,
   canonicalOrgSeatInvite,
   hybridSign,
+  canonicalOrgDirectoryWrite,
+  orgKemKeyPair,
+  sealOrgDirectoryEntry,
+  signOrgSeatKem,
   orgSeatRolesHash,
   orgSha256Hex,
   signOrgApproval,
@@ -21,6 +25,8 @@ import {
   handleOrgCeremonyApprove,
   handleOrgCeremonyOpen,
   handleOrgCreate,
+  handleOrgDirectoryGet,
+  handleOrgDirectoryPut,
   handleOrgFreeze,
   handleOrgInviteAccept,
   handleOrgInviteCreate,
@@ -29,6 +35,7 @@ import {
   handleOrgSeatGrant,
   type OrgDeps,
 } from "../src/orgs.js";
+import { handleOrgKeysGet } from "../src/orgServers.js";
 
 const V = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../protocol/test-vectors/org-authority/vectors.json"), "utf8"));
 const resolveRefs = (v: unknown): any => {
@@ -164,5 +171,52 @@ describe("Restore my access", () => {
     const o2 = canonicalOrgOverturn(other);
     const refused = await handleOrgCeremonyOpen(d, ORG, { order: new TextDecoder().decode(o2), payload: {}, approvals: [approve(key("X outsider"), o2, 1, now + 3)] });
     expect(refused.status).toBe(403);
+  });
+});
+
+describe("org directory and joining", () => {
+  it("records the KEM key a member sent with its accept once the grant lands (a member never has to open the org page)", async () => {
+    const now = chain.entries[1].record.issuedAt + 3_600_000;
+    const d = await created(now);
+    const roles: OrgSeatRole[] = [{ role: "member" }];
+    const sealedLabelHex = "aa".repeat(40);
+    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY };
+    expect((await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite), 1, now)], sealedLabelHex, offerHex: "0102" })).status).toBe(200);
+    const kem = orgKemKeyPair(new Uint8Array(32).fill(0x71));
+    const statement = { orgId: ORG, seatId: MM.seatId, kemKeyId: kem.kemKeyId, issuedAt: now };
+    const seatKem = { statement, kemPubHex: Buffer.from(kem.kemPub).toString("hex"), signature: signOrgSeatKem(statement, MM.secret) };
+    const accept = { orgId: ORG, seatId: MM.seatId, inviteSha256: orgSha256Hex(canonicalOrgSeatInvite(invite)), memberKeyId: MM.keyId, adminKeyId: "", issuedAt: now };
+    const signature = Buffer.from(hybridSign(MM.secret, "flagship/org-seat-accept/v1", canonicalOrgSeatAccept(accept))).toString("hex");
+    // A statement signed by another key is refused with the accept.
+    const forged = { ...seatKem, signature: signOrgSeatKem(statement, A.secret) };
+    expect((await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, seatKem: forged })).status).toBe(403);
+    expect((await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, seatKem })).status).toBe(200);
+    const deps2 = { ...d, servers: new InMemoryStorage().servers };
+    const before = (await handleOrgKeysGet(deps2, ORG)).body as { seatKems: unknown[] };
+    expect(before.seatKems).toHaveLength(0);
+    const grant = { orgId: ORG, seatId: MM.seatId, labelSha256: invite.labelSha256, memberKeyId: MM.keyId, adminKeyId: "", rolesHash: invite.rolesHash, oarVersion: 1, issuedAt: now, expiresAt: now + 300 * DAY };
+    expect((await handleOrgSeatGrant(d, ORG, { grant, roles, memberBinding: MM.binding, adminBinding: null, approvals: [approve(A, canonicalOrgSeatGrant(grant), 1, now)] })).status).toBe(200);
+    const after = (await handleOrgKeysGet(deps2, ORG)).body as { seatKems: Array<{ statement: { seatId: string; kemKeyId: string } }> };
+    expect(after.seatKems.map((k) => k.statement)).toEqual([expect.objectContaining({ seatId: MM.seatId, kemKeyId: kem.kemKeyId })]);
+  });
+
+  it("stores sealed directory entries under one org admin's approval and keeps the newest", async () => {
+    const now = chain.entries[1].record.issuedAt + 3_600_000;
+    const d = await created(now);
+    const entry = { seatId: MM.seatId, pendingId: "", pseudonym: "Ana", displayName: "", email: "", externalId: "", source: "manual", groups: [], updatedAt: now };
+    const seal = (pseudonym: string, issuedAt: number) =>
+      sealOrgDirectoryEntry({ orgId: ORG, entryId: "e1".repeat(16), keyVersion: 1, directoryKey: new Uint8Array(32).fill(9), entry: { ...entry, pseudonym, updatedAt: issuedAt }, issuedAt });
+    const s1 = seal("Ana", now);
+    expect((await handleOrgDirectoryPut(d, ORG, { entry: s1, approvals: [approve(MM, canonicalOrgDirectoryWrite(s1), 1, now)] })).status).toBe(403);
+    expect((await handleOrgDirectoryPut(d, ORG, { entry: s1, approvals: [approve(B, canonicalOrgDirectoryWrite({ ...s1, issuedAt: now + 1 }), 1, now)] })).status).toBe(403);
+    expect((await handleOrgDirectoryPut(d, ORG, { entry: s1, approvals: [approve(B, canonicalOrgDirectoryWrite(s1), 1, now)] })).status).toBe(200);
+    expect((await handleOrgDirectoryPut(d, ORG, { entry: s1, approvals: [approve(B, canonicalOrgDirectoryWrite(s1), 1, now)] })).status).toBe(409);
+    const s2 = seal("Ana P.", now + 1000);
+    expect((await handleOrgDirectoryPut(d, ORG, { entry: s2, approvals: [approve(C, canonicalOrgDirectoryWrite(s2), 1, now)] })).status).toBe(200);
+    const got = (await handleOrgDirectoryGet(d, ORG)).body as { entries: unknown[] };
+    expect(got.entries).toEqual([s2]);
+    // Nothing a name could be read from reaches storage: only the sealed bytes and the header.
+    const raw = JSON.stringify(await d.store.listObjects(ORG, "directory"));
+    expect(raw).not.toContain("Ana");
   });
 });

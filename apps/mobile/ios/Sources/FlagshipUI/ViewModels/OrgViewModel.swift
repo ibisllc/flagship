@@ -34,6 +34,10 @@ public final class OrgViewModel {
     /// Departed seats whose keys still need rotating, computed on this phone from what it verified.
     public private(set) var rotations: [OrgPendingRotation] = []
     private var plan: OrgRotationPlan?
+    /// Pseudonyms from the org directory (seat id → name), opened on this phone with the directory key.
+    public private(set) var names: [String: String] = [:]
+    private var directoryKeys: [Int64: [UInt8]] = [:]
+    private var directoryEntryIds: [String: String] = [:]
 
     private let client: OrgClient
     private let keys: OrgSeatKeys
@@ -86,6 +90,7 @@ public final class OrgViewModel {
             plan = seat.memberOnly == true ? nil : try? await client.rotationPlan(snapshot!, now: now())
             rotations = plan?.pending ?? []
             phase = .loaded
+            if seat.memberOnly != true { await loadNames(seat) }
         } catch {
             snapshot = nil
             phase = .failed(String(localized: "This organization's records didn't check out, so nothing is shown. Try again later."))
@@ -103,6 +108,12 @@ public final class OrgViewModel {
 
     public func myFreeze(_ seat: OrgSeatKeys.Seat) -> OrgVerifiedFreeze? {
         snapshot.flatMap { OrgAuthority.activeFreeze($0.book, seatId: seat.seatId, now: now()) }
+    }
+
+    /// What a screen calls a seat: "You", its pseudonym from the directory, or a placeholder until the directory opens.
+    public func name(_ seat: OrgSeatKeys.Seat, _ seatId: String) -> String {
+        if seatId == seat.seatId { return String(localized: "You") }
+        return names[seatId] ?? String(localized: "Name hidden (\(String(seatId.prefix(6))))")
     }
 
     /// Who must approve "Restore my access" under the bylaws, as admin rows.
@@ -279,6 +290,8 @@ public final class OrgViewModel {
                 "sealedLabelHex": OrgAuthority.hex([UInt8](sealedLabel)),
                 "offerHex": OrgAuthority.hex([UInt8](offer)),
             ])
+            // The admins' copy of the pseudonym, under the directory key (the link key's copy is the person's).
+            try? await recordName(seat, seatId: seatId, pseudonym: name)
             let k = linkKey.withUnsafeBytes { OrgAuthority.hex(Array($0)) }
             inviteLink = "\(Endpoints.controlBaseUrl.absoluteString)/org-join#o=\(seat.orgId)&s=\(seatId)&k=\(k)"
         } catch let e as OrgClientError where e.code == "org-seat-limit" {
@@ -300,7 +313,9 @@ public final class OrgViewModel {
         guard let s = snapshot else { return }
         busy = true; defer { busy = false }
         do {
-            try await publishSeatKem(seat, s)
+            var umk = try await self.umk(String(localized: "Rotate this organization's keys"))
+            defer { for i in umk.indices { umk[i] = 0 } }
+            try await publishSeatKem(seat, s, umk: umk)
             await load(seat)
             guard var p = plan else { throw OrgAuthorityError("malformed", "no plan") }
             for k in rotatable(r) {
@@ -313,14 +328,13 @@ public final class OrgViewModel {
             }
             message = String(localized: "Keys rotated.")
             await load(seat)
+            if rotatable(r).contains(where: { $0.kind == .directoryKey }) { await resealDirectory(seat) }
         } catch { failed(error) }
     }
 
     /// This seat's X-Wing key from the UMK, signed by the seat admin key (an org admin) or the member key.
-    private func publishSeatKem(_ seat: OrgSeatKeys.Seat, _ s: OrgSnapshot) async throws {
+    private func publishSeatKem(_ seat: OrgSeatKeys.Seat, _ s: OrgSnapshot, umk: [UInt8]) async throws {
         let t = now()
-        var umk = try await self.umk(String(localized: "Rotate this organization's keys"))
-        defer { for i in umk.indices { umk[i] = 0 } }
         let kp = try PqHybrid.hybridSealKeygen(seed: try OrgAuthority.seatKemSeed(umk: umk, orgId: seat.orgId))
         let kemKeyId = OrgAuthority.kemKeyIdHex(kp.publicKey)
         let msg = try OrgAuthority.canonicalSeatKem(orgId: seat.orgId, seatId: seat.seatId, kemKeyId: kemKeyId, issuedAt: t)
@@ -338,5 +352,66 @@ public final class OrgViewModel {
             "kemPubHex": OrgAuthority.hex(kp.publicKey),
             "signature": OrgAuthority.hex(sig),
         ])
+    }
+
+    // MARK: directory (docs/org-directory.md §2)
+
+    /// Opens the org directory with this admin's seat KEM key. The first admin to look makes the
+    /// directory key (sealed to every admin with a KEM key); an admin whose KEM key `.com` lacks
+    /// announces it first. Names stay on this phone; nothing here reaches `.com` unsealed.
+    func loadNames(_ seat: OrgSeatKeys.Seat) async {
+        guard let s = snapshot, s.state.current.admins.contains(where: { $0.seatId == seat.seatId && $0.kind == .admin }) else { return }
+        do {
+            var umk = try await self.umk(String(localized: "Show the names in this organization"))
+            defer { for i in umk.indices { umk[i] = 0 } }
+            let kp = try PqHybrid.hybridSealKeygen(seed: try OrgAuthority.seatKemSeed(umk: umk, orgId: seat.orgId))
+            if plan?.ctx.kems["seat:\(seat.seatId)"]?.kemKeyId != OrgAuthority.kemKeyIdHex(kp.publicKey) {
+                try await publishSeatKem(seat, s, umk: umk)
+                plan = try await client.rotationPlan(s, now: now())
+            }
+            guard var p = plan else { return }
+            if OrgDirectory.newestVersion(p) == nil {
+                var key = SymmetricKey(size: .bits256).withUnsafeBytes { Array($0) }
+                defer { for i in key.indices { key[i] = 0 } }
+                let b = try OrgRotation.rotate(p, kind: .directoryKey, scope: "*", issuedAt: now(), key: key) { order, _ in try approval(seat, order: order) }
+                try await client.postKeyRing(orgId: seat.orgId, b)
+                p = try await client.rotationPlan(s, now: now())
+                plan = p
+            }
+            directoryKeys = OrgDirectory.keys(p, seatId: seat.seatId, kemSecret: kp.secretKey)
+            let view = OrgDirectory.openAll(orgId: seat.orgId, try await client.directory(orgId: seat.orgId), keys: directoryKeys)
+            names = view.bySeat.mapValues { $0.entry.pseudonym }
+            directoryEntryIds = view.bySeat.mapValues { $0.entryId }
+        } catch {
+            names = [:]
+        }
+    }
+
+    /// Writes (or renames) one person's entry under the newest directory key.
+    func recordName(_ seat: OrgSeatKeys.Seat, seatId: String, pseudonym: String) async throws {
+        if directoryKeys.isEmpty { await loadNames(seat) }
+        guard let p = plan, let version = OrgDirectory.newestVersion(p), let key = directoryKeys[version] else { throw OrgAuthorityError("locked") }
+        let t = now()
+        let entry = OrgDirectoryEntry(seatId: seatId, pseudonym: pseudonym, updatedAt: t)
+        let sealed = try OrgDirectory.seal(orgId: seat.orgId, entryId: directoryEntryIds[seatId] ?? OrgAuthority.randomId(), keyVersion: version,
+                                           directoryKey: key, entry: entry, issuedAt: t)
+        try await client.putDirectory(orgId: seat.orgId, entry: sealed, approval: try approval(seat, order: try OrgDirectory.canonicalWrite(sealed)))
+        names[seatId] = pseudonym
+        directoryEntryIds[seatId] = sealed.entryId
+    }
+
+    /// After the directory key changes, every entry is sealed again under the new version, so a new
+    /// admin (who holds only the new key) reads the same names.
+    func resealDirectory(_ seat: OrgSeatKeys.Seat) async {
+        guard let p = plan, let version = OrgDirectory.newestVersion(p), let key = directoryKeys[version] else { return }
+        guard let all = try? await client.directory(orgId: seat.orgId) else { return }
+        let view = OrgDirectory.openAll(orgId: seat.orgId, all, keys: directoryKeys)
+        let stale = Set(all.filter { $0.keyVersion < version }.map(\.entryId))
+        for (_, e) in view.bySeat.merging(view.byPending, uniquingKeysWith: { a, _ in a }) where stale.contains(e.entryId) {
+            let t = now()
+            guard let sealed = try? OrgDirectory.seal(orgId: seat.orgId, entryId: e.entryId, keyVersion: version, directoryKey: key, entry: e.entry, issuedAt: t),
+                  let a = try? approval(seat, order: try OrgDirectory.canonicalWrite(sealed)) else { continue }
+            try? await client.putDirectory(orgId: seat.orgId, entry: sealed, approval: a)
+        }
     }
 }

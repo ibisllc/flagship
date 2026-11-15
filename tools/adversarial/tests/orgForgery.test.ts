@@ -11,6 +11,11 @@
  *   AT-ENV-44  org-audit-export/v1: log head swap, record hash swap, outsider
  *   AT-ENV-45  org-install-blob/v1: installer commit, registration URL or genesis changed after approval; the code's approval reused
  *   AT-ENV-46  org-box-log-head/v1: another STK, moved to another server or org, seq or head hash changed, separator refused
+ *   AT-ENV-47  org-directory-entry/v1: ciphertext or header changed, an entry moved to another id or key version,
+ *              a write approval reused for other bytes, a separator in any field, a replayed older entry
+ *   AT-ENV-48  org-connector/v1: scopes, box or key changed after approval, a box outside the org, a retired id reused
+ *   AT-ENV-49  org-proposal/v1: signed by another key, subject or kind moved, a sealed copy dropped or swapped,
+ *              roles changed, a scope the connector lacks, a paused connector; the decision form
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,6 +25,7 @@ import * as P from "../../../packages/protocol/src/index.js";
 const VECTORS = join(import.meta.dirname, "../../../packages/protocol/test-vectors");
 const A = JSON.parse(readFileSync(join(VECTORS, "org-authority/vectors.json"), "utf8"));
 const V = JSON.parse(readFileSync(join(VECTORS, "org-servers/vectors.json"), "utf8"));
+const D = JSON.parse(readFileSync(join(VECTORS, "org-directory/vectors.json"), "utf8"));
 const refs = (v: unknown): any => {
   if (Array.isArray(v)) return v.map(refs);
   if (!v || typeof v !== "object") return v;
@@ -216,5 +222,113 @@ describe("AT-ENV-46 org-box-log-head/v1 (a box's own signed log head)", () => {
     b.head.serverDomain = `${good.head.serverDomain}|1`;
     expect(() => P.canonicalOrgBoxLogHead(b.head)).toThrow(/malformed/);
     expect(() => P.orgBoxLogEntryHash(1, "00".repeat(32), "aa|bb")).toThrow(/malformed/);
+  });
+});
+
+describe("AT-ENV-47 org-directory-entry/v1 (sealed names under the directory key)", () => {
+  const good = D.entries[0];
+  const key = Uint8Array.from(Buffer.from(good.directoryKeyHex, "hex"));
+  const open = (s: P.OrgDirectorySealed) => () => P.openOrgDirectoryEntry(s, key);
+  it("AT-ENV-47a the sealed entry opens (control)", () => expect(open(clone(good.sealed))()).toEqual(good.entry));
+  it("AT-ENV-47b a changed ciphertext, nonce or tag is refused", () => {
+    for (const i of [0, 30, good.sealed.sealedHex.length - 1]) {
+      const s = clone(good.sealed);
+      s.sealedHex = s.sealedHex.slice(0, i) + (s.sealedHex[i] === "0" ? "1" : "0") + s.sealedHex.slice(i + 1);
+      expect(open(s)).toThrow(/malformed/);
+    }
+  });
+  it("AT-ENV-47c moving an entry to another id, org, key version or bucket is refused (catches: .com renaming a seat by swapping entries)", () => {
+    for (const patch of [{ entryId: D.entries[1].entryId }, { orgId: "ab".repeat(16) }, { keyVersion: 2 }, { sizeBucket: 512 }]) {
+      expect(open({ ...clone(good.sealed), ...patch })).toThrow(/malformed/);
+    }
+  });
+  it("AT-ENV-47d an approval of one write does not cover other bytes", () => {
+    const w1 = P.canonicalOrgDirectoryWrite(good.sealed);
+    const w2 = P.canonicalOrgDirectoryWrite(D.entries[1].sealed);
+    const w3 = P.canonicalOrgDirectoryWrite({ ...good.sealed, issuedAt: good.sealed.issuedAt + 1 });
+    expect(new Set([w1, w2, w3].map((b) => Buffer.from(b).toString("hex"))).size).toBe(3);
+  });
+  it("AT-ENV-47e no field can carry the separator: text travels encoded, ids and source are strict", () => {
+    const body = new TextDecoder().decode(P.canonicalOrgDirectoryEntryBody({ ...good.entry, pseudonym: "a|b|c", groups: ["x|y"] }));
+    expect(body.split("|")).toHaveLength(11);
+    expect(() => P.canonicalOrgDirectoryEntryBody({ ...good.entry, source: "manual|scim" })).toThrow(/malformed/);
+    expect(() => P.canonicalOrgDirectoryWrite({ ...good.sealed, entryId: `${good.sealed.entryId}|` })).toThrow(/malformed/);
+    for (const c of D.badBodies) expect(() => P.parseOrgDirectoryEntryBody(new TextEncoder().encode(c.body))).toThrow();
+  });
+  it("AT-ENV-47f a replayed older entry for the same seat does not win", () => {
+    const keys = new Map([[1, key]]);
+    const view = P.openOrgDirectory(D.orgId, [...D.newest.sealed].reverse(), keys);
+    expect(view.bySeat.get(D.newest.expect.seat)?.pseudonym).toBe(D.newest.expect.pseudonym);
+  });
+});
+
+describe("AT-ENV-48 org-connector/v1 (a directory connector's authority record)", () => {
+  const C = D.connectors;
+  const c = () => {
+    const state = P.verifyOrgAuthorityChain(entries, { genesisHash: A.genesisHash, now: C.now });
+    return { state, book: P.buildOrgSeatBook(state, { grants, revokes: [], now: C.now }), servers: new Set(["home.acme.flagship.services"]), now: C.now };
+  };
+  it("AT-ENV-48a the approved record verifies (control)", () => expect(() => P.verifyOrgConnector(c(), clone(C.connector), null)).not.toThrow());
+  it("AT-ENV-48b widening scopes, moving it to another box or swapping its key after approval is refused", () => {
+    for (const patch of [{ scopes: ["propose-invite", "propose-offboard", "update-entry"].slice(0, 1) }, { serverDomain: "other.acme.flagship.services" }, { mappingSha256: "00".repeat(32) }]) {
+      const b = clone(C.connector);
+      Object.assign(b.connector, patch);
+      expect(() => P.verifyOrgConnector({ ...c(), servers: new Set(["home.acme.flagship.services", "other.acme.flagship.services"]) }, b, null)).toThrow(P.OrgAuthorityError);
+    }
+    const k = clone(C.connector);
+    k.connectorPubHex = Buffer.from(P.hybridSigKeygen(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2)).publicKey).toString("hex");
+    expect(() => P.verifyOrgConnector(c(), k, null)).toThrow(/binding/);
+  });
+  it("AT-ENV-48c a retired connector id never comes back", () => {
+    const retired = { ...clone(C.connector).connector, status: "retired", issuedAt: C.connector.connector.issuedAt - 1 };
+    expect(() => P.verifyOrgConnector(c(), clone(C.connector), retired)).toThrow(/seat-revoked/);
+  });
+  it("AT-ENV-48d no field can carry the separator", () => {
+    expect(() => P.canonicalOrgConnector({ ...clone(C.connector).connector, serverDomain: "home|x" })).toThrow(/malformed/);
+    expect(() => P.canonicalOrgConnector({ ...clone(C.connector).connector, kind: "scim|ldap" })).toThrow(/malformed/);
+  });
+});
+
+describe("AT-ENV-49 org-proposal/v1 (a connector proposes; admins decide)", () => {
+  const C = D.connectors;
+  const [inv, off] = C.proposals;
+  const run = (b: unknown, rolesHash = off.rolesHash, conn = C.connector) => () => P.verifyOrgProposal(conn, b as never, { rolesHash, now: C.now });
+  it("AT-ENV-49a both proposals verify (control)", () => {
+    expect(run(clone(inv.bundle), inv.rolesHash)).not.toThrow();
+    expect(run(clone(off.bundle))).not.toThrow();
+  });
+  it("AT-ENV-49b moving it to another subject, kind or proposal id breaks the connector's signature", () => {
+    for (const patch of [{ subject: "ee".repeat(16) }, { proposalId: "ee".repeat(16) }, { issuedAt: off.bundle.proposal.issuedAt + 1 }]) {
+      const b = clone(off.bundle);
+      Object.assign(b.proposal, patch);
+      expect(run(b)).toThrow(/bad-signature/);
+    }
+    const k = clone(off.bundle);
+    k.proposal.kind = "entry-update";
+    expect(run(k)).toThrow(/bad-signature/);
+  });
+  it("AT-ENV-49c a sealed copy dropped, added or swapped is refused (catches: .com hiding a proposal from one admin)", () => {
+    const a = clone(off.bundle);
+    a.recipients = a.recipients.slice(1);
+    expect(run(a)).toThrow(/order-mismatch/);
+    const b = clone(off.bundle);
+    b.recipients[0].sealedHex = inv.bundle.recipients[0].sealedHex;
+    expect(run(b)).toThrow(/order-mismatch/);
+  });
+  it("AT-ENV-49d roles changed beside the statement, a scope the connector lacks, a paused connector: refused", () => {
+    expect(run(clone(inv.bundle), "ab".repeat(32))).toThrow(/order-mismatch/);
+    const narrow = clone(C.connector);
+    narrow.connector.scopes = ["update-entry"];
+    expect(run(clone(off.bundle), "", narrow)).toThrow(/scope/);
+    const paused = clone(C.connector);
+    paused.connector.status = "paused";
+    expect(run(clone(off.bundle), "", paused)).toThrow(/seat-revoked/);
+  });
+  it("AT-ENV-49e another key's signature is refused; the decision form is strict", () => {
+    const other = clone(C.connector);
+    other.connectorPubHex = Buffer.from(P.hybridSigKeygen(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2)).publicKey).toString("hex");
+    expect(run(clone(off.bundle), "", other)).toThrow(/bad-signature/);
+    expect(() => P.canonicalOrgProposalDecision({ ...C.decision.statement, refSha256: "00".repeat(32) })).toThrow(/malformed/);
+    expect(() => P.canonicalOrgProposalDecision({ ...C.decision.statement, decision: "done|x" })).toThrow(/malformed/);
   });
 });

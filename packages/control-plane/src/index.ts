@@ -121,4 +121,5 @@ export * from "./issuance/policy.js";
 export * from "./relayFeedSeal.js";
 export * from "./directAccess.js";
 export * from "./orgs.js";
+export * from "./orgConnectors.js";
 export * from "./orgServers.js";

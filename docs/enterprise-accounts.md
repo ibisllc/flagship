@@ -644,3 +644,16 @@ device or a real box.
 Still open from `0.4/enterprise-build`: passing org approvals at each box order call site, the org directory key,
 the webapp's org UI (it can only show an invitation), conversion of an existing account (§17), and a per-isolate cache
 of the verified chain on `.com` (each request re-verifies every ML-DSA signature).
+
+**Branch `0.4/org-directory` (2026-11-15).** Builds `docs/org-directory.md` (its "As built" has the detail):
+- **Org directory key and entries** (closes "Seat <id>"): sealed `flagship/org-directory-entry/v1` entries under the
+  `directory-key` ring, `.com` `/directory` routes (one org admin writes, newest per entry), the admins' pseudonym view on
+  iOS and Android (the webapp has no seat keys yet). Members see only the people they share with (owner, 2026-11-15);
+  member slices are not built yet.
+- **Connectors and proposals** (`flagship/org-connector/v1`, `flagship/org-proposal/v1`), executed only through the existing
+  approvals.
+- **Release-manager decisions built here:** a member seat announces its seat KEM key at join (it rides with the accept
+  and `.com` records it when the grant lands); D1 **0148** indexes `org_objects(kind, object_key)` for the server-code
+  serial lookup (in `KNOWN_MIGRATIONS`); Android has create, invite (pseudonym first, QR and share link) and freeze,
+  matching iOS.
+

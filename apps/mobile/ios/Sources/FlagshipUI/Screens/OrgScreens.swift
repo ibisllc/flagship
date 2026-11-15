@@ -197,9 +197,7 @@ public struct OrgDetailScreen: View {
         }
     }
 
-    private func label(_ seatId: String) -> String {
-        seatId == seat.seatId ? String(localized: "You") : String(localized: "Seat \(String(seatId.prefix(6)))")
-    }
+    private func label(_ seatId: String) -> String { vm.name(seat, seatId) }
 }
 
 /// Invite: the pseudonym comes first, then the role; only then is the QR and link made.

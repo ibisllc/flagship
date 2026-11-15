@@ -93,9 +93,11 @@ class OrgRotateViewModelTest {
         assertEquals(listOf(OrgKeyKind.ARCHIVE_KEYS to domain), pending.keys)
 
         vm.rotate(w.founder, pending)
-        assertEquals(1, w.seatKems.count { (it["statement"] as JsonObject)["seatId"] == JsonPrimitive(w.founderSeat) })
-        assertEquals(2, w.rings.size)
-        val v2 = OrgRotation.bundle(w.rings.last())
+        assertTrue(w.seatKems.any { (it["statement"] as JsonObject)["seatId"] == JsonPrimitive(w.founderSeat) })
+        // Opening the org page also made the directory key (docs/org-directory.md); count the backup keys' chain.
+        val archive = w.rings.filter { ((it["ring"] as JsonObject)["kind"] as JsonPrimitive).content == "archive-keys" }
+        assertEquals(2, archive.size)
+        val v2 = OrgRotation.bundle(archive.last())
         assertEquals(2L, v2.ring.version)
         assertEquals(listOf(x), v2.ring.retired)
         assertFalse(v2.recipients.any { it.recipient == "seat:$x" })
@@ -119,7 +121,7 @@ class OrgRotateViewModelTest {
         val vm = OrgViewModel(OrgClient(w.http), w.founderSeats, { umkFounder.copyOf() }, { w.now })
         vm.load(w.founder)
         vm.rotate(w.founder, vm.rotations.value.single())
-        assertFalse(OrgRotation.bundle(w.rings.last()).recipients.any { it.recipient == "seat:$stranger" })
+        assertFalse(w.rings.any { r -> OrgRotation.bundle(r).recipients.any { it.recipient == "seat:$stranger" } })
     }
 
     @Test fun aLockedSessionRotatesNothing() = runTest {
@@ -128,7 +130,7 @@ class OrgRotateViewModelTest {
         val vm = OrgViewModel(OrgClient(w.http), w.founderSeats, { umkFounder.copyOf() }, { w.now })
         vm.load(w.founder)
         vm.rotate(w.founder, vm.rotations.value.single())
-        assertEquals(1, w.rings.size)
+        assertEquals(1, w.rings.count { ((it["ring"] as JsonObject)["kind"] as JsonPrimitive).content == "archive-keys" })
         assertTrue(vm.message.value != null)
     }
 }

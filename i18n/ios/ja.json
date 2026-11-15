@@ -3745,5 +3745,7 @@
   "Disk key of %@": "%@ のディスクの鍵",
   "A disk key changes when its server is re-keyed, which isn't available yet.": "ディスクの鍵はサーバーの再暗号化で変わります。この機能はまだ使えません。",
   "Answer calls while Flagship is locked": "Flagship がロック中でも通話に応答",
-  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "このデバイスは通話への応答にしか使えない鍵を保持するので、ロック画面から応答できます。ロックを解除するまで、発信者は「voi.ci のユーザー」と表示されます。"
+  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "このデバイスは通話への応答にしか使えない鍵を保持するので、ロック画面から応答できます。ロックを解除するまで、発信者は「voi.ci のユーザー」と表示されます。",
+  "Name hidden (%@)": "名前は非表示 (%@)",
+  "Show the names in this organization": "この組織の名前を表示"
 }

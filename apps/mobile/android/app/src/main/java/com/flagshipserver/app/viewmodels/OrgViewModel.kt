@@ -11,6 +11,10 @@ import com.flagshipserver.app.core.OrgPendingJoin
 import com.flagshipserver.app.core.OrgSnapshot
 import com.flagshipserver.app.core.str
 import com.flagshipserver.app.core.memberKey
+import com.flagshipserver.app.core.genesis
+import com.flagshipserver.app.core.randomId
+import com.flagshipserver.app.core.pq.keys
+import com.flagshipserver.app.core.pq.newestVersion
 import com.flagshipserver.app.core.pq.OrgApproval
 import com.flagshipserver.app.core.pq.OrgAuthority
 import com.flagshipserver.app.core.pq.OrgAuthorityException
@@ -75,7 +79,217 @@ class OrgViewModel(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    private val _names = MutableStateFlow<Map<String, String>>(emptyMap())
+    /** Pseudonyms from the org directory (seat id → name), opened on this phone with the directory key. */
+    val names: StateFlow<Map<String, String>> = _names.asStateFlow()
+    private var directoryKeys: Map<Long, ByteArray> = emptyMap()
+    private var directoryEntryIds: Map<String, String> = emptyMap()
+    private val _inviteLink = MutableStateFlow<String?>(null)
+    /** The link of the last invitation made, shown as a QR and shared. */
+    val inviteLink: StateFlow<String?> = _inviteLink.asStateFlow()
+
     fun reloadSeats() { _seats.value = keys.seats() }
+
+    /** What a screen calls a seat: "You", its pseudonym from the directory, or a placeholder until the directory opens. */
+    fun name(seat: OrgSeatRecord, seatId: String): String = when {
+        seatId == seat.seatId -> FSStrings.get(R.string.org_you)
+        else -> _names.value[seatId] ?: FSStrings.get(R.string.org_name_hidden, seatId.take(6))
+    }
+
+    class AdminRow(val seatId: String, val kind: com.flagshipserver.app.core.pq.OrgAdminKind, val isFounder: Boolean, val isMe: Boolean, val frozenUntil: Long?)
+
+    fun admins(seat: OrgSeatRecord): List<AdminRow> {
+        val s = _snapshot.value ?: return emptyList()
+        val r = s.state.current
+        return r.admins.map { a ->
+            AdminRow(a.seatId, a.kind, a.seatId == r.founderSeatId, a.seatId == seat.seatId,
+                s.book.freezes.firstOrNull { it.seatId == a.seatId && it.issuedAt <= now() && now() < it.untilMs }?.untilMs)
+        }
+    }
+
+    /** Creates an org with this phone as its founder and only admin; more admins join by invite. */
+    suspend fun create(name: String): Boolean {
+        val n = name.trim().lowercase()
+        if (n.isEmpty()) return false
+        _busy.value = true
+        val orgId = OrgAuthority.randomId()
+        val seatId = OrgAuthority.randomId()
+        val t = now()
+        return try {
+            val (binding, secret) = keys.makeKey(orgId, seatId, t)
+            try {
+                val record = OrgAuthority.genesis(orgId, seatId, binding, t)
+                val keyId = OrgAuthority.keyIdHex(binding.ed25519PubHex, binding.mldsaPubHex)
+                val approval = OrgAuthority.signApproval(orgId, 0, OrgAuthority.canonicalAuthority(record), seatId, keyId, t, t + DAY) { p, m ->
+                    com.flagshipserver.app.core.pq.PqHybrid.hybridSign(secret, p, m)
+                }
+                client.create(n, com.flagshipserver.app.core.pq.OrgAuthorityEntry(record, "genesis", listOf(approval), null, null))
+                keys.remember(orgId, seatId, n, OrgAuthority.authorityHash(record), binding, secret)
+            } finally { secret.fill(0) }
+            reloadSeats()
+            true
+        } catch (e: OrgClientException) {
+            _message.value = if (e.code == "taken" || e.status == 409) FSStrings.get(R.string.org_name_taken) else FSStrings.get(R.string.org_create_failed)
+            false
+        } catch (e: Exception) {
+            _message.value = FSStrings.get(R.string.org_create_failed)
+            false
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    /** Freezes another admin for 72 hours (one admin may, at most once a week). */
+    suspend fun freeze(seat: OrgSeatRecord, target: String) {
+        val s = _snapshot.value ?: return
+        _busy.value = true
+        try {
+            val t = now()
+            val body = com.flagshipserver.app.core.pq.OrgSeatFreeze(seat.orgId, target, t + 72 * 3_600_000L, s.state.current.version, t)
+            val a = approval(seat, OrgAuthority.canonical(body))
+            client.freeze(seat.orgId, com.flagshipserver.app.core.pq.OrgSigned(body, listOf(a)))
+            _message.value = FSStrings.get(R.string.org_frozen_done)
+            load(seat)
+        } catch (e: OrgClientException) {
+            _message.value = if (e.code == "org-freeze-refused") FSStrings.get(R.string.org_freeze_refused) else FSStrings.get(R.string.org_try_again)
+        } catch (e: Exception) {
+            failed(e)
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    enum class InviteRole { MEMBER, SERVER_ADMIN, APP_ADMIN }
+
+    /**
+     * Makes an invitation. The pseudonym is required first: `.com` keeps only its digest and the copy
+     * sealed under the link key; the admins' copy goes into the org directory under the directory key.
+     */
+    suspend fun invite(seat: OrgSeatRecord, pseudonym: String, role: InviteRole, target: String) {
+        val name = pseudonym.trim()
+        if (name.isEmpty()) { _message.value = FSStrings.get(R.string.org_invite_name_needed); return }
+        val s = _snapshot.value ?: return
+        _busy.value = true
+        try {
+            val roles = when (role) {
+                InviteRole.MEMBER -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.Member)
+                InviteRole.SERVER_ADMIN -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.ServerAdmin(listOf(target.trim().lowercase())))
+                InviteRole.APP_ADMIN -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.ServiceAdmin(listOf(target.trim().lowercase())))
+            }
+            val seatId = OrgAuthority.randomId()
+            val t = now()
+            val linkKey = ByteArray(32).also(java.security.SecureRandom()::nextBytes)
+            val sealedLabel = gcmSeal(linkKey, name.toByteArray(Charsets.UTF_8))
+            val rolesJson = OrgJson.roles(roles)
+            val offer = gcmSeal(linkKey, buildJsonObject {
+                put("orgId", seat.orgId); put("orgName", seat.orgName); put("genesisHash", seat.genesisHash); put("seatId", seatId)
+                put("roles", rolesJson); put("pseudonym", name)
+            }.toString().toByteArray(Charsets.UTF_8))
+            val rolesHash = OrgAuthority.rolesHash(roles)
+            val labelSha = OrgAuthority.sha256Hex(sealedLabel)
+            val v = s.state.current.version
+            val expires = t + 7 * DAY
+            val order = OrgAuthority.canonicalSeatInvite(seat.orgId, seatId, labelSha, rolesHash, v, t, expires)
+            val a = approval(seat, order)
+            client.createInvite(seat.orgId, buildJsonObject {
+                put("invite", buildJsonObject {
+                    put("orgId", seat.orgId); put("seatId", seatId); put("labelSha256", labelSha); put("rolesHash", rolesHash)
+                    put("oarVersion", v); put("issuedAt", t); put("expiresAt", expires)
+                })
+                put("roles", rolesJson)
+                put("approvals", buildJsonArray { add(OrgJson.approval(a)) })
+                put("sealedLabelHex", com.flagshipserver.app.core.pq.PqHex.encode(sealedLabel))
+                put("offerHex", com.flagshipserver.app.core.pq.PqHex.encode(offer))
+            })
+            runCatching { recordName(seat, seatId, name) }
+            _inviteLink.value = "${com.flagshipserver.app.core.Endpoints.controlBaseUrl}/org-join#o=${seat.orgId}&s=$seatId&k=${com.flagshipserver.app.core.pq.PqHex.encode(linkKey)}"
+            linkKey.fill(0)
+        } catch (e: Exception) {
+            failed(e)
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    fun clearInvite() { _inviteLink.value = null }
+
+    private fun gcmSeal(key: ByteArray, plain: ByteArray): ByteArray {
+        val nonce = ByteArray(12).also(java.security.SecureRandom()::nextBytes)
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(javax.crypto.Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(key, "AES"), javax.crypto.spec.GCMParameterSpec(128, nonce))
+        return nonce + c.doFinal(plain)
+    }
+
+    // ── directory (docs/org-directory.md §2) ──
+
+    /**
+     * Opens the org directory with this admin's seat KEM key. The first admin to look makes the
+     * directory key (sealed to every admin with a KEM key); an admin whose KEM key `.com` lacks
+     * announces it first. Names stay on this phone; nothing reaches `.com` unsealed.
+     */
+    suspend fun loadNames(seat: OrgSeatRecord) {
+        val s = _snapshot.value ?: return
+        if (s.state.current.admins.none { it.seatId == seat.seatId && it.kind == com.flagshipserver.app.core.pq.OrgAdminKind.ADMIN }) return
+        try {
+            val seed = umk(FSStrings.get(R.string.org_show_names_reason))
+            val kp = try {
+                val kemSeed = com.flagshipserver.app.core.pq.OrgServers.seatKemSeed(seed, seat.orgId)
+                try { com.flagshipserver.app.core.pq.PqHybrid.hybridSealKeygen(kemSeed) } finally { kemSeed.fill(0) }
+            } finally { seed.fill(0) }
+            if (plan?.ctx?.kems?.get("seat:${seat.seatId}")?.kemKeyId != com.flagshipserver.app.core.pq.OrgServers.kemKeyIdHex(kp.publicKey)) {
+                publishSeatKem(seat, s)
+                plan = client.rotationPlan(s, now())
+            }
+            var p = plan ?: return
+            if (com.flagshipserver.app.core.pq.OrgDirectory.newestVersion(p) == null) {
+                val key = ByteArray(32).also(java.security.SecureRandom()::nextBytes)
+                val b = try {
+                    com.flagshipserver.app.core.pq.OrgRotation.rotate(p, com.flagshipserver.app.core.pq.OrgKeyKind.DIRECTORY_KEY, "*", now(), key) { order, _ -> approval(seat, order) }
+                } finally { key.fill(0) }
+                client.postKeyRing(seat.orgId, com.flagshipserver.app.core.pq.OrgRotation.bundleJson(b))
+                p = client.rotationPlan(s, now())
+                plan = p
+            }
+            directoryKeys = com.flagshipserver.app.core.pq.OrgDirectory.keys(p, seat.seatId, kp.secretKey)
+            val (bySeat, _) = com.flagshipserver.app.core.pq.OrgDirectory.openAll(seat.orgId, client.directory(seat.orgId), directoryKeys)
+            _names.value = bySeat.mapValues { it.value.entry.pseudonym }
+            directoryEntryIds = bySeat.mapValues { it.value.entryId }
+        } catch (e: Exception) {
+            _names.value = emptyMap()
+        }
+    }
+
+    /** Writes (or renames) one person's entry under the newest directory key. */
+    suspend fun recordName(seat: OrgSeatRecord, seatId: String, pseudonym: String) {
+        if (directoryKeys.isEmpty()) loadNames(seat)
+        val p = plan ?: throw OrgAuthorityException("locked")
+        val version = com.flagshipserver.app.core.pq.OrgDirectory.newestVersion(p) ?: throw OrgAuthorityException("locked")
+        val key = directoryKeys[version] ?: throw OrgAuthorityException("locked")
+        val t = now()
+        val sealed = com.flagshipserver.app.core.pq.OrgDirectory.seal(seat.orgId, directoryEntryIds[seatId] ?: OrgAuthority.randomId(), version, key,
+            com.flagshipserver.app.core.pq.OrgDirectoryEntry(seatId = seatId, pseudonym = pseudonym, updatedAt = t), t)
+        client.putDirectory(seat.orgId, sealed, approval(seat, com.flagshipserver.app.core.pq.OrgDirectory.canonicalWrite(sealed)))
+        _names.value = _names.value + (seatId to pseudonym)
+        directoryEntryIds = directoryEntryIds + (seatId to sealed.entryId)
+    }
+
+    /** After the directory key changes, every entry is sealed again under the new version. */
+    private suspend fun resealDirectory(seat: OrgSeatRecord) {
+        val p = plan ?: return
+        val version = com.flagshipserver.app.core.pq.OrgDirectory.newestVersion(p) ?: return
+        val key = directoryKeys[version] ?: return
+        val all = runCatching { client.directory(seat.orgId) }.getOrNull() ?: return
+        val (bySeat, byPending) = com.flagshipserver.app.core.pq.OrgDirectory.openAll(seat.orgId, all, directoryKeys)
+        val stale = all.filter { it.keyVersion < version }.map { it.entryId }.toSet()
+        for (e in bySeat.values + byPending.values) {
+            if (e.entryId !in stale) continue
+            runCatching {
+                val t = now()
+                val sealed = com.flagshipserver.app.core.pq.OrgDirectory.seal(seat.orgId, e.entryId, version, key, e.entry, t)
+                client.putDirectory(seat.orgId, sealed, approval(seat, com.flagshipserver.app.core.pq.OrgDirectory.canonicalWrite(sealed)))
+            }
+        }
+    }
 
     suspend fun load(seat: OrgSeatRecord) {
         _phase.value = Phase.Loading
@@ -85,6 +299,7 @@ class OrgViewModel(
             plan = if (seat.memberOnly) null else runCatching { client.rotationPlan(_snapshot.value!!, now()) }.getOrNull()
             _rotations.value = plan?.pending ?: emptyList()
             _phase.value = Phase.Loaded
+            if (!seat.memberOnly) loadNames(seat)
         } catch (e: Exception) {
             _snapshot.value = null
             _phase.value = Phase.Failed(FSStrings.get(R.string.org_records_bad))
@@ -210,6 +425,7 @@ class OrgViewModel(
             }
             _message.value = FSStrings.get(R.string.org_keys_rotated)
             load(seat)
+            if (rotatable(r).any { it.first == com.flagshipserver.app.core.pq.OrgKeyKind.DIRECTORY_KEY }) resealDirectory(seat)
         } catch (e: Exception) {
             failed(e)
         } finally {
@@ -245,6 +461,13 @@ class OrgViewModel(
     }
 
     companion object {
+        fun kindText(kind: com.flagshipserver.app.core.pq.OrgAdminKind, founder: Boolean): String = when {
+            founder -> FSStrings.get(R.string.org_kind_founder)
+            kind == com.flagshipserver.app.core.pq.OrgAdminKind.BOARD -> FSStrings.get(R.string.org_kind_board)
+            kind == com.flagshipserver.app.core.pq.OrgAdminKind.RECOVERY -> FSStrings.get(R.string.org_kind_recovery)
+            else -> FSStrings.get(R.string.org_kind_admin)
+        }
+
         fun keyText(kind: com.flagshipserver.app.core.pq.OrgKeyKind, scope: String): String = when (kind) {
             com.flagshipserver.app.core.pq.OrgKeyKind.CGK -> FSStrings.get(R.string.org_key_cgk)
             com.flagshipserver.app.core.pq.OrgKeyKind.DIRECTORY_KEY -> FSStrings.get(R.string.org_key_directory)

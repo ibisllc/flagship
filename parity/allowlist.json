@@ -860,6 +860,26 @@
       "check": "signed-tags",
       "key": "web:flagship/org-server-register/v1",
       "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-connector/v1",
+      "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-directory-entry/v1",
+      "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/org-proposal/v1",
+      "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:org-directory",
+      "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
     }
   ]
 }

@@ -3747,5 +3747,7 @@
   "Disk key of %@": "Clé du disque de %@",
   "A disk key changes when its server is re-keyed, which isn't available yet.": "Une clé de disque change quand son serveur est rechiffré, ce qui n'est pas encore disponible.",
   "Answer calls while Flagship is locked": "Répondre aux appels quand Flagship est verrouillé",
-  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "Cet appareil garde une clé qui ne sert qu'à répondre aux appels : vous pouvez ainsi répondre depuis l'écran verrouillé. L'appelant s'affiche comme « Quelqu'un sur voi.ci » jusqu'au déverrouillage."
+  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "Cet appareil garde une clé qui ne sert qu'à répondre aux appels : vous pouvez ainsi répondre depuis l'écran verrouillé. L'appelant s'affiche comme « Quelqu'un sur voi.ci » jusqu'au déverrouillage.",
+  "Name hidden (%@)": "Nom masqué (%@)",
+  "Show the names in this organization": "Afficher les noms de cette organisation"
 }

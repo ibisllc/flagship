@@ -33,6 +33,7 @@ final class OrgFakeCom: @unchecked Sendable {
     var accepts: [[String: Any]] = [], grants: [[String: Any]] = [], ceremonies: [[String: Any]] = []
     var revokes: [[String: Any]] = [], rings: [[String: Any]] = [], seatKems: [[String: Any]] = [], boxKems: [[String: Any]] = [], servers: [[String: Any]] = []
     var inviteExpired = false
+    var directory: [String: [String: Any]] = [:]
 
     init() throws {
         let t0 = now - 3_600_000
@@ -84,6 +85,16 @@ final class OrgFakeCom: @unchecked Sendable {
             rings.append(wire(body!)); return (200, [:])
         case ("POST", "\(base)/seat-kems"):
             seatKems.append(wire(body!)); return (200, [:])
+        case ("GET", "\(base)/directory"):
+            return (200, wire(["entries": Array(directory.values)]))
+        case ("POST", "\(base)/directory"):
+            let e = body!["entry"] as! [String: Any]
+            directory[e["entryId"] as! String] = wire(e); return (200, [:])
+        case ("POST", "\(base)/invites"):
+            let inv = body!["invite"] as! [String: Any]
+            invites[inv["seatId"] as! String] = wire(["invite": inv, "roles": body!["roles"]!])
+            offers[inv["seatId"] as! String] = body!["offerHex"] as? String
+            return (200, [:])
         case ("GET", "\(base)/ceremonies"):
             return (200, wire(["ceremonies": ceremonies]))
         case ("POST", "\(base)/seats"):
@@ -143,6 +154,44 @@ final class OrgJoinViewModelTests: XCTestCase {
         let snap = try await com.client.snapshot(orgId: com.orgId, genesisHash: com.genesisHash, now: com.now)
         XCTAssertNotNil(snap.book.seats[seat])
         XCTAssertTrue(a.pendingJoins.isEmpty)
+    }
+
+    func testTheAcceptCarriesTheSeatsKemKeySignedByItsMemberKey() async throws {
+        let com = try OrgFakeCom()
+        let seat = OrgAuthority.randomId()
+        let key = try com.invite(seatId: seat, roles: [.member])
+        let vm = joiner(com, seat: seat, key: key)
+        await vm.load(); await vm.accept()
+        let a = admin(com)
+        await a.load(com.founder)
+        await a.admit(com.founder, try XCTUnwrap(a.pendingJoins.first))
+        let k = try XCTUnwrap(com.accepts.first?["seatKem"] as? [String: Any])
+        let snap = try await com.client.snapshot(orgId: com.orgId, genesisHash: com.genesisHash, now: com.now)
+        let v = try OrgRotation.verifySeatKem(snap.state, snap.book, statement: k["statement"] as! [String: Any], kemPubHex: k["kemPubHex"] as! String,
+                                              signatureHex: k["signature"] as! String, now: com.now)
+        let expected = try PqHybrid.hybridSealKeygen(seed: try OrgAuthority.seatKemSeed(umk: umk, orgId: com.orgId))
+        XCTAssertEqual(v.kemKeyId, OrgAuthority.kemKeyIdHex(expected.publicKey))
+    }
+
+    func testAdminsSeeThePseudonymTheInviterChoseAndComSeesNoName() async throws {
+        let com = try OrgFakeCom()
+        let a = admin(com)
+        await a.load(com.founder)
+        await a.invite(com.founder, pseudonym: "Ana Pérez", role: .member, target: "")
+        let link = try XCTUnwrap(a.inviteLink)
+        let frag = try XCTUnwrap(link.split(separator: "#").last)
+        let parts = Dictionary(uniqueKeysWithValues: frag.split(separator: "&").map { p in (String(p.split(separator: "=")[0]), String(p.split(separator: "=")[1])) })
+        let seat = try XCTUnwrap(parts["s"])
+        let vm = joiner(com, seat: seat, key: try XCTUnwrap(parts["k"]))
+        await vm.load(); await vm.accept()
+        let b = admin(com)
+        await b.load(com.founder)
+        XCTAssertEqual(b.pendingJoins.first?.seatId, seat)
+        XCTAssertEqual(b.name(com.founder, seat), "Ana Pérez")
+        XCTAssertEqual(b.name(com.founder, com.founderSeat), String(localized: "You"))
+        let stored = String(decoding: try JSONSerialization.data(withJSONObject: Array(com.directory.values)), as: UTF8.self)
+        XCTAssertFalse(stored.contains("Ana"))
+        XCTAssertEqual(com.directory.count, 1)
     }
 
     func testAnAdminRoleKeepsAnAdminKeyOnThisPhone() async throws {
@@ -272,8 +321,10 @@ final class OrgRotateViewModelTests: XCTestCase {
         XCTAssertEqual(pending.seatId, x)
         XCTAssertEqual(pending.keys, [.init(kind: .archiveKeys, scope: domain)])
         await vm.rotate(com.founder, pending)
-        XCTAssertEqual(com.rings.count, 2)
-        let v2 = try OrgKeyRingBundle.fromWire(com.rings.last)
+        // Opening the org page also made the directory key (docs/org-directory.md); count the backup keys' chain.
+        let archive = com.rings.filter { ($0["ring"] as? [String: Any])?["kind"] as? String == "archive-keys" }
+        XCTAssertEqual(archive.count, 2)
+        let v2 = try OrgKeyRingBundle.fromWire(archive.last)
         XCTAssertEqual(v2.ring.version, 2)
         XCTAssertEqual(v2.ring.retired, [x])
         XCTAssertFalse(v2.recipients.contains { $0.recipient == "seat:\(x)" })

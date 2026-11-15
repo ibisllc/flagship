@@ -99,8 +99,53 @@ decision (`docs/webapp-key-custody.md`).
 4. LDAP pull, tested against an OpenLDAP container in CI.
 5. Admin console screens (iOS first, then Android and the webapp).
 
-## 9. Open (owner)
-- Do members see a company address book (everyone's name), or only the people they share with? The default above is
-  the second.
-- Should the SCIM token be per connector, or also rotate on a schedule? Proposed default: per connector, manual
-  rotation, with a warning after 365 days.
+## 9. Owner decisions (2026-11-15, accepted the defaults)
+- **Members see only the people and servers they share something with**; there is no company-wide address book.
+- **SCIM tokens are per connector**, rotated by hand, with a warning after 365 days.
+
+## 10. As built (branch `0.4/org-directory`, 2026-11-15)
+
+Not deployed, not run on a real box or phone.
+
+**Directory entries (§8 step 1).** `packages/protocol/src/orgDirectory.ts`; ports `apps/mobile/shared/Sources/FlagshipCore/OrgDirectory.swift`
+and `apps/mobile/android/.../core/pq/OrgDirectory.kt`; vectors `test-vectors/org-directory` (`tools/org-directory-vectors.ts`),
+read by TS, Swift and Kotlin. The ring kind is the existing `directory-key` (sealed to org admins only).
+- Body `flagship/org-directory-entry/v1|body|<seatId>|<pendingId>|<pseudonym>|<displayName>|<email>|<externalId>|<source>|<groups>|<updatedAt>`:
+  every free-text field is unpadded base64url of NFC UTF-8 (no control characters, byte limits 128/256/320/256, at most
+  32 groups of 256), groups comma-joined and sorted, so no value can move a `|` or `,` boundary (AT-ENV-09). Exactly one
+  of seatId and pendingId.
+- Sealed with AES-256-GCM under `HKDF(directoryKey, info = <tag>|key|<orgId>|<entryId>|<keyVersion>)`, AAD
+  `<tag>|seal|<orgId>|<entryId>|<keyVersion>|<sizeBucket>`, the body padded to a bucket of 256…8192 bytes. `.com` sees
+  orgId, an opaque entryId, the key version and the bucket.
+- `GET/POST /api/orgs/<id>/directory`: a write needs one org admin's `org-approval` over
+  `<tag>|<orgId>|<entryId>|<keyVersion>|<sizeBucket>|<sealedSha256>|<issuedAt>`; `.com` keeps the newest per entryId (an
+  older one is refused). Readers keep the newest `updatedAt` per seat, so a replayed older entry never renames anyone.
+- Phones: the first admin who opens an org page announces its seat KEM key if `.com` lacks it, makes directory key v1
+  (sealed to every admin with a KEM key) when none exists, opens every version it can and shows the pseudonyms in
+  "Waiting to join", "People who can approve", "Keys to rotate" and Restore my access (iOS `OrgViewModel.loadNames`,
+  Android the same). The inviter writes the person's entry as it makes the invitation, so the names show before they
+  join. A directory-key rotation re-seals every entry under the new version. Until the directory opens (a locked
+  phone, a member seat) a row says "Name hidden (<6 hex>)".
+- The webapp has no org seat keys (`webapp-key-custody.md` is undecided), so it shows no names yet (parity allowlist).
+- Member slices (the people a member shares with) are not built: the directory key goes to org admins only.
+
+**Connectors and proposals (§8 step 2).** `packages/protocol/src/orgConnector.ts`, `.com`
+`packages/control-plane/src/orgConnectors.ts`, ports `OrgConnector.swift` / `OrgConnector.kt`, vectors in
+`test-vectors/org-directory` (`connectors`), forgery AT-ENV-48/49.
+- `flagship/org-connector/v1|<orgId>|<connectorId>|<scim|ldap|custom>|<serverDomain>|<connectorKeyId>|<scopes>|<mappingSha256>|<active|paused|retired>|<issuedAt>`,
+  approved by one org admin, the box one of the org's registered servers, `connectorKeyId` the id of a hybrid
+  (Ed25519 + ML-DSA-65) key the connector box holds. A newer record replaces the older; a retired id never returns; the
+  key never changes (add a new connector instead).
+- `flagship/org-proposal/v1|<orgId>|<proposalId>|<connectorId>|<kind>|<subject>|<rolesHash>|<sealedSha256>|<issuedAt>`,
+  signed by the connector key. The person's directory entry is hybrid-sealed (X-Wing) to each org admin's seat KEM key
+  (context orgId, proposalId, recipient), and `sealedSha256` commits to every copy, so `.com` can neither read nor hide
+  a copy. Scopes: `propose-invite` (invite, role-change), `propose-offboard`, `update-entry`.
+- A proposal moves no authority. The admin acts with the usual invite, revoke or grant, then records
+  `<tag>|decision|<orgId>|<proposalId>|<done|declined>|<refSha256>|<issuedAt>` under one org admin's approval; for "done"
+  `.com` checks that refSha256 is already in the org log.
+- Routes: `GET/POST /api/orgs/<id>/connectors`, `GET/POST /api/orgs/<id>/proposals`, `POST /api/orgs/<id>/proposals/decisions`.
+
+**Joining.** A joining seat signs its seat KEM statement (`org-seat-kem/v1`) with its member key at accept and sends it
+with the accept; `.com` checks it against the member binding, keeps it, and records it as the seat's KEM key when the
+grant lands, so a member receives key-ring versions without opening the org page (release-manager decision).
+

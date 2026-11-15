@@ -133,3 +133,5 @@ export * from "./orgAuthority.js";
 export * from "./orgServers.js";
 export * from "./orgKeyRing.js";
 export * from "./orgAudit.js";
+export * from "./orgDirectory.js";
+export * from "./orgConnector.js";
