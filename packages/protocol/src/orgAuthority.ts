@@ -593,6 +593,7 @@ export function orgFounderRemovalOf(p: OrgAuthorityRecord, target: string, issue
   if (bylaws.overturnSeats !== "*" && bylaws.overturnSeats.includes(target)) {
     const seats = bylaws.overturnSeats.filter((s) => s !== target);
     bylaws = {
+      ...bylaws,
       overturnSeats: seats.length > 0 ? seats : "*",
       overturnK: bylaws.overturnK === 0 ? 0 : Math.min(bylaws.overturnK, seats.length > 0 ? seats.length : n),
       vetoK: bylaws.vetoK,

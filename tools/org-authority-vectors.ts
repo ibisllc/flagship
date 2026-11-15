@@ -100,8 +100,11 @@ const S = key("S scoped admin", 0x51, 0x1b, 0x1c);
 const SM = key("S member", 0x51, 0x1d, 0x1e, "org-seat-member");
 const MM = key("M member", 0x61, 0x1f, 0x20, "org-seat-member");
 const X = key("X outsider", 0x71, 0x21, 0x22);
+// Browser-custody admins (docs/webapp-key-custody.md items 1 and 3).
+const W = key("W browser admin", 0xf1, 0x23, 0x24);
+const V = key("V browser admin", 0xf2, 0x25, 0x26);
 
-const entry = (k: Key, kind: OrgAdminEntry["kind"]): OrgAdminEntry => ({ seatId: k.seatId, kind, binding: k.binding });
+const entry = (k: Key, kind: OrgAdminEntry["kind"], custody?: "browser"): OrgAdminEntry => ({ seatId: k.seatId, kind, binding: k.binding, ...(custody ? { custody } : {}) });
 
 function approve(k: Key, order: Uint8Array, oarVersion: number, issuedAt: number, notAfter = issuedAt + 3 * DAY): OrgApproval {
   return signOrgApproval({ orgId: ORG, oarVersion, order, seatId: k.seatId, adminKeyId: k.keyId, issuedAt, notAfter }, k.secret, { deterministic: true });
@@ -190,6 +193,30 @@ const v1bOrder = canonicalOrgAuthority(v1b);
 const e1bTwo: OrgAuthorityEntry = { record: v1b, via: "direct", approvals: [A, B].map((k) => approve(k, v1bOrder, 0, T0 + HOUR + MIN)) };
 const e1bThree: OrgAuthorityEntry = { record: v1b, via: "direct", approvals: [A, B, C].map((k) => approve(k, v1bOrder, 0, T0 + HOUR + MIN)) };
 
+// Custody: W and V join as browser admins; then a direct change needs a hardware approval in its quorum
+// of two, unless the bylaws turn that off; bylaws that need hardware admins refuse a browser admin.
+const vw1: OrgAuthorityRecord = { ...v0, version: 1, prevHash: genesisHash, admins: [...v0.admins, entry(W, "admin", "browser"), entry(V, "admin", "browser")], issuedAt: T0 + HOUR };
+const vw1Order = canonicalOrgAuthority(vw1);
+const ew1: OrgAuthorityEntry = { record: vw1, via: "direct", approvals: [approve(A, vw1Order, 0, T0 + HOUR + MIN), approve(B, vw1Order, 0, T0 + HOUR + MIN), approve(W, vw1Order, 1, T0 + HOUR + MIN), approve(V, vw1Order, 1, T0 + HOUR + MIN)] };
+const vw2: OrgAuthorityRecord = { ...vw1, version: 2, prevHash: orgAuthorityHash(vw1), kSite: 2, issuedAt: T0 + 2 * HOUR };
+const vw2Order = canonicalOrgAuthority(vw2);
+const ew2Browser: OrgAuthorityEntry = { record: vw2, via: "direct", approvals: [W, V].map((k) => approve(k, vw2Order, 1, T0 + 2 * HOUR + MIN)) };
+const ew2Mixed: OrgAuthorityEntry = { record: vw2, via: "direct", approvals: [W, A].map((k) => approve(k, vw2Order, 1, T0 + 2 * HOUR + MIN)) };
+const vq1: OrgAuthorityRecord = { ...vw1, bylaws: { ...vw1.bylaws, quorumHardware: false } };
+const vq0: OrgAuthorityRecord = { ...v0, bylaws: { ...v0.bylaws, quorumHardware: false } };
+const vq0Hash = orgAuthorityHash(vq0);
+const eq0: OrgAuthorityEntry = { record: vq0, via: "genesis", approvals: [A, B, C, D].map((k) => approve(k, canonicalOrgAuthority(vq0), 0, T0 + MIN)) };
+const vq1r: OrgAuthorityRecord = { ...vq1, prevHash: vq0Hash };
+const vq1Order = canonicalOrgAuthority(vq1r);
+const eq1: OrgAuthorityEntry = { record: vq1r, via: "direct", approvals: [approve(A, vq1Order, 0, T0 + HOUR + MIN), approve(B, vq1Order, 0, T0 + HOUR + MIN), approve(W, vq1Order, 1, T0 + HOUR + MIN), approve(V, vq1Order, 1, T0 + HOUR + MIN)] };
+const vq2: OrgAuthorityRecord = { ...vq1r, version: 2, prevHash: orgAuthorityHash(vq1r), kSite: 2, issuedAt: T0 + 2 * HOUR };
+const eq2Browser: OrgAuthorityEntry = { record: vq2, via: "direct", approvals: [W, V].map((k) => approve(k, canonicalOrgAuthority(vq2), 1, T0 + 2 * HOUR + MIN)) };
+const vh0: OrgAuthorityRecord = { ...v0, bylaws: { ...v0.bylaws, adminCustody: "hardware" } };
+const vh0Hash = orgAuthorityHash(vh0);
+const eh0: OrgAuthorityEntry = { record: vh0, via: "genesis", approvals: [A, B, C, D].map((k) => approve(k, canonicalOrgAuthority(vh0), 0, T0 + MIN)) };
+const vh1: OrgAuthorityRecord = { ...vh0, version: 1, prevHash: vh0Hash, admins: [...vh0.admins, entry(W, "admin", "browser")], issuedAt: T0 + HOUR };
+const eh1: OrgAuthorityEntry = { record: vh1, via: "direct", approvals: [approve(A, canonicalOrgAuthority(vh1), 0, T0 + HOUR + MIN), approve(B, canonicalOrgAuthority(vh1), 0, T0 + HOUR + MIN), approve(W, canonicalOrgAuthority(vh1), 1, T0 + HOUR + MIN)] };
+
 const flip = (a: OrgApproval): OrgApproval => ({ ...a, signature: a.signature.slice(0, 10) + (a.signature[10] === "0" ? "1" : "0") + a.signature.slice(11) });
 const ok = { ok: true };
 const no = (code: string) => ({ ok: false, code });
@@ -225,6 +252,11 @@ const chains = [
   { name: "the restore without the restored seat's consent", entries: [e0, e1, e2, { ...e3, approvals: e3.approvals.slice(0, 2) }], now: NOW, expect: no("consent-missing") },
   { name: "changing the bylaws with k_gov only", entries: [e0, e1bTwo], now: NOW, expect: no("threshold") },
   { name: "changing the bylaws with the strictest ceremony", entries: [e0, e1bThree], now: NOW, expect: ok, currentVersion: 1 },
+  { name: "two browser admins join, each consenting", entries: [e0, ew1], now: NOW, expect: ok, currentVersion: 1 },
+  { name: "a quorum of two browser admins needs a hardware approval", entries: [e0, ew1, ew2Browser], now: NOW, expect: no("custody") },
+  { name: "a browser admin and a hardware admin make a quorum", entries: [e0, ew1, ew2Mixed], now: NOW, expect: ok, currentVersion: 2 },
+  { name: "bylaws without the hardware quorum let two browser admins decide", entries: [eq0, eq1, eq2Browser], now: NOW, genesisHash: vq0Hash, expect: ok, currentVersion: 2 },
+  { name: "bylaws that need hardware admins refuse a browser admin", entries: [eh0, eh1], now: NOW, genesisHash: vh0Hash, expect: no("custody") },
 ];
 
 // ── seats ───────────────────────────────────────────────────────────────
@@ -233,8 +265,9 @@ const memberRoles: OrgSeatRole[] = [{ role: "member" }];
 const scopedRoles: OrgSeatRole[] = [{ role: "server-admin", servers: [SERVER] }, { role: "service-admin", apps: ["acme--wiki"] }];
 const label = orgSha256Hex(new TextEncoder().encode("sealed pseudonym bytes"));
 
-function grant(seat: string, member: Key, admin: Key | null, roles: OrgSeatRole[], signers: Key[], oarVersion = 1, issuedAt = T0 + 2 * HOUR): OrgSeatGrantBundle {
+function grant(seat: string, member: Key, admin: Key | null, roles: OrgSeatRole[], signers: Key[], oarVersion = 1, issuedAt = T0 + 2 * HOUR, custody?: "browser"): OrgSeatGrantBundle {
   const g: OrgSeatGrant = {
+    ...(custody ? { custody } : {}),
     orgId: ORG,
     seatId: seat,
     labelSha256: label,
@@ -252,6 +285,7 @@ function grant(seat: string, member: Key, admin: Key | null, roles: OrgSeatRole[
 const grantM = grant(MM.seatId, MM, null, memberRoles, [A]);
 const grantSOne = grant(S.seatId, SM, S, scopedRoles, [A]);
 const grantSTwo = grant(S.seatId, SM, S, scopedRoles, [A, B]);
+const grantSBrowser = grant(S.seatId, SM, S, scopedRoles, [A, B], 1, T0 + 2 * HOUR, "browser");
 const grantByBoard = grant(MM.seatId, MM, null, memberRoles, [D]);
 const leaveM = signOrgSeatLeave({ orgId: ORG, seatId: MM.seatId, reason: "left", oarVersion: 1, issuedAt: T0 + 3 * HOUR }, (() => {
   return new Uint8Array([...Buffer.from(MM.edSeedHex, "hex"), ...Buffer.from(MM.mldsaSeedHex, "hex")]);
@@ -270,6 +304,7 @@ const seatBooks = [
   { name: "a scoped admin approved by one admin is refused", grants: [grantM, grantSOne], revokes: [], expectSeats: [MM.seatId], expectRefused: [{ seatId: S.seatId, code: "threshold" }] },
   { name: "a board seat cannot admit", grants: [grantByBoard], revokes: [], expectSeats: [], expectRefused: [{ seatId: MM.seatId, code: "not-an-admin" }] },
   { name: "a member leaves; an admin offboards the scoped admin", grants: [grantM, grantSTwo], revokes: [leaveM, revokeSByA], expectSeats: [], expectRefused: [{ seatId: MM.seatId, code: "seat-revoked" }, { seatId: S.seatId, code: "seat-revoked" }] },
+  { name: "a scoped admin with a browser key, by two admins", grants: [grantSBrowser], revokes: [], expectSeats: [S.seatId], expectRefused: [] },
   { name: "an org admin's seat is not revoked by a seat revoke", grants: [grantM], revokes: [revokeBByA], expectSeats: [MM.seatId], expectRefused: [{ seatId: B.seatId, code: "seat-is-org-admin" }] },
 ];
 
@@ -322,6 +357,10 @@ const canonical = [
   { name: "accept", bytes: utf8(canonicalOrgSeatAccept(accept)) },
   { name: "grant", bytes: utf8(canonicalOrgSeatGrant(grantSTwo.grant)) },
   { name: "revoke", bytes: utf8(canonicalOrgSeatRevoke(revokeSByA.revoke)) },
+  { name: "admins with browser custody", bytes: utf8(canonicalOrgAdmins(vw1.admins)) },
+  { name: "bylaws hardware admins, browser quorums", bytes: utf8(canonicalOrgBylaws({ ...v0.bylaws, adminCustody: "hardware", quorumHardware: false })) },
+  { name: "accept browser", bytes: utf8(canonicalOrgSeatAccept({ ...accept, adminKeyId: S.keyId, custody: "browser" })) },
+  { name: "grant browser", bytes: utf8(canonicalOrgSeatGrant(grantSBrowser.grant)) },
 ].map((c) => ({ ...c, sha256: orgSha256Hex(new TextEncoder().encode(c.bytes)) }));
 
 const umk = fill(32, 0x42);
@@ -332,7 +371,7 @@ const doc = {
     "Enterprise org authority (docs/enterprise-accounts.md). Keys are hybrid Ed25519 + ML-DSA-65 from fixed seeds; signatures deterministic. chains: verifyOrgAuthorityChain(entries, {genesisHash ?? top-level genesisHash, now, freezes, overturns, vetoes}). seatBooks and authorize run on the state of chains[0].entries[0..1] (v0, v1) with no freezes. authorize uses seatBooks[0]'s book.",
   orgId: ORG,
   keys: Object.fromEntries(
-    [A, B, C, D, R, S, SM, MM, X].map((k) => [k.name, { seatId: k.seatId, edSeedHex: k.edSeedHex, mldsaSeedHex: k.mldsaSeedHex, keyId: k.keyId, binding: k.binding }]),
+    [A, B, C, D, R, S, SM, MM, X, W, V].map((k) => [k.name, { seatId: k.seatId, edSeedHex: k.edSeedHex, mldsaSeedHex: k.mldsaSeedHex, keyId: k.keyId, binding: k.binding }]),
   ),
   genesisHash,
   records: { v0: orgAuthorityHash(v0), v1: orgAuthorityHash(v1), v2: orgAuthorityHash(v2), v3: orgAuthorityHash(v3) },
@@ -350,7 +389,7 @@ const doc = {
 
 // Bindings become {"$key": name} (see `keys`) and approvals {"$approval": i} (see `approvals`), so the
 // file stays small; readers resolve both before use.
-const KEYS = [A, B, C, D, R, S, SM, MM, X];
+const KEYS = [A, B, C, D, R, S, SM, MM, X, W, V];
 const approvalPool: OrgApproval[] = [];
 const approvalIndex = new Map<string, number>();
 function compact(v: unknown, top = false): unknown {

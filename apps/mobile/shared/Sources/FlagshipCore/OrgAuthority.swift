@@ -59,11 +59,18 @@ public struct OrgAuthorityError: Error, Equatable, CustomStringConvertible {
 
 public enum OrgAdminKind: String, Sendable { case admin, board, recovery }
 
+/// Where a seat's admin key lives (docs/webapp-key-custody.md items 1 and 3): `hardware` (a phone, the
+/// default) or `browser` ("Browser: software key, unlocked with a passkey"). Encoded only when `browser`.
+public enum OrgCustody: String, Sendable { case hardware, browser }
+
 public struct OrgAdminEntry: Sendable {
     public var seatId: String
     public var kind: OrgAdminKind
     public var binding: PqKeyBindingWire
-    public init(seatId: String, kind: OrgAdminKind, binding: PqKeyBindingWire) { self.seatId = seatId; self.kind = kind; self.binding = binding }
+    public var custody: OrgCustody
+    public init(seatId: String, kind: OrgAdminKind, binding: PqKeyBindingWire, custody: OrgCustody = .hardware) {
+        self.seatId = seatId; self.kind = kind; self.binding = binding; self.custody = custody
+    }
 }
 
 public struct OrgBylaws: Equatable, Sendable {
@@ -72,7 +79,14 @@ public struct OrgBylaws: Equatable, Sendable {
     /// 0 = a majority of the set.
     public var overturnK: Int
     public var vetoK: Int
-    public init(overturnSeats: [String]?, overturnK: Int, vetoK: Int) { self.overturnSeats = overturnSeats; self.overturnK = overturnK; self.vetoK = vetoK }
+    /// true: admin keys must be hardware custody.
+    public var hardwareAdmins: Bool
+    /// true (default): a quorum of two or more needs a hardware-custody approval.
+    public var quorumHardware: Bool
+    public init(overturnSeats: [String]?, overturnK: Int, vetoK: Int, hardwareAdmins: Bool = false, quorumHardware: Bool = true) {
+        self.overturnSeats = overturnSeats; self.overturnK = overturnK; self.vetoK = vetoK
+        self.hardwareAdmins = hardwareAdmins; self.quorumHardware = quorumHardware
+    }
 }
 
 public struct OrgAuthorityRecord: Sendable {
@@ -122,7 +136,7 @@ extension OrgAuthority {
         for a in admins {
             try need(isHex(a.seatId, 32), "malformed", "seatId")
             try need(isHex(a.binding.ed25519PubHex, 64) && isHex(a.binding.mldsaPubHex, 3904), "malformed", "binding")
-            lines.append("\(a.seatId):\(a.kind.rawValue):\(a.binding.ed25519PubHex):\(a.binding.mldsaPubHex)")
+            lines.append("\(a.seatId):\(a.kind.rawValue):\(a.binding.ed25519PubHex):\(a.binding.mldsaPubHex)\(a.custody == .browser ? ":browser" : "")")
         }
         return Array("\(tagAdmins)|\(lines.sorted().joined(separator: ","))".utf8)
     }
@@ -135,7 +149,8 @@ extension OrgAuthority {
             for x in s { try need(isHex(x, 32), "malformed", "overturnSeats") }
             seats = s.sorted().joined(separator: ",")
         } else { seats = "*" }
-        return Array("\(tagBylaws)|\(b.overturnK)|\(seats)|\(b.vetoK)".utf8)
+        let extra = (b.hardwareAdmins ? "|hardware-admins" : "") + (b.quorumHardware ? "" : "|browser-quorums")
+        return Array("\(tagBylaws)|\(b.overturnK)|\(seats)|\(b.vetoK)\(extra)".utf8)
     }
 
     public static func canonicalAuthority(_ r: OrgAuthorityRecord) throws -> [UInt8] {
@@ -177,6 +192,19 @@ extension OrgAuthority {
         let size = overturnSet(r).count
         try need(size > 0 && overturnThreshold(r) <= size && overturnThreshold(r) <= kMax, "bylaws", "overturnK")
         try need(r.bylaws.vetoK >= 1 && r.bylaws.vetoK <= kMax, "bylaws", "vetoK")
+        if r.bylaws.hardwareAdmins {
+            for a in r.admins { try need(a.custody == .hardware, "custody", "\(a.seatId): the bylaws need hardware custody for admins") }
+        }
+    }
+
+    /// The bylaws' quorum rule: a quorum of two or more needs a hardware-custody approval, unless turned off.
+    public static func checkQuorumCustody(_ r: OrgAuthorityRecord, k: Int, signers: [String], custodyOf: (String) -> OrgCustody) throws {
+        if !r.bylaws.quorumHardware || k < 2 || signers.isEmpty { return }
+        try need(signers.contains { custodyOf($0) == .hardware }, "custody", "a quorum of two or more needs a hardware approval")
+    }
+
+    static func adminCustody(_ r: OrgAuthorityRecord) -> (String) -> OrgCustody {
+        { s in r.admins.first { $0.seatId == s }?.custody ?? .hardware }
     }
 
     // MARK: approvals
@@ -263,10 +291,11 @@ extension OrgAuthority {
     }
 
     public static func canonicalSeatAccept(orgId: String, seatId: String, inviteSha256: String, memberKeyId: String, adminKeyId: String,
-                                           issuedAt: Int64) throws -> [UInt8] {
+                                           issuedAt: Int64, custody: OrgCustody = .hardware) throws -> [UInt8] {
         try need(isHex(orgId, 32) && isHex(seatId, 32) && isHex(inviteSha256, 64) && isHex(memberKeyId, 64)
                  && (adminKeyId.isEmpty || isHex(adminKeyId, 64)), "malformed", "accept")
-        return join([tagSeatAccept, orgId, seatId, inviteSha256, memberKeyId, adminKeyId, String(issuedAt)])
+        try need(custody == .hardware || !adminKeyId.isEmpty, "malformed", "custody without an admin key")
+        return join([tagSeatAccept, orgId, seatId, inviteSha256, memberKeyId, adminKeyId, String(issuedAt)]) + (custody == .browser ? Array("|browser".utf8) : [])
     }
 
     public static func canonicalSeatRevoke(orgId: String, seatId: String, reason: String, oarVersion: Int64, issuedAt: Int64) throws -> [UInt8] {

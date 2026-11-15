@@ -372,11 +372,14 @@ class OrgViewModel(
         val adminKeyId = str(j.accept, "adminKeyId") ?: ""
         val orgId = str(j.invite, "orgId") ?: throw OrgAuthorityException("malformed")
         val expiresAt = t + 365 * DAY
-        val grant = OrgSeatGrant(orgId, j.seatId, label, memberKeyId, adminKeyId, rolesHash, version, t, expiresAt)
+        // The custody the person's accept signed (a browser seat says so); the grant repeats it.
+        val custody = if (str(j.accept, "custody") == "browser") com.flagshipserver.app.core.pq.OrgCustody.BROWSER else com.flagshipserver.app.core.pq.OrgCustody.HARDWARE
+        val grant = OrgSeatGrant(orgId, j.seatId, label, memberKeyId, adminKeyId, rolesHash, version, t, expiresAt, custody)
         val body = buildJsonObject {
             put("grant", buildJsonObject {
                 put("orgId", orgId); put("seatId", j.seatId); put("labelSha256", label); put("memberKeyId", memberKeyId)
                 put("adminKeyId", adminKeyId); put("rolesHash", rolesHash); put("oarVersion", version); put("issuedAt", t); put("expiresAt", expiresAt)
+                if (custody == com.flagshipserver.app.core.pq.OrgCustody.BROWSER) put("custody", "browser")
             })
             put("roles", j.roles)
             put("memberBinding", j.memberBinding.toJson())

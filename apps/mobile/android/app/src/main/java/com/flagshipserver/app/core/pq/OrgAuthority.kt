@@ -19,10 +19,19 @@ class OrgAuthorityException(val code: String, detail: String = "") : Exception(i
 
 enum class OrgAdminKind(val wire: String) { ADMIN("admin"), BOARD("board"), RECOVERY("recovery") }
 
-data class OrgAdminEntry(val seatId: String, val kind: OrgAdminKind, val binding: PqTrust.Wire)
+/**
+ * Where a seat's admin key lives (docs/webapp-key-custody.md items 1 and 3): HARDWARE (a phone, the default) or
+ * BROWSER ("Browser: software key, unlocked with a passkey"). Encoded only when BROWSER.
+ */
+enum class OrgCustody(val wire: String) { HARDWARE("hardware"), BROWSER("browser") }
 
-/** [overturnSeats] null = every admin; [overturnK] 0 = a majority of the set. */
-data class OrgBylaws(val overturnSeats: List<String>?, val overturnK: Int, val vetoK: Int)
+data class OrgAdminEntry(val seatId: String, val kind: OrgAdminKind, val binding: PqTrust.Wire, val custody: OrgCustody = OrgCustody.HARDWARE)
+
+/**
+ * [overturnSeats] null = every admin; [overturnK] 0 = a majority of the set. [hardwareAdmins]: admin keys must be
+ * hardware custody. [quorumHardware] (default): a quorum of two or more needs a hardware-custody approval.
+ */
+data class OrgBylaws(val overturnSeats: List<String>?, val overturnK: Int, val vetoK: Int, val hardwareAdmins: Boolean = false, val quorumHardware: Boolean = true)
 
 data class OrgAuthorityRecord(
     val orgId: String, val version: Long, val prevHash: String, val admins: List<OrgAdminEntry>, val bylaws: OrgBylaws,
@@ -55,6 +64,7 @@ sealed class OrgSeatRole {
 data class OrgSeatGrant(
     val orgId: String, val seatId: String, val labelSha256: String, val memberKeyId: String, val adminKeyId: String,
     val rolesHash: String, val oarVersion: Long, val issuedAt: Long, val expiresAt: Long,
+    val custody: OrgCustody = OrgCustody.HARDWARE,
 )
 data class OrgSeatGrantBundle(val grant: OrgSeatGrant, val roles: List<OrgSeatRole>, val memberBinding: PqTrust.Wire, val adminBinding: PqTrust.Wire?, val approvals: List<OrgApproval>)
 data class OrgSeatRevokeBundle(val orgId: String, val seatId: String, val reason: String, val oarVersion: Long, val issuedAt: Long, val approvals: List<OrgApproval>, val selfSignature: String?)
@@ -124,7 +134,7 @@ object OrgAuthority {
     fun canonicalAdmins(admins: List<OrgAdminEntry>): ByteArray {
         val lines = admins.map {
             need(hex(it.seatId, 32) && hex(it.binding.ed25519PubHex, 64) && hex(it.binding.mldsaPubHex, 3904), "malformed", "admins")
-            "${it.seatId}:${it.kind.wire}:${it.binding.ed25519PubHex}:${it.binding.mldsaPubHex}"
+            "${it.seatId}:${it.kind.wire}:${it.binding.ed25519PubHex}:${it.binding.mldsaPubHex}" + if (it.custody == OrgCustody.BROWSER) ":browser" else ""
         }
         return "$TAG_ADMINS|${lines.sorted().joinToString(",")}".toByteArray(Charsets.UTF_8)
     }
@@ -136,7 +146,8 @@ object OrgAuthority {
             s.forEach { need(hex(it, 32), "malformed", "overturnSeats") }
             s.sorted().joinToString(",")
         } ?: "*"
-        return "$TAG_BYLAWS|${b.overturnK}|$seats|${b.vetoK}".toByteArray(Charsets.UTF_8)
+        val extra = (if (b.hardwareAdmins) "|hardware-admins" else "") + (if (b.quorumHardware) "" else "|browser-quorums")
+        return "$TAG_BYLAWS|${b.overturnK}|$seats|${b.vetoK}$extra".toByteArray(Charsets.UTF_8)
     }
 
     fun canonicalAuthority(r: OrgAuthorityRecord): ByteArray {
@@ -171,7 +182,16 @@ object OrgAuthority {
         val size = overturnSet(r).size
         need(size > 0 && overturnThreshold(r) <= size && overturnThreshold(r) <= K_MAX, "bylaws", "overturnK")
         need(r.bylaws.vetoK in 1..K_MAX, "bylaws", "vetoK")
+        if (r.bylaws.hardwareAdmins) r.admins.forEach { need(it.custody == OrgCustody.HARDWARE, "custody", "${it.seatId}: the bylaws need hardware custody for admins") }
     }
+
+    /** The bylaws' quorum rule: a quorum of two or more needs a hardware-custody approval, unless turned off. */
+    fun checkQuorumCustody(r: OrgAuthorityRecord, k: Int, signers: List<String>, custodyOf: (String) -> OrgCustody) {
+        if (!r.bylaws.quorumHardware || k < 2 || signers.isEmpty()) return
+        need(signers.any { custodyOf(it) == OrgCustody.HARDWARE }, "custody", "a quorum of two or more needs a hardware approval")
+    }
+
+    private fun adminCustody(r: OrgAuthorityRecord): (String) -> OrgCustody = { s -> r.admins.firstOrNull { it.seatId == s }?.custody ?: OrgCustody.HARDWARE }
 
     private val PURPOSE = Regex("^flagship/[a-z0-9/-]+/v[1-9][0-9]*$")
 
@@ -206,16 +226,20 @@ object OrgAuthority {
         return join(TAG_SEAT_INVITE, orgId, seatId, labelSha256, rolesHash, oarVersion, issuedAt, expiresAt)
     }
 
-    fun canonicalSeatAccept(orgId: String, seatId: String, inviteSha256: String, memberKeyId: String, adminKeyId: String, issuedAt: Long): ByteArray {
+    fun canonicalSeatAccept(orgId: String, seatId: String, inviteSha256: String, memberKeyId: String, adminKeyId: String, issuedAt: Long, custody: OrgCustody = OrgCustody.HARDWARE): ByteArray {
         need(hex(orgId, 32) && hex(seatId, 32) && hex(inviteSha256, 64) && hex(memberKeyId, 64) && (adminKeyId.isEmpty() || hex(adminKeyId, 64)), "malformed", "accept")
-        return join(TAG_SEAT_ACCEPT, orgId, seatId, inviteSha256, memberKeyId, adminKeyId, issuedAt)
+        need(custody == OrgCustody.HARDWARE || adminKeyId.isNotEmpty(), "malformed", "custody without an admin key")
+        return join(TAG_SEAT_ACCEPT, orgId, seatId, inviteSha256, memberKeyId, adminKeyId, issuedAt) + browserSuffix(custody)
     }
 
     fun canonical(g: OrgSeatGrant): ByteArray {
         need(hex(g.labelSha256, 64), "label-missing")
         need(hex(g.orgId, 32) && hex(g.seatId, 32) && hex(g.memberKeyId, 64) && (g.adminKeyId.isEmpty() || hex(g.adminKeyId, 64)) && hex(g.rolesHash, 64), "malformed", "grant")
         need(g.expiresAt > g.issuedAt && g.expiresAt - g.issuedAt <= GRANT_MAX_LIFETIME_MS, "malformed", "expiresAt")
-        return join(TAG_SEAT_GRANT, g.orgId, g.seatId, g.labelSha256, g.memberKeyId, g.adminKeyId, g.rolesHash, g.oarVersion, g.issuedAt, g.expiresAt)
+        return join(TAG_SEAT_GRANT, g.orgId, g.seatId, g.labelSha256, g.memberKeyId, g.adminKeyId, g.rolesHash, g.oarVersion, g.issuedAt, g.expiresAt) + browserSuffix(g.custody)
+    }
+
+    private fun browserSuffix(c: OrgCustody): ByteArray = if (c == OrgCustody.BROWSER) "|browser".toByteArray(Charsets.UTF_8) else ByteArray(0)
     }
 
     private val REASON = Regex("^[a-z0-9][a-z0-9-]{0,47}$")
@@ -311,7 +335,7 @@ object OrgAuthority {
         val s = bylaws.overturnSeats
         if (s != null && target in s) {
             val seats = s.filter { it != target }
-            bylaws = OrgBylaws(seats.ifEmpty { null }, if (bylaws.overturnK == 0) 0 else minOf(bylaws.overturnK, if (seats.isEmpty()) n else seats.size), bylaws.vetoK)
+            bylaws = bylaws.copy(overturnSeats = seats.ifEmpty { null }, overturnK = if (bylaws.overturnK == 0) 0 else minOf(bylaws.overturnK, if (seats.isEmpty()) n else seats.size))
         }
         return p.copy(version = p.version + 1, prevHash = authorityHash(p), admins = admins, bylaws = bylaws,
             kGov = clamp(p.kGov), kGrant = clamp(p.kGrant), kDestroy = clamp(p.kDestroy), kSite = clamp(p.kSite), issuedAt = issuedAt)
@@ -446,7 +470,9 @@ object OrgAuthority {
                     need(kindOf(it) == OrgAdminKind.ADMIN, "not-an-admin", it)
                     need(it !in removed, "removed-signer", it)
                 }
-                need(signers.size >= if (bylawsChanged || founderMoved) bylawsThreshold(p) else p.kGov, "threshold")
+                val k = if (bylawsChanged || founderMoved) bylawsThreshold(p) else p.kGov
+                need(signers.size >= k, "threshold")
+                checkQuorumCustody(p, k, signers, adminCustody(p))
             }
             "founder-removal" -> {
                 val n = e.notice?.takeIf { it.body.kind == "founder-removal" } ?: fail("notice-invalid")
@@ -471,7 +497,9 @@ object OrgAuthority {
                 val signers = checkApprovals(n.approvals, p.orgId, p.version, canonical(n.body), now, prevKey, frozen)
                 signers.forEach { need(kindOf(it) == OrgAdminKind.ADMIN || kindOf(it) == OrgAdminKind.RECOVERY, "not-an-admin", it) }
                 need(signers.any { kindOf(it) == OrgAdminKind.RECOVERY }, "notice-invalid", "no recovery seat")
-                need(signers.size >= if (bylawsChanged || founderMoved) bylawsThreshold(p) else p.kGov, "threshold")
+                val k = if (bylawsChanged || founderMoved) bylawsThreshold(p) else p.kGov
+                need(signers.size >= k, "threshold")
+                checkQuorumCustody(p, k, signers, adminCustody(p))
                 val noticeHash = sha256Hex(canonical(n.body))
                 val eligible = p.admins.filter { it.kind == OrgAdminKind.ADMIN && it.seatId !in signers }.map { it.seatId }.toSet()
                 for (v in vetoes) if (vetoSigners(v, noticeHash, n.body)?.any { it in eligible } == true) fail("notice-vetoed")
@@ -498,6 +526,7 @@ object OrgAuthority {
                 val set = overturnSet(p).toSet()
                 need(signers.all { it in set }, "not-an-admin", "outside the overturn set")
                 need(signers.size >= overturnThreshold(p), "threshold")
+                checkQuorumCustody(p, overturnThreshold(p), signers, adminCustody(p))
             }
             else -> fail("malformed", "via")
         }
@@ -541,9 +570,14 @@ object OrgAuthority {
             need(b.roles.none { it.raisesAdmin }, "binding", "an admin role needs an admin key")
             null
         }
+        if (g.custody == OrgCustody.BROWSER) {
+            need(g.adminKeyId.isNotEmpty(), "malformed", "custody without an admin key")
+            need(!(r.bylaws.hardwareAdmins && b.roles.any { it.raisesAdmin }), "custody", "the bylaws need hardware custody for admins")
+        }
         val signers = checkApprovals(b.approvals, g.orgId, g.oarVersion, order, now, { st.binding(g.oarVersion, it) }, frozen)
         signers.forEach { s -> need(r.admins.firstOrNull { it.seatId == s }?.kind == OrgAdminKind.ADMIN, "not-an-admin", s) }
         need(signers.size >= grantThreshold(r, b.roles), "threshold")
+        checkQuorumCustody(r, grantThreshold(r, b.roles), signers, adminCustody(r))
         return OrgSeat(g.seatId, b.roles, member, admin, g)
     }
 
@@ -608,6 +642,7 @@ object OrgAuthority {
         fun needK(k: Int): Pair<List<String>, String?> {
             need(others.isEmpty(), "scope", "a seat outside the org admins")
             need(orgAdmins.size >= k, "threshold")
+            checkQuorumCustody(at, k, orgAdmins, adminCustody(at))
             return signers to null
         }
         return when (action) {
@@ -661,9 +696,19 @@ object OrgAuthorityWire {
         val admins = (o["admins"] as? JsonArray ?: bad("admins")).map { a ->
             val x = obj(a, "admin")
             val kind = OrgAdminKind.values().firstOrNull { it.wire == x.s("kind") } ?: bad("kind")
-            OrgAdminEntry(x.s("seatId"), kind, binding(x["binding"]))
+            OrgAdminEntry(x.s("seatId"), kind, binding(x["binding"]), custody(x))
         }
-        return OrgAuthorityRecord(o.s("orgId"), o.n("version"), o.s("prevHash"), admins, OrgBylaws(seats, b.n("overturnK").toInt(), b.n("vetoK").toInt()),
+        val hardwareAdmins = when (val v = b["adminCustody"]) {
+            null, is JsonNull -> false
+            is JsonPrimitive -> if (v.isString && (v.content == "any" || v.content == "hardware")) v.content == "hardware" else throw OrgAuthorityException("bylaws", "adminCustody")
+            else -> throw OrgAuthorityException("bylaws", "adminCustody")
+        }
+        val quorumHardware = when (val v = b["quorumHardware"]) {
+            null, is JsonNull -> true
+            is JsonPrimitive -> if (!v.isString && (v.content == "true" || v.content == "false")) v.content == "true" else throw OrgAuthorityException("bylaws", "quorumHardware")
+            else -> throw OrgAuthorityException("bylaws", "quorumHardware")
+        }
+        return OrgAuthorityRecord(o.s("orgId"), o.n("version"), o.s("prevHash"), admins, OrgBylaws(seats, b.n("overturnK").toInt(), b.n("vetoK").toInt(), hardwareAdmins, quorumHardware),
             o.s("founderSeatId"), o.n("kGov").toInt(), o.n("kGrant").toInt(), o.n("kDestroy").toInt(), o.n("kSite").toInt(), o.n("issuedAt"))
     }
 
@@ -706,9 +751,16 @@ object OrgAuthorityWire {
         }
     }
 
+    /** `custody`: absent or "hardware" = HARDWARE, "browser" = BROWSER; anything else is refused. */
+    fun custody(o: JsonObject): OrgCustody = when (val v = o["custody"]) {
+        null, is JsonNull -> OrgCustody.HARDWARE
+        is JsonPrimitive -> OrgCustody.values().firstOrNull { v.isString && it.wire == v.content } ?: bad("custody")
+        else -> bad("custody")
+    }
+
     fun grantBundle(e: JsonElement?): OrgSeatGrantBundle {
         val o = obj(e, "grant bundle"); val g = obj(o["grant"], "grant")
-        val grant = OrgSeatGrant(g.s("orgId"), g.s("seatId"), g.s("labelSha256"), g.s("memberKeyId"), g.s("adminKeyId"), g.s("rolesHash"), g.n("oarVersion"), g.n("issuedAt"), g.n("expiresAt"))
+        val grant = OrgSeatGrant(g.s("orgId"), g.s("seatId"), g.s("labelSha256"), g.s("memberKeyId"), g.s("adminKeyId"), g.s("rolesHash"), g.n("oarVersion"), g.n("issuedAt"), g.n("expiresAt"), custody(g))
         val admin = o["adminBinding"].let { if (it == null || it is JsonNull) null else binding(it) }
         return OrgSeatGrantBundle(grant, roles(o["roles"]), binding(o["memberBinding"]), admin, approvals(o["approvals"]))
     }
