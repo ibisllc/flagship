@@ -115,6 +115,16 @@ struct ThreadScreen: View {
                 Button(role: .destructive) { confirmBlock = true } label: { Label("Block", systemImage: "hand.raised") }
                     .accessibilityIdentifier("thread-block")
             }
+            if store.callsOn {
+                Button { Task { note = await store.setCallAllow(c, allow: true) ?? String(localized: "They can call you now.") } } label: {
+                    Label("Allow calls from them", systemImage: "phone")
+                }
+                .accessibilityIdentifier("thread-allow-calls")
+                Button { Task { note = await store.setCallAllow(c, allow: false) ?? String(localized: "They can't call you any more.") } } label: {
+                    Label("Don't allow calls from them", systemImage: "phone.down")
+                }
+                .accessibilityIdentifier("thread-disallow-calls")
+            }
             if let last = c.messages.last(where: { !$0.fromOwner }) {
                 Button(role: .destructive) { reporting = last } label: { Label("Report", systemImage: "exclamationmark.bubble") }
                     .accessibilityIdentifier("thread-report")
@@ -137,9 +147,12 @@ struct ThreadScreen: View {
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 4)
                     }
-                    ForEach(c.messages) { m in
-                        bubble(m, last: m.id == c.messages.last(where: \.fromOwner)?.id)
-                            .id(m.id)
+                    let lastOwn = c.messages.last(where: \.fromOwner)?.id
+                    ForEach(VoiciThreadEntry.timeline(messages: c.messages, calls: store.missedCalls, conv: c.conv)) { e in
+                        switch e {
+                        case .message(let m): bubble(m, last: m.id == lastOwn).id(m.id)
+                        case .missedCall(let call): missedCall(call).id(e.id)
+                        }
                     }
                 }
                 .padding(.horizontal, 12)
@@ -150,6 +163,21 @@ struct ThreadScreen: View {
                 if let last = c.messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
             }
         }
+    }
+
+    private func missedCall(_ call: VoiciMissedCallRow) -> some View {
+        HStack {
+            Label(VoiciThreadEntry.missedLabel(call), systemImage: call.video ? "video.slash" : "phone.arrow.down.left")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(.secondarySystemBackground), in: Capsule())
+            Text(Date(timeIntervalSince1970: Double(call.ringingAt) / 1000), style: .time).font(.caption2).foregroundStyle(.secondary)
+            Spacer(minLength: 48)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("thread-missed-call")
     }
 
     private func bubble(_ m: VoiciThreadMessage, last: Bool) -> some View {

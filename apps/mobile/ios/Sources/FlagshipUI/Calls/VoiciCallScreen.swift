@@ -35,31 +35,9 @@ public struct VoiciCallScreen: View {
         }
     }
 
-    private var visible: Bool {
-        switch center.phase {
-        case .idle: return false
-        case .ringing, .needsUnlock: return center.noRingMode
-        default: return true
-        }
-    }
+    private var visible: Bool { VoiciCallScreenModel.visible(center.phase, noRingMode: center.noRingMode) }
 
-    private var status: String {
-        switch center.phase {
-        case .ringing: return String(localized: "voi.ci call")
-        case .needsUnlock: return String(localized: "Unlock Flagship to answer")
-        case .connecting: return String(localized: "Connecting…")
-        case .connected: return String(localized: "Quantum-safe call")
-        case .idle: return ""
-        case .ended(let code):
-            switch code {
-            case "answered-elsewhere": return String(localized: "Answered on another device")
-            case "media-unavailable": return String(localized: "This version of Flagship can't connect calls yet.")
-            case "failed": return String(localized: "The call couldn't connect.")
-            case "limit": return String(localized: "Calls end after 60 minutes.")
-            default: return String(localized: "Call ended")
-            }
-        }
-    }
+    private var status: String { VoiciCallScreenModel.status(center.phase) }
 
     @ViewBuilder private var controls: some View {
         switch center.phase {
@@ -88,6 +66,34 @@ public struct VoiciCallScreen: View {
             Button { cameraRefused = false; center.dismissEnded() } label: { Text("Close") }.buttonStyle(.borderedProminent)
         case .idle:
             EmptyView()
+        }
+    }
+}
+/// What the call screen shows for each phase (pure, so the view-model tests can pin it).
+enum VoiciCallScreenModel {
+    static func visible(_ phase: VoiciCallCenter.Phase, noRingMode: Bool) -> Bool {
+        switch phase {
+        case .idle: return false
+        case .ringing, .needsUnlock: return noRingMode
+        default: return true
+        }
+    }
+
+    static func status(_ phase: VoiciCallCenter.Phase) -> String {
+        switch phase {
+        case .ringing: return String(localized: "voi.ci call")
+        case .needsUnlock: return String(localized: "Unlock Flagship to answer")
+        case .connecting: return String(localized: "Connecting…")
+        case .connected: return String(localized: "Quantum-safe call")
+        case .idle: return ""
+        case .ended(let code):
+            switch code {
+            case "answered-elsewhere": return String(localized: "Answered on another device")
+            case "media-unavailable": return String(localized: "This version of Flagship can't connect calls yet.")
+            case "failed": return String(localized: "The call couldn't connect.")
+            case "limit": return String(localized: "Calls end after 60 minutes.")
+            default: return String(localized: "Call ended")
+            }
         }
     }
 }

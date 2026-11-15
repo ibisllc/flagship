@@ -54,6 +54,10 @@ public final class MessagesStore {
     public private(set) var state = MessagesState()
     public private(set) var phase: Phase = .idle
     public private(set) var lastError: String?
+    /// Missed calls opened and checked here (docs/voici-calls.md §6), shown in their conversation's thread.
+    public private(set) var missedCalls: [VoiciMissedCallRow] = []
+    /// A calls change being published (`setCalls`); nil: every publish carries the index's own calls setting.
+    @ObservationIgnored private var pendingCalls: (on: Bool, from: String)?
 
     // MARK: kept on the device
 
@@ -87,7 +91,7 @@ public final class MessagesStore {
         guard changed else { return }
         self.username = u
         index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
-        state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false
+        state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
         local = Local()
         guard !u.isEmpty else { return }
         // A sample account's example page is read from `.com` each time; no copy of it is kept on the device.
@@ -101,11 +105,15 @@ public final class MessagesStore {
         username = ""
         Self.currentUsername = nil
         index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
-        state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false
+        state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
         local = Local()
     }
 
     public var isAdmin: Bool { Keystore.hasAdminRoot }
+    /// Calls are on in the published index (only while the page is public).
+    public var callsOn: Bool { isPublic && index?.takesCalls == true }
+    /// Who may call: the index's setting while calls are on, else what this device picked last.
+    public var callsFrom: String { callsOn ? VoiciCallSettings.read(acceptsCalls: index?.acceptsCalls, callsFrom: index?.callsFrom).from : CallSettingsStore.lastFrom() }
     /// Visitors see the page on voi.ci now.
     public var isPublic: Bool { index != nil && !isRemoved }
     public var hasAccount: Bool {
@@ -255,6 +263,7 @@ public final class MessagesStore {
             await loadState(client)
             await loadLane(client, keys)
             await loadInbox(client)
+            await loadMissedCalls(client)
             settleHanded()
             await checkReplies()
             phase = .ready
@@ -412,6 +421,33 @@ public final class MessagesStore {
         local.revoked = inbox.revoked
         save()
         await rebuildAsync()
+    }
+
+    /// Every missed call `.com` holds for the page, opened under the inbox key of each epoch and checked; anything
+    /// that fails to open or check is dropped.
+    private func loadMissedCalls(_ client: any VoiciComClient) async {
+        guard let idx = index, let items = try? await client.missedCalls(username: username) else { return }
+        let ca = await client.caKeys()
+        var seeds: [[UInt8]] = []
+        var e = idx.inboxEpoch
+        while e >= 1, let k = keys(epoch: e) { seeds.append(k.inbox.seed); e -= 1 }
+        missedCalls = Self.openMissedCalls(items, seeds: seeds, pageId: idx.pageId, origin: Endpoints.voiciOrigin, caKeys: ca)
+    }
+
+    nonisolated static func openMissedCalls(_ items: [VoiciMissedCallItem], seeds: [[UInt8]], pageId: String, origin: String, caKeys: [String]) -> [VoiciMissedCallRow] {
+        var out: [VoiciMissedCallRow] = []
+        for item in items {
+            guard let sealed = CanonicalJson.b64Decode(item.sealed) else { continue }
+            for seed in seeds {
+                guard let m = VoiciCalls.openMissedCall(inboxSeed: seed, callId: item.callId, sealed: sealed, pageId: pageId, origin: origin, caKeys: caKeys) else { continue }
+                if !out.contains(where: { $0.callId == item.callId }) {
+                    out.append(VoiciMissedCallRow(callId: item.callId, conv: m.request.conv, pseudonymPub: m.request.from, reason: m.reason,
+                                                  ringingAt: m.ringingAt, video: m.request.hasVideo))
+                }
+                break
+            }
+        }
+        return out.sorted { $0.ringingAt < $1.ringingAt }
     }
 
     private func rebuild() { Task { await rebuildAsync() } }
@@ -586,6 +622,20 @@ public final class MessagesStore {
         await publish(signer: s, only: ops, mayRepublish: mayRepublish)
     }
 
+    /// Settings → Messages → Calls: on/off and who may call, published at once in the index by an admin device
+    /// (docs/voici-calls.md §6, §8). Drafts stay drafts. False when it couldn't be published (`publishError` says why).
+    @discardableResult
+    public func setCalls(on: Bool, from: String) async -> Bool {
+        guard isAdmin, isPublic, VoiciCallSettings.fromValues.contains(from) else { return false }
+        CallSettingsStore.setLastFrom(from)
+        guard on != callsOn || (on && from != callsFrom) else { return true }
+        guard let s = await sensitiveSigner(reason: String(localized: "Publish your page")) else { return false }
+        pendingCalls = (on, from)
+        defer { pendingCalls = nil }
+        await publish(signer: s, only: [])
+        return publishError == nil
+    }
+
     /// Rotate the inbox key: the next index names `inboxEpoch + 1`; messages sealed to the old key stay readable here.
     /// Only the key changes: drafts stay drafts.
     public func rotateInbox() async {
@@ -662,9 +712,14 @@ public final class MessagesStore {
             try await client.uploadPiece(username: username, upload: up, signerPub: signerPub,
                                          signature: try VoiciPage.signVoiciPieceUpload(up, signerSeed: seed), bytes: p.bytes)
         }
+        // Every publish carries the calls setting of the index it replaces (a profile edit never turns calls off).
+        let current = VoiciCallSettings.read(acceptsCalls: isRemoved ? nil : index?.acceptsCalls, callsFrom: index?.callsFrom)
+        let calls = pendingCalls ?? current
+        let fields = VoiciCallSettings.indexFields(on: calls.on, from: calls.from)
         let body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),
                                   acceptsMessages: merged.acceptsMessages, inboxEpoch: epoch, inboxPub: k.inboxPub, ownerSignPub: k.signPub,
-                                  pieces: pieces.map(\.ref), signerKind: Keystore.hasAdminRoot ? "admin-root" : "irk")
+                                  pieces: pieces.map(\.ref), signerKind: Keystore.hasAdminRoot ? "admin-root" : "irk",
+                                  acceptsCalls: fields.acceptsCalls, callsFrom: fields.callsFrom)
         let idx = try VoiciPage.signVoiciPageIndex(body, signerSeed: seed)
         try await client.publish(username: username, index: idx.json)
         if only == nil {
@@ -773,6 +828,21 @@ public final class MessagesStore {
         } catch {
             lastError = Self.sentence(error)
             return false
+        }
+    }
+
+    /// The thread menu's "Allow calls from them" / "Don't allow calls from them": a signed call-allow order
+    /// (`flagship/voici-call-allow/v1`) under the page's owner signing key. Nil on success, else a sentence.
+    public func setCallAllow(_ c: VoiciConversation, allow: Bool) async -> String? {
+        guard let client, let idx = index, let k = keys(epoch: idx.inboxEpoch) else { return String(localized: "Unlock Flagship and try again.") }
+        let op = allow ? "allow" : "disallow"
+        let at = now()
+        do {
+            let sig = try VoiciCalls.signAllow(pageId: idx.pageId, conv: c.conv, op: op, issuedAt: at, ownerSignSeed: k.sign.seed)
+            try await client.callAllow(username: username, allow: VoiciCalls.allowJson(pageId: idx.pageId, conv: c.conv, op: op, issuedAt: at), signature: sig)
+            return nil
+        } catch {
+            return Self.sentence(error)
         }
     }
 

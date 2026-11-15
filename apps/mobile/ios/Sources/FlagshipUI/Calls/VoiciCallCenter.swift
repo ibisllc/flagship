@@ -37,6 +37,18 @@ public final class VoiciCallCenter: NSObject {
     /// No CallKit here (the China mainland storefront): calls ring only on the open app's screen.
     public private(set) var noRingMode = false
 
+    /// This device's Do Not Disturb hours (Settings → Messages → Calls); read when a call arrives.
+    @ObservationIgnored public var quietHours: () -> CallQuietHours = { CallSettingsStore.quietHours() }
+    @ObservationIgnored public var clock: () -> Date = { Date() }
+
+    /// A call that arrives now rings here only outside this device's Do Not Disturb hours. A quiet device stays out of
+    /// the room, so another device can answer and an unanswered call becomes a missed call.
+    func shouldRing(issuedAt: Int64) -> Bool {
+        let now = clock()
+        let ms = Int64(now.timeIntervalSince1970 * 1000)
+        return ms - issuedAt <= VoiciCalls.ringMs && !quietHours().isQuiet(at: now)
+    }
+
     /// The WebRTC implementation; a stub until the libwebrtc dependency is decided (docs/voici-calls.md).
     @ObservationIgnored public var mediaFactory: () -> CallMediaEngine = { StubCallMediaEngine() }
 
@@ -165,7 +177,7 @@ public final class VoiciCallCenter: NSObject {
     }
 
     private func ringInApp(_ call: VoiciCallPush) {
-        guard noRingMode else { return }
+        guard noRingMode, shouldRing(issuedAt: call.issuedAt) else { return }
         Task { await incoming(call) }
     }
 
@@ -336,10 +348,10 @@ extension VoiciCallCenter: PKPushRegistryDelegate {
             guard let provider = self.provider else { return completion() }
             provider.reportNewIncomingCall(with: id, update: u) { error in
                 Task { @MainActor in
-                    let now = Int64(Date().timeIntervalSince1970 * 1000)
-                    guard error == nil, let call, !busy, now - call.issuedAt <= VoiciCalls.ringMs else {
-                        // A malformed, late or second call: reported, then ended at once.
-                        provider.reportCall(with: id, endedAt: nil, reason: .failed)
+                    guard error == nil, let call, !busy, self.shouldRing(issuedAt: call.issuedAt) else {
+                        // A malformed, late or second call, or Do Not Disturb here: reported (Apple requires it), then
+                        // ended at once.
+                        provider.reportCall(with: id, endedAt: nil, reason: call == nil || busy ? .failed : .unanswered)
                         return completion()
                     }
                     self.callUUID = id
