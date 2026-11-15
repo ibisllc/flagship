@@ -522,3 +522,25 @@ Owner idea: turning calls on means agreeing to ring. Each page owner picks one m
   FCM are free). Limits: we run both halves, so the split guards against one side's breach, a subpoena served on
   one provider, and our own logs, but it is not protection against Flagship itself. A third-party operator would
   be the stronger option later.
+
+### Push relay over the relay network (owner, 2026-11-15)
+
+Owner: the push relay runs on the relays and uses the relay mesh, so that "as more institutions agree to host
+Flagship relays, the deeper the obfuscation". Design:
+- **Onion path through the mesh.** `.com` doesn't push. It picks a random path of hops among blessed relays (relay
+  blessing, `docs/architecture-v2/relay-mesh.md`) and wraps the delivery in layers, one per hop, each sealed to that
+  hop's relay key. Each hop learns only the previous and next hop. The entry hop sees `.com` but only ciphertext;
+  the last hop (the exit) opens the sealed token and sends the content-free push, but never learns the conversation
+  or which `.com` request started it.
+- **Exits hold the push credentials.** Apple's APNs key and Google's FCM credentials can't be handed to outside
+  institutions, so only Flagship-run relays act as exits. Relays hosted by other institutions are entry and middle
+  hops. Each added independent relay widens the set of possible paths, so linking a conversation to a phone needs
+  every hop on the path plus the exit to collude.
+- **The app registers its token through whichever relay it reaches.** The token is sealed to the exit key set (any
+  Flagship exit can open it), and the registration travels to `.com` through the app's own nearest relay. `.com`
+  never sees the phone's network address with the registration.
+- **Timing:** each hop adds a small random delay (tens of milliseconds) and pads every message to one size, so a
+  hop can't match in and out by size. A ring still arrives within a second.
+- **Fallback:** with a single relay (today), the path is entry = exit = the Fly relay. That is the about-$0 option,
+  with protection exactly as described above, deepening as relays join.
+- **Cost:** nothing extra beyond relays we or partners already run; the mesh links already exist.
