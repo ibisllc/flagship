@@ -23,6 +23,8 @@ import {
   orgNewestRingFor,
   orgPendingRotations,
   canonicalOrgBoxKem,
+  verifyOrgInstallBlob,
+  type OrgInstallBlob,
   type OrgKeyKind,
   type OrgKeyRingBundle,
   type OrgKeyRings,
@@ -150,5 +152,23 @@ export async function readOrgCgk(dataDir: string): Promise<{ version: number; ke
     return { version: k.version, key: Uint8Array.from(Buffer.from(k.keyHex, "hex")) };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Checks this box's own recipe once its org chain is pinned: the server code and the recipe both
+ * carry org approvals (`add-server`) that must verify under the chain replayed from the recipe's
+ * genesis. A recipe that does not verify is named in Activity (the box keeps its pin: it already
+ * trusts that genesis, as a personal box trusts the IRK its recipe named).
+ */
+export async function verifyOwnOrgRecipe(pinned: OrgPinned, blobPath: string, now: number): Promise<{ ok: true; signers: string[] } | { ok: false; reason: string }> {
+  const r = await readStateFile(blobPath);
+  if (r.kind !== "ok") return { ok: false, reason: "the recipe is not on this box" };
+  try {
+    const b = JSON.parse(r.text) as OrgInstallBlob;
+    if (b.kind !== "org") return { ok: false, reason: "the recipe is not an org server's" };
+    return { ok: true, signers: verifyOrgInstallBlob(pinned.state, pinned.book, b, now).signers };
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
   }
 }

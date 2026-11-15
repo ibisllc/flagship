@@ -355,7 +355,7 @@ import {
   type RotationPq,
 } from "./adminRootRotationConsumer.js";
 import { currentOrgPin, startOrgAuthoritySync } from "./orgAuthorityPin.js";
-import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxRotationDone, readOrgCgk, verifyServedRings } from "./orgBoxKeys.js";
+import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxRotationDone, readOrgCgk, verifyOwnOrgRecipe, verifyServedRings } from "./orgBoxKeys.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
 import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
 import {
@@ -556,6 +556,11 @@ async function configFromInstallBlob(): Promise<ServerConfig | null> {
     const bak = b.phoneDelegatedPubKey;
     const irk = b.authCode?.userPubKey;
     const isHex32 = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/i.test(v);
+    // An org server's recipe (docs/enterprise-accounts.md "Org servers") pins the org, not an IRK.
+    const org = b as { kind?: unknown; orgId?: unknown; genesisHash?: unknown };
+    if (org.kind === "org") {
+      return parseConfig({ serverId, userId, bakPublicKey: typeof bak === "string" ? bak.toLowerCase() : bak, orgId: org.orgId, orgGenesisHash: org.genesisHash });
+    }
     if (typeof serverId !== "string" || typeof userId !== "string" || !isHex32(bak) || !isHex32(irk)) {
       return null;
     }
@@ -1686,9 +1691,16 @@ async function main(): Promise<void> {
     const orgKeyDeps = { dataDir, orgId: cfg.orgId, serverDomain: cfg.serverId, signAsBox: (m: Uint8Array) => custodian.signAsBox(m), controlPlaneBaseUrl: env.controlPlaneBaseUrl };
     void announceOrgBoxKem(orgKeyDeps).catch((e) => console.warn(`[org] box KEM key not announced: ${(e as Error).message}`));
     let ringsCache: { at: number; rings: OrgKeyRings } | null = null;
+    let recipeChecked = false;
     const orgRings = async (): Promise<OrgKeyRings | null> => {
       const pin = currentOrgPin();
       if (!pin) return null;
+      if (!recipeChecked) {
+        recipeChecked = true;
+        const v = await verifyOwnOrgRecipe(pin, process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json", Date.now());
+        if (v.ok) activityLog.note("org.recipe.verified", `This server's recipe carries the approval of seat ${v.signers.map((s) => s.slice(0, 8)).join(", ")}`, { ok: true });
+        else activityLog.note("org.recipe.unverified", `This server's recipe did not verify under the org's chain: ${v.reason}`, { ok: false });
+      }
       if (ringsCache && Date.now() - ringsCache.at < 60_000) return ringsCache.rings;
       const rings = verifyServedRings(pin, await fetchOrgRings(orgKeyDeps), cfg.serverId, Date.now());
       ringsCache = { at: Date.now(), rings };

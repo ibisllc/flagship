@@ -25,6 +25,7 @@ import {
   type OrgSeatRevokeBundle,
 } from "../packages/protocol/src/orgAuthority.js";
 import {
+  canonicalOrgInstallBlob,
   canonicalOrgServerCode,
   canonicalOrgServerRegister,
   orgServerCodeSha256,
@@ -128,6 +129,32 @@ const serverCodes = [
   { name: "an approval of another code", code, approvals: [approve(B, canonicalOrgServerCode({ ...code, serial: "orgsrv-0002-abcd" }), 1, AT)], now: AT + MIN, expect: no("order-mismatch") },
 ];
 void grantAddRoles;
+
+// ── the org recipe (install blob) ────────────────────────────────────────
+const blobBase = {
+  kind: "org" as const,
+  version: 1 as const,
+  orgId: ORG,
+  genesisHash: GENESIS,
+  orgName: "acme",
+  username: "acme",
+  serverName: "home",
+  serverDomain: SERVER,
+  registrationUrl: `https://flagshipserver.com/api/orgs/${ORG}/servers/register`,
+  installerGitRef: "c0".repeat(20),
+  phoneDelegatedPubKey: "d1".repeat(32),
+  bootUnlockMode: "approve" as const,
+  diskEncryption: "luks" as const,
+  code,
+};
+const blobOrder = canonicalOrgInstallBlob(blobBase);
+const installBlob = { ...blobBase, codeApprovals: serverCodes[0]!.approvals, approvals: [approve(B, blobOrder, 1, AT)] };
+const installBlobs = [
+  { name: "the recipe and its code, each approved by an org admin", blob: installBlob, now: AT + 3 * DAY, expect: { ok: true } },
+  { name: "the installer commit changed after approval", blob: { ...installBlob, installerGitRef: "c1".repeat(20) }, now: AT + MIN, expect: no("order-mismatch") },
+  { name: "a recipe approved by an outsider", blob: { ...installBlob, approvals: [approve(X, blobOrder, 1, AT)] }, now: AT + MIN, expect: no("unknown-signer") },
+  { name: "a recipe whose code names another server", blob: { ...installBlob, code: { ...code, serverName: "other", serverDomain: OTHER } }, now: AT + MIN, expect: no("malformed") },
+];
 
 const stkSeed = fill(32, 0x5e);
 const stkPub = hex(ed25519.getPublicKey(stkSeed));
@@ -265,17 +292,19 @@ const canonical = [
   { name: "box kem", bytes: utf8(canonicalOrgBoxKem(boxKemStatement)) },
   { name: "key ring v2", bytes: utf8(canonicalOrgKeyRing(ring2.ring)) },
   { name: "audit export", bytes: utf8(canonicalOrgAuditExport(exported.statement)) },
+  { name: "install blob", bytes: utf8(blobOrder) },
 ].map((c) => ({ ...c, sha256: orgSha256Hex(new TextEncoder().encode(c.bytes)) }));
 
 const doc = {
   description:
-    "Org servers, the org key ring and the audit export (docs/enterprise-accounts.md). Uses org-authority/vectors.json: its keys, chains[0].entries[0..1] (v0, v1) and seatBooks[0]'s grants [M, S]. serverCodes: verifyOrgServerCode(state, book, code, approvals, now). register: verifyOrgServerRegister(request, signature) with an Ed25519 STK from seed 5e*32. kems: verifyOrgSeatKem / verifyOrgBoxKem (STK above). keyRings: verifyOrgKeyRing(ctx, bundle, prev, {fresh}) with ctx = state, seat book (grants [M, S] + revokes), newest KEM keys, servers [home, other] at now. rotations: orgRotationDone over buildOrgKeyRings(ctx with revokes [revokeS]). opens: openOrgKeyRing(ring, recipient, X-Wing secret from kemSeedHex) returns keyHex. audit: verifyOrgAuditExport(export, {genesisHash, now}).",
+    "Org servers, the org key ring and the audit export (docs/enterprise-accounts.md). Uses org-authority/vectors.json: its keys, chains[0].entries[0..1] (v0, v1) and seatBooks[0]'s grants [M, S]. serverCodes: verifyOrgServerCode(state, book, code, approvals, now). installBlobs: verifyOrgInstallBlob(state, book, blob, now). register: verifyOrgServerRegister(request, signature) with an Ed25519 STK from seed 5e*32. kems: verifyOrgSeatKem / verifyOrgBoxKem (STK above). keyRings: verifyOrgKeyRing(ctx, bundle, prev, {fresh}) with ctx = state, seat book (grants [M, S] + revokes), newest KEM keys, servers [home, other] at now. rotations: orgRotationDone over buildOrgKeyRings(ctx with revokes [revokeS]). opens: openOrgKeyRing(ring, recipient, X-Wing secret from kemSeedHex) returns keyHex. audit: verifyOrgAuditExport(export, {genesisHash, now}).",
   orgId: ORG,
   genesisHash: GENESIS,
   servers: [SERVER, OTHER],
   revokeS,
   canonical,
   serverCodes,
+  installBlobs,
   register: { request: register, signature: registerSig, stkSeedHex: hex(stkSeed), flipped: registerSig.slice(0, 127) + (registerSig[127] === "0" ? "1" : "0") },
   seatKemSeed: { umkHex: hex(umk), seedHex: hex(seatKemSeed), kemKeyId: orgKemKeyPair(seatKemSeed).kemKeyId },
   kems: { seat: seatKems, box: boxKems },

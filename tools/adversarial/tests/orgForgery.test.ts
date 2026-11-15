@@ -9,6 +9,7 @@
  *   AT-ENV-42  org-seat-kem/v1 and org-box-kem/v1: moved to another seat, KEM key swapped, another STK
  *   AT-ENV-43  org-key-ring/v1: recipient spliced after approval, retired seat dropped, commitment and scope swap
  *   AT-ENV-44  org-audit-export/v1: log head swap, record hash swap, outsider
+ *   AT-ENV-45  org-install-blob/v1: installer commit, registration URL or genesis changed after approval; the code's approval reused
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -157,5 +158,26 @@ describe("AT-ENV-44 org-audit-export/v1", () => {
   });
   it("AT-ENV-44c an export under another genesis is refused", () => {
     expect(() => P.verifyOrgAuditExport(clone(V.audit.export), { genesisHash: "11".repeat(32), now })).toThrow(/wrong-org/);
+  });
+});
+
+describe("AT-ENV-45 org-install-blob/v1", () => {
+  const good = V.installBlobs[0];
+  const run = (b: P.OrgInstallBlob) => {
+    const c = ctx(good.now);
+    return () => P.verifyOrgInstallBlob(c.state, c.book, b, good.now);
+  };
+  it("AT-ENV-45a the recipe verifies (control)", () => expect(run(good.blob)).not.toThrow());
+  it("AT-ENV-45b the installer commit or the registration URL changed after approval is refused (catches: a recipe pointed at other code or another .com)", () => {
+    expect(run({ ...good.blob, installerGitRef: "c1".repeat(20) })).toThrow(/order-mismatch/);
+    const otherUrl = good.blob.registrationUrl.replace("flagshipserver.com", "evil.example");
+    expect(run({ ...good.blob, registrationUrl: otherUrl })).toThrow(/order-mismatch/);
+  });
+  it("AT-ENV-45c the server code's approval cannot stand in for the recipe's", () => {
+    expect(run({ ...good.blob, approvals: good.blob.codeApprovals })).toThrow(/order-mismatch/);
+  });
+  it("AT-ENV-45d unlock mode or disk encryption downgraded after approval is refused", () => {
+    expect(run({ ...good.blob, bootUnlockMode: "auto" })).toThrow(/order-mismatch/);
+    expect(run({ ...good.blob, diskEncryption: "none" })).toThrow(/order-mismatch/);
   });
 });

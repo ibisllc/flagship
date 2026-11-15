@@ -24,6 +24,8 @@ import {
   verifyOrgSeatKem,
   verifyOrgServerCode,
   verifyOrgServerRegister,
+  verifyOrgInstallBlob,
+  canonicalOrgInstallBlob,
   type OrgKeyKind,
 } from "../src/index.js";
 
@@ -82,6 +84,22 @@ describe("org servers, key ring and audit vectors", () => {
       try {
         const r = verifyOrgServerCode(state, book, c.code, c.approvals, c.now);
         got = { ok: true, scopedSeat: r.scopedSeat };
+      } catch (e) {
+        got = { ok: false, code: codeOf(e) };
+      }
+      expect(got, c.name).toEqual(c.expect);
+    }
+  });
+
+  it("org recipes (install blobs)", () => {
+    const byName = Object.fromEntries(V.canonical.map((c: { name: string; bytes: string }) => [c.name, c.bytes]));
+    expect(new TextDecoder().decode(canonicalOrgInstallBlob(V.installBlobs[0].blob))).toBe(byName["install blob"]);
+    for (const c of V.installBlobs) {
+      const { state, book } = ctxAt(c.now);
+      let got: unknown;
+      try {
+        verifyOrgInstallBlob(state, book, c.blob, c.now);
+        got = { ok: true };
       } catch (e) {
         got = { ok: false, code: codeOf(e) };
       }
