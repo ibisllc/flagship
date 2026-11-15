@@ -21,6 +21,17 @@ export interface VoiciCallAllowRecord {
   signature: string;
 }
 
+/** A device's bound call-only key (flagship/voici-call-key/v1; migration 0147). */
+export interface VoiciCallKeyRecord {
+  username: string;
+  deviceId: string;
+  callKeyPub: string;
+  createdAt: number;
+  /** Ed25519 by the page's ownerSignPub over the binding. */
+  signature: string;
+  registeredAt: number;
+}
+
 export interface VoiciMissedCallRecord {
   id: number;
   pageId: string;
@@ -48,6 +59,12 @@ export interface VoiciCallStorage {
   /** Retention (180 days, as the mailbox) and the counters older than two days. */
   collectCalls(o: { missedBefore: number; countsBeforeDay: string; now: number; limit: number }): Promise<number>;
   deleteCallsForPage(pageId: string): Promise<void>;
+  /** Binds a call key for (username, deviceId), replacing that device's previous one; false when the key was revoked. */
+  putCallKey(rec: VoiciCallKeyRecord): Promise<boolean>;
+  getCallKey(username: string, deviceId: string): Promise<VoiciCallKeyRecord | null>;
+  /** Records the revocation and drops the binding when it still names this key. */
+  revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string; revokedAt: number; signature: string }): Promise<void>;
+  isCallKeyRevoked(callKeyPub: string): Promise<boolean>;
   deleteCallsForAccount(username: string): Promise<void>;
 }
 
@@ -167,6 +184,40 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
   async deleteCallsForAccount(username: string) {
     await this.db.prepare("DELETE FROM voici_voip_tokens WHERE username = ?1").bind(username).run();
     await this.db.prepare("DELETE FROM voici_live_calls WHERE username = ?1").bind(username).run();
+    await this.db.prepare("DELETE FROM voici_call_keys WHERE username = ?1").bind(username).run();
+  }
+
+  async putCallKey(rec: VoiciCallKeyRecord) {
+    if (await this.isCallKeyRevoked(rec.callKeyPub)) return false;
+    await this.db
+      .prepare(
+        "INSERT INTO voici_call_keys (username, device_id, call_key_pub, created_at, signature, registered_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6) " +
+          "ON CONFLICT (username, device_id) DO UPDATE SET call_key_pub = ?3, created_at = ?4, signature = ?5, registered_at = ?6",
+      )
+      .bind(rec.username, rec.deviceId, rec.callKeyPub, rec.createdAt, rec.signature, rec.registeredAt)
+      .run();
+    return true;
+  }
+
+  async getCallKey(username: string, deviceId: string) {
+    const r = await this.db
+      .prepare("SELECT username, device_id, call_key_pub, created_at, signature, registered_at FROM voici_call_keys WHERE username = ?1 AND device_id = ?2")
+      .bind(username, deviceId)
+      .first<{ username: string; device_id: string; call_key_pub: string; created_at: number; signature: string; registered_at: number }>();
+    return r ? { username: r.username, deviceId: r.device_id, callKeyPub: r.call_key_pub, createdAt: r.created_at, signature: r.signature, registeredAt: r.registered_at } : null;
+  }
+
+  async revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string; revokedAt: number; signature: string }) {
+    await this.db
+      .prepare("INSERT OR IGNORE INTO voici_call_key_revocations (call_key_pub, username, device_id, revoked_at, signature) VALUES (?1, ?2, ?3, ?4, ?5)")
+      .bind(rec.callKeyPub, rec.username, rec.deviceId, rec.revokedAt, rec.signature)
+      .run();
+    await this.db.prepare("DELETE FROM voici_call_keys WHERE username = ?1 AND device_id = ?2 AND call_key_pub = ?3").bind(rec.username, rec.deviceId, rec.callKeyPub).run();
+  }
+
+  async isCallKeyRevoked(callKeyPub: string) {
+    const r = await this.db.prepare("SELECT 1 AS x FROM voici_call_key_revocations WHERE call_key_pub = ?1").bind(callKeyPub).first<{ x: number }>();
+    return !!r;
   }
 }
 
@@ -176,6 +227,8 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   voip = new Map<string, VoiciVoipToken>();
   allows = new Map<string, VoiciCallAllowRecord>();
   missed: VoiciMissedCallRecord[] = [];
+  callKeys = new Map<string, VoiciCallKeyRecord>();
+  revokedCallKeys = new Set<string>();
   private nextId = 1;
 
   async countRing(pageId: string, day: string, max: number) {
@@ -240,6 +293,23 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   }
   async deleteCallsForAccount(username: string) {
     for (const k of [...this.voip.keys()]) if (k.startsWith(`${username}|`)) this.voip.delete(k);
+    for (const k of [...this.callKeys.keys()]) if (k.startsWith(`${username}|`)) this.callKeys.delete(k);
     this.live.delete(username);
+  }
+  async putCallKey(rec: VoiciCallKeyRecord) {
+    if (this.revokedCallKeys.has(rec.callKeyPub)) return false;
+    this.callKeys.set(`${rec.username}|${rec.deviceId}`, { ...rec });
+    return true;
+  }
+  async getCallKey(username: string, deviceId: string) {
+    return this.callKeys.get(`${username}|${deviceId}`) ?? null;
+  }
+  async revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string }) {
+    this.revokedCallKeys.add(rec.callKeyPub);
+    const k = `${rec.username}|${rec.deviceId}`;
+    if (this.callKeys.get(k)?.callKeyPub === rec.callKeyPub) this.callKeys.delete(k);
+  }
+  async isCallKeyRevoked(callKeyPub: string) {
+    return this.revokedCallKeys.has(callKeyPub);
   }
 }

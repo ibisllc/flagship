@@ -14,6 +14,9 @@
  *   handleVoiciVoipToken     POST /api/accounts/<u>/voici-voip-token: a device's PushKit token (device headers)
  *   authorizeVoiciCallDevice the room WebSocket of a ringing device: an active admin device of the account
  *   handleVoiciMissedCalls   GET /api/voici/pages/<u>/calls?since=: sealed missed calls (read token)
+ *   handleVoiciCallKey       POST /api/accounts/<u>/voici-call-key: an admin device binds its call-only key (device headers)
+ *   handleVoiciCallKeyRevoke POST /api/accounts/<u>/voici-call-key/revoke: a signed revocation (owner key or the call key)
+ *   authorizeVoiciCallKeyDevice the room WebSocket of a ringing device that is locked: a join signed by its bound call key
  *
  * What `.com` learns: that pseudonym P rang page X, when, and whether someone answered; never audio or frame keys
  * (the X-Wing secret is the caller's and the answering phone's; `.com` relays only its ciphertext).
@@ -23,6 +26,12 @@ import {
   checkVoiciCallAnswer,
   checkVoiciCallEnd,
   checkVoiciCallRequest,
+  parseVoiciCallKeyProof,
+  parseVoiciCallKeyRevoke,
+  verifyVoiciCallJoin,
+  verifyVoiciCallKeyBinding,
+  verifyVoiciCallKeyRevoke,
+  isVoiciCallKeyPub,
   parseVoiciCallAllow,
   parseVoiciCallRequest,
   parseVoiciPageIndex,
@@ -258,7 +267,8 @@ export function buildVoiciCallRinger(deps: VoiciCallRingerDeps) {
 
 // ── the room ────────────────────────────────────────────────────────────────
 
-export type VoiciCallRoomPeer = { role: "caller" } | { role: "device"; deviceRef: string };
+/** A device peer joined with a bound call key carries it (the answer and its end orders must be signed by it). */
+export type VoiciCallRoomPeer = { role: "caller" } | { role: "device"; deviceRef: string; callKeyPub?: string };
 
 export type VoiciCallRoomAction =
   | { kind: "send"; to: "caller" | "devices" | { deviceRef: string } | { notDeviceRef: string }; msg: Record<string, unknown> }
@@ -274,6 +284,8 @@ export interface VoiciCallRoomState {
   winner: string | null;
   answeredAt: number | null;
   endReason: string | null;
+  /** The winner's call key when it answered while locked. */
+  winnerCallKeyPub?: string | null;
 }
 
 /**
@@ -320,7 +332,12 @@ export class VoiciCallRoomCore {
       return peer.deviceRef === s.winner ? [{ kind: "send", to: "caller", msg: { t: "camera", state: msg.state } }] : [];
     }
     if (msg.t === "end") {
-      const e = checkVoiciCallEnd(msg.end, { callId: s.init.callId, callerPub: s.init.callerPub, ownerSignPub: s.init.ownerSignPub });
+      const e = checkVoiciCallEnd(msg.end, {
+        callId: s.init.callId,
+        callerPub: s.init.callerPub,
+        ownerSignPub: s.init.ownerSignPub,
+        ...(s.winnerCallKeyPub ? { ownerCallKeyPub: s.winnerCallKeyPub } : {}),
+      });
       if (!e || Math.abs(e.issuedAt - now) > VOICI_CALL_SKEW_MS) return [];
       if (peer.role === "caller" && e.side !== "caller") return [];
       if (peer.role === "device" && (e.side !== "owner" || (s.phase === "answered" && peer.deviceRef !== s.winner))) return [];
@@ -331,12 +348,19 @@ export class VoiciCallRoomCore {
     if (msg.t === "answer") {
       const to = { deviceRef: peer.deviceRef };
       if (s.phase !== "ringing") return [{ kind: "send", to, msg: { t: "answered-elsewhere" } }];
-      const a = checkVoiciCallAnswer(msg.answer, { request: s.init.request, ownerSignPub: s.init.ownerSignPub, now });
+      const a = checkVoiciCallAnswer(msg.answer, {
+        request: s.init.request,
+        ownerSignPub: s.init.ownerSignPub,
+        now,
+        username: s.init.username,
+        ...(peer.callKeyPub ? { callKeyPub: peer.callKeyPub } : {}),
+      });
       if (!a.ok) return [{ kind: "send", to, msg: { t: "error", code: a.code } }];
       if (a.answer.deviceRef !== peer.deviceRef) return [{ kind: "send", to, msg: { t: "error", code: "wrong-device" } }];
       s.phase = "answered";
       s.winner = peer.deviceRef;
       s.answeredAt = now;
+      s.winnerCallKeyPub = peer.callKeyPub ?? null;
       const receipt = signVoiciCallReceipt({ account: s.init.username, callId: s.init.callId, deviceRef: peer.deviceRef, issuedAt: now, expiresAt: now + VOICI_CALL_RECEIPT_TTL_MS }, this.ca.seed);
       return [
         { kind: "send", to, msg: { t: "won", receipt } },
@@ -473,3 +497,86 @@ export async function handleVoiciMissedCalls(
     headers: { ...ACCOUNT_READ_HEADERS },
   };
 }
+
+// ── call keys: answering while locked ───────────────────────────────────────
+
+type CallKeyDirectory = Pick<AccountDirectoryDeps, "identities" | "nonces" | "now" | "freshnessMs">;
+
+/**
+ * Body {binding, signature}: an active admin device binds its own call-only key, signed by the page's current
+ * ownerSignPub. One key per device; a revoked key never binds again.
+ */
+export async function handleVoiciCallKey(
+  deps: { voici: VoiciStorage; calls: VoiciCallStorage; usernames: Pick<UsernameStorage, "get">; grants: Pick<DeviceCapabilityGrantStorage, "listForUser">; directory: CallKeyDirectory; now?: () => number },
+  username: string,
+  auth: DirectoryAuthorization | undefined,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  const u = username.toLowerCase();
+  const now = (deps.now ?? Date.now)();
+  const caller = await authorizeActiveDevice(deps.directory, auth, { accountId: u, method: "POST", path: `/api/accounts/${u}/voici-call-key` });
+  if (!caller) return voiciRefusal(403, "forbidden");
+  const proof = parseVoiciCallKeyProof(body);
+  if (!proof) return voiciRefusal(400, "malformed");
+  if (proof.binding.username !== u || proof.binding.deviceId !== caller.deviceId) return voiciRefusal(403, "wrong-device");
+  if (Math.abs(proof.binding.createdAt - now) > VOICI_CALL_SKEW_MS) return voiciRefusal(403, "stale");
+  const user = await deps.usernames.get(u);
+  if (!user?.adminRootPubHex) return voiciRefusal(403, "forbidden");
+  if (!(await adminDeviceIds(deps.grants, u, user.adminRootPubHex, now)).has(caller.deviceId)) return voiciRefusal(403, "not-admin");
+  const page = await deps.voici.getPage(u);
+  if (!page) return voiciRefusal(404, "not-found");
+  if (!verifyVoiciCallKeyBinding(proof.binding, proof.signature, { ownerSignPub: page.ownerSignPub, username: u })) return voiciRefusal(403, "bad-signature");
+  if (!(await deps.calls.putCallKey({ ...proof.binding, signature: proof.signature, registeredAt: now }))) return voiciRefusal(403, "revoked");
+  return ok({ ok: true });
+}
+
+/** Body {revoke, signature}: signed by the page's ownerSignPub or by the call key itself. No device needed. */
+export async function handleVoiciCallKeyRevoke(
+  deps: { voici: VoiciStorage; calls: VoiciCallStorage },
+  username: string,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  const u = username.toLowerCase();
+  const b = isObj(body) ? body : {};
+  const r = parseVoiciCallKeyRevoke(b.revoke);
+  if (!r || typeof b.signature !== "string") return voiciRefusal(400, "malformed");
+  const page = await deps.voici.getPage(u);
+  // A page that is gone still lets the key revoke itself.
+  if (!verifyVoiciCallKeyRevoke(r, b.signature, { ownerSignPub: page?.ownerSignPub ?? "", username: u })) return voiciRefusal(403, "bad-signature");
+  await deps.calls.revokeCallKey({ ...r, signature: b.signature });
+  return ok({ ok: true });
+}
+
+/** The join a locked device sends as headers on the room WebSocket. */
+export interface VoiciCallKeyJoinAuth {
+  deviceId: string;
+  callKeyPub: string;
+  issuedAt: number;
+  signature: string;
+}
+
+/**
+ * A ringing device's room WebSocket while its account key is locked: a join signed by the call key `.com` holds for
+ * that device, not revoked, whose binding still verifies under the page's current ownerSignPub, on an active admin
+ * device. Answers the deviceRef (H(callKeyPub)) and the key the answer must be signed by.
+ */
+export async function authorizeVoiciCallKeyDevice(
+  deps: { voici: VoiciStorage; calls: VoiciCallStorage; usernames: Pick<UsernameStorage, "get">; grants: Pick<DeviceCapabilityGrantStorage, "listForUser">; now?: () => number },
+  username: string,
+  callId: string,
+  join: VoiciCallKeyJoinAuth | undefined,
+): Promise<{ deviceRef: string; callKeyPub: string } | null> {
+  const u = username.toLowerCase();
+  const now = (deps.now ?? Date.now)();
+  if (!join || !CALL_ID.test(callId) || !isVoiciCallKeyPub(join.callKeyPub)) return null;
+  if (!verifyVoiciCallJoin({ username: u, callId, deviceId: join.deviceId, callKeyPub: join.callKeyPub, issuedAt: join.issuedAt }, join.signature, now)) return null;
+  const rec = await deps.calls.getCallKey(u, join.deviceId);
+  if (!rec || rec.callKeyPub !== join.callKeyPub || (await deps.calls.isCallKeyRevoked(rec.callKeyPub))) return null;
+  const page = await deps.voici.getPage(u);
+  if (!page || !verifyVoiciCallKeyBinding({ username: rec.username, deviceId: rec.deviceId, callKeyPub: rec.callKeyPub, createdAt: rec.createdAt }, rec.signature, { ownerSignPub: page.ownerSignPub, username: u })) return null;
+  const user = await deps.usernames.get(u);
+  if (!user?.adminRootPubHex) return null;
+  if (!(await adminDeviceIds(deps.grants, u, user.adminRootPubHex, now)).has(join.deviceId)) return null;
+  return { deviceRef: voiciCallDeviceRef(join.callKeyPub), callKeyPub: join.callKeyPub };
+}
+

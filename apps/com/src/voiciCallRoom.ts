@@ -7,7 +7,8 @@
  * Requests from the Worker (voiciCallRoutes.ts), all internal:
  *   POST /init        the VoiciCallRoomInit; 409 if this callId was used
  *   GET  /caller?t=   the caller's WebSocket (token checked against its hash)
- *   GET  /device      a ringing admin device's WebSocket; `x-voici-device-ref` set by the Worker after its checks
+ *   GET  /device      a ringing admin device's WebSocket; `x-voici-device-ref` (and, for a locked device that joined with
+ *                     its bound call key, `x-voici-call-key-pub`) set by the Worker after its checks
  */
 import { D1Storage, RequestD1, type D1Database } from "@flagship/storage";
 import { recordVoiciMissedCall, VoiciCallRoomCore, type VoiciCallRoomAction, type VoiciCallRoomInit, type VoiciCallRoomPeer, type VoiciCallRoomState } from "@flagship/control-plane";
@@ -87,7 +88,8 @@ export class VoiciCallRoom implements DurableObject {
     } else if (url.pathname === "/device") {
       const ref = request.headers.get("x-voici-device-ref") ?? "";
       if (!/^[0-9a-f]{64}$/.test(ref)) return json(403, { code: "forbidden" });
-      peer = { role: "device", deviceRef: ref };
+      const callKeyPub = request.headers.get("x-voici-call-key-pub");
+      peer = { role: "device", deviceRef: ref, ...(callKeyPub && /^04[0-9a-f]{128}$/.test(callKeyPub) ? { callKeyPub } : {}) };
     } else return json(404, { code: "not-found" });
     const pair = new WebSocketPair();
     const server = pair[1] as Attachable;

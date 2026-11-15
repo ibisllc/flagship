@@ -153,6 +153,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0141",
   // voi.ci calls: per-page daily ring counts, one live call per account, VoIP tokens, call allows, missed calls.
   "0146",
+  // voi.ci calls answered while locked: each device's bound call-only key and the revocations.
+  "0147",
 ];
 
 export interface SchemaStatusDeps {
