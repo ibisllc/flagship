@@ -355,7 +355,9 @@ import {
   type RotationPq,
 } from "./adminRootRotationConsumer.js";
 import { currentOrgPin, startOrgAuthoritySync } from "./orgAuthorityPin.js";
-import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxRotationDone, postOrgBoxLogHead, readOrgCgk, verifyOwnOrgRecipe, verifyServedRings } from "./orgBoxKeys.js";
+import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxKemSeed, orgBoxRotationDone, postOrgBoxLogHead, readOrgCgk, verifyOwnOrgRecipe, verifyServedRings } from "./orgBoxKeys.js";
+import { ConnectorRuntime } from "./directory/connector.js";
+import { startDirectoryConnectors } from "./directory/wiring.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
 import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
 import {
@@ -2562,6 +2564,26 @@ async function main(): Promise<void> {
     // the caller's STK envelope against the .com directory and owner-scopes
     // reads. 503s until wirePeerBackup had identity + .com reachability.
     runtime.addHandler(pbFramesHandler);
+    // Org directory connectors (docs/org-directory.md): SCIM 2.0 at /scim/v2 and LDAP pull, on an org
+    // box only. They propose changes sealed to the org admins and never hold an org key.
+    if (cfg?.orgId && cfg.orgGenesisHash && env.controlPlaneBaseUrl) {
+      const directory = startDirectoryConnectors({
+        rt: new ConnectorRuntime({
+          dataDir,
+          orgId: cfg.orgId,
+          serverDomain: cfg.serverId,
+          controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+          pin: currentOrgPin,
+          boxKemSeed: () => orgBoxKemSeed(dataDir),
+          log: (m) => console.warn(m),
+        }),
+        dataDir,
+        note: (kind, text, ok) => activityLog.note(kind, text, { ok }),
+        log: (m) => console.warn(m),
+      });
+      runtime.addHandler(directory.handler);
+      process.once("SIGTERM", () => directory.stop());
+    }
     outboundProxy?.onChange(() => runtime.reconnectTunnel());
     // startDaemonRuntime now resolves once the tunnel is connected and the
     // local API + TLS server are serving — BEFORE the first ACME attempt

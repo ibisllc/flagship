@@ -145,6 +145,29 @@ read by TS, Swift and Kotlin. The ring kind is the existing `directory-key` (sea
   `.com` checks that refSha256 is already in the org log.
 - Routes: `GET/POST /api/orgs/<id>/connectors`, `GET/POST /api/orgs/<id>/proposals`, `POST /api/orgs/<id>/proposals/decisions`.
 
+**The connector box (§8 steps 3-5).** `packages/server-daemon/src/directory/`; developer guide
+`docs/directory-connectors.md`.
+- The admin's phone makes the connector's hybrid seeds and (SCIM) a bearer token shown once, approves the record, and
+  seals the setup (`sealOrgConnectorSetup`: seeds, mapping, token SHA-256, LDAP settings and bind password) to the box's
+  org KEM key; `.com` stores it as ciphertext beside the record. The box (`ConnectorRuntime`) re-reads the records every
+  5 minutes, checks each under its own pinned chain (`verifyOrgConnector(..., { stored: true })`: the approval as of the
+  record it names, its signers still org admins now), opens the setup and checks the seeds against the approved key id
+  and the mapping against its digest. A token rotation is a re-post with a later `issuedAt` and a new setup; the box
+  warns in Activity when a token is over 365 days old.
+- `engine.ts` diffs each snapshot against the last and proposes invite / offboard / role-change / entry-update once
+  each; a pending person is linked to a seat only when the decided invite proposal's `refSha256` matches an invite whose
+  seat the box's pinned seat book holds.
+- SCIM 2.0 (`scim.ts`) at `/scim/v2` on the box's own name: Users, Groups, ServiceProviderConfig, Schemas, ResourceTypes;
+  filters `userName eq`, `externalId eq` (and `displayName eq` for Groups, which Entra sends); Entra's and Okta's PATCH
+  shapes; 600 requests a minute; counts per 15 minutes in Activity, never names. Tests replay recorded Entra and Okta
+  request sequences (`tests/fixtures/scim/`).
+- LDAP pull (`ldap.ts`, `ldapts` 9.2.0: MIT, pure TypeScript, one dependency) over LDAPS only, AD and OpenLDAP defaults,
+  every 15 minutes by default; tests run the real client against an in-process fake LDAP server. No CI job against an
+  OpenLDAP container: no existing workflow runs service containers for the daemon's unit tests.
+- `DirectorySource` (`source.ts`) with the sample `StaticDirectorySource` (a JSON file).
+- Not built: a `changes()` delta feed for any built-in source, group sync beyond membership names, a webhook for the
+  company's mailer, SCIM bulk.
+
 **Joining.** A joining seat signs its seat KEM statement (`org-seat-kem/v1`) with its member key at accept and sends it
 with the accept; `.com` checks it against the member binding, keeps it, and records it as the seat's KEM key when the
 grant lands, so a member receives key-ring versions without opening the org page (release-manager decision).

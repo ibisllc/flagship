@@ -22,7 +22,16 @@
  */
 import { sha256 } from "@noble/hashes/sha256";
 import { hex } from "./canonicalBase.js";
-import { OrgAuthorityError, authorizeOrgOrder, orgKeyIdHex, orgSha256Hex, type OrgApproval, type OrgAuthorityState, type OrgSeatBook } from "./orgAuthority.js";
+import {
+  OrgAuthorityError,
+  authorizeOrgOrder,
+  orgKeyIdHex,
+  orgSha256Hex,
+  verifyOrgRecordedApprovals,
+  type OrgApproval,
+  type OrgAuthorityState,
+  type OrgSeatBook,
+} from "./orgAuthority.js";
 import { hybridOpen, hybridSeal, hybridSealWithRandomness, hybridSign, hybridVerify, HYBRID_SIG_PUBLIC_KEY_LEN } from "./pqHybrid.js";
 import type { OrgKemKey } from "./orgKeyRing.js";
 import type { Bytes } from "./types.js";
@@ -123,12 +132,16 @@ export function orgConnectorKeyId(connectorPub: Bytes): string {
 
 /**
  * Checks a connector record against the org's chain and seat book: well formed, its key matches the
- * named id, one org admin approved it now, and the box is one of the org's servers. Throws.
+ * named id, one org admin approved it, and the box is one of the org's servers. Throws.
+ * Fresh (`.com` at submission): the approval must be current. `stored` (the connector box, later):
+ * the approval is checked as of the record it names (it may have expired since), and its signers
+ * must still be org admins now, so a connector an ousted admin added stops at the next refresh.
  */
 export function verifyOrgConnector(
   ctx: { state: OrgAuthorityState; book: OrgSeatBook; servers: ReadonlySet<string>; now: number },
   b: OrgConnectorBundle,
   prev: OrgConnector | null,
+  opts: { stored?: boolean } = {},
 ): void {
   const c = b.connector;
   const order = canonicalOrgConnector(c);
@@ -140,6 +153,11 @@ export function verifyOrgConnector(
     if (prev.connectorId !== c.connectorId) fail("malformed", "another connector");
     if (prev.status === "retired") fail("seat-revoked", "connector retired");
     if (c.issuedAt <= prev.issuedAt) fail("not-after-previous");
+  }
+  if (opts.stored) {
+    const { signers } = verifyOrgRecordedApprovals(ctx.state, ctx.book, order, b.approvals, b.approvals[0]?.oarVersion ?? -1, ctx.now);
+    for (const s of signers) if (!ctx.state.current.admins.some((a) => a.seatId === s && a.kind === "admin")) fail("not-an-admin", s);
+    return;
   }
   authorizeOrgOrder({ state: ctx.state, book: ctx.book, action: { kind: "seat-invite" }, order, approvals: b.approvals, now: ctx.now });
 }
@@ -322,7 +340,18 @@ export interface OrgConnectorSetup {
   /** When the token was made (the console warns after 365 days). */
   scimTokenIssuedAt?: number;
   /** LDAP pull settings. */
-  ldap?: { url: string; bindDn: string; bindPassword: string; baseDn: string; userFilter: string; groupFilter?: string; intervalMinutes?: number };
+  ldap?: {
+    url: string;
+    bindDn: string;
+    bindPassword: string;
+    baseDn: string;
+    userFilter: string;
+    groupFilter?: string;
+    intervalMinutes?: number;
+    /** `ad` (default) or `openldap`: picks the attribute defaults. */
+    flavor?: "ad" | "openldap";
+    attributes?: { externalId?: string; userName?: string; displayName?: string; memberOf?: string; disabled?: string };
+  };
 }
 
 /** The admin-edited mapping: attribute names and groups → org roles (no names of people). */
