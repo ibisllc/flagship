@@ -76,6 +76,9 @@ private extension Data {
         self = d
     }
 
+}
+
+extension ServerRestoreMergeVectorTests {
     /// The admin root's hybrid half (`pqSignature`) a strict box needs beside each order's Ed25519 signature.
     func testHybridHalfOverEachOrder() throws {
         let v = try vectors()
