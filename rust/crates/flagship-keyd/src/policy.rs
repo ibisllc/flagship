@@ -163,7 +163,9 @@ fn receipt_text_ok(s: &str) -> bool {
 }
 
 fn lower_hex_len(s: &str, n: usize) -> bool {
-    s.len() == n && s.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    s.len() == n
+        && s.bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
 /// The claim receipt's fixed shape: the box's own two keys and one claim transcript.
@@ -177,7 +179,9 @@ fn claim_receipt_ok(msg: &[u8], public_key_hex: &str, mldsa_pub_hex: Option<&str
     }
     let own = format!("{public_key_hex}{}", mldsa_pub_hex.unwrap_or(""));
     let serial_ok = (8..=64).contains(&p[3].len())
-        && p[3].bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-');
+        && p[3]
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-');
     let issued_ok = !p[9].is_empty()
         && p[9].len() <= 16
         && p[9].bytes().all(|c| c.is_ascii_digit())
@@ -270,7 +274,9 @@ fn check_sign_inner(
             ));
         }
     }
-    if purpose == "flagship/box-claim-receipt/v1" && !claim_receipt_ok(msg, public_key_hex, mldsa_pub_hex) {
+    if purpose == "flagship/box-claim-receipt/v1"
+        && !claim_receipt_ok(msg, public_key_hex, mldsa_pub_hex)
+    {
         return Err(KeydError::forbidden(
             "a claim receipt names the box's own two keys and one claim transcript",
         ));
@@ -887,7 +893,12 @@ mod tests {
         );
         assert!(check_sign(good.as_bytes(), PUB, BOX_SIGN_PURPOSES).is_err());
         for bad in [
-            receipt("open", &format!("{}{ml}", "ef".repeat(32)), &"0f".repeat(64), ""),
+            receipt(
+                "open",
+                &format!("{}{ml}", "ef".repeat(32)),
+                &"0f".repeat(64),
+                "",
+            ),
             receipt("other", &own, &"0f".repeat(64), ""),
             receipt("open", &own, &"0f".repeat(63), ""),
             receipt("open", &own, &"0f".repeat(64), "|more"),
