@@ -164,8 +164,10 @@ export async function handleOrgCreate(deps: OrgDeps, body: unknown): Promise<Han
   if (typeof b?.name !== "string" || !b.entry) return malformed("name and entry required");
   const v = validateUserLabel(b.name);
   if (!v.ok) return malformed(v.reason);
-  if (isReservedName(v.label)) return forbidden("name reserved");
-  if (await deps.usernames.get(v.label)) return conflict("name taken");
+  if (isReservedName(v.label) || (await deps.usernames.get(v.label)) || (await deps.orgs.getOrgByName(v.label))) {
+    // One namespace with usernames (`<server>.<name>.<apex>`): the apps write the sentence from the code.
+    return { status: 409, body: { error: "taken or too similar to an existing name", code: "taken" } };
+  }
   let genesisHash: string;
   try {
     genesisHash = orgAuthorityHash(b.entry.record);
