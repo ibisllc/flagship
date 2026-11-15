@@ -254,7 +254,7 @@ describe("specializer wiring", () => {
     const rekey = script.indexOf("flagship_luks_run_reencrypt \"$ROOT_LUKS_PART\" \"$REKEY_BUILD_KEY\" fresh");
     expect(rekey).toBeGreaterThan(script.indexOf('stage "Checking the server recipe"'));
     expect(rekey).toBeLessThan(script.indexOf('growpart "/dev/$ROOT_PARENT"'));
-    expect(rekey).toBeLessThan(script.indexOf("FLAGSHIP_APPLIANCE_PREINSTALLED=1 /usr/local/sbin/flagship-bootstrap.sh"));
+    expect(rekey).toBeLessThan(script.indexOf('FLAGSHIP_APPLIANCE_PREINSTALLED=1 FLAGSHIP_BOX_KEY_IN_KEYD="$RETAIL" /usr/local/sbin/flagship-bootstrap.sh'));
     expect(script).toContain("FLAGSHIP_LUKS_BUILD_KEY=/etc/flagship/appliance-build.key");
   });
   it("checks the key again before the box is marked specialized", () => {
