@@ -20,7 +20,7 @@ export const SPECIALIZER_RETAIL_DROP_IN_PATH = "/etc/systemd/system/flagship-app
 /** Conditions add up: the unit's own "not specialized yet" and "a claim left a recipe". */
 export const SPECIALIZER_RETAIL_DROP_IN = `[Unit]
 ConditionPathExists=${RETAIL_CLAIMED_RECIPE}
-Before=flagship-daemon.service
+Before=flagship-daemon.service flagship-claim.service
 `;
 
 /** Paths a retail image must not carry: the appliance's, plus every box key and Bluetooth identity. */
@@ -75,7 +75,10 @@ rm -rf /var/lib/apt/lists/*
 echo "[retail-image] BlueZ installed"
 
 ${retailHostSetupScript()}${files}systemctl enable bluetooth.service
-echo "[retail-image] claim service host files written"
+# The claim service of a box with no owner yet runs unprivileged as flagship-claim, its two root steps
+# through the claim helper; both stay off once a claim's first boot is done (boot-chain retailHost.ts).
+systemctl enable flagship-claim-helper.service flagship-claim.service
+echo "[retail-image] claim service host files and units written"
 
 # keyd from the installed release, so a box's first boot makes its own identity (keyd migrate).
 /usr/local/bin/node --input-type=module -e '
@@ -90,8 +93,8 @@ writeFileSync(KEYD_DAEMON_DROPIN_PATH, daemonKeydDropIn(), { mode: 0o644 });
 systemctl enable flagship-keyd.service
 echo "[retail-image] keyd unit installed"
 
-# The daemon from the first boot, with no daemon.env yet: it runs the claim service alone until a
-# claim's first boot gives it an owner.
+# The daemon's unit, with no daemon.env yet: its retail drop-in keeps it off until a claim's first boot
+# is done, then it serves (and runs the claim service of a box with an owner).
 cat > ${DAEMON_UNIT_PATH} <<'FLAGSHIP_RETAIL_DAEMON_EOF'
 ${daemonServiceUnit({ envFileOptional: true })}FLAGSHIP_RETAIL_DAEMON_EOF
 chmod 644 ${DAEMON_UNIT_PATH}

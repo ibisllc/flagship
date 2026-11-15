@@ -39,7 +39,9 @@ import { repairSystemPackages } from "./systemRepair.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { refreshDaemonHardening } from "./privdInstall.js";
 import { FILES_HELPER_IMAGE } from "./volumeDump.js";
-import { RETAIL_STATE_DIR, retailPaths } from "./retailClaim/daemon.js";
+import { RETAIL_STATE_DIR, retailLifecycle, retailPaths } from "./retailClaim/daemon.js";
+import { firstBootRestartRefusal } from "./retailClaim/firstBoot.js";
+import { verifyClaimRecipe } from "./retailClaim/recipe.js";
 import { readRetailImage, resetKeydAsRoot, retailWipeAsRoot } from "./retailClaim/wipe.js";
 
 const REPO = "/opt/flagship";
@@ -240,6 +242,23 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
         log,
       });
     })(),
+  // The claim helper's restart into a claim's first boot (retailClaim/firstBoot.ts): every precondition
+  // checked here, as root, from the files the unprivileged claim service left.
+  "retail-first-boot": async () => {
+    const p = retailPaths();
+    const recipeText = await readFile(p.recipe, "utf8").catch(() => null);
+    const refusal = firstBootRestartRefusal({
+      retailImage: (await readRetailImage()) !== null,
+      lifecycle: await retailLifecycle(),
+      firstBootDone: existsSync(p.firstBootDone),
+      recipeText,
+      verify: (t) => verifyClaimRecipe(t, 0).ok,
+    });
+    if (refusal) throw new Error(`retail first boot refused: ${refusal}`);
+    log("[retail] restarting into the claim's first boot");
+    await cmd.run("systemctl", ["reboot"]);
+    return { rebooting: true };
+  },
   "boot-chain": () => refreshBootChainAsRoot({ releaseRoot: REPO, trustedFiles: [fileURLToPath(import.meta.resolve("@flagship/boot-chain"))], log }),
 };
 

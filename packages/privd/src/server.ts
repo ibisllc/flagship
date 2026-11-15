@@ -3,7 +3,7 @@ import { appendFileSync, chmodSync, chownSync, closeSync, constants, existsSync,
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import { BOX_RELEASE } from "@flagship/protocol";
-import { DAEMON_TRANSFER_ROOTS, transferPath, validateRequest, type Exec, type GpuClaimReader, type GpuRunClaim, type ReleaseTrust } from "./policy.js";
+import { DAEMON_TRANSFER_ROOTS, transferPath, validateRequest, validateRetailClaimRequest, type Exec, type PrivdProfile, type GpuClaimReader, type GpuRunClaim, type ReleaseTrust } from "./policy.js";
 import { readActiveEngine, type EngineKind } from "./podman.js";
 import { FrameReader, PRIVD_PROTOCOL_VERSION, PrivdError, encodeFrame, parseRequest, type PrivdRequest, type PrivdResponse } from "./wire.js";
 
@@ -256,6 +256,8 @@ export interface PrivdServerOptions {
   /** The release trust a release install is checked against (tests). Default: this release's own. */
   trust?: ReleaseTrust;
   helloTimeoutMs?: number;
+  /** "retail-claim": the claim helper's two steps only (policy.ts validateRetailClaimRequest). */
+  profile?: PrivdProfile;
 }
 
 /**
@@ -365,6 +367,7 @@ export class PrivdServer {
   }
 
   private validate(req: PrivdRequest): Exec {
+    if (this.o.profile === "retail-claim") return validateRetailClaimRequest(req.op, req.args);
     return validateRequest(req.op, req.args, {
       engine: (this.o.engine ?? readActiveEngine)(),
       mounts: this.o.mounts ?? (() => readFileSync("/proc/self/mounts", "utf8")),

@@ -10,7 +10,8 @@
 # (guest.sh) runs the retail layer the image builder would, starts BlueZ's virtual controllers
 # (btvirt over hci_vhci: two linked controllers, hci0 for the box, hci1 to scan from), then checks:
 #   - the image carries no box key, and keyd makes one at its first start (and keeps it on restart);
-#   - the daemon starts with no daemon.env and runs the claim service only;
+#   - the claim service runs as flagship-claim with no capabilities, the daemon stays off, and the
+#     claim helper refuses anything but the claim's own steps;
 #   - the claim GATT service advertises: the adapter has an active advertising instance, and a scan
 #     from hci1 finds the claim service UUID.
 # The verdict is the guest's "RETAIL-VM: PASS" on the serial console; exit 0 on pass, 1 otherwise.

@@ -55,7 +55,8 @@ describe("retail image layer", () => {
     expect(script).toContain("systemctl enable flagship-daemon.service");
     expect(script).not.toContain("ln -s /dev/null /etc/systemd/system/flagship-appliance-specialize.service");
     expect(SPECIALIZER_RETAIL_DROP_IN).toContain(`ConditionPathExists=${RETAIL_CLAIMED_RECIPE}`);
-    expect(SPECIALIZER_RETAIL_DROP_IN).toContain("Before=flagship-daemon.service");
+    expect(SPECIALIZER_RETAIL_DROP_IN).toContain("Before=flagship-daemon.service flagship-claim.service");
+    expect(script).toContain("systemctl enable flagship-claim-helper.service flagship-claim.service");
     expect(script).toContain(`cat > ${SPECIALIZER_RETAIL_DROP_IN_PATH} <<'FLAGSHIP_RETAIL_HOST_EOF'\n${SPECIALIZER_RETAIL_DROP_IN}FLAGSHIP_RETAIL_HOST_EOF`);
   });
 

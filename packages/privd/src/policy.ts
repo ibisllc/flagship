@@ -1264,6 +1264,23 @@ export function nftExec(args: Record<string, unknown>): Exec {
   return { file: "/usr/sbin/nft", args: ["-f", "-"], timeoutMs: 30_000, input: script };
 }
 
+/**
+ * The retail claim helper (docs/retail-box-setup.md §16): the same broker started with
+ * `--profile retail-claim` for the unprivileged claim service of a box with no owner yet. Two root
+ * steps and nothing else, each checking its own preconditions in setup.ts: the wipe (only with the
+ * reset marker on disk) and the restart into a claim's first boot (only with a claimed recipe that
+ * verifies and no first boot done). No power, docker, host, release or file operation.
+ */
+export const RETAIL_CLAIM_STEPS = ["retail-wipe", "retail-first-boot"] as const;
+export type PrivdProfile = "full" | "retail-claim";
+
+export function validateRetailClaimRequest(op: Op, args: Record<string, unknown>): Exec {
+  if (op !== "setup") throw new PrivdError("forbidden", "the claim helper runs only its own steps");
+  noExtra(args, ["step"]);
+  if (typeof args.step !== "string" || !(RETAIL_CLAIM_STEPS as readonly string[]).includes(args.step)) throw new PrivdError("forbidden", "unknown claim step");
+  return { file: "/usr/local/bin/node", args: [`${RELEASE_REPO}/packages/server-daemon/dist/setup.js`, args.step], timeoutMs: 10 * 60_000 };
+}
+
 /** What a request is checked against besides its arguments. */
 export interface PolicyContext {
   engine: EngineKind;
