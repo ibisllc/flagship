@@ -20,6 +20,8 @@
 // `|`-separated UTF-8, with the username field-guarded exactly like
 // canonicalBase.legacyFieldGuard (reject '|' + control chars).
 
+import { isAdminRootKey, loadAdminRootKey } from "./keyCustody.js";
+import { adminKeyLabel } from "./state.js";
 import {
   loadAdminRootSeed as ksLoadAdminRootSeed,
   adminRootPubHex as ksAdminRootPubHex,
@@ -135,10 +137,10 @@ export async function runRotateAdminRoot(deps) {
   const now = deps.now ?? (() => Date.now());
 
   // 1 — the OLD (current) admin root. Only an admin device can rotate.
-  const oldSeed = deps.currentAdminRootSeed instanceof Uint8Array
+  const oldSeed = isAdminRootKey(deps.currentAdminRootSeed)
     ? deps.currentAdminRootSeed
     : await loadSeed(umkSeed);
-  if (!(oldSeed instanceof Uint8Array) || oldSeed.length !== 32) {
+  if (!isAdminRootKey(oldSeed)) {
     throw new Error("rotate: this device isn't an admin device — no admin root to rotate");
   }
 
@@ -169,7 +171,12 @@ export async function runRotateAdminRoot(deps) {
 
   // 5 — re-store the NEW root, update the session, re-escrow under recovery.
   await persist(umkSeed, newSeed);
-  if (deps.session) deps.session.adminRootSeed = newSeed;
+  if (deps.session) {
+    // Production: the session gets the new root's handle; the seed moves under the browser's
+    // passkey on its first signature and is wiped here (docs/webapp-key-custody.md item 6).
+    const reload = deps.loadAdminRootKey ?? (deps.persistAdminRootSeed ? null : loadAdminRootKey);
+    deps.session.adminRootSeed = reload ? await reload(() => deps.session.umk ?? umkSeed, { userName: adminKeyLabel(username) }) : newSeed;
+  }
   let reEscrow = "skipped";
   if (typeof deps.reEscrow === "function") {
     // Best-effort: a rotation still succeeds even if the account has no recovery

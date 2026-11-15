@@ -163,6 +163,7 @@ import {
 } from "./lib/companionReceiver.js";
 
 import { tr } from "./lib/i18n.js";
+import { installAdminRootBinding } from "./lib/adminSigning.js";
 // Register the tab-bar landing sections (#23). They have no per-view
 // module — the tab bar simply toggles them.
 registerView("view-settings-tab", { tab: "settings" });
@@ -563,6 +564,7 @@ async function boot() {
       await renderProviders();
     },
   });
+  installAdminRootBinding();
   initSettingsView();
   initPodPairView();
   initServerDetailView();

@@ -205,7 +205,7 @@ function hexOf(b) {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-async function releaseKeyId(edHex, mlHex) {
+export async function releaseKeyId(edHex, mlHex) {
   const pk = Uint8Array.from((edHex + mlHex).match(/../g).map((h) => parseInt(h, 16)));
   const tag = new TextEncoder().encode("flagship/pq-key-id/v1");
   const input = new Uint8Array(1 + tag.length + 4 + pk.length);

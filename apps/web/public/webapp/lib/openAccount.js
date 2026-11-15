@@ -21,6 +21,7 @@
 // All side-effecting collaborators are injected so this is unit-testable
 // without IndexedDB / the DOM / the network.
 
+import { isAdminRootKey } from "./keyCustody.js";
 import { controlApex } from "./apex.js";
 import { ensureAdminRoot as defaultEnsureAdminRoot } from "./adminRoot.js";
 import { throwIfRateLimited } from "./rateLimited.js";
@@ -163,7 +164,7 @@ export async function openAccount(username, deps) {
 
   const ensureAdminRoot = deps.ensureAdminRoot || defaultEnsureAdminRoot;
   const adminRootPubHex = await ensureAdminRoot(session);
-  if (!adminRootPubHex || !(session.adminRootSeed instanceof Uint8Array)) {
+  if (!adminRootPubHex || !isAdminRootKey(session.adminRootSeed)) {
     throw new Error("administrator key unavailable");
   }
   const toHex = deps.bytesToHex || defaultBytesToHex;

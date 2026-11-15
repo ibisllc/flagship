@@ -6,6 +6,7 @@
 import { inlinePrompt } from "./modal.js";
 import { unlockUmk } from "../keystore.js";
 import { getSession } from "./state.js";
+import { isLockedKey } from "./keyCustody.js";
 
 import { tr } from "./i18n.js";
 export const FRESH_UNLOCK_WRONG = tr("That passphrase doesn't unlock this device.");
@@ -26,6 +27,9 @@ export async function confirmFreshUnlock({ title, message, okLabel = tr("Confirm
   const prompt = deps.prompt ?? inlinePrompt;
   const unlock = deps.unlock ?? unlockUmk;
   const session = deps.session ?? getSession();
+  // A passkey-sealed admin key asks the platform authenticator for the signature itself
+  // (lib/keyCustody.js), which is the stronger fresh check; no passphrase on top of it.
+  if (isLockedKey(session?.adminRootSeed)) return { ok: true };
   const passphrase = await prompt({
     title,
     message: tr("{0} Enter this device's passphrase to sign it.", message),

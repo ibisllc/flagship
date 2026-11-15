@@ -7,6 +7,7 @@
 //
 // Pages and messages never reach a model (§10.4): nothing here is shared with any AI code.
 
+import { isAdminRootKey } from "./keyCustody.js";
 import {
   b64Encode,
   b64Decode,
@@ -146,7 +147,7 @@ export async function ownPageSigner(deps = {}) {
   const canPublish = deps.canPublish ?? canSignAdminOrders;
   if (!canPublish(c.session, c.profile)) return null;
   const seed = c.session?.adminRootSeed;
-  if (seed instanceof Uint8Array) {
+  if (isAdminRootKey(seed)) {
     return { kind: "admin-root", pub: await adminRootPubHex(seed), sign: async (bytes) => bytesToHex(await signWithAdminRoot(seed, bytes)) };
   }
   const umk = umkOf(c).seed;

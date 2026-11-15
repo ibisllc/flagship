@@ -81,8 +81,15 @@ export const MERGE_CHUNK_BYTES = 4 * 1024 * 1024;
 export const PLAN_TTL_MS = 6 * 60 * 60_000;
 export const ACTION_ORDER = ["install", "keep", "replace", "replace-data", "copy", "skip"];
 export const RESTORE_ADMIN_ONLY = tr("Only an admin device of this account can restore a backup.");
-/** A quantum-safe (strict) box wants the signer's hybrid half, which a browser can't make (it holds no ML-DSA key). */
-export const RESTORE_NEEDS_PHONE = tr("This server needs a quantum-safe signature, which the webapp can't make. Restore it from the Flagship app on an admin phone.");
+/** A quantum-safe (strict) box wants the signer's hybrid half, and this browser holds no bound one. */
+export const RESTORE_NEEDS_PHONE = tr("This server needs a quantum-safe signature, and this browser's admin key has no quantum-safe half that the server accepts. Restore it from the Flagship app on the admin phone that set the account up.");
+
+/** `sign` returns the classical signature, or `{ signatureHex, pqSignature }` (lib/adminSigning.js). */
+async function signed(sign, canonical) {
+  const s = await sign(canonical);
+  if (s instanceof Uint8Array) return { signatureHex: bytesToHex(s) };
+  return { signatureHex: s.signatureHex, ...(s.pqSignature ? { pqSignature: s.pqSignature } : {}) };
+}
 
 /** The box's refusal of a restore order as a sentence: a strict box's points to the phone. */
 export function restoreErrorText(e, fallback) {
@@ -99,8 +106,7 @@ export async function mergeStatus({ client }) {
 /** Sign and send the stage order: the box may take and open this backup (it changes no app). */
 export async function stageRestore({ client, serverDomain, archiveId, bytes, sha256: hash, source, sign, now = Date.now }) {
   const order = { serverDomain, archiveId, bytes, sha256: hash, source, issuedAt: now() };
-  const signature = await sign(serverRestoreStageBytes(order));
-  const r = await client.fetch(`${MERGE_PATH}/stage`, { method: "POST", body: JSON.stringify({ order, signatureHex: bytesToHex(signature) }) });
+  const r = await client.fetch(`${MERGE_PATH}/stage`, { method: "POST", body: JSON.stringify({ order, ...(await signed(sign, serverRestoreStageBytes(order))) }) });
   return { restoreId: r?.restoreId, received: Number(r?.received) || 0, order };
 }
 
@@ -216,16 +222,14 @@ export function planLines(preview, choices, serverDomain) {
 export async function sendPlan({ client, serverDomain, restoreId, archiveId, sha256: hash, lines, sign, now = Date.now }) {
   const issuedAt = now();
   const order = { serverDomain, restoreId, archiveId, sha256: hash, planSha256: restoreMergePlanSha256(lines), issuedAt, expiresAt: issuedAt + PLAN_TTL_MS };
-  const signature = await sign(serverRestoreMergeBytes(order));
-  await client.fetch(`${MERGE_PATH}/plan`, { method: "POST", body: JSON.stringify({ order, signatureHex: bytesToHex(signature), lines }) });
+  await client.fetch(`${MERGE_PATH}/plan`, { method: "POST", body: JSON.stringify({ order, ...(await signed(sign, serverRestoreMergeBytes(order))), lines }) });
   return order;
 }
 
 /** Undo a replaced app (put its earlier copy back) or delete the earlier copy now; both signed. */
 export async function sendUndo({ client, serverDomain, point, discard, sign, now = Date.now }) {
   const order = { serverDomain, restoreId: point.restoreId, serviceId: point.serviceId, action: discard ? "discard" : "undo", issuedAt: now() };
-  const signature = await sign(appRestoreUndoBytes(order));
-  await client.fetch(`${MERGE_PATH}/undo`, { method: "POST", body: JSON.stringify({ order, signatureHex: bytesToHex(signature) }) });
+  await client.fetch(`${MERGE_PATH}/undo`, { method: "POST", body: JSON.stringify({ order, ...(await signed(sign, appRestoreUndoBytes(order))) }) });
 }
 
 // ---- what the screen says ----

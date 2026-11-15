@@ -9,6 +9,8 @@ import { escapeHtml } from "../lib/util.js";
 import { boxErrorText } from "../lib/humanError.js";
 import { inlineConfirm } from "../lib/modal.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
+import { signAdminOrder } from "../lib/adminSigning.js";
+import { isAdminRootKey } from "../lib/keyCustody.js";
 import { canSignAdminOrders } from "../lib/addServerGate.js";
 import { deriveServerArchiveKeyFromSeed } from "../keystore.js";
 import { parseBackupFile, openWithAccountKey, splitBundle, BACKUP_BUNDLE_EXTENSION } from "../lib/serverBackupFormat.js";
@@ -47,6 +49,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function signer() {
   const session = getSession();
+  // An admin device signs with the admin root and its hybrid half (one passkey prompt per order).
+  if (isAdminRootKey(session.adminRootSeed)) return (bytes) => signAdminOrder(session.adminRootSeed, bytes);
   return (bytes) => sensitiveSigner()(session.umk, bytes);
 }
 

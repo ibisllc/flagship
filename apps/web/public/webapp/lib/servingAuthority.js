@@ -13,6 +13,7 @@
 // Canonical bytes mirror @flagship/protocol servingAuthority.ts byte for byte
 // (shared vectors: packages/protocol/test-vectors/serving-authority/vectors.json).
 
+import { isAdminRootKey } from "./keyCustody.js";
 import {
   activeProfileId,
   bytesToHex,
@@ -232,7 +233,7 @@ export async function ensureRenewalKey(deps = {}) {
  */
 export function servingSigner(session = getSession(), profile = getActiveProfile()) {
   if (!session?.umk) return null;
-  if (session.adminRootSeed instanceof Uint8Array) {
+  if (isAdminRootKey(session.adminRootSeed)) {
     const seed = session.adminRootSeed;
     return { kind: "admin", sign: (bytes) => signWithAdminRoot(seed, bytes) };
   }

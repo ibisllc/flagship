@@ -8,6 +8,7 @@
 // apex, boot, sensitiveSign(bytes), accountSign(bytes), boxFetch(fqdn, path,
 // init) (A's own session on the box) and openDiskKey(serverDomain).
 
+import { isAdminRootKey } from "./keyCustody.js";
 import { noteKeyChanged, pinnedStk } from "./serverPins.js";
 import * as ss from "./serverShare.js";
 import * as si from "./serviceInvite.js";
@@ -19,7 +20,7 @@ import { _internal as bootSeal, fetchSealedDiskKey } from "./bootApproval.js";
 import { BoxKeyChangedError, requirePinnedBoxKey } from "./boxKeyPins.js";
 import { sharedBootKeyFor } from "./bootKey.js";
 import { humanError } from "./humanError.js";
-import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes } from "../keystore.js";
+import { deriveHouseholdKeyFromSeed, signWithIrk, signWithAdminRoot, bytesToHex, hexToBytes } from "../keystore.js";
 import { confirmFreshUnlock } from "./freshUnlock.js";
 import { getActiveProfile } from "./profiles.js";
 
@@ -622,7 +623,7 @@ export async function openShareLink({ shareId, secretHex }, deps = {}) {
  * root; `.com` signs the request for the demo account instead.
  */
 async function adminProof(d, accept) {
-  const isAdmin = d.adminRootSeed instanceof Uint8Array;
+  const isAdmin = isAdminRootKey(d.adminRootSeed);
   const isDemo = d.isDemo ?? !!getActiveProfile()?.demoServer;
   if (!isAdmin && !isDemo) throw new ShareError(SHARE_ACCEPT_ADMIN_ONLY, "not-admin");
   if (!isDemo) {
@@ -641,7 +642,7 @@ async function adminProof(d, accept) {
     res = await postJson(d, `${d.apex}/api/dev/sample-user/${user}/share-key-attestation`, { keyPubHex });
   } else {
     const request = { username: d.username, keyPubHex, issuedAt: d.now() };
-    const signature = await sigHex(ss.signShareKeyAttestationRequest(request, d.adminRootSeed));
+    const signature = await sigHex(ss.signShareKeyAttestationRequest(request, d.adminRootSeed instanceof Uint8Array ? d.adminRootSeed : (msg) => signWithAdminRoot(d.adminRootSeed, msg)));
     res = await postJson(d, `${d.apex}/api/users/${user}/share-key-attestation`, { request, signature });
   }
   if (res.status === 403 && res.body?.code === "accept-not-admin") throw new ShareError(SHARE_ACCEPT_ADMIN_ONLY, "not-admin");

@@ -17,6 +17,7 @@
 // targets only). The display names live in ROLE_LABELS only.
 //
 // Must pass packages/protocol/test-vectors/app-access-orders/vectors.json.
+import { isAdminRootKey } from "./keyCustody.js";
 import { tr } from "./i18n.js";
 
 export const TAG_APP_RANK = "flagship/app-rank/v1";
@@ -189,7 +190,7 @@ export const ADMIN_ONLY_MODE_NOTE = tr("Only an admin device can change who can 
 
 /** Whether this unlocked session holds the account's admin root. */
 export function isAdminDevice(session) {
-  return session?.adminRootSeed instanceof Uint8Array;
+  return isAdminRootKey(session?.adminRootSeed);
 }
 
 /** The ranks this device may give a new invite. */

@@ -105,7 +105,7 @@ describe("Phase 3 — promote-a-device (seal-root, assurance-gated)", () => {
 
   it("promote ON with NO/short admin root → hard error (never silently drop the grant)", async () => {
     await expect(seal(true, null)).rejects.toThrow(/admin device/);
-    await expect(seal(true, new Uint8Array(16))).rejects.toThrow(/no admin root/);
+    await expect(seal(true, new Uint8Array(16))).rejects.toThrow(/no admin root|Only an admin device/);
   });
 
   it("parseSealedBundle rejects a malformed wrappedAdminRoot", async () => {
