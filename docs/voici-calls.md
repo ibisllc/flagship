@@ -404,3 +404,48 @@ are not built). Not compiled for a device yet (iOS: no Xcode build on this Mac u
 - **WebRTC stack**: options in `docs/voici-calls-webrtc-options.md` (recommended: a pinned prebuilt now, our own
   build before GA). The owner's choice is pending. Linking `flagship-turn-lite` (UniFFI vs ports) is decided with it.
 - **The terms change (legal minimum) ships with the 0.4 deploy**, not before.
+
+## As built: answering while locked (2026-11-15, worktree `0.4/calls-2`)
+
+Owner decision 2026-11-15, built as designed above. Off by default; on the Social (Messages) page, Calls section:
+"Answer calls while Flagship is locked" (admin devices, while calls are on).
+
+- **Records** (`packages/protocol/src/voiciCalls.ts`; Swift `VoiciCalls.swift`, Kotlin `VoiciCalls.kt`, caller side
+  `packages/flagship-web/src/callProtocol.js`; vectors `test-vectors/voici-calls/vectors.json` section `callKey`):
+  - binding `flagship/voici-call-key/v1|<username>|<deviceId>|<callKeyPub>|<createdAt>`, Ed25519 by the page's
+    ownerSignPub; wire `{binding:{username, deviceId, callKeyPub, createdAt}, signature}` (exact keys; callKeyPub a
+    valid uncompressed P-256 point, lowercase hex 130; deviceId 32 hex).
+  - revoke `flagship/voici-call-key-revoke/v1|<username>|<deviceId>|<callKeyPub>|<revokedAt>`, Ed25519 by ownerSignPub
+    or P-256 by the call key itself (sign-out may happen after the owner key is gone).
+  - join `flagship/voici-call-join/v1|<username>|<callId>|<deviceId>|<callKeyPub>|<issuedAt>`, P-256 by the call key:
+    the locked device's room WebSocket (headers `x-flagship-call-key-device`, `-pub`, `-at`, `-sig`), since the
+    account device key that signs the usual device headers needs the unlocked account. This is the one use beyond
+    "answer and decline" in the design; the decline itself is the room message on that authenticated socket.
+  - the answer may carry `callKey` (the binding proof) with `sig` P-256 (IEEE P1363) by its key; deviceRef must be
+    H(callKeyPub). An owner end order may be signed by the call key that answered.
+  The key signs only those three tags; every other verifier takes Ed25519 or a different key, so it is refused there.
+- **`.com`** (migration **0147**, in `KNOWN_MIGRATIONS`): `voici_call_keys` (one bound key per device) and
+  `voici_call_key_revocations` (a revoked key never binds again). Routes `POST /api/accounts/<u>/voici-call-key`
+  (device headers of an active admin device; the binding must name that device, be fresh, and verify under the
+  page's current ownerSignPub) and `POST /api/accounts/<u>/voici-call-key/revoke` (signature only). The device room
+  route takes the call-key join instead of device headers: stored key, not revoked, binding still valid under the
+  current ownerSignPub, device still an admin device. The room then accepts from that peer only an answer and end
+  signed by that key (`winnerCallKeyPub`).
+- **The caller's browser** checks the binding under the page's ownerSignPub and the answer under the bound key (it
+  can't see revocations; `.com` refuses a revoked key at join, before the device can answer).
+- **Phones.** iOS `Calls/VoiciCallKey.swift`: Secure Enclave P-256 where available (else a software key), stored in
+  the Keychain `AfterFirstUnlockThisDeviceOnly`, no user presence. Android `calls/VoiciCallKey.kt`: Keystore EC P-256
+  without user authentication, StrongBox where the phone has it. Beside the key: account, device, page, the
+  ownerSignPub and the binding (public). A VoIP push / call push with the account locked uses only the call key: the
+  caller shows as "Someone on voi.ci" (the inbox key that opens the name is locked) and no local block list is
+  checked (`.com` refuses blocked callers before ringing). After an inbox-key rotation the next unlocked refresh
+  binds the same key again. Turning the setting off sends an owner-signed revocation; sign-out / removal
+  (`Keystore.onWipe`) sends a self-signed one, then deletes the key.
+- **Tests:** protocol vectors (TS replay, flagship-web, Swift `testCallKey`, Kotlin `callKey`), control-plane
+  `voiciCallKeys.test.ts` (join, refusals, revocation, room), Android `VoiciAppTest` (bind, locked join/answer/end,
+  revoke; a non-admin device refused), iOS `VoiciCallKeyTests`. Not run on a device.
+- **Open:** a device removed by another admin device stops ringing at once (`.com` checks the admin grant at join) but
+  its binding row stays until it revokes itself or is replaced; on iOS, a sign-out that wipes the Keychain before
+  `onWipe` runs skips the self-revocation (same effect). The answer is still classical-only (P-256), as the owner
+  answer is Ed25519-only today.
+
