@@ -14,6 +14,9 @@ public final class OrgSeatKeys: @unchecked Sendable {
         public var orgName: String
         public let genesisHash: String
         public let binding: PqKeyBindingWire
+        /// A member seat holds no admin key: `binding` is its member key's (re-derived from the UMK when
+        /// needed), and it approves nothing. Nil on records from before members could join.
+        public var memberOnly: Bool?
         public var keyId: String { OrgAuthority.keyIdHex(ed25519PubHex: binding.ed25519PubHex, mldsaPubHex: binding.mldsaPubHex) }
         public var id: String { "\(orgId):\(seatId)" }
     }
@@ -46,8 +49,15 @@ public final class OrgSeatKeys: @unchecked Sendable {
 
     public func remember(orgId: String, seatId: String, orgName: String, genesisHash: String, binding: PqKeyBindingWire, secret: [UInt8]) throws {
         let sealed = try Keystore.pqSealSeed(Data(secret), aad: aad(orgId, seatId))
-        let rec = Record(seat: Seat(orgId: orgId, seatId: seatId, orgName: orgName, genesisHash: genesisHash, binding: binding),
+        let rec = Record(seat: Seat(orgId: orgId, seatId: seatId, orgName: orgName, genesisHash: genesisHash, binding: binding, memberOnly: nil),
                          sealed: sealed.sealed, ephemeralPub: sealed.ephemeralPub)
+        try Keystore.pqRecordWrite(slot(orgId, seatId), try JSONEncoder().encode(rec))
+    }
+
+    /// A member seat: nothing secret is kept (the member key derives from the UMK), only the binding.
+    public func rememberMember(orgId: String, seatId: String, orgName: String, genesisHash: String, memberBinding: PqKeyBindingWire) throws {
+        let rec = Record(seat: Seat(orgId: orgId, seatId: seatId, orgName: orgName, genesisHash: genesisHash, binding: memberBinding, memberOnly: true),
+                         sealed: Data(), ephemeralPub: Data())
         try Keystore.pqRecordWrite(slot(orgId, seatId), try JSONEncoder().encode(rec))
     }
 

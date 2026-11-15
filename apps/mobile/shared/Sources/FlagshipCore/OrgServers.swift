@@ -206,3 +206,33 @@ extension OrgAuthority {
         return join([tagAuditExport, orgId, String(oarVersion), oarHash, String(logSeq), logHeadHash, String(issuedAt)])
     }
 }
+
+// MARK: joining (docs/enterprise-accounts.md §7)
+
+extension OrgAuthority {
+    /// True when the roles give admin authority (the person makes a seat admin key; two org admins admit them).
+    public static func rolesRaiseAdmin(_ roles: [OrgSeatRole]) -> Bool { roles.contains { $0.raisesAdmin } }
+
+    /// `flagship/org-seat-grant/v1|…`, for an admin admitting a person who accepted.
+    public static func canonicalSeatGrant(orgId: String, seatId: String, labelSha256: String, memberKeyId: String, adminKeyId: String,
+                                          rolesHash: String, oarVersion: Int64, issuedAt: Int64, expiresAt: Int64) throws -> [UInt8] {
+        try OrgSeatGrant(orgId: orgId, seatId: seatId, labelSha256: labelSha256, memberKeyId: memberKeyId, adminKeyId: adminKeyId,
+                         rolesHash: rolesHash, oarVersion: oarVersion, issuedAt: issuedAt, expiresAt: expiresAt).canonical()
+    }
+
+    /// The seat member key from the person's UMK: its hybrid secret and its `org-seat-member` binding.
+    public static func memberKey(umk: [UInt8], orgId: String, seatId: String, issuedAt: Int64) throws -> (binding: PqKeyBindingWire, secret: [UInt8]) {
+        let seeds = try memberSeeds(umk: umk, orgId: orgId)
+        let (pub, secret) = try PqHybrid.hybridSigKeygen(edSeed: seeds.edSeed, mldsaSeed: seeds.mldsaSeed)
+        let st = PqKeyBindingStatement(role: "org-seat-member", subjectId: seatSubject(orgId: orgId, seatId: seatId),
+                                       ed25519PubHex: hex(Array(pub[0..<32])), mldsaPubHex: hex(Array(pub[32...])), issuedAt: issuedAt)
+        let binding = try PqTrust.signPqKeyBinding(st) { p, m in try PqHybrid.hybridSign(secretKey: secret, purpose: p, payload: m) }
+        return (binding, secret)
+    }
+}
+
+extension OrgAuthority {
+    /// For callers outside FlagshipCore reading org JSON: an integer field, lowercase hex to bytes.
+    public static func int64(_ v: Any?) -> Int64? { i64(v) }
+    public static func bytes(hex s: String) -> [UInt8]? { PqBin.unhex(s) }
+}

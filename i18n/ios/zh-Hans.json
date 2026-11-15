@@ -3701,5 +3701,19 @@
   "Mute": "静音",
   "Camera off": "关闭摄像头",
   "Camera": "摄像头",
-  "Hang up": "挂断"
+  "Hang up": "挂断",
+  "This invitation was already accepted.": "此邀请已被接受。",
+  "This invitation has run out. Ask for a new one.": "此邀请已过期。请索取新的邀请。",
+  "This invitation couldn't be opened. Check the link and try again.": "无法打开此邀请。请检查链接后重试。",
+  "Join this organization": "加入此组织",
+  "Admitted.": "已准许加入。",
+  "Another admin needs to approve this before it takes effect.": "需要另一位管理员批准后才会生效。",
+  "%@ invited you to join as %@": "%@ 邀请你以 %@ 的身份加入",
+  "The organization knows you only by this name. It can't see your own account or your servers.": "组织只通过这个名称认识你，看不到你自己的账户或服务器。",
+  "You'll be an admin. This phone makes a key that only it holds for this organization.": "你将成为管理员。这部手机会为此组织生成一个只有它持有的密钥。",
+  "Read this code to the person who invited you. They admit you once it matches theirs.": "把这个代码读给邀请你的人听。代码与对方的一致后，对方就会准许你加入。",
+  "Join an organization": "加入组织",
+  "Waiting to join": "等待加入",
+  "Their code should read %@ %@": "对方的代码应为 %@ %@",
+  "Codes match: admit": "代码一致：准许加入"
 }

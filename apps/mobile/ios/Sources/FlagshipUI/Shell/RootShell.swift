@@ -50,8 +50,15 @@ public struct RootShell: View {
     @State private var pendingAccept: AcceptTarget?
     /// "Sign in with Flagship" from a voi.ci page (docs/voici-and-messages.md §6.5).
     @State private var pendingVoiciSignIn: VoiciSignInTarget?
+    /// An organization's seat invitation (docs/enterprise-accounts.md §7).
+    @State private var pendingOrgJoin: OrgJoinTarget?
     @Environment(\.voiciComClient) private var voiciCom
     @Environment(\.qrRelayClient) private var qrRelay
+
+    private struct OrgJoinTarget: Identifiable, Equatable {
+        let orgId: String, seatId: String, keyHex: String
+        var id: String { "\(orgId):\(seatId)" }
+    }
 
     private struct VoiciSignInTarget: Identifiable, Equatable {
         let link: String
@@ -217,6 +224,11 @@ public struct RootShell: View {
                 }
             }
         }
+        .fullScreenCover(item: $pendingOrgJoin) { t in
+            NavigationStack {
+                OrgJoinScreen(vm: OrgJoinViewModel(orgId: t.orgId, seatId: t.seatId, keyHex: t.keyHex), onDone: { pendingOrgJoin = nil })
+            }
+        }
         .fullScreenCover(item: $pendingVoiciSignIn) { target in
             NavigationStack {
                 if let link = VoiciSignInLink.parse(target.link), let voiciCom {
@@ -359,6 +371,13 @@ public struct RootShell: View {
             pendingBackupApproval = BackupApprovalTarget(serverFqdn: serverFqdn, archiveId: archiveId, requestId: requestId)
             return
         }
+        if case let .orgJoin(orgId, seatId, keyHex) = link {
+            // Joining signs with this account's keys (the seat keys come from the UMK): wait for unlock.
+            guard app.isUnlocked else { return }
+            _ = linker.consume()
+            pendingOrgJoin = OrgJoinTarget(orgId: orgId, seatId: seatId, keyHex: keyHex)
+            return
+        }
         if case let .voiciSignIn(raw) = link {
             // Signs with this account's keys (one Face ID): wait for unlock, like an invite.
             guard app.isUnlocked else { return }
@@ -410,7 +429,7 @@ public struct RootShell: View {
              .accountSecurity, .accountDevices: return .settings
         case .transferOffer, .shareServer, .builderPair, .sharedWithMe: return .home
         case .messages, .pageEditor: return .messages
-        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload, .voiciSignIn: return selected
+        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload, .voiciSignIn, .orgJoin: return selected
         }
     }
 }

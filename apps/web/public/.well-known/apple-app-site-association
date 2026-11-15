@@ -125,6 +125,14 @@
             "comment": "Trailing-slash variant of the same acceptance reply."
           },
           {
+            "/": "/org-join",
+            "comment": "An organization's seat invitation, /org-join#o=<orgId>&s=<seatId>&k=<link key>; the key rides in the fragment and never reaches a server (docs/enterprise-accounts.md §7). The app opens OrgJoinScreen."
+          },
+          {
+            "/": "/org-join/",
+            "comment": "Trailing-slash variant of the same seat invitation."
+          },
+          {
             "/": "/app/*",
             "comment": "Any screen in the app: /app/<route> (a widget, a notification, a Siri shortcut). The app routes it like its old flagship://<route> links."
           }

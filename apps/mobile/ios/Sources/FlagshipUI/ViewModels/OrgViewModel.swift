@@ -29,6 +29,8 @@ public final class OrgViewModel {
     public var message: String?
     /// The link and code of the last invitation made, shown as a QR and a share sheet.
     public private(set) var inviteLink: String?
+    /// People who accepted an invitation and wait for an admin to compare the code and admit them.
+    public private(set) var pendingJoins: [OrgPendingJoin] = []
 
     private let client: OrgClient
     private let keys: OrgSeatKeys
@@ -75,6 +77,7 @@ public final class OrgViewModel {
         phase = .loading
         do {
             snapshot = try await client.snapshot(orgId: seat.orgId, genesisHash: seat.genesisHash, now: now())
+            pendingJoins = (try? await client.pendingJoins(orgId: seat.orgId)) ?? []
             phase = .loaded
         } catch {
             snapshot = nil
@@ -157,6 +160,16 @@ public final class OrgViewModel {
         do {
             let a = try approval(seat, order: Array(c.order.utf8))
             try await client.approve(orgId: seat.orgId, sha256: c.sha256, approval: a)
+            if c.purpose == OrgAuthority.tagSeatGrant, c.payload["kind"] as? String == "grant", let s = snapshot,
+               let roles = try? OrgAuthorityWire.roles(c.payload["roles"]) {
+                let all = c.approvals.filter { $0.seatId != seat.seatId } + [a]
+                if all.count >= OrgAuthority.grantThreshold(s.state.current, roles) {
+                    var body = c.payload
+                    body.removeValue(forKey: "kind")
+                    body["approvals"] = all.map(\.jsonObject)
+                    try await client.grant(orgId: seat.orgId, body: body)
+                }
+            }
             if c.purpose == OrgAuthority.tagOverturn, let s = snapshot, let frozen = c.payload["seatId"] as? String,
                let body = (c.payload["body"] as? [String: Any]).flatMap({ try? OrgAuthorityWire.overturn(["body": $0, "approvals": []]).body }) {
                 let all = c.approvals.filter { $0.seatId != seat.seatId } + [a]
@@ -171,6 +184,51 @@ public final class OrgViewModel {
     }
 
     public func hasApproved(_ seat: OrgSeatKeys.Seat, _ c: OrgCeremony) -> Bool { c.approvals.contains { $0.seatId == seat.seatId } }
+
+    // MARK: admit (after the codes match)
+
+    private func grantBody(_ j: OrgPendingJoin, version: Int64, issuedAt t: Int64) throws -> (order: [UInt8], body: [String: Any], roles: [OrgSeatRole]) {
+        let roles = try OrgAuthorityWire.roles(j.roles)
+        guard let label = j.invite["labelSha256"] as? String, let rolesHash = j.invite["rolesHash"] as? String,
+              let memberKeyId = j.accept["memberKeyId"] as? String else { throw OrgAuthorityError("malformed") }
+        let adminKeyId = (j.accept["adminKeyId"] as? String) ?? ""
+        let expiresAt = t + 365 * OrgAuthority.day
+        let order = try OrgAuthority.canonicalSeatGrant(orgId: j.invite["orgId"] as? String ?? "", seatId: j.seatId, labelSha256: label, memberKeyId: memberKeyId,
+                                                        adminKeyId: adminKeyId, rolesHash: rolesHash, oarVersion: version, issuedAt: t, expiresAt: expiresAt)
+        let body: [String: Any] = [
+            "grant": ["orgId": j.invite["orgId"] as? String ?? "", "seatId": j.seatId, "labelSha256": label, "memberKeyId": memberKeyId, "adminKeyId": adminKeyId,
+                      "rolesHash": rolesHash, "oarVersion": NSNumber(value: version), "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: expiresAt)],
+            "roles": OrgAuthorityWire.rolesJSON(roles),
+            "memberBinding": j.memberBinding.jsonObject,
+            "adminBinding": j.adminBinding.map { $0.jsonObject as Any } ?? NSNull(),
+        ]
+        return (order, body, roles)
+    }
+
+    /// Admits a person whose code matched: one admin for a member; for an admin role, the second admin's
+    /// approval in the inbox completes it (two org admins raise a seat to admin).
+    public func admit(_ seat: OrgSeatKeys.Seat, _ j: OrgPendingJoin) async {
+        guard let s = snapshot else { return }
+        busy = true; defer { busy = false }
+        do {
+            let g = try grantBody(j, version: s.state.current.version, issuedAt: now())
+            let a = try approval(seat, order: g.order)
+            if OrgAuthority.grantThreshold(s.state.current, g.roles) <= 1 {
+                var body = g.body
+                body["approvals"] = [a.jsonObject]
+                try await client.grant(orgId: seat.orgId, body: body)
+                message = String(localized: "Admitted.")
+            } else {
+                var payload = g.body
+                payload["kind"] = "grant"
+                try await client.openCeremony(orgId: seat.orgId, order: String(decoding: g.order, as: UTF8.self), payload: payload, approval: a)
+                message = String(localized: "Another admin needs to approve this before it takes effect.")
+            }
+            await load(seat)
+        } catch let e as OrgClientError where e.code == "org-seat-limit" {
+            message = String(localized: "Your plan has no free seats. Remove someone or add seats first.")
+        } catch { failed(error) }
+    }
 
     // MARK: invite
 

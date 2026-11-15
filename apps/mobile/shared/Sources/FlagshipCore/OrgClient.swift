@@ -51,6 +51,22 @@ public struct OrgSnapshot {
     public let ceremonies: [OrgCeremony]
 }
 
+/// A person who accepted an invitation and waits for an admin to compare the code and admit them.
+public struct OrgPendingJoin: Identifiable {
+    public let seatId: String
+    public let invite: [String: Any]
+    public let roles: [Any]
+    public let accept: [String: Any]
+    public let memberBinding: PqKeyBindingWire
+    public let adminBinding: PqKeyBindingWire?
+    public var id: String { seatId }
+    /// The 6-digit code both phones show (`flagship/org-seat-sas/v1`).
+    public var sas: String? {
+        guard let inv = accept["inviteSha256"] as? String, let m = accept["memberKeyId"] as? String else { return nil }
+        return try? OrgAuthority.seatSas(inviteSha256: inv, memberKeyId: m, adminKeyId: (accept["adminKeyId"] as? String) ?? "")
+    }
+}
+
 public struct OrgCeremony: Identifiable {
     public let sha256: String
     public let order: String
@@ -132,6 +148,37 @@ public final class OrgClient: @unchecked Sendable {
 
     public func overturn(orgId: String, _ o: OrgSigned<OrgOverturn>) async throws {
         _ = try await call("POST", "/api/orgs/\(orgId)/overturns", OrgJSON.overturn(o))
+    }
+
+    /// The invitation behind a link: the invite, its roles and the offer sealed under the link key.
+    public func inviteOffer(orgId: String, seatId: String) async throws -> [String: Any] {
+        try await call("GET", "/api/orgs/\(orgId)/invites/\(seatId)")
+    }
+
+    /// The person's acceptance, signed with their seat member key.
+    public func accept(orgId: String, seatId: String, body: [String: Any]) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/invites/\(seatId)/accept", body)
+    }
+
+    /// Invitations and acceptances not yet granted (the admin's "compare the code, then admit" list).
+    public func pendingJoins(orgId: String) async throws -> [OrgPendingJoin] {
+        let s = try await call("GET", "/api/orgs/\(orgId)/seats")
+        let granted = Set(((s["grants"] as? [[String: Any]]) ?? []).compactMap { ($0["grant"] as? [String: Any])?["seatId"] as? String })
+        let invites = Dictionary(((s["invites"] as? [[String: Any]]) ?? []).compactMap { i -> (String, [String: Any])? in
+            guard let inv = i["invite"] as? [String: Any], let id = inv["seatId"] as? String else { return nil }
+            return (id, i)
+        }, uniquingKeysWith: { a, _ in a })
+        return ((s["accepts"] as? [[String: Any]]) ?? []).compactMap { a in
+            guard let acc = a["accept"] as? [String: Any], let seatId = acc["seatId"] as? String, !granted.contains(seatId),
+                  let inv = invites[seatId], let invite = inv["invite"] as? [String: Any],
+                  let member = try? PqTrust.pqKeyBindingFromWire(a["memberBinding"]) else { return nil }
+            let admin = (a["adminBinding"] as? [String: Any]).flatMap { try? PqTrust.pqKeyBindingFromWire($0) }
+            return OrgPendingJoin(seatId: seatId, invite: invite, roles: (inv["roles"] as? [Any]) ?? [], accept: acc, memberBinding: member, adminBinding: admin)
+        }
+    }
+
+    public func grant(orgId: String, body: [String: Any]) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/seats", body)
     }
 
     public func createInvite(orgId: String, body: [String: Any]) async throws {

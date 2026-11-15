@@ -768,33 +768,18 @@
     },
     {
       "check": "app-links",
-      "key": "aasa:/org-join",
-      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
-    },
-    {
-      "check": "app-links",
-      "key": "aasa:/org-join/",
-      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
-    },
-    {
-      "check": "app-links",
       "key": "android-manifest:/org-join",
-      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone. iOS claims /org-join (OrgJoinScreen); the Android org join screen is not built yet, so the Android app does not claim the link and Android users get the open-in-app page, whose webapp handover shows the invitation. Claim it in the manifest and AppLink parser together with the Android join screen."
     },
     {
       "check": "app-links",
       "key": "android-manifest:/org-join/",
-      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
-    },
-    {
-      "check": "app-links",
-      "key": "ios-parser:/org-join",
-      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone. iOS claims /org-join (OrgJoinScreen); the Android org join screen is not built yet, so the Android app does not claim the link and Android users get the open-in-app page, whose webapp handover shows the invitation. Claim it in the manifest and AppLink parser together with the Android join screen."
     },
     {
       "check": "app-links",
       "key": "android-parser:/org-join",
-      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone; the iOS join screen and the Android org UI (branch 0.4/enterprise-build) are not built yet, so no native app claims /org-join: the link opens the open-in-app page, whose webapp handover shows the invitation and hands the link to the phone. Claim it in the AASA, the manifest and both parsers together with the join screens."
+      "reason": "An org seat invitation (docs/enterprise-accounts.md §7) is accepted on a phone. iOS claims /org-join (OrgJoinScreen); the Android org join screen is not built yet, so the Android app does not claim the link and Android users get the open-in-app page, whose webapp handover shows the invitation. Claim it in the manifest and AppLink parser together with the Android join screen."
     },
     {
       "check": "test-vectors",

@@ -3701,5 +3701,19 @@
   "Mute": "ミュート",
   "Camera off": "カメラをオフ",
   "Camera": "カメラ",
-  "Hang up": "終了"
+  "Hang up": "終了",
+  "This invitation was already accepted.": "この招待はすでに承諾されています。",
+  "This invitation has run out. Ask for a new one.": "この招待は期限切れです。新しい招待を依頼してください。",
+  "This invitation couldn't be opened. Check the link and try again.": "この招待を開けませんでした。リンクを確認して、もう一度お試しください。",
+  "Join this organization": "この組織に参加",
+  "Admitted.": "参加を承認しました。",
+  "Another admin needs to approve this before it takes effect.": "有効になる前に、別の管理者の承認が必要です。",
+  "%@ invited you to join as %@": "%@ から %@ として参加するよう招待されました",
+  "The organization knows you only by this name. It can't see your own account or your servers.": "組織はこの名前でしかあなたを知りません。あなた自身のアカウントやサーバーは見えません。",
+  "You'll be an admin. This phone makes a key that only it holds for this organization.": "あなたは管理者になります。このスマートフォンが、この組織用に自分だけが持つ鍵を作成します。",
+  "Read this code to the person who invited you. They admit you once it matches theirs.": "招待した人にこのコードを読み上げてください。相手のコードと一致すれば参加が承認されます。",
+  "Join an organization": "組織に参加",
+  "Waiting to join": "参加待ち",
+  "Their code should read %@ %@": "相手のコードは %@ %@ のはずです",
+  "Codes match: admit": "コードが一致：承認する"
 }

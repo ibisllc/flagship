@@ -3703,5 +3703,19 @@
   "Mute": "Silenciar",
   "Camera off": "Apagar cámara",
   "Camera": "Cámara",
-  "Hang up": "Colgar"
+  "Hang up": "Colgar",
+  "This invitation was already accepted.": "Esta invitación ya fue aceptada.",
+  "This invitation has run out. Ask for a new one.": "Esta invitación ha caducado. Pide una nueva.",
+  "This invitation couldn't be opened. Check the link and try again.": "No se pudo abrir esta invitación. Revisa el enlace e inténtalo de nuevo.",
+  "Join this organization": "Unirse a esta organización",
+  "Admitted.": "Admitido.",
+  "Another admin needs to approve this before it takes effect.": "Otro administrador debe aprobarlo antes de que surta efecto.",
+  "%@ invited you to join as %@": "%@ te invitó a unirte como %@",
+  "The organization knows you only by this name. It can't see your own account or your servers.": "La organización solo te conoce por este nombre. No puede ver tu propia cuenta ni tus servidores.",
+  "You'll be an admin. This phone makes a key that only it holds for this organization.": "Serás administrador. Este teléfono crea una clave para esta organización que solo él tiene.",
+  "Read this code to the person who invited you. They admit you once it matches theirs.": "Lee este código a la persona que te invitó. Te admitirá cuando coincida con el suyo.",
+  "Join an organization": "Unirse a una organización",
+  "Waiting to join": "Esperando para unirse",
+  "Their code should read %@ %@": "Su código debería ser %@ %@",
+  "Codes match: admit": "Los códigos coinciden: admitir"
 }

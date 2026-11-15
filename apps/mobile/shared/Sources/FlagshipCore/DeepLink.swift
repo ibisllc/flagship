@@ -162,6 +162,10 @@ public enum DeepLink: Equatable, Sendable {
     /// sign-in for one page. Carries the whole link; `VoiciSignInLink.parse` reads it.
     case voiciSignIn(link: String)
 
+    /// An organization's seat invitation (docs/enterprise-accounts.md §7):
+    /// `/org-join#o=<orgId>&s=<seatId>&k=<link key>`, all in the fragment (the key never reaches a server).
+    case orgJoin(orgId: String, seatId: String, keyHex: String)
+
     /// The Messages tab: the `messages` push (a new message or request) and `page-drafts` (another device
     /// wrote a post or edited the page; it opens the page editor).
     case messages
@@ -223,6 +227,7 @@ public enum DeepLink: Equatable, Sendable {
             case "/access":   return accessLink(fragmentOrQueryParams(url))
             case "/invite-accept": return inviteAcceptLink(fragmentOrQueryParams(url))
             case "/voici-sign-in": return VoiciSignInLink.parse(url.absoluteString) != nil ? .voiciSignIn(link: url.absoluteString) : nil
+            case "/org-join": return orgJoinLink(fragmentParams(url))
             case "/invite":
                 // The box /invite page's "Open in the Flagship app" button:
                 // `#server=<box>&k=<secret>&a=&i=&s=`, all in the fragment.
@@ -488,6 +493,15 @@ public enum DeepLink: Equatable, Sendable {
 
     /// The CONSUMER's manual-approve acceptance reply; THIS phone is the AUTHOR
     /// finalizing. server/iid/ref/aid(64hex)/sig(128hex)/at(ms) all required.
+    private static func orgJoinLink(_ p: [String: String]) -> DeepLink? {
+        func hex(_ s: String?, _ n: Int) -> String? {
+            guard let s, s.count == n, s.allSatisfy({ ("0"..."9").contains($0) || ("a"..."f").contains($0) }) else { return nil }
+            return s
+        }
+        guard let o = hex(p["o"], 32), let s = hex(p["s"], 32), let k = hex(p["k"], 64) else { return nil }
+        return .orgJoin(orgId: o, seatId: s, keyHex: k)
+    }
+
     private static func inviteAcceptLink(_ params: [String: String]) -> DeepLink? {
         let server = params["server"] ?? params["host"] ?? ""
         let iid = params["iid"] ?? ""
