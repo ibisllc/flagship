@@ -154,7 +154,7 @@ describe("appliance specializer progress", () => {
   const script = buildApplianceSpecializerScript();
 
   it("reports each stage to the order-status stream the recipe names", () => {
-    expect(script).toContain('STATUS_URL="${REGISTRATION_URL%/api/server/register}/api/order/$SERIAL/status"');
+    expect(script).toContain(`STATUS_URL="$(echo "$REGISTRATION_URL" | sed -E 's#/api/(server|orgs/[0-9a-f]{32}/servers)/register$##')/api/order/$SERIAL/status"`);
     for (const stage of [
       "Checking the server recipe",
       "Expanding the disk to",
@@ -197,7 +197,15 @@ describe("appliance specializer progress", () => {
   });
 
   it("only reports to a well-formed serial and registration URL", () => {
-    expect(script).toContain('[[ "$SERIAL" =~ ^[A-Za-z0-9]{1,64}$ ]]');
-    expect(script).toContain('[[ "$REGISTRATION_URL" =~ ^https://[A-Za-z0-9.-]+/api/server/register$ ]]');
+    expect(script).toContain('[[ "$SERIAL" =~ ^[A-Za-z0-9_-]{8,64}$ ]]');
+    expect(script).toContain('[[ "$REGISTRATION_URL" =~ ^https://[A-Za-z0-9.-]+/api/(server|orgs/[0-9a-f]{32}/servers)/register$ ]]');
+  });
+
+  it("reports an org server's install under its server code", () => {
+    expect(script).toContain(`SERIAL="$(jq -r '.authCode.serial // .code.serial // empty' /var/flagship/install-blob.json)"`);
+    const run = (url: string) =>
+      spawnSync("bash", ["-c", `REGISTRATION_URL='${url}'; SERIAL=orgsrv-0001-abcd; echo "$(echo "$REGISTRATION_URL" | sed -E 's#/api/(server|orgs/[0-9a-f]{32}/servers)/register$##')/api/order/$SERIAL/status"`], { encoding: "utf8" }).stdout.trim();
+    expect(run(`https://flagshipserver.com/api/orgs/${"ab".repeat(16)}/servers/register`)).toBe("https://flagshipserver.com/api/order/orgsrv-0001-abcd/status");
+    expect(run("https://flagshipserver.com/api/server/register")).toBe("https://flagshipserver.com/api/order/orgsrv-0001-abcd/status");
   });
 });

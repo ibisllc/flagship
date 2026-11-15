@@ -3729,7 +3729,7 @@ export async function tryControlPlane(
     return finish(
       await handlePostInstallEvent(
         // Pass authCodes so the handler gates on serial-existence (#18).
-        { storage: storage.installEvents, authCodes: storage.authCodes },
+        { storage: storage.installEvents, authCodes: storage.authCodes, orgSerialKnown: async (s: string) => (await storage.orgs.findServerCodeOrg(s)) !== null },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
@@ -3778,6 +3778,8 @@ export async function tryControlPlane(
           // change wakes the owner's devices. All best-effort inside the
           // handler — a push failure never fails the status write.
           authCodes: storage.authCodes,
+          // An org server's serial is its org's server code (no AuthCode): its timeline is kept too.
+          orgSerialKnown: async (s: string) => (await storage.orgs.findServerCodeOrg(s)) !== null,
           pushTokens: storage.pushTokens,
           // Mirror the canonical phase onto the owner's demo_users row so the
           // demo install-progress timeline reads off this same channel (the

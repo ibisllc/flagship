@@ -71,6 +71,8 @@ export interface OrgStorage {
   /** Appends to the org's hash chain and returns the new entry. */
   appendLog(orgId: string, kind: string, refSha256: string, at: number): Promise<OrgLogEntry>;
   listLog(orgId: string, afterSeq?: number): Promise<OrgLogEntry[]>;
+  /** The org that issued server code `serial` (any org), or null: the install timeline accepts an org server's serial. */
+  findServerCodeOrg(serial: string): Promise<string | null>;
 }
 
 export const ORG_LOG_GENESIS = PROTOCOL_LOG_GENESIS;
@@ -120,6 +122,13 @@ export class InMemoryOrgStorage implements OrgStorage {
   }
   async listObjects(orgId: string, kind: OrgObjectKind) {
     return [...this.bucket(orgId, kind).values()].map((o) => ({ ...o })).sort(byIssued);
+  }
+  async findServerCodeOrg(serial: string) {
+    for (const [k, m] of this.objects) {
+      const [orgId, kind] = k.split("|");
+      if (kind === "server-code" && m.has(serial)) return orgId!;
+    }
+    return null;
   }
   async deleteObject(orgId: string, kind: OrgObjectKind, key: string) {
     this.bucket(orgId, kind).delete(key);
@@ -225,6 +234,13 @@ export class D1OrgStorage implements OrgStorage {
       .bind(orgId, kind)
       .all<ObjRow>();
     return r.results.map(objOf);
+  }
+  async findServerCodeOrg(serial: string) {
+    const r = await this.db
+      .prepare(`SELECT org_id FROM org_objects WHERE kind = 'server-code' AND object_key = ?1 LIMIT 1`)
+      .bind(serial)
+      .first<{ org_id: string }>();
+    return r?.org_id ?? null;
   }
   async deleteObject(orgId: string, kind: OrgObjectKind, key: string) {
     await this.db.prepare(`DELETE FROM org_objects WHERE org_id = ?1 AND kind = ?2 AND object_key = ?3`).bind(orgId, kind, key).run();

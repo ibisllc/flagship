@@ -31,6 +31,12 @@ export interface ProvisionStatusDeps {
   /** Resolves SERIAL → owner (the auth-code records who created the order).
    *  Absent ⇒ no owner lookup, so no push (dev / partial wiring). */
   authCodes?: AuthCodeStorage;
+  /**
+   * An org server's install has no AuthCode: its serial is the org's server code
+   * (docs/enterprise-accounts.md "Org servers"). True when `serial` names one, so its timeline is kept
+   * too. Pushes, the Activity row and the demo mirror stay AuthCode-only (an org has no owner account).
+   */
+  orgSerialKnown?: (serial: string) => Promise<boolean>;
   /** Resolves owner username → registered push subscriptions. */
   pushTokens?: PushTokenStorage;
   /**
@@ -136,7 +142,7 @@ export async function handlePostProvisionStatus(
   }
   if (deps.authCodes) {
     const order = await deps.authCodes.get(serial);
-    if (!order) return forbidden("unknown serial");
+    if (!order && !(await deps.orgSerialKnown?.(serial))) return forbidden("unknown serial");
   }
 
   // Capture whether the box had already gone `live` BEFORE this report, so the

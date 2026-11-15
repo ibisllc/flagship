@@ -7,6 +7,8 @@ export interface InstallEventsDeps {
    *  matching a known auth-code. Strongly recommended for production
    *  to prevent unbounded posting to fabricated serials. */
   authCodes?: AuthCodeStorage;
+  /** True when `serial` is an org's server code (an org server's install has no AuthCode). */
+  orgSerialKnown?: (serial: string) => Promise<boolean>;
   now?: () => number;
 }
 
@@ -69,7 +71,7 @@ export async function handlePostInstallEvent(
   // are randomly issued; without one, an attacker can't post fabricated
   // serials to grow the table unbounded.
   if (deps.authCodes) {
-    const code = await deps.authCodes.get(serial);
+    const code = (await deps.authCodes.get(serial)) ?? ((await deps.orgSerialKnown?.(serial)) ? "org" : null);
     if (!code) {
       console.warn(`[install-events] REJECT serial=${serial} event=${body.event} reason=unknown-serial`);
       return forbidden("unknown serial");

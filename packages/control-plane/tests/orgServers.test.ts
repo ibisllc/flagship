@@ -140,6 +140,12 @@ describe(".com org servers", () => {
     expect((await handleOrgServerCode(d, ORG, { code: c, approvals: [approve(A, canonicalOrgServerCode(c), AT)] })).status).toBe(409);
   });
 
+  it("finds the org behind a server code's serial, for the install timeline", async () => {
+    const { d, c } = await registered();
+    expect(await d.orgs.findServerCodeOrg(c.serial)).toBe(ORG);
+    expect(await d.orgs.findServerCodeOrg("orgsrv-9999-none")).toBeNull();
+  });
+
   it("refuses a new server once the org's plan has lapsed", async () => {
     const d = await orgWithSeats();
     await d.store.setPlan(ORG, { planTier: "enterprise", seatLimit: null, paidUntil: AT - DAY });

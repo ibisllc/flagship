@@ -346,6 +346,21 @@ describe("provision status channel", () => {
     expect(get.status).toBe(404);
   });
 
+  it("an org server's serial (its org's server code, no AuthCode) keeps a timeline, with no push", async () => {
+    const storage = new InMemoryStorage();
+    const pushFanout = vi.fn(async () => {});
+    const orgSerial = "orgsrv-0001-abcd";
+    const known = async (s: string) => s === orgSerial;
+    const deps = { storage: storage.provisionStatus, authCodes: storage.authCodes, orgSerialKnown: known, pushTokens: storage.pushTokens, pushFanout };
+    expect((await handlePostProvisionStatus(deps, orgSerial, { phase: "installing" })).status).toBe(200);
+    expect((await handlePostProvisionStatus(deps, orgSerial, { phase: "live" })).status).toBe(200);
+    expect((await handlePostProvisionStatus(deps, "orgsrv-0002-dead", { phase: "live" })).status).toBe(403);
+    const get = await handleGetProvisionStatus({ storage: storage.provisionStatus }, orgSerial);
+    expect(get.status).toBe(200);
+    expect(JSON.stringify(get.body)).toContain("live");
+    expect(pushFanout).not.toHaveBeenCalled();
+  });
+
   it("without an auth-code gate (dev) any serial-shaped POST is accepted", async () => {
     const storage = new InMemoryStorage();
     // No `authCodes` dep → the gate is off; the phase still stores.
