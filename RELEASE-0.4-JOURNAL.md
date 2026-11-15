@@ -429,11 +429,22 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Terms §8.2 bullet "nudity or sexual content, or graphic real-world violence" (`7accf8146`, 2026-11-07, on main) and
   the matching rules-sheet line (`voiciCopy.js` + native, `749a31e60`); asked the owner whether to remove them.
 
+- 2026-11-14 late: Owner: "remove what goes further than our strict legal minimum". Terms §8.2 now says only: no use
+  in furtherance of anything illegal (CSAM named, reported at once) + takedowns as the law requires; the rules sheet
+  in webapp/iOS/Android, all 7 languages, says the same (release/0.4 `86739fc31`, docs `9b9e06aa6`, guard
+  `scripts/rules-summary.test.ts` inverted). Terms on main `881f7757e` (pushed, NOT deployed: a `.com` deploy from main
+  would also ship the undeployed mirror-domains and abuse-wording commits; asked the owner). Play content rating
+  answers of 2026-11-07 assumed the old rule: re-answer with the next submission. Left alone: Terms §6 (acceptable
+  use: malware, spam, phishing, DoS, IP); its spam bullet goes beyond the law, flagged to the owner.
+  Enterprise Kotlin port: local Gradle green (OrgAuthorityVectorsTest 4/4, VoiciCallsVectorsTest 5/5), merged
+  (`f871219ca`), org parity reds gone. Remaining parity reds: voici-call push handlers (ios/android) and web
+  voici-call-allow / voici-missed-call: both handed to the calls-phone agent.
+
 ## Resume point
 
 1. Check the cloud session's reports: `git fetch origin && git log --oneline origin/0.4/cloud-reports` and read
    `cloud-reports/*.md`; fix real failures it lists.
-2. Enterprise Kotlin port (committed on `0.4/enterprise-build` fc088c058; cloud Task 2 compiles it): compile + test
+2. Enterprise Kotlin port: merged (f871219ca). Owner to answer: deploy `.com` from main for the terms change?: compile + test
    (`--tests '*OrgAuthorityVectorsTest*' --tests '*VoiciCallsVector*'`), commit, merge, push.
 3. Builder agents running (calls-phone, restore-ui, enterprise-servers, retail-image): merge each when it reports. Remaining build work: calls phone layers (iOS CallKit/PushKit, Android ConnectionService), restore screens on
    Android/webapp, enterprise invite-accept + org servers + rotations, retail image (keyd identity at build,
