@@ -143,3 +143,81 @@ describe("flagship-web call protocol (test-vectors/voici-calls)", () => {
     expect(VOICI_CALL_AUDIO.audio).toMatchObject({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
   });
 });
+
+describe("the browser handoff (test-vectors/voici-calls handoff)", () => {
+  const X = V.handoff;
+  const code = (r: { ok: boolean; code?: string }) => (r.ok ? "ok" : r.code);
+  it("checks, link, pipe key and seal as the TypeScript reference", async () => {
+    const Ho = await import("../src/proto/lib/voiciCallHandoff.js");
+    expect(Ho.voiciCallHandoffDelegatePub(X.handoff.delegatePriv)).toBe(X.delegatePub);
+    for (const c of X.checks) expect(code(Ho.checkVoiciCallHandoff(c.input, X.ctx)), c.name).toBe(c.expect);
+    expect(code(Ho.checkVoiciCallHandoff(X.handoff, { ...X.ctx, now: X.lateNow }))).toBe("expired");
+    expect(Ho.voiciCallHandoffLink({ host: X.link.host, username: X.handoff.username, sid: X.link.sid, browserSecret: h(X.link.browserSecret) })).toBe(X.link.url);
+    for (const f of X.link.badFragments) expect(Ho.parseVoiciCallHandoffFragment(f), f).toBeNull();
+    expect(H(Ho.voiciCallHandoffKey(h(X.link.browserSecret), h(X.pipe.appPub)))).toBe(X.pipe.key);
+    expect(Ho.sealVoiciCallHandoff(X.handoff, h(X.pipe.appSecret), h(X.link.browserSecret), h(X.pipe.nonce))).toEqual(X.pipe.sealed);
+    expect(Ho.openVoiciCallHandoff(h(X.link.browserSecret), X.pipe.sealed)).toEqual(JSON.parse(X.canonical));
+  });
+});
+
+describe("receiveVoiciCallHandoff (the voi.ci tab's side of the pipe)", () => {
+  const X = V.handoff;
+  class FakeWs {
+    static last: FakeWs | null = null;
+    listeners: Record<string, ((ev: { data?: unknown }) => void)[]> = {};
+    url: string;
+    constructor(url: string) {
+      this.url = url;
+      FakeWs.last = this;
+    }
+    addEventListener(k: string, f: (ev: { data?: unknown }) => void) {
+      (this.listeners[k] ??= []).push(f);
+    }
+    emit(m: unknown) {
+      for (const f of this.listeners.message ?? []) f({ data: JSON.stringify(m) });
+    }
+    close() {}
+  }
+  const hash = new URL(X.link.url).hash;
+
+  it("opens the delivery, checks it and imports the delegate key; the session signs what it names", async () => {
+    const W = await import("../src/handoff.js");
+    const rx = W.receiveVoiciCallHandoff({ hash, username: X.handoff.username, origin: X.ctx.origin, apex: "flagshipserver.com", caKeys: X.ctx.caKeys, now: () => X.ctx.now, WebSocketImpl: FakeWs });
+    const ws = FakeWs.last!;
+    expect(ws.url).toBe(`wss://flagshipserver.com/qr-pipe/${X.link.sid}?role=browser`);
+    ws.emit({ kind: "accepted" });
+    ws.emit({ kind: "peer-hello", phonePk: X.pipe.sealed.phonePk });
+    ws.emit({ kind: "peer-deliver", nonce: X.pipe.sealed.nonce, ciphertext: X.pipe.sealed.ciphertext });
+    const got = await rx.done;
+    expect(got.media).toBe("audio,video");
+    expect([got.session.pageId, got.session.delegatePub, got.session.handoff]).toEqual([X.handoff.pageId, X.delegatePub, true]);
+    const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, got.session.privateKey, new Uint8Array([1, 2, 3])));
+    expect(p256.verify(sig, new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array([1, 2, 3]))), h(X.delegatePub), { prehash: false, format: "compact" } as never)).toBe(true);
+  });
+
+  it("refuses a used session, another page, a bad fragment and a delivery that doesn't open", async () => {
+    const W = await import("../src/handoff.js");
+    const start = (o: Record<string, unknown> = {}) => W.receiveVoiciCallHandoff({ hash, username: X.handoff.username, origin: X.ctx.origin, apex: "a", caKeys: X.ctx.caKeys, now: () => X.ctx.now, WebSocketImpl: FakeWs, ...o });
+    const used = start();
+    FakeWs.last!.emit({ kind: "rebind" });
+    await expect(used.done).rejects.toMatchObject({ code: "used" });
+    const other = start({ username: "bob" });
+    FakeWs.last!.emit({ kind: "peer-hello", phonePk: X.pipe.sealed.phonePk });
+    FakeWs.last!.emit({ kind: "peer-deliver", nonce: X.pipe.sealed.nonce, ciphertext: X.pipe.sealed.ciphertext });
+    await expect(other.done).rejects.toMatchObject({ code: "wrong-page" });
+    await expect(start({ hash: "#call=abc" }).done).rejects.toMatchObject({ code: "malformed" });
+    const garbled = start();
+    FakeWs.last!.emit({ kind: "peer-hello", phonePk: X.pipe.sealed.phonePk });
+    FakeWs.last!.emit({ kind: "peer-deliver", nonce: X.pipe.sealed.nonce, ciphertext: X.pipe.sealed.ciphertext.slice(0, -4) + "AAAA" });
+    await expect(garbled.done).rejects.toMatchObject({ code: "malformed" });
+  });
+
+  it("takes the fragment off the address bar", async () => {
+    const W = await import("../src/handoff.js");
+    let replaced = "";
+    const win = { location: { hash, pathname: "/alice", search: "" }, history: { replaceState: (_a: unknown, _b: string, u: string) => (replaced = u) } };
+    expect(W.takeVoiciCallHandoffFragment(win)).toBe(hash);
+    expect(replaced).toBe("/alice");
+    expect(W.takeVoiciCallHandoffFragment({ location: { hash: "#x" } })).toBeNull();
+  });
+});

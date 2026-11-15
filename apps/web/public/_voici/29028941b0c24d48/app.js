@@ -8,7 +8,7 @@ import { routeOf, siteConfig } from "./config.js";
 import { h } from "./dom.js";
 import { LOCALES, initLocale, locale, setLocale, t } from "./i18n.js";
 import { openMessages } from "./messages.js";
-import { openCall } from "./call.js";
+import { openCall, openHandoffCall } from "./call.js";
 import { footer, renderPage, renderState } from "./page.js";
 import { openReport } from "./report.js";
 
@@ -69,7 +69,7 @@ async function blobUrlOf(bytes) {
   return bytes ? URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" })) : null;
 }
 
-async function showPage(cfg, username) {
+async function showPage(cfg, username, handoff = null) {
   renderState(doc, root, { kind: "loading" });
   const r = await lib.loadVoiciPage({ username, filesBase: cfg.files, apiBase: cfg.apiBase });
   if (!r.ok) return failure(cfg, r.code, username);
@@ -122,6 +122,7 @@ async function showPage(cfg, username) {
     });
   };
   rerender();
+  if (handoff) withStore((c) => openHandoffCall(c, handoff));
 }
 
 function showAbout(cfg) {
@@ -149,6 +150,9 @@ function showAbout(cfg) {
 function main() {
   initLocale();
   doc.documentElement.setAttribute("lang", locale());
+  // A call the visitor's Flagship app handed to this tab: the fragment holds a pipe secret, so it leaves the address
+  // bar before anything else runs.
+  const handoff = lib.takeVoiciCallHandoffFragment(win);
   const cfg = siteConfig(win.location, doc);
   const route = routeOf(win.location.pathname, doc.querySelector('meta[name="voici-status"]')?.getAttribute("content") ?? null);
   if (!cfg) {
@@ -164,7 +168,7 @@ function main() {
     rerender = () => showState(cfg, { icon: "globe", title: t("This link was removed."), body: t("It doesn't lead anywhere any more. Ask whoever shared it for a new one.") });
     return rerender();
   }
-  showPage(cfg, route.username).catch(() => failure(cfg, "bad-piece", route.username));
+  showPage(cfg, route.username, handoff).catch(() => failure(cfg, "bad-piece", route.username));
 }
 
 main();

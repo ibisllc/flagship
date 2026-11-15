@@ -1,8 +1,8 @@
 {
  "v": 1,
  "files": {
-  "app.js": "4c677bebac081c5721c76972f569fc7e3628f155c40baecc4b8ad321f6e3f1cd",
-  "call.js": "e52309267bd0877668892f8289b2549de96d0d128d43f80bcca3710aa09468da",
+  "app.js": "46b78c31c6d36e672abae66f31059a72c4a0586e6eb98c9f1d4678609d8e4092",
+  "call.js": "287d9e01857bef66f6a263af9f4a5a66dd3822668579011c7f6568970e8f738a",
   "config.js": "1f0a2c02033730528d0529b8363702dbcc804eaf7ce6924447c219b69b28f6d4",
   "dom.js": "faa65e667ee1fcbf999e0ff12098726863ba477c083bc7f67a2bf4f3c73c2b3a",
   "favicon.svg": "681d17250cf4c5dd68f3122ec6dc9d8aab8c7d3c83e8318561350ded950d6cf2",
@@ -12,8 +12,10 @@
   "flagship-web/callWorker.js": "afd61d187246ea36b3eeb2caf19220314458b62d66ee1bc20dfa14f82bb5b62c",
   "flagship-web/deliver.js": "0fc10bf537e4ebae2b3b76762fc2d271290fa6f22434736269c8b873593a2e57",
   "flagship-web/envelope.js": "a90463eb195d2eca0366624cd65d42ce730213c29218aece8f9ec5bcdf302cc5",
-  "flagship-web/index.js": "c0de17ba097f3fdb102c2e2b0e139a800acdc45c7e36572ed482444104adf141",
+  "flagship-web/handoff.js": "bcf215414bf689c91f33ae83b531cf9e3c6acc67f9a35f0617f9abf4a588383c",
+  "flagship-web/index.js": "c88edef097387f24a8b6e6c2438804fb50496ff138ad358352d2e2cbd3a9097a",
   "flagship-web/pipeCrypto.js": "8ee6c0ae0029ecadc1d63657b01b606809cab4872b7cfe8d0bb527a55b943f83",
+  "flagship-web/proto/lib/voiciCallHandoff.js": "98f7eeb6e61f1d516cebfa864fe18eef109dca67d4e54fc3c0fa4be2b2a02609",
   "flagship-web/proto/lib/voiciCore.js": "80d0b17280dc8bf79d886e387ebde89dc8cc8f4004c437fa202706a8615f1206",
   "flagship-web/proto/lib/voiciMessages.js": "d83297c52a30c86baffa27eab7efc0bcde9e454a66935f0d0eaaaf8877fb9a4e",
   "flagship-web/proto/lib/voiciPage.js": "bde25b1635c515f8a7a3b23767a84edeff8984853e2e8fddad2d0d75ceea6a42",
@@ -32,7 +34,7 @@
   "qrEncoder.js": "cfae9ffa8ac1734af8c858ccd2c2c16684e8320434cf3fb461388b860ea4dd11",
   "report.js": "5406c94f1d8c0882cf137c5645dbc57807b16723dabd2134f77786e4ad296ef9",
   "sheet.js": "a875be200121ce81155d5a6ca3a73c933462aa3f751d1ea7069a235d6fbd5736",
-  "strings.js": "80e5729c7a06a6e302e833f3c6f10f1cc4e78ab44e3bf1f30d8fb52ac8cb129c",
+  "strings.js": "ae99b6db5b5da7fa51d1ea5468fe9e215de0bf0207f600db8900337189beb223",
   "style.css": "e593d6250fe10150ef4b56a5e8c16d28b1a5e15aee875099207c4e9f168afbe6",
   "sw.js": "7cbe74e17f74c4d6314d9d3fc1997bcb79bdb168239906d46da2f5cc899159e5"
  }

@@ -41,35 +41,35 @@
   },
   "About voi.ci": {
     "en": "About voi.ci",
-    "ctx": "voici-site/app.js:130"
+    "ctx": "voici-site/app.js:131"
   },
   "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.": {
     "en": "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.",
-    "ctx": "voici-site/app.js:135"
+    "ctx": "voici-site/app.js:136"
   },
   "This build": {
     "en": "This build",
-    "ctx": "voici-site/app.js:140"
+    "ctx": "voici-site/app.js:141"
   },
   "Manifest": {
     "en": "Manifest",
-    "ctx": "voici-site/app.js:142"
+    "ctx": "voici-site/app.js:143"
   },
   "This copy of the site isn't running on voi.ci.": {
     "en": "This copy of the site isn't running on voi.ci.",
-    "ctx": "voici-site/app.js:155"
+    "ctx": "voici-site/app.js:159"
   },
   "Check the address and try again.": {
     "en": "Check the address and try again.",
-    "ctx": "voici-site/app.js:160"
+    "ctx": "voici-site/app.js:164"
   },
   "This link was removed.": {
     "en": "This link was removed.",
-    "ctx": "voici-site/app.js:164"
+    "ctx": "voici-site/app.js:168"
   },
   "It doesn't lead anywhere any more. Ask whoever shared it for a new one.": {
     "en": "It doesn't lead anywhere any more. Ask whoever shared it for a new one.",
-    "ctx": "voici-site/app.js:164"
+    "ctx": "voici-site/app.js:168"
   },
   "They aren't taking calls right now.": {
     "en": "They aren't taking calls right now.",
@@ -127,57 +127,77 @@
     "en": "Call ended",
     "ctx": "voici-site/call.js:46"
   },
+  "This call link was already used or has expired. Start the call again from your Flagship app.": {
+    "en": "This call link was already used or has expired. Start the call again from your Flagship app.",
+    "ctx": "voici-site/call.js:60"
+  },
+  "This call link isn't valid. Start the call again from your Flagship app.": {
+    "en": "This call link isn't valid. Start the call again from your Flagship app.",
+    "ctx": "voici-site/call.js:65"
+  },
+  "Getting the call from your Flagship app…": {
+    "en": "Getting the call from your Flagship app…",
+    "ctx": "voici-site/call.js:76"
+  },
+  "Your Flagship app is ready to call {0}.": {
+    "en": "Your Flagship app is ready to call {0}.",
+    "ctx": "voici-site/call.js:89"
+  },
+  "Call": {
+    "en": "Call",
+    "ctx": "voici-site/call.js:90"
+  },
   "Calling {0}…": {
     "en": "Calling {0}…",
-    "ctx": "voici-site/call.js:64"
+    "ctx": "voici-site/call.js:102"
   },
   "Mute": {
     "en": "Mute",
-    "ctx": "voici-site/call.js:70"
+    "ctx": "voici-site/call.js:108"
   },
   "Camera": {
     "en": "Camera",
-    "ctx": "voici-site/call.js:71"
+    "ctx": "voici-site/call.js:109"
   },
   "Hang up": {
     "en": "Hang up",
-    "ctx": "voici-site/call.js:72"
+    "ctx": "voici-site/call.js:110"
   },
   "Quantum-safe call": {
     "en": "Quantum-safe call",
-    "ctx": "voici-site/call.js:73"
+    "ctx": "voici-site/call.js:111"
   },
   "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.": {
     "en": "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.",
-    "ctx": "voici-site/call.js:73"
+    "ctx": "voici-site/call.js:111"
   },
   "Unmute": {
     "en": "Unmute",
-    "ctx": "voici-site/call.js:84"
+    "ctx": "voici-site/call.js:122"
   },
   "Camera off": {
     "en": "Camera off",
-    "ctx": "voici-site/call.js:101"
+    "ctx": "voici-site/call.js:139"
   },
   "{0} turned on their camera.": {
     "en": "{0} turned on their camera.",
-    "ctx": "voici-site/call.js:111"
+    "ctx": "voici-site/call.js:149"
   },
   "Camera paused": {
     "en": "Camera paused",
-    "ctx": "voici-site/call.js:114"
+    "ctx": "voici-site/call.js:152"
   },
   "Call again": {
     "en": "Call again",
-    "ctx": "voici-site/call.js:123"
+    "ctx": "voici-site/call.js:161"
   },
   "Ringing…": {
     "en": "Ringing…",
-    "ctx": "voici-site/call.js:150"
+    "ctx": "voici-site/call.js:188"
   },
   "Connecting…": {
     "en": "Connecting…",
-    "ctx": "voici-site/call.js:151"
+    "ctx": "voici-site/call.js:189"
   },
   "Visitor {0}": {
     "en": "Visitor {0}",
@@ -390,10 +410,6 @@
   "Send me a message": {
     "en": "Send me a message",
     "ctx": "voici-site/page.js:92"
-  },
-  "Call": {
-    "en": "Call",
-    "ctx": "voici-site/page.js:93"
   },
   "Private messages and quantum-safe calls, with your Flagship app.": {
     "en": "Private messages and quantum-safe calls, with your Flagship app.",

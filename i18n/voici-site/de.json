@@ -126,5 +126,9 @@
   "Camera": "Kamera",
   "Camera off": "Kamera aus",
   "{0} turned on their camera.": "{0} hat die Kamera eingeschaltet.",
-  "Camera paused": "Kamera pausiert"
+  "Camera paused": "Kamera pausiert",
+  "This call link was already used or has expired. Start the call again from your Flagship app.": "Dieser Anruf-Link wurde schon benutzt oder ist abgelaufen. Starte den Anruf erneut in deiner Flagship-App.",
+  "This call link isn't valid. Start the call again from your Flagship app.": "Dieser Anruf-Link ist ungültig. Starte den Anruf erneut in deiner Flagship-App.",
+  "Getting the call from your Flagship app…": "Der Anruf wird von deiner Flagship-App übernommen…",
+  "Your Flagship app is ready to call {0}.": "Deine Flagship-App ist bereit, {0} anzurufen."
 }

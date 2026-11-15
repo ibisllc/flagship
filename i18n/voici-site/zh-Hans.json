@@ -126,5 +126,9 @@
   "Camera": "摄像头",
   "Camera off": "关闭摄像头",
   "{0} turned on their camera.": "{0} 打开了摄像头。",
-  "Camera paused": "摄像头已暂停"
+  "Camera paused": "摄像头已暂停",
+  "This call link was already used or has expired. Start the call again from your Flagship app.": "此通话链接已被使用或已过期。请在 Flagship 应用中重新发起通话。",
+  "This call link isn't valid. Start the call again from your Flagship app.": "此通话链接无效。请在 Flagship 应用中重新发起通话。",
+  "Getting the call from your Flagship app…": "正在从你的 Flagship 应用接收通话…",
+  "Your Flagship app is ready to call {0}.": "你的 Flagship 应用已准备好呼叫 {0}。"
 }

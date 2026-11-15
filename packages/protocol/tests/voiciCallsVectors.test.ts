@@ -182,6 +182,23 @@ describe("voici-calls vectors", () => {
     }
   });
 
+  it("the browser handoff: shape, times, key, page, the sign-in inside, the link and the pipe seal", () => {
+    const X = V.handoff;
+    expect(dec(P.canonicalJsonBytes(X.handoff))).toBe(X.canonical);
+    expect(P.voiciCallHandoffDelegatePub(X.handoff.delegatePriv)).toBe(X.delegatePub);
+    for (const c of X.checks) expect(code(P.checkVoiciCallHandoff(c.input, X.ctx)), c.name).toBe(c.expect);
+    expect(code(P.checkVoiciCallHandoff(X.handoff, { ...X.ctx, now: X.lateNow }))).toBe("expired");
+    expect(code(P.checkVoiciCallHandoff(X.handoff, { ...X.ctx, username: "bob" }))).toBe("wrong-page");
+    expect(P.voiciCallHandoffLink({ host: X.link.host, username: X.handoff.username, sid: X.link.sid, browserSecret: h(X.link.browserSecret) })).toBe(X.link.url);
+    const frag = P.parseVoiciCallHandoffFragment(new URL(X.link.url).hash)!;
+    expect([frag.sid, H(frag.browserSecret)]).toEqual([X.link.sid, X.link.browserSecret]);
+    for (const f of X.link.badFragments) expect(P.parseVoiciCallHandoffFragment(f), f).toBeNull();
+    expect(H(P.voiciCallHandoffKey(h(X.link.browserSecret), h(X.pipe.appPub)))).toBe(X.pipe.key);
+    expect(P.sealVoiciCallHandoff(X.handoff, h(X.pipe.appSecret), h(X.link.browserSecret), h(X.pipe.nonce))).toEqual(X.pipe.sealed);
+    expect(P.openVoiciCallHandoff(h(X.link.browserSecret), X.pipe.sealed)).toEqual(JSON.parse(X.canonical));
+    expect(P.openVoiciCallHandoff(h(X.pipe.appSecret), X.pipe.sealed)).toBeNull();
+  });
+
   it("the vectors file is fresh", () => {
     execFileSync("npx", ["tsx", join(import.meta.dirname, "..", "..", "..", "tools", "voici-calls-vectors.ts"), "--check"], { stdio: "pipe" });
   }, 60_000);
