@@ -21,9 +21,11 @@ import type {
   DeviceSelfProfileStorage,
   PushTokenStorage,
   UsernameStorage,
+  VoiciCallStorage,
 } from "@flagship/storage";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { requireDeviceScope } from "./deviceCapabilityGrants.js";
+import { dropVoiciCallKeysOfRevokedDevices } from "./voiciCallKeyCleanup.js";
 import { hexToBytes } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -41,6 +43,8 @@ export interface AccountDirectoryDeps {
   keyGrants: AccountDirectoryKeyGrantStorage;
   pushTokens: PushTokenStorage;
   nonces: DirectoryNonceStore;
+  /** voi.ci calls: a removed device's call-key binding is dropped. */
+  callKeys?: Pick<VoiciCallStorage, "deleteCallKeyForDevice">;
   now?: () => number;
   freshnessMs?: number;
 }
@@ -335,6 +339,7 @@ export async function handleRevokeAccountDevice(
     grants.filter((grant) => grant.deviceId === id && grant.revokedAt === null)
       .map((grant) => deps.grants.revoke(grant.grantId, revokedAt)),
   );
+  await dropVoiciCallKeysOfRevokedDevices({ grants: deps.grants, callKeys: deps.callKeys }, account, [id]);
   const tokens = await deps.pushTokens.listByUser(account);
   await Promise.all(tokens.filter((token) => token.deviceId === id).map((token) => deps.pushTokens.remove(token.tokenId)));
   return ok({ ok: true, deviceId: id, revokedAt }, { "cache-control": "private, no-store" });

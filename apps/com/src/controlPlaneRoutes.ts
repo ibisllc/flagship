@@ -2816,6 +2816,7 @@ export async function tryControlPlane(
           // accepts the recovering device's re-signed grants in the
           // /complete body.
           deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          voiciCallKeys: storage.voiciCalls,
         },
         decodeURIComponent(m[1]!),
         (parsedBody ?? undefined) as
@@ -3044,6 +3045,7 @@ export async function tryControlPlane(
           storage: storage.deviceCapabilityGrants,
           identities: storage.deviceIdentities,
           usernames: storage.usernames,
+          callKeys: storage.voiciCalls,
         },
         await readJson(request),
       ),
@@ -4772,6 +4774,7 @@ function accountDirectoryDeps(storage: D1Storage, db: D1Database) {
     keyGrants: storage.accountDirectoryKeyGrants,
     pushTokens: storage.pushTokens,
     nonces: new D1NonceStore(db),
+    callKeys: storage.voiciCalls,
   };
 }
 
