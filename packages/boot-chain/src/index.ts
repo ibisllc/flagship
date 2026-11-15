@@ -22,3 +22,4 @@ export {
   type InitrdEntry,
 } from "./initramfs.js";
 export { BOOT_FS_MOUNT_SH, BOOT_FS_UUID_FILE, DISK_UUID_RECORD_SH, LUKS_UUID_FILE } from "./bootFsMount.js";
+export * from "./retailHost.js";
