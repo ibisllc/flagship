@@ -161,6 +161,8 @@ final class VoiciCallSession {
             return "failed"
         }
         pending = (ss, reqBytes, ansBytes)
+        // The caller's TURN stream may reach this device's bare name only for this answer's one-time credential.
+        CallTurnGate.shared.arm(.init(user: turn.user, secret: turn.secret))
         send(["t": "answer", "answer": signed])
         return nil
     }
@@ -201,6 +203,7 @@ final class VoiciCallSession {
     private func end(_ reason: String) {
         guard !over else { return }
         over = true
+        CallTurnGate.shared.disarm()
         if var p = pending { wipe(&p.ss) }
         pending = nil
         media.stop()

@@ -170,6 +170,8 @@ class VoiciCallSession(
         )
         val signed = VoiciCalls.signAnswer(body, keys.ownerSignSeed)
         pending = Triple(ss, reqBytes, VoiciCalls.canonicalAnswer(body))
+        // The caller's TURN stream may reach this device's bare name only for this answer's one-time credential.
+        com.flagshipserver.app.phoneroute.CallTurnGate.arm(com.flagshipserver.app.phoneroute.CallTurnGate.Credential(turn.user, turn.secret))
         send(JsonObject(mapOf("t" to JsonPrimitive("answer"), "answer" to signed)))
         return null
     }
@@ -211,6 +213,7 @@ class VoiciCallSession(
     @Synchronized private fun end(reason: String) {
         if (over) return
         over = true
+        com.flagshipserver.app.phoneroute.CallTurnGate.disarm()
         pending?.first?.fill(0)
         pending = null
         media.stop()
