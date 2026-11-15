@@ -385,6 +385,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   (AuthCode/registration/genesis), real key rotations on offboarding, Rust port, Android/web UI, audit export, account
   conversion. Owner Qs: strictest-ceremony formula vs unanimity; founder veto k=1; recovery kit required under 3
   admins?; trial seat limit (10 now); org reads need a signed token?
+- 2026-11-14 Merged `0.4/retail-apps-2`: one Face ID, certificate wait before "done" (5 min soft notice, 30 min
+  checking), persisted per-device "untrusted" server state (no connections, red badge, Delete + reset steps), retail
+  entry on store builds; full Android port (BLE scan + GATT, permissions API 29-31+, screens, code scan, 108 strings).
+  iOS 9 retail gym tests green; Android unit tests green, Android gym scenarios not run (no emulator). My first rebase
+  of this branch committed conflict markers (zsh did not split the file list); reset to the agent's tip and redone
+  with scratchpad/rebase-i18n.sh (refuses on any marker). Owner Q: mark a box that never comes online untrusted too?
 
 ## Resume point
 
