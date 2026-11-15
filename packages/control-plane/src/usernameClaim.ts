@@ -1,5 +1,5 @@
 import { verifyClaimUsername, voiciNameProblem, type ClaimUsername } from "@flagship/protocol";
-import type { UsernameStorage, UsernameOfferStorage } from "@flagship/storage";
+import type { OrgStorage, UsernameStorage, UsernameOfferStorage } from "@flagship/storage";
 import { HEX128, HEX64, hexToBytes, bytesToHex } from "./hex.js";
 import { isReservedName } from "./labels.js";
 import { forbidden, malformed, notFound, ok } from "./types.js";
@@ -31,6 +31,16 @@ export interface UsernameClaimDeps {
   bypassOfferGate?: boolean;
   freshnessMs?: number;
   now?: () => number;
+  /**
+   * Org names share the `<server>.<name>.<apex>` namespace with usernames (docs/enterprise-accounts.md):
+   * a name an org holds answers `taken`, the same sentence as any other held name.
+   */
+  orgs?: OrgStorage;
+}
+
+/** True when an org holds `label` (the two namespaces are one). */
+export async function orgHoldsName(orgs: OrgStorage | undefined, label: string): Promise<boolean> {
+  return orgs ? (await orgs.getOrgByName(label.toLowerCase())) !== null : false;
 }
 
 export interface UsernameClaimBody {
@@ -93,6 +103,7 @@ export async function handleUsernameClaim(
   if (problem) return { status: 400, body: { error: "not a valid username", code: "invalid", problem } };
   const v = { label: r.username.toLowerCase() };
   if (isReservedName(v.label)) return { ...USERNAME_TAKEN };
+  if (await orgHoldsName(deps.orgs, v.label)) return { ...USERNAME_TAKEN };
 
   // Roster gate — a username is claimable ONLY if the server recently SUGGESTED
   // it (so the generator's not-claimed + not-.com vetting is what gates claims).

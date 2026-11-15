@@ -1312,7 +1312,7 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
     return finish(
       await handleUsernameClaim(
-        { storage: storage.usernames, offers: storage.usernameOffers },
+        { storage: storage.usernames, offers: storage.usernameOffers, orgs: storage.orgs },
         await readJson(request),
       ),
     );
@@ -1324,6 +1324,7 @@ export async function tryControlPlane(
           provisioning: storage.accountProvisioning,
           usernames: storage.usernames,
           offers: storage.usernameOffers,
+          orgs: storage.orgs,
         },
         await readJson(request),
       ),

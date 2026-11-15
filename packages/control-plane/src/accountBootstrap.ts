@@ -11,6 +11,7 @@ import {
 } from "@flagship/protocol";
 import type {
   AccountProvisioningStorage,
+  OrgStorage,
   UsernameOfferStorage,
   UsernameStorage,
 } from "@flagship/storage";
@@ -18,7 +19,7 @@ import { bytesToHex, HEX128, HEX64, hexToBytes } from "./hex.js";
 import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { isReservedName } from "./labels.js";
 import { conflict, forbidden, malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
-import { USERNAME_TAKEN } from "./usernameClaim.js";
+import { USERNAME_TAKEN, orgHoldsName } from "./usernameClaim.js";
 
 const DEVICE_ID = /^[0-9a-f]{32}$/;
 const PLATFORM_CLASSES = new Set(["ios", "android", "web", "macos", "windows", "linux", "other"]);
@@ -47,6 +48,8 @@ export interface AccountBootstrapDeps {
   offerTtlMs?: number;
   freshnessMs?: number;
   now?: () => number;
+  /** A name an org holds answers `taken` (usernames and org names are one namespace). */
+  orgs?: OrgStorage;
 }
 
 export async function handleAccountBootstrap(
@@ -69,6 +72,7 @@ export async function handleAccountBootstrap(
   const username = request.username.toLowerCase();
   if (Math.abs(now - request.issuedAt) > (deps.freshnessMs ?? 5 * 60_000)) return forbidden("stale request");
   if (isReservedName(username)) return { ...USERNAME_TAKEN };
+  if (await orgHoldsName(deps.orgs, username)) return { ...USERNAME_TAKEN };
 
   const irkPub = hexToBytes(request.irkPub);
   const claim: ClaimUsername = { username, irkPub, issuedAt: request.issuedAt };
