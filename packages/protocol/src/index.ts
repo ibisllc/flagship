@@ -130,3 +130,6 @@ export * from "./coManagerCap.js";
 export * from "./boxClaim.js";
 export * from "./boxRelease.js";
 export * from "./orgAuthority.js";
+export * from "./orgServers.js";
+export * from "./orgKeyRing.js";
+export * from "./orgAudit.js";

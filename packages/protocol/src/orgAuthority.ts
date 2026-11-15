@@ -1100,6 +1100,39 @@ export function verifyOrgSeatGrant(st: OrgAuthorityState, b: OrgSeatGrantBundle,
   return { seatId: g.seatId, roles: b.roles, member, admin, grant: g };
 }
 
+/**
+ * Approvals of a stored org object, checked as of the record it names (as for seat grants): each
+ * signer is an org admin of record `oarVersion` (under that record's key) or, when `scoped` is
+ * given, one granted seat with an admin key whose roles cover it. Nothing here asks the approval to
+ * be unexpired now: a durable record keeps verifying after its ceremony ended. Returns the signers.
+ */
+export function verifyOrgRecordedApprovals(
+  st: OrgAuthorityState,
+  book: OrgSeatBook,
+  order: Bytes,
+  approvals: readonly OrgApproval[],
+  oarVersion: number,
+  now: number,
+  scoped?: OrgAction,
+): { signers: string[]; scopedSeat: string | null } {
+  const r = recordAt(st, oarVersion);
+  if (!r) fail("stale-oar");
+  if (!Array.isArray(approvals) || approvals.length === 0) fail("threshold", "no approvals");
+  const frozen = (s: string, t: number) => book.freezes.some((f) => f.seatId === s && f.issuedAt <= t && t < f.untilMs);
+  const keyOf = (s: string): VerifiedPqKeyBinding | undefined => {
+    if (r!.admins.some((a) => a.seatId === s)) return st.bindings.get(bindingKey(oarVersion, s));
+    if (!scoped || book.revoked.has(s)) return undefined;
+    return book.seats.get(s)?.admin ?? undefined;
+  };
+  const signers = checkApprovals(approvals, { orgId: st.orgId, oarVersion, order, now }, keyOf, frozen);
+  const admins = signers.filter((s) => r!.admins.find((a) => a.seatId === s)?.kind === "admin");
+  if (admins.length >= 1 && admins.length === signers.length) return { signers, scopedSeat: null };
+  if (!scoped || signers.length !== 1) fail("scope", "one org admin, or one scoped seat alone");
+  const seat = book.seats.get(signers[0]!);
+  if (!seat || seat.grant.expiresAt <= now || !covers(seat, scoped!)) fail("scope", signers[0]);
+  return { signers, scopedSeat: seat!.seatId };
+}
+
 function verifyOrgSeatRevoke(
   st: OrgAuthorityState,
   b: OrgSeatRevokeBundle,
