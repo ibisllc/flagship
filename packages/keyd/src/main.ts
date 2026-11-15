@@ -105,6 +105,7 @@ async function main(): Promise<void> {
     revocationsPath: join(STATE, "revocations.json"),
     caKeysPath: join(STATE, "ca-keys.json"),
     revocationListPath: join(STATE, "revocation-list.json"),
+    orgPinPath: join(STATE, "org.json"),
     owner: owner && policy ? { irkPubHex: owner.irkPubHex, serverFqdn: policy.serverFqdn, adminRootPubHex: owner.adminRootPubHex ?? null } : null,
     ceremony,
   });

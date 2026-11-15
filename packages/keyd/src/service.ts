@@ -33,6 +33,17 @@ import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { TLS_SLOTS, TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage, type ActivateSlot } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
 import type { HeldRevocationsState } from "@flagship/protocol";
+import { OrgCgkError, checkOrgCgkPin, verifyOrgCgkAdoption, type OrgCgkPin } from "./orgCgk.js";
+
+/** `org.json`, or null when there is none; a damaged one pins nothing (no adoption, fail closed). */
+function loadOrgPin(path: string | null): OrgCgkPin | null {
+  if (!path) return null;
+  try {
+    return checkOrgCgkPin(JSON.parse(readFileSync(path, "utf8")));
+  } catch {
+    return null;
+  }
+}
 
 const GOSSIP_TAG = "flagship/gossip/v2|";
 const ACCESS_SYNC_TAG = "flagship/access-sync/v1|";
@@ -80,6 +91,11 @@ export interface KeydServiceInit {
    */
   caKeysPath?: string;
   revocationListPath?: string;
+  /**
+   * The org this box belongs to and the org CGK version keyd holds (`org.json`, pinned with the
+   * boot ceremony's token by `org.pin`). Absent: `cgk.orgAdopt` is refused (orgCgk.ts).
+   */
+  orgPinPath?: string;
   now?: () => number;
 }
 
@@ -112,6 +128,8 @@ export class KeydService {
   readonly #revocationListPath: string | null;
   /** The newest `.com` revocation list keyd took (its issuedAt); null: none yet. */
   #listAt: number | null;
+  readonly #orgPinPath: string | null;
+  #orgPin: OrgCgkPin | null;
 
   constructor(init: KeydServiceInit) {
     if (init.identitySeed.length !== 32) throw new Error("keyd: identity seed must be 32 bytes");
@@ -144,6 +162,8 @@ export class KeydService {
     this.#caKeysPath = init.caKeysPath ?? null;
     this.#revocationListPath = init.revocationListPath ?? null;
     this.#listAt = loadListAt(this.#revocationListPath);
+    this.#orgPinPath = init.orgPinPath ?? null;
+    this.#orgPin = loadOrgPin(this.#orgPinPath);
   }
 
   get publicKeyHex(): string {
@@ -593,6 +613,45 @@ export class KeydService {
         }
         return { result: { stored: true } };
       }
+      case "org.pin": {
+        // The org this box belongs to, set once with the boot ceremony's token (as a raw key is).
+        noExtraArgs(a, ["orgId", "genesisHash", "serverDomain", "cgkVersion", "ceremony"]);
+        const token = hexArg(a, "ceremony", { exact: 32 });
+        const c = this.#ceremony;
+        if (!c || this.#now() > c.notAfter || !Buffer.from(c.token).equals(Buffer.from(token))) {
+          throw new KeydError("forbidden", "an org is pinned only during the boot ceremony");
+        }
+        let pin: OrgCgkPin;
+        try {
+          pin = checkOrgCgkPin({ orgId: a.orgId, genesisHash: a.genesisHash, serverDomain: a.serverDomain, cgkVersion: a.cgkVersion });
+        } catch (e) {
+          throw new KeydError("bad-request", (e as Error).message);
+        }
+        if (this.#orgPin) {
+          const same = this.#orgPin.orgId === pin.orgId && this.#orgPin.genesisHash === pin.genesisHash && this.#orgPin.serverDomain === pin.serverDomain;
+          if (same) return { result: { stored: false, already: true } };
+          throw new KeydError("forbidden", "this box is already pinned to an org");
+        }
+        this.#saveOrgPin(pin);
+        return { result: { stored: true } };
+      }
+      case "cgk.orgAdopt": {
+        // A rotated org CGK, only on evidence keyd checks itself (orgCgk.ts): never the daemon's word.
+        noExtraArgs(a, ["chain", "ring", "recipients", "approvals", "key"]);
+        if (!this.#orgPin) throw new KeydError("forbidden", "no org is pinned for this box");
+        let adopted: { key: Uint8Array; version: number };
+        try {
+          adopted = verifyOrgCgkAdoption(a, this.#orgPin, this.#now());
+        } catch (e) {
+          if (e instanceof OrgCgkError) throw new KeydError(e.code === "malformed" ? "bad-request" : "forbidden", e.message);
+          throw new KeydError("failed", "internal error");
+        }
+        this.#store?.save("cgk", adopted.key);
+        this.#cgk?.fill(0);
+        this.#cgk = adopted.key;
+        this.#saveOrgPin({ ...this.#orgPin, cgkVersion: adopted.version });
+        return { result: { version: adopted.version } };
+      }
       case "archive.pool.add":
       case "archive.pool.list":
       case "archive.create":
@@ -606,6 +665,15 @@ export class KeydService {
       default:
         throw new KeydError("unknown-op", "unknown operation");
     }
+  }
+
+  #saveOrgPin(pin: OrgCgkPin): void {
+    if (this.#orgPinPath) {
+      const tmp = `${this.#orgPinPath}.tmp`;
+      writeFileSync(tmp, JSON.stringify(pin), { mode: 0o600 });
+      renameSync(tmp, this.#orgPinPath);
+    }
+    this.#orgPin = pin;
   }
 
   #req(a: Record<string, unknown>, name: string): Uint8Array {

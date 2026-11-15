@@ -141,6 +141,7 @@ fn run() -> Result<(), String> {
         service = service.with_state_dir(state.clone());
     }
     service = service.with_archive_pool(state.join("archive-keks.json"));
+    service = service.with_org_pin(state.join("org.json"));
     service = service.with_revocations(state.join("revocations.json"));
     service = service.with_revocation_list(
         state.join("ca-keys.json"),

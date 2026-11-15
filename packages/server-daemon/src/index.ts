@@ -304,7 +304,7 @@ import { SAVED_DATA_FILE, SavedBackups } from "./serverArchive/saved.js";
 import { legacyOrigin } from "./appLineage.js";
 import { authorizeRestoreOrder } from "./serverArchive/merge/authorize.js";
 import { parseServiceId as parseServiceIdForMerge } from "@flagship/protocol";
-import type { OrgKeyRings } from "@flagship/protocol";
+import { orgNewestRingFor, type OrgKeyRings } from "@flagship/protocol";
 import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
 import { buildMigratePause, movingPage, type MigratePause } from "./serverArchive/migratePause.js";
 import { BackupPolicyStore } from "./backupPolicy/policy.js";
@@ -1399,7 +1399,7 @@ async function main(): Promise<void> {
     // and removes the readable copy. After that the daemon never sees the bytes again.
     // keyd lets a raw key in only with the boot ceremony's token (root reads it beside keyd's
     // state); without it the key stays where it was and the box keeps running as before.
-    const ceremony = (swkHex && !keyd.hasSwk) || (legacyCgk && !keyd.hasCgk)
+    const ceremony = (swkHex && !keyd.hasSwk) || (legacyCgk && !keyd.hasCgk) || (cfg?.orgId && !keyd.hasCgk)
       ? ((await tryReadFile(process.env.FLAGSHIP_KEYD_CEREMONY_TOKEN ?? KEYD_CEREMONY_TOKEN_PATH))?.trim() ?? "")
       : "";
     if (swkHex && !keyd.hasSwk) {
@@ -1411,7 +1411,17 @@ async function main(): Promise<void> {
         console.warn(`[daemon] flagship-keyd did not take the workload key (${(e as Error).message})`);
       }
     }
-    if (legacyCgk && !keyd.hasCgk) {
+    if (cfg?.orgId && cfg.orgGenesisHash && !keyd.hasCgk && ceremony) {
+      // An org box never hands keyd a raw CGK: it pins the org with the ceremony's token, and keyd
+      // takes every version of the org CGK only on a key-ring version it verifies itself under this
+      // genesis (cgk.orgAdopt, below), the first one included.
+      try {
+        keyd.pinOrg({ orgId: cfg.orgId, genesisHash: cfg.orgGenesisHash, serverDomain: cfg.serverId, cgkVersion: 0 }, ceremony);
+      } catch (e) {
+        console.warn(`[daemon] flagship-keyd did not pin the org (${(e as Error).message})`);
+      }
+    }
+    if (legacyCgk && !keyd.hasCgk && !cfg?.orgId) {
       try {
         keyd.provisionCgk(legacyCgk, ceremony);
         await rm("/var/flagship/cgk.hex", { force: true }).catch(() => {});
@@ -1691,6 +1701,7 @@ async function main(): Promise<void> {
     const orgKeyDeps = { dataDir, orgId: cfg.orgId, serverDomain: cfg.serverId, signAsBox: (m: Uint8Array) => custodian.signAsBox(m), controlPlaneBaseUrl: env.controlPlaneBaseUrl };
     void announceOrgBoxKem(orgKeyDeps).catch((e) => console.warn(`[org] box KEM key not announced: ${(e as Error).message}`));
     let ringsCache: { at: number; rings: OrgKeyRings } | null = null;
+    let keydOrgCgkTried = keyd && !keyd.hasCgk ? 0 : (orgCgk?.version ?? 0);
     let recipeChecked = false;
     const orgRings = async (): Promise<OrgKeyRings | null> => {
       const pin = currentOrgPin();
@@ -1710,6 +1721,21 @@ async function main(): Promise<void> {
       });
       const cgkVersion = adopted?.keys["cgk|*"]?.version ?? 0;
       if (cgkVersion > (orgCgk?.version ?? 0) && !keyd) restarts.request(`org CGK v${cgkVersion} opened; restarting so gossip and access sync use it`);
+      if (keyd && cgkVersion > keydOrgCgkTried) {
+        // keyd holds the CGK: hand it the chain, the version and the key; it checks them itself.
+        keydOrgCgkTried = cgkVersion;
+        const ring = orgNewestRingFor(rings, "cgk", "*", `box:${cfg.serverId}`);
+        const keyHex = adopted?.keys["cgk|*"]?.keyHex;
+        if (ring && keyHex && ring.ring.version === cgkVersion) {
+          try {
+            keyd.adoptOrgCgk({ chain: pin.file.entries, ring: ring.ring, recipients: ring.recipients, approvals: ring.approvals, key: hexToBytes(keyHex) });
+            activityLog.note("org.cgk.rotated", `The org's server-to-server key moved to version ${cgkVersion}`, { ok: true });
+            restarts.request(`org CGK v${cgkVersion} adopted by flagship-keyd; restarting so gossip and access sync use it`);
+          } catch (e) {
+            activityLog.note("org.cgk.refused", `flagship-keyd kept the org's server-to-server key: ${(e as Error).message}`, { ok: false });
+          }
+        }
+      }
       return rings;
     };
     const notedPending = new Set<string>();
