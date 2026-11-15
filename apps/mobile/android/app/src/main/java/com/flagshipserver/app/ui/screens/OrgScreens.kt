@@ -20,7 +20,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -37,6 +40,9 @@ import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.FSSectionHeader
+import com.flagshipserver.app.ui.components.OutlinedTextField
+import com.flagshipserver.app.core.QrImage
+import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.LocalOrgs
 import com.flagshipserver.app.viewmodels.OrgJoinViewModel
@@ -100,13 +106,20 @@ fun OrgJoinScreen(orgId: String, seatId: String, keyHex: String, onDone: () -> U
     }
 }
 
-/** Settings → Organizations: the organizations this phone holds a seat in. */
+/** Settings → Organizations: the organizations this phone holds a seat in, and Create (as iOS). */
 @Composable
 fun OrgListScreen(onOpen: (OrgSeatRecord) -> Unit) {
     val rt = LocalOrgs.current
     OrgPage(stringResource(R.string.orgs_title)) {
         Body(stringResource(R.string.orgs_intro), muted = true)
-        val seats = remember(rt) { rt?.keys?.seats() ?: emptyList() }
+        if (rt == null) return@OrgPage
+        val vm = remember(rt) { OrgViewModel(rt.client, rt.keys, rt.umk) }
+        val seats by vm.seats.collectAsState()
+        val busy by vm.busy.collectAsState()
+        val message by vm.message.collectAsState()
+        val scope = rememberCoroutineScope()
+        var creating by remember { mutableStateOf(false) }
+        var name by remember { mutableStateOf("") }
         if (seats.isEmpty()) {
             Body(stringResource(R.string.orgs_none), muted = true, tag = "orgs-none")
         } else {
@@ -115,6 +128,22 @@ fun OrgListScreen(onOpen: (OrgSeatRecord) -> Unit) {
                 FSCard(Modifier.clickable { onOpen(s) }.testTag("org-row-${s.orgName}")) { Body(s.orgName) }
             }
         }
+        if (!creating) {
+            FSSecondaryButton(stringResource(R.string.org_create), onClick = { creating = true }, block = true, modifier = Modifier.testTag("org-create"))
+        } else {
+            FSCard {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Body(stringResource(R.string.org_create_title))
+                    OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true,
+                        label = { Text(stringResource(R.string.org_create_name)) }, modifier = Modifier.fillMaxWidth().testTag("org-create-name"))
+                    Body(stringResource(R.string.org_create_note), muted = true)
+                    FSPrimaryButton(stringResource(R.string.org_create_button), onClick = {
+                        scope.launch { if (vm.create(name)) { name = ""; creating = false } }
+                    }, enabled = !busy && name.isNotBlank(), block = true, modifier = Modifier.testTag("org-create-confirm"))
+                }
+            }
+        }
+        message?.let { Body(it) }
     }
 }
 
@@ -131,8 +160,11 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
     val rotations by vm.rotations.collectAsState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(seat.id) { vm.load(seat) }
-    fun label(id: String) = if (id == seat.seatId) com.flagshipserver.app.core.FSStrings.get(R.string.org_you)
-        else com.flagshipserver.app.core.FSStrings.get(R.string.org_seat, id.take(6))
+    val names by vm.names.collectAsState()
+    val inviteLink by vm.inviteLink.collectAsState()
+    var inviting by remember { mutableStateOf(false) }
+    var freezeTarget by remember { mutableStateOf<String?>(null) }
+    fun label(id: String) = names.let { vm.name(seat, id) }
     OrgPage(seat.orgName) {
         when (val p = phase) {
             OrgViewModel.Phase.Idle, OrgViewModel.Phase.Loading -> CircularProgressIndicator()
@@ -191,9 +223,83 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
                             }
                         }
                     }
+                    FSSectionHeader(stringResource(R.string.org_people_approve))
+                    vm.admins(seat).forEach { a ->
+                        FSCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                Body(label(a.seatId))
+                                Body(OrgViewModel.kindText(a.kind, a.isFounder), muted = true)
+                                a.frozenUntil?.let { Body(fsString(R.string.org_frozen_until_short, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))), danger = true) }
+                                if (!a.isMe && a.kind == com.flagshipserver.app.core.pq.OrgAdminKind.ADMIN && a.frozenUntil == null && frozen == null) {
+                                    if (freezeTarget == a.seatId) {
+                                        Body(stringResource(R.string.org_freeze_explain), muted = true)
+                                        FSPrimaryButton(stringResource(R.string.org_freeze_confirm), onClick = { scope.launch { vm.freeze(seat, a.seatId); freezeTarget = null } },
+                                            enabled = !busy, modifier = Modifier.testTag("org-freeze-confirm-${a.seatId.take(8)}"))
+                                    } else {
+                                        FSSecondaryButton(stringResource(R.string.org_freeze), onClick = { freezeTarget = a.seatId },
+                                            modifier = Modifier.testTag("org-freeze-${a.seatId.take(8)}"))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    FSSectionHeader(stringResource(R.string.org_invite_title))
+                    if (!inviting && inviteLink == null) {
+                        FSSecondaryButton(stringResource(R.string.org_invite), onClick = { inviting = true }, block = true, modifier = Modifier.testTag("org-invite"))
+                    } else {
+                        OrgInviteCard(vm, seat, inviteLink, busy) { inviting = false; vm.clearInvite() }
+                    }
                 }
             }
         }
         message?.let { Body(it) }
+    }
+}
+
+/** Invite: the pseudonym comes first, then the role; only then is the QR and link made (as iOS). */
+@Composable
+private fun OrgInviteCard(vm: OrgViewModel, seat: OrgSeatRecord, link: String?, busy: Boolean, onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var pseudonym by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf(OrgViewModel.InviteRole.MEMBER) }
+    var target by remember { mutableStateOf("") }
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            if (link != null) {
+                QrImage(link, 220.dp, modifier = Modifier.fillMaxWidth().testTag("org-invite-qr"))
+                val share = stringResource(R.string.org_invite_share)
+                FSSecondaryButton(share, onClick = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, link)
+                    context.startActivity(android.content.Intent.createChooser(send, share))
+                }, block = true, modifier = Modifier.testTag("org-invite-share"))
+                Body(stringResource(R.string.org_invite_after), muted = true)
+                FSSecondaryButton(stringResource(R.string.org_done), onClick = onDone, block = true)
+            } else {
+                Body(stringResource(R.string.org_invite_who))
+                OutlinedTextField(value = pseudonym, onValueChange = { pseudonym = it }, singleLine = true,
+                    label = { Text(stringResource(R.string.org_invite_pseudonym)) }, modifier = Modifier.fillMaxWidth().testTag("org-invite-pseudonym"))
+                Body(stringResource(R.string.org_invite_pseudonym_note), muted = true)
+                Body(stringResource(R.string.org_invite_what))
+                listOf(
+                    OrgViewModel.InviteRole.MEMBER to R.string.org_role_member,
+                    OrgViewModel.InviteRole.SERVER_ADMIN to R.string.org_role_server_admin,
+                    OrgViewModel.InviteRole.APP_ADMIN to R.string.org_role_app_admin,
+                ).forEach { (r, label) ->
+                    val chosen = r == role
+                    Text((if (chosen) "● " else "○ ") + stringResource(label), color = FS.colors.text,
+                        modifier = Modifier.fillMaxWidth().clickable { role = r }.padding(vertical = FS.space.s2).testTag("org-invite-role-${r.name.lowercase()}"))
+                }
+                if (role != OrgViewModel.InviteRole.MEMBER) {
+                    OutlinedTextField(value = target, onValueChange = { target = it }, singleLine = true,
+                        label = { Text(stringResource(if (role == OrgViewModel.InviteRole.SERVER_ADMIN) R.string.org_invite_server else R.string.org_invite_app)) },
+                        modifier = Modifier.fillMaxWidth().testTag("org-invite-target"))
+                }
+                FSPrimaryButton(stringResource(R.string.org_invite_make), onClick = { scope.launch { vm.invite(seat, pseudonym, role, target) } },
+                    enabled = !busy && pseudonym.isNotBlank() && (role == OrgViewModel.InviteRole.MEMBER || target.isNotBlank()),
+                    block = true, modifier = Modifier.testTag("org-invite-make"))
+                FSSecondaryButton(stringResource(R.string.org_cancel), onClick = onDone, block = true)
+            }
+        }
     }
 }

@@ -162,7 +162,38 @@ class OrgClient(private val http: OrgHttp) {
     suspend fun approve(orgId: String, sha256: String, approval: OrgApproval) {
         call("POST", "/api/orgs/$orgId/ceremonies/$sha256/approvals", buildJsonObject { put("approval", OrgJson.approval(approval)) })
     }
+
+    /** Creates an org from its genesis (this phone the founder and only admin). */
+    suspend fun create(name: String, genesis: com.flagshipserver.app.core.pq.OrgAuthorityEntry) {
+        call("POST", "/api/orgs", buildJsonObject { put("name", name); put("entry", OrgJson.entry(genesis)) })
+    }
+
+    suspend fun freeze(orgId: String, f: com.flagshipserver.app.core.pq.OrgSigned<com.flagshipserver.app.core.pq.OrgSeatFreeze>) {
+        call("POST", "/api/orgs/$orgId/freezes", OrgJson.freeze(f))
+    }
+
+    suspend fun createInvite(orgId: String, body: JsonObject) { call("POST", "/api/orgs/$orgId/invites", body) }
+
+    /** The org's sealed directory entries (docs/org-directory.md §2); only the directory key opens them. */
+    suspend fun directory(orgId: String): List<com.flagshipserver.app.core.pq.OrgDirectorySealed> =
+        arr(call("GET", "/api/orgs/$orgId/directory"), "entries").mapNotNull { e -> runCatching { OrgJson.sealed(e as JsonObject) }.getOrNull() }
+
+    /** Stores one sealed entry, approved by this org admin over its write form. */
+    suspend fun putDirectory(orgId: String, entry: com.flagshipserver.app.core.pq.OrgDirectorySealed, approval: OrgApproval) {
+        call("POST", "/api/orgs/$orgId/directory", buildJsonObject { put("entry", OrgJson.sealed(entry)); put("approvals", buildJsonArray { add(OrgJson.approval(approval)) }) })
+    }
 }
+
+/** A one-admin org's genesis: the founder alone, thresholds at their floor, the bylaws' set = every admin by majority (as iOS). */
+fun OrgAuthority.genesis(orgId: String, founderSeatId: String, founderBinding: PqTrust.Wire, issuedAt: Long) =
+    com.flagshipserver.app.core.pq.OrgAuthorityRecord(
+        orgId, 0, "0".repeat(64),
+        listOf(com.flagshipserver.app.core.pq.OrgAdminEntry(founderSeatId, com.flagshipserver.app.core.pq.OrgAdminKind.ADMIN, founderBinding)),
+        com.flagshipserver.app.core.pq.OrgBylaws(null, 0, 1), founderSeatId, 1, 1, 1, 1, issuedAt,
+    )
+
+/** A random 16-byte id, hex. */
+fun OrgAuthority.randomId(): String = PqHex.encode(ByteArray(16).also(java.security.SecureRandom()::nextBytes))
 
 /** The seat member key from the person's UMK: its hybrid secret and its `org-seat-member` binding. */
 fun OrgAuthority.memberKey(umk: ByteArray, orgId: String, seatId: String, issuedAt: Long): Pair<PqTrust.Wire, ByteArray> {
@@ -179,4 +210,54 @@ object OrgJson {
         put("orgId", a.orgId); put("oarVersion", a.oarVersion); put("purposeTag", a.purposeTag); put("orderSha256", a.orderSha256)
         put("seatId", a.seatId); put("adminKeyId", a.adminKeyId); put("notAfter", a.notAfter); put("issuedAt", a.issuedAt); put("signature", a.signature)
     }
+
+    fun record(r: com.flagshipserver.app.core.pq.OrgAuthorityRecord): JsonObject = buildJsonObject {
+        put("orgId", r.orgId); put("version", r.version); put("prevHash", r.prevHash)
+        put("admins", buildJsonArray {
+            r.admins.forEach { a -> add(buildJsonObject { put("seatId", a.seatId); put("kind", a.kind.wire); put("binding", a.binding.toJson()) }) }
+        })
+        put("bylaws", buildJsonObject {
+            val seats = r.bylaws.overturnSeats
+            if (seats == null) put("overturnSeats", "*") else put("overturnSeats", buildJsonArray { seats.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+            put("overturnK", r.bylaws.overturnK); put("vetoK", r.bylaws.vetoK)
+        })
+        put("founderSeatId", r.founderSeatId); put("kGov", r.kGov); put("kGrant", r.kGrant); put("kDestroy", r.kDestroy); put("kSite", r.kSite)
+        put("issuedAt", r.issuedAt)
+    }
+
+    /** A genesis or plain entry (no notice; delayed changes are not made on Android yet). */
+    fun entry(e: com.flagshipserver.app.core.pq.OrgAuthorityEntry): JsonObject = buildJsonObject {
+        put("record", record(e.record)); put("via", e.via); put("approvals", buildJsonArray { e.approvals.forEach { add(approval(it)) } })
+        e.overturnOf?.let { put("overturnOf", it) }
+    }
+
+    fun freeze(f: com.flagshipserver.app.core.pq.OrgSigned<com.flagshipserver.app.core.pq.OrgSeatFreeze>): JsonObject = buildJsonObject {
+        put("body", buildJsonObject {
+            put("orgId", f.body.orgId); put("seatId", f.body.seatId); put("untilMs", f.body.untilMs); put("oarVersion", f.body.oarVersion); put("issuedAt", f.body.issuedAt)
+        })
+        put("approvals", buildJsonArray { f.approvals.forEach { add(approval(it)) } })
+    }
+
+    fun roles(roles: List<com.flagshipserver.app.core.pq.OrgSeatRole>): JsonArray = buildJsonArray {
+        fun strs(l: List<String>) = buildJsonArray { l.forEach { add(JsonPrimitive(it)) } }
+        roles.forEach { r ->
+            add(buildJsonObject {
+                when (r) {
+                    com.flagshipserver.app.core.pq.OrgSeatRole.Member -> put("role", "member")
+                    com.flagshipserver.app.core.pq.OrgSeatRole.ServersAdd -> put("role", "servers-add")
+                    is com.flagshipserver.app.core.pq.OrgSeatRole.ServerAdmin -> { put("role", "server-admin"); r.servers?.let { put("servers", strs(it)) } ?: put("servers", "*") }
+                    is com.flagshipserver.app.core.pq.OrgSeatRole.ServiceAdmin -> { put("role", "service-admin"); put("apps", strs(r.apps)) }
+                    is com.flagshipserver.app.core.pq.OrgSeatRole.Unlock -> { put("role", "unlock"); put("servers", strs(r.servers)) }
+                }
+            })
+        }
+    }
+
+    fun sealed(s: com.flagshipserver.app.core.pq.OrgDirectorySealed): JsonObject = buildJsonObject {
+        put("orgId", s.orgId); put("entryId", s.entryId); put("keyVersion", s.keyVersion); put("sizeBucket", s.sizeBucket); put("sealedHex", s.sealedHex); put("issuedAt", s.issuedAt)
+    }
+
+    fun sealed(o: JsonObject) = com.flagshipserver.app.core.pq.OrgDirectorySealed(
+        str(o, "orgId")!!, str(o, "entryId")!!, num(o, "keyVersion")!!, num(o, "sizeBucket")!!.toInt(), str(o, "sealedHex")!!, num(o, "issuedAt")!!,
+    )
 }

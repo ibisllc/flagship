@@ -11,6 +11,12 @@ import {
   canonicalOrgOverturn,
   canonicalOrgSeatRevoke,
   canonicalOrgVeto,
+  canonicalOrgDirectoryWrite,
+  canonicalOrgSeatKem,
+  orgKemKeyIdHex,
+  verifyOrgSeatKem,
+  type OrgDirectorySealed,
+  type OrgSeatKemBundle,
   orgApprovalFromWire,
   orgAuthorityHash,
   orgKeyIdHex,
@@ -63,6 +69,12 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  *   GET/POST /api/orgs/:orgId/ceremonies            { order, payload, approvals }   the approvals inbox
  *   POST /api/orgs/:orgId/ceremonies/:sha/approvals { approval }
  *   GET  /api/orgs/:orgId/log                                                  the org's audit hash chain
+ *   GET  /api/orgs/:orgId/directory                                            sealed directory entries
+ *   POST /api/orgs/:orgId/directory              { entry, approvals }          store or replace one (one org admin)
+ *
+ * An accept may carry the joining seat's KEM statement (`seatKem`, signed by the member key it
+ * accepts with); `.com` keeps it with the accept and records it as the seat's KEM key when the grant
+ * lands, so a member receives key-ring versions without opening the org page first.
  *
  * The orgId (128 random bits) is the read capability for the GET routes; nothing they return is
  * secret (labels are sealed, keys are public), but it does show the org's structure.
@@ -288,7 +300,13 @@ export async function handleOrgInviteGet(deps: OrgDeps, orgId: string, seatId: s
 
 export async function handleOrgInviteAccept(deps: OrgDeps, orgId: string, seatId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
-  const b = body as { accept?: { orgId: string; seatId: string; inviteSha256: string; memberKeyId: string; adminKeyId: string; issuedAt: number }; memberBinding?: unknown; adminBinding?: unknown; signature?: unknown } | undefined;
+  const b = body as {
+    accept?: { orgId: string; seatId: string; inviteSha256: string; memberKeyId: string; adminKeyId: string; issuedAt: number };
+    memberBinding?: unknown;
+    adminBinding?: unknown;
+    signature?: unknown;
+    seatKem?: OrgSeatKemBundle;
+  } | undefined;
   if (!b?.accept || typeof b.signature !== "string") return malformed("accept and signature required");
   const o = await deps.orgs.getObject(orgId, "invite", seatId);
   if (!o) return notFound("invite not found");
@@ -316,10 +334,11 @@ export async function handleOrgInviteAccept(deps: OrgDeps, orgId: string, seatId
       binding: member,
       policy: STRICT,
     });
+    if (b.seatKem !== undefined) checkJoinSeatKem(b.seatKem, member, orgId, seatId, now);
     const stored = await deps.orgs.putObject(orgId, {
       kind: "accept",
       key: seatId,
-      bodyJson: JSON.stringify({ accept: a, memberBinding: b.memberBinding, adminBinding: b.adminBinding ?? null, signature: b.signature }),
+      bodyJson: JSON.stringify({ accept: a, memberBinding: b.memberBinding, adminBinding: b.adminBinding ?? null, signature: b.signature, seatKem: b.seatKem ?? null }),
       issuedAt: a.issuedAt,
       storedAt: now,
     });
@@ -373,6 +392,7 @@ export async function handleOrgSeatGrant(deps: OrgDeps, orgId: string, body: unk
     await deps.orgs.putObject(orgId, { kind: "grant", key: `${g.grant.seatId}:${pad(g.grant.issuedAt)}`, bodyJson: JSON.stringify(g), issuedAt: g.grant.issuedAt, storedAt: now });
     await logged(deps, orgId, "grant", orgSha256Hex(order), now);
     await deps.orgs.deleteObject(orgId, "ceremony", orgSha256Hex(order));
+    await recordJoinSeatKem(deps, v, g, now);
     return ok({ seatId: g.grant.seatId });
   } catch (e) {
     return refuse(e);
@@ -524,6 +544,81 @@ export async function handleOrgLog(deps: OrgDeps, orgId: string, after: number):
   if (!ORG_ID.test(orgId)) return malformed("orgId");
   if (!(await deps.orgs.getOrg(orgId))) return notFound("org not found");
   return ok({ entries: await deps.orgs.listLog(orgId, Number.isSafeInteger(after) && after > 0 ? after : 0) });
+}
+
+/** The KEM statement a joining seat sends with its accept: signed by the member key it accepts with. */
+function checkJoinSeatKem(k: OrgSeatKemBundle, member: ReturnType<typeof verifyPqKeyBinding>, orgId: string, seatId: string, now: number): void {
+  if (!k?.statement || k.statement.orgId !== orgId || k.statement.seatId !== seatId) throw new OrgAuthorityError("malformed", "seatKem");
+  if (Math.abs(now - k.statement.issuedAt) > 10 * 60_000) throw new OrgAuthorityError("malformed", "stale seatKem");
+  if (typeof k.kemPubHex !== "string" || !/^(?:[0-9a-f]{2})+$/.test(k.kemPubHex) || orgKemKeyIdHex(hexBytes(k.kemPubHex)) !== k.statement.kemKeyId) {
+    throw new OrgAuthorityError("binding", "kem key id");
+  }
+  verifyCriticalSignature({
+    message: canonicalOrgSeatKem(k.statement),
+    expectedPurpose: "flagship/org-seat-kem/v1",
+    envelope: { suite: "hybrid-ed25519-mldsa65/v1", signature: String(k.signature ?? "") },
+    signerEd25519PubHex: member.ed25519PubHex,
+    binding: member,
+    policy: STRICT,
+  });
+}
+
+/**
+ * When a new seat's grant lands, its join-time KEM statement (kept with the accept) becomes its KEM
+ * key, verified against the book with the grant in it. A newer statement the seat posted itself wins.
+ */
+async function recordJoinSeatKem(deps: OrgDeps, v: OrgView, g: OrgSeatGrantBundle, now: number): Promise<void> {
+  const seatId = g.grant.seatId;
+  const acc = await deps.orgs.getObject(v.org.orgId, "accept", seatId);
+  const k = acc ? parse<{ seatKem?: OrgSeatKemBundle | null }>(acc.bodyJson).seatKem : null;
+  if (!k) return;
+  const have = await deps.orgs.getObject(v.org.orgId, "seat-kem", seatId);
+  if (have && have.issuedAt >= k.statement.issuedAt) return;
+  try {
+    const book = buildOrgSeatBook(v.state, { grants: [...v.grants, g], revokes: v.revokes, freezes: v.freezes, overturns: v.overturns, now });
+    verifyOrgSeatKem(v.state, book, k, now);
+  } catch {
+    return;
+  }
+  await deps.orgs.putObject(v.org.orgId, { kind: "seat-kem", key: seatId, bodyJson: JSON.stringify(k), issuedAt: k.statement.issuedAt, storedAt: now }, true);
+}
+
+const MAX_DIRECTORY_ENTRIES = 20_000;
+
+export async function handleOrgDirectoryGet(deps: OrgDeps, orgId: string): Promise<HandlerResponseWithHeaders> {
+  if (!ORG_ID.test(orgId)) return malformed("orgId");
+  if (!(await deps.orgs.getOrg(orgId))) return notFound("org not found");
+  const entries = await list<{ entry: OrgDirectorySealed }>(deps, orgId, "directory");
+  return ok({ entries: entries.map((e) => e.entry) });
+}
+
+/**
+ * Stores or replaces one sealed directory entry, approved by one org admin over its write form.
+ * `.com` sees the org, an opaque entry id, the key version and the size bucket, never a name.
+ */
+export async function handleOrgDirectoryPut(deps: OrgDeps, orgId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
+  const now = nowOf(deps);
+  const b = body as { entry?: OrgDirectorySealed; approvals?: unknown[] } | undefined;
+  if (!b?.entry || !Array.isArray(b.approvals)) return malformed("entry and approvals required");
+  try {
+    const e = b.entry;
+    const order = canonicalOrgDirectoryWrite(e);
+    if (e.orgId !== orgId) return malformed("orgId");
+    if (Math.abs(now - e.issuedAt) > 10 * 60_000) return malformed("stale entry");
+    const v = await loadOrg(deps, orgId, now);
+    if (!v) return notFound("org not found");
+    authorizeOrgOrder({ state: v.state, book: v.book, action: { kind: "seat-invite" }, order, approvals: b.approvals.map(orgApprovalFromWire), now });
+    const prev = await deps.orgs.getObject(orgId, "directory", e.entryId);
+    if (prev && prev.issuedAt >= e.issuedAt) return conflict("older than the entry kept");
+    if (!prev && (await deps.orgs.listObjects(orgId, "directory")).length >= MAX_DIRECTORY_ENTRIES) return forbidden("directory full");
+    const clean: OrgDirectorySealed = { orgId, entryId: e.entryId, keyVersion: e.keyVersion, sizeBucket: e.sizeBucket, sealedHex: e.sealedHex, issuedAt: e.issuedAt };
+    await deps.orgs.putObject(orgId, { kind: "directory", key: e.entryId, bodyJson: JSON.stringify({ entry: clean, approvals: b.approvals }), issuedAt: e.issuedAt, storedAt: now }, true);
+    await logged(deps, orgId, "directory", orgSha256Hex(order), now);
+    return ok({ entryId: e.entryId });
+  } catch (e) {
+    if (e instanceof PqTrustError) return { status: 403, body: { error: e.message, code: "org-binding" } };
+    return refuse(e);
+  }
 }
 
 function hexBytes(s: string): Uint8Array {

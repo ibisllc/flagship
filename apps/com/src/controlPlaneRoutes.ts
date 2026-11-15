@@ -289,6 +289,13 @@ import {
   handleOrgCeremonyApprove,
   handleOrgCeremonyOpen,
   handleOrgCreate,
+  handleOrgDirectoryGet,
+  handleOrgConnectorsGet,
+  handleOrgConnectorPut,
+  handleOrgProposalsGet,
+  handleOrgProposalPost,
+  handleOrgProposalDecision,
+  handleOrgDirectoryPut,
   handleOrgFreeze,
   handleOrgInviteAccept,
   handleOrgInviteCreate,
@@ -710,7 +717,7 @@ const ROUTE_RE = {
   SERVER_REGISTER: /^\/api\/server\/register$/,
   BOX_CLAIM_KEY: /^\/api\/box-claim\/key$/,
   ORGS: /^\/api\/orgs$/,
-  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|box-log-heads|keys|export)$/,
+  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|box-log-heads|keys|export|directory|connectors|proposals|proposals\/decisions)$/,
   ORG_INVITE: /^\/api\/orgs\/([0-9a-f]{32})\/invites\/([0-9a-f]{32})(\/accept)?$/,
   ORG_CEREMONY_APPROVE: /^\/api\/orgs\/([0-9a-f]{32})\/ceremonies\/([0-9a-f]{64})\/approvals$/,
   BOX_CLAIM_MAILBOX: /^\/api\/box-claim\/mailbox\/([0-9a-f]{64})\/(to-box|to-phone)$/,
@@ -1499,6 +1506,9 @@ export async function tryControlPlane(
         if (sub === "servers") return finish(await handleOrgServersList(osd, orgId));
         if (sub === "keys") return finish(await handleOrgKeysGet(osd, orgId));
         if (sub === "export") return finish(await handleOrgExport(osd, orgId));
+        if (sub === "directory") return finish(await handleOrgDirectoryGet(od, orgId));
+        if (sub === "connectors") return finish(await handleOrgConnectorsGet(od, orgId));
+        if (sub === "proposals") return finish(await handleOrgProposalsGet(od, orgId));
       }
       if (method === "POST") {
         const body = await readJson(request);
@@ -1516,6 +1526,10 @@ export async function tryControlPlane(
         if (sub === "box-kems") return finish(await handleOrgBoxKem(osd, orgId, body));
         if (sub === "box-log-heads") return finish(await handleOrgBoxLogHead(osd, orgId, body));
         if (sub === "keys") return finish(await handleOrgKeyRingPost(osd, orgId, body));
+        if (sub === "directory") return finish(await handleOrgDirectoryPut(od, orgId, body));
+        if (sub === "connectors") return finish(await handleOrgConnectorPut(od, orgId, body));
+        if (sub === "proposals") return finish(await handleOrgProposalPost(od, orgId, body));
+        if (sub === "proposals/decisions") return finish(await handleOrgProposalDecision(od, orgId, body));
       }
     }
   }

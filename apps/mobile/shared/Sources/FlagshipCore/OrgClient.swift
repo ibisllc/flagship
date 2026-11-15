@@ -218,6 +218,17 @@ public final class OrgClient: @unchecked Sendable {
     public func createInvite(orgId: String, body: [String: Any]) async throws {
         _ = try await call("POST", "/api/orgs/\(orgId)/invites", body)
     }
+
+    /// The org's sealed directory entries (docs/org-directory.md §2); only the directory key opens them.
+    public func directory(orgId: String) async throws -> [OrgDirectorySealed] {
+        let r = try await call("GET", "/api/orgs/\(orgId)/directory")
+        return ((r["entries"] as? [Any]) ?? []).compactMap { try? OrgDirectorySealed.fromWire($0) }
+    }
+
+    /// Stores one sealed entry, approved by this org admin over its write form.
+    public func putDirectory(orgId: String, entry: OrgDirectorySealed, approval: OrgApproval) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/directory", ["entry": entry.json, "approvals": [approval.jsonObject]])
+    }
 }
 
 extension OrgAuthority {

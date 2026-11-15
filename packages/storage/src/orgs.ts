@@ -40,7 +40,13 @@ export type OrgObjectKind =
   /** A box's X-Wing key statement, keyed by server domain (newest wins). */
   | "box-kem"
   /** A box's own signed Activity log head, keyed by server domain (newest wins). */
-  | "box-log-head";
+  | "box-log-head"
+  /** A sealed directory entry (docs/org-directory.md §2), keyed by its opaque entry id (newest wins). */
+  | "directory"
+  /** A directory connector's authority record, keyed by connector id (newest wins). */
+  | "connector"
+  /** A connector's proposal, keyed by proposal id; `decided` is set in the body once an admin acted on it. */
+  | "proposal";
 
 export interface OrgObject {
   kind: OrgObjectKind;

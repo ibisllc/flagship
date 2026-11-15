@@ -89,6 +89,9 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
     val boxKems = mutableListOf<JsonObject>()
     val servers = mutableListOf<JsonObject>()
     var inviteExpired = false
+    val directory = mutableMapOf<String, JsonObject>()
+    val freezes = mutableListOf<JsonObject>()
+    val created = mutableListOf<JsonObject>()
     val calls = mutableListOf<String>()
 
     init {
@@ -169,6 +172,20 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
             method == "GET" && path == "$base/servers" -> 200 to buildJsonObject { put("servers", JsonArray(servers)) }
             method == "POST" && path == "$base/keys" -> { rings += body!!; 200 to JsonObject(emptyMap()) }
             method == "POST" && path == "$base/seat-kems" -> { seatKems += body!!; 200 to JsonObject(emptyMap()) }
+            method == "GET" && path == "$base/directory" -> 200 to buildJsonObject { put("entries", JsonArray(directory.values.toList())) }
+            method == "POST" && path == "$base/directory" -> {
+                val e = body!!["entry"] as JsonObject
+                directory[(e["entryId"] as JsonPrimitive).content] = e; 200 to JsonObject(emptyMap())
+            }
+            method == "POST" && path == "$base/invites" -> {
+                val inv = body!!["invite"] as JsonObject
+                val s = (inv["seatId"] as JsonPrimitive).content
+                invites[s] = buildJsonObject { put("invite", inv); put("roles", body["roles"]!!) }
+                offers[s] = (body["offerHex"] as JsonPrimitive).content
+                200 to JsonObject(emptyMap())
+            }
+            method == "POST" && path == "$base/freezes" -> { freezes += body!!; 200 to JsonObject(emptyMap()) }
+            method == "POST" && path == "/api/orgs" -> { created += body!!; 200 to JsonObject(emptyMap()) }
             else -> 404 to JsonObject(emptyMap())
         }
     }

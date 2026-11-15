@@ -83,11 +83,22 @@ public final class OrgJoinViewModel {
                                                                                         oarVersion: oar, issuedAt: ia, expiresAt: ea))
             let msg = try OrgAuthority.canonicalSeatAccept(orgId: orgId, seatId: seatId, inviteSha256: inviteSha, memberKeyId: memberKeyId, adminKeyId: adminKeyId, issuedAt: t)
             let sig = try PqHybrid.hybridSign(secretKey: member.secret, purpose: OrgAuthority.tagSeatAccept, payload: msg)
+            // The seat's X-Wing key rides with the accept; `.com` records it when the grant lands, so this
+            // seat receives new key-ring versions without opening the org page first.
+            let kem = try PqHybrid.hybridSealKeygen(seed: try OrgAuthority.seatKemSeed(umk: umk, orgId: orgId))
+            let kemKeyId = OrgAuthority.kemKeyIdHex(kem.publicKey)
+            let kemMsg = try OrgAuthority.canonicalSeatKem(orgId: orgId, seatId: seatId, kemKeyId: kemKeyId, issuedAt: t)
+            let kemSig = try PqHybrid.hybridSign(secretKey: member.secret, purpose: OrgAuthority.tagSeatKem, payload: kemMsg)
             try await client.accept(orgId: orgId, seatId: seatId, body: [
                 "accept": ["orgId": orgId, "seatId": seatId, "inviteSha256": inviteSha, "memberKeyId": memberKeyId, "adminKeyId": adminKeyId, "issuedAt": NSNumber(value: t)],
                 "memberBinding": member.binding.jsonObject,
                 "adminBinding": admin.map { $0.binding.jsonObject as Any } ?? NSNull(),
                 "signature": OrgAuthority.hex(sig),
+                "seatKem": [
+                    "statement": ["orgId": orgId, "seatId": seatId, "kemKeyId": kemKeyId, "issuedAt": NSNumber(value: t)] as [String: Any],
+                    "kemPubHex": OrgAuthority.hex(kem.publicKey),
+                    "signature": OrgAuthority.hex(kemSig),
+                ] as [String: Any],
             ])
             let name = (offer["orgName"] as? String) ?? ""
             if let admin {

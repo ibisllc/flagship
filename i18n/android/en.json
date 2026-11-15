@@ -16574,5 +16574,149 @@
   "voici_calls_answer_locked_unlock": {
     "en": "Unlock Flagship and try again.",
     "ctx": "voi.ci calls: the locked-answer setting needs an unlocked account"
+  },
+  "org_cancel": {
+    "en": "Cancel",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_create": {
+    "en": "Create an organization",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_create_button": {
+    "en": "Create",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_create_failed": {
+    "en": "Couldn't create the organization. Try again.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_create_name": {
+    "en": "Name",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_create_note": {
+    "en": "This becomes the organization's address, like home.name.flagship.services. You start as its only admin; invite others next.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_create_title": {
+    "en": "Name your organization",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_freeze": {
+    "en": "Freeze",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_freeze_confirm": {
+    "en": "Freeze for 72 hours",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_freeze_explain": {
+    "en": "They can't approve anything until it ends or the bylaws' signers lift it. You can freeze one admin once a week. Removing an admin takes more people.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_freeze_refused": {
+    "en": "You can freeze one admin for up to 72 hours, once a week.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_frozen_done": {
+    "en": "Frozen for 72 hours. The bylaws' signers can lift it sooner.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_frozen_until_short": {
+    "en": "Frozen until %1$s",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite": {
+    "en": "Invite a person",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_title": {
+    "en": "Invite a person",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_after": {
+    "en": "They open it on their phone and you both check the same 6-digit code before you approve.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_app": {
+    "en": "App id",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_make": {
+    "en": "Make the invitation",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_name_needed": {
+    "en": "Give this person a name the organization will know them by.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_pseudonym": {
+    "en": "Name the organization will know them by",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_pseudonym_note": {
+    "en": "Required. The organization sees only this name, never their own account.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_server": {
+    "en": "Server address",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_share": {
+    "en": "Share the link",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_what": {
+    "en": "What can they do?",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_invite_who": {
+    "en": "Who is this?",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_kind_admin": {
+    "en": "Admin",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_kind_board": {
+    "en": "Board member: lifts freezes",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_kind_founder": {
+    "en": "Founder and admin",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_kind_recovery": {
+    "en": "Recovery key",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_name_hidden": {
+    "en": "Name hidden (%1$s)",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_name_taken": {
+    "en": "That name is taken. Try another.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_people_approve": {
+    "en": "People who can approve",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_role_app_admin": {
+    "en": "Admin of one app",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_role_member": {
+    "en": "Member",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_role_server_admin": {
+    "en": "Admin of one server",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
+  "org_show_names_reason": {
+    "en": "Show the names in this organization",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
   }
 }

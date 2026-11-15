@@ -100,7 +100,16 @@ class OrgJoinViewModel(
         val t = now()
         try {
             val seed = umk(FSStrings.get(R.string.org_join_reason))
-            val (memberBinding, memberSecret) = try { OrgAuthority.memberKey(seed, orgId, seatId, t) } finally { seed.fill(0) }
+            val kemSeed: ByteArray
+            val (memberBinding, memberSecret) = try {
+                kemSeed = com.flagshipserver.app.core.pq.OrgServers.seatKemSeed(seed, orgId)
+                OrgAuthority.memberKey(seed, orgId, seatId, t)
+            } finally { seed.fill(0) }
+            // The seat's X-Wing key rides with the accept; `.com` records it when the grant lands, so this
+            // seat receives new key-ring versions without opening the org page first.
+            val kem = try { PqHybrid.hybridSealKeygen(kemSeed) } finally { kemSeed.fill(0) }
+            val kemKeyId = com.flagshipserver.app.core.pq.OrgServers.kemKeyIdHex(kem.publicKey)
+            val kemMsg = com.flagshipserver.app.core.pq.OrgServers.canonicalSeatKem(orgId, seatId, kemKeyId, t)
             val memberKeyId = OrgAuthority.keyIdHex(memberBinding.ed25519PubHex, memberBinding.mldsaPubHex)
             val admin = if (roles.any { it.raisesAdmin }) keys.makeKey(orgId, seatId, t) else null
             val adminKeyId = admin?.let { OrgAuthority.keyIdHex(it.first.ed25519PubHex, it.first.mldsaPubHex) } ?: ""
@@ -114,7 +123,12 @@ class OrgJoinViewModel(
                 ),
             )
             val msg = OrgAuthority.canonicalSeatAccept(orgId, seatId, inviteSha, memberKeyId, adminKeyId, t)
-            val sig = try { PqHybrid.hybridSign(memberSecret, OrgAuthority.TAG_SEAT_ACCEPT, msg) } finally { memberSecret.fill(0) }
+            val sig: ByteArray
+            val kemSig: ByteArray
+            try {
+                sig = PqHybrid.hybridSign(memberSecret, OrgAuthority.TAG_SEAT_ACCEPT, msg)
+                kemSig = PqHybrid.hybridSign(memberSecret, com.flagshipserver.app.core.pq.OrgServers.TAG_SEAT_KEM, kemMsg)
+            } finally { memberSecret.fill(0) }
             client.accept(orgId, seatId, buildJsonObject {
                 put("accept", buildJsonObject {
                     put("orgId", orgId); put("seatId", seatId); put("inviteSha256", inviteSha)
@@ -123,6 +137,11 @@ class OrgJoinViewModel(
                 put("memberBinding", memberBinding.toJson())
                 put("adminBinding", admin?.first?.toJson() ?: JsonNull)
                 put("signature", PqHex.encode(sig))
+                put("seatKem", buildJsonObject {
+                    put("statement", buildJsonObject { put("orgId", orgId); put("seatId", seatId); put("kemKeyId", kemKeyId); put("issuedAt", t) })
+                    put("kemPubHex", PqHex.encode(kem.publicKey))
+                    put("signature", PqHex.encode(kemSig))
+                })
             })
             val name = str(offer, "orgName") ?: ""
             if (admin != null) {

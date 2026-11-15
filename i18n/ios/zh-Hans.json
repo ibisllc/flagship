@@ -3745,5 +3745,7 @@
   "Disk key of %@": "%@ 的磁盘密钥",
   "A disk key changes when its server is re-keyed, which isn't available yet.": "磁盘密钥会在其服务器重新加密时更换，此功能尚不可用。",
   "Answer calls while Flagship is locked": "在 Flagship 锁定时接听来电",
-  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "此设备保存一个只能用于接听来电的密钥，因此可以在锁定屏幕上接听。在你解锁之前，来电者显示为“voi.ci 上的某人”。"
+  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "此设备保存一个只能用于接听来电的密钥，因此可以在锁定屏幕上接听。在你解锁之前，来电者显示为“voi.ci 上的某人”。",
+  "Name hidden (%@)": "名称已隐藏 (%@)",
+  "Show the names in this organization": "显示此组织中的名称"
 }

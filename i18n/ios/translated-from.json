@@ -3741,5 +3741,7 @@
   "Disk key of %@": "a5263956d19b",
   "A disk key changes when its server is re-keyed, which isn't available yet.": "63baa7098a0c",
   "Answer calls while Flagship is locked": "c35ce2df1380",
-  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "188fb4d85ab5"
+  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "188fb4d85ab5",
+  "Name hidden (%@)": "c16da6de863a",
+  "Show the names in this organization": "a0b5aefa4df8"
 }

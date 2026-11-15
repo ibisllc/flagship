@@ -16013,5 +16013,13 @@
   "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": {
     "en": "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (answering while locked)"
+  },
+  "Name hidden (%@)": {
+    "en": "Name hidden (%@)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Show the names in this organization": {
+    "en": "Show the names in this organization",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
   }
 }
