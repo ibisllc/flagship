@@ -735,6 +735,46 @@
       "check": "test-vectors",
       "key": "web:org-authority",
       "reason": "The webapp holds no org keys and has no org console yet (docs/enterprise-accounts.md E4: web is view-and-collect, after iOS and Android); TS, Swift and Kotlin read the vectors."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-answer/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-end/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-frame/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-push/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-receipt/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-request/v1",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
+    },
+    {
+      "check": "push-categories",
+      "key": "web:voici-call",
+      "reason": "Calls ring only native admin devices: .com never sends a voici-call push to a browser's Web Push token (docs/voici-calls.md §8)."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:voici-calls",
+      "reason": "The webapp never answers a call (docs/voici-calls.md §8: web push can't ring reliably); the caller's browser side of this record is packages/flagship-web/src/callProtocol.js, pinned to the shared vectors by packages/flagship-web/tests/call.test.ts."
     }
   ]
 }
