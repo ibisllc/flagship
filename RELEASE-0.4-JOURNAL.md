@@ -567,6 +567,27 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
     ceremony). Recorded in `docs/enterprise-accounts.md` by the next agent.
   Next: the org directory + connectors agent (`docs/org-directory.md`), plus Android create/invite/freeze.
 
+- 2026-11-15: **Locked answering merged** (`..3a39d7fc7`, migration **0147** `voici_call_keys`): a call-only P-256
+  device key bound by `flagship/voici-call-key/v1`, a revocation, and `flagship/voici-call-join/v1` (a locked phone
+  can't sign device headers). 1152 targeted tests, i18n and parity green; iOS package and Android tests per the agent.
+  **Owner (2026-11-15, second round): "I agree with all your choices and defaults."**
+  - **Every feature lands with 0.4**, including the webapp safety upgrades and **our own build of Google's
+    libwebrtc** (option A; no vendor prebuilt).
+  - Calls must work from the voi.ci page in browsers, and the owner must be able to **call back from the Social page**
+    (the phone's browser is an acceptable fallback). Design: `docs/voici-calls.md` "Calling back".
+  - Defaults now binding: directory members see only what they share; SCIM tokens per connector, rotated by hand,
+    with a warning at 365 days; webapp custody proposal 1-6; Do Not Disturb per device; call settings admin-only;
+    the join record accepted; `.com` drops a call-key binding when its device grant is revoked.
+  - Still asked: the Terms §6 spam bullet (keep, trim to unlawful, or remove).
+  **Agents started** from `fc5d721f2`:
+  - `libwebrtc`: a CI build of Google libwebrtc (iOS xcframework + Android AAR, checksums, artifacts only; hosting
+    is an owner step), real `CallMediaEngine` on both phones, TURN responder linked, a media CI lane;
+  - `calls-callback`: browser calling verified with Playwright, call back from the thread and missed-call row, the
+    browser handoff fallback, webapp call back, call-key binding dropped on grant revoke (shell v217, migration 0149
+    if needed);
+  - `webapp-custody`: proposal 1-6 (shell v218, migration 0150 if needed).
+  `org-directory` is still running (migration 0148, shell v219 if needed).
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
@@ -581,7 +602,8 @@ change ships with 0.4.
 
 Next steps for whoever resumes:
 1. **Merge any agent branch that reported** (worktrees `~/flagship-0.4-<slug>`, branches `0.4/<slug>`):
-   - `calls-2` merged (`1041fec0a`, shell v216); its agent is now building answering-while-locked;
+   - Running: `org-directory`, `libwebrtc`, `calls-callback`, `webapp-custody` (reserved: shells v217/v218/v219,
+     migrations 0148 directory, 0149 callback, 0150 custody). `calls-2` (incl. locked answering) is merged.
    - `enterprise-3` merged; `org-directory` agent next (directory + SCIM/LDAP connectors, KEM at join, index 0148,
      Android create/invite/freeze).
    - Merge rule: run `scratchpad/rebase-i18n.sh` (or rebase by hand). Never commit conflict markers. On a shell
@@ -597,10 +619,9 @@ Next steps for whoever resumes:
    - org directory + SCIM/LDAP connectors (`docs/org-directory.md` §8 build order);
    - answering while locked (`docs/voici-calls.md`, owner decisions 2026-11-15);
    - `voici-call-allow/v1` missing from `tools/adversarial/tests/support/tagInventory.ts`;
-   - after the owner decides: the WebRTC media engine, linking `flagship-turn-lite`, the webapp key custody items.
-4. **Waiting on the owner:** the Terms §6 spam bullet; the WebRTC choice (B now + A before GA?); webapp key custody
-   (accept proposal 1-6?); directory visibility for members and SCIM token rotation (`org-directory.md` §9); a
-   KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
+   - (decided and running: libwebrtc option A, the media engine, flagship-turn-lite, webapp custody 1-6, call back.)
+4. **Waiting on the owner:** the Terms §6 spam bullet; hosting for the libwebrtc binaries; signing the webapp shell
+   at release; a KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
    enterprise formulas, calls v2, retail untrusted, direct names, voi.ci name caps, payments, wired fleet).
 5. **Not run yet:** the full vitest and Android suites on the newest tip (send to the cloud), the iOS mock gym, the
    Playwright gym specs, and anything on a real box or phone.
