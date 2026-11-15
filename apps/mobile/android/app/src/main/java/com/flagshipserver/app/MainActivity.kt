@@ -540,6 +540,9 @@ class MainActivity : FragmentActivity() {
                         toasts.error(com.flagshipserver.app.core.AppStorageText.ALERT)
                         FlagshipFcmService.showStorageFullNotification(appContext, serviceId, server)
                     },
+                    notifyResetWindow = { server, at ->
+                        FlagshipFcmService.showResetWindowNotification(appContext, server, at)
+                    },
                     // Every box this device has a session on, so an alert
                     // from any of them names the box its chat is on.
                     sources = run {

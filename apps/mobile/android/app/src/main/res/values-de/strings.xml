@@ -3829,4 +3829,22 @@
     <string name="retail_open_server">Server öffnen</string>
     <string name="retail_alarm_title">Verwende diesen Server nicht</string>
     <string name="retail_delete_this_server">Diesen Server löschen</string>
+    <string name="retail_reset_window_notice">Jemand hat die Reset-Taste von %1$s gedrückt. Wenn du das nicht warst: Der Server ist unverändert und bleibt deiner, außer jemand richtet ihn in den nächsten 10 Minuten ein.</string>
+    <string name="release_box_warning">Freigeben löscht alles auf dieser Box: ihre Apps, deren Daten und ihre Schlüssel. Das lässt sich nicht rückgängig machen. Die Box ist danach wie neu, bereit für den nächsten Besitzer.</string>
+    <string name="release_box_suggestion">Um deine Daten zu behalten, erstelle zuerst ein Backup oder übertrage den Server stattdessen an den neuen Besitzer.</string>
+    <string name="release_box_admin_only">Nur ein Admin-Gerät dieses Kontos kann diese Box freigeben.</string>
+    <string name="release_box_reason">%1$s freigeben</string>
+    <string name="release_box_cancelled">Die Box wurde nicht freigegeben.</string>
+    <string name="release_box_not_admin">Nur der Admin-Schlüssel dieses Kontos kann diese Box freigeben.</string>
+    <string name="release_box_needs_hybrid">Dieser Server braucht eine quantensichere Signatur. Schalte den quantensicheren Schutz auf diesem Gerät ein und versuche es erneut.</string>
+    <string name="release_box_other_server">Dieser Auftrag gilt für einen anderen Server. Lade diese Seite neu und versuche es erneut.</string>
+    <string name="release_box_clock">Die Uhr dieses Geräts weicht zu stark von der des Servers ab. Prüfe die Uhrzeit und versuche es erneut.</string>
+    <string name="release_box_replayed">Dieser Auftrag wurde schon verwendet. Versuche es erneut.</string>
+    <string name="release_box_already">Diese Box ist bereits freigegeben.</string>
+    <string name="release_box_failed">Die Box konnte nicht freigegeben werden. Versuche es gleich noch einmal.</string>
+    <string name="release_box_title">Diese Box freigeben</string>
+    <string name="release_box_done">Die Box wird gelöscht. Sie startet als neue Box neu.</string>
+    <string name="release_box_busy">Wird freigegeben …</string>
+    <string name="release_box_confirm_title">Diese Box freigeben?</string>
+    <string name="release_box_confirm">Löschen und freigeben</string>
 </resources>

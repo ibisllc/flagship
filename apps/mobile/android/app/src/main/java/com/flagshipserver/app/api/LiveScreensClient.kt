@@ -634,6 +634,10 @@ class LiveScreensClient(
     override suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse =
         request("/api/screens/debug-access/revoke", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
 
+    override suspend fun releaseBox(bodyJson: String) {
+        request<Unit>("/api/screens/box-release", null, "POST", bodyJson.toByteArray())
+    }
+
     override suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse {
         val body = json.encodeToString(AppCopyRequest.serializer(), req).toByteArray()
         return request("/api/screens/services/copy", AppCopyResponse.serializer(), "POST", body)

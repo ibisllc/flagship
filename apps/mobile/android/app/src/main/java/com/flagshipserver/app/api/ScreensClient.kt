@@ -323,6 +323,11 @@ interface ScreensClient {
     suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         throw ScreensError.NotImplemented("debug access")
 
+    /** `POST /api/screens/box-release {order, signatureHex, pqSignature?}`: wipes a retail box.
+     *  A refusal carries a `release-*` code (`ReleaseThisBox.refusal`). */
+    suspend fun releaseBox(bodyJson: String): Unit =
+        throw ScreensError.NotImplemented("release this box")
+
     // ---- Container stack (packages/server-daemon/src/archV2Switch.ts) --------------------------
 
     /** `GET /api/stack`: the stack, the switch record and the plan for the other stack. */

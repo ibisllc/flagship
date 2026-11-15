@@ -3834,4 +3834,22 @@
     <string name="retail_open_server">Open the server</string>
     <string name="retail_alarm_title">Don\'t use this server</string>
     <string name="retail_delete_this_server">Delete this server</string>
+    <string name="retail_reset_window_notice">Someone pressed the reset button on %1$s. If that was not you, the server is unchanged and stays yours unless someone sets it up in the next 10 minutes.</string>
+    <string name="release_box_warning">Releasing wipes everything on this box: its apps, their data and its keys. It can\'t be undone. The box goes back to new, ready for its next owner.</string>
+    <string name="release_box_suggestion">To keep your data, make a backup first, or transfer the server to its new owner instead.</string>
+    <string name="release_box_admin_only">Only an admin device of this account can release this box.</string>
+    <string name="release_box_reason">Release %1$s</string>
+    <string name="release_box_cancelled">The box wasn\'t released.</string>
+    <string name="release_box_not_admin">Only this account\'s admin key can release this box.</string>
+    <string name="release_box_needs_hybrid">This server needs a quantum-safe signature. Turn on Quantum-safe protection on this device and try again.</string>
+    <string name="release_box_other_server">That order is for another server. Refresh this page and try again.</string>
+    <string name="release_box_clock">This device\'s clock is too far from the server\'s. Check the time and try again.</string>
+    <string name="release_box_replayed">That order was already used. Try again.</string>
+    <string name="release_box_already">This box is already released.</string>
+    <string name="release_box_failed">The box couldn\'t be released. Try again in a moment.</string>
+    <string name="release_box_title">Release this box</string>
+    <string name="release_box_done">The box is being wiped. It restarts as a new box.</string>
+    <string name="release_box_busy">Releasing…</string>
+    <string name="release_box_confirm_title">Release this box?</string>
+    <string name="release_box_confirm">Wipe and release</string>
 </resources>

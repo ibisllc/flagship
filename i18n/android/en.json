@@ -15780,5 +15780,79 @@
   "retail_delete_this_server": {
     "en": "Delete this server",
     "ctx": "retail claim (core/RetailClaim.kt, ui/screens/RetailClaimScreen.kt)"
+  },
+  "retail_reset_window_notice": {
+    "en": "Someone pressed the reset button on %1$s. If that was not you, the server is unchanged and stays yours unless someone sets it up in the next 10 minutes.",
+    "ctx": "push/FlagshipFcmService.kt (notification)",
+    "args": 1
+  },
+  "release_box_warning": {
+    "en": "Releasing wipes everything on this box: its apps, their data and its keys. It can't be undone. The box goes back to new, ready for its next owner.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_suggestion": {
+    "en": "To keep your data, make a backup first, or transfer the server to its new owner instead.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_admin_only": {
+    "en": "Only an admin device of this account can release this box.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_reason": {
+    "en": "Release %1$s",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)",
+    "args": 1
+  },
+  "release_box_cancelled": {
+    "en": "The box wasn't released.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_not_admin": {
+    "en": "Only this account's admin key can release this box.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_needs_hybrid": {
+    "en": "This server needs a quantum-safe signature. Turn on Quantum-safe protection on this device and try again.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_other_server": {
+    "en": "That order is for another server. Refresh this page and try again.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_clock": {
+    "en": "This device's clock is too far from the server's. Check the time and try again.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_replayed": {
+    "en": "That order was already used. Try again.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_already": {
+    "en": "This box is already released.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_failed": {
+    "en": "The box couldn't be released. Try again in a moment.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_title": {
+    "en": "Release this box",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_done": {
+    "en": "The box is being wiped. It restarts as a new box.",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_busy": {
+    "en": "Releasing…",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_confirm_title": {
+    "en": "Release this box?",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
+  },
+  "release_box_confirm": {
+    "en": "Wipe and release",
+    "ctx": "viewmodels/ReleaseThisBoxViewModel.kt (Release this box)"
   }
 }

@@ -350,6 +350,14 @@ fun ServerDetailScreen(
             }
         }
         LaunchedEffect(debugVm, loadedDetail?.debugAccess) { debugVm?.reconcile(loadedDetail?.debugAccess) }
+        val releaseVm = remember(loadedDetail?.serverFqdn, loadedDetail?.retail, client) {
+            val retail = loadedDetail?.retail
+            if (retail != null && client != null) {
+                com.flagshipserver.app.viewmodels.ReleaseThisBoxViewModel(loadedDetail.serverFqdn, loadedDetail.username, retail.stkPubHex, client)
+            } else {
+                null
+            }
+        }
         debugVm?.let { DebugAccessBanner(it) }
 
         // Boot-unlock approval — hoisted ABOVE the load-state branch so a box
@@ -467,6 +475,7 @@ fun ServerDetailScreen(
             JournalCard(serverDomain = d.value.serverFqdn)
             debugVm?.let { vm -> DebugAccessCard(vm = vm, onChanged = { detailVm?.load() }) }
             client?.let { DirectAccessCard(serverDomain = d.value.serverFqdn, box = it) }
+            releaseVm?.let { ReleaseThisBoxCard(it) }
             d.value.runtimeView?.let { RuntimeSection(it) }
             onOpenLocalAi?.let { LocalAiCard(onOpen = it) }
             // The box's GPUs: who holds or waits for each, and Stop (gpu/http.ts).
