@@ -223,6 +223,7 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
                             }
                         }
                     }
+                    OrgDirectorySections(vm, seat, busy, frozen == null)
                     FSSectionHeader(stringResource(R.string.org_people_approve))
                     vm.admins(seat).forEach { a ->
                         FSCard {
@@ -301,5 +302,73 @@ private fun OrgInviteCard(vm: OrgViewModel, seat: OrgSeatRecord, link: String?, 
                 FSSecondaryButton(stringResource(R.string.org_cancel), onClick = onDone, block = true)
             }
         }
+    }
+}
+
+/** The admin console's Directory (docs/org-directory.md §6): proposals with Approve, people, connectors (as iOS). */
+@Composable
+private fun OrgDirectorySections(vm: OrgViewModel, seat: OrgSeatRecord, busy: Boolean, canAct: Boolean) {
+    val scope = rememberCoroutineScope()
+    val proposals by vm.proposals.collectAsState()
+    val people by vm.people.collectAsState()
+    val connectors by vm.connectors.collectAsState()
+    val fresh by vm.newConnector.collectAsState()
+    var picking by remember { mutableStateOf(false) }
+    if (proposals.isNotEmpty()) {
+        FSSectionHeader(stringResource(R.string.org_directory_proposals))
+        proposals.forEach { p ->
+            FSCard {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Body(p.entry.pseudonym)
+                    if (p.entry.email.isNotEmpty()) Body(p.entry.email, muted = true)
+                    Body(OrgViewModel.proposalText(p.kind), muted = true)
+                    FSPrimaryButton(stringResource(R.string.org_approve), onClick = { scope.launch { vm.approveProposal(seat, p) } },
+                        enabled = !busy && canAct, modifier = Modifier.testTag("org-proposal-approve-${p.id.take(8)}"))
+                    FSSecondaryButton(stringResource(R.string.org_decline), onClick = { scope.launch { vm.declineProposal(seat, p) } },
+                        enabled = !busy, modifier = Modifier.testTag("org-proposal-decline-${p.id.take(8)}"))
+                }
+            }
+        }
+    }
+    if (people.isNotEmpty()) {
+        FSSectionHeader(stringResource(R.string.org_directory_people))
+        people.values.sortedBy { it.pseudonym }.forEach { e ->
+            FSCard {
+                Column {
+                    Body(e.pseudonym)
+                    val sub = (listOf(e.email) + e.groups).filter { it.isNotEmpty() }.joinToString(" · ")
+                    if (sub.isNotEmpty()) Body(sub, muted = true)
+                }
+            }
+        }
+    }
+    FSSectionHeader(stringResource(R.string.org_directory_connectors))
+    Body(stringResource(R.string.org_directory_connectors_note), muted = true)
+    connectors.forEach { k ->
+        FSCard { Column { Body(OrgViewModel.connectorText(k.kind)); Body("${k.serverDomain} · ${OrgViewModel.statusText(k.status)}", muted = true) } }
+    }
+    val f = fresh
+    if (f != null) {
+        FSCard {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Body(stringResource(R.string.org_connector_token_once))
+                Text(f.first, color = FS.colors.text, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
+                Text(f.second, color = FS.colors.text, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp), modifier = Modifier.testTag("org-connector-token"))
+                FSSecondaryButton(stringResource(R.string.org_done), onClick = { vm.clearNewConnector() }, block = true)
+            }
+        }
+    } else if (picking) {
+        FSCard {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Body(stringResource(R.string.org_connector_which_server))
+                vm.servers().forEach { d ->
+                    FSSecondaryButton(d, onClick = { picking = false; scope.launch { vm.addScimConnector(seat, d) } }, block = true)
+                }
+                FSSecondaryButton(stringResource(R.string.org_cancel), onClick = { picking = false }, block = true)
+            }
+        }
+    } else {
+        FSSecondaryButton(stringResource(R.string.org_connector_add), onClick = { picking = true }, enabled = !busy && vm.servers().isNotEmpty(),
+            block = true, modifier = Modifier.testTag("org-connector-add"))
     }
 }

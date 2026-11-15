@@ -4062,4 +4062,27 @@
     <string name="org_role_member">Membre</string>
     <string name="org_role_server_admin">Administrateur d’un serveur</string>
     <string name="org_show_names_reason">Afficher les noms de cette organisation</string>
+    <string name="org_decline">Refuser</string>
+    <string name="org_directory_proposals">Depuis l\'annuaire de votre entreprise</string>
+    <string name="org_directory_people">Personnes</string>
+    <string name="org_directory_connectors">Connecteurs d\'annuaire</string>
+    <string name="org_directory_connectors_note">Microsoft Entra ID, Okta et d\'autres envoient des personnes à votre propre serveur. Rien ne change tant qu\'un admin ne l\'approuve pas ici.</string>
+    <string name="org_connector_token_once">Donnez ces informations à votre fournisseur d\'identité. Le jeton ne s\'affiche que maintenant.</string>
+    <string name="org_connector_which_server">Quel serveur exécute le connecteur ?</string>
+    <string name="org_connector_add">Ajouter un connecteur SCIM</string>
+    <string name="org_connector_no_key">Ce serveur n\'a pas encore annoncé sa clé. Réessayez dans quelques minutes.</string>
+    <string name="org_proposal_invited">Invitation créée. Partagez le lien avec la personne.</string>
+    <string name="org_proposal_removed">Retiré. Changez les clés qu\'elle pouvait ouvrir quand la liste le demande.</string>
+    <string name="org_proposal_updated">Mis à jour.</string>
+    <string name="org_proposal_role_from_seat">Changez le rôle de cette personne depuis sa place, puis refusez cette proposition.</string>
+    <string name="org_proposal_invite">Proposition : inviter dans l\'organisation</string>
+    <string name="org_proposal_offboard">Proposition : retirer de l\'organisation</string>
+    <string name="org_proposal_role">Proposition : changer son rôle</string>
+    <string name="org_proposal_entry">Proposition : mettre à jour ses informations</string>
+    <string name="org_connector_scim">Connecteur SCIM</string>
+    <string name="org_connector_ldap">Connecteur LDAP</string>
+    <string name="org_connector_custom">Connecteur personnalisé</string>
+    <string name="org_connector_active">Actif</string>
+    <string name="org_connector_paused">En pause</string>
+    <string name="org_connector_retired">Retiré</string>
 </resources>

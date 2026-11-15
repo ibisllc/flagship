@@ -83,6 +83,19 @@ class OrgViewModel(
     /** Pseudonyms from the org directory (seat id → name), opened on this phone with the directory key. */
     val names: StateFlow<Map<String, String>> = _names.asStateFlow()
     private var directoryKeys: Map<Long, ByteArray> = emptyMap()
+    private val _people = MutableStateFlow<Map<String, com.flagshipserver.app.core.pq.OrgDirectoryEntry>>(emptyMap())
+    /** The admin console's Directory: everyone's entry (seat id → entry). */
+    val people: StateFlow<Map<String, com.flagshipserver.app.core.pq.OrgDirectoryEntry>> = _people.asStateFlow()
+    class DirectoryProposal(val id: String, val kind: String, val entry: com.flagshipserver.app.core.pq.OrgDirectoryEntry,
+        val roles: List<com.flagshipserver.app.core.pq.OrgSeatRole>, val subject: String)
+    private val _proposals = MutableStateFlow<List<DirectoryProposal>>(emptyList())
+    /** Open proposals from directory connectors, each checked against its connector and opened on this phone. */
+    val proposals: StateFlow<List<DirectoryProposal>> = _proposals.asStateFlow()
+    private val _connectors = MutableStateFlow<List<com.flagshipserver.app.core.pq.OrgConnector>>(emptyList())
+    val connectors: StateFlow<List<com.flagshipserver.app.core.pq.OrgConnector>> = _connectors.asStateFlow()
+    private val _newConnector = MutableStateFlow<Pair<String, String>?>(null)
+    /** The SCIM URL and token of a connector just added: shown once, never stored on the phone. */
+    val newConnector: StateFlow<Pair<String, String>?> = _newConnector.asStateFlow()
     private var directoryEntryIds: Map<String, String> = emptyMap()
     private val _inviteLink = MutableStateFlow<String?>(null)
     /** The link of the last invitation made, shown as a QR and shared. */
@@ -168,14 +181,25 @@ class OrgViewModel(
     suspend fun invite(seat: OrgSeatRecord, pseudonym: String, role: InviteRole, target: String) {
         val name = pseudonym.trim()
         if (name.isEmpty()) { _message.value = FSStrings.get(R.string.org_invite_name_needed); return }
-        val s = _snapshot.value ?: return
+        val roles = when (role) {
+            InviteRole.MEMBER -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.Member)
+            InviteRole.SERVER_ADMIN -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.ServerAdmin(listOf(target.trim().lowercase())))
+            InviteRole.APP_ADMIN -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.ServiceAdmin(listOf(target.trim().lowercase())))
+        }
         _busy.value = true
         try {
-            val roles = when (role) {
-                InviteRole.MEMBER -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.Member)
-                InviteRole.SERVER_ADMIN -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.ServerAdmin(listOf(target.trim().lowercase())))
-                InviteRole.APP_ADMIN -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.ServiceAdmin(listOf(target.trim().lowercase())))
-            }
+            makeInvite(seat, name, roles, null)
+        } catch (e: Exception) {
+            failed(e)
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    /** Posts an invitation for [roles] and records the person in the directory; returns the invite's digest. */
+    private suspend fun makeInvite(seat: OrgSeatRecord, name: String, roles: List<com.flagshipserver.app.core.pq.OrgSeatRole>, entry: com.flagshipserver.app.core.pq.OrgDirectoryEntry?): String {
+        val s = _snapshot.value ?: throw OrgAuthorityException("stale-oar")
+        run {
             val seatId = OrgAuthority.randomId()
             val t = now()
             val linkKey = ByteArray(32).also(java.security.SecureRandom()::nextBytes)
@@ -201,13 +225,10 @@ class OrgViewModel(
                 put("sealedLabelHex", com.flagshipserver.app.core.pq.PqHex.encode(sealedLabel))
                 put("offerHex", com.flagshipserver.app.core.pq.PqHex.encode(offer))
             })
-            runCatching { recordName(seat, seatId, name) }
+            runCatching { recordEntry(seat, (entry ?: com.flagshipserver.app.core.pq.OrgDirectoryEntry(seatId = seatId, pseudonym = name, updatedAt = t)).copy(seatId = seatId, pendingId = "")) }
             _inviteLink.value = "${com.flagshipserver.app.core.Endpoints.controlBaseUrl}/org-join#o=${seat.orgId}&s=$seatId&k=${com.flagshipserver.app.core.pq.PqHex.encode(linkKey)}"
             linkKey.fill(0)
-        } catch (e: Exception) {
-            failed(e)
-        } finally {
-            _busy.value = false
+            return OrgAuthority.sha256Hex(order)
         }
     }
 
@@ -253,24 +274,29 @@ class OrgViewModel(
             directoryKeys = com.flagshipserver.app.core.pq.OrgDirectory.keys(p, seat.seatId, kp.secretKey)
             val (bySeat, _) = com.flagshipserver.app.core.pq.OrgDirectory.openAll(seat.orgId, client.directory(seat.orgId), directoryKeys)
             _names.value = bySeat.mapValues { it.value.entry.pseudonym }
+            _people.value = bySeat.mapValues { it.value.entry }
             directoryEntryIds = bySeat.mapValues { it.value.entryId }
+            loadConsole(seat, kp.secretKey)
         } catch (e: Exception) {
             _names.value = emptyMap()
         }
     }
 
-    /** Writes (or renames) one person's entry under the newest directory key. */
-    suspend fun recordName(seat: OrgSeatRecord, seatId: String, pseudonym: String) {
+    /** Writes (or updates) one person's entry under the newest directory key; returns the write's digest. */
+    suspend fun recordEntry(seat: OrgSeatRecord, entry: com.flagshipserver.app.core.pq.OrgDirectoryEntry): String {
         if (directoryKeys.isEmpty()) loadNames(seat)
         val p = plan ?: throw OrgAuthorityException("locked")
         val version = com.flagshipserver.app.core.pq.OrgDirectory.newestVersion(p) ?: throw OrgAuthorityException("locked")
         val key = directoryKeys[version] ?: throw OrgAuthorityException("locked")
         val t = now()
-        val sealed = com.flagshipserver.app.core.pq.OrgDirectory.seal(seat.orgId, directoryEntryIds[seatId] ?: OrgAuthority.randomId(), version, key,
-            com.flagshipserver.app.core.pq.OrgDirectoryEntry(seatId = seatId, pseudonym = pseudonym, updatedAt = t), t)
-        client.putDirectory(seat.orgId, sealed, approval(seat, com.flagshipserver.app.core.pq.OrgDirectory.canonicalWrite(sealed)))
-        _names.value = _names.value + (seatId to pseudonym)
-        directoryEntryIds = directoryEntryIds + (seatId to sealed.entryId)
+        val e = entry.copy(updatedAt = t)
+        val sealed = com.flagshipserver.app.core.pq.OrgDirectory.seal(seat.orgId, directoryEntryIds[e.seatId] ?: OrgAuthority.randomId(), version, key, e, t)
+        val order = com.flagshipserver.app.core.pq.OrgDirectory.canonicalWrite(sealed)
+        client.putDirectory(seat.orgId, sealed, approval(seat, order))
+        _names.value = _names.value + (e.seatId to e.pseudonym)
+        _people.value = _people.value + (e.seatId to e)
+        directoryEntryIds = directoryEntryIds + (e.seatId to sealed.entryId)
+        return OrgAuthority.sha256Hex(order)
     }
 
     /** After the directory key changes, every entry is sealed again under the new version. */
@@ -460,7 +486,138 @@ class OrgViewModel(
         }
     }
 
+    // ── admin console: directory proposals and connectors (docs/org-directory.md §6) ──
+
+    private suspend fun loadConsole(seat: OrgSeatRecord, kemSecret: ByteArray) {
+        val raw = runCatching { client.connectors(seat.orgId) }.getOrDefault(emptyList())
+        val byId = raw.associateBy { str(it["connector"] as? JsonObject, "connectorId") ?: "" }
+        _connectors.value = raw.mapNotNull { runCatching { com.flagshipserver.app.core.pq.OrgConnectors.connector(it["connector"] as JsonObject) }.getOrNull() }
+        val out = mutableListOf<DirectoryProposal>()
+        for (p in runCatching { client.proposals(seat.orgId) }.getOrDefault(emptyList())) {
+            if (p["decision"] != null && p["decision"] !is JsonNull) continue
+            runCatching {
+                val b = p["bundle"] as JsonObject
+                val cb = byId[str(b["proposal"] as JsonObject, "connectorId")] ?: return@runCatching
+                val roles = (b["roles"] as? JsonArray)?.let { OrgAuthorityWire.roles(it) } ?: emptyList()
+                val v = com.flagshipserver.app.core.pq.OrgConnectors.verifyProposal(cb, b, if (roles.isEmpty()) "" else OrgAuthority.rolesHash(roles), now())
+                val entry = com.flagshipserver.app.core.pq.OrgDirectory.parseBody(
+                    com.flagshipserver.app.core.pq.OrgConnectors.openProposal(b, "seat:${seat.seatId}", kemSecret))
+                out += DirectoryProposal(v.proposalId, v.kind, entry, roles, v.subject)
+            }
+        }
+        _proposals.value = out.sortedBy { it.entry.pseudonym }
+    }
+
+    private suspend fun decide(seat: OrgSeatRecord, p: DirectoryProposal, ref: String?) {
+        val t = now()
+        val r = ref ?: "0".repeat(64)
+        val d = if (ref == null) "declined" else "done"
+        val order = com.flagshipserver.app.core.pq.OrgConnectors.canonicalDecision(seat.orgId, p.id, d, r, t)
+        client.decideProposal(seat.orgId, buildJsonObject {
+            put("orgId", seat.orgId); put("proposalId", p.id); put("decision", d); put("refSha256", r); put("issuedAt", t)
+        }, approval(seat, order))
+        _proposals.value = _proposals.value.filter { it.id != p.id }
+    }
+
+    /** Carries a proposal out with the usual order, then records it (an invitation, a removal or the updated entry). */
+    suspend fun approveProposal(seat: OrgSeatRecord, p: DirectoryProposal) {
+        val s = _snapshot.value ?: return
+        _busy.value = true
+        try {
+            when (p.kind) {
+                "invite" -> {
+                    val ref = makeInvite(seat, p.entry.pseudonym, p.roles.ifEmpty { listOf(com.flagshipserver.app.core.pq.OrgSeatRole.Member) }, p.entry)
+                    decide(seat, p, ref)
+                    _message.value = FSStrings.get(R.string.org_proposal_invited)
+                }
+                "offboard" -> {
+                    val t = now()
+                    val v = s.state.current.version
+                    val order = OrgAuthority.canonical(com.flagshipserver.app.core.pq.OrgSeatRevokeBundle(seat.orgId, p.subject, "offboarded", v, t, emptyList(), null))
+                    val a = approval(seat, order)
+                    client.revoke(seat.orgId, buildJsonObject {
+                        put("revoke", buildJsonObject { put("orgId", seat.orgId); put("seatId", p.subject); put("reason", "offboarded"); put("oarVersion", v); put("issuedAt", t) })
+                        put("approvals", buildJsonArray { add(OrgJson.approval(a)) })
+                    })
+                    decide(seat, p, OrgAuthority.sha256Hex(order))
+                    _message.value = FSStrings.get(R.string.org_proposal_removed)
+                    load(seat)
+                }
+                "entry-update" -> {
+                    decide(seat, p, recordEntry(seat, p.entry.copy(seatId = p.subject, pendingId = "")))
+                    _message.value = FSStrings.get(R.string.org_proposal_updated)
+                }
+                else -> _message.value = FSStrings.get(R.string.org_proposal_role_from_seat)
+            }
+        } catch (e: Exception) {
+            failed(e)
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    suspend fun declineProposal(seat: OrgSeatRecord, p: DirectoryProposal) {
+        _busy.value = true
+        try { decide(seat, p, null) } catch (e: Exception) { failed(e) } finally { _busy.value = false }
+    }
+
+    /** The org's servers this phone verified (the connector's server picker). */
+    fun servers(): List<String> = plan?.ctx?.servers?.sorted() ?: emptyList()
+
+    /**
+     * Adds a SCIM connector on one of the org's servers: this phone makes its key and bearer token,
+     * approves the record and seals the setup to that server. The token is shown once.
+     */
+    suspend fun addScimConnector(seat: OrgSeatRecord, serverDomain: String) {
+        val boxKem = plan?.ctx?.kems?.get("box:$serverDomain")
+        if (boxKem == null) { _message.value = FSStrings.get(R.string.org_connector_no_key); return }
+        _busy.value = true
+        try {
+            val t = now()
+            val mapping = com.flagshipserver.app.core.pq.OrgConnectorConsole.defaultMapping()
+            val made = com.flagshipserver.app.core.pq.OrgConnectorConsole.newConnector(seat.orgId, OrgAuthority.randomId(), "scim", serverDomain, mapping, t)
+            val token = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also(java.security.SecureRandom()::nextBytes))
+            val setup = buildJsonObject {
+                put("connectorSeedsHex", made.seedsHex); put("mapping", mapping)
+                put("scimTokenSha256", OrgAuthority.sha256Hex(token.toByteArray(Charsets.UTF_8))); put("scimTokenIssuedAt", t)
+            }
+            val a = approval(seat, com.flagshipserver.app.core.pq.OrgConnectors.canonical(made.connector))
+            client.postConnector(seat.orgId, buildJsonObject {
+                put("connector", com.flagshipserver.app.core.pq.OrgConnectorConsole.json(made.connector)); put("connectorPubHex", made.pubHex)
+                put("approvals", buildJsonArray { add(OrgJson.approval(a)) })
+                put("setup", com.flagshipserver.app.core.pq.OrgConnectorConsole.sealSetup(made.connector, boxKem, setup, t))
+            })
+            _newConnector.value = "https://$serverDomain/scim/v2" to token
+            _connectors.value = _connectors.value + made.connector
+        } catch (e: Exception) {
+            failed(e)
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    fun clearNewConnector() { _newConnector.value = null }
+
     companion object {
+        fun proposalText(kind: String): String = when (kind) {
+            "invite" -> FSStrings.get(R.string.org_proposal_invite)
+            "offboard" -> FSStrings.get(R.string.org_proposal_offboard)
+            "role-change" -> FSStrings.get(R.string.org_proposal_role)
+            else -> FSStrings.get(R.string.org_proposal_entry)
+        }
+
+        fun connectorText(kind: String): String = when (kind) {
+            "scim" -> FSStrings.get(R.string.org_connector_scim)
+            "ldap" -> FSStrings.get(R.string.org_connector_ldap)
+            else -> FSStrings.get(R.string.org_connector_custom)
+        }
+
+        fun statusText(status: String): String = when (status) {
+            "active" -> FSStrings.get(R.string.org_connector_active)
+            "paused" -> FSStrings.get(R.string.org_connector_paused)
+            else -> FSStrings.get(R.string.org_connector_retired)
+        }
+
         fun kindText(kind: com.flagshipserver.app.core.pq.OrgAdminKind, founder: Boolean): String = when {
             founder -> FSStrings.get(R.string.org_kind_founder)
             kind == com.flagshipserver.app.core.pq.OrgAdminKind.BOARD -> FSStrings.get(R.string.org_kind_board)

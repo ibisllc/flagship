@@ -74,6 +74,7 @@ extension OrgDirectoryVectorTests {
         let conn = try OrgConnector.fromWire(cb["connector"])
         XCTAssertEqual(String(decoding: try OrgConnectors.canonicalConnector(conn), as: UTF8.self), c["connectorBytes"] as? String)
         XCTAssertEqual(try OrgConnectors.connectorKeyId(PqBin.unhex(cb["connectorPubHex"] as! String)!), conn.connectorKeyId)
+        XCTAssertEqual(try OrgConnectors.mappingSha256(c["mapping"] as! [String: Any]), conn.mappingSha256)
         let now = (c["now"] as! NSNumber).int64Value
         for p in c["proposals"] as! [[String: Any]] {
             let b = p["bundle"] as! [String: Any]

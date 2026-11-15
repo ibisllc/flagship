@@ -4067,4 +4067,27 @@
     <string name="org_role_member">Member</string>
     <string name="org_role_server_admin">Admin of one server</string>
     <string name="org_show_names_reason">Show the names in this organization</string>
+    <string name="org_decline">Decline</string>
+    <string name="org_directory_proposals">From your company directory</string>
+    <string name="org_directory_people">People</string>
+    <string name="org_directory_connectors">Directory connectors</string>
+    <string name="org_directory_connectors_note">Microsoft Entra ID, Okta and others send people to your own server. Nothing changes until an admin approves it here.</string>
+    <string name="org_connector_token_once">Give these to your identity provider. The token is shown only now.</string>
+    <string name="org_connector_which_server">Which server runs the connector?</string>
+    <string name="org_connector_add">Add a SCIM connector</string>
+    <string name="org_connector_no_key">That server hasn\'t announced its key yet. Try again in a few minutes.</string>
+    <string name="org_proposal_invited">Invitation made. Share the link with them.</string>
+    <string name="org_proposal_removed">Removed. Rotate the keys they could open when the list asks.</string>
+    <string name="org_proposal_updated">Updated.</string>
+    <string name="org_proposal_role_from_seat">Change this person\'s role from their seat, then decline this proposal.</string>
+    <string name="org_proposal_invite">Proposed: invite to the organization</string>
+    <string name="org_proposal_offboard">Proposed: remove from the organization</string>
+    <string name="org_proposal_role">Proposed: change their role</string>
+    <string name="org_proposal_entry">Proposed: update their details</string>
+    <string name="org_connector_scim">SCIM connector</string>
+    <string name="org_connector_ldap">LDAP connector</string>
+    <string name="org_connector_custom">Custom connector</string>
+    <string name="org_connector_active">Active</string>
+    <string name="org_connector_paused">Paused</string>
+    <string name="org_connector_retired">Retired</string>
 </resources>

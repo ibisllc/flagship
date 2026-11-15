@@ -178,6 +178,19 @@ class OrgClient(private val http: OrgHttp) {
     suspend fun directory(orgId: String): List<com.flagshipserver.app.core.pq.OrgDirectorySealed> =
         arr(call("GET", "/api/orgs/$orgId/directory"), "entries").mapNotNull { e -> runCatching { OrgJson.sealed(e as JsonObject) }.getOrNull() }
 
+    /** Directory connectors (newest record each) and their proposals with any decision. */
+    suspend fun connectors(orgId: String): List<JsonObject> = arr(call("GET", "/api/orgs/$orgId/connectors"), "connectors").mapNotNull { it as? JsonObject }
+
+    suspend fun postConnector(orgId: String, body: JsonObject) { call("POST", "/api/orgs/$orgId/connectors", body) }
+
+    suspend fun proposals(orgId: String): List<JsonObject> = arr(call("GET", "/api/orgs/$orgId/proposals"), "proposals").mapNotNull { it as? JsonObject }
+
+    suspend fun decideProposal(orgId: String, decision: JsonObject, approval: OrgApproval) {
+        call("POST", "/api/orgs/$orgId/proposals/decisions", buildJsonObject { put("decision", decision); put("approvals", buildJsonArray { add(OrgJson.approval(approval)) }) })
+    }
+
+    suspend fun revoke(orgId: String, body: JsonObject) { call("POST", "/api/orgs/$orgId/revokes", body) }
+
     /** Stores one sealed entry, approved by this org admin over its write form. */
     suspend fun putDirectory(orgId: String, entry: com.flagshipserver.app.core.pq.OrgDirectorySealed, approval: OrgApproval) {
         call("POST", "/api/orgs/$orgId/directory", buildJsonObject { put("entry", OrgJson.sealed(entry)); put("approvals", buildJsonArray { add(OrgJson.approval(approval)) }) })

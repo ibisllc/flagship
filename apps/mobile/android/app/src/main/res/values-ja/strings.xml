@@ -4062,4 +4062,27 @@
     <string name="org_role_member">メンバー</string>
     <string name="org_role_server_admin">1台のサーバーの管理者</string>
     <string name="org_show_names_reason">この組織の名前を表示</string>
+    <string name="org_decline">辞退</string>
+    <string name="org_directory_proposals">会社のディレクトリから</string>
+    <string name="org_directory_people">メンバー</string>
+    <string name="org_directory_connectors">ディレクトリコネクタ</string>
+    <string name="org_directory_connectors_note">Microsoft Entra ID、Okta などが自分のサーバーにメンバーを送ります。管理者がここで承認するまで何も変わりません。</string>
+    <string name="org_connector_token_once">これらをIDプロバイダーに設定してください。トークンは今だけ表示されます。</string>
+    <string name="org_connector_which_server">コネクタを実行するサーバーは？</string>
+    <string name="org_connector_add">SCIMコネクタを追加</string>
+    <string name="org_connector_no_key">そのサーバーはまだ鍵を公開していません。数分後にもう一度お試しください。</string>
+    <string name="org_proposal_invited">招待を作成しました。リンクを相手に共有してください。</string>
+    <string name="org_proposal_removed">削除しました。一覧で求められたら、その人が開けた鍵を交換してください。</string>
+    <string name="org_proposal_updated">更新しました。</string>
+    <string name="org_proposal_role_from_seat">この人の役割は本人の席から変更し、その後この提案を却下してください。</string>
+    <string name="org_proposal_invite">提案：組織に招待</string>
+    <string name="org_proposal_offboard">提案：組織から削除</string>
+    <string name="org_proposal_role">提案：役割を変更</string>
+    <string name="org_proposal_entry">提案：情報を更新</string>
+    <string name="org_connector_scim">SCIMコネクタ</string>
+    <string name="org_connector_ldap">LDAPコネクタ</string>
+    <string name="org_connector_custom">カスタムコネクタ</string>
+    <string name="org_connector_active">使用中</string>
+    <string name="org_connector_paused">一時停止中</string>
+    <string name="org_connector_retired">廃止済み</string>
 </resources>

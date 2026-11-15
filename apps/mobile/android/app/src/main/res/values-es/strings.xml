@@ -4062,4 +4062,27 @@
     <string name="org_role_member">Miembro</string>
     <string name="org_role_server_admin">Administrador de un servidor</string>
     <string name="org_show_names_reason">Mostrar los nombres de esta organización</string>
+    <string name="org_decline">Rechazar</string>
+    <string name="org_directory_proposals">Del directorio de tu empresa</string>
+    <string name="org_directory_people">Personas</string>
+    <string name="org_directory_connectors">Conectores de directorio</string>
+    <string name="org_directory_connectors_note">Microsoft Entra ID, Okta y otros envían personas a tu propio servidor. Nada cambia hasta que un administrador lo apruebe aquí.</string>
+    <string name="org_connector_token_once">Da estos datos a tu proveedor de identidad. El token solo se muestra ahora.</string>
+    <string name="org_connector_which_server">¿Qué servidor ejecuta el conector?</string>
+    <string name="org_connector_add">Añadir un conector SCIM</string>
+    <string name="org_connector_no_key">Ese servidor aún no ha anunciado su clave. Inténtalo de nuevo en unos minutos.</string>
+    <string name="org_proposal_invited">Invitación creada. Comparte el enlace con esa persona.</string>
+    <string name="org_proposal_removed">Eliminado. Cambia las claves que podía abrir cuando la lista lo pida.</string>
+    <string name="org_proposal_updated">Actualizado.</string>
+    <string name="org_proposal_role_from_seat">Cambia el rol de esta persona desde su plaza y después rechaza esta propuesta.</string>
+    <string name="org_proposal_invite">Propuesta: invitar a la organización</string>
+    <string name="org_proposal_offboard">Propuesta: quitar de la organización</string>
+    <string name="org_proposal_role">Propuesta: cambiar su rol</string>
+    <string name="org_proposal_entry">Propuesta: actualizar sus datos</string>
+    <string name="org_connector_scim">Conector SCIM</string>
+    <string name="org_connector_ldap">Conector LDAP</string>
+    <string name="org_connector_custom">Conector personalizado</string>
+    <string name="org_connector_active">Activo</string>
+    <string name="org_connector_paused">En pausa</string>
+    <string name="org_connector_retired">Retirado</string>
 </resources>
