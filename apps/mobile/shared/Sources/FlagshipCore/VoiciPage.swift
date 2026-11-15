@@ -327,7 +327,7 @@ public enum VoiciPage {
         guard CanonicalJson.isTime(b.seq), b.seq >= 1, CanonicalJson.isTime(b.issuedAt) else { throw bad("seq/issuedAt") }
         guard b.acceptsMessages == 0 || b.acceptsMessages == 1 else { throw bad("acceptsMessages") }
         if b.isV2 {
-            guard let c = b.acceptsCalls, c == 0 || c == 1, b.callsFrom == "accepted" || b.callsFrom == "signed-in" else { throw bad("calls") }
+            guard let c = b.acceptsCalls, c == 0 || c == 1, ["accepted", "signed-in", "anyone", "callback"].contains(b.callsFrom ?? "") else { throw bad("calls") }
         }
         guard CanonicalJson.isTime(b.inboxEpoch), b.inboxEpoch >= 1 else { throw bad("inboxEpoch") }
         guard CanonicalJson.isLowerHex(b.inboxPub, bytes: 1216), CanonicalJson.isLowerHex(b.ownerSignPub, bytes: 32) else { throw bad("keys") }

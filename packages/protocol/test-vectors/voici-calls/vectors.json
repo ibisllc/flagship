@@ -2813,7 +2813,7 @@
           ],
           "signerKind": "admin-root",
           "acceptsCalls": 1,
-          "callsFrom": "anyone",
+          "callsFrom": "everyone",
           "signerPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
           "signature": "e23924d99573dd7444ab37c1bdd13e708851ff587709ae3c140d82e527048e2d7cb3ce6e9467e5a0be105c918327149cc17d6d29855d3c4a4384e37d8a24a809"
         },

@@ -192,7 +192,7 @@ describe("receiveVoiciCallHandoff (the voi.ci tab's side of the pipe)", () => {
     expect(got.media).toBe("audio,video");
     expect([got.session.pageId, got.session.delegatePub, got.session.handoff]).toEqual([X.handoff.pageId, X.delegatePub, true]);
     const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, got.session.privateKey, new Uint8Array([1, 2, 3])));
-    expect(p256.verify(sig, new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array([1, 2, 3]))), h(X.delegatePub), { prehash: false, format: "compact" } as never)).toBe(true);
+    expect(p256.verify(sig, new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array([1, 2, 3]))), h(X.delegatePub), { prehash: false, lowS: false, format: "compact" } as never)).toBe(true);
   });
 
   it("refuses a used session, another page, a bad fragment and a delivery that doesn't open", async () => {

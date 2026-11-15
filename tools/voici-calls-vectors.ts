@@ -503,7 +503,7 @@ const pageV2Checks = (
     ["v2 without callsFrom", (() => { const x = clone(pageV2) as R; delete x.callsFrom; return x; })(), "malformed"],
     ["v1 carrying acceptsCalls", { ...VP.index.signed, acceptsCalls: 1, callsFrom: "accepted" }, "malformed"],
     ["v2 keys under version 1", { ...pageV2, version: 1 }, "malformed"],
-    ["unknown callsFrom", { ...pageV2, callsFrom: "anyone" }, "malformed"],
+    ["unknown callsFrom", { ...pageV2, callsFrom: "everyone" }, "malformed"],
     ["acceptsCalls 2", { ...pageV2, acceptsCalls: 2 }, "malformed"],
     ["calls switched off after signing", { ...pageV2, acceptsCalls: 0 }, "bad-signature"],
     ["callsFrom widened after signing", { ...pageV2, callsFrom: "signed-in" }, "bad-signature"],
