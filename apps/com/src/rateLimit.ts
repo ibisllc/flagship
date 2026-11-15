@@ -235,6 +235,12 @@ export type RateLimitEndpoint =
   | "voici-call"
   | "voici-call-caller"
   | "voici-call-page"
+  // voi.ci call modes (docs/voici-calls.md, owner-approved): anonymous rings into one page (subject = pageId), a
+  // caller's ring-back orders per address, the owner's rings per account (subject = username), challenges per address.
+  | "voici-call-anon-page"
+  | "voici-ring-back"
+  | "voici-ring"
+  | "voici-call-challenge"
   | "voici-publish"
   | "voici-piece"
   | "voici-thread"
@@ -534,6 +540,13 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "subject", limit: 10, windowSec: 86_400 },
   ],
   "voici-call-page": [{ axis: "subject", limit: 20, windowSec: 3600 }],
+  "voici-call-anon-page": [
+    { axis: "subject", limit: 10, windowSec: 3600 },
+    { axis: "subject", limit: 30, windowSec: 86_400 },
+  ],
+  "voici-ring-back": [{ axis: "ip", limit: 30, windowSec: 3600 }],
+  "voici-ring": [{ axis: "subject", limit: 20, windowSec: 3600 }],
+  "voici-call-challenge": [{ axis: "ip", limit: 30, windowSec: 3600 }],
   "voici-publish": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "subject", limit: 100, windowSec: 86_400 },

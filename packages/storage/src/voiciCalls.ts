@@ -32,6 +32,26 @@ export interface VoiciCallKeyRecord {
   registeredAt: number;
 }
 
+/** A caller's ring-back channel (flagship/voici-ring-back/v1; migration 0149): sealed push tokens only. */
+export interface VoiciRingBackRecord {
+  pageId: string;
+  conv: string;
+  targets: string[];
+  issuedAt: number;
+  expiresAt: number;
+}
+
+/** The owner's ring still ringing (flagship/voici-ring/v1; migration 0149). */
+export interface VoiciRingRecord {
+  pageId: string;
+  conv: string;
+  ringId: string;
+  hint: string;
+  media: string;
+  issuedAt: number;
+  expiresAt: number;
+}
+
 export interface VoiciMissedCallRecord {
   id: number;
   pageId: string;
@@ -68,6 +88,17 @@ export interface VoiciCallStorage {
   /** Drops a device's call-key binding (its device grant was revoked: docs/voici-calls.md, 2026-11-15 second round). */
   deleteCallKeyForDevice(username: string, deviceId: string): Promise<void>;
   deleteCallsForAccount(username: string): Promise<void>;
+  /** Newest issuedAt wins; false when a newer order is stored. */
+  putRingBack(rec: VoiciRingBackRecord): Promise<boolean>;
+  getRingBack(pageId: string, conv: string, now: number): Promise<VoiciRingBackRecord | null>;
+  /** "Stop call-backs": the channel and any ring in progress go. */
+  deleteRingBack(pageId: string, conv: string): Promise<void>;
+  putRing(rec: VoiciRingRecord): Promise<void>;
+  getRing(pageId: string, conv: string, now: number): Promise<VoiciRingRecord | null>;
+  /** Spends a proof-of-work challenge once; false when it was spent already. */
+  spendPow(challengeHash: string, expiresAt: number): Promise<boolean>;
+  blockAnon(pageId: string, conv: string, expiresAt: number): Promise<void>;
+  isAnonBlocked(pageId: string, conv: string, now: number): Promise<boolean>;
 }
 
 type MissedRow = { id: number; page_id: string; conv: string; call_id: string; sealed: string; stored_at: number };
@@ -174,13 +205,18 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
       .run();
     const b = await this.db.prepare("DELETE FROM voici_call_counts WHERE day < ?1").bind(o.countsBeforeDay).run();
     const c = await this.db.prepare("DELETE FROM voici_live_calls WHERE expires_at < ?1").bind(o.now).run();
-    return (a.meta.changes ?? 0) + (b.meta.changes ?? 0) + (c.meta.changes ?? 0);
+    let more = 0;
+    for (const t of ["voici_ring_backs", "voici_rings", "voici_pow_spent", "voici_anon_blocks"]) {
+      more += (await this.db.prepare(`DELETE FROM ${t} WHERE expires_at < ?1`).bind(o.now).run()).meta.changes ?? 0;
+    }
+    return (a.meta.changes ?? 0) + (b.meta.changes ?? 0) + (c.meta.changes ?? 0) + more;
   }
 
   async deleteCallsForPage(pageId: string) {
     await this.db.prepare("DELETE FROM voici_missed_calls WHERE page_id = ?1").bind(pageId).run();
     await this.db.prepare("DELETE FROM voici_call_allows WHERE page_id = ?1").bind(pageId).run();
     await this.db.prepare("DELETE FROM voici_call_counts WHERE page_id = ?1").bind(pageId).run();
+    for (const t of ["voici_ring_backs", "voici_rings", "voici_anon_blocks"]) await this.db.prepare(`DELETE FROM ${t} WHERE page_id = ?1`).bind(pageId).run();
   }
 
   async deleteCallsForAccount(username: string) {
@@ -221,6 +257,73 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
     await this.db.prepare("DELETE FROM voici_call_keys WHERE username = ?1 AND device_id = ?2").bind(username, deviceId).run();
   }
 
+  async putRingBack(rec: VoiciRingBackRecord) {
+    const r = await this.db
+      .prepare(
+        "INSERT INTO voici_ring_backs (page_id, conv, targets_json, issued_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5) " +
+          "ON CONFLICT (page_id, conv) DO UPDATE SET targets_json = ?3, issued_at = ?4, expires_at = ?5 WHERE voici_ring_backs.issued_at < ?4",
+      )
+      .bind(rec.pageId, rec.conv, JSON.stringify(rec.targets), rec.issuedAt, rec.expiresAt)
+      .run();
+    return (r.meta.changes ?? 0) === 1;
+  }
+
+  async getRingBack(pageId: string, conv: string, now: number) {
+    const r = await this.db
+      .prepare("SELECT page_id, conv, targets_json, issued_at, expires_at FROM voici_ring_backs WHERE page_id = ?1 AND conv = ?2 AND expires_at > ?3")
+      .bind(pageId, conv, now)
+      .first<{ page_id: string; conv: string; targets_json: string; issued_at: number; expires_at: number }>();
+    if (!r) return null;
+    let targets: string[] = [];
+    try {
+      const t = JSON.parse(r.targets_json);
+      targets = Array.isArray(t) ? t.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      targets = [];
+    }
+    return { pageId: r.page_id, conv: r.conv, targets, issuedAt: r.issued_at, expiresAt: r.expires_at };
+  }
+
+  async deleteRingBack(pageId: string, conv: string) {
+    await this.db.prepare("DELETE FROM voici_ring_backs WHERE page_id = ?1 AND conv = ?2").bind(pageId, conv).run();
+    await this.db.prepare("DELETE FROM voici_rings WHERE page_id = ?1 AND conv = ?2").bind(pageId, conv).run();
+  }
+
+  async putRing(rec: VoiciRingRecord) {
+    await this.db
+      .prepare(
+        "INSERT INTO voici_rings (page_id, conv, ring_id, hint, media, issued_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) " +
+          "ON CONFLICT (page_id, conv) DO UPDATE SET ring_id = ?3, hint = ?4, media = ?5, issued_at = ?6, expires_at = ?7",
+      )
+      .bind(rec.pageId, rec.conv, rec.ringId, rec.hint, rec.media, rec.issuedAt, rec.expiresAt)
+      .run();
+  }
+
+  async getRing(pageId: string, conv: string, now: number) {
+    const r = await this.db
+      .prepare("SELECT page_id, conv, ring_id, hint, media, issued_at, expires_at FROM voici_rings WHERE page_id = ?1 AND conv = ?2 AND expires_at > ?3")
+      .bind(pageId, conv, now)
+      .first<{ page_id: string; conv: string; ring_id: string; hint: string; media: string; issued_at: number; expires_at: number }>();
+    return r ? { pageId: r.page_id, conv: r.conv, ringId: r.ring_id, hint: r.hint, media: r.media, issuedAt: r.issued_at, expiresAt: r.expires_at } : null;
+  }
+
+  async spendPow(challengeHash: string, expiresAt: number) {
+    const r = await this.db.prepare("INSERT OR IGNORE INTO voici_pow_spent (challenge_hash, expires_at) VALUES (?1, ?2)").bind(challengeHash, expiresAt).run();
+    return (r.meta.changes ?? 0) === 1;
+  }
+
+  async blockAnon(pageId: string, conv: string, expiresAt: number) {
+    await this.db
+      .prepare("INSERT INTO voici_anon_blocks (page_id, conv, expires_at) VALUES (?1, ?2, ?3) ON CONFLICT (page_id, conv) DO UPDATE SET expires_at = ?3")
+      .bind(pageId, conv, expiresAt)
+      .run();
+  }
+
+  async isAnonBlocked(pageId: string, conv: string, now: number) {
+    const r = await this.db.prepare("SELECT 1 AS x FROM voici_anon_blocks WHERE page_id = ?1 AND conv = ?2 AND expires_at > ?3").bind(pageId, conv, now).first<{ x: number }>();
+    return !!r;
+  }
+
   async isCallKeyRevoked(callKeyPub: string) {
     const r = await this.db.prepare("SELECT 1 AS x FROM voici_call_key_revocations WHERE call_key_pub = ?1").bind(callKeyPub).first<{ x: number }>();
     return !!r;
@@ -235,6 +338,10 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   missed: VoiciMissedCallRecord[] = [];
   callKeys = new Map<string, VoiciCallKeyRecord>();
   revokedCallKeys = new Set<string>();
+  ringBacks = new Map<string, VoiciRingBackRecord>();
+  rings = new Map<string, VoiciRingRecord>();
+  powSpent = new Map<string, number>();
+  anonBlocks = new Map<string, number>();
   private nextId = 1;
 
   async countRing(pageId: string, day: string, max: number) {
@@ -296,6 +403,7 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     this.missed = this.missed.filter((m) => m.pageId !== pageId);
     for (const k of [...this.allows.keys()]) if (k.startsWith(`${pageId}|`)) this.allows.delete(k);
     for (const k of [...this.counts.keys()]) if (k.startsWith(`${pageId}|`)) this.counts.delete(k);
+    for (const m of [this.ringBacks, this.rings, this.anonBlocks]) for (const k of [...m.keys()]) if (k.startsWith(`${pageId}|`)) m.delete(k);
   }
   async deleteCallsForAccount(username: string) {
     for (const k of [...this.voip.keys()]) if (k.startsWith(`${username}|`)) this.voip.delete(k);
@@ -318,6 +426,40 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   async deleteCallKeyForDevice(username: string, deviceId: string) {
     this.callKeys.delete(`${username}|${deviceId}`);
   }
+  async putRingBack(rec: VoiciRingBackRecord) {
+    const k = `${rec.pageId}|${rec.conv}`;
+    const cur = this.ringBacks.get(k);
+    if (cur && cur.issuedAt >= rec.issuedAt) return false;
+    this.ringBacks.set(k, { ...rec, targets: [...rec.targets] });
+    return true;
+  }
+  async getRingBack(pageId: string, conv: string, now: number) {
+    const r = this.ringBacks.get(`${pageId}|${conv}`);
+    return r && r.expiresAt > now ? { ...r, targets: [...r.targets] } : null;
+  }
+  async deleteRingBack(pageId: string, conv: string) {
+    this.ringBacks.delete(`${pageId}|${conv}`);
+    this.rings.delete(`${pageId}|${conv}`);
+  }
+  async putRing(rec: VoiciRingRecord) {
+    this.rings.set(`${rec.pageId}|${rec.conv}`, { ...rec });
+  }
+  async getRing(pageId: string, conv: string, now: number) {
+    const r = this.rings.get(`${pageId}|${conv}`);
+    return r && r.expiresAt > now ? { ...r } : null;
+  }
+  async spendPow(challengeHash: string, expiresAt: number) {
+    if (this.powSpent.has(challengeHash)) return false;
+    this.powSpent.set(challengeHash, expiresAt);
+    return true;
+  }
+  async blockAnon(pageId: string, conv: string, expiresAt: number) {
+    this.anonBlocks.set(`${pageId}|${conv}`, expiresAt);
+  }
+  async isAnonBlocked(pageId: string, conv: string, now: number) {
+    return (this.anonBlocks.get(`${pageId}|${conv}`) ?? 0) > now;
+  }
+
   async isCallKeyRevoked(callKeyPub: string) {
     return this.revokedCallKeys.has(callKeyPub);
   }

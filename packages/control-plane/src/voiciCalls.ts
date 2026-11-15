@@ -51,6 +51,8 @@ import {
   type VoiciCallEnd,
   type VoiciCallRequest,
   type VoiciMissedCallReason,
+  type VoiciCallsFrom,
+  type VoiciCallRequestAnon,
 } from "@flagship/protocol";
 import type { DeviceCapabilityGrantStorage, PushTokenStorage, UsernameStorage, VoiciCallStorage, VoiciPageRecord, VoiciStorage } from "@flagship/storage";
 import { requireAccountRead, ACCOUNT_KEY_HOLDERS_ONLY, ACCOUNT_READ_HEADERS, type AccountReadTokenDeps } from "./accountReadToken.js";
@@ -59,6 +61,7 @@ import { hexToBytes } from "./hex.js";
 import { adminDeviceIds, type InviteNoticeForward } from "./inviteNotice.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
 import { voiciRefusal } from "./voiciPages.js";
+import { checkAnonymousCall, voiciHasRingBack } from "./voiciCallModes.js";
 export { dropVoiciCallKeysOfRevokedDevices } from "./voiciCallKeyCleanup.js";
 
 /** A page's rings per UTC day (D1 counter; the rate-limit buckets hold the per-hour and per-caller budgets). */
@@ -76,7 +79,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const callDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 /** The calls setting a stored page carries: v2 index acceptsCalls / callsFrom; a v1 index takes no calls. */
-export function voiciPageCalls(page: Pick<VoiciPageRecord, "indexJson" | "takenDownAt" | "removedAt">): { on: boolean; from: "accepted" | "signed-in"; inboxPub: string | null } {
+export function voiciPageCalls(page: Pick<VoiciPageRecord, "indexJson" | "takenDownAt" | "removedAt">): { on: boolean; from: VoiciCallsFrom; inboxPub: string | null } {
   if (page.takenDownAt !== null || page.removedAt !== null) return { on: false, from: "accepted", inboxPub: null };
   const idx = parseVoiciPageIndex(page.indexJson);
   if (!idx) return { on: false, from: "accepted", inboxPub: null };
@@ -90,14 +93,16 @@ export function voiciPageCalls(page: Pick<VoiciPageRecord, "indexJson" | "takenD
 export async function voiciCallerAllowed(
   deps: { voici: VoiciStorage; calls: VoiciCallStorage },
   page: { pageId: string },
-  from: "accepted" | "signed-in",
+  from: VoiciCallsFrom,
   conv: string,
   pseudonymPub: string,
   now: number,
 ): Promise<boolean> {
   const allow = await deps.calls.getCallAllow(page.pageId, conv);
   if (allow?.op === "disallow") return false;
-  if (allow?.op === "allow" || from === "signed-in") return true;
+  // "anyone" and "callback" take every signed-in caller ("callback" also needs the conversation's ring-back
+  // channel, checked by the request route).
+  if (allow?.op === "allow" || from === "signed-in" || from === "anyone" || from === "callback") return true;
   const [block, stats] = await Promise.all([deps.voici.getBlock(page.pageId, pseudonymPub), deps.voici.convStats(page.pageId, conv, now - 3_600_000, now - 86_400_000)]);
   return block?.op === "unblock" || stats.replies > 0;
 }
@@ -110,7 +115,7 @@ export interface VoiciCallRoomInit {
   pageId: string;
   ownerSignPub: string;
   inboxPub: string;
-  request: VoiciCallRequest;
+  request: VoiciCallRequest | VoiciCallRequestAnon;
   callerPub: string;
   callerTokenHash: string;
   ringingAt: number;
@@ -126,6 +131,9 @@ export interface VoiciCallRequestDeps {
   limitIp: () => Promise<number | null>;
   limitCaller: (pseudonymPub: string) => Promise<number | null>;
   limitPage: (pageId: string) => Promise<number | null>;
+  /** Anonymous calls (pages in "anyone" mode): the page's budget, and `.com`'s proof-of-work secret (absent = off). */
+  limitAnonPage?: (pageId: string) => Promise<number | null>;
+  powSecret?: Uint8Array;
   /** Creates the room; false when one exists under this callId. */
   openRoom: (init: VoiciCallRoomInit) => Promise<boolean>;
   ring: (username: string, call: { callId: string; pageId: string; conv: string; from: string; inboxPub: string; issuedAt: number }) => Promise<number>;
@@ -141,7 +149,7 @@ const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "
 /** Records a missed call sealed to the inbox key; best effort. */
 export async function recordVoiciMissedCall(
   calls: VoiciCallStorage,
-  o: { pageId: string; inboxPub: string; request: VoiciCallRequest; ringingAt: number; endedAt: number; reason: VoiciMissedCallReason },
+  o: { pageId: string; inboxPub: string; request: VoiciCallRequest | VoiciCallRequestAnon; ringingAt: number; endedAt: number; reason: VoiciMissedCallReason },
 ): Promise<boolean> {
   try {
     const sealed = sealVoiciMissedCall(hexToBytes(o.inboxPub), { request: o.request, ringingAt: o.ringingAt, endedAt: o.endedAt, reason: o.reason });
@@ -165,7 +173,9 @@ export async function handleVoiciCallRequest(deps: VoiciCallRequestDeps, bodyTex
   } catch {
     return voiciRefusal(400, "malformed");
   }
-  const r = parseVoiciCallRequest(isObj(raw) ? raw.request : undefined);
+  const rawRequest = isObj(raw) ? raw.request : undefined;
+  if (isObj(rawRequest) && rawRequest.kind === "voici-call-request-anon") return handleAnonymousCallRequest(deps, rawRequest, now);
+  const r = parseVoiciCallRequest(rawRequest);
   if (!r) return voiciRefusal(400, "malformed");
   const page = await deps.voici.getPageById(r.pageId);
   if (!page) return voiciRefusal(404, "not-found");
@@ -181,6 +191,8 @@ export async function handleVoiciCallRequest(deps: VoiciCallRequestDeps, bodyTex
   const checked = checkVoiciCallRequest(r, { pageId: page.pageId, acceptsCalls: true, origin: deps.origin, caKeys: deps.caKeys(now), now });
   if (!checked.ok) return voiciRefusal(checked.code === "malformed" || checked.code === "too-large" ? 400 : 403, checked.code);
   if (!(await voiciCallerAllowed(deps, page, calls.from, r.conv, r.from, now))) return voiciRefusal(403, "not-allowed");
+  // "Callback accounts only": calling is consent to a ring-back, so the conversation's channel must be attached.
+  if (calls.from === "callback" && !(await voiciHasRingBack(deps.calls, page.pageId, r.conv, now))) return voiciRefusal(403, "ring-back-required");
   if (!(await deps.calls.countRing(page.pageId, callDay(now), VOICI_CALL_PAGE_DAILY_MAX))) return voiciRefusal(429, "rate-limited", { retryAfterSec: 3600 });
   if (!(await deps.calls.claimLiveCall(page.username, r.callId, now, now + VOICI_CALL_RING_MS + 15_000))) {
     await recordVoiciMissedCall(deps.calls, { pageId: page.pageId, inboxPub: calls.inboxPub, request: r, ringingAt: now, endedAt: now, reason: "busy" });
@@ -203,6 +215,48 @@ export async function handleVoiciCallRequest(deps: VoiciCallRequestDeps, bodyTex
     return voiciRefusal(409, "malformed");
   }
   await deps.ring(page.username, { callId: r.callId, pageId: page.pageId, conv: r.conv, from: r.from, inboxPub: calls.inboxPub, issuedAt: now });
+  return ok({ callId: r.callId, room: `wss://${deps.apex}/api/voici/calls/${r.callId}/caller`, token, ringMs: VOICI_CALL_RING_MS });
+}
+
+/** The anonymous branch: no account, a proof of work, the page's own budget; then the same room and ringing. */
+async function handleAnonymousCallRequest(deps: VoiciCallRequestDeps, raw: Record<string, unknown>, now: number): Promise<HandlerResponseWithHeaders> {
+  if (typeof raw.pageId !== "string") return voiciRefusal(400, "malformed");
+  const page = await deps.voici.getPageById(raw.pageId);
+  if (!page) return voiciRefusal(404, "not-found");
+  const calls = voiciPageCalls(page);
+  if (!calls.on || !calls.inboxPub) return voiciRefusal(403, "calls-off");
+  const ipWait = await deps.limitIp();
+  if (ipWait !== null) return voiciRefusal(429, "rate-limited", { retryAfterSec: ipWait });
+  const checked = await checkAnonymousCall(
+    { calls: deps.calls, ...(deps.powSecret ? { powSecret: deps.powSecret } : {}), limitAnonPage: deps.limitAnonPage ?? (async () => null), sha256Hex: deps.sha256Hex },
+    page,
+    raw,
+    now,
+  );
+  if (!checked.ok) return checked.response;
+  const r = checked.request;
+  if (!(await deps.calls.countRing(page.pageId, callDay(now), VOICI_CALL_PAGE_DAILY_MAX))) return voiciRefusal(429, "rate-limited", { retryAfterSec: 3600 });
+  if (!(await deps.calls.claimLiveCall(page.username, r.callId, now, now + VOICI_CALL_RING_MS + 15_000))) {
+    await recordVoiciMissedCall(deps.calls, { pageId: page.pageId, inboxPub: calls.inboxPub, request: r, ringingAt: now, endedAt: now, reason: "busy" });
+    return voiciRefusal(409, "busy");
+  }
+  const token = hex((deps.random ?? ((n) => crypto.getRandomValues(new Uint8Array(n))))(32));
+  const init: VoiciCallRoomInit = {
+    callId: r.callId,
+    username: page.username,
+    pageId: page.pageId,
+    ownerSignPub: page.ownerSignPub,
+    inboxPub: calls.inboxPub,
+    request: r,
+    callerPub: r.browserPub,
+    callerTokenHash: await deps.sha256Hex(new TextEncoder().encode(token)),
+    ringingAt: now,
+  };
+  if (!(await deps.openRoom(init))) {
+    await deps.calls.releaseLiveCall(page.username, r.callId);
+    return voiciRefusal(409, "malformed");
+  }
+  await deps.ring(page.username, { callId: r.callId, pageId: page.pageId, conv: r.conv, from: r.browserPub, inboxPub: calls.inboxPub, issuedAt: now });
   return ok({ callId: r.callId, room: `wss://${deps.apex}/api/voici/calls/${r.callId}/caller`, token, ringMs: VOICI_CALL_RING_MS });
 }
 

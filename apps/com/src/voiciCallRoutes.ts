@@ -18,7 +18,11 @@ import {
   buildVoiciCallRinger,
   buildVoipPushSender,
   handleVoiciCallAllow,
+  handleVoiciCallChallenge,
   handleVoiciCallRequest,
+  handleVoiciRing,
+  handleVoiciRingBack,
+  voiciPowSecret,
   handleVoiciMissedCalls,
   handleVoiciVoipToken,
   voiciRefusal,
@@ -51,17 +55,20 @@ export interface VoiciCallEnv extends RateLimitEnv {
   APNS_PRIVATE_KEY_PEM?: string;
   APNS_BUNDLE_ID?: string;
   APNS_HOST?: string;
+  /** 32 bytes hex: `.com`'s proof-of-work MAC key for anonymous calls (pages in "anyone" mode); unset = refused. */
+  VOICI_CALL_POW_SECRET?: string;
 }
 
 const CALL_PATH = /^\/api\/voici\/calls\/([0-9a-f]{32})\/(caller|device)$/;
-const PAGE_CALLS = /^\/api\/voici\/pages\/([^/]+)\/(call-allow|calls)$/;
+const PAGE_CALLS = /^\/api\/voici\/pages\/([^/]+)\/(call-allow|calls|call-challenge|ring)$/;
+const RING_BACK = "/api/voici/web/ring-back";
 const VOIP_TOKEN = /^\/api\/accounts\/([^/]+)\/voici-voip-token$/;
 const CALL_KEY = /^\/api\/accounts\/([^/]+)\/voici-call-key(\/revoke)?$/;
 
 export const voiciCallsEnabled = (env: VoiciCallEnv) => env.VOICI_ENABLED === "on" && env.VOICI_CALLS === "on" && !!env.VOICI_CALL_ROOM && !!env.DB;
 
 export function isVoiciCallPath(pathname: string): boolean {
-  return pathname === "/api/voici/calls" || CALL_PATH.test(pathname) || PAGE_CALLS.test(pathname) || VOIP_TOKEN.test(pathname) || CALL_KEY.test(pathname);
+  return pathname === "/api/voici/calls" || pathname === RING_BACK || CALL_PATH.test(pathname) || PAGE_CALLS.test(pathname) || VOIP_TOKEN.test(pathname) || CALL_KEY.test(pathname);
 }
 
 function toResponse(r: HandlerResponseWithHeaders): Response {
@@ -122,7 +129,20 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
   const apex = env.CONTROL_APEX ?? "flagshipserver.com";
   const origin = env.VOICI_WEB_ORIGIN ?? "https://voi.ci";
   const room = (callId: string) => env.VOICI_CALL_ROOM!.get(env.VOICI_CALL_ROOM!.idFromName(callId));
+  const powSecret = voiciPowSecret(env.VOICI_CALL_POW_SECRET);
   let m: RegExpMatchArray | null;
+
+  if (path === RING_BACK && method === "POST") {
+    const w = await wait(env, "voici-ring-back", request, undefined, ctx);
+    if (w !== null) return toResponse(voiciRefusal(429, "rate-limited", { retryAfterSec: w }));
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      body = undefined;
+    }
+    return toResponse(await handleVoiciRingBack({ voici: storage.voici, calls: storage.voiciCalls, origin, caKeys }, body));
+  }
 
   if (path === "/api/voici/calls" && method === "POST") {
     const forward = buildOptionalPushForwarder(env as unknown as ControlPlaneEnv) ?? undefined;
@@ -147,6 +167,8 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
           limitIp: () => wait(env, "voici-call", request, undefined, ctx),
           limitCaller: (p) => wait(env, "voici-call-caller", request, p, ctx),
           limitPage: (pageId) => wait(env, "voici-call-page", request, pageId, ctx),
+          limitAnonPage: (pageId) => wait(env, "voici-call-anon-page", request, pageId, ctx),
+          ...(powSecret ? { powSecret } : {}),
           openRoom: async (init) => (await room(init.callId).fetch("https://room/init", { method: "POST", body: JSON.stringify(init) })).ok,
           ring: ringer.ring,
           apex,
@@ -177,6 +199,26 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
     headers.set("x-voici-device-ref", dev.deviceRef);
     if ("callKeyPub" in dev) headers.set("x-voici-call-key-pub", dev.callKeyPub);
     return room(callId).fetch(new Request("https://room/device", { method: "GET", headers }));
+  }
+
+  if ((m = path.match(PAGE_CALLS)) && m[2] === "call-challenge" && method === "GET") {
+    const username = decodeURIComponent(m[1]!).toLowerCase();
+    return toResponse(await handleVoiciCallChallenge({ voici: storage.voici, ...(powSecret ? { powSecret } : {}), limitIp: () => wait(env, "voici-call-challenge", request, undefined, ctx) }, username));
+  }
+
+  if ((m = path.match(PAGE_CALLS)) && m[2] === "ring" && method === "POST") {
+    const username = decodeURIComponent(m[1]!).toLowerCase();
+    const w = await wait(env, "voici-ring", request, username, ctx);
+    if (w !== null) return toResponse(voiciRefusal(429, "rate-limited", { retryAfterSec: w }));
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      body = undefined;
+    }
+    // The push relay (sealed targets) is its own branch; until it lands and PUSH_RELAY is on, a ring reaches the
+    // caller's open voi.ci tab and app through their thread fetch only.
+    return toResponse(await handleVoiciRing({ voici: storage.voici, calls: storage.voiciCalls }, username, body));
   }
 
   if ((m = path.match(PAGE_CALLS))) {
