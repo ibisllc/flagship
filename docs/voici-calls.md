@@ -489,3 +489,21 @@ Messages state); no server keeps a log of who called whom.
 5. **Strings, settings and tests:** every new string through i18n. View-model tests, mock gym scenarios, a
    browser-to-browser Playwright test against a local `.com` with two voi.ci pages, and a media CI lane once the
    libwebrtc build exists.
+
+## Who may call a page, and ringing a caller back (proposal, 2026-11-15, awaiting the owner's yes)
+
+Owner idea: turning calls on means agreeing to ring. Each page owner picks one mode:
+- **Anyone on the internet**: no account needed; a browser visitor calls. Abuse controls from `voici-calls-v2.md`
+  §2: a per-page call budget, proof-of-work in the browser, short-lived blocks, optional hours. The page says
+  "Anyone can call you here".
+- **Callback accounts only**: the caller is signed in with Flagship, and calling counts as consent to being rung
+  back **in that conversation**. The ring-back goes through the conversation's mailbox, never to a username or a
+  known phone, so the caller stays pseudonymous to the owner.
+- The pseudonymous side always dials out and the public side hosts the media (no bare name of the pseudonymous
+  side is ever used).
+- **Sealed-token push relay** (needed so the mailbox can't be tied to a phone at `.com`): apps give `.com` only
+  their push token sealed (fresh randomness each time) to a small separate push-relay service. `.com` hands the
+  sealed blob to the relay, which opens it and sends a content-free push. `.com` sees conversations but no tokens;
+  the relay sees tokens but no conversations. All pushes, account ones included, use it, so `.com` never holds a
+  raw token. Linking needs both to collude; Apple and Google still see that a push reached a device. Its hosting
+  is decided at deploy.
