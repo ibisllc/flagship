@@ -16,6 +16,8 @@ const UNWIRED_BOX_PURPOSES = new Set([
   "flagship/pod-binding/v1",
   "flagship/mint-reservation/v1",
   "flagship/sibling-sync/v1",
+  // An org box's registration: the org install path (install blob carrying the server code) is not built yet.
+  "flagship/org-server-register/v1",
 ]);
 
 /**
@@ -49,6 +51,12 @@ const MESH_BOX_PURPOSES = new Set(["flagship/relay-attachment/v1"]);
  * timer server-daemon healthReporter.ts writes), which this scan cannot follow; keyd tests/healthSign.test.ts signs one.
  */
 const HEALTH_BOX_PURPOSES = new Set(["flagship/box-health/v1"]);
+/**
+ * An org box's KEM statement is built by canonicalOrgBoxKem and signed through a signer callback
+ * (packages/server-daemon/src/orgBoxKeys.ts), which this scan cannot follow;
+ * packages/server-daemon/tests/orgBoxKeys.test.ts signs one through keyd's policy.
+ */
+const ORG_BOX_PURPOSES = new Set(["flagship/org-box-kem/v1"]);
 
 /** Signed by the owner, an admin or the account key, never by the box: keyd must refuse them. */
 const NOT_BOX_PURPOSES = [
@@ -81,7 +89,7 @@ describe("box signing purposes", () => {
   });
 
   it("lists nothing the box does not sign", () => {
-    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t) && !ISSUANCE_BOX_PURPOSES.has(t) && !MESH_BOX_PURPOSES.has(t) && !HEALTH_BOX_PURPOSES.has(t));
+    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t) && !ISSUANCE_BOX_PURPOSES.has(t) && !MESH_BOX_PURPOSES.has(t) && !HEALTH_BOX_PURPOSES.has(t) && !ORG_BOX_PURPOSES.has(t));
     expect(idle).toEqual([]);
     for (const t of NOT_BOX_PURPOSES) expect(BOX_SIGN_PURPOSES.has(t), t).toBe(false);
   });

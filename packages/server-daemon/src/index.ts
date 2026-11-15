@@ -303,6 +303,7 @@ import { SAVED_DATA_FILE, SavedBackups } from "./serverArchive/saved.js";
 import { legacyOrigin } from "./appLineage.js";
 import { hybridOrderSignature as hybridOrderSignatureForMerge } from "./pqAuthority.js";
 import { parseServiceId as parseServiceIdForMerge } from "@flagship/protocol";
+import type { OrgKeyRings } from "@flagship/protocol";
 import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
 import { buildMigratePause, movingPage, type MigratePause } from "./serverArchive/migratePause.js";
 import { BackupPolicyStore } from "./backupPolicy/policy.js";
@@ -352,7 +353,8 @@ import {
   resolvePinnedAdminRoot,
   type RotationPq,
 } from "./adminRootRotationConsumer.js";
-import { startOrgAuthoritySync } from "./orgAuthorityPin.js";
+import { currentOrgPin, startOrgAuthoritySync } from "./orgAuthorityPin.js";
+import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, orgBoxRotationDone, verifyServedRings } from "./orgBoxKeys.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
 import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
 import {
@@ -1679,10 +1681,24 @@ async function main(): Promise<void> {
   authorityHub.ops.onTransition = (op) =>
     activityLog.note("authority.operation", `${op.kind} ${op.state}${op.reason ? ` (${op.reason})` : ""}, id ${op.id.slice(0, 8)}, payload ${op.payloadHash.slice(0, 12)}${op.resultDigest ? `, result ${op.resultDigest.slice(0, 12)}` : ""}`, { ok: op.state !== "failed" && op.state !== "outcome-unknown" });
   // ---- Enterprise org authority (docs/enterprise-accounts.md §6, §8) ----
-  // An org server pins its org's genesis and replays the chain and seat book itself. The rotations a
-  // departed seat leaves behind stay pending (and are named in Activity) until the org's clients
-  // finish them; nothing here rotates a secret on its own yet.
+  // An org server pins its org's genesis and replays the chain and seat book itself. A departed
+  // seat's rotations stay pending (named once in Activity) until the org key ring holds, for every
+  // key the seat could open here, a version since it left that leaves it out (orgBoxKeys.ts); the
+  // box opens the newest version sealed to it and keeps it in org-keys.json.
   if (cfg?.orgId && cfg.orgGenesisHash && env.controlPlaneBaseUrl) {
+    const orgKeyDeps = { dataDir, orgId: cfg.orgId, serverDomain: cfg.serverId, signAsBox: (m: Uint8Array) => custodian.signAsBox(m), controlPlaneBaseUrl: env.controlPlaneBaseUrl };
+    void announceOrgBoxKem(orgKeyDeps).catch((e) => console.warn(`[org] box KEM key not announced: ${(e as Error).message}`));
+    let ringsCache: { at: number; rings: OrgKeyRings } | null = null;
+    const orgRings = async (): Promise<OrgKeyRings | null> => {
+      const pin = currentOrgPin();
+      if (!pin) return null;
+      if (ringsCache && Date.now() - ringsCache.at < 60_000) return ringsCache.rings;
+      const rings = verifyServedRings(pin, await fetchOrgRings(orgKeyDeps), cfg.serverId, Date.now());
+      ringsCache = { at: Date.now(), rings };
+      await adoptOrgKeys(dataDir, rings, cfg.serverId).catch((e) => console.warn(`[org] keys not adopted: ${(e as Error).message}`));
+      return rings;
+    };
+    const notedPending = new Set<string>();
     const orgSync = await startOrgAuthoritySync({
       orgId: cfg.orgId,
       genesisHash: cfg.orgGenesisHash,
@@ -1694,8 +1710,17 @@ async function main(): Promise<void> {
         dropEnrolledAppIds: async () => undefined,
         freezeInvitesBy: async () => undefined,
         rotate: async (kind, seat) => {
-          activityLog.note("org.rotation.pending", `Key rotation pending (${kind}) after seat ${seat.slice(0, 8)} left`, { ok: false });
-          return false;
+          const pin = currentOrgPin();
+          const rings = await orgRings().catch(() => null);
+          const done = !!pin && !!rings && orgBoxRotationDone(pin, rings, kind, seat, cfg.serverId);
+          const id = `${seat}|${kind}`;
+          if (done) {
+            if (notedPending.delete(id)) activityLog.note("org.rotation.done", `Key rotation done (${kind}) after seat ${seat.slice(0, 8)} left`, { ok: true });
+          } else if (!notedPending.has(id)) {
+            notedPending.add(id);
+            activityLog.note("org.rotation.pending", `Key rotation pending (${kind}) after seat ${seat.slice(0, 8)} left`, { ok: false });
+          }
+          return done;
         },
       },
       onLog: (m) => console.log(m),

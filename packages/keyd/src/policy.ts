@@ -38,6 +38,10 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/box-trust-status/v1",
   "flagship/box-read-token-request/v1",
   "flagship/server-register/v1",
+  // Enterprise orgs (docs/enterprise-accounts.md "Org servers", §5.4): an org box registering with its
+  // server code, and announcing the X-Wing key the org's key ring seals to.
+  "flagship/org-server-register/v1",
+  "flagship/org-box-kem/v1",
   "flagship/put-sealed-luks-key/v1",
   "flagship/boot-suspension/v1",
   "flagship/boot-auth/v1",
