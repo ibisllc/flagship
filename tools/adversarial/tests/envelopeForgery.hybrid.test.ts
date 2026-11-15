@@ -18,6 +18,7 @@
  *   AT-ENV-28  server-order/v1: hex signature forms, reordered stks, other key
  *   AT-ENV-29  rotate-rck/v1: either of the two signatures missing or swapped
  *   AT-ENV-30  MAC proofs (gossip/v2, enrollment-proof/v1, server-code-seen/v1): wrong key, truncated, case
+ *   AT-ENV-31  box-claim-receipt/v1: flipped, spliced, relabelled, re-signed by another box key, any field changed
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -517,3 +518,68 @@ describe("AT-ENV-30 MAC proofs", () => {
   });
 });
 
+
+// ---------------------------------------------------------------- retail box claim receipt
+
+describe("AT-ENV-31 box-claim-receipt/v1 (the box's hybrid-signed receipt the phone checks before trusting its key)", () => {
+  const V = JSON.parse(readFileSync(join(VECTORS, "box-claim/vectors.json"), "utf8"));
+  const t = V.transcripts[0];
+  const expectFor = { transcriptHex: t.transcriptHex, mode: t.mode, serverDomain: V.serverDomain, serial: V.serial };
+  const refused = (wire: unknown) => throws(() => P.verifyBoxClaimReceipt(wire, expectFor));
+  const stk = hybridSigKeygen(fromHex(V.stk.ed25519SeedHex), fromHex(V.stk.mldsaSeedHex));
+  const other = hybridSigKeygen(seed(41), seed(42));
+  const { signature: _sig, v: _v, ...fields } = t.receipt;
+  const canon = P.canonicalBoxClaimReceipt(fields);
+
+  it("AT-ENV-31a control: the vector receipt verifies", () => {
+    expect(refused(t.receipt)).toBe(false);
+    expect(toHex(stk.publicKey)).toBe(t.receipt.stkHybridPub);
+  });
+
+  it("AT-ENV-31b one flipped bit in either half is refused (catches: a verifier that checks only one half)", () => {
+    for (const at of [0, 63, 64, 3000]) {
+      const sig = fromHex(t.receipt.signature);
+      sig[at] = sig[at]! ^ 1;
+      expect(refused({ ...t.receipt, signature: toHex(sig) }), `byte ${at}`).toBe(true);
+    }
+  });
+
+  it("AT-ENV-31c the Ed25519 half of another receipt spliced onto this one's ML-DSA half is refused (catches: half-and-half splicing)", () => {
+    const otherSig = hybridSign(stk.secretKey, P.TAG_BOX_CLAIM_RECEIPT, P.canonicalBoxClaimReceipt({ ...fields, model: "Other" }), { deterministic: true });
+    const spliced = fromHex(t.receipt.signature);
+    spliced.set(otherSig.subarray(0, 64), 0);
+    expect(refused({ ...t.receipt, signature: toHex(spliced) })).toBe(true);
+  });
+
+  it("AT-ENV-31d the same bytes signed under another purpose are refused (catches: a signature for another family relabelled as a receipt)", () => {
+    const relabelled = hybridSign(stk.secretKey, "flagship/server-order/v1", canon, { deterministic: true });
+    expect(refused({ ...t.receipt, signature: toHex(relabelled) })).toBe(true);
+  });
+
+  it("AT-ENV-31e another box's signature over a receipt naming this box's key is refused (catches: a relay signing for the real box)", () => {
+    const forged = hybridSign(other.secretKey, P.TAG_BOX_CLAIM_RECEIPT, canon, { deterministic: true });
+    expect(refused({ ...t.receipt, signature: toHex(forged) })).toBe(true);
+  });
+
+  it("AT-ENV-31f changing any signed field breaks the receipt (catches: a field left out of the signed bytes)", () => {
+    const changes: Record<string, unknown> = {
+      mode: t.mode === "open" ? "code" : "open",
+      serverDomain: "home2.alice.flagship.services",
+      serial: "another-serial-01",
+      stkHybridPub: toHex(other.publicKey),
+      bootKeyBindingSha256: t.receipt.bootKeyBindingSha256 === "" ? "ab".repeat(32) : "",
+      model: "Other",
+      imageVersion: "9.9.9",
+      transcript: "cd".repeat(64),
+      issuedAt: t.receipt.issuedAt + 1,
+    };
+    for (const [k, val] of Object.entries(changes)) expect(refused({ ...t.receipt, [k]: val }), k).toBe(true);
+  });
+
+  it("AT-ENV-31g truncated, empty, extra-key and wrong-version receipts are refused (catches: shape bugs)", () => {
+    expect(refused({ ...t.receipt, signature: t.receipt.signature.slice(0, -2) })).toBe(true);
+    expect(refused({ ...t.receipt, signature: "" })).toBe(true);
+    expect(refused({ ...t.receipt, extra: 1 })).toBe(true);
+    expect(refused({ ...t.receipt, v: 2 })).toBe(true);
+  });
+});

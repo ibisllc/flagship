@@ -228,4 +228,21 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/messages-pseudonym/v1": "kdf per-page pseudonym key P (unlinkable across pages; voiciVectors.test.ts properties)",
   "flagship/messages-thread/v1": "kdf per-page thread X-Wing seed T",
   "flagship/voici-conv/v1": "hash conversation id H(pageId|Ppub)",
+  "flagship/voici-page/v2": "vectors voiciCallsVectors.test.ts + test-vectors/voici-calls pageV2 (9 index cases: v2 keys under version 1, acceptsCalls on v1, unknown callsFrom, calls switched off or callsFrom widened after signing)",
+  // ---- voi.ci calls (docs/voici-calls.md; voiciCallsVectors.test.ts + test-vectors/voici-calls)
+  "flagship/voici-call-request/v1": "vectors voiciCallsVectors.test.ts request.checks (25 cases: offer swapped after signing, another browser, another page or pseudonym, revoked browser key, unknown CA, stale, blocked, not allowed)",
+  "flagship/voici-call-answer/v1": "vectors voiciCallsVectors.test.ts answer.checks (10 cases: another call or request, turn secret swapped, signed by the pseudonym, short ciphertext, stale)",
+  "flagship/voici-call-receipt/v1": "vectors voiciCallsVectors.test.ts receipt.checks (10 cases: unknown CA, device swapped, another account or device, too long, expired, not yet valid); CA artifact",
+  "flagship/voici-call-end/v1": "vectors voiciCallsVectors.test.ts end.checks (owner end claimed as caller, another call, caller key swapped, unknown reason)",
+  "flagship/voici-call-frame/v1": "kdf + aad: per-direction frame keys and epoch ratchet; refusals in voiciCallsVectors.test.ts frames.refusals",
+  "flagship/voici-call-push/v1": "aad: hybrid seal purpose of the content-free ring push (badConvSealed refused in voiciCallsVectors.test.ts)",
+  "flagship/voici-missed-call/v1": "aad: hybrid seal purpose of a missed call; the sealed entry carries the caller's signed request, re-checked on open (forgedSealed refused in voiciCallsVectors.test.ts)",
+  // ---- retail box claim (docs/retail-box-setup.md §7, §15; boxClaimVectors.test.ts + test-vectors/box-claim)
+  "flagship/box-claim/v1": "hash: handshake message bytes and the HKDF salt (mode and setup-code hash); negatives wrong-code, mode-downgrade, state forgery, relay key swap in boxClaimVectors.test.ts",
+  "flagship/box-claim-keys/v1": "kdf: the claim session's HKDF-Expand labels",
+  "flagship/box-claim-confirm/v1": "mac: the phone's and box's confirmation HMACs over the transcript (wrong-code and relay negatives in boxClaimVectors.test.ts)",
+  "flagship/box-claim-record/v1": "aad: AES-GCM record associated data (session, direction, sequence; record-replay negative in boxClaimVectors.test.ts)",
+  "flagship/box-claim-receipt/v1": "bespoke AT-ENV-31 (flip, splice, relabel, another box key, every field); transcript-mismatch and changed-field cases in boxClaimVectors.test.ts",
+  "flagship/box-setup-code-key/v1": "hash: the setup code's key fed to the claim HKDF salt",
+  "flagship/box-claim-mailbox/v1": "hash: the blind remote-claim mailbox id derived from the setup code",
 };

@@ -208,4 +208,26 @@ export const SEEDS: Record<string, Record<string, unknown>> = {
     nonce: h(16),
     issuedAt: NOW,
   },
+  ServerRestoreStage: {
+    serverDomain: "home.alice.flagship.services",
+    archiveId: h(16, "0a"),
+    bytes: 4_000_000,
+    sha256: h(32, "0b"),
+    source: "upload",
+    issuedAt: NOW,
+  },
+  AppRestoreUndo: {
+    serverDomain: "home.alice.flagship.services",
+    restoreId: h(16, "0c"),
+    serviceId: "alice--notes",
+    action: "undo",
+    issuedAt: NOW,
+  },
+  BoxClaimKey: {
+    username: "alice",
+    serial: "retail-serial-0001",
+    serverDomain: "home.alice.flagship.services",
+    stkPubHex: h(32, "0d"),
+    issuedAt: NOW,
+  },
 };
