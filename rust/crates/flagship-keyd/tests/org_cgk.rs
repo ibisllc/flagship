@@ -168,3 +168,18 @@ fn pin_then_adopt_through_the_service() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// review-cloud: the TS twin is packages/keyd/tests/orgCgk.test.ts ("superseded authority records").
+#[test]
+fn review_cloud_refuses_a_ring_approved_under_a_superseded_record() {
+    let v = vectors("keyd-org-cgk");
+    let a = vectors("org-authority");
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/review-cloud-superseded-oar.json");
+    let f: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+    let mut args = f["args"].as_object().unwrap().clone();
+    args.insert("chain".into(), chain(&v, &a, f["chain"].as_str().unwrap()));
+    let pin = check_pin(&v["pin"]).unwrap();
+    let got = verify_adoption(&args, &pin, v["now"].as_u64().unwrap());
+    assert_eq!(got.err().map(|e| e.code), Some("stale-oar"));
+}
