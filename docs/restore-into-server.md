@@ -1,6 +1,6 @@
 # Restore a backup into a running server (merge its apps)
 
-> **Status (2026-11-14, branch `0.4/restore-merge-build`): the box side is built; no client screens yet.**
+> **Status (2026-11-14): the box side and the client screens are built (iOS, Android, webapp); the live gym group is not.**
 > Built: store generations (§3.3; TS provisioner, quotas, the Rust broker's `appdata.files` `generation`),
 > origin + `codeHistory` (§1-§2, `appLineage.ts`), the three orders with TS vectors (§4,
 > `test-vectors/server-restore-merge/`), stage → preview → plan → run with the journal, resume, undo and
@@ -12,8 +12,10 @@
 > into the undo point before the swap (journalled as `tree-moved`, so a restart puts it back); undo, discard and
 > expiry delete the kept copy's image unless something else still runs it (`ServicePlatform.keptImages()` is the
 > list any future image sweep must leave); sources `pull` and `peers` are refused for now
-> (`source-unavailable`). Not built: Swift/Kotlin/webapp ports of the orders, the client screens, the live
-> gym group.
+> (`source-unavailable`). Clients (§7): the orders in all four ports and the server page's Backups entries
+> (a saved backup's "Restore into this server…", "Restore apps from a backup file…", the earlier copies with Undo and
+> Delete now) on iOS, Android (`RestoreMergeScreen.kt`) and the webapp (`views/restore-merge.js`, shell v211); the
+> Home → Restore from backup → "Into a server I have" entry is not built on any app. Not built: the live gym group.
 >
 > **Original status: design, 2026-11-14.** Owner request 2026-11-14: "Restore-to-server means
 > deleting the data already on there? It would be nice if it means combining the backuped apps into the
