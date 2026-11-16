@@ -14,7 +14,11 @@
  */
 
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
-import { PASSPHRASE, createAccount, mock, reachHome, sawToast, shot, toastMark, unlock, watchToasts, type Mock } from "./gymKit.js";
+import { prfAuthenticator, PASSPHRASE, createAccount, mock, reachHome, sawToast, shot, toastMark, unlock, watchToasts, type Mock } from "./gymKit.js";
+
+// A new account keeps its keys under a passkey's PRF, and WebAuthn refuses an IP address as the
+// relying party, so these run on localhost (same static server), as gym-custody does.
+test.use({ baseURL: `http://localhost:${Number(process.env.GYM_WEBAPP_PORT ?? "8799")}` });
 
 test.use({ viewport: { width: 430, height: 932 } });
 
@@ -52,6 +56,7 @@ async function passphrases(page: Page): Promise<void> {
 
 /** From the passphrases to an open account, taking the second handle. */
 async function openNewAccount(page: Page, testInfo?: TestInfo): Promise<void> {
+  await prfAuthenticator(page);
   await passphrases(page);
   const sheet = page.locator(".modal-card", { has: page.locator("[data-suggest-name]") });
   await expect(sheet.locator(".modal-title")).toHaveText("Your handle", { timeout: 30_000 });
@@ -411,6 +416,7 @@ test.describe("gym webapp onboarding", () => {
   });
 
   test("gym onboarding the username step refuses a bad name, shows a taken one with the trademark link, then opens the account", async ({ page }, testInfo) => {
+    await prfAuthenticator(page);
     await deviceOnly(page);
     const m = await mock(page);
     const open = accountsEndpoint(m);

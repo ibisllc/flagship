@@ -400,6 +400,25 @@ export function serverDetail(fqdn: string, extra: Record<string, unknown> = {}):
 
 /** Render Home again (after the router is installed). */
 /**
+ * A Chrome virtual authenticator with the PRF extension (CDP WebAuthn.addVirtualAuthenticator,
+ * hasPrf). The webapp keeps a new account's keys under a passkey's PRF and refuses to create one
+ * without it (custody-unsupported, docs/webapp-key-custody.md). Returns the total sign count.
+ */
+export async function prfAuthenticator(page: Page): Promise<{ count: () => Promise<number> }> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", ctap2Version: "ctap2_1", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true },
+  });
+  return {
+    count: async () => {
+      const { credentials } = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
+      return credentials.reduce((n, c) => n + (c.signCount ?? 0), 0);
+    },
+  };
+}
+
+/**
  * Taps Home's "Add / Restore a server" the way a person would: after Home has
  * stopped moving. The button ignores a tap for SETTLE_MS (450 ms,
  * lib/settleGuard.js) after anything is inserted above it, and Home adds its
