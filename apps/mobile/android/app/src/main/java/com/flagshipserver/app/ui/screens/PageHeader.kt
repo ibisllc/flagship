@@ -102,6 +102,8 @@ class PagePublicFlow(private val center: VoiciCenter, private val scope: Corouti
     var showRules by mutableStateOf(false)
     var showWarning by mutableStateOf(false)
     var confirmRemove by mutableStateOf(false)
+    /** The warning is for the page's first publish: it also says what starts on (messages and signed-in calls). */
+    var firstPublish by mutableStateOf(false)
     private var action: Action? = null
 
     fun setPublic(on: Boolean) {
@@ -120,6 +122,7 @@ class PagePublicFlow(private val center: VoiciCenter, private val scope: Corouti
 
     private fun begin(a: Action) {
         action = a
+        firstPublish = center.page.value.firstPublish
         advance()
     }
 
@@ -185,7 +188,12 @@ fun PagePublicDialogs(flow: PagePublicFlow) {
     if (flow.showWarning) AlertDialog(
         onDismissRequest = { flow.cancel() },
         title = { Text(stringResource(R.string.voici_public_warning_title)) },
-        text = { Text(stringResource(R.string.voici_public_warning_body)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Text(stringResource(R.string.voici_public_warning_body))
+                if (flow.firstPublish) Text(stringResource(R.string.voici_first_publish_defaults), modifier = Modifier.testTag("page-first-publish-defaults"))
+            }
+        },
         confirmButton = { FSGhostButton(stringResource(R.string.voici_make_it_public), { flow.makePublic() }, modifier = Modifier.testTag("page-make-public")) },
         dismissButton = { FSGhostButton(stringResource(R.string.voici_cancel), { flow.cancel() }) },
         modifier = Modifier.testTag("page-public-warning"),

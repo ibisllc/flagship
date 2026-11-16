@@ -11,11 +11,12 @@ import { inlineConfirm } from "./modal.js";
 import { toast } from "./toast.js";
 import { tr } from "./i18n.js";
 import { mergeVoiciPage, sha256Hex } from "./voiciProtocol.js";
-import { consumeDraftOps, defaultVoiciProfile, makeDraftOp, opImages, publishVoiciPage, removeVoiciPage, sendDraftOp } from "./voiciOwner.js";
+import { consumeDraftOps, makeDraftOp, newVoiciPageBase, opImages, publishVoiciPage, removeVoiciPage, sendDraftOp } from "./voiciOwner.js";
 import { reencodeAvatar } from "./voiciImage.js";
 import { emitWorld, pendingOps, world } from "./voiciWorld.js";
 import { clearRemovedSnapshot, hasSeenPublicWarning, markPublicWarningSeen, saveRemovedSnapshot } from "./voiciPagePublic.js";
 import {
+  VOICI_FIRST_PUBLISH_DEFAULTS,
   VOICI_PUBLIC_WARNING,
   VOICI_PUBLIC_WARNING_TITLE,
   VOICI_REMOVE_TEXT,
@@ -43,7 +44,7 @@ export const pageBusy = () => busy;
 
 /** What the edits apply to: the published page, the removed page this device kept, or a new page. */
 export function basePage() {
-  return world.page ?? world.removed ?? { profile: defaultVoiciProfile(pageUsername()), acceptsMessages: 0, chunks: [], issuedAt: 0 };
+  return world.page ?? world.removed ?? newVoiciPageBase(pageUsername());
 }
 
 /** The page with every pending change applied, plus which parts are still pending. */
@@ -154,8 +155,9 @@ function storageFlag(k) {
   }
 }
 
-/** Before a page goes public: the rules sheet once (§9.7), then the public warning once per account (§3.3). */
-export async function confirmGoPublic(username = pageUsername()) {
+/** Before a page goes public: the rules sheet once (§9.7), then the public warning once per account (§3.3). A first
+ *  publish always shows the warning, with what the page starts with: messages and signed-in calls on. */
+export async function confirmGoPublic(username = pageUsername(), firstPublish = !world.page && !world.removed) {
   if (!storageFlag(RULES_KEY)) {
     const ok = await inlineConfirm({ title: VOICI_RULES_TITLE(), message: VOICI_RULES_TEXT(), okLabel: tr("I agree") });
     if (!ok) return false;
@@ -165,8 +167,9 @@ export async function confirmGoPublic(username = pageUsername()) {
       /* asked again next time */
     }
   }
-  if (hasSeenPublicWarning(username)) return true;
-  const ok = await inlineConfirm({ title: VOICI_PUBLIC_WARNING_TITLE(), message: VOICI_PUBLIC_WARNING(), okLabel: tr("Make it public"), cancelLabel: tr("Cancel") });
+  if (hasSeenPublicWarning(username) && !firstPublish) return true;
+  const message = firstPublish ? `${VOICI_PUBLIC_WARNING()} ${VOICI_FIRST_PUBLISH_DEFAULTS()}` : VOICI_PUBLIC_WARNING();
+  const ok = await inlineConfirm({ title: VOICI_PUBLIC_WARNING_TITLE(), message, okLabel: tr("Make it public"), cancelLabel: tr("Cancel") });
   if (ok) markPublicWarningSeen(username);
   return ok;
 }

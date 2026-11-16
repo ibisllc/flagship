@@ -35,7 +35,15 @@ public final class MessagesStore {
 
     /// The last signed index this device saw. After "Remove my page" it stays (its pageId and inbox keys still open the
     /// conversations) and `isRemoved` is set.
-    public private(set) var index: VoiciPageIndex?
+    public private(set) var index: VoiciPageIndex? {
+        didSet {
+            // Calls just came on (a publish here or another device's): this phone sends its VoIP token again, which it
+            // could not do while there was no page, so it rings without waiting for the next unlock.
+            if index?.takesCalls == true, oldValue?.takesCalls != true { Self.callsTurnedOn?() }
+        }
+    }
+    /// Set by the call center (iOS): sends this device's VoIP token to `.com`.
+    public static var callsTurnedOn: (@MainActor () -> Void)?
     /// The page was taken down (here or on another device): `.com` answers "no page". Its content stays on the device.
     public private(set) var isRemoved = false
     /// The last published content; kept after a removal so turning the page on again republishes it.
@@ -158,8 +166,12 @@ public final class MessagesStore {
 
     var base: VoiciPageState {
         published ?? VoiciPageState(profile: VoiciProfile(displayName: username, bio: "", avatar: nil, theme: "classic", links: []),
-                                    acceptsMessages: 0, chunks: [], issuedAt: 0)
+                                    acceptsMessages: VoiciCallSettings.firstPublishAcceptsMessages, chunks: [], issuedAt: 0)
     }
+
+    /// The next publish is the page's first: this device has seen no index and no removal. It carries the first-publish
+    /// defaults (messages on, calls on from signed-in people); every later publish keeps the owner's choices.
+    public var isFirstPublish: Bool { index == nil && !isRemoved && local.highestSeq == 0 }
 
     public var pendingCount: Int { Set((ownOps + laneOps).map(\.opId)).count }
 
@@ -897,7 +909,8 @@ public final class MessagesStore {
                                          signature: try VoiciPage.signVoiciPieceUpload(up, signerSeed: seed), bytes: p.bytes)
         }
         // Every publish carries the calls setting of the index it replaces (a profile edit never turns calls off).
-        let current = VoiciCallSettings.read(acceptsCalls: isRemoved ? nil : index?.acceptsCalls, callsFrom: index?.callsFrom)
+        let current = isFirstPublish ? VoiciCallSettings.firstPublish
+            : VoiciCallSettings.read(acceptsCalls: isRemoved ? nil : index?.acceptsCalls, callsFrom: index?.callsFrom)
         let calls = pendingCalls ?? current
         let fields = VoiciCallSettings.indexFields(on: calls.on, from: calls.from)
         let body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),

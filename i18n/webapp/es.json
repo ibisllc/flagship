@@ -3785,5 +3785,6 @@
   "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "Fuera de este horario tus teléfonos no suenan y la llamada aparece como perdida. Solo tus dispositivos conocen el horario.",
   "This browser couldn't check it's you. Nothing was deleted.": "Este navegador no pudo comprobar que eres tú. No se ha eliminado nada.",
   "{0} Enter this device's passphrase to confirm.": "{0} Introduce la frase de contraseña de este dispositivo para confirmar.",
-  "It goes from all your devices and from Flagship.": "Desaparece de todos tus dispositivos y de Flagship."
+  "It goes from all your devices and from Flagship.": "Desaparece de todos tus dispositivos y de Flagship.",
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Los mensajes y las llamadas de personas que iniciaron sesión con Flagship están activados. Puedes desactivarlos en Opciones de la página."
 }

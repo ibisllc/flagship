@@ -21,8 +21,13 @@ public enum VoiciCallSettings {
     public static let fromAnyone = "anyone"
     public static let fromCallback = "callback"
     public static let fromValues = [fromAccepted, fromSignedIn, fromAnyone, fromCallback]
-    /// The modes the Social page offers; an older value turns into "callback" at the next change.
-    public static let modes = [fromAnyone, fromCallback]
+    /// The modes the Social page offers; an older value ("accepted") turns into "callback" at the next change.
+    /// "signed-in" is the first-publish default (owner decision 2026-11-16), so it is offered too.
+    public static let modes = [fromSignedIn, fromAnyone, fromCallback]
+    /// What a page's first publish carries (owner decision 2026-11-16, docs/voici-and-messages.md §5.4): calls on from
+    /// people signed in with Flagship (never anonymous), and messages on. A later publish keeps the owner's choices.
+    public static let firstPublish = (on: true, from: fromSignedIn)
+    public static let firstPublishAcceptsMessages: Int64 = 1
     public static func mode(_ from: String) -> String { modes.contains(from) ? from : fromCallback }
 
     /// The index fields for a calls setting: v2 fields while on, none (a v1 index) while off.
@@ -99,7 +104,7 @@ public enum CallSettingsStore {
 
     /// The last "who can call" picked here, for turning calls on again.
     public static func lastFrom(_ d: UserDefaults = .standard) -> String {
-        d.string(forKey: fromKey).flatMap { VoiciCallSettings.fromValues.contains($0) ? $0 : nil } ?? VoiciCallSettings.fromAccepted
+        d.string(forKey: fromKey).flatMap { VoiciCallSettings.fromValues.contains($0) ? $0 : nil } ?? VoiciCallSettings.firstPublish.from
     }
 
     public static func setLastFrom(_ from: String, _ d: UserDefaults = .standard) {

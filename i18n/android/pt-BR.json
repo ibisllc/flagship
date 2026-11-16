@@ -4177,5 +4177,7 @@
   "voici_reveal_username_line": "%1$s é a página no voi.ci desta pessoa.",
   "voici_calls_hours": "Horário de chamadas",
   "voici_calls_hours_switch": "Só em certos horários",
-  "voici_calls_hours_footer": "Fora desses horários as chamadas não tocam em nenhum dos seus dispositivos e viram chamadas perdidas. Só os seus próprios dispositivos conhecem esses horários. Fuso horário: %1$s."
+  "voici_calls_hours_footer": "Fora desses horários as chamadas não tocam em nenhum dos seus dispositivos e viram chamadas perdidas. Só os seus próprios dispositivos conhecem esses horários. Fuso horário: %1$s.",
+  "voici_first_publish_defaults": "Mensagens e chamadas de pessoas conectadas com o Flagship estão ativadas. Você pode desativá-las em Opções da página.",
+  "voici_calls_from_signed_in_note": "Quem liga entra com o Flagship. A pessoa continua anônima para você."
 }

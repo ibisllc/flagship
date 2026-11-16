@@ -15441,5 +15441,9 @@
   "It goes from all your devices and from Flagship.": {
     "en": "It goes from all your devices and from Flagship.",
     "ctx": "webapp/lib/voiciWorld.js"
+  },
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": {
+    "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
+    "ctx": "webapp/lib/voiciCopy.js:27"
   }
 }

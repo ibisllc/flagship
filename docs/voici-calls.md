@@ -27,8 +27,9 @@ their branch; this doc and its migrations stay on `main`).
    first answer, and records a content-free missed call. It never sees audio or key material.
 5. **Every admin device rings; the first answer wins; the answering device takes the bare name** for the call, even
    from another of the owner's devices that holds it (§5). One call at a time per account.
-6. **Calls are off until the owner turns them on**, then by default only callers whose conversation the owner accepted
-   (decision D1). The page shows a Call action only while calls are on.
+6. **A page's first publish turns calls on for people signed in with Flagship** (`callsFrom: signed-in`, never
+   anonymous; owner decision 2026-11-16, which replaces "off until the owner turns them on" and D1's accepted-only
+   default). A later publish keeps the owner's choice. The page shows a Call action only while calls are on.
 7. **Ringing a phone in a pocket** uses the platforms' calling paths: iOS PushKit VoIP pushes and CallKit, Android a
    high-priority FCM (or UnifiedPush) message and a self-managed Telecom connection with a full-screen notification.
 
@@ -167,8 +168,8 @@ for the browser, hybrid for strict owners), which only need to hold while the ca
 
 ## 8. The owner's side (apps)
 
-- Settings → Messages → Calls: off (default) / on; "Who can call: people whose conversation you accepted |
-  anyone signed in with Flagship"; Do Not Disturb hours; the China note on iOS.
+- Settings → Messages → Calls: on / off (on from the page's first publish, owner decision 2026-11-16); "Who can call"
+  (see "Who may call a page" and "First publish" below); Do Not Disturb hours; the China note on iOS.
 - The call screen is the system's (CallKit, Telecom). Inside the app: the call in the conversation's thread, missed
   calls in Messages, Block / Report on a call.
 - The webapp shows calls in the thread but does not answer (web push can't ring reliably).
@@ -764,3 +765,37 @@ Hours in the page index would show the owner's time zone to anyone, so they are 
 - The webapp's Calls sheet edits the synced setting (time zone defaults to the browser's); its note says only the
   owner's devices know the hours. Vectors `voici-call-modes` section `callSettings` (key, sealed blob, refusals,
   shapes, when a call may ring) for Swift and Kotlin.
+
+## First publish: calls and messages on (owner decision 2026-11-16, `0.4/page-defaults`)
+
+Owner: "when someone makes their page public, they should default to 'yes receive calls from non-anon users, and
+accept messages'". The page's **first** publish signs a v2 index with `acceptsMessages: 1`, `acceptsCalls: 1`,
+`callsFrom: "signed-in"` (`.com`'s `voiciCallerAllowed` takes every signed-in caller for it, with no ring-back channel
+needed; anonymous calls stay refused, since only `anyone` takes them). The shared constant is `VOICI_FIRST_PUBLISH`
+(`packages/protocol/src/voiciPage.ts`; webapp `lib/voiciOwner.js`, iOS `VoiciCallSettings.firstPublish`, Android
+`VoiciCallSettings.FIRST_PUBLISH` + `VoiciOwner.FIRST_PUBLISH_ACCEPTS_MESSAGES`).
+- **First** means this device has seen no published index and no removal (iOS `isFirstPublish`, Android
+  `VoiciPageUi.firstPublish`, webapp: no page and no removed copy). A first publish that loses a seq race to another
+  device's page merges onto that page and keeps its settings. Re-publishing a removed page is not a first publish.
+- A switch the owner turned off before publishing (Accept messages, a draft op) is kept: the editor already shows
+  messages on for a page that was never published, so the owner sees the default and can change it.
+- **Every later publish keeps the owner's choices** (the "every publish carries the calls fields of the index it
+  replaces" rule above, and `acceptsMessages` from the merged page).
+- **The publish screen says so:** the public warning ("Make your page public?") shows on every first publish, also
+  when this device acknowledged it before, with the added sentence "Messages and calls from people signed in with
+  Flagship are on. You can turn them off in Page options." (iOS, Android `page-first-publish-defaults`, webapp; six
+  languages, machine drafts).
+- **Who can call** on iOS and Android now offers "Anyone signed in with Flagship" next to "Anyone on the internet" and
+  "People who let you call them back" (the webapp already listed it); calls turned on by hand later start from the same
+  mode.
+- **Ringing needs nothing more:** Android rings through the account's ordinary push and registers its Telecom phone
+  account when a call arrives. iOS sends its VoIP token only while it can sign as the page (`callKeys()`), so before
+  this a phone that published its first page rang only after the next unlock: `MessagesStore.index` now calls
+  `MessagesStore.callsTurnedOn` (set by `VoiciCallCenter.start`) whenever calls come on, from a publish here or one
+  adopted from another device, and the token goes at once. The call-only key ("Answer calls while Flagship is locked")
+  stays off by default.
+- Tests: protocol `voiciCallsVectors.test.ts`; webapp `webappVoiciOwner.test.ts` (first publish, a switch turned off
+  first, re-publish keeps choices, a lost race keeps the stored page's); iOS `PageControlsTests`
+  (`test_firstPublish*`, `test_aRepublishKeepsTheOwnersChoices`), `VoiciCallsViewModelTests`; Android `VoiciAppTest`
+  (`aFirstPublish*`, `aRepublishKeepsTheOwnersChoices`), `VoiciCallSettingsTest`; gym `GymMessagesTest` checks the
+  warning line and that the first publish is a signed-in calls index. Webapp shell **v225**.

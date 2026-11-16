@@ -19,6 +19,7 @@ struct VoiciCallsSettingsSection: View {
                 .accessibilityIdentifier("page-accept-calls")
             if v.showsWho {
                 Picker("Who can call", selection: Binding(get: { VoiciCallSettings.mode(store.callsFrom) }, set: { f in change(on: true, from: f) })) {
+                    Text("Anyone signed in with Flagship").tag(VoiciCallSettings.fromSignedIn)
                     Text("Anyone on the internet").tag(VoiciCallSettings.fromAnyone)
                     Text("People who let you call them back").tag(VoiciCallSettings.fromCallback)
                 }
@@ -34,9 +35,12 @@ struct VoiciCallsSettingsSection: View {
                 case .publishFirst: Text("Publish your page to take calls.")
                 case .adminOnly: Text("Only an admin device can change this")
                 case nil:
-                    if VoiciCallSettings.mode(store.callsFrom) == VoiciCallSettings.fromAnyone {
+                    switch VoiciCallSettings.mode(store.callsFrom) {
+                    case VoiciCallSettings.fromAnyone:
                         Text("Anyone can call you from your page, with or without a Flagship account. Your admin devices ring.")
-                    } else {
+                    case VoiciCallSettings.fromSignedIn:
+                        Text("Visitors signed in with Flagship can call you from your page. Your admin devices ring.")
+                    default:
                         Text("Callers sign in with Flagship and let you call them back in that conversation. You never learn who they are. Your admin devices ring.")
                     }
                 }

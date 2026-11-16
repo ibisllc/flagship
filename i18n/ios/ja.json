@@ -3856,5 +3856,6 @@
   "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ にはあなたが誰かわかりません。Flagship は、この会話からあなたの電話を鳴らせることを把握します。",
   "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "あなたのデバイスは、この時間帯（タイムゾーン %@）にだけ着信します。時間外の通話は不在着信になります。この時間帯を知っているのはあなた自身のデバイスだけです。終了が開始より前の場合は、深夜0時をまたぎます。",
   "Delete this conversation": "この会話を削除",
-  "The conversation wasn't deleted.": "会話は削除されていません。"
+  "The conversation wasn't deleted.": "会話は削除されていません。",
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。"
 }

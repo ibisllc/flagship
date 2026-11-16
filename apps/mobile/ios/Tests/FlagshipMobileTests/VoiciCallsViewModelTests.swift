@@ -20,6 +20,14 @@ final class VoiciCallsViewModelTests: XCTestCase {
         XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: 0, callsFrom: "signed-in") == (false, "signed-in"))
     }
 
+    func test_firstPublishDefaultsAndTheModesOffered() {
+        XCTAssertTrue(VoiciCallSettings.firstPublish == (true, "signed-in"))
+        XCTAssertEqual(VoiciCallSettings.firstPublishAcceptsMessages, 1)
+        XCTAssertEqual(VoiciCallSettings.modes, ["signed-in", "anyone", "callback"])
+        XCTAssertEqual(VoiciCallSettings.mode("signed-in"), "signed-in")
+        XCTAssertEqual(VoiciCallSettings.mode("accepted"), "callback")
+    }
+
     func test_viewState() {
         let admin = VoiciCallSettings.viewState(isAdmin: true, isPublic: true, callsOn: true, noRingMode: false)
         XCTAssertTrue(admin.canEdit)
@@ -78,7 +86,7 @@ final class VoiciCallsViewModelTests: XCTestCase {
         let d = try XCTUnwrap(UserDefaults(suiteName: "VoiciCallsViewModelTests"))
         d.removePersistentDomain(forName: "VoiciCallsViewModelTests")
         XCTAssertEqual(CallSettingsStore.quietHours(d), .standard)
-        XCTAssertEqual(CallSettingsStore.lastFrom(d), "accepted")
+        XCTAssertEqual(CallSettingsStore.lastFrom(d), "signed-in", "Calls turned on by hand start from the first-publish mode.")
         let q = CallQuietHours(on: true, startMinute: 60, endMinute: 120)
         CallSettingsStore.setQuietHours(q, d)
         CallSettingsStore.setLastFrom("signed-in", d)

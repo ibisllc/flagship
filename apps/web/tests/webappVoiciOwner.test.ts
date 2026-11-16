@@ -11,12 +11,14 @@ import {
   consumeDraftOps,
   defaultVoiciProfile,
   makeDraftOp,
+  newVoiciPageBase,
   openInbox,
   publishVoiciPage,
   updateMessagesState,
   isRequest,
   isUnread,
   voiciWebOrigin,
+  VOICI_FIRST_PUBLISH,
 } from "../public/webapp/lib/voiciOwner.js";
 import { approveSignIn, parseVoiciSignInLink, pagePseudonym, revokeSignedInSite } from "../public/webapp/lib/voiciSignIn.js";
 import { voiciErrorText } from "../public/webapp/lib/voiciCopy.js";
@@ -156,6 +158,71 @@ describe("publishing keeps the calls setting (docs/voici-calls.md §6)", () => {
     expect(next.index.callsFrom).toBe("signed-in");
     expect(P.parseVoiciPageIndex(next.index)).not.toBeNull();
     expect(P.checkVoiciPageIndex(next.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB }).ok).toBe(true);
+  });
+});
+
+describe("a page's first publish (owner decision 2026-11-16)", () => {
+  it("turns messages on and calls on from signed-in people, never anonymous", async () => {
+    expect(VOICI_FIRST_PUBLISH).toEqual({ acceptsMessages: 1, acceptsCalls: true, callsFrom: "signed-in" });
+    expect(newVoiciPageBase(U).acceptsMessages).toBe(1);
+    const com = fakeCom();
+    const profileOp = makeDraftOp("profile", { profile: { ...defaultVoiciProfile(U), displayName: "Alice" } }, { deviceId: "d", now: NOW - 10 });
+    const page = await publishVoiciPage({ ops: [profileOp] }, deps(com, { published: null }));
+    expect(page.index.version).toBe(2);
+    expect(page.index.acceptsMessages).toBe(1);
+    expect(page.index.acceptsCalls).toBe(1);
+    expect(page.index.callsFrom).toBe("signed-in");
+    expect(P.checkVoiciPageIndex(com.state.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB }).ok).toBe(true);
+  });
+
+  it("keeps a switch the owner turned off before the first publish", async () => {
+    const com = fakeCom();
+    const page = await publishVoiciPage(
+      { ops: [makeDraftOp("accept-messages", { accepts: 0 }, { now: NOW - 5 })], calls: { acceptsCalls: false, callsFrom: "signed-in" } },
+      deps(com, { published: null }),
+    );
+    expect(page.index.acceptsMessages).toBe(0);
+    expect(page.index.version).toBe(1);
+    expect(page.index.acceptsCalls).toBeUndefined();
+  });
+
+  it("a re-publish keeps the owner's choices: messages off, calls off or another mode", async () => {
+    const com = fakeCom();
+    const first = await publishVoiciPage({ ops: [] }, deps(com, { published: null }));
+    const off = await publishVoiciPage(
+      { ops: [makeDraftOp("accept-messages", { accepts: 0 }, { now: NOW + 1 })], calls: { acceptsCalls: false, callsFrom: "signed-in" } },
+      deps(com, { published: first }),
+    );
+    expect(off.index.acceptsMessages).toBe(0);
+    expect(off.index.acceptsCalls).toBeUndefined();
+    const edit = await publishVoiciPage({ ops: [makeDraftOp("post-add", { post: post("0a".repeat(16), "hello") }, { now: NOW - 1 })] }, deps(com, { published: off }));
+    expect(edit.index.seq).toBe(3);
+    expect(edit.index.acceptsMessages).toBe(0);
+    expect(edit.index.version).toBe(1);
+    expect(edit.index.acceptsCalls).toBeUndefined();
+    const anyone = await publishVoiciPage({ ops: [], calls: { acceptsCalls: true, callsFrom: "anyone" } }, deps(com, { published: edit }));
+    const again = await publishVoiciPage({ ops: [makeDraftOp("post-add", { post: post("0b".repeat(16), "again") }, { now: NOW - 1 })] }, deps(com, { published: anyone }));
+    expect(again.index.callsFrom).toBe("anyone");
+  });
+
+  it("a first publish that loses to another device's page takes that page's settings", async () => {
+    const com = fakeCom();
+    const merged = { ...newVoiciPageBase(U), acceptsMessages: 0 };
+    const other = await buildVoiciIndex({ username: U, published: null, merged, images: new Map(), signer, umk: { seed: UMK }, now: NOW - 100 });
+    for (const u of other.uploads) com.pieces.set(u.sha256, u.bytes);
+    com.state.conflictOnce = other.index;
+    const page = await publishVoiciPage({ ops: [makeDraftOp("post-add", { post: post("0c".repeat(16), "mine") }, { now: NOW - 1 })] }, deps(com, { published: null }));
+    expect(page.index.seq).toBe(2);
+    expect(page.index.acceptsMessages).toBe(0);
+    expect(page.index.acceptsCalls).toBeUndefined();
+  });
+
+  it("the public warning before a first publish says what starts on", () => {
+    const control = readFileSync(join(import.meta.dirname, "../public/webapp/lib/voiciPageControl.js"), "utf8");
+    expect(control).toMatch(/hasSeenPublicWarning\(username\) && !firstPublish/);
+    expect(control).toContain("VOICI_FIRST_PUBLISH_DEFAULTS()");
+    const copy = readFileSync(join(import.meta.dirname, "../public/webapp/lib/voiciCopy.js"), "utf8");
+    expect(copy).toContain('tr("Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.")');
   });
 });
 

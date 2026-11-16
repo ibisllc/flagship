@@ -3785,5 +3785,6 @@
   "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "在这些时段之外，你的手机不会响铃，来电会显示为未接。只有你的设备知道这些时段。",
   "This browser couldn't check it's you. Nothing was deleted.": "此浏览器无法确认是你本人。未删除任何内容。",
   "{0} Enter this device's passphrase to confirm.": "{0} 请输入此设备的密码短语以确认。",
-  "It goes from all your devices and from Flagship.": "它会从你的所有设备和 Flagship 中删除。"
+  "It goes from all your devices and from Flagship.": "它会从你的所有设备和 Flagship 中删除。",
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "来自用 Flagship 登录的人的消息和通话已开启。你可以在页面选项中关闭它们。"
 }

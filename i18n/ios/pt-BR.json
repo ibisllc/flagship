@@ -3858,5 +3858,6 @@
   "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ não vai saber quem você é. O Flagship vai saber que esta conversa pode fazer seu telefone tocar.",
   "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "Seus dispositivos só tocam nesses horários, no fuso horário %@; fora deles, a chamada vira uma chamada perdida. Só os seus próprios dispositivos conhecem esses horários. Um fim antes do início passa da meia-noite.",
   "Delete this conversation": "Excluir esta conversa",
-  "The conversation wasn't deleted.": "A conversa não foi excluída."
+  "The conversation wasn't deleted.": "A conversa não foi excluída.",
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Mensagens e chamadas de pessoas conectadas com o Flagship estão ativadas. Você pode desativá-las em Opções da página."
 }

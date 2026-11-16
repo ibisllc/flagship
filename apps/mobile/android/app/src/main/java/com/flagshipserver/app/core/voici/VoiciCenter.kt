@@ -97,6 +97,11 @@ data class VoiciPageUi(
     val publicWarned: Boolean = false,
     /** Calls are on in the published index (docs/voici-calls.md §6; only while the page is public). */
     val callsOn: Boolean = false,
+    /**
+     * The next publish is the page's first (this device saw no index and no removal): it turns on messages and calls
+     * from signed-in people (VoiciCallSettings.FIRST_PUBLISH), and the public warning says so.
+     */
+    val firstPublish: Boolean = false,
     /** Who may call while calls are on: "accepted" or "signed-in". */
     val callsFrom: String = "accepted",
     /** The owner's call hours (synced between the owner's devices, never in the page); null = any time. */
@@ -238,6 +243,8 @@ class VoiciCenter(
         (local.localOps.mapNotNull { VoiciMessages.parseVoiciDraftOp(it.op) } + local.laneOps.mapNotNull { VoiciMessages.parseVoiciDraftOp(it) })
             .distinctBy { it.opId }
 
+    private fun isFirstPublish(idx: VoiciPageIndex?, local: VoiciLocal): Boolean = idx == null && !local.removed && local.ladderSeq == 0L
+
     private fun publishedState(u: String, local: VoiciLocal): VoiciPageState =
         // A first page carries the account name (the username) until the owner changes it: never a private label.
         VoiciOwner.parsePageState(local.publishedState) ?: VoiciOwner.emptyState(u)
@@ -268,6 +275,7 @@ class VoiciCenter(
             removed = local.removed,
             publicWarned = local.publicWarned,
             callsOn = idx != null && !local.removed && idx.body.takesCalls,
+            firstPublish = isFirstPublish(idx, local),
             callsFrom = com.flagshipserver.app.calls.VoiciCallSettings.read(idx?.body?.acceptsCalls, idx?.body?.callsFrom).second,
             callHours = callHoursSetting(local)?.hours,
             answersWhileLocked = callKeyVault?.load(u) != null,
@@ -506,7 +514,9 @@ class VoiciCenter(
                 }
                 val seq = maxOf(idx?.body?.seq ?: 0, local.ladderSeq) + 1
                 // Every publish carries the calls setting of the index it replaces (a profile edit never turns calls off).
-                val current = com.flagshipserver.app.calls.VoiciCallSettings.read(if (local.removed) null else idx?.body?.acceptsCalls, idx?.body?.callsFrom)
+                // A first publish turns calls on for signed-in callers (owner decision 2026-11-16).
+                val current = if (isFirstPublish(idx, local)) com.flagshipserver.app.calls.VoiciCallSettings.FIRST_PUBLISH
+                else com.flagshipserver.app.calls.VoiciCallSettings.read(if (local.removed) null else idx?.body?.acceptsCalls, idx?.body?.callsFrom)
                 val (callsOn, callsFrom) = calls ?: current
                 val fields = com.flagshipserver.app.calls.VoiciCallSettings.indexFields(callsOn, callsFrom)
                 val body = VoiciPageIndexBody(
@@ -630,7 +640,8 @@ class VoiciCenter(
     /** What the Public switch, or Publish while the page is not public, must show before anything is signed. */
     fun publicStep(): PagePublicStep {
         val p = _page.value
-        return PagePublicStep.next(isAdmin = p.canPublish, rulesAccepted = p.rulesAccepted, acknowledged = p.publicWarned)
+        // A first publish always shows the warning, since it says what the page starts with.
+        return PagePublicStep.next(isAdmin = p.canPublish, rulesAccepted = p.rulesAccepted, acknowledged = p.publicWarned && !p.firstPublish)
     }
 
     /**

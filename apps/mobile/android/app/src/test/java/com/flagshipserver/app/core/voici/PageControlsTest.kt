@@ -62,7 +62,10 @@ class PageControlsTest {
         c.acceptRules()
         assertEquals(PagePublicStep.Warning, c.publicStep())
         c.acknowledgePublicWarning()
-        assertEquals(PagePublicStep.Publish, c.publicStep())
+        assertEquals("a first publish shows it again: it says what starts on", PagePublicStep.Warning, c.publicStep())
+        assertTrue(c.goPublic("test"))
+        assertTrue(c.removePage("test"))
+        assertEquals("after the first publish it is remembered", PagePublicStep.Publish, c.publicStep())
         val again = center()
         again.refresh()
         assertEquals("a relaunch remembers it", PagePublicStep.Publish, again.publicStep())
@@ -100,11 +103,11 @@ class PageControlsTest {
         ready(c)
         assertTrue(c.goPublic("test"))
         val before = mock.publishCount
-        c.edit("accept-messages", accepts = 1)
+        c.edit("accept-messages", accepts = 0)
         c.refresh()
         assertEquals("neither the edit nor a refresh publishes", before, mock.publishCount)
         assertEquals(1, c.page.value.pendingCount)
-        c.edit("accept-messages", accepts = 0)
+        c.edit("accept-messages", accepts = 1)
         assertEquals(0, c.page.value.pendingCount)
     }
 

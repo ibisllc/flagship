@@ -197,13 +197,72 @@ final class PageControlsTests: XCTestCase {
         let s = await store()
         await s.goPublic()
         let before = mock.publishes
-        await s.setAcceptsMessages(true)
+        await s.setAcceptsMessages(false)
         await s.addPost(text: "Draft.", links: [], images: [:])
         await s.refresh()
         XCTAssertEqual(mock.publishes, before, "Neither the edit nor a refresh publishes a draft.")
         XCTAssertEqual(s.pendingCount, 2)
-        await s.setAcceptsMessages(false)
+        await s.setAcceptsMessages(true)
         XCTAssertEqual(s.pendingCount, 1, "Setting it back drops the draft.")
+    }
+
+    // MARK: the first publish's defaults (owner decision 2026-11-16)
+
+    func test_firstPublishTurnsOnMessagesAndCallsFromSignedInPeople() async throws {
+        var registered = 0
+        MessagesStore.callsTurnedOn = { registered += 1 }
+        defer { MessagesStore.callsTurnedOn = nil }
+        let s = await store()
+        XCTAssertTrue(s.isFirstPublish)
+        XCTAssertTrue(s.acceptsMessages, "The editor shows messages on before the first publish.")
+        await s.goPublic()
+        XCTAssertNil(s.publishError)
+        let idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(idx.acceptsMessages, 1)
+        XCTAssertEqual(idx.acceptsCalls, 1)
+        XCTAssertEqual(idx.callsFrom, "signed-in", "Signed-in callers only, never anonymous.")
+        XCTAssertTrue(s.callsOn)
+        XCTAssertEqual(s.callsFrom, VoiciCallSettings.fromSignedIn)
+        XCTAssertFalse(s.isFirstPublish)
+        XCTAssertEqual(registered, 1, "Calls coming on registers the phone at once, as turning them on by hand does.")
+    }
+
+    func test_firstPublishKeepsASwitchTheOwnerTurnedOffBeforehand() async throws {
+        let s = await store()
+        await s.setAcceptsMessages(false)
+        await s.publishNow()
+        let idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(idx.acceptsMessages, 0)
+        XCTAssertEqual(idx.acceptsCalls, 1, "Calls still start on.")
+    }
+
+    func test_aRepublishKeepsTheOwnersChoices() async throws {
+        let s = await store()
+        await s.goPublic()
+        let off = await s.setCalls(on: false, from: VoiciCallSettings.fromSignedIn)
+        XCTAssertTrue(off)
+        await s.setAcceptsMessages(false)
+        await s.publishNow()
+        await s.addPost(text: "Later.", links: [], images: [:])
+        await s.publishNow()
+        var idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(idx.seq, 4)
+        XCTAssertEqual(idx.acceptsMessages, 0)
+        XCTAssertNil(idx.acceptsCalls, "Calls stay off: a v1 index.")
+        let anyone = await s.setCalls(on: true, from: VoiciCallSettings.fromAnyone)
+        XCTAssertTrue(anyone)
+        _ = await s.setQuickProfile(displayName: "Maple", avatar: nil)
+        idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(idx.callsFrom, "anyone")
+        XCTAssertEqual(idx.acceptsMessages, 0)
+
+        // A second device that adopts the page publishes with the page's choices, not the first-publish defaults.
+        let other = await store()
+        XCTAssertFalse(other.isFirstPublish)
+        _ = await other.setQuickProfile(displayName: "Maple Two", avatar: nil)
+        idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(idx.callsFrom, "anyone")
+        XCTAssertEqual(idx.acceptsMessages, 0)
     }
 
     func test_removeSignsTheNextSeqAndRepublishingContinuesTheLadder() async throws {

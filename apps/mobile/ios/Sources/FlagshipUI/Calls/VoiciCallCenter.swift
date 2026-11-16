@@ -81,6 +81,9 @@ public final class VoiciCallCenter: NSObject {
     /// Called once at launch: decides the ringing mode and registers for VoIP pushes where CallKit is allowed.
     public func start() {
         noRingMode = UserDefaults.standard.bool(forKey: Self.noRingKey)
+        // A page's first publish turns calls on (owner decision 2026-11-16): register this phone at once, as turning
+        // calls on by hand does, instead of at the next unlock.
+        MessagesStore.callsTurnedOn = { [weak self] in self?.accountChanged() }
         observer = NotificationCenter.default.addObserver(forName: VoiciCallEvents.name, object: nil, queue: .main) { [weak self] n in
             guard let call = VoiciCallEvents.call(from: n) else { return }
             Task { @MainActor in self?.ringInApp(call) }

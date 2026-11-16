@@ -89,9 +89,11 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
             FSDivider(0.dp)
             Column(Modifier.testTag("page-calls-from")) {
                 Text(stringResource(R.string.voici_calls_who), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2))
-                // Owner-approved modes (docs/voici-calls.md "Who may call a page"): anyone on the internet, or signed-in
-                // callers who allow a call-back. An older page's mode shows with neither picked until one is chosen.
+                // Owner-approved modes (docs/voici-calls.md "Who may call a page"): anyone signed in (the first-publish
+                // default), anyone on the internet, or signed-in callers who allow a call-back. An older page's mode
+                // ("accepted") shows with none picked until one is chosen.
                 for ((value, res) in listOf(
+                    VoiciCallSettings.FROM_SIGNED_IN to (R.string.voici_calls_from_signed_in to R.string.voici_calls_from_signed_in_note),
                     VoiciCallSettings.FROM_ANYONE to (R.string.voici_calls_from_anyone to R.string.voici_calls_from_anyone_note),
                     VoiciCallSettings.FROM_CALLBACK to (R.string.voici_calls_from_callback to R.string.voici_calls_from_callback_note),
                 )) {

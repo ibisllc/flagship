@@ -125,7 +125,8 @@ class VoiciOutgoingCallTest {
         owner.edit("accept-messages", accepts = 1)
         owner.acceptRules()
         assertTrue(owner.publish("test"))
-        if (calls) assertTrue(owner.setCalls(true, "signed-in", "test"))
+        // The first publish turns calls on for signed-in callers (owner decision 2026-11-16).
+        if (!calls) assertTrue(owner.setCalls(false, "signed-in", "test"))
         val pageId = VoiciPage.parseVoiciPageIndex(mock.storedIndex("alice"))!!.body.pageId
         val visitor = center(mock, Keys("bob", visitorUmk, ByteArray(32) { 6 }, true, ByteArray(32) { 7 }))
         visitor.refresh()
