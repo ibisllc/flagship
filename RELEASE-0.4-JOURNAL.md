@@ -804,6 +804,20 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   generator on release/0.4, `629869b84` on gym-0.4); the gym-only `GymLiveAdoption` dropped the removed
   `DeveloperSettings`. Owner's live call test next; gym relays ON until it ends.
 
+- 2026-11-16: Owner's call test on the gym: the browser rang, the phone never did; calls ended as missed. Cause:
+  APNs answers `TopicDisallowed` for the phone's real PushKit token on `com.flagshipserver.app.gym(.voip)` with key
+  `FHZWTBFQCM` (production-only and apparently topic-restricted). **Owner action:** add the gym bundle to that key or
+  make a new team-wide Sandbox & Production APNs key; then set the gym Worker's `APNS_*` secrets and test-push before
+  calling again. A government device showed "Couldn't reach Flagship" on the caller page (likely its network).
+- 2026-11-16: **secure-screen merged** (shell **v224**). "Secure your account": the big title is gone (iOS; the webapp
+  keeps its card title, it has no nav bar), the explainer ends "We cannot recover it for you.", cloud backup and
+  backup file are two independent unchecked options (the passphrase shows only while cloud is ticked), and the skip
+  warning is anchored to the Skip button (popover on iOS and webapp, dropdown on Android). Translated in 6 languages.
+  Checks: tsc, i18n, parity 0 red, web 3655; Android 17, iOS 6 + onboarding UI tests. Open: the web gym onboarding
+  spec never gets past "Setting up…" on release/0.4 (pre-existing).
+- 2026-11-16: Owner: **a page made public defaults to calls from signed-in (non-anonymous) people on, and messages
+  on.** Queued.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
@@ -815,7 +829,7 @@ State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branc
 - org directory with SCIM/LDAP connectors (all three apps);
 - restore, enterprise, retail, cloud fixes; terms and privacy wording for 0.4.
 
-Shell **v223**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
+Shell **v224**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
 running.
 
 Next steps for whoever resumes:
