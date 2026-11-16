@@ -21,7 +21,10 @@ describe("Postgres clients in the daemon", () => {
     const made: string[] = [];
     const missing: string[] = [];
     for (const f of files(SRC)) {
-      const lines = readFileSync(f, "utf8").split("\n");
+      const src = readFileSync(f, "utf8");
+      // Only files that load the pg driver make Postgres clients (directory/ldap.ts makes an ldapts Client).
+      if (!/from "pg"|import\("pg"\)/.test(src)) continue;
+      const lines = src.split("\n");
       lines.forEach((l, i) => {
         if (!/new (?:Client|PgClient|pg\.Client|pg\.Pool|Pool)\(/.test(l) || l.trimStart().startsWith("//")) return;
         // App code the AI writes lives in prompt strings: it is not daemon code.
