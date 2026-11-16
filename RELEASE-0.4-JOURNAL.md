@@ -768,6 +768,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   21, iOS app builds; Android 91. Open: a device offline > 30 days after a delete can bring entries back once; older
   iOS "deletes" stay archived only; old builds can't read v2 (pre-release: accepted).
 
+- 2026-11-16: Owner: **deleting a conversation is gated by biometrics** (agent on `0.4/delete-gate`: Face ID /
+  BiometricPrompt, passkey user verification on the webapp). Retail VM test moves to **GitHub Actions** (standard
+  Linux runners have KVM; agent on `0.4/retail-ci`), so no KVM host is needed from the owner. Webapp shell signing:
+  not yet, the signature covers the exact final files on `main` after 0.4 merges there.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
@@ -796,7 +801,7 @@ Next steps for whoever resumes:
    IPv4-only boxes and `.com`'s IPv4 checks; fold into "make Fly redundant"); libwebrtc builds are not byte
    reproducible; the caller's video in the call screens.
 5. **Waiting on the owner:** at release, sign the webapp shell (`docs/webapp-key-custody.md`) and then set
-   `SHELL_SIGNATURE_REQUIRED=true`; a KVM host for the retail VM test (`tools/retail-vm/run.sh`); the older questions
+   `SHELL_SIGNATURE_REQUIRED=true`; the older questions
    in the 2026-11-14 entries (co-manager caps, enterprise formulas, calls v2, retail untrusted, direct names, voi.ci
    name caps, payments, wired fleet).
 6. Fly: gym relays are off between runs (`scripts/gym-relays.sh`); a hand-run gym needs `gym-relays.sh on` first.
