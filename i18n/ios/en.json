@@ -16449,5 +16449,13 @@
   "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": {
     "en": "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:80"
+  },
+  "Delete this conversation": {
+    "en": "Delete this conversation",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/DestructiveAuth.swift"
+  },
+  "The conversation wasn't deleted.": {
+    "en": "The conversation wasn't deleted.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/DestructiveAuth.swift"
   }
 }

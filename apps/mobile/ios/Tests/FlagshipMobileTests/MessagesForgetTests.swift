@@ -23,9 +23,14 @@ final class MessagesForgetTests: XCTestCase {
         mock = MockVoiciComClient()
         let admin = CanonicalJson.hex(try! CanonicalJson.ed25519PublicKey(seed: Array(GymSeams.gymAdminRootSeed)))
         mock.keys[user] = VoiciAccountKeys(irkPub: String(repeating: "11", count: 32), adminRootPub: admin)
+        // Delete asks for Face ID / the passcode: passed here unless a test says otherwise.
+        GymSeams.bypassBiometricGates = true
+        GymSeams.refuseBiometricGates = false
     }
 
     override func tearDown() {
+        GymSeams.bypassBiometricGates = false
+        GymSeams.refuseBiometricGates = false
         GymSeams.adminRootSeed = nil
         GymSeams.accountRootSeed = nil
         MessagesStore.forgetLocal(username: user, allProfiles: false)
@@ -110,5 +115,38 @@ final class MessagesForgetTests: XCTestCase {
         let again = try XCTUnwrap(b.conversations.first { $0.conv == c.conv })
         XCTAssertTrue(b.isRequest(again))
         XCTAssertEqual(again.messages.map(\.text), ["Hello again"])
+    }
+
+    /// The owner's delete with a cancelled Face ID / passcode prompt: nothing is deleted on this device or the other,
+    /// and no delete reaches `.com` (docs/voici-calls.md "Deleting a conversation").
+    func test_ownerDeleteWithACancelledPromptDeletesNothing() async throws {
+        let a = await store("c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0")
+        await a.setAcceptsMessages(true)
+        await a.goPublic()
+        let pageId = try XCTUnwrap(a.index?.pageId)
+        _ = await visitorWrites("Hello", pageId: pageId)
+        await a.refresh()
+        let c = try XCTUnwrap(a.conversations.first)
+        await a.accept(c)
+
+        GymSeams.bypassBiometricGates = false
+        GymSeams.refuseBiometricGates = true
+        let refused = await a.delete(c)
+        XCTAssertEqual(refused, String(localized: "The conversation wasn't deleted."))
+        XCTAssertTrue(mock.convDeletes.isEmpty, "No delete reached .com.")
+        XCTAssertTrue(a.conversations.contains { $0.conv == c.conv })
+        XCTAssertTrue(a.state.accepted.contains(c.conv))
+        XCTAssertNil(a.state.forgotten[c.conv])
+        let b = await store("d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0")
+        XCTAssertTrue(b.conversations.contains { $0.conv == c.conv })
+
+        // Passed, the same delete goes through.
+        GymSeams.refuseBiometricGates = false
+        GymSeams.bypassBiometricGates = true
+        let done = await a.delete(c)
+        XCTAssertNil(done)
+        XCTAssertEqual(mock.convDeletes.count, 1)
+        XCTAssertFalse(a.conversations.contains { $0.conv == c.conv })
+        XCTAssertNotNil(a.state.forgotten[c.conv])
     }
 }

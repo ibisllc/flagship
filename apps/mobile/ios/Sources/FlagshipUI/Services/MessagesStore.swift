@@ -1182,9 +1182,11 @@ public final class MessagesStore {
 
     /// Delete = forget (docs/voici-calls.md): a signed owner delete makes `.com` drop the conversation's mailbox,
     /// ring-back channel, ring and missed calls at once; then this device's copy goes. Nil on success, else a sentence
-    /// (nothing is erased locally when `.com` refused, so the person can try again).
+    /// (nothing is erased locally when `.com` refused, so the person can try again). Face ID / passcode first: a
+    /// cancelled or failed prompt deletes nothing and sends nothing.
     @discardableResult
     public func delete(_ c: VoiciConversation) async -> String? {
+        if let refused = await DestructiveAuth.askToDeleteConversation() { return refused }
         if let client, let idx = index, let k = keys(epoch: idx.inboxEpoch) {
             do {
                 let signed = try VoiciConversations.signedDeleteOwner(pageId: idx.pageId, conv: c.conv, issuedAt: now(), ownerSignSeed: k.sign.seed)

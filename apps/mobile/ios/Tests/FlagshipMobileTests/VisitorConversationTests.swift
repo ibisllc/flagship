@@ -33,6 +33,14 @@ final class VisitorConversationTests: XCTestCase {
         bob.ownerSignPub = CanonicalJson.hex(try CanonicalJson.ed25519PublicKey(seed: ownSeed))
         client.keys["bob"] = client.keys["alice"]
         client.pages["bob"] = try VoiciPage.signVoiciPageIndex(bob, signerSeed: [UInt8](repeating: 0x33, count: 32)).json
+        // Delete asks for Face ID / the passcode: passed here unless a test says otherwise.
+        GymSeams.bypassBiometricGates = true
+        GymSeams.refuseBiometricGates = false
+    }
+
+    override func tearDown() async throws {
+        GymSeams.bypassBiometricGates = false
+        GymSeams.refuseBiometricGates = false
     }
 
     private func model(defaults: UserDefaults) -> VisitorConversationModel {
@@ -106,6 +114,34 @@ final class VisitorConversationTests: XCTestCase {
         XCTAssertFalse(defaults.bool(forKey: VisitorConversationModel.revealKey(m.callee.pageId)))
         // The account's other devices forget it too: the synced state's deletion marker for this conversation.
         XCTAssertEqual(forgotten.map(\.conv), [m.conv])
+    }
+
+    /// A cancelled Face ID / passcode prompt deletes nothing and sends nothing (docs/voici-calls.md "Deleting a conversation").
+    func test_deleteWithACancelledPromptDeletesNothing() async throws {
+        let defaults = UserDefaults(suiteName: "visitor-\(UUID())")!
+        let m = model(defaults: defaults)
+        await m.load()
+        let sent = await m.send("Still here")
+        XCTAssertTrue(sent)
+        await m.setRevealed(true)
+        let mailbox = client.mailbox["alice"]?.count ?? 0
+        GymSeams.bypassBiometricGates = false
+        GymSeams.refuseBiometricGates = true
+        await m.delete()
+        XCTAssertFalse(m.deleted)
+        XCTAssertEqual(m.messages.map(\.text), ["Still here"])
+        XCTAssertTrue(client.convDeletes.isEmpty, "No delete reached .com.")
+        XCTAssertEqual(client.mailbox["alice"]?.count ?? 0, mailbox)
+        XCTAssertTrue(defaults.bool(forKey: VisitorConversationModel.revealKey(m.callee.pageId)))
+        XCTAssertTrue(forgotten.isEmpty, "No deletion marker for the other devices.")
+        XCTAssertEqual(m.note, String(localized: "The conversation wasn't deleted."))
+
+        // The same delete with the prompt passed goes through.
+        GymSeams.refuseBiometricGates = false
+        GymSeams.bypassBiometricGates = true
+        await m.delete()
+        XCTAssertTrue(m.deleted)
+        XCTAssertEqual(client.convDeletes.count, 1)
     }
 
     func test_anOwnerBlocksAnAnonymousCaller() async throws {
