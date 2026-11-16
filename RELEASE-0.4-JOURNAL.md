@@ -798,6 +798,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   deletes and sends nothing (tests on all three). A phone with no screen lock deletes without a prompt (same rule as
   Sign out). Checks: tsc, i18n, parity 0 red, web 3655; Android 7/7, iOS 6/6, iOS app builds.
 
+- 2026-11-16: Owner accepted Apple's new Program License Agreement. **Flagship Gym installed on the owner's iPhone 14
+  Pro** (bundle `com.flagshipserver.app.gym`, production push, `gym-0.4` at `c5ac57a5b`). Two build fixes on the way:
+  `BoxRelease.sequence` is now `Int64` in Swift (a dated sequence overflowed the watch's 32-bit Int; fixed in the
+  generator on release/0.4, `629869b84` on gym-0.4); the gym-only `GymLiveAdoption` dropped the removed
+  `DeveloperSettings`. Owner's live call test next; gym relays ON until it ends.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
