@@ -409,3 +409,20 @@ export async function renderHome(page: Page): Promise<void> {
 export function homeCard(page: Page, fqdn: string) {
   return page.locator(`#servers-list [data-open-fqdn="${fqdn}"]`);
 }
+
+/** A Chrome virtual authenticator with the PRF extension (CDP WebAuthn), so the browser's admin key can go under
+ *  a passkey (docs/webapp-key-custody.md item 2: opening an account seals it at once). WebAuthn refuses an IP
+ *  address as the relying party, so a spec that uses it runs on `localhost`. `count` sums the sign counts. */
+export async function passkeyAuthenticator(page: Page): Promise<{ count: () => Promise<number> }> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", ctap2Version: "ctap2_1", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true },
+  });
+  return {
+    count: async () => {
+      const { credentials } = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
+      return credentials.reduce((n, c) => n + (c.signCount ?? 0), 0);
+    },
+  };
+}

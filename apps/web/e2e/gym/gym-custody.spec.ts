@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { ADMIN_SEED_HEX, mock, reachHome, sawToast, shot } from "./gymKit";
+import { ADMIN_SEED_HEX, mock, passkeyAuthenticator as authenticator, reachHome, sawToast, shot } from "./gymKit";
 
 /**
  * The browser's admin key under a passkey (docs/webapp-key-custody.md items 2, 5 and 6), with a
@@ -9,20 +9,6 @@ import { ADMIN_SEED_HEX, mock, reachHome, sawToast, shot } from "./gymKit";
  * authenticator again (its sign count goes up each time), and while signatures of the shell are
  * required an unsigned shell can't open the key.
  */
-
-async function authenticator(page: Page): Promise<{ count: () => Promise<number> }> {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("WebAuthn.enable");
-  const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
-    options: { protocol: "ctap2", ctap2Version: "ctap2_1", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true },
-  });
-  return {
-    count: async () => {
-      const { credentials } = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
-      return credentials.reduce((n, c) => n + (c.signCount ?? 0), 0);
-    },
-  };
-}
 
 /** The account's admin root as a passphrase-only (version 1) record, and the session's handle for it. */
 async function legacyAdminRoot(page: Page): Promise<void> {
