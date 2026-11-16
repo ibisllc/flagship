@@ -51,6 +51,8 @@ class VoiciCallKeys(
     val revoked: Set<String>,
     val nicknames: Map<String, String>,
     val callKey: VoiciCallKey? = null,
+    /** The page's "who can call" (an "anyone" page also takes anonymous requests); locked, `.com`'s check stands. */
+    val callsFrom: String = com.flagshipserver.app.core.voici.VoiciCallModes.FROM_ANYONE,
 ) {
     val deviceRef: String get() = callKey?.deviceRef ?: VoiciCalls.deviceRef(device!!.pubHex)
 
@@ -157,7 +159,7 @@ class VoiciCallSession(
             pageId = keys.pageId, acceptsCalls = keys.acceptsCalls, origin = keys.origin, caKeys = keys.caKeys, now = now(),
             blocked = keys.blocked, revoked = keys.revoked,
         )
-        when (val r = VoiciCalls.checkRequest(raw, ctx)) {
+        when (val r = VoiciCalls.checkAnyRequest(raw, ctx, keys.callsFrom)) {
             is VoiciOutcome.Ok -> {
                 if (r.value.callId != push.callId) return end("failed")
                 request = r.value

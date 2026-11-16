@@ -264,13 +264,30 @@ object VoiciMessages {
         recipients: List<ByteArray>,
         plaintext: VoiciPlaintext,
         rnd: VoiciSealRandomness? = null,
+    ): ByteArray = sealVoiciBodyBytes(conv, msgId, sentAt, fromPub, recipients, plaintextBytes(plaintext), rnd)
+
+    /**
+     * Seals a conversation control instead of text (docs/voici-calls.md, "Reveal who I am"): {v:1, control:<reveal |
+     * unreveal>} (VoiciCallModes). Old readers refuse it as inner-schema and show nothing.
+     */
+    fun sealVoiciControl(conv: String, msgId: String, sentAt: Long, fromPub: String, recipients: List<ByteArray>, control: JsonObject, rnd: VoiciSealRandomness? = null): ByteArray =
+        sealVoiciBodyBytes(conv, msgId, sentAt, fromPub, recipients, WebEnvelopes.canonicalJsonBytes(JsonObject(linkedMapOf("v" to kotlinx.serialization.json.JsonPrimitive(1), "control" to control))), rnd)
+
+    private fun sealVoiciBodyBytes(
+        conv: String,
+        msgId: String,
+        sentAt: Long,
+        fromPub: String,
+        recipients: List<ByteArray>,
+        plainBytes: ByteArray,
+        rnd: VoiciSealRandomness?,
     ): ByteArray {
         require(hex(msgId, 16) && hex(conv, 32) && hex(fromPub)) { "voici body: bad ids" }
         require(recipients.size == 2) { "voici body: two recipients" }
         val cek = rnd?.cek ?: random(32)
         val nonce = rnd?.nonce ?: random(12)
         require(cek.size == 32 && nonce.size == 12) { "voici body: bad randomness" }
-        val ct = VoiciJs.gcmEncrypt(cek, nonce, bodyAad(conv, msgId), plaintextBytes(plaintext))
+        val ct = VoiciJs.gcmEncrypt(cek, nonce, bodyAad(conv, msgId), plainBytes)
         val wraps = recipients.mapIndexed { i, pub ->
             val eseed = rnd?.eseeds?.getOrNull(i) ?: random(PqHybrid.HYBRID_SEAL_RANDOMNESS_LEN)
             val sealed = PqHybrid.hybridSealWithRandomness(
@@ -313,7 +330,17 @@ object VoiciMessages {
      * Unwraps the CEK with the recipient's X-Wing seed, decrypts, then the inner schema and the text refusals.
      * Codes: malformed, no-wrap, decrypt-failed, inner-schema, or a text refusal.
      */
-    fun openVoiciBody(bodyBytes: ByteArray, conv: String, msgId: String, recipientSeed: ByteArray): VoiciOutcome<VoiciPlaintext> {
+    fun openVoiciBody(bodyBytes: ByteArray, conv: String, msgId: String, recipientSeed: ByteArray): VoiciOutcome<VoiciPlaintext> =
+        when (val r = openVoiciBodyAny(bodyBytes, conv, msgId, recipientSeed)) {
+            is VoiciOutcome.Ok -> (r.value as? VoiciPlaintext)?.let { VoiciOutcome.Ok(it) } ?: no("inner-schema")
+            is VoiciOutcome.Refused -> r
+        }
+
+    /** A conversation control opened from a body: the reveal or unreveal as sealed (VoiciCallModes.parseRevealControl). */
+    data class VoiciBodyControl(val control: JsonObject, val parsed: VoiciCallModes.RevealControl)
+
+    /** As openVoiciBody, also taking a control body {v:1, control} for this conversation: VoiciPlaintext or VoiciBodyControl. */
+    fun openVoiciBodyAny(bodyBytes: ByteArray, conv: String, msgId: String, recipientSeed: ByteArray): VoiciOutcome<Any> {
         val b = parseVoiciSealedBody(bodyBytes) ?: return no("malformed")
         val myId = VoiciJs.hex(PqHybrid.pqKeyId(PqHybrid.SUITE_HYBRID_SEAL_V1, PqHybrid.hybridSealKeygen(recipientSeed).publicKey))
         val w = b.wraps.firstOrNull { it.keyId == myId } ?: return no("no-wrap")
@@ -327,6 +354,13 @@ object VoiciMessages {
         val text = VoiciJs.utf8Fatal(pt) ?: return no("inner-schema")
         val r = VoiciJs.parseJson(text) ?: return no("inner-schema")
         val o = VoiciJs.obj(r) ?: return no("inner-schema")
+        if (VoiciJs.exactKeys(o, listOf("v", "control")) && VoiciJs.isNumEq(o["v"], 1)) {
+            val control = VoiciJs.obj(o["control"]) ?: return no("inner-schema")
+            val c = VoiciCallModes.parseRevealControl(control) ?: return no("inner-schema")
+            val cConv = when (c) { is VoiciCallModes.RevealControl.Shown -> c.reveal.conv; is VoiciCallModes.RevealControl.Hidden -> c.conv }
+            if (cConv != conv || !canonicalText(o, text)) return no("inner-schema")
+            return VoiciOutcome.Ok(VoiciBodyControl(control, c))
+        }
         if (!VoiciJs.exactKeysOpt(o, listOf("v", "text", "replyTo")) || !VoiciJs.isNumEq(o["v"], 1) || str(o["text"]) == null) return no("inner-schema")
         if (o["replyTo"] !is JsonNull && !hex(o["replyTo"], 16)) return no("inner-schema")
         VoiciText.checkVoiciText(VoiciTextField.messageText, str(o["text"]))?.let { return no(it) }
