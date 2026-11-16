@@ -25,7 +25,7 @@ public struct VoiciComError: Error, Equatable, Sendable {
         let v = JSONValue.parse(utf8: Array(data))
         var e = VoiciComError(status: status, code: v?["code"]?.string ?? (status == 0 ? "network" : "http-\(status)"),
                               retryAfterSec: v?["retryAfterSec"]?.safeInt.map(Int.init),
-                              stored: v?["index"] ?? v?["state"])
+                              stored: v?["index"] ?? v?["state"] ?? v?["settings"])
         e.limit = v?["limit"]?.safeInt.map(Int.init)
         e.storedSeq = v?["seq"]?.safeInt
         e.storedPageId = v?["pageId"]?.string
@@ -138,6 +138,10 @@ public protocol VoiciComClient: Sendable {
     func deleteConversation(_ signed: JSONValue) async throws
     /// The owner blocks (or unblocks) an anonymous caller's conversation (`POST /api/voici/pages/<u>/anon-block`).
     func anonBlock(username: String, signed: JSONValue) async throws
+    /// The owner's sealed call hours (`GET /api/accounts/<u>/voici-call-settings`, read token); nil when none is stored.
+    func callSettings(username: String) async throws -> JSONValue?
+    /// `PUT` the sealed call hours with `version` = stored + 1 (device headers); 409 `version-conflict` carries the stored blob.
+    func putCallSettings(username: String, sealed: JSONValue, device: VoiciDeviceSigner) async throws
 }
 
 /// `.com`'s answer to a call request: `{callId, room, token, ringMs}`.
@@ -167,6 +171,8 @@ public extension VoiciComClient {
     func ringBack(order: JSONValue, account: String, device: VoiciDeviceSigner) async throws { throw VoiciComError(status: 0, code: "unsupported") }
     func deleteConversation(_ signed: JSONValue) async throws { throw VoiciComError(status: 0, code: "unsupported") }
     func anonBlock(username: String, signed: JSONValue) async throws { throw VoiciComError(status: 0, code: "unsupported") }
+    func callSettings(username: String) async throws -> JSONValue? { nil }
+    func putCallSettings(username: String, sealed: JSONValue, device: VoiciDeviceSigner) async throws { throw VoiciComError(status: 0, code: "unsupported") }
 }
 
 public enum VoiciComPaths {
@@ -434,6 +440,16 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
 
     public func deleteConversation(_ signed: JSONValue) async throws {
         try await call(try json("POST", "/api/voici/web/conv-delete", signed))
+    }
+
+    public func callSettings(username: String) async throws -> JSONValue? {
+        try await read(try json("GET", "/api/accounts/\(VoiciComPaths.seg(username))/voici-call-settings", nil), username: username)
+    }
+
+    public func putCallSettings(username: String, sealed: JSONValue, device: VoiciDeviceSigner) async throws {
+        let path = "/api/accounts/\(VoiciComPaths.seg(username))/voici-call-settings"
+        guard let a = await device("PUT", path) else { throw VoiciComError(status: 0, code: "no-device-key") }
+        try await call(try json("PUT", path, sealed, headers: Self.deviceHeaders(a)))
     }
 
     public func anonBlock(username: String, signed: JSONValue) async throws {

@@ -3849,10 +3849,10 @@
   "Anonymous caller": "匿名呼叫者",
   "Only at certain hours": "仅在特定时间",
   "Calls can ring at any time.": "通话随时都可能响铃。",
-  "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": "通话只在这些时间响铃（时区 %@）。你的页面会向访客显示这些时间和时区。结束时间早于开始时间则跨越午夜。",
   "This page takes calls only from people who let it call them back.": "此页面只接听允许回拨的人的电话。",
   "Let voi.ci/%@ call you back?": "允许 voi.ci/%@ 回拨你吗？",
   "Call and allow call-back": "呼叫并允许回拨",
   "Call without call-back": "呼叫但不允许回拨",
-  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ 不会知道你是谁。Flagship 会知道此对话可以让你的手机响铃。"
+  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ 不会知道你是谁。Flagship 会知道此对话可以让你的手机响铃。",
+  "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "你的设备只在这些时间响铃（时区 %@）；在此之外，来电会变成未接来电。只有你自己的设备知道这些时间。结束时间早于开始时间则跨越午夜。"
 }

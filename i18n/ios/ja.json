@@ -3849,10 +3849,10 @@
   "Anonymous caller": "匿名の発信者",
   "Only at certain hours": "特定の時間のみ",
   "Calls can ring at any time.": "通話はいつでも着信します。",
-  "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": "通話はこの時間帯にだけ着信します（タイムゾーン %@）。あなたのページは、この時間帯とタイムゾーンを訪問者に表示します。終了が開始より前の場合は、深夜0時をまたぎます。",
   "This page takes calls only from people who let it call them back.": "このページは、折り返しを許可する人からの通話だけを受け付けます。",
   "Let voi.ci/%@ call you back?": "voi.ci/%@ からの折り返しを許可しますか？",
   "Call and allow call-back": "発信して折り返しを許可",
   "Call without call-back": "折り返しなしで発信",
-  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ にはあなたが誰かわかりません。Flagship は、この会話からあなたの電話を鳴らせることを把握します。"
+  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ にはあなたが誰かわかりません。Flagship は、この会話からあなたの電話を鳴らせることを把握します。",
+  "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "あなたのデバイスは、この時間帯（タイムゾーン %@）にだけ着信します。時間外の通話は不在着信になります。この時間帯を知っているのはあなた自身のデバイスだけです。終了が開始より前の場合は、深夜0時をまたぎます。"
 }

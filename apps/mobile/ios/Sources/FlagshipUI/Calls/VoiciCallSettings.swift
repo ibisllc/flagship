@@ -105,6 +105,17 @@ public enum CallSettingsStore {
     public static func setLastFrom(_ from: String, _ d: UserDefaults = .standard) {
         if VoiciCallSettings.fromValues.contains(from) { d.set(from, forKey: fromKey) }
     }
+
+    static let ownerHoursKey = "flagship.voici.calls.ownerHours"
+
+    /// This device's copy of the owner's synced call hours (it rings while the account may be locked).
+    public static func ownerHours(_ d: UserDefaults = .standard) -> VoiciCallSettingsValue? {
+        d.data(forKey: ownerHoursKey).flatMap { try? JSONDecoder().decode(VoiciCallSettingsValue.self, from: $0) }
+    }
+
+    public static func setOwnerHours(_ s: VoiciCallSettingsValue?, _ d: UserDefaults = .standard) {
+        if let s, let data = try? JSONEncoder().encode(s) { d.set(data, forKey: ownerHoursKey) } else { d.removeObject(forKey: ownerHoursKey) }
+    }
 }
 
 /// A missed call, opened and checked on this device, shown in its conversation's thread.
@@ -164,8 +175,7 @@ enum VoiciCallNetwork {
     static let session: URLSession = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
 }
 
-/// The call-hours value of the page index, "<days> <HHMM>-<HHMM> <time zone>" (VoiciPage.isCallHours), as the editor
-/// shows it: seven days from Monday, minutes after midnight, the zone.
+/// The owner's call hours as the editor shows them: seven days from Monday, minutes after midnight, the zone.
 public struct VoiciCallHoursDraft: Equatable, Sendable {
     public var days: [Bool]
     public var startMinute: Int
@@ -181,20 +191,24 @@ public struct VoiciCallHoursDraft: Equatable, Sendable {
         VoiciCallHoursDraft(days: [true, true, true, true, true, false, false], startMinute: 9 * 60, endMinute: 17 * 60 + 30, zone: zone)
     }
 
-    public init?(_ value: String?) {
-        guard let value, VoiciPage.isCallHours(value) else { return nil }
-        let f = value.split(separator: " ").map(String.init)
-        let t = f[1].split(separator: "-").map(String.init)
-        days = f[0].map { $0 == "1" }
-        startMinute = VoiciPage.hhmm(t[0])!
-        endMinute = VoiciPage.hhmm(t[1])!
-        zone = f[2]
+    public init?(_ hours: VoiciCallHours?) {
+        guard let hours, let h = VoiciCallSettingsSync.parseHours(hours.json), let a = Self.minutes(h.from), let b = Self.minutes(h.to) else { return nil }
+        days = h.days.map { $0 == "1" }
+        startMinute = a
+        endMinute = b
+        zone = h.zone
     }
 
-    /// The index value, or nil when it isn't a valid one (no day, start equal to end, an unknown zone).
-    public var value: String? {
+    static func minutes(_ s: String) -> Int? {
+        guard s.count == 4, let n = Int(s) else { return nil }
+        return (n / 100) * 60 + n % 100
+    }
+
+    /// The synced setting's hours, or nil when they aren't valid ones (no day, start equal to end, an unknown zone).
+    public var hours: VoiciCallHours? {
         func hm(_ m: Int) -> String { String(format: "%02d%02d", (m / 60) % 24, m % 60) }
-        let v = "\(days.map { $0 ? "1" : "0" }.joined()) \(hm(startMinute))-\(hm(endMinute)) \(zone)"
-        return days.count == 7 && VoiciPage.isCallHours(v) ? v : nil
+        guard days.count == 7 else { return nil }
+        let h = VoiciCallHours(days: days.map { $0 ? "1" : "0" }.joined(), from: hm(startMinute), to: hm(endMinute), zone: zone)
+        return VoiciCallSettingsSync.parseHours(h.json)
     }
 }
