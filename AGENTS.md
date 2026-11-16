@@ -338,7 +338,10 @@ of the last check here: **2026-11-13** (30 days: builder-pipe-upgrade and accoun
   (`flagship-services`, one `shared-cpu-1x:512MB` machine in iad, one dedicated IPv4 at $2 a month)
   is a single point of failure for box tunnels, the address echo and outbound AI streams.
   Suggestions from the owner, to be turned into a plan:
-  1. Gym: one IPv6 endpoint only, no IPv4 (drops the gym's dedicated address).
+  1. Gym: one IPv6 endpoint only, no IPv4 (drops the gym's dedicated address). Blocked (2026-11-16): gym UpCloud
+     boxes get IPv4 only (`apps/com/src/upcloud.ts`, `tools/live-e2e/lib/upcloudVm.ts`, `isoBox.ts`) and `.com`'s
+     zone-health / legacy sweep need `SERVICES_PASSTHROUGH_IPV4`. The gym relays are already off between runs
+     (`scripts/gym-relays.sh`, `docs/runbooks/gym-test-env.md`).
   2. Production: every endpoint IPv6 except one IPv4 (the single IPv4 stays so IPv4-only networks
      still reach a relay; phones need the echo to match for any address `.com` recommends).
   3. Get an ASN and our own IPv6 space, so every server (relay hosts and boxes) can have a directly
