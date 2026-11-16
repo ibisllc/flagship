@@ -55,6 +55,14 @@ describe("voici call modes vectors", () => {
     }
   });
 
+  it("an anonymous call's push opens as an anonymous caller", () => {
+    const X = V.anonPush;
+    expect(P.b64Encode(P.sealVoiciCallPush(P.hybridSealKeygen(h(X.inboxSeed)).publicKey, { callId: X.payload.callId, pageId: X.payload.pageId, conv: X.payload.conv, from: X.payload.from }, V.now, h(X.eseed)))).toBe(X.sealed);
+    expect(P.openVoiciCallPush(h(X.inboxSeed), X.callId, P.b64Decode(X.sealed)!)).toEqual(X.opened);
+    expect(X.opened.anonymous).toBe(true);
+    expect(P.openVoiciCallPush(h(X.inboxSeed), X.callId, P.b64Decode(X.badConvSealed)!)).toBeNull();
+  });
+
   it("a v2 index carries the new modes", () => {
     for (const from of ["anyone", "callback"]) expect(P.VOICI_CALLS_FROM_VALUES as readonly string[]).toContain(from);
   });
