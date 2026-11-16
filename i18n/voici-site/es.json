@@ -142,5 +142,6 @@
   "Not now": "Ahora no",
   "{0} is calling you back.": "{0} te está devolviendo la llamada.",
   "Getting ready to call…": "Preparando la llamada…",
-  "Stop call-backs": "Dejar de recibir llamadas de vuelta"
+  "Stop call-backs": "Dejar de recibir llamadas de vuelta",
+  "No microphone found on this device. Connect one, or call from your phone.": "No hay ningún micrófono en este dispositivo. Conecta uno o llama desde tu teléfono."
 }

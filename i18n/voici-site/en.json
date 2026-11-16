@@ -574,5 +574,9 @@
   "Close": {
     "en": "Close",
     "ctx": "voici-site/report.js:69"
+  },
+  "No microphone found on this device. Connect one, or call from your phone.": {
+    "en": "No microphone found on this device. Connect one, or call from your phone.",
+    "ctx": "voici-site/call.js:29"
   }
 }

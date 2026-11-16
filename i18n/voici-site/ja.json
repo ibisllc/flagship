@@ -142,5 +142,6 @@
   "Not now": "今はしない",
   "{0} is calling you back.": "{0} から折り返しの着信です。",
   "Getting ready to call…": "通話を準備しています…",
-  "Stop call-backs": "折り返しを停止"
+  "Stop call-backs": "折り返しを停止",
+  "No microphone found on this device. Connect one, or call from your phone.": "このデバイスにマイクが見つかりません。マイクを接続するか、スマートフォンから発信してください。"
 }

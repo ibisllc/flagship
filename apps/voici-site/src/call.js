@@ -25,6 +25,8 @@ export function callRefusal(code, o = {}) {
       return t("voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.");
     case "microphone":
       return t("voi.ci needs your microphone for the call. Allow it in your browser and try again.");
+    case "no-microphone":
+      return t("No microphone found on this device. Connect one, or call from your phone.");
     case "unsupported":
       return t("This browser can't make quantum-safe calls. Try a current Chrome, Safari or Firefox.");
     case "unreachable":
@@ -255,8 +257,9 @@ async function startCall(ctx, session, opts = {}) {
   let stream;
   try {
     stream = await win.navigator.mediaDevices.getUserMedia(lib.VOICI_CALL_AUDIO);
-  } catch {
-    return finish(callRefusal("microphone"));
+  } catch (e) {
+    const missing = e && (e.name === "NotFoundError" || e.name === "OverconstrainedError" || e.name === "DevicesNotFoundError");
+    return finish(callRefusal(missing ? "no-microphone" : "microphone"));
   }
   let worker;
   try {
