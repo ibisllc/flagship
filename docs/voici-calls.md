@@ -565,6 +565,10 @@ superseded. What we promise instead:
    into it. Its own copy of past messages stays on its device until its user deletes it too: we can't erase another
    person's phone, and the sentence in the delete sheet says so ("Messages already on <name>'s device stay there").
 3. The device erases its own copy and the conversation's keys.
+4. The owner's (or the caller's) other devices forget it too: the delete writes a deletion marker into the account's
+   sealed Messages state, and every device that merges it drops the conversation's archived flag, nickname, accepted
+   and read marks, reveal, call records and ring-back state (`voici-and-messages.md` §10.1.1; the marker is ciphertext
+   to `.com` and is dropped after 30 days).
 
 **No logs.** `.com` and the relays keep no record of mailboxes created, messages passed, rings sent or deletes,
 beyond the live mailbox rows themselves and the aggregate counters we already keep (hourly totals, no ids). Rate
@@ -712,6 +716,17 @@ Built and tested in TS, `.com`, flagship-web, voi.ci and the webapp; the native 
   signed delete with "Messages already on <name>'s device stay there.", Block / Unblock on anonymous missed calls in
   Calls, and the `voici-ring` push. The webapp has no caller-side conversation screen, so no reveal switch (the apps
   have it).
+
+### Delete forgets on every device (2026-11-16, `0.4/conv-forget`)
+
+Before this, a delete on one device left the conversation's `archived` entry, nickname and accepted mark in the
+account's synced Messages state, and the union merge brought them back from the owner's other devices (iOS even
+archived on delete, so a later message from the same caller arrived hidden). The state now carries per-conversation
+deletion markers (v2, `voici-and-messages.md` §10.1.1): newer marker wins over the other side's entries, entries beside
+their marker (made after the delete) stay, markers go after 30 days; each device drops what it keeps by itself once
+per marker. TS (protocol, webapp, flagship-web), Swift, Kotlin; vectors `test-vectors/messages` `stateForget`, with
+the two-device case (A deletes, B on the old state syncs, gone on both and stays gone) in every port and in the apps
+(Android `VoiciConversationFlowsTest`, iOS `MessagesForgetTests`). No `.com` change, no migration. Webapp shell v222.
 
 ### Call hours stay on the owner's devices (owner decision 2026-11-16, option c; `0.4/calls-callback`)
 
