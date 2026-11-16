@@ -3,17 +3,24 @@ import Foundation
 import PackageDescription
 
 // voi.ci call media (docs/voici-calls.md §4): our WebRTC.xcframework and the TURN responder's FlagshipTurn.xcframework,
-// built by .github/workflows/libwebrtc.yml (artifacts only) and unpacked into Vendor/WebRTC (git-ignored) by
-// tools/libwebrtc/use-artifacts.sh. Without them FlagshipUI builds with StubCallMediaEngine: calls ring but never
-// connect (`#if canImport(WebRTC)` in WebRTCCallMediaEngine.swift).
+// built by .github/workflows/libwebrtc.yml. By default SwiftPM downloads them from the pinned GitHub pre-release and
+// refuses them unless their SHA-256 matches (`webrtcRelease`, written by tools/libwebrtc/pin-release.sh from
+// tools/libwebrtc/artifacts.sha256; never edit it by hand). For development, tools/libwebrtc/use-artifacts.sh unpacks
+// a CI run (checked against the same pin) into Vendor/WebRTC (git-ignored), which wins. With neither, FlagshipUI builds
+// with StubCallMediaEngine: calls ring but never connect (`#if canImport(WebRTC)` in WebRTCCallMediaEngine.swift).
+let webrtcRelease: (base: String, webrtc: String, turn: String)? = nil
 let vendorWebRTC = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/WebRTC")
-let webrtcBundled = ["WebRTC.xcframework", "FlagshipTurn.xcframework"].allSatisfy {
+let webrtcLocal = ["WebRTC.xcframework", "FlagshipTurn.xcframework"].allSatisfy {
     FileManager.default.fileExists(atPath: vendorWebRTC.appendingPathComponent($0).path)
 }
-let callMediaTargets: [Target] = webrtcBundled ? [
+let callMediaTargets: [Target] = webrtcLocal ? [
     .binaryTarget(name: "WebRTC", path: "Vendor/WebRTC/WebRTC.xcframework"),
     .binaryTarget(name: "FlagshipTurn", path: "Vendor/WebRTC/FlagshipTurn.xcframework")
-] : []
+] : webrtcRelease.map { r in [
+    .binaryTarget(name: "WebRTC", url: "\(r.base)/WebRTC.xcframework.zip", checksum: r.webrtc),
+    .binaryTarget(name: "FlagshipTurn", url: "\(r.base)/FlagshipTurn.xcframework.zip", checksum: r.turn)
+] } ?? []
+let webrtcBundled = !callMediaTargets.isEmpty
 let callMediaDependencies: [Target.Dependency] = webrtcBundled ? ["WebRTC", "FlagshipTurn"] : []
 
 // FlagshipMobile — iOS-only Swift package. Holds the bits that touch
