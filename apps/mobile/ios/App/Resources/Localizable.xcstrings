@@ -157919,6 +157919,211 @@
           }
         }
       }
+    },
+    "This page takes calls only from people who let it call them back.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta página solo acepta llamadas de quien permite que le devuelvan la llamada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette page ne prend que les appels de personnes qui acceptent d'être rappelées."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Seite nimmt nur Anrufe von Leuten an, die einen Rückruf erlauben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta página só atende chamadas de quem deixa retornar a ligação."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このページは、折り返しを許可する人からの通話だけを受け付けます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此页面只接听允许回拨的人的电话。"
+          }
+        }
+      }
+    },
+    "Let voi.ci/%@ call you back?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Dejar que voi.ci/%@ te devuelva la llamada?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laisser voi.ci/%@ vous rappeler ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ dich zurückrufen lassen?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixar voi.ci/%@ retornar sua ligação?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ からの折り返しを許可しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许 voi.ci/%@ 回拨你吗？"
+          }
+        }
+      }
+    },
+    "Call and allow call-back": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Llamar y permitir que me devuelvan la llamada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appeler et autoriser le rappel"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anrufen und Rückruf erlauben"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligar e permitir retorno"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "発信して折り返しを許可"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "呼叫并允许回拨"
+          }
+        }
+      }
+    },
+    "Call without call-back": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Llamar sin permitir que me devuelvan la llamada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appeler sans rappel"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne Rückruf anrufen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligar sem retorno"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "折り返しなしで発信"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "呼叫但不允许回拨"
+          }
+        }
+      }
+    },
+    "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ no sabrá quién eres. Flagship sabrá que esta conversación puede hacer sonar tu teléfono."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ ne saura pas qui vous êtes. Flagship saura que cette conversation peut faire sonner votre téléphone."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ erfährt nicht, wer du bist. Flagship weiß, dass diese Unterhaltung dein Telefon klingeln lassen kann."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ não vai saber quem você é. O Flagship vai saber que esta conversa pode fazer seu telefone tocar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ にはあなたが誰かわかりません。Flagship は、この会話からあなたの電話を鳴らせることを把握します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci/%@ 不会知道你是谁。Flagship 会知道此对话可以让你的手机响铃。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

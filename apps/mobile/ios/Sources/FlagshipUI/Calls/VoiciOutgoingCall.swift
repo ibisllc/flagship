@@ -100,6 +100,8 @@ final class VoiciOutgoingCall: Identifiable {
     let id = UUID()
     let callee: VoiciCallee
     let video: Bool
+    /// The pop-up's choice before the call: attach this conversation's ring-back channel ("Call and allow call-back").
+    let allowCallBack: Bool
     private(set) var phase: Phase = .preparing
     private(set) var muted = false
     private(set) var cameraOn = false
@@ -117,9 +119,10 @@ final class VoiciOutgoingCall: Identifiable {
     @ObservationIgnored private var startedAt: Int64 = 0
     @ObservationIgnored private var over = false
 
-    init(callee: VoiciCallee, video: Bool, deps: Deps) {
+    init(callee: VoiciCallee, video: Bool, allowCallBack: Bool = false, deps: Deps) {
         self.callee = callee
         self.video = video
+        self.allowCallBack = allowCallBack
         self.deps = deps
     }
 
@@ -135,8 +138,10 @@ final class VoiciOutgoingCall: Identifiable {
             else { return fail("not-found") }
             guard idx.takesCalls else { return fail("calls-off") }
             ownerSignPub = idx.ownerSignPub
-            // On a "callback accounts only" page, calling is consent to being rung back in this conversation.
-            if idx.callsFrom == "callback" { try await deps.attachRingBack(callee.pageId) }
+            // On a "callback accounts only" page, calling is consent to being rung back in this conversation: without
+            // the choice, the page refuses the call, so it isn't placed.
+            if idx.callsFrom == "callback" && !allowCallBack { return fail("callback-only") }
+            if allowCallBack { try await deps.attachRingBack(callee.pageId) }
         } catch {
             return fail(Self.code(error))
         }
@@ -367,6 +372,7 @@ extension VoiciOutgoingCall {
         case "not-found": return String(localized: "This page isn't on voi.ci.")
         case "locked": return String(localized: "Unlock Flagship and try again.")
         case "browser": return String(localized: "Couldn't hand the call to your browser. Try again.")
+        case "callback-only": return String(localized: "This page takes calls only from people who let it call them back.")
         default: return String(localized: "The call couldn't connect. Check your connection and try again.")
         }
     }

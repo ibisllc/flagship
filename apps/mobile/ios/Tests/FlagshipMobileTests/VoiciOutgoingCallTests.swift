@@ -112,6 +112,7 @@ final class VoiciOutgoingCallTests: XCTestCase {
         let engine = Engine(), socket = Socket(), history = VoiciCallHistory(defaults: UserDefaults(suiteName: "voici-out-\(UUID())")!)
         history.configure(username: "me")
         engine.offerSdp = calls["sdp"]!["offerRaw"]!.string!
+        // An "accepted" page and "Call without call-back": nothing attached, the call is placed.
         let c = call(engine: engine, socket: socket, history: history)
         await c.start()
         XCTAssertEqual(c.phase, .ringing)
@@ -290,10 +291,15 @@ final class VoiciOutgoingCallTests: XCTestCase {
             attachRingBack: { attached.append($0) },
             relay: { Relay(missing: 0) }, openURL: { _ in true }, background: { await $0() }, history: nil,
             now: { [unowned self] in self.now }, sleep: { _ in })
-        let c = VoiciOutgoingCall(callee: VoiciCallee(username: "alice", pageId: idx.pageId), video: false, deps: deps)
+        let c = VoiciOutgoingCall(callee: VoiciCallee(username: "alice", pageId: idx.pageId), video: false, allowCallBack: true, deps: deps)
         await c.start()
         XCTAssertEqual(attached, [idx.pageId])
         XCTAssertEqual(c.phase, .ringing)
+        // "Call without call-back" on a callback-only page: not placed, and nothing attached.
+        let without = VoiciOutgoingCall(callee: VoiciCallee(username: "alice", pageId: idx.pageId), video: false, deps: deps)
+        await without.start()
+        XCTAssertEqual(without.phase, .failed("callback-only"))
+        XCTAssertEqual(attached, [idx.pageId])
     }
 
     /// The owner's ring back: refused until the visitor attached the conversation's channel; the hint opens only under

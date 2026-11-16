@@ -9,7 +9,8 @@ extension VoiciOutgoingCall {
     /// A call from this device to a page it knows, wired to the app: the account's visitor session (one Face ID if
     /// the account isn't unlocked), the calls' pinned network, the system browser for the fallback.
     @MainActor
-    static func live(callee: VoiciCallee, video: Bool, client: any VoiciComClient, media: CallMediaEngine? = nil) -> VoiciOutgoingCall {
+    static func live(callee: VoiciCallee, video: Bool, allowCallBack: Bool = false, client: any VoiciComClient,
+                     media: CallMediaEngine? = nil) -> VoiciOutgoingCall {
         let username = MessagesStore.shared.username
         let deps = Deps(
             client: client,
@@ -39,7 +40,7 @@ extension VoiciOutgoingCall {
                 if id != .invalid { UIApplication.shared.endBackgroundTask(id) }
             },
             history: VoiciCallHistory.shared)
-        return VoiciOutgoingCall(callee: callee, video: video, deps: deps)
+        return VoiciOutgoingCall(callee: callee, video: video, allowCallBack: allowCallBack, deps: deps)
     }
 }
 
@@ -159,27 +160,41 @@ struct VoiciCallsScreen: View {
     }
 }
 
-/// "Call" and "Video call" for a page this account can call.
+/// "Call" and "Video call" for a page this account can call. Before the call, the call-back pop-up (docs/voici-calls.md,
+/// owner additions, as Android): "Call and allow call-back" attaches this conversation's ring-back channel, "Call
+/// without call-back" doesn't. The page owner never learns who this account is either way.
 struct VoiciCallButtons: View {
     let callee: VoiciCallee
     var onCall: (VoiciOutgoingCall) -> Void
     @Environment(\.voiciComClient) private var client
+    @State private var asking: Bool?
 
     var body: some View {
         HStack(spacing: 12) {
-            Button { start(video: false) } label: { Label("Call", systemImage: "phone") }
+            Button { asking = false } label: { Label("Call", systemImage: "phone") }
                 .accessibilityIdentifier("voici-call-audio")
-            Button { start(video: true) } label: { Label("Video call", systemImage: "video") }
+            Button { asking = true } label: { Label("Video call", systemImage: "video") }
                 .accessibilityIdentifier("voici-call-video")
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
         .disabled(client == nil)
+        .confirmationDialog(Text(verbatim: String(localized: "Let voi.ci/\(callee.username) call you back?")),
+                            isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), titleVisibility: .visible) {
+            Button("Call and allow call-back") { start(allowCallBack: true) }
+                .accessibilityIdentifier("voici-call-allow-back")
+            Button("Call without call-back") { start(allowCallBack: false) }
+                .accessibilityIdentifier("voici-call-no-back")
+            Button("Cancel", role: .cancel) { asking = nil }
+        } message: {
+            Text(verbatim: String(localized: "voi.ci/\(callee.username) won't learn who you are. Flagship will know this conversation can ring your phone."))
+        }
     }
 
-    private func start(video: Bool) {
-        guard let client else { return }
-        onCall(VoiciOutgoingCall.live(callee: callee, video: video, client: client))
+    private func start(allowCallBack: Bool) {
+        guard let client, let video = asking else { return }
+        asking = nil
+        onCall(VoiciOutgoingCall.live(callee: callee, video: video, allowCallBack: allowCallBack, client: client))
     }
 }
 #endif

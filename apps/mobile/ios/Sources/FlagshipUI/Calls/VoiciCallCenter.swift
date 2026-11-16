@@ -357,8 +357,9 @@ public final class VoiciCallCenter: NSObject {
             provider?.reportCall(with: r.id, endedAt: nil, reason: .failed)
             return
         }
+        // The ring came through this conversation's channel, so the call keeps it (attaching again renews it).
         let call = VoiciOutgoingCall.live(callee: VoiciCallee(username: hint.username, pageId: hint.pageId), video: hint.media == VoiciCalls.mediaVideo,
-                                          client: client)
+                                          allowCallBack: true, client: client)
         ringBack = call
     }
 
