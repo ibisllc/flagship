@@ -842,6 +842,15 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   anonymous requests are now a shared vector (`voici-call-modes/browser-built.json`). Carried to `gym-0.4`
   (`cc69cc67b`); the built gym app awaits install (phone unreachable).
 
+- 2026-11-16: **gym-onboard merged** (shell **v226**). Real user bugs found by the webapp gym:
+  - **The webapp didn't start at all on release/0.4**: `lib/voiciOwner.js` imported `checkVoiciPageIndex` twice
+    (from `b34cf9971`), a SyntaxError, so no module loaded and every browser stayed on "Setting up…". Fixed, and
+    `apps/web/tests/webappModulesParse.test.ts` now parses every shell file so vitest catches this class of break.
+  - Home ignored the first tap (an empty allowance card shifted the button inside its 450 ms guard). Fixed.
+  - Confirm boxes opened from inside a modal dialog sat behind it (Restore's Undo). They now open in the top dialog.
+  Test-only: onboarding uses the virtual PRF passkey on localhost (`gymKit.passkeyAuthenticator`); four specs updated
+  to the current shell. Whole webapp gym 375/375; vitest 3661; tsc, i18n, parity 0 red.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
@@ -853,7 +862,7 @@ State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branc
 - org directory with SCIM/LDAP connectors (all three apps);
 - restore, enterprise, retail, cloud fixes; terms and privacy wording for 0.4.
 
-Shell **v225**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
+Shell **v226**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
 running.
 
 Next steps for whoever resumes:
