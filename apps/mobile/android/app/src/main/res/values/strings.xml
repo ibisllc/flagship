@@ -2321,7 +2321,7 @@
     <string name="couldnt_rotate_the_admin_key_try">Couldn\'t rotate the admin key. Try again.</string>
     <string name="couldnt_update_the_recovery_backup_try">Couldn\'t update the recovery backup. Try again.</string>
     <string name="secure_your_account">Secure your account</string>
-    <string name="back_up_your_account_now_so">Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.</string>
+    <string name="back_up_your_account_now_so">Back up your account now so you can get back in if you lose this device. We cannot recover it for you.</string>
     <string name="back_up_with_your_passkey">Back up with your passkey</string>
     <string name="recover_with_your_google_passkey_or">Recover with your Google passkey or password manager.</string>
     <string name="passkeys_arent_available_on_this_device">Passkeys aren\'t available on this device — use a backup file.</string>

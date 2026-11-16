@@ -1,11 +1,11 @@
 // "Secure your account" — the SKIPPABLE backup nudge shown once, right
 // after a brand-new account is opened (create path only; the recovery /
-// "Connect to an existing account" path never sees this). It pre-selects the
-// cloud (passkey) option when the device can do it, falls back to a
-// file-only / skip state when it can't, and never blocks the user from
-// reaching the app.
+// "Connect to an existing account" path never sees this). Cloud (passkey)
+// backup and a backup file are two INDEPENDENT ticks, both off at first:
+// the person ticks either, both, or skips behind a warning. Cloud can't be
+// ticked when the device can't make a passkey; file + skip still work.
 //
-// This VM holds ONLY selection + skip-confirm state. The actual cloud
+// This VM holds ONLY the two ticks + skip-confirm state. The actual cloud
 // ceremony reuses PasskeyRecoveryManager + Recovery + BlockStoreUmkStore
 // (exactly as RecoveryScreen does) and the file option reuses the
 // existing KeyfileExportScreen — neither is rebuilt here.
@@ -31,19 +31,19 @@ class SecureAccountViewModel(
     val passkeyAvailable: Boolean,
 ) : ViewModel() {
 
-    // Cloud is PRE-SELECTED by default when it's available; when it
-    // isn't, nothing is pre-selected (the step still works via file or
-    // skip). The cloud option is rendered disabled in that case.
-    private val _selected = MutableStateFlow(
-        if (passkeyAvailable) SecureAccountOption.Cloud else null,
-    )
-    val selected: StateFlow<SecureAccountOption?> = _selected.asStateFlow()
+    // Both start unticked: Continue waits for a choice, Skip is the way out.
+    private val _cloudSelected = MutableStateFlow(false)
+    val cloudSelected: StateFlow<Boolean> = _cloudSelected.asStateFlow()
 
-    fun select(option: SecureAccountOption) {
-        // The cloud option can't be selected when passkeys are
-        // unavailable on this device.
-        if (option == SecureAccountOption.Cloud && !passkeyAvailable) return
-        _selected.value = option
+    private val _fileSelected = MutableStateFlow(false)
+    val fileSelected: StateFlow<Boolean> = _fileSelected.asStateFlow()
+
+    /** Tick or untick one option; cloud can't be ticked without passkeys. */
+    fun toggle(option: SecureAccountOption) {
+        when (option) {
+            SecureAccountOption.Cloud -> if (passkeyAvailable) _cloudSelected.value = !_cloudSelected.value
+            SecureAccountOption.File -> _fileSelected.value = !_fileSelected.value
+        }
     }
 
     // Drives the "Skip for now" confirmation dialog.
@@ -53,9 +53,9 @@ class SecureAccountViewModel(
     fun requestSkip() { _showSkipConfirm.value = true }
     fun cancelSkip() { _showSkipConfirm.value = false }
 
-    /** Continue is meaningful only with a selection. */
+    /** Continue runs every ticked backup, so it needs at least one. */
     val canContinue: Boolean
-        get() = _selected.value != null
+        get() = _cloudSelected.value || _fileSelected.value
 
     companion object {
         /** Copy — kept here so tests can assert it and the other
@@ -73,12 +73,12 @@ class SecureAccountViewModel(
         val FILE_LABEL get() = FSStrings.get(R.string.save_a_backup_file)
         val FILE_SUBLABEL get() = FSStrings.get(R.string.an_encrypted_flagshipkey_you_keep_yourself)
 
-        const val CONTINUE = "Continue"
+        val CONTINUE get() = FSStrings.get(R.string.continue_label)
         val SKIP get() = FSStrings.get(R.string.skip_for_now)
 
         val SKIP_WARNING get() =
             FSStrings.get(R.string.without_a_backup_losing_this_device)
         val SKIP_CONFIRM get() = FSStrings.get(R.string.skip_anyway)
-        const val SKIP_BACK = "Back"
+        val SKIP_BACK get() = FSStrings.get(R.string.back)
     }
 }

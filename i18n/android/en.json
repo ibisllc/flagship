@@ -9681,7 +9681,7 @@
     "ctx": "viewmodels/SecureAccountViewModel.kt:61 (prose)"
   },
   "back_up_your_account_now_so": {
-    "en": "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.",
+    "en": "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.",
     "ctx": "viewmodels/SecureAccountViewModel.kt:63 (prose)"
   },
   "back_up_with_your_passkey": {

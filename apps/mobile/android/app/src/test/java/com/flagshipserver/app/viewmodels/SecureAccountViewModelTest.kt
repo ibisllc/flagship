@@ -1,7 +1,7 @@
-// Pins the "Secure your account" backup-nudge selection logic:
-//   - cloud available   → cloud is PRE-SELECTED
-//   - cloud unavailable → nothing pre-selected; file + skip still work
-//                         and the cloud option can't be selected
+// Pins the "Secure your account" backup-nudge tick logic:
+//   - cloud and file start UNTICKED; Continue waits for a choice
+//   - the two tick independently (either, both, neither)
+//   - cloud unavailable → cloud can't be ticked; file + skip still work
 //   - skip              → raises the warning-confirm flag
 //
 // Pure-JVM — the VM holds no Android types, so no Robolectric needed.
@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,39 +19,43 @@ class SecureAccountViewModelTest {
 
     // ── cloud available ─────────────────────────────────────────────
 
-    @Test fun cloudAvailable_preSelectsCloud_andCanContinue() = runTest {
+    @Test fun bothStartUnticked_andContinueWaits() = runTest {
         val vm = SecureAccountViewModel(passkeyAvailable = true)
-        assertEquals(SecureAccountOption.Cloud, vm.selected.first())
-        assertTrue("a pre-selection means Continue is actionable", vm.canContinue)
+        assertFalse("cloud starts unticked", vm.cloudSelected.first())
+        assertFalse("file starts unticked", vm.fileSelected.first())
+        assertFalse("Continue waits for a choice; Skip is the way out", vm.canContinue)
     }
 
-    @Test fun cloudAvailable_canSwitchToFileAndBack() = runTest {
+    @Test fun optionsAreIndependent() = runTest {
         val vm = SecureAccountViewModel(passkeyAvailable = true)
-        vm.select(SecureAccountOption.File)
-        assertEquals(SecureAccountOption.File, vm.selected.first())
-        vm.select(SecureAccountOption.Cloud)
-        assertEquals(SecureAccountOption.Cloud, vm.selected.first())
+        vm.toggle(SecureAccountOption.Cloud)
+        assertTrue(vm.cloudSelected.first())
+        assertFalse("ticking cloud leaves the file alone", vm.fileSelected.first())
+        assertTrue(vm.canContinue)
+        vm.toggle(SecureAccountOption.File)
+        assertTrue("ticking the file keeps cloud ticked", vm.cloudSelected.first())
+        assertTrue(vm.fileSelected.first())
+        vm.toggle(SecureAccountOption.Cloud)
+        assertFalse(vm.cloudSelected.first())
+        assertTrue("unticking cloud keeps the file", vm.fileSelected.first())
+        assertTrue(vm.canContinue)
+        vm.toggle(SecureAccountOption.File)
+        assertFalse("with neither ticked Continue is inert again", vm.canContinue)
     }
 
     // ── cloud unavailable ───────────────────────────────────────────
 
-    @Test fun cloudUnavailable_preSelectsNothing() = runTest {
-        val vm = SecureAccountViewModel(passkeyAvailable = false)
-        assertNull("nothing is pre-selected when passkeys are unavailable", vm.selected.first())
-        assertFalse("no selection ⇒ Continue is inert", vm.canContinue)
-    }
-
-    @Test fun cloudUnavailable_cannotSelectCloud_butFileWorks() = runTest {
+    @Test fun cloudUnavailable_cannotTickCloud_butFileWorks() = runTest {
         val vm = SecureAccountViewModel(passkeyAvailable = false)
 
-        // Attempting to choose cloud is a no-op (the row is disabled).
-        vm.select(SecureAccountOption.Cloud)
-        assertNull(vm.selected.first())
+        // Ticking cloud is a no-op (the row is disabled).
+        vm.toggle(SecureAccountOption.Cloud)
+        assertFalse(vm.cloudSelected.first())
         assertFalse(vm.canContinue)
 
         // File remains a valid path → the step still works.
-        vm.select(SecureAccountOption.File)
-        assertEquals(SecureAccountOption.File, vm.selected.first())
+        vm.toggle(SecureAccountOption.File)
+        assertTrue(vm.fileSelected.first())
         assertTrue(vm.canContinue)
     }
 
@@ -62,7 +65,7 @@ class SecureAccountViewModelTest {
         val vm = SecureAccountViewModel(passkeyAvailable = false)
         assertFalse(vm.showSkipConfirm.first())
         vm.requestSkip()
-        assertTrue("skip must surface the warning dialog", vm.showSkipConfirm.first())
+        assertTrue("skip must surface the warning", vm.showSkipConfirm.first())
         vm.cancelSkip()
         assertFalse("Back dismisses the warning", vm.showSkipConfirm.first())
     }
@@ -79,7 +82,7 @@ class SecureAccountViewModelTest {
         assertEquals("Secure your account", SecureAccountViewModel.TITLE)
         assertEquals(
             "Back up your account now so you can get back in if you lose " +
-                "this device. No one — not even us — can recover it for you.",
+                "this device. We cannot recover it for you.",
             SecureAccountViewModel.BODY,
         )
         assertEquals(

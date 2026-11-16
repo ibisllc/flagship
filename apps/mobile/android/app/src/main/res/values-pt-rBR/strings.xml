@@ -2318,7 +2318,7 @@
     <string name="couldnt_rotate_the_admin_key_try">Não foi possível girar a chave de administrador. Tente de novo.</string>
     <string name="couldnt_update_the_recovery_backup_try">Não foi possível atualizar o backup de recuperação. Tente de novo.</string>
     <string name="secure_your_account">Proteja sua conta</string>
-    <string name="back_up_your_account_now_so">Faça backup da sua conta agora para poder voltar se perder este dispositivo. Ninguém — nem nós — pode recuperá-la por você.</string>
+    <string name="back_up_your_account_now_so">Faça backup da sua conta agora para poder voltar se perder este dispositivo. Não podemos recuperá-la por você.</string>
     <string name="back_up_with_your_passkey">Fazer backup com sua passkey</string>
     <string name="recover_with_your_google_passkey_or">Recupere com sua passkey do Google ou seu gerenciador de senhas.</string>
     <string name="passkeys_arent_available_on_this_device">Passkeys não estão disponíveis neste dispositivo — use um arquivo de backup.</string>
