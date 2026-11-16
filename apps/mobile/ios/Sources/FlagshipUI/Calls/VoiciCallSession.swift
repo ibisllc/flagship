@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import OSLog
 import Flagship
 import FlagshipAPI
 import FlagshipCore
@@ -23,9 +24,13 @@ struct VoiciCallKeys: @unchecked Sendable {
     let blocked: Set<String>
     let revoked: Set<String>
     let nicknames: [String: String]
-    /// The page's call mode ("anyone" takes anonymous calls, docs/voici-calls.md "Who may call a page").
+    /// The page's call mode ("anyone" takes anonymous calls, docs/voici-calls.md "Who may call a page"), from this
+    /// device's copy of the index (none while locked).
     var callsFrom: String = "accepted"
     var callKey: VoiciCallKey? = nil
+    /// Reads the page's live call mode from its signed index on `.com`, for an anonymous call the copy above refuses
+    /// (the mode was changed on another device, or the device is locked and keeps no copy).
+    var liveMode: (@Sendable () async -> VoiciCallModes.CallMode?)? = nil
 
     /// What a locked device has: its call key and the public facts kept with it.
     static func locked(_ k: VoiciCallKey, caKeys: [String], origin: String) -> VoiciCallKeys {
@@ -111,13 +116,13 @@ final class VoiciCallSession {
     func connect() {
         let path = "/api/voici/calls/\(push.callId)/device"
         guard let url = URL(string: "wss://\(push.room)\(path)?u=\(keys.username)"), let headers = keys.roomHeaders(callId: push.callId, path: path) else {
-            return end("failed")
+            return end("failed", why: "no-room-auth")
         }
         var req = URLRequest(url: url, timeoutInterval: 20)
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         media.onLocalIce = { [weak self] c in Task { @MainActor in self?.send(["t": "ice", "candidate": c.map { .string($0) } ?? .null]) } }
         media.onConnected = { [weak self] in Task { @MainActor in self?.onEvent(.connected) } }
-        media.onFailed = { [weak self] in Task { @MainActor in self?.end("failed") } }
+        media.onFailed = { [weak self] in Task { @MainActor in self?.end("failed", why: "media-failed") } }
         let t = VoiciCallNetwork.session.webSocketTask(with: req)
         task = t
         t.resume()
@@ -135,7 +140,7 @@ final class VoiciCallSession {
                 case .success:
                     self.receive()
                 case .failure:
-                    self.end("failed")
+                    self.end("failed", why: "room-socket-closed")
                 }
             }
         }
@@ -151,27 +156,37 @@ final class VoiciCallSession {
         switch t {
         case "request": onRequest(m["request"])
         case "won": onWon(m["receipt"])
-        case "answered-elsewhere": end("answered-elsewhere")
+        case "answered-elsewhere": end("answered-elsewhere", why: "room")
         case "ice": media.addRemoteIce(m["candidate"]?.string)
         case "camera": if let s = m["state"]?.string, VoiciCalls.cameraStates.contains(s) { onEvent(.remoteCamera(s)) }
-        case "ended": end(m["reason"]?.string ?? "hangup")
-        case "error": end("failed")
+        case "ended": end(m["reason"]?.string ?? "hangup", why: "room-ended")
+        case "error": end("failed", why: "room-error")
         default: break
         }
     }
 
     private func onRequest(_ raw: JSONValue?) {
-        guard let raw else { return end("failed") }
+        guard let raw else { return end("failed", why: "request-missing") }
         if raw["kind"]?.string == VoiciCallModes.anonKind {
-            // A browser with no account calling a page open to anyone (`.com` checked its proof of work).
-            guard case .ok(let r) = VoiciCallModes.checkRequestAnon(raw, pageId: keys.pageId, acceptsCalls: keys.acceptsCalls, callsFrom: keys.callsFrom,
-                                                                     now: Self.now(), blocked: keys.blocked), r.callId == push.callId else { return end("failed") }
-            request = r
-            return onEvent(.request(r))
+            // A browser with no account calling a page open to anyone (`.com` checked its proof of work). This device's
+            // copy of the call mode may be older than the page `.com` rang for: then the live signed index decides.
+            let keys = keys, live = keys.liveMode
+            Task { @MainActor [weak self] in
+                let v = await VoiciCallModes.checkRequestAnon(raw, pageId: keys.pageId, mode: (keys.acceptsCalls, keys.callsFrom), now: Self.now(),
+                                                              blocked: keys.blocked, live: { await live?() })
+                guard let self, !self.over else { return }
+                guard case .ok(let r) = v else { return self.end("failed", why: "anon-request-\(v.code)") }
+                guard r.callId == self.push.callId else { return self.end("failed", why: "anon-request-wrong-call") }
+                self.request = r
+                self.onEvent(.request(r))
+            }
+            return
         }
         let ctx = VoiciCallRequestCheckContext(pageId: keys.pageId, acceptsCalls: keys.acceptsCalls, origin: keys.origin, caKeys: keys.caKeys,
                                                now: Self.now(), blocked: keys.blocked, revoked: keys.revoked)
-        guard case .ok(let r) = VoiciCalls.checkRequest(raw, ctx), r.callId == push.callId else { return end("failed") }
+        let v = VoiciCalls.checkRequest(raw, ctx)
+        guard case .ok(let r) = v else { return end("failed", why: "request-\(v.code)") }
+        guard r.callId == push.callId else { return end("failed", why: "request-wrong-call") }
         request = r
         onEvent(.request(r))
     }
@@ -210,7 +225,7 @@ final class VoiciCallSession {
     private func onWon(_ receipt: JSONValue?) {
         guard var p = pending, let deviceRef = keys.deviceRef,
               case .ok = VoiciCalls.checkReceipt(receipt, caKeys: keys.caKeys, now: Self.now(), account: keys.username, deviceRef: deviceRef)
-        else { return end("failed") }
+        else { return end("failed", why: "receipt") }
         let audio = VoiciCalls.frameKeys(sharedSecret: p.ss, requestBytes: p.req, answerBytes: p.ans)
         let video = request?.hasVideo == true ? VoiciCalls.videoFrameKeys(sharedSecret: p.ss, requestBytes: p.req, answerBytes: p.ans) : nil
         wipe(&p.ss)
@@ -222,7 +237,7 @@ final class VoiciCallSession {
     /// Decline while ringing: the room ends the call for every device and records a missed call.
     func decline() {
         send(["t": "decline"])
-        end("decline")
+        end("decline", why: "declined-here")
     }
 
     /// Hang up an answered call: the end order is signed by the owner messages key.
@@ -230,19 +245,21 @@ final class VoiciCallSession {
         if let order = keys.signEnd(callId: push.callId, reason: "hangup", issuedAt: Self.now()) {
             send(["t": "end", "end": order])
         }
-        end("hangup")
+        end("hangup", why: "hung-up-here")
     }
 
     /// Leaves the room without ending the call for the other devices (this device couldn't answer).
-    func leave() { end("left") }
+    func leave() { end("left", why: "left-here") }
 
     func sendCamera(_ state: String) {
         if VoiciCalls.cameraStates.contains(state) { send(["t": "camera", "state": .string(state)]) }
     }
 
-    private func end(_ reason: String) {
+    /// `why` names the cause for the device log (a code, never a key or a name), so a device test shows why a call ended.
+    private func end(_ reason: String, why: String) {
         guard !over else { return }
         over = true
+        voiciCallLog.notice("call session ended: \(reason, privacy: .public) (\(why, privacy: .public))")
         CallTurnGate.shared.disarm()
         if var p = pending { wipe(&p.ss) }
         pending = nil
@@ -251,6 +268,8 @@ final class VoiciCallSession {
         onEvent(.ended(reason))
     }
 }
+
+let voiciCallLog = Logger(subsystem: "com.flagshipserver.app", category: "calls")
 
 private func wipe(_ b: inout [UInt8]) {
     for i in b.indices { b[i] = 0 }

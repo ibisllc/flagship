@@ -53,6 +53,12 @@ class VoiciCallKeys(
     val callKey: VoiciCallKey? = null,
     /** The page's "who can call" (an "anyone" page also takes anonymous requests); locked, `.com`'s check stands. */
     val callsFrom: String = com.flagshipserver.app.core.voici.VoiciCallModes.FROM_ANYONE,
+    /**
+     * Reads the page's live call mode (acceptsCalls, callsFrom) from its signed index on `.com`, for an anonymous call
+     * this device's copy refuses: the copy is refreshed only while the Social screen is open, so another device's change
+     * of "Who can call" may not be here yet.
+     */
+    val liveMode: (suspend () -> Pair<Boolean, String>?)? = null,
 ) {
     val deviceRef: String get() = callKey?.deviceRef ?: VoiciCalls.deviceRef(device!!.pubHex)
 
@@ -124,16 +130,16 @@ class VoiciCallSession(
                 .header("x-flagship-issued-at", at.toString())
                 .header("x-flagship-signature", HexUtil.encode(sig))
         } else {
-            return end("failed")
+            return end("failed", "no-room-auth")
         }
         val req = b.build()
         media.onLocalIce = { c -> send(JsonObject(mapOf("t" to JsonPrimitive("ice"), "candidate" to (c?.let { JsonPrimitive(it) } ?: JsonNull)))) }
         media.onConnected = { listener.onConnected() }
-        media.onFailed = { end("failed") }
+        media.onFailed = { end("failed", "media-failed") }
         ws = http.newWebSocket(req, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) = onRoom(text)
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = end("failed")
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end("failed")
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = end("failed", "room-socket-failed")
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end("failed", "room-socket-closed")
         })
     }
 
@@ -146,11 +152,11 @@ class VoiciCallSession(
         when ((m["t"] as? JsonPrimitive)?.contentOrNull) {
             "request" -> onRequest(m["request"])
             "won" -> onWon(m["receipt"])
-            "answered-elsewhere" -> end("answered-elsewhere")
+            "answered-elsewhere" -> end("answered-elsewhere", "room")
             "ice" -> media.addRemoteIce((m["candidate"] as? JsonPrimitive)?.takeIf { it.isString }?.content)
             "camera" -> (m["state"] as? JsonPrimitive)?.contentOrNull?.takeIf { it in VoiciCalls.CAMERA_STATES }?.let(listener::onRemoteCamera)
-            "ended" -> end((m["reason"] as? JsonPrimitive)?.contentOrNull ?: "hangup")
-            "error" -> end("failed")
+            "ended" -> end((m["reason"] as? JsonPrimitive)?.contentOrNull ?: "hangup", "room-ended")
+            "error" -> end("failed", "room-error")
         }
     }
 
@@ -159,13 +165,28 @@ class VoiciCallSession(
             pageId = keys.pageId, acceptsCalls = keys.acceptsCalls, origin = keys.origin, caKeys = keys.caKeys, now = now(),
             blocked = keys.blocked, revoked = keys.revoked,
         )
-        when (val r = VoiciCalls.checkAnyRequest(raw, ctx, keys.callsFrom)) {
+        val live = keys.liveMode
+        if (live != null && com.flagshipserver.app.core.voici.VoiciCallModes.isAnon(raw)) {
+            // This device's copy of the call mode may be older than the page `.com` rang for: the live index decides.
+            scope.launch {
+                val r = com.flagshipserver.app.core.voici.VoiciCallModes.checkAnonLive(raw, ctx.pageId, ctx.acceptsCalls, keys.callsFrom, ctx.now, ctx.blocked) {
+                    runCatching { live() }.getOrNull()
+                }
+                if (!over) took(r, "anon-request")
+            }
+            return
+        }
+        took(VoiciCalls.checkAnyRequest(raw, ctx, keys.callsFrom), "request")
+    }
+
+    private fun took(r: VoiciOutcome<VoiciCallRequest>, what: String) {
+        when (r) {
             is VoiciOutcome.Ok -> {
-                if (r.value.callId != push.callId) return end("failed")
+                if (r.value.callId != push.callId) return end("failed", "$what-wrong-call")
                 request = r.value
                 listener.onRequest(r.value)
             }
-            is VoiciOutcome.Refused -> end("failed")
+            is VoiciOutcome.Refused -> end("failed", "$what-${r.reason}")
         }
     }
 
@@ -207,8 +228,8 @@ class VoiciCallSession(
     }
 
     private fun onWon(receipt: JsonElement?) {
-        val p = pending ?: return end("failed")
-        if (VoiciCalls.checkReceipt(receipt, keys.caKeys, now(), keys.username, keys.deviceRef) !is VoiciOutcome.Ok) return end("failed")
+        val p = pending ?: return end("failed", "won-without-answer")
+        if (VoiciCalls.checkReceipt(receipt, keys.caKeys, now(), keys.username, keys.deviceRef) !is VoiciOutcome.Ok) return end("failed", "receipt")
         val (ss, reqBytes, ansBytes) = p
         val audio = VoiciCalls.frameKeys(ss, reqBytes, ansBytes)
         val video = if (request?.hasVideo == true) VoiciCalls.videoFrameKeys(ss, reqBytes, ansBytes) else null
@@ -221,27 +242,29 @@ class VoiciCallSession(
     /** "Decline" while ringing: the room ends the call for every device and records a missed call. */
     fun decline() {
         send(JsonObject(mapOf("t" to JsonPrimitive("decline"))))
-        end("decline")
+        end("decline", "declined-here")
     }
 
     /** Hang up an answered call: the end order is signed by the owner messages key, or the call key that answered. */
     fun hangUp() {
         scope.launch {
             keys.signEnd(push.callId, "hangup", now())?.let { order -> send(JsonObject(mapOf("t" to JsonPrimitive("end"), "end" to order))) }
-            end("hangup")
+            end("hangup", "hung-up-here")
         }
     }
 
     /** Leaves the room without ending the call for the other devices (this device couldn't answer). */
-    fun leave() = end("left")
+    fun leave() = end("left", "left-here")
 
     fun sendCamera(state: String) {
         if (state in VoiciCalls.CAMERA_STATES) send(JsonObject(mapOf("t" to JsonPrimitive("camera"), "state" to JsonPrimitive(state))))
     }
 
-    @Synchronized private fun end(reason: String) {
+    /** [why] names the cause for the device log (a code, never a key or a name), so a device test shows why a call ended. */
+    @Synchronized private fun end(reason: String, why: String) {
         if (over) return
         over = true
+        runCatching { android.util.Log.i("FlagshipCalls", "call session ended: $reason ($why)") }
         com.flagshipserver.app.phoneroute.CallTurnGate.disarm()
         pending?.first?.fill(0)
         pending = null

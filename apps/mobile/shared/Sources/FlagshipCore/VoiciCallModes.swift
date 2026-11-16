@@ -114,4 +114,27 @@ public enum VoiciCallModes {
         return .ok(VoiciCallRequest(pageId: f.pageId, conv: f.conv, callId: f.callId, from: "", callerXwingPub: f.xpub, offerSdp: f.sdp, issuedAt: f.at,
                                     delegatePub: f.browserPub, json: v, media: f.media ?? VoiciCalls.mediaAudio))
     }
+
+    /// The page's call settings as the answering phone knows them: on/off and who may call.
+    public typealias CallMode = (acceptsCalls: Bool, callsFrom: String)
+
+    /// `checkRequestAnon` against the phone's own copy of the page's call mode, then, only when that copy refuses the
+    /// mode itself (`calls-off`, `not-allowed`), once more against the live mode `live` reads from the page's signed
+    /// index. The copy can be older than the page `.com` rang for: the mode was changed on another device, or the
+    /// device is locked and keeps no copy. Every other refusal stands without a fetch.
+    public static func checkRequestAnon(_ v: JSONValue, pageId: String, mode: CallMode, now: Int64, blocked: Set<String> = [],
+                                        live: () async -> CallMode?) async -> VoiciVerdict<VoiciCallRequest, VoiciCallRequestAnonRefusal> {
+        let first = checkRequestAnon(v, pageId: pageId, acceptsCalls: mode.acceptsCalls, callsFrom: mode.callsFrom, now: now, blocked: blocked)
+        guard case .refused(let why) = first, why == .callsOff || why == .notAllowed, let m = await live() else { return first }
+        return checkRequestAnon(v, pageId: pageId, acceptsCalls: m.acceptsCalls, callsFrom: m.callsFrom, now: now, blocked: blocked)
+    }
+
+    /// The page's live call mode from its current signed index on `.com`, checked under the account's sensitive key,
+    /// for this page and never older than `highestSeenSeq`. Nil when it can't be read or doesn't check.
+    public static func liveCallMode(client: any VoiciComClient, username: String, pageId: String, highestSeenSeq: Int64? = nil) async -> (mode: CallMode, index: VoiciPageIndex)? {
+        guard let keys = try? await client.accountKeys(username: username), let raw = try? await client.page(username: username),
+              case .ok(let idx) = VoiciPage.checkVoiciPageIndex(raw, username: username, sensitiveKind: keys.sensitive.kind, sensitivePub: keys.sensitive.pub,
+                                                                highestSeenSeq: highestSeenSeq, pageId: pageId) else { return nil }
+        return ((idx.takesCalls, idx.callsFrom ?? "accepted"), idx)
+    }
 }
