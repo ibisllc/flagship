@@ -693,3 +693,25 @@ Built and tested in TS, `.com`, flagship-web, voi.ci and the webapp; the native 
    apps show only reply notices for them. The switch needs a visitor-side conversation screen in the apps (or the
    app signs the reveal and hands it to the tab). The message plaintext `{v:1, control}` form is a change in four ports.
 4. Hours for anonymous calls (needs an index field) and an owner route to block an anonymous caller.
+
+### As built: the release-manager decisions (2026-11-16, `0.4/calls-callback`)
+
+- **Call hours** in the v2 index, optional `callHours` = `"<days> <HHMM>-<HHMM> <time zone>"` (seven 0/1 from Monday,
+  IANA zone or `UTC`; an end before the start runs past midnight), appended to the signed bytes only when present.
+  `.com` refuses every call outside them with `closed`, anonymous or signed in. TS and the webapp (flagship-web's
+  copy) replay vectors `voici-call-modes` section `callHours`; Swift and Kotlin are the forks'.
+- **Blocking a conversation:** signed-in callers keep the pseudonym block (calls and messages). An anonymous caller's
+  conversation, the browser key its proof of work was made for, is blocked by `flagship/voici-anon-block/v1`
+  (`POST /api/voici/pages/<u>/anon-block`, owner key) until unblocked. Deleting a conversation drops its block or
+  accept too, so a caller who writes again is a new request; the owner can delete an anonymous conversation (16-byte
+  conv). The owner's inbox lists `anonBlocks`.
+- **`ringBack: true|false`** on every owner inbox item.
+- **The control body** `{v:1, control:<reveal|unreveal>}`: TS `openVoiciBodyAny`, the webapp's port; old readers refuse
+  it as `inner-schema`. Vectors `voici-conversation` section `control`.
+- **Webapp:** the reveal pill "Display Name (username)" on the row and in the thread (checked against the page key
+  `.com` serves; anything failing shows nothing), the info icon beside the display name with "This is a name the
+  person chose. Flagship doesn't check names, so anyone can use any name.", Call back in the thread menu when the
+  caller allowed it (`flagship/voici-ring/v1` with the hint sealed to the caller's thread key), delete sends the
+  signed delete with "Messages already on <name>'s device stay there.", Block / Unblock on anonymous missed calls in
+  Calls, and the `voici-ring` push. The webapp has no caller-side conversation screen, so no reveal switch (the apps
+  have it).
