@@ -16,7 +16,9 @@
 #               pointed at the gym D1, then `wrangler deploy --config wrangler.gym.toml`),
 #               then the gym Fly app, scaled to one machine. It NEVER runs `npm run
 #               deploy` and never touches flagship-webapp (the production static Worker
-#               that owns webapp./remote.flagshipserver.com).
+#               that owns webapp./remote.flagshipserver.com). Then every gym relay machine is
+#               started (scripts/gym-relays.sh on: flagship-services-gym and -gym-b); they stay
+#               stopped, with autostart off, between runs (`gym-relays.sh off` after a run).
 #   5b. test CA when wrangler.gym.toml names the gym's Pebble (docs/gym-test-acme.md), restart it: a fresh root
 #               and empty state for the run (GYM_ACME_RESTART=0 keeps it running).
 #   6. health   gym.flagshipserver.com and flagship-services-gym answer 200.
