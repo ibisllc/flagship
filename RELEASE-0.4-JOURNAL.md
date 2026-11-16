@@ -750,6 +750,14 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   (`apps/com/src/upcloud.ts`, `tools/live-e2e/lib/upcloudVm.ts`, `isoBox.ts`) and `.com`'s zone-health / DNS sweep /
   route-gc need `SERVICES_PASSTHROUGH_IPV4`, so 137.66.62.214 stays ($2/mo). Saving now ~$6-7/mo. A hand-run
   `shared-run.ts` needs `gym-relays.sh on` first.
+- 2026-11-16: **Calls round 3 merged** (shell v221, D1 **0150** `voici_call_settings`). Call hours (owner option c):
+  out of the page index (a v2 index carrying `callHours` is `malformed`), an owner-device setting sealed under a
+  UMK-derived key (`flagship/voici-call-settings/v1`, `GET/PUT /api/accounts/<u>/voici-call-settings`, ciphertext
+  only on `.com`, newer `updatedAt` wins), enforced by the ringing phone from its own copy (no ring, missed call; the
+  caller sees "No answer"). iOS and Android place in-app calls and answer ring-backs through the real WebRTC engine
+  (browser handoff only as a fallback); iOS asks "Let voi.ci/<name> call you back?" before a call. Checks: tsc, i18n,
+  parity 0 red, vitest 6262; Android call/voici/push tests; shared Swift 22 + iOS 28; iOS app builds against the
+  release's WebRTC. Not run: gym UI tests, any device, a real browser-to-phone or phone-to-phone call.
 
 ## Resume point
 
