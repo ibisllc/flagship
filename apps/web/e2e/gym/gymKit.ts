@@ -226,7 +226,7 @@ export class Mock {
 
   async install(): Promise<this> {
     await this.page.route(
-      (url) => url.pathname.startsWith("/api/") || url.hostname !== "127.0.0.1",
+      (url) => url.pathname.startsWith("/api/") || (url.hostname !== "127.0.0.1" && url.hostname !== "localhost"),
       (route) => this.handle(route),
     );
     return this;
