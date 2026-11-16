@@ -54,6 +54,10 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
   // leftovers under the new name are cleared, so their devices are never rung for this account.
   ["voici_voip_tokens", "username"],
   ["voici_live_calls", "username"],
+  // The owner's call hours (one ciphertext under a key from the account's UMK, not the name) and a caller account's
+  // ring-back channel (whose phones a call-back rings) belong to the account.
+  ["voici_call_settings", "username"],
+  ["voici_ring_backs", "username"],
   ["vouchers", "redeemed_by"],
   ["watch_delegates", "username"],
   ["webauthn_recovery_records", "username"],
@@ -61,6 +65,8 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
 
 /** Username-like columns a rename leaves alone, and why. */
 export const NOT_RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, column: string, reason: string]> = [
+  ["voici_call_keys", "username", "each binding is signed over the old name, so a rewritten row would not verify; the device binds its call key again under the new name"],
+  ["voici_call_key_revocations", "username", "a revocation record, keyed by the call key; the name is the signer's at the time"],
   ["usernames", "username", "the row itself — moved by insert-then-delete, not an UPDATE"],
   ["usernames_aliases", "old_username", "history of the removed #93 rename route"],
   ["usernames_aliases", "new_username", "history of the removed #93 rename route"],
