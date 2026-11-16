@@ -818,6 +818,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-16: Owner: **a page made public defaults to calls from signed-in (non-anonymous) people on, and messages
   on.** Queued.
 
+- 2026-11-16: The old APNs key `FHZWTBFQCM` kept answering `TopicDisallowed` for the gym app even after the owner
+  added the topic. The owner made a new team-wide Sandbox & Production key **`Z274PT8G76`**; a test VoIP push to the
+  phone returned 200. The gym Worker now uses it (`APNS_KEY_ID`, `APNS_PRIVATE_KEY_PEM`). Production still uses
+  `FHZWTBFQCM` (it only serves `com.flagshipserver.app`); consider moving production to the new key at release.
+- 2026-11-16: voi.ci page: a device with no microphone (e.g. a Mac mini) now says "No microphone found on this
+  device. Connect one, or call from your phone." instead of asking to allow it (`382951b13`, 6 languages).
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
