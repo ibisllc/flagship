@@ -1,6 +1,7 @@
 #if os(iOS) && canImport(WebRTC) && canImport(FlagshipTurn)
 import AVFoundation
 import Flagship
+import FlagshipCore
 import Foundation
 import WebRTC
 
@@ -37,6 +38,12 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     private var gatheringDone = false
     private var stopped = false
     private var connectedOnce = false
+    /// This engine places the call (calling from the app): relay only, through the callee's TURN, candidates trickle.
+    private var caller = false
+    /// The offer this engine made, applied (munged, exactly as signed) once the answer brings the TURN credential.
+    private var offerSdp: String?
+    /// No CallKit call owns the audio session (an in-app call): this engine activated it and gives it back on stop.
+    private var ownsAudio = false
 
     /// The caller's camera, for a renderer (RTCMTLVideoView), once the offer made a video transceiver.
     public private(set) var remoteVideo: RTCVideoTrack?
@@ -64,17 +71,20 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
 
     private static let noConstraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
 
-    private func build() -> RTCPeerConnection? {
+    private func build(caller: Bool = false) -> RTCPeerConnection? {
         lock.withLock {
             guard !stopped else { return nil }
+            self.caller = caller
             let options = RTCPeerConnectionFactoryOptions()
-            // Loopback only: the caller arrives through this phone's TURN responder, never over Wi-Fi or cellular, so
-            // every other adapter is ignored and loopback (ignored by default) is not.
-            options.ignoreLoopbackNetworkAdapter = false
-            options.ignoreWiFiNetworkAdapter = true
-            options.ignoreCellularNetworkAdapter = true
-            options.ignoreEthernetNetworkAdapter = true
-            options.ignoreVPNNetworkAdapter = true
+            if !caller {
+                // Loopback only: the caller arrives through this phone's TURN responder, never over Wi-Fi or cellular, so
+                // every other adapter is ignored and loopback (ignored by default) is not.
+                options.ignoreLoopbackNetworkAdapter = false
+                options.ignoreWiFiNetworkAdapter = true
+                options.ignoreCellularNetworkAdapter = true
+                options.ignoreEthernetNetworkAdapter = true
+                options.ignoreVPNNetworkAdapter = true
+            }
             let f = RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(),
                                              decoderFactory: RTCDefaultVideoDecoderFactory())
             f.setOptions(options)
@@ -85,6 +95,9 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
             config.rtcpMuxPolicy = .require
             config.tcpCandidatePolicy = .disabled
             config.continualGatheringPolicy = .gatherOnce
+            // Placing a call: the callee's phone is the only ICE server (set with its one-time credential once the
+            // answer arrives), relay candidates only, as a voi.ci browser does (docs/voici-calls.md §0.1).
+            if caller { config.iceTransportPolicy = .relay }
             guard let pc = f.peerConnection(with: config, constraints: Self.noConstraints, delegate: self) else { return nil }
             factory = f
             self.pc = pc
@@ -149,6 +162,68 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     }
 
     public func start(_ crypto: CallFrameCrypto) { lock.withLock { keys = crypto } }
+
+    // MARK: placing a call (calling from the app)
+
+    /// The caller's offer: audio (and a video section when the call may carry video), the frame layer on every sender
+    /// and receiver. Nothing is gathered yet: the local description is applied with the callee's TURN server.
+    public func offer(video: Bool) async throws -> String {
+        guard let pc = build(caller: true) else { throw CallMediaUnavailable() }
+        try lock.withLock {
+            guard let frames, let audioTrack else { throw CallMediaUnavailable() }
+            let ai = RTCRtpTransceiverInit()
+            ai.direction = .sendRecv
+            guard let at = pc.addTransceiver(with: audioTrack, init: ai) else { throw CallMediaUnavailable() }
+            frames.attach(sender: at.sender)
+            frames.attach(receiver: at.receiver)
+            if video {
+                let vi = RTCRtpTransceiverInit()
+                vi.direction = .sendRecv
+                guard let vt = pc.addTransceiver(of: .video, init: vi) else { throw CallMediaUnavailable() }
+                videoTransceiver = vt
+                remoteVideo = vt.receiver.track as? RTCVideoTrack
+                frames.attach(sender: vt.sender)
+                frames.attach(receiver: vt.receiver)
+            }
+        }
+        let offer = try await pc.offer(for: Self.noConstraints)
+        lock.withLock { offerSdp = offer.sdp }
+        return offer.sdp
+    }
+
+    /// The callee's checked answer: the TURN server goes in first, then the signed offer (munged, byte for byte what
+    /// the request hashed) and the answer, whose DTLS fingerprint WebRTC then holds the connection to.
+    public func applyAnswer(sdp: String, iceServer: CallerIceServer) async throws {
+        guard let pc = lock.withLock({ self.pc }), let raw = lock.withLock({ offerSdp }) else { throw CallMediaUnavailable() }
+        let config = pc.configuration
+        config.iceServers = [RTCIceServer(urlStrings: [iceServer.url], username: iceServer.username, credential: iceServer.credential)]
+        config.iceTransportPolicy = .relay
+        guard pc.setConfiguration(config) else { throw CallMediaUnavailable() }
+        activateAudioIfNeeded()
+        try await pc.setLocalDescription(RTCSessionDescription(type: .offer, sdp: VoiciCalls.mungeSdp(raw)))
+        try await pc.setRemoteDescription(RTCSessionDescription(type: .answer, sdp: sdp))
+        let queued: [String] = lock.withLock { defer { pendingIce = [] }; return pendingIce }
+        for c in queued { try? await pc.add(RTCIceCandidate(sdp: c, sdpMLineIndex: 0, sdpMid: "0")) }
+    }
+
+    /// Keys for the caller's direction (`CallFrameCrypto.caller`: sends c2p, opens p2c).
+    public func startCaller(_ crypto: CallFrameCrypto) { lock.withLock { keys = crypto } }
+
+    /// An in-app call has no CallKit call to hand WebRTC the audio session: take it here (voice chat, the speaker
+    /// route the system picks), and give it back on stop. A call CallKit answered (a ring-back) already has it.
+    private func activateAudioIfNeeded() {
+        let rtc = RTCAudioSession.sharedInstance()
+        guard !rtc.isAudioEnabled else { return }
+        let s = AVAudioSession.sharedInstance()
+        do {
+            try s.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .allowBluetoothA2DP])
+            try s.setActive(true)
+        } catch {
+            return
+        }
+        CallMediaFactory.audioSessionDidActivate(s)
+        lock.withLock { ownsAudio = true }
+    }
 
     public func addRemoteIce(_ candidate: String?) {
         guard let candidate else { return }
@@ -229,6 +304,11 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         }
         pc?.close()
         finishGathering()
+        if lock.withLock({ defer { ownsAudio = false }; return ownsAudio }) {
+            let session = AVAudioSession.sharedInstance()
+            CallMediaFactory.audioSessionDidDeactivate(session)
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }
 
@@ -270,7 +350,11 @@ extension WebRTCCallMediaEngine: RTCPeerConnectionDelegate {
     public func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
     public func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {}
-    public func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {}
+    public func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
+        // The callee bakes its one loopback candidate into the signed answer; the caller trickles its relay candidates.
+        guard lock.withLock({ caller }) else { return }
+        onLocalIce?(candidate.sdp)
+    }
     public func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     public func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
 }
