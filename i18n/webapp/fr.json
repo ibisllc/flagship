@@ -3770,5 +3770,18 @@
   "Messages already on {0}'s device stay there.": "Les messages déjà sur l'appareil de {0} y restent.",
   "{0} ({1})": "{0} ({1})",
   "Call back": "Rappeler",
-  "Ringing them. When they answer, your phone rings.": "Leur téléphone sonne. Quand ils répondent, c'est le vôtre qui sonne."
+  "Ringing them. When they answer, your phone rings.": "Leur téléphone sonne. Quand ils répondent, c'est le vôtre qui sonne.",
+  "People whose conversation you accepted": "Les personnes dont vous avez accepté la conversation",
+  "Anyone signed in with Flagship": "Toute personne connectée avec Flagship",
+  "Anyone on the internet": "Tout le monde sur internet",
+  "Only people you can call back": "Seulement les personnes que vous pouvez rappeler",
+  "Accept calls": "Accepter les appels",
+  "Who can call": "Qui peut appeler",
+  "Only at certain hours": "Seulement à certaines heures",
+  "Days": "Jours",
+  "From": "De",
+  "To": "À",
+  "Time zone": "Fuseau horaire",
+  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": "Les appels ne sonnent que pendant ces heures. Votre page les montre à tout le monde, avec le fuseau horaire.",
+  "These hours don't work. Pick at least one day and different start and end times.": "Ces heures ne conviennent pas. Choisissez au moins un jour et des heures de début et de fin différentes."
 }

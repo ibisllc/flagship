@@ -238,7 +238,19 @@ const json = (v) => canonicalJsonBytes(v);
  * images: Map sha256 → bytes for any image not already on the page. Returns {index, uploads: [{role, sha256,
  * size, bytes, contentType}]} with only the pieces `published` doesn't list.
  */
-export async function buildVoiciIndex({ username, published, merged, images, signer, umk, now, rotate = false }) {
+/** The calls fields a publish signs: an explicit change (`calls`), else those of the index it replaces. */
+export function carriedCalls(published, calls) {
+  if (calls) {
+    if (!calls.acceptsCalls) return {};
+    return { acceptsCalls: 1, callsFrom: calls.callsFrom, ...(calls.callHours ? { callHours: calls.callHours } : {}) };
+  }
+  const idx = published?.index;
+  if (idx?.acceptsCalls !== 1) return {};
+  const from = ["accepted", "signed-in", "anyone", "callback"].includes(idx.callsFrom) ? idx.callsFrom : "accepted";
+  return { acceptsCalls: 1, callsFrom: from, ...(typeof idx.callHours === "string" ? { callHours: idx.callHours } : {}) };
+}
+
+export async function buildVoiciIndex({ username, published, merged, images, signer, umk, now, rotate = false, calls }) {
   const pageId = published?.index.pageId ?? randHex(16);
   const prevEpoch = published?.index.inboxEpoch ?? 1;
   const inboxEpoch = rotate && published ? prevEpoch + 1 : prevEpoch;
@@ -277,7 +289,7 @@ export async function buildVoiciIndex({ username, published, merged, images, sig
     acceptsMessages: merged.acceptsMessages ? 1 : 0,
     // Every publish carries the calls setting of the index it replaces (docs/voici-calls.md §6: v2 only while calls
     // are on), so an edit from this device never turns calls off.
-    ...(published?.index.acceptsCalls === 1 ? { acceptsCalls: 1, callsFrom: published.index.callsFrom === "signed-in" ? "signed-in" : "accepted" } : {}),
+    ...carriedCalls(published, calls),
     inboxEpoch,
     inboxPub: hex(keys.inbox.publicKey),
     ownerSignPub: hex(keys.sign.publicKey),
@@ -319,7 +331,7 @@ async function uploadPiece(username, pageId, piece, signer, c) {
  * Publishes `ops` (draft ops: this device's and other devices') on top of the current page. On a seq conflict it
  * reads the newer page, merges again and retries, at most 3 times (§5.3). Returns the new published model.
  */
-export async function publishVoiciPage({ ops = [], images = new Map(), rotate = false }, deps = {}) {
+export async function publishVoiciPage({ ops = [], images = new Map(), rotate = false, calls }, deps = {}) {
   const c = ctx(deps);
   const username = usernameOf(c);
   const umk = umkOf(c);
@@ -333,7 +345,7 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
     const base = published ?? { profile: defaultVoiciProfile(username), acceptsMessages: 0, chunks: [], issuedAt: 0 };
     const merged = mergeVoiciPage(base, ops);
     const allImages = new Map([...(published?.pieces ?? new Map()), ...images]);
-    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate });
+    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls });
     for (const u of uploads) await uploadPiece(username, index.pageId, u, signer, c);
     const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(username)}/publish`, {
       method: "POST",

@@ -48,7 +48,9 @@ import { avatarUrl, displayUrl } from "./page-header.js";
 import { copyIcon, moreHorizontalIcon, pencilIcon, plusIcon, sendIcon, userIcon, xIcon } from "../lib/icons.js";
 import { VOICI_ACCEPT_NOTE, VOICI_NOT_PUBLISHED, VOICI_RULES_TEXT, VOICI_RULES_TITLE, VOICI_WAITING_ADMIN, voiciErrorText, voiciTextProblem } from "../lib/voiciCopy.js";
 
-import { tr, trn } from "../lib/i18n.js";
+import { dateLocale, tr, trn } from "../lib/i18n.js";
+import { isVoiciCallHours } from "../lib/voiciProtocol.js";
+import { browserTimeZone, callHoursFields, callHoursValue } from "../lib/voiciCallOut.js";
 
 const isAdmin = () => canPublishPage();
 const deviceId = () => getActiveProfile()?.deviceId || "webapp";
@@ -600,6 +602,7 @@ export function openPageOptions() {
           <p class="note">${escapeHtml(VOICI_ACCEPT_NOTE())}</p>
           <div class="fs-group mt-3">
             <button type="button" class="fs-row" id="page-signed-in-sites"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(tr("Websites you're signed in to"))}</span></span></button>
+            ${admin && on ? `<button type="button" class="fs-row" id="page-calls" data-testid="page-calls"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(tr("Calls"))}</span></span></button>` : ""}
             ${canRotate ? `<button type="button" class="fs-row" id="page-rotate"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(tr("Rotate inbox key"))}</span></span></button>` : ""}
             <button type="button" class="fs-row" id="page-rules"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(VOICI_RULES_TITLE())}</span></span></button>
           </div>
@@ -625,6 +628,10 @@ export function openPageOptions() {
           void import("./messages.js").then((mod) => mod.enterSignedInSites());
         });
         body.querySelector("#page-rotate")?.addEventListener("click", () => void rotateInbox());
+        body.querySelector("#page-calls")?.addEventListener("click", () => {
+          close();
+          openCallsSheet();
+        });
         body.querySelector("#page-rules").addEventListener("click", () => void inlineAlert({ title: VOICI_RULES_TITLE(), message: VOICI_RULES_TEXT() }));
         body.querySelector("#page-remove")?.addEventListener("click", () => {
           close();
@@ -632,6 +639,102 @@ export function openPageOptions() {
         });
       };
       redraw();
+    },
+  });
+}
+
+// ── calls: who can call and the hours (docs/voici-calls.md; admin devices publish them in the page index) ──
+
+const CALLS_FROM_CHOICES = () => [
+  ["accepted", tr("People whose conversation you accepted")],
+  ["signed-in", tr("Anyone signed in with Flagship")],
+  ["anyone", tr("Anyone on the internet")],
+  ["callback", tr("Only people you can call back")],
+];
+
+function weekdayNames() {
+  // 2027-01-04 is a Monday; the browser's formatter names the days in the app's language.
+  const f = new Intl.DateTimeFormat(dateLocale(), { weekday: "short", timeZone: "UTC" });
+  return Array.from({ length: 7 }, (_, i) => f.format(new Date(Date.UTC(2027, 0, 4 + i))));
+}
+
+function timeZones(current) {
+  let zones = [];
+  try {
+    zones = Intl.supportedValuesOf("timeZone");
+  } catch {
+    zones = [];
+  }
+  return [...new Set([current, browserTimeZone(), "UTC", ...zones])];
+}
+
+function openCallsSheet() {
+  const idx = world.page?.index ?? {};
+  const state = { on: idx.acceptsCalls === 1, from: idx.callsFrom ?? "accepted", hours: callHoursFields(idx.callHours) };
+  openSheet({
+    title: tr("Calls"),
+    testid: "page-calls-sheet",
+    build: (body, close) => {
+      const days = weekdayNames();
+      body.innerHTML = `
+        <div class="fs-group">
+          <div class="fs-row">
+            <span class="fs-row-body"><span class="fs-row-title" id="calls-on-label">${escapeHtml(tr("Accept calls"))}</span></span>
+            <button type="button" role="switch" class="fs-switch" id="calls-on" aria-labelledby="calls-on-label" aria-checked="${state.on}"><span class="fs-switch-thumb" aria-hidden="true"></span></button>
+          </div>
+        </div>
+        <h4 class="mt-3">${escapeHtml(tr("Who can call"))}</h4>
+        <div class="stack-sm" role="radiogroup" aria-label="${escapeHtml(tr("Who can call"))}">
+          ${CALLS_FROM_CHOICES().map(([v, label]) => `<label class="row"><input type="radio" name="calls-from" value="${v}" ${state.from === v ? "checked" : ""}> <span>${escapeHtml(label)}</span></label>`).join("")}
+        </div>
+        <div class="fs-group mt-3">
+          <div class="fs-row">
+            <span class="fs-row-body"><span class="fs-row-title" id="calls-hours-label">${escapeHtml(tr("Only at certain hours"))}</span></span>
+            <button type="button" role="switch" class="fs-switch" id="calls-hours" aria-labelledby="calls-hours-label" aria-checked="${state.hours.on}"><span class="fs-switch-thumb" aria-hidden="true"></span></button>
+          </div>
+        </div>
+        <div id="calls-hours-fields" class="stack-sm mt-2"${state.hours.on ? "" : " hidden"}>
+          <div class="row" role="group" aria-label="${escapeHtml(tr("Days"))}">
+            ${days.map((d, i) => `<label><input type="checkbox" data-call-day="${i}" ${state.hours.days[i] ? "checked" : ""}> ${escapeHtml(d)}</label>`).join(" ")}
+          </div>
+          <label class="row">${escapeHtml(tr("From"))} <input type="time" id="calls-from-time" value="${escapeHtml(state.hours.from)}"></label>
+          <label class="row">${escapeHtml(tr("To"))} <input type="time" id="calls-to-time" value="${escapeHtml(state.hours.to)}"></label>
+          <label class="row">${escapeHtml(tr("Time zone"))} <select id="calls-zone">${timeZones(state.hours.zone).map((z) => `<option value="${escapeHtml(z)}"${z === state.hours.zone ? " selected" : ""}>${escapeHtml(z)}</option>`).join("")}</select></label>
+          <p class="note">${escapeHtml(tr("Calls ring only during these hours. Your page shows them to anyone, with the time zone."))}</p>
+        </div>
+        <p class="note" id="calls-error" hidden></p>
+        <button type="button" class="primary full-width mt-3" id="calls-save">${escapeHtml(tr("Save"))}</button>`;
+      const sw = (id) => body.querySelector(id);
+      sw("#calls-on").addEventListener("click", (e) => e.currentTarget.setAttribute("aria-checked", String(e.currentTarget.getAttribute("aria-checked") !== "true")));
+      sw("#calls-hours").addEventListener("click", (e) => {
+        const on = e.currentTarget.getAttribute("aria-checked") !== "true";
+        e.currentTarget.setAttribute("aria-checked", String(on));
+        sw("#calls-hours-fields").hidden = !on;
+      });
+      sw("#calls-save").addEventListener("click", async () => {
+        const acceptsCalls = sw("#calls-on").getAttribute("aria-checked") === "true";
+        const callsFrom = body.querySelector("input[name=calls-from]:checked")?.value ?? "accepted";
+        let callHours;
+        if (sw("#calls-hours").getAttribute("aria-checked") === "true") {
+          callHours = callHoursValue([...body.querySelectorAll("[data-call-day]")].map((b) => b.checked), sw("#calls-from-time").value, sw("#calls-to-time").value, sw("#calls-zone").value);
+          if (!isVoiciCallHours(callHours)) {
+            const err = sw("#calls-error");
+            err.hidden = false;
+            err.textContent = tr("These hours don't work. Pick at least one day and different start and end times.");
+            return;
+          }
+        }
+        sw("#calls-save").disabled = true;
+        try {
+          world.page = await publishVoiciPage({ ops: [], calls: { acceptsCalls, callsFrom, ...(callHours ? { callHours } : {}) } }, { published: world.page });
+          emitWorld();
+          toast(tr("Saved."));
+          close();
+        } catch (e) {
+          sw("#calls-save").disabled = false;
+          toast(voiciErrorText(e), "err");
+        }
+      });
     },
   });
 }

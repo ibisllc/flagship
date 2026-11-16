@@ -3770,5 +3770,18 @@
   "Messages already on {0}'s device stay there.": "已经在 {0} 设备上的消息会留在那里。",
   "{0} ({1})": "{0}（{1}）",
   "Call back": "回拨",
-  "Ringing them. When they answer, your phone rings.": "正在呼叫对方。对方接听时，你的手机会响铃。"
+  "Ringing them. When they answer, your phone rings.": "正在呼叫对方。对方接听时，你的手机会响铃。",
+  "People whose conversation you accepted": "你已接受其对话的人",
+  "Anyone signed in with Flagship": "任何通过 Flagship 登录的人",
+  "Anyone on the internet": "互联网上的任何人",
+  "Only people you can call back": "只限你可以回拨的人",
+  "Accept calls": "接受来电",
+  "Who can call": "谁可以呼叫",
+  "Only at certain hours": "仅限特定时段",
+  "Days": "日期",
+  "From": "从",
+  "To": "到",
+  "Time zone": "时区",
+  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": "来电只在这些时段响铃。你的页面会向任何人显示这些时段及时区。",
+  "These hours don't work. Pick at least one day and different start and end times.": "这些时段无效。请至少选择一天，并设置不同的开始和结束时间。"
 }
