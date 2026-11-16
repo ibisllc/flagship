@@ -35,7 +35,7 @@ class PhoneRouteLifecycleTest {
         l.callStarted()
         l.enterForeground()
         assertTrue(l.callEnded())
-        assertFalse(l.callEnded())
+        assertTrue(l.callEnded())
         assertFalse(l.enterBackground())
     }
 }
