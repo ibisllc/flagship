@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { transformSync } from "esbuild";
 
 // One module that fails to parse (a name imported twice, say) stops the whole module graph, so the page never
-// leaves "Setting up…" (shell v225). Every shell file must parse as an ES module.
+// leaves "Setting up…" (shell v226). Every shell file must parse as an ES module.
 const ROOT = fileURLToPath(new URL("../public/webapp/", import.meta.url));
 
 function jsFiles(dir: string): string[] {

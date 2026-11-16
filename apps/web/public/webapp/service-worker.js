@@ -522,7 +522,9 @@
 //       the skip warning pops up at the Skip link (views/wizard.js confirmAtButton).
 //  v225: a page's first publish turns on messages and calls from people signed in with Flagship, and the public
 //       warning says so (lib/voiciOwner.js VOICI_FIRST_PUBLISH, lib/voiciPageControl.js confirmGoPublic).
-const SHELL_VERSION = "v225";
+//  v226: the webapp loads again (voiciOwner imported a name twice), Home's first tap works, confirms open inside
+//       an open dialog.
+const SHELL_VERSION = "v226";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
