@@ -171,7 +171,15 @@ export function canonicalVoiciCallRequest(r) {
 /** The media a request or answer names (absent = audio). */
 export const voiciCallMedia = (r) => r.media ?? "audio";
 
-export const voiciCallRequestHash = (r) => sha256Hex(canonicalVoiciCallRequest(r));
+/** The anonymous request's bytes (voiciCallModes.ts; a page open to anyone). */
+export function canonicalVoiciCallRequestAnon(r) {
+  const parts = ["flagship/voici-call-request-anon/v1", r.pageId, r.conv, r.callId, r.browserPub, r.callerXwingPub, voiciCallSdpHash(r.offerSdp), r.issuedAt, sha256Hex(utf8(r.pow.challenge)), r.pow.nonce];
+  if (r.media !== undefined) parts.push(r.media);
+  return utf8(parts.map(String).join("|"));
+}
+
+/** H(request bytes), by the request's kind. */
+export const voiciCallRequestHash = (r) => sha256Hex(r.kind === "voici-call-request-anon" ? canonicalVoiciCallRequestAnon(r) : canonicalVoiciCallRequest(r));
 
 export function canonicalVoiciCallAnswer(a) {
   if (

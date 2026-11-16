@@ -21,6 +21,7 @@ import {
   canonicalVoiciCallAnswer,
   canonicalVoiciCallEnd,
   canonicalVoiciCallRequest,
+  canonicalVoiciCallRequestAnon,
   checkVoiciCallAnswer,
   deriveVoiciCallFrameKeys,
   deriveVoiciCallVideoFrameKeys,
@@ -34,6 +35,7 @@ import {
 } from "./callProtocol.js";
 import { messageCred, randomHex, signP256 } from "./envelope.js";
 import { voiciConv } from "./proto/lib/voiciProtocol.js";
+import { buildAnonRequest, fetchCallChallenge, solveVoiciCallPow } from "./callModes.js";
 
 const NO_CREDS = { credentials: "omit", referrerPolicy: "no-referrer", mode: "cors", cache: "no-store" };
 const AUDIO = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 };
@@ -71,6 +73,18 @@ async function signEnd(session, callId, reason, issuedAt) {
   return { v: 1, kind: "voici-call-end", ...body, sig: await signP256(session.privateKey, canonicalVoiciCallEnd(body)) };
 }
 
+/**
+ * An anonymous call (a page open to anyone, docs/voici-calls.md "Who may call a page"): the page's challenge, the
+ * work (a second or two, in slices), then the request signed by this browser's anonymous key alone.
+ */
+async function buildAnonymousRequest(o, cfg, fields) {
+  const ch = await fetchCallChallenge({ apiBase: cfg.apiBase, username: o.username, fetch: o.deps?.fetch });
+  if (!ch.ok) return { refused: ch };
+  const nonce = await solveVoiciCallPow(ch.challenge, { cancelled: o.cancelled });
+  if (nonce === null) return { refused: { code: "unavailable" } };
+  return { request: await buildAnonRequest(o.anonymous, { ...fields, pageId: o.index.pageId, challenge: ch.challenge, nonce }) };
+}
+
 function attachTransform(deps, worker, target, side, track = "audio") {
   if (deps.RTCRtpScriptTransform) {
     target.transform = new deps.RTCRtpScriptTransform(worker, { side, track });
@@ -92,7 +106,9 @@ export function startVoiciCall(o) {
     RTCRtpScriptTransform: o.deps?.RTCRtpScriptTransform ?? globalThis.RTCRtpScriptTransform,
     now: o.deps?.now ?? (() => Date.now()),
   };
-  const { session, index, cfg } = o;
+  const { index, cfg } = o;
+  // An anonymous call signs with the browser's anonymous key; a signed-in one with B (the session's key).
+  const session = o.anonymous ? { privateKey: o.anonymous.privateKey } : o.session;
   const scriptTransform = !!deps.RTCRtpScriptTransform;
   const pc = new deps.RTCPeerConnection({ iceServers: [], iceTransportPolicy: "relay", bundlePolicy: "max-bundle", rtcpMuxPolicy: "require", ...(scriptTransform ? {} : { encodedInsertableStreams: true }) });
   const remoteStream = new MediaStream();
@@ -162,7 +178,7 @@ export function startVoiciCall(o) {
     if (!r.ok) return set("failed", { code: "bad-answer" });
     set("connecting");
     const ss = voiciCallDecapsulate(hexToBytes(answer.xwingCiphertext), callerKey.seed);
-    const rb = canonicalVoiciCallRequest(request);
+    const rb = request.kind === "voici-call-request-anon" ? canonicalVoiciCallRequestAnon(request) : canonicalVoiciCallRequest(request);
     const ab = canonicalVoiciCallAnswer(answer);
     const k = deriveVoiciCallFrameKeys(ss, rb, ab);
     const vk = videoAble ? deriveVoiciCallVideoFrameKeys(ss, rb, ab) : null;
@@ -190,7 +206,14 @@ export function startVoiciCall(o) {
   (async () => {
     callerKey = voiciCallKeygen();
     const offer = await pc.createOffer({ offerToReceiveAudio: true });
-    request = await buildVoiciCallRequest(session, { callId, callerXwingPub: callerKey.publicKey, offerSdp: mungeVoiciCallSdp(offer.sdp), issuedAt: deps.now(), ...(videoAble ? { media: "audio,video" } : {}) });
+    const fields = { callId, callerXwingPub: callerKey.publicKey, offerSdp: mungeVoiciCallSdp(offer.sdp), issuedAt: deps.now(), ...(videoAble ? { media: "audio,video" } : {}) };
+    if (o.anonymous) {
+      o.onState?.("working", {});
+      const a = await buildAnonymousRequest(o, cfg, fields);
+      if (a.refused) return set("failed", { code: a.refused.code, ...(a.refused.retryAfterSec ? { retryAfterSec: a.refused.retryAfterSec } : {}) });
+      request = a.request;
+      if (state !== "requesting") return;
+    } else request = await buildVoiciCallRequest(session, fields);
     const res = await deps.fetch(`${cfg.apiBase}/api/voici/calls`, { ...NO_CREDS, method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request }) });
     let j = null;
     try {

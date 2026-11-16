@@ -29,6 +29,10 @@ export function callRefusal(code, o = {}) {
       return t("This browser can't make quantum-safe calls. Try a current Chrome, Safari or Firefox.");
     case "unreachable":
       return t("The call couldn't connect. Check your connection and try again.");
+    case "ring-back-required":
+      return t("They take calls only from people they can call back. Choose \"Call and allow call-back\".");
+    case "bad-pow":
+      return t("The call couldn't start. Try again.");
     default:
       return t("Couldn't reach Flagship. Check your connection and try again.");
   }
@@ -91,12 +95,99 @@ export async function openHandoffCall(ctx, hash) {
 }
 
 export async function openCall(ctx) {
+  const mode = ctx.lib.pageCallMode(ctx.page.index);
+  if (mode === "anyone" || mode === "callback") return showCallChoice(ctx, mode);
   const session = await ctx.lib.loadVoiciSession(ctx.store, ctx.page.index.pageId, { origin: ctx.cfg.origin });
   if (!session) return openMessages(ctx);
   startCall(ctx, session);
 }
 
-async function startCall(ctx, session) {
+/**
+ * The pop-up before a call on a page that takes calls from anyone or rings callers back (docs/voici-calls.md, owner
+ * additions 2026-11-15): "Call anonymously" (no account, no ring-back) and "Call and allow call-back" (signed in; the
+ * conversation's ring-back channel is attached first). A callback-only page shows only the second, with the reason.
+ */
+function showCallChoice(ctx, mode) {
+  const { doc, lib, cfg, page } = ctx;
+  const name = page.profile.displayName;
+  const note = h(doc, "p", { class: "call-status", role: "status", hidden: true });
+  const anon = h(doc, "button", { class: "btn btn-secondary btn-wide", type: "button" }, t("Call anonymously"));
+  const allow = h(doc, "button", { class: "btn btn-primary btn-wide", type: "button" }, icon(doc, "call"), h(doc, "span", {}, t("Call and allow call-back")));
+  const sheet = openSheet(doc, { title: t("Let {0} call you back?", name) });
+  replace(
+    sheet.body,
+    mode === "callback" ? h(doc, "p", { class: "lede" }, t("{0} takes calls only from people they can call back.", name)) : null,
+    h(doc, "p", { class: "fine" }, t("{0} won't learn who you are. Flagship will know this conversation can ring your phone.", name)),
+    allow,
+    mode === "anyone" ? anon : null,
+    note,
+  );
+  anon.addEventListener("click", async () => {
+    const key = await lib.anonKey(ctx.store, page.index.pageId);
+    closeSheet();
+    startCall(ctx, null, { anonymous: key });
+  });
+  allow.addEventListener("click", async () => {
+    const session = await lib.loadVoiciSession(ctx.store, page.index.pageId, { origin: cfg.origin });
+    if (!session) {
+      closeSheet();
+      return openMessages(ctx);
+    }
+    allow.disabled = true;
+    const r = await lib.postRingBack(session, "attach", { apiBase: cfg.apiBase, store: ctx.store });
+    allow.disabled = false;
+    if (!r.ok) {
+      note.hidden = false;
+      return replace(note, callRefusal(r.code));
+    }
+    closeSheet();
+    watchRings(ctx, session);
+    startCall(ctx, session);
+  });
+}
+
+let watching = null;
+
+/**
+ * While this tab is open and the conversation allows call-back, it rings when the page owner calls back: the ring
+ * shows in the thread fetch, its hint opens with this browser's thread key, and answering dials out to the owner.
+ */
+export function watchRings(ctx, session) {
+  if (watching === session.pageId) return;
+  watching = session.pageId;
+  const seen = new Set();
+  const tick = async () => {
+    if (watching !== session.pageId) return;
+    if (ctx.doc.visibilityState !== "hidden") {
+      const r = await ctx.lib.fetchThread(session, { apiBase: ctx.cfg.apiBase });
+      const ring = r.ok ? ctx.lib.ringOf(r) : null;
+      if (ring && !seen.has(ring.ringId)) {
+        seen.add(ring.ringId);
+        showIncomingRing(ctx, session, ring);
+      }
+    }
+    ctx.win.setTimeout(tick, 10_000);
+  };
+  tick();
+}
+
+/** Stops watching (after "Stop call-backs"). */
+export function stopWatchingRings() {
+  watching = null;
+}
+
+export function showIncomingRing(ctx, session, ring) {
+  const { doc, lib, page } = ctx;
+  const conv = lib.protocol.voiciConv(session.pageId, session.pseudonymPub);
+  const hint = lib.openVoiciRingHint(lib.threadSeedOf(session), conv, ring.ringId, ring.hint);
+  if (!hint || hint.pageId !== page.index.pageId) return;
+  const sheet = openSheet(doc, { title: page.profile.displayName });
+  const answer = h(doc, "button", { class: "btn btn-primary", type: "button", on: { click: () => (closeSheet(), startCall(ctx, session)) } }, icon(doc, "call"), h(doc, "span", {}, t("Answer")));
+  const later = h(doc, "button", { class: "btn btn-secondary", type: "button", on: { click: () => closeSheet() } }, t("Not now"));
+  replace(sheet.body, h(doc, "p", { class: "call-status", role: "status" }, t("{0} is calling you back.", page.profile.displayName)), h(doc, "div", { class: "call-controls" }, answer, later));
+}
+
+async function startCall(ctx, session, opts = {}) {
   const { doc, win, lib, cfg, page } = ctx;
   let call = null;
   const status = h(doc, "p", { class: "call-status", role: "status" }, t("Calling {0}…", page.profile.displayName));
@@ -158,7 +249,7 @@ async function startCall(ctx, session) {
   const finish = (line) => {
     clearInterval(tick);
     replace(status, line);
-    replace(controls, h(doc, "button", { class: "btn btn-primary", type: "button", on: { click: () => (closeSheet(), startCall(ctx, session)) } }, t("Call again")));
+    replace(controls, h(doc, "button", { class: "btn btn-primary", type: "button", on: { click: () => (closeSheet(), startCall(ctx, session, opts)) } }, t("Call again")));
   };
 
   let stream;
@@ -179,13 +270,15 @@ async function startCall(ctx, session) {
     videoAble,
     onCamera,
     session,
+    ...(opts.anonymous ? { anonymous: opts.anonymous } : {}),
     index: page.index,
     username: page.username,
     cfg,
     stream,
     worker,
     onState(state, d) {
-      if (state === "ringing") replace(status, t("Ringing…"));
+      if (state === "working") replace(status, t("Getting ready to call…"));
+      else if (state === "ringing") replace(status, t("Ringing…"));
       else if (state === "connecting") replace(status, t("Connecting…"));
       else if (state === "connected") {
         audio.srcObject = call.remoteStream;

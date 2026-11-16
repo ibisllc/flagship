@@ -41,35 +41,35 @@
   },
   "About voi.ci": {
     "en": "About voi.ci",
-    "ctx": "voici-site/app.js:131"
+    "ctx": "voici-site/app.js:137"
   },
   "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.": {
     "en": "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.",
-    "ctx": "voici-site/app.js:136"
+    "ctx": "voici-site/app.js:142"
   },
   "This build": {
     "en": "This build",
-    "ctx": "voici-site/app.js:141"
+    "ctx": "voici-site/app.js:147"
   },
   "Manifest": {
     "en": "Manifest",
-    "ctx": "voici-site/app.js:143"
+    "ctx": "voici-site/app.js:149"
   },
   "This copy of the site isn't running on voi.ci.": {
     "en": "This copy of the site isn't running on voi.ci.",
-    "ctx": "voici-site/app.js:159"
+    "ctx": "voici-site/app.js:165"
   },
   "Check the address and try again.": {
     "en": "Check the address and try again.",
-    "ctx": "voici-site/app.js:164"
+    "ctx": "voici-site/app.js:170"
   },
   "This link was removed.": {
     "en": "This link was removed.",
-    "ctx": "voici-site/app.js:168"
+    "ctx": "voici-site/app.js:174"
   },
   "It doesn't lead anywhere any more. Ask whoever shared it for a new one.": {
     "en": "It doesn't lead anywhere any more. Ask whoever shared it for a new one.",
-    "ctx": "voici-site/app.js:168"
+    "ctx": "voici-site/app.js:174"
   },
   "They aren't taking calls right now.": {
     "en": "They aren't taking calls right now.",
@@ -107,97 +107,141 @@
     "en": "The call couldn't connect. Check your connection and try again.",
     "ctx": "voici-site/call.js:31"
   },
+  "They take calls only from people they can call back. Choose \"Call and allow call-back\".": {
+    "en": "They take calls only from people they can call back. Choose \"Call and allow call-back\".",
+    "ctx": "voici-site/call.js:33"
+  },
+  "The call couldn't start. Try again.": {
+    "en": "The call couldn't start. Try again.",
+    "ctx": "voici-site/call.js:35"
+  },
   "Couldn't reach Flagship. Check your connection and try again.": {
     "en": "Couldn't reach Flagship. Check your connection and try again.",
-    "ctx": "voici-site/call.js:33"
+    "ctx": "voici-site/call.js:37"
   },
   "No answer.": {
     "en": "No answer.",
-    "ctx": "voici-site/call.js:40"
+    "ctx": "voici-site/call.js:44"
   },
   "They can't take your call right now.": {
     "en": "They can't take your call right now.",
-    "ctx": "voici-site/call.js:42"
+    "ctx": "voici-site/call.js:46"
   },
   "Calls end after 60 minutes.": {
     "en": "Calls end after 60 minutes.",
-    "ctx": "voici-site/call.js:44"
+    "ctx": "voici-site/call.js:48"
   },
   "Call ended": {
     "en": "Call ended",
-    "ctx": "voici-site/call.js:46"
+    "ctx": "voici-site/call.js:50"
   },
   "This call link was already used or has expired. Start the call again from your Flagship app.": {
     "en": "This call link was already used or has expired. Start the call again from your Flagship app.",
-    "ctx": "voici-site/call.js:60"
+    "ctx": "voici-site/call.js:64"
   },
   "This call link isn't valid. Start the call again from your Flagship app.": {
     "en": "This call link isn't valid. Start the call again from your Flagship app.",
-    "ctx": "voici-site/call.js:65"
+    "ctx": "voici-site/call.js:69"
   },
   "Getting the call from your Flagship app…": {
     "en": "Getting the call from your Flagship app…",
-    "ctx": "voici-site/call.js:76"
+    "ctx": "voici-site/call.js:80"
   },
   "Your Flagship app is ready to call {0}.": {
     "en": "Your Flagship app is ready to call {0}.",
-    "ctx": "voici-site/call.js:89"
+    "ctx": "voici-site/call.js:93"
   },
   "Call": {
     "en": "Call",
-    "ctx": "voici-site/call.js:90"
+    "ctx": "voici-site/call.js:94"
+  },
+  "Call anonymously": {
+    "en": "Call anonymously",
+    "ctx": "voici-site/call.js:114"
+  },
+  "Call and allow call-back": {
+    "en": "Call and allow call-back",
+    "ctx": "voici-site/call.js:115"
+  },
+  "Let {0} call you back?": {
+    "en": "Let {0} call you back?",
+    "ctx": "voici-site/call.js:116"
+  },
+  "{0} takes calls only from people they can call back.": {
+    "en": "{0} takes calls only from people they can call back.",
+    "ctx": "voici-site/call.js:119"
+  },
+  "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": {
+    "en": "{0} won't learn who you are. Flagship will know this conversation can ring your phone.",
+    "ctx": "voici-site/call.js:120"
+  },
+  "Answer": {
+    "en": "Answer",
+    "ctx": "voici-site/call.js:185"
+  },
+  "Not now": {
+    "en": "Not now",
+    "ctx": "voici-site/call.js:186"
+  },
+  "{0} is calling you back.": {
+    "en": "{0} is calling you back.",
+    "ctx": "voici-site/call.js:187"
   },
   "Calling {0}…": {
     "en": "Calling {0}…",
-    "ctx": "voici-site/call.js:102"
+    "ctx": "voici-site/call.js:193"
   },
   "Mute": {
     "en": "Mute",
-    "ctx": "voici-site/call.js:108"
+    "ctx": "voici-site/call.js:199"
   },
   "Camera": {
     "en": "Camera",
-    "ctx": "voici-site/call.js:109"
+    "ctx": "voici-site/call.js:200"
   },
   "Hang up": {
     "en": "Hang up",
-    "ctx": "voici-site/call.js:110"
+    "ctx": "voici-site/call.js:201"
   },
   "Quantum-safe call": {
     "en": "Quantum-safe call",
-    "ctx": "voici-site/call.js:111"
+    "ctx": "voici-site/call.js:202"
   },
   "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.": {
     "en": "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.",
-    "ctx": "voici-site/call.js:111"
+    "ctx": "voici-site/call.js:202"
   },
   "Unmute": {
     "en": "Unmute",
-    "ctx": "voici-site/call.js:122"
+    "ctx": "voici-site/call.js:213"
   },
   "Camera off": {
     "en": "Camera off",
-    "ctx": "voici-site/call.js:139"
+    "ctx": "voici-site/call.js:230"
   },
   "{0} turned on their camera.": {
     "en": "{0} turned on their camera.",
-    "ctx": "voici-site/call.js:149"
+    "ctx": "voici-site/call.js:240"
   },
   "Camera paused": {
     "en": "Camera paused",
-    "ctx": "voici-site/call.js:152"
+    "ctx": "voici-site/call.js:243"
   },
   "Call again": {
     "en": "Call again",
-    "ctx": "voici-site/call.js:161"
+    "ctx": "voici-site/call.js:252"
+  },
+  "Getting ready to call…": {
+    "en": "Getting ready to call…",
+    "ctx": "voici-site/call.js:280"
   },
   "Ringing…": {
     "en": "Ringing…",
-    "ctx": "voici-site/call.js:188"
+    "ctx": "voici-site/call.js:281"
   },
   "Connecting…": {
     "en": "Connecting…",
-    "ctx": "voici-site/call.js:189"
+    "ctx": "voici-site/call.js:282"
   },
   "Visitor {0}": {
     "en": "Visitor {0}",
@@ -339,69 +383,73 @@
     "en": "Conversation",
     "ctx": "voici-site/messages.js:209"
   },
+  "Stop call-backs": {
+    "en": "Stop call-backs",
+    "ctx": "voici-site/messages.js:211"
+  },
   "Some messages haven't arrived yet.": {
     "en": "Some messages haven't arrived yet.",
-    "ctx": "voici-site/messages.js:210"
+    "ctx": "voici-site/messages.js:222"
   },
   "Message": {
     "en": "Message",
-    "ctx": "voici-site/messages.js:212"
+    "ctx": "voici-site/messages.js:224"
   },
   "Write a message": {
     "en": "Write a message",
-    "ctx": "voici-site/messages.js:212"
+    "ctx": "voici-site/messages.js:224"
   },
   "Send": {
     "en": "Send",
-    "ctx": "voici-site/messages.js:214"
+    "ctx": "voici-site/messages.js:226"
   },
   "You appear here as {0}. They never see your username.": {
     "en": "You appear here as {0}. They never see your username.",
-    "ctx": "voici-site/messages.js:232"
+    "ctx": "voici-site/messages.js:244"
   },
   "Sign out of this page": {
     "en": "Sign out of this page",
-    "ctx": "voici-site/messages.js:234"
+    "ctx": "voici-site/messages.js:247"
   },
   "Open {0}?": {
     "en": "Open {0}?",
-    "ctx": "voici-site/messages.js:255"
+    "ctx": "voici-site/messages.js:268"
   },
   "Cancel": {
     "en": "Cancel",
-    "ctx": "voici-site/messages.js:261"
+    "ctx": "voici-site/messages.js:274"
   },
   "Open": {
     "en": "Open",
-    "ctx": "voici-site/messages.js:275"
+    "ctx": "voici-site/messages.js:288"
   },
   "Say hello. {0} will see you as {1}.": {
     "en": "Say hello. {0} will see you as {1}.",
-    "ctx": "voici-site/messages.js:285"
+    "ctx": "voici-site/messages.js:298"
   },
   "You have a reply on voi.ci.": {
     "en": "You have a reply on voi.ci.",
-    "ctx": "voici-site/messages.js:321"
+    "ctx": "voici-site/messages.js:334"
   },
   "You'll get an alert when they reply.": {
     "en": "You'll get an alert when they reply.",
-    "ctx": "voici-site/messages.js:339"
+    "ctx": "voici-site/messages.js:352"
   },
   "Turn off alerts": {
     "en": "Turn off alerts",
-    "ctx": "voici-site/messages.js:340"
+    "ctx": "voici-site/messages.js:353"
   },
   "Get an alert when they reply": {
     "en": "Get an alert when they reply",
-    "ctx": "voici-site/messages.js:346"
+    "ctx": "voici-site/messages.js:359"
   },
   "The alert only says that they replied, never what they wrote.": {
     "en": "The alert only says that they replied, never what they wrote.",
-    "ctx": "voici-site/messages.js:347"
+    "ctx": "voici-site/messages.js:360"
   },
   "Your sign-in for this page has ended. Sign in again.": {
     "en": "Your sign-in for this page has ended. Sign in again.",
-    "ctx": "voici-site/messages.js:363"
+    "ctx": "voici-site/messages.js:376"
   },
   "Links": {
     "en": "Links",

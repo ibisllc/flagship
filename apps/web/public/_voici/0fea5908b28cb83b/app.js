@@ -8,7 +8,7 @@ import { routeOf, siteConfig } from "./config.js";
 import { h } from "./dom.js";
 import { LOCALES, initLocale, locale, setLocale, t } from "./i18n.js";
 import { openMessages } from "./messages.js";
-import { openCall, openHandoffCall } from "./call.js";
+import { openCall, openHandoffCall, watchRings } from "./call.js";
 import { footer, renderPage, renderState } from "./page.js";
 import { openReport } from "./report.js";
 
@@ -123,6 +123,12 @@ async function showPage(cfg, username, handoff = null) {
   };
   rerender();
   if (handoff) withStore((c) => openHandoffCall(c, handoff));
+  // This browser allowed the owner to ring it back: the open tab rings when they do.
+  withStore(async (c) => {
+    if (!(await lib.ringBackAttached(c.store, index.pageId))) return;
+    const s = await lib.loadVoiciSession(c.store, index.pageId, { origin: cfg.origin });
+    if (s) watchRings(c, s);
+  });
 }
 
 function showAbout(cfg) {

@@ -130,5 +130,17 @@
   "This call link was already used or has expired. Start the call again from your Flagship app.": "Este link de chamada já foi usado ou expirou. Comece a chamada de novo no seu app Flagship.",
   "This call link isn't valid. Start the call again from your Flagship app.": "Este link de chamada não é válido. Comece a chamada de novo no seu app Flagship.",
   "Getting the call from your Flagship app…": "Recebendo a chamada do seu app Flagship…",
-  "Your Flagship app is ready to call {0}.": "Seu app Flagship está pronto para ligar para {0}."
+  "Your Flagship app is ready to call {0}.": "Seu app Flagship está pronto para ligar para {0}.",
+  "They take calls only from people they can call back. Choose \"Call and allow call-back\".": "Só aceitam chamadas de pessoas para quem podem ligar de volta. Escolha \"Ligar e permitir retorno\".",
+  "The call couldn't start. Try again.": "Não foi possível iniciar a chamada. Tente de novo.",
+  "Call anonymously": "Ligar anonimamente",
+  "Call and allow call-back": "Ligar e permitir retorno",
+  "Let {0} call you back?": "Permitir que {0} ligue de volta para você?",
+  "{0} takes calls only from people they can call back.": "{0} só aceita chamadas de pessoas para quem pode ligar de volta.",
+  "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": "{0} não vai saber quem você é. O Flagship vai saber que esta conversa pode fazer seu telefone tocar.",
+  "Answer": "Atender",
+  "Not now": "Agora não",
+  "{0} is calling you back.": "{0} está ligando de volta para você.",
+  "Getting ready to call…": "Preparando a chamada…",
+  "Stop call-backs": "Parar retornos"
 }

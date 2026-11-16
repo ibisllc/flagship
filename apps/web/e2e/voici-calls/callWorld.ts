@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { p256 } from "@noble/curves/nist.js";
 import * as P from "@flagship/protocol";
-import { handleVoiciCallRequest, VoiciCallRoomCore, type VoiciCallRoomAction, type VoiciCallRoomInit } from "@flagship/control-plane";
+import { handleVoiciCallChallenge, handleVoiciCallRequest, VoiciCallRoomCore, type VoiciCallRoomAction, type VoiciCallRoomInit } from "@flagship/control-plane";
 import { InMemoryVoiciCallStorage, InMemoryVoiciStorage } from "@flagship/storage";
 // @ts-expect-error plain ES modules without types
 import { buildSite } from "../../../voici-site/build.mjs";
@@ -43,11 +43,11 @@ export interface CallWorld {
 }
 
 /** A v2 index for alice with calls on for anyone signed in, over the fixture's pieces. */
-function alicePage(now: number) {
+function alicePage(now: number, callsFrom: "signed-in" | "anyone" | "callback") {
   const base = samplePage(USER, {}, now);
   const i = base.index;
   const index = P.signVoiciPageIndex(
-    { username: i.username, pageId: i.pageId, seq: i.seq, issuedAt: i.issuedAt, acceptsMessages: i.acceptsMessages, acceptsCalls: 1, callsFrom: "signed-in", inboxEpoch: i.inboxEpoch, inboxPub: i.inboxPub, ownerSignPub: i.ownerSignPub, pieces: i.pieces, signerKind: i.signerKind },
+    { username: i.username, pageId: i.pageId, seq: i.seq, issuedAt: i.issuedAt, acceptsMessages: i.acceptsMessages, acceptsCalls: 1, callsFrom, inboxEpoch: i.inboxEpoch, inboxPub: i.inboxPub, ownerSignPub: i.ownerSignPub, pieces: i.pieces, signerKind: i.signerKind },
     h(VK.keys.adminRootSeed),
   );
   return { ...base, index };
@@ -106,7 +106,8 @@ ws.onmessage = async (e) => {
 };
 </script>`;
 
-export async function startCallWorld(): Promise<CallWorld> {
+export async function startCallWorld(o: { callsFrom?: "signed-in" | "anyone" | "callback" } = {}): Promise<CallWorld> {
+  const powSecret = randomBytes(32);
   const build = buildSite();
   const voici = new InMemoryVoiciStorage();
   const calls = new InMemoryVoiciCallStorage();
@@ -161,6 +162,8 @@ export async function startCallWorld(): Promise<CallWorld> {
           limitIp: async () => null,
           limitCaller: async () => null,
           limitPage: async () => null,
+          limitAnonPage: async () => null,
+          powSecret,
           openRoom: async (init: VoiciCallRoomInit) => {
             const s = VoiciCallRoomCore.start(init);
             rooms.set(init.callId, { core: new VoiciCallRoomCore(s.state, { seed: caSeed }), caller: null, tokenHash: init.callerTokenHash });
@@ -181,6 +184,10 @@ export async function startCallWorld(): Promise<CallWorld> {
       if (out.status !== 200) log.requestRefusal = String(b.code);
       if (typeof b.room === "string") b.room = b.room.replace(/^wss:/, "ws:");
       return json(out.status, b);
+    }
+    if (p === "/api/voici/pages/alice/call-challenge") {
+      const out = await handleVoiciCallChallenge({ voici, powSecret, limitIp: async () => null, bits: 12 }, "alice");
+      return json(out.status, out.body);
     }
     if (p === "/__phone") {
       res.writeHead(200, { "content-type": "text/html", "content-security-policy": `default-src 'none'; script-src 'unsafe-inline'; connect-src ws://127.0.0.1:${port}` });
@@ -274,7 +281,7 @@ export async function startCallWorld(): Promise<CallWorld> {
   });
 
   const now = Date.now();
-  const world = { page: alicePage(now) };
+  const world = { page: alicePage(now, o.callsFrom ?? "signed-in") };
   await voici.publishPage(
     { username: USER, pageId: D.pageId, seq: world.page.index.seq, issuedAt: world.page.index.issuedAt, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: D.ownerSignPub, indexJson: JSON.stringify(world.page.index), publishedAt: now },
     0,
