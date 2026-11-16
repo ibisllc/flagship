@@ -1163,6 +1163,31 @@ section:not(.hidden) {
 .secure-option-text { display: flex; flex-direction: column; gap: 2px; }
 .secure-option-label { font-weight: 600; }
 .secure-option.disabled { opacity: 0.55; cursor: not-allowed; }
+.secure-option input[type="checkbox"] { margin-top: 2px; flex: 0 0 auto; }
+/* The skip warning pops up at the Skip link (views/wizard.js confirmAtButton). */
+.secure-skip { position: relative; }
+.secure-skip-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + var(--space-2));
+  z-index: 20;
+  width: min(22rem, calc(100vw - 32px));
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.secure-skip-pop::after {
+  content: "";
+  position: absolute;
+  left: var(--space-4);
+  top: 100%;
+  border: 7px solid transparent;
+  border-top-color: var(--border);
+}
+.secure-skip-pop .note { margin: 0 0 var(--space-3); color: var(--text); }
 
 /* Off-screen but screen-reader-available (e.g. a <legend> we don't
  * want to paint but must keep for accessibility). */

@@ -239,13 +239,18 @@ async function handleOpenAccount() {
   }
 }
 
+/** Cloud backup finished on an earlier Continue (the file is still to do). */
+let secureCloudDone = false;
+
 /**
- * Act on the "Secure your account" step's selected option, reusing the
+ * Run every backup ticked on the "Secure your account" step, reusing the
  * existing recovery primitives (we never rebuild backup crypto here):
- *   - cloud → lib/recovery.js setupCloudRecovery (WebAuthn-PRF passkey)
- *   - file  → the lib/keyfileBackup.js export ceremony
- * Returns true once the chosen backup actually completed, false if it
- * failed or the user cancelled (so the caller keeps them on the step).
+ *   - cloud → lib/recovery.js setupCloudRecovery (WebAuthn-PRF passkey;
+ *     its recovery passphrase is asked in the recovery window it opens)
+ *   - file  → the lib/keyfileBackup.js export ceremony (its own passphrase)
+ * Cloud runs first, then the file. Returns true once every ticked backup
+ * completed, false if one failed or was cancelled (so the caller keeps them
+ * on the step; a finished cloud backup is not asked for again).
  */
 async function handleSecureAccount() {
   const session = getSession();
@@ -256,16 +261,21 @@ async function handleSecureAccount() {
   const username =
     session.username || profileGet("username") || "";
   const cloud = document.getElementById("wizard-secure-cloud");
-  const useCloud = !!(cloud && cloud.checked && !cloud.disabled);
+  const file = document.getElementById("wizard-secure-file");
+  const useCloud = !!(cloud && cloud.checked && !cloud.disabled) && !secureCloudDone;
+  const useFile = !!(file && file.checked);
+  if (!useCloud && !useFile && !secureCloudDone) return false;
   const btn = document.getElementById("wizard-secure-continue");
   if (btn) btn.disabled = true;
   try {
     if (useCloud) {
       const { setupCloudRecovery } = await import("../lib/recovery.js");
       await setupCloudRecovery(username);
+      secureCloudDone = true;
+      if (cloud) cloud.disabled = true;
       toast(tr("Cloud backup on for {0}", username), "ok");
-      return true;
     }
+    if (!useFile) return true;
     // File path: run the same `.flagshipkey` export ceremony the
     // Recovery view uses (heavy warnings + strong passphrase + acks).
     const { runKeyfileExportCeremony } = await import("./recovery.js");
@@ -275,8 +285,71 @@ async function handleSecureAccount() {
     toast(tr("Backup failed: {0}", e?.message ?? e), "err");
     return false;
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) btn.disabled = !secureCanContinue();
   }
+}
+
+/** Continue needs at least one ticked backup (Skip is the way out). */
+function secureCanContinue() {
+  const cloud = document.getElementById("wizard-secure-cloud");
+  const file = document.getElementById("wizard-secure-file");
+  return !!((cloud && cloud.checked) || (file && file.checked));
+}
+
+/**
+ * The skip warning as a small popover at the Skip link, where the person
+ * just tapped. Resolves true for "Skip anyway", false for Back, Escape or a
+ * click outside.
+ */
+function confirmAtButton(anchor, { message, okLabel, cancelLabel }) {
+  return new Promise((resolve) => {
+    const host = anchor.closest(".secure-skip") ?? anchor.parentElement;
+    host.querySelector(".secure-skip-pop")?.remove();
+    const pop = document.createElement("div");
+    pop.className = "secure-skip-pop";
+    pop.id = "wizard-secure-skip-pop";
+    pop.setAttribute("role", "alertdialog");
+    const msg = document.createElement("p");
+    msg.className = "note";
+    msg.id = "wizard-secure-skip-message";
+    msg.textContent = message;
+    pop.setAttribute("aria-describedby", msg.id);
+    const row = document.createElement("div");
+    row.className = "btn-row-sm";
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "pill";
+    back.id = "wizard-secure-skip-back";
+    back.textContent = cancelLabel;
+    const ok = document.createElement("button");
+    ok.type = "button";
+    ok.className = "pill danger";
+    ok.id = "wizard-secure-skip-anyway";
+    ok.textContent = okLabel;
+    row.append(back, ok);
+    pop.append(msg, row);
+    host.append(pop);
+    anchor.setAttribute("aria-expanded", "true");
+    const finish = (value) => {
+      document.removeEventListener("pointerdown", onOutside, true);
+      document.removeEventListener("keydown", onKey, true);
+      pop.remove();
+      anchor.setAttribute("aria-expanded", "false");
+      if (!value) anchor.focus?.();
+      resolve(value);
+    };
+    const onOutside = (ev) => {
+      if (!pop.contains(ev.target) && ev.target !== anchor) finish(false);
+    };
+    const onKey = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
+    };
+    back.addEventListener("click", () => finish(false));
+    ok.addEventListener("click", () => finish(true));
+    document.addEventListener("pointerdown", onOutside, true);
+    document.addEventListener("keydown", onKey, true);
+    back.focus?.();
+  });
 }
 
 async function renderStep(state) {
@@ -393,10 +466,12 @@ function renderPeerBackupStep() {
 
 /**
  * "Secure your account" step (runs immediately after the account is
- * opened, before the user reaches the app). Nudges a backup with the
- * cloud (passkey) option pre-selected when WebAuthn is available, the
- * downloadable `.flagshipkey` file as the self-custody alternative, and
- * a clearly de-emphasized "Skip for now" text link guarded by a warning.
+ * opened, before the user reaches the app). Nudges a backup with two
+ * independent ticks, both off at first: the cloud (passkey) option,
+ * disabled when WebAuthn is unavailable, and the downloadable
+ * `.flagshipkey` file as the self-custody alternative. Continue runs every
+ * ticked one; a clearly de-emphasized "Skip for now" link warns in a
+ * popover at the link.
  *
  * Both methods are reachable later from Settings → Recovery (the cloud
  * passkey via #recovery-cloud-setup, the file via #recovery-keyfile-export),
@@ -409,21 +484,20 @@ export function renderSecureAccountStep() {
     ? tr("Recover with your device passkey or password manager.")
     : tr("Passkeys aren't available in this browser — use a backup file.");
   return `
-    <p class="note">${tr("Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.")}</p>
+    <p class="note">${tr("Back up your account now so you can get back in if you lose this device. We cannot recover it for you.")}</p>
     <fieldset id="wizard-secure-options" class="secure-options stack-md">
       <legend class="visually-hidden">${tr("Backup method")}</legend>
       <label class="secure-option${havePasskeys ? "" : " disabled"}">
-        <input type="radio" name="wizard-secure-method" value="cloud"
-               id="wizard-secure-cloud"
-               ${havePasskeys ? "checked" : "disabled"} />
+        <input type="checkbox" name="wizard-secure-cloud" value="cloud"
+               id="wizard-secure-cloud"${havePasskeys ? "" : " disabled"} />
         <span class="secure-option-text">
           <span class="secure-option-label">${tr("Save to a passkey")}</span>
           <span class="secure-option-sub muted-sm" id="wizard-secure-cloud-hint">${escapeHtml(cloudHint)}</span>
         </span>
       </label>
       <label class="secure-option">
-        <input type="radio" name="wizard-secure-method" value="file"
-               id="wizard-secure-file" ${havePasskeys ? "" : "checked"} />
+        <input type="checkbox" name="wizard-secure-file" value="file"
+               id="wizard-secure-file" />
         <span class="secure-option-text">
           <span class="secure-option-label">${tr("Save a backup file")}</span>
           <span class="secure-option-sub muted-sm">${tr("An encrypted .flagshipkey you keep yourself.")}</span>
@@ -431,11 +505,11 @@ export function renderSecureAccountStep() {
       </label>
     </fieldset>
     <div class="btn-row-sm">
-      <button id="wizard-secure-continue" class="pill primary">${tr("Continue")}</button>
+      <button id="wizard-secure-continue" class="pill primary" disabled>${tr("Continue")}</button>
     </div>
-    <p class="note muted-sm">
-      <a id="wizard-secure-skip" href="#" role="button">${tr("Skip for now")}</a>
-    </p>
+    <div class="secure-skip note muted-sm">
+      <a id="wizard-secure-skip" href="#" role="button" aria-haspopup="dialog" aria-expanded="false">${tr("Skip for now")}</a>
+    </div>
   `;
 }
 
@@ -455,6 +529,7 @@ function wireStepHandlers(state, step) {
       });
       break;
     case "secure-account":
+      secureCloudDone = false;
       document.getElementById("wizard-secure-continue")?.addEventListener("click", async () => {
         const ok = await handleSecureAccount();
         // Backing up clears any prior skip warning — the account is now
@@ -465,16 +540,21 @@ function wireStepHandlers(state, step) {
           markCompleteAndAdvance(state, "secure-account");
         }
       });
+      for (const id of ["wizard-secure-cloud", "wizard-secure-file"]) {
+        document.getElementById(id)?.addEventListener("change", () => {
+          const btn = document.getElementById("wizard-secure-continue");
+          if (btn) btn.disabled = !secureCanContinue();
+        });
+      }
       document.getElementById("wizard-secure-skip")?.addEventListener("click", async (ev) => {
         ev.preventDefault();
-        const { inlineConfirm } = await import("../lib/modal.js");
-        const skip = await inlineConfirm({
-          title: tr("Skip backup?"),
+        const anchor = ev.currentTarget;
+        if (anchor.getAttribute("aria-expanded") === "true") return;
+        const skip = await confirmAtButton(anchor, {
           message:
             tr("Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings."),
           okLabel: tr("Skip anyway"),
           cancelLabel: tr("Back"),
-          danger: true,
         });
         if (!skip) return;
         try { profileSet("recoveryWarn", "true"); } catch { /* swallow */ }
