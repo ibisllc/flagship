@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,7 +43,6 @@ import com.flagshipserver.app.core.SavedAiKey
 import com.flagshipserver.app.core.ModelMenu
 import com.flagshipserver.app.core.ModelMenus
 import com.flagshipserver.app.core.VisionCheck
-import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FlagshipTheme
@@ -253,8 +253,16 @@ class ModelMenuComposeTest {
             Column(Modifier.padding(horizontal = FS.space.s6)) {
                 Header(own, ModelChoice("gpt-5.4-mini", "medium"))
                 Spacer(Modifier.height(FS.space.s4))
-                FSCard {
-                    Column {
+                // FSCard's look without its animateContentSize: in the full suite the
+                // size animation sometimes never settles under Robolectric's clock, so
+                // setContent never goes idle (AppNotIdleException), like a live text field.
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ) {
+                    Column(Modifier.padding(FS.space.s4)) {
                         ChatMessage(VibeCodeSessionMessage("assistant", "Want a watering reminder too?", 1, credits = 2.8))
                         Spacer(Modifier.height(FS.space.s2))
                         // A still stand-in for the reply field (a live text field keeps
