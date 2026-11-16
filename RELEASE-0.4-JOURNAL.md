@@ -761,40 +761,34 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 
 ## Resume point
 
-State (2026-11-15): `release/0.4` holds everything merged so far:
-- calls: rings on iOS/Android, video, missed calls, settings;
-- restore into a server (iOS, Android, webapp; hybrid for strict boxes);
-- enterprise: org servers, key ring and rotations, audit export, install path, iOS join;
-- retail: identity at first boot, BlueZ with least privilege, unprivileged claim service, webapp Release;
-- the cloud-report fixes.
+State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
+- calls: rings, video, missed calls, locked answering, calls from the app's logs (real WebRTC engine on iOS and
+  Android, browser handoff as fallback), ring-back with the honest pop-up, anonymous calls with proof of work and
+  blocking, delete = forget, reveal pill with the unchecked-name sheet, call hours on the owner's devices only;
+- libwebrtc built by us (CI), pinned to GitHub pre-release `libwebrtc-157-43884507084`;
+- webapp custody 1-6 and the webapp as a full org seat;
+- org directory with SCIM/LDAP connectors (all three apps);
+- restore, enterprise, retail, cloud fixes; terms and privacy wording for 0.4.
 
-Parity has 0 red. Shell is v215 (v216 arrives with calls-2). Nothing is deployed; only `main` deploys, and the terms
-change ships with 0.4.
+Shell **v221**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
+running.
 
 Next steps for whoever resumes:
-1. **Merge any agent branch that reported** (worktrees `~/flagship-0.4-<slug>`, branches `0.4/<slug>`):
-   - `libwebrtc`: CI run 43756120375 started (`gh run view 43756120375`); fix rounds, then record the pin and merge.
-   - Running: `org-directory` (gap closure), `calls-callback`, `webapp-custody` (reserved: shells v217/v218/v219,
-     migrations 0148 directory, 0149 callback, 0150 custody). `calls-2` (incl. locked answering) is merged.
-   - `enterprise-3` merged; `org-directory` agent next (directory + SCIM/LDAP connectors, KEM at join, index 0148,
-     Android create/invite/freeze).
-   - Merge rule: run `scratchpad/rebase-i18n.sh` (or rebase by hand). Never commit conflict markers. On a shell
-     clash, take the next number and move WEB_BUILD plus `release/compatibility.json` with it (the compat-matrix
-     test guards this). Generated installer files (preseed engine, goldens, bootstrap pin): regenerate with
-     `node scripts/box-release-regen.mjs`. Then run tsc, the touched tests, `npm run i18n` and `npm run parity`;
-     fast-forward and push.
-2. **Cloud session** (`Session ID for inter-session communication`, cloud): it reports on `origin/0.4/cloud-reports`
-   (`cloud-reports/NN-*.md`). It has no KVM, so the retail VM test (`tools/retail-vm/run.sh`) needs another Linux
-   KVM host. It has no Xcode; iOS builds run on this Mac (commands in the 2026-11-15 log entries; native builds are
-   serialised by `/private/tmp/claude-501/flagship-locks/native-build.lock`).
-3. **Build next** (designs on disk):
-   - org directory + SCIM/LDAP connectors (`docs/org-directory.md` §8 build order);
-   - answering while locked (`docs/voici-calls.md`, owner decisions 2026-11-15);
-   - `voici-call-allow/v1` missing from `tools/adversarial/tests/support/tagInventory.ts`;
-   - (decided and running: libwebrtc option A, the media engine, flagship-turn-lite, webapp custody 1-6, call back.)
-4. **Waiting on the owner:** at release, sign the webapp shell (`docs/webapp-key-custody.md`), then set
-   `SHELL_SIGNATURE_REQUIRED=true`; signing the webapp shell
-   at release; a KVM host for the retail VM test; plus the older questions in the 2026-11-14 entries (co-manager caps,
-   enterprise formulas, calls v2, retail untrusted, direct names, voi.ci name caps, payments, wired fleet).
-5. **Not run yet:** the full vitest and Android suites on the newest tip (send to the cloud), the iOS mock gym, the
-   Playwright gym specs, and anything on a real box or phone.
+1. **Cloud task 6** (sent 2026-11-16): full suites on `4bb402875`, plus task 5 if still open. Read
+   `cloud-reports/05-*.md` and `06-*.md` on `origin/0.4/cloud-reports`, merge any `0.4/*-cloudfix` branches.
+2. **Merge rule** for any new branch: rebase with `scratchpad/rebase-i18n.sh` or by hand; never commit conflict
+   markers (`git grep -n '^<<<<<<<'` before committing); on a shell clash take the next number and move WEB_BUILD,
+   `release/compatibility.json` and the `apps/web/tests` pins (use perl, BSD sed has no `\b`); after a merge that
+   changes packages, `npm i && npx tsc -b` before trusting webapp tests (stale `dist/` broke 20 of them once).
+3. **Not run yet:** gym UI tests on iOS and Android for calls, the iOS mock gym, any real box, phone or watch, a
+   real browser-to-phone and phone-to-phone call, the OpenLDAP CI job, a real browser against a real `.com` for
+   custody. These are the release's remaining risk.
+4. **Open, decided later or not in 0.4:** verification notes (paid, idea only); IPv6-only gym (blocked on UpCloud
+   IPv4-only boxes and `.com`'s IPv4 checks; fold into "make Fly redundant"); libwebrtc builds are not byte
+   reproducible; the caller's video in the call screens; delete on iOS can't fully forget across the owner's devices
+   (the synced Messages state merges by union: needs a format change).
+5. **Waiting on the owner:** at release, sign the webapp shell (`docs/webapp-key-custody.md`) and then set
+   `SHELL_SIGNATURE_REQUIRED=true`; a KVM host for the retail VM test (`tools/retail-vm/run.sh`); the older questions
+   in the 2026-11-14 entries (co-manager caps, enterprise formulas, calls v2, retail untrusted, direct names, voi.ci
+   name caps, payments, wired fleet).
+6. Fly: gym relays are off between runs (`scripts/gym-relays.sh`); a hand-run gym needs `gym-relays.sh on` first.
