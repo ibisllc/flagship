@@ -22,6 +22,7 @@
 # Env (passed through to scripts/gym-refresh.sh): GYM_REFRESH_ARGS (e.g. --skip-fly-deploy when only box code changed), GYM_BASE_REF, GYM_START_REF (e.g. origin/gym-ux to run
 # the UX branch's gym), and the gym secrets file (.gym-secrets.env: GYM_ADMIN_SECRET, GYM_DEMO_IRK_KEK).
 # GYM_SYNC_REPO (+ GYM_SYNC_BASE_REF, GYM_SYNC_NEXT_REF) turns the upstream-sync group on.
+# GYM_KEEP_RELAYS=1 leaves the gym relays running at the end (default: scripts/gym-relays.sh off).
 # FLAGSHIP_GYM_LOCK overrides the lock path. The lock is a file naming its holder (release.sh and the
 # UX session read it the same way), created with noclobber so two runs cannot both take it.
 set -euo pipefail
@@ -54,7 +55,8 @@ if [ "$DRY" = 0 ]; then
   mkdir -p "$(dirname "$LOCK")"
   ( set -o noclobber; echo "release gate (scripts/gym-release-run.sh) $(date -u +%Y-%m-%dT%H:%M:%SZ) pid $$" > "$LOCK" ) 2>/dev/null \
     || { echo "✗ could not take the gym lock (taken meanwhile)" >&2; exit 4; }
-  trap 'rm -f "$LOCK"' EXIT
+  # The gym relays stop when the run ends (scripts/gym-relays.sh; GYM_KEEP_RELAYS=1 leaves them up).
+  trap 'rm -f "$LOCK"; [ "${GYM_KEEP_RELAYS:-0}" = 1 ] || bash "$REPO/scripts/gym-relays.sh" off || true' EXIT
 fi
 # A sleeping Mac freezes the harness mid-group (gym 8's classic pass: a 20 s probe "took" 942 s and every
 # write in flight timed out), so the run keeps the machine awake until it ends.
@@ -84,6 +86,8 @@ export GYM_ROLLBACK_TARGET="${GYM_ROLLBACK_TARGET:-1}"
 if [ "$REFRESH" = 1 ]; then
   # shellcheck disable=SC2086
   run bash scripts/gym-refresh.sh ${GYM_REFRESH_ARGS:-}
+else
+  run bash scripts/gym-relays.sh on
 fi
 
 # Two passes (owner, 2026-10-24: the gym decides what new boxes are built on). arch-v2 runs every
