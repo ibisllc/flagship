@@ -3851,5 +3851,10 @@
   "Anonymous caller": "Appel anonyme",
   "Only at certain hours": "Seulement à certaines heures",
   "Calls can ring at any time.": "Les appels peuvent sonner à toute heure.",
-  "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": "Les appels ne sonnent qu'à ces heures, dans le fuseau horaire %@. Votre page montre ces heures et le fuseau horaire aux visiteurs. Une fin avant le début passe minuit."
+  "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": "Les appels ne sonnent qu'à ces heures, dans le fuseau horaire %@. Votre page montre ces heures et le fuseau horaire aux visiteurs. Une fin avant le début passe minuit.",
+  "This page takes calls only from people who let it call them back.": "Cette page ne prend que les appels de personnes qui acceptent d'être rappelées.",
+  "Let voi.ci/%@ call you back?": "Laisser voi.ci/%@ vous rappeler ?",
+  "Call and allow call-back": "Appeler et autoriser le rappel",
+  "Call without call-back": "Appeler sans rappel",
+  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ ne saura pas qui vous êtes. Flagship saura que cette conversation peut faire sonner votre téléphone."
 }

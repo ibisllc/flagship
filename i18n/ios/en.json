@@ -16429,5 +16429,25 @@
   "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": {
     "en": "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:80"
+  },
+  "This page takes calls only from people who let it call them back.": {
+    "en": "This page takes calls only from people who let it call them back.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:375"
+  },
+  "Let voi.ci/%@ call you back?": {
+    "en": "Let voi.ci/%@ call you back?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:182"
+  },
+  "Call and allow call-back": {
+    "en": "Call and allow call-back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:184"
+  },
+  "Call without call-back": {
+    "en": "Call without call-back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:186"
+  },
+  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": {
+    "en": "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:190"
   }
 }
