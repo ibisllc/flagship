@@ -3762,5 +3762,13 @@
   "{0} · {1}": "{0} · {1}",
   "Open conversation": "Abrir a conversa",
   "voi.ci/{0}, since {1}": "voi.ci/{0}, desde {1}",
-  "Calls": "Chamadas"
+  "Calls": "Chamadas",
+  "Anonymous caller": "Chamada anônima",
+  "Unblock": "Desbloquear",
+  "About this name": "Sobre este nome",
+  "This is a name the person chose. Flagship doesn't check names, so anyone can use any name.": "Este é um nome que a pessoa escolheu. O Flagship não verifica nomes, então qualquer pessoa pode usar qualquer nome.",
+  "Messages already on {0}'s device stay there.": "As mensagens que já estão no dispositivo de {0} continuam lá.",
+  "{0} ({1})": "{0} ({1})",
+  "Call back": "Ligar de volta",
+  "Ringing them. When they answer, your phone rings.": "O telefone deles está tocando. Quando atenderem, o seu toca."
 }

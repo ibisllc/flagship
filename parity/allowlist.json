@@ -755,6 +755,16 @@
       "check": "signed-tags",
       "key": "android:flagship/webapp-shell/v1",
       "reason": "Browser-only: the signed manifest of the webapp shell that its service worker checks (docs/webapp-key-custody.md item 5). The native apps ship as signed store builds and have no shell to verify."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-call-pow/v1",
+      "reason": "An anonymous caller's proof of work is solved by the caller's browser on voi.ci (packages/flagship-web/src/callModes.js, pinned to test-vectors/voici-call-modes by packages/flagship-web/tests/callModes.test.ts); the webapp is an owner device and never places an anonymous call."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-ring-back/v1",
+      "reason": "The ring-back channel is the caller's order, signed in the caller's voi.ci tab (packages/flagship-web/src/callModes.js) or by the caller's app; the webapp's calls to known pages go through a voi.ci tab, which attaches it there."
     }
   ]
 }

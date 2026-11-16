@@ -30,6 +30,11 @@ import {
   mergeVoiciPage,
   openMessagesState,
   openVoiciBody,
+  openVoiciBodyAny,
+  checkVoiciReveal,
+  checkVoiciPageIndex,
+  signVoiciConvDeleteOwner,
+  signVoiciAnonBlock,
   openVoiciDraft,
   parseVoiciChunkPiece,
   parseVoiciProfilePiece,
@@ -53,7 +58,7 @@ import {
   canonicalVoiciPageRemove,
 } from "./voiciProtocol.js";
 import { controlApex, controlHost, dataApex } from "./apex.js";
-import { openVoiciMissedCall, signVoiciCallAllow } from "./voiciCalls.js";
+import { openVoiciMissedCall, sealVoiciRingHint, signVoiciCallAllow, signVoiciRing, voiciRingHintB64 } from "./voiciCalls.js";
 import { accountReadFetch } from "./accountRead.js";
 import { canonicalDirectoryRequest } from "./accountMetadata.js";
 import { deviceGrantCanonicalBytes } from "./crossDevicePairing.js";
@@ -666,14 +671,14 @@ export function openInbox(page, body, { umk, caKeys, origin }) {
   const signPubs = new Set(allKeys.map((k) => hex(k.sign.publicKey)));
   const open = (env) => {
     for (const k of allKeys) {
-      const o = openVoiciBody(b64Decode(env.bodyB64), { conv: env.conv, msgId: env.msgId }, k.inbox.seed);
+      const o = openVoiciBodyAny(b64Decode(env.bodyB64), { conv: env.conv, msgId: env.msgId }, k.inbox.seed);
       if (o.ok || o.code !== "no-wrap") return o;
     }
     return { ok: false, code: "no-wrap" };
   };
   const convs = new Map();
   const conv = (id) => {
-    if (!convs.has(id)) convs.set(id, { conv: id, pseudonymPub: null, threadPub: null, messages: [] });
+    if (!convs.has(id)) convs.set(id, { conv: id, pseudonymPub: null, threadPub: null, messages: [], controlSeqs: [], control: null, ringBack: false });
     return convs.get(id);
   };
   const seen = new Set();
@@ -692,6 +697,14 @@ export function openInbox(page, body, { umk, caKeys, origin }) {
       seen.add(`${env.conv}|${env.msgId}`);
       const cv = conv(env.conv);
       cv.pseudonymPub = env.from;
+      if (typeof item?.ringBack === "boolean") cv.ringBack = item.ringBack;
+      if (opened.control) {
+        // A reveal or an unreveal (docs/voici-calls.md, "Reveal who I am"): the newest wins; it is checked against
+        // the caller's page key before anything shows (checkConversationReveal).
+        cv.controlSeqs.push(env.seq);
+        if (!cv.control || opened.control.issuedAt >= cv.control.issuedAt) cv.control = opened.control;
+        continue;
+      }
       if (!cv.threadAt || m.cred.threadStmt.issuedAt >= cv.threadAt) {
         cv.threadPub = m.cred.threadStmt.threadPub;
         cv.threadAt = m.cred.threadStmt.issuedAt;
@@ -706,6 +719,7 @@ export function openInbox(page, body, { umk, caKeys, origin }) {
       const opened = open(env);
       if (!opened.ok) continue;
       seen.add(`${env.conv}|${env.msgId}`);
+      if (!opened.plaintext) continue;
       conv(env.conv).messages.push({ msgId: env.msgId, seq: env.seq, sentAt: env.sentAt, mine: true, text: opened.plaintext.text, envelope: env, ...meta });
     }
   }
@@ -714,13 +728,15 @@ export function openInbox(page, body, { umk, caKeys, origin }) {
     if (!cv.pseudonymPub) continue;
     cv.messages.sort((a, b) => a.sentAt - b.sentAt || (a.msgId < b.msgId ? -1 : 1));
     // A gap in a sender's seq shows "Some messages haven't arrived yet" until it fills (§7.3).
-    const theirs = cv.messages.filter((m) => !m.mine).map((m) => m.seq).sort((a, b) => a - b);
+    const theirs = [...cv.messages.filter((m) => !m.mine).map((m) => m.seq), ...cv.controlSeqs].sort((a, b) => a - b);
+    delete cv.controlSeqs;
     cv.gap = theirs.some((s, i) => s !== i + 1);
     delete cv.threadAt;
     conversations.push(cv);
   }
   conversations.sort((a, b) => lastAt(b) - lastAt(a));
-  return { conversations, blocks: [...blocks], revoked: [...revoked], cursor: typeof body?.cursor === "string" ? body.cursor : "" };
+  const anonBlocks = (Array.isArray(body?.anonBlocks) ? body.anonBlocks : []).filter((x) => typeof x === "string" && /^[0-9a-f]{32}$/.test(x));
+  return { conversations, blocks: [...blocks], revoked: [...revoked], anonBlocks, cursor: typeof body?.cursor === "string" ? body.cursor : "" };
 }
 
 const lastAt = (cv) => cv.messages[cv.messages.length - 1]?.sentAt ?? 0;
@@ -832,7 +848,7 @@ export function openMissedCalls(page, body, { umk, caKeys, origin }) {
     for (const seed of seeds) {
       const m = openVoiciMissedCall(seed, item.callId, sealed, { pageId, origin, caKeys });
       if (!m) continue;
-      calls.push({ id: item.id, callId: item.callId, conv: m.request.conv, pseudonymPub: m.request.from, reason: m.reason, ringingAt: m.ringingAt, endedAt: m.endedAt, video: m.request.media === "audio,video" });
+      calls.push({ id: item.id, callId: item.callId, conv: m.request.conv, pseudonymPub: m.request.from ?? null, anonymous: m.request.kind === "voici-call-request-anon", reason: m.reason, ringingAt: m.ringingAt, endedAt: m.endedAt, video: m.request.media === "audio,video" });
       break;
     }
   }
@@ -852,4 +868,68 @@ export async function postCallAllow(page, conv, op, deps = {}) {
     body: JSON.stringify({ allow, signature }),
   });
   if (!r.ok) throw await readError(r);
+}
+
+// ── reveal, delete, anonymous blocks (docs/voici-calls.md, 2026-11-16) ────────
+
+/**
+ * The caller's reveal, checked: the page key `.com` serves for the revealed username must have signed it. Answers
+ * {displayName, username} for the pill, or null (no reveal, an unreveal, or anything that fails: nothing shows).
+ */
+export async function checkConversationReveal(cv, deps = {}) {
+  const r = cv?.control;
+  if (!r || r.kind !== "voici-reveal") return null;
+  try {
+    const c = ctx(deps);
+    const res = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(r.username)}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const keys = deps.accountKeys ?? (await fetchAccountKeys(r.username, deps));
+    const idx = checkVoiciPageIndex((await res.json())?.index, { username: r.username, sensitiveKind: keys.kind, sensitivePub: keys.pub });
+    if (!idx.ok) return null;
+    const ok = checkVoiciReveal(r, { conv: cv.conv, pageSignPub: idx.index.ownerSignPub });
+    return ok.ok ? { displayName: ok.reveal.displayName, username: ok.reveal.username } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Delete = forget: the owner's signed delete; `.com` drops the conversation's rows at once. */
+export async function postConversationDelete(page, conv, deps = {}) {
+  const c = ctx(deps);
+  const keys = ownerKeys(umkOf(c), page.index.pageId, page.index.inboxEpoch);
+  const body = signVoiciConvDeleteOwner({ pageId: page.index.pageId, conv, issuedAt: c.now() }, keys.sign.seed);
+  const r = await c.fetch(`${c.apex}/api/voici/web/conv-delete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw await readError(r);
+}
+
+/** Blocks (or unblocks) an anonymous caller's conversation (flagship/voici-anon-block/v1). */
+export async function postAnonBlock(page, conv, op, deps = {}) {
+  const c = ctx(deps);
+  const keys = ownerKeys(umkOf(c), page.index.pageId, page.index.inboxEpoch);
+  const block = { pageId: page.index.pageId, conv, op, issuedAt: c.now() };
+  const signature = signVoiciAnonBlock(block, keys.sign.seed);
+  const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(usernameOf(c))}/anon-block`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ block, signature }) });
+  if (!r.ok) throw await readError(r);
+}
+
+/**
+ * Rings a caller back (docs/voici-calls.md): only for a conversation whose caller allowed it (`cv.ringBack`). The
+ * hint is sealed to the caller's thread key, so only the caller's own app or tab learns which page is calling; the
+ * caller dials out to this page and the owner's phones ring as for any call. Answers {pushed}.
+ */
+export async function postRing(page, cv, media = "audio", deps = {}) {
+  if (!cv.threadPub) throw new VoiciError("no-thread-key");
+  const c = ctx(deps);
+  const keys = ownerKeys(umkOf(c), page.index.pageId, page.index.inboxEpoch);
+  const issuedAt = c.now();
+  const ringId = randHex(16);
+  const hint = voiciRingHintB64(sealVoiciRingHint(hexToBytes(cv.threadPub), { pageId: page.index.pageId, username: usernameOf(c), conv: cv.conv, ringId, media, issuedAt }));
+  const ring = { pageId: page.index.pageId, conv: cv.conv, ringId, hint, media, issuedAt };
+  const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(usernameOf(c))}/ring`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ring, signature: signVoiciRing(ring, keys.sign.seed) }),
+  });
+  if (!r.ok) throw await readError(r);
+  return r.json();
 }

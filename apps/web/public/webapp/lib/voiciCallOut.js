@@ -77,7 +77,7 @@ export function callHistory(missedCalls = [], deps = {}) {
     direction: "in",
     outcome: "missed",
     video: !!m.video,
-    peer: { kind: "visitor", conv: m.conv, pseudonymPub: m.pseudonymPub },
+    peer: { kind: "visitor", conv: m.conv, pseudonymPub: m.pseudonymPub ?? null, anonymous: m.anonymous === true },
   }));
   return [...placed, ...missed].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : 1));
 }

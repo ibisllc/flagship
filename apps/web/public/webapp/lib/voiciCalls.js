@@ -7,8 +7,10 @@
 //   canonicalVoiciCallAllow, signVoiciCallAllow, verifyVoiciCallAllow     flagship/voici-call-allow/v1
 //   canonicalVoiciCallRequest, checkVoiciCallRequestSignatures            the request a missed call carries
 //   openVoiciMissedCall                                                   flagship/voici-missed-call/v1
+//   sealVoiciRingHint, canonicalVoiciRing, signVoiciRing                  the owner ringing a caller back
+//                                                                         (flagship/voici-ring/v1, -ring-hint/v1)
 
-import { canonicalJson, ed25519SignHex, ed25519VerifyHex, hybridOpen, isLowerHex, p256VerifyP1363, sha256Hex } from "./voiciCore.js";
+import { b64Decode, b64Encode, canonicalJson, canonicalJsonBytes, ed25519SignHex, ed25519VerifyHex, hybridOpen, hybridSealWithRandomness, isLowerHex, p256VerifyP1363, parseHybridSealPublicKey, sha256Hex } from "./voiciCore.js";
 import { canonicalVoiciThreadStatement, checkMessagesKeyAttestation, checkWebDelegation, parseVoiciThreadStatement, voiciConv } from "./voiciMessages.js";
 
 export const TAG_VOICI_CALL_REQUEST = "flagship/voici-call-request/v1";
@@ -73,6 +75,7 @@ export function canonicalVoiciCallRequest(r) {
  */
 export function checkVoiciCallRequestSignatures(r, ctx) {
   const no = (code) => ({ ok: false, code });
+  if (isObj(r) && r.kind === "voici-call-request-anon") return checkAnonRequestSignature(r, ctx);
   if (!isObj(r) || !(exactKeys(r, REQUEST_KEYS) || exactKeys(r, [...REQUEST_KEYS, "media"])) || r.v !== 1 || r.kind !== "voici-call-request") return no("malformed");
   if (!isLowerHex(r.sig, 64) || !isLowerHex(r.from, 32) || !isObj(r.cred)) return no("malformed");
   let bytes;
@@ -92,6 +95,21 @@ export function checkVoiciCallRequestSignatures(r, ctx) {
   if (!ts || ts.pageId !== ctx.pageId || ts.pseudonymPub !== r.from || typeof c.threadSig !== "string" || !ed25519VerifyHex(c.threadSig, canonicalVoiciThreadStatement(ts), r.from)) return no("bad-thread");
   if (r.conv !== voiciConv(ctx.pageId, r.from)) return no("wrong-conv");
   if (!p256VerifyP1363(r.sig, bytes, del.delegation.delegatePub)) return no("bad-signature");
+  return { ok: true, request: r };
+}
+
+// An anonymous caller's request (voiciCallModes.ts): its browser key signed it and names its conversation; the work
+// was `.com`'s check when it rang.
+const ANON_KEYS = ["v", "kind", "pageId", "conv", "callId", "browserPub", "callerXwingPub", "offerSdp", "issuedAt", "pow", "sig"];
+
+function checkAnonRequestSignature(r, ctx) {
+  const no = (code) => ({ ok: false, code });
+  if (!(exactKeys(r, ANON_KEYS) || exactKeys(r, [...ANON_KEYS, "media"])) || r.v !== 1 || !isLowerHex(r.sig, 64) || !isLowerHex(r.browserPub, 65) || !isObj(r.pow)) return no("malformed");
+  if (!PAGE_ID.test(r.pageId) || !isLowerHex(r.conv, 16) || !isLowerHex(r.callId, 16) || !isTime(r.issuedAt) || typeof r.offerSdp !== "string" || typeof r.pow.challenge !== "string" || typeof r.pow.nonce !== "string") return no("malformed");
+  if (r.pageId !== ctx.pageId) return no("wrong-audience");
+  if (r.conv !== sha256Hex(utf8(`flagship/voici-anon-conv/v1|${r.pageId}|${r.browserPub}`)).slice(0, 32)) return no("wrong-conv");
+  const bytes = join(["flagship/voici-call-request-anon/v1", r.pageId, r.conv, r.callId, r.browserPub, r.callerXwingPub, sha256Hex(utf8(r.offerSdp)), r.issuedAt, sha256Hex(utf8(r.pow.challenge)), r.pow.nonce, ...(r.media !== undefined ? [r.media] : [])]);
+  if (!p256VerifyP1363(r.sig, bytes, r.browserPub)) return no("bad-signature");
   return { ok: true, request: r };
 }
 
@@ -115,3 +133,30 @@ export function openVoiciMissedCall(inboxSeed, callId, sealed, ctx) {
     return null;
   }
 }
+
+// ── ringing a caller back (packages/protocol/src/voiciCallModes.ts) ───────────
+
+export const TAG_VOICI_RING = "flagship/voici-ring/v1";
+export const TAG_VOICI_RING_HINT = "flagship/voici-ring-hint/v1";
+const USERNAME = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+
+/** The hint only the caller's app or tab opens (its thread key): which page is calling back, and the ring. */
+export function sealVoiciRingHint(threadPub, h, eseed = crypto.getRandomValues(new Uint8Array(64))) {
+  if (!PAGE_ID.test(h.pageId) || !USERNAME.test(h.username) || !isLowerHex(h.conv, 32) || !isLowerHex(h.ringId, 16) || !VOICI_CALL_MEDIA.includes(h.media) || !isTime(h.issuedAt)) throw new Error(`${TAG_VOICI_RING_HINT}: bad field`);
+  return hybridSealWithRandomness(
+    parseHybridSealPublicKey(threadPub),
+    { purpose: TAG_VOICI_RING_HINT, senderKeyId: new Uint8Array(32), issuedAt: h.issuedAt },
+    [utf8(h.conv), utf8(h.ringId)],
+    canonicalJsonBytes({ v: 1, pageId: h.pageId, username: h.username, conv: h.conv, ringId: h.ringId, media: h.media, issuedAt: h.issuedAt }),
+    eseed,
+  );
+}
+
+export function canonicalVoiciRing(r) {
+  const hint = b64Decode(r.hint);
+  if (!PAGE_ID.test(r.pageId) || !isLowerHex(r.conv, 32) || !isLowerHex(r.ringId, 16) || !hint || !VOICI_CALL_MEDIA.includes(r.media) || !isTime(r.issuedAt)) throw new Error(`${TAG_VOICI_RING}: bad field`);
+  return join([TAG_VOICI_RING, r.pageId, r.conv, r.ringId, sha256Hex(hint), r.media, r.issuedAt]);
+}
+
+export const signVoiciRing = (r, ownerSignSeed) => ed25519SignHex(canonicalVoiciRing(r), ownerSignSeed);
+export const voiciRingHintB64 = (bytes) => b64Encode(bytes);

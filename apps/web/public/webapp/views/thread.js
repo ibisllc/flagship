@@ -5,9 +5,9 @@
 import { $, registerView, show } from "../lib/router.js";
 import { toast } from "../lib/toast.js";
 import { formatWhen } from "../lib/dateFormat.js";
-import { inlineChoice, inlineConfirm, inlinePrompt } from "../lib/modal.js";
+import { inlineAlert, inlineChoice, inlineConfirm, inlinePrompt } from "../lib/modal.js";
 import { findVoiciLinks, prepareVoiciText, VOICI_REPORT_REASONS } from "../lib/voiciProtocol.js";
-import { isRequest, postBlock, postCallAllow, postMessageReport, sendReply } from "../lib/voiciOwner.js";
+import { checkConversationReveal, isRequest, postBlock, postCallAllow, postConversationDelete, postMessageReport, postRing, sendReply, voiciWebOrigin } from "../lib/voiciOwner.js";
 import { changeState, emitWorld, findConversation, refreshWorld, visitorName, world } from "../lib/voiciWorld.js";
 import { voiciErrorText, voiciTextProblem } from "../lib/voiciCopy.js";
 
@@ -16,6 +16,58 @@ import { tr } from "../lib/i18n.js";
 registerView("view-thread", { tab: "messages" });
 
 let openConv = null;
+
+// ── the caller's reveal (docs/voici-calls.md, "Reveal who I am", "What the reveal shows") ──
+const reveals = new Map();
+
+/** The checked reveal of a conversation ({displayName, username}) once known, else null; checks it once per reveal. */
+export function revealOf(cv) {
+  const c = cv?.control;
+  if (!c || c.kind !== "voici-reveal") return null;
+  const key = `${cv.conv}|${c.sig}`;
+  if (!reveals.has(key)) {
+    reveals.set(key, null);
+    void checkConversationReveal(cv).then((r) => {
+      reveals.set(key, r);
+      if (r) emitWorld();
+    });
+  }
+  return reveals.get(key);
+}
+
+/** "This is a name the person chose…": the sheet behind the info icon next to every printed chosen name. */
+export function chosenNameInfo() {
+  return inlineAlert({ title: tr("About this name"), message: tr("This is a name the person chose. Flagship doesn't check names, so anyone can use any name.") });
+}
+
+/** The pill "Display Name (username)" (or "username"), opening the page, with the info icon beside the chosen name. */
+export function revealPill(r, doc = document) {
+  const wrap = doc.createElement("span");
+  wrap.className = "reveal-pill";
+  wrap.setAttribute("data-testid", "reveal-pill");
+  const open = doc.createElement("button");
+  open.type = "button";
+  open.className = "pill";
+  open.textContent = r.displayName ? tr("{0} ({1})", r.displayName, r.username) : r.username;
+  open.addEventListener("click", (e) => {
+    e.stopPropagation();
+    window.open(`${voiciWebOrigin()}/${r.username}`, "_blank", "noopener,noreferrer");
+  });
+  wrap.appendChild(open);
+  if (r.displayName) {
+    const info = doc.createElement("button");
+    info.type = "button";
+    info.className = "icon-btn";
+    info.setAttribute("aria-label", tr("About this name"));
+    info.textContent = "ⓘ";
+    info.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void chosenNameInfo();
+    });
+    wrap.appendChild(info);
+  }
+  return wrap;
+}
 
 const REASON_LABEL = {
   spam: () => tr("Spam"),
@@ -62,6 +114,8 @@ function render() {
   $("thread-title").textContent = visitorName(cv.pseudonymPub);
   const notice = $("thread-notice");
   notice.replaceChildren();
+  const revealed = revealOf(cv);
+  if (revealed) notice.appendChild(revealPill(revealed));
   if (cv.gap) {
     const p = document.createElement("p");
     p.className = "note";
@@ -254,14 +308,25 @@ async function deleteConv() {
   if (!cv) return;
   const ok = await inlineConfirm({
     title: tr("Delete this conversation?"),
-    message: tr("It's removed from your devices."),
+    message: `${tr("It's removed from your devices.")} ${tr("Messages already on {0}'s device stay there.", visitorName(cv.pseudonymPub))}`,
     okLabel: tr("Delete"),
     danger: true,
   });
   if (!ok) return;
   try {
+    // Delete = forget (docs/voici-calls.md): `.com` drops the conversation's mail, ring-back channel and calls at once.
+    await postConversationDelete(world.page, cv.conv);
     await changeState((s) => ({ ...s, archived: [...new Set([...s.archived, cv.conv])].sort() }));
     await leave();
+  } catch (e) {
+    toast(voiciErrorText(e), "err");
+  }
+}
+
+async function callBack(cv) {
+  try {
+    await postRing(world.page, cv);
+    toast(tr("Ringing them. When they answer, your phone rings."));
   } catch (e) {
     toast(voiciErrorText(e), "err");
   }
@@ -280,13 +345,16 @@ async function menu() {
   const cv = findConversation(openConv);
   if (!cv) return;
   const choices = [{ id: "rename", label: tr("Rename"), secondary: true }];
+  // Call back rings the caller's own devices through the conversation; only when they allowed it.
+  if (cv.ringBack) choices.unshift({ id: "call-back", label: tr("Call back"), secondary: true });
   if (isRequest(cv, world.state)) choices.push({ id: "accept", label: tr("Accept"), secondary: true });
   if (world.page?.index?.acceptsCalls === 1) {
     choices.push({ id: "allow-calls", label: tr("Allow calls from them"), secondary: true }, { id: "disallow-calls", label: tr("Don't allow calls from them"), secondary: true });
   }
   choices.push({ id: "block", label: tr("Block"), danger: true }, { id: "report", label: tr("Report"), secondary: true }, { id: "delete", label: tr("Delete conversation"), danger: true });
   const pick = await inlineChoice({ title: visitorName(cv.pseudonymPub), choices });
-  if (pick === "rename") await rename();
+  if (pick === "call-back") await callBack(cv);
+  else if (pick === "rename") await rename();
   else if (pick === "accept") await acceptConv();
   else if (pick === "block") await block();
   else if (pick === "delete") await deleteConv();
