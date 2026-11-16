@@ -188,30 +188,8 @@ class VoiciSignInFlow(
             val umk = keyring.umk() ?: return fail("not-found")
             val device = keyring.device() ?: return fail("not-found")
             val visitor = VoiciVisitorKeys.derive(umk, req.pageId)
-            val ca = center.caKeys()
-            val previous = center.previousAttestation(req.pageId)?.let { MessagesAttestations.parseMessagesKeyAttestation(it) }
             val t = now()
-            val attestation = previous?.takeIf { it.pseudonymPub == visitor.pseudonymPub && it.expiresAt - t > 7 * 86_400_000L }
-                ?.takeIf { ca.isEmpty() || MessagesAttestations.checkMessagesKeyAttestation(it.toJson(), ca, t, visitor.pseudonymPub).ok }
-                ?.toJson()
-                ?: run {
-                    val renewOf = previous?.takeIf { it.pseudonymPub == visitor.pseudonymPub && t - it.expiresAt <= MessagesAttestations.MESSAGES_ATTESTATION_RENEW_GRACE_MS }
-                        ?.let(MessagesAttestations::messagesAttestationHash).orEmpty()
-                    val probe = VoiciOwner.attestationRequest(u, visitor, renewOf, "android", t) { device.signer.sign(it) }
-                    val token = integrity.token(VoiciOwner.requestHash(probe.first))
-                    val (reqJson, sig) = if (token != null) probe else VoiciOwner.attestationRequest(u, visitor, renewOf, "none", t) { device.signer.sign(it) }
-                    // B2: `integrity` only with a token (absent for `none`); `previous` names the attestation a renewal renews.
-                    val body = linkedMapOf<String, kotlinx.serialization.json.JsonElement>("request" to reqJson, "signature" to kotlinx.serialization.json.JsonPrimitive(sig))
-                    token?.let { body["integrity"] = JsonObject(mapOf("platform" to kotlinx.serialization.json.JsonPrimitive("android"), "token" to kotlinx.serialization.json.JsonPrimitive(it))) }
-                    if (renewOf.isNotEmpty()) previous?.let { body["previous"] = it.toJson() }
-                    center.client.attest(u, device, JsonObject(body))
-                }
-            // `.com`'s clock may run a little ahead of this phone's: judge a just-issued attestation at its own issuedAt.
-            val issued = MessagesAttestations.parseMessagesKeyAttestation(attestation)?.issuedAt ?: t
-            val checkAt = if (issued > t && issued - t <= VoiciMessages.VOICI_SEND_SKEW_MS) issued else t
-            val att = if (ca.isNotEmpty()) MessagesAttestations.checkMessagesKeyAttestation(attestation, ca, checkAt, visitor.pseudonymPub).valueOrNull()
-            else MessagesAttestations.parseMessagesKeyAttestation(attestation)
-            if (att == null || att.pseudonymPub != visitor.pseudonymPub) return fail("bad-attestation")
+            val att = VoiciVisitorAttestation.obtain(center, u, device, integrity, visitor, t) ?: return fail("bad-attestation")
             val answer = VoiciOwner.signInAnswer(req, visitor, att.toJson(), att.expiresAt, t)
             pipe.deliver(WebEnvelopes.canonicalJsonBytes(answer))
             center.recordSignIn(req.pageId, req.username, req.delegatePub, att.toJson())
@@ -234,5 +212,39 @@ class VoiciSignInFlow(
     private fun fail(code: String, retry: Long? = null) {
         _phase.value = VoiciSignInPhase.Failed(code, retry)
         pipe.close()
+    }
+}
+
+/**
+ * This account's attestation for its pseudonym on a page (§6.3): the stored one while it has more than 7 days left,
+ * else a fresh one from `.com` (a renewal of the stored one when it lapsed at most 7 days ago), with the device's
+ * integrity token when there is one. Null when what came back doesn't check; `.com` refusals throw VoiciHttpError.
+ * The sign-in approval and calling from the app (VoiciOutgoingCall) both take it from here.
+ */
+object VoiciVisitorAttestation {
+    suspend fun obtain(center: VoiciCenter, u: String, device: com.flagshipserver.app.api.VoiciDeviceSigner, integrity: VoiciIntegrity, visitor: VoiciVisitorKeys, t: Long): MessagesKeyAttestation? {
+        val ca = center.caKeys()
+        val previous = center.previousAttestation(visitor.pageId)?.let { MessagesAttestations.parseMessagesKeyAttestation(it) }
+        val attestation = previous?.takeIf { it.pseudonymPub == visitor.pseudonymPub && it.expiresAt - t > 7 * 86_400_000L }
+            ?.takeIf { ca.isEmpty() || MessagesAttestations.checkMessagesKeyAttestation(it.toJson(), ca, t, visitor.pseudonymPub).ok }
+            ?.toJson()
+            ?: run {
+                val renewOf = previous?.takeIf { it.pseudonymPub == visitor.pseudonymPub && t - it.expiresAt <= MessagesAttestations.MESSAGES_ATTESTATION_RENEW_GRACE_MS }
+                    ?.let(MessagesAttestations::messagesAttestationHash).orEmpty()
+                val probe = VoiciOwner.attestationRequest(u, visitor, renewOf, "android", t) { device.signer.sign(it) }
+                val token = integrity.token(VoiciOwner.requestHash(probe.first))
+                val (reqJson, sig) = if (token != null) probe else VoiciOwner.attestationRequest(u, visitor, renewOf, "none", t) { device.signer.sign(it) }
+                // B2: `integrity` only with a token (absent for `none`); `previous` names the attestation a renewal renews.
+                val body = linkedMapOf<String, kotlinx.serialization.json.JsonElement>("request" to reqJson, "signature" to kotlinx.serialization.json.JsonPrimitive(sig))
+                token?.let { body["integrity"] = JsonObject(mapOf("platform" to kotlinx.serialization.json.JsonPrimitive("android"), "token" to kotlinx.serialization.json.JsonPrimitive(it))) }
+                if (renewOf.isNotEmpty()) previous?.let { body["previous"] = it.toJson() }
+                center.client.attest(u, device, JsonObject(body))
+            }
+        // `.com`'s clock may run a little ahead of this phone's: judge a just-issued attestation at its own issuedAt.
+        val issued = MessagesAttestations.parseMessagesKeyAttestation(attestation)?.issuedAt ?: t
+        val checkAt = if (issued > t && issued - t <= VoiciMessages.VOICI_SEND_SKEW_MS) issued else t
+        val att = if (ca.isNotEmpty()) MessagesAttestations.checkMessagesKeyAttestation(attestation, ca, checkAt, visitor.pseudonymPub).valueOrNull()
+        else MessagesAttestations.parseMessagesKeyAttestation(attestation)
+        return att?.takeIf { it.pseudonymPub == visitor.pseudonymPub }
     }
 }

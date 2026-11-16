@@ -76,6 +76,7 @@ object VoiciCallCenter {
     @Volatile private var pendingPush: VoiciCallPush.Payload? = null
     @Volatile internal var connection: VoiciConnection? = null
     @Volatile private var pausedByBackground = false
+    @Volatile private var connectedAt: Long? = null
     private lateinit var app: Context
 
     private fun update(f: (Ui) -> Ui) {
@@ -275,6 +276,8 @@ object VoiciCallCenter {
     }
 
     private fun finish(code: String) {
+        recordIncoming(session?.request, code)
+        connectedAt = null
         pendingPush = null
         session = null
         media = null
@@ -297,12 +300,29 @@ object VoiciCallCenter {
             update { it.copy(phase = Phase.Connecting) }
         }
         override fun onConnected() {
+            connectedAt = System.currentTimeMillis()
             update { it.copy(phase = Phase.Connected) }
         }
         override fun onEnded(reason: String) = finish(reason)
         override fun onRemoteCamera(state: String) {
             update { it.copy(remoteCamera = state) }
         }
+    }
+
+    /**
+     * The call history keeps calls that rang here (docs/voici-calls.md "Calling from the app"), on this device only.
+     * A call whose request never arrived (locked, never joined) is left to the missed calls `.com` holds.
+     */
+    private fun recordIncoming(request: VoiciCallRequest?, code: String) {
+        val r = request ?: return
+        val started = connectedAt
+        val outcome = VoiciCallHistory.incomingOutcome(code, started != null) ?: return
+        val now = System.currentTimeMillis()
+        val rec = VoiciCallRecord(
+            id = r.callId + "-in", callId = r.callId, direction = "in", outcome = outcome, conv = r.conv, pseudonymPub = r.from,
+            media = r.media, at = started ?: r.issuedAt, durationMs = started?.let { now - it } ?: 0,
+        )
+        scope.launch { runCatching { VoiciCenter.shared?.recordCall(rec) } }
     }
 
     /** The address Telecom shows for a voi.ci call: never a phone number. */

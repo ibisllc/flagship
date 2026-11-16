@@ -196,6 +196,47 @@ class MockVoiciClient(
         }
     }
 
+    /** Calls placed to a page (docs/voici-calls.md §6): checked with the shared request check, as `.com` does. */
+    val placedCalls = mutableListOf<JsonObject>()
+    /** The control apex the room URL names. */
+    var callApex: String = com.flagshipserver.app.core.Endpoints.controlHost
+
+    override suspend fun placeCall(request: JsonObject): VoiciCallPlaced = synchronized(this) {
+        val pageId = VoiciJs.str(request["pageId"]) ?: refuse(400, "malformed")
+        val owner = ownerOf(pageId) ?: refuse(404, "not-found")
+        val idx = VoiciPage.parseVoiciPageIndex(pages[owner]) ?: refuse(404, "not-found")
+        if (!idx.body.takesCalls) refuse(403, "calls-off")
+        val from = VoiciJs.str(request["from"]) ?: refuse(400, "malformed")
+        if (blocks[owner]?.contains(from) == true) refuse(403, "calls-off")
+        val ctx = com.flagshipserver.app.core.voici.VoiciCallRequestCheckContext(pageId, true, com.flagshipserver.app.core.Endpoints.voiciOrigin, listOf(caPub), now(),
+            allowed = { idx.body.callsFrom == "signed-in" })
+        when (val r = VoiciCalls.checkRequest(request, ctx)) {
+            is com.flagshipserver.app.core.voici.VoiciOutcome.Refused -> refuse(if (r.reason == "malformed") 400 else 403, r.reason)
+            is com.flagshipserver.app.core.voici.VoiciOutcome.Ok -> {
+                placedCalls += request
+                val id = r.value.callId
+                VoiciCallPlaced(id, "wss://$callApex/api/voici/calls/$id/caller", "7".repeat(64), VoiciCalls.RING_MS)
+            }
+        }
+    }
+
+    /** Conversations whose caller attached a ring-back channel ("Call and allow call-back"), and the rings sent. */
+    val ringBacks = HashSet<String>()
+    val rings = mutableListOf<JsonObject>()
+
+    override suspend fun ring(username: String, body: JsonObject): Unit = synchronized(this) {
+        val r = body["ring"] as? JsonObject ?: refuse(400, "malformed")
+        val sig = VoiciJs.str(body["signature"]) ?: refuse(400, "malformed")
+        val idx = VoiciPage.parseVoiciPageIndex(pages[username]) ?: refuse(404, "not-found")
+        val ring = runCatching {
+            com.flagshipserver.app.core.voici.VoiciRing(VoiciJs.str(r["pageId"])!!, VoiciJs.str(r["conv"])!!, VoiciJs.str(r["ringId"])!!, VoiciJs.str(r["hint"])!!, VoiciJs.str(r["media"])!!, VoiciJs.time(r["issuedAt"])!!)
+        }.getOrNull() ?: refuse(400, "malformed")
+        if (ring.pageId != idx.body.pageId) refuse(404, "not-found")
+        if (!com.flagshipserver.app.core.voici.VoiciRings.verifyRing(ring, sig, idx.body.ownerSignPub)) refuse(403, "bad-signature")
+        if (ring.conv !in ringBacks) refuse(404, "no-ring-back")
+        rings += r
+    }
+
     private fun ownerOf(pageId: String): String? = pages.entries.firstOrNull { VoiciJs.str(it.value["pageId"]) == pageId }?.key
 
     override suspend fun send(envelope: JsonObject, direct: Boolean) = synchronized(this) {

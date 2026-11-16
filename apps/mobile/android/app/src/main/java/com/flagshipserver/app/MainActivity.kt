@@ -377,6 +377,9 @@ class MainActivity : FragmentActivity() {
             callKeyVault = if (mocks != null) com.flagshipserver.app.calls.MemoryCallKeyVault() else com.flagshipserver.app.calls.KeystoreCallKeyVault(this),
         )
         com.flagshipserver.app.core.voici.VoiciCenter.shared = voiciCenter
+        com.flagshipserver.app.calls.VoiciOutgoingCalls.integrity =
+            if (mocks != null) com.flagshipserver.app.core.voici.VoiciIntegrity.NONE
+            else com.flagshipserver.app.core.voici.PlayVoiciIntegrity(applicationContext)
         com.flagshipserver.app.keystore.Keystore.onWipe = { voiciCenter.forgetLocal() }
         val voiciSignInFlows = com.flagshipserver.app.ui.screens.VoiciSignInFlows {
             com.flagshipserver.app.core.voici.VoiciSignInFlow(
