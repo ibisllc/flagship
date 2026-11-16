@@ -3851,10 +3851,10 @@
   "Anonymous caller": "Anonymer Anrufer",
   "Only at certain hours": "Nur zu bestimmten Zeiten",
   "Calls can ring at any time.": "Anrufe können jederzeit klingeln.",
-  "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": "Anrufe klingeln nur zu diesen Zeiten, in der Zeitzone %@. Deine Seite zeigt Besuchern diese Zeiten und die Zeitzone. Ein Ende vor dem Beginn reicht über Mitternacht.",
   "This page takes calls only from people who let it call them back.": "Diese Seite nimmt nur Anrufe von Leuten an, die einen Rückruf erlauben.",
   "Let voi.ci/%@ call you back?": "voi.ci/%@ dich zurückrufen lassen?",
   "Call and allow call-back": "Anrufen und Rückruf erlauben",
   "Call without call-back": "Ohne Rückruf anrufen",
-  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ erfährt nicht, wer du bist. Flagship weiß, dass diese Unterhaltung dein Telefon klingeln lassen kann."
+  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ erfährt nicht, wer du bist. Flagship weiß, dass diese Unterhaltung dein Telefon klingeln lassen kann.",
+  "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "Deine Geräte klingeln nur zu diesen Zeiten, in der Zeitzone %@; außerhalb wird ein Anruf zu einem verpassten Anruf. Nur deine eigenen Geräte kennen diese Zeiten. Ein Ende vor dem Beginn reicht über Mitternacht."
 }

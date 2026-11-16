@@ -48,9 +48,9 @@ struct VoiciCallsSettingsSection: View {
         if v.showsWho {
             Section {
                 Toggle("Only at certain hours", isOn: Binding(get: { store.callHours != nil }, set: { on in
-                    publishHours(on ? (VoiciCallHoursDraft(store.callHours) ?? .standard()).value : nil)
+                    publishHours(on ? (VoiciCallHoursDraft(store.callHours) ?? .standard()).hours : nil)
                 }))
-                .disabled(!v.canEdit || busy)
+                .disabled(busy)
                 .accessibilityIdentifier("calls-hours")
                 if let draft = VoiciCallHoursDraft(store.callHours) {
                     HStack {
@@ -58,7 +58,7 @@ struct VoiciCallsSettingsSection: View {
                             Button(Self.dayLetter(d)) {
                                 var x = draft
                                 x.days[d].toggle()
-                                if let value = x.value { publishHours(value) }
+                                if let h = x.hours { publishHours(h) }
                             }
                             .buttonStyle(.bordered)
                             .tint(draft.days[d] ? .accentColor : .secondary)
@@ -67,17 +67,17 @@ struct VoiciCallsSettingsSection: View {
                             .accessibilityIdentifier("calls-hours-day-\(d)")
                         }
                     }
-                    .disabled(!v.canEdit || busy)
+                    .disabled(busy)
                     DatePicker(selection: hoursBinding(draft, \.startMinute), displayedComponents: .hourAndMinute) { Text("From") }
-                        .disabled(!v.canEdit || busy)
+                        .disabled(busy)
                         .accessibilityIdentifier("calls-hours-from")
                     DatePicker(selection: hoursBinding(draft, \.endMinute), displayedComponents: .hourAndMinute) { Text("Until") }
-                        .disabled(!v.canEdit || busy)
+                        .disabled(busy)
                         .accessibilityIdentifier("calls-hours-until")
                 }
             } footer: {
                 if let draft = VoiciCallHoursDraft(store.callHours) {
-                    Text(verbatim: String(localized: "Calls ring only at these hours, in the time zone \(draft.zone). Your page shows these hours and the time zone to visitors. An end before the start runs past midnight."))
+                    Text(verbatim: String(localized: "Your devices ring only at these hours, in the time zone \(draft.zone); outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight."))
                 } else {
                     Text("Calls can ring at any time.")
                 }
@@ -125,10 +125,10 @@ struct VoiciCallsSettingsSection: View {
 
     private func save() { CallSettingsStore.setQuietHours(quiet) }
 
-    private func publishHours(_ value: String?) {
+    private func publishHours(_ hours: VoiciCallHours?) {
         busy = true
         Task {
-            _ = await store.setCallHours(value)
+            _ = await store.setCallHours(hours)
             busy = false
         }
     }
@@ -141,7 +141,7 @@ struct VoiciCallsSettingsSection: View {
             let c = Calendar.current.dateComponents([.hour, .minute], from: d)
             var x = draft
             x[keyPath: kp] = (c.hour ?? 0) * 60 + (c.minute ?? 0)
-            if let value = x.value { publishHours(value) }
+            if let h = x.hours { publishHours(h) }
         })
     }
 

@@ -170,26 +170,62 @@ final class VoiciCallsViewModelTests: XCTestCase {
         XCTAssertFalse(c.shouldRing(issuedAt: at - VoiciCalls.ringMs - 1))
     }
 
-    // MARK: call hours (the page index's callHours)
+    // MARK: call hours (the owner's synced setting, never in the page)
 
     func test_callHoursDraftRoundTrips() {
-        let d = VoiciCallHoursDraft("1111100 0900-1730 Europe/Paris")
+        let paris = VoiciCallHours(days: "1111100", from: "0900", to: "1730", zone: "Europe/Paris")
+        let d = VoiciCallHoursDraft(paris)
         XCTAssertEqual(d?.days, [true, true, true, true, true, false, false])
         XCTAssertEqual(d?.startMinute, 540)
         XCTAssertEqual(d?.endMinute, 1050)
-        XCTAssertEqual(d?.value, "1111100 0900-1730 Europe/Paris")
+        XCTAssertEqual(d?.hours, paris)
         var x = VoiciCallHoursDraft.standard(zone: "UTC")
-        XCTAssertEqual(x.value, "1111100 0900-1730 UTC")
+        XCTAssertEqual(x.hours, VoiciCallHours(days: "1111100", from: "0900", to: "1730", zone: "UTC"))
         x.days = Array(repeating: false, count: 7)
-        XCTAssertNil(x.value, "No day: not a value the index takes.")
-        x = .standard(zone: "Mars/Olympus")
-        XCTAssertNil(x.value, "An unknown zone isn't published.")
+        XCTAssertNil(x.hours, "No day: not hours the setting takes.")
+        XCTAssertNil(VoiciCallHoursDraft.standard(zone: "Mars/Olympus").hours, "An unknown zone isn't saved.")
         x = .standard(zone: "UTC")
         x.endMinute = x.startMinute
-        XCTAssertNil(x.value)
+        XCTAssertNil(x.hours)
         x.startMinute = 22 * 60
         x.endMinute = 6 * 60
-        XCTAssertEqual(x.value, "1111100 2200-0600 UTC")
+        XCTAssertEqual(x.hours?.to, "0600")
         XCTAssertNil(VoiciCallHoursDraft(nil))
+    }
+
+    /// Outside the owner's hours this device doesn't ring (the call becomes a missed call), as for Do Not Disturb.
+    @MainActor
+    func test_theRingingPhoneKeepsTheOwnersHours() {
+        let center = VoiciCallCenter.shared
+        let saved = (center.clock, center.ownerHours, center.quietHours)
+        defer { (center.clock, center.ownerHours, center.quietHours) = saved }
+        center.quietHours = { CallQuietHours(on: false, startMinute: 0, endMinute: 0) }
+        let monday10Paris: Int64 = 1_799_053_200_000, monday0859: Int64 = 1_799_049_540_000
+        center.ownerHours = { VoiciCallSettingsValue(hours: VoiciCallHours(days: "1111100", from: "0900", to: "1730", zone: "Europe/Paris"), updatedAt: 1) }
+        center.clock = { Date(timeIntervalSince1970: TimeInterval(monday10Paris) / 1000) }
+        XCTAssertTrue(center.shouldRing(issuedAt: monday10Paris))
+        center.clock = { Date(timeIntervalSince1970: TimeInterval(monday0859) / 1000) }
+        XCTAssertFalse(center.shouldRing(issuedAt: monday0859))
+        center.ownerHours = { nil }
+        XCTAssertTrue(center.shouldRing(issuedAt: monday0859), "No hours: calls ring any time.")
+    }
+
+    /// The setting syncs through `.com` as ciphertext with compare-and-set; a conflict is a 409 with the stored blob.
+    func test_callSettingsSyncThroughTheMock() async throws {
+        let client = MockVoiciComClient()
+        let key = VoiciCallSettingsSync.deriveKey(umk: Array(repeating: 1, count: 32))
+        let a = VoiciCallSettingsValue(hours: VoiciCallHours(days: "1111111", from: "2200", to: "0600", zone: "UTC"), updatedAt: 5)
+        try await client.putCallSettings(username: "alice", sealed: try VoiciCallSettingsSync.seal(key: key, username: "alice", version: 1, settings: a),
+                                         device: { _, _ in nil })
+        let stored = try await client.callSettings(username: "alice")
+        XCTAssertEqual(VoiciCallSettingsSync.open(key: key, username: "alice", blob: stored), a)
+        do {
+            try await client.putCallSettings(username: "alice", sealed: try VoiciCallSettingsSync.seal(key: key, username: "alice", version: 1, settings: a),
+                                             device: { _, _ in nil })
+            XCTFail("a stale version")
+        } catch let e as VoiciComError {
+            XCTAssertEqual(e.code, "version-conflict")
+            XCTAssertEqual(VoiciCallSettingsSync.version(e.stored), 1)
+        }
     }
 }

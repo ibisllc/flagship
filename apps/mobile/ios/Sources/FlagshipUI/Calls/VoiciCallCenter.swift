@@ -40,13 +40,17 @@ public final class VoiciCallCenter: NSObject {
     /// This device's Do Not Disturb hours (Settings → Messages → Calls); read when a call arrives.
     @ObservationIgnored public var quietHours: () -> CallQuietHours = { CallSettingsStore.quietHours() }
     @ObservationIgnored public var clock: () -> Date = { Date() }
+    /// The owner's synced call hours, this device's copy.
+    @ObservationIgnored public var ownerHours: () -> VoiciCallSettingsValue? = { CallSettingsStore.ownerHours() }
 
     /// A call that arrives now rings here only outside this device's Do Not Disturb hours. A quiet device stays out of
     /// the room, so another device can answer and an unanswered call becomes a missed call.
     func shouldRing(issuedAt: Int64) -> Bool {
         let now = clock()
         let ms = Int64(now.timeIntervalSince1970 * 1000)
-        return ms - issuedAt <= VoiciCalls.ringMs && !quietHours().isQuiet(at: now)
+        // The owner's synced call hours (docs/voici-calls.md, option c): outside them no device rings, and the call ends
+        // as a missed call, as for Do Not Disturb.
+        return ms - issuedAt <= VoiciCalls.ringMs && !quietHours().isQuiet(at: now) && VoiciCallSettingsSync.allows(ownerHours()?.hours, now: ms)
     }
 
     /// The WebRTC implementation: our libwebrtc build when the app was built with it (CallMediaFactory), else the stub.

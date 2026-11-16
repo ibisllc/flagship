@@ -60,8 +60,6 @@ public final class MessagesStore {
     public private(set) var answersWhileLocked = false
     /// A calls change being published (`setCalls`); nil: every publish carries the index's own calls setting.
     @ObservationIgnored private var pendingCalls: (on: Bool, from: String)?
-    /// A call-hours change being published (`setCallHours`): .some(nil) removes the hours.
-    @ObservationIgnored private var pendingHours: String??
 
     // MARK: kept on the device
 
@@ -96,7 +94,7 @@ public final class MessagesStore {
         self.username = u
         index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
         state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
-        reveals = [:]; ringBackFlags = [:]; noRingBack = []
+        reveals = [:]; ringBackFlags = [:]; noRingBack = []; callSettings = nil; callSettingsVersion = 0
         local = Local()
         VoiciCallHistory.shared.configure(username: u.isEmpty ? nil : u)
         guard !u.isEmpty else { return }
@@ -114,7 +112,7 @@ public final class MessagesStore {
         Self.currentUsername = nil
         index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
         state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
-        reveals = [:]; ringBackFlags = [:]; noRingBack = []
+        reveals = [:]; ringBackFlags = [:]; noRingBack = []; callSettings = nil; callSettingsVersion = 0
         local = Local()
         VoiciCallHistory.shared.forgetInMemory()
     }
@@ -274,6 +272,7 @@ public final class MessagesStore {
             await loadLane(client, keys)
             await loadInbox(client)
             await loadMissedCalls(client)
+            await loadCallSettings(client)
             await rebindCallKeyIfNeeded(client)
             settleHanded()
             await checkReplies()
@@ -673,19 +672,51 @@ public final class MessagesStore {
         return publishError == nil
     }
 
-    /// The page's call hours (nil: any time), as the published index says.
-    public var callHours: String? { isRemoved ? nil : index?.callHours }
+    /// The owner's call hours (docs/voici-calls.md, owner decision 2026-11-16 option c): a setting synced between the
+    /// owner's own devices, sealed under a key from the UMK, never in the page. Nil: calls ring any time.
+    public private(set) var callSettings: VoiciCallSettingsValue? = CallSettingsStore.ownerHours()
+    public var callHours: VoiciCallHours? { callSettings?.hours }
+    @ObservationIgnored private var callSettingsVersion: Int64 = 0
 
-    /// The call-hours editor on the Social page (docs/voici-calls.md, release-manager decisions 3): an admin device
-    /// publishes the hours into the page index, where `.com` reads them before ringing, anonymous calls included.
-    public func setCallHours(_ hours: String?) async -> Bool {
-        guard isAdmin, isPublic, callsOn, hours.map(VoiciPage.isCallHours) ?? true else { return false }
+    private func loadCallSettings(_ client: any VoiciComClient) async {
+        guard let umk = Keystore.messagesUMKIfCached(), let blob = try? await client.callSettings(username: username) else { return }
+        callSettingsVersion = VoiciCallSettingsSync.version(blob)
+        guard let remote = VoiciCallSettingsSync.open(key: VoiciCallSettingsSync.deriveKey(umk: Array(umk)), username: username, blob: blob) else { return }
+        adoptCallSettings(callSettings.map { VoiciCallSettingsSync.merge(local: $0, remote: remote) } ?? remote)
+    }
+
+    private func adoptCallSettings(_ s: VoiciCallSettingsValue) {
+        callSettings = s
+        // The ringing phone reads its own copy (it may ring while the account is locked).
+        CallSettingsStore.setOwnerHours(s)
+    }
+
+    /// The call-hours editor on the Social page: any device of the owner seals the new hours and puts them with
+    /// compare-and-set; on a conflict the newer change wins and the put is tried again. False when it couldn't.
+    public func setCallHours(_ hours: VoiciCallHours?) async -> Bool {
+        guard let client, let umk = Keystore.messagesUMKIfCached(), let device else { return false }
+        if let hours, VoiciCallSettingsSync.parseHours(hours.json) == nil { return false }
         guard hours != callHours else { return true }
-        guard let s = await sensitiveSigner(reason: String(localized: "Publish your page")) else { return false }
-        pendingHours = .some(hours)
-        defer { pendingHours = nil }
-        await publish(signer: s, only: [])
-        return publishError == nil
+        let key = VoiciCallSettingsSync.deriveKey(umk: Array(umk))
+        var mine = VoiciCallSettingsValue(hours: hours, updatedAt: max(now(), (callSettings?.updatedAt ?? 0) + 1))
+        for _ in 0..<3 {
+            do {
+                let sealed = try VoiciCallSettingsSync.seal(key: key, username: username, version: callSettingsVersion + 1, settings: mine)
+                try await client.putCallSettings(username: username, sealed: sealed, device: device)
+                callSettingsVersion += 1
+                adoptCallSettings(mine)
+                return true
+            } catch let e as VoiciComError where e.code == "version-conflict" {
+                callSettingsVersion = VoiciCallSettingsSync.version(e.stored)
+                if let remote = VoiciCallSettingsSync.open(key: key, username: username, blob: e.stored) {
+                    mine = VoiciCallSettingsSync.merge(local: mine, remote: remote)
+                    if mine == remote { adoptCallSettings(remote); return remote.hours == hours }
+                }
+            } catch {
+                return false
+            }
+        }
+        return false
     }
 
     // MARK: answering while locked (docs/voici-calls.md, owner decisions 2026-11-15)
@@ -821,12 +852,10 @@ public final class MessagesStore {
         let current = VoiciCallSettings.read(acceptsCalls: isRemoved ? nil : index?.acceptsCalls, callsFrom: index?.callsFrom)
         let calls = pendingCalls ?? current
         let fields = VoiciCallSettings.indexFields(on: calls.on, from: calls.from)
-        var body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),
+        let body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),
                                   acceptsMessages: merged.acceptsMessages, inboxEpoch: epoch, inboxPub: k.inboxPub, ownerSignPub: k.signPub,
                                   pieces: pieces.map(\.ref), signerKind: Keystore.hasAdminRoot ? "admin-root" : "irk",
                                   acceptsCalls: fields.acceptsCalls, callsFrom: fields.callsFrom)
-        // The call hours ride with calls on; a publish keeps the ones the index already names.
-        if fields.acceptsCalls != nil { body.callHours = pendingHours ?? (isRemoved ? nil : index?.callHours) }
         let idx = try VoiciPage.signVoiciPageIndex(body, signerSeed: seed)
         try await client.publish(username: username, index: idx.json)
         if only == nil {
@@ -1388,6 +1417,7 @@ public final class MessagesStore {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(u).json"))
         }
         VoiciCallHistory.forget(username: username?.lowercased(), allProfiles: allProfiles)
+        CallSettingsStore.setOwnerHours(nil)
     }
 
     /// Wires `Keystore.onWipe` (once, at launch).

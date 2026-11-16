@@ -99,22 +99,33 @@ final class VoiciCallModesVectorTests: XCTestCase {
         XCTAssertEqual(VoiciMessages.openVoiciControl(mine, conv: conv, msgId: String(repeating: "b2", count: 16), recipientSeed: seed), .unreveal(conv: conv, issuedAt: 5))
     }
 
-    func testCallHours() throws {
+    /// The owner's call hours: a sealed setting synced between the owner's devices (never in the page index).
+    func testCallSettings() throws {
         let v = try S.load("packages/protocol/test-vectors/voici-call-modes/vectors.json", from: #filePath)
-        let h = try XCTUnwrap(v["callHours"])
-        for t in S.a(h["shapes"]) {
-            let value = try XCTUnwrap(t["value"]?.string), name = t["name"]?.string ?? "?"
-            XCTAssertEqual(VoiciPage.isCallHours(value), t["expect"] == .bool(true), name)
+        let c = try XCTUnwrap(v["callSettings"])
+        let key = VoiciCallSettingsSync.deriveKey(umk: S.h(c["ownerUmk"]))
+        XCTAssertEqual(CanonicalJson.hex(key), S.s(c["key"]))
+        let plain = try XCTUnwrap(VoiciCallSettingsSync.parse(c["plain"]))
+        let sealed = try XCTUnwrap(c["sealed"])
+        let mine = try VoiciCallSettingsSync.seal(key: key, username: S.s(c["username"]), version: S.i(sealed["version"]), settings: plain, nonce: S.h(c["nonce"]))
+        XCTAssertEqual(S.cj(mine), S.cj(sealed))
+        XCTAssertEqual(VoiciCallSettingsSync.open(key: key, username: S.s(c["username"]), blob: sealed), plain)
+        // Refused: another account, another version, another key.
+        XCTAssertNil(VoiciCallSettingsSync.open(key: key, username: "bob", blob: sealed))
+        var other = sealed.object!
+        other["version"] = .number(Double(S.i(sealed["version"]) + 1))
+        XCTAssertNil(VoiciCallSettingsSync.open(key: key, username: S.s(c["username"]), blob: .object(other)))
+        XCTAssertNil(VoiciCallSettingsSync.open(key: [UInt8](repeating: 2, count: 32), username: S.s(c["username"]), blob: sealed))
+        let none = try XCTUnwrap(VoiciCallSettingsSync.parse(c["plainNone"]))
+        XCTAssertNil(none.hours)
+        XCTAssertEqual(VoiciCallSettingsSync.merge(local: none, remote: plain), plain)
+        XCTAssertEqual(VoiciCallSettingsSync.merge(local: plain, remote: none), plain)
+        for t in S.a(c["hoursShapes"]) {
+            XCTAssertEqual(VoiciCallSettingsSync.parseHours(t["value"]) != nil, t["expect"] == .bool(true), t["name"]?.string ?? "?")
         }
-        for t in S.a(h["open"]) {
-            let hours = t["hours"]?.string, now = try XCTUnwrap(t["now"]?.safeInt ?? t["now"]?.time)
-            XCTAssertEqual(VoiciPage.callHoursOpen(hours, now: now), t["expect"] == .bool(true), t["name"]?.string ?? "?")
+        for t in S.a(c["hoursAllow"]) {
+            let hours = t["hours"].flatMap { $0.isNull ? nil : VoiciCallSettingsSync.parseHours($0) }
+            XCTAssertEqual(VoiciCallSettingsSync.allows(hours, now: try XCTUnwrap(t["now"]?.time)), t["expect"] == .bool(true), t["name"]?.string ?? "?")
         }
-        for t in S.a(h["index"]) { XCTAssertEqual(VoiciPage.parseVoiciPageIndex(try XCTUnwrap(t["index"])) != nil, t["ok"] == .bool(true), t["name"]?.string ?? "?") }
-        let with = try XCTUnwrap(VoiciPage.parseVoiciPageIndex(try XCTUnwrap(h["withHours"])))
-        XCTAssertEqual(S.text(try VoiciPage.canonicalVoiciPageIndex(with)), try XCTUnwrap(h["withHoursCanonical"]?.string))
-        XCTAssertEqual(with.json, h["withHours"])
-        let without = try XCTUnwrap(VoiciPage.parseVoiciPageIndex(try XCTUnwrap(h["noHours"])))
-        XCTAssertEqual(S.text(try VoiciPage.canonicalVoiciPageIndex(without)), try XCTUnwrap(h["noHoursCanonical"]?.string))
     }
 }

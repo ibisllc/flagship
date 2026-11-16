@@ -157879,47 +157879,6 @@
         }
       }
     },
-    "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Las llamadas solo suenan en este horario, en la zona horaria %@. Tu página muestra este horario y la zona horaria a quien la visite. Un final antes del inicio pasa de la medianoche."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les appels ne sonnent qu'à ces heures, dans le fuseau horaire %@. Votre page montre ces heures et le fuseau horaire aux visiteurs. Une fin avant le début passe minuit."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anrufe klingeln nur zu diesen Zeiten, in der Zeitzone %@. Deine Seite zeigt Besuchern diese Zeiten und die Zeitzone. Ein Ende vor dem Beginn reicht über Mitternacht."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "As chamadas só tocam nesses horários, no fuso horário %@. Sua página mostra esses horários e o fuso horário aos visitantes. Um fim antes do início passa da meia-noite."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通話はこの時間帯にだけ着信します（タイムゾーン %@）。あなたのページは、この時間帯とタイムゾーンを訪問者に表示します。終了が開始より前の場合は、深夜0時をまたぎます。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通话只在这些时间响铃（时区 %@）。你的页面会向访客显示这些时间和时区。结束时间早于开始时间则跨越午夜。"
-          }
-        }
-      }
-    },
     "This page takes calls only from people who let it call them back.": {
       "extractionState": "manual",
       "localizations": {
@@ -158121,6 +158080,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "voi.ci/%@ 不会知道你是谁。Flagship 会知道此对话可以让你的手机响铃。"
+          }
+        }
+      }
+    },
+    "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus dispositivos solo suenan en este horario, en la zona horaria %@; fuera de él, una llamada queda como perdida. Solo tus propios dispositivos conocen este horario. Un final antes del inicio pasa de la medianoche."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos appareils ne sonnent qu'à ces heures, dans le fuseau horaire %@ ; en dehors, un appel devient un appel manqué. Seuls vos propres appareils connaissent ces heures. Une fin avant le début passe minuit."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Geräte klingeln nur zu diesen Zeiten, in der Zeitzone %@; außerhalb wird ein Anruf zu einem verpassten Anruf. Nur deine eigenen Geräte kennen diese Zeiten. Ein Ende vor dem Beginn reicht über Mitternacht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus dispositivos só tocam nesses horários, no fuso horário %@; fora deles, a chamada vira uma chamada perdida. Só os seus próprios dispositivos conhecem esses horários. Um fim antes do início passa da meia-noite."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あなたのデバイスは、この時間帯（タイムゾーン %@）にだけ着信します。時間外の通話は不在着信になります。この時間帯を知っているのはあなた自身のデバイスだけです。終了が開始より前の場合は、深夜0時をまたぎます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的设备只在这些时间响铃（时区 %@）；在此之外，来电会变成未接来电。只有你自己的设备知道这些时间。结束时间早于开始时间则跨越午夜。"
           }
         }
       }

@@ -180,6 +180,25 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
 
     public private(set) var convDeletes: [JSONValue] = []
     public private(set) var anonBlocks: [JSONValue] = []
+    /// The sealed call hours by account (compare-and-set on version, as `.com`).
+    public var callSettingsBlobs: [String: JSONValue] = [:]
+
+    public func callSettings(username: String) async throws -> JSONValue? {
+        try down()
+        return w { callSettingsBlobs[username.lowercased()] }
+    }
+
+    public func putCallSettings(username: String, sealed: JSONValue, device: VoiciDeviceSigner) async throws {
+        try down()
+        let u = username.lowercased()
+        try w {
+            let stored = callSettingsBlobs[u]
+            guard let v = sealed["version"]?.time, v == VoiciCallSettingsSync.version(stored) + 1 else {
+                throw VoiciComError(status: 409, code: "version-conflict", stored: stored)
+            }
+            callSettingsBlobs[u] = sealed
+        }
+    }
 
     public func anonBlock(username: String, signed: JSONValue) async throws {
         try down()

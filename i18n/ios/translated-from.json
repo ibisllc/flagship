@@ -3845,10 +3845,10 @@
   "Outgoing call · %@": "d6d9c6056919",
   "Only at certain hours": "f2e73a357e96",
   "Calls can ring at any time.": "2ead57e93a0c",
-  "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": "49cdc132b38e",
   "This page takes calls only from people who let it call them back.": "7c9717489df1",
   "Let voi.ci/%@ call you back?": "e61e7332181c",
   "Call and allow call-back": "f7c8a0b87f2b",
   "Call without call-back": "fac6640c3ef0",
-  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "e1b7e9e9c1af"
+  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "e1b7e9e9c1af",
+  "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "d270ed803a3b"
 }
