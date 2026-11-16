@@ -867,6 +867,16 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `voici_live_calls` for ~30 more minutes (the room only releases at its end or `VOICI_CALL_MAX_MS`; a caller who
   leaves after an answer does nothing). Cleared the gym row by hand. **Open:** after an answer, end the room when
   the caller's socket closes and no media connected (the 45 s give-up now covers the common case).
+- 2026-11-16: **Retest of media-fix failed at ICE.** The browser stayed on "Connecting…" and the phone on "Opening a
+  direct path…", then both gave up. The relay logged the phone holding its route (generation 16) at 22:45:22Z, so the
+  tunnel came up. Added media-path logs: iOS `calls` category (TLS on relayed streams, TURN gate route/close reason,
+  responder open/status/first datagrams/close, ICE and connection states, the answer's candidate count) and browser
+  `[voici-call]` console lines (states, `icecandidateerror`). Commits: gym-0.4 `e640a8ab0` (gym Worker
+  `5f09a166`, voi.ci build `6f337016c8242288`, gym app reinstalled) and `0.4/media-fix` `b62fb9f22`.
+  libwebrtc M157 source check: loopback is gathered when `ignoreLoopbackNetworkAdapter` is false (lo0 is
+  `IFF_LOOPBACK`, not filtered). `TurnPort::CreateConnection` drops only mDNS and non-UDP remote candidates, and an
+  allocate success needs XOR-MAPPED, XOR-RELAYED and LIFETIME, which turn-lite sends. No loopback block found, so
+  the next retest's logs decide.
 
 ## Resume point
 
