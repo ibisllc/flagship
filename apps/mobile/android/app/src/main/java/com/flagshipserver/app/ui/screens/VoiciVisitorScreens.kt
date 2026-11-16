@@ -39,6 +39,8 @@ import com.flagshipserver.app.calls.VoiciCallTarget
 import com.flagshipserver.app.calls.VoiciOutgoingCalls
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.voici.VoiciCenter
+import androidx.fragment.app.FragmentActivity
+import com.flagshipserver.app.ui.shell.confirmConversationDelete
 import com.flagshipserver.app.core.voici.VoiciCopy
 import com.flagshipserver.app.ui.components.FSDivider
 import com.flagshipserver.app.ui.components.FSEmptyState
@@ -137,6 +139,7 @@ fun VisitorThreadScreen(nav: NavController, username: String, pageId: String) {
 
 @Composable
 private fun VisitorSettingsDialog(center: VoiciCenter, target: VoiciCallTarget, name: String, onDeleted: () -> Unit, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val toasts = LocalToastCenter.current
     var revealed by remember { mutableStateOf(target.pageId in center.revealedTo()) }
@@ -198,8 +201,8 @@ private fun VisitorSettingsDialog(center: VoiciCenter, target: VoiciCallTarget, 
             FSGhostButton(stringResource(R.string.voici_delete), {
                 confirmDelete = false
                 scope.launch {
-                    val err = center.deleteVisitorConversation(target)
-                    if (err == null) onDeleted() else toasts.error(VoiciCopy.sendError(err))
+                    val err = center.deleteVisitorConversation(target) { confirmConversationDelete(context as? FragmentActivity) { toasts.error(it) } }
+                    if (err == null) onDeleted() else if (err != VoiciCenter.DELETE_NOT_CONFIRMED) toasts.error(VoiciCopy.sendError(err))
                 }
             }, modifier = Modifier.testTag("visitor-delete-confirm"))
         },

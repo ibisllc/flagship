@@ -4157,6 +4157,7 @@
   "voici_ring_incoming": "%1$s vous rappelle",
   "voici_ring_incoming_locked": "Une personne à qui vous avez écrit vous rappelle. Ouvrez Flagship pour répondre.",
   "voici_delete_forget_body": "Elle est supprimée de vos appareils et de Flagship immédiatement. Les messages déjà sur l'appareil de %1$s y restent.",
+  "voici_delete_prompt_title": "Supprimer cette conversation",
   "voici_anonymous_caller": "Appel anonyme",
   "voici_my_conversations": "Conversations que vous avez commencées",
   "voici_my_conversations_empty": "Les conversations que vous commencez sur les pages d'autres personnes s'affichent ici.",

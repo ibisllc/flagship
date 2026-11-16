@@ -4159,6 +4159,7 @@
     <string name="voici_ring_incoming">%1$s ruft dich zurück</string>
     <string name="voici_ring_incoming_locked">Jemand, dem du geschrieben hast, ruft dich zurück. Öffne Flagship, um anzunehmen.</string>
     <string name="voici_delete_forget_body">Es wird sofort von deinen Geräten und von Flagship entfernt. Nachrichten, die schon auf dem Gerät von %1$s sind, bleiben dort.</string>
+    <string name="voici_delete_prompt_title">Diese Unterhaltung löschen</string>
     <string name="voici_anonymous_caller">Anonymer Anruf</string>
     <string name="voici_my_conversations">Gespräche, die du begonnen hast</string>
     <string name="voici_my_conversations_empty">Gespräche, die du auf den Seiten anderer beginnst, erscheinen hier.</string>

@@ -123,12 +123,33 @@ class VoiciConversationFlowsTest {
 
     @Test fun deleteForgetsTheConversationOnBothSides() = runBlocking {
         val w = world()
-        assertNull(w.alice.deleteConversation(w.conv))
+        var asked = 0
+        assertNull(w.alice.deleteConversation(w.conv) { asked++; true })
+        assertEquals("The biometric prompt is asked once, before anything is sent.", 1, asked)
         assertEquals("owner", VoiciJs.str((w.mock.convDeletes.single()["del"] as JsonObject)["side"]))
         assertTrue(w.alice.messages.value.conversations.none { it.conv == w.conv } || w.alice.messages.value.conversations.isEmpty())
         // The caller deletes its side too: a delete signed by its pseudonym.
-        assertNull(w.bob.deleteVisitorConversation(VoiciCallTarget("alice", w.pageId)))
+        assertNull(w.bob.deleteVisitorConversation(VoiciCallTarget("alice", w.pageId)) { true })
         assertEquals("caller", VoiciJs.str((w.mock.convDeletes.last()["del"] as JsonObject)["side"]))
+    }
+
+    /** A cancelled biometric / device-credential prompt deletes nothing and sends nothing, on either side
+     *  (docs/voici-calls.md "Deleting a conversation"). */
+    @Test fun deleteWithACancelledPromptDeletesNothing() = runBlocking {
+        val w = world()
+        assertNull(w.alice.accept(w.conv))
+        w.alice.syncState()
+        assertEquals(VoiciCenter.DELETE_NOT_CONFIRMED, w.alice.deleteConversation(w.conv) { false })
+        assertTrue(w.mock.convDeletes.isEmpty())
+        assertTrue(w.alice.messages.value.conversations.any { it.conv == w.conv })
+        assertTrue(w.conv in w.alice.messages.value.state.accepted)
+        assertTrue(w.conv !in w.alice.messages.value.state.forgotten)
+        assertEquals(VoiciCenter.DELETE_NOT_CONFIRMED, w.bob.deleteVisitorConversation(VoiciCallTarget("alice", w.pageId)) { false })
+        assertTrue(w.mock.convDeletes.isEmpty())
+        // Passed, the same deletes go through.
+        assertNull(w.alice.deleteConversation(w.conv) { true })
+        assertNull(w.bob.deleteVisitorConversation(VoiciCallTarget("alice", w.pageId)) { true })
+        assertEquals(2, w.mock.convDeletes.size)
     }
 
     /** Delete = forget on every device (docs/voici-and-messages.md §10.1.1): the owner's second device, still on the old
@@ -145,7 +166,7 @@ class VoiciConversationFlowsTest {
         assertTrue(w.conv in alice2.messages.value.state.accepted)
         assertTrue(w.conv in alice2.ringBackOff())
 
-        assertNull(w.alice.deleteConversation(w.conv))
+        assertNull(w.alice.deleteConversation(w.conv) { true })
         w.alice.syncState()
         // The second device marks it read on its old copy, then syncs (a conflict and a merge).
         alice2.markRead(w.conv)

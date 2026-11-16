@@ -17107,6 +17107,10 @@
     "en": "It's removed from your devices and from Flagship at once. Messages already on %1$s's device stay there.",
     "ctx": "voi.ci: delete a conversation; %1$s is the other side"
   },
+  "voici_delete_prompt_title": {
+    "en": "Delete this conversation",
+    "ctx": "voi.ci / Messages: biometric prompt title before a delete"
+  },
   "voici_anonymous_caller": {
     "en": "Anonymous caller",
     "ctx": "voi.ci calls: a caller without an account"
