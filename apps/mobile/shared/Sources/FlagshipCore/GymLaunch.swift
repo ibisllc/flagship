@@ -33,7 +33,8 @@ public enum GymLaunch {
             UserDefaults.standard.set(host == Endpoints.prodControlHost ? nil : host, forKey: stickyApexKey)
         }
         guard let host = argValue("-apex-host", args)
-                ?? (usesMocks ? nil : UserDefaults.standard.string(forKey: stickyApexKey)) else { return }
+                ?? (usesMocks ? nil : UserDefaults.standard.string(forKey: stickyApexKey))
+                ?? (usesMocks ? nil : bakedApexHost) else { return }
         if host == Endpoints.prodControlHost {
             Endpoints.setOverride(nil)
         } else {
@@ -42,6 +43,14 @@ public enum GymLaunch {
     }
 
     static let stickyApexKey = "flagship.debug.stickyApexHost"
+
+    /// `FlagshipGymApexHost` in Info.plist, written only by scripts/gym-ios-device.sh for the separate "Flagship Gym"
+    /// app on a real phone, so that app never talks to production even on a plain launch.
+    static var bakedApexHost: String? {
+        let raw = (Bundle.main.object(forInfoDictionaryKey: "FlagshipGymApexHost") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return raw.flatMap { $0.isEmpty ? nil : $0 }
+    }
 
     private static func argValue(_ flag: String, _ args: [String]) -> String? {
         guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
