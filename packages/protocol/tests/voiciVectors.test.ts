@@ -171,7 +171,7 @@ describe("messages vectors (test-vectors/messages)", () => {
     expect(new TextDecoder().decode(P.canonicalVoiciThreadFetch(M.threadFetch.fetch))).toBe(M.threadFetch.canonical);
     expect(P.verifyVoiciThreadFetch(M.threadFetch.fetch, M.threadFetch.signature, M.keys.browserPub)).toBe(true);
     const s = M.state;
-    expect(P.mergeMessagesState(s.a, s.b)).toEqual(s.merged);
+    expect(P.mergeMessagesState(s.a, s.b, 1_800_000_000_000)).toEqual(s.merged);
     expect(P.sealMessagesState(h(d.stateKey), s.username, s.version, s.a, h(s.nonce))).toEqual(s.sealed);
     expect(P.openMessagesState(h(d.stateKey), s.username, s.sealed)).toEqual(s.a);
     for (const k of ["message", "messageWithText", "page"] as const) {
@@ -184,6 +184,54 @@ describe("messages vectors (test-vectors/messages)", () => {
     }
     for (const c of M.phoneWeb.cases) expect(P.phoneWebCheck(c.request, { hostname: c.hostname, origins: c.origins }), c.name).toEqual(c.expected);
     for (const c of M.phoneWeb.liveAnswers) expect(P.parsePhoneLiveAnswer(c.answer) !== null).toBe(c.expected);
+  });
+
+  it("state v2: delete = forget", () => {
+    const f = M.stateForget;
+    expect(P.VOICI_FORGET_KEEP_MS).toBe(f.keepMs);
+    for (const c of f.forget) expect(P.forgetConversation(c.state, c.conv, c.pseudonymPub, c.at), c.name).toEqual(c.result);
+    for (const c of f.merges) expect(P.mergeMessagesState(c.local, c.remote, c.now), c.name).toEqual(c.merged);
+    for (const c of f.parse) expect(P.parseMessagesState(c.input), c.name).toEqual(c.expected);
+    const x = f.sealed;
+    expect(P.sealMessagesState(h(d.stateKey), x.username, x.version, x.state, h(x.nonce))).toEqual(x.blob);
+    expect(P.openMessagesState(h(d.stateKey), x.username, x.blob)).toEqual(x.state);
+  });
+
+  it("two devices: A deletes, B on the old state syncs, the conversation is gone on both and stays gone", () => {
+    const f = M.stateForget;
+    const base = f.forget[0].state;
+    // A server that keeps one sealed state with a version (compare-and-set), as `.com` does.
+    let server = { state: base, version: 1 };
+    const put = (next: unknown, version: number) => {
+      if (version !== server.version + 1) return false;
+      server = { state: P.parseMessagesState(next)!, version };
+      return true;
+    };
+    let a = { state: base, version: 1 };
+    let b = { state: base, version: 1 };
+    let now = 1_800_000_000_000;
+    a.state = P.forgetConversation(a.state, f.conv, f.pseudonymPub, ++now);
+    expect(put(a.state, a.version + 1)).toBe(true);
+    a.version += 1;
+    // B, still on the old state, marks the conversation read: the write conflicts, B merges and writes again.
+    b.state = { ...b.state, readUpTo: { ...b.state.readUpTo, [f.conv]: "77".repeat(16) } };
+    expect(put(b.state, b.version + 1)).toBe(false);
+    b = { state: P.mergeMessagesState(b.state, server.state, ++now), version: server.version };
+    expect(put(b.state, b.version + 1)).toBe(true);
+    b.version += 1;
+    a = { state: P.mergeMessagesState(a.state, server.state, ++now), version: server.version };
+    for (const s of [a.state, b.state, server.state]) {
+      expect(s.accepted).not.toContain(f.conv);
+      expect(s.archived).not.toContain(f.conv);
+      expect(s.readUpTo[f.conv]).toBeUndefined();
+      expect(s.nicknames[f.pseudonymPub]).toBeUndefined();
+      expect(s.blocks).not.toContain(f.pseudonymPub);
+      expect(s.accepted).toContain(f.otherConv);
+    }
+    // Stays gone: B's stale copy merged again, sealed and opened, changes nothing.
+    expect(P.mergeMessagesState(base, a.state, ++now)).toEqual(a.state);
+    const sealed = P.sealMessagesState(h(d.stateKey), "alice", 9, a.state);
+    expect(P.openMessagesState(h(d.stateKey), "alice", sealed)).toEqual(a.state);
   });
 });
 

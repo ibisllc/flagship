@@ -18,7 +18,8 @@ import Foundation
 /// SealedMessagesState, VoiciMessageReport, VoiciPageReport, VoiciSignInRequest, VoiciSignInAnswer,
 /// VoiciSignInRefusal, and on VoiciMessages: canonicalVoiciAck, signVoiciAck, verifyVoiciAck, canonicalVoiciBlock,
 /// signVoiciBlock, verifyVoiciBlock, parseVoiciBlock, draftOpKinds, parseVoiciDraftOp, sealVoiciDraft,
-/// parseVoiciDraftBody, openVoiciDraft, emptyMessagesState, parseMessagesState, mergeMessagesState,
+/// parseVoiciDraftBody, openVoiciDraft, emptyMessagesState, parseMessagesState, mergeMessagesState, forgetConversation,
+/// liveForgotten, forgetKeepMs,
 /// sealMessagesState, openMessagesState, reportReasons, canonicalVoiciMessageReport, canonicalVoiciPageReport,
 /// signVoiciMessageReport, verifyVoiciMessageReport, parseVoiciSignInRequest, checkVoiciSignInAnswer.
 public struct VoiciAck: Equatable, Sendable {
@@ -98,6 +99,14 @@ public struct MessagesState: Equatable, Sendable {
         public init(pageId: String, delegatePub: String, at: Int64) { self.pageId = pageId; self.delegatePub = delegatePub; self.at = at }
     }
 
+    /// A deleted conversation's marker (docs/voici-and-messages.md §10.1.1): when, and its caller's pseudonym (nil for an
+    /// anonymous caller's conversation).
+    public struct Forgotten: Equatable, Sendable {
+        public var at: Int64
+        public var pseudonymPub: String?
+        public init(at: Int64, pseudonymPub: String?) { self.at = at; self.pseudonymPub = pseudonymPub }
+    }
+
     public var nicknames: [String: Nickname] = [:]
     public var blocks: [String] = []
     public var accepted: [String] = []
@@ -105,16 +114,23 @@ public struct MessagesState: Equatable, Sendable {
     public var readUpTo: [String: String] = [:]
     public var signedInSites: [SignedInSite] = []
     public var pendingOps: [VoiciDraftOp] = []
+    /// v2: one marker per deleted conversation (conv → marker). The state is written as v1 while this is empty.
+    public var forgotten: [String: Forgotten] = [:]
 
     public init() {}
 
     public var json: JSONValue {
-        ["v": 1,
-         "nicknames": .object(nicknames.mapValues { ["name": .string($0.name), "at": .int($0.at)] }),
-         "blocks": .array(blocks.map { .string($0) }), "accepted": .array(accepted.map { .string($0) }),
-         "archived": .array(archived.map { .string($0) }), "readUpTo": .object(readUpTo.mapValues { .string($0) }),
-         "signedInSites": .array(signedInSites.map { ["pageId": .string($0.pageId), "delegatePub": .string($0.delegatePub), "at": .int($0.at)] }),
-         "pendingOps": .array(pendingOps.map(\.json))]
+        var o: [String: JSONValue] = [
+            "v": forgotten.isEmpty ? 1 : 2,
+            "nicknames": .object(nicknames.mapValues { ["name": .string($0.name), "at": .int($0.at)] }),
+            "blocks": .array(blocks.map { .string($0) }), "accepted": .array(accepted.map { .string($0) }),
+            "archived": .array(archived.map { .string($0) }), "readUpTo": .object(readUpTo.mapValues { .string($0) }),
+            "signedInSites": .array(signedInSites.map { ["pageId": .string($0.pageId), "delegatePub": .string($0.delegatePub), "at": .int($0.at)] }),
+            "pendingOps": .array(pendingOps.map(\.json))]
+        if !forgotten.isEmpty {
+            o["forgotten"] = .object(forgotten.mapValues { ["at": .int($0.at), "pseudonymPub": $0.pseudonymPub.map { .string($0) } ?? .null] })
+        }
+        return .object(o)
     }
 }
 
@@ -309,10 +325,20 @@ extension VoiciMessages {
     public static func emptyMessagesState() -> MessagesState { MessagesState() }
 
     public static func parseMessagesState(_ v: JSONValue?) -> MessagesState? {
-        guard let r = v?.object, r["v"]?.isOne == true,
-              Set(r.keys) == ["v", "nicknames", "blocks", "accepted", "archived", "readUpTo", "signedInSites", "pendingOps"],
-              let nicks = r["nicknames"]?.object, let reads = r["readUpTo"]?.object else { return nil }
+        let v1Keys: Set<String> = ["v", "nicknames", "blocks", "accepted", "archived", "readUpTo", "signedInSites", "pendingOps"]
+        guard let r = v?.object else { return nil }
+        if r["v"]?.isOne == true {
+            guard Set(r.keys) == v1Keys else { return nil }
+        } else if r["v"]?.time == 2 {
+            guard Set(r.keys) == v1Keys.union(["forgotten"]), r["forgotten"]?.object != nil else { return nil }
+        } else { return nil }
+        guard let nicks = r["nicknames"]?.object, let reads = r["readUpTo"]?.object else { return nil }
         var s = MessagesState()
+        for (k, f) in r["forgotten"]?.object ?? [:] {
+            guard isForgetConv(k), let o = f.object, Set(o.keys) == ["at", "pseudonymPub"], let at = o["at"]?.time,
+                  let p = o["pseudonymPub"], p.isNull || CanonicalJson.isLowerHex(p, bytes: 32) else { return nil }
+            s.forgotten[k] = MessagesState.Forgotten(at: at, pseudonymPub: p.string)
+        }
         for (k, n) in nicks {
             guard CanonicalJson.isLowerHex(k, bytes: 32), let o = n.object, Set(o.keys) == ["name", "at"],
                   VoiciText.checkVoiciText(.nickname, o["name"]) == nil, let at = o["at"]?.time else { return nil }
@@ -348,10 +374,64 @@ extension VoiciMessages {
         return out.sorted(by: CanonicalJson.utf16Less)
     }
 
+    /// How long a deletion marker stays in the synced state (§10.1.1): long enough to reach every device that syncs.
+    public static let forgetKeepMs: Int64 = 30 * 86_400_000
+
+    static func isForgetConv(_ k: String) -> Bool {
+        CanonicalJson.isLowerHex(k, bytes: 32) || CanonicalJson.isLowerHex(k, bytes: 16)
+    }
+
+    static func stripConversation(_ s: MessagesState, conv: String, pseudonymPub: String?) -> MessagesState {
+        var s = s
+        s.readUpTo[conv] = nil
+        s.accepted.removeAll { $0 == conv }
+        s.archived.removeAll { $0 == conv }
+        if let p = pseudonymPub {
+            s.nicknames[p] = nil
+            s.blocks.removeAll { $0 == p }
+        }
+        return s
+    }
+
+    /// The deletion markers still inside the keep window at `now` (a marker from a clock ahead of ours is kept).
+    public static func liveForgotten(_ s: MessagesState, now: Int64) -> [String: MessagesState.Forgotten] {
+        s.forgotten.filter { now - $0.value.at < forgetKeepMs }
+    }
+
+    /// Delete = forget on this device's copy: the conversation's accepted mark, archived flag, read mark, and its
+    /// caller's nickname and block go, and the marker that makes the owner's other devices do the same is recorded.
+    public static func forgetConversation(_ s: MessagesState, conv: String, pseudonymPub: String?, at: Int64) throws -> MessagesState {
+        guard isForgetConv(conv), pseudonymPub.map({ CanonicalJson.isLowerHex($0, bytes: 32) }) ?? true, CanonicalJson.isTime(at) else {
+            throw CanonicalJsonError("\(tagMessagesState): bad input")
+        }
+        var live = liveForgotten(s, now: at)
+        let prev = live[conv]
+        let p = pseudonymPub ?? prev?.pseudonymPub
+        live[conv] = MessagesState.Forgotten(at: max(prev?.at ?? 0, at), pseudonymPub: p)
+        var out = stripConversation(s, conv: conv, pseudonymPub: p)
+        out.forgotten = live
+        return out
+    }
+
     /// The compare-and-set merge (§10.1): sets are unions, the newer nickname wins (ties: local), readUpTo keeps the
     /// local entry, signed-in sites union by delegatePub (newer `at`), pending ops union by opId; lists sorted.
-    public static func mergeMessagesState(local: MessagesState, remote: MessagesState) -> MessagesState {
+    /// Deletion markers (§10.1.1) go first: markers older than `forgetKeepMs` at `now` are dropped, and a side without
+    /// a conversation's marker, or with an older one, loses its entries for that conversation before the union.
+    public static func mergeMessagesState(local: MessagesState, remote: MessagesState,
+                                          now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> MessagesState {
+        var local = local, remote = remote
+        let fl = liveForgotten(local, now: now), fr = liveForgotten(remote, now: now)
+        var forgotten: [String: MessagesState.Forgotten] = [:]
+        for conv in Set(fl.keys).union(fr.keys) {
+            let l = fl[conv], r = fr[conv]
+            if let r, l == nil || r.at > l!.at { local = stripConversation(local, conv: conv, pseudonymPub: r.pseudonymPub ?? l?.pseudonymPub) }
+            if let l, r == nil || l.at > r!.at { remote = stripConversation(remote, conv: conv, pseudonymPub: l.pseudonymPub ?? r?.pseudonymPub) }
+            let localWins = r == nil || (l != nil && l!.at >= r!.at)
+            let win = localWins ? l! : r!
+            forgotten[conv] = MessagesState.Forgotten(at: win.at, pseudonymPub: win.pseudonymPub ?? (localWins ? r?.pseudonymPub : l?.pseudonymPub))
+        }
         var out = MessagesState()
+        out.forgotten = forgotten
         out.nicknames = remote.nicknames
         for (k, n) in local.nicknames where out.nicknames[k] == nil || n.at >= out.nicknames[k]!.at { out.nicknames[k] = n }
         var sites: [String: MessagesState.SignedInSite] = [:]
@@ -373,8 +453,8 @@ extension VoiciMessages {
     public static func sealMessagesState(stateKey: [UInt8], username: String, version: Int64, state: MessagesState, nonce: [UInt8]? = nil) throws -> SealedMessagesState {
         let n = nonce ?? random(12)
         guard MessagesAttestations.isUsername(username), CanonicalJson.isTime(version), version >= 1, n.count == 12,
-              parseMessagesState(state.json) != nil else { throw CanonicalJsonError("\(tagMessagesState): bad input") }
-        let pt = try CanonicalJson.canonicalJsonBytes(state.json)
+              let canon = parseMessagesState(state.json) else { throw CanonicalJsonError("\(tagMessagesState): bad input") }
+        let pt = try CanonicalJson.canonicalJsonBytes(canon.json)
         if pt.count > stateMaxBytes { throw CanonicalJsonError("\(tagMessagesState): too large") }
         let ct = try gcmSeal(key: stateKey, nonce: n, aad: "\(tagMessagesState)|\(username)|\(version)", pt)
         return SealedMessagesState(version: version, nonce: CanonicalJson.hex(n), ct: CanonicalJson.b64Encode(ct))

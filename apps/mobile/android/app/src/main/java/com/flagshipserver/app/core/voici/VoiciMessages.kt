@@ -28,7 +28,7 @@
 // parseVoiciThreadStatement, checkVoiciMessage, checkVoiciReply, checkVoiciDraft, canonicalVoiciAck, signVoiciAck,
 // verifyVoiciAck, canonicalVoiciBlock, signVoiciBlock, verifyVoiciBlock, parseVoiciBlock, VOICI_DRAFT_OP_KINDS,
 // parseVoiciDraftOp, sealVoiciDraft, parseVoiciDraftBody, openVoiciDraft, emptyMessagesState, parseMessagesState,
-// mergeMessagesState, sealMessagesState, openMessagesState, VOICI_REPORT_REASONS, canonicalVoiciReport,
+// mergeMessagesState, forgetConversation, liveForgotten, FORGET_KEEP_MS, sealMessagesState, openMessagesState, VOICI_REPORT_REASONS, canonicalVoiciReport,
 // signVoiciMessageReport, verifyVoiciMessageReport, parseVoiciSignInRequest, checkVoiciSignInAnswer.
 
 package com.flagshipserver.app.core.voici
@@ -122,6 +122,9 @@ data class VoiciDraftOp(
 data class MessagesNickname(val name: String, val at: Long)
 data class MessagesSignedInSite(val pageId: String, val delegatePub: String, val at: Long)
 
+/** A deleted conversation's marker (docs/voici-and-messages.md §10.1.1); pseudonymPub null for an anonymous caller. */
+data class MessagesForgotten(val at: Long, val pseudonymPub: String?)
+
 data class MessagesState(
     val nicknames: Map<String, MessagesNickname> = emptyMap(),
     val blocks: List<String> = emptyList(),
@@ -130,10 +133,12 @@ data class MessagesState(
     val readUpTo: Map<String, String> = emptyMap(),
     val signedInSites: List<MessagesSignedInSite> = emptyList(),
     val pendingOps: List<VoiciDraftOp> = emptyList(),
+    /** v2: conv → marker, one per deleted conversation. Written as v1 while empty. */
+    val forgotten: Map<String, MessagesForgotten> = emptyMap(),
 ) {
     fun toJson() = JsonObject(
         linkedMapOf(
-            "v" to JsonPrimitive(1),
+            "v" to JsonPrimitive(if (forgotten.isEmpty()) 1 else 2),
             "nicknames" to JsonObject(nicknames.mapValues { (_, n) -> JsonObject(linkedMapOf("name" to JsonPrimitive(n.name), "at" to JsonPrimitive(n.at))) }),
             "blocks" to JsonArray(blocks.map { JsonPrimitive(it) }),
             "accepted" to JsonArray(accepted.map { JsonPrimitive(it) }),
@@ -143,7 +148,15 @@ data class MessagesState(
                 signedInSites.map { JsonObject(linkedMapOf("pageId" to JsonPrimitive(it.pageId), "delegatePub" to JsonPrimitive(it.delegatePub), "at" to JsonPrimitive(it.at))) },
             ),
             "pendingOps" to JsonArray(pendingOps.map { it.toJson() }),
-        ),
+        ).also { m ->
+            if (forgotten.isNotEmpty()) {
+                m["forgotten"] = JsonObject(
+                    forgotten.toSortedMap().mapValues { (_, f) ->
+                        JsonObject(linkedMapOf("at" to JsonPrimitive(f.at), "pseudonymPub" to (f.pseudonymPub?.let { JsonPrimitive(it) } ?: JsonNull)))
+                    },
+                )
+            }
+        },
     )
 }
 
@@ -617,7 +630,20 @@ object VoiciMessages {
 
     fun parseMessagesState(v: JsonElement?): MessagesState? {
         val o = VoiciJs.obj(v) ?: return null
-        if (!VoiciJs.isNumEq(o["v"], 1) || !VoiciJs.exactKeysOpt(o, listOf("v", "nicknames", "blocks", "accepted", "archived", "readUpTo", "signedInSites", "pendingOps"))) return null
+        val v1Keys = listOf("v", "nicknames", "blocks", "accepted", "archived", "readUpTo", "signedInSites", "pendingOps")
+        when {
+            VoiciJs.isNumEq(o["v"], 1) -> if (!VoiciJs.exactKeys(o, v1Keys)) return null
+            VoiciJs.isNumEq(o["v"], 2) -> if (!VoiciJs.exactKeys(o, v1Keys + "forgotten") || VoiciJs.obj(o["forgotten"]) == null) return null
+            else -> return null
+        }
+        val forgotten = LinkedHashMap<String, MessagesForgotten>()
+        for ((k, fe) in VoiciJs.obj(o["forgotten"]) ?: JsonObject(emptyMap())) {
+            val f = VoiciJs.obj(fe) ?: return null
+            if (!isForgetConv(k) || !VoiciJs.exactKeys(f, listOf("at", "pseudonymPub"))) return null
+            val p = f["pseudonymPub"]
+            if (p !is JsonNull && !hex(p, 32)) return null
+            forgotten[k] = MessagesForgotten(VoiciJs.time(f["at"]) ?: return null, if (p is JsonNull) null else str(p))
+        }
         val nickObj = VoiciJs.obj(o["nicknames"]) ?: return null
         val readObj = VoiciJs.obj(o["readUpTo"]) ?: return null
         val nick = LinkedHashMap<String, MessagesNickname>()
@@ -649,14 +675,59 @@ object VoiciMessages {
             sites.add(MessagesSignedInSite(pageId, str(s["delegatePub"])!!, VoiciJs.time(s["at"]) ?: return null))
         }
         val ops = opsArr.map { parseVoiciDraftOp(it) ?: return null }
-        return MessagesState(nick, blocks, accepted, archived, read, sites, ops)
+        return MessagesState(nick, blocks, accepted, archived, read, sites, ops, forgotten)
+    }
+
+    /** How long a deletion marker stays in the synced state (§10.1.1): long enough to reach every device that syncs. */
+    const val FORGET_KEEP_MS: Long = 30L * 86_400_000
+
+    private fun isForgetConv(k: String) = hex(k, 32) || hex(k, 16)
+
+    private fun stripConversation(s: MessagesState, conv: String, pseudonymPub: String?): MessagesState = s.copy(
+        nicknames = if (pseudonymPub != null) s.nicknames - pseudonymPub else s.nicknames,
+        blocks = if (pseudonymPub != null) s.blocks.filter { it != pseudonymPub } else s.blocks,
+        accepted = s.accepted.filter { it != conv },
+        archived = s.archived.filter { it != conv },
+        readUpTo = s.readUpTo - conv,
+    )
+
+    /** The deletion markers still inside the keep window at [now] (a marker from a clock ahead of ours is kept). */
+    fun liveForgotten(s: MessagesState, now: Long): Map<String, MessagesForgotten> = s.forgotten.filterValues { now - it.at < FORGET_KEEP_MS }
+
+    /**
+     * Delete = forget on this device's copy: the conversation's accepted mark, archived flag, read mark, and its
+     * caller's nickname and block go, and the marker that makes the owner's other devices do the same is recorded.
+     */
+    fun forgetConversation(s: MessagesState, conv: String, pseudonymPub: String?, at: Long): MessagesState {
+        require(isForgetConv(conv) && (pseudonymPub == null || hex(pseudonymPub, 32)) && isTime(at)) { "$TAG_MESSAGES_STATE: bad input" }
+        val live = LinkedHashMap(liveForgotten(s, at))
+        val prev = live[conv]
+        val p = pseudonymPub ?: prev?.pseudonymPub
+        live[conv] = MessagesForgotten(maxOf(prev?.at ?: 0, at), p)
+        return stripConversation(s, conv, p).copy(forgotten = live.toSortedMap())
     }
 
     /**
      * The compare-and-set merge (§10.1): sets are unions, the newer nickname wins (ties: local), readUpTo keeps the
      * local entry, signed-in sites union by delegatePub (newer at), pending ops union by opId. Sorted output.
      */
-    fun mergeMessagesState(local: MessagesState, remote: MessagesState): MessagesState {
+    fun mergeMessagesState(localIn: MessagesState, remoteIn: MessagesState, now: Long = System.currentTimeMillis()): MessagesState {
+        // Deletion markers (§10.1.1) go first: a side without a conversation's marker, or with an older one, loses its
+        // entries for that conversation before the union; markers past FORGET_KEEP_MS at [now] are dropped.
+        var local = localIn
+        var remote = remoteIn
+        val fl = liveForgotten(local, now)
+        val fr = liveForgotten(remote, now)
+        val forgotten = sortedMapOf<String, MessagesForgotten>()
+        for (conv in fl.keys + fr.keys) {
+            val l = fl[conv]
+            val r = fr[conv]
+            if (r != null && (l == null || r.at > l.at)) local = stripConversation(local, conv, r.pseudonymPub ?: l?.pseudonymPub)
+            if (l != null && (r == null || l.at > r.at)) remote = stripConversation(remote, conv, l.pseudonymPub ?: r?.pseudonymPub)
+            val localWins = r == null || (l != null && l.at >= r.at)
+            val win = if (localWins) l!! else r!!
+            forgotten[conv] = MessagesForgotten(win.at, win.pseudonymPub ?: (if (localWins) r?.pseudonymPub else l?.pseudonymPub))
+        }
         val nicknames = LinkedHashMap(remote.nicknames)
         for ((k, n) in local.nicknames) {
             val cur = nicknames[k]
@@ -677,15 +748,16 @@ object VoiciMessages {
             readUpTo = (remote.readUpTo + local.readUpTo).toSortedMap(),
             signedInSites = sites.values.sortedBy { it.delegatePub },
             pendingOps = ops.values.sortedBy { it.opId },
+            forgotten = forgotten,
         )
     }
 
     private fun stateAad(username: String, version: Long) = VoiciJs.utf8("$TAG_MESSAGES_STATE|$username|$version")
 
     fun sealMessagesState(stateKey: ByteArray, username: String, version: Long, s: MessagesState, nonce: ByteArray = random(12)): MessagesStateBlob {
-        val json = s.toJson()
-        require(USERNAME.matches(username) && isTime(version) && version >= 1 && nonce.size == 12 && parseMessagesState(json) != null) { "$TAG_MESSAGES_STATE: bad input" }
-        val pt = WebEnvelopes.canonicalJsonBytes(json)
+        val canon = parseMessagesState(s.toJson())
+        require(USERNAME.matches(username) && isTime(version) && version >= 1 && nonce.size == 12 && canon != null) { "$TAG_MESSAGES_STATE: bad input" }
+        val pt = WebEnvelopes.canonicalJsonBytes(canon!!.toJson())
         require(pt.size <= VOICI_STATE_MAX_BYTES) { "$TAG_MESSAGES_STATE: too large" }
         return MessagesStateBlob(version, VoiciJs.hex(nonce), WebEnvelopes.b64Encode(VoiciJs.gcmEncrypt(stateKey, nonce, stateAad(username, version), pt)))
     }

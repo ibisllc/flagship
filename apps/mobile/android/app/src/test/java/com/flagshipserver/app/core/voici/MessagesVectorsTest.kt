@@ -36,6 +36,59 @@ class MessagesVectorsTest {
     private val keys by lazy { M.o("keys") }
     private fun utf8(b: ByteArray) = String(b, Charsets.UTF_8)
 
+    @Test fun stateForget() {
+        val f = M.o("stateForget")
+        assertEquals(f.l("keepMs"), VoiciMessages.FORGET_KEEP_MS)
+        fun st(e: JsonElement?) = VoiciMessages.parseMessagesState(e)!!
+        for (c in f.a("forget")) {
+            val x = c.jsonObject
+            val got = VoiciMessages.forgetConversation(st(x["state"]), x.s("conv"), x.sOrNull("pseudonymPub"), x.l("at"))
+            assertEquals(x.s("name"), x["result"], got.toJson())
+        }
+        for (c in f.a("merges")) {
+            val x = c.jsonObject
+            assertEquals(x.s("name"), x["merged"], VoiciMessages.mergeMessagesState(st(x["local"]), st(x["remote"]), x.l("now")).toJson())
+        }
+        for (c in f.a("parse")) {
+            val x = c.jsonObject
+            val want = x["expected"].takeIf { it !is kotlinx.serialization.json.JsonNull }
+            assertEquals(x.s("name"), want, VoiciMessages.parseMessagesState(x["input"])?.toJson())
+        }
+        val x = f.o("sealed")
+        val sealed = VoiciMessages.sealMessagesState(h(d.s("stateKey")), x.s("username"), x.l("version"), st(x["state"]), h(x.s("nonce")))
+        assertEquals(x["blob"], sealed.toJson())
+        assertEquals(x["state"], VoiciMessages.openMessagesState(h(d.s("stateKey")), x.s("username"), x["blob"])!!.toJson())
+    }
+
+    /** Device A deletes; device B, holding the old state, syncs through a compare-and-set store; gone on both, stays gone. */
+    @Test fun stateForgetTwoDevices() {
+        val f = M.o("stateForget")
+        val conv = f.s("conv")
+        val p = f.s("pseudonymPub")
+        val base = VoiciMessages.parseMessagesState(f.a("forget")[0].jsonObject["state"])!!
+        var server = base to 1L
+        fun put(s: MessagesState, version: Long): Boolean {
+            if (version != server.second + 1) return false
+            server = VoiciMessages.parseMessagesState(s.toJson())!! to version
+            return true
+        }
+        var now = 1_800_000_000_000L
+        var a = base to 1L
+        var b = base to 1L
+        a = VoiciMessages.forgetConversation(a.first, conv, p, ++now) to a.second
+        assertTrue(put(a.first, a.second + 1)); a = a.first to a.second + 1
+        b = b.first.copy(readUpTo = b.first.readUpTo + (conv to "77".repeat(16))) to b.second
+        assertFalse(put(b.first, b.second + 1))
+        b = VoiciMessages.mergeMessagesState(b.first, server.first, ++now) to server.second
+        assertTrue(put(b.first, b.second + 1)); b = b.first to b.second + 1
+        a = VoiciMessages.mergeMessagesState(a.first, server.first, ++now) to server.second
+        for (s in listOf(a.first, b.first, server.first)) {
+            assertFalse(conv in s.accepted); assertFalse(conv in s.archived); assertNull(s.readUpTo[conv])
+            assertNull(s.nicknames[p]); assertFalse(p in s.blocks); assertTrue(f.s("otherConv") in s.accepted)
+        }
+        assertEquals(a.first.toJson(), VoiciMessages.mergeMessagesState(base, a.first, ++now).toJson())
+    }
+
     @Test fun derivations() {
         val owner = h(d.s("ownerUmk"))
         val inbox = VoiciMessages.deriveVoiciInboxKey(owner, d.s("pageId"), d.l("inboxEpoch"))
@@ -230,7 +283,7 @@ class MessagesVectorsTest {
         val a = VoiciMessages.parseMessagesState(s["a"])!!
         val b = VoiciMessages.parseMessagesState(s["b"])!!
         assertEquals(s["a"], a.toJson())
-        assertEquals(s["merged"], VoiciMessages.mergeMessagesState(a, b).toJson())
+        assertEquals(s["merged"], VoiciMessages.mergeMessagesState(a, b, 1_800_000_000_000L).toJson())
         val sealed = VoiciMessages.sealMessagesState(h(d.s("stateKey")), s.s("username"), s.l("version"), a, h(s.s("nonce")))
         assertEquals(s["sealed"], sealed.toJson())
         assertEquals(a, VoiciMessages.openMessagesState(h(d.s("stateKey")), s.s("username"), s["sealed"]))
