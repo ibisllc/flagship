@@ -5,7 +5,7 @@ set -euo pipefail
 P=/run/payload
 SVC_UUID=6f3c1a00-5e1b-4f0a-9c55-f1a95e5b0c01
 say() { echo "RETAIL-VM: $*" | tee -a /dev/ttyS0; }
-fail() { say "FAIL $*"; journalctl -u flagship-keyd -u flagship-daemon -u bluetooth --no-pager -n 80 > /dev/ttyS0 2>&1 || true; systemctl poweroff; exit 1; }
+fail() { say "FAIL $*"; journalctl -u flagship-keyd -u flagship-daemon -u flagship-claim -u flagship-claim-helper -u bluetooth --no-pager -n 120 > /dev/ttyS0 2>&1 || true; systemctl poweroff; exit 1; }
 trap 'fail "guest.sh line $LINENO"' ERR
 wait_for() { local n="$1"; shift; for _ in $(seq 1 "$n"); do if "$@"; then return 0; fi; sleep 1; done; return 1; }
 
