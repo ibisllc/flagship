@@ -126,6 +126,10 @@ interface VoiciClient {
     suspend fun ring(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
     /** `POST /api/voici/web/ring-back?u=<u>` (device headers): this account's pseudonym attaches or stops a channel. */
     suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
+    /** `GET /api/accounts/<u>/voici-call-settings` (read token): the owner's sealed call hours, or null. */
+    suspend fun callSettings(username: String): JsonObject? = null
+    /** `PUT /api/accounts/<u>/voici-call-settings` {version, nonce, ct} (device headers); 409 `version-conflict` {settings}. */
+    suspend fun putCallSettings(username: String, device: VoiciDeviceSigner, blob: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
     /** `POST /api/voici/pages/<u>/anon-block` {block, signature}: the owner blocks or unblocks an anonymous caller. */
     suspend fun anonBlock(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
     /** `POST /api/voici/web/conv-delete`: a signed delete; `.com` forgets the conversation. */
@@ -277,6 +281,20 @@ class LiveVoiciClient(
     override suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject) {
         val path = "/api/voici/web/ring-back"
         postJson("${base()}$path?u=${enc(username)}", body, deviceHeaders(username, device, "POST", path))
+    }
+
+    override suspend fun callSettings(username: String): JsonObject? = call {
+        AccountReadTokens.authorize(username) { auth ->
+            val r = transport.execute("GET", "${base()}/api/accounts/${enc(username)}/voici-call-settings", extraHeaders = auth, accept = setOf(200, 404))
+            if (r.status == 404) null else parse(r.body)
+        }
+    }
+
+    override suspend fun putCallSettings(username: String, device: VoiciDeviceSigner, blob: JsonObject) {
+        val path = "/api/accounts/${enc(username)}/voici-call-settings"
+        call {
+            transport.execute("PUT", base() + path, blob.toString().toByteArray(), "application/json; charset=utf-8", deviceHeaders(username, device, "PUT", path), setOf(200, 204))
+        }
     }
 
     override suspend fun anonBlock(username: String, body: JsonObject) {

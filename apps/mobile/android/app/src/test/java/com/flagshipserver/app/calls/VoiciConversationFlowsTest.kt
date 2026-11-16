@@ -151,4 +151,24 @@ class VoiciConversationFlowsTest {
         w.alice.refreshInbox()
         assertTrue(w.alice.messages.value.conversations.single().ordered.any { it.text == "From the app" })
     }
+
+    /** Owner decision 2026-11-16: call hours sync between the owner's devices, sealed, never in the page. */
+    @Test fun callHoursSyncSealedBetweenTheOwnersDevices() = runBlocking {
+        val w = world()
+        val hours = com.flagshipserver.app.core.voici.VoiciCallHours("1111100", "0900", "1730", "Europe/Paris")
+        assertTrue(w.alice.setCallHours(hours))
+        val blob = w.mock.callSettingsBlobs["alice"]!!
+        assertTrue("`.com` holds ciphertext only", !blob.toString().contains("Europe/Paris"))
+        assertTrue("the page index carries no hours", !w.mock.storedIndex("alice").toString().contains("Paris"))
+        // Another device of the account reads the same hours and keeps a copy for a locked phone.
+        val tablet = center(w.mock, K("alice", aliceUmk, aliceRoot, ByteArray(32) { 4 }))
+        var kept: com.flagshipserver.app.core.voici.VoiciCallHours? = null
+        tablet.onCallHours = { kept = it }
+        tablet.refreshCallHours()
+        assertEquals(hours, kept)
+        // A write from a device that missed the newer version merges (newer wins) and lands as the next version.
+        assertTrue(tablet.setCallHours(null))
+        assertTrue(w.alice.setCallHours(hours))
+        assertEquals(3L, VoiciJs.time(w.mock.callSettingsBlobs["alice"]!!["version"]))
+    }
 }

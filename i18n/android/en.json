@@ -17184,7 +17184,7 @@
     "ctx": "voi.ci calls: settings switch"
   },
   "voici_calls_hours_footer": {
-    "en": "Outside these hours calls don't ring on any of your devices, and callers see you aren't taking calls. Time zone: %1$s.",
+    "en": "Outside these hours calls don't ring on any of your devices and become missed calls. Only your own devices know these hours. Time zone: %1$s.",
     "ctx": "voi.ci calls: settings footer; %1$s is a time zone id"
   }
 }

@@ -227,6 +227,17 @@ class MockVoiciClient(
     val ringBacks = HashSet<String>()
     val ringBackOrders = mutableListOf<JsonObject>()
     val convDeletes = mutableListOf<JsonObject>()
+    /** The owner's sealed call hours per account, as `.com` keeps them (it can't open them). */
+    val callSettingsBlobs = HashMap<String, JsonObject>()
+
+    override suspend fun callSettings(username: String): JsonObject? = synchronized(this) { callSettingsBlobs[username] }
+
+    override suspend fun putCallSettings(username: String, device: VoiciDeviceSigner, blob: JsonObject): Unit = synchronized(this) {
+        val cur = callSettingsBlobs[username]
+        val stored = cur?.let { VoiciJs.time(it["version"]) } ?: 0
+        if (VoiciJs.time(blob["version"]) != stored + 1) refuse(409, "version-conflict", mapOf("settings" to (cur ?: kotlinx.serialization.json.JsonNull)))
+        callSettingsBlobs[username] = blob
+    }
 
     override suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject): Unit = synchronized(this) {
         val order = body["order"] as? JsonObject ?: refuse(400, "malformed")

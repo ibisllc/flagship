@@ -4176,5 +4176,5 @@
   "voici_reveal_username_line": "%1$s est la page voi.ci de cette personne.",
   "voici_calls_hours": "Heures d'appel",
   "voici_calls_hours_switch": "Seulement à certaines heures",
-  "voici_calls_hours_footer": "En dehors de ces heures, les appels ne sonnent sur aucun de vos appareils et les appelants voient que vous ne prenez pas d'appels. Fuseau horaire : %1$s."
+  "voici_calls_hours_footer": "En dehors de ces heures, les appels ne sonnent sur aucun de vos appareils et deviennent des appels manqués. Seuls vos propres appareils connaissent ces heures. Fuseau horaire : %1$s."
 }

@@ -4178,5 +4178,5 @@
     <string name="voici_reveal_username_line">%1$s 是此人的 voi.ci 页面。</string>
     <string name="voici_calls_hours">通话时段</string>
     <string name="voici_calls_hours_switch">仅在特定时段</string>
-    <string name="voici_calls_hours_footer">在这些时段之外，你的任何设备都不会响铃，来电者会看到你目前不接听通话。时区：%1$s。</string>
+    <string name="voici_calls_hours_footer">在这些时段之外，你的任何设备都不会响铃，来电会成为未接来电。只有你自己的设备知道这些时段。时区：%1$s。</string>
 </resources>

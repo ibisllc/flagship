@@ -108,7 +108,7 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
             }
         }
     }
-    if (v.showsWho && page.callsOn) CallHoursEditor(center, page, v.canEdit, onError, ::pickTime, ::label)
+    if (v.showsWho && page.callsOn) CallHoursEditor(center, page, true, onError, ::pickTime, ::label)
     Text(
         stringResource(
             when (v.note) {
@@ -189,14 +189,14 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
 private fun CallHoursEditor(center: VoiciCenter, page: VoiciPageUi, canEdit: Boolean, onError: (String) -> Unit, pickTime: (Int, (Int) -> Unit) -> Unit, label: (Int) -> String) {
     val scope = rememberCoroutineScope()
     val zone = remember { java.util.TimeZone.getDefault().id }
-    val published = VoiciCallSettings.CallHours.parse(page.callHours)
+    val published = VoiciCallSettings.CallHours.from(page.callHours)
     var draft by remember(page.callHours) { mutableStateOf(published ?: VoiciCallSettings.CallHours.default(zone)) }
     var busy by remember { mutableStateOf(false) }
     fun publish(h: VoiciCallSettings.CallHours?) {
         if (h != null && !h.valid) return
         busy = true
         scope.launch {
-            if (!center.setCallHours(h?.value(), FSStrings.get(R.string.voici_publish_reason))) center.page.value.error?.let { onError(VoiciCopy.publishError(it)) }
+            if (!center.setCallHours(h?.toHours())) onError(VoiciCopy.publishError(null))
             busy = false
         }
     }

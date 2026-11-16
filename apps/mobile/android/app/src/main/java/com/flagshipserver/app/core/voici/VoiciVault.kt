@@ -70,6 +70,9 @@ data class VoiciLocal(
     val reveals: Map<String, VoiciRevealShown> = emptyMap(),
     /** Owner side: anonymous callers' conversations this page blocked (`.com`'s list). */
     val anonBlocks: List<String> = emptyList(),
+    /** The owner's call hours as last synced (opened {v:1, hours, updatedAt}) and the stored blob's version. */
+    val callHoursSetting: JsonObject? = null,
+    val callHoursVersion: Long = 0,
 )
 
 /** A caller's reveal the owner's app checked against the page key `.com` serves for that username. */

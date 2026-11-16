@@ -377,6 +377,8 @@ class MainActivity : FragmentActivity() {
             callKeyVault = if (mocks != null) com.flagshipserver.app.calls.MemoryCallKeyVault() else com.flagshipserver.app.calls.KeystoreCallKeyVault(this),
         )
         com.flagshipserver.app.core.voici.VoiciCenter.shared = voiciCenter
+        // The owner's call hours, as synced, stay on this device too: a locked phone still holds a call to them.
+        voiciCenter.onCallHours = { h -> com.flagshipserver.app.calls.CallSettingsStore(applicationContext).setCallHours(h) }
         com.flagshipserver.app.calls.VoiciOutgoingCalls.integrity =
             if (mocks != null) com.flagshipserver.app.core.voici.VoiciIntegrity.NONE
             else com.flagshipserver.app.core.voici.PlayVoiciIntegrity(applicationContext)

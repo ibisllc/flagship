@@ -4176,5 +4176,5 @@
   "voici_reveal_username_line": "%1$s es la página de voi.ci de esta persona.",
   "voici_calls_hours": "Horario de llamadas",
   "voici_calls_hours_switch": "Solo en ciertas horas",
-  "voici_calls_hours_footer": "Fuera de este horario las llamadas no suenan en ninguno de tus dispositivos y quien llama ve que no aceptas llamadas. Zona horaria: %1$s."
+  "voici_calls_hours_footer": "Fuera de este horario las llamadas no suenan en ninguno de tus dispositivos y quedan como llamadas perdidas. Solo tus propios dispositivos conocen este horario. Zona horaria: %1$s."
 }
