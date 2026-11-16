@@ -9,12 +9,14 @@ fail() {
     say "FAIL $*"
     {
         systemctl status --no-pager -l flagship-keyd flagship-claim-helper flagship-claim flagship-daemon bluetooth
-        journalctl -u flagship-keyd -u flagship-daemon -u flagship-claim -u flagship-claim-helper -u bluetooth --no-pager -n 120
+        journalctl --merge -u flagship-keyd -u flagship-daemon -u flagship-claim -u flagship-claim-helper -u bluetooth --no-pager -n 120
     } > /dev/ttyS0 2>&1 || true
     systemctl poweroff
     exit 1
 }
 trap 'fail "guest.sh line $LINENO"' ERR
+# The retail layer empties /etc/machine-id (as the factory image must), so journald keeps writing under
+# the old id until a reboot this test never does: plain journalctl then finds no journal.
 wait_for() { local n="$1"; shift; for _ in $(seq 1 "$n"); do if "$@"; then return 0; fi; sleep 1; done; return 1; }
 
 say "guest up: $(uname -r)"
@@ -64,7 +66,7 @@ say "keyd made its own identity at first start and kept it"
 
 [ ! -e /etc/flagship/daemon.env ] || fail "daemon.env on an unclaimed image"
 systemctl start flagship-claim-helper.service flagship-claim.service
-wait_for 120 sh -c 'journalctl -u flagship-claim --no-pager | grep -q "this box has no owner yet: claim service as uid"' || fail "the claim service did not start"
+wait_for 120 sh -c 'journalctl --merge -u flagship-claim --no-pager | grep -q "this box has no owner yet: claim service as uid"' || fail "the claim service did not start"
 pid="$(systemctl show -p MainPID --value flagship-claim.service)"
 [ "$pid" -gt 0 ] || fail "the claim service has no process"
 claim_uid="$(awk '/^Uid:/ {print $2}' "/proc/$pid/status")"
