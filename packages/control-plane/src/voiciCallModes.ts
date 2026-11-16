@@ -18,6 +18,7 @@
 import {
   checkVoiciCallPowChallenge,
   checkVoiciCallRequestAnon,
+  checkVoiciConvDelete,
   checkVoiciRingBackOrder,
   issueVoiciCallPow,
   parseVoiciCallPow,
@@ -222,3 +223,31 @@ export function buildVoiciRingPusher(deps: {
 }
 
 export const VOICI_RING_PUSH_CATEGORY = "voici-ring";
+
+// ── delete = forget ───────────────────────────────────────────────────────
+
+/**
+ * POST /api/voici/web/conv-delete: a signed delete by either side (docs/voici-calls.md, owner 2026-11-16). Drops the
+ * conversation's mailbox rows, reply alerts, ring-back channel, ring, call allow and missed calls at once; keeps no
+ * archive and no tombstone, and logs nothing. Answers {ok}. `calls` is absent while calls are off (their tables may
+ * not exist yet).
+ */
+export async function handleVoiciConvDelete(
+  deps: { voici: VoiciStorage; calls?: VoiciCallStorage; origin: string; caKeys: (now: number) => string[]; now?: () => number },
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  const del = isObj(body) && isObj(body.del) ? body.del : null;
+  if (!del || typeof del.pageId !== "string") return voiciRefusal(400, "malformed");
+  const page = await deps.voici.getPageById(del.pageId);
+  if (!page) return voiciRefusal(404, "not-found");
+  const revoked = new Set<string>();
+  const delegatePub = isObj(body) && isObj(body.cred) && isObj(body.cred.delegation) ? body.cred.delegation.delegatePub : undefined;
+  const from = isObj(body) && typeof body.from === "string" ? body.from : "";
+  if (typeof delegatePub === "string" && from && (await deps.voici.isRevoked(delegatePub, from, now))) revoked.add(delegatePub);
+  const r = checkVoiciConvDelete(body, { pageId: page.pageId, ownerSignPub: page.ownerSignPub, origin: deps.origin, caKeys: deps.caKeys(now), now, revoked });
+  if (!r.ok) return voiciRefusal(r.code === "malformed" ? 400 : 403, r.code);
+  await deps.voici.deleteConversation(page.pageId, r.del.conv);
+  await deps.calls?.deleteConversationCalls(page.pageId, r.del.conv);
+  return ok({ ok: true });
+}

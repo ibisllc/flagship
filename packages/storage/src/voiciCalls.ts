@@ -98,6 +98,10 @@ export interface VoiciCallStorage {
   /** Spends a proof-of-work challenge once; false when it was spent already. */
   spendPow(challengeHash: string, expiresAt: number): Promise<boolean>;
   blockAnon(pageId: string, conv: string, expiresAt: number): Promise<void>;
+  /** Delete = forget: the conversation's ring-back channel, ring, call allow and missed calls go at once. */
+  deleteConversationCalls(pageId: string, conv: string): Promise<void>;
+  /** Rows still held for one conversation in the call tables (tests: a deleted conversation leaves none). */
+  conversationCallRowCount(pageId: string, conv: string): Promise<number>;
   isAnonBlocked(pageId: string, conv: string, now: number): Promise<boolean>;
 }
 
@@ -300,6 +304,20 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
     return r ? { pageId: r.page_id, conv: r.conv, ringId: r.ring_id, hint: r.hint, media: r.media, issuedAt: r.issued_at, expiresAt: r.expires_at } : null;
   }
 
+  async deleteConversationCalls(pageId: string, conv: string) {
+    for (const t of ["voici_ring_backs", "voici_rings", "voici_call_allows", "voici_missed_calls"]) {
+      await this.db.prepare(`DELETE FROM ${t} WHERE page_id = ?1 AND conv = ?2`).bind(pageId, conv).run();
+    }
+  }
+
+  async conversationCallRowCount(pageId: string, conv: string) {
+    let n = 0;
+    for (const t of ["voici_ring_backs", "voici_rings", "voici_call_allows", "voici_missed_calls", "voici_anon_blocks"]) {
+      n += (await this.db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE page_id = ?1 AND conv = ?2`).bind(pageId, conv).first<{ n: number }>())?.n ?? 0;
+    }
+    return n;
+  }
+
   async spendPow(challengeHash: string, expiresAt: number) {
     const r = await this.db.prepare("INSERT OR IGNORE INTO voici_pow_spent (challenge_hash, expires_at) VALUES (?1, ?2)").bind(challengeHash, expiresAt).run();
     return (r.meta.changes ?? 0) === 1;
@@ -441,6 +459,17 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   async getRing(pageId: string, conv: string, now: number) {
     const r = this.rings.get(`${pageId}|${conv}`);
     return r && r.expiresAt > now ? { ...r } : null;
+  }
+  async deleteConversationCalls(pageId: string, conv: string) {
+    const k = `${pageId}|${conv}`;
+    this.ringBacks.delete(k);
+    this.rings.delete(k);
+    this.allows.delete(k);
+    this.missed = this.missed.filter((m) => !(m.pageId === pageId && m.conv === conv));
+  }
+  async conversationCallRowCount(pageId: string, conv: string) {
+    const k = `${pageId}|${conv}`;
+    return [this.ringBacks, this.rings, this.allows, this.anonBlocks].filter((m) => m.has(k)).length + this.missed.filter((m) => m.pageId === pageId && m.conv === conv).length;
   }
   async spendPow(challengeHash: string, expiresAt: number) {
     if (this.powSpent.has(challengeHash)) return false;

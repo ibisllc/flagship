@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { InMemoryVoiciCallStorage, InMemoryVoiciStorage } from "@flagship/storage";
 import { canonicalVoiciThreadFetch, hexToBytes, signVoiciBlock, signVoiciRing, signVoiciRingBackPseudonym } from "@flagship/protocol";
 import { p256 } from "@noble/curves/nist.js";
-import { handleVoiciBlock, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
+import { handleVoiciBlock, handleVoiciConvDelete, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,5 +152,44 @@ describe("the channel ends with the conversation", () => {
     const r = await handleVoiciBlock({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { block, signature: signVoiciBlock(block, hexToBytes(M.derivations.ownerSignSeed)) });
     expect(r.status).toBe(200);
     expect(await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW)).toBeNull();
+  });
+});
+
+describe("delete = forget (docs/voici-calls.md, owner 2026-11-16)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const CV: any = JSON.parse(readFileSync(join(here, "../../protocol/test-vectors/voici-conversation/vectors.json"), "utf8"));
+  const conv: string = M.derivations.conv;
+
+  async function filled() {
+    const w = await world("callback");
+    const d = { voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW };
+    await w.voici.insertMessage({ pageId: K.pageId, conv, msgId: "11".repeat(16), kind: "voici-message", fromPub: M.derivations.pseudonymPub, delegatePub: M.keys.browserPub, sentAt: NOW, envelope: "{}", size: 2, direct: false, pushed: false, storedAt: NOW });
+    await w.voici.putAlert({ conv, endpointHash: "aa".repeat(32), pageId: K.pageId, subscription: "{}", delegatePub: M.keys.browserPub, createdAt: NOW, expiresAt: NOW + 1000 }, 3);
+    await handleVoiciRingBack(d, CM.ringBack.app, "visitor");
+    await handleVoiciRing({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { ring: CM.ring.order, signature: CM.ring.signature });
+    await w.calls.setCallAllow({ pageId: K.pageId, conv, op: "allow", issuedAt: NOW, signature: "00" }, NOW);
+    await w.calls.putMissedCall({ pageId: K.pageId, conv, callId: "c1".repeat(16), sealed: "x", storedAt: NOW });
+    expect((await w.voici.conversationRowCount(K.pageId, conv)) + (await w.calls.conversationCallRowCount(K.pageId, conv))).toBe(6);
+    return { w, d };
+  }
+
+  for (const side of ["owner", "app", "browser"] as const) {
+    it(`a delete by the ${side} leaves zero rows in every table the conversation touched`, async () => {
+      const { w, d } = await filled();
+      const r = await handleVoiciConvDelete(d, CV.delete[side]);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(await w.voici.conversationRowCount(K.pageId, conv)).toBe(0);
+      expect(await w.calls.conversationCallRowCount(K.pageId, conv)).toBe(0);
+      // No tombstone, no archive, no log: the stores hold nothing else about it either.
+      expect(JSON.stringify([...w.calls.ringBacks.values(), ...w.calls.rings.values(), ...w.calls.allows.values(), ...w.calls.missed])).not.toContain(conv);
+      // A ring into the gone conversation fails: its channel is gone.
+      expect(code(await handleVoiciRing({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { ring: CM.ring.order, signature: CM.ring.signature }))).toBe("no-ring-back");
+    });
+  }
+
+  it("refuses a forged delete and keeps everything", async () => {
+    const { w, d } = await filled();
+    expect(code(await handleVoiciConvDelete(d, { ...CV.delete.owner, sig: "00".repeat(64) }))).toBe("bad-signature");
+    expect(await w.voici.conversationRowCount(K.pageId, conv)).toBe(2);
   });
 });
