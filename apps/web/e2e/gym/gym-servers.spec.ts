@@ -73,6 +73,8 @@ function serverOrderRule(page: Page, keys: Keys) {
 
 async function dragAbove(page: Page, moving: string, target: string, release = true): Promise<void> {
   const handle = card(page, moving).locator(".js-order-handle");
+  // The list can start below the fold (cards above it, the wide layout): both rows must be on screen for the mouse.
+  await handle.scrollIntoViewIfNeeded();
   const hb = (await handle.boundingBox())!;
   const top = (await card(page, target).boundingBox())!;
   await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
@@ -215,6 +217,7 @@ test.describe("gym webapp servers", () => {
     await expect(page.locator("dialog[open] button:not([data-choice-cancel])")).toHaveText([
       "Create a server",
       "Co-manage a running server",
+      "Set up a box from a store",
       "Restore from backup",
     ]);
     await shot(page, testInfo, "home-add-import-menu");

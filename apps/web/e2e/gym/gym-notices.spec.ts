@@ -92,7 +92,7 @@ test.describe("gym webapp security notices", () => {
     await shot(page, testInfo, "update-lock");
 
     // The page behind it is inert.
-    const inert = await page.evaluate(() => ["header", "main", "nav"].map((s) => document.querySelector(s)?.hasAttribute("inert")));
+    const inert = await page.evaluate(() => ["header", "main", "nav"].map((s) => !!document.querySelector(s)?.closest("[inert]")));
     expect(inert).toEqual([true, true, true]);
 
     // Nothing leaves the page but reads from .com and the shell.
