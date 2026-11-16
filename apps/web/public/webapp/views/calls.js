@@ -8,6 +8,7 @@ import { formatWhen } from "../lib/dateFormat.js";
 import { refreshWorld, visitorName, world } from "../lib/voiciWorld.js";
 import { voiciErrorText } from "../lib/voiciCopy.js";
 import { callHistory, isCallablePeer, startHandoffCall } from "../lib/voiciCallOut.js";
+import { postAnonBlock } from "../lib/voiciOwner.js";
 import { tr } from "../lib/i18n.js";
 
 registerView("view-calls", { tab: "messages" });
@@ -65,14 +66,34 @@ export function renderCalls() {
     body.className = "fs-row-body";
     const title = document.createElement("span");
     title.className = "fs-row-title";
-    title.textContent = r.peer.kind === "page" ? `voi.ci/${r.peer.username}` : visitorName(r.peer.pseudonymPub);
+    title.textContent = r.peer.kind === "page" ? `voi.ci/${r.peer.username}` : r.peer.anonymous ? tr("Anonymous caller") : visitorName(r.peer.pseudonymPub);
     const sub = document.createElement("span");
     sub.className = "fs-row-sub";
     sub.textContent = tr("{0} · {1}", outcomeLine(r), formatWhen(r.at));
     body.append(title, sub);
     row.appendChild(body);
     if (isCallablePeer(r.peer)) row.appendChild(callButtons(r.peer));
-    else if (r.peer.kind === "visitor") {
+    else if (r.peer.anonymous) {
+      // An anonymous caller: the owner can block its conversation (its browser key) until unblocking it.
+      const blocked = world.anonBlocks.includes(r.peer.conv);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = blocked ? "secondary" : "danger";
+      b.setAttribute("data-anon-block", r.peer.conv);
+      b.textContent = blocked ? tr("Unblock") : tr("Block");
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await postAnonBlock(world.page, r.peer.conv, blocked ? "unblock" : "block");
+          world.anonBlocks = blocked ? world.anonBlocks.filter((c) => c !== r.peer.conv) : [...world.anonBlocks, r.peer.conv];
+          renderCalls();
+        } catch (e) {
+          b.disabled = false;
+          toast(voiciErrorText(e), "err");
+        }
+      });
+      row.appendChild(b);
+    } else if (r.peer.kind === "visitor") {
       const open = document.createElement("button");
       open.type = "button";
       open.className = "secondary";

@@ -3762,5 +3762,13 @@
   "{0} · {1}": "{0} · {1}",
   "Open conversation": "Unterhaltung öffnen",
   "voi.ci/{0}, since {1}": "voi.ci/{0}, seit {1}",
-  "Calls": "Anrufe"
+  "Calls": "Anrufe",
+  "Anonymous caller": "Anonymer Anrufer",
+  "Unblock": "Blockierung aufheben",
+  "About this name": "Über diesen Namen",
+  "This is a name the person chose. Flagship doesn't check names, so anyone can use any name.": "Diesen Namen hat die Person selbst gewählt. Flagship prüft Namen nicht, also kann jeder jeden Namen verwenden.",
+  "Messages already on {0}'s device stay there.": "Nachrichten, die schon auf dem Gerät von {0} sind, bleiben dort.",
+  "{0} ({1})": "{0} ({1})",
+  "Call back": "Zurückrufen",
+  "Ringing them. When they answer, your phone rings.": "Es klingelt bei ihnen. Wenn sie annehmen, klingelt dein Telefon."
 }

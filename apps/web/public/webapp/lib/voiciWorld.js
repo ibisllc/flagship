@@ -38,6 +38,8 @@ function fresh() {
     inboxError: null,
     /** Missed voi.ci calls (docs/voici-calls.md §6), opened and checked; the webapp never answers a call. */
     missedCalls: [],
+    /** Blocked anonymous callers' conversations (the owner's anon-block orders). */
+    anonBlocks: [],
     /** A sample account: its page is the operator's example, read and shown, never changed (no drafts, no inbox). */
     sample: false,
   };
@@ -96,7 +98,9 @@ export async function refreshWorld(deps = {}) {
   }
   if (world.page) {
     try {
-      world.conversations = (await (deps.loadInbox ?? loadInbox)(world.page, deps)).conversations;
+      const inbox = await (deps.loadInbox ?? loadInbox)(world.page, deps);
+      world.conversations = inbox.conversations;
+      world.anonBlocks = inbox.anonBlocks ?? [];
       world.inboxError = null;
     } catch (e) {
       world.inboxError = e;

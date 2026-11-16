@@ -726,6 +726,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciReplies.js",
   "/lib/voiciCallHandoff.js",
   "/lib/voiciCallOut.js",
+  "/lib/voiciReveal.js",
   "/views/messages.js",
   "/views/thread.js",
   "/views/calls.js",
@@ -1071,6 +1072,9 @@ const ACCOUNT_NOTICES = {
 const VOICI_NOTICES = {
   messages: { body: "New message", deepLink: "/?view=messages" },
   "page-drafts": { body: "A device on your account has changes waiting to be published on your page.", deepLink: "/?view=page-editor" },
+  // A page owner ringing this account back (docs/voici-calls.md): the webapp can't take the call itself; the page it
+  // was written to is one tap away in Messages (Call opens a voi.ci tab). Names no one.
+  "voici-ring": { body: "Someone is calling you. Open Flagship to answer.", deepLink: "/?view=messages" },
 };
 
 self.addEventListener("push", (event) => {

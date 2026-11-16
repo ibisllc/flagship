@@ -145,6 +145,34 @@ function renderList() {
   list.querySelectorAll("[data-conv]").forEach((b) =>
     b.addEventListener("click", () => void import("./thread.js").then((m) => m.enterThread(b.getAttribute("data-conv")))),
   );
+  // A caller who revealed who they are: "Display Name (username)" on the row, with the unchecked-name info beside it.
+  void import("./thread.js").then(({ revealOf, chosenNameInfo }) => {
+    for (const row of list.querySelectorAll("[data-conv]")) {
+      const cv = world.conversations.find((c) => c.conv === row.getAttribute("data-conv"));
+      const r = cv ? revealOf(cv) : null;
+      if (!r) continue;
+      const tag = document.createElement("span");
+      tag.className = "reveal-pill-text";
+      tag.setAttribute("data-testid", "reveal-pill-row");
+      tag.textContent = r.displayName ? tr("{0} ({1})", r.displayName, r.username) : r.username;
+      row.querySelector(".fs-row-body")?.appendChild(tag);
+      if (r.displayName) {
+        const info = document.createElement("span");
+        info.setAttribute("role", "button");
+        info.tabIndex = 0;
+        info.className = "icon-btn";
+        info.setAttribute("aria-label", tr("About this name"));
+        info.textContent = "ⓘ";
+        const show = (e) => {
+          e.stopPropagation();
+          void chosenNameInfo();
+        };
+        info.addEventListener("click", show);
+        info.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && show(e));
+        tag.appendChild(info);
+      }
+    }
+  });
 }
 
 function renderReplyAlerts() {

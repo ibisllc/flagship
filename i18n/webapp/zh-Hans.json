@@ -3762,5 +3762,13 @@
   "{0} · {1}": "{0} · {1}",
   "Open conversation": "打开对话",
   "voi.ci/{0}, since {1}": "voi.ci/{0}，自 {1} 起",
-  "Calls": "通话记录"
+  "Calls": "通话记录",
+  "Anonymous caller": "匿名来电者",
+  "Unblock": "取消屏蔽",
+  "About this name": "关于这个名字",
+  "This is a name the person chose. Flagship doesn't check names, so anyone can use any name.": "这是对方自己选的名字。Flagship 不核实名字，所以任何人都可以用任何名字。",
+  "Messages already on {0}'s device stay there.": "已经在 {0} 设备上的消息会留在那里。",
+  "{0} ({1})": "{0}（{1}）",
+  "Call back": "回拨",
+  "Ringing them. When they answer, your phone rings.": "正在呼叫对方。对方接听时，你的手机会响铃。"
 }

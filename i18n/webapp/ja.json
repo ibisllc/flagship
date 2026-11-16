@@ -3762,5 +3762,13 @@
   "{0} · {1}": "{0} · {1}",
   "Open conversation": "会話を開く",
   "voi.ci/{0}, since {1}": "voi.ci/{0}（{1} から）",
-  "Calls": "通話"
+  "Calls": "通話",
+  "Anonymous caller": "匿名の発信者",
+  "Unblock": "ブロックを解除",
+  "About this name": "この名前について",
+  "This is a name the person chose. Flagship doesn't check names, so anyone can use any name.": "これは本人が選んだ名前です。Flagship は名前を確認しないため、誰でもどんな名前でも使えます。",
+  "Messages already on {0}'s device stay there.": "{0} のデバイスにすでにあるメッセージはそのまま残ります。",
+  "{0} ({1})": "{0}（{1}）",
+  "Call back": "折り返し電話",
+  "Ringing them. When they answer, your phone rings.": "相手を呼び出しています。相手が応答すると、あなたの電話が鳴ります。"
 }
