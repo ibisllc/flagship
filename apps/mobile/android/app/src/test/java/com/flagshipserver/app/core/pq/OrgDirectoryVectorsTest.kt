@@ -84,4 +84,69 @@ class OrgDirectoryVectorsTest {
         val s = d["statement"]!!.jsonObject
         assertEquals(d.s("bytes"), utf8(OrgConnectors.canonicalDecision(s.s("orgId"), s.s("proposalId"), s.s("decision"), s.s("refSha256"), s.l("issuedAt"))))
     }
+
+    private val a = PqVectors.load("packages/protocol/test-vectors/org-authority/vectors.json")
+    private fun resolve(e: kotlinx.serialization.json.JsonElement?): kotlinx.serialization.json.JsonElement? = when (e) {
+        is kotlinx.serialization.json.JsonArray -> kotlinx.serialization.json.JsonArray(e.map { resolve(it)!! })
+        is JsonObject -> when {
+            e["\$key"] != null -> a["keys"]!!.jsonObject[e["\$key"]!!.jsonPrimitive.content]!!.jsonObject["binding"]
+            e["\$approval"] != null -> a["approvals"]!!.jsonArray[e["\$approval"]!!.jsonPrimitive.int]
+            else -> JsonObject(e.mapValues { resolve(it.value)!! })
+        }
+        else -> e
+    }
+    private fun stateAndBook(n: Int, now: Long): Pair<OrgAuthorityState, OrgSeatBook> {
+        val chain = resolve(a["chains"]!!.jsonArray[0])!!.jsonObject
+        val st = OrgAuthority.verifyChain(chain["entries"]!!.jsonArray.take(n).map { OrgAuthorityWire.entry(it) }, a.s("genesisHash"), now)
+        val grants = resolve(a["seatBooks"]!!.jsonArray[0])!!.jsonObject["grants"]!!.jsonArray.map { OrgAuthorityWire.grantBundle(it) }
+        return st to OrgAuthority.buildSeatBook(st, grants, emptyList(), emptyList(), emptyList(), now)
+    }
+
+    @Test fun connectorStanding() {
+        for (c in v["standing"]!!.jsonObject["cases"]!!.jsonArray.map { it.jsonObject }) {
+            val now = c.l("now")
+            val (st, book) = stateAndBook(c["entries"]!!.jsonPrimitive.int, now)
+            val s = OrgConnectorStandings.standing(st, book, c["bundle"]!!.jsonObject, now)
+            val e = c["expect"]!!.jsonObject
+            assertEquals(c.s("name"), e.s("state"), s.state)
+            assertEquals(c.s("name"), (e["leftAt"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull(), s.leftAt)
+        }
+    }
+
+    @Test fun memberSlices() {
+        val sl = v["slices"]!!.jsonObject
+        val now = sl.l("now")
+        val (st, book) = stateAndBook(2, now)
+        val servers = sl["servers"]!!.jsonArray.map { it.jsonPrimitive.content }
+        val dir = sl["directory"]!!.jsonArray.map { entry(it.jsonObject) }.associateBy { it.seatId }
+        val key = bytes(sl.s("directoryKeyHex"))
+        for (c in sl["seats"]!!.jsonArray.map { it.jsonObject }) {
+            val seatId = c.s("seatId")
+            val (seats, srv) = OrgDirectorySlices.shares(st, book, seatId, servers, now)
+            assertEquals(c["shares"]!!.jsonObject["seats"]!!.jsonArray.map { it.jsonPrimitive.content }, seats)
+            assertEquals(c["shares"]!!.jsonObject["servers"]!!.jsonArray.map { it.jsonPrimitive.content }, srv)
+            val content = OrgDirectorySlices.content(st, book, seatId, dir, servers, now)
+            val payload = OrgDirectorySlices.payload(orgId, seatId, content)
+            assertEquals(c.s("payload"), utf8(payload))
+            assertEquals(c.s("contentTag"), OrgDirectorySlices.contentTag(key, payload))
+            val slice = OrgDirectorySlices.fromJson(c["slice"]!!.jsonObject)
+            assertEquals(c.s("write"), utf8(OrgDirectorySlices.canonicalWrite(slice)))
+            val kp = PqHybrid.hybridSealKeygen(bytes(c.s("kemSeedHex")))
+            val opened = OrgDirectorySlices.open(slice, kp.secretKey)
+            assertEquals(content.entries, opened.entries)
+            assertEquals(content.servers, opened.servers)
+        }
+    }
+
+    @Test fun sealedMapping() {
+        val c = v["connectors"]!!.jsonObject
+        val m = c["mappingSealed"]!!.jsonObject
+        val id = c["connector"]!!.jsonObject["connector"]!!.jsonObject.s("connectorId")
+        val key = bytes(m.s("directoryKeyHex"))
+        val sealed = m["sealed"]!!.jsonObject
+        val opened = OrgConnectorStandings.openMapping(orgId, id, key, sealed)
+        assertEquals(OrgConnectorConsole.mappingSha256(c["mapping"]!!.jsonObject), OrgConnectorConsole.mappingSha256(opened))
+        val mine = OrgConnectorStandings.sealMapping(orgId, id, key, 1, c["mapping"]!!.jsonObject, bytes(sealed.s("sealedHex")).copyOfRange(0, 12))
+        assertEquals(sealed.s("sealedHex"), mine.s("sealedHex"))
+    }
 }

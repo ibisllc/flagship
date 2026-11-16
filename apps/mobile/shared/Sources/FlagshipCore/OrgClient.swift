@@ -242,6 +242,15 @@ public final class OrgClient: @unchecked Sendable {
         _ = try await call("POST", "/api/orgs/\(orgId)/proposals/decisions", ["decision": decision, "approvals": [approval.jsonObject]])
     }
 
+    /// Members' sealed slices of the directory, each with the org admin's approval.
+    public func directorySlices(orgId: String) async throws -> [[String: Any]] {
+        ((try await call("GET", "/api/orgs/\(orgId)/directory/slices"))["slices"] as? [[String: Any]]) ?? []
+    }
+
+    public func putDirectorySlice(orgId: String, slice: OrgDirectorySlice, approval: OrgApproval) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/directory/slices", ["slice": slice.json, "approvals": [approval.jsonObject]])
+    }
+
     public func revoke(orgId: String, body: [String: Any]) async throws {
         _ = try await call("POST", "/api/orgs/\(orgId)/revokes", body)
     }

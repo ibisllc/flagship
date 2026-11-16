@@ -189,6 +189,15 @@ class OrgClient(private val http: OrgHttp) {
         call("POST", "/api/orgs/$orgId/proposals/decisions", buildJsonObject { put("decision", decision); put("approvals", buildJsonArray { add(OrgJson.approval(approval)) }) })
     }
 
+    /** Members' sealed slices of the directory, each with the org admin's approval. */
+    suspend fun directorySlices(orgId: String): List<JsonObject> = arr(call("GET", "/api/orgs/$orgId/directory/slices"), "slices").mapNotNull { it as? JsonObject }
+
+    suspend fun putDirectorySlice(orgId: String, slice: com.flagshipserver.app.core.pq.OrgDirectorySlice, approval: OrgApproval) {
+        call("POST", "/api/orgs/$orgId/directory/slices", buildJsonObject {
+            put("slice", com.flagshipserver.app.core.pq.OrgDirectorySlices.json(slice)); put("approvals", buildJsonArray { add(OrgJson.approval(approval)) })
+        })
+    }
+
     suspend fun revoke(orgId: String, body: JsonObject) { call("POST", "/api/orgs/$orgId/revokes", body) }
 
     /** Stores one sealed entry, approved by this org admin over its write form. */

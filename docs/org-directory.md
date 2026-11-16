@@ -99,9 +99,14 @@ decision (`docs/webapp-key-custody.md`).
 4. LDAP pull, tested against an OpenLDAP container in CI.
 5. Admin console screens (iOS first, then Android and the webapp).
 
-## 9. Owner decisions (2026-11-15, accepted the defaults)
-- **Members see only the people and servers they share something with**; there is no company-wide address book.
+## 9. Owner decisions (2026-11-15)
+- **Members see only the people and servers they share something with**; there is no company-wide address book. Built
+  in 0.4 (every feature lands in 0.4).
 - **SCIM tokens are per connector**, rotated by hand, with a warning after 365 days.
+- **Connector setup through the admin's phone: accepted** (the phone makes the connector's seeds and seals them to the box).
+- **A connector does not die silently when its approver leaves:** it is flagged "needs re-approval", keeps working for
+  7 days, then is suspended until any org admin approves it again; the approver's removal or offboarding lists it among
+  the pending rotations.
 
 ## 10. As built (branch `0.4/org-directory`, 2026-11-15)
 
@@ -179,9 +184,42 @@ read by TS, Swift and Kotlin. The ring kind is the existing `directory-key` (sea
 - **People:** each entry's name, email and groups.
 - **Directory connectors:** the org's connectors (kind, server, status) and "Add a SCIM connector": pick one of the org's
   servers; the phone makes the key and token, seals the setup to that server and shows the SCIM URL and token once.
-- Not built: the LDAP form (the box and protocol take `setup.ldap`; no screen fills it), editing the group → role
-  mapping (new connectors propose everyone in scope as a member), pause / retire / token rotation buttons, the
-  members' "Shared with: Ana (Finance)" view, and the webapp console (no seat keys until the key-custody decision).
+- See "Second round" below for the LDAP form, the mapping editor, pause / retire / token rotation, role changes and the
+  members' "Shared with" view. The webapp console waits for the key-custody branch.
+
+**Second round (owner decisions above).**
+- **Re-approval.** `orgConnectorStanding` (TS, Swift `OrgConnectors.standing`, Kotlin `OrgConnectorStandings.standing`,
+  vectors `standing`): the stored approval is checked as of the record it names; when every approver is no longer an
+  org admin the standing is `needs-reapproval` from the first record that dropped the last of them, and `suspended` 7 days
+  later. The box keeps a `needs-reapproval` connector running with one Activity line saying when it stops, and stops a
+  suspended one (Activity says so). `.com` returns each connector's standing on `GET /connectors` and the ones to
+  re-approve as `pendingConnectors` on `GET /keys`; the phones list them under "Keys to rotate" with "Approve again",
+  which posts the same record with a later `issuedAt` under the admin's own approval.
+- **Members' slices.** `flagship/org-directory-slice/v1`: an org admin's phone seals to each live seat that is not an org
+  admin (and announced a KEM key) the entries of the people it shares something with and the servers its roles name:
+  every org admin, each seat whose roles name a server or app its roles name (`*` matches every server). Emails and
+  external ids are left out. `GET/POST /api/orgs/<id>/directory/slices` (one org admin approves a write; the seat must be
+  live and the slice sealed to its announced KEM key; newest per seat). A keyed tag (HMAC under the directory key) lets
+  an admin see a stale slice without opening it; phones re-publish stale ones when an admin opens the org page. The
+  member's phone checks an org admin approved its slice (anyone can seal to a public key), opens it and shows "Shared
+  with" on the org page, and uses the names on its other org rows. Vectors `slices`; forgery AT-ENV-50.
+- **Connector upkeep from the console** (iOS and Android): pause, resume, retire (with a confirmation), a new SCIM token
+  (shown once), the group → role mapping editor, the LDAP form (AD or OpenLDAP, `ldaps://` only, the password sealed to
+  the box), and "Add an LDAP connector". A later setup is partial: it carries only what changed (no seeds, or no mapping,
+  or no token); the box keeps the rest of what it opened before in `<dataDir>/org-directory/<id>.setup.json` (0600, on
+  the encrypted disk). The mapping also travels sealed under the directory key (`mappingSealed`) so any org admin can
+  edit it.
+- **Role-change proposals** are carried out with a new seat grant (the seat's existing keys, the proposed roles), through
+  a ceremony when the roles need two admins; an admin role for a seat that has no admin key asks for a new invitation.
+- **SCIM audit:** one content-free Activity line per request (`SCIM <method> <resource kind> <status> (connector <id8>)`;
+  an unknown path reads "other"), so nothing a model could read names a person.
+- **CI:** the `openldap` job in `ci.yml` runs LDAP pull against an `osixia/openldap:1.5.0` service container
+  (`directory.openldap.integration.test.ts`, skipped without `FLAGSHIP_TEST_LDAP_URL`); not run locally (no Docker here).
+- **Webapp hooks** (for after the webapp key-custody branch): the webapp needs a seat's X-Wing key (derived from the UMK as
+  `deriveOrgSeatKemSeed`) to open the directory key, slices and proposals, and a seat admin key to sign approvals. Every
+  piece is in `packages/protocol` (`openOrgDirectory`, `openOrgDirectorySlice`, `verifyOrgDirectorySliceApproval`,
+  `verifyOrgProposal`, `openOrgProposal`, `orgConnectorStanding`, `sealOrgConnectorSetup`, `sealOrgConnectorMapping`) and
+  every route above; the parity allowlist names each tag the webapp still lacks.
 
 **Joining.** A joining seat signs its seat KEM statement (`org-seat-kem/v1`) with its member key at accept and sends it
 with the accept; `.com` checks it against the member binding, keeps it, and records it as the seat's KEM key when the

@@ -67,7 +67,7 @@ public struct OrgDetailScreen: View {
                 joinsSection(c: c)
                 rotationsSection(c: c)
                 approvalsSection(c: c)
-                if seat.memberOnly != true { OrgDirectorySections(vm: vm, seat: seat) }
+                if vm.isOrgAdmin(seat) { OrgDirectorySections(vm: vm, seat: seat) } else { OrgSharedWithSection(vm: vm) }
                 adminsSection(c: c)
                 Section {
                     Button("Invite a person") { inviting = true }.accessibilityIdentifier("org-invite")
@@ -126,11 +126,20 @@ public struct OrgDetailScreen: View {
         }
     }
 
-    /// People who left: rotate the keys they could open so they read nothing new.
+    /// People who left: rotate the keys they could open so they read nothing new, and re-approve the
+    /// directory connectors they approved.
     @ViewBuilder
     private func rotationsSection(c: FSColors) -> some View {
-        if !vm.rotations.isEmpty && seat.memberOnly != true {
+        if (!vm.rotations.isEmpty || !vm.connectorsToReapprove.isEmpty) && seat.memberOnly != true {
             Section("Keys to rotate") {
+                ForEach(vm.connectorsToReapprove, id: \.connector.connectorId) { r in
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        Text(OrgDirectoryCopy.reapprove(r.connector, r.standing)).font(FS.font.body()).foregroundColor(r.standing.state == "suspended" ? c.danger : c.text)
+                        Button("Approve again") { Task { await vm.reapproveConnector(seat, r.connector.connectorId) } }
+                            .disabled(vm.busy || vm.myFreeze(seat) != nil)
+                            .accessibilityIdentifier("org-connector-reapprove-\(r.connector.connectorId.prefix(8))")
+                    }
+                }
                 ForEach(vm.rotations) { r in
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         Text("\(label(r.seatId)) left. Rotate the keys they could open so they can't read anything new.")
@@ -290,6 +299,10 @@ struct OrgDirectorySections: View {
     @Bindable var vm: OrgViewModel
     let seat: OrgSeatKeys.Seat
     @State private var pickingServer = false
+    @State private var pickingKind = "scim"
+    @State private var retiring: String?
+    @State private var editingMapping: String?
+    @State private var ldapTarget: (server: String, id: String?)?
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -326,10 +339,25 @@ struct OrgDirectorySections: View {
             }
         }
         Section {
-            ForEach(vm.connectors, id: \.connectorId) { k in
-                VStack(alignment: .leading) {
+            ForEach(vm.connectors.filter { $0.status != "retired" }, id: \.connectorId) { k in
+                VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text(OrgDirectoryCopy.kind(k.kind)).font(FS.font.body()).foregroundColor(c.text)
                     Text("\(k.serverDomain) · \(OrgDirectoryCopy.status(k.status))").font(FS.font.caption()).foregroundColor(c.textMuted)
+                    if let st = vm.standings[k.connectorId], st.state != "ok" {
+                        Text(OrgDirectoryCopy.reapprove(k, st)).font(FS.font.caption()).foregroundColor(st.state == "suspended" ? c.danger : c.textMuted)
+                    }
+                    HStack {
+                        Menu("Manage") {
+                            Button("Edit group roles") { editingMapping = k.connectorId }
+                            if k.kind == "ldap" { Button("Edit LDAP settings") { ldapTarget = (k.serverDomain, k.connectorId) } }
+                            if k.kind == "scim" { Button("New SCIM token") { Task { await vm.rotateScimToken(seat, k.connectorId) } } }
+                            if k.status == "active" { Button("Pause") { Task { await vm.setConnectorStatus(seat, k.connectorId, status: "paused") } } }
+                            if k.status == "paused" { Button("Resume") { Task { await vm.setConnectorStatus(seat, k.connectorId, status: "active") } } }
+                            Button("Retire", role: .destructive) { retiring = k.connectorId }
+                        }
+                        .disabled(vm.busy)
+                        .accessibilityIdentifier("org-connector-manage-\(k.connectorId.prefix(8))")
+                    }
                 }
             }
             if let n = vm.newConnector {
@@ -341,15 +369,139 @@ struct OrgDirectorySections: View {
                     Button("Done") { vm.clearNewConnector() }
                 }
             } else {
-                Button("Add a SCIM connector") { pickingServer = true }
+                Button("Add a SCIM connector") { pickingKind = "scim"; pickingServer = true }
                     .disabled(vm.busy || vm.servers.isEmpty)
                     .accessibilityIdentifier("org-connector-add")
+                Button("Add an LDAP connector") { pickingKind = "ldap"; pickingServer = true }
+                    .disabled(vm.busy || vm.servers.isEmpty)
+                    .accessibilityIdentifier("org-connector-add-ldap")
             }
         } header: { Text("Directory connectors") } footer: {
             Text("Microsoft Entra ID, Okta and others send people to your own server. Nothing changes until an admin approves it here.")
         }
         .confirmationDialog("Which server runs the connector?", isPresented: $pickingServer, titleVisibility: .visible) {
-            ForEach(vm.servers, id: \.self) { d in Button(d) { Task { await vm.addScimConnector(seat, serverDomain: d) } } }
+            ForEach(vm.servers, id: \.self) { d in
+                Button(d) { if pickingKind == "ldap" { ldapTarget = (d, nil) } else { Task { await vm.addScimConnector(seat, serverDomain: d) } } }
+            }
+        }
+        .confirmationDialog("Retire this connector? It stops for good; you can add a new one later.", isPresented: Binding(get: { retiring != nil }, set: { if !$0 { retiring = nil } }), titleVisibility: .visible) {
+            Button("Retire", role: .destructive) { if let id = retiring { Task { await vm.setConnectorStatus(seat, id, status: "retired") } }; retiring = nil }
+        }
+        .sheet(isPresented: Binding(get: { editingMapping != nil }, set: { if !$0 { editingMapping = nil } })) {
+            if let id = editingMapping { NavigationStack { OrgMappingEditor(vm: vm, seat: seat, connectorId: id) } }
+        }
+        .sheet(isPresented: Binding(get: { ldapTarget != nil }, set: { if !$0 { ldapTarget = nil } })) {
+            if let t = ldapTarget { NavigationStack { OrgLdapForm(vm: vm, seat: seat, serverDomain: t.server, connectorId: t.id) } }
+        }
+    }
+}
+
+/// A member's view: the people and servers it shares something with (its slice of the directory).
+struct OrgSharedWithSection: View {
+    @Environment(\.colorScheme) private var scheme
+    @Bindable var vm: OrgViewModel
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        if let sw = vm.sharedWith {
+            Section {
+                if sw.people.isEmpty && sw.servers.isEmpty {
+                    Text("No names shared with you yet.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                }
+                ForEach(sw.people, id: \.seatId) { e in
+                    VStack(alignment: .leading) {
+                        Text(e.pseudonym).font(FS.font.body()).foregroundColor(c.text)
+                        if !e.groups.isEmpty { Text(e.groups.joined(separator: " · ")).font(FS.font.caption()).foregroundColor(c.textMuted) }
+                    }
+                }
+                ForEach(sw.servers, id: \.self) { d in
+                    Label(d, systemImage: "server.rack").font(FS.font.bodySm()).foregroundColor(c.text)
+                }
+            } header: { Text("Shared with") } footer: {
+                Text("The people and servers you share something with. Admins see the whole organization.")
+            }
+        }
+    }
+}
+
+/// The mapping editor: which directory group gets which role (docs/org-directory.md §3).
+struct OrgMappingEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var vm: OrgViewModel
+    let seat: OrgSeatKeys.Seat
+    let connectorId: String
+    @State private var rows: [OrgViewModel.MappingRow] = []
+    @State private var defaultMember = true
+    @State private var loaded = false
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach($rows) { $r in
+                    VStack(alignment: .leading) {
+                        TextField("Group name", text: $r.group).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Picker("Role", selection: $r.role) {
+                            Text("Member").tag(OrgViewModel.InviteRole.member)
+                            Text("Admin of one server").tag(OrgViewModel.InviteRole.serverAdmin)
+                            Text("Admin of one app").tag(OrgViewModel.InviteRole.appAdmin)
+                        }
+                        if r.role == .serverAdmin { TextField("Server address", text: $r.target).textInputAutocapitalization(.never) }
+                        if r.role == .appAdmin { TextField("App id", text: $r.target).textInputAutocapitalization(.never) }
+                    }
+                }
+                .onDelete { rows.remove(atOffsets: $0) }
+                Button("Add a group") { rows.append(.init(group: "", role: .member, target: "")) }
+            } header: { Text("Group roles") } footer: {
+                Text("People in these groups are proposed with these roles. Nothing changes until an admin approves each proposal.")
+            }
+            Section {
+                Toggle("Invite people in no listed group as members", isOn: $defaultMember)
+            }
+        }
+        .navigationTitle("Edit group roles")
+        .onAppear { if !loaded { let m = vm.mappingRows(connectorId); rows = m.rows; defaultMember = m.defaultMember; loaded = true } }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") { Task { await vm.saveMapping(seat, connectorId, rows: rows, defaultMember: defaultMember); dismiss() } }
+                    .disabled(vm.busy || rows.contains { $0.role != .member && $0.target.isEmpty })
+            }
+        }
+    }
+}
+
+/// The LDAP form (docs/org-directory.md §4): LDAPS only; the password goes only to the server, sealed.
+struct OrgLdapForm: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var vm: OrgViewModel
+    let seat: OrgSeatKeys.Seat
+    let serverDomain: String
+    let connectorId: String?
+    @State private var form = OrgViewModel.LdapForm()
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Directory", selection: $form.openLdap) {
+                    Text("Active Directory").tag(false)
+                    Text("OpenLDAP").tag(true)
+                }
+                TextField("ldaps:// address", text: $form.url).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                TextField("Bind account (DN)", text: $form.bindDn).textInputAutocapitalization(.never).autocorrectionDisabled()
+                SecureField("Password", text: $form.password)
+                TextField("Base DN", text: $form.baseDn).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("User filter (optional)", text: $form.userFilter).textInputAutocapitalization(.never).autocorrectionDisabled()
+            } footer: {
+                Text("Read-only: the server reads the directory every 15 minutes and never writes to it. The password is sealed to \(serverDomain).")
+            }
+        }
+        .navigationTitle(connectorId == nil ? String(localized: "Add an LDAP connector") : String(localized: "Edit LDAP settings"))
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") { Task { await vm.saveLdapConnector(seat, serverDomain: serverDomain, form: form, id: connectorId); dismiss() } }
+                    .disabled(vm.busy || !form.valid)
+            }
         }
     }
 }
@@ -369,6 +521,12 @@ enum OrgDirectoryCopy {
         case "ldap": return String(localized: "LDAP connector")
         default: return String(localized: "Custom connector")
         }
+    }
+    static func reapprove(_ k: OrgConnector, _ st: OrgConnectorStanding) -> String {
+        let when = Date(timeIntervalSince1970: TimeInterval(st.suspendAt ?? 0) / 1000).formatted(date: .abbreviated, time: .omitted)
+        return st.state == "suspended"
+            ? String(localized: "The \(kind(k.kind)) on \(k.serverDomain) stopped: the admin who approved it left. Approve it again to restart it.")
+            : String(localized: "The \(kind(k.kind)) on \(k.serverDomain) needs approving again: the admin who approved it left. It stops on \(when).")
     }
     static func status(_ s: String) -> String {
         switch s {

@@ -159,3 +159,59 @@ object OrgConnectorConsole {
         put("status", JsonPrimitive(c.status)); put("issuedAt", JsonPrimitive(c.issuedAt))
     }
 }
+
+/** A stored connector's standing (packages/protocol/src/orgConnector.ts `orgConnectorStanding`). */
+data class OrgConnectorStanding(val state: String, val approvers: List<String>, val leftAt: Long?, val suspendAt: Long?)
+
+object OrgConnectorStandings {
+    const val GRACE_MS = 7 * 24 * 3_600_000L
+
+    fun standing(st: OrgAuthorityState, book: OrgSeatBook, connectorBundle: JsonObject, now: Long): OrgConnectorStanding {
+        val c = OrgConnectors.connector(connectorBundle["connector"] as JsonObject)
+        val approvals = OrgAuthorityWire.approvals(connectorBundle["approvals"])
+        val at = approvals.firstOrNull()?.oarVersion ?: -1
+        OrgRotation.recordedApprovals(st, book, OrgConnectors.canonical(c), approvals, at, now, null)
+        val signers = approvals.map { it.seatId }.distinct()
+        val isAdmin = { s: String -> st.current.admins.any { it.seatId == s && it.kind == OrgAdminKind.ADMIN } }
+        val departed = signers.filter { !isAdmin(it) }.map { s ->
+            st.records.firstOrNull { r -> r.version > at && r.admins.none { it.seatId == s && it.kind == OrgAdminKind.ADMIN } }?.issuedAt ?: st.current.issuedAt
+        }
+        if (departed.size < signers.size) return OrgConnectorStanding("ok", signers, null, null)
+        val left = departed.max()
+        return OrgConnectorStanding(if (now < left + GRACE_MS) "needs-reapproval" else "suspended", signers, left, left + GRACE_MS)
+    }
+
+    private fun info(orgId: String, connectorId: String, v: Long): ByteArray {
+        if (!Regex("^[0-9a-f]{32}$").matches(orgId) || !Regex("^[0-9a-f]{32}$").matches(connectorId) || v < 0) throw OrgAuthorityException("malformed", "mapping")
+        return listOf(OrgConnectors.TAG_CONNECTOR, "mapping", orgId, connectorId, v).joinToString("|").toByteArray(Charsets.UTF_8)
+    }
+
+    private fun key(directoryKey: ByteArray, info: ByteArray): ByteArray {
+        val g = org.bouncycastle.crypto.generators.HKDFBytesGenerator(org.bouncycastle.crypto.digests.SHA256Digest())
+        g.init(org.bouncycastle.crypto.params.HKDFParameters(directoryKey, ByteArray(0), info))
+        return ByteArray(32).also { g.generateBytes(it, 0, 32) }
+    }
+
+    /** The mapping sealed under the org directory key for the admins' editor (`sealOrgConnectorMapping`). */
+    fun sealMapping(orgId: String, connectorId: String, directoryKey: ByteArray, keyVersion: Long, mapping: JsonObject, nonce: ByteArray? = null): JsonObject {
+        val i = info(orgId, connectorId, keyVersion)
+        val n = nonce ?: ByteArray(12).also(java.security.SecureRandom()::nextBytes)
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(javax.crypto.Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(key(directoryKey, i), "AES"), javax.crypto.spec.GCMParameterSpec(128, n))
+        c.updateAAD(i)
+        val ct = c.doFinal(OrgConnectorConsole.canonicalJson(mapping).toByteArray(Charsets.UTF_8))
+        return kotlinx.serialization.json.buildJsonObject { put("keyVersion", JsonPrimitive(keyVersion)); put("sealedHex", JsonPrimitive(PqHex.encode(n + ct))) }
+    }
+
+    fun openMapping(orgId: String, connectorId: String, directoryKey: ByteArray, sealed: JsonObject): JsonObject {
+        val v = (sealed["keyVersion"] as? JsonPrimitive)?.content?.toLongOrNull() ?: throw OrgAuthorityException("malformed", "mapping")
+        val b = PqHex.decode((sealed["sealedHex"] as? JsonPrimitive)?.content ?: "") ?: throw OrgAuthorityException("malformed", "mapping")
+        val i = info(orgId, connectorId, v)
+        return try {
+            val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            c.init(javax.crypto.Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(key(directoryKey, i), "AES"), javax.crypto.spec.GCMParameterSpec(128, b.copyOfRange(0, 12)))
+            c.updateAAD(i)
+            kotlinx.serialization.json.Json.parseToJsonElement(String(c.doFinal(b, 12, b.size - 12), Charsets.UTF_8)) as JsonObject
+        } catch (e: Exception) { throw OrgAuthorityException("malformed", "mapping does not open") }
+    }
+}

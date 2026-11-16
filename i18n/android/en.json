@@ -16810,5 +16810,149 @@
   "org_connector_retired": {
     "en": "Retired",
     "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_role_needs_invite": {
+    "en": "An admin role needs this person to accept a new invitation. Decline this and invite them again.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_role_changed": {
+    "en": "Role changed.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_reapproved": {
+    "en": "Approved again.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_mapping_saved": {
+    "en": "Saved. The server uses it at its next check.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_fill_in": {
+    "en": "Fill in an ldaps:// address, the bind account, its password and the base DN.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_saved": {
+    "en": "Saved. The server reads the directory within 15 minutes.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_stopped": {
+    "en": "The %1$s on %2$s stopped: the admin who approved it left. Approve it again to restart it.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_needs_reapproval": {
+    "en": "The %1$s on %2$s needs approving again: the admin who approved it left. It stops on %3$s.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_reapprove": {
+    "en": "Approve again",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_manage": {
+    "en": "Manage",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_edit_roles": {
+    "en": "Edit group roles",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_edit_ldap": {
+    "en": "Edit LDAP settings",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_new_token": {
+    "en": "New SCIM token",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_pause": {
+    "en": "Pause",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_resume": {
+    "en": "Resume",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_retire_confirm": {
+    "en": "Retire this connector? It stops for good; you can add a new one later.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_retire": {
+    "en": "Retire",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_connector_add_ldap": {
+    "en": "Add an LDAP connector",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_shared_with": {
+    "en": "Shared with",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_shared_with_note": {
+    "en": "The people and servers you share something with. Admins see the whole organization.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_shared_with_none": {
+    "en": "No names shared with you yet.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_mapping_title": {
+    "en": "Group roles",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_mapping_note": {
+    "en": "People in these groups are proposed with these roles. Nothing changes until an admin approves each proposal.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_mapping_group": {
+    "en": "Group name",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_mapping_remove": {
+    "en": "Remove",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_mapping_add": {
+    "en": "Add a group",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_mapping_default_member": {
+    "en": "Invite people in no listed group as members",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_save": {
+    "en": "Save",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_ad": {
+    "en": "Active Directory",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_openldap": {
+    "en": "OpenLDAP",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_url": {
+    "en": "ldaps:// address",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_bind": {
+    "en": "Bind account (DN)",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_password": {
+    "en": "Password",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_base": {
+    "en": "Base DN",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_filter": {
+    "en": "User filter (optional)",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "org_ldap_note": {
+    "en": "Read-only: the server reads the directory every 15 minutes and never writes to it. The password is sealed to %1$s.",
+    "ctx": "Organizations: directory console (docs/org-directory.md)"
   }
 }

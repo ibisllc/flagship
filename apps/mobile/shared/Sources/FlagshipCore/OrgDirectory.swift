@@ -192,3 +192,116 @@ extension OrgDirectory {
     /// The newest verified directory-key version, or nil before the first one exists.
     public static func newestVersion(_ plan: OrgRotationPlan) -> Int64? { plan.chains[OrgRotation.chainId(.directoryKey, "*")]?.last?.ring.version }
 }
+
+/// A member's slice of the directory (packages/protocol/src/orgDirectory.ts, `flagship/org-directory-slice/v1`).
+public struct OrgDirectorySlice: Equatable {
+    public var orgId: String, seatId: String, kemKeyId: String, tagKeyVersion: Int64, contentTag: String, sealedHex: String, issuedAt: Int64
+    public var json: [String: Any] {
+        ["orgId": orgId, "seatId": seatId, "kemKeyId": kemKeyId, "tagKeyVersion": NSNumber(value: tagKeyVersion), "contentTag": contentTag,
+         "sealedHex": sealedHex, "issuedAt": NSNumber(value: issuedAt)]
+    }
+    public static func fromWire(_ w: Any?) throws -> OrgDirectorySlice {
+        guard let o = w as? [String: Any], let a = o["orgId"] as? String, let s = o["seatId"] as? String, let k = o["kemKeyId"] as? String,
+              let v = OrgAuthority.i64(o["tagKeyVersion"]), let t = o["contentTag"] as? String, let h = o["sealedHex"] as? String,
+              let i = OrgAuthority.i64(o["issuedAt"]) else { throw OrgAuthorityError("malformed", "slice") }
+        return OrgDirectorySlice(orgId: a, seatId: s, kemKeyId: k, tagKeyVersion: v, contentTag: t, sealedHex: h, issuedAt: i)
+    }
+}
+
+extension OrgDirectory {
+    public static let sliceTag = "flagship/org-directory-slice/v1"
+
+    static func serverTargets(_ roles: [OrgSeatRole], _ all: [String]) -> Set<String> {
+        var out = Set<String>()
+        for r in roles {
+            switch r {
+            case .serverAdmin(let s): out.formUnion(s ?? all)
+            case .unlock(let s): out.formUnion(s)
+            default: break
+            }
+        }
+        return out
+    }
+    static func appTargets(_ roles: [OrgSeatRole]) -> Set<String> {
+        var out = Set<String>()
+        for case .serviceAdmin(let apps) in roles { out.formUnion(apps) }
+        return out
+    }
+
+    /// Every org admin, each live seat whose roles name a server or app this seat's roles name, and those servers.
+    public static func shares(_ st: OrgAuthorityState, _ book: OrgSeatBook, seatId: String, servers: [String], now: Int64) -> (seats: [String], servers: [String]) {
+        let mine = book.seats[seatId]
+        let myServers = mine.map { serverTargets($0.roles, servers) } ?? []
+        let myApps = mine.map { appTargets($0.roles) } ?? []
+        var seats = Set(st.current.admins.filter { $0.kind == .admin }.map(\.seatId))
+        for (id, s) in book.seats where id != seatId && !book.revoked.contains(id) && s.grant.expiresAt > now {
+            if !serverTargets(s.roles, servers).isDisjoint(with: myServers) || !appTargets(s.roles).isDisjoint(with: myApps) { seats.insert(id) }
+        }
+        seats.remove(seatId)
+        return (seats.sorted(), myServers.filter { servers.contains($0) }.sorted())
+    }
+
+    public static func sliceContent(_ st: OrgAuthorityState, _ book: OrgSeatBook, seatId: String, bySeat: [String: OrgDirectoryEntry], servers: [String], now: Int64)
+        -> (entries: [OrgDirectoryEntry], servers: [String]) {
+        let sh = shares(st, book, seatId: seatId, servers: servers, now: now)
+        let entries = sh.seats.compactMap { bySeat[$0] }.map { e -> OrgDirectoryEntry in var x = e; x.email = ""; x.externalId = ""; x.updatedAt = 0; return x }
+        return (entries, sh.servers)
+    }
+
+    public static func slicePayload(orgId: String, seatId: String, entries: [OrgDirectoryEntry], servers: [String]) throws -> [UInt8] {
+        guard OrgAuthority.isHex(orgId, 32), OrgAuthority.isHex(seatId, 32), entries.count <= 2000, servers.count <= 512 else { throw fail("slice") }
+        let bodies = try entries.map { b64u(try canonicalBody($0)) }.sorted()
+        for s in servers { if !OrgAuthority.token(s, "^[a-z0-9][a-z0-9.-]{0,252}$") { throw fail("server") } }
+        guard servers == Array(Set(servers)).sorted() else { throw fail("servers not sorted and unique") }
+        return OrgAuthority.join([sliceTag, "payload", orgId, seatId, bodies.joined(separator: ","), servers.joined(separator: ",")])
+    }
+
+    public static func parseSlicePayload(_ b: [UInt8], orgId: String, seatId: String) throws -> (entries: [OrgDirectoryEntry], servers: [String]) {
+        guard let s = String(bytes: b, encoding: .utf8) else { throw fail("utf8") }
+        let p = s.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard p.count == 6, p[0] == sliceTag, p[1] == "payload", p[2] == orgId, p[3] == seatId else { throw fail("slice payload") }
+        let entries = p[4].isEmpty ? [] : try p[4].split(separator: ",").map { try parseBody(try unb64u(String($0))) }
+        let servers = p[5].isEmpty ? [] : p[5].split(separator: ",").map(String.init)
+        guard try slicePayload(orgId: orgId, seatId: seatId, entries: entries, servers: servers) == b else { throw fail("slice payload not canonical") }
+        return (entries, servers)
+    }
+
+    public static func sliceContentTag(directoryKey: [UInt8], payload: [UInt8]) -> String {
+        let mac = HMAC<SHA256>.authenticationCode(for: Array("\(sliceTag)|tag|".utf8) + payload, using: SymmetricKey(data: directoryKey))
+        return PqBin.hex(Array(mac))
+    }
+
+    public static func canonicalSliceWrite(_ s: OrgDirectorySlice) throws -> [UInt8] {
+        guard OrgAuthority.isHex(s.orgId, 32), OrgAuthority.isHex(s.seatId, 32), OrgAuthority.isHex(s.kemKeyId, 64), OrgAuthority.isHex(s.contentTag, 64),
+              s.tagKeyVersion >= 1, s.issuedAt >= 0, let sealed = PqBin.unhex(s.sealedHex), !sealed.isEmpty else { throw fail("slice") }
+        return OrgAuthority.join([sliceTag, s.orgId, s.seatId, s.kemKeyId, String(s.tagKeyVersion), s.contentTag, OrgAuthority.sha256Hex(sealed), String(s.issuedAt)])
+    }
+
+    public static func sealSlice(orgId: String, seatId: String, kemPub: [UInt8], kemKeyId: String, entries: [OrgDirectoryEntry], servers: [String],
+                                 directoryKey: [UInt8], tagKeyVersion: Int64, issuedAt: Int64) throws -> OrgDirectorySlice {
+        let payload = try slicePayload(orgId: orgId, seatId: seatId, entries: entries, servers: servers)
+        let opts = HybridSealOptions(purpose: sliceTag, senderKeyId: [UInt8](repeating: 0, count: 32), issuedAt: UInt64(issuedAt))
+        let sealed = try PqHybrid.hybridSeal(recipientPublicKey: kemPub, options: opts, context: [Array(orgId.utf8), Array(seatId.utf8)], plaintext: payload)
+        let s = OrgDirectorySlice(orgId: orgId, seatId: seatId, kemKeyId: kemKeyId, tagKeyVersion: tagKeyVersion,
+                                  contentTag: sliceContentTag(directoryKey: directoryKey, payload: payload), sealedHex: PqBin.hex(sealed), issuedAt: issuedAt)
+        _ = try canonicalSliceWrite(s)
+        return s
+    }
+
+    public static func openSlice(_ s: OrgDirectorySlice, kemSecret: [UInt8]) throws -> (entries: [OrgDirectoryEntry], servers: [String]) {
+        _ = try canonicalSliceWrite(s)
+        guard let sealed = PqBin.unhex(s.sealedHex) else { throw fail("hex") }
+        let plain: [UInt8]
+        do { plain = try PqHybrid.hybridOpen(recipientSecretKey: kemSecret, expectedPurpose: sliceTag, context: [Array(s.orgId.utf8), Array(s.seatId.utf8)], sealed: sealed).plaintext } catch {
+            throw fail("slice does not open")
+        }
+        return try parseSlicePayload(plain, orgId: s.orgId, seatId: s.seatId)
+    }
+
+    /// A member's check that one org admin (still one now) approved its slice.
+    public static func verifySliceApproval(_ st: OrgAuthorityState, _ book: OrgSeatBook, _ s: OrgDirectorySlice, approvals: [OrgApproval], now: Int64) throws {
+        let at = approvals.first?.oarVersion ?? -1
+        try OrgRotation.recordedApprovals(st, book, order: try canonicalSliceWrite(s), approvals: approvals, oarVersion: at, now: now, scoped: nil)
+        guard approvals.contains(where: { a in st.current.admins.contains { $0.seatId == a.seatId && $0.kind == .admin } }) else { throw fail("not an org admin now") }
+    }
+}

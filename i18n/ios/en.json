@@ -16105,5 +16105,125 @@
   "Retired": {
     "en": "Retired",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "An admin role needs this person to accept a new invitation. Decline this and invite them again.": {
+    "en": "An admin role needs this person to accept a new invitation. Decline this and invite them again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Role changed.": {
+    "en": "Role changed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Approved again.": {
+    "en": "Approved again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Saved. The server uses it at its next check.": {
+    "en": "Saved. The server uses it at its next check.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Fill in an ldaps:// address, the bind account, its password and the base DN.": {
+    "en": "Fill in an ldaps:// address, the bind account, its password and the base DN.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Saved. The server reads the directory within 15 minutes.": {
+    "en": "Saved. The server reads the directory within 15 minutes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Approve again": {
+    "en": "Approve again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Manage": {
+    "en": "Manage",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Edit group roles": {
+    "en": "Edit group roles",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Edit LDAP settings": {
+    "en": "Edit LDAP settings",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "New SCIM token": {
+    "en": "New SCIM token",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Pause": {
+    "en": "Pause",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Retire": {
+    "en": "Retire",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Add an LDAP connector": {
+    "en": "Add an LDAP connector",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Retire this connector? It stops for good; you can add a new one later.": {
+    "en": "Retire this connector? It stops for good; you can add a new one later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "No names shared with you yet.": {
+    "en": "No names shared with you yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "The people and servers you share something with. Admins see the whole organization.": {
+    "en": "The people and servers you share something with. Admins see the whole organization.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Group roles": {
+    "en": "Group roles",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "People in these groups are proposed with these roles. Nothing changes until an admin approves each proposal.": {
+    "en": "People in these groups are proposed with these roles. Nothing changes until an admin approves each proposal.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Invite people in no listed group as members": {
+    "en": "Invite people in no listed group as members",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Directory": {
+    "en": "Directory",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Active Directory": {
+    "en": "Active Directory",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "OpenLDAP": {
+    "en": "OpenLDAP",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "ldaps:// address": {
+    "en": "ldaps:// address",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Bind account (DN)": {
+    "en": "Bind account (DN)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Base DN": {
+    "en": "Base DN",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "User filter (optional)": {
+    "en": "User filter (optional)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Read-only: the server reads the directory every 15 minutes and never writes to it. The password is sealed to %@.": {
+    "en": "Read-only: the server reads the directory every 15 minutes and never writes to it. The password is sealed to %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "The %@ on %@ stopped: the admin who approved it left. Approve it again to restart it.": {
+    "en": "The %@ on %@ stopped: the admin who approved it left. Approve it again to restart it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "The %@ on %@ needs approving again: the admin who approved it left. It stops on %@.": {
+    "en": "The %@ on %@ needs approving again: the admin who approved it left. It stops on %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
   }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Directory connectors and their proposals (packages/protocol/src/orgConnector.ts; docs/org-directory.md
 /// §2-§4), byte for byte, pinned by test-vectors/org-directory. A connector only proposes; an admin
@@ -152,5 +153,62 @@ extension OrgConnectors {
     public static func connectorJSON(_ c: OrgConnector) -> [String: Any] {
         ["orgId": c.orgId, "connectorId": c.connectorId, "kind": c.kind, "serverDomain": c.serverDomain, "connectorKeyId": c.connectorKeyId,
          "scopes": c.scopes, "mappingSha256": c.mappingSha256, "status": c.status, "issuedAt": NSNumber(value: c.issuedAt)]
+    }
+}
+
+/// A stored connector's standing (packages/protocol/src/orgConnector.ts `orgConnectorStanding`).
+public struct OrgConnectorStanding: Equatable {
+    public let state: String
+    public let approvers: [String]
+    public let leftAt: Int64?
+    public let suspendAt: Int64?
+}
+
+extension OrgConnectors {
+    public static let reapprovalGraceMs: Int64 = 7 * 24 * 3_600_000
+
+    /// The approval checked as of the record it names, then whether any approver is still an org admin:
+    /// `ok`, `needs-reapproval` for 7 days after the last one left, then `suspended`.
+    public static func standing(_ st: OrgAuthorityState, _ book: OrgSeatBook, connector cb: [String: Any], now: Int64) throws -> OrgConnectorStanding {
+        let c = try OrgConnector.fromWire(cb["connector"])
+        let approvals = try OrgAuthorityWire.approvals(cb["approvals"])
+        let at = approvals.first?.oarVersion ?? -1
+        try OrgRotation.recordedApprovals(st, book, order: try canonicalConnector(c), approvals: approvals, oarVersion: at, now: now, scoped: nil)
+        var signers: [String] = []
+        for a in approvals where !signers.contains(a.seatId) { signers.append(a.seatId) }
+        let isAdmin = { (s: String) in st.current.admins.contains { $0.seatId == s && $0.kind == .admin } }
+        let departed = signers.filter { !isAdmin($0) }.map { s -> Int64 in
+            st.records.first { $0.version > at && !$0.admins.contains { $0.seatId == s && $0.kind == .admin } }?.issuedAt ?? st.current.issuedAt
+        }
+        if departed.count < signers.count { return OrgConnectorStanding(state: "ok", approvers: signers, leftAt: nil, suspendAt: nil) }
+        let left = departed.max() ?? 0
+        return OrgConnectorStanding(state: now < left + reapprovalGraceMs ? "needs-reapproval" : "suspended", approvers: signers, leftAt: left, suspendAt: left + reapprovalGraceMs)
+    }
+
+    static func mappingInfo(_ orgId: String, _ connectorId: String, _ v: Int64) throws -> [UInt8] {
+        try need(t(orgId, hex16) && t(connectorId, hex16) && v >= 0, "malformed", "mapping")
+        return OrgAuthority.join([tagConnector, "mapping", orgId, connectorId, String(v)])
+    }
+
+    static func mappingKey(_ directoryKey: [UInt8], _ info: [UInt8]) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: directoryKey), salt: Data(), info: Data(info), outputByteCount: 32)
+    }
+
+    /// The mapping sealed under the org directory key for the admins' editor (`sealOrgConnectorMapping`).
+    public static func sealMapping(orgId: String, connectorId: String, directoryKey: [UInt8], keyVersion: Int64, mapping: [String: Any], nonce: [UInt8]? = nil) throws -> [String: Any] {
+        let info = try mappingInfo(orgId, connectorId, keyVersion)
+        let plain = try JSONSerialization.data(withJSONObject: mapping, options: [.sortedKeys, .withoutEscapingSlashes])
+        let box = try AES.GCM.seal(plain, using: mappingKey(directoryKey, info), nonce: try AES.GCM.Nonce(data: nonce ?? PqBin.random(12)), authenticating: info)
+        return ["keyVersion": NSNumber(value: keyVersion), "sealedHex": PqBin.hex(Array(box.combined!))]
+    }
+
+    public static func openMapping(orgId: String, connectorId: String, directoryKey: [UInt8], sealed: [String: Any]) throws -> [String: Any] {
+        guard let v = OrgAuthority.i64(sealed["keyVersion"]), let b = (sealed["sealedHex"] as? String).flatMap(PqBin.unhex) else { throw OrgAuthorityError("malformed", "mapping") }
+        let info = try mappingInfo(orgId, connectorId, v)
+        do {
+            let plain = try AES.GCM.open(try AES.GCM.SealedBox(combined: Data(b)), using: mappingKey(directoryKey, info), authenticating: info)
+            guard let o = try JSONSerialization.jsonObject(with: plain) as? [String: Any] else { throw OrgAuthorityError("malformed", "mapping") }
+            return o
+        } catch { throw OrgAuthorityError("malformed", "mapping does not open") }
     }
 }
