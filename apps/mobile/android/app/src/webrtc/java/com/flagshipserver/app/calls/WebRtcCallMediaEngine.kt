@@ -4,6 +4,11 @@
 // CallTurnGate). Every encoded frame goes through FlagshipFrameCrypto (the tools/libwebrtc overlay) into
 // [CallFrameCrypto]: until the keys arrive, and after stop, every frame is dropped. Same shape as iOS
 // WebRTCCallMediaEngine.swift.
+//
+// The same engine places calls (docs/voici-calls.md "Calling from the app"): [offer] makes this phone's offer before
+// the request is signed (nothing is gathered yet), [applyAnswer] sets the callee's phone as the only ICE server
+// (TURN over TLS on its bare name, relay only) and applies the munged offer exactly as signed, then the answer, and
+// [startCaller] hands over the caller-direction frame keys (sends c2p, receives p2c).
 
 package com.flagshipserver.app.calls
 
@@ -57,6 +62,9 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
     private var textures: SurfaceTextureHelper? = null
     private var frames: FlagshipFrameCrypto? = null
     private val pendingIce = ArrayList<String>()
+    /** Placing a call: the offer as made, applied (munged as signed) only once the answer brings the ICE server. */
+    @Volatile private var caller = false
+    private var rawOffer: String? = null
     private val gathered = CompletableDeferred<Unit>()
     @Volatile private var keys: CallFrameCrypto? = null
     @Volatile private var stopped = false
@@ -85,8 +93,9 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
         return pc.localDescription?.description ?: throw CallMediaUnavailable()
     }
 
-    private fun build(video: Boolean): PeerConnection? {
+    private fun build(video: Boolean, placing: Boolean = false): PeerConnection? {
         if (stopped) return null
+        caller = placing
         initialize(context)
         val egl = EglBase.create().also { this.egl = it }
         val adm = JavaAudioDeviceModule.builder(context)
@@ -94,9 +103,9 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
             .setUseHardwareNoiseSuppressor(true)
             .createAudioDeviceModule()
         val options = PeerConnectionFactory.Options().apply {
-            // Loopback only: the caller arrives through this phone's TURN responder, never over the LAN or mobile
-            // network, so every other adapter is ignored and loopback (ignored by default) is not.
-            networkIgnoreMask = ADAPTER_ETHERNET or ADAPTER_WIFI or ADAPTER_CELLULAR or ADAPTER_VPN or ADAPTER_ANY
+            // Answering: loopback only (the caller arrives through this phone's TURN responder, never over the LAN or
+            // mobile network). Placing a call: the network reaches the callee's TURN server; the policy is relay only.
+            if (!placing) networkIgnoreMask = ADAPTER_ETHERNET or ADAPTER_WIFI or ADAPTER_CELLULAR or ADAPTER_VPN or ADAPTER_ANY
         }
         val f = PeerConnectionFactory.builder()
             .setOptions(options)
@@ -152,6 +161,56 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
     }
 
     override fun start(crypto: CallFrameCrypto) {
+        keys = crypto
+    }
+
+    // ── placing a call ──
+
+    override suspend fun offer(video: Boolean): String {
+        val pc = synchronized(lock) { build(video, placing = true) } ?: throw CallMediaUnavailable()
+        synchronized(lock) {
+            val crypto = frames ?: throw CallMediaUnavailable()
+            val audio = pc.addTransceiver(audioTrack, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV))
+                ?: throw CallMediaUnavailable()
+            crypto.attach(audio.sender)
+            crypto.attach(audio.receiver)
+            if (video) {
+                // Video is an upgrade of the audio call: the section is offered, the camera starts on the Camera tap.
+                val v = pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV))
+                    ?: throw CallMediaUnavailable()
+                videoTransceiver = v
+                remoteVideo = v.receiver.track() as? VideoTrack
+                crypto.attach(v.sender)
+                crypto.attach(v.receiver)
+            }
+        }
+        val offer = pc.awaitCreate { o -> pc.createOffer(o, MediaConstraints()) }
+        if (stopped) throw CallMediaUnavailable()
+        synchronized(lock) { rawOffer = offer.description }
+        return offer.description
+    }
+
+    override suspend fun applyAnswer(sdp: String, iceServer: CallerIceServer) {
+        val pc = synchronized(lock) { pc } ?: throw CallMediaUnavailable()
+        val offer = synchronized(lock) { rawOffer } ?: throw CallMediaUnavailable()
+        val turn = PeerConnection.IceServer.builder(iceServer.url).setUsername(iceServer.username).setPassword(iceServer.credential).createIceServer()
+        val config = PeerConnection.RTCConfiguration(listOf(turn)).apply {
+            iceTransportsType = PeerConnection.IceTransportsType.RELAY
+            bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
+            rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
+            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
+        }
+        if (!pc.setConfiguration(config)) throw CallMediaUnavailable()
+        // The signed offer is exactly the one applied: the same munging the request's hash was made over.
+        pc.awaitSdp { o -> pc.setLocalDescription(o, SessionDescription(SessionDescription.Type.OFFER, com.flagshipserver.app.core.voici.VoiciCalls.mungeSdp(offer))) }
+        pc.awaitSdp { o -> pc.setRemoteDescription(o, SessionDescription(SessionDescription.Type.ANSWER, sdp)) }
+        synchronized(lock) {
+            pendingIce.forEach { pc.addIceCandidate(IceCandidate("0", 0, it)) }
+            pendingIce.clear()
+        }
+    }
+
+    override fun startCaller(crypto: CallFrameCrypto) {
         keys = crypto
     }
 
@@ -232,7 +291,11 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
     }
 
     private val observer = object : PeerConnection.Observer {
-        override fun onIceCandidate(candidate: IceCandidate) {}
+        // Answering, the signed answer carries the one loopback candidate whole; placing a call, relay candidates
+        // trickle to the callee through the room.
+        override fun onIceCandidate(candidate: IceCandidate) {
+            if (caller) onLocalIce?.invoke(candidate.sdp)
+        }
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {
             if (state == PeerConnection.IceGatheringState.COMPLETE) {
                 gathered.complete(Unit)
