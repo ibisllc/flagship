@@ -1,3 +1,5 @@
+import java.net.URI
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -33,11 +35,69 @@ val shippedLocales: List<String> = run {
 }
 
 // voi.ci call media (docs/voici-calls.md §4): our libwebrtc AAR and the TURN responder's .so files, built by
-// .github/workflows/libwebrtc.yml (artifacts only) and unpacked by tools/libwebrtc/use-artifacts.sh into
-// vendor/webrtc (git-ignored), or wherever -Pflagship.webrtcDir points. Without them the app builds with the stub
-// engine from src/nowebrtc, and calls ring but never connect.
-val webrtcDir: File = (project.findProperty("flagship.webrtcDir") as String?)?.let { file(it) } ?: rootProject.file("vendor/webrtc")
-val webrtcBundled: Boolean = webrtcDir.resolve("libwebrtc.aar").isFile && webrtcDir.resolve("jniLibs").isDirectory
+// .github/workflows/libwebrtc.yml. By default they come from the pinned GitHub pre-release
+// (tools/libwebrtc/release.env), downloaded once into build/webrtc/<tag> and checked against
+// tools/libwebrtc/artifacts.sha256: a mismatch fails the build. For development, tools/libwebrtc/use-artifacts.sh
+// unpacks a CI run into vendor/webrtc (git-ignored; or -Pflagship.webrtcDir), which wins; a release build checks
+// those files against the same pin. -Pflagship.webrtc=stub builds without them (calls ring but never connect).
+val webrtcPinDir: File = rootProject.file("../../../tools/libwebrtc")
+val webrtcPins: Map<String, String> = webrtcPinDir.resolve("artifacts.sha256").takeIf { it.isFile }?.readLines()
+    ?.mapNotNull { l -> l.trim().split(Regex("\\s+"), limit = 2).takeIf { it.size == 2 }?.let { it[1] to it[0].lowercase() } }
+    ?.toMap() ?: emptyMap()
+val webrtcRelease = Properties().apply {
+    webrtcPinDir.resolve("release.env").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+}
+
+fun sha256(f: File): String = MessageDigest.getInstance("SHA-256").let { md ->
+    f.inputStream().use { input ->
+        val buf = ByteArray(1 shl 16)
+        while (true) { val n = input.read(buf); if (n < 0) break; md.update(buf, 0, n) }
+    }
+    md.digest().joinToString("") { "%02x".format(it) }
+}
+
+fun checkPinned(f: File, name: String) {
+    val want = webrtcPins[name] ?: throw GradleException("tools/libwebrtc/artifacts.sha256 has no checksum for $name")
+    val got = sha256(f)
+    if (got != want) throw GradleException("$name does not match its pin (want $want, got $got): refusing to build with it")
+}
+
+/** The pinned release's files in build/webrtc/<tag>, downloaded and checked on first use. */
+fun pinnedWebrtc(): File? {
+    val tag = webrtcRelease.getProperty("RELEASE_TAG") ?: return null
+    val base = webrtcRelease.getProperty("RELEASE_BASE_URL") ?: return null
+    val dir = rootProject.layout.buildDirectory.dir("webrtc/$tag").get().asFile
+    for (name in listOf("libwebrtc.aar", "flagship-turn-android.zip")) {
+        val f = dir.resolve(name)
+        if (f.isFile && runCatching { checkPinned(f, name) }.isSuccess) continue
+        dir.mkdirs()
+        val part = dir.resolve("$name.part")
+        logger.lifecycle("libwebrtc: downloading $name from $tag")
+        URI("$base/$name").toURL().openStream().use { input -> part.outputStream().use { input.copyTo(it) } }
+        checkPinned(part, name)
+        part.renameTo(f)
+        if (name.endsWith(".zip")) {
+            val jni = dir.resolve("jniLibs")
+            jni.deleteRecursively()
+            copy { from(zipTree(f)); into(jni) }
+        }
+    }
+    return dir
+}
+
+val webrtcStub: Boolean = project.findProperty("flagship.webrtc") == "stub"
+val webrtcOverride: File = (project.findProperty("flagship.webrtcDir") as String?)?.let { file(it) } ?: rootProject.file("vendor/webrtc")
+val webrtcDir: File? = when {
+    webrtcStub -> null
+    webrtcOverride.resolve("libwebrtc.aar").isFile && webrtcOverride.resolve("jniLibs").isDirectory -> webrtcOverride.also {
+        if (gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) || it.contains("bundle", ignoreCase = true) }) {
+            checkPinned(it.resolve("libwebrtc.aar"), "libwebrtc.aar")
+            checkPinned(it.resolve("flagship-turn-android.zip"), "flagship-turn-android.zip")
+        }
+    }
+    else -> pinnedWebrtc()
+}
+val webrtcBundled: Boolean = webrtcDir != null
 
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore/keystore.properties")
@@ -136,7 +196,7 @@ android {
     sourceSets {
         getByName("main") {
             java.srcDir(if (webrtcBundled) "src/webrtc/java" else "src/nowebrtc/java")
-            if (webrtcBundled) jniLibs.srcDir(webrtcDir.resolve("jniLibs"))
+            if (webrtcDir != null) jniLibs.srcDir(webrtcDir.resolve("jniLibs"))
         }
     }
 
@@ -148,7 +208,7 @@ android {
 }
 
 dependencies {
-    if (webrtcBundled) implementation(files(webrtcDir.resolve("libwebrtc.aar")))
+    if (webrtcDir != null) implementation(files(webrtcDir.resolve("libwebrtc.aar")))
     val composeBom = platform("androidx.compose:compose-bom:2024.10.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)

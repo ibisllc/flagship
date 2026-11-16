@@ -46,3 +46,27 @@ for path, anchor, add, minimum in EDITS:
         sys.exit(f"apply-overlay: {path}: anchor {anchor} found {hits} times, need {minimum}")
     gn.write_text("".join(out))
     print(f"apply-overlay: {path}: {add[0]} after {hits} anchor(s)")
+
+# Chromium compiles Java with `--release 25` (class files 69), which the app's Android Gradle Plugin cannot dex. The
+# app targets Java 17, so the AAR's classes do too. Two upstream lines; a pin that moved them fails here.
+JAVA_RELEASE = [
+    ("build/android/gyp/compile_java.py", "        '--release',\n", "        '25',\n", "        '17',\n"),
+    ("build/android/gyp/turbine.py", None, "    javac_cmd = ['--release', '25']\n", "    javac_cmd = ['--release', '17']\n"),
+]
+for path, before, old, new in JAVA_RELEASE:
+    f = src / path
+    if not f.exists():
+        continue
+    text = f.read_text()
+    if new in text and old not in text:
+        continue
+    lines = text.splitlines(keepends=True)
+    hits = 0
+    for i, line in enumerate(lines):
+        if line == old and (before is None or any(l == before for l in lines[max(0, i - 6):i])):
+            lines[i] = new
+            hits += 1
+    if hits != 1:
+        sys.exit(f"apply-overlay: {path}: expected one Java release line, found {hits}")
+    f.write_text("".join(lines))
+    print(f"apply-overlay: {path}: Java release 17")
