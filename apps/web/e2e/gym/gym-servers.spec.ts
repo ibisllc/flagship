@@ -73,6 +73,10 @@ function serverOrderRule(page: Page, keys: Keys) {
 }
 
 async function dragAbove(page: Page, moving: string, target: string, release = true): Promise<void> {
+  // The wide layout puts Home's list low on a 720 px window: bring both cards into view first,
+  // or the press lands below the viewport and no drag starts.
+  await card(page, moving).scrollIntoViewIfNeeded();
+  await card(page, target).scrollIntoViewIfNeeded();
   const handle = card(page, moving).locator(".js-order-handle");
   const hb = (await handle.boundingBox())!;
   const top = (await card(page, target).boundingBox())!;
