@@ -15,7 +15,31 @@ import { tr } from "./i18n.js";
 
 const HOST_ID = "flagship-modal-host";
 
+function topModalDialog() {
+  const open = Array.from(document.querySelectorAll("dialog[open]"));
+  const modal = open.filter((d) => {
+    try {
+      return d.matches(":modal");
+    } catch {
+      return false;
+    }
+  });
+  return modal.at(-1) ?? null;
+}
+
 export function ensureHost() {
+  // A modal <dialog> is in the top layer and leaves the rest of the page inert, so an overlay
+  // opened from inside one (restore-merge's Undo and Delete confirmations) has to live in it.
+  const top = topModalDialog();
+  if (top) {
+    let inner = top.querySelector(":scope > [data-modal-host]");
+    if (!inner) {
+      inner = document.createElement("div");
+      inner.setAttribute("data-modal-host", "");
+      top.appendChild(inner);
+    }
+    return inner;
+  }
   let host = document.getElementById(HOST_ID);
   if (host) return host;
   host = document.createElement("div");
