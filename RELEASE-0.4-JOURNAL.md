@@ -673,6 +673,16 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   nike.com"), no links and never fetched by the viewer: the caller carries the note inside the reveal. Not in 0.4
   unless the owner says so (doc: "What the reveal shows").
 
+- 2026-11-16: **org-directory round two merged** (no migration, no shell bump). Connector re-approval (flagged when
+  every approver stops being an org admin, works 7 days, then suspended until an admin approves again); members'
+  directory slices (`flagship/org-directory-slice/v1`, `GET/POST /api/orgs/<id>/directory/slices`, admin-approved,
+  checked by the member's phone); partial connector setups; content-free SCIM audit lines; `openldap` CI job (not run
+  yet); iOS and Android: "Shared with", "Approve again", role-change execution, pause/resume/retire, token rotation,
+  mapping editor, LDAP form. The rebase dropped the 4 custody allowlist entries; restored (`Parity: keep the browser
+  custody tags`). tsc, i18n, parity 0 red; agent's 1234 TS + Swift 7 + iOS 15 + Android 25 tests. Local
+  `peerBackupNetwork.sim` times out under build load on release/0.4 too (cloud run green): not this branch. Open: the
+  webapp directory pieces wait for webapp-custody (hooks in `docs/org-directory.md` "Webapp hooks").
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
