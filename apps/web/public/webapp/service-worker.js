@@ -509,7 +509,10 @@
 //       carry a hybrid companion from ML-DSA-65 in pinned WebAssembly (lib/mldsaWasm.js, lib/pqSign.js,
 //       lib/adminSigning.js); the shell installs only files that match its manifest, and the page checks the
 //       manifest's release signature before it offers an update (lib/shellTrust.js; docs/webapp-key-custody.md).
-const SHELL_VERSION = "v218";
+//  v220: browser org seats (join, approvals, admits, rotations, the directory console and members' "Shared with"),
+//       hybrid server order, direct access and update orders, and the strict opt-in from Settings, Quantum-safe
+//       protection (lib/orgSeat.js, lib/orgDirectoryConsole.js, vendor/flagship-org, lib/policySigning.js).
+const SHELL_VERSION = "v220";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -583,6 +586,7 @@ const OPTIONAL_SHELL = [
   "/lib/adminSigning.js",
   "/lib/policySigning.js",
   "/lib/orgSeat.js",
+  "/lib/orgDirectoryConsole.js",
   "/views/orgs.js",
   "/vendor/flagship-org/org.js",
   "/lib/pqSign.js",

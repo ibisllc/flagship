@@ -232,11 +232,6 @@
       "reason": "iOS wraps a software ML-DSA seed under its Secure Enclave key, local storage only; the webapp holds no ML-DSA seed (keyless-web rule)."
     },
     {
-      "check": "test-vectors",
-      "key": "web:pq-hybrid",
-      "reason": "The webapp is verify-only for the architecture-v2 suites (keyless-web rule): it checks hybrid signatures, key bindings and the assurance policy but seals nothing hybrid, so it has no envelope, seal or KEM key-id code yet; the native apps and the box use them (pq-suites.md §11.1)."
-    },
-    {
       "check": "signed-tags",
       "key": "web:flagship/pq-session/v1",
       "reason": "The webapp holds no post-quantum key (keyless-web rule), so it cannot open a flagship/pq-session/v1 session; a strict server refuses browsers unless the owner allowed them (pq-suites.md §13.4). Phones and the box implement it."
@@ -553,11 +548,6 @@
     },
     {
       "check": "signed-tags",
-      "key": "web:flagship/pq-key-binding/v2",
-      "reason": "Only release keys carry a v2 PQ key binding, checked by the box installer's verify-box-artifact.sh; Android carries the tag only inside the embedded preseed engine it shares with the builder. No phone or browser signs or checks one."
-    },
-    {
-      "check": "signed-tags",
       "key": "web:flagship/voici-app-reader/v1",
       "reason": "HKDF info, not a signed tag: the native apps' own delegated key for checking whether a voi.ci page replied to this account (owner decision, reply alerts). The webapp reads replies with a short-lived key P delegates on each open instead (lib/voiciReplies.js), so it derives no app-reader key."
     },
@@ -658,86 +648,6 @@
     },
     {
       "check": "signed-tags",
-      "key": "web:flagship/org-admins/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-approval/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-authority/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-bylaws/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-delayed-change/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-overturn/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-accept/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-freeze/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-grant/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-invite/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-member/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-member-pq/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-revoke/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-roles/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-sas/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-veto/v1",
-      "reason": "Enterprise orgs (docs/enterprise-accounts.md): the webapp is keyless (no seat admin ML-DSA seed), so org approvals, invites, accepts, freezes and overturns are signed on the phones (iOS, Android); the web org console (view and collect) is phase E4 work not built yet."
-    },
-    {
-      "check": "signed-tags",
       "key": "android:flagship/org-seat-key-wrap/v1",
       "reason": "Not a wire message: the AAD iOS uses to wrap its own seat admin key at rest (OrgSeatKeys.swift, Secure Enclave). Android's seat key store (Settings, Organizations) is not built yet; it will pick its own Keystore wrapping, which need not share the tag."
     },
@@ -745,11 +655,6 @@
       "check": "signed-tags",
       "key": "web:flagship/org-seat-key-wrap/v1",
       "reason": "Not a wire message: the AAD iOS uses to wrap its own seat admin key at rest (OrgSeatKeys.swift). The webapp holds no org keys (docs/enterprise-accounts.md E4)."
-    },
-    {
-      "check": "test-vectors",
-      "key": "web:org-authority",
-      "reason": "The webapp holds no org keys and has no org console yet (docs/enterprise-accounts.md E4: web is view-and-collect, after iOS and Android); TS, Swift and Kotlin read the vectors."
     },
     {
       "check": "signed-tags",
@@ -808,47 +713,12 @@
     },
     {
       "check": "signed-tags",
-      "key": "web:flagship/org-box-kem/v1",
-      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
-    },
-    {
-      "check": "signed-tags",
       "key": "web:flagship/org-install-blob/v1",
       "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
     },
     {
       "check": "signed-tags",
-      "key": "web:flagship/org-key-commit/v1",
-      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-key-recipients/v1",
-      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-key-ring/v1",
-      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-key-seal/v1",
-      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
-    },
-    {
-      "check": "signed-tags",
       "key": "web:flagship/org-log/v1",
-      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-kem-seed/v1",
-      "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-seat-kem/v1",
       "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
     },
     {
@@ -862,29 +732,9 @@
       "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
     },
     {
-      "check": "signed-tags",
-      "key": "web:flagship/org-connector/v1",
-      "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-directory-entry/v1",
-      "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-proposal/v1",
-      "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
-    },
-    {
       "check": "test-vectors",
       "key": "web:org-directory",
       "reason": "Org directory, connectors and proposals (docs/org-directory.md): the webapp is keyless (no seat X-Wing key to open the directory key or a proposal, no seat admin ML-DSA seed to approve), so it cannot read pseudonyms or act on proposals until the webapp key-custody decision (docs/webapp-key-custody.md); iOS (OrgDirectory.swift, OrgConnector.swift) and Android (OrgDirectory.kt, OrgConnector.kt) read the shared vectors."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/org-directory-slice/v1",
-      "reason": "Members' directory slices (docs/org-directory.md §10 'Members' slices'): the webapp holds no seat X-Wing key to open a slice nor a seat admin key to publish one until the webapp key-custody branch merges; the hook for it is listed in docs/org-directory.md ('Webapp hooks'). iOS (OrgDirectory.swift) and Android (OrgDirectory.kt) read the shared vectors."
     },
     {
       "check": "signed-tags",
