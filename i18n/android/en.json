@@ -17058,5 +17058,133 @@
   "voici_call_back_off": {
     "en": "They didn't allow call-backs. They can call you again and allow it.",
     "ctx": "voi.ci calls: the caller chose to call anonymously or stopped call-backs"
+  },
+  "voici_calls_from_anyone": {
+    "en": "Anyone on the internet",
+    "ctx": "voi.ci calls: page call mode"
+  },
+  "voici_calls_from_anyone_note": {
+    "en": "No account needed. Callers can't be called back.",
+    "ctx": "voi.ci calls: page call mode note"
+  },
+  "voici_calls_from_callback": {
+    "en": "People with a call-back account",
+    "ctx": "voi.ci calls: page call mode"
+  },
+  "voici_calls_from_callback_note": {
+    "en": "Callers sign in with Flagship and let you call them back. They stay anonymous to you.",
+    "ctx": "voi.ci calls: page call mode note"
+  },
+  "voici_call_back_prompt_title": {
+    "en": "Let %1$s call you back?",
+    "ctx": "voi.ci calls: pop-up before a call; %1$s is the page"
+  },
+  "voici_call_back_prompt_body": {
+    "en": "%1$s won't learn who you are. Flagship will know this conversation can ring your phone.",
+    "ctx": "voi.ci calls: pop-up before a call"
+  },
+  "voici_call_and_allow_back": {
+    "en": "Call and allow call-back",
+    "ctx": "voi.ci calls: pop-up button"
+  },
+  "voici_call_without_back": {
+    "en": "Call without call-back",
+    "ctx": "voi.ci calls: pop-up button"
+  },
+  "voici_call_ring_back_required": {
+    "en": "This page takes calls only from people who allow a call-back.",
+    "ctx": "voi.ci calls: refusal"
+  },
+  "voici_ring_incoming": {
+    "en": "%1$s is calling you back",
+    "ctx": "voi.ci calls: an owner rings this account back; %1$s is the page"
+  },
+  "voici_ring_incoming_locked": {
+    "en": "Someone you wrote to is calling you back. Open Flagship to answer.",
+    "ctx": "voi.ci calls: a ring-back while the account is locked"
+  },
+  "voici_delete_forget_body": {
+    "en": "It's removed from your devices and from Flagship at once. Messages already on %1$s's device stay there.",
+    "ctx": "voi.ci: delete a conversation; %1$s is the other side"
+  },
+  "voici_anonymous_caller": {
+    "en": "Anonymous caller",
+    "ctx": "voi.ci calls: a caller without an account"
+  },
+  "voici_my_conversations": {
+    "en": "Conversations you started",
+    "ctx": "voi.ci: Social row; conversations this account started on other pages"
+  },
+  "voici_my_conversations_empty": {
+    "en": "Conversations you start on other people's pages show here.",
+    "ctx": "voi.ci: empty list"
+  },
+  "voici_visitor_settings": {
+    "en": "Settings",
+    "ctx": "voi.ci: conversation settings"
+  },
+  "voici_reveal_switch": {
+    "en": "Show %1$s who I am",
+    "ctx": "voi.ci: reveal switch; %1$s is the page owner"
+  },
+  "voici_reveal_footer": {
+    "en": "%1$s sees your voi.ci page name, checked against your page. They see nothing else about you.",
+    "ctx": "voi.ci: reveal switch footer"
+  },
+  "voici_reveal_off_warning": {
+    "en": "Turning this off hides the name, but %1$s may already have seen it.",
+    "ctx": "voi.ci: turning the reveal off"
+  },
+  "voici_reveal_turn_off": {
+    "en": "Turn off",
+    "ctx": "voi.ci: button"
+  },
+  "voici_reveal_needs_page": {
+    "en": "Publish your page to show who you are.",
+    "ctx": "voi.ci: reveal needs a page"
+  },
+  "voici_call_backs_allow": {
+    "en": "Allow call-backs",
+    "ctx": "voi.ci: conversation setting"
+  },
+  "voici_call_backs_stop": {
+    "en": "Stop call-backs",
+    "ctx": "voi.ci: conversation setting"
+  },
+  "voici_call_backs_footer": {
+    "en": "%1$s can ring your phone back in this conversation. They still don't learn who you are.",
+    "ctx": "voi.ci: conversation setting footer"
+  },
+  "voici_reveal_pill": {
+    "en": "%1$s (%2$s)",
+    "ctx": "voi.ci: a caller's checked reveal; %1$s the display name they chose, %2$s their username"
+  },
+  "voici_reveal_info": {
+    "en": "Name info",
+    "ctx": "voi.ci: info button by a chosen name"
+  },
+  "voici_reveal_info_title": {
+    "en": "About this name",
+    "ctx": "voi.ci: info sheet title"
+  },
+  "voici_reveal_name_unchecked": {
+    "en": "This is a name the person chose. Flagship doesn't check names, so anyone can use any name.",
+    "ctx": "voi.ci: info sheet"
+  },
+  "voici_reveal_username_line": {
+    "en": "%1$s is this person's voi.ci page.",
+    "ctx": "voi.ci: info sheet; %1$s is the username"
+  },
+  "voici_calls_hours": {
+    "en": "Call hours",
+    "ctx": "voi.ci calls: settings group"
+  },
+  "voici_calls_hours_switch": {
+    "en": "Only at certain hours",
+    "ctx": "voi.ci calls: settings switch"
+  },
+  "voici_calls_hours_footer": {
+    "en": "Outside these hours calls don't ring on any of your devices, and callers see you aren't taking calls. Time zone: %1$s.",
+    "ctx": "voi.ci calls: settings footer; %1$s is a time zone id"
   }
 }

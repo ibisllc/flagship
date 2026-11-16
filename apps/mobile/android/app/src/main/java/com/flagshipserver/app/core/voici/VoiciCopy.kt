@@ -63,7 +63,10 @@ object VoiciCopy {
     }
 
     /** "Visitor 4F3A" (§6.2): the generated name, never text the visitor chose. */
-    fun visitorName(pseudonymPub: String): String = FSStrings.get(R.string.voici_visitor_name, VoiciText.voiciPseudonymCode(pseudonymPub))
+    fun visitorName(pseudonymPub: String): String =
+        // An anonymous caller (an "anyone" page) has a browser key, not a pseudonym: no generated name exists for it.
+        if (!WebEnvelopes.isLowerHex(pseudonymPub, 32)) FSStrings.get(R.string.voici_anonymous_caller)
+        else FSStrings.get(R.string.voici_visitor_name, VoiciText.voiciPseudonymCode(pseudonymPub))
 
     // ── calling from the app (docs/voici-calls.md "Calling from the app") ──
 
@@ -111,6 +114,7 @@ object VoiciCopy {
         "rate-limited" -> FSStrings.get(R.string.voici_call_rate_limited)
         "locked" -> FSStrings.get(R.string.voici_calls_answer_locked_unlock)
         "browser-unreachable" -> FSStrings.get(R.string.voici_call_no_browser)
+        "ring-back-required" -> FSStrings.get(R.string.voici_call_ring_back_required)
         "first-contact-limit", "device-limit", "banned", "unattested-too-new" -> signInRefusal(code, null)
         else -> FSStrings.get(R.string.voici_call_failed)
     }

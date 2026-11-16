@@ -20,6 +20,8 @@ import com.flagshipserver.app.ui.screens.SocialScreen
 import com.flagshipserver.app.ui.screens.SocialSection
 import com.flagshipserver.app.ui.screens.ThreadScreen
 import com.flagshipserver.app.ui.screens.VoiciCallHistoryScreen
+import com.flagshipserver.app.ui.screens.VisitorConversationsScreen
+import com.flagshipserver.app.ui.screens.VisitorThreadScreen
 
 @Composable
 fun MessagesTab() {
@@ -57,5 +59,10 @@ fun MessagesTab() {
         }
         composable("signed-in-sites") { SignedInSitesScreen(nav) }
         composable("calls") { VoiciCallHistoryScreen(nav) }
+        composable("visitor-threads") { VisitorConversationsScreen(nav) }
+        composable(
+            "visitor/{user}/{page}",
+            arguments = listOf(navArgument("user") { type = NavType.StringType }, navArgument("page") { type = NavType.StringType }),
+        ) { e -> VisitorThreadScreen(nav, e.arguments?.getString("user").orEmpty(), e.arguments?.getString("page").orEmpty()) }
     }
 }

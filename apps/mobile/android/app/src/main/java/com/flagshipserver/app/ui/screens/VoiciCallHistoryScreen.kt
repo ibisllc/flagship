@@ -49,25 +49,44 @@ import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-/** Call / Video call for a page this account can call. The microphone is asked for on the tap; a refusal still calls (the browser asks its own). */
+/**
+ * Call / Video call for a page this account can call. Before the call, the call-back pop-up (docs/voici-calls.md,
+ * owner additions): "Call and allow call-back" attaches this conversation's ring-back channel, "Call without
+ * call-back" doesn't. The microphone is asked for on the tap; a refusal still calls (the browser asks its own).
+ */
 @Composable
 fun VoiciCallButtons(target: VoiciCallTarget, tagPrefix: String = "call") {
     val context = LocalContext.current
     var pendingVideo by remember { mutableStateOf<Boolean?>(null) }
+    var allowBack by remember { mutableStateOf(false) }
+    var asking by remember { mutableStateOf<Boolean?>(null) }
     val mic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        pendingVideo?.let { v -> VoiciOutgoingCalls.start(context, target, v) }
+        pendingVideo?.let { v -> VoiciOutgoingCalls.start(context, target, v, allowCallBack = allowBack) }
         pendingVideo = null
     }
-    val place = { video: Boolean ->
-        pendingVideo = video
-        mic.launch(Manifest.permission.RECORD_AUDIO)
-    }
     Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-        FSGhostButton(stringResource(R.string.voici_call_action), { place(false) }, modifier = Modifier.testTag("$tagPrefix-audio"))
-        FSGhostButton(stringResource(R.string.voici_call_video_action), { place(true) }, modifier = Modifier.testTag("$tagPrefix-video"))
+        FSGhostButton(stringResource(R.string.voici_call_action), { asking = false }, modifier = Modifier.testTag("$tagPrefix-audio"))
+        FSGhostButton(stringResource(R.string.voici_call_video_action), { asking = true }, modifier = Modifier.testTag("$tagPrefix-video"))
+    }
+    asking?.let { video ->
+        val name = stringResource(R.string.voici_calls_peer_page, target.username)
+        val go = { allow: Boolean ->
+            asking = null
+            allowBack = allow
+            pendingVideo = video
+            mic.launch(Manifest.permission.RECORD_AUDIO)
+        }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { asking = null },
+            title = { Text(stringResource(R.string.voici_call_back_prompt_title, name)) },
+            text = { Text(stringResource(R.string.voici_call_back_prompt_body, name)) },
+            confirmButton = { FSPrimaryButton(stringResource(R.string.voici_call_and_allow_back), { go(true) }, modifier = Modifier.testTag("$tagPrefix-allow-back")) },
+            dismissButton = { FSGhostButton(stringResource(R.string.voici_call_without_back), { go(false) }, modifier = Modifier.testTag("$tagPrefix-no-back")) },
+        )
     }
 }
 
@@ -112,6 +131,9 @@ fun VoiciCallHistoryScreen(nav: NavController) {
     LaunchedEffect(center) { runCatching { center.refreshInbox() } }
     val history = remember(version, messages.missedCalls) { center.callHistory() }
     val nicknames = messages.state.nicknames.mapValues { it.value.name }
+    val anonBlocked = remember(version) { center.anonBlocks() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val toasts = com.flagshipserver.app.core.LocalToastCenter.current
     FSScreen(title = stringResource(R.string.voici_calls_header), onBack = { nav.popBackStack() }, titleTag = "calls-title") {
         current?.let { VoiciOutgoingCallPanel(it) }
         if (history.isEmpty()) {
@@ -119,7 +141,9 @@ fun VoiciCallHistoryScreen(nav: NavController) {
         } else {
             FSGroup {
                 history.forEachIndexed { i, r ->
-                    CallHistoryRow(r, nicknames, onOpenThread = { conv -> nav.navigate("thread/$conv") })
+                    CallHistoryRow(r, nicknames, anonBlocked, onOpenThread = { conv -> nav.navigate("thread/$conv") }) { conv, block ->
+                        scope.launch { center.blockAnonymous(conv, block)?.let { toasts.error(VoiciCopy.sendError(it)) } }
+                    }
                     if (i < history.size - 1) FSDivider(0.dp)
                 }
             }
@@ -129,7 +153,9 @@ fun VoiciCallHistoryScreen(nav: NavController) {
 }
 
 @Composable
-private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, onOpenThread: (String) -> Unit) {
+private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, anonBlocked: Set<String>, onOpenThread: (String) -> Unit, onBlockAnonymous: (String, Boolean) -> Unit) {
+    // An anonymous caller (an "anyone" page) has no thread: its row offers Block / Unblock instead.
+    val anonConv = r.conv?.takeIf { r.pseudonymPub != null && r.pseudonymPub.length != 64 }
     val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(r.at))
     FSRow(
         title = VoiciCopy.callPeer(r, nicknames),
@@ -139,8 +165,15 @@ private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, o
             r.direction == "out" -> Icons.Outlined.CallMade
             else -> Icons.Outlined.CallReceived
         },
-        onClick = r.conv?.let { c -> { onOpenThread(c) } },
-        trailing = if (r.callable) ({ VoiciCallButtons(VoiciCallTarget(r.peerUsername!!, r.peerPageId!!), "calls-row") }) else null,
+        onClick = if (anonConv == null) r.conv?.let { c -> { onOpenThread(c) } } else null,
+        trailing = when {
+            r.callable -> ({ VoiciCallButtons(VoiciCallTarget(r.peerUsername!!, r.peerPageId!!), "calls-row") })
+            anonConv != null -> ({
+                val blocked = anonConv in anonBlocked
+                FSGhostButton(stringResource(if (blocked) R.string.voici_menu_unblock else R.string.voici_menu_block), { onBlockAnonymous(anonConv, !blocked) }, modifier = Modifier.testTag("calls-row-anon-block"))
+            })
+            else -> null
+        },
         modifier = Modifier.fillMaxWidth().testTag("calls-row"),
     )
 }
