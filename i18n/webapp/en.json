@@ -15093,5 +15093,217 @@
   "ORGANIZATIONS": {
     "en": "ORGANIZATIONS",
     "ctx": "webapp/index.html"
+  },
+  "The admin who approved it left. It stops on {0} unless an admin approves it again.": {
+    "en": "The admin who approved it left. It stops on {0} unless an admin approves it again.",
+    "ctx": "webapp/views/orgs.js:114"
+  },
+  "Stopped: approve it again to restart it.": {
+    "en": "Stopped: approve it again to restart it.",
+    "ctx": "webapp/views/orgs.js:115"
+  },
+  "someone": {
+    "en": "someone",
+    "ctx": "webapp/views/orgs.js:119"
+  },
+  "Invite {0} (from the {1} directory)": {
+    "en": "Invite {0} (from the {1} directory)",
+    "ctx": "webapp/views/orgs.js:120"
+  },
+  "Remove {0} (they left the directory)": {
+    "en": "Remove {0} (they left the directory)",
+    "ctx": "webapp/views/orgs.js:121"
+  },
+  "Update {0}'s details": {
+    "en": "Update {0}'s details",
+    "ctx": "webapp/views/orgs.js:122"
+  },
+  "Change {0}'s role": {
+    "en": "Change {0}'s role",
+    "ctx": "webapp/views/orgs.js:123"
+  },
+  "That server hasn't announced its key yet. Try again in a few minutes.": {
+    "en": "That server hasn't announced its key yet. Try again in a few minutes.",
+    "ctx": "webapp/views/orgs.js:130"
+  },
+  "Fill in an ldaps:// address, the bind account, its password and the base DN.": {
+    "en": "Fill in an ldaps:// address, the bind account, its password and the base DN.",
+    "ctx": "webapp/views/orgs.js:132"
+  },
+  "An admin role needs this person to accept a new invitation. Decline this and invite them again.": {
+    "en": "An admin role needs this person to accept a new invitation. Decline this and invite them again.",
+    "ctx": "webapp/views/orgs.js:136"
+  },
+  "Give this person a name the organization will know them by.": {
+    "en": "Give this person a name the organization will know them by.",
+    "ctx": "webapp/views/orgs.js:138"
+  },
+  "Your plan has no free seats. Remove someone or add seats first.": {
+    "en": "Your plan has no free seats. Remove someone or add seats first.",
+    "ctx": "webapp/views/orgs.js:140"
+  },
+  "Copy it now: it isn't shown again.": {
+    "en": "Copy it now: it isn't shown again.",
+    "ctx": "webapp/views/orgs.js:147"
+  },
+  "Servers: {0}": {
+    "en": "Servers: {0}",
+    "ctx": "webapp/views/orgs.js:155"
+  },
+  "Invite someone": {
+    "en": "Invite someone",
+    "ctx": "webapp/views/orgs.js:164"
+  },
+  "The name the organization will know them by": {
+    "en": "The name the organization will know them by",
+    "ctx": "webapp/views/orgs.js:165"
+  },
+  "Admin of a server": {
+    "en": "Admin of a server",
+    "ctx": "webapp/views/orgs.js:166"
+  },
+  "Admin of an app": {
+    "en": "Admin of an app",
+    "ctx": "webapp/views/orgs.js:166"
+  },
+  "Server or app (for an admin role)": {
+    "en": "Server or app (for an admin role)",
+    "ctx": "webapp/views/orgs.js:167"
+  },
+  "Make the invitation": {
+    "en": "Make the invitation",
+    "ctx": "webapp/views/orgs.js:168"
+  },
+  "Proposed by the directory": {
+    "en": "Proposed by the directory",
+    "ctx": "webapp/views/orgs.js:170"
+  },
+  "Change it": {
+    "en": "Change it",
+    "ctx": "webapp/views/orgs.js:170"
+  },
+  "Do it": {
+    "en": "Do it",
+    "ctx": "webapp/views/orgs.js:170"
+  },
+  "Directory connectors": {
+    "en": "Directory connectors",
+    "ctx": "webapp/views/orgs.js:171"
+  },
+  "Paused": {
+    "en": "Paused",
+    "ctx": "webapp/views/orgs.js:175"
+  },
+  "Retired": {
+    "en": "Retired",
+    "ctx": "webapp/views/orgs.js:175"
+  },
+  "Approve again": {
+    "en": "Approve again",
+    "ctx": "webapp/views/orgs.js:176"
+  },
+  "Pause": {
+    "en": "Pause",
+    "ctx": "webapp/views/orgs.js:177"
+  },
+  "New SCIM token": {
+    "en": "New SCIM token",
+    "ctx": "webapp/views/orgs.js:178"
+  },
+  "Retire": {
+    "en": "Retire",
+    "ctx": "webapp/views/orgs.js:179"
+  },
+  "Propose people in no listed group as members": {
+    "en": "Propose people in no listed group as members",
+    "ctx": "webapp/views/orgs.js:181"
+  },
+  "Save the mapping": {
+    "en": "Save the mapping",
+    "ctx": "webapp/views/orgs.js:182"
+  },
+  "Add a SCIM connector": {
+    "en": "Add a SCIM connector",
+    "ctx": "webapp/views/orgs.js:185"
+  },
+  "Add an LDAP connector": {
+    "en": "Add an LDAP connector",
+    "ctx": "webapp/views/orgs.js:186"
+  },
+  "Bind account": {
+    "en": "Bind account",
+    "ctx": "webapp/views/orgs.js:187"
+  },
+  "Password": {
+    "en": "Password",
+    "ctx": "webapp/views/orgs.js:188"
+  },
+  "Base DN": {
+    "en": "Base DN",
+    "ctx": "webapp/views/orgs.js:188"
+  },
+  "User filter (optional)": {
+    "en": "User filter (optional)",
+    "ctx": "webapp/views/orgs.js:189"
+  },
+  "OpenLDAP (not Active Directory)": {
+    "en": "OpenLDAP (not Active Directory)",
+    "ctx": "webapp/views/orgs.js:190"
+  },
+  "Update what members see": {
+    "en": "Update what members see",
+    "ctx": "webapp/views/orgs.js:193"
+  },
+  "Share this link with them": {
+    "en": "Share this link with them",
+    "ctx": "webapp/views/orgs.js:212"
+  },
+  "Invitation made. Share the link with them.": {
+    "en": "Invitation made. Share the link with them.",
+    "ctx": "webapp/views/orgs.js:218"
+  },
+  "Declined.": {
+    "en": "Declined.",
+    "ctx": "webapp/views/orgs.js:228"
+  },
+  "Approved again.": {
+    "en": "Approved again.",
+    "ctx": "webapp/views/orgs.js:232"
+  },
+  "Retire this connector?": {
+    "en": "Retire this connector?",
+    "ctx": "webapp/views/orgs.js:236"
+  },
+  "It stops for good. Its proposals stay as they are.": {
+    "en": "It stops for good. Its proposals stay as they are.",
+    "ctx": "webapp/views/orgs.js:236"
+  },
+  "The SCIM address and token": {
+    "en": "The SCIM address and token",
+    "ctx": "webapp/views/orgs.js:243"
+  },
+  "Saved. The server uses it at its next check.": {
+    "en": "Saved. The server uses it at its next check.",
+    "ctx": "webapp/views/orgs.js:253"
+  },
+  "Saved. The server reads the directory within 15 minutes.": {
+    "en": "Saved. The server reads the directory within 15 minutes.",
+    "ctx": "webapp/views/orgs.js:262"
+  },
+  "Updated what {0} members see.": {
+    "en": "Updated what {0} members see.",
+    "ctx": "webapp/views/orgs.js:265"
+  },
+  "Members already see the latest.": {
+    "en": "Members already see the latest.",
+    "ctx": "webapp/views/orgs.js:265"
+  },
+  "Each line reads like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki.": {
+    "en": "Each line reads like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki.",
+    "ctx": "webapp/views/orgs.js:134"
+  },
+  "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki": {
+    "en": "One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki",
+    "ctx": "webapp/views/orgs.js:180"
   }
 }

@@ -215,11 +215,13 @@ read by TS, Swift and Kotlin. The ring kind is the existing `directory-key` (sea
   an unknown path reads "other"), so nothing a model could read names a person.
 - **CI:** the `openldap` job in `ci.yml` runs LDAP pull against an `osixia/openldap:1.5.0` service container
   (`directory.openldap.integration.test.ts`, skipped without `FLAGSHIP_TEST_LDAP_URL`); not run locally (no Docker here).
-- **Webapp hooks** (for after the webapp key-custody branch): the webapp needs a seat's X-Wing key (derived from the UMK as
-  `deriveOrgSeatKemSeed`) to open the directory key, slices and proposals, and a seat admin key to sign approvals. Every
-  piece is in `packages/protocol` (`openOrgDirectory`, `openOrgDirectorySlice`, `verifyOrgDirectorySliceApproval`,
-  `verifyOrgProposal`, `openOrgProposal`, `orgConnectorStanding`, `sealOrgConnectorSetup`, `sealOrgConnectorMapping`) and
-  every route above; the parity allowlist names each tag the webapp still lacks.
+- **Webapp (built, 2026-11-16, branch `0.4/webapp-custody`):** the webapp is an org seat (`docs/webapp-key-custody.md`
+  item 1). `lib/orgDirectoryConsole.js` opens the directory key with the seat's X-Wing key (`deriveOrgSeatKemSeed`),
+  reads the people, verifies and opens the proposals, shows each connector's standing, adds SCIM and LDAP connectors
+  (`sealOrgConnectorSetup`), re-approves, pauses, resumes, retires, rotates the SCIM token, edits the mapping as text
+  lines (`sealOrgConnectorMapping`), seals the members' slices, and shows a member its "Shared with"
+  (`openOrgDirectorySlice` after `verifyOrgDirectorySliceApproval`). The functions are the bundled protocol code
+  (`apps/web/public/webapp/vendor/flagship-org/org.js`); parity reads that bundle, so the org tags left the allowlist.
 
 **Joining.** A joining seat signs its seat KEM statement (`org-seat-kem/v1`) with its member key at accept and sends it
 with the accept; `.com` checks it against the member binding, keeps it, and records it as the seat's KEM key when the

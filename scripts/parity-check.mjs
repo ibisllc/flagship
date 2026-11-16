@@ -630,7 +630,9 @@ function checkSignedTags(repo) {
   const roots = {
     ios: ["apps/mobile/shared/Sources", "apps/mobile/ios/Sources", "apps/mobile/ios/App"],
     android: ["apps/mobile/android/app/src/main", "apps/mobile/android/app/src/debug"],
-    web: [P.webapp, "apps/web/public/recovery"],
+    // vendor/ is skipped as third-party code; vendor/flagship-org is the org protocol bundled from
+    // packages/protocol for the browser seat (scripts/build-webapp-org-vendor.mjs), so it counts.
+    web: [P.webapp, "apps/web/public/recovery", "apps/web/public/webapp/vendor/flagship-org"],
   };
   const exts = [".swift", ".kt", ".js"];
   const sets = {};

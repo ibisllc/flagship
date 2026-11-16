@@ -74,8 +74,10 @@ Owner: proposal 1-6 accepted, all in 0.4. Not deployed; not run in a real browse
   `signPqKeyBinding` and matches the `pq-hybrid` and `pq-binding` vectors byte for byte. When the ML-DSA half is
   made, its `admin-root` binding goes to `.com`; `.com` keeps the first ML-DSA key per Ed25519 key, so a root a
   phone bound first stays classical in this browser (Settings says so). `lib/adminSigning.js` adds `pqSignature` to
-  Release this box and the restore orders. Not yet hybrid from the web: the other sensitive orders (server order,
-  direct access, update, policy changes); the strict opt-in stays phone-only.
+  Release this box, the restore orders, the server order, direct access, direct names and update orders. Settings,
+  Quantum-safe protection turns strict on (the browser question answered explicitly) or off (losses listed) for a
+  server, signed hybrid by the admin root (`lib/policySigning.js`); returning to strict after a compatibility
+  period stays on the phone, which collects the re-entry evidence.
 - **Item 5, verifiable shell (`lib/shellTrust.js`, `scripts/webapp-shell.ts`).** The webapp build writes
   `/shell-manifest.json` (SHA-256 of every file the worker installs, at its version). A new worker refuses to
   install files that don't match it. The page checks `/shell-signature.json` (the ca-track maintainer key over
@@ -91,9 +93,20 @@ Owner: proposal 1-6 accepted, all in 0.4. Not deployed; not run in a real browse
   `.com` refuses a grant whose custody differs from the accept. Bylaws gain `adminCustody: "hardware"` (no browser
   admin keys, in the record or in admin-role grants) and `quorumHardware` (default on: a threshold of two or more
   needs at least one hardware-custody approval; checked in OAR transitions, seat grants and `authorizeOrgOrder`,
-  so boxes and `.com` both enforce it). Still open: the Swift and Kotlin ports of these fields (no browser seat can
-  exist until the next item lands, so phones verify every record that exists today), and the webapp as an org seat
-  (join with SAS, approvals, rotations: today `lib/orgJoin.js` still hands the invitation to the phone).
+  so boxes and `.com` both enforce it). Swift and Kotlin read, write and enforce the same fields; the org-authority
+  vectors carry two browser admins, the quorum and bylaw cases and a browser-key seat grant (TS, Swift, Kotlin).
+- **Item 1, the webapp as an org seat (`lib/orgSeat.js`, `lib/orgDirectoryConsole.js`, Settings, Organizations).**
+  An invitation joins on the browser: the member key and the seat X-Wing key come from the account key per org (as
+  on the phones), an admin role gets a random seat admin key sealed under the browser's passkey and signed into
+  the accept as browser custody, and both sides compare the 6-digit code. An admin seat approves ceremonies, admits
+  people whose code matched, rotates the keys a departed seat leaves, invites, and runs the directory console:
+  people, the connectors' proposals (do it or decline), the connectors (add SCIM or LDAP, approve again, pause,
+  resume, retire, a new SCIM token, the group to role mapping) and the members' slices; a member sees "Shared
+  with". The org protocol is the packages/protocol code bundled for the browser
+  (`scripts/build-webapp-org-vendor.mjs`, fresh-checked by a test); every admin write opens the seat admin key for
+  that action. Tested against `.com`'s real handlers in process (join, the custody check, admission by two
+  hardware admins, the browser seat's approval) and the gym (`gym-custody.spec.ts`: wrap, migration, a passkey
+  prompt per signature, an unsigned shell refused while required). Not run against a real `.com` or box.
 
 ### Signing a release shell
 

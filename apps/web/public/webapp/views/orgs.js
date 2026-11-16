@@ -9,8 +9,9 @@ import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { inlineConfirm } from "../lib/modal.js";
-import { tr } from "../lib/i18n.js";
+import { tr, dateLocale } from "../lib/i18n.js";
 import * as os from "../lib/orgSeat.js";
+import * as dc from "../lib/orgDirectoryConsole.js";
 
 registerView("view-orgs", { tab: "settings" });
 
@@ -57,6 +58,7 @@ async function renderSeat(seat, host) {
     : [];
   const joins = isAdminSeat ? os.pendingJoins(snap) : [];
   const people = names ? [...names.values()].filter(Boolean) : [];
+  const isOrgAdmin = granted && !!seat.adminBinding && snap.state.current.admins.some((a) => a.seatId === seat.seatId && a.kind === "admin");
   host.innerHTML = `
     <p class="fs-row-title">${escapeHtml(snap.name || seat.orgName)}</p>
     <p class="note">${escapeHtml(granted ? tr("You are in as {0}.", seat.pseudonym || tr("a member")) : tr("Waiting for an admin to let you in. Your code: {0}", seat.code ?? ""))}</p>
@@ -66,6 +68,7 @@ async function renderSeat(seat, host) {
     ${joins.length ? `<p class="fs-detail-label">${escapeHtml(tr("Waiting to join"))}</p>` + joins.map((j) => `<div class="stack-sm"><p class="note">${escapeHtml(tr("Code {0}", os.joinCode(j)))}${j.custody === "browser" ? " · " + escapeHtml(CUSTODY_BROWSER_LABEL) : ""}</p><button data-org-admit="${escapeHtml(j.seatId)}">${escapeHtml(tr("The codes match: let them in"))}</button></div>`).join("") : ""}
     ${isAdminSeat ? `<button class="secondary" data-org-rotate>${escapeHtml(tr("Rotate keys"))}</button>` : ""}
     ${people.length ? `<p class="fs-detail-label">${escapeHtml(tr("People"))}</p><ul>${people.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : ""}
+    <div data-org-directory></div>
     <button class="secondary" data-org-forget>${escapeHtml(tr("Remove from this browser"))}</button>`;
 
   const act = async (fn, done) => {
@@ -91,11 +94,175 @@ async function renderSeat(seat, host) {
   host.querySelector("[data-org-rotate]")?.addEventListener("click", () =>
     act(() => os.rotatePending(seat, snap, { umk: getSession().umk }), (n) => (n ? tr("Rotated {0} keys.", n) : tr("Nothing to rotate."))),
   );
+  const dirHost = host.querySelector("[data-org-directory]");
+  if (dirHost && umk) {
+    if (isOrgAdmin) renderConsole(seat, snap, dirHost, () => renderSeat(seat, host)).catch(() => {});
+    else if (granted) renderSharedWith(seat, snap, dirHost).catch(() => {});
+  }
   host.querySelector("[data-org-forget]")?.addEventListener("click", async () => {
     const ok = await inlineConfirm({ title: tr("Remove this organization from this browser?"), message: tr("Your seat stays. Join again from an invitation to use it here."), okLabel: tr("Remove"), danger: true });
     if (!ok) return;
     os.forgetSeat(seat.orgId, seat.seatId);
     await render();
+  });
+}
+
+/* ---------- the directory (docs/org-directory.md) ---------- */
+
+export function standingText(st) {
+  if (!st || st.state === "ok") return tr("Running");
+  if (st.state === "needs-reapproval") return tr("The admin who approved it left. It stops on {0} unless an admin approves it again.", new Date(st.suspendAt ?? Date.now()).toLocaleDateString(dateLocale()));
+  return tr("Stopped: approve it again to restart it.");
+}
+
+function proposalText(p) {
+  const who = p.entry?.pseudonym || tr("someone");
+  if (p.kind === "invite") return tr("Invite {0} (from the {1} directory)", who, p.connectorKind.toUpperCase());
+  if (p.kind === "offboard") return tr("Remove {0} (they left the directory)", who);
+  if (p.kind === "entry-update") return tr("Update {0}'s details", who);
+  return tr("Change {0}'s role", who);
+}
+
+function directoryFail(e) {
+  if (e?.userMessage) return e.userMessage;
+  switch (e?.code) {
+    case "box-key-missing":
+      return tr("That server hasn't announced its key yet. Try again in a few minutes.");
+    case "ldap-form":
+      return tr("Fill in an ldaps:// address, the bind account, its password and the base DN.");
+    case "mapping-line":
+      return tr("Each line reads like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki.");
+    case "needs-new-invite":
+      return tr("An admin role needs this person to accept a new invitation. Decline this and invite them again.");
+    case "name-missing":
+      return tr("Give this person a name the organization will know them by.");
+    case "org-seat-limit":
+      return tr("Your plan has no free seats. Remove someone or add seats first.");
+    default:
+      return tr("That didn't go through. Try again.");
+  }
+}
+
+function shownOnce(box, title, lines) {
+  box.innerHTML = `<div class="card stack-sm" data-org-shown-once><p class="weight-600">${escapeHtml(title)}</p>${lines.map((l) => `<p class="mono">${escapeHtml(l)}</p>`).join("")}<p class="muted">${escapeHtml(tr("Copy it now: it isn't shown again."))}</p></div>`;
+}
+
+async function renderSharedWith(seat, snap, box) {
+  const c = await dc.loadSlice(seat, snap, { umk: getSession().umk }).catch(() => null);
+  if (!c) return;
+  box.innerHTML = `<p class="fs-detail-label">${escapeHtml(tr("Shared with"))}</p>
+    <ul>${c.entries.map((e) => `<li>${escapeHtml(e.pseudonym)}</li>`).join("")}</ul>
+    ${c.servers.length ? `<p class="note">${escapeHtml(tr("Servers: {0}", c.servers.join(", ")))}</p>` : ""}`;
+}
+
+async function renderConsole(seat, snap, box, refresh) {
+  const umk = getSession().umk;
+  const c = await dc.loadConsole(seat, snap, { umk });
+  const servers = [...c.plan.ctx.servers].sort();
+  const serverOptions = servers.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("");
+  box.innerHTML = `
+    <p class="fs-detail-label">${escapeHtml(tr("Invite someone"))}</p>
+    <input id="org-inv-name" placeholder="${escapeHtml(tr("The name the organization will know them by"))}">
+    <select id="org-inv-role"><option value="member">${escapeHtml(tr("Member"))}</option><option value="server-admin">${escapeHtml(tr("Admin of a server"))}</option><option value="app-admin">${escapeHtml(tr("Admin of an app"))}</option></select>
+    <input id="org-inv-target" placeholder="${escapeHtml(tr("Server or app (for an admin role)"))}">
+    <button data-org-invite>${escapeHtml(tr("Make the invitation"))}</button>
+    <div data-org-out></div>
+    ${c.proposals.length ? `<p class="fs-detail-label">${escapeHtml(tr("Proposed by the directory"))}</p>` + c.proposals.map((p, i) => `<div class="stack-sm"><p class="note">${escapeHtml(proposalText(p))}</p><button data-org-prop-ok="${i}">${escapeHtml(p.kind === "role-change" ? tr("Change it") : tr("Do it"))}</button> <button class="secondary" data-org-prop-no="${i}">${escapeHtml(tr("Decline"))}</button></div>`).join("") : ""}
+    <p class="fs-detail-label">${escapeHtml(tr("Directory connectors"))}</p>
+    ${c.connectors.map((x, i) => {
+      const k = x.connector;
+      const retired = k.status === "retired";
+      return `<div class="stack-sm" data-org-conn="${i}"><p class="note">${escapeHtml(`${k.kind.toUpperCase()} · ${k.serverDomain} · ${k.status === "paused" ? tr("Paused") : retired ? tr("Retired") : standingText(x.standing)}`)}</p>
+        ${retired ? "" : `${x.standing && x.standing.state !== "ok" ? `<button data-org-conn-reapprove="${i}">${escapeHtml(tr("Approve again"))}</button>` : ""}
+        <button class="secondary" data-org-conn-pause="${i}">${escapeHtml(k.status === "paused" ? tr("Resume") : tr("Pause"))}</button>
+        ${k.kind === "scim" ? `<button class="secondary" data-org-conn-token="${i}">${escapeHtml(tr("New SCIM token"))}</button>` : ""}
+        <button class="secondary" data-org-conn-retire="${i}">${escapeHtml(tr("Retire"))}</button>
+        <textarea data-org-conn-map="${i}" rows="3" placeholder="${escapeHtml(tr("One line per group, like Sales = member, Ops = server-admin home.acme.flagship.services or Wiki = app-admin acme--wiki"))}">${escapeHtml(dc.mappingToLines(x.mapping))}</textarea>
+        <label><input type="checkbox" data-org-conn-default="${i}" ${x.mapping ? ((x.mapping.defaultRoles ?? []).length ? "checked" : "") : "checked"}> ${escapeHtml(tr("Propose people in no listed group as members"))}</label>
+        <button class="secondary" data-org-conn-savemap="${i}">${escapeHtml(tr("Save the mapping"))}</button>`}</div>`;
+    }).join("")}
+    ${servers.length ? `<select id="org-conn-server">${serverOptions}</select>
+    <button class="secondary" data-org-add-scim>${escapeHtml(tr("Add a SCIM connector"))}</button>
+    <details><summary>${escapeHtml(tr("Add an LDAP connector"))}</summary>
+      <input id="org-ldap-url" value="ldaps://"><input id="org-ldap-bind" placeholder="${escapeHtml(tr("Bind account"))}">
+      <input id="org-ldap-pass" type="password" placeholder="${escapeHtml(tr("Password"))}"><input id="org-ldap-base" placeholder="${escapeHtml(tr("Base DN"))}">
+      <input id="org-ldap-filter" placeholder="${escapeHtml(tr("User filter (optional)"))}">
+      <label><input type="checkbox" id="org-ldap-openldap"> ${escapeHtml(tr("OpenLDAP (not Active Directory)"))}</label>
+      <button class="secondary" data-org-add-ldap>${escapeHtml(tr("Add"))}</button>
+    </details>` : ""}
+    <button class="secondary" data-org-slices>${escapeHtml(tr("Update what members see"))}</button>`;
+
+  const out = box.querySelector("[data-org-out]");
+  const act = async (fn, done) => {
+    try {
+      const r = await fn();
+      if (done) toast(typeof done === "function" ? done(r) : done, "ok");
+      return r;
+    } catch (e) {
+      toast(directoryFail(e), "err");
+      return null;
+    }
+  };
+  const again = () => refresh();
+  box.querySelector("[data-org-invite]")?.addEventListener("click", async () => {
+    const role = $("org-inv-role").value;
+    const target = $("org-inv-target").value.trim().toLowerCase();
+    const roles = role === "server-admin" ? [{ role: "server-admin", servers: [target] }] : role === "app-admin" ? [{ role: "service-admin", apps: [target] }] : [{ role: "member" }];
+    const r = await act(() => dc.invite(seat, snap, c, { name: $("org-inv-name").value, roles, umk }));
+    if (r) shownOnce(out, tr("Share this link with them"), [r.link]);
+  });
+  for (const b of box.querySelectorAll("[data-org-prop-ok]")) {
+    const p = c.proposals[Number(b.dataset.orgPropOk)];
+    b.addEventListener("click", async () => {
+      const r = await act(() => dc.approveProposal(seat, snap, c, p, { umk }));
+      if (r?.link) shownOnce(out, tr("Invitation made. Share the link with them."), [r.link]);
+      else if (r) {
+        toast(r.ceremony ? tr("Another admin needs to approve this before it takes effect.") : tr("Done."), "ok");
+        await again();
+      }
+    });
+  }
+  for (const b of box.querySelectorAll("[data-org-prop-no]")) {
+    const p = c.proposals[Number(b.dataset.orgPropNo)];
+    b.addEventListener("click", async () => {
+      if (await act(() => dc.declineProposal(seat, snap, p, { umk }), tr("Declined."))) await again();
+    });
+  }
+  const conn = (attr) => [...box.querySelectorAll(`[${attr}]`)].map((b) => [b, c.connectors[Number(b.getAttribute(attr))]]);
+  for (const [b, x] of conn("data-org-conn-reapprove")) b.addEventListener("click", async () => { await act(() => dc.updateConnector(seat, snap, c, x.connector.connectorId, { umk }), tr("Approved again.")); await again(); });
+  for (const [b, x] of conn("data-org-conn-pause")) b.addEventListener("click", async () => { await act(() => dc.updateConnector(seat, snap, c, x.connector.connectorId, { umk, status: x.connector.status === "paused" ? "active" : "paused" })); await again(); });
+  for (const [b, x] of conn("data-org-conn-retire")) {
+    b.addEventListener("click", async () => {
+      const ok = await inlineConfirm({ title: tr("Retire this connector?"), message: tr("It stops for good. Its proposals stay as they are."), okLabel: tr("Retire"), danger: true });
+      if (ok) { await act(() => dc.updateConnector(seat, snap, c, x.connector.connectorId, { umk, status: "retired" })); await again(); }
+    });
+  }
+  for (const [b, x] of conn("data-org-conn-token")) {
+    b.addEventListener("click", async () => {
+      const r = await act(() => dc.rotateScimToken(seat, snap, c, x.connector.connectorId, { umk }));
+      if (r) shownOnce(out, tr("The SCIM address and token"), [r.url, r.token]);
+    });
+  }
+  for (const [b, x] of conn("data-org-conn-savemap")) {
+    const i = b.getAttribute("data-org-conn-savemap");
+    b.addEventListener("click", async () => {
+      await act(() => {
+        const base = x.mapping ?? dc.defaultMapping(x.connector.kind);
+        const m = dc.mappingFromLines(base, box.querySelector(`[data-org-conn-map="${i}"]`).value, box.querySelector(`[data-org-conn-default="${i}"]`).checked);
+        return dc.updateConnector(seat, snap, c, x.connector.connectorId, { umk, mapping: m });
+      }, tr("Saved. The server uses it at its next check."));
+    });
+  }
+  box.querySelector("[data-org-add-scim]")?.addEventListener("click", async () => {
+    const r = await act(() => dc.addScimConnector(seat, snap, c, { serverDomain: $("org-conn-server").value, umk }));
+    if (r) shownOnce(out, tr("The SCIM address and token"), [r.url, r.token]);
+  });
+  box.querySelector("[data-org-add-ldap]")?.addEventListener("click", async () => {
+    const form = { url: $("org-ldap-url").value, bindDn: $("org-ldap-bind").value, password: $("org-ldap-pass").value, baseDn: $("org-ldap-base").value, userFilter: $("org-ldap-filter").value, openLdap: $("org-ldap-openldap").checked };
+    if (await act(() => dc.addLdapConnector(seat, snap, c, { serverDomain: $("org-conn-server").value, form, umk }), tr("Saved. The server reads the directory within 15 minutes."))) await again();
+  });
+  box.querySelector("[data-org-slices]")?.addEventListener("click", async () => {
+    await act(() => dc.publishSlices(seat, snap, c, { umk }), (n) => (n ? tr("Updated what {0} members see.", n) : tr("Members already see the latest.")));
   });
 }
 
