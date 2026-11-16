@@ -33,6 +33,8 @@ import {
   handleVoiciSend,
   handleVoiciThread,
   handleVoiciConvDelete,
+  handleVoiciCallSettingsGet,
+  handleVoiciCallSettingsPut,
   resolveVoiciPath,
   appHome,
   runVoiciGc,
@@ -92,7 +94,7 @@ export function isVoiciHost(hostname: string, env: VoiciEnv): boolean {
   return hostname === "voi.ci" || hostname === "www.voi.ci" || hostname === webHost(env);
 }
 
-const ACCOUNT_VOICI = /^\/api\/accounts\/([^/]+)\/(voici-drafts|voici-drafts\/consume|messages-state)$/;
+const ACCOUNT_VOICI = /^\/api\/accounts\/([^/]+)\/(voici-drafts|voici-drafts\/consume|messages-state|voici-call-settings)$/;
 const PAGE_ROUTE = /^\/api\/voici\/pages\/([^/]+)(?:\/(pieces|publish|remove|inbox|block)(?:\/([0-9a-f]{64}))?)?$/;
 
 /** The paths this file owns. */
@@ -364,6 +366,13 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
     const wait = await limited(env, "voici-owner", request, undefined, ctx);
     if (wait !== null) return tooMany(wait);
     const owner = ownerDeps(env, storage);
+    if (m[2] === "voici-call-settings") {
+      // The owner's call hours, sealed and synced between the owner's devices (docs/voici-calls.md, option c).
+      if (!voiciCallsEnabled(env)) return notFound();
+      if (method === "GET") return toResponse(await handleVoiciCallSettingsGet({ calls: storage.voiciCalls, readTokens: owner.readTokens }, username, request.headers.get("authorization")));
+      if (method === "PUT") return toResponse(await handleVoiciCallSettingsPut({ calls: storage.voiciCalls, directory: owner.directory }, username, directoryAuth(request, username, path), await request.text()));
+      return notFound();
+    }
     if (m[2] === "messages-state") {
       if (method === "GET") return toResponse(await handleMessagesStateGet(owner, username, request.headers.get("authorization")));
       if (method === "PUT") return toResponse(await handleMessagesStatePut(owner, username, directoryAuth(request, username, path), await request.text()));

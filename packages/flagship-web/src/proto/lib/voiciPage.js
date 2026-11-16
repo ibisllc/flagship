@@ -167,37 +167,6 @@ const CALLS_FROM = ["accepted", "signed-in", "anyone", "callback"];
 const isV2 = (b) => b.acceptsCalls !== undefined || b.callsFrom !== undefined;
 export const voiciPageAcceptsCalls = (b) => b.acceptsCalls === 1;
 
-// Call hours (v2, optional; packages/protocol/src/voiciPage.ts): "<days> <HHMM>-<HHMM> <time zone>".
-const CALL_HOURS = /^([01]{7}) ([01][0-9]|2[0-3])([0-5][0-9])-([01][0-9]|2[0-3])([0-5][0-9]) (UTC|[A-Za-z]{1,32}(?:\/[A-Za-z0-9_+-]{1,32}){1,2})$/;
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-export function isVoiciCallHours(v) {
-  if (typeof v !== "string" || v.length > 80) return false;
-  const m = CALL_HOURS.exec(v);
-  if (!m || m[1] === "0000000" || `${m[2]}${m[3]}` === `${m[4]}${m[5]}`) return false;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: m[6] });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function voiciCallHoursOpen(callHours, now) {
-  if (callHours === undefined) return true;
-  if (!isVoiciCallHours(callHours)) return false;
-  const m = CALL_HOURS.exec(callHours);
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: m[6], weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(now));
-  const day = WEEKDAYS.indexOf(parts.find((p) => p.type === "weekday")?.value ?? "");
-  const min = Number(parts.find((p) => p.type === "hour")?.value) * 60 + Number(parts.find((p) => p.type === "minute")?.value);
-  if (day < 0 || !Number.isFinite(min)) return false;
-  const start = Number(m[2]) * 60 + Number(m[3]);
-  const end = Number(m[4]) * 60 + Number(m[5]);
-  const on = (d) => m[1][(d + 7) % 7] === "1";
-  if (start < end) return on(day) && min >= start && min < end;
-  return (on(day) && min >= start) || (on(day - 1) && min < end);
-}
-
 export function canonicalVoiciPageIndex(b) {
   const bad = (f) => new Error(`${TAG_VOICI_PAGE}: bad ${f}`);
   if (typeof b.username !== "string" || !USERNAME.test(b.username)) throw bad("username");
@@ -206,7 +175,6 @@ export function canonicalVoiciPageIndex(b) {
   if (b.acceptsMessages !== 0 && b.acceptsMessages !== 1) throw bad("acceptsMessages");
   const v2 = isV2(b);
   if (v2 && ((b.acceptsCalls !== 0 && b.acceptsCalls !== 1) || !CALLS_FROM.includes(b.callsFrom))) throw bad("calls");
-  if (b.callHours !== undefined && (!v2 || !isVoiciCallHours(b.callHours))) throw bad("callHours");
   if (!isTime(b.inboxEpoch) || b.inboxEpoch < 1) throw bad("inboxEpoch");
   if (!isLowerHex(b.inboxPub, 1216) || !isLowerHex(b.ownerSignPub, 32)) throw bad("keys");
   const pp = piecesProblem(b.pieces);
@@ -228,7 +196,6 @@ export function canonicalVoiciPageIndex(b) {
       b.pieces.map(pieceKey).join(","),
       b.signerKind,
       b.signerPub,
-      ...(b.callHours !== undefined ? [b.callHours] : []),
     ].join("|"),
   );
 }
@@ -260,7 +227,7 @@ export function parseVoiciPageIndex(input) {
     }
   }
   if (!isObj(v) || v.kind !== "VoiciPage" || !isLowerHex(v.signature, 64)) return null;
-  if (!(v.version === 1 && exactKeys(v, INDEX_KEYS)) && !(v.version === 2 && (exactKeys(v, INDEX_KEYS_V2) || exactKeys(v, [...INDEX_KEYS_V2, "callHours"])))) return null;
+  if (!(v.version === 1 && exactKeys(v, INDEX_KEYS)) && !(v.version === 2 && exactKeys(v, INDEX_KEYS_V2))) return null;
   try {
     canonicalVoiciPageIndex(v);
   } catch {
@@ -275,7 +242,6 @@ export function parseVoiciPageIndex(input) {
     issuedAt: v.issuedAt,
     acceptsMessages: v.acceptsMessages,
     ...(v.version === 2 ? { acceptsCalls: v.acceptsCalls, callsFrom: v.callsFrom } : {}),
-    ...(v.callHours !== undefined ? { callHours: v.callHours } : {}),
     inboxEpoch: v.inboxEpoch,
     inboxPub: v.inboxPub,
     ownerSignPub: v.ownerSignPub,

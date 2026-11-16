@@ -88,6 +88,10 @@ export interface VoiciCallStorage {
   /** Drops a device's call-key binding (its device grant was revoked: docs/voici-calls.md, 2026-11-15 second round). */
   deleteCallKeyForDevice(username: string, deviceId: string): Promise<void>;
   deleteCallsForAccount(username: string): Promise<void>;
+  /** The owner's sealed call settings (migration 0150): {version, blob} or null. */
+  getCallSettings(username: string): Promise<{ version: number; blob: string } | null>;
+  /** Compare-and-set: stores when `version` is the stored version + 1 (1 when none); false otherwise. */
+  putCallSettings(username: string, version: number, blob: string, at: number): Promise<boolean>;
   /** Newest issuedAt wins; false when a newer order is stored. */
   putRingBack(rec: VoiciRingBackRecord): Promise<boolean>;
   getRingBack(pageId: string, conv: string, now: number): Promise<VoiciRingBackRecord | null>;
@@ -233,6 +237,7 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
     await this.db.prepare("DELETE FROM voici_live_calls WHERE username = ?1").bind(username).run();
     await this.db.prepare("DELETE FROM voici_call_keys WHERE username = ?1").bind(username).run();
     await this.db.prepare("DELETE FROM voici_ring_backs WHERE username = ?1").bind(username).run();
+    await this.db.prepare("DELETE FROM voici_call_settings WHERE username = ?1").bind(username).run();
   }
 
   async putCallKey(rec: VoiciCallKeyRecord) {
@@ -265,6 +270,19 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
 
   async deleteCallKeyForDevice(username: string, deviceId: string) {
     await this.db.prepare("DELETE FROM voici_call_keys WHERE username = ?1 AND device_id = ?2").bind(username, deviceId).run();
+  }
+
+  async getCallSettings(username: string) {
+    const r = await this.db.prepare("SELECT version, blob FROM voici_call_settings WHERE username = ?1").bind(username).first<{ version: number; blob: string }>();
+    return r ? { version: r.version, blob: r.blob } : null;
+  }
+
+  async putCallSettings(username: string, version: number, blob: string, at: number) {
+    const r =
+      version === 1
+        ? await this.db.prepare("INSERT OR IGNORE INTO voici_call_settings (username, version, blob, updated_at) VALUES (?1, 1, ?2, ?3)").bind(username, blob, at).run()
+        : await this.db.prepare("UPDATE voici_call_settings SET version = ?2, blob = ?3, updated_at = ?4 WHERE username = ?1 AND version = ?2 - 1").bind(username, version, blob, at).run();
+    return (r.meta.changes ?? 0) === 1;
   }
 
   async putRingBack(rec: VoiciRingBackRecord) {
@@ -372,6 +390,7 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   rings = new Map<string, VoiciRingRecord>();
   powSpent = new Map<string, number>();
   anonBlocks = new Map<string, number>();
+  callSettings = new Map<string, { version: number; blob: string }>();
   private nextId = 1;
 
   async countRing(pageId: string, day: string, max: number) {
@@ -439,6 +458,7 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     for (const k of [...this.voip.keys()]) if (k.startsWith(`${username}|`)) this.voip.delete(k);
     for (const k of [...this.callKeys.keys()]) if (k.startsWith(`${username}|`)) this.callKeys.delete(k);
     for (const [k, r] of [...this.ringBacks]) if (r.username === username) this.ringBacks.delete(k);
+    this.callSettings.delete(username);
     this.live.delete(username);
   }
   async putCallKey(rec: VoiciCallKeyRecord) {
@@ -456,6 +476,15 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   }
   async deleteCallKeyForDevice(username: string, deviceId: string) {
     this.callKeys.delete(`${username}|${deviceId}`);
+  }
+  async getCallSettings(username: string) {
+    return this.callSettings.get(username) ?? null;
+  }
+  async putCallSettings(username: string, version: number, blob: string) {
+    const cur = this.callSettings.get(username)?.version ?? 0;
+    if (version !== cur + 1) return false;
+    this.callSettings.set(username, { version, blob });
+    return true;
   }
   async putRingBack(rec: VoiciRingBackRecord) {
     const k = `${rec.pageId}|${rec.conv}`;

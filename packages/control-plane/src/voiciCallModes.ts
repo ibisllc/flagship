@@ -18,6 +18,8 @@
 import {
   checkVoiciCallPowChallenge,
   checkVoiciCallRequestAnon,
+  b64Decode,
+  canonicalJson,
   checkVoiciConvDelete,
   parseVoiciAnonBlock,
   verifyVoiciAnonBlock,
@@ -35,6 +37,8 @@ import {
 } from "@flagship/protocol";
 import type { PushTokenStorage, VoiciCallStorage, VoiciStorage } from "@flagship/storage";
 import type { InviteNoticeForward } from "./inviteNotice.js";
+import { requireAccountRead, ACCOUNT_KEY_HOLDERS_ONLY, ACCOUNT_READ_HEADERS, type AccountReadTokenDeps } from "./accountReadToken.js";
+import { authorizeActiveDevice, type AccountDirectoryDeps, type DirectoryAuthorization } from "./accountDirectory.js";
 import { hexToBytes } from "./hex.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
 import { voiciRefusal } from "./voiciPages.js";
@@ -279,4 +283,55 @@ export async function handleVoiciAnonBlock(
   if (order.op === "block") await deps.calls.blockAnon(page.pageId, order.conv, Number.MAX_SAFE_INTEGER);
   else await deps.calls.unblockAnon(page.pageId, order.conv);
   return ok({ ok: true });
+}
+
+// ── the owner's call hours, synced and sealed (owner decision 2026-11-16, option c) ─────
+
+const SETTINGS_MAX_BODY = 8 * 1024;
+
+/** GET /api/accounts/<u>/voici-call-settings: the sealed blob (read token of a device of the account), or 404. */
+export async function handleVoiciCallSettingsGet(
+  deps: { calls: Pick<VoiciCallStorage, "getCallSettings">; readTokens: AccountReadTokenDeps },
+  username: string,
+  authorization: string | null,
+): Promise<HandlerResponseWithHeaders> {
+  const u = username.toLowerCase();
+  const read = await requireAccountRead(deps.readTokens, u, authorization, ACCOUNT_KEY_HOLDERS_ONLY);
+  if (!read.ok) return read.response;
+  const s = await deps.calls.getCallSettings(u);
+  if (!s) return { ...voiciRefusal(404, "not-found"), headers: { ...ACCOUNT_READ_HEADERS } };
+  return { status: 200, body: JSON.parse(s.blob) as unknown, headers: { ...ACCOUNT_READ_HEADERS } };
+}
+
+/**
+ * PUT /api/accounts/<u>/voici-call-settings {version, nonce, ct} from a device of the account (device headers):
+ * `version` = stored + 1, else 409 `version-conflict` with the stored blob. `.com` checks only the shape: it can't open
+ * the blob, so it never sees the hours or the time zone.
+ */
+export async function handleVoiciCallSettingsPut(
+  deps: { calls: Pick<VoiciCallStorage, "getCallSettings" | "putCallSettings">; directory: Pick<AccountDirectoryDeps, "identities" | "nonces" | "now" | "freshnessMs">; now?: () => number },
+  username: string,
+  auth: DirectoryAuthorization | undefined,
+  bodyText: string,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  const u = username.toLowerCase();
+  if (bodyText.length > SETTINGS_MAX_BODY) return voiciRefusal(413, "too-large");
+  const caller = await authorizeActiveDevice(deps.directory, auth, { accountId: u, method: "PUT", path: `/api/accounts/${u}/voici-call-settings` });
+  if (!caller) return voiciRefusal(403, "forbidden");
+  let s: unknown;
+  try {
+    s = JSON.parse(bodyText);
+  } catch {
+    return voiciRefusal(400, "malformed");
+  }
+  if (!isObj(s) || Object.keys(s).length !== 3 || !Number.isSafeInteger(s.version) || (s.version as number) < 1 || typeof s.nonce !== "string" || !/^[0-9a-f]{24}$/.test(s.nonce) || typeof s.ct !== "string" || !b64Decode(s.ct)) {
+    return voiciRefusal(400, "malformed");
+  }
+  const blob = canonicalJson({ version: s.version, nonce: s.nonce, ct: s.ct });
+  if (!(await deps.calls.putCallSettings(u, s.version as number, blob, now))) {
+    const cur = await deps.calls.getCallSettings(u);
+    return voiciRefusal(409, "version-conflict", { settings: cur ? JSON.parse(cur.blob) : null });
+  }
+  return ok({ ok: true, version: s.version });
 }

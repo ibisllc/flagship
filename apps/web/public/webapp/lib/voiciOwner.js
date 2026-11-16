@@ -59,6 +59,7 @@ import {
 } from "./voiciProtocol.js";
 import { controlApex, controlHost, dataApex } from "./apex.js";
 import { openVoiciMissedCall, sealVoiciRingHint, signVoiciCallAllow, signVoiciRing, voiciRingHintB64 } from "./voiciCalls.js";
+import { deriveVoiciCallSettingsKey, openVoiciCallSettings, sealVoiciCallSettings } from "./voiciCallSettings.js";
 import { accountReadFetch } from "./accountRead.js";
 import { canonicalDirectoryRequest } from "./accountMetadata.js";
 import { deviceGrantCanonicalBytes } from "./crossDevicePairing.js";
@@ -242,12 +243,12 @@ const json = (v) => canonicalJsonBytes(v);
 export function carriedCalls(published, calls) {
   if (calls) {
     if (!calls.acceptsCalls) return {};
-    return { acceptsCalls: 1, callsFrom: calls.callsFrom, ...(calls.callHours ? { callHours: calls.callHours } : {}) };
+    return { acceptsCalls: 1, callsFrom: calls.callsFrom };
   }
   const idx = published?.index;
   if (idx?.acceptsCalls !== 1) return {};
   const from = ["accepted", "signed-in", "anyone", "callback"].includes(idx.callsFrom) ? idx.callsFrom : "accepted";
-  return { acceptsCalls: 1, callsFrom: from, ...(typeof idx.callHours === "string" ? { callHours: idx.callHours } : {}) };
+  return { acceptsCalls: 1, callsFrom: from };
 }
 
 export async function buildVoiciIndex({ username, published, merged, images, signer, umk, now, rotate = false, calls }) {
@@ -944,4 +945,44 @@ export async function postRing(page, cv, media = "audio", deps = {}) {
   });
   if (!r.ok) throw await readError(r);
   return r.json();
+}
+
+// ── the owner's call hours: sealed, synced between the owner's devices, never on the page (option c) ──
+
+/** {settings, version}: the account's call settings ({hours: null} when none were saved). */
+export async function loadCallSettings(deps = {}) {
+  const c = ctx(deps);
+  const username = usernameOf(c);
+  const r = await c.readFetch(`${c.apex}/api/accounts/${encodeURIComponent(username)}/voici-call-settings`, { cache: "no-store" }, { username });
+  if (r.status === 404) return { settings: { v: 1, hours: null, updatedAt: 0 }, version: 0 };
+  if (!r.ok) throw await readError(r);
+  const blob = await r.json();
+  const settings = openVoiciCallSettings(deriveVoiciCallSettingsKey(umkOf(c)), username, blob);
+  if (!settings) throw new VoiciError("state-unreadable");
+  return { settings, version: blob.version };
+}
+
+/** Saves the hours (null: calls ring any time); a version conflict retries on the stored version. */
+export async function saveCallHours(hours, deps = {}) {
+  const c = ctx(deps);
+  const username = usernameOf(c);
+  const key = deriveVoiciCallSettingsKey(umkOf(c));
+  let cur = deps.current ?? (await loadCallSettings(deps));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const next = { v: 1, hours, updatedAt: Math.max(c.now(), cur.settings.updatedAt + 1) };
+    const version = cur.version + 1;
+    const path = `/api/accounts/${username}/voici-call-settings`;
+    const r = await c.fetch(`${c.apex}${path}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...(await deviceHeaders(c, "PUT", path)) },
+      body: JSON.stringify(sealVoiciCallSettings(key, username, version, next)),
+    });
+    if (r.ok) return { settings: next, version };
+    const err = await readError(r);
+    if (r.status !== 409) throw err;
+    const stored = err.body?.settings ?? null;
+    const opened = stored ? openVoiciCallSettings(key, username, stored) : null;
+    cur = opened ? { settings: opened, version: stored.version } : await loadCallSettings(deps);
+  }
+  throw new VoiciError("state-conflict");
 }

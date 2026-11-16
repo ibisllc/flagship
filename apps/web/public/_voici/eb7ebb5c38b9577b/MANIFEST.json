@@ -19,7 +19,7 @@
   "flagship-web/proto/lib/voiciCallHandoff.js": "98f7eeb6e61f1d516cebfa864fe18eef109dca67d4e54fc3c0fa4be2b2a02609",
   "flagship-web/proto/lib/voiciCore.js": "80d0b17280dc8bf79d886e387ebde89dc8cc8f4004c437fa202706a8615f1206",
   "flagship-web/proto/lib/voiciMessages.js": "6e911ee6821faef053f2fa9f2b8097438c7302148cc9dbb99ab5a2c2f53ceb3a",
-  "flagship-web/proto/lib/voiciPage.js": "5dfe64bd86fe4883383ab0492cefa6a3f7b2856fe8888763aa1d3d5393b667af",
+  "flagship-web/proto/lib/voiciPage.js": "1abc7a0d76222cedd23d991b7ff9198f46a8dd035a8b8123a65765fdec22e799",
   "flagship-web/proto/lib/voiciProtocol.js": "1a97dc2ba32ff88c79052c8e18af24d635dbadacea81261bedd796342aa9845c",
   "flagship-web/proto/lib/voiciReveal.js": "437cdaff950d3e596893c52c10267b30197617bf3cfaa8740d8d84655141722e",
   "flagship-web/proto/lib/voiciText.js": "726c60b64c7e32df130772f37841db26d96ab7ed13c4d46084b602f5a21f1fde",

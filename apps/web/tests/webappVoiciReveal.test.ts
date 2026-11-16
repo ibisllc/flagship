@@ -38,14 +38,6 @@ describe("webapp voici conversation port", () => {
     expect(dec(P.canonicalVoiciConvDelete(CV.anonBlock.ownerDelete.del))).toContain(CV.anonBlock.order.conv);
   });
 
-  it("call hours", () => {
-    const X = CM.callHours;
-    for (const c of X.shapes) expect(P.isVoiciCallHours(c.value), c.name).toBe(c.expect);
-    for (const c of X.open) expect(P.voiciCallHoursOpen(c.hours ?? undefined, c.now), c.name).toBe(c.expect);
-    expect(dec(P.canonicalVoiciPageIndex(X.withHours))).toBe(X.withHoursCanonical);
-    expect(dec(P.canonicalVoiciPageIndex(X.noHours))).toBe(X.noHoursCanonical);
-    for (const c of X.index) expect(P.parseVoiciPageIndex(c.index) !== null, c.name).toBe(c.ok);
-  });
 });
 
 describe("the owner's inbox reads a reveal and the ring-back flag", () => {

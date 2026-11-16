@@ -3782,6 +3782,6 @@
   "From": "Desde",
   "To": "Hasta",
   "Time zone": "Zona horaria",
-  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": "Las llamadas solo suenan en este horario. Tu página lo muestra a cualquiera, con la zona horaria.",
-  "These hours don't work. Pick at least one day and different start and end times.": "Este horario no sirve. Elige al menos un día y horas de inicio y fin distintas."
+  "These hours don't work. Pick at least one day and different start and end times.": "Este horario no sirve. Elige al menos un día y horas de inicio y fin distintas.",
+  "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "Fuera de este horario tus teléfonos no suenan y la llamada aparece como perdida. Solo tus dispositivos conocen el horario."
 }

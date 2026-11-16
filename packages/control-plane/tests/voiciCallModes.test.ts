@@ -7,10 +7,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { InMemoryVoiciCallStorage, InMemoryVoiciStorage } from "@flagship/storage";
+import { InMemoryStorage, InMemoryVoiciCallStorage, InMemoryVoiciStorage } from "@flagship/storage";
+import * as P from "@flagship/protocol";
 import { canonicalVoiciThreadFetch, hexToBytes, signVoiciAnonBlock, signVoiciBlock, signVoiciRing, signVoiciRingBackPseudonym } from "@flagship/protocol";
 import { p256 } from "@noble/curves/nist.js";
-import { handleVoiciAnonBlock, handleVoiciBlock, handleVoiciConvDelete, handleVoiciInbox, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
+import { handleVoiciAnonBlock, handleVoiciBlock, handleVoiciCallSettingsGet, handleVoiciCallSettingsPut, handleVoiciConvDelete, handleVoiciInbox, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -194,27 +195,10 @@ describe("delete = forget (docs/voici-calls.md, owner 2026-11-16)", () => {
   });
 });
 
-describe("hours, blocking and the inbox's ring-back flag (release-manager decisions 2026-11-16)", () => {
+describe("blocking and the inbox's ring-back flag (release-manager decisions 2026-11-16)", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const CV: any = JSON.parse(readFileSync(join(here, "../../protocol/test-vectors/voici-conversation/vectors.json"), "utf8"));
   const conv: string = M.derivations.conv;
-
-  async function withHours(callsFrom: string, callHours: string) {
-    const w = await world(callsFrom);
-    const index = { ...V.pageV2.signed, callsFrom, callHours };
-    await w.voici.publishPage({ username: "alice", pageId: K.pageId, seq: 9, issuedAt: NOW, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: K.ownerSignPub, indexJson: JSON.stringify(index), publishedAt: NOW }, 8);
-    return w;
-  }
-
-  it("a page's hours close calls for anonymous and signed-in callers alike", async () => {
-    // NOW is a Friday at 03:00 UTC; hours from 09:00 to 17:00 UTC on every day are closed then.
-    const shut = await withHours("anyone", "1111111 0900-1700 UTC");
-    expect(code(await handleVoiciCallRequest(shut.deps, body(CM.anon.signed)))).toBe("closed");
-    const shutSigned = await withHours("signed-in", "1111111 0900-1700 UTC");
-    expect(code(await handleVoiciCallRequest(shutSigned.deps, body(V.request.signed)))).toBe("closed");
-    const open = await withHours("anyone", "1111111 0000-2359 UTC");
-    expect((await handleVoiciCallRequest(open.deps, body(CM.anon.signed))).status).toBe(200);
-  });
 
   it("the owner blocks an anonymous caller until unblocked; a forged or stale order is refused", async () => {
     const w = await world("anyone");
@@ -263,5 +247,36 @@ describe("hours, blocking and the inbox's ring-back flag (release-manager decisi
     await w.voici.insertMessage({ pageId: K.pageId, conv, msgId: "14".repeat(16), kind: "voici-message", fromPub: M.derivations.pseudonymPub, delegatePub: M.keys.browserPub, sentAt: NOW, envelope: JSON.stringify(M.message.envelope), size: 2, direct: false, pushed: false, storedAt: NOW });
     const after = await handleVoiciInbox(owner, "alice", "", null);
     expect((after.body as { items: { ringBack: boolean }[] }).items.map((i) => i.ringBack)).toEqual([true, true]);
+  });
+});
+
+describe("the owner's call hours: sealed, synced, never on the page (owner decision 2026-11-16, option c)", () => {
+  it("devices of the account store and read the sealed blob with compare-and-set; .com holds no hours or zone", async () => {
+    const s = Object.assign(new InMemoryStorage(), { voiciCalls: new InMemoryVoiciCallStorage() });
+    const deviceSeed = new Uint8Array(32).fill(0x75);
+    const device = { privateKey: deviceSeed, publicKey: P.ed.getPublicKey(deviceSeed) };
+    const deviceId = "ce".repeat(16);
+    await s.deviceIdentities.put({ accountId: "alice", deviceId, devicePubHex: Buffer.from(device.publicKey).toString("hex"), platformClass: "ios", createdAt: 1, lastSeenAt: 1, revokedAt: null });
+    let rid = 0;
+    const auth = () => {
+      const request = { accountId: "alice", deviceId, signerPubHex: Buffer.from(device.publicKey).toString("hex"), method: "PUT", path: "/api/accounts/alice/voici-call-settings", requestId: (++rid).toString(16).padStart(32, "0"), issuedAt: NOW };
+      return { request, signature: P.signAccountDirectoryRequest(request, device) };
+    };
+    const directory = { identities: s.deviceIdentities, nonces: { claim: async () => true }, now: () => NOW };
+    const d = { calls: s.voiciCalls, directory, now: () => NOW };
+    const X = CM.callSettings;
+    expect(code(await handleVoiciCallSettingsPut(d, "alice", auth(), JSON.stringify(X.sealed)))).toBe("version-conflict"); // version 3 first
+    const v1 = { ...X.sealed, version: 1 };
+    expect(code(await handleVoiciCallSettingsPut(d, "alice", auth(), JSON.stringify(v1)))).toBe("ok");
+    expect(code(await handleVoiciCallSettingsPut(d, "alice", auth(), JSON.stringify(v1)))).toBe("version-conflict");
+    expect(code(await handleVoiciCallSettingsPut(d, "alice", undefined, JSON.stringify({ ...v1, version: 2 })))).toBe("forbidden");
+    expect(code(await handleVoiciCallSettingsPut(d, "alice", auth(), JSON.stringify({ ...v1, version: 2, hours: "x" })))).toBe("malformed");
+    const stored = JSON.stringify([...s.voiciCalls.callSettings.values()]);
+    for (const leak of ["Europe/Paris", "1111100", "0900", "1730"]) expect(stored).not.toContain(leak);
+    const readTokens = { secret: undefined, usernames: { get: async () => ({ username: "alice", isDemo: true }) } as never, identities: {} as never, servers: {} as never, demoUsers: { get: async () => ({ username: "alice" }) } as never, nonces: { claim: async () => true } };
+    const got = await handleVoiciCallSettingsGet({ calls: s.voiciCalls, readTokens }, "alice", null);
+    expect(got.body).toEqual(JSON.parse(P.canonicalJson(v1)));
+    await s.voiciCalls.deleteCallsForAccount("alice");
+    expect(await s.voiciCalls.getCallSettings("alice")).toBeNull();
   });
 });

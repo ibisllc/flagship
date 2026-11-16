@@ -152,47 +152,53 @@ const opened = P.openVoiciRingHint(h(D.threadSeed), D.conv, ringId, P.b64Decode(
 if (!opened || opened.username !== "alice") throw new Error("hint open");
 if (P.openVoiciRingHint(h(D.threadSeed), D.conv, "00".repeat(16), P.b64Decode(hint)!) !== null) throw new Error("hint ring id");
 
-// ── call hours in the page index ──
-const hoursBody = { username: "alice", pageId: PAGE_ID, seq: 3, issuedAt: NOW, acceptsMessages: 1 as const, acceptsCalls: 1 as const, callsFrom: "anyone" as const, inboxEpoch: 1, inboxPub: D.inboxPub, ownerSignPub: D.ownerSignPub, pieces: [{ role: "profile", sha256: "11".repeat(32), size: 10 }], signerKind: "admin-root" as const };
-const hoursSeed = fill(32, 0xa1);
-const withHours = P.signVoiciPageIndex({ ...hoursBody, callHours: "1111100 0900-1730 Europe/Paris" }, hoursSeed);
-const noHours = P.signVoiciPageIndex(hoursBody, hoursSeed);
+// ── call hours: an owner-device setting, sealed, never published (owner decision 2026-11-16, option c) ──
+const settingsKey = P.deriveVoiciCallSettingsKey({ seed: h(D.ownerUmk) } as never);
+const settings: P.VoiciCallSettings = { v: 1, hours: { days: "1111100", from: "0900", to: "1730", zone: "Europe/Paris" }, updatedAt: NOW };
+const settingsNone: P.VoiciCallSettings = { v: 1, hours: null, updatedAt: NOW - 1 };
+const settingsNonce = fill(12, 0xc1);
+const sealedSettings = P.sealVoiciCallSettings(settingsKey, "alice", 3, settings, settingsNonce);
+if (P.canonicalJson(P.openVoiciCallSettings(settingsKey, "alice", sealedSettings)) !== P.canonicalJson(settings)) throw new Error("settings round trip");
+const settingsRefusals = [
+  ["another account", () => P.openVoiciCallSettings(settingsKey, "bob", sealedSettings)],
+  ["another version", () => P.openVoiciCallSettings(settingsKey, "alice", { ...sealedSettings, version: 4 })],
+  ["another key", () => P.openVoiciCallSettings(fill(32, 9), "alice", sealedSettings)],
+].map(([name, f]) => {
+  if ((f as () => unknown)() !== null) throw new Error(`settings ${name}`);
+  return name;
+});
 const hoursShapes = [
-  ["weekdays in Paris", "1111100 0900-1730 Europe/Paris", true],
-  ["overnight in UTC", "1111111 2200-0600 UTC", true],
-  ["no day", "0000000 0900-1730 UTC", false],
-  ["start equals end", "1111111 0900-0900 UTC", false],
-  ["24:00", "1111111 0900-2400 UTC", false],
-  ["unknown zone", "1111111 0900-1700 Mars/Olympus", false],
-  ["six days", "111110 0900-1700 UTC", false],
-  ["lowercase utc", "1111111 0900-1700 utc", false],
-  ["extra space", "1111111  0900-1700 UTC", false],
+  ["weekdays in Paris", { days: "1111100", from: "0900", to: "1730", zone: "Europe/Paris" }, true],
+  ["overnight in UTC", { days: "1111111", from: "2200", to: "0600", zone: "UTC" }, true],
+  ["no day", { days: "0000000", from: "0900", to: "1730", zone: "UTC" }, false],
+  ["start equals end", { days: "1111111", from: "0900", to: "0900", zone: "UTC" }, false],
+  ["24:00", { days: "1111111", from: "0900", to: "2400", zone: "UTC" }, false],
+  ["unknown zone", { days: "1111111", from: "0900", to: "1700", zone: "Mars/Olympus" }, false],
+  ["six days", { days: "111110", from: "0900", to: "1700", zone: "UTC" }, false],
+  ["lowercase utc", { days: "1111111", from: "0900", to: "1700", zone: "utc" }, false],
+  ["extra key", { days: "1111111", from: "0900", to: "1700", zone: "UTC", note: "x" }, false],
 ].map(([name, value, expect]) => {
-  if (P.isVoiciCallHours(value) !== expect) throw new Error(`hours shape ${name}`);
+  if ((P.parseVoiciCallHours(value) !== null) !== expect) throw new Error(`hours shape ${name}`);
   return { name, value, expect };
 });
 // 2027-01-04 is a Monday. Paris is UTC+1 in January.
 const at = (iso: string) => Date.parse(iso);
-const hoursOpen = [
-  ["Monday 10:00 Paris", "1111100 0900-1730 Europe/Paris", at("2027-01-04T09:00:00Z"), true],
-  ["Monday 08:59 Paris", "1111100 0900-1730 Europe/Paris", at("2027-01-04T07:59:00Z"), false],
-  ["Monday 17:30 Paris (end excluded)", "1111100 0900-1730 Europe/Paris", at("2027-01-04T16:30:00Z"), false],
-  ["Saturday noon Paris", "1111100 0900-1730 Europe/Paris", at("2027-01-09T11:00:00Z"), false],
-  ["Monday 23:00 UTC overnight", "1000000 2200-0600 UTC", at("2027-01-04T23:00:00Z"), true],
-  ["Tuesday 05:00 UTC, Monday's night", "1000000 2200-0600 UTC", at("2027-01-05T05:00:00Z"), true],
-  ["Tuesday 23:00 UTC, not a Tuesday night", "1000000 2200-0600 UTC", at("2027-01-05T23:00:00Z"), false],
-  ["no hours", undefined, at("2027-01-09T03:00:00Z"), true],
+const paris = { days: "1111100", from: "0900", to: "1730", zone: "Europe/Paris" };
+const night = { days: "1000000", from: "2200", to: "0600", zone: "UTC" };
+const hoursAllow = [
+  ["Monday 10:00 Paris", paris, at("2027-01-04T09:00:00Z"), true],
+  ["Monday 08:59 Paris", paris, at("2027-01-04T07:59:00Z"), false],
+  ["Monday 17:30 Paris (end excluded)", paris, at("2027-01-04T16:30:00Z"), false],
+  ["Saturday noon Paris", paris, at("2027-01-09T11:00:00Z"), false],
+  ["Monday 23:00 UTC overnight", night, at("2027-01-04T23:00:00Z"), true],
+  ["Tuesday 05:00 UTC, Monday's night", night, at("2027-01-05T05:00:00Z"), true],
+  ["Tuesday 23:00 UTC, not a Tuesday night", night, at("2027-01-05T23:00:00Z"), false],
+  ["no hours", null, at("2027-01-09T03:00:00Z"), true],
 ].map(([name, hours, now, expect]) => {
-  if (P.voiciCallHoursOpen(hours as string | undefined, now as number) !== expect) throw new Error(`hours open ${name}`);
-  return { name, hours: hours ?? null, now, expect };
+  if (P.voiciCallHoursAllow(hours as P.VoiciCallHours | null, now as number) !== expect) throw new Error(`hours allow ${name}`);
+  return { name, hours, now, expect };
 });
-const hoursIndexChecks = [
-  { name: "with hours parses", index: withHours, ok: true },
-  { name: "without hours keeps its bytes", index: noHours, ok: true },
-  { name: "hours on a v1 index", index: { ...noHours, version: 1, callHours: "1111111 0900-1700 UTC" }, ok: false },
-  { name: "hours changed after signing", index: { ...withHours, callHours: "1111111 0000-2359 Europe/Paris" }, ok: true, signatureHolds: false },
-];
-for (const c of hoursIndexChecks) if ((P.parseVoiciPageIndex(c.index) !== null) !== c.ok) throw new Error(`hours index ${c.name}`);
+if (P.mergeVoiciCallSettings(settingsNone, settings) !== settings) throw new Error("merge");
 
 // ── the ring push of an anonymous call (its caller sealed to the inbox key) ──
 const anonPushEseed = fill(64, 0xb1);
@@ -213,15 +219,17 @@ const doc = {
   anonPush: { inboxSeed: D.inboxSeed, callId: anonBody.callId, eseed: H(anonPushEseed), payload: { v: 1, ...anonPushBody }, sealed: anonPushSealed, opened: anonPushOpened, badConvSealed: anonPushBadConv },
   anon: { browserPriv: H(browserPriv), browserPub, body: anonBody, signed: anon, canonical: new TextDecoder().decode(P.canonicalVoiciCallRequestAnon(anon)), hash: P.sha256Hex(P.canonicalVoiciCallRequestAnon(anon)), ctx: anonCtx, checks: anonChecks, modeChecks: anonModeChecks },
   ringBack: { app: byApp, browser: byBrowser, stop, canonical: new TextDecoder().decode(P.canonicalVoiciRingBack(attach)), ctx: rbCtx, checks: ringBackChecks },
-  callHours: {
-    signerSeed: H(hoursSeed),
-    withHours,
-    noHours,
-    withHoursCanonical: new TextDecoder().decode(P.canonicalVoiciPageIndex(withHours)),
-    noHoursCanonical: new TextDecoder().decode(P.canonicalVoiciPageIndex(noHours)),
-    shapes: hoursShapes,
-    open: hoursOpen,
-    index: hoursIndexChecks,
+  callSettings: {
+    ownerUmk: D.ownerUmk,
+    key: H(settingsKey),
+    username: "alice",
+    plain: settings,
+    plainNone: settingsNone,
+    nonce: H(settingsNonce),
+    sealed: sealedSettings,
+    refusals: settingsRefusals,
+    hoursShapes,
+    hoursAllow,
   },
   ring: { order: ring, signature: ringSig, canonical: new TextDecoder().decode(P.canonicalVoiciRing(ring)), hintPlain: { v: 1, ...hintBody }, hintEseed: H(hintEseed), threadSeed: D.threadSeed, threadPub: D.threadPub, ownerSignPub: D.ownerSignPub, checks: ringChecks },
 };

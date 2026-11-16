@@ -30,7 +30,7 @@ import {
   VOICI_PROFILE_MAX_LINKS,
   VOICI_POST_MAX_LINKS,
 } from "../lib/voiciProtocol.js";
-import { makeDraftOp, postsNewestFirst, publishVoiciPage, voiciPageUrl } from "../lib/voiciOwner.js";
+import { loadCallSettings, makeDraftOp, postsNewestFirst, publishVoiciPage, saveCallHours, voiciPageUrl } from "../lib/voiciOwner.js";
 import {
   addPageOp,
   avatarProblemText,
@@ -49,7 +49,7 @@ import { copyIcon, moreHorizontalIcon, pencilIcon, plusIcon, sendIcon, userIcon,
 import { VOICI_ACCEPT_NOTE, VOICI_NOT_PUBLISHED, VOICI_RULES_TEXT, VOICI_RULES_TITLE, VOICI_WAITING_ADMIN, voiciErrorText, voiciTextProblem } from "../lib/voiciCopy.js";
 
 import { dateLocale, tr, trn } from "../lib/i18n.js";
-import { isVoiciCallHours } from "../lib/voiciProtocol.js";
+import { parseVoiciCallHours } from "../lib/voiciCallSettings.js";
 import { browserTimeZone, callHoursFields, callHoursValue } from "../lib/voiciCallOut.js";
 
 const isAdmin = () => canPublishPage();
@@ -630,7 +630,7 @@ export function openPageOptions() {
         body.querySelector("#page-rotate")?.addEventListener("click", () => void rotateInbox());
         body.querySelector("#page-calls")?.addEventListener("click", () => {
           close();
-          openCallsSheet();
+          void openCallsSheet();
         });
         body.querySelector("#page-rules").addEventListener("click", () => void inlineAlert({ title: VOICI_RULES_TITLE(), message: VOICI_RULES_TEXT() }));
         body.querySelector("#page-remove")?.addEventListener("click", () => {
@@ -668,9 +668,16 @@ function timeZones(current) {
   return [...new Set([current, browserTimeZone(), "UTC", ...zones])];
 }
 
-function openCallsSheet() {
+async function openCallsSheet() {
   const idx = world.page?.index ?? {};
-  const state = { on: idx.acceptsCalls === 1, from: idx.callsFrom ?? "accepted", hours: callHoursFields(idx.callHours) };
+  // The hours stay on the owner's devices (sealed and synced; option c): never in the page, so no server sees the zone.
+  let synced = null;
+  try {
+    synced = await loadCallSettings();
+  } catch {
+    synced = null;
+  }
+  const state = { on: idx.acceptsCalls === 1, from: idx.callsFrom ?? "accepted", hours: callHoursFields(synced?.settings.hours ?? null) };
   openSheet({
     title: tr("Calls"),
     testid: "page-calls-sheet",
@@ -700,7 +707,7 @@ function openCallsSheet() {
           <label class="row">${escapeHtml(tr("From"))} <input type="time" id="calls-from-time" value="${escapeHtml(state.hours.from)}"></label>
           <label class="row">${escapeHtml(tr("To"))} <input type="time" id="calls-to-time" value="${escapeHtml(state.hours.to)}"></label>
           <label class="row">${escapeHtml(tr("Time zone"))} <select id="calls-zone">${timeZones(state.hours.zone).map((z) => `<option value="${escapeHtml(z)}"${z === state.hours.zone ? " selected" : ""}>${escapeHtml(z)}</option>`).join("")}</select></label>
-          <p class="note">${escapeHtml(tr("Calls ring only during these hours. Your page shows them to anyone, with the time zone."))}</p>
+          <p class="note">${escapeHtml(tr("Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours."))}</p>
         </div>
         <p class="note" id="calls-error" hidden></p>
         <button type="button" class="primary full-width mt-3" id="calls-save">${escapeHtml(tr("Save"))}</button>`;
@@ -714,10 +721,10 @@ function openCallsSheet() {
       sw("#calls-save").addEventListener("click", async () => {
         const acceptsCalls = sw("#calls-on").getAttribute("aria-checked") === "true";
         const callsFrom = body.querySelector("input[name=calls-from]:checked")?.value ?? "accepted";
-        let callHours;
+        let callHours = null;
         if (sw("#calls-hours").getAttribute("aria-checked") === "true") {
           callHours = callHoursValue([...body.querySelectorAll("[data-call-day]")].map((b) => b.checked), sw("#calls-from-time").value, sw("#calls-to-time").value, sw("#calls-zone").value);
-          if (!isVoiciCallHours(callHours)) {
+          if (!parseVoiciCallHours(callHours)) {
             const err = sw("#calls-error");
             err.hidden = false;
             err.textContent = tr("These hours don't work. Pick at least one day and different start and end times.");
@@ -726,7 +733,10 @@ function openCallsSheet() {
         }
         sw("#calls-save").disabled = true;
         try {
-          world.page = await publishVoiciPage({ ops: [], calls: { acceptsCalls, callsFrom, ...(callHours ? { callHours } : {}) } }, { published: world.page });
+          await saveCallHours(callHours, synced ? { current: synced } : {});
+          if (acceptsCalls !== (idx.acceptsCalls === 1) || callsFrom !== (idx.callsFrom ?? "accepted")) {
+            world.page = await publishVoiciPage({ ops: [], calls: { acceptsCalls, callsFrom } }, { published: world.page });
+          }
           emitWorld();
           toast(tr("Saved."));
           close();

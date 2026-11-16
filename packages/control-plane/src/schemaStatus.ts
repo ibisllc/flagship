@@ -159,6 +159,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0148",
   // voi.ci call modes: ring-back channels, rings in progress, spent proofs of work, blocked anonymous callers.
   "0149",
+  // voi.ci call hours: the owner's sealed call settings, synced between the owner's devices (ciphertext only).
+  "0150",
 ];
 
 export interface SchemaStatusDeps {
