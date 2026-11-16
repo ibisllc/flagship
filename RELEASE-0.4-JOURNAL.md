@@ -825,6 +825,13 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-16: voi.ci page: a device with no microphone (e.g. a Mac mini) now says "No microphone found on this
   device. Connect one, or call from your phone." instead of asking to allow it (`382951b13`, 6 languages).
 
+- 2026-11-16: **page-defaults merged** (shell **v225**). A page's first publish turns on messages and calls from
+  signed-in people (`callsFrom: "signed-in"`, not anonymous); re-publishing keeps the owner's choices; the first-publish
+  warning says so. iOS and Android pickers gain "Anyone signed in with Flagship". Found and fixed: iOS sent its VoIP
+  token only at unlock with a page present, so a phone that just published its first page wouldn't ring until the
+  next unlock; it now sends it as soon as calls come on. Checks: tsc, i18n, parity 0 red, vitest 6163; Android 3072;
+  iOS 38, app builds.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
@@ -836,7 +843,7 @@ State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branc
 - org directory with SCIM/LDAP connectors (all three apps);
 - restore, enterprise, retail, cloud fixes; terms and privacy wording for 0.4.
 
-Shell **v224**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
+Shell **v225**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
 running.
 
 Next steps for whoever resumes:
