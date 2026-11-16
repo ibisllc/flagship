@@ -191,6 +191,8 @@ object OrgAuthority {
         need(signers.any { custodyOf(it) == OrgCustody.HARDWARE }, "custody", "a quorum of two or more needs a hardware approval")
     }
 
+    private fun browserSuffix(c: OrgCustody): ByteArray = if (c == OrgCustody.BROWSER) "|browser".toByteArray(Charsets.UTF_8) else ByteArray(0)
+
     private fun adminCustody(r: OrgAuthorityRecord): (String) -> OrgCustody = { s -> r.admins.firstOrNull { it.seatId == s }?.custody ?: OrgCustody.HARDWARE }
 
     private val PURPOSE = Regex("^flagship/[a-z0-9/-]+/v[1-9][0-9]*$")
@@ -237,9 +239,6 @@ object OrgAuthority {
         need(hex(g.orgId, 32) && hex(g.seatId, 32) && hex(g.memberKeyId, 64) && (g.adminKeyId.isEmpty() || hex(g.adminKeyId, 64)) && hex(g.rolesHash, 64), "malformed", "grant")
         need(g.expiresAt > g.issuedAt && g.expiresAt - g.issuedAt <= GRANT_MAX_LIFETIME_MS, "malformed", "expiresAt")
         return join(TAG_SEAT_GRANT, g.orgId, g.seatId, g.labelSha256, g.memberKeyId, g.adminKeyId, g.rolesHash, g.oarVersion, g.issuedAt, g.expiresAt) + browserSuffix(g.custody)
-    }
-
-    private fun browserSuffix(c: OrgCustody): ByteArray = if (c == OrgCustody.BROWSER) "|browser".toByteArray(Charsets.UTF_8) else ByteArray(0)
     }
 
     private val REASON = Regex("^[a-z0-9][a-z0-9-]{0,47}$")

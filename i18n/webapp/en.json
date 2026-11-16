@@ -14941,5 +14941,157 @@
   "{0} is back to compatibility.": {
     "en": "{0} is back to compatibility.",
     "ctx": "webapp/views/quantum-safety.js:190"
+  },
+  "Join on this browser": {
+    "en": "Join on this browser",
+    "ctx": "webapp/views/org-join.js:49"
+  },
+  "An admin role makes a key for this browser, protected by a passkey. Admins see it as \"Browser: software key, unlocked with a passkey\".": {
+    "en": "An admin role makes a key for this browser, protected by a passkey. Admins see it as \"Browser: software key, unlocked with a passkey\".",
+    "ctx": "webapp/views/org-join.js:50"
+  },
+  "You join as a member with your account's key.": {
+    "en": "You join as a member with your account's key.",
+    "ctx": "webapp/views/org-join.js:50"
+  },
+  "Unlock the webapp to join on this browser.": {
+    "en": "Unlock the webapp to join on this browser.",
+    "ctx": "webapp/views/org-join.js:50"
+  },
+  "Or open this link on your phone to join there.": {
+    "en": "Or open this link on your phone to join there.",
+    "ctx": "webapp/views/org-join.js:51"
+  },
+  "Show this code to the admin who invited you": {
+    "en": "Show this code to the admin who invited you",
+    "ctx": "webapp/views/org-join.js:64"
+  },
+  "They let you in once the code on their screen matches. Your organization is in Settings, Organizations.": {
+    "en": "They let you in once the code on their screen matches. Your organization is in Settings, Organizations.",
+    "ctx": "webapp/views/org-join.js:66"
+  },
+  "That didn't go through. Try again.": {
+    "en": "That didn't go through. Try again.",
+    "ctx": "webapp/views/org-join.js:70"
+  },
+  "Phone: hardware key": {
+    "en": "Phone: hardware key",
+    "ctx": "webapp/views/orgs.js:18"
+  },
+  "Seat {0}": {
+    "en": "Seat {0}",
+    "ctx": "webapp/views/orgs.js:22"
+  },
+  "Admin": {
+    "en": "Admin",
+    "ctx": "webapp/views/orgs.js:23"
+  },
+  "Board": {
+    "en": "Board",
+    "ctx": "webapp/views/orgs.js:23"
+  },
+  "The organization's rules need an approval from a phone's hardware key for this.": {
+    "en": "The organization's rules need an approval from a phone's hardware key for this.",
+    "ctx": "webapp/views/orgs.js:29"
+  },
+  "{0} couldn't be checked. Try again later.": {
+    "en": "{0} couldn't be checked. Try again later.",
+    "ctx": "webapp/views/orgs.js:40"
+  },
+  "You are in as {0}.": {
+    "en": "You are in as {0}.",
+    "ctx": "webapp/views/orgs.js:62"
+  },
+  "a member": {
+    "en": "a member",
+    "ctx": "webapp/views/orgs.js:62"
+  },
+  "Waiting for an admin to let you in. Your code: {0}": {
+    "en": "Waiting for an admin to let you in. Your code: {0}",
+    "ctx": "webapp/views/orgs.js:62"
+  },
+  "This seat's admin key: {0}": {
+    "en": "This seat's admin key: {0}",
+    "ctx": "webapp/views/orgs.js:63"
+  },
+  "Admins": {
+    "en": "Admins",
+    "ctx": "webapp/views/orgs.js:64"
+  },
+  "Waiting for your approval": {
+    "en": "Waiting for your approval",
+    "ctx": "webapp/views/orgs.js:65"
+  },
+  "Waiting to join": {
+    "en": "Waiting to join",
+    "ctx": "webapp/views/orgs.js:66"
+  },
+  "Code {0}": {
+    "en": "Code {0}",
+    "ctx": "webapp/views/orgs.js:66"
+  },
+  "The codes match: let them in": {
+    "en": "The codes match: let them in",
+    "ctx": "webapp/views/orgs.js:66"
+  },
+  "Rotate keys": {
+    "en": "Rotate keys",
+    "ctx": "webapp/views/orgs.js:67"
+  },
+  "People": {
+    "en": "People",
+    "ctx": "webapp/views/orgs.js:68"
+  },
+  "Approved.": {
+    "en": "Approved.",
+    "ctx": "webapp/views/orgs.js:82"
+  },
+  "Let them in?": {
+    "en": "Let them in?",
+    "ctx": "webapp/views/orgs.js:87"
+  },
+  "Only if the code on their screen is {0}.": {
+    "en": "Only if the code on their screen is {0}.",
+    "ctx": "webapp/views/orgs.js:87"
+  },
+  "Let them in": {
+    "en": "Let them in",
+    "ctx": "webapp/views/orgs.js:87"
+  },
+  "Admitted.": {
+    "en": "Admitted.",
+    "ctx": "webapp/views/orgs.js:88"
+  },
+  "Another admin needs to approve this before it takes effect.": {
+    "en": "Another admin needs to approve this before it takes effect.",
+    "ctx": "webapp/views/orgs.js:88"
+  },
+  "Rotated {0} keys.": {
+    "en": "Rotated {0} keys.",
+    "ctx": "webapp/views/orgs.js:92"
+  },
+  "Nothing to rotate.": {
+    "en": "Nothing to rotate.",
+    "ctx": "webapp/views/orgs.js:92"
+  },
+  "Remove this organization from this browser?": {
+    "en": "Remove this organization from this browser?",
+    "ctx": "webapp/views/orgs.js:95"
+  },
+  "Your seat stays. Join again from an invitation to use it here.": {
+    "en": "Your seat stays. Join again from an invitation to use it here.",
+    "ctx": "webapp/views/orgs.js:95"
+  },
+  "This browser isn't in any organization. Open an invitation link to join.": {
+    "en": "This browser isn't in any organization. Open an invitation link to join.",
+    "ctx": "webapp/views/orgs.js:107"
+  },
+  "Organizations": {
+    "en": "Organizations",
+    "ctx": "webapp/index.html"
+  },
+  "ORGANIZATIONS": {
+    "en": "ORGANIZATIONS",
+    "ctx": "webapp/index.html"
   }
 }

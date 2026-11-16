@@ -1,8 +1,7 @@
 // An organization's seat invitation opened in the browser (docs/enterprise-accounts.md §7):
 // /org-join#o=<orgId>&s=<seatId>&k=<link key>. The key rides in the fragment and never reaches a
-// server; it opens the offer the inviter sealed (AES-GCM, nonce || ciphertext || tag). The webapp
-// holds no seat keys (accepting signs with ML-DSA keys only the phone app holds), so it shows the
-// invitation and hands the same link to the phone.
+// server; it opens the offer the inviter sealed (AES-GCM, nonce || ciphertext || tag). Joining on this
+// browser is lib/orgSeat.js (docs/webapp-key-custody.md item 1); the same link also opens on a phone.
 
 import { controlApex } from "./apex.js";
 

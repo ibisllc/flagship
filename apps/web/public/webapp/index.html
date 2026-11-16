@@ -325,6 +325,7 @@
           <div class="fs-group-header">ACCOUNT</div>
           <div class="fs-group">
             <button class="fs-row" id="settings-tab-account-security" data-split-view="view-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-orgs" data-split-view="view-orgs"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Organizations</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-quantum-safety" data-split-view="view-quantum-safety"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Quantum-safe protection</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-providers" data-split-view="view-settings"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI API keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-tier" data-split-view="view-tier-status"><span class="fs-row-icon icon" data-row-icon="tier"></span><span class="fs-row-body"><span class="fs-row-title">Tier &amp; usage</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
@@ -1098,6 +1099,12 @@
         <p class="fs-detail-label">LOCAL AI</p>
         <div id="local-ai-content"></div>
         <button class="secondary full-width mt-2" id="local-ai-back">← Back</button>
+      </section>
+
+      <section id="view-orgs" class="hidden">
+        <p class="fs-detail-label">ORGANIZATIONS</p>
+        <div id="orgs-content"></div>
+        <button class="secondary full-width mt-2" id="orgs-back">← Back</button>
       </section>
 
       <section id="view-quantum-safety" class="hidden">
