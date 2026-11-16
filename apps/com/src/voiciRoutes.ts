@@ -32,6 +32,7 @@ import {
   handleVoiciRevoke,
   handleVoiciSend,
   handleVoiciThread,
+  handleVoiciConvDelete,
   resolveVoiciPath,
   appHome,
   runVoiciGc,
@@ -274,6 +275,14 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
       if (!webPushSender(env)) return toResponse(voiciRefusal(503, "unavailable"));
       return toResponse(
         await handleVoiciAlerts({ voici: storage.voici, origin, caKeys: (t: number) => caKeys(env, t), isPseudonymBanned: (p) => isPseudonymBanned(db, p) }, await readJson(request)),
+      );
+    }
+    if (path === "/api/voici/web/conv-delete") {
+      // Delete = forget (docs/voici-calls.md): either side's signed delete drops the conversation's rows at once.
+      const wait = await limited(env, "voici-owner", request, undefined, ctx);
+      if (wait !== null) return tooMany(wait);
+      return toResponse(
+        await handleVoiciConvDelete({ voici: storage.voici, origin, caKeys: (t: number) => caKeys(env, t), ...(voiciCallsEnabled(env) ? { calls: storage.voiciCalls } : {}) }, await readJson(request)),
       );
     }
     if (path === "/api/voici/web/thread" || path === "/api/voici/web/revoke") {

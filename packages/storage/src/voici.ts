@@ -204,6 +204,10 @@ export interface VoiciStorage {
   listAlerts(conv: string): Promise<VoiciAlertRecord[]>;
   deleteAlert(conv: string, endpointHash: string): Promise<boolean>;
   deleteAlertsForPage(pageId: string): Promise<number>;
+  /** Delete = forget (docs/voici-calls.md, owner 2026-11-16): the conversation's mail and reply alerts go at once; nothing is kept. */
+  deleteConversation(pageId: string, conv: string): Promise<void>;
+  /** Rows still held for one conversation (tests: a deleted conversation leaves none). */
+  conversationRowCount(pageId: string, conv: string): Promise<number>;
   /** The browser key's alerts in one conversation (the one its revoked delegation was for). */
   deleteAlertsForDelegate(delegatePub: string, conv: string): Promise<number>;
 
@@ -787,6 +791,19 @@ export class D1VoiciStorage implements VoiciStorage {
     return (res.meta.changes ?? 0) > 0;
   }
 
+  async deleteConversation(pageId: string, conv: string) {
+    await this.db.prepare("DELETE FROM voici_messages WHERE page_id = ?1 AND conv = ?2").bind(pageId, conv).run();
+    await this.db.prepare("DELETE FROM voici_alerts WHERE page_id = ?1 AND conv = ?2").bind(pageId, conv).run();
+  }
+
+  async conversationRowCount(pageId: string, conv: string) {
+    const r = await this.db
+      .prepare("SELECT (SELECT COUNT(*) FROM voici_messages WHERE page_id = ?1 AND conv = ?2) + (SELECT COUNT(*) FROM voici_alerts WHERE page_id = ?1 AND conv = ?2) AS n")
+      .bind(pageId, conv)
+      .first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+
   async deleteAlertsForPage(pageId: string) {
     const res = await this.db.prepare("DELETE FROM voici_alerts WHERE page_id = ?1").bind(pageId).run();
     return res.meta.changes ?? 0;
@@ -1171,6 +1188,15 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     const n = this.alerts.length;
     this.alerts = this.alerts.filter((a) => !(a.conv === conv && a.endpointHash === endpointHash));
     return this.alerts.length < n;
+  }
+
+  async deleteConversation(pageId: string, conv: string) {
+    this.messages = this.messages.filter((m) => !(m.pageId === pageId && m.conv === conv));
+    this.alerts = this.alerts.filter((a) => !(a.pageId === pageId && a.conv === conv));
+  }
+
+  async conversationRowCount(pageId: string, conv: string) {
+    return this.messages.filter((m) => m.pageId === pageId && m.conv === conv).length + this.alerts.filter((a) => a.pageId === pageId && a.conv === conv).length;
   }
 
   async deleteAlertsForPage(pageId: string) {
