@@ -49,12 +49,14 @@ class VoiciCallActionReceiver : android.content.BroadcastReceiver() {
         when (intent.action) {
             DECLINE -> VoiciCallCenter.decline()
             HANG_UP -> VoiciCallCenter.hangUp()
+            RING_DECLINE -> VoiciRingCenter.clear(context)
         }
     }
 
     companion object {
         const val DECLINE = "com.flagshipserver.app.calls.DECLINE"
         const val HANG_UP = "com.flagshipserver.app.calls.HANG_UP"
+        const val RING_DECLINE = "com.flagshipserver.app.calls.RING_DECLINE"
     }
 }
 

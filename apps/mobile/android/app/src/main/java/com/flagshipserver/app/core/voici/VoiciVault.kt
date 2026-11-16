@@ -62,7 +62,19 @@ data class VoiciLocal(
     val callHistory: List<com.flagshipserver.app.calls.VoiciCallRecord> = emptyList(),
     /** Owner side: conversations whose caller didn't allow call-backs (conv → when a ring was refused), this device only. */
     val ringBackOff: Map<String, Long> = emptyMap(),
+    /** Caller side: pages whose conversation this account allowed to ring it back (this device's record). */
+    val callBackPages: List<String> = emptyList(),
+    /** Caller side: pages where "Show <name> who I am" is on (pageId → when the reveal was sent). */
+    val revealedTo: Map<String, Long> = emptyMap(),
+    /** Owner side: checked reveals by conversation (conv → username and display name); an unreveal removes one. */
+    val reveals: Map<String, VoiciRevealShown> = emptyMap(),
+    /** Owner side: anonymous callers' conversations this page blocked (`.com`'s list). */
+    val anonBlocks: List<String> = emptyList(),
 )
+
+/** A caller's reveal the owner's app checked against the page key `.com` serves for that username. */
+@kotlinx.serialization.Serializable
+data class VoiciRevealShown(val username: String, val displayName: String? = null, val issuedAt: Long)
 
 /** Where the sealed files live. */
 interface VoiciVaultStore {

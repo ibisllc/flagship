@@ -113,6 +113,11 @@ object PushMessageHandler {
             com.flagshipserver.app.calls.VoiciCallCenter.onPush(context, call)
             return
         }
+        // A page owner rings this account back (its ring-back channel): it rings as a call, never as a plain notice.
+        VoiciRingPush.parse(data)?.let { ring ->
+            com.flagshipserver.app.calls.VoiciRingCenter.onPush(context, ring)
+            return
+        }
 
         // An install's checkpoints update its one ongoing setup notification
         // instead of each posting a new one.
