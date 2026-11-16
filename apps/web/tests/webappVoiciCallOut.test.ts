@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Ho from "../public/webapp/lib/voiciCallHandoff.js";
-import { buildHandoff, callHistory, callVisitor, deliverHandoff, isCallablePeer, recordCall } from "../public/webapp/lib/voiciCallOut.js";
+import { buildHandoff, callHistory, callVisitor, deliverHandoff, forgetPlacedCalls, isCallablePeer, recordCall } from "../public/webapp/lib/voiciCallOut.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const M: any = JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "..", "packages", "protocol", "test-vectors", "messages", "vectors.json"), "utf8"));
@@ -87,5 +87,18 @@ describe("the Calls sheet's helpers and what a publish signs", () => {
     expect(carriedCalls(published, { acceptsCalls: true, callsFrom: "anyone" })).toEqual({ acceptsCalls: 1, callsFrom: "anyone" });
     expect(carriedCalls(published, { acceptsCalls: false })).toEqual({});
     expect(carriedCalls({ index: { acceptsMessages: 1 } })).toEqual({});
+  });
+
+  it("another device's delete drops this browser's placed calls to that page from before it, never later ones", () => {
+    const storage = memStorage();
+    const session = { umk: hexToBytes(D.visitorUmk), username: "visitor" };
+    const page = { kind: "page", username: "alice", pageId: D.pageId };
+    const other = { kind: "page", username: "bob", pageId: "ab".repeat(16) };
+    recordCall({ id: "c1", at: NOW - 10, direction: "out", outcome: "browser", video: false, peer: page }, { storage, session });
+    recordCall({ id: "c2", at: NOW + 10, direction: "out", outcome: "browser", video: false, peer: page }, { storage, session });
+    recordCall({ id: "c3", at: NOW - 10, direction: "out", outcome: "browser", video: false, peer: other }, { storage, session });
+    expect(M.stateForget.pseudonymPub).toBe(D.pseudonymPub);
+    forgetPlacedCalls({ [M.stateForget.conv]: { at: NOW, pseudonymPub: D.pseudonymPub } }, { storage, session });
+    expect(callHistory([], { storage, session }).map((r) => r.id)).toEqual(["c2", "c3"]);
   });
 });

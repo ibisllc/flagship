@@ -68,6 +68,14 @@ public final class VoiciCallHistory {
         defaults.set(data, forKey: Self.key(u))
     }
 
+    /// Drops the records a deleted conversation covers (docs/voici-and-messages.md §10.1.1).
+    public func forget(where drop: (VoiciCallRecord) -> Bool) {
+        let before = records.count
+        records.removeAll(where: drop)
+        guard records.count != before, let u = username, let data = try? JSONEncoder().encode(records) else { return }
+        defaults.set(data, forKey: Self.key(u))
+    }
+
     /// The list as shown: this device's records and the page's missed calls, newest first. A missed call this device
     /// already has a record of (it rang here and was declined, say) shows once, as this device's record.
     public func entries(missed: [VoiciMissedCallRow]) -> [VoiciCallRecord] {

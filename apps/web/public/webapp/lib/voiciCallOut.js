@@ -8,13 +8,14 @@
 //   startHandoffCall(page {pageId, username}, media, deps?)   opens the tab and delivers; records the call
 //   callHistory(missedCalls, deps?)                           newest first: missed (incoming) and placed (outgoing)
 //   recordCall(entry, deps?) / clearCallHistory(account, storage?)
+//   forgetPlacedCalls(forgotten, deps?)                        drops placed calls a deleted conversation covers
 //   callVisitor(conv)                                         the owner calling a pseudonymous visitor: a hook only,
 //                                                             pending the owner's decision (ring by opt-in, or a
 //                                                             "tried to call you" note the visitor dials back from)
 
 import { p256 } from "../vendor/noble-post-quantum/pq-seal.js";
 import { hex } from "./voiciCore.js";
-import { signVoiciThreadStatement, signWebDelegation, TAG_VOICI_SIGN_IN } from "./voiciProtocol.js";
+import { signVoiciThreadStatement, signWebDelegation, TAG_VOICI_SIGN_IN, voiciConv } from "./voiciProtocol.js";
 import { sealVoiciCallHandoff, TAG_VOICI_CALL_HANDOFF, VOICI_CALL_HANDOFF_SESSION_MS, voiciCallHandoffLink } from "./voiciCallHandoff.js";
 import { getAttestation, pagePseudonym } from "./voiciSignIn.js";
 import { voiciWebOrigin, VoiciError } from "./voiciOwner.js";
@@ -60,6 +61,31 @@ export function clearCallHistory(account, storage = globalThis.localStorage) {
     storage?.removeItem(historyKey(String(account ?? "").toLowerCase()));
   } catch {
     /* nothing kept */
+  }
+}
+
+/**
+ * Delete = forget (docs/voici-and-messages.md §10.1.1): another device of this account deleted its conversation with a
+ * page, so this browser's placed calls to that page from before the delete go too. `forgotten` is the synced state's
+ * markers ({conv: {at}}); a call placed after the delete stays.
+ */
+export function forgetPlacedCalls(forgotten, deps = {}) {
+  const storage = deps.storage ?? globalThis.localStorage;
+  const session = deps.session ?? getSession();
+  const account = accountOf(deps);
+  if (!account || !(session?.umk instanceof Uint8Array) || !forgotten || Object.keys(forgotten).length === 0) return;
+  const list = readHistory(account, storage);
+  const convOf = new Map();
+  const kept = list.filter((r) => {
+    if (!convOf.has(r.peer.pageId)) convOf.set(r.peer.pageId, voiciConv(r.peer.pageId, hex(pagePseudonym(session.umk, r.peer.pageId).p.publicKey)));
+    const f = forgotten[convOf.get(r.peer.pageId)];
+    return !(f && r.at <= f.at);
+  });
+  if (kept.length === list.length) return;
+  try {
+    storage?.setItem(historyKey(account), JSON.stringify(kept));
+  } catch {
+    /* the history is a courtesy */
   }
 }
 

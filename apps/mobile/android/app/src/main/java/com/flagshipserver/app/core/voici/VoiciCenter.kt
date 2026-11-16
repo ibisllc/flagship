@@ -178,10 +178,53 @@ class VoiciCenter(
     private suspend fun update(block: (VoiciLocal) -> VoiciLocal): VoiciLocal? = mutex.withLock {
         val u = user() ?: return null
         val umk = keyring.umk() ?: return null
-        val next = block(vault.load(umk, u))
+        val next = applyForgotten(block(vault.load(umk, u)), umk)
         vault.save(umk, u, next)
         publishUi(u, next)
         next
+    }
+
+    /**
+     * Delete = forget on every device (docs/voici-and-messages.md §10.1.1): for each deletion marker in the synced state
+     * this device hasn't acted on yet, what it keeps by itself of that conversation goes: the stored messages, a
+     * checked reveal, the ring-back flag and call history (owner side, by conv), and, when the conversation is this
+     * account's own as a caller, the page's call-back and reveal records, reply notices and calls (caller side).
+     */
+    private fun applyForgotten(l: VoiciLocal, umk: ByteArray): VoiciLocal {
+        val raw = l.state?.get("forgotten") as? JsonObject
+        if (raw == null) return if (l.forgetApplied.isEmpty()) l else l.copy(forgetApplied = emptyMap())
+        // Only the markers are read here (this runs on every update): the state was checked when it was stored.
+        val t = now()
+        val live = raw.mapNotNull { (conv, f) -> VoiciJs.time((f as? JsonObject)?.get("at"))?.let { conv to it } }
+            .filter { (_, at) -> t - at < VoiciMessages.FORGET_KEEP_MS }.toMap()
+        val fresh = live.filter { (conv, at) -> at > (l.forgetApplied[conv] ?: -1) }
+        val applied = live.mapValues { (conv, at) -> maxOf(at, l.forgetApplied[conv] ?: 0) }
+        if (fresh.isEmpty()) return if (applied == l.forgetApplied) l else l.copy(forgetApplied = applied)
+        var out = l
+        for (conv in fresh.keys) out = forgetLocally(out, conv, umk)
+        if (out.callHistory != l.callHistory) _callHistoryVersion.value += 1
+        _messages.value = _messages.value.copy(missedCalls = _messages.value.missedCalls.filter { it.conv !in fresh.keys })
+        return out.copy(forgetApplied = applied)
+    }
+
+    /** What this device keeps of one conversation, by itself (never synced), goes. */
+    private fun forgetLocally(l: VoiciLocal, conv: String, umk: ByteArray): VoiciLocal {
+        val secret = VoiciMessages.deriveMessagesSecret(umk)
+        val candidates = l.callBackPages + l.revealedTo.keys + l.signInPages.keys + l.replyLatest.keys + l.callHistory.mapNotNull { it.peerPageId }
+        val pages = candidates.toSet().filter { pid ->
+            runCatching { VoiciMessages.voiciConv(pid, VoiciJs.hex(VoiciMessages.deriveMessagesPseudonymKey(secret, pid).publicKey)) == conv }.getOrDefault(false)
+        }.toSet()
+        return l.copy(
+            conversations = l.conversations.filter { it.conv != conv },
+            reveals = l.reveals - conv,
+            ringBackOff = l.ringBackOff - conv,
+            callHistory = l.callHistory.filterNot { it.conv == conv || it.peerPageId in pages },
+            callBackPages = l.callBackPages - pages,
+            revealedTo = l.revealedTo - pages,
+            replyLatest = l.replyLatest - pages,
+            replySeen = l.replySeen - pages,
+            replyCursor = l.replyCursor - pages,
+        )
     }
 
     fun image(sha: String?): ByteArray? {
@@ -1382,6 +1425,8 @@ class VoiciCenter(
                     callHistory = it.callHistory.filterNot { r -> r.peerPageId == target.pageId },
                 )
             }
+            // The account's other devices forget it too (the synced state's deletion marker).
+            changeState { st -> runCatching { VoiciMessages.forgetConversation(st, conv, visitor.pseudonymPub, now()) }.getOrDefault(st) }
             null
         } catch (e: VoiciHttpError) {
             e.code ?: "network"
@@ -1400,13 +1445,9 @@ class VoiciCenter(
         val keys = ownerKeys(local, umk) ?: return "not-found"
         return try {
             client.deleteConversation(VoiciCallModes.signConvDeleteOwner(keys.pageId, conv, now(), keys.sign.seed))
-            update {
-                it.copy(
-                    conversations = it.conversations.filter { c -> c.conv != conv }, reveals = it.reveals - conv, ringBackOff = it.ringBackOff - conv,
-                    callHistory = it.callHistory.filterNot { r -> r.conv == conv },
-                )
-            }
-            changeState { st -> st.copy(archived = st.archived - conv, accepted = st.accepted - conv) }
+            val pseudonym = local.conversations.firstOrNull { it.conv == conv }?.pseudonymPub?.takeIf { WebEnvelopes.isLowerHex(it, 32) }
+            // The synced state forgets it too, and its marker makes the owner's other devices drop their copies.
+            changeState { st -> runCatching { VoiciMessages.forgetConversation(st, conv, pseudonym, now()) }.getOrDefault(st) }
             _messages.value = _messages.value.copy(missedCalls = _messages.value.missedCalls.filter { it.conv != conv })
             _callHistoryVersion.value += 1
             null
