@@ -910,3 +910,14 @@ Next steps for whoever resumes:
    in the 2026-11-14 entries (co-manager caps, enterprise formulas, calls v2, retail untrusted, direct names, voi.ci
    name caps, payments, wired fleet).
 6. Fly: gym relays are off between runs (`scripts/gym-relays.sh`); a hand-run gym needs `gym-relays.sh on` first.
+
+### 2026-11-16 — Calls: sticky "on another call" fixed (room ends when the answering device leaves)
+- Cause: after an answer, the room ended only on a signed `end`. A phone that gave up connecting (45 s), lost its
+  end, or was killed just closed its room socket, so `voici_live_calls` held the account busy for up to an hour.
+- Fix (`79f3eebe3` gym-0.4, `f0a0dc64a` 0.4/media-fix): `VoiciCallRoomCore.deviceLeft` ends an answered call with
+  `hangup` when the winner's socket closes; the Durable Object ignores a close when an open socket from the same
+  side remains (a replaced caller socket no longer cancels a ringing call). Test added; doc §6 updated.
+- Gym Worker deployed `82b1754a`. Stale rows cleared by hand twice today before the fix.
+- Owner's call test (pre-logging build): call connected; phone heard the room (same room as laptop); laptop got
+  static that varied with ambient sound (phone→laptop audio damaged: suspect frames over 63 bytes dropped);
+  mid-call camera never answered by the phone. Waiting on the next run's Console + `[voici-call]` logs and dump.
