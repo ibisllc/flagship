@@ -16954,5 +16954,109 @@
   "org_ldap_note": {
     "en": "Read-only: the server reads the directory every 15 minutes and never writes to it. The password is sealed to %1$s.",
     "ctx": "Organizations: directory console (docs/org-directory.md)"
+  },
+  "voici_call_action": {
+    "en": "Call",
+    "ctx": "voi.ci calls: button that calls a page from the app"
+  },
+  "voici_call_video_action": {
+    "en": "Video call",
+    "ctx": "voi.ci calls: button that starts a video call from the app"
+  },
+  "voici_calls_history_empty": {
+    "en": "No calls yet. Calls you make and get show here, on this device only.",
+    "ctx": "voi.ci calls: empty call history"
+  },
+  "voici_calls_history_footer": {
+    "en": "Kept on this device only. Missed calls come from Flagship, sealed so only your devices can read them.",
+    "ctx": "voi.ci calls: call history footer"
+  },
+  "voici_calls_history_outgoing": {
+    "en": "Outgoing call",
+    "ctx": "voi.ci calls: call history row"
+  },
+  "voici_calls_history_incoming": {
+    "en": "Incoming call",
+    "ctx": "voi.ci calls: call history row"
+  },
+  "voici_calls_history_declined": {
+    "en": "Declined call",
+    "ctx": "voi.ci calls: call history row"
+  },
+  "voici_calls_history_no_answer": {
+    "en": "No answer",
+    "ctx": "voi.ci calls: call history row, an outgoing call nobody answered"
+  },
+  "voici_calls_history_cancelled": {
+    "en": "Cancelled call",
+    "ctx": "voi.ci calls: call history row"
+  },
+  "voici_calls_history_failed": {
+    "en": "Call didn't connect",
+    "ctx": "voi.ci calls: call history row"
+  },
+  "voici_calls_history_browser": {
+    "en": "Placed in your browser",
+    "ctx": "voi.ci calls: call history row, the call was handed to a voi.ci tab"
+  },
+  "voici_calls_peer_page": {
+    "en": "voi.ci/%1$s",
+    "ctx": "voi.ci calls: the page called; %1$s is its username"
+  },
+  "voici_call_calling": {
+    "en": "Calling %1$s…",
+    "ctx": "voi.ci calls: outgoing call status; %1$s is the page name"
+  },
+  "voici_call_ringing": {
+    "en": "Ringing…",
+    "ctx": "voi.ci calls: outgoing call status"
+  },
+  "voici_call_in_browser": {
+    "en": "Your browser is placing the call to %1$s. Tap Call there.",
+    "ctx": "voi.ci calls: the call went to a voi.ci tab; %1$s is the page name"
+  },
+  "voici_call_off": {
+    "en": "They aren't taking calls right now.",
+    "ctx": "voi.ci calls: refusal"
+  },
+  "voici_call_not_allowed": {
+    "en": "They take calls only from people whose messages they accepted. Send a message first.",
+    "ctx": "voi.ci calls: refusal"
+  },
+  "voici_call_busy": {
+    "en": "They're on another call. Try again later.",
+    "ctx": "voi.ci calls: refusal"
+  },
+  "voici_call_rate_limited": {
+    "en": "Too many calls. Try again later.",
+    "ctx": "voi.ci calls: refusal"
+  },
+  "voici_call_no_browser": {
+    "en": "Flagship couldn't hand the call to your browser. Try again.",
+    "ctx": "voi.ci calls: the browser handoff failed"
+  },
+  "voici_call_no_answer": {
+    "en": "No answer.",
+    "ctx": "voi.ci calls: an outgoing call nobody answered"
+  },
+  "voici_call_declined": {
+    "en": "They can't take your call right now.",
+    "ctx": "voi.ci calls: the callee declined"
+  },
+  "voici_calls_history_line": {
+    "en": "%1$s · %2$s",
+    "ctx": "voi.ci calls: call history row subtitle; %1$s is the outcome (Missed call, Outgoing call), %2$s the date and time"
+  },
+  "voici_call_back": {
+    "en": "Call back",
+    "ctx": "voi.ci calls: button on a missed call in a thread; rings the caller back through the conversation"
+  },
+  "voici_call_back_ringing": {
+    "en": "Ringing them. Their app calls you back here.",
+    "ctx": "voi.ci calls: the ring reached the caller's devices; they dial out to this phone"
+  },
+  "voici_call_back_off": {
+    "en": "They didn't allow call-backs. They can call you again and allow it.",
+    "ctx": "voi.ci calls: the caller chose to call anonymously or stopped call-backs"
   }
 }

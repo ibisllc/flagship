@@ -170,4 +170,55 @@ class GymMessagesTest : GymBase() {
         assertTrue(textOfTag("messages-reply-notice").contains("voi.ci/${GymVoici.OTHER}"))
         gymShot("messages-reply-notice")
     }
+
+    /**
+     * docs/voici-calls.md "Calling from the app": after signing in to Ana's page, the reply notice and Social → Calls
+     * call her. This build has no media engine, so the call is handed to a voi.ci tab over /qr-pipe (a scripted pipe
+     * here), and the call history keeps it on this device.
+     */
+    @Test fun callingAnasPageFromTheAppHandsTheCallToTheBrowser() {
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+            .grantRuntimePermission(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.packageName, android.Manifest.permission.RECORD_AUDIO)
+        launch(tab = "home", deepLink = GymVoici.signInLink())
+        waitUntilExists("voici-signin-review", 20_000)
+        tap("voici-signin-approve")
+        tapMatching(androidx.compose.ui.test.hasTestTag("voici-rules-agree"))
+        waitUntilExists("voici-signin-done", 15_000)
+        tap("voici-signin-done-close")
+        GymVoici.anaTakesCalls()
+        GymVoici.anaReplies()
+        var handed: Pair<String, com.flagshipserver.app.core.voici.VoiciCallHandoffSealed>? = null
+        var opened: String? = null
+        val livePipe = com.flagshipserver.app.calls.VoiciOutgoingCalls.pipeFactory
+        com.flagshipserver.app.calls.VoiciOutgoingCalls.pipeFactory = {
+            object : com.flagshipserver.app.calls.VoiciCallHandoffPipe {
+                override suspend fun deliver(sid: String, sealed: com.flagshipserver.app.core.voici.VoiciCallHandoffSealed, openBrowser: () -> Unit) {
+                    openBrowser()
+                    handed = sid to sealed
+                }
+            }
+        }
+        com.flagshipserver.app.calls.VoiciOutgoingCalls.openBrowserOverride = { opened = it }
+        try {
+            tap("tab-messages")
+            tap("social-tab-messages")
+            eventually(15_000, "the reply notice") {
+                runBlocking { com.flagshipserver.app.core.voici.VoiciCenter.shared!!.checkReplies() }
+                tagCount("reply-notice-call-audio") > 0
+            }
+            tap("reply-notice-call-audio")
+            eventually(20_000, "handed to the browser") { handed != null }
+            assertTrue(opened!!.startsWith("https://voi.ci/${GymVoici.OTHER}#call=${handed!!.first}."))
+            waitUntilExists("outgoing-call-status")
+            gymShot("calls-outgoing-browser")
+            tap("outgoing-call-close")
+            tap("messages-calls")
+            waitUntilExists("calls-row", 15_000)
+            assertTrue(textOfTag("calls-row").contains("voi.ci/${GymVoici.OTHER}"))
+            gymShot("calls-history")
+        } finally {
+            com.flagshipserver.app.calls.VoiciOutgoingCalls.pipeFactory = livePipe
+            com.flagshipserver.app.calls.VoiciOutgoingCalls.openBrowserOverride = null
+        }
+    }
 }

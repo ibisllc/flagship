@@ -40,6 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
@@ -853,6 +854,16 @@ private fun SocialMessages(center: VoiciCenter, ui: com.flagshipserver.app.core.
     val context = LocalContext.current
     var showRequests by rememberSaveable { mutableStateOf(false) }
     val replies by center.replyNotices.collectAsState()
+    val outgoing by com.flagshipserver.app.calls.VoiciOutgoingCalls.current.collectAsState()
+    outgoing?.let { VoiciOutgoingCallPanel(it) }
+    FSGroup {
+        FSRow(
+            title = stringResource(R.string.voici_calls_header),
+            icon = Icons.Outlined.Call,
+            onClick = { nav.navigate("calls") },
+            modifier = Modifier.testTag("messages-calls"),
+        )
+    }
     if (replies.isNotEmpty() && !showRequests) {
         FSGroup {
             replies.forEach { n ->
@@ -860,6 +871,7 @@ private fun SocialMessages(center: VoiciCenter, ui: com.flagshipserver.app.core.
                     title = stringResource(R.string.voici_reply_notice, n.username),
                     icon = Icons.AutoMirrored.Outlined.Reply,
                     iconTint = FS.colors.accent,
+                    trailing = { VoiciCallButtons(com.flagshipserver.app.calls.VoiciCallTarget(n.username, n.pageId), "reply-notice-call") },
                     onClick = {
                         scope.launch { center.openedReply(n) }
                         runCatching {
