@@ -963,6 +963,40 @@ A: a nickname is stored as `{name, at}` so the merge can pick the newer; readUpT
 sides have one; signed-in sites merge by delegatePub (newer `at`); pending ops by opId; output lists sorted. Wire:
 `{version, nonce:<hex>, ct:<b64>}`.
 
+#### 10.1.1 Delete = forget across the owner's devices (state v2, 0.4)
+
+Deleting a conversation (owner side or caller side; `docs/voici-calls.md` "Deleting a conversation") must forget it on
+every device of the account, but the union merge above brings a deleted conversation's entries back from any device
+that still holds them. `.com` keeps no tombstone (owner rule), so the marker lives inside the sealed state, where the
+server sees only ciphertext:
+
+- **Format.** v2 adds one field: `{v:2, …the v1 fields…, forgotten:{<conv>: {at, pseudonymPub}}}`. `conv` is 32 bytes
+  of hex, or 16 for an anonymous caller's conversation; `at` is the delete time (ms) on the deleting device;
+  `pseudonymPub` is the caller's pseudonym (32-byte hex) or `null` (anonymous, or unknown). A state is written as v1
+  while it holds no marker and as v2 while it holds one, so v1 readers keep working until somebody deletes; every reader
+  accepts both. A v1 object carrying `forgotten`, a v2 one without it, or a marker with any other field is refused.
+- **Delete** (`forgetConversation(state, conv, pseudonymPub, at)`): drops the conversation's `accepted` and
+  `archived` entries and `readUpTo` mark, the caller's nickname and block, and records the marker (the newer `at` when
+  one is already there).
+- **Merge rule** (`mergeMessagesState(local, remote, now)`): markers whose `at` is 30 days or more before `now` are
+  dropped (`VOICI_FORGET_KEEP_MS`). Then, per conversation, the side with the newer marker wins: the other side (no
+  marker, or an older one) loses its entries for that conversation before the v1 union. Entries that sit beside a
+  marker as new as the other side's were made after the delete (the same caller wrote again and the owner accepted,
+  renamed or read it), so they stay. The merged state keeps the newer marker. The rule is deterministic, so every port
+  answers the same bytes (vectors `test-vectors/messages` section `stateForget`, including the two-device run).
+- **What each device keeps by itself** (never synced) goes too, once per marker: each device remembers which markers it
+  has acted on (`forgetApplied`, conv → `at`), and the first time it sees a newer one it drops the conversation's
+  stored messages, its checked reveal, ring-back flags, missed calls and call records (owner side, by conv) and, when the
+  conversation is the account's own as a caller on another page (conv = H(pageId, own pseudonym)), that page's reveal
+  switch, call-back record, reply notices and calls (caller side). Anything that arrives after stays. The webapp keeps
+  no messages of its own; it drops placed calls to that page made before the marker's `at`.
+- **The bound.** A device that does not sync for 30 days after a delete can bring the deleted conversation's
+  state-blob entries back once (the marker has been pruned by then). Its own stored messages for the conversation are
+  not affected by that (`.com` dropped the mailbox; they stay only on that device until the owner deletes again).
+- **Old builds.** A build that reads only v1 cannot open a v2 state; until 30 days after the last delete it ignores the
+  stored state (and an Android build that writes on top may overwrite it). Pre-release: the apps that read v2 ship
+  together in 0.4.
+
 ### 10.2 Rotation and recovery
 
 Recovery keeps the UMK, so everything continues. Wipe & restart makes a new UMK: the app publishes a new index with
