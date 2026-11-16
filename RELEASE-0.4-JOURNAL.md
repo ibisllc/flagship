@@ -667,6 +667,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   conversation; the owner's app verifies it against `.com`'s page key and shows a pill; turning it off removes the
   pill (the sheet warns it may already have been seen). Given to the calls-callback agent.
 
+- 2026-11-16: Owner: the reveal shows `Display Name (username)` or `username`, with an **info icon by every printed
+  chosen name**: "This is a name the person chose. Flagship doesn't check names, so anyone can use any name." Idea
+  for later (possibly paid): `.com`-signed plain-text **verification notes** ("We checked that this account controls
+  nike.com"), no links and never fetched by the viewer: the caller carries the note inside the reveal. Not in 0.4
+  unless the owner says so (doc: "What the reveal shows").
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:

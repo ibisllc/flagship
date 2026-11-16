@@ -586,3 +586,26 @@ in the call screen: "<pageName> ✓" (tapping it opens the page). A reveal that 
   already have seen it ("Turning this off hides the name, but <name> may already have seen it").
 - Alice's side has no reveal switch: the page owner is already known by her page.
 - Ring-back is unchanged by a reveal; it still goes through the conversation's channel, never Bob's bare name.
+
+#### What the reveal shows, and "names aren't checked" (owner, 2026-11-16)
+
+- A page is `voi.ci/<username>`; the username is the unique handle and the page's key is bound to it. The display
+  name is free text on the page record (1-64 chars, `voici-and-messages.md` §168), never checked. So the reveal
+  carries the **username**, plus the display name copied from the caller's signed page record when one is set.
+  The pill reads `Philip Jackson (jumbo-karaoke)`, or `jumbo-karaoke` alone with no display name. The reveal's
+  signed bytes become `flagship/voici-reveal/v1|<conversationId>|<username>|<displayNameSha256 or ->|<issuedAt>`;
+  the display name travels beside it and must hash to the signed value.
+- **An info icon sits right by every printed chosen name** (this pill, and anywhere else we print a display
+  name). Tapping it shows a sheet: "This is a name the person chose. Flagship doesn't check names, so anyone can
+  use any name." The username line says "<username> is this person's voi.ci page."
+- **Verification notes (later, possibly paid; not in 0.4 unless the owner says so).** Opt-in for people who *want*
+  to be identifiable (a brand, a public figure); anonymous use is untouched, and a reveal is optional anyway.
+  `.com` writes a short plain-text note per username, e.g. "We checked that this account controls nike.com" or
+  "We checked that this account runs @jumbo-karaoke on Threads", and signs
+  `flagship/voici-verified/v1|<username>|<noteSha256>|<issuedAt>|<expiresAt>` with a pinned `.com` attestation key.
+  The info sheet then shows that note instead of "doesn't check names".
+  - **No links, no fetching.** The note is plain text only (no URLs rendered as links, no markup); the apps never
+    turn it into a link and never fetch anything to show it. The caller's app fetches its own current note and
+    carries it inside the sealed reveal, so the person viewing it makes no request at all (nothing tells `.com` who
+    looked at whom). The viewer checks the signature against the pinned key and the expiry, offline.
+  - Open for the owner: price, how checks are done (DNS TXT for domains, a post for social handles), renewal.
