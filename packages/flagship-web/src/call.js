@@ -228,15 +228,27 @@ export function startVoiciCall(o) {
     attachTransform(deps, o.worker, e.receiver, "receive", e.track.kind === "video" ? "video" : "audio");
     remoteStream.addTrack(e.track);
   };
+  const diag = (...a) => {
+    try {
+      console.info("[voici-call]", ...a);
+    } catch {
+      /* no console */
+    }
+  };
   pc.onicecandidate = (e) => {
     // A candidate here is a relay candidate: their phone's TURN allocated it.
+    diag("local candidate", e.candidate ? `${e.candidate.type ?? "?"}/${e.candidate.protocol ?? "?"}` : "end");
     if (e.candidate) steps.step("path");
     if (state === "connecting" || state === "connected") send({ t: "ice", candidate: e.candidate ? e.candidate.candidate : null });
   };
+  pc.onicecandidateerror = (e) => diag("candidate error", e.errorCode, e.errorText, e.url);
+  pc.onicegatheringstatechange = () => diag("ice gathering", pc.iceGatheringState);
   pc.oniceconnectionstatechange = () => {
+    diag("ice connection", pc.iceConnectionState);
     if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") steps.step("audio");
   };
   pc.onconnectionstatechange = () => {
+    diag("connection", pc.connectionState);
     if (pc.connectionState === "connected") set("connected");
     if (pc.connectionState === "failed") set("failed", { code: "unreachable" });
   };
@@ -257,6 +269,7 @@ export function startVoiciCall(o) {
     pc.setConfiguration({ iceServers: [voiciCallIceServer(o.username, cfg.services, answer)], iceTransportPolicy: "relay", bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
     await pc.setLocalDescription({ type: "offer", sdp: request.offerSdp });
     await pc.setRemoteDescription({ type: "answer", sdp: answer.answerSdp });
+    diag("answer applied", (answer.answerSdp.match(/^a=candidate:/gm) ?? []).length, "remote candidates");
     steps.step("reach");
     for (const c of pendingIce.splice(0)) await pc.addIceCandidate(c === null ? null : { candidate: c, sdpMid: "0" }).catch(() => {});
     limitTimer = setTimeout(() => set("ended", { reason: "limit" }), VOICI_CALL_MAX_MS);

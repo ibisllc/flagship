@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import os
 import Security
 import CryptoKit
 import FlagshipAPI
@@ -174,12 +175,27 @@ final class PhoneTlsTerminator: @unchecked Sendable {
         guard expected.remove(remotePort.rawValue) != nil else {
             // Our own connection may report its local port a moment after the listener sees it; anything else is
             // another process on this device and is refused.
-            if retried { c.cancel() } else { queue.asyncAfter(deadline: .now() + 0.3) { self.accept(c, retried: true) } }
+            if retried {
+                if CallTurnGate.shared.isArmed { callPathLog.notice("relayed stream refused: unknown local port") }
+                c.cancel()
+            } else { queue.asyncAfter(deadline: .now() + 0.3) { self.accept(c, retried: true) } }
             return
         }
         // A draft envelope may be 1 MiB (docs/voici-and-messages.md §5.2); the deliver handler applies each kind's cap.
         var reader = HttpRequestReader(maxBytes: VoiciMessages.draftMaxEnvelopeBytes + 16 * 1024)
         var decided = false
+        // Only while a call is armed, so the log carries the call path and not every message delivery.
+        let duringCall = CallTurnGate.shared.isArmed
+        if duringCall { callPathLog.notice("relayed stream accepted (call armed)") }
+        c.stateUpdateHandler = { st in
+            guard duringCall else { return }
+            switch st {
+            case .ready: callPathLog.notice("relayed stream: tls ready")
+            case .failed(let e): callPathLog.notice("relayed stream: tls failed \(String(describing: e), privacy: .public)")
+            case .waiting(let e): callPathLog.notice("relayed stream: tls waiting \(String(describing: e), privacy: .public)")
+            default: break
+            }
+        }
         func read() {
             c.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [responder] data, _, done, err in
                 if let data, !data.isEmpty {
@@ -187,6 +203,7 @@ final class PhoneTlsTerminator: @unchecked Sendable {
                     if !decided, let first = data.first {
                         decided = true
                         let (route, conn) = CallTurnGate.shared.open(firstByte: first)
+                        if duringCall { callPathLog.notice("relayed stream: first byte 0x\(String(format: "%02x", first), privacy: .public) -> \(String(describing: route), privacy: .public)") }
                         switch route {
                         case .http: break
                         case .close:
@@ -211,6 +228,7 @@ final class PhoneTlsTerminator: @unchecked Sendable {
                         return
                     }
                 }
+                if let err, duringCall { callPathLog.notice("relayed stream: read error \(String(describing: err), privacy: .public)") }
                 if done || err != nil { c.cancel() } else { read() }
             }
         }
@@ -226,11 +244,20 @@ final class PhoneTlsTerminator: @unchecked Sendable {
             return true
         }
         conn.attach(toClient: { b in c.send(content: b, completion: .contentProcessed { _ in }) }, end: { c.cancel() })
-        guard feed(first) else { conn.close(); c.cancel(); return }
+        guard feed(first) else {
+            callPathLog.notice("turn stream: responder refused the first bytes")
+            conn.close(); c.cancel(); return
+        }
         func next() {
             c.receive(minimumIncompleteLength: 1, maximumLength: 16 * 1024) { data, _, done, err in
-                if let data, !data.isEmpty, !feed(data) { conn.close(); c.cancel(); return }
-                if done || err != nil { conn.close(); c.cancel() } else { next() }
+                if let data, !data.isEmpty, !feed(data) {
+                    callPathLog.notice("turn stream: responder refused client bytes")
+                    conn.close(); c.cancel(); return
+                }
+                if done || err != nil {
+                    callPathLog.notice("turn stream: ended (\(err.map { String(describing: $0) } ?? "eof", privacy: .public))")
+                    conn.close(); c.cancel()
+                } else { next() }
             }
         }
         next()
