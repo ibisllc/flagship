@@ -110,6 +110,15 @@ public final class PushNotifications: NSObject {
         return VoiciCallPush.parse(info)
     }
 
+    /// A page owner ringing this account back (docs/voici-calls.md "ringing a caller back"): `{kind:"voici-ring", ringId,
+    /// hint, room}`, nested under `flagship-call` in a VoIP push, flat in an ordinary one. No text: the hint is sealed to
+    /// this account's thread key for that page.
+    public nonisolated static func voiciRing(_ info: [AnyHashable: Any]) -> VoiciRingPush? {
+        let d = (info["flagship-call"] as? [AnyHashable: Any]) ?? info
+        guard (d["kind"] as? String) == "voici-ring" else { return nil }
+        return VoiciRingPush.parse(d)
+    }
+
     /// Where a tapped push leads: its app link when it carries one, else
     /// what its `kind` / `category` names.
     public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
@@ -340,6 +349,20 @@ public struct VoiciCallPush: Equatable, Sendable {
         let at: Int64? = (d["issuedAt"] as? String).flatMap(Int64.init) ?? (d["issuedAt"] as? NSNumber)?.int64Value
         guard let issuedAt = at else { return nil }
         return VoiciCallPush(callId: callId, room: room, sealed: sealed, issuedAt: issuedAt)
+    }
+}
+
+/// The fields of a ring-back push: the ring id and the hint (base64), sealed to the caller's thread key.
+public struct VoiciRingPush: Equatable, Sendable {
+    public let ringId: String
+    public let hint: String
+
+    public init(ringId: String, hint: String) { self.ringId = ringId; self.hint = hint }
+
+    public static func parse(_ d: [AnyHashable: Any]) -> VoiciRingPush? {
+        guard let id = d["ringId"] as? String, CanonicalJson.isLowerHex(id, bytes: 16), let hint = d["hint"] as? String,
+              !hint.isEmpty, hint.count <= 8192, CanonicalJson.b64Decode(hint) != nil else { return nil }
+        return VoiciRingPush(ringId: id, hint: hint)
     }
 }
 

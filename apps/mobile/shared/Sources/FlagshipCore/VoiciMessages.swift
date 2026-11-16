@@ -229,12 +229,25 @@ public enum VoiciMessages {
     /// `rnd` only for vectors; omitted, everything is fresh randomness.
     public static func sealVoiciBody(conv: String, msgId: String, sentAt: Int64, fromPub: String, recipients: [[UInt8]],
                                      plaintext: VoiciPlaintext, randomness rnd: VoiciSealRandomness? = nil) throws -> [UInt8] {
+        try sealVoiciBodyBytes(conv: conv, msgId: msgId, sentAt: sentAt, fromPub: fromPub, recipients: recipients, plaintext: try plaintextBytes(plaintext), randomness: rnd)
+    }
+
+    /// A conversation control instead of text (docs/voici-calls.md "Reveal who I am"): the body {v:1, control}.
+    public static func sealVoiciControl(conv: String, msgId: String, sentAt: Int64, fromPub: String, recipients: [[UInt8]],
+                                        control: JSONValue, randomness rnd: VoiciSealRandomness? = nil) throws -> [UInt8] {
+        guard control.object != nil else { throw CanonicalJsonError("voici body: bad control") }
+        return try sealVoiciBodyBytes(conv: conv, msgId: msgId, sentAt: sentAt, fromPub: fromPub, recipients: recipients,
+                                      plaintext: try CanonicalJson.canonicalJsonBytes(VoiciConversations.controlBody(control)), randomness: rnd)
+    }
+
+    static func sealVoiciBodyBytes(conv: String, msgId: String, sentAt: Int64, fromPub: String, recipients: [[UInt8]],
+                                   plaintext: [UInt8], randomness rnd: VoiciSealRandomness?) throws -> [UInt8] {
         guard CanonicalJson.isLowerHex(msgId, bytes: 16), CanonicalJson.isLowerHex(conv, bytes: 32), CanonicalJson.isLowerHex(fromPub),
               sentAt >= 0, recipients.count == 2 else { throw CanonicalJsonError("voici body: bad ids") }
         let cek = rnd?.cek ?? random(32)
         let nonce = rnd?.nonce ?? random(12)
         guard cek.count == 32, nonce.count == 12 else { throw CanonicalJsonError("voici body: bad randomness") }
-        let ct = try gcmSeal(key: cek, nonce: nonce, aad: "\(tagVoiciBody)|\(conv)|\(msgId)", try plaintextBytes(plaintext))
+        let ct = try gcmSeal(key: cek, nonce: nonce, aad: "\(tagVoiciBody)|\(conv)|\(msgId)", plaintext)
         let senderKeyId = CanonicalJson.sha256(try CanonicalJson.hexToBytes(fromPub))
         var wraps: [JSONValue] = []
         for (i, pub) in recipients.enumerated() {
@@ -281,11 +294,33 @@ public enum VoiciMessages {
             return .refused(.decryptFailed)
         }
         guard let text = CanonicalJson.utf8Decode(pt), let v = JSONValue.parse(text) else { return .refused(.innerSchema) }
+        return innerPlaintext(v, text)
+    }
+
+    static func innerPlaintext(_ v: JSONValue, _ text: String) -> VoiciVerdict<VoiciPlaintext, VoiciOpenRefusal> {
         guard let r = v.object, Set(r.keys) == ["v", "text", "replyTo"], r["v"]?.isOne == true, r["text"]?.isJSString == true,
               let rt = r["replyTo"], rt.isNull || CanonicalJson.isLowerHex(rt, bytes: 16) else { return .refused(.innerSchema) }
         if let tr = VoiciText.checkVoiciText(.messageText, r["text"]) { return .refused(VoiciOpenRefusal(rawValue: tr.rawValue)!) }
         guard CanonicalJson.isCanonical(v, text) else { return .refused(.innerSchema) }
         return .ok(VoiciPlaintext(text: r["text"]!.string!, replyTo: rt.string))
+    }
+
+    /// A body that holds a conversation control (a reveal or an unreveal) for this conversation, or nil (text, or
+    /// anything that doesn't open or parse).
+    public static func openVoiciControl(_ bodyBytes: [UInt8], conv: String, msgId: String, recipientSeed: [UInt8]) -> VoiciConversations.Control? {
+        guard let b = parseVoiciSealedBody(bodyBytes), let pub = try? PqHybrid.hybridSealKeygen(seed: recipientSeed).publicKey else { return nil }
+        let myId = CanonicalJson.hex(PqHybrid.pqKeyId(suite: PqHybrid.suiteHybridSealV1, publicKey: pub))
+        guard let w = b.wraps.first(where: { $0.keyId == myId }),
+              let cek = try? PqHybrid.hybridOpen(recipientSecretKey: recipientSeed, expectedPurpose: tagVoiciCek,
+                                                 context: [Array(conv.utf8), Array(msgId.utf8)], sealed: CanonicalJson.b64Decode(w.sealed)!).plaintext,
+              cek.count == 32, let nonce = try? CanonicalJson.hexToBytes(b.nonce),
+              let pt = try? gcmOpen(key: cek, nonce: nonce, aad: "\(tagVoiciBody)|\(conv)|\(msgId)", CanonicalJson.b64Decode(b.ct)!),
+              let text = CanonicalJson.utf8Decode(pt), let v = JSONValue.parse(text), let r = v.object, Set(r.keys) == ["v", "control"], r["v"]?.isOne == true,
+              CanonicalJson.isCanonical(v, text), let c = VoiciConversations.parseControl(r["control"]) else { return nil }
+        switch c {
+        case .reveal(let x): return x.conv == conv ? c : nil
+        case .unreveal(let cv, _): return cv == conv ? c : nil
+        }
     }
 
     // MARK: thread statement

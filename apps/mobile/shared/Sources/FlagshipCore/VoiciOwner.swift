@@ -28,6 +28,12 @@ public struct VoiciConversation: Equatable, Sendable, Identifiable {
     public var messages: [VoiciThreadMessage]
     /// A visitor's `seq` skips a number: "Some messages haven't arrived yet".
     public var hasGap: Bool
+    /// The newest reveal or unreveal the visitor sent (docs/voici-calls.md "Reveal who I am"), not yet checked: the app
+    /// checks a reveal against the page key `.com` serves for its username before it shows the pill.
+    public var control: VoiciConversations.Control?
+    /// The seq numbers the controls used (they count toward the visitor's sequence, so no gap shows).
+    public var controlSeqs: [Int64] = []
+    var controlAt: Int64?
     public var id: String { conv }
     public init(conv: String, pseudonymPub: String, threadPub: String, messages: [VoiciThreadMessage], hasGap: Bool) {
         self.conv = conv; self.pseudonymPub = pseudonymPub; self.threadPub = threadPub; self.messages = messages; self.hasGap = hasGap
@@ -109,8 +115,17 @@ public enum VoiciOwner {
                 let sentAt = item.envelope["sentAt"]?.time ?? 0
                 let ctx = VoiciMessageCheckContext(pageId: pageId, acceptsMessages: true, origin: origin, caKeys: caKeys, now: sentAt)
                 guard case .ok(let ok) = VoiciMessages.checkVoiciMessage(item.envelope, ctx), !seen.contains(ok.envelope.conv + ok.envelope.msgId),
-                      let body = CanonicalJson.b64Decode(ok.envelope.bodyB64),
-                      case .ok(let pt)? = try? VoiciMessages.openVoiciBody(body, conv: ok.envelope.conv, msgId: ok.envelope.msgId, recipientSeed: inboxSeed)
+                      let body = CanonicalJson.b64Decode(ok.envelope.bodyB64) else { continue }
+                if let control = VoiciMessages.openVoiciControl(body, conv: ok.envelope.conv, msgId: ok.envelope.msgId, recipientSeed: inboxSeed) {
+                    seen.insert(ok.envelope.conv + ok.envelope.msgId)
+                    var c = byConv[ok.envelope.conv] ?? VoiciConversation(conv: ok.envelope.conv, pseudonymPub: ok.envelope.from, threadPub: "", messages: [], hasGap: false)
+                    c.threadPub = ok.cred.threadStmt.threadPub
+                    c.controlSeqs.append(ok.envelope.seq)
+                    if (c.controlAt ?? -1) <= ok.envelope.sentAt { c.control = control; c.controlAt = ok.envelope.sentAt }
+                    byConv[ok.envelope.conv] = c
+                    continue
+                }
+                guard case .ok(let pt)? = try? VoiciMessages.openVoiciBody(body, conv: ok.envelope.conv, msgId: ok.envelope.msgId, recipientSeed: inboxSeed)
                 else { continue }
                 seen.insert(ok.envelope.conv + ok.envelope.msgId)
                 var c = byConv[ok.envelope.conv] ?? VoiciConversation(conv: ok.envelope.conv, pseudonymPub: ok.envelope.from, threadPub: "", messages: [], hasGap: false)
@@ -138,7 +153,7 @@ public enum VoiciOwner {
             guard !conv.pseudonymPub.isEmpty else { return nil }
             var c = conv
             c.messages.sort { $0.sentAt != $1.sentAt ? $0.sentAt < $1.sentAt : CanonicalJson.utf16Less($0.msgId, $1.msgId) }
-            let seqs = Set(c.messages.filter { !$0.fromOwner }.map(\.seq))
+            let seqs = Set(c.messages.filter { !$0.fromOwner }.map(\.seq) + c.controlSeqs)
             c.hasGap = (seqs.max() ?? 0) > Int64(seqs.count)
             return c
         }.sorted { $0.lastAt != $1.lastAt ? $0.lastAt > $1.lastAt : $0.conv < $1.conv }
