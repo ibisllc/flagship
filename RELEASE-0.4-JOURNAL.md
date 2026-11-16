@@ -759,6 +759,15 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   parity 0 red, vitest 6262; Android call/voici/push tests; shared Swift 22 + iOS 28; iOS app builds against the
   release's WebRTC. Not run: gym UI tests, any device, a real browser-to-phone or phone-to-phone call.
 
+- 2026-11-16: **conv-forget merged** (shell **v222**, no migration, no `.com` change). Delete = forget on all the
+  owner's devices: Messages state v2 adds `forgotten: {conv: {at, pseudonymPub}}` (still written as v1 without
+  markers); the newer marker wins over older entries at merge, markers expire after 30 days; each device drops
+  everything it holds for that conversation the first time it sees a new marker (messages, reveal, ring-back,
+  missed calls, call records; caller side too). TS, webapp, flagship-web (voi.ci site rebuilt), Swift, Kotlin, shared
+  vectors, parity row `voici-conv-forget`. Checks: tsc, i18n, parity 0 red, vitest web + protocol 6074; Swift 12, iOS
+  21, iOS app builds; Android 91. Open: a device offline > 30 days after a delete can bring entries back once; older
+  iOS "deletes" stay archived only; old builds can't read v2 (pre-release: accepted).
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
@@ -770,7 +779,7 @@ State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branc
 - org directory with SCIM/LDAP connectors (all three apps);
 - restore, enterprise, retail, cloud fixes; terms and privacy wording for 0.4.
 
-Shell **v221**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
+Shell **v222**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
 running.
 
 Next steps for whoever resumes:
@@ -785,8 +794,7 @@ Next steps for whoever resumes:
    custody. These are the release's remaining risk.
 4. **Open, decided later or not in 0.4:** verification notes (paid, idea only); IPv6-only gym (blocked on UpCloud
    IPv4-only boxes and `.com`'s IPv4 checks; fold into "make Fly redundant"); libwebrtc builds are not byte
-   reproducible; the caller's video in the call screens; delete on iOS can't fully forget across the owner's devices
-   (the synced Messages state merges by union: needs a format change).
+   reproducible; the caller's video in the call screens.
 5. **Waiting on the owner:** at release, sign the webapp shell (`docs/webapp-key-custody.md`) and then set
    `SHELL_SIGNATURE_REQUIRED=true`; a KVM host for the retail VM test (`tools/retail-vm/run.sh`); the older questions
    in the 2026-11-14 entries (co-manager caps, enterprise formulas, calls v2, retail untrusted, direct names, voi.ci
