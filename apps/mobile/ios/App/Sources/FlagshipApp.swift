@@ -903,7 +903,6 @@ struct FlagshipApp: App {
                                 try await GymLiveAdoption.adopt(
                                     gymArgs,
                                     app: appState,
-                                    dev: dev,
                                     store: sessionStore,
                                     privacy: privacy,
                                     urlSession: BoxPinnedURLSession.make(

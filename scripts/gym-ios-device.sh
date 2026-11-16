@@ -64,7 +64,7 @@ if grep -rn 'group\.com\.flagshipserver\.app[^.]' "${EDITED[@]:3}" | grep -v "$G
 rm -rf "$OUT"; mkdir -p "$OUT"
 xcodebuild -project "$IOS/App/FlagshipApp.xcodeproj" -scheme FlagshipApp -configuration Debug \
   -destination generic/platform=iOS -derivedDataPath "$OUT/dd" -archivePath "$OUT/FlagshipGym.xcarchive" \
-  -allowProvisioningUpdates DEVELOPMENT_TEAM="$TEAM" archive | tail -5
+  -allowProvisioningUpdates DEVELOPMENT_TEAM="$TEAM" archive 2>&1 | tee "$OUT/archive.log" | tail -5
 cat > "$OUT/export.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
