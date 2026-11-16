@@ -6,17 +6,17 @@ import FlagshipAPI
 
 /// **Secure your account** — the skippable backup nudge shown right after
 /// a brand-new account is opened (OpenAccount) and before the user lands
-/// in the main app. Cloud is pre-selected; the user can pick a backup
-/// file instead, or skip behind a clear warning.
+/// in the main app. Cloud and a backup file are two independent ticks,
+/// both off at first; Continue runs every ticked one (cloud first, then the
+/// file). Skip warns from the Skip button itself.
 ///
 /// This screen REUSES the two existing backup mechanisms:
-///   - cloud → the WebAuthn-PRF cloud recovery (RecoveryViewModel), which
-///     wraps the live UMK under a passkey-derived key and ships the
-///     envelope to flagshipserver.com,
+///   - cloud → the WebAuthn-PRF cloud recovery (RecoveryViewModel),
+///     which wraps the live UMK under a passkey-derived key and a recovery
+///     passphrase and ships the envelope to flagshipserver.com; the
+///     passphrase fields show only while cloud is ticked, inside its row,
 ///   - file  → the existing KeyfileExportScreen / KeyfileExportViewModel
-///     (`.flagshipkey` export), presented as a sheet.
-///
-/// Copy is verbatim + shared cross-surface for consistency.
+///     (`.flagshipkey` export, with its own passphrase), presented as a sheet.
 public struct SecureAccountScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.flagshipServerClient) private var server
@@ -34,6 +34,8 @@ public struct SecureAccountScreen: View {
     @State private var cloudWorking = false
     @State private var cloudPassphrase = ""
     @State private var cloudPassphrase2 = ""
+    /// Cloud backup finished on an earlier Continue (the file is still to do).
+    @State private var cloudDone = false
 
     public init(
         username: String,
@@ -52,31 +54,19 @@ public struct SecureAccountScreen: View {
         FSScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s6) {
-                    Spacer().frame(height: FS.space.s8)
-
-                    VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text("Secure your account")
-                            .font(FS.font.h2())
-                            .foregroundColor(c.text)
-                        Text("Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.")
-                            .font(FS.font.body())
-                            .foregroundColor(c.textMuted)
-                    }
+                    Text("Back up your account now so you can get back in if you lose this device. We cannot recover it for you.")
+                        .font(FS.font.body())
+                        .foregroundColor(c.textMuted)
+                        .padding(.top, FS.space.s4)
 
                     VStack(spacing: FS.space.s3) {
                         cloudRow(c: c)
                         fileRow(c: c)
                     }
 
-                    if vm.selected == .cloud {
-                        cloudPassphraseFields(c: c)
-                    }
-
                     if let cloudError {
                         ErrorCard(message: cloudError)
                     }
-
-                    Spacer().frame(height: FS.space.s4)
 
                     FSPrimaryButton(
                         cloudWorking ? String(localized: "Backing up…") : String(localized: "Continue"),
@@ -98,6 +88,18 @@ public struct SecureAccountScreen: View {
                     .buttonStyle(.plain)
                     .disabled(cloudWorking)
                     .accessibilityIdentifier("secure-account-skip")
+                    // The warning pops up from Skip itself: a popover anchored
+                    // to the button on iPad and iPhone alike.
+                    .popover(
+                        isPresented: Binding(
+                            get: { vm.showSkipConfirm },
+                            set: { if !$0 { vm.cancelSkip() } }
+                        ),
+                        arrowEdge: .bottom
+                    ) {
+                        skipWarning(c: c)
+                            .presentationCompactAdaptation(.popover)
+                    }
                 }
                 .padding(.horizontal, FS.space.s6)
                 .padding(.bottom, FS.space.s8)
@@ -117,21 +119,6 @@ public struct SecureAccountScreen: View {
                     username: { [username] in username }
                 )
             }
-        }
-        .confirmationDialog(
-            "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.",
-            isPresented: Binding(
-                get: { vm.showSkipConfirm },
-                set: { if !$0 { vm.cancelSkip() } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Skip anyway", role: .destructive) {
-                vm.cancelSkip()
-                onSkip()
-            }
-            .accessibilityIdentifier("secure-account-skip-anyway")
-            Button("Back", role: .cancel) { vm.cancelSkip() }
         }
         .sheet(isPresented: $showFileExport) {
             NavigationStack {
@@ -153,10 +140,37 @@ public struct SecureAccountScreen: View {
 
     // MARK: - Rows
 
+    /// The skip warning, shown in a popover anchored to Skip.
+    private func skipWarning(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.")
+                .font(FS.font.bodySm())
+                .foregroundColor(c.text)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: FS.space.s3) {
+                Button("Back") { vm.cancelSkip() }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("secure-account-skip-back")
+                Spacer(minLength: 0)
+                Button("Skip anyway", role: .destructive) {
+                    vm.cancelSkip()
+                    onSkip()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .accessibilityIdentifier("secure-account-skip-anyway")
+            }
+        }
+        .padding(FS.space.s4)
+        .frame(idealWidth: 320, maxWidth: 360)
+    }
+
     /// Recovery-passphrase entry for cloud backup (Task #4). Mirrors
     /// recovery.js enroll: two fields, 8+ chars, must match. The passphrase
     /// is Argon2id-hardened on enroll and is REQUIRED — plus the passkey —
-    /// to recover on a new device.
+    /// to recover on a new device. It belongs to cloud backup only (the
+    /// file export asks for its own), so it shows inside the cloud row
+    /// while cloud is ticked.
     private func cloudPassphraseFields(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             Text("Recovery passphrase")
@@ -165,6 +179,7 @@ public struct SecureAccountScreen: View {
             Text("Treat this like a password — write it down somewhere safe. You'll need it, plus your passkey, to get back in on a new device. We can't reset it.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
             SecureField("Passphrase (8+ characters)", text: $cloudPassphrase)
                 .textContentType(.newPassword)
                 .autocorrectionDisabled(true)
@@ -183,44 +198,67 @@ public struct SecureAccountScreen: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("secure-account-passphrase-hint")
         }
-        .padding(FS.space.s4)
+        .padding([.horizontal, .bottom], FS.space.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(c.surface)
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
     }
 
     private func cloudRow(c: FSColors) -> some View {
-        optionRow(
-            selected: vm.selected == .cloud,
-            enabled: vm.canSelectCloud,
-            icon: "icloud.fill",
-            title: String(localized: "Back up to iCloud"),
-            subtitle: vm.iCloudAvailable
-                ? String(localized: "Syncs securely with your other Apple devices.")
-                : "iCloud is off — turn it on in Settings, or use a backup file.",
-            id: "secure-account-option-cloud",
-            c: c
-        ) {
-            vm.selectCloud()
+        let checked = vm.cloudSelected || cloudDone
+        return optionCard(checked: checked, c: c) {
+            optionRow(
+                checked: checked,
+                enabled: vm.canSelectCloud && !cloudDone && !cloudWorking,
+                icon: "icloud.fill",
+                title: String(localized: "Back up to iCloud"),
+                subtitle: vm.iCloudAvailable
+                    ? String(localized: "Syncs securely with your other Apple devices.")
+                    : "iCloud is off — turn it on in Settings, or use a backup file.",
+                id: "secure-account-option-cloud",
+                c: c
+            ) {
+                vm.toggleCloud()
+            }
+            if vm.cloudSelected && !cloudDone {
+                cloudPassphraseFields(c: c)
+            }
         }
     }
 
     private func fileRow(c: FSColors) -> some View {
-        optionRow(
-            selected: vm.selected == .file,
-            enabled: true,
-            icon: "doc.badge.arrow.up.fill",
-            title: String(localized: "Save a backup file"),
-            subtitle: String(localized: "An encrypted .flagshipkey you keep yourself."),
-            id: "secure-account-option-file",
-            c: c
-        ) {
-            vm.selectFile()
+        optionCard(checked: vm.fileSelected, c: c) {
+            optionRow(
+                checked: vm.fileSelected,
+                enabled: !cloudWorking,
+                icon: "doc.badge.arrow.up.fill",
+                title: String(localized: "Save a backup file"),
+                subtitle: String(localized: "An encrypted .flagshipkey you keep yourself."),
+                id: "secure-account-option-file",
+                c: c
+            ) {
+                vm.toggleFile()
+            }
         }
     }
 
+    private func optionCard<Content: View>(
+        checked: Bool,
+        c: FSColors,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) { content() }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(c.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
+                    .stroke(checked ? c.accent : c.border, lineWidth: checked ? 2 : 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+    }
+
+    /// One tickable backup option: a checkbox, since the two are
+    /// independent (either, both, or neither).
     private func optionRow(
-        selected: Bool,
+        checked: Bool,
         enabled: Bool,
         icon: String,
         title: String,
@@ -233,12 +271,12 @@ public struct SecureAccountScreen: View {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 Image(systemName: icon)
                     .imageScale(.large)
-                    .foregroundColor(enabled ? c.accent : c.textMuted)
+                    .foregroundColor(enabled || checked ? c.accent : c.textMuted)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(FS.font.h4())
-                        .foregroundColor(enabled ? c.text : c.textMuted)
+                        .foregroundColor(enabled || checked ? c.text : c.textMuted)
                     Text(subtitle)
                         .font(FS.font.bodySm())
                         .foregroundColor(c.textMuted)
@@ -246,37 +284,36 @@ public struct SecureAccountScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                Image(systemName: checked ? "checkmark.square.fill" : "square")
                     .imageScale(.large)
-                    .foregroundColor(selected ? c.accent : c.border)
+                    .foregroundColor(checked ? c.accent : c.border)
             }
             .padding(FS.space.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(c.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
-                    .stroke(selected ? c.accent : c.border, lineWidth: selected ? 2 : 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
-            .opacity(enabled ? 1 : 0.6)
+            .contentShape(Rectangle())
+            .opacity(enabled || checked ? 1 : 0.6)
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
         .accessibilityIdentifier(id)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityAddTraits(checked ? [.isSelected] : [])
     }
 
     // MARK: - Actions
 
+    /// Runs every ticked backup: cloud first (it stays on this screen for
+    /// its passphrase and passkey), then the file export sheet, whose Done
+    /// enters the app. Cloud alone enters the app as soon as it is set up.
     private func onContinue() async {
         cloudError = nil
-        switch vm.selected {
-        case .cloud:
+        if vm.cloudSelected && !cloudDone {
             await setUpCloudBackup()
-        case .file:
+            guard cloudDone else { return }
+        }
+        if vm.fileSelected {
             showFileExport = true
-        case .none:
-            break
+        } else if cloudDone {
+            onSecured()
         }
     }
 
@@ -304,7 +341,9 @@ public struct SecureAccountScreen: View {
             let umk = try await Keystore.currentUMK(reason: String(localized: "Back up your Flagship account to iCloud"))
             await recoveryVm.setup(umkSeed: umk, passphrase: cloudPassphrase)
             if case .registered = recoveryVm.phase {
-                onSecured()
+                cloudPassphrase = ""
+                cloudPassphrase2 = ""
+                cloudDone = true
             } else if case .failed(let msg) = recoveryVm.phase {
                 cloudError = msg
             }

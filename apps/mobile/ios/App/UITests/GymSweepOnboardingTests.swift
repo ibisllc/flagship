@@ -238,8 +238,21 @@ final class GymSweepOnboardingTests: GymSweepCase {
         let cloud = app.buttons["secure-account-option-cloud"]
         let file = app.buttons["secure-account-option-file"]
         XCTAssertTrue(cloud.exists && file.exists, "Cloud and file are both offered.")
-        file.tap()
+        XCTAssertFalse(cloud.isSelected, "Cloud starts unticked.")
+        XCTAssertFalse(file.isSelected, "The file starts unticked.")
         let secureContinue = app.buttons["secure-account-continue"]
+        XCTAssertFalse(secureContinue.isEnabled, "Continue waits for a choice.")
+        let passphrase = app.secureTextFields["secure-account-passphrase"]
+        XCTAssertFalse(passphrase.exists, "The cloud passphrase is hidden until cloud is ticked.")
+        if cloud.isEnabled {
+            cloud.tap()
+            XCTAssertTrue(passphrase.waitForExistence(timeout: 5), "Ticking cloud shows its passphrase.")
+            cloud.tap()
+            waitGone(passphrase)
+        }
+        file.tap()
+        wait(file, "isSelected == true")
+        XCTAssertFalse(passphrase.exists, "The file alone needs no cloud passphrase.")
         wait(secureContinue, "isEnabled == true")
         secureContinue.tap()
         XCTAssertTrue(app.navigationBars["Account backup"].waitForExistence(timeout: 10), "The file backup opens.")

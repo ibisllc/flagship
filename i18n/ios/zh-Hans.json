@@ -1872,7 +1872,7 @@
   "Secure your account": "保护你的账户",
   "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.": "没有备份的话，丢失此设备就意味着永久失去你的账户。你可以随时在“设置”中进行设置。",
   "Backing up…": "正在备份…",
-  "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.": "现在就备份你的账户，这样即使丢失此设备也能重新进入。没有人（包括我们）能替你恢复它。",
+  "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.": "现在就备份你的账户，这样即使丢失此设备也能重新进入。我们无法替你恢复它。",
   "Back up to iCloud": "备份到 iCloud",
   "Syncs securely with your other Apple devices.": "安全地同步到你的其他 Apple 设备。",
   "Save a backup file": "保存备份文件",

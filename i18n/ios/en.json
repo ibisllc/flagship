@@ -7623,8 +7623,8 @@
     "en": "Backing up…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecureAccountScreen.swift:82"
   },
-  "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.": {
-    "en": "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.",
+  "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.": {
+    "en": "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecureAccountScreen.swift:61"
   },
   "Back up to iCloud": {

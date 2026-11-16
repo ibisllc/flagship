@@ -404,7 +404,7 @@ const ONBOARDING: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-onboarding-create-file-backup",
-    "Create your account: Try another changes the handle; names typed; Skip warns and Back keeps the step; Save a backup file opens Account backup; Done lands on Home with Add/Import (creates a simulator account, mock .com only).",
+    "Create your account: Try another changes the handle; names typed; Skip warns from the Skip button and Back keeps the step; cloud and file start unticked with Continue off and the cloud passphrase hidden; ticking Save a backup file opens Account backup; Done lands on Home with Add/Import (creates a simulator account, mock .com only).",
     "GymSweepOnboardingTests/test_createRegeneratesTheHandleAndBacksUpToAFile",
     ["suggest-regenerate", "open-account-continue", "secure-account-skip", "secure-account-option-file", "secure-account-continue", "Done"],
     ["home-add-server"],
