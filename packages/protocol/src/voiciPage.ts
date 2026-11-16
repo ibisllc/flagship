@@ -46,6 +46,16 @@ export const TAG_VOICI_PAGE_V2 = "flagship/voici-page/v2";
  *  earlier rules, still read. */
 export const VOICI_CALLS_FROM_VALUES = ["accepted", "signed-in", "anyone", "callback"] as const;
 export type VoiciPageCallsFrom = (typeof VOICI_CALLS_FROM_VALUES)[number];
+/**
+ * What a page carries on its first publish (owner decision 2026-11-16, docs/voici-and-messages.md §5.4): messages on,
+ * and calls on from people signed in with Flagship (never anonymous). Every app's first publish signs these unless
+ * the owner switched one off before publishing; a later publish carries the choices of the index it replaces.
+ */
+export const VOICI_FIRST_PUBLISH: Readonly<{ acceptsMessages: 1; acceptsCalls: 1; callsFrom: VoiciPageCallsFrom }> = Object.freeze({
+  acceptsMessages: 1,
+  acceptsCalls: 1,
+  callsFrom: "signed-in",
+});
 export const TAG_VOICI_PIECE_UPLOAD = "flagship/voici-piece-upload/v1";
 
 export const VOICI_PROFILE_MAX_BYTES = 16 * 1024;

@@ -19,11 +19,18 @@ import java.util.Calendar
 object VoiciCallSettings {
     const val FROM_ACCEPTED = "accepted"
     const val FROM_SIGNED_IN = "signed-in"
-    /** The two modes the Social page offers (owner-approved 2026-11-15); the older two stay readable. */
+    /** The modes the Social page offers (owner-approved 2026-11-15, signed-in added 2026-11-16); "accepted" stays readable. */
     const val FROM_ANYONE = "anyone"
     const val FROM_CALLBACK = "callback"
     val FROM_VALUES = listOf(FROM_ACCEPTED, FROM_SIGNED_IN, FROM_ANYONE, FROM_CALLBACK)
-    val FROM_CHOICES = listOf(FROM_ANYONE, FROM_CALLBACK)
+    val FROM_CHOICES = listOf(FROM_SIGNED_IN, FROM_ANYONE, FROM_CALLBACK)
+
+    /**
+     * What a page's first publish carries (owner decision 2026-11-16, docs/voici-and-messages.md §5.4): calls on from
+     * people signed in with Flagship (never anonymous); messages on is VoiciOwner.FIRST_PUBLISH_ACCEPTS_MESSAGES. A
+     * later publish keeps the owner's choices.
+     */
+    val FIRST_PUBLISH: Pair<Boolean, String> = true to FROM_SIGNED_IN
 
     /** The index fields for a calls setting: v2 fields while on, none (a v1 index) while off. */
     fun indexFields(on: Boolean, from: String): Pair<Int?, String?> =
@@ -120,7 +127,7 @@ class CallSettingsStore(context: Context) {
     }
 
     /** The last "who can call" picked here, for turning calls on again. */
-    fun lastFrom(): String = prefs.getString("from", null)?.takeIf { it in VoiciCallSettings.FROM_CHOICES } ?: VoiciCallSettings.FROM_CALLBACK
+    fun lastFrom(): String = prefs.getString("from", null)?.takeIf { it in VoiciCallSettings.FROM_CHOICES } ?: VoiciCallSettings.FIRST_PUBLISH.second
 
     fun setLastFrom(from: String) {
         if (from in VoiciCallSettings.FROM_VALUES) prefs.edit().putString("from", from).apply()

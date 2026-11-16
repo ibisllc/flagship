@@ -4177,5 +4177,7 @@
   "voici_reveal_username_line": "%1$s ist die voi.ci-Seite dieser Person.",
   "voici_calls_hours": "Anrufzeiten",
   "voici_calls_hours_switch": "Nur zu bestimmten Zeiten",
-  "voici_calls_hours_footer": "Außerhalb dieser Zeiten klingelt kein Anruf auf deinen Geräten, und er wird zum verpassten Anruf. Nur deine eigenen Geräte kennen diese Zeiten. Zeitzone: %1$s."
+  "voici_calls_hours_footer": "Außerhalb dieser Zeiten klingelt kein Anruf auf deinen Geräten, und er wird zum verpassten Anruf. Nur deine eigenen Geräte kennen diese Zeiten. Zeitzone: %1$s.",
+  "voici_first_publish_defaults": "Nachrichten und Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten.",
+  "voici_calls_from_signed_in_note": "Anrufende melden sich mit Flagship an. Sie bleiben für dich anonym."
 }

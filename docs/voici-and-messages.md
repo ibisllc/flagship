@@ -462,6 +462,12 @@ creation order. Merging is a pure function in
 The switch is in the index (`acceptsMessages`), so turning it on or off is a publish. `.com` enforces the stored
 index as the first filter on every send (§8.3); the phone enforces its own latest.
 
+**Defaults (owner decision 2026-11-16):** a page's first publish accepts messages and takes calls from people signed in
+with Flagship (`acceptsMessages: 1`, `acceptsCalls: 1`, `callsFrom: "signed-in"`; `VOICI_FIRST_PUBLISH`). A page that
+was never published shows Accept messages on in the editor, the public warning before the first publish says
+"Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.", and every
+later publish keeps the owner's choices. Detail: `voici-calls.md` "First publish".
+
 ## 6. Signing in with Flagship (visitor side)
 
 ### 6.1 Shape
@@ -1048,7 +1054,7 @@ A fifth tab between Apps and Activity: iOS `bubble.left` (`AppDestination.messag
   appears as the URL is typed).
 - Theme: three swatches.
 - **Accept messages** switch with "People with a Flagship account can write to you. They appear as visitors, not by
-  name."
+  name." On for a page that was never published (§5.4).
 - Posts: compose, the list (grayed "Not published yet" items, "Waiting for an admin device to publish" on non-admin
   devices), edit, delete, remove a link card.
 - Preview: renders with the same rules as voi.ci (shared renderer logic; the webapp reuses the site's module).

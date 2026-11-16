@@ -29,6 +29,7 @@ class GymMessagesTest : GymBase() {
         tap("page-public-switch")
         tap("voici-rules-agree")
         waitUntilExists("page-make-public")
+        waitUntilExists("page-first-publish-defaults")
         gymShot("page-public-warning")
         tap("page-make-public")
         eventually(15_000, "the page is published") { GymVoici.client.storedIndex(account()) != null }
@@ -74,15 +75,20 @@ class GymMessagesTest : GymBase() {
         eventually(10_000, "blocked at .com") { GymVoici.client.blocks[account()].orEmpty().isNotEmpty() }
     }
 
-    /** docs/voici-calls.md §8: calls on is a publish (v2 index), a later post keeps it, and the thread can allow a caller. */
+    /**
+     * docs/voici-calls.md §8: the first publish turns calls on for signed-in callers (owner decision 2026-11-16; a v2
+     * index), Page options shows it, and the thread can allow a caller.
+     */
     @Test fun anAdminTurnsCallsOnAndAllowsAVisitorToCall() {
         launch(tab = "messages", adminRoot = true)
         waitUntilExists("social-title", 20_000)
         publishFirstPage()
+        eventually(15_000, "calls on at .com") {
+            VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.let { it.acceptsCalls == 1 && it.callsFrom == "signed-in" } == true
+        }
         tap("page-options")
-        tap("page-accept-calls")
-        eventually(15_000, "calls on at .com") { VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.acceptsCalls == 1 }
         waitUntilExists("page-calls-from")
+        waitUntilExists("page-calls-from-signed-in")
         waitUntilExists("calls-dnd")
         gymShot("calls-settings")
         tap("page-options-done")

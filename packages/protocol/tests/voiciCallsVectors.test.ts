@@ -203,3 +203,16 @@ describe("voici-calls vectors", () => {
     execFileSync("npx", ["tsx", join(import.meta.dirname, "..", "..", "..", "tools", "voici-calls-vectors.ts"), "--check"], { stdio: "pipe" });
   }, 60_000);
 });
+
+describe("a page's first publish (owner decision 2026-11-16)", () => {
+  it("is messages on and calls on from signed-in people, a v2 index every reader takes", () => {
+    expect(P.VOICI_FIRST_PUBLISH).toEqual({ acceptsMessages: 1, acceptsCalls: 1, callsFrom: "signed-in" });
+    expect(P.VOICI_CALLS_FROM_VALUES).toContain(P.VOICI_FIRST_PUBLISH.callsFrom);
+    expect(Object.isFrozen(P.VOICI_FIRST_PUBLISH)).toBe(true);
+    const V = JSON.parse(readFileSync(join(import.meta.dirname, "..", "test-vectors", "voici-calls", "vectors.json"), "utf8"));
+    const body = { ...V.pageV2.body, ...P.VOICI_FIRST_PUBLISH };
+    const signed = P.signVoiciPageIndex(body, new Uint8Array(32).fill(0x33));
+    expect(signed.version).toBe(2);
+    expect(P.parseVoiciPageIndex(JSON.parse(JSON.stringify(signed)))).not.toBeNull();
+  });
+});

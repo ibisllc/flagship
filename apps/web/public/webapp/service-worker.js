@@ -520,7 +520,9 @@
 //       device's passphrase (lib/freshUnlock.js confirmUserForDelete, lib/voiciWorld.js deleteConversationGated).
 //  v224: Secure your account: cloud and backup file are two independent ticks (both off), a shorter explainer, and
 //       the skip warning pops up at the Skip link (views/wizard.js confirmAtButton).
-const SHELL_VERSION = "v224";
+//  v225: a page's first publish turns on messages and calls from people signed in with Flagship, and the public
+//       warning says so (lib/voiciOwner.js VOICI_FIRST_PUBLISH, lib/voiciPageControl.js confirmGoPublic).
+const SHELL_VERSION = "v225";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

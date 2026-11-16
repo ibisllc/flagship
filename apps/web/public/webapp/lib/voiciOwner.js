@@ -81,6 +81,17 @@ export function defaultVoiciProfile(username) {
   return { v: 1, displayName: String(username).slice(0, 64), bio: "", avatar: null, theme: "classic", links: [] };
 }
 
+/**
+ * What a page carries on its first publish (owner decision 2026-11-16, docs/voici-and-messages.md §5.4): messages on,
+ * and calls on from people signed in with Flagship, never anonymous. A later publish keeps the owner's choices.
+ */
+export const VOICI_FIRST_PUBLISH = Object.freeze({ acceptsMessages: 1, acceptsCalls: true, callsFrom: "signed-in" });
+
+/** The page a never-published account starts from: the default profile, messages on. */
+export function newVoiciPageBase(username) {
+  return { profile: defaultVoiciProfile(username), acceptsMessages: VOICI_FIRST_PUBLISH.acceptsMessages, chunks: [], issuedAt: 0 };
+}
+
 const rand = (n) => crypto.getRandomValues(new Uint8Array(n));
 const randHex = (n) => hex(rand(n));
 
@@ -343,10 +354,12 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
   // `.com`, so every piece is uploaded again under the same pageId, one step up the seq ladder.
   if (!published && deps.removed) published = deps.removed;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const base = published ?? { profile: defaultVoiciProfile(username), acceptsMessages: 0, chunks: [], issuedAt: 0 };
+    const base = published ?? newVoiciPageBase(username);
     const merged = mergeVoiciPage(base, ops);
     const allImages = new Map([...(published?.pieces ?? new Map()), ...images]);
-    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls });
+    // A first publish turns calls on (signed-in callers); any other carries the index it replaces.
+    const callsNow = calls ?? (published ? undefined : { acceptsCalls: VOICI_FIRST_PUBLISH.acceptsCalls, callsFrom: VOICI_FIRST_PUBLISH.callsFrom });
+    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls: callsNow });
     for (const u of uploads) await uploadPiece(username, index.pageId, u, signer, c);
     const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(username)}/publish`, {
       method: "POST",

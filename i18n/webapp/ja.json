@@ -3785,5 +3785,6 @@
   "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "この時間帯以外は電話が鳴らず、不在着信として表示されます。時間帯を知っているのはあなたのデバイスだけです。",
   "This browser couldn't check it's you. Nothing was deleted.": "このブラウザーで本人確認ができませんでした。何も削除されていません。",
   "{0} Enter this device's passphrase to confirm.": "{0} 確認のため、このデバイスのパスフレーズを入力してください。",
-  "It goes from all your devices and from Flagship.": "すべてのデバイスと Flagship から削除されます。"
+  "It goes from all your devices and from Flagship.": "すべてのデバイスと Flagship から削除されます。",
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。"
 }

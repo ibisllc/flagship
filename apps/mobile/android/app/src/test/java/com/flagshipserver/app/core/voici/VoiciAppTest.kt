@@ -100,21 +100,21 @@ class VoiciAppTest {
         a.refresh()
         a.acceptRules()
         assertTrue(a.publish("test"))
-        assertEquals(1, published(mock).first.body.let { if (it.isV2) 2 else 1 })
-        assertTrue(a.setCalls(true, "signed-in", "test"))
+        assertTrue("the first publish turns calls on", published(mock).first.body.isV2)
+        assertTrue(a.setCalls(true, "anyone", "test"))
         published(mock).first.body.let {
             assertEquals(1, it.acceptsCalls)
-            assertEquals("signed-in", it.callsFrom)
+            assertEquals("anyone", it.callsFrom)
         }
         assertTrue(a.page.value.callsOn)
-        assertEquals("signed-in", a.page.value.callsFrom)
+        assertEquals("anyone", a.page.value.callsFrom)
         // A post publishes on top: calls stay on.
         a.edit("post-add", post = post("Hello"))
         assertTrue(a.publish("test"))
         published(mock).first.body.let {
             assertEquals(3L, it.seq)
             assertEquals(1, it.acceptsCalls)
-            assertEquals("signed-in", it.callsFrom)
+            assertEquals("anyone", it.callsFrom)
         }
         // Off is a v1 index again.
         assertTrue(a.setCalls(false, "signed-in", "test"))
@@ -127,6 +127,67 @@ class VoiciAppTest {
         val b = center(mock, FakeKeyring("alice", umk, root, false, ByteArray(32) { 5 }))
         b.refresh()
         assertFalse(b.setCalls(true, "accepted", "test"))
+    }
+
+    /** Owner decision 2026-11-16: a page's first publish turns on messages and calls from signed-in people. */
+    @Test fun aFirstPublishTurnsOnMessagesAndSignedInCalls() = runBlocking {
+        val mock = mock()
+        val a = center(mock, admin())
+        a.refresh()
+        assertTrue(a.page.value.firstPublish)
+        assertEquals("the editor shows messages on before the first publish", 1, a.page.value.working?.acceptsMessages)
+        a.acceptRules()
+        a.acknowledgePublicWarning()
+        assertEquals("a first publish always shows the warning, which says what starts on", PagePublicStep.Warning, a.publicStep())
+        assertTrue(a.goPublic("test"))
+        published(mock).first.body.let {
+            assertEquals(1, it.acceptsMessages)
+            assertEquals(1, it.acceptsCalls)
+            assertEquals("signed-in", it.callsFrom)
+        }
+        assertTrue(a.page.value.callsOn)
+        assertFalse(a.page.value.firstPublish)
+        assertEquals(PagePublicStep.Publish, a.publicStep())
+    }
+
+    @Test fun aFirstPublishKeepsMessagesOffWhenTheOwnerTurnedThemOffFirst() = runBlocking {
+        val mock = mock()
+        val a = center(mock, admin())
+        a.refresh()
+        a.acceptRules()
+        a.edit("accept-messages", accepts = 0)
+        assertTrue(a.publish("test"))
+        published(mock).first.body.let {
+            assertEquals(0, it.acceptsMessages)
+            assertEquals(1, it.acceptsCalls)
+        }
+    }
+
+    @Test fun aRepublishKeepsTheOwnersChoices() = runBlocking {
+        val mock = mock()
+        val a = center(mock, admin())
+        a.refresh()
+        a.acceptRules()
+        assertTrue(a.publish("test"))
+        assertTrue(a.setCalls(false, "signed-in", "test"))
+        a.edit("accept-messages", accepts = 0)
+        assertTrue(a.publish("test"))
+        a.edit("post-add", post = post("Later"))
+        assertTrue(a.publish("test"))
+        published(mock).first.body.let {
+            assertEquals(4L, it.seq)
+            assertEquals(0, it.acceptsMessages)
+            assertNull(it.acceptsCalls)
+        }
+        // A second admin device that never saw the page loses the seq race and keeps the page's choices.
+        val b = center(mock, admin(4))
+        b.edit("post-add", post = post("From B"))
+        assertTrue(b.publish("test"))
+        published(mock).first.body.let {
+            assertEquals(5L, it.seq)
+            assertEquals(0, it.acceptsMessages)
+            assertNull(it.acceptsCalls)
+        }
     }
 
     /** docs/voici-calls.md, owner decisions 2026-11-15: the call key is bound, answers and ends while locked, and is revoked. */

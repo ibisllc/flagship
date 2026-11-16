@@ -4114,5 +4114,7 @@
   "voici_reveal_username_line": "0c17b0f59325",
   "voici_calls_hours": "f598ca385136",
   "voici_calls_hours_switch": "f2e73a357e96",
-  "voici_calls_hours_footer": "322b47c58d9e"
+  "voici_calls_hours_footer": "322b47c58d9e",
+  "voici_first_publish_defaults": "34c4a6e9362a",
+  "voici_calls_from_signed_in_note": "d23fae6991da"
 }

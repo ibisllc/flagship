@@ -21,6 +21,9 @@ export const VOICI_NOT_PUBLISHED = () => tr("Not published yet");
 export const VOICI_PUBLIC_WARNING_TITLE = () => tr("Make your page public?");
 export const VOICI_PUBLIC_WARNING = () =>
   tr("Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.");
+/** Under the public warning before a first publish: what the page starts with (VOICI_FIRST_PUBLISH). */
+export const VOICI_FIRST_PUBLISH_DEFAULTS = () =>
+  tr("Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.");
 export const VOICI_REMOVE_TITLE = () => tr("Remove your page from voi.ci?");
 export const VOICI_REMOVE_TEXT = () =>
   tr("Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.");

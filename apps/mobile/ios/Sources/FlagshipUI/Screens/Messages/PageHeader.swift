@@ -16,6 +16,8 @@ final class PagePublicFlow {
     var showRules = false
     var showWarning = false
     var confirmRemove = false
+    /// The warning is for the page's first publish: it also says what starts on (messages and signed-in calls).
+    var firstPublish = false
     @ObservationIgnored private var action: Action?
     @ObservationIgnored private var rulesJustAccepted = false
     @ObservationIgnored private let warning: PagePublicWarning
@@ -49,11 +51,14 @@ final class PagePublicFlow {
 
     private func begin(_ a: Action) {
         action = a
+        firstPublish = store.isFirstPublish
         advance()
     }
 
     private func advance() {
-        switch PagePublicWarning.next(isAdmin: store.isAdmin, rulesAccepted: VoiciRules.accepted, acknowledged: warning.acknowledged(username: store.username)) {
+        // A first publish always shows the warning, since it says what the page starts with.
+        let acknowledged = warning.acknowledged(username: store.username) && !firstPublish
+        switch PagePublicWarning.next(isAdmin: store.isAdmin, rulesAccepted: VoiciRules.accepted, acknowledged: acknowledged) {
         case .refuse: action = nil
         case .rules: showRules = true
         case .warning: showWarning = true
@@ -110,7 +115,13 @@ private struct PagePublicFlowModifier: ViewModifier {
                 Button("Make it public") { flow.makePublic() }
                     .accessibilityIdentifier("page-make-public")
             } message: {
-                Text("Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.")
+                if flow.firstPublish {
+                    Text("Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.")
+                        + Text(verbatim: "\n\n")
+                        + Text("Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.")
+                } else {
+                    Text("Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.")
+                }
             }
             .alert("Remove your page from voi.ci?", isPresented: $flow.confirmRemove) {
                 Button("Cancel", role: .cancel) {}

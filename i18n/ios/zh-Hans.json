@@ -3856,5 +3856,6 @@
   "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": "voi.ci/%@ 不会知道你是谁。Flagship 会知道此对话可以让你的手机响铃。",
   "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "你的设备只在这些时间响铃（时区 %@）；在此之外，来电会变成未接来电。只有你自己的设备知道这些时间。结束时间早于开始时间则跨越午夜。",
   "Delete this conversation": "删除此对话",
-  "The conversation wasn't deleted.": "对话未被删除。"
+  "The conversation wasn't deleted.": "对话未被删除。",
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "来自用 Flagship 登录的人的消息和通话已开启。你可以在页面选项中关闭它们。"
 }

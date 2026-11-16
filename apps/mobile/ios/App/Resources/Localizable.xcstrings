@@ -158206,6 +158206,47 @@
           }
         }
       }
+    },
+    "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los mensajes y las llamadas de personas que iniciaron sesión con Flagship están activados. Puedes desactivarlos en Opciones de la página."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les messages et les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten und Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagens e chamadas de pessoas conectadas com o Flagship estão ativadas. Você pode desativá-las em Opções da página."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来自用 Flagship 登录的人的消息和通话已开启。你可以在页面选项中关闭它们。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

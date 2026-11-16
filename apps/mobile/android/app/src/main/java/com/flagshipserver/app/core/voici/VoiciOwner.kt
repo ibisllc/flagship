@@ -102,7 +102,11 @@ object VoiciOwner {
         links = emptyList(),
     )
 
-    fun emptyState(displayName: String) = VoiciPageState(defaultProfile(displayName), 0, emptyList(), 0)
+    /** Messages are on in a page's first publish (owner decision 2026-11-16); the calls half is VoiciCallSettings.FIRST_PUBLISH. */
+    const val FIRST_PUBLISH_ACCEPTS_MESSAGES = 1
+
+    /** The page a never-published account starts from: the account name, messages on. */
+    fun emptyState(displayName: String) = VoiciPageState(defaultProfile(displayName), FIRST_PUBLISH_ACCEPTS_MESSAGES, emptyList(), 0)
 
     // ── page state ⇄ JSON (local storage only) ──
 

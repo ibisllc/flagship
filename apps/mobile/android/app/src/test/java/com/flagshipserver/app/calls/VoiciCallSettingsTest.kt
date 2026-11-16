@@ -29,6 +29,14 @@ class VoiciCallSettingsTest {
         assertEquals(true to "signed-in", VoiciCallSettings.read(1, "signed-in"))
     }
 
+    /** Owner decision 2026-11-16: the first publish's defaults, and the modes the Social page offers. */
+    @Test fun firstPublishDefaultsAndTheModesOffered() {
+        assertEquals(true to "signed-in", VoiciCallSettings.FIRST_PUBLISH)
+        assertEquals(1, com.flagshipserver.app.core.voici.VoiciOwner.FIRST_PUBLISH_ACCEPTS_MESSAGES)
+        assertEquals(1, com.flagshipserver.app.core.voici.VoiciOwner.emptyState("alice").acceptsMessages)
+        assertEquals(listOf("signed-in", "anyone", "callback"), VoiciCallSettings.FROM_CHOICES)
+    }
+
     @Test fun callHoursEditorFormRoundTripsAndRefusesWhatTheSettingWouldRefuse() {
         val h = VoiciCallSettings.CallHours(setOf(0, 1, 2, 3, 4), 9 * 60, 17 * 60 + 30, "Europe/Paris")
         assertEquals(com.flagshipserver.app.core.voici.VoiciCallHours("1111100", "0900", "1730", "Europe/Paris"), h.toHours())
