@@ -44,7 +44,11 @@ Handover is vacancy-only (owner, 2026-11-01; `issuance-and-lease-records.md` §4
 route is vacant, decided by the ledger. A live holder keeps it while its tunnel and lease live; another eligible phone
 is refused `route-held` with the holder's generation and, with its tunnel left open, becomes a standby that gets
 `route-vacant` when the holder's tunnel drops, it releases, or its lease lapses. Leaving the foreground is just closing
-the socket: the route is vacant at once and the holder's streams end with it (no drain).
+the socket: the route is vacant at once and the holder's streams end with it (no drain). Exception: while a voi.ci call
+rings or runs on the device, the tunnel opens (or stays open) in the background too, and the answer waits up to 8 s for
+the route to be held, because the call's media reaches the phone only through its bare name and CallKit / Telecom
+answer with the app in the background (`PhoneRouteLifecycle`, iOS and Android; found live 2026-11-16, every call
+answered outside the app stayed "Connecting…").
 
 `claim` is `flagship/route-claim/v1` signed (Ed25519) by the phone's account device key, the key its admin grant
 names; `release` is `flagship/route-release/v1` over the held claim's fields. Refusal codes: `malformed`, `busy`,

@@ -56,6 +56,8 @@ public final class VoiciCallCenter: NSObject {
     /// The WebRTC implementation: our libwebrtc build when the app was built with it (CallMediaFactory), else the stub.
     @ObservationIgnored public var mediaFactory: () -> CallMediaEngine = { CallMediaFactory.make() }
 
+    /// This device holds its bare name for the call in progress (PhoneRouteController.callStarted).
+    @ObservationIgnored private var holdsRoute = false
     @ObservationIgnored private var registry: PKPushRegistry?
     @ObservationIgnored private var provider: CXProvider?
     @ObservationIgnored private let callController = CXCallController()
@@ -183,6 +185,12 @@ public final class VoiciCallCenter: NSObject {
         }
         let m = mediaFactory()
         media = m
+        // The caller's media arrives only through this phone's bare name: hold it while the call rings and runs, even
+        // with the app in the background (CallKit answers there).
+        if !holdsRoute {
+            holdsRoute = true
+            PhoneRouteController.callStarted()
+        }
         let s = VoiciCallSession(push: call, keys: keys, media: m) { [weak self] e in self?.onSession(e) }
         session = s
         s.connect()
@@ -237,6 +245,9 @@ public final class VoiciCallCenter: NSObject {
     func answerNow() async -> Bool {
         guard phase == .ringing, let s = session else { return false }
         phase = .connecting
+        // The answer sends the caller to this phone's TURN at once, and a caller's browser tries it only once.
+        let holding = await PhoneRouteController.waitUntilHolding(seconds: 8)
+        if !holding { voiciCallLog.notice("answering without the bare name held") }
         if let code = await s.answer(cameraAble: cameraAble()) {
             s.leave()
             finish(code)
@@ -425,6 +436,10 @@ public final class VoiciCallCenter: NSObject {
         session = nil
         media = nil
         push = nil
+        if holdsRoute {
+            holdsRoute = false
+            PhoneRouteController.callEnded()
+        }
         cameraOn = false
         pausedByBackground = false
         phase = .ended(code)

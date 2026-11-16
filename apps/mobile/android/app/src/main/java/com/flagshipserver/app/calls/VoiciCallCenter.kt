@@ -73,6 +73,8 @@ object VoiciCallCenter {
 
     @Volatile private var session: VoiciCallSession? = null
     @Volatile private var media: CallMediaEngine? = null
+    /** This device holds its bare name for the call in progress (PhoneRouteController.callStarted). */
+    @Volatile private var holdsRoute = false
     @Volatile private var pendingPush: VoiciCallPush.Payload? = null
     @Volatile internal var connection: VoiciConnection? = null
     @Volatile private var pausedByBackground = false
@@ -123,6 +125,12 @@ object VoiciCallCenter {
         if (who != null) update { it.copy(name = keys.nicknames[who.third] ?: VoiciCopy.visitorName(who.third)) }
         val m = mediaFactory()
         media = m
+        // The caller's media arrives only through this phone's bare name: hold it while the call rings and runs, even
+        // with the app in the background.
+        if (!holdsRoute) {
+            holdsRoute = true
+            com.flagshipserver.app.phoneroute.PhoneRouteController.callStarted()
+        }
         val s = VoiciCallSession(push, keys, m, http, scope, listener)
         session = s
         s.connect()
@@ -222,6 +230,8 @@ object VoiciCallCenter {
         update { it.copy(phase = Phase.Connecting) }
         clearNotification()
         scope.launch {
+            // The answer sends the caller to this phone's TURN at once, and a caller's browser tries it only once.
+            com.flagshipserver.app.phoneroute.PhoneRouteController.awaitHolding(8_000)
             when (val code = s.answer(cameraAble = hasCamera(context))) {
                 null -> {
                     connection?.setActive()
@@ -292,6 +302,10 @@ object VoiciCallCenter {
         session = null
         media = null
         pausedByBackground = false
+        if (holdsRoute) {
+            holdsRoute = false
+            com.flagshipserver.app.phoneroute.PhoneRouteController.callEnded()
+        }
         clearNotification()
         connection?.let { c ->
             c.setDisconnected(disconnectCause(code))
