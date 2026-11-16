@@ -4179,5 +4179,10 @@
   "voici_calls_hours_switch": "Solo en ciertas horas",
   "voici_calls_hours_footer": "Fuera de este horario las llamadas no suenan en ninguno de tus dispositivos y quedan como llamadas perdidas. Solo tus propios dispositivos conocen este horario. Zona horaria: %1$s.",
   "voici_first_publish_defaults": "Los mensajes y las llamadas de personas que iniciaron sesión con Flagship están activados. Puedes desactivarlos en Opciones de la página.",
-  "voici_calls_from_signed_in_note": "Quien llama inicia sesión con Flagship. Sigue siendo anónimo para ti."
+  "voici_calls_from_signed_in_note": "Quien llama inicia sesión con Flagship. Sigue siendo anónimo para ti.",
+  "voici_call_step_route": "Abriendo tu línea…",
+  "voici_call_step_secure": "Protegiendo la línea (a prueba de computación cuántica)…",
+  "voici_call_step_path": "Abriendo una ruta directa…",
+  "voici_call_step_audio": "Iniciando el audio…",
+  "voici_call_slow": "Está tardando más de lo habitual"
 }

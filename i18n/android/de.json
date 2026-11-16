@@ -4179,5 +4179,10 @@
   "voici_calls_hours_switch": "Nur zu bestimmten Zeiten",
   "voici_calls_hours_footer": "Außerhalb dieser Zeiten klingelt kein Anruf auf deinen Geräten, und er wird zum verpassten Anruf. Nur deine eigenen Geräte kennen diese Zeiten. Zeitzone: %1$s.",
   "voici_first_publish_defaults": "Nachrichten und Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten.",
-  "voici_calls_from_signed_in_note": "Anrufende melden sich mit Flagship an. Sie bleiben für dich anonym."
+  "voici_calls_from_signed_in_note": "Anrufende melden sich mit Flagship an. Sie bleiben für dich anonym.",
+  "voici_call_step_route": "Deine Leitung wird geöffnet…",
+  "voici_call_step_secure": "Leitung wird gesichert (quantensicher)…",
+  "voici_call_step_path": "Direkter Weg wird geöffnet…",
+  "voici_call_step_audio": "Audio wird gestartet…",
+  "voici_call_slow": "Das dauert länger als üblich"
 }

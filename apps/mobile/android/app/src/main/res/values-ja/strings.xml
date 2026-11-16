@@ -4182,4 +4182,9 @@
     <string name="voici_calls_hours_footer">この時間帯以外は、どのデバイスでも着信音が鳴らず、不在着信になります。この時間帯を知っているのはあなたのデバイスだけです。タイムゾーン：%1$s</string>
     <string name="voici_first_publish_defaults">Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。</string>
     <string name="voici_calls_from_signed_in_note">発信者は Flagship でサインインします。あなたには匿名のままです。</string>
+    <string name="voici_call_step_route">回線を開いています…</string>
+    <string name="voici_call_step_secure">回線を保護しています（量子耐性）…</string>
+    <string name="voici_call_step_path">直接の経路を開いています…</string>
+    <string name="voici_call_step_audio">音声を開始しています…</string>
+    <string name="voici_call_slow">通常より時間がかかっています</string>
 </resources>

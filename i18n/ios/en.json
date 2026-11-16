@@ -16461,5 +16461,21 @@
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": {
     "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:112"
+  },
+  "Securing the line (quantum-safe)…": {
+    "en": "Securing the line (quantum-safe)…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
+  },
+  "Opening a direct path…": {
+    "en": "Opening a direct path…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
+  },
+  "Starting audio…": {
+    "en": "Starting audio…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
+  },
+  "Opening your line…": {
+    "en": "Opening your line…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
   }
 }

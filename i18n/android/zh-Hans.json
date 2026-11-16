@@ -4179,5 +4179,10 @@
   "voici_calls_hours_switch": "仅在特定时段",
   "voici_calls_hours_footer": "在这些时段之外，你的任何设备都不会响铃，来电会成为未接来电。只有你自己的设备知道这些时段。时区：%1$s。",
   "voici_first_publish_defaults": "来自用 Flagship 登录的人的消息和通话已开启。你可以在页面选项中关闭它们。",
-  "voici_calls_from_signed_in_note": "来电者使用 Flagship 登录。对你而言他们保持匿名。"
+  "voici_calls_from_signed_in_note": "来电者使用 Flagship 登录。对你而言他们保持匿名。",
+  "voici_call_step_route": "正在打开你的线路…",
+  "voici_call_step_secure": "正在保护线路（抗量子）…",
+  "voici_call_step_path": "正在打开直接通道…",
+  "voici_call_step_audio": "正在启动音频…",
+  "voici_call_slow": "这比平时用的时间长"
 }

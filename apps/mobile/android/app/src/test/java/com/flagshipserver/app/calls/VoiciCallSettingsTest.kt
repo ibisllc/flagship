@@ -134,6 +134,23 @@ class VoiciCallScreenModelTest {
         assertEquals(com.flagshipserver.app.R.string.voici_call_ended, VoiciCallScreenModel.status(ui(VoiciCallCenter.Phase.Ended, "no-answer")))
     }
 
+    @Test fun connectingSteps() {
+        val c = VoiciCallCenter.Phase.Connecting
+        assertEquals(com.flagshipserver.app.R.string.voici_call_connecting, VoiciCallScreenModel.status(ui(c)))
+        assertEquals(com.flagshipserver.app.R.string.voici_call_step_route, VoiciCallScreenModel.status(VoiciCallCenter.Ui(phase = c, step = VoiciCallConnectStep.Route)))
+        assertEquals(com.flagshipserver.app.R.string.voici_call_step_secure, VoiciCallScreenModel.status(VoiciCallCenter.Ui(phase = c, step = VoiciCallConnectStep.Secure)))
+        assertEquals(com.flagshipserver.app.R.string.voici_call_step_path, VoiciCallScreenModel.status(VoiciCallCenter.Ui(phase = c, step = VoiciCallConnectStep.Path)))
+        assertEquals(com.flagshipserver.app.R.string.voici_call_step_audio, VoiciCallScreenModel.status(VoiciCallCenter.Ui(phase = c, step = VoiciCallConnectStep.Audio)))
+        val s = VoiciCallConnectSteps()
+        assertTrue(s.advance(VoiciCallConnectStep.Route))
+        assertTrue(s.advance(VoiciCallConnectStep.Path))
+        assertFalse(s.advance(VoiciCallConnectStep.Secure))
+        assertFalse(s.advance(VoiciCallConnectStep.Path))
+        assertTrue(s.advance(VoiciCallConnectStep.Audio))
+        assertEquals(20_000L, VoiciCallConnectSteps.SLOW_MS)
+        assertEquals(45_000L, VoiciCallConnectSteps.LIMIT_MS)
+    }
+
     @Test fun remoteCameraOnlyWhileConnected() {
         assertNull(VoiciCallScreenModel.remoteCamera(ui(VoiciCallCenter.Phase.Connecting, remote = "on")))
         assertEquals(VoiciCallScreenModel.RemoteCamera.On, VoiciCallScreenModel.remoteCamera(ui(VoiciCallCenter.Phase.Connected, remote = "on")))

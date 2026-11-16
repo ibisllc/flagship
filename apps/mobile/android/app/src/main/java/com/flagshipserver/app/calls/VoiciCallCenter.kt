@@ -55,6 +55,9 @@ object VoiciCallCenter {
         val remoteCamera: String = "off",
         /** Why the call ended or couldn't connect, as a code the screen turns into a sentence. */
         val endCode: String? = null,
+        /** While connecting: the step under way, and whether it has run longer than usual (VoiciCallConnectSteps). */
+        val step: VoiciCallConnectStep? = null,
+        val slow: Boolean = false,
     )
 
     const val CHANNEL_ID = "flagship.calls"
@@ -75,6 +78,10 @@ object VoiciCallCenter {
     @Volatile private var media: CallMediaEngine? = null
     /** This device holds its bare name for the call in progress (PhoneRouteController.callStarted). */
     @Volatile private var holdsRoute = false
+    private val steps = VoiciCallConnectSteps()
+    @Volatile private var slowJob: kotlinx.coroutines.Job? = null
+    @Volatile private var limitJob: kotlinx.coroutines.Job? = null
+    @Volatile private var gaveUp = false
     @Volatile private var pendingPush: VoiciCallPush.Payload? = null
     @Volatile internal var connection: VoiciConnection? = null
     @Volatile private var pausedByBackground = false
@@ -228,10 +235,13 @@ object VoiciCallCenter {
         val s = session ?: return
         if (_ui.value.phase != Phase.Ringing) return
         update { it.copy(phase = Phase.Connecting) }
+        startConnectClock()
+        step(VoiciCallConnectStep.Route)
         clearNotification()
         scope.launch {
             // The answer sends the caller to this phone's TURN at once, and a caller's browser tries it only once.
             com.flagshipserver.app.phoneroute.PhoneRouteController.awaitHolding(8_000)
+            step(VoiciCallConnectStep.Secure)
             when (val code = s.answer(cameraAble = hasCamera(context))) {
                 null -> {
                     connection?.setActive()
@@ -295,7 +305,46 @@ object VoiciCallCenter {
         }
     }
 
-    private fun finish(code: String) {
+    // ── connecting steps ──
+
+    private fun startConnectClock() {
+        steps.reset()
+        limitJob?.cancel()
+        limitJob = scope.launch {
+            kotlinx.coroutines.delay(VoiciCallConnectSteps.LIMIT_MS)
+            if (_ui.value.phase == Phase.Connecting) giveUp()
+        }
+    }
+
+    private fun step(s: VoiciCallConnectStep) {
+        if (_ui.value.phase != Phase.Connecting || !steps.advance(s)) return
+        update { it.copy(step = s, slow = false) }
+        slowJob?.cancel()
+        slowJob = scope.launch {
+            kotlinx.coroutines.delay(VoiciCallConnectSteps.SLOW_MS)
+            if (_ui.value.phase == Phase.Connecting && _ui.value.step == s) update { it.copy(slow = true) }
+        }
+    }
+
+    private fun stopConnectClock() {
+        slowJob?.cancel()
+        limitJob?.cancel()
+        slowJob = null
+        limitJob = null
+    }
+
+    /** Connecting took too long: end the call for both sides, shown as "The call couldn't connect." */
+    private fun giveUp() {
+        gaveUp = true
+        val s = session
+        if (s != null) s.hangUp() else finish("failed")
+    }
+
+    private fun finish(reason: String) {
+        // A call that gave up connecting ends as "failed", whatever its hang-up said.
+        val code = if (gaveUp) "failed" else reason
+        gaveUp = false
+        stopConnectClock()
         recordIncoming(session?.request, code)
         connectedAt = null
         pendingPush = null
@@ -313,7 +362,7 @@ object VoiciCallCenter {
         }
         connection = null
         if (::app.isInitialized) VoiciCallService.stop(app)
-        update { it.copy(phase = Phase.Ended, endCode = code, cameraOn = false) }
+        update { it.copy(phase = Phase.Ended, endCode = code, cameraOn = false, step = null, slow = false) }
     }
 
     private val listener = object : VoiciCallSession.Listener {
@@ -322,10 +371,13 @@ object VoiciCallCenter {
         }
         override fun onWon() {
             update { it.copy(phase = Phase.Connecting) }
+            step(VoiciCallConnectStep.Path)
         }
+        override fun onPathOpen() = step(VoiciCallConnectStep.Audio)
         override fun onConnected() {
+            stopConnectClock()
             connectedAt = System.currentTimeMillis()
-            update { it.copy(phase = Phase.Connected) }
+            update { it.copy(phase = Phase.Connected, step = null, slow = false) }
         }
         override fun onEnded(reason: String) = finish(reason)
         override fun onRemoteCamera(state: String) {

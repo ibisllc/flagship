@@ -17198,5 +17198,25 @@
   "voici_calls_from_signed_in_note": {
     "en": "Callers sign in with Flagship. They stay anonymous to you.",
     "ctx": "voi.ci calls: page call mode note"
+  },
+  "voici_call_step_route": {
+    "en": "Opening your line…",
+    "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_step_secure": {
+    "en": "Securing the line (quantum-safe)…",
+    "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_step_path": {
+    "en": "Opening a direct path…",
+    "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_step_audio": {
+    "en": "Starting audio…",
+    "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_slow": {
+    "en": "This is taking longer than usual",
+    "ctx": "voi.ci calls: connecting step"
   }
 }

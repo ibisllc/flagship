@@ -3853,5 +3853,9 @@
   "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "d270ed803a3b",
   "Delete this conversation": "7e40a320fa97",
   "The conversation wasn't deleted.": "4c8024efad1e",
-  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "34c4a6e9362a"
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "34c4a6e9362a",
+  "Securing the line (quantum-safe)…": "4a16cbba1b0b",
+  "Opening a direct path…": "e2107a4a10dd",
+  "Starting audio…": "7147905891f5",
+  "Opening your line…": "6647a246c6a2"
 }

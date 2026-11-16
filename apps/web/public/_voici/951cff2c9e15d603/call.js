@@ -189,10 +189,27 @@ export function showIncomingRing(ctx, session, ring) {
   replace(sheet.body, h(doc, "p", { class: "call-status", role: "status" }, t("{0} is calling you back.", page.profile.displayName)), h(doc, "div", { class: "call-controls" }, answer, later));
 }
 
+/** The status line for one connecting step (flagship-web VOICI_CALL_STEPS, in the order they happen). */
+function connectStepLine(step) {
+  switch (step) {
+    case "secure":
+      return t("Securing the line (quantum-safe)…");
+    case "reach":
+      return t("Reaching their phone…");
+    case "path":
+      return t("Opening a direct path…");
+    case "audio":
+      return t("Starting audio…");
+    default:
+      return t("Connecting…");
+  }
+}
+
 async function startCall(ctx, session, opts = {}) {
   const { doc, win, lib, cfg, page } = ctx;
   let call = null;
   const status = h(doc, "p", { class: "call-status", role: "status" }, t("Calling {0}…", page.profile.displayName));
+  const slowNote = h(doc, "p", { class: "call-camera-note", hidden: true }, t("This is taking longer than usual"));
   const timer = h(doc, "p", { class: "call-timer", hidden: true }, "0:00");
   const audio = h(doc, "audio", { autoplay: true });
   const remoteVideo = h(doc, "video", { class: "call-video", autoplay: true, playsinline: true, muted: true, hidden: true });
@@ -204,7 +221,7 @@ async function startCall(ctx, session, opts = {}) {
   const why = h(doc, "details", { class: "alt-flow" }, h(doc, "summary", {}, t("Quantum-safe call")), h(doc, "p", { class: "fine" }, t("The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.")));
   const controls = h(doc, "div", { class: "call-controls" }, mute, camera, hang);
   const sheet = openSheet(doc, { title: page.profile.displayName, onClose: () => call?.hangUp() });
-  replace(sheet.body, status, timer, remoteVideo, selfView, cameraNote, audio, controls, why);
+  replace(sheet.body, status, slowNote, timer, remoteVideo, selfView, cameraNote, audio, controls, why);
   let muted = false;
   let started = 0;
   let tick = null;
@@ -282,8 +299,11 @@ async function startCall(ctx, session, opts = {}) {
     onState(state, d) {
       if (state === "working") replace(status, t("Getting ready to call…"));
       else if (state === "ringing") replace(status, t("Ringing…"));
-      else if (state === "connecting") replace(status, t("Connecting…"));
-      else if (state === "connected") {
+      else if (state === "connecting") {
+        replace(status, connectStepLine(d.step));
+        slowNote.hidden = !d.slow;
+      } else if (state === "connected") {
+        slowNote.hidden = true;
         audio.srcObject = call.remoteStream;
         camera.hidden = !videoAble;
         replace(status, t("Quantum-safe call"));
@@ -291,9 +311,11 @@ async function startCall(ctx, session, opts = {}) {
         started = Date.now();
         tick = setInterval(() => replace(timer, mmss(Date.now() - started)), 1000);
       } else if (state === "ended") {
+        slowNote.hidden = true;
         worker.terminate();
         finish(endedLine(d.reason));
       } else if (state === "failed") {
+        slowNote.hidden = true;
         worker.terminate();
         finish(callRefusal(d.code, d));
       }

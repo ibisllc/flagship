@@ -160,6 +160,23 @@ final class VoiciCallsViewModelTests: XCTestCase {
         XCTAssertEqual(VoiciCallScreenModel.status(.ended("media-unavailable")), "This version of Flagship can't connect calls yet.")
         XCTAssertEqual(VoiciCallScreenModel.status(.ended("limit")), "Calls end after 60 minutes.")
         XCTAssertEqual(VoiciCallScreenModel.status(.ended("no-answer")), "Call ended")
+        XCTAssertEqual(VoiciCallScreenModel.status(.ended("failed")), "The call couldn't connect.")
+    }
+
+    func test_connectingSteps() {
+        XCTAssertEqual(VoiciCallScreenModel.status(.connecting), "Connecting…")
+        XCTAssertEqual(VoiciCallScreenModel.status(.connecting, step: .route), "Opening your line…")
+        XCTAssertEqual(VoiciCallScreenModel.status(.connecting, step: .secure), "Securing the line (quantum-safe)…")
+        XCTAssertEqual(VoiciCallScreenModel.status(.connecting, step: .path), "Opening a direct path…")
+        XCTAssertEqual(VoiciCallScreenModel.status(.connecting, step: .audio), "Starting audio…")
+        var s = VoiciCallConnectSteps()
+        XCTAssertTrue(s.advance(to: .route))
+        XCTAssertTrue(s.advance(to: .path))
+        XCTAssertFalse(s.advance(to: .secure), "a late event never shows an earlier step")
+        XCTAssertFalse(s.advance(to: .path))
+        XCTAssertTrue(s.advance(to: .audio))
+        XCTAssertEqual(VoiciCallConnectSteps.slowSeconds, 20)
+        XCTAssertEqual(VoiciCallConnectSteps.limitSeconds, 45)
     }
 
     @MainActor

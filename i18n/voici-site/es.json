@@ -143,5 +143,10 @@
   "{0} is calling you back.": "{0} te está devolviendo la llamada.",
   "Getting ready to call…": "Preparando la llamada…",
   "Stop call-backs": "Dejar de recibir llamadas de vuelta",
-  "No microphone found on this device. Connect one, or call from your phone.": "No hay ningún micrófono en este dispositivo. Conecta uno o llama desde tu teléfono."
+  "No microphone found on this device. Connect one, or call from your phone.": "No hay ningún micrófono en este dispositivo. Conecta uno o llama desde tu teléfono.",
+  "Reaching their phone…": "Contactando con su teléfono…",
+  "Securing the line (quantum-safe)…": "Protegiendo la línea (a prueba de computación cuántica)…",
+  "Opening a direct path…": "Abriendo una ruta directa…",
+  "Starting audio…": "Iniciando el audio…",
+  "This is taking longer than usual": "Está tardando más de lo habitual"
 }

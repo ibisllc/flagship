@@ -4187,4 +4187,9 @@
     <string name="voici_calls_hours_footer">Outside these hours calls don\'t ring on any of your devices and become missed calls. Only your own devices know these hours. Time zone: %1$s.</string>
     <string name="voici_first_publish_defaults">Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.</string>
     <string name="voici_calls_from_signed_in_note">Callers sign in with Flagship. They stay anonymous to you.</string>
+    <string name="voici_call_step_route">Opening your line…</string>
+    <string name="voici_call_step_secure">Securing the line (quantum-safe)…</string>
+    <string name="voici_call_step_path">Opening a direct path…</string>
+    <string name="voici_call_step_audio">Starting audio…</string>
+    <string name="voici_call_slow">This is taking longer than usual</string>
 </resources>

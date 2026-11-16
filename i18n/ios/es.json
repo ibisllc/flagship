@@ -3859,5 +3859,9 @@
   "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": "Tus dispositivos solo suenan en este horario, en la zona horaria %@; fuera de él, una llamada queda como perdida. Solo tus propios dispositivos conocen este horario. Un final antes del inicio pasa de la medianoche.",
   "Delete this conversation": "Eliminar esta conversación",
   "The conversation wasn't deleted.": "La conversación no se ha eliminado.",
-  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Los mensajes y las llamadas de personas que iniciaron sesión con Flagship están activados. Puedes desactivarlos en Opciones de la página."
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Los mensajes y las llamadas de personas que iniciaron sesión con Flagship están activados. Puedes desactivarlos en Opciones de la página.",
+  "Securing the line (quantum-safe)…": "Protegiendo la línea (a prueba de computación cuántica)…",
+  "Opening a direct path…": "Abriendo una ruta directa…",
+  "Starting audio…": "Iniciando el audio…",
+  "Opening your line…": "Abriendo tu línea…"
 }

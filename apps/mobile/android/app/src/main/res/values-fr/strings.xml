@@ -4182,4 +4182,9 @@
     <string name="voici_calls_hours_footer">En dehors de ces heures, les appels ne sonnent sur aucun de vos appareils et deviennent des appels manqués. Seuls vos propres appareils connaissent ces heures. Fuseau horaire : %1$s.</string>
     <string name="voici_first_publish_defaults">Les messages et les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page.</string>
     <string name="voici_calls_from_signed_in_note">Les appelants se connectent avec Flagship. Ils restent anonymes pour vous.</string>
+    <string name="voici_call_step_route">Ouverture de votre ligne…</string>
+    <string name="voici_call_step_secure">Sécurisation de la ligne (résistante aux ordinateurs quantiques)…</string>
+    <string name="voici_call_step_path">Ouverture d\'un chemin direct…</string>
+    <string name="voici_call_step_audio">Démarrage de l\'audio…</string>
+    <string name="voici_call_slow">Cela prend plus de temps que d\'habitude</string>
 </resources>
