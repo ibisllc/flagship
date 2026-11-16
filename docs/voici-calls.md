@@ -623,44 +623,73 @@ in the call screen: "<pageName> ✓" (tapping it opens the page). A reveal that 
    Call back disabled from the start instead of after a refused ring.
 5. **Privacy policy §2.11** overstates: no relay passes a visitor's IP to the owner's box or phone. Wording fix
    proposed to the owner (legal text: owner approves).
-||||||| parent of 09d0ace39 (Calls: CI-built libwebrtc and TURN responder behind the real CallMediaEngine)
 
-## As built: media (2026-11-15, worktree `0.4/libwebrtc`)
+## As built: calling back, call modes, delete and reveal (2026-11-16, worktree `0.4/calls-callback`)
 
-- **The library.** `tools/libwebrtc` pins one upstream WebRTC (`pins.env`: M157, branch-heads/8103, an exact commit and
-  depot_tools commit) and adds one overlay: `RTCFlagshipFrameCrypto` (Objective-C) and `org.webrtc.FlagshipFrameCrypto`
-  (Java + JNI), which put an app delegate behind libwebrtc's C++ `FrameEncryptorInterface` / `FrameDecryptorInterface`
-  (upstream exposes those only in C++). `apply-overlay.py` lists the files in the SDK's `BUILD.gn` after named anchor
-  lines and fails when a new pin moved them. `.github/workflows/libwebrtc.yml` fetches (no history), builds
-  `WebRTC.xcframework` (iOS arm64, simulator arm64 + x86_64, iOS 18 floor) and `libwebrtc.aar` (arm64-v8a,
-  armeabi-v7a, x86_64), checks the overlay is in each, and uploads one artifact `libwebrtc` with `SHA256SUMS` and a
-  `manifest.json` naming the pins. **Artifacts only**: nothing is published or hosted. A WebRTC build never runs on a
-  developer Mac.
-- **The TURN responder** is `rust/crates/flagship-turn-ffi`: a C ABI (`include/flagship_turn.h`, an Xcode module
-  `FlagshipTurn`) and JNI exports for `calls.TurnResponder` over `flagship-turn-lite`. It has its own lint table (the
-  workspace forbids `unsafe`, a C boundary needs it); everything that can be safe is in `session.rs`, which forbids
-  `unsafe` again. The same workflow builds `FlagshipTurn.xcframework` and `libflagship_turn_ffi.so` per ABI (NDK,
-  minSdk 29, 16 KB pages). The responder only accepts loopback relay and peer addresses.
-- **Taking a build.** `tools/libwebrtc/use-artifacts.sh <run-id>` downloads a run's artifact, checks every file against
-  the committed pin `tools/libwebrtc/artifacts.sha256` (`--record` writes it from a reviewed run), and unpacks into
-  `apps/mobile/ios/Vendor/WebRTC` and `apps/mobile/android/vendor/webrtc` (both git-ignored); `--clean` deletes them.
-  Without those folders both apps build exactly as before, with `StubCallMediaEngine`.
-- **The engines.** iOS `WebRTCCallMediaEngine` (`#if canImport(WebRTC) && canImport(FlagshipTurn)`; `Package.swift`
-  adds the two binary targets only when the folder holds them) and Android `WebRtcCallMediaEngine` (`src/webrtc`,
-  picked by `app/build.gradle.kts` when `vendor/webrtc` holds the AAR; `src/nowebrtc` otherwise) behind the existing
-  `CallMediaEngine`. `CallMediaFactory` picks one. The peer connection ignores every network adapter but loopback (on
-  by default it is ignored), has no ICE servers, bundles and muxes, and returns its answer once its one loopback host
-  candidate is gathered (at most 3 s), so the signed answer carries it and nothing trickles. The frame layer is
-  attached to every sender and receiver before the answer, and drops every frame until `start` hands it the keys.
-  Audio: CallKit's audio session drives `RTCAudioSession` (manual audio, enabled on `didActivate`); Android uses the
-  Java audio device module with the hardware echo canceller and noise suppressor. The camera is 360p at 24 fps.
-- **The endpoint.** `CallTurnConnection.attach(toClient:end:)` gives the responder a way to write bytes that arrive
-  later (peer datagrams); the engine installs `CallTurnGate`'s factory for the call (64 kbit/s audio, 2.56 Mbit/s with
-  video) and removes it on stop.
-- **The media lane.** The workflow's `media-android` job builds the debug APK against the artifact and checks it
-  carries libwebrtc, the responder for each ABI and the overlay; `media-ios` runs `CallMediaBundledTests` with
-  `FLAGSHIP_EXPECT_WEBRTC=1` (the real engine is linked; the responder answers a STUN Binding and refuses HTTP).
-- **Not done yet.** No run of the workflow yet (the first one is the real check of the pins, the overlay's anchors and
-  the JNI glue); no call between a browser and a phone; the remote camera has a track (`remoteVideo`) but no renderer
-  in the call screens; DTLS 1.3 / X25519MLKEM768 in the build is unchecked (not required, §3).
+Built and tested in TS, `.com`, flagship-web, voi.ci and the webapp; the native screens are in progress (below).
 
+- **The browser handoff** (`flagship/voici-call-handoff/v1`, `voiciCalls.ts`; webapp `lib/voiciCallHandoff.js`, a byte
+  copy in flagship-web; vectors `voici-calls` section `handoff`): when the app's media engine is missing it signs a
+  voi.ci session for the callee's page (its pseudonym there, a delegation of at most 10 minutes to a P-256 key made
+  for the call) and opens `https://voi.ci/<callee>#call=<sid>.<k>`. The tab drops the fragment, listens on `/qr-pipe`,
+  and the app delivers the session sealed under the pipe key of the sign-in construction; the relay consumes it, so
+  it opens once. The session lives in the tab only. Not a signature: the sign-in answer inside is checked as one.
+- **Calling pages you know** (you are the visitor dialling out to a public owner): the webapp's Calls view, Call /
+  Video call on the reply rows and on Websites you're signed in to, through a voi.ci tab (`lib/voiciCallOut.js`,
+  `views/calls.js`, shell **v219**: v217 was taken by the time this rebased onto v218). The call history is the
+  device's own record of placed calls plus the page's missed calls; nothing about who called whom is stored on a server.
+- **Page call modes**: the v2 index's `callsFrom` also takes `anyone` and `callback` (all four ports).
+- **Anonymous calls** (`anyone` pages; `flagship/voici-call-request-anon/v1`, `voiciCallModes.ts`): signed by the
+  browser's own key, a conversation derived from it, and a proof of work on a challenge `.com` MACs
+  (`flagship/voici-call-pow/v1`, `GET /api/voici/pages/<u>/call-challenge`, 18 bits by default, 2 minutes, spent once,
+  secret `VOICI_CALL_POW_SECRET`; unset = anonymous calls refused). Budgets `voici-call-anon-page` (10 an hour, 30 a
+  day per page) and `voici-call-challenge`. An anonymous key's conversation can be blocked for 30 days (storage only;
+  no owner route yet).
+- **The pop-up** on voi.ci ("Let <name> call you back?", "Call anonymously" / "Call and allow call-back", and "<name>
+  won't learn who you are. Flagship will know this conversation can ring your phone."). A callback page shows only the
+  second with the reason, and takes a signed-in call only once the conversation's channel is attached
+  (`ring-back-required`). "Stop call-backs" in the voi.ci thread.
+- **Ring-back** (`flagship/voici-ring-back/v1` by the caller; `flagship/voici-ring/v1` by the owner with a hint sealed to
+  the caller's thread key, `flagship/voici-ring-hint/v1`): `POST /api/voici/web/ring-back` (with `?u=` and device headers
+  from the caller's app, so the ring push reaches that account's devices; a browser's order names no account) and
+  `POST /api/voici/pages/<u>/ring` (owner key). The ring goes as a content-free push on today's path (category
+  `voici-ring`: VoIP where registered, else the ordinary push) and shows in the caller's thread fetch (`ring`), so an
+  open voi.ci tab rings and offers Answer, which dials out. Migration **0149**. The channel goes on Stop call-backs,
+  an owner's block, page removal, the caller's account deletion, a conversation delete, or after 90 days.
+- **Delete = forget** (`flagship/voici-conv-delete/v1`, `voiciConversation.ts`, `POST /api/voici/web/conv-delete`, by
+  the owner, the caller's pseudonym or the caller's browser): the conversation's mail, alerts, channel, ring, call allow
+  and missed calls go at once; a test checks zero rows remain in every table, for each signer. No route here logs.
+- **Reveal** (`flagship/voici-reveal/v1|<conv>|<username>|<SHA-256 of the display name or ->|<issuedAt>`, Ed25519 by the
+  caller's own page key, the display name beside it; unreveal `{kind:"voici-unreveal"}`), carried inside the sealed
+  conversation as a message body `{v:1, control:…}`. Records and vectors (`voici-conversation`) are built; no screen
+  sends or shows them yet.
+- **Call keys** are deleted when a device's grant is revoked (`/device-grants/revoke`, removing a device, a strict
+  re-pair; a device that keeps another active grant keeps its binding).
+- **The relay and the caller's address:** neither relay passes the visitor's address to a box or phone. The Rust
+  relay's OPEN frame carries only the SNI; between relays the bridge OPEN carries an opaque per-process HMAC of the
+  address (`mesh/rebalance.rs` `client_key`), and the TS relay is the same. The PROXY header exists only on the
+  `:8444` echo listener, between Fly and the relay. The phone's TURN responder reports a fixed address in
+  XOR-MAPPED-ADDRESS. The privacy policy (§2.11, "the page owner's phone then sees the IP address the message came
+  from") says more than happens.
+- **Tests:** protocol vectors (`voiciCallsVectors`, `voiciCallModesVectors`, `voiciConversationVectors`),
+  control-plane `voiciCallModes.test.ts`, `voiciCallKeys.test.ts`, flagship-web `call.test.ts`, `callModes.test.ts`,
+  webapp `webappVoiciCallOut.test.ts`, and the Playwright lane `apps/web/e2e/voici-calls` (two Chromium contexts
+  against a stand-in `.com` running the real request check and room: a handed-off call, a one-use handoff, an anonymous
+  call from the pop-up; set-up through the signed answer and both descriptions, ICE stops there).
+
+### Open
+
+1. **Native screens** (iOS, Android; the forks' work is uncommitted in the worktree): calling known pages through
+   `CallMediaEngine` with the handoff fallback, the call history, Swift/Kotlin ports of the anonymous request, the
+   ring-back and ring (the phone that answers an anonymous call must accept the anon request's hash and bytes), the
+   owner's Call in a thread (`POST …/ring`, which `callVisitor(conv)` should call), the caller app's channel attach
+   with device headers and ringing on a `voici-ring` push, the page-mode setting, delete and reveal (switch, pill with
+   the unchecked-name info icon), every string through i18n.
+2. **Delete with a derived conversation id:** the spec assumes random mailbox ids, but `conv` is
+   H(pageId, pseudonym), so a later message from the same caller opens the same id again as a new request. Keeping no
+   tombstone means "can no longer send into it" holds only until the caller writes again. Owner: accept, or keep a
+   minimal tombstone (the conv hash alone)?
+3. **Reveal transport:** the caller's conversations live on voi.ci, which doesn't hold the caller's page key, and the
+   apps show only reply notices for them. The switch needs a visitor-side conversation screen in the apps (or the
+   app signs the reveal and hands it to the tab). The message plaintext `{v:1, control}` form is a change in four ports.
+4. Hours for anonymous calls (needs an index field) and an owner route to block an anonymous caller.
