@@ -9,7 +9,11 @@ final class VoiciCallsViewModelTests: XCTestCase {
 
     func test_callsFieldsAreV2OnlyWhileOn() {
         XCTAssertTrue(VoiciCallSettings.indexFields(on: true, from: "signed-in") == (1, "signed-in"))
-        XCTAssertTrue(VoiciCallSettings.indexFields(on: true, from: "anyone") == (1, "accepted"))
+        XCTAssertTrue(VoiciCallSettings.indexFields(on: true, from: "anyone") == (1, "anyone"))
+        XCTAssertTrue(VoiciCallSettings.indexFields(on: true, from: "callback") == (1, "callback"))
+        XCTAssertTrue(VoiciCallSettings.indexFields(on: true, from: "nobody") == (1, "accepted"))
+        XCTAssertEqual(VoiciCallSettings.mode("accepted"), "callback")
+        XCTAssertEqual(VoiciCallSettings.mode("anyone"), "anyone")
         XCTAssertTrue(VoiciCallSettings.indexFields(on: false, from: "signed-in") == (nil, nil))
         XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: nil, callsFrom: nil) == (false, "accepted"))
         XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: 1, callsFrom: "signed-in") == (true, "signed-in"))
@@ -164,5 +168,28 @@ final class VoiciCallsViewModelTests: XCTestCase {
         c.quietHours = { CallQuietHours(on: false, startMinute: m, endMinute: m + 30) }
         XCTAssertTrue(c.shouldRing(issuedAt: at))
         XCTAssertFalse(c.shouldRing(issuedAt: at - VoiciCalls.ringMs - 1))
+    }
+
+    // MARK: call hours (the page index's callHours)
+
+    func test_callHoursDraftRoundTrips() {
+        let d = VoiciCallHoursDraft("1111100 0900-1730 Europe/Paris")
+        XCTAssertEqual(d?.days, [true, true, true, true, true, false, false])
+        XCTAssertEqual(d?.startMinute, 540)
+        XCTAssertEqual(d?.endMinute, 1050)
+        XCTAssertEqual(d?.value, "1111100 0900-1730 Europe/Paris")
+        var x = VoiciCallHoursDraft.standard(zone: "UTC")
+        XCTAssertEqual(x.value, "1111100 0900-1730 UTC")
+        x.days = Array(repeating: false, count: 7)
+        XCTAssertNil(x.value, "No day: not a value the index takes.")
+        x = .standard(zone: "Mars/Olympus")
+        XCTAssertNil(x.value, "An unknown zone isn't published.")
+        x = .standard(zone: "UTC")
+        x.endMinute = x.startMinute
+        XCTAssertNil(x.value)
+        x.startMinute = 22 * 60
+        x.endMinute = 6 * 60
+        XCTAssertEqual(x.value, "1111100 2200-0600 UTC")
+        XCTAssertNil(VoiciCallHoursDraft(nil))
     }
 }

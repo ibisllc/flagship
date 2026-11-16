@@ -4,6 +4,10 @@ import FlagshipCore
 
 enum MessagesRoute: Hashable {
     case thread(conv: String)
+    /// This device's calls: placed, answered, missed (docs/voici-calls.md "Calling from the app").
+    case calls
+    /// A conversation this account started on someone else's page.
+    case visitor(username: String, pageId: String, title: String)
 }
 
 /// The Social tab (docs/social-tab.md): the account's voi.ci page, drawn as visitors see it and edited in place, and
@@ -25,6 +29,7 @@ public struct SocialTab: View {
     @State private var flow = PagePublicFlow()
     @State private var draft = PageDraft()
     @State private var showOptions = false
+    @State private var calling: VoiciOutgoingCall?
     private let store = MessagesStore.shared
 
     public init() {}
@@ -36,9 +41,15 @@ public struct SocialTab: View {
                 .navigationDestination(for: MessagesRoute.self) { route in
                     switch route {
                     case .thread(let conv): ThreadScreen(conv: conv)
+                    case .calls: VoiciCallsScreen()
+                    case .visitor(let u, let p, let title):
+                        if let client {
+                            VisitorConversationScreen(model: .live(callee: VoiciCallee(username: u, pageId: p), displayName: title, client: client))
+                        }
                     }
                 }
         }
+        .fullScreenCover(item: $calling) { c in VoiciOutgoingCallScreen(call: c) { calling = nil } }
         .task(id: app.currentUser) { configure() }
         .onAppear {
             configure()
@@ -241,21 +252,42 @@ public struct SocialTab: View {
             if !store.replyNotices.isEmpty && segment == 0 {
                 SwiftUI.Section {
                     ForEach(store.replyNotices) { n in
-                        Button {
-                            store.openedReply(n)
-                            openURL(n.url)
-                        } label: {
-                            Label {
-                                Text(verbatim: String(localized: "You have a reply on voi.ci/\(n.username)"))
-                                    .foregroundStyle(.primary)
-                            } icon: {
-                                Image(systemName: "arrowshape.turn.up.left.fill")
+                        HStack {
+                            Button {
+                                store.openedReply(n)
+                                openURL(n.url)
+                            } label: {
+                                Label {
+                                    Text(verbatim: String(localized: "You have a reply on voi.ci/\(n.username)"))
+                                        .foregroundStyle(.primary)
+                                } icon: {
+                                    Image(systemName: "arrowshape.turn.up.left.fill")
+                                }
                             }
+                            .buttonStyle(.borderless)
+                            .accessibilityIdentifier("messages-reply-notice")
+                            Spacer()
+                            VoiciCallButtons(callee: VoiciCallee(username: n.username, pageId: n.pageId)) { calling = $0 }
                         }
-                        .accessibilityIdentifier("messages-reply-notice")
                     }
                 } footer: {
                     Text("Your conversations with other pages are on voi.ci.")
+                }
+            }
+            SwiftUI.Section {
+                NavigationLink(value: MessagesRoute.calls) { Label("Calls", systemImage: "phone") }
+                    .accessibilityIdentifier("messages-calls")
+            }
+            if segment == 0 && !store.callablePages.isEmpty {
+                SwiftUI.Section {
+                    ForEach(store.callablePages, id: \.pageId) { page in
+                        NavigationLink(value: MessagesRoute.visitor(username: page.username, pageId: page.pageId, title: page.title)) {
+                            Label { Text(verbatim: page.title) } icon: { Image(systemName: "bubble.left.and.text.bubble.right") }
+                        }
+                        .accessibilityIdentifier("messages-visitor-\(page.username)")
+                    }
+                } header: {
+                    Text("Your conversations on other pages")
                 }
             }
             SwiftUI.Section {

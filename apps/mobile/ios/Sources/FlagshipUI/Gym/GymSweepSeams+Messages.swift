@@ -63,6 +63,12 @@ extension GymSweepSeams {
         if args.contains("-smoke-voici-reply"), let umk = GymSeams.accountRootSeed.map(Array.init) {
             seedReply(m, user: user, umk: umk, now: now)
         }
+        if args.contains("-smoke-voici-call-history") {
+            // This device's call list: a call to river-otter's page an hour ago (kept on the device only).
+            let r = VoiciCallRecord(callId: String(repeating: "ca", count: 16), direction: .outgoing, outcome: .answered,
+                                    peer: .page(username: "river-otter", pageId: otterPageId), video: false, at: now - 3_600_000, durationMs: 95_000)
+            if let data = try? JSONEncoder().encode([r]) { UserDefaults.standard.set(data, forKey: VoiciCallHistory.key(user)) }
+        }
         if let r = value(args, "-smoke-voici-attest-limit") ?? (args.contains("-smoke-voici-attest-limit") ? "18000" : nil) {
             m.attestRefusal = ("first-contact-limit", Int(r))
         }

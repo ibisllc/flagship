@@ -16,7 +16,14 @@ import FlagshipCore
 public enum VoiciCallSettings {
     public static let fromAccepted = "accepted"
     public static let fromSignedIn = "signed-in"
-    public static let fromValues = [fromAccepted, fromSignedIn]
+    /// The page call modes the owner approved (docs/voici-calls.md "Who may call a page"): anyone on the internet, no
+    /// account needed; or callback accounts only, where calling counts as consent to a ring-back in that conversation.
+    public static let fromAnyone = "anyone"
+    public static let fromCallback = "callback"
+    public static let fromValues = [fromAccepted, fromSignedIn, fromAnyone, fromCallback]
+    /// The modes the Social page offers; an older value turns into "callback" at the next change.
+    public static let modes = [fromAnyone, fromCallback]
+    public static func mode(_ from: String) -> String { modes.contains(from) ? from : fromCallback }
 
     /// The index fields for a calls setting: v2 fields while on, none (a v1 index) while off.
     public static func indexFields(on: Bool, from: String) -> (acceptsCalls: Int64?, callsFrom: String?) {
@@ -157,3 +164,37 @@ enum VoiciCallNetwork {
     static let session: URLSession = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
 }
 
+/// The call-hours value of the page index, "<days> <HHMM>-<HHMM> <time zone>" (VoiciPage.isCallHours), as the editor
+/// shows it: seven days from Monday, minutes after midnight, the zone.
+public struct VoiciCallHoursDraft: Equatable, Sendable {
+    public var days: [Bool]
+    public var startMinute: Int
+    public var endMinute: Int
+    public var zone: String
+
+    public init(days: [Bool], startMinute: Int, endMinute: Int, zone: String) {
+        self.days = days; self.startMinute = startMinute; self.endMinute = endMinute; self.zone = zone
+    }
+
+    /// Weekdays 9:00 to 17:30 in this device's zone.
+    public static func standard(zone: String = TimeZone.current.identifier) -> VoiciCallHoursDraft {
+        VoiciCallHoursDraft(days: [true, true, true, true, true, false, false], startMinute: 9 * 60, endMinute: 17 * 60 + 30, zone: zone)
+    }
+
+    public init?(_ value: String?) {
+        guard let value, VoiciPage.isCallHours(value) else { return nil }
+        let f = value.split(separator: " ").map(String.init)
+        let t = f[1].split(separator: "-").map(String.init)
+        days = f[0].map { $0 == "1" }
+        startMinute = VoiciPage.hhmm(t[0])!
+        endMinute = VoiciPage.hhmm(t[1])!
+        zone = f[2]
+    }
+
+    /// The index value, or nil when it isn't a valid one (no day, start equal to end, an unknown zone).
+    public var value: String? {
+        func hm(_ m: Int) -> String { String(format: "%02d%02d", (m / 60) % 24, m % 60) }
+        let v = "\(days.map { $0 ? "1" : "0" }.joined()) \(hm(startMinute))-\(hm(endMinute)) \(zone)"
+        return days.count == 7 && VoiciPage.isCallHours(v) ? v : nil
+    }
+}

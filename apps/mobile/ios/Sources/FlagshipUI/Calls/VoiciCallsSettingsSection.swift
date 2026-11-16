@@ -14,13 +14,13 @@ struct VoiciCallsSettingsSection: View {
     var body: some View {
         let v = VoiciCallSettings.viewState(isAdmin: store.isAdmin, isPublic: store.isPublic, callsOn: store.callsOn, noRingMode: center.noRingMode)
         Section {
-            Toggle("Accept calls", isOn: Binding(get: { store.callsOn }, set: { on in change(on: on, from: store.callsFrom) }))
+            Toggle("Accept calls", isOn: Binding(get: { store.callsOn }, set: { on in change(on: on, from: VoiciCallSettings.mode(store.callsFrom)) }))
                 .disabled(!v.canEdit || busy)
                 .accessibilityIdentifier("page-accept-calls")
             if v.showsWho {
-                Picker("Who can call", selection: Binding(get: { store.callsFrom }, set: { f in change(on: true, from: f) })) {
-                    Text("People whose conversation you accepted").tag(VoiciCallSettings.fromAccepted)
-                    Text("Anyone signed in with Flagship").tag(VoiciCallSettings.fromSignedIn)
+                Picker("Who can call", selection: Binding(get: { VoiciCallSettings.mode(store.callsFrom) }, set: { f in change(on: true, from: f) })) {
+                    Text("Anyone on the internet").tag(VoiciCallSettings.fromAnyone)
+                    Text("People who let you call them back").tag(VoiciCallSettings.fromCallback)
                 }
                 .pickerStyle(.inline)
                 .disabled(!v.canEdit || busy)
@@ -33,10 +33,53 @@ struct VoiciCallsSettingsSection: View {
                 switch v.note {
                 case .publishFirst: Text("Publish your page to take calls.")
                 case .adminOnly: Text("Only an admin device can change this")
-                case nil: Text("Visitors signed in with Flagship can call you from your page. Your admin devices ring.")
+                case nil:
+                    if VoiciCallSettings.mode(store.callsFrom) == VoiciCallSettings.fromAnyone {
+                        Text("Anyone can call you from your page, with or without a Flagship account. Your admin devices ring.")
+                    } else {
+                        Text("Callers sign in with Flagship and let you call them back in that conversation. You never learn who they are. Your admin devices ring.")
+                    }
                 }
                 if v.noRingNote {
                     Text("In your region, calls ring only while Flagship is open.").accessibilityIdentifier("calls-no-ring-note")
+                }
+            }
+        }
+        if v.showsWho {
+            Section {
+                Toggle("Only at certain hours", isOn: Binding(get: { store.callHours != nil }, set: { on in
+                    publishHours(on ? (VoiciCallHoursDraft(store.callHours) ?? .standard()).value : nil)
+                }))
+                .disabled(!v.canEdit || busy)
+                .accessibilityIdentifier("calls-hours")
+                if let draft = VoiciCallHoursDraft(store.callHours) {
+                    HStack {
+                        ForEach(0..<7, id: \.self) { d in
+                            Button(Self.dayLetter(d)) {
+                                var x = draft
+                                x.days[d].toggle()
+                                if let value = x.value { publishHours(value) }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(draft.days[d] ? .accentColor : .secondary)
+                            .accessibilityLabel(Text(Self.dayName(d)))
+                            .accessibilityAddTraits(draft.days[d] ? .isSelected : [])
+                            .accessibilityIdentifier("calls-hours-day-\(d)")
+                        }
+                    }
+                    .disabled(!v.canEdit || busy)
+                    DatePicker(selection: hoursBinding(draft, \.startMinute), displayedComponents: .hourAndMinute) { Text("From") }
+                        .disabled(!v.canEdit || busy)
+                        .accessibilityIdentifier("calls-hours-from")
+                    DatePicker(selection: hoursBinding(draft, \.endMinute), displayedComponents: .hourAndMinute) { Text("Until") }
+                        .disabled(!v.canEdit || busy)
+                        .accessibilityIdentifier("calls-hours-until")
+                }
+            } footer: {
+                if let draft = VoiciCallHoursDraft(store.callHours) {
+                    Text(verbatim: String(localized: "Calls ring only at these hours, in the time zone \(draft.zone). Your page shows these hours and the time zone to visitors. An end before the start runs past midnight."))
+                } else {
+                    Text("Calls can ring at any time.")
                 }
             }
         }
@@ -81,6 +124,39 @@ struct VoiciCallsSettingsSection: View {
     }
 
     private func save() { CallSettingsStore.setQuietHours(quiet) }
+
+    private func publishHours(_ value: String?) {
+        busy = true
+        Task {
+            _ = await store.setCallHours(value)
+            busy = false
+        }
+    }
+
+    /// A time picker over one end of the published hours; a change publishes the hours again.
+    private func hoursBinding(_ draft: VoiciCallHoursDraft, _ kp: WritableKeyPath<VoiciCallHoursDraft, Int>) -> Binding<Date> {
+        Binding(get: {
+            Calendar.current.date(bySettingHour: draft[keyPath: kp] / 60, minute: draft[keyPath: kp] % 60, second: 0, of: Date()) ?? Date()
+        }, set: { d in
+            let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+            var x = draft
+            x[keyPath: kp] = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+            if let value = x.value { publishHours(value) }
+        })
+    }
+
+    /// Monday first, in the device's language.
+    static func dayName(_ d: Int) -> String {
+        let f = DateFormatter()
+        f.locale = .current
+        return f.standaloneWeekdaySymbols[(d + 1) % 7]
+    }
+
+    static func dayLetter(_ d: Int) -> String {
+        let f = DateFormatter()
+        f.locale = .current
+        return f.veryShortStandaloneWeekdaySymbols[(d + 1) % 7]
+    }
 
     private func minuteBinding(_ kp: WritableKeyPath<CallQuietHours, Int>) -> Binding<Date> {
         Binding(get: {

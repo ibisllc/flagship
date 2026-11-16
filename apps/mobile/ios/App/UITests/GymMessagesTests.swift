@@ -419,4 +419,21 @@ final class GymMessagesTests: GymSweepCase {
         XCTAssertFalse(text(app, containing: "Thank you!").exists, "The conversation itself stays on voi.ci.")
         shot(app, "messages-reply-notice")
     }
+
+    // MARK: - Calls from the app (docs/voici-calls.md "Calling from the app")
+
+    func test_aPageThisAccountWroteToCanBeCalledAndTheCallsListShowsIt() throws {
+        let app = openMessages(["-smoke-voici-page", "-smoke-voici-reply", "-smoke-voici-call-history"])
+        showMessages(app)
+        XCTAssertTrue(any(app, "messages-reply-notice").waitForExistence(timeout: 30))
+        XCTAssertTrue(any(app, "voici-call-audio").waitForExistence(timeout: 10), "The reply notice offers Call.")
+        XCTAssertTrue(any(app, "voici-call-video").exists, "The reply notice offers Video call.")
+        let calls = any(app, "messages-calls")
+        XCTAssertTrue(calls.waitForExistence(timeout: 10))
+        calls.tap()
+        let row = any(app, "voici-calls-row")
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "The call to river-otter is listed.")
+        XCTAssertTrue(text(app, containing: "voi.ci/river-otter").exists)
+        shot(app, "messages-calls-list")
+    }
 }
