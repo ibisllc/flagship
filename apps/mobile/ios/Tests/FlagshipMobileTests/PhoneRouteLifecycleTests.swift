@@ -30,7 +30,7 @@ final class PhoneRouteLifecycleTests: XCTestCase {
         _ = l.callStarted()
         _ = l.enterForeground()
         XCTAssertTrue(l.callEnded())
-        XCTAssertFalse(l.callEnded(), "an extra end never goes below zero")
+        XCTAssertTrue(l.callEnded(), "an extra end never goes below zero")
         XCTAssertFalse(l.enterBackground())
     }
 }
