@@ -4178,5 +4178,5 @@
     <string name="voici_reveal_username_line">%1$s ist die voi.ci-Seite dieser Person.</string>
     <string name="voici_calls_hours">Anrufzeiten</string>
     <string name="voici_calls_hours_switch">Nur zu bestimmten Zeiten</string>
-    <string name="voici_calls_hours_footer">Außerhalb dieser Zeiten klingelt kein Anruf auf deinen Geräten, und Anrufende sehen, dass du gerade keine Anrufe annimmst. Zeitzone: %1$s.</string>
+    <string name="voici_calls_hours_footer">Außerhalb dieser Zeiten klingelt kein Anruf auf deinen Geräten, und er wird zum verpassten Anruf. Nur deine eigenen Geräte kennen diese Zeiten. Zeitzone: %1$s.</string>
 </resources>

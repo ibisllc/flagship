@@ -29,16 +29,27 @@ class VoiciCallSettingsTest {
         assertEquals(true to "signed-in", VoiciCallSettings.read(1, "signed-in"))
     }
 
-    @Test fun callHoursRoundTripAndRefuseWhatTheIndexWouldRefuse() {
+    @Test fun callHoursEditorFormRoundTripsAndRefusesWhatTheSettingWouldRefuse() {
         val h = VoiciCallSettings.CallHours(setOf(0, 1, 2, 3, 4), 9 * 60, 17 * 60 + 30, "Europe/Paris")
-        assertEquals("1111100 0900-1730 Europe/Paris", h.value())
-        assertEquals(h, VoiciCallSettings.CallHours.parse(h.value()))
+        assertEquals(com.flagshipserver.app.core.voici.VoiciCallHours("1111100", "0900", "1730", "Europe/Paris"), h.toHours())
+        assertEquals(h, VoiciCallSettings.CallHours.from(h.toHours()))
         assertTrue(h.valid)
         assertFalse("no day", h.copy(days = emptySet()).valid)
         assertFalse("start equals end", h.copy(end = h.start).valid)
         assertFalse("unknown zone", h.copy(zone = "Mars/Olympus").valid)
-        assertNull(VoiciCallSettings.CallHours.parse("1111111 0900-2400 UTC"))
+        assertNull(VoiciCallSettings.CallHours.from(com.flagshipserver.app.core.voici.VoiciCallHours("1111111", "0900", "2400", "UTC")))
         assertEquals(setOf(0, 1, 2, 3, 4), VoiciCallSettings.CallHours.default("UTC").days)
+    }
+
+    @Test fun theRingingPhoneHoldsACallToTheOwnersHours() {
+        val q = CallQuietHours(false, 0, 0)
+        val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        val mondayTen = 1799053200000L // Monday 10:00 in Paris (09:00 UTC)
+        val weekdays = com.flagshipserver.app.core.voici.VoiciCallHours("1111100", "0900", "1730", "Europe/Paris")
+        assertTrue(VoiciCallCenter.shouldRing(mondayTen, mondayTen, q, utc, weekdays))
+        val saturdayNoon = 1799492400000L
+        assertFalse("outside the hours nothing rings (the call is missed)", VoiciCallCenter.shouldRing(saturdayNoon, saturdayNoon, q, utc, weekdays))
+        assertTrue("no hours: always", VoiciCallCenter.shouldRing(saturdayNoon, saturdayNoon, q, utc, null))
     }
 
     @Test fun viewState() {

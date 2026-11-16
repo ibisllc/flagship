@@ -99,8 +99,8 @@ data class VoiciPageUi(
     val callsOn: Boolean = false,
     /** Who may call while calls are on: "accepted" or "signed-in". */
     val callsFrom: String = "accepted",
-    /** When calls ring, as published ("<days> <HHMM>-<HHMM> <zone>"); null = any time. */
-    val callHours: String? = null,
+    /** The owner's call hours (synced between the owner's devices, never in the page); null = any time. */
+    val callHours: VoiciCallHours? = null,
     /** "Answer calls while Flagship is locked" is on here: this device holds a bound call key. */
     val answersWhileLocked: Boolean = false,
 )
@@ -226,7 +226,7 @@ class VoiciCenter(
             publicWarned = local.publicWarned,
             callsOn = idx != null && !local.removed && idx.body.takesCalls,
             callsFrom = com.flagshipserver.app.calls.VoiciCallSettings.read(idx?.body?.acceptsCalls, idx?.body?.callsFrom).second,
-            callHours = idx?.body?.callHours?.takeIf { !local.removed },
+            callHours = callHoursSetting(local)?.hours,
             answersWhileLocked = callKeyVault?.load(u) != null,
         )
         val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
@@ -264,6 +264,7 @@ class VoiciCenter(
         runCatching { refreshDrafts() }
         runCatching { syncState() }
         runCatching { refreshInbox() }
+        runCatching { refreshCallHours() }
         runCatching { rebindCallKeyIfNeeded() }
         runCatching { checkReplies() }
         // Every change waits for Publish on an admin device (or the Messages header's quick controls).
@@ -431,7 +432,7 @@ class VoiciCenter(
      * other draft stays a draft; null publishes every pending change. [mayRepublish]: only the Public switch (after its
      * warning) brings back a page another device took down; any other publish that learns of it from a 409 stops.
      */
-    suspend fun publish(reason: String?, only: List<VoiciDraftOp>? = null, mayRepublish: Boolean = false, calls: Pair<Boolean, String>? = null, hours: Pair<Boolean, String?>? = null): Boolean {
+    suspend fun publish(reason: String?, only: List<VoiciDraftOp>? = null, mayRepublish: Boolean = false, calls: Pair<Boolean, String>? = null): Boolean {
         val u = user() ?: return false
         val umk = keyring.umk() ?: return false
         val acc = account ?: refreshAccount() ?: return fail("not-found")
@@ -468,8 +469,6 @@ class VoiciCenter(
                 val body = VoiciPageIndexBody(
                     u, pageId, seq, now(), working.acceptsMessages, keys.epoch, keys.inboxPub, keys.signPub,
                     plan.map { it.ref }, kind, acceptsCalls = fields.first, callsFrom = fields.second,
-                    // Call hours set elsewhere (another app) ride along while calls stay on.
-                    callHours = if (fields.first == null) null else if (hours != null) hours.second else if (!local.removed) idx?.body?.callHours else null,
                 )
                 val signed = VoiciPage.signVoiciPageIndex(body, seed)
                 try {
@@ -693,16 +692,55 @@ class VoiciCenter(
         return publish(reason, only = emptyList(), calls = on to from)
     }
 
+    // ── the owner's call hours: synced between the owner's devices, never in the page (owner decision 2026-11-16) ──
+
+    /** Called with the hours whenever they sync, so the device keeps a copy that a locked phone can enforce. */
+    @Volatile var onCallHours: ((VoiciCallHours?) -> Unit)? = null
+
+    private fun callHoursSetting(local: VoiciLocal): VoiciCallHoursSetting? = local.callHoursSetting?.let(VoiciCallHoursSettings::parse)
+
+    /** The synced setting from `.com` (opened with the account's own key), merged with this device's copy: newer wins. */
+    suspend fun refreshCallHours() {
+        val u = user() ?: return
+        val umk = keyring.umk() ?: return
+        val blob = client.callSettings(u) ?: return
+        val remote = VoiciCallHoursSettings.open(VoiciCallHoursSettings.deriveKey(umk), u, blob) ?: return
+        val local = withLocal { _, _, l -> l } ?: return
+        val mine = callHoursSetting(local)
+        val merged = if (mine == null) remote else VoiciCallHoursSettings.merge(mine, remote)
+        update { it.copy(callHoursSetting = merged.toJson(), callHoursVersion = VoiciCallHoursSettings.version(blob)) }
+        onCallHours?.invoke(merged.hours)
+    }
+
     /**
-     * Call hours (docs/voici-calls.md, release-manager decisions: hours for every call): when calls ring, published in
-     * the page index so `.com` honours them for every caller; null = any time. Only while calls are on.
+     * Set or clear the owner's call hours (null = calls ring any time): sealed with the account's own key and written
+     * as the next version; on a conflict the newer one wins and the write is tried again. `.com` never sees the hours.
      */
-    suspend fun setCallHours(hours: String?, reason: String): Boolean {
-        val p = _page.value
-        if (!p.isPublic || !p.canPublish || !p.callsOn) return false
-        if (hours != null && !VoiciPage.isVoiciCallHours(hours)) return false
-        if (hours == p.callHours) return true
-        return publish(reason, only = emptyList(), calls = true to p.callsFrom, hours = true to hours)
+    suspend fun setCallHours(hours: VoiciCallHours?): Boolean {
+        val u = user() ?: return false
+        val umk = keyring.umk() ?: return false
+        val device = keyring.device() ?: return false
+        if (hours != null && VoiciCallHoursSettings.parseHours(hours.toJson()) == null) return false
+        val key = VoiciCallHoursSettings.deriveKey(umk)
+        var mine = VoiciCallHoursSetting(hours, now())
+        var version = (withLocal { _, _, l -> l.callHoursVersion } ?: 0) + 1
+        for (attempt in 0 until 3) {
+            try {
+                client.putCallSettings(u, device, VoiciCallHoursSettings.seal(key, u, version, mine))
+                update { it.copy(callHoursSetting = mine.toJson(), callHoursVersion = version) }
+                onCallHours?.invoke(mine.hours)
+                withLocal { uu, _, l -> publishUi(uu, l) }
+                return true
+            } catch (e: VoiciHttpError) {
+                if (e.code != "version-conflict") return false
+                val stored = e.body["settings"]
+                VoiciCallHoursSettings.open(key, u, stored)?.let { remote -> mine = VoiciCallHoursSettings.merge(mine, remote) }
+                version = VoiciCallHoursSettings.version(stored) + 1
+            } catch (e: Exception) {
+                return false
+            }
+        }
+        return false
     }
 
     // ── answering while locked (docs/voici-calls.md, owner decisions 2026-11-15) ──

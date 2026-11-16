@@ -95,8 +95,6 @@ data class VoiciPageIndexBody(
     val acceptsCalls: Int? = null,
     /** "accepted", "signed-in", "anyone" or "callback" on a v2 index. */
     val callsFrom: String? = null,
-    /** When calls ring (v2 only): "<7 day bits Mon..Sun> <HHMM>-<HHMM> <time zone>"; null = any time. */
-    val callHours: String? = null,
 ) {
     val isV2: Boolean get() = acceptsCalls != null || callsFrom != null
     val takesCalls: Boolean get() = acceptsCalls == 1
@@ -123,7 +121,6 @@ data class VoiciPageIndex(val body: VoiciPageIndexBody, val signature: String) {
             if (body.isV2) {
                 put("acceptsCalls", JsonPrimitive(body.acceptsCalls))
                 put("callsFrom", JsonPrimitive(body.callsFrom))
-                body.callHours?.let { put("callHours", JsonPrimitive(it)) }
             }
         },
     )
@@ -173,31 +170,6 @@ object VoiciPage {
     private fun isTime(n: Long) = n in 0..VoiciJs.MAX_SAFE
     private fun hex(s: String?, n: Int) = WebEnvelopes.isLowerHex(s, n)
     private fun hex(e: JsonElement?, n: Int) = WebEnvelopes.isLowerHex(e, n)
-
-    private val CALL_HOURS = Regex("^([01]{7}) ([01][0-9]|2[0-3])([0-5][0-9])-([01][0-9]|2[0-3])([0-5][0-9]) (UTC|[A-Za-z]{1,32}(?:/[A-Za-z0-9_+-]{1,32}){1,2})$")
-
-    /** Strict format of a call-hours value, with a time zone this runtime knows (as voiciPage.ts isVoiciCallHours). */
-    fun isVoiciCallHours(v: String?): Boolean {
-        if (v == null || v.length > 80) return false
-        val m = CALL_HOURS.matchEntire(v) ?: return false
-        val g = m.groupValues
-        if (g[1] == "0000000" || g[2] + g[3] == g[4] + g[5]) return false
-        return runCatching { java.time.ZoneId.of(g[6]) }.isSuccess
-    }
-
-    /** Whether calls ring at [now] under these hours (null: always; a bad value or unknown zone: never). */
-    fun voiciCallHoursOpen(callHours: String?, now: Long): Boolean {
-        if (callHours == null) return true
-        if (!isVoiciCallHours(callHours)) return false
-        val g = CALL_HOURS.matchEntire(callHours)!!.groupValues
-        val t = java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneId.of(g[6]))
-        val day = t.dayOfWeek.value - 1
-        val min = t.hour * 60 + t.minute
-        val start = g[2].toInt() * 60 + g[3].toInt()
-        val end = g[4].toInt() * 60 + g[5].toInt()
-        fun on(d: Int) = g[1][(d + 7) % 7] == '1'
-        return if (start < end) on(day) && min >= start && min < end else (on(day) && min >= start) || (on(day - 1) && min < end)
-    }
 
     fun isVoiciJpeg(b: ByteArray): Boolean = b.size >= 4 && b[0] == 0xff.toByte() && b[1] == 0xd8.toByte() && b[2] == 0xff.toByte()
 
@@ -345,13 +317,12 @@ object VoiciPage {
         piecesProblem(b.pieces)?.let { bad(it) }
         if (b.signerKind != "admin-root" && b.signerKind != "irk") bad("signerKind")
         if (!hex(b.signerPub, 32)) bad("signerPub")
-        if (b.callHours != null && (!b.isV2 || !isVoiciCallHours(b.callHours))) bad("callHours")
         return VoiciJs.utf8(
             (listOf(
                 if (b.isV2) TAG_VOICI_PAGE_V2 else TAG_VOICI_PAGE, b.username, b.pageId, b.seq.toString(), b.issuedAt.toString(), b.acceptsMessages.toString(),
             ) + (if (b.isV2) listOf(b.acceptsCalls.toString(), b.callsFrom!!) else emptyList()) + listOf(
                 b.inboxEpoch.toString(), b.inboxPub, b.ownerSignPub, b.pieces.joinToString(",") { it.key }, b.signerKind, b.signerPub,
-            ) + listOfNotNull(b.callHours)).joinToString("|"),
+            )).joinToString("|"),
         )
     }
 
@@ -373,7 +344,7 @@ object VoiciPage {
         }
         val o = VoiciJs.obj(v) ?: return null
         val v2 = VoiciJs.isNumEq(o["version"], 2)
-        val shapeOk = (VoiciJs.isNumEq(o["version"], 1) && VoiciJs.exactKeys(o, INDEX_KEYS)) || (v2 && (VoiciJs.exactKeys(o, INDEX_KEYS + listOf("acceptsCalls", "callsFrom")) || VoiciJs.exactKeys(o, INDEX_KEYS + listOf("acceptsCalls", "callsFrom", "callHours"))))
+        val shapeOk = (VoiciJs.isNumEq(o["version"], 1) && VoiciJs.exactKeys(o, INDEX_KEYS)) || (v2 && VoiciJs.exactKeys(o, INDEX_KEYS + listOf("acceptsCalls", "callsFrom")))
         if (!shapeOk || VoiciJs.str(o["kind"]) != "VoiciPage" || !hex(o["signature"], 64)) return null
         val calls = if (v2) (VoiciJs.safeInt(o["acceptsCalls"]) ?: return null).toInt() else null
         val callsFrom = if (v2) (VoiciJs.str(o["callsFrom"]) ?: return null) else null
@@ -401,7 +372,6 @@ object VoiciPage {
             signerPub = VoiciJs.str(o["signerPub"]) ?: return null,
             acceptsCalls = calls,
             callsFrom = callsFrom,
-            callHours = if (o.containsKey("callHours")) (VoiciJs.str(o["callHours"]) ?: return null) else null,
         )
         return try {
             canonicalVoiciPageIndex(body)

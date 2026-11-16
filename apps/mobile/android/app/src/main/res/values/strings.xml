@@ -4183,5 +4183,5 @@
     <string name="voici_reveal_username_line">%1$s is this person\'s voi.ci page.</string>
     <string name="voici_calls_hours">Call hours</string>
     <string name="voici_calls_hours_switch">Only at certain hours</string>
-    <string name="voici_calls_hours_footer">Outside these hours calls don\'t ring on any of your devices, and callers see you aren\'t taking calls. Time zone: %1$s.</string>
+    <string name="voici_calls_hours_footer">Outside these hours calls don\'t ring on any of your devices and become missed calls. Only your own devices know these hours. Time zone: %1$s.</string>
 </resources>

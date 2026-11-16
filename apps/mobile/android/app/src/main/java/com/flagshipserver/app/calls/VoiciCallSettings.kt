@@ -34,28 +34,25 @@ object VoiciCallSettings {
         (acceptsCalls == 1) to (callsFrom?.takeIf { it in FROM_VALUES } ?: FROM_ACCEPTED)
 
     /**
-     * Call hours as the page index carries them: "<7 day bits, Mon..Sun> <HHMM>-<HHMM> <time zone>". [days] are 0 = Monday
-     * to 6 = Sunday; [start] and [end] minutes of the day (an end before the start runs past midnight).
+     * The editor's form of the owner's call hours (a synced setting, never in the page: VoiciCallHoursSettings).
+     * [days] are 0 = Monday to 6 = Sunday; [start] and [end] minutes of the day (an end before the start runs past midnight).
      */
     data class CallHours(val days: Set<Int>, val start: Int, val end: Int, val zone: String) {
-        fun value(): String {
-            val bits = (0..6).joinToString("") { if (it in days) "1" else "0" }
+        fun toHours(): com.flagshipserver.app.core.voici.VoiciCallHours {
             fun hm(m: Int) = "%02d%02d".format(java.util.Locale.ROOT, m / 60, m % 60)
-            return "$bits ${hm(start)}-${hm(end)} $zone"
+            return com.flagshipserver.app.core.voici.VoiciCallHours((0..6).joinToString("") { if (it in days) "1" else "0" }, hm(start), hm(end), zone)
         }
-        /** A value the page index takes (a day picked, start ≠ end, a known zone). */
-        val valid: Boolean get() = com.flagshipserver.app.core.voici.VoiciPage.isVoiciCallHours(value())
+        /** Hours the setting takes (a day picked, start ≠ end, a known zone). */
+        val valid: Boolean get() = com.flagshipserver.app.core.voici.VoiciCallHoursSettings.parseHours(toHours().toJson()) != null
 
         companion object {
             /** Weekdays 9:00 to 17:00 in this device's zone: what the editor starts from. */
             fun default(zone: String) = CallHours((0..4).toSet(), 9 * 60, 17 * 60, zone)
 
-            fun parse(v: String?): CallHours? {
-                if (!com.flagshipserver.app.core.voici.VoiciPage.isVoiciCallHours(v)) return null
-                val (bits, span, zone) = v!!.split(" ")
-                val (a, b) = span.split("-")
+            fun from(h: com.flagshipserver.app.core.voici.VoiciCallHours?): CallHours? {
+                val v = h?.let { com.flagshipserver.app.core.voici.VoiciCallHoursSettings.parseHours(it.toJson()) } ?: return null
                 fun m(x: String) = x.substring(0, 2).toInt() * 60 + x.substring(2).toInt()
-                return CallHours((0..6).filter { bits[it] == '1' }.toSet(), m(a), m(b), zone)
+                return CallHours((0..6).filter { v.days[it] == '1' }.toSet(), m(v.from), m(v.to), v.zone)
             }
         }
     }
@@ -109,6 +106,17 @@ class CallSettingsStore(context: Context) {
     fun setQuietHours(q: CallQuietHours) {
         val n = q.normalized()
         prefs.edit().putBoolean("quietOn", n.on).putInt("quietStart", n.startMinute).putInt("quietEnd", n.endMinute).apply()
+    }
+
+    /**
+     * The owner's call hours as last synced (VoiciCallHoursSettings): kept here, on this device, so a call that arrives
+     * while the account is locked is still held to them.
+     */
+    fun callHours(): com.flagshipserver.app.core.voici.VoiciCallHours? =
+        prefs.getString("hours", null)?.let { com.flagshipserver.app.core.voici.VoiciJs.parseJson(it) }?.let(com.flagshipserver.app.core.voici.VoiciCallHoursSettings::parseHours)
+
+    fun setCallHours(h: com.flagshipserver.app.core.voici.VoiciCallHours?) {
+        if (h == null) prefs.edit().remove("hours").apply() else prefs.edit().putString("hours", h.toJson().toString()).apply()
     }
 
     /** The last "who can call" picked here, for turning calls on again. */

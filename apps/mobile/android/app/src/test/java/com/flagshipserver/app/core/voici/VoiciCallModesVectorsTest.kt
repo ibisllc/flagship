@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.core.voici
 
+import com.flagshipserver.app.core.voici.VoiciVectorsTest.Companion.H
 import com.flagshipserver.app.core.voici.VoiciVectorsTest.Companion.h
 import com.flagshipserver.app.core.voici.VoiciVectorsTest.Companion.vectorsFile
 import kotlinx.serialization.json.Json
@@ -123,25 +124,27 @@ class VoiciCallModesVectorsTest {
         for (c in b.cases("checks")) assertEquals(c.s("name"), c["expect"]!!.jsonPrimitive.boolean, VoiciCallModes.verifyAnonBlock(c["block"], c.s("signature"), C.s("ownerSignPub")))
     }
 
-    @Test fun callHoursInThePageIndex() {
-        val x = M.o("callHours")
-        for (c in x.cases("shapes")) assertEquals(c.s("name"), c["expect"]!!.jsonPrimitive.boolean, VoiciPage.isVoiciCallHours(c.s("value")))
-        for (c in x.cases("open")) {
-            val hours = (c["hours"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
-            assertEquals(c.s("name"), c["expect"]!!.jsonPrimitive.boolean, VoiciPage.voiciCallHoursOpen(hours, c.l("now")))
+    @Test fun callSettingsSealedAndSynced() {
+        val x = M.o("callSettings")
+        val key = VoiciCallHoursSettings.deriveKey(h(x.s("ownerUmk")))
+        assertEquals(x.s("key"), H(key))
+        val plain = VoiciCallHoursSettings.parse(x["plain"])!!
+        val sealed = x.o("sealed")
+        assertEquals(sealed, VoiciCallHoursSettings.seal(key, x.s("username"), sealed.l("version"), plain, h(x.s("nonce"))))
+        assertEquals(plain, VoiciCallHoursSettings.open(key, x.s("username"), sealed))
+        assertEquals(x["plain"], plain.toJson())
+        // Refusals: another account, another version, another key.
+        assertEquals(null, VoiciCallHoursSettings.open(key, "bob", sealed))
+        assertEquals(null, VoiciCallHoursSettings.open(key, x.s("username"), JsonObject(sealed + ("version" to kotlinx.serialization.json.JsonPrimitive(sealed.l("version") + 1)))))
+        assertEquals(null, VoiciCallHoursSettings.open(ByteArray(32) { 1 }, x.s("username"), sealed))
+        for (c in x.cases("hoursShapes")) assertEquals(c.s("name"), c["expect"]!!.jsonPrimitive.boolean, VoiciCallHoursSettings.parseHours(c["value"]) != null)
+        for (c in x.cases("hoursAllow")) {
+            val hours = (c["hours"] as? JsonObject)?.let(VoiciCallHoursSettings::parseHours)
+            assertEquals(c.s("name"), c["expect"]!!.jsonPrimitive.boolean, VoiciCallHoursSettings.allow(hours, c.l("now")))
         }
-        val with = VoiciPage.parseVoiciPageIndex(x["withHours"])!!
-        assertEquals(x.s("withHoursCanonical"), String(VoiciPage.canonicalVoiciPageIndex(with.body), Charsets.UTF_8))
-        assertEquals(x["withHours"], with.toJson())
-        val without = VoiciPage.parseVoiciPageIndex(x["noHours"])!!
-        assertEquals(x.s("noHoursCanonical"), String(VoiciPage.canonicalVoiciPageIndex(without.body), Charsets.UTF_8))
-        for (c in x.cases("index")) {
-            val parsed = VoiciPage.parseVoiciPageIndex(c["index"])
-            assertEquals(c.s("name"), c["ok"]!!.jsonPrimitive.boolean, parsed != null)
-            if (parsed != null && c["signatureHolds"]?.jsonPrimitive?.boolean == false) {
-                assertFalse(c.s("name"), WebEnvelopes.ed25519VerifyHex(parsed.signature, VoiciPage.canonicalVoiciPageIndex(parsed.body), parsed.body.signerPub))
-            }
-        }
+        val none = VoiciCallHoursSettings.parse(x["plainNone"])!!
+        assertEquals(plain, VoiciCallHoursSettings.merge(none, plain))
+        assertEquals(plain, VoiciCallHoursSettings.merge(plain, none))
     }
 
     @Test fun anAnonymousCallersPushOpensAsAnonymous() {

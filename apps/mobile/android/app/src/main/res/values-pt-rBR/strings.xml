@@ -4178,5 +4178,5 @@
     <string name="voici_reveal_username_line">%1$s é a página no voi.ci desta pessoa.</string>
     <string name="voici_calls_hours">Horário de chamadas</string>
     <string name="voici_calls_hours_switch">Só em certos horários</string>
-    <string name="voici_calls_hours_footer">Fora desses horários as chamadas não tocam em nenhum dos seus dispositivos, e quem liga vê que você não está recebendo chamadas. Fuso horário: %1$s.</string>
+    <string name="voici_calls_hours_footer">Fora desses horários as chamadas não tocam em nenhum dos seus dispositivos e viram chamadas perdidas. Só os seus próprios dispositivos conhecem esses horários. Fuso horário: %1$s.</string>
 </resources>

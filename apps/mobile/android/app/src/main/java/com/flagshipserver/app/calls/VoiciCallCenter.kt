@@ -89,12 +89,22 @@ object VoiciCallCenter {
      * A call that arrives at [nowMs] rings here only while fresh and outside this device's Do Not Disturb hours. A
      * quiet device stays out of the room, so another device can answer and an unanswered call becomes a missed call.
      */
-    fun shouldRing(issuedAt: Long, nowMs: Long, quiet: CallQuietHours, calendar: java.util.Calendar = java.util.Calendar.getInstance()): Boolean =
-        nowMs - issuedAt <= VoiciCalls.RING_MS && !quiet.isQuiet(nowMs, calendar)
+    fun shouldRing(
+        issuedAt: Long,
+        nowMs: Long,
+        quiet: CallQuietHours,
+        calendar: java.util.Calendar = java.util.Calendar.getInstance(),
+        /** The owner's call hours (synced between the owner's devices): outside them nothing rings, so it's missed. */
+        hours: com.flagshipserver.app.core.voici.VoiciCallHours? = null,
+    ): Boolean =
+        nowMs - issuedAt <= VoiciCalls.RING_MS && !quiet.isQuiet(nowMs, calendar) && com.flagshipserver.app.core.voici.VoiciCallHoursSettings.allow(hours, nowMs)
 
     fun onPush(context: Context, push: VoiciCallPush.Payload) {
         app = context.applicationContext
-        if (!shouldRing(push.issuedAt, System.currentTimeMillis(), CallSettingsStore(app).quietHours())) return
+        val store = CallSettingsStore(app)
+        // Outside the owner's call hours (or this device's Do Not Disturb) the device stays out of the room: nothing
+        // rings, and the unanswered call becomes a missed call.
+        if (!shouldRing(push.issuedAt, System.currentTimeMillis(), store.quietHours(), hours = store.callHours())) return
         if (session != null || pendingPush != null) return
         pendingPush = push
         update { Ui(phase = Phase.Ringing, callId = push.callId, name = FSStrings.get(R.string.voici_call_someone)) }
