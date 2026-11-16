@@ -377,7 +377,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(priv).toContain("aren't responsible for how it behaves");
     expect(priv).toContain("We may change provider at any time");
     expect(priv).not.toMatch(/to be named|to be confirmed|free AI/i);
-    expect(priv).toContain("Last updated: 2026-11-08");
+    expect(priv).toContain("Last updated: 2026-11-16");
   });
 
   it("the abuse page and privacy policy never suggest that a report lets Flagship read a message", async () => {
