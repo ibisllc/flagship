@@ -34,6 +34,9 @@ trap 'rm -rf "$dl"' EXIT
 gh run download "$run" --name libwebrtc --dir "$dl"
 cd "$dl"
 shasum -a 256 -c SHA256SUMS
+for f in WebRTC.xcframework.zip FlagshipTurn.xcframework.zip libwebrtc.aar flagship-turn-android.zip; do
+  grep -q "  $f\$" SHA256SUMS || { echo "use-artifacts: run $run's SHA256SUMS does not list $f" >&2; exit 1; }
+done
 if [ "$record" = "--record" ]; then
   cp SHA256SUMS "$pin"
   echo "use-artifacts: wrote $pin from run $run; review and commit it."
