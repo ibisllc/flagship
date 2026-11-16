@@ -15426,12 +15426,12 @@
     "en": "Time zone",
     "ctx": "webapp/views/page-editor.js"
   },
-  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": {
-    "en": "Calls ring only during these hours. Your page shows them to anyone, with the time zone.",
-    "ctx": "webapp/views/page-editor.js"
-  },
   "These hours don't work. Pick at least one day and different start and end times.": {
     "en": "These hours don't work. Pick at least one day and different start and end times.",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": {
+    "en": "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.",
     "ctx": "webapp/views/page-editor.js"
   }
 }

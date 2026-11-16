@@ -42,17 +42,17 @@ describe("voici call modes vectors", () => {
     expect(P.openVoiciRingHint(h(V.ring.threadSeed), V.ring.order.conv, V.ring.order.ringId, P.b64Decode(hint)!)).toEqual(V.ring.hintPlain);
   });
 
-  it("call hours: shape, open at an instant, the index bytes", () => {
-    const X = V.callHours;
-    for (const c of X.shapes) expect(P.isVoiciCallHours(c.value), c.name).toBe(c.expect);
-    for (const c of X.open) expect(P.voiciCallHoursOpen(c.hours ?? undefined, c.now), c.name).toBe(c.expect);
-    expect(dec(P.canonicalVoiciPageIndex(X.withHours))).toBe(X.withHoursCanonical);
-    expect(dec(P.canonicalVoiciPageIndex(X.noHours))).toBe(X.noHoursCanonical);
-    for (const c of X.index) {
-      const parsed = P.parseVoiciPageIndex(c.index);
-      expect(parsed !== null, c.name).toBe(c.ok);
-      if (parsed && c.signatureHolds === false) expect(P.ed25519VerifyHex(c.index.signature, P.canonicalVoiciPageIndex(parsed), c.index.signerPub)).toBe(false);
-    }
+  it("call hours: the owner's sealed setting, its shapes, and when a call may ring", () => {
+    const X = V.callSettings;
+    const key = P.deriveVoiciCallSettingsKey({ seed: h(X.ownerUmk) } as never);
+    expect(H(key)).toBe(X.key);
+    expect(P.sealVoiciCallSettings(key, X.username, X.sealed.version, X.plain, h(X.nonce))).toEqual(X.sealed);
+    expect(P.openVoiciCallSettings(key, X.username, X.sealed)).toEqual(X.plain);
+    expect(P.openVoiciCallSettings(key, "bob", X.sealed)).toBeNull();
+    expect(P.openVoiciCallSettings(key, X.username, { ...X.sealed, version: X.sealed.version + 1 })).toBeNull();
+    for (const c of X.hoursShapes) expect(P.parseVoiciCallHours(c.value) !== null, c.name).toBe(c.expect);
+    for (const c of X.hoursAllow) expect(P.voiciCallHoursAllow(c.hours, c.now), c.name).toBe(c.expect);
+    expect(P.mergeVoiciCallSettings(X.plainNone, X.plain)).toEqual(X.plain);
   });
 
   it("an anonymous call's push opens as an anonymous caller", () => {

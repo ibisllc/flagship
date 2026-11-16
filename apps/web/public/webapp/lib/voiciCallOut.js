@@ -220,16 +220,14 @@ export function browserTimeZone() {
   }
 }
 
-/** "<days> <HHMM>-<HHMM> <zone>" from the sheet's fields (days Monday first, times "HH:MM"). */
+/** The synced hours ({days, from, to, zone}; voiciCallSettings.js) from the sheet's fields (days Monday first, "HH:MM"). */
 export function callHoursValue(days, from, to, zone) {
   const hhmm = (t) => String(t ?? "").replace(":", "");
-  return `${days.map((d) => (d ? "1" : "0")).join("")} ${hhmm(from)}-${hhmm(to)} ${zone}`;
+  return { days: days.map((d) => (d ? "1" : "0")).join(""), from: hhmm(from), to: hhmm(to), zone };
 }
 
-/** The sheet's fields from a stored value (or the defaults: weekdays, 09:00 to 17:00, the browser's zone). */
-export function callHoursFields(value) {
-  const m = /^([01]{7}) (\d{2})(\d{2})-(\d{2})(\d{2}) (\S+)$/.exec(value ?? "");
-  if (!m) return { on: false, days: [true, true, true, true, true, false, false], from: "09:00", to: "17:00", zone: browserTimeZone() };
-  return { on: true, days: [...m[1]].map((c) => c === "1"), from: `${m[2]}:${m[3]}`, to: `${m[4]}:${m[5]}`, zone: m[6] };
+/** The sheet's fields from the synced hours (or the defaults: weekdays, 09:00 to 17:00, the browser's zone). */
+export function callHoursFields(hours) {
+  if (!hours) return { on: false, days: [true, true, true, true, true, false, false], from: "09:00", to: "17:00", zone: browserTimeZone() };
+  return { on: true, days: [...hours.days].map((c) => c === "1"), from: `${hours.from.slice(0, 2)}:${hours.from.slice(2)}`, to: `${hours.to.slice(0, 2)}:${hours.to.slice(2)}`, zone: hours.zone };
 }
-

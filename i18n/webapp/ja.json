@@ -3782,6 +3782,6 @@
   "From": "開始",
   "To": "終了",
   "Time zone": "タイムゾーン",
-  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": "通話はこの時間帯にだけ鳴ります。この時間帯とタイムゾーンは、あなたのページで誰でも見られます。",
-  "These hours don't work. Pick at least one day and different start and end times.": "この時間帯は使えません。少なくとも 1 日を選び、開始と終了を別の時刻にしてください。"
+  "These hours don't work. Pick at least one day and different start and end times.": "この時間帯は使えません。少なくとも 1 日を選び、開始と終了を別の時刻にしてください。",
+  "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "この時間帯以外は電話が鳴らず、不在着信として表示されます。時間帯を知っているのはあなたのデバイスだけです。"
 }

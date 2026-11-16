@@ -696,10 +696,7 @@ Built and tested in TS, `.com`, flagship-web, voi.ci and the webapp; the native 
 
 ### As built: the release-manager decisions (2026-11-16, `0.4/calls-callback`)
 
-- **Call hours** in the v2 index, optional `callHours` = `"<days> <HHMM>-<HHMM> <time zone>"` (seven 0/1 from Monday,
-  IANA zone or `UTC`; an end before the start runs past midnight), appended to the signed bytes only when present.
-  `.com` refuses every call outside them with `closed`, anonymous or signed in. TS and the webapp (flagship-web's
-  copy) replay vectors `voici-call-modes` section `callHours`; Swift and Kotlin are the forks'.
+- **Call hours** were first built into the page index; the owner then chose to keep them off it (option c, below).
 - **Blocking a conversation:** signed-in callers keep the pseudonym block (calls and messages). An anonymous caller's
   conversation, the browser key its proof of work was made for, is blocked by `flagship/voici-anon-block/v1`
   (`POST /api/voici/pages/<u>/anon-block`, owner key) until unblocked. Deleting a conversation drops its block or
@@ -715,3 +712,20 @@ Built and tested in TS, `.com`, flagship-web, voi.ci and the webapp; the native 
   signed delete with "Messages already on <name>'s device stay there.", Block / Unblock on anonymous missed calls in
   Calls, and the `voici-ring` push. The webapp has no caller-side conversation screen, so no reveal switch (the apps
   have it).
+
+### Call hours stay on the owner's devices (owner decision 2026-11-16, option c; `0.4/calls-callback`)
+
+Hours in the page index would show the owner's time zone to anyone, so they are **never published**:
+- `callHours` is gone from the page index (TS, the webapp, flagship-web; a v2 index carrying it is `malformed`, a
+  vector in `voici-calls` pageV2). `.com` never answers `closed`.
+- The hours are an owner-device setting synced between the owner's own devices: `flagship/voici-call-settings/v1`, a
+  sealed blob like the Messages state (key HKDF of the UMK with that info; AES-256-GCM, aad
+  `flagship/voici-call-settings/v1|<username>|<version>`) holding `{v:1, hours: null | {days, from, to, zone}, updatedAt}`
+  (days seven 0/1 from Monday, from/to `HHMM`, zone IANA or `UTC`; a conflict keeps the newer `updatedAt`). `.com`
+  stores only ciphertext (`GET`/`PUT /api/accounts/<u>/voici-call-settings`, device headers, compare-and-set on
+  `version`, D1 **0150**), so no server learns the hours or the zone; account deletion drops it.
+- **The ringing phone enforces them** (`voiciCallHoursAllow`): outside them it doesn't ring and the call ends as a
+  missed call; the caller, anonymous or not, sees "No answer".
+- The webapp's Calls sheet edits the synced setting (time zone defaults to the browser's); its note says only the
+  owner's devices know the hours. Vectors `voici-call-modes` section `callSettings` (key, sealed blob, refusals,
+  shapes, when a call may ring) for Swift and Kotlin.

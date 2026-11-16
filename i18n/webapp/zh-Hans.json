@@ -3782,6 +3782,6 @@
   "From": "从",
   "To": "到",
   "Time zone": "时区",
-  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": "来电只在这些时段响铃。你的页面会向任何人显示这些时段及时区。",
-  "These hours don't work. Pick at least one day and different start and end times.": "这些时段无效。请至少选择一天，并设置不同的开始和结束时间。"
+  "These hours don't work. Pick at least one day and different start and end times.": "这些时段无效。请至少选择一天，并设置不同的开始和结束时间。",
+  "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "在这些时段之外，你的手机不会响铃，来电会显示为未接。只有你的设备知道这些时段。"
 }

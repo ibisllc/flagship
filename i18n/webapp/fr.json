@@ -3782,6 +3782,6 @@
   "From": "De",
   "To": "À",
   "Time zone": "Fuseau horaire",
-  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": "Les appels ne sonnent que pendant ces heures. Votre page les montre à tout le monde, avec le fuseau horaire.",
-  "These hours don't work. Pick at least one day and different start and end times.": "Ces heures ne conviennent pas. Choisissez au moins un jour et des heures de début et de fin différentes."
+  "These hours don't work. Pick at least one day and different start and end times.": "Ces heures ne conviennent pas. Choisissez au moins un jour et des heures de début et de fin différentes.",
+  "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "En dehors de ces heures, vos téléphones ne sonnent pas et l'appel apparaît comme manqué. Seuls vos appareils connaissent ces heures."
 }

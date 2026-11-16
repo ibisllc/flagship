@@ -507,6 +507,7 @@ const pageV2Checks = (
     ["acceptsCalls 2", { ...pageV2, acceptsCalls: 2 }, "malformed"],
     ["calls switched off after signing", { ...pageV2, acceptsCalls: 0 }, "bad-signature"],
     ["callsFrom widened after signing", { ...pageV2, callsFrom: "signed-in" }, "bad-signature"],
+    ["call hours in the index (they stay on the owner's devices)", { ...pageV2, callHours: "1111111 0900-1700 UTC" }, "malformed"],
   ] as const
 ).map(([name, index, expected]) => ({ name, index, expected: want(`page v2 ${name}`, code(P.checkVoiciPageIndex(index, pctx)), expected) }));
 want("v1 has no calls", P.voiciPageAcceptsCalls(VP.index.signed), false);

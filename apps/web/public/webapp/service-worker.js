@@ -721,6 +721,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciCallHandoff.js",
   "/lib/voiciCallOut.js",
   "/lib/voiciReveal.js",
+  "/lib/voiciCallSettings.js",
   "/views/messages.js",
   "/views/thread.js",
   "/views/calls.js",

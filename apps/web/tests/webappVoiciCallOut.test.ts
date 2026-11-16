@@ -71,18 +71,18 @@ describe("webapp calls to known pages", () => {
 describe("the Calls sheet's helpers and what a publish signs", () => {
   it("hours round-trip through the sheet's fields; the default is weekdays 09-17 in the browser's zone", async () => {
     const { callHoursFields, callHoursValue, browserTimeZone } = await import("../public/webapp/lib/voiciCallOut.js");
-    const P = await import("../public/webapp/lib/voiciProtocol.js");
+    const S = await import("../public/webapp/lib/voiciCallSettings.js");
     const v = callHoursValue([true, true, true, true, true, false, false], "09:00", "17:30", "Europe/Paris");
-    expect(v).toBe("1111100 0900-1730 Europe/Paris");
-    expect(P.isVoiciCallHours(v)).toBe(true);
+    expect(v).toEqual({ days: "1111100", from: "0900", to: "1730", zone: "Europe/Paris" });
+    expect(S.parseVoiciCallHours(v)).toEqual(v);
     expect(callHoursFields(v)).toEqual({ on: true, days: [true, true, true, true, true, false, false], from: "09:00", to: "17:30", zone: "Europe/Paris" });
     expect(callHoursFields(undefined)).toMatchObject({ on: false, from: "09:00", to: "17:00", zone: browserTimeZone() });
   });
 
-  it("a publish keeps every call mode and the hours of the index it replaces, unless the owner changes them", async () => {
+  it("a publish keeps every call mode of the index it replaces, unless the owner changes it; hours never go in", async () => {
     const { carriedCalls } = await import("../public/webapp/lib/voiciOwner.js");
-    const published = { index: { acceptsCalls: 1, callsFrom: "callback", callHours: "1111111 0800-2000 UTC" } };
-    expect(carriedCalls(published)).toEqual({ acceptsCalls: 1, callsFrom: "callback", callHours: "1111111 0800-2000 UTC" });
+    const published = { index: { acceptsCalls: 1, callsFrom: "callback" } };
+    expect(carriedCalls(published)).toEqual({ acceptsCalls: 1, callsFrom: "callback" });
     expect(carriedCalls({ index: { acceptsCalls: 1, callsFrom: "anyone" } })).toEqual({ acceptsCalls: 1, callsFrom: "anyone" });
     expect(carriedCalls(published, { acceptsCalls: true, callsFrom: "anyone" })).toEqual({ acceptsCalls: 1, callsFrom: "anyone" });
     expect(carriedCalls(published, { acceptsCalls: false })).toEqual({});
