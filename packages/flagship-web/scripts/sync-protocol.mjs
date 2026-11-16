@@ -22,6 +22,7 @@ export const PROTOCOL_FILES = [
   "lib/voiciMessages.js",
   "lib/voiciProtocol.js",
   "lib/voiciCallHandoff.js",
+  "lib/voiciReveal.js",
   "vendor/noble-post-quantum/pq-seal.js",
 ];
 

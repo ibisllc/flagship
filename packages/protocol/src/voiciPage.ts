@@ -219,6 +219,13 @@ export interface VoiciPageIndexBody {
   /** Present (with callsFrom) only on a v2 index. */
   acceptsCalls?: 0 | 1;
   callsFrom?: VoiciPageCallsFrom;
+  /**
+   * The hours calls ring (v2 only, optional; docs/voici-calls.md, release-manager decisions 2026-11-16):
+   * "<days> <HHMM>-<HHMM> <time zone>", days seven 0/1 from Monday, the zone IANA or "UTC"; an end before the start
+   * runs past midnight (the days name the start's day). Absent: any time. Appended to the v2 bytes as `|<callHours>`
+   * only when present, so pages without hours keep their bytes.
+   */
+  callHours?: string;
   inboxEpoch: number;
   inboxPub: string;
   ownerSignPub: string;
@@ -234,6 +241,38 @@ export interface VoiciPageIndex extends VoiciPageIndexBody {
 }
 
 const isV2 = (b: VoiciPageIndexBody) => b.acceptsCalls !== undefined || b.callsFrom !== undefined;
+
+const CALL_HOURS = /^([01]{7}) ([01][0-9]|2[0-3])([0-5][0-9])-([01][0-9]|2[0-3])([0-5][0-9]) (UTC|[A-Za-z]{1,32}(?:\/[A-Za-z0-9_+-]{1,32}){1,2})$/;
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Strict format of a call-hours value (and a time zone this runtime knows). */
+export function isVoiciCallHours(v: unknown): v is string {
+  if (typeof v !== "string" || v.length > 80) return false;
+  const m = CALL_HOURS.exec(v);
+  if (!m || m[1] === "0000000" || `${m[2]}${m[3]}` === `${m[4]}${m[5]}`) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: m[6] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether calls ring at `now` under these hours (absent: always). An unknown zone or bad value: never. */
+export function voiciCallHoursOpen(callHours: string | undefined, now: number): boolean {
+  if (callHours === undefined) return true;
+  if (!isVoiciCallHours(callHours)) return false;
+  const m = CALL_HOURS.exec(callHours)!;
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: m[6], weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(now));
+  const day = WEEKDAYS.indexOf(parts.find((p) => p.type === "weekday")?.value ?? "");
+  const min = Number(parts.find((p) => p.type === "hour")?.value) * 60 + Number(parts.find((p) => p.type === "minute")?.value);
+  if (day < 0 || !Number.isFinite(min)) return false;
+  const start = Number(m[2]) * 60 + Number(m[3]);
+  const end = Number(m[4]) * 60 + Number(m[5]);
+  const on = (d: number) => m[1]![(d + 7) % 7] === "1";
+  if (start < end) return on(day) && min >= start && min < end;
+  return (on(day) && min >= start) || (on(day - 1) && min < end);
+}
 
 /** Calls on (a v2 index with acceptsCalls 1); a v1 index never takes calls. */
 export function voiciPageAcceptsCalls(b: VoiciPageIndexBody): boolean {
@@ -271,6 +310,7 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
   if (b.acceptsMessages !== 0 && b.acceptsMessages !== 1) throw bad("acceptsMessages");
   const v2 = isV2(b);
   if (v2 && ((b.acceptsCalls !== 0 && b.acceptsCalls !== 1) || !VOICI_CALLS_FROM_VALUES.includes(b.callsFrom as VoiciPageCallsFrom))) throw bad("calls");
+  if (b.callHours !== undefined && (!v2 || !isVoiciCallHours(b.callHours))) throw bad("callHours");
   if (!isTime(b.inboxEpoch) || b.inboxEpoch < 1) throw bad("inboxEpoch");
   if (!isLowerHex(b.inboxPub, 1216) || !isLowerHex(b.ownerSignPub, 32)) throw bad("keys");
   const pp = piecesProblem(b.pieces);
@@ -292,6 +332,7 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
       b.pieces.map((p) => `${p.role}:${p.sha256}:${p.size}`).join(","),
       b.signerKind,
       b.signerPub,
+      ...(b.callHours !== undefined ? [b.callHours] : []),
     ].join("|"),
   );
 }
@@ -326,7 +367,7 @@ export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
     }
   }
   if (!isObj(v) || v.kind !== "VoiciPage" || !isLowerHex(v.signature, 64)) return null;
-  if (!(v.version === 1 && exactKeys(v, INDEX_KEYS)) && !(v.version === 2 && exactKeys(v, INDEX_KEYS_V2))) return null;
+  if (!(v.version === 1 && exactKeys(v, INDEX_KEYS)) && !(v.version === 2 && (exactKeys(v, INDEX_KEYS_V2) || exactKeys(v, [...INDEX_KEYS_V2, "callHours"])))) return null;
   const r = v as unknown as VoiciPageIndex;
   try {
     canonicalVoiciPageIndex(r);
@@ -342,6 +383,7 @@ export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
     issuedAt: r.issuedAt,
     acceptsMessages: r.acceptsMessages,
     ...(r.version === 2 ? { acceptsCalls: r.acceptsCalls, callsFrom: r.callsFrom } : {}),
+    ...(r.callHours !== undefined ? { callHours: r.callHours } : {}),
     inboxEpoch: r.inboxEpoch,
     inboxPub: r.inboxPub,
     ownerSignPub: r.ownerSignPub,

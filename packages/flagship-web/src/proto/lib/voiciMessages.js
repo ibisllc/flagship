@@ -38,6 +38,7 @@ import {
   WEB_ENVELOPE_MAX_BYTES,
 } from "./voiciCore.js";
 import { checkVoiciText } from "./voiciText.js";
+import { parseVoiciRevealControl } from "./voiciReveal.js";
 import { isVoiciJpeg, parseVoiciPost, parseVoiciProfile } from "./voiciPage.js";
 
 export const TAG_VOICI_INBOX = "flagship/voici-inbox/v1";
@@ -309,6 +310,11 @@ export function voiciConv(pageId, pseudonymPub) {
 const rand = (n) => crypto.getRandomValues(new Uint8Array(n));
 
 function plaintextBytes(p) {
+  // A conversation control (a reveal or an unreveal) instead of text: {v:1, control}.
+  if (p.control !== undefined) {
+    if (!isObj(p.control)) throw new Error("voici body: bad control");
+    return canonicalJsonBytes({ v: 1, control: p.control });
+  }
   const t = checkVoiciText("messageText", p.text);
   if (t) throw new Error(`voici body: text refused (${t})`);
   if (p.replyTo !== null && !isLowerHex(p.replyTo, 16)) throw new Error("voici body: bad replyTo");
@@ -359,6 +365,13 @@ export function parseVoiciSealedBody(bodyBytes) {
 
 /** {ok:true, plaintext} | {ok:false, code: malformed|no-wrap|decrypt-failed|inner-schema|<text refusal>}. */
 export function openVoiciBody(bodyBytes, o, recipientSeed) {
+  const r = openVoiciBodyAny(bodyBytes, o, recipientSeed);
+  if (!r.ok) return r;
+  return r.plaintext ? r : { ok: false, code: "inner-schema" };
+}
+
+/** As openVoiciBody, also taking a conversation control: {ok:true, control} (strict shape, this conversation). */
+export function openVoiciBodyAny(bodyBytes, o, recipientSeed) {
   const b = parseVoiciSealedBody(bodyBytes);
   if (!b) return { ok: false, code: "malformed" };
   const myId = hex(pqKeyId(SUITE_HYBRID_SEAL_V1, hybridSealKeygen(recipientSeed).publicKey));
@@ -379,6 +392,16 @@ export function openVoiciBody(bodyBytes, o, recipientSeed) {
     r = JSON.parse(text);
   } catch {
     return { ok: false, code: "inner-schema" };
+  }
+  if (isObj(r) && exactKeys(r, ["v", "control"]) && r.v === 1) {
+    const c = parseVoiciRevealControl(r.control);
+    if (!c || c.conv !== o.conv) return { ok: false, code: "inner-schema" };
+    try {
+      if (canonicalJson(r) !== text) return { ok: false, code: "inner-schema" };
+    } catch {
+      return { ok: false, code: "inner-schema" };
+    }
+    return { ok: true, control: c };
   }
   if (!isObj(r) || !exactKeys(r, ["v", "text", "replyTo"]) || r.v !== 1 || typeof r.text !== "string") return { ok: false, code: "inner-schema" };
   if (r.replyTo !== null && !isLowerHex(r.replyTo, 16)) return { ok: false, code: "inner-schema" };
