@@ -433,6 +433,16 @@ export class VoiciCallRoomCore {
     return this.state.phase === "ringing" ? this.end("cancel", now) : [];
   }
 
+  /**
+   * A device's room connection dropped. The answering device ends its call whenever its room connection closes (a
+   * give-up while connecting, a hang-up whose signed end was lost, the app ending), so after an answer the winner
+   * leaving ends the call; otherwise the account would stay "on another call" until the 60-minute limit.
+   */
+  deviceLeft(deviceRef: string, now: number): VoiciCallRoomAction[] {
+    const s = this.state;
+    return s.phase === "answered" && s.winner === deviceRef ? this.end("hangup", now) : [];
+  }
+
   alarm(now: number): VoiciCallRoomAction[] {
     const s = this.state;
     if (s.phase === "ringing" && now >= s.init.ringingAt + VOICI_CALL_RING_MS) return this.end("no-answer", now);

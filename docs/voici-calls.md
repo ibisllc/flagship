@@ -275,7 +275,9 @@ demux, settings and the thread entries), the relays' call work (§5), the CI lan
 - **Room messages** (JSON over the WebSocket). Room → caller: `ringing`, `answer {answer}`, `ice {candidate}`,
   `ended {reason, end?}`. Room → device: `request {request, ringingAt}`, `won {receipt}`, `answered-elsewhere`,
   `ice`, `ended`, `error {code}`. Device → room: `answer`, `decline`, `ice`, `end`. Caller → room: `ice`, `end`. A
-  caller's room socket closing before an answer is a cancel; after one, the media path decides.
+  caller's room socket closing before an answer is a cancel; after one, the media path decides. The answering
+device's room socket closing after an answer ends the call (the device ends its side whenever that socket closes),
+so a give-up, a lost signed end or a killed app never leaves the account "on another call" until the limit.
 - **Pushes.** VoIP (`buildVoipPushSender`): topic `<bundleId>.voip`, `apns-push-type: voip`, priority 10, expiring
   with the ring; body `{"flagship-call": {kind:"voici-call", callId, room, sealed, issuedAt}}`. Other admin devices
   get the same fields as FCM data / UnifiedPush / an APNs alert ("Someone is calling you. Open Flagship to answer.").
