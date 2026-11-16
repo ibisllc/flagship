@@ -1872,7 +1872,7 @@
   "Secure your account": "アカウントを保護",
   "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.": "バックアップがないと、このデバイスを紛失した時点でアカウントは完全に失われます。「設定」からいつでも設定できます。",
   "Backing up…": "バックアップ中…",
-  "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.": "いまアカウントをバックアップして、このデバイスを紛失しても戻れるようにしましょう。誰も、私たちでさえも、代わりに復旧することはできません。",
+  "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.": "いまアカウントをバックアップして、このデバイスを紛失しても戻れるようにしましょう。私たちが代わりに復旧することはできません。",
   "Back up to iCloud": "iCloud にバックアップ",
   "Syncs securely with your other Apple devices.": "他の Apple デバイスと安全に同期されます。",
   "Save a backup file": "バックアップファイルを保存",

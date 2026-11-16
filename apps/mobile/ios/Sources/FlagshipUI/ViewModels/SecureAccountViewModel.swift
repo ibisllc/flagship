@@ -4,13 +4,13 @@ import Observation
 /// Backs the **Secure your account** step of create-onboarding.
 ///
 /// Inserted right after an account/identity is opened (OpenAccount) and
-/// before the user lands in the main app. It nudges the user to back up
-/// the account they just created, with the cloud option pre-selected,
-/// while letting them skip behind a clear warning.
+/// before the user lands in the main app. It offers two independent
+/// backups, cloud and a backup file, both unchecked at first: the person
+/// ticks either, both, or skips behind a clear warning.
 ///
-/// This VM owns ONLY the small selection + skip-confirmation state and
-/// the iCloud-availability detection. The two backup mechanisms it routes
-/// to are the EXISTING ones:
+/// This VM owns ONLY the two ticks, the skip-confirmation state and the
+/// iCloud-availability detection. The two backup mechanisms it routes to
+/// are the EXISTING ones:
 ///   - cloud  → the WebAuthn-PRF cloud recovery (RecoveryViewModel),
 ///   - file   → the `.flagshipkey` export (KeyfileExportViewModel /
 ///     KeyfileExportScreen).
@@ -18,23 +18,17 @@ import Observation
 @Observable
 @MainActor
 public final class SecureAccountViewModel {
-    /// The three mutually-exclusive choices on the step. `none` is the
-    /// pre-selected value only when iCloud is unavailable (so the user
-    /// still has file + skip).
-    public enum Option: Equatable, Sendable {
-        case cloud
-        case file
-    }
+    /// Cloud backup is ticked. Only ever true while iCloud is available.
+    public private(set) var cloudSelected: Bool = false
 
-    /// The current selection. Starts pre-selected with `.cloud` when
-    /// iCloud is available, otherwise `nil` (nothing pre-selected).
-    public var selected: Option?
+    /// Save a backup file is ticked.
+    public private(set) var fileSelected: Bool = false
 
     /// Whether iCloud is reachable for this device/account. When false
-    /// the cloud row is shown disabled with a hint and never pre-selected.
+    /// the cloud row is shown disabled with a hint.
     public let iCloudAvailable: Bool
 
-    /// Drives the "Skip for now" confirmation sheet.
+    /// Drives the "Skip for now" confirmation, shown from the Skip button.
     public var showSkipConfirm: Bool = false
 
     /// Detects iCloud availability via the iCloud ubiquity token — the
@@ -46,32 +40,26 @@ public final class SecureAccountViewModel {
 
     public init(iCloudAvailable: Bool = SecureAccountViewModel.detectICloudAvailable()) {
         self.iCloudAvailable = iCloudAvailable
-        // Pre-select the cloud option ONLY when iCloud is available.
-        // When it's off we pre-select nothing; the step still works via
-        // the file option or skip.
-        self.selected = iCloudAvailable ? .cloud : nil
     }
 
-    /// The cloud row is selectable only when iCloud is available.
+    /// The cloud row is tickable only when iCloud is available.
     public var canSelectCloud: Bool { iCloudAvailable }
 
-    /// Continue acts on the current selection. Enabled whenever SOMETHING
-    /// is selected (cloud only when available — `selected` can't be
-    /// `.cloud` if it isn't, since selecting it is gated).
-    public var canContinue: Bool { selected != nil }
+    /// Continue runs every ticked backup, so it needs at least one.
+    public var canContinue: Bool { cloudSelected || fileSelected }
 
-    /// Select the cloud option (no-op when iCloud is unavailable).
-    public func selectCloud() {
+    /// Tick or untick cloud backup (no-op when iCloud is unavailable).
+    public func toggleCloud() {
         guard canSelectCloud else { return }
-        selected = .cloud
+        cloudSelected.toggle()
     }
 
-    /// Select the file-backup option.
-    public func selectFile() {
-        selected = .file
+    /// Tick or untick the backup file.
+    public func toggleFile() {
+        fileSelected.toggle()
     }
 
-    /// Begin the skip flow — surfaces the confirmation sheet.
+    /// Begin the skip flow — surfaces the confirmation.
     public func requestSkip() {
         showSkipConfirm = true
     }

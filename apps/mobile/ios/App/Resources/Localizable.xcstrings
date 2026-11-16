@@ -76808,43 +76808,43 @@
         }
       }
     },
-    "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.": {
+    "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Haz ahora una copia de tu cuenta para poder volver a entrar si pierdes este dispositivo. Nadie, ni siquiera nosotros, puede recuperarla por ti."
+            "value": "Haz ahora una copia de tu cuenta para poder volver a entrar si pierdes este dispositivo. No podemos recuperarla por ti."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sauvegardez votre compte dès maintenant pour pouvoir y revenir si vous perdez cet appareil. Personne — pas même nous — ne peut le récupérer à votre place."
+            "value": "Sauvegardez votre compte dès maintenant pour pouvoir y revenir si vous perdez cet appareil. Nous ne pouvons pas le récupérer à votre place."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sichere dein Konto jetzt, damit du wieder hineinkommst, falls du dieses Gerät verlierst. Niemand – auch wir nicht – kann es für dich wiederherstellen."
+            "value": "Sichere dein Konto jetzt, damit du wieder hineinkommst, falls du dieses Gerät verlierst. Wir können es nicht für dich wiederherstellen."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Faça backup da sua conta agora para poder voltar se perder este dispositivo. Ninguém — nem nós — pode recuperá-la por você."
+            "value": "Faça backup da sua conta agora para poder voltar se perder este dispositivo. Não podemos recuperá-la por você."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "いまアカウントをバックアップして、このデバイスを紛失しても戻れるようにしましょう。誰も、私たちでさえも、代わりに復旧することはできません。"
+            "value": "いまアカウントをバックアップして、このデバイスを紛失しても戻れるようにしましょう。私たちが代わりに復旧することはできません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "现在就备份你的账户，这样即使丢失此设备也能重新进入。没有人（包括我们）能替你恢复它。"
+            "value": "现在就备份你的账户，这样即使丢失此设备也能重新进入。我们无法替你恢复它。"
           }
         }
       }

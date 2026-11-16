@@ -1873,7 +1873,7 @@
   "Secure your account": "Dein Konto absichern",
   "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.": "Ohne Backup bedeutet der Verlust dieses Geräts, dein Konto für immer zu verlieren. Du kannst das jederzeit in den Einstellungen einrichten.",
   "Backing up…": "Sichere …",
-  "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.": "Sichere dein Konto jetzt, damit du wieder hineinkommst, falls du dieses Gerät verlierst. Niemand – auch wir nicht – kann es für dich wiederherstellen.",
+  "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.": "Sichere dein Konto jetzt, damit du wieder hineinkommst, falls du dieses Gerät verlierst. Wir können es nicht für dich wiederherstellen.",
   "Back up to iCloud": "In iCloud sichern",
   "Syncs securely with your other Apple devices.": "Wird sicher mit deinen anderen Apple-Geräten synchronisiert.",
   "Save a backup file": "Eine Backup-Datei speichern",

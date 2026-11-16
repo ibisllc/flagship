@@ -1,37 +1,54 @@
 import XCTest
 @testable import FlagshipUI
 
-/// Covers the **Secure your account** onboarding step's selection +
-/// skip-confirmation state machine and its iCloud-availability gating.
+/// Covers the **Secure your account** onboarding step's two independent
+/// ticks, the skip confirmation and the iCloud-availability gating.
 ///
-///   - cloud available → cloud pre-selected,
-///   - cloud off → nothing pre-selected, but file + skip still work,
+///   - both options start unticked, so Continue waits for a choice,
+///   - cloud and file tick independently (either, both, neither),
+///   - cloud off → cloud can't be ticked, but file + skip still work,
 ///   - skip → the warning (confirmation) is surfaced.
 @MainActor
 final class SecureAccountViewModelTests: XCTestCase {
 
-    func test_cloudAvailable_preselectsCloud() {
+    func test_bothOptionsStartUnticked() {
         let vm = SecureAccountViewModel(iCloudAvailable: true)
-        XCTAssertEqual(vm.selected, .cloud, "cloud is pre-selected when iCloud is available")
+        XCTAssertFalse(vm.cloudSelected, "cloud starts unticked")
+        XCTAssertFalse(vm.fileSelected, "file starts unticked")
         XCTAssertTrue(vm.canSelectCloud)
-        XCTAssertTrue(vm.canContinue, "Continue is enabled with the pre-selection")
+        XCTAssertFalse(vm.canContinue, "Continue waits for a choice; Skip is the way out")
     }
 
-    func test_cloudOff_preselectsNothing_andCloudNotSelectable() {
-        let vm = SecureAccountViewModel(iCloudAvailable: false)
-        XCTAssertNil(vm.selected, "nothing is pre-selected when iCloud is off")
-        XCTAssertFalse(vm.canSelectCloud)
-        XCTAssertFalse(vm.canContinue, "Continue is disabled until the user picks file")
+    func test_optionsAreIndependent() {
+        let vm = SecureAccountViewModel(iCloudAvailable: true)
+        vm.toggleCloud()
+        XCTAssertTrue(vm.cloudSelected)
+        XCTAssertFalse(vm.fileSelected, "ticking cloud leaves the file alone")
+        XCTAssertTrue(vm.canContinue)
+        vm.toggleFile()
+        XCTAssertTrue(vm.cloudSelected, "ticking the file keeps cloud ticked")
+        XCTAssertTrue(vm.fileSelected)
+        XCTAssertTrue(vm.canContinue)
+        vm.toggleCloud()
+        XCTAssertFalse(vm.cloudSelected)
+        XCTAssertTrue(vm.fileSelected, "unticking cloud keeps the file")
+        XCTAssertTrue(vm.canContinue)
+        vm.toggleFile()
+        XCTAssertFalse(vm.canContinue, "with neither ticked Continue is off again")
+    }
 
-        // Selecting cloud is a no-op when it isn't available.
-        vm.selectCloud()
-        XCTAssertNil(vm.selected, "cloud stays unselected when iCloud is off")
+    func test_cloudOff_cloudNotTickable() {
+        let vm = SecureAccountViewModel(iCloudAvailable: false)
+        XCTAssertFalse(vm.canSelectCloud)
+        vm.toggleCloud()
+        XCTAssertFalse(vm.cloudSelected, "cloud stays unticked when iCloud is off")
+        XCTAssertFalse(vm.canContinue)
     }
 
     func test_cloudOff_fileStillWorks() {
         let vm = SecureAccountViewModel(iCloudAvailable: false)
-        vm.selectFile()
-        XCTAssertEqual(vm.selected, .file)
+        vm.toggleFile()
+        XCTAssertTrue(vm.fileSelected)
         XCTAssertTrue(vm.canContinue, "the file path keeps the step usable when iCloud is off")
     }
 
@@ -48,14 +65,5 @@ final class SecureAccountViewModelTests: XCTestCase {
         XCTAssertTrue(vm.showSkipConfirm, "the skip warning is shown")
         vm.cancelSkip()
         XCTAssertFalse(vm.showSkipConfirm, "Back dismisses the warning without skipping")
-    }
-
-    func test_canSwitchFromCloudToFileAndBack() {
-        let vm = SecureAccountViewModel(iCloudAvailable: true)
-        XCTAssertEqual(vm.selected, .cloud)
-        vm.selectFile()
-        XCTAssertEqual(vm.selected, .file)
-        vm.selectCloud()
-        XCTAssertEqual(vm.selected, .cloud, "cloud is re-selectable when available")
     }
 }
