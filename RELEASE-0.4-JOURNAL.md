@@ -744,6 +744,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - 2026-11-16: Owner: **Fly costs** ($18 bill; 23 accounts, 11 servers). Approved: take the two gym relays off between
   gym runs (scanners kept waking them through auto-start since 2026-11-09) and run the gym IPv6-only (release
   `flagship-services-gym`'s dedicated IPv4, $2/mo). Saves ~$8.40/mo; production stays one 512 MB machine + one IPv4.
+- 2026-11-16: Fly cut done on `main` (`eb43ae84c`): `scripts/gym-relays.sh on|off|status`; both gym relay
+  machines stopped with autostart off (verified they stay down under probes); gym-refresh / gym-weekly /
+  gym-release-run turn them on and off. **IPv6-only blocked:** UpCloud gym boxes are created IPv4-only
+  (`apps/com/src/upcloud.ts`, `tools/live-e2e/lib/upcloudVm.ts`, `isoBox.ts`) and `.com`'s zone-health / DNS sweep /
+  route-gc need `SERVICES_PASSTHROUGH_IPV4`, so 137.66.62.214 stays ($2/mo). Saving now ~$6-7/mo. A hand-run
+  `shared-run.ts` needs `gym-relays.sh on` first.
 
 ## Resume point
 
