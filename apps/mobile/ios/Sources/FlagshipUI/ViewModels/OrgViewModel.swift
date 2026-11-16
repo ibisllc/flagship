@@ -42,8 +42,14 @@ public final class OrgViewModel {
     public private(set) var people: [String: OrgDirectoryEntry] = [:]
     public private(set) var proposals: [DirectoryProposal] = []
     public private(set) var connectors: [OrgConnector] = []
-    /// The SCIM URL and token of a connector just added: shown once, never stored on the phone.
+    /// The SCIM URL and token of a connector just added (or a rotated token): shown once, never stored on the phone.
     public private(set) var newConnector: (url: String, token: String)?
+    /// Each connector's standing (re-approval needed after its approver left), its mapping for the editor.
+    public private(set) var standings: [String: OrgConnectorStanding] = [:]
+    public private(set) var mappings: [String: [String: Any]] = [:]
+    private var connectorBundles: [String: [String: Any]] = [:]
+    /// A member's view: the people and servers it shares something with (its slice of the directory).
+    public private(set) var sharedWith: (people: [OrgDirectoryEntry], servers: [String])?
 
     public struct DirectoryProposal: Identifiable {
         public let id: String
@@ -105,7 +111,8 @@ public final class OrgViewModel {
             plan = seat.memberOnly == true ? nil : try? await client.rotationPlan(snapshot!, now: now())
             rotations = plan?.pending ?? []
             phase = .loaded
-            if seat.memberOnly != true { await loadNames(seat) }
+            let isOrgAdmin = snapshot?.state.current.admins.contains { $0.seatId == seat.seatId && $0.kind == .admin } ?? false
+            if isOrgAdmin { await loadNames(seat) } else { await loadSlice(seat) }
         } catch {
             snapshot = nil
             phase = .failed(String(localized: "This organization's records didn't check out, so nothing is shown. Try again later."))
@@ -123,6 +130,10 @@ public final class OrgViewModel {
 
     public func myFreeze(_ seat: OrgSeatKeys.Seat) -> OrgVerifiedFreeze? {
         snapshot.flatMap { OrgAuthority.activeFreeze($0.book, seatId: seat.seatId, now: now()) }
+    }
+
+    public func isOrgAdmin(_ seat: OrgSeatKeys.Seat) -> Bool {
+        snapshot?.state.current.admins.contains { $0.seatId == seat.seatId && $0.kind == .admin } ?? false
     }
 
     /// What a screen calls a seat: "You", its pseudonym from the directory, or a placeholder until the directory opens.
@@ -405,6 +416,7 @@ public final class OrgViewModel {
             people = view.bySeat.mapValues { $0.entry }
             directoryEntryIds = view.bySeat.mapValues { $0.entryId }
             await loadConsole(seat, kemSecret: kp.secretKey)
+            await publishSlices(seat)
         } catch {
             names = [:]
         }
@@ -451,6 +463,15 @@ public final class OrgViewModel {
         var byId: [String: [String: Any]] = [:]
         for c in raw { if let id = (c["connector"] as? [String: Any])?["connectorId"] as? String { byId[id] = c } }
         connectors = raw.compactMap { try? OrgConnector.fromWire($0["connector"]) }.sorted { $0.issuedAt < $1.issuedAt }
+        connectorBundles = byId
+        if let snap = snapshot {
+            standings = byId.compactMapValues { try? OrgConnectors.standing(snap.state, snap.book, connector: $0, now: now()) }
+        }
+        mappings = byId.compactMapValues { cb -> [String: Any]? in
+            guard let sealed = cb["mappingSealed"] as? [String: Any], let v = OrgAuthority.int64(sealed["keyVersion"]), let key = directoryKeys[v],
+                  let id = (cb["connector"] as? [String: Any])?["connectorId"] as? String else { return nil }
+            return try? OrgConnectors.openMapping(orgId: seat.orgId, connectorId: id, directoryKey: key, sealed: sealed)
+        }
         var out: [DirectoryProposal] = []
         for p in (try? await client.proposals(orgId: seat.orgId)) ?? [] where p["decision"] == nil || p["decision"] is NSNull {
             guard let b = p["bundle"] as? [String: Any], let prop = b["proposal"] as? [String: Any], let cid = prop["connectorId"] as? String, let cb = byId[cid],
@@ -502,8 +523,40 @@ public final class OrgViewModel {
                 e.seatId = p.subject; e.pendingId = ""
                 try await decide(seat, p, done: try await recordEntry(seat, e))
                 message = String(localized: "Updated.")
+            case "role-change":
+                guard let g = s.grants.last(where: { $0.grant.seatId == p.subject }), !s.book.revoked.contains(p.subject) else { throw OrgAuthorityError("seat-unknown") }
+                if OrgAuthority.rolesRaiseAdmin(p.roles) && g.grant.adminKeyId.isEmpty {
+                    message = String(localized: "An admin role needs this person to accept a new invitation. Decline this and invite them again.")
+                    return
+                }
+                // A newer grant replaces the seat's current one; it must be later even if this phone's clock lags.
+                let t = max(now(), g.grant.issuedAt + 1)
+                let rolesHash = try OrgAuthority.rolesHash(p.roles)
+                let expiresAt = t + 365 * OrgAuthority.day
+                let order = try OrgAuthority.canonicalSeatGrant(orgId: seat.orgId, seatId: p.subject, labelSha256: g.grant.labelSha256, memberKeyId: g.grant.memberKeyId,
+                                                                adminKeyId: g.grant.adminKeyId, rolesHash: rolesHash, oarVersion: s.state.current.version, issuedAt: t, expiresAt: expiresAt)
+                let a = try approval(seat, order: order)
+                var body: [String: Any] = [
+                    "grant": ["orgId": seat.orgId, "seatId": p.subject, "labelSha256": g.grant.labelSha256, "memberKeyId": g.grant.memberKeyId, "adminKeyId": g.grant.adminKeyId,
+                              "rolesHash": rolesHash, "oarVersion": NSNumber(value: s.state.current.version), "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: expiresAt)],
+                    "roles": OrgAuthorityWire.rolesJSON(p.roles),
+                    "memberBinding": g.memberBinding.jsonObject,
+                    "adminBinding": g.adminBinding.map { $0.jsonObject as Any } ?? NSNull(),
+                ]
+                if OrgAuthority.grantThreshold(s.state.current, p.roles) <= 1 {
+                    body["approvals"] = [a.jsonObject]
+                    try await client.grant(orgId: seat.orgId, body: body)
+                    message = String(localized: "Role changed.")
+                } else {
+                    body["kind"] = "grant"
+                    try await client.openCeremony(orgId: seat.orgId, order: String(decoding: order, as: UTF8.self), payload: body, approval: a)
+                    message = String(localized: "Another admin needs to approve this before it takes effect.")
+                }
+                // The org log holds the grant (or the ceremony that will produce it) under this digest.
+                try await decide(seat, p, done: OrgAuthority.sha256Hex(order))
+                await load(seat)
             default:
-                message = String(localized: "Change this person's role from their seat, then decline this proposal.")
+                message = String(localized: "Updated.")
             }
         } catch { failed(error) }
     }
@@ -530,10 +583,14 @@ public final class OrgViewModel {
             let setup: [String: Any] = ["connectorSeedsHex": made.seedsHex, "mapping": mapping,
                                         "scimTokenSha256": OrgAuthority.sha256Hex(Array(token.utf8)), "scimTokenIssuedAt": NSNumber(value: t)]
             let a = try approval(seat, order: try OrgConnectors.canonicalConnector(made.connector))
-            try await client.postConnector(orgId: seat.orgId, body: [
+            var body: [String: Any] = [
                 "connector": OrgConnectors.connectorJSON(made.connector), "connectorPubHex": made.pubHex, "approvals": [a.jsonObject],
                 "setup": try OrgConnectors.sealSetup(made.connector, boxKem: boxKem, setup: setup, issuedAt: t),
-            ])
+            ]
+            if let dk = newestDirectoryKey() {
+                body["mappingSealed"] = try OrgConnectors.sealMapping(orgId: seat.orgId, connectorId: made.connector.connectorId, directoryKey: dk.key, keyVersion: dk.version, mapping: mapping)
+            }
+            try await client.postConnector(orgId: seat.orgId, body: body)
             newConnector = ("https://\(serverDomain)/scim/v2", token)
             connectors.append(made.connector)
         } catch { failed(error) }
@@ -543,4 +600,196 @@ public final class OrgViewModel {
 
     /// The org's servers this phone verified (for the connector's server picker).
     public var servers: [String] { plan.map { Array($0.ctx.servers).sorted() } ?? [] }
+
+    // MARK: connector upkeep: re-approve, pause, retire, rotate the token, the mapping, LDAP
+
+    private func newestDirectoryKey() -> (version: Int64, key: [UInt8])? {
+        guard let p = plan, let v = OrgDirectory.newestVersion(p), let k = directoryKeys[v] else { return nil }
+        return (v, k)
+    }
+
+    /// Posts a new version of a connector record (same key, a later `issuedAt`) with this admin's approval;
+    /// `setup` (sealed to its box) and the mapping change only when given.
+    private func postConnectorUpdate(_ seat: OrgSeatKeys.Seat, _ id: String, status: String? = nil, mapping: [String: Any]? = nil, setup: [String: Any]? = nil) async throws {
+        guard let cb = connectorBundles[id], var c = try? OrgConnector.fromWire(cb["connector"]), let pub = cb["connectorPubHex"] as? String else { throw OrgAuthorityError("seat-unknown") }
+        let t = now()
+        c.issuedAt = t
+        if let status { c.status = status }
+        if let mapping { c.mappingSha256 = try OrgConnectors.mappingSha256(mapping) }
+        var body: [String: Any] = ["connector": OrgConnectors.connectorJSON(c), "connectorPubHex": pub, "approvals": [try approval(seat, order: try OrgConnectors.canonicalConnector(c)).jsonObject]]
+        var sealedSetup = setup ?? [:]
+        if let mapping { sealedSetup["mapping"] = mapping }
+        if !sealedSetup.isEmpty {
+            guard let boxKem = plan?.ctx.kems["box:\(c.serverDomain)"] else { throw OrgAuthorityError("binding", "box key") }
+            body["setup"] = try OrgConnectors.sealSetup(c, boxKem: boxKem, setup: sealedSetup, issuedAt: t)
+        }
+        if let mapping, let dk = newestDirectoryKey() {
+            body["mappingSealed"] = try OrgConnectors.sealMapping(orgId: seat.orgId, connectorId: id, directoryKey: dk.key, keyVersion: dk.version, mapping: mapping)
+            mappings[id] = mapping
+        }
+        try await client.postConnector(orgId: seat.orgId, body: body)
+    }
+
+    /// Approves a connector again after the admin who approved it left (it stops 7 days after that).
+    public func reapproveConnector(_ seat: OrgSeatKeys.Seat, _ id: String) async {
+        busy = true; defer { busy = false }
+        do { try await postConnectorUpdate(seat, id); message = String(localized: "Approved again."); await load(seat) } catch { failed(error) }
+    }
+
+    /// Pauses, resumes or retires a connector (a retired one never comes back).
+    public func setConnectorStatus(_ seat: OrgSeatKeys.Seat, _ id: String, status: String) async {
+        busy = true; defer { busy = false }
+        do { try await postConnectorUpdate(seat, id, status: status); await load(seat) } catch { failed(error) }
+    }
+
+    /// A new SCIM token for the connector, shown once; the box takes it at its next refresh.
+    public func rotateScimToken(_ seat: OrgSeatKeys.Seat, _ id: String) async {
+        busy = true; defer { busy = false }
+        do {
+            let token = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0).base64EncodedString() }
+                .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+            try await postConnectorUpdate(seat, id, setup: ["scimTokenSha256": OrgAuthority.sha256Hex(Array(token.utf8)), "scimTokenIssuedAt": NSNumber(value: now())])
+            if let c = connectors.first(where: { $0.connectorId == id }) { newConnector = ("https://\(c.serverDomain)/scim/v2", token) }
+        } catch { failed(error) }
+    }
+
+    /// One row of the mapping editor: a directory group and the role its members are proposed.
+    public struct MappingRow: Identifiable, Equatable {
+        public var id = UUID()
+        public var group: String
+        public var role: InviteRole
+        public var target: String
+        public init(group: String, role: InviteRole, target: String) { self.group = group; self.role = role; self.target = target }
+    }
+
+    public func mappingRows(_ id: String) -> (rows: [MappingRow], defaultMember: Bool) {
+        let m = mappings[id] ?? OrgConnectors.defaultMapping(kind: connectors.first { $0.connectorId == id }?.kind ?? "scim")
+        let groups = (m["groups"] as? [String: Any]) ?? [:]
+        let rows = groups.keys.sorted().compactMap { g -> MappingRow? in
+            guard let roles = try? OrgAuthorityWire.roles(groups[g]) else { return nil }
+            for r in roles {
+                if case .serverAdmin(let s) = r { return MappingRow(group: g, role: .serverAdmin, target: s?.first ?? "") }
+                if case .serviceAdmin(let a) = r { return MappingRow(group: g, role: .appAdmin, target: a.first ?? "") }
+            }
+            return MappingRow(group: g, role: .member, target: "")
+        }
+        return (rows, !((m["defaultRoles"] as? [Any]) ?? []).isEmpty)
+    }
+
+    /// Saves the mapping: groups → roles, and whether people in no mapped group are proposed as members.
+    public func saveMapping(_ seat: OrgSeatKeys.Seat, _ id: String, rows: [MappingRow], defaultMember: Bool) async {
+        busy = true; defer { busy = false }
+        do {
+            let kind = connectors.first { $0.connectorId == id }?.kind ?? "scim"
+            var mapping = mappings[id] ?? OrgConnectors.defaultMapping(kind: kind)
+            var groups: [String: Any] = [:]
+            for r in rows where !r.group.trimmingCharacters(in: .whitespaces).isEmpty {
+                let roles: [OrgSeatRole]
+                switch r.role {
+                case .member: roles = [.member]
+                case .serverAdmin: roles = [.member, .serverAdmin(servers: [r.target.lowercased()])]
+                case .appAdmin: roles = [.member, .serviceAdmin(apps: [r.target.lowercased()])]
+                }
+                groups[r.group.trimmingCharacters(in: .whitespaces)] = OrgAuthorityWire.rolesJSON(roles)
+            }
+            mapping["groups"] = groups
+            mapping["defaultRoles"] = defaultMember ? [["role": "member"]] : [[String: Any]]()
+            try await postConnectorUpdate(seat, id, mapping: mapping)
+            message = String(localized: "Saved. The server uses it at its next check.")
+            await load(seat)
+        } catch { failed(error) }
+    }
+
+    /// The LDAP form: an `ldaps://` URL, the bind account, the base DN and filter, AD or OpenLDAP defaults.
+    public struct LdapForm: Equatable {
+        public var url = "ldaps://"
+        public var bindDn = ""
+        public var password = ""
+        public var baseDn = ""
+        public var userFilter = ""
+        public var openLdap = false
+        public init() {}
+        public var valid: Bool { url.lowercased().hasPrefix("ldaps://") && url.count > 8 && !bindDn.isEmpty && !password.isEmpty && !baseDn.isEmpty }
+    }
+
+    /// Adds an LDAP connector, or (with `id`) replaces an LDAP connector's settings; the password goes only to the box, sealed.
+    public func saveLdapConnector(_ seat: OrgSeatKeys.Seat, serverDomain: String, form: LdapForm, id: String? = nil) async {
+        guard form.valid else { message = String(localized: "Fill in an ldaps:// address, the bind account, its password and the base DN."); return }
+        let ldap: [String: Any] = ["url": form.url, "bindDn": form.bindDn, "bindPassword": form.password, "baseDn": form.baseDn, "userFilter": form.userFilter,
+                                   "flavor": form.openLdap ? "openldap" : "ad", "intervalMinutes": 15]
+        busy = true; defer { busy = false }
+        do {
+            if let id {
+                try await postConnectorUpdate(seat, id, setup: ["ldap": ldap])
+            } else {
+                guard let boxKem = plan?.ctx.kems["box:\(serverDomain)"] else {
+                    message = String(localized: "That server hasn't announced its key yet. Try again in a few minutes.")
+                    return
+                }
+                let t = now()
+                var mapping = OrgConnectors.defaultMapping(kind: "ldap")
+                if form.openLdap {
+                    mapping["attributes"] = ["email": "mail", "displayName": "cn", "externalId": "entryUUID", "disabled": "pwdAccountLockedTime"]
+                }
+                let made = try OrgConnectors.newConnector(orgId: seat.orgId, kind: "ldap", serverDomain: serverDomain, mapping: mapping, issuedAt: t)
+                var body: [String: Any] = [
+                    "connector": OrgConnectors.connectorJSON(made.connector), "connectorPubHex": made.pubHex,
+                    "approvals": [try approval(seat, order: try OrgConnectors.canonicalConnector(made.connector)).jsonObject],
+                    "setup": try OrgConnectors.sealSetup(made.connector, boxKem: boxKem, setup: ["connectorSeedsHex": made.seedsHex, "mapping": mapping, "ldap": ldap], issuedAt: t),
+                ]
+                if let dk = newestDirectoryKey() {
+                    body["mappingSealed"] = try OrgConnectors.sealMapping(orgId: seat.orgId, connectorId: made.connector.connectorId, directoryKey: dk.key, keyVersion: dk.version, mapping: mapping)
+                }
+                try await client.postConnector(orgId: seat.orgId, body: body)
+                connectors.append(made.connector)
+            }
+            message = String(localized: "Saved. The server reads the directory within 15 minutes.")
+        } catch { failed(error) }
+    }
+
+    /// Connectors whose approver left, shown beside the keys to rotate.
+    public var connectorsToReapprove: [(connector: OrgConnector, standing: OrgConnectorStanding)] {
+        connectors.compactMap { c in standings[c.connectorId].flatMap { $0.state == "ok" || c.status == "retired" ? nil : (c, $0) } }
+    }
+
+    // MARK: members' slices (docs/org-directory.md: members see whom they share with)
+
+    /// For each live seat that is not an org admin and announced a KEM key, the slice it should hold;
+    /// a stale or missing one is sealed to it and stored under this admin's approval.
+    func publishSlices(_ seat: OrgSeatKeys.Seat) async {
+        guard let s = snapshot, let p = plan, let dk = newestDirectoryKey() else { return }
+        let stored = (try? await client.directorySlices(orgId: seat.orgId)) ?? []
+        let byId = Dictionary(stored.compactMap { o -> (String, OrgDirectorySlice)? in (try? OrgDirectorySlice.fromWire(o["slice"])).map { ($0.seatId, $0) } }, uniquingKeysWith: { a, _ in a })
+        let servers = Array(p.ctx.servers).sorted()
+        let admins = Set(s.state.current.admins.filter { $0.kind == .admin }.map(\.seatId))
+        for (id, _) in s.book.seats where !s.book.revoked.contains(id) && !admins.contains(id) {
+            guard let kem = p.ctx.kems["seat:\(id)"] else { continue }
+            let content = OrgDirectory.sliceContent(s.state, s.book, seatId: id, bySeat: people, servers: servers, now: now())
+            guard let payload = try? OrgDirectory.slicePayload(orgId: seat.orgId, seatId: id, entries: content.entries, servers: content.servers) else { continue }
+            let tag = OrgDirectory.sliceContentTag(directoryKey: dk.key, payload: payload)
+            if let have = byId[id], have.contentTag == tag, have.tagKeyVersion == dk.version, have.kemKeyId == kem.kemKeyId { continue }
+            guard let slice = try? OrgDirectory.sealSlice(orgId: seat.orgId, seatId: id, kemPub: kem.kemPub, kemKeyId: kem.kemKeyId, entries: content.entries,
+                                                         servers: content.servers, directoryKey: dk.key, tagKeyVersion: dk.version, issuedAt: now()),
+                  let a = try? approval(seat, order: try OrgDirectory.canonicalSliceWrite(slice)) else { continue }
+            try? await client.putDirectorySlice(orgId: seat.orgId, slice: slice, approval: a)
+        }
+    }
+
+    /// A member opens its own slice (an org admin must have approved it) with its seat KEM key.
+    func loadSlice(_ seat: OrgSeatKeys.Seat) async {
+        guard let s = snapshot else { return }
+        do {
+            let mine = (try await client.directorySlices(orgId: seat.orgId)).first { (($0["slice"] as? [String: Any])?["seatId"] as? String) == seat.seatId }
+            guard let mine, let slice = try? OrgDirectorySlice.fromWire(mine["slice"]) else { sharedWith = ([], []); return }
+            try OrgDirectory.verifySliceApproval(s.state, s.book, slice, approvals: try OrgAuthorityWire.approvals(mine["approvals"]), now: now())
+            var umk = try await self.umk(String(localized: "Show the names in this organization"))
+            defer { for i in umk.indices { umk[i] = 0 } }
+            let kp = try PqHybrid.hybridSealKeygen(seed: try OrgAuthority.seatKemSeed(umk: umk, orgId: seat.orgId))
+            let c = try OrgDirectory.openSlice(slice, kemSecret: kp.secretKey)
+            sharedWith = (c.entries.sorted { $0.pseudonym < $1.pseudonym }, c.servers)
+            for e in c.entries { names[e.seatId] = e.pseudonym }
+        } catch {
+            sharedWith = nil
+        }
+    }
 }

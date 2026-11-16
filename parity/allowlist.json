@@ -229,7 +229,12 @@
     {
       "check": "signed-tags",
       "key": "web:flagship/pq-seed-wrap/v1",
-      "reason": "iOS wraps a software ML-DSA seed under its Secure Enclave key, local storage only; the webapp seals its ML-DSA seed with the admin root under a passkey instead (lib/keyCustody.js, docs/webapp-key-custody.md)."
+      "reason": "iOS wraps a software ML-DSA seed under its Secure Enclave key, local storage only; the webapp holds no ML-DSA seed (keyless-web rule)."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:pq-hybrid",
+      "reason": "The webapp is verify-only for the architecture-v2 suites (keyless-web rule): it checks hybrid signatures, key bindings and the assurance policy but seals nothing hybrid, so it has no envelope, seal or KEM key-id code yet; the native apps and the box use them (pq-suites.md §11.1)."
     },
     {
       "check": "signed-tags",
@@ -878,23 +883,8 @@
     },
     {
       "check": "signed-tags",
-      "key": "ios:flagship/web-key-custody/v1",
-      "reason": "Browser-only: the webapp seals its admin root and ML-DSA seed under a passkey PRF output (docs/webapp-key-custody.md item 2). Phones keep keys in the Secure Enclave / Keystore and never use this wrap."
-    },
-    {
-      "check": "signed-tags",
-      "key": "android:flagship/web-key-custody/v1",
-      "reason": "Browser-only: the webapp seals its admin root and ML-DSA seed under a passkey PRF output (docs/webapp-key-custody.md item 2). Phones keep keys in the Secure Enclave / Keystore and never use this wrap."
-    },
-    {
-      "check": "signed-tags",
-      "key": "ios:flagship/webapp-shell/v1",
-      "reason": "Browser-only: the signed manifest of the webapp shell that its service worker checks (docs/webapp-key-custody.md item 5). The native apps ship as signed store builds and have no shell to verify."
-    },
-    {
-      "check": "signed-tags",
-      "key": "android:flagship/webapp-shell/v1",
-      "reason": "Browser-only: the signed manifest of the webapp shell that its service worker checks (docs/webapp-key-custody.md item 5). The native apps ship as signed store builds and have no shell to verify."
+      "key": "web:flagship/org-directory-slice/v1",
+      "reason": "Members' directory slices (docs/org-directory.md §10 'Members' slices'): the webapp holds no seat X-Wing key to open a slice nor a seat admin key to publish one until the webapp key-custody branch merges; the hook for it is listed in docs/org-directory.md ('Webapp hooks'). iOS (OrgDirectory.swift) and Android (OrgDirectory.kt) read the shared vectors."
     }
   ]
 }

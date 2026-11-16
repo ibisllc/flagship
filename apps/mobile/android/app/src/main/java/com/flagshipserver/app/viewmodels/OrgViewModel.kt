@@ -93,6 +93,14 @@ class OrgViewModel(
     val proposals: StateFlow<List<DirectoryProposal>> = _proposals.asStateFlow()
     private val _connectors = MutableStateFlow<List<com.flagshipserver.app.core.pq.OrgConnector>>(emptyList())
     val connectors: StateFlow<List<com.flagshipserver.app.core.pq.OrgConnector>> = _connectors.asStateFlow()
+    private val _standings = MutableStateFlow<Map<String, com.flagshipserver.app.core.pq.OrgConnectorStanding>>(emptyMap())
+    /** Each connector's standing (re-approval needed after its approver left). */
+    val standings: StateFlow<Map<String, com.flagshipserver.app.core.pq.OrgConnectorStanding>> = _standings.asStateFlow()
+    private var connectorBundles: Map<String, JsonObject> = emptyMap()
+    private var mappings: Map<String, JsonObject> = emptyMap()
+    private val _sharedWith = MutableStateFlow<com.flagshipserver.app.core.pq.OrgSliceContent?>(null)
+    /** A member's view: the people and servers it shares something with (its slice of the directory). */
+    val sharedWith: StateFlow<com.flagshipserver.app.core.pq.OrgSliceContent?> = _sharedWith.asStateFlow()
     private val _newConnector = MutableStateFlow<Pair<String, String>?>(null)
     /** The SCIM URL and token of a connector just added: shown once, never stored on the phone. */
     val newConnector: StateFlow<Pair<String, String>?> = _newConnector.asStateFlow()
@@ -277,6 +285,7 @@ class OrgViewModel(
             _people.value = bySeat.mapValues { it.value.entry }
             directoryEntryIds = bySeat.mapValues { it.value.entryId }
             loadConsole(seat, kp.secretKey)
+            publishSlices(seat)
         } catch (e: Exception) {
             _names.value = emptyMap()
         }
@@ -325,7 +334,7 @@ class OrgViewModel(
             plan = if (seat.memberOnly) null else runCatching { client.rotationPlan(_snapshot.value!!, now()) }.getOrNull()
             _rotations.value = plan?.pending ?: emptyList()
             _phase.value = Phase.Loaded
-            if (!seat.memberOnly) loadNames(seat)
+            if (isOrgAdmin(seat)) loadNames(seat) else loadSlice(seat)
         } catch (e: Exception) {
             _snapshot.value = null
             _phase.value = Phase.Failed(FSStrings.get(R.string.org_records_bad))
@@ -492,6 +501,15 @@ class OrgViewModel(
         val raw = runCatching { client.connectors(seat.orgId) }.getOrDefault(emptyList())
         val byId = raw.associateBy { str(it["connector"] as? JsonObject, "connectorId") ?: "" }
         _connectors.value = raw.mapNotNull { runCatching { com.flagshipserver.app.core.pq.OrgConnectors.connector(it["connector"] as JsonObject) }.getOrNull() }
+        connectorBundles = byId
+        val snap = _snapshot.value
+        if (snap != null) _standings.value = byId.mapNotNull { (id, cb) -> runCatching { id to com.flagshipserver.app.core.pq.OrgConnectorStandings.standing(snap.state, snap.book, cb, now()) }.getOrNull() }.toMap()
+        mappings = byId.mapNotNull { (id, cb) ->
+            val sealed = cb["mappingSealed"] as? JsonObject ?: return@mapNotNull null
+            val v = (sealed["keyVersion"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: return@mapNotNull null
+            val key = directoryKeys[v] ?: return@mapNotNull null
+            runCatching { id to com.flagshipserver.app.core.pq.OrgConnectorStandings.openMapping(seat.orgId, id, key, sealed) }.getOrNull()
+        }.toMap()
         val out = mutableListOf<DirectoryProposal>()
         for (p in runCatching { client.proposals(seat.orgId) }.getOrDefault(emptyList())) {
             if (p["decision"] != null && p["decision"] !is JsonNull) continue
@@ -547,7 +565,41 @@ class OrgViewModel(
                     decide(seat, p, recordEntry(seat, p.entry.copy(seatId = p.subject, pendingId = "")))
                     _message.value = FSStrings.get(R.string.org_proposal_updated)
                 }
-                else -> _message.value = FSStrings.get(R.string.org_proposal_role_from_seat)
+                "role-change" -> {
+                    val g = s.grants.lastOrNull { it.grant.seatId == p.subject }
+                    if (g == null || p.subject in s.book.revoked) throw OrgAuthorityException("seat-unknown")
+                    if (p.roles.any { it.raisesAdmin } && g.grant.adminKeyId.isEmpty()) {
+                        _message.value = FSStrings.get(R.string.org_role_needs_invite)
+                        return
+                    }
+                    // A newer grant replaces the seat's current one; it must be later even if this phone's clock lags.
+                    val t = maxOf(now(), g.grant.issuedAt + 1)
+                    val v = s.state.current.version
+                    val rolesHash = OrgAuthority.rolesHash(p.roles)
+                    val expiresAt = t + 365 * DAY
+                    val grant = OrgSeatGrant(seat.orgId, p.subject, g.grant.labelSha256, g.grant.memberKeyId, g.grant.adminKeyId, rolesHash, v, t, expiresAt)
+                    val order = OrgAuthority.canonical(grant)
+                    val a = approval(seat, order)
+                    val body = buildJsonObject {
+                        put("grant", buildJsonObject {
+                            put("orgId", seat.orgId); put("seatId", p.subject); put("labelSha256", g.grant.labelSha256); put("memberKeyId", g.grant.memberKeyId)
+                            put("adminKeyId", g.grant.adminKeyId); put("rolesHash", rolesHash); put("oarVersion", v); put("issuedAt", t); put("expiresAt", expiresAt)
+                        })
+                        put("roles", OrgJson.roles(p.roles))
+                        put("memberBinding", g.memberBinding.toJson())
+                        put("adminBinding", g.adminBinding?.toJson() ?: JsonNull)
+                    }
+                    if (OrgAuthority.grantThreshold(s.state.current, p.roles) <= 1) {
+                        client.grant(seat.orgId, JsonObject(body + ("approvals" to buildJsonArray { add(OrgJson.approval(a)) })))
+                        _message.value = FSStrings.get(R.string.org_role_changed)
+                    } else {
+                        client.openCeremony(seat.orgId, String(order, Charsets.UTF_8), JsonObject(body + ("kind" to kotlinx.serialization.json.JsonPrimitive("grant"))), a)
+                        _message.value = FSStrings.get(R.string.org_needs_second_admin)
+                    }
+                    decide(seat, p, OrgAuthority.sha256Hex(order))
+                    load(seat)
+                }
+                else -> _message.value = FSStrings.get(R.string.org_proposal_updated)
             }
         } catch (e: Exception) {
             failed(e)
@@ -586,6 +638,7 @@ class OrgViewModel(
                 put("connector", com.flagshipserver.app.core.pq.OrgConnectorConsole.json(made.connector)); put("connectorPubHex", made.pubHex)
                 put("approvals", buildJsonArray { add(OrgJson.approval(a)) })
                 put("setup", com.flagshipserver.app.core.pq.OrgConnectorConsole.sealSetup(made.connector, boxKem, setup, t))
+                newestDirectoryKey()?.let { (v, k) -> put("mappingSealed", com.flagshipserver.app.core.pq.OrgConnectorStandings.sealMapping(seat.orgId, made.connector.connectorId, k, v, mapping)) }
             })
             _newConnector.value = "https://$serverDomain/scim/v2" to token
             _connectors.value = _connectors.value + made.connector
@@ -597,6 +650,179 @@ class OrgViewModel(
     }
 
     fun clearNewConnector() { _newConnector.value = null }
+
+    fun isOrgAdmin(seat: OrgSeatRecord): Boolean =
+        _snapshot.value?.state?.current?.admins?.any { it.seatId == seat.seatId && it.kind == com.flagshipserver.app.core.pq.OrgAdminKind.ADMIN } ?: false
+
+    // ── connector upkeep: re-approve, pause, retire, rotate the token, the mapping, LDAP ──
+
+    private fun newestDirectoryKey(): Pair<Long, ByteArray>? {
+        val p = plan ?: return null
+        val v = com.flagshipserver.app.core.pq.OrgDirectory.newestVersion(p) ?: return null
+        return directoryKeys[v]?.let { v to it }
+    }
+
+    private suspend fun postConnectorUpdate(seat: OrgSeatRecord, id: String, status: String? = null, mapping: JsonObject? = null, setup: JsonObject? = null) {
+        val cb = connectorBundles[id] ?: throw OrgAuthorityException("seat-unknown")
+        val old = com.flagshipserver.app.core.pq.OrgConnectors.connector(cb["connector"] as JsonObject)
+        val t = now()
+        val c = old.copy(issuedAt = t, status = status ?: old.status,
+            mappingSha256 = mapping?.let { com.flagshipserver.app.core.pq.OrgConnectorConsole.mappingSha256(it) } ?: old.mappingSha256)
+        val sealedSetup = JsonObject((setup ?: JsonObject(emptyMap())) + (mapping?.let { mapOf("mapping" to it) } ?: emptyMap()))
+        val body = buildJsonObject {
+            put("connector", com.flagshipserver.app.core.pq.OrgConnectorConsole.json(c))
+            put("connectorPubHex", cb["connectorPubHex"]!!)
+            put("approvals", buildJsonArray { add(OrgJson.approval(approval(seat, com.flagshipserver.app.core.pq.OrgConnectors.canonical(c)))) })
+            if (sealedSetup.isNotEmpty()) {
+                val boxKem = plan?.ctx?.kems?.get("box:${c.serverDomain}") ?: throw OrgAuthorityException("binding", "box key")
+                put("setup", com.flagshipserver.app.core.pq.OrgConnectorConsole.sealSetup(c, boxKem, sealedSetup, t))
+            }
+            if (mapping != null) newestDirectoryKey()?.let { (v, k) -> put("mappingSealed", com.flagshipserver.app.core.pq.OrgConnectorStandings.sealMapping(seat.orgId, id, k, v, mapping)) }
+        }
+        client.postConnector(seat.orgId, body)
+        if (mapping != null) mappings = mappings + (id to mapping)
+    }
+
+    private suspend fun upkeep(block: suspend () -> Unit) {
+        _busy.value = true
+        try { block() } catch (e: Exception) { failed(e) } finally { _busy.value = false }
+    }
+
+    suspend fun reapproveConnector(seat: OrgSeatRecord, id: String) = upkeep {
+        postConnectorUpdate(seat, id); _message.value = FSStrings.get(R.string.org_connector_reapproved); load(seat)
+    }
+
+    suspend fun setConnectorStatus(seat: OrgSeatRecord, id: String, status: String) = upkeep { postConnectorUpdate(seat, id, status = status); load(seat) }
+
+    suspend fun rotateScimToken(seat: OrgSeatRecord, id: String) = upkeep {
+        val token = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also(java.security.SecureRandom()::nextBytes))
+        postConnectorUpdate(seat, id, setup = buildJsonObject { put("scimTokenSha256", OrgAuthority.sha256Hex(token.toByteArray(Charsets.UTF_8))); put("scimTokenIssuedAt", now()) })
+        _connectors.value.firstOrNull { it.connectorId == id }?.let { _newConnector.value = "https://${it.serverDomain}/scim/v2" to token }
+    }
+
+    /** One row of the mapping editor: a directory group and the role its members are proposed. */
+    data class MappingRow(val group: String, val role: InviteRole, val target: String)
+
+    fun mappingRows(id: String): Pair<List<MappingRow>, Boolean> {
+        val m = mappings[id] ?: com.flagshipserver.app.core.pq.OrgConnectorConsole.defaultMapping()
+        val groups = (m["groups"] as? JsonObject) ?: JsonObject(emptyMap())
+        val rows = groups.keys.sorted().mapNotNull { g ->
+            val roles = runCatching { OrgAuthorityWire.roles(groups[g]) }.getOrNull() ?: return@mapNotNull null
+            roles.firstNotNullOfOrNull { r ->
+                when (r) {
+                    is com.flagshipserver.app.core.pq.OrgSeatRole.ServerAdmin -> MappingRow(g, InviteRole.SERVER_ADMIN, r.servers?.firstOrNull() ?: "")
+                    is com.flagshipserver.app.core.pq.OrgSeatRole.ServiceAdmin -> MappingRow(g, InviteRole.APP_ADMIN, r.apps.firstOrNull() ?: "")
+                    else -> null
+                }
+            } ?: MappingRow(g, InviteRole.MEMBER, "")
+        }
+        return rows to ((m["defaultRoles"] as? JsonArray)?.isNotEmpty() ?: false)
+    }
+
+    suspend fun saveMapping(seat: OrgSeatRecord, id: String, rows: List<MappingRow>, defaultMember: Boolean) = upkeep {
+        val base = mappings[id] ?: com.flagshipserver.app.core.pq.OrgConnectorConsole.defaultMapping()
+        val groups = buildJsonObject {
+            for (r in rows) {
+                val g = r.group.trim()
+                if (g.isEmpty()) continue
+                val roles = when (r.role) {
+                    InviteRole.MEMBER -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.Member)
+                    InviteRole.SERVER_ADMIN -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.Member, com.flagshipserver.app.core.pq.OrgSeatRole.ServerAdmin(listOf(r.target.trim().lowercase())))
+                    InviteRole.APP_ADMIN -> listOf(com.flagshipserver.app.core.pq.OrgSeatRole.Member, com.flagshipserver.app.core.pq.OrgSeatRole.ServiceAdmin(listOf(r.target.trim().lowercase())))
+                }
+                put(g, OrgJson.roles(roles))
+            }
+        }
+        val mapping = JsonObject(base + mapOf("groups" to groups,
+            "defaultRoles" to if (defaultMember) buildJsonArray { add(buildJsonObject { put("role", "member") }) } else JsonArray(emptyList())))
+        postConnectorUpdate(seat, id, mapping = mapping)
+        _message.value = FSStrings.get(R.string.org_mapping_saved)
+        load(seat)
+    }
+
+    /** The LDAP form: an `ldaps://` URL, the bind account, the base DN and filter, AD or OpenLDAP defaults. */
+    data class LdapForm(val url: String = "ldaps://", val bindDn: String = "", val password: String = "", val baseDn: String = "", val userFilter: String = "", val openLdap: Boolean = false) {
+        val valid: Boolean get() = url.lowercase().startsWith("ldaps://") && url.length > 8 && bindDn.isNotEmpty() && password.isNotEmpty() && baseDn.isNotEmpty()
+    }
+
+    suspend fun saveLdapConnector(seat: OrgSeatRecord, serverDomain: String, form: LdapForm, id: String? = null) {
+        if (!form.valid) { _message.value = FSStrings.get(R.string.org_ldap_fill_in); return }
+        val ldap = buildJsonObject {
+            put("url", form.url); put("bindDn", form.bindDn); put("bindPassword", form.password); put("baseDn", form.baseDn); put("userFilter", form.userFilter)
+            put("flavor", if (form.openLdap) "openldap" else "ad"); put("intervalMinutes", 15)
+        }
+        upkeep {
+            if (id != null) {
+                postConnectorUpdate(seat, id, setup = buildJsonObject { put("ldap", ldap) })
+            } else {
+                val boxKem = plan?.ctx?.kems?.get("box:$serverDomain")
+                if (boxKem == null) { _message.value = FSStrings.get(R.string.org_connector_no_key); return@upkeep }
+                val t = now()
+                val attrs = if (form.openLdap) buildJsonObject { put("email", "mail"); put("displayName", "cn"); put("externalId", "entryUUID"); put("disabled", "pwdAccountLockedTime") }
+                    else buildJsonObject { put("email", "userPrincipalName"); put("displayName", "displayName"); put("externalId", "objectGUID"); put("disabled", "userAccountControl") }
+                val mapping = JsonObject(com.flagshipserver.app.core.pq.OrgConnectorConsole.defaultMapping() + ("attributes" to attrs))
+                val made = com.flagshipserver.app.core.pq.OrgConnectorConsole.newConnector(seat.orgId, OrgAuthority.randomId(), "ldap", serverDomain, mapping, t)
+                client.postConnector(seat.orgId, buildJsonObject {
+                    put("connector", com.flagshipserver.app.core.pq.OrgConnectorConsole.json(made.connector)); put("connectorPubHex", made.pubHex)
+                    put("approvals", buildJsonArray { add(OrgJson.approval(approval(seat, com.flagshipserver.app.core.pq.OrgConnectors.canonical(made.connector)))) })
+                    put("setup", com.flagshipserver.app.core.pq.OrgConnectorConsole.sealSetup(made.connector, boxKem, buildJsonObject {
+                        put("connectorSeedsHex", made.seedsHex); put("mapping", mapping); put("ldap", ldap)
+                    }, t))
+                    newestDirectoryKey()?.let { (v, k) -> put("mappingSealed", com.flagshipserver.app.core.pq.OrgConnectorStandings.sealMapping(seat.orgId, made.connector.connectorId, k, v, mapping)) }
+                })
+                _connectors.value = _connectors.value + made.connector
+            }
+            _message.value = FSStrings.get(R.string.org_ldap_saved)
+        }
+    }
+
+    /** Connectors whose approver left, shown beside the keys to rotate. */
+    fun connectorsToReapprove(): List<Pair<com.flagshipserver.app.core.pq.OrgConnector, com.flagshipserver.app.core.pq.OrgConnectorStanding>> =
+        _connectors.value.mapNotNull { c -> _standings.value[c.connectorId]?.takeIf { it.state != "ok" && c.status != "retired" }?.let { c to it } }
+
+    // ── members' slices ──
+
+    private suspend fun publishSlices(seat: OrgSeatRecord) {
+        val s = _snapshot.value ?: return
+        val p = plan ?: return
+        val (v, key) = newestDirectoryKey() ?: return
+        val stored = runCatching { client.directorySlices(seat.orgId) }.getOrDefault(emptyList())
+            .mapNotNull { o -> runCatching { com.flagshipserver.app.core.pq.OrgDirectorySlices.fromJson(o["slice"] as JsonObject) }.getOrNull() }.associateBy { it.seatId }
+        val servers = p.ctx.servers.sorted()
+        val admins = s.state.current.admins.filter { it.kind == com.flagshipserver.app.core.pq.OrgAdminKind.ADMIN }.map { it.seatId }.toSet()
+        for (id in s.book.seats.keys) {
+            if (id in s.book.revoked || id in admins) continue
+            val kem = p.ctx.kems["seat:$id"] ?: continue
+            runCatching {
+                val content = com.flagshipserver.app.core.pq.OrgDirectorySlices.content(s.state, s.book, id, _people.value, servers, now())
+                val tag = com.flagshipserver.app.core.pq.OrgDirectorySlices.contentTag(key, com.flagshipserver.app.core.pq.OrgDirectorySlices.payload(seat.orgId, id, content))
+                val have = stored[id]
+                if (have != null && have.contentTag == tag && have.tagKeyVersion == v && have.kemKeyId == kem.kemKeyId) return@runCatching
+                val slice = com.flagshipserver.app.core.pq.OrgDirectorySlices.seal(seat.orgId, id, kem.kemPub, kem.kemKeyId, content, key, v, now())
+                client.putDirectorySlice(seat.orgId, slice, approval(seat, com.flagshipserver.app.core.pq.OrgDirectorySlices.canonicalWrite(slice)))
+            }
+        }
+    }
+
+    private suspend fun loadSlice(seat: OrgSeatRecord) {
+        val s = _snapshot.value ?: return
+        try {
+            val mine = client.directorySlices(seat.orgId).firstOrNull { str(it["slice"] as? JsonObject, "seatId") == seat.seatId }
+            if (mine == null) { _sharedWith.value = com.flagshipserver.app.core.pq.OrgSliceContent(emptyList(), emptyList()); return }
+            val slice = com.flagshipserver.app.core.pq.OrgDirectorySlices.fromJson(mine["slice"] as JsonObject)
+            com.flagshipserver.app.core.pq.OrgDirectorySlices.verifyApproval(s.state, s.book, slice, OrgAuthorityWire.approvals(mine["approvals"]), now())
+            val seed = umk(FSStrings.get(R.string.org_show_names_reason))
+            val kp = try {
+                val kemSeed = com.flagshipserver.app.core.pq.OrgServers.seatKemSeed(seed, seat.orgId)
+                try { com.flagshipserver.app.core.pq.PqHybrid.hybridSealKeygen(kemSeed) } finally { kemSeed.fill(0) }
+            } finally { seed.fill(0) }
+            val c = com.flagshipserver.app.core.pq.OrgDirectorySlices.open(slice, kp.secretKey)
+            _sharedWith.value = com.flagshipserver.app.core.pq.OrgSliceContent(c.entries.sortedBy { it.pseudonym }, c.servers)
+            _names.value = _names.value + c.entries.associate { it.seatId to it.pseudonym }
+        } catch (e: Exception) {
+            _sharedWith.value = null
+        }
+    }
 
     companion object {
         fun proposalText(kind: String): String = when (kind) {
@@ -610,6 +836,12 @@ class OrgViewModel(
             "scim" -> FSStrings.get(R.string.org_connector_scim)
             "ldap" -> FSStrings.get(R.string.org_connector_ldap)
             else -> FSStrings.get(R.string.org_connector_custom)
+        }
+
+        fun reapproveText(c: com.flagshipserver.app.core.pq.OrgConnector, st: com.flagshipserver.app.core.pq.OrgConnectorStanding): String {
+            val whenText = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(st.suspendAt ?: 0))
+            return if (st.state == "suspended") FSStrings.get(R.string.org_connector_stopped, connectorText(c.kind), c.serverDomain)
+                else FSStrings.get(R.string.org_connector_needs_reapproval, connectorText(c.kind), c.serverDomain, whenText)
         }
 
         fun statusText(status: String): String = when (status) {

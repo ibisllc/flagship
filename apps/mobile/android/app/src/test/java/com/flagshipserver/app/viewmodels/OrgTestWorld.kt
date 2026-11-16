@@ -95,6 +95,7 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
     val connectors = mutableListOf<JsonObject>()
     val proposals = mutableListOf<JsonObject>()
     val decisions = mutableListOf<JsonObject>()
+    val slices = mutableMapOf<String, JsonObject>()
     val calls = mutableListOf<String>()
 
     init {
@@ -161,7 +162,17 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
                 } ?: (404 to JsonObject(emptyMap()))
             }
             method == "POST" && path.endsWith("/accept") -> { accepts += body!!; 200 to JsonObject(emptyMap()) }
-            method == "POST" && path == "$base/seats" -> { grants += body!!; 200 to JsonObject(emptyMap()) }
+            method == "POST" && path == "$base/seats" -> {
+                grants += body!!
+                // As .com does: the KEM key a seat sent with its accept becomes its KEM key when the grant lands.
+                val sid = ((body["grant"] as JsonObject)["seatId"] as JsonPrimitive).content
+                accepts.firstOrNull { ((it["accept"] as JsonObject)["seatId"] as JsonPrimitive).content == sid }?.get("seatKem")?.let { seatKems += it as JsonObject }
+                200 to JsonObject(emptyMap())
+            }
+            method == "GET" && path == "$base/directory/slices" -> 200 to buildJsonObject { put("slices", JsonArray(slices.values.toList())) }
+            method == "POST" && path == "$base/directory/slices" -> {
+                slices[(((body!!["slice"] as JsonObject)["seatId"]) as JsonPrimitive).content] = body; 200 to JsonObject(emptyMap())
+            }
             method == "POST" && path == "$base/ceremonies" -> {
                 ceremonies += buildJsonObject {
                     put("sha256", OrgAuthority.sha256Hex((body!!["order"] as JsonPrimitive).content.toByteArray())); put("order", body["order"]!!)

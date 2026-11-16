@@ -659,6 +659,10 @@ of the verified chain on `.com` (each request re-verifies every ML-DSA signature
 - **Directory connectors on the org box** (SCIM 2.0 at `/scim/v2`, LDAP pull) and the developer guide
   `docs/directory-connectors.md`; **the admin console's Directory** on iOS and Android (proposals with Approve, people,
   connectors with "Add a SCIM connector"). SCIM tokens are per connector, rotated by hand, warned after 365 days (owner,
-  2026-11-15). Open: the LDAP form and mapping editor, role-change execution, member slices of the directory, the
-  webapp console.
+  2026-11-15).
+- **Second round (owner, 2026-11-15):** a connector whose approver left needs re-approval (7 days of grace, then
+  suspended; listed with the pending rotations); members get their slice of the directory (`flagship/org-directory-slice/v1`:
+  the people and servers they share with, no emails); the console carries out role changes and has the LDAP form, the
+  mapping editor, pause / retire / new token; one content-free Activity line per SCIM request; an OpenLDAP CI job. The
+  webapp pieces wait for the key-custody branch (hooks listed in `org-directory.md`).
 

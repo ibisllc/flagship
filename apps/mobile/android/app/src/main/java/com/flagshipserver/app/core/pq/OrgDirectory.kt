@@ -168,3 +168,104 @@ fun OrgDirectory.keys(plan: OrgRotationPlan, seatId: String, kemSecret: ByteArra
 
 /** The newest verified directory-key version, or null before the first one exists. */
 fun OrgDirectory.newestVersion(plan: OrgRotationPlan): Long? = plan.chains[OrgRotation.chainId(OrgKeyKind.DIRECTORY_KEY, "*")]?.lastOrNull()?.ring?.version
+
+/** A member's slice of the directory (packages/protocol/src/orgDirectory.ts, `flagship/org-directory-slice/v1`). */
+data class OrgDirectorySlice(val orgId: String, val seatId: String, val kemKeyId: String, val tagKeyVersion: Long, val contentTag: String, val sealedHex: String, val issuedAt: Long)
+
+class OrgSliceContent(val entries: List<OrgDirectoryEntry>, val servers: List<String>)
+
+object OrgDirectorySlices {
+    const val TAG = "flagship/org-directory-slice/v1"
+    private val HEX16 = Regex("^[0-9a-f]{32}$")
+    private val HEX32 = Regex("^[0-9a-f]{64}$")
+    private val DOMAIN = Regex("^[a-z0-9][a-z0-9.-]{0,252}$")
+    private fun fail(d: String): Nothing = throw OrgAuthorityException("malformed", d)
+    private fun join(vararg p: Any): ByteArray = p.joinToString("|").toByteArray(Charsets.UTF_8)
+    private fun b64u(b: ByteArray) = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(b)
+
+    private fun serverTargets(roles: List<OrgSeatRole>, all: List<String>): Set<String> = roles.flatMap { r ->
+        when (r) { is OrgSeatRole.ServerAdmin -> r.servers ?: all; is OrgSeatRole.Unlock -> r.servers; else -> emptyList() }
+    }.toSet()
+    private fun appTargets(roles: List<OrgSeatRole>): Set<String> = roles.flatMap { if (it is OrgSeatRole.ServiceAdmin) it.apps else emptyList() }.toSet()
+
+    /** Every org admin, each live seat whose roles name a server or app this seat's roles name, and those servers. */
+    fun shares(st: OrgAuthorityState, book: OrgSeatBook, seatId: String, servers: List<String>, now: Long): Pair<List<String>, List<String>> {
+        val mine = book.seats[seatId]
+        val myServers = mine?.let { serverTargets(it.roles, servers) } ?: emptySet()
+        val myApps = mine?.let { appTargets(it.roles) } ?: emptySet()
+        val seats = st.current.admins.filter { it.kind == OrgAdminKind.ADMIN }.map { it.seatId }.toMutableSet()
+        for ((id, s) in book.seats) {
+            if (id == seatId || id in book.revoked || s.grant.expiresAt <= now) continue
+            if (serverTargets(s.roles, servers).any { it in myServers } || appTargets(s.roles).any { it in myApps }) seats += id
+        }
+        seats -= seatId
+        return seats.sorted() to myServers.filter { it in servers }.sorted()
+    }
+
+    fun content(st: OrgAuthorityState, book: OrgSeatBook, seatId: String, bySeat: Map<String, OrgDirectoryEntry>, servers: List<String>, now: Long): OrgSliceContent {
+        val (seats, srv) = shares(st, book, seatId, servers, now)
+        return OrgSliceContent(seats.mapNotNull { bySeat[it] }.map { it.copy(email = "", externalId = "", updatedAt = 0) }, srv)
+    }
+
+    fun payload(orgId: String, seatId: String, c: OrgSliceContent): ByteArray {
+        if (!HEX16.matches(orgId) || !HEX16.matches(seatId) || c.entries.size > 2000 || c.servers.size > 512) fail("slice")
+        val bodies = c.entries.map { b64u(OrgDirectory.canonicalBody(it)) }.sorted()
+        for (s in c.servers) if (!DOMAIN.matches(s)) fail("server")
+        if (c.servers != c.servers.toSortedSet().toList()) fail("servers not sorted and unique")
+        return join(TAG, "payload", orgId, seatId, bodies.joinToString(","), c.servers.joinToString(","))
+    }
+
+    fun parsePayload(b: ByteArray, orgId: String, seatId: String): OrgSliceContent {
+        val p = String(b, Charsets.UTF_8).split("|")
+        if (p.size != 6 || p[0] != TAG || p[1] != "payload" || p[2] != orgId || p[3] != seatId) fail("slice payload")
+        val entries = if (p[4].isEmpty()) emptyList() else p[4].split(",").map { OrgDirectory.parseBody(java.util.Base64.getUrlDecoder().decode(it)) }
+        val c = OrgSliceContent(entries, if (p[5].isEmpty()) emptyList() else p[5].split(","))
+        if (!payload(orgId, seatId, c).contentEquals(b)) fail("slice payload not canonical")
+        return c
+    }
+
+    fun contentTag(directoryKey: ByteArray, payload: ByteArray): String {
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+        mac.init(javax.crypto.spec.SecretKeySpec(directoryKey, "HmacSHA256"))
+        return PqHex.encode(mac.doFinal("$TAG|tag|".toByteArray(Charsets.UTF_8) + payload))
+    }
+
+    fun canonicalWrite(s: OrgDirectorySlice): ByteArray {
+        val sealed = PqHex.decode(s.sealedHex)
+        if (!HEX16.matches(s.orgId) || !HEX16.matches(s.seatId) || !HEX32.matches(s.kemKeyId) || !HEX32.matches(s.contentTag) || s.tagKeyVersion < 1 || s.issuedAt < 0 || sealed == null || sealed.isEmpty()) fail("slice")
+        return join(TAG, s.orgId, s.seatId, s.kemKeyId, s.tagKeyVersion, s.contentTag, OrgAuthority.sha256Hex(sealed), s.issuedAt)
+    }
+
+    fun seal(orgId: String, seatId: String, kemPub: ByteArray, kemKeyId: String, c: OrgSliceContent, directoryKey: ByteArray, tagKeyVersion: Long, issuedAt: Long): OrgDirectorySlice {
+        val p = payload(orgId, seatId, c)
+        val sealed = PqHybrid.hybridSeal(kemPub, PqHybrid.HybridSealOptions(purpose = TAG, senderKeyId = ByteArray(32), issuedAt = issuedAt),
+            listOf(orgId.toByteArray(), seatId.toByteArray()), p)
+        return OrgDirectorySlice(orgId, seatId, kemKeyId, tagKeyVersion, contentTag(directoryKey, p), PqHex.encode(sealed), issuedAt).also { canonicalWrite(it) }
+    }
+
+    fun open(s: OrgDirectorySlice, kemSecret: ByteArray): OrgSliceContent {
+        canonicalWrite(s)
+        val plain = try {
+            PqHybrid.hybridOpen(kemSecret, TAG, listOf(s.orgId.toByteArray(), s.seatId.toByteArray()), PqHex.decode(s.sealedHex)!!).plaintext
+        } catch (e: Exception) { fail("slice does not open") }
+        return parsePayload(plain, s.orgId, s.seatId)
+    }
+
+    /** A member's check that one org admin (still one now) approved its slice. */
+    fun verifyApproval(st: OrgAuthorityState, book: OrgSeatBook, s: OrgDirectorySlice, approvals: List<OrgApproval>, now: Long) {
+        OrgRotation.recordedApprovals(st, book, canonicalWrite(s), approvals, approvals.firstOrNull()?.oarVersion ?: -1, now, null)
+        if (approvals.none { a -> st.current.admins.any { it.seatId == a.seatId && it.kind == OrgAdminKind.ADMIN } }) fail("not an org admin now")
+    }
+
+    fun fromJson(o: kotlinx.serialization.json.JsonObject): OrgDirectorySlice {
+        fun s(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: fail(k)
+        return OrgDirectorySlice(s("orgId"), s("seatId"), s("kemKeyId"), s("tagKeyVersion").toLong(), s("contentTag"), s("sealedHex"), s("issuedAt").toLong())
+    }
+
+    fun json(sl: OrgDirectorySlice) = kotlinx.serialization.json.buildJsonObject {
+        put("orgId", kotlinx.serialization.json.JsonPrimitive(sl.orgId)); put("seatId", kotlinx.serialization.json.JsonPrimitive(sl.seatId))
+        put("kemKeyId", kotlinx.serialization.json.JsonPrimitive(sl.kemKeyId)); put("tagKeyVersion", kotlinx.serialization.json.JsonPrimitive(sl.tagKeyVersion))
+        put("contentTag", kotlinx.serialization.json.JsonPrimitive(sl.contentTag)); put("sealedHex", kotlinx.serialization.json.JsonPrimitive(sl.sealedHex))
+        put("issuedAt", kotlinx.serialization.json.JsonPrimitive(sl.issuedAt))
+    }
+}

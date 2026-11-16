@@ -34,7 +34,7 @@ final class OrgFakeCom: @unchecked Sendable {
     var revokes: [[String: Any]] = [], rings: [[String: Any]] = [], seatKems: [[String: Any]] = [], boxKems: [[String: Any]] = [], servers: [[String: Any]] = []
     var inviteExpired = false
     var directory: [String: [String: Any]] = [:]
-    var connectors: [[String: Any]] = [], proposals: [[String: Any]] = [], decisions: [[String: Any]] = []
+    var connectors: [[String: Any]] = [], proposals: [[String: Any]] = [], decisions: [[String: Any]] = [], slices: [String: [String: Any]] = [:]
 
     init() throws {
         let t0 = now - 3_600_000
@@ -109,7 +109,16 @@ final class OrgFakeCom: @unchecked Sendable {
         case ("GET", "\(base)/ceremonies"):
             return (200, wire(["ceremonies": ceremonies]))
         case ("POST", "\(base)/seats"):
-            grants.append(wire(body!)); return (200, [:])
+            grants.append(wire(body!))
+            // As .com does: the KEM key a seat sent with its accept becomes its KEM key when the grant lands.
+            let sid = (body!["grant"] as? [String: Any])?["seatId"] as? String
+            if let k = accepts.first(where: { ($0["accept"] as? [String: Any])?["seatId"] as? String == sid })?["seatKem"] as? [String: Any] { seatKems.append(k) }
+            return (200, [:])
+        case ("GET", "\(base)/directory/slices"):
+            return (200, wire(["slices": Array(slices.values)]))
+        case ("POST", "\(base)/directory/slices"):
+            let sl = body!["slice"] as! [String: Any]
+            slices[sl["seatId"] as! String] = wire(body!); return (200, [:])
         case ("POST", "\(base)/ceremonies"):
             ceremonies.append(wire(["sha256": OrgAuthority.sha256Hex(Array((body!["order"] as! String).utf8)), "order": body!["order"]!,
                                     "payload": body!["payload"]!, "approvals": body!["approvals"]!]))
@@ -453,5 +462,160 @@ final class OrgDirectoryConsoleTests: XCTestCase {
         XCTAssertFalse(String(describing: posted).contains(shown.token))
         a.clearNewConnector()
         XCTAssertNil(a.newConnector)
+    }
+}
+
+
+/// Members' slices, a role change carried out from the console, and connector upkeep.
+@MainActor
+final class OrgDirectoryUpkeepTests: XCTestCase {
+    private let umkA = [UInt8](repeating: 7, count: 32)
+    private let umkM = [UInt8](repeating: 3, count: 32)
+    private let domain = "home.acme.flagship.services"
+
+    private func admin(_ com: OrgFakeCom) -> OrgViewModel {
+        let u = umkA
+        return OrgViewModel(client: com.client, keys: com.founderKeys, now: { com.now }, umk: { _ in u })
+    }
+
+    /// A member admitted through the real join; returns its seat id and its phone's keys.
+    private func member(_ com: OrgFakeCom, _ a: OrgViewModel) async throws -> (String, FakeOrgSeatKeys) {
+        let seat = OrgAuthority.randomId()
+        let key = try com.invite(seatId: seat, roles: [.member], pseudonym: "Mia")
+        let mine = FakeOrgSeatKeys()
+        let u = umkM
+        let j = OrgJoinViewModel(orgId: com.orgId, seatId: seat, keyHex: key, client: com.client, keys: mine, now: { com.now }, umk: { _ in u })
+        await j.load(); await j.accept()
+        await a.load(com.founder)
+        await a.admit(com.founder, try XCTUnwrap(a.pendingJoins.first))
+        return (seat, mine)
+    }
+
+    private func withServer(_ com: OrgFakeCom) throws {
+        let stk = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 4, count: 32))
+        com.servers = [["serverDomain": domain, "identityPubKeyHex": OrgAuthority.hex([UInt8](stk.publicKey.rawRepresentation))]]
+        let box = try PqHybrid.hybridSealKeygen(seed: [UInt8](repeating: 8, count: 32))
+        let boxId = OrgAuthority.kemKeyIdHex(box.publicKey), bt = com.now - 50_000
+        let msg = try OrgAuthority.canonicalBoxKem(orgId: com.orgId, serverDomain: domain, kemKeyId: boxId, issuedAt: bt)
+        com.boxKems = [["statement": ["orgId": com.orgId, "serverDomain": domain, "kemKeyId": boxId, "issuedAt": NSNumber(value: bt)] as [String: Any],
+                        "kemPubHex": OrgAuthority.hex(box.publicKey), "signature": OrgAuthority.hex([UInt8](try stk.signature(for: Data(msg))))]]
+    }
+
+    private func openSetup(_ com: OrgFakeCom, _ posted: [String: Any]) throws -> [String: Any] {
+        let c = try OrgConnector.fromWire(posted["connector"])
+        let box = try PqHybrid.hybridSealKeygen(seed: [UInt8](repeating: 8, count: 32))
+        let (_, plain) = try PqHybrid.hybridOpen(recipientSecretKey: box.secretKey, expectedPurpose: OrgConnectors.tagConnector,
+                                                 context: [com.orgId, c.connectorId, domain].map { Array($0.utf8) },
+                                                 sealed: OrgAuthority.bytes(hex: (posted["setup"] as! [String: Any])["sealedHex"] as! String)!)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(plain)) as? [String: Any])
+    }
+
+    func testAMemberSeesOnlyThePeopleItSharesWith() async throws {
+        let com = try OrgFakeCom()
+        let a = admin(com)
+        await a.load(com.founder)
+        try await a.recordEntry(com.founder, OrgDirectoryEntry(seatId: com.founderSeat, pseudonym: "Fay", email: "fay@acme.example", updatedAt: com.now))
+        let (seat, mine) = try await member(com, a)
+        await a.load(com.founder)
+        let stored = try XCTUnwrap(com.slices[seat])
+        XCTAssertFalse(String(describing: stored).contains("Fay"))
+        let u = umkM
+        let m = OrgViewModel(client: com.client, keys: mine, now: { com.now }, umk: { _ in u })
+        let mseat = try XCTUnwrap(mine.seats().first)
+        await m.load(mseat)
+        XCTAssertFalse(m.isOrgAdmin(mseat))
+        let sw = try XCTUnwrap(m.sharedWith)
+        XCTAssertEqual(sw.people.map(\.pseudonym), ["Fay"])
+        XCTAssertEqual(sw.people.first?.email, "")
+        XCTAssertEqual(m.name(mseat, com.founderSeat), "Fay")
+        // A slice without an org admin's approval is not shown.
+        var forged = stored
+        forged["approvals"] = []
+        com.slices[seat] = forged
+        await m.load(mseat)
+        XCTAssertNil(m.sharedWith)
+    }
+
+    func testARoleChangeProposalIsCarriedOutWithANewGrant() async throws {
+        let com = try OrgFakeCom()
+        let a = admin(com)
+        await a.load(com.founder)
+        let (seat, _) = try await member(com, a)
+        let conn = try PqHybrid.hybridSigKeygen(edSeed: [UInt8](repeating: 0x61, count: 32), mldsaSeed: [UInt8](repeating: 0x62, count: 32))
+        let connector = OrgConnector(orgId: com.orgId, connectorId: OrgAuthority.randomId(), kind: "scim", serverDomain: domain,
+                                     connectorKeyId: try OrgConnectors.connectorKeyId(conn.publicKey), scopes: OrgConnectors.scopes,
+                                     mappingSha256: String(repeating: "ab", count: 32), status: "active", issuedAt: com.now - 1000)
+        com.connectors = [["connector": OrgConnectors.connectorJSON(connector), "connectorPubHex": OrgAuthority.hex(conn.publicKey), "approvals": []]]
+        let kem = try PqHybrid.hybridSealKeygen(seed: try OrgAuthority.seatKemSeed(umk: umkA, orgId: com.orgId))
+        let pid = OrgAuthority.randomId(), t = com.now - 500
+        let body = try OrgDirectory.canonicalBody(OrgDirectoryEntry(seatId: seat, pseudonym: "Mia", source: "scim", updatedAt: t))
+        let recipient = "seat:\(com.founderSeat)"
+        let sealed = try PqHybrid.hybridSeal(recipientPublicKey: kem.publicKey,
+                                             options: HybridSealOptions(purpose: OrgConnectors.tagProposal, senderKeyId: [UInt8](repeating: 0, count: 32), issuedAt: UInt64(t)),
+                                             context: [com.orgId, pid, recipient].map { Array($0.utf8) }, plaintext: body)
+        let recipients = [(recipient: recipient, kemKeyId: OrgAuthority.kemKeyIdHex(kem.publicKey), sealedHex: OrgAuthority.hex(sealed))]
+        let roles: [OrgSeatRole] = [.member, .unlock(servers: [domain])]
+        let prop = OrgProposal(orgId: com.orgId, proposalId: pid, connectorId: connector.connectorId, kind: "role-change", subject: seat,
+                               rolesHash: try OrgAuthority.rolesHash(roles), sealedSha256: try OrgConnectors.recipientsHash(recipients), issuedAt: t)
+        let sig = try PqHybrid.hybridSign(secretKey: conn.secretKey, purpose: OrgConnectors.tagProposal, payload: try OrgConnectors.canonicalProposal(prop))
+        com.proposals = [["bundle": [
+            "proposal": ["orgId": prop.orgId, "proposalId": pid, "connectorId": prop.connectorId, "kind": prop.kind, "subject": seat, "rolesHash": prop.rolesHash,
+                         "sealedSha256": prop.sealedSha256, "issuedAt": NSNumber(value: t)] as [String: Any],
+            "roles": OrgAuthorityWire.rolesJSON(roles),
+            "recipients": recipients.map { ["recipient": $0.recipient, "kemKeyId": $0.kemKeyId, "sealedHex": $0.sealedHex] },
+            "signature": OrgAuthority.hex(sig),
+        ] as [String: Any], "decision": NSNull()]]
+        await a.load(com.founder)
+        let p = try XCTUnwrap(a.proposals.first)
+        XCTAssertEqual(p.kind, "role-change")
+        let before = com.grants.count
+        await a.approveProposal(com.founder, p)
+        XCTAssertEqual(com.grants.count, before + 1)
+        let snap = try await com.client.snapshot(orgId: com.orgId, genesisHash: com.genesisHash, now: com.now)
+        XCTAssertEqual(snap.book.seats[seat]?.roles, roles)
+        XCTAssertEqual((com.decisions.last?["decision"] as? [String: Any])?["decision"] as? String, "done")
+    }
+
+    func testPauseRotateMappingAndLdap() async throws {
+        let com = try OrgFakeCom()
+        try withServer(com)
+        let a = admin(com)
+        await a.load(com.founder)
+        await a.addScimConnector(com.founder, serverDomain: domain)
+        let first = try XCTUnwrap(com.connectors.last)
+        let id = try OrgConnector.fromWire(first["connector"]).connectorId
+        XCTAssertNotNil(first["mappingSealed"])
+        a.clearNewConnector()
+        await a.load(com.founder)
+
+        await a.rotateScimToken(com.founder, id)
+        let token = try XCTUnwrap(a.newConnector?.token)
+        let rotated = try openSetup(com, try XCTUnwrap(com.connectors.last))
+        XCTAssertNil(rotated["connectorSeedsHex"])
+        XCTAssertEqual(rotated["scimTokenSha256"] as? String, OrgAuthority.sha256Hex(Array(token.utf8)))
+
+        await a.load(com.founder)
+        await a.setConnectorStatus(com.founder, id, status: "paused")
+        XCTAssertEqual(try OrgConnector.fromWire(com.connectors.last?["connector"]).status, "paused")
+
+        await a.load(com.founder)
+        await a.saveMapping(com.founder, id, rows: [.init(group: "Finance", role: .serverAdmin, target: domain)], defaultMember: false)
+        let saved = try XCTUnwrap(com.connectors.last)
+        let rec = try OrgConnector.fromWire(saved["connector"])
+        let sealedSetup = try openSetup(com, saved)
+        let mapping = try XCTUnwrap(sealedSetup["mapping"] as? [String: Any])
+        XCTAssertEqual(try OrgConnectors.mappingSha256(mapping), rec.mappingSha256)
+        XCTAssertNotNil((mapping["groups"] as? [String: Any])?["Finance"])
+        XCTAssertNotNil(saved["mappingSealed"])
+        await a.load(com.founder)
+        XCTAssertEqual(a.mappingRows(id).rows.map(\.group), ["Finance"])
+
+        var form = OrgViewModel.LdapForm()
+        form.url = "ldaps://dc1.acme.example"; form.bindDn = "CN=svc,DC=acme,DC=example"; form.password = "s3cret"; form.baseDn = "DC=acme,DC=example"
+        await a.saveLdapConnector(com.founder, serverDomain: domain, form: form)
+        let ldap = try XCTUnwrap(com.connectors.last)
+        XCTAssertEqual(try OrgConnector.fromWire(ldap["connector"]).kind, "ldap")
+        XCTAssertEqual((try openSetup(com, ldap)["ldap"] as? [String: Any])?["bindPassword"] as? String, "s3cret")
+        XCTAssertFalse(String(describing: ldap).contains("s3cret"))
     }
 }

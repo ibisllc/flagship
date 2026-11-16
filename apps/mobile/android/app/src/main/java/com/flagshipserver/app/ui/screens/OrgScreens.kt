@@ -187,8 +187,18 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
                         }
                     }
                 }
-                if (rotations.isNotEmpty() && !seat.memberOnly) {
+                val reapprove = vm.connectorsToReapprove()
+                if ((rotations.isNotEmpty() || reapprove.isNotEmpty()) && !seat.memberOnly) {
                     FSSectionHeader(stringResource(R.string.org_keys_to_rotate))
+                    reapprove.forEach { (c, st) ->
+                        FSCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                Body(OrgViewModel.reapproveText(c, st), danger = st.state == "suspended")
+                                FSPrimaryButton(stringResource(R.string.org_connector_reapprove), onClick = { scope.launch { vm.reapproveConnector(seat, c.connectorId) } },
+                                    enabled = !busy && frozen == null, modifier = Modifier.testTag("org-connector-reapprove-${c.connectorId.take(8)}"))
+                            }
+                        }
+                    }
                     rotations.forEach { r ->
                         FSCard {
                             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
@@ -205,6 +215,7 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
                         }
                     }
                 }
+                if (!vm.isOrgAdmin(seat)) OrgSharedWithSection(vm)
                 if (!seat.memberOnly) {
                     FSSectionHeader(stringResource(R.string.org_waiting_approval))
                     val list = snap?.ceremonies ?: emptyList()
@@ -223,7 +234,7 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
                             }
                         }
                     }
-                    OrgDirectorySections(vm, seat, busy, frozen == null)
+                    if (vm.isOrgAdmin(seat)) OrgDirectorySections(vm, seat, busy, frozen == null)
                     FSSectionHeader(stringResource(R.string.org_people_approve))
                     vm.admins(seat).forEach { a ->
                         FSCard {
@@ -314,6 +325,7 @@ private fun OrgDirectorySections(vm: OrgViewModel, seat: OrgSeatRecord, busy: Bo
     val connectors by vm.connectors.collectAsState()
     val fresh by vm.newConnector.collectAsState()
     var picking by remember { mutableStateOf(false) }
+    var pickingKind by remember { mutableStateOf("scim") }
     if (proposals.isNotEmpty()) {
         FSSectionHeader(stringResource(R.string.org_directory_proposals))
         proposals.forEach { p ->
@@ -344,9 +356,38 @@ private fun OrgDirectorySections(vm: OrgViewModel, seat: OrgSeatRecord, busy: Bo
     }
     FSSectionHeader(stringResource(R.string.org_directory_connectors))
     Body(stringResource(R.string.org_directory_connectors_note), muted = true)
-    connectors.forEach { k ->
-        FSCard { Column { Body(OrgViewModel.connectorText(k.kind)); Body("${k.serverDomain} · ${OrgViewModel.statusText(k.status)}", muted = true) } }
+    val standings by vm.standings.collectAsState()
+    var managing by remember { mutableStateOf<String?>(null) }
+    var editingMapping by remember { mutableStateOf<String?>(null) }
+    var ldapTarget by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    var retiring by remember { mutableStateOf<String?>(null) }
+    connectors.filter { it.status != "retired" }.forEach { k ->
+        FSCard {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Body(OrgViewModel.connectorText(k.kind)); Body("${k.serverDomain} · ${OrgViewModel.statusText(k.status)}", muted = true)
+                standings[k.connectorId]?.takeIf { it.state != "ok" }?.let { Body(OrgViewModel.reapproveText(k, it), muted = it.state != "suspended", danger = it.state == "suspended") }
+                if (managing != k.connectorId) {
+                    FSSecondaryButton(stringResource(R.string.org_connector_manage), onClick = { managing = k.connectorId }, enabled = !busy,
+                        modifier = Modifier.testTag("org-connector-manage-${k.connectorId.take(8)}"))
+                } else {
+                    FSSecondaryButton(stringResource(R.string.org_connector_edit_roles), onClick = { editingMapping = k.connectorId; managing = null }, block = true)
+                    if (k.kind == "ldap") FSSecondaryButton(stringResource(R.string.org_connector_edit_ldap), onClick = { ldapTarget = k.serverDomain to k.connectorId; managing = null }, block = true)
+                    if (k.kind == "scim") FSSecondaryButton(stringResource(R.string.org_connector_new_token), onClick = { managing = null; scope.launch { vm.rotateScimToken(seat, k.connectorId) } }, block = true)
+                    if (k.status == "active") FSSecondaryButton(stringResource(R.string.org_connector_pause), onClick = { managing = null; scope.launch { vm.setConnectorStatus(seat, k.connectorId, "paused") } }, block = true)
+                    if (k.status == "paused") FSSecondaryButton(stringResource(R.string.org_connector_resume), onClick = { managing = null; scope.launch { vm.setConnectorStatus(seat, k.connectorId, "active") } }, block = true)
+                    if (retiring == k.connectorId) {
+                        Body(stringResource(R.string.org_connector_retire_confirm), muted = true)
+                        FSPrimaryButton(stringResource(R.string.org_connector_retire), onClick = { retiring = null; managing = null; scope.launch { vm.setConnectorStatus(seat, k.connectorId, "retired") } }, block = true)
+                    } else {
+                        FSSecondaryButton(stringResource(R.string.org_connector_retire), onClick = { retiring = k.connectorId }, block = true)
+                    }
+                    FSSecondaryButton(stringResource(R.string.org_cancel), onClick = { managing = null; retiring = null }, block = true)
+                }
+            }
+        }
     }
+    editingMapping?.let { id -> OrgMappingEditor(vm, seat, id, busy) { editingMapping = null } }
+    ldapTarget?.let { (server, id) -> OrgLdapFormCard(vm, seat, server, id, busy) { ldapTarget = null } }
     val f = fresh
     if (f != null) {
         FSCard {
@@ -362,13 +403,98 @@ private fun OrgDirectorySections(vm: OrgViewModel, seat: OrgSeatRecord, busy: Bo
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Body(stringResource(R.string.org_connector_which_server))
                 vm.servers().forEach { d ->
-                    FSSecondaryButton(d, onClick = { picking = false; scope.launch { vm.addScimConnector(seat, d) } }, block = true)
+                    FSSecondaryButton(d, onClick = {
+                        picking = false
+                        if (pickingKind == "ldap") ldapTarget = d to null else scope.launch { vm.addScimConnector(seat, d) }
+                    }, block = true)
                 }
                 FSSecondaryButton(stringResource(R.string.org_cancel), onClick = { picking = false }, block = true)
             }
         }
     } else {
-        FSSecondaryButton(stringResource(R.string.org_connector_add), onClick = { picking = true }, enabled = !busy && vm.servers().isNotEmpty(),
+        FSSecondaryButton(stringResource(R.string.org_connector_add), onClick = { pickingKind = "scim"; picking = true }, enabled = !busy && vm.servers().isNotEmpty(),
             block = true, modifier = Modifier.testTag("org-connector-add"))
+        FSSecondaryButton(stringResource(R.string.org_connector_add_ldap), onClick = { pickingKind = "ldap"; picking = true }, enabled = !busy && vm.servers().isNotEmpty(),
+            block = true, modifier = Modifier.testTag("org-connector-add-ldap"))
+    }
+}
+
+/** A member's view: the people and servers it shares something with (its slice of the directory). */
+@Composable
+private fun OrgSharedWithSection(vm: OrgViewModel) {
+    val sw by vm.sharedWith.collectAsState()
+    val c = sw ?: return
+    FSSectionHeader(stringResource(R.string.org_shared_with))
+    Body(stringResource(R.string.org_shared_with_note), muted = true)
+    if (c.entries.isEmpty() && c.servers.isEmpty()) Body(stringResource(R.string.org_shared_with_none), muted = true, tag = "org-shared-none")
+    c.entries.forEach { e ->
+        FSCard { Column { Body(e.pseudonym); if (e.groups.isNotEmpty()) Body(e.groups.joinToString(" · "), muted = true) } }
+    }
+    c.servers.forEach { d -> FSCard { Body(d) } }
+}
+
+/** The mapping editor: which directory group gets which role (docs/org-directory.md §3). */
+@Composable
+private fun OrgMappingEditor(vm: OrgViewModel, seat: OrgSeatRecord, id: String, busy: Boolean, onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val initial = remember(id) { vm.mappingRows(id) }
+    var rows by remember(id) { mutableStateOf(initial.first) }
+    var defaultMember by remember(id) { mutableStateOf(initial.second) }
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Body(stringResource(R.string.org_mapping_title))
+            Body(stringResource(R.string.org_mapping_note), muted = true)
+            rows.forEachIndexed { i, r ->
+                OutlinedTextField(value = r.group, onValueChange = { v -> rows = rows.toMutableList().also { it[i] = r.copy(group = v) } }, singleLine = true,
+                    label = { Text(stringResource(R.string.org_mapping_group)) }, modifier = Modifier.fillMaxWidth().testTag("org-mapping-group-$i"))
+                listOf(OrgViewModel.InviteRole.MEMBER to R.string.org_role_member, OrgViewModel.InviteRole.SERVER_ADMIN to R.string.org_role_server_admin,
+                    OrgViewModel.InviteRole.APP_ADMIN to R.string.org_role_app_admin).forEach { (role, label) ->
+                    Text((if (r.role == role) "● " else "○ ") + stringResource(label), color = FS.colors.text,
+                        modifier = Modifier.fillMaxWidth().clickable { rows = rows.toMutableList().also { it[i] = r.copy(role = role) } }.padding(vertical = FS.space.s1))
+                }
+                if (r.role != OrgViewModel.InviteRole.MEMBER) {
+                    OutlinedTextField(value = r.target, onValueChange = { v -> rows = rows.toMutableList().also { it[i] = r.copy(target = v) } }, singleLine = true,
+                        label = { Text(stringResource(if (r.role == OrgViewModel.InviteRole.SERVER_ADMIN) R.string.org_invite_server else R.string.org_invite_app)) },
+                        modifier = Modifier.fillMaxWidth())
+                }
+                FSSecondaryButton(stringResource(R.string.org_mapping_remove), onClick = { rows = rows.toMutableList().also { it.removeAt(i) } })
+            }
+            FSSecondaryButton(stringResource(R.string.org_mapping_add), onClick = { rows = rows + OrgViewModel.MappingRow("", OrgViewModel.InviteRole.MEMBER, "") }, block = true)
+            Text((if (defaultMember) "☑ " else "☐ ") + stringResource(R.string.org_mapping_default_member), color = FS.colors.text,
+                modifier = Modifier.fillMaxWidth().clickable { defaultMember = !defaultMember }.padding(vertical = FS.space.s2))
+            FSPrimaryButton(stringResource(R.string.org_save), onClick = { scope.launch { vm.saveMapping(seat, id, rows, defaultMember); onDone() } },
+                enabled = !busy && rows.none { it.role != OrgViewModel.InviteRole.MEMBER && it.target.isBlank() }, block = true, modifier = Modifier.testTag("org-mapping-save"))
+            FSSecondaryButton(stringResource(R.string.org_cancel), onClick = onDone, block = true)
+        }
+    }
+}
+
+/** The LDAP form (docs/org-directory.md §4): LDAPS only; the password goes only to the server, sealed. */
+@Composable
+private fun OrgLdapFormCard(vm: OrgViewModel, seat: OrgSeatRecord, server: String, id: String?, busy: Boolean, onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var form by remember(server, id) { mutableStateOf(OrgViewModel.LdapForm()) }
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Body(stringResource(if (id == null) R.string.org_connector_add_ldap else R.string.org_connector_edit_ldap))
+            listOf(false to R.string.org_ldap_ad, true to R.string.org_ldap_openldap).forEach { (open, label) ->
+                Text((if (form.openLdap == open) "● " else "○ ") + stringResource(label), color = FS.colors.text,
+                    modifier = Modifier.fillMaxWidth().clickable { form = form.copy(openLdap = open) }.padding(vertical = FS.space.s1))
+            }
+            OutlinedTextField(value = form.url, onValueChange = { form = form.copy(url = it) }, singleLine = true, label = { Text(stringResource(R.string.org_ldap_url)) },
+                modifier = Modifier.fillMaxWidth().testTag("org-ldap-url"))
+            OutlinedTextField(value = form.bindDn, onValueChange = { form = form.copy(bindDn = it) }, singleLine = true, label = { Text(stringResource(R.string.org_ldap_bind)) },
+                modifier = Modifier.fillMaxWidth().testTag("org-ldap-bind"))
+            OutlinedTextField(value = form.password, onValueChange = { form = form.copy(password = it) }, singleLine = true, label = { Text(stringResource(R.string.org_ldap_password)) },
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().testTag("org-ldap-password"))
+            OutlinedTextField(value = form.baseDn, onValueChange = { form = form.copy(baseDn = it) }, singleLine = true, label = { Text(stringResource(R.string.org_ldap_base)) },
+                modifier = Modifier.fillMaxWidth().testTag("org-ldap-base"))
+            OutlinedTextField(value = form.userFilter, onValueChange = { form = form.copy(userFilter = it) }, singleLine = true, label = { Text(stringResource(R.string.org_ldap_filter)) },
+                modifier = Modifier.fillMaxWidth())
+            Body(fsString(R.string.org_ldap_note, server), muted = true)
+            FSPrimaryButton(stringResource(R.string.org_save), onClick = { scope.launch { vm.saveLdapConnector(seat, server, form, id); onDone() } },
+                enabled = !busy && form.valid, block = true, modifier = Modifier.testTag("org-ldap-save"))
+            FSSecondaryButton(stringResource(R.string.org_cancel), onClick = onDone, block = true)
+        }
     }
 }

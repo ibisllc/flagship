@@ -107,7 +107,7 @@ object OrgRotation {
     }
 
     /** `verifyOrgRecordedApprovals`: the approvals as of the record they name. */
-    private fun recordedApprovals(st: OrgAuthorityState, book: OrgSeatBook, order: ByteArray, approvals: List<OrgApproval>, oarVersion: Long, now: Long, scoped: OrgAction?) {
+    internal fun recordedApprovals(st: OrgAuthorityState, book: OrgSeatBook, order: ByteArray, approvals: List<OrgApproval>, oarVersion: Long, now: Long, scoped: OrgAction?) {
         val r = st.record(oarVersion) ?: throw OrgAuthorityException("stale-oar")
         need(approvals.isNotEmpty(), "threshold", "no approvals")
         val frozen = { s: String, t: Long -> book.freezes.any { it.seatId == s && it.issuedAt <= t && t < it.untilMs } }
