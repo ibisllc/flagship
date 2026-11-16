@@ -26,6 +26,18 @@ enum DestructiveAuth {
         }
     }
 
+    /// Delete = forget for a voi.ci conversation (docs/voici-calls.md "Deleting a conversation"): it goes from every
+    /// device of the account, so Face ID, Touch ID or the device passcode first. Nil when allowed, else the sentence
+    /// to show; nothing may be deleted or sent unless it is nil. A phone with no screen lock has nothing to ask with
+    /// and deletes, as `ask` allows.
+    static func askToDeleteConversation() async -> String? {
+        switch await ask(reason: String(localized: "Delete this conversation")) {
+        case .allowed: return nil
+        case .declined: return String(localized: "The conversation wasn't deleted.")
+        case .failed(let why): return why
+        }
+    }
+
     /// The account is already open this session, so the person passed the lock.
     @MainActor
     static func accountUnlocked(_ app: AppState) -> Bool {

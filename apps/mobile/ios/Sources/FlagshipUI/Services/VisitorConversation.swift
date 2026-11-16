@@ -178,9 +178,14 @@ final class VisitorConversationModel {
         }
     }
 
-    /// Delete = forget: `.com` drops the conversation; this device forgets its reveal choice.
+    /// Delete = forget: `.com` drops the conversation; this device forgets its reveal choice. Face ID / passcode
+    /// first: a cancelled or failed prompt deletes nothing and sends nothing.
     func delete() async {
         guard let keys else { return }
+        if let refused = await DestructiveAuth.askToDeleteConversation() {
+            note = refused
+            return
+        }
         do {
             try await deps.client.deleteConversation(try VoiciConversations.signedDeleteCaller(pageId: callee.pageId, conv: keys.conv, issuedAt: deps.now(),
                                                                                               pseudonymSeed: keys.p.seed))
