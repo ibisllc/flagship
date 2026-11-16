@@ -67,7 +67,7 @@ test.describe("gym webapp account gone", () => {
     await shot(page, testInfo, "account-gone");
 
     // The page behind it is inert.
-    const inert = await page.evaluate(() => ["header", "main", "nav"].map((s) => document.querySelector(s)?.hasAttribute("inert")));
+    const inert = await page.evaluate(() => ["header", "main", "nav"].map((s) => !!document.querySelector(s)?.closest("[inert]")));
     expect(inert).toEqual([true, true, true]);
 
     // No retry storm: after the first 404 nothing more is sent for this account.
