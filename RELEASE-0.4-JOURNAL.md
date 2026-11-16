@@ -773,6 +773,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Linux runners have KVM; agent on `0.4/retail-ci`), so no KVM host is needed from the owner. Webapp shell signing:
   not yet, the signature covers the exact final files on `main` after 0.4 merges there.
 
+- 2026-11-16: Owner **networking vision**: natively IPv6 end to end, IPv4 supported, and any transport that offers a
+  connection (Freenet named). Written up in `docs/networking-vision.md` (principles, every IPv4 assumption found so
+  far, a transport survey, the shape of the work). Proposed: the IPv6-native pass in 0.4; overlay transports
+  (Yggdrasil, Tor onion reachability, a Freenet prototype for voi.ci) after, one at a time.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
