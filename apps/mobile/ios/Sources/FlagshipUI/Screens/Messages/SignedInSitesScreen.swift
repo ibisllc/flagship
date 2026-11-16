@@ -9,6 +9,7 @@ struct SignedInSitesScreen: View {
     @Environment(\.voiciComClient) private var client
     private let store = MessagesStore.shared
     @State private var signingOut: String?
+    @State private var calling: VoiciOutgoingCall?
 
     var body: some View {
         Form {
@@ -26,6 +27,9 @@ struct SignedInSitesScreen: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
+                        if let u = VoiciSignInBook.username(pageId: site.pageId) {
+                            VoiciCallButtons(callee: VoiciCallee(username: u, pageId: site.pageId)) { calling = $0 }
+                        }
                         Button(signingOut == site.delegatePub ? String(localized: "Signing out…") : String(localized: "Sign out")) {
                             signingOut = site.delegatePub
                             Task {
@@ -33,6 +37,7 @@ struct SignedInSitesScreen: View {
                                 signingOut = nil
                             }
                         }
+                        .buttonStyle(.borderless)
                         .disabled(signingOut != nil)
                         .accessibilityIdentifier("messages-settings-sign-out")
                     }
@@ -42,6 +47,7 @@ struct SignedInSitesScreen: View {
                 Section { Text(verbatim: e).font(.footnote).foregroundStyle(.secondary) }
             }
         }
+        .fullScreenCover(item: $calling) { c in VoiciOutgoingCallScreen(call: c) { calling = nil } }
         .navigationTitle(Text("Websites you're signed in to"))
         .navigationBarTitleDisplayMode(.inline)
         .task {

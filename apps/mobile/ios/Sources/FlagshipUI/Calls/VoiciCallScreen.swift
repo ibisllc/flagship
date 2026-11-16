@@ -12,7 +12,11 @@ public struct VoiciCallScreen: View {
     public init() {}
 
     public var body: some View {
-        if visible {
+        if let call = center.ringBack {
+            VoiciOutgoingCallScreen(call: call) { center.ringBackDone() }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.regularMaterial)
+        } else if visible {
             VStack(spacing: 16) {
                 Spacer()
                 Text(center.callerName).font(.largeTitle.weight(.semibold)).multilineTextAlignment(.center)

@@ -23,6 +23,8 @@ struct VoiciCallKeys: @unchecked Sendable {
     let blocked: Set<String>
     let revoked: Set<String>
     let nicknames: [String: String]
+    /// The page's call mode ("anyone" takes anonymous calls, docs/voici-calls.md "Who may call a page").
+    var callsFrom: String = "accepted"
     var callKey: VoiciCallKey? = nil
 
     /// What a locked device has: its call key and the public facts kept with it.
@@ -160,6 +162,13 @@ final class VoiciCallSession {
 
     private func onRequest(_ raw: JSONValue?) {
         guard let raw else { return end("failed") }
+        if raw["kind"]?.string == VoiciCallModes.anonKind {
+            // A browser with no account calling a page open to anyone (`.com` checked its proof of work).
+            guard case .ok(let r) = VoiciCallModes.checkRequestAnon(raw, pageId: keys.pageId, acceptsCalls: keys.acceptsCalls, callsFrom: keys.callsFrom,
+                                                                     now: Self.now(), blocked: keys.blocked), r.callId == push.callId else { return end("failed") }
+            request = r
+            return onEvent(.request(r))
+        }
         let ctx = VoiciCallRequestCheckContext(pageId: keys.pageId, acceptsCalls: keys.acceptsCalls, origin: keys.origin, caKeys: keys.caKeys,
                                                now: Self.now(), blocked: keys.blocked, revoked: keys.revoked)
         guard case .ok(let r) = VoiciCalls.checkRequest(raw, ctx), r.callId == push.callId else { return end("failed") }

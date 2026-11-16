@@ -16225,5 +16225,209 @@
   "The %@ on %@ needs approving again: the admin who approved it left. It stops on %@.": {
     "en": "The %@ on %@ needs approving again: the admin who approved it left. It stops on %@.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Your conversations on other pages": {
+    "en": "Your conversations on other pages",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:290"
+  },
+  "Call": {
+    "en": "Call",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:55"
+  },
+  "Video call": {
+    "en": "Video call",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:58"
+  },
+  "It goes from all your devices and from Flagship. Messages already on %@'s device stay there. A new message from them starts a new request.": {
+    "en": "It goes from all your devices and from Flagship. Messages already on %@'s device stay there. A new message from them starts a new request.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:85"
+  },
+  "About this name": {
+    "en": "About this name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:188"
+  },
+  "Ringing %@. When they answer, their phone calls you here.": {
+    "en": "Ringing %@. When they answer, their phone calls you here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:202"
+  },
+  "They didn't allow call-backs in this conversation.": {
+    "en": "They didn't allow call-backs in this conversation.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:203"
+  },
+  "Call back": {
+    "en": "Call back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:220"
+  },
+  "This is a name the person chose. Flagship doesn't check names, so anyone can use any name.": {
+    "en": "This is a name the person chose. Flagship doesn't check names, so anyone can use any name.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:365"
+  },
+  "%@ is this person's voi.ci page.": {
+    "en": "%@ is this person's voi.ci page.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/ThreadScreen.swift:367"
+  },
+  "Publish your own voi.ci page first.": {
+    "en": "Publish your own voi.ci page first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/VisitorConversation.swift:150"
+  },
+  "They can't ring you back in this conversation any more.": {
+    "en": "They can't ring you back in this conversation any more.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/VisitorConversation.swift:171"
+  },
+  "Open your conversation with voi.ci/%@": {
+    "en": "Open your conversation with voi.ci/%@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:13"
+  },
+  "No messages yet.": {
+    "en": "No messages yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:73"
+  },
+  "Message": {
+    "en": "Message",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:92"
+  },
+  "Show %@ who I am": {
+    "en": "Show %@ who I am",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:121"
+  },
+  "Turning this off hides the name, but %@ may already have seen it.": {
+    "en": "Turning this off hides the name, but %@ may already have seen it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:129"
+  },
+  "%@ sees your voi.ci page name, checked by Flagship. Otherwise they only see a visitor name.": {
+    "en": "%@ sees your voi.ci page name, checked by Flagship. Otherwise they only see a visitor name.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:131"
+  },
+  "Publish your own voi.ci page to show who you are.": {
+    "en": "Publish your own voi.ci page to show who you are.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:133"
+  },
+  "Stop call-backs": {
+    "en": "Stop call-backs",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:137"
+  },
+  "%@ can ring you back in this conversation only while you allow it.": {
+    "en": "%@ can ring you back in this conversation only while you allow it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:140"
+  },
+  "It goes from Flagship and this device. Messages already on %@'s device stay there.": {
+    "en": "It goes from Flagship and this device. Messages already on %@'s device stay there.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VisitorConversationScreen.swift:159"
+  },
+  "Anyone on the internet": {
+    "en": "Anyone on the internet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:22"
+  },
+  "People who let you call them back": {
+    "en": "People who let you call them back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:23"
+  },
+  "Anyone can call you from your page, with or without a Flagship account. Your admin devices ring.": {
+    "en": "Anyone can call you from your page, with or without a Flagship account. Your admin devices ring.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:38"
+  },
+  "Callers sign in with Flagship and let you call them back in that conversation. You never learn who they are. Your admin devices ring.": {
+    "en": "Callers sign in with Flagship and let you call them back in that conversation. You never learn who they are. Your admin devices ring.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:40"
+  },
+  "They aren't taking calls right now.": {
+    "en": "They aren't taking calls right now.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:363"
+  },
+  "They take calls only from people whose messages they accepted.": {
+    "en": "They take calls only from people whose messages they accepted.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:364"
+  },
+  "They're on another call. Try again later.": {
+    "en": "They're on another call. Try again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:365"
+  },
+  "Too many calls. Try again later.": {
+    "en": "Too many calls. Try again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:366"
+  },
+  "Couldn't hand the call to your browser. Try again.": {
+    "en": "Couldn't hand the call to your browser. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:369"
+  },
+  "The call couldn't connect. Check your connection and try again.": {
+    "en": "The call couldn't connect. Check your connection and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:370"
+  },
+  "Calling…": {
+    "en": "Calling…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:377"
+  },
+  "Ringing…": {
+    "en": "Ringing…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:378"
+  },
+  "The call continues in your browser.": {
+    "en": "The call continues in your browser.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:381"
+  },
+  "No answer.": {
+    "en": "No answer.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:384"
+  },
+  "They can't take your call right now.": {
+    "en": "They can't take your call right now.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:385"
+  },
+  "Call voi.ci/%@": {
+    "en": "Call voi.ci/%@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:21"
+  },
+  "No calls yet. Calls you make, answer or miss show here, on this device only.": {
+    "en": "No calls yet. Calls you make, answer or miss show here, on this device only.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:98"
+  },
+  "Anonymous caller": {
+    "en": "Anonymous caller",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:135"
+  },
+  "Missed call · %@": {
+    "en": "Missed call · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:150"
+  },
+  "Declined · %@": {
+    "en": "Declined · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:151"
+  },
+  "Incoming call · %@": {
+    "en": "Incoming call · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:152"
+  },
+  "Opened in your browser · %@": {
+    "en": "Opened in your browser · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:153"
+  },
+  "No answer · %@": {
+    "en": "No answer · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:154"
+  },
+  "Couldn't take your call · %@": {
+    "en": "Couldn't take your call · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:155"
+  },
+  "Didn't connect · %@": {
+    "en": "Didn't connect · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:156"
+  },
+  "Outgoing call · %@": {
+    "en": "Outgoing call · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:157"
+  },
+  "Only at certain hours": {
+    "en": "Only at certain hours",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:50"
+  },
+  "Calls can ring at any time.": {
+    "en": "Calls can ring at any time.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:82"
+  },
+  "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.": {
+    "en": "Calls ring only at these hours, in the time zone %@. Your page shows these hours and the time zone to visitors. An end before the start runs past midnight.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:80"
   }
 }

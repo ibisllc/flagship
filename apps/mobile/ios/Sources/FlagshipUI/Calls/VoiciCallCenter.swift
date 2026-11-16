@@ -62,6 +62,13 @@ public final class VoiciCallCenter: NSObject {
     @ObservationIgnored private var pausedByBackground = false
     @ObservationIgnored private var lastToken: String?
     @ObservationIgnored private var observer: NSObjectProtocol?
+    /// The caller of the ringing call, once the push opened (for this device's call list).
+    /// A page owner is ringing this account back (docs/voici-calls.md "ringing a caller back"): answering makes this
+    /// device dial out to that page; the pseudonymous side never hosts.
+    private(set) var ringBack: VoiciOutgoingCall?
+    @ObservationIgnored private var ringing: (id: UUID, hint: VoiciRingHint?)?
+    @ObservationIgnored private var incomingPeer: VoiciCallRecord.Peer?
+    @ObservationIgnored private var connectedAt: Int64?
 
     static let noRingKey = "flagship.voici.calls.noRing"
 
@@ -159,6 +166,7 @@ public final class VoiciCallCenter: NSObject {
 
     private func join(_ call: VoiciCallPush, _ keys: VoiciCallKeys) {
         if let who = keys.openPush(call) {
+            incomingPeer = .visitor(conv: who.conv, pseudonymPub: who.from)
             callerName = keys.nicknames[who.from] ?? MessagesStore.shared.name(pseudonymPub: who.from)
             updateCallKit()
         }
@@ -294,6 +302,7 @@ public final class VoiciCallCenter: NSObject {
         case .won: phase = .connecting
         case .connected:
             phase = .connected
+            connectedAt = Int64(clock().timeIntervalSince1970 * 1000)
             if let id = callUUID { provider?.reportOutgoingCall(with: id, connectedAt: nil) }
         case .remoteCamera(let s):
             remoteCamera = s
@@ -302,7 +311,84 @@ public final class VoiciCallCenter: NSObject {
         }
     }
 
+    // MARK: ringing back (this account was the caller)
+
+    /// A ring-back VoIP push: reported to CallKit at once (Apple requires it), named after the page when this
+    /// account's thread key for one of its pages opens the hint, else "Someone on voi.ci" (the account is locked).
+    private func incomingRing(_ ring: VoiciRingPush, completion: @escaping () -> Void) {
+        let hint = MessagesStore.shared.openRing(ring)
+        let id = UUID()
+        let u = CXCallUpdate()
+        u.remoteHandle = CXHandle(type: .generic, value: "voi.ci")
+        u.localizedCallerName = hint.map { "voi.ci/\($0.username)" } ?? String(localized: "Someone on voi.ci")
+        u.hasVideo = hint?.media == VoiciCalls.mediaVideo
+        u.supportsHolding = false
+        u.supportsDTMF = false
+        guard let provider, ringing == nil, session == nil, push == nil, hint != nil || Keystore.messagesUMKIfCached() == nil else {
+            // A second ring, or a hint none of this account's pages opens: reported, then ended at once.
+            let p = provider ?? CXProvider(configuration: CXProviderConfiguration())
+            p.reportNewIncomingCall(with: id, update: u) { _ in
+                Task { @MainActor in p.reportCall(with: id, endedAt: nil, reason: .failed); completion() }
+            }
+            return
+        }
+        ringing = (id, hint)
+        provider.reportNewIncomingCall(with: id, update: u) { error in
+            Task { @MainActor in
+                if error != nil { self.ringing = nil }
+                completion()
+            }
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(VoiciRings.ttlMs) * 1_000_000)
+            if let r = self.ringing, r.id == id, self.ringBack == nil {
+                self.ringing = nil
+                provider.reportCall(with: id, endedAt: nil, reason: .unanswered)
+            }
+        }
+    }
+
+    /// Answer on a ring-back: dial out to the page that rang (in the app's engine, else through the browser).
+    private func answerRing() {
+        guard let r = ringing, let client = MessagesStore.shared.client else { return }
+        guard let hint = r.hint else {
+            // Locked when the push came: no page to dial. The owner's ring still shows in the conversation on voi.ci.
+            ringing = nil
+            provider?.reportCall(with: r.id, endedAt: nil, reason: .failed)
+            return
+        }
+        let call = VoiciOutgoingCall.live(callee: VoiciCallee(username: hint.username, pageId: hint.pageId), video: hint.media == VoiciCalls.mediaVideo,
+                                          client: client)
+        ringBack = call
+    }
+
+    /// The ring-back call's screen closed.
+    public func ringBackDone() {
+        if let r = ringing { provider?.reportCall(with: r.id, endedAt: nil, reason: .remoteEnded) }
+        ringing = nil
+        ringBack = nil
+    }
+
+    /// This device's record of the call it rang for: answered here, declined here, or missed. A call another device
+    /// answered isn't this device's to list; a missed call is also on `.com` (merged by the list).
+    static func incomingOutcome(code: String, wasConnected: Bool) -> VoiciCallRecord.Outcome? {
+        if wasConnected { return .answered }
+        switch code {
+        case "answered-elsewhere": return nil
+        case "decline": return .declined
+        case "no-answer", "cancel", "hangup", "busy": return .missed
+        default: return .failed
+        }
+    }
+
     private func finish(_ code: String) {
+        if let call = push, let peer = incomingPeer, let outcome = Self.incomingOutcome(code: code, wasConnected: connectedAt != nil) {
+            let end = Int64(clock().timeIntervalSince1970 * 1000)
+            VoiciCallHistory.shared.record(VoiciCallRecord(callId: call.callId, direction: .incoming, outcome: outcome, peer: peer, video: offersVideo,
+                                                           at: call.issuedAt, durationMs: connectedAt.map { end - $0 } ?? 0))
+        }
+        incomingPeer = nil
+        connectedAt = nil
         if let id = callUUID, let provider {
             let reason: CXCallEndedReason = switch code {
             case "answered-elsewhere": .answeredElsewhere
@@ -345,6 +431,10 @@ extension VoiciCallCenter: PKPushRegistryDelegate {
     nonisolated public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType,
                                          completion: @escaping () -> Void) {
         let info = payload.dictionaryPayload
+        if let ring = PushNotifications.voiciRing(info) {
+            MainActor.assumeIsolated { self.incomingRing(ring, completion: completion) }
+            return
+        }
         MainActor.assumeIsolated {
             let id = UUID()
             let call = PushNotifications.voiciCall(info)
@@ -382,12 +472,21 @@ extension VoiciCallCenter: CXProviderDelegate {
 
     nonisolated public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
         Task { @MainActor in
+            if let r = self.ringing, r.id == action.callUUID {
+                self.answerRing()
+                return action.fulfill()
+            }
             if await self.answerNow() { action.fulfill() } else { action.fail() }
         }
     }
 
     nonisolated public func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
         Task { @MainActor in
+            if let r = self.ringing, r.id == action.callUUID {
+                self.ringing = nil
+                self.ringBack?.hangUp()
+                return action.fulfill()
+            }
             self.endNow()
             action.fulfill()
         }

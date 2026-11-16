@@ -78,19 +78,10 @@ final class VoiciSignInViewModel {
         let r = link.request
         do {
             let umk = Array(try await Keystore.messagesUMK(reason: String(localized: "Sign in to voi.ci")))
-            let secret = VoiciMessages.deriveMessagesSecret(umk: umk)
-            let p = try VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: secret, pageId: r.pageId)
-            let t = try VoiciMessages.deriveMessagesThreadKey(messagesSecret: secret, pageId: r.pageId)
-            let pPub = CanonicalJson.hex(p.publicKey)
-            pseudonymName = try? VoiciText.voiciPseudonymName(pPub, prefix: String(localized: "Visitor "))
-            let att = try await attestation(pseudonymPub: pPub)
-            let t0 = now()
-            let del = WebDelegation(scope: "voici-messages", origin: r.origin, audience: r.pageId, principalPub: pPub, delegatePub: r.delegatePub,
-                                    issuedAt: t0, expiresAt: min(att.expiresAt, t0 + MessagesAttestations.ttlMs), nonce: r.nonce)
-            let ts = VoiciThreadStatement(pageId: r.pageId, pseudonymPub: pPub, threadPub: CanonicalJson.hex(t.publicKey), issuedAt: t0)
-            let cred = VoiciMessageCred(attestation: att, delegation: del, delegationSig: try WebDelegations.signWebDelegation(del, principalSeed: p.seed),
-                                        threadStmt: ts, threadSig: try VoiciMessages.signVoiciThreadStatement(ts, pseudonymSeed: p.seed))
-            let answer = VoiciSignInAnswer(pageId: r.pageId, pseudonymPub: pPub, cred: cred, threadSeed: CanonicalJson.hex(t.seed))
+            let made = try await VoiciVisitorSession.answer(client: client, username: username, pageId: r.pageId, origin: r.origin,
+                                                            delegatePub: r.delegatePub, nonce: r.nonce, ttlMs: MessagesAttestations.ttlMs, umk: umk, now: now())
+            let answer = made.answer, del = made.delegation, cred = answer.cred
+            pseudonymName = try? VoiciText.voiciPseudonymName(answer.pseudonymPub, prefix: String(localized: "Visitor "))
             let sealed = try QrRelay.seal(payload: Data(try CanonicalJson.canonicalJson(answer.json).utf8), with: key)
             try await relay.deliver(ciphertextBase64Url: sealed.ciphertextBase64Url, nonceBase64Url: sealed.nonceBase64Url)
             await relay.close()
@@ -108,38 +99,6 @@ final class VoiciSignInViewModel {
     func cancel() async {
         aeadKey = nil
         await relay.close()
-    }
-
-    /// The kept attestation of P while it is valid, a renewal of one that ended within 7 days, else a new one.
-    private func attestation(pseudonymPub: String) async throws -> MessagesKeyAttestation {
-        let ca = await client.caKeys()
-        let storeKey = VoiciSignInBook.attestationKey(link.request.pageId)
-        let kept = UserDefaults.standard.string(forKey: storeKey).flatMap { JSONValue.parse($0) }
-            .flatMap { MessagesAttestations.parseMessagesKeyAttestation($0) }
-            .flatMap { $0.pseudonymPub == pseudonymPub ? $0 : nil }
-        let t = now()
-        if let kept, kept.expiresAt - t > 86_400_000, MessagesAttestations.checkMessagesKeyAttestation(kept.json, caKeys: ca, now: t, pseudonymPub: pseudonymPub).isOk {
-            return kept
-        }
-        let renewOf = kept.flatMap { k in t - k.expiresAt <= MessagesAttestations.renewGraceMs ? try? MessagesAttestations.messagesAttestationHash(k) : nil } ?? ""
-        let store = MessagesStore.shared
-        guard let device = store.deviceKey(), let signer = store.device else { throw VoiciComError(status: 0, code: "locked") }
-        var request = MessagesKeyAttestationRequest(username: username, pseudonymPub: pseudonymPub, renewOfHash: renewOf,
-                                                    deviceCheckRef: DeviceIntegrity.ref, issuedAt: t)
-        var evidence = await DeviceIntegrity.evidence(requestBytes: try MessagesAttestations.canonicalMessagesKeyAttestationRequest(request))
-        if evidence.ref != request.deviceCheckRef {
-            // The evidence is over the request's bytes, which name the platform: without evidence it says "none".
-            request.deviceCheckRef = "none"
-            evidence = DeviceIntegrity.Evidence(ref: "none", json: nil)
-        }
-        let sig = try MessagesAttestations.signMessagesKeyAttestationRequest(request, deviceSeed: Array(device.rawRepresentation))
-        let raw = try await client.attest(username: username, request: request, signature: sig, integrity: evidence.json,
-                                          previous: renewOf.isEmpty ? nil : kept?.json, device: signer)
-        guard case .ok(let att) = MessagesAttestations.checkMessagesKeyAttestation(raw, caKeys: ca, now: now(), pseudonymPub: pseudonymPub) else {
-            throw VoiciComError(status: 200, code: "bad-attestation")
-        }
-        if let text = try? CanonicalJson.canonicalJson(att.json) { UserDefaults.standard.set(text, forKey: storeKey) }
-        return att
     }
 
     static func sentence(_ error: Error) -> String {

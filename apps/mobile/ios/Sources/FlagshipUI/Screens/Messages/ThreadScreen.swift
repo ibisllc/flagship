@@ -19,6 +19,7 @@ struct ThreadScreen: View {
     @State private var reported = false
     @State private var opening: URL?
     @State private var note: String?
+    @State private var nameInfo = false
 
     var body: some View {
         Group {
@@ -34,6 +35,7 @@ struct ThreadScreen: View {
     private func thread(_ c: VoiciConversation) -> some View {
         let blocked = store.state.blocks.contains(c.pseudonymPub)
         return VStack(spacing: 0) {
+            if let r = store.reveals[c.conv] { revealPill(r) }
             messageList(c)
             if let note {
                 Text(verbatim: note).font(.footnote).foregroundStyle(.secondary).padding(.horizontal).padding(.top, 4)
@@ -47,7 +49,17 @@ struct ThreadScreen: View {
             }
         }
         .navigationTitle(Text(verbatim: store.name(c)))
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { menu(c, blocked: blocked) } }
+        .toolbar {
+            if store.canRingBack(c) && !blocked {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { ringBack(c, video: false) } label: { Label("Call", systemImage: "phone") }.accessibilityIdentifier("thread-call")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { ringBack(c, video: true) } label: { Label("Video call", systemImage: "video") }.accessibilityIdentifier("thread-video-call")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) { menu(c, blocked: blocked) }
+        }
         .task { await store.markRead(c) }
         .alert("Rename", isPresented: $renaming) {
             TextField("Name", text: $newName).accessibilityIdentifier("thread-rename-field")
@@ -66,13 +78,13 @@ struct ThreadScreen: View {
         .confirmationDialog("Delete this conversation?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 Task {
-                    await store.delete(c)
-                    dismiss()
+                    if let why = await store.delete(c) { note = why } else { dismiss() }
                 }
             }
         } message: {
-            Text("It goes from all your devices. A new message from them starts a new request.")
+            Text(verbatim: String(localized: "It goes from all your devices and from Flagship. Messages already on \(store.name(c))'s device stay there. A new message from them starts a new request."))
         }
+        .sheet(isPresented: $nameInfo) { ChosenNameInfoSheet(username: store.reveals[c.conv]?.username) }
         .sheet(item: $reporting) { m in
             ReportSheet(message: m) { reason in
                 Task {
@@ -165,6 +177,35 @@ struct ThreadScreen: View {
         }
     }
 
+    /// The visitor showed who they are (docs/voici-calls.md "What the reveal shows"): "Display Name (username)", the
+    /// username checked against its page key; an info icon right by the chosen name says nobody checks names.
+    private func revealPill(_ r: VoiciReveal) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.seal")
+            Text(verbatim: VoiciConversations.pillText(r)).lineLimit(1)
+            Button { nameInfo = true } label: { Image(systemName: "info.circle") }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(Text("About this name"))
+                .accessibilityIdentifier("thread-reveal-info")
+        }
+        .font(.footnote)
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(Color(.secondarySystemBackground), in: Capsule())
+        .padding(.top, 6)
+        .accessibilityIdentifier("thread-reveal-pill")
+    }
+
+    /// Rings the visitor back through the conversation's ring-back channel; the visitor's phone then dials this page.
+    private func ringBack(_ c: VoiciConversation, video: Bool) {
+        Task {
+            switch await store.callVisitor(conv: c.conv, video: video) {
+            case .rang: note = String(localized: "Ringing \(store.name(c)). When they answer, their phone calls you here.")
+            case .noRingBack: note = String(localized: "They didn't allow call-backs in this conversation.")
+            case .failed(let code): note = code == "locked" ? String(localized: "Unlock Flagship and try again.") : VoiciOutgoingCall.sentence(code)
+            }
+        }
+    }
+
     private func missedCall(_ call: VoiciMissedCallRow) -> some View {
         HStack {
             Label(VoiciThreadEntry.missedLabel(call), systemImage: call.video ? "video.slash" : "phone.arrow.down.left")
@@ -175,8 +216,13 @@ struct ThreadScreen: View {
                 .background(Color(.secondarySystemBackground), in: Capsule())
             Text(Date(timeIntervalSince1970: Double(call.ringingAt) / 1000), style: .time).font(.caption2).foregroundStyle(.secondary)
             Spacer(minLength: 48)
+            if let c = store.conversation(conv), store.canRingBack(c) {
+                Button { ringBack(c, video: call.video) } label: { Text("Call back") }
+                    .font(.footnote)
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("thread-missed-call-back")
+            }
         }
-        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("thread-missed-call")
     }
 
@@ -305,5 +351,30 @@ struct ReportSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+/// What a printed chosen name is (docs/voici-calls.md "What the reveal shows"): Flagship checks usernames, never names.
+struct ChosenNameInfoSheet: View {
+    let username: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("This is a name the person chose. Flagship doesn't check names, so anyone can use any name.")
+                if let username {
+                    Text(verbatim: String(localized: "\(username) is this person's voi.ci page."))
+                }
+                Spacer()
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .navigationTitle(Text("About this name"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .presentationDetents([.medium])
+        .accessibilityIdentifier("reveal-name-info")
     }
 }

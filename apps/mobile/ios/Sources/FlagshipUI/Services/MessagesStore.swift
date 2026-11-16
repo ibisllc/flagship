@@ -60,6 +60,8 @@ public final class MessagesStore {
     public private(set) var answersWhileLocked = false
     /// A calls change being published (`setCalls`); nil: every publish carries the index's own calls setting.
     @ObservationIgnored private var pendingCalls: (on: Bool, from: String)?
+    /// A call-hours change being published (`setCallHours`): .some(nil) removes the hours.
+    @ObservationIgnored private var pendingHours: String??
 
     // MARK: kept on the device
 
@@ -94,7 +96,9 @@ public final class MessagesStore {
         self.username = u
         index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
         state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
+        reveals = [:]; ringBackFlags = [:]; noRingBack = []
         local = Local()
+        VoiciCallHistory.shared.configure(username: u.isEmpty ? nil : u)
         guard !u.isEmpty else { return }
         VoiciCallKeyStore.rememberAccount(u)
         answersWhileLocked = VoiciCallKeyStore.load(username: u) != nil
@@ -110,7 +114,9 @@ public final class MessagesStore {
         Self.currentUsername = nil
         index = nil; published = nil; accountKeys = nil; ownOps = []; laneOps = []; conversations = []
         state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
+        reveals = [:]; ringBackFlags = [:]; noRingBack = []
         local = Local()
+        VoiciCallHistory.shared.forgetInMemory()
     }
 
     public var isAdmin: Bool { Keystore.hasAdminRoot }
@@ -419,6 +425,9 @@ public final class MessagesStore {
 
     private func loadInbox(_ client: any VoiciComClient) async {
         guard let inbox = try? await client.inbox(username: username, since: local.cursor) else { rebuild(); return }
+        for item in inbox.items {
+            if let conv = item.envelope["conv"]?.string, let flag = item.ringBack { ringBackFlags[conv] = flag }
+        }
         let known = Set(local.items.compactMap { $0.envelope["msgId"]?.string })
         local.items += inbox.items.filter { !known.contains($0.envelope["msgId"]?.string ?? "") }
         local.cursor = inbox.cursor
@@ -472,6 +481,29 @@ public final class MessagesStore {
             e -= 1
         }
         conversations = all.sorted { $0.lastAt > $1.lastAt }
+        await checkReveals(client)
+    }
+
+    /// The visitors' reveals (docs/voici-calls.md "Reveal who I am"), each checked against the page key `.com` serves
+    /// for its username; one that fails shows nothing. An unreveal removes the pill.
+    public private(set) var reveals: [String: VoiciReveal] = [:]
+
+    private func checkReveals(_ client: any VoiciComClient) async {
+        var out: [String: VoiciReveal] = [:]
+        for c in conversations {
+            guard case .reveal(let r)? = c.control else { continue }
+            if let known = reveals[c.conv], known == r { out[c.conv] = known; continue }
+            guard let keys = try? await client.accountKeys(username: r.username), let raw = try? await client.page(username: r.username),
+                  case .ok(let idx) = VoiciPage.checkVoiciPageIndex(raw, username: r.username, sensitiveKind: keys.sensitive.kind, sensitivePub: keys.sensitive.pub),
+                  case .ok(let ok) = VoiciConversations.checkReveal(Self.revealJson(r), conv: c.conv, pageSignPub: idx.ownerSignPub) else { continue }
+            out[c.conv] = ok
+        }
+        reveals = out
+    }
+
+    nonisolated static func revealJson(_ r: VoiciReveal) -> JSONValue {
+        ["v": 1, "kind": "voici-reveal", "conv": .string(r.conv), "username": .string(r.username), "displayName": r.displayName.map { .string($0) } ?? .null,
+         "issuedAt": .number(Double(r.issuedAt)), "sig": .string(r.sig)]
     }
 
     // MARK: editing (any device)
@@ -641,6 +673,21 @@ public final class MessagesStore {
         return publishError == nil
     }
 
+    /// The page's call hours (nil: any time), as the published index says.
+    public var callHours: String? { isRemoved ? nil : index?.callHours }
+
+    /// The call-hours editor on the Social page (docs/voici-calls.md, release-manager decisions 3): an admin device
+    /// publishes the hours into the page index, where `.com` reads them before ringing, anonymous calls included.
+    public func setCallHours(_ hours: String?) async -> Bool {
+        guard isAdmin, isPublic, callsOn, hours.map(VoiciPage.isCallHours) ?? true else { return false }
+        guard hours != callHours else { return true }
+        guard let s = await sensitiveSigner(reason: String(localized: "Publish your page")) else { return false }
+        pendingHours = .some(hours)
+        defer { pendingHours = nil }
+        await publish(signer: s, only: [])
+        return publishError == nil
+    }
+
     // MARK: answering while locked (docs/voici-calls.md, owner decisions 2026-11-15)
 
     /// Settings → Messages → "Answer calls while Flagship is locked" (off by default). On: an unlocked admin device makes
@@ -774,10 +821,12 @@ public final class MessagesStore {
         let current = VoiciCallSettings.read(acceptsCalls: isRemoved ? nil : index?.acceptsCalls, callsFrom: index?.callsFrom)
         let calls = pendingCalls ?? current
         let fields = VoiciCallSettings.indexFields(on: calls.on, from: calls.from)
-        let body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),
+        var body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),
                                   acceptsMessages: merged.acceptsMessages, inboxEpoch: epoch, inboxPub: k.inboxPub, ownerSignPub: k.signPub,
                                   pieces: pieces.map(\.ref), signerKind: Keystore.hasAdminRoot ? "admin-root" : "irk",
                                   acceptsCalls: fields.acceptsCalls, callsFrom: fields.callsFrom)
+        // The call hours ride with calls on; a publish keeps the ones the index already names.
+        if fields.acceptsCalls != nil { body.callHours = pendingHours ?? (isRemoved ? nil : index?.callHours) }
         let idx = try VoiciPage.signVoiciPageIndex(body, signerSeed: seed)
         try await client.publish(username: username, index: idx.json)
         if only == nil {
@@ -889,6 +938,106 @@ public final class MessagesStore {
         }
     }
 
+    /// The owner calling a visitor of their own page back (owner decision: through the conversation's ring-back
+    /// channel, only when the visitor chose "Call and allow call-back"; otherwise there is nothing to ring). The ring
+    /// is signed by the page's owner key and carries a hint sealed to the visitor's thread key, so only the visitor's
+    /// own app learns which page is calling; the visitor then dials out to this page and this device rings as usual.
+    public enum CallVisitorOutcome: Equatable, Sendable {
+        case rang(ringId: String)
+        /// The visitor didn't allow call-backs in this conversation (or stopped them).
+        case noRingBack
+        case failed(String)
+    }
+
+    /// Conversations `.com` said have no ring-back channel; their Call stays off until the visitor calls again.
+    public private(set) var noRingBack: Set<String> = []
+    /// `.com`'s ringBack flag per conversation, from the inbox items (release-manager decision 4).
+    public private(set) var ringBackFlags: [String: Bool] = [:]
+
+    /// Whether the thread's Call can ring the visitor: calls on, the visitor's thread key known, not refused before.
+    public func canRingBack(_ c: VoiciConversation) -> Bool {
+        isAdmin && index?.takesCalls == true && !c.threadPub.isEmpty && !noRingBack.contains(c.conv) && ringBackFlags[c.conv] != false
+    }
+
+    public func callVisitor(conv: String, video: Bool = false) async -> CallVisitorOutcome {
+        guard let client, let idx = index, let k = keys(epoch: idx.inboxEpoch) else { return .failed("locked") }
+        guard let c = conversation(conv), let tpub = try? CanonicalJson.hexToBytes(c.threadPub), !c.threadPub.isEmpty else { return .noRingBack }
+        let ringId = newId()
+        let at = now()
+        let media = video ? VoiciCalls.mediaVideo : VoiciCalls.mediaAudio
+        do {
+            let hint = try VoiciRings.sealHint(threadPub: tpub, VoiciRingHint(pageId: idx.pageId, username: username, conv: conv, ringId: ringId,
+                                                                              media: media, issuedAt: at))
+            let signed = try VoiciRings.signedRing(pageId: idx.pageId, conv: conv, ringId: ringId, hint: CanonicalJson.b64Encode(hint), media: media,
+                                                   issuedAt: at, ownerSignSeed: k.sign.seed)
+            try await client.ring(username: username, ring: signed.ring, signature: signed.signature)
+            return .rang(ringId: ringId)
+        } catch let e as VoiciComError where e.code == "no-ring-back" {
+            noRingBack.insert(conv)
+            return .noRingBack
+        } catch {
+            return .failed((error as? VoiciComError)?.code ?? "unavailable")
+        }
+    }
+
+    /// A ring-back push to this account as a caller: the hint opens under this account's thread key for one of the
+    /// pages it signed in to (nil while the account is locked, or when none opens).
+    func openRing(_ push: VoiciRingPush) -> VoiciRingHint? {
+        guard let umk = Keystore.messagesUMKIfCached(), let sealed = CanonicalJson.b64Decode(push.hint) else { return nil }
+        let secret = VoiciMessages.deriveMessagesSecret(umk: Array(umk))
+        for pageId in Set(state.signedInSites.map(\.pageId)).sorted() {
+            guard let p = try? VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: secret, pageId: pageId),
+                  let t = try? VoiciMessages.deriveMessagesThreadKey(messagesSecret: secret, pageId: pageId),
+                  let conv = try? VoiciMessages.voiciConv(pageId: pageId, pseudonymPub: CanonicalJson.hex(p.publicKey)),
+                  let h = VoiciRings.openHint(threadSeed: t.seed, conv: conv, ringId: push.ringId, sealed: sealed), h.pageId == pageId else { continue }
+            return h
+        }
+        return nil
+    }
+
+    /// Before this account calls a "callback accounts only" page from the app: attach the conversation's ring-back
+    /// channel (calling there is consent to being rung back in that conversation), signed by the pseudonym, with this
+    /// device's headers so the ring reaches this account's devices. The owner never learns who the caller is.
+    func attachRingBack(pageId: String, umk: [UInt8]) async throws {
+        guard let client, let signer = device else { throw VoiciComError(status: 0, code: "locked") }
+        let secret = VoiciMessages.deriveMessagesSecret(umk: umk)
+        let p = try VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: secret, pageId: pageId)
+        let conv = try VoiciMessages.voiciConv(pageId: pageId, pseudonymPub: CanonicalJson.hex(p.publicKey))
+        let order = try VoiciRings.signedRingBack(pageId: pageId, conv: conv, op: "attach", issuedAt: now(), pseudonymSeed: p.seed)
+        try await client.ringBack(order: order, account: username, device: signer)
+    }
+
+    /// Blocks (or unblocks) an anonymous caller's conversation: it can't call this page again until unblocked or
+    /// deleted. Nil on success, else a sentence.
+    public func setAnonBlocked(conv: String, _ blocked: Bool) async -> String? {
+        guard let client, let idx = index, let k = keys(epoch: idx.inboxEpoch) else { return String(localized: "Unlock Flagship and try again.") }
+        do {
+            let signed = try VoiciConversations.signedAnonBlock(pageId: idx.pageId, conv: conv, op: blocked ? "block" : "unblock", issuedAt: now(), ownerSignSeed: k.sign.seed)
+            try await client.anonBlock(username: username, signed: signed)
+            if blocked { anonBlocked.insert(conv) } else { anonBlocked.remove(conv) }
+            return nil
+        } catch {
+            return Self.sentence(error)
+        }
+    }
+
+    /// Anonymous callers this device blocked (the page's block list for them lives on `.com`).
+    public private(set) var anonBlocked: Set<String> = []
+
+    /// This account's own published page, which signs a reveal (docs/voici-calls.md "Reveal who I am"); nil without one.
+    func ownPageForReveal() -> VisitorConversationModel.OwnPage? {
+        guard let idx = index, !isRemoved, let k = keys(epoch: idx.inboxEpoch) else { return nil }
+        let name = published?.profile.displayName
+        return VisitorConversationModel.OwnPage(username: username, pageId: idx.pageId, displayName: name.flatMap { $0.isEmpty ? nil : $0 }, signSeed: k.sign.seed)
+    }
+
+    /// The pages this account signed in to as a visitor whose username this device knows: the ones it can call.
+    public var callablePages: [(username: String, pageId: String, title: String)] {
+        Set(state.signedInSites.map(\.pageId)).sorted().compactMap { p in
+            VoiciSignInBook.username(pageId: p).map { ($0, p, VoiciSignInBook.title(pageId: p)) }
+        }
+    }
+
     /// The thread menu's "Allow calls from them" / "Don't allow calls from them": a signed call-allow order
     /// (`flagship/voici-call-allow/v1`) under the page's owner signing key. Nil on success, else a sentence.
     public func setCallAllow(_ c: VoiciConversation, allow: Bool) async -> String? {
@@ -954,11 +1103,27 @@ public final class MessagesStore {
         await editState { s in if !s.accepted.contains(c.conv) { s.accepted.append(c.conv) } }
     }
 
-    public func delete(_ c: VoiciConversation) async {
+    /// Delete = forget (docs/voici-calls.md): a signed owner delete makes `.com` drop the conversation's mailbox,
+    /// ring-back channel, ring and missed calls at once; then this device's copy goes. Nil on success, else a sentence
+    /// (nothing is erased locally when `.com` refused, so the person can try again).
+    @discardableResult
+    public func delete(_ c: VoiciConversation) async -> String? {
+        if let client, let idx = index, let k = keys(epoch: idx.inboxEpoch) {
+            do {
+                let signed = try VoiciConversations.signedDeleteOwner(pageId: idx.pageId, conv: c.conv, issuedAt: now(), ownerSignSeed: k.sign.seed)
+                try await client.deleteConversation(signed)
+            } catch let e as VoiciComError where e.code != "not-found" {
+                return Self.sentence(e)
+            } catch {}
+        }
+        reveals[c.conv] = nil
+        ringBackFlags[c.conv] = nil
+        missedCalls.removeAll { $0.conv == c.conv }
         await editState { s in if !s.archived.contains(c.conv) { s.archived.append(c.conv) } }
         local.items.removeAll { $0.envelope["conv"]?.string == c.conv }
         save()
         conversations.removeAll { $0.conv == c.conv }
+        return nil
     }
 
     public func markRead(_ c: VoiciConversation) async {
@@ -1112,7 +1277,7 @@ public final class MessagesStore {
             username: username, deviceId: deviceId, deviceKey: device, pageId: idx.pageId, acceptsCalls: idx.takesCalls,
             ownerSignSeed: k.sign.seed, ownerSignPub: k.signPub, inboxSeeds: inbox, caKeys: await client.caKeys(),
             origin: Endpoints.voiciOrigin, blocked: Set(state.blocks + local.blocks), revoked: Set(local.revoked),
-            nicknames: state.nicknames.mapValues(\.name))
+            nicknames: state.nicknames.mapValues(\.name), callsFrom: idx.callsFrom ?? "accepted")
     }
 
     /// Hands the phone endpoint what it needs to take deliveries while this admin phone is open and unlocked.
@@ -1222,6 +1387,7 @@ public final class MessagesStore {
         } else if let u = username?.lowercased(), !u.isEmpty {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(u).json"))
         }
+        VoiciCallHistory.forget(username: username?.lowercased(), allProfiles: allProfiles)
     }
 
     /// Wires `Keystore.onWipe` (once, at launch).
