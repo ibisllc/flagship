@@ -3,13 +3,15 @@
 --
 -- Re-runnable: every statement is CREATE ... IF NOT EXISTS.
 
--- A caller's ring-back channel for one conversation (flagship/voici-ring-back/v1): push tokens sealed to the push
--- relay, never a raw token; `.com` can't open them. Replaced by the caller's next attach, deleted by "Stop
--- call-backs", lapses after 90 days.
+-- A caller's ring-back channel for one conversation (flagship/voici-ring-back/v1). `username` is the caller's
+-- account when their app attached it (its devices get the ring push), NULL when only a browser did (the open voi.ci
+-- tab and the apps see the ring in their thread fetch). Policy, said plainly to the caller: Flagship knows this
+-- conversation can ring that account's phone. No log of who called whom: the row is replaced by the next attach,
+-- deleted by "Stop call-backs", when the owner blocks the caller or removes the page, and lapses after 90 days.
 CREATE TABLE IF NOT EXISTS voici_ring_backs (
   page_id      TEXT NOT NULL,
   conv         TEXT NOT NULL,
-  targets_json TEXT NOT NULL,
+  username     TEXT,
   issued_at    INTEGER NOT NULL,
   expires_at   INTEGER NOT NULL,
   PRIMARY KEY (page_id, conv)

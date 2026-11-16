@@ -4,14 +4,16 @@
  *   handleVoiciCallChallenge  GET  /api/voici/pages/<u>/call-challenge: a proof-of-work challenge for an anonymous call
  *                             (pages in "anyone" mode only)
  *   checkAnonymousCall        the anonymous branch of POST /api/voici/calls (handleVoiciCallRequest calls it)
- *   handleVoiciRingBack       POST /api/voici/web/ring-back: the caller attaches or stops the conversation's ring-back
- *                             channel (sealed push tokens only)
- *   handleVoiciRing           POST /api/voici/pages/<u>/ring: the owner rings a caller back; the channel's sealed
- *                             targets go to the push relay (when the PUSH_RELAY switch is on) with a content-free
- *                             payload, and the caller's open tab or app sees the ring in its thread fetch
+ *   handleVoiciRingBack       POST /api/voici/web/ring-back[?u=<caller's account>]: the caller attaches or stops the
+ *                             conversation's ring-back channel; from the caller's app (device headers) it names the
+ *                             account whose devices the ring push reaches
+ *   handleVoiciRing           POST /api/voici/pages/<u>/ring: the owner rings a caller back: a content-free push to
+ *                             the caller's devices (today's push path), and the caller's open tab or app sees the ring
+ *                             in its thread fetch
  *
- * What `.com` learns: which conversation allowed a ring-back and when the owner rang it; never a push token (they are
- * sealed to the relay), never who the caller is.
+ * What `.com` learns (said plainly to the caller in the pop-up): which conversation can ring which account's phone,
+ * and when the owner rang it. Policy, not cryptography: no log of who called whom; the channel goes on "Stop
+ * call-backs", when the owner blocks the caller, removes the page or the caller's account goes, and after 90 days.
  */
 import {
   checkVoiciCallPowChallenge,
@@ -28,7 +30,8 @@ import {
   VOICI_RING_TTL_MS,
   type VoiciCallRequestAnon,
 } from "@flagship/protocol";
-import type { VoiciCallStorage, VoiciStorage } from "@flagship/storage";
+import type { PushTokenStorage, VoiciCallStorage, VoiciStorage } from "@flagship/storage";
+import type { InviteNoticeForward } from "./inviteNotice.js";
 import { hexToBytes } from "./hex.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
 import { voiciRefusal } from "./voiciPages.js";
@@ -37,10 +40,8 @@ const NO_STORE = { "cache-control": "private, no-store" };
 const ok = (body: unknown): HandlerResponseWithHeaders => ({ status: 200, body, headers: { ...NO_STORE } });
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
-/** The push relay `.com` hands sealed targets to (built in the push-relay branch); absent while PUSH_RELAY is off. */
-export interface VoiciPushRelay {
-  deliver(items: { sealed: string; payload: Record<string, string>; kind: "call" | "alert" | "silent"; expiresAt: number }[]): Promise<number>;
-}
+/** Pushes a ring to every device of the caller's account (today's push path); answers how many got it. */
+export type VoiciRingPusher = (username: string, payload: { kind: "voici-ring"; ringId: string; hint: string }, expiresAt: number) => Promise<number>;
 
 /** The calls settings of a stored page, with the new modes. */
 function pageMode(indexJson: string): string | null {
@@ -105,10 +106,15 @@ export async function checkAnonymousCall(
 
 // ── the ring-back channel ─────────────────────────────────────────────────
 
-/** Body: the signed order (pushTokenSeal / voiciCallModes `checkVoiciRingBackOrder`). Answers {ok, expiresAt?}. */
+/**
+ * Body: the signed order (`checkVoiciRingBackOrder`). `account` is the caller's account when the route authorized the
+ * caller's app's device headers (a pseudonym-signed order only); a browser's order names no account. Answers
+ * {ok, expiresAt?}.
+ */
 export async function handleVoiciRingBack(
   deps: { voici: VoiciStorage; calls: VoiciCallStorage; origin: string; caKeys: (now: number) => string[]; now?: () => number },
   body: unknown,
+  account: string | null = null,
 ): Promise<HandlerResponseWithHeaders> {
   const now = (deps.now ?? Date.now)();
   const order = isObj(body) && isObj(body.order) ? body.order : null;
@@ -121,12 +127,13 @@ export async function handleVoiciRingBack(
   if (typeof delegatePub === "string" && from && (await deps.voici.isRevoked(delegatePub, from, now))) revoked.add(delegatePub);
   const r = checkVoiciRingBackOrder(body, { pageId: page.pageId, origin: deps.origin, caKeys: deps.caKeys(now), now, revoked });
   if (!r.ok) return voiciRefusal(r.code === "malformed" ? 400 : 403, r.code);
+  if (account !== null && isObj(body) && body.signer !== "pseudonym") return voiciRefusal(400, "malformed");
   if (r.order.op === "stop") {
     await deps.calls.deleteRingBack(page.pageId, r.order.conv);
     return ok({ ok: true });
   }
   const expiresAt = now + VOICI_RING_BACK_TTL_MS;
-  if (!(await deps.calls.putRingBack({ pageId: page.pageId, conv: r.order.conv, targets: r.order.targets, issuedAt: r.order.issuedAt, expiresAt }))) return voiciRefusal(409, "stale");
+  if (!(await deps.calls.putRingBack({ pageId: page.pageId, conv: r.order.conv, username: account, issuedAt: r.order.issuedAt, expiresAt }))) return voiciRefusal(409, "stale");
   return ok({ ok: true, expiresAt });
 }
 
@@ -139,12 +146,12 @@ export async function voiciHasRingBack(calls: VoiciCallStorage, pageId: string, 
 
 /**
  * Body {ring, signature} by the page's ownerSignPub. The conversation must have a ring-back channel. Stores the ring
- * (the caller's thread fetch shows it while it rings) and hands each sealed target to the push relay with
- * {kind:"voici-ring", ringId, hint}: the relay sees the ring id and the hint's ciphertext, never the conversation.
+ * (the caller's thread fetch shows it while it rings) and, when the caller's app attached the channel, pushes
+ * {kind:"voici-ring", ringId, hint} to that account's devices: no text, the hint sealed to the caller's thread key.
  * Answers {ok, ringId, pushed, expiresAt}.
  */
 export async function handleVoiciRing(
-  deps: { voici: VoiciStorage; calls: VoiciCallStorage; pushRelay?: VoiciPushRelay; now?: () => number },
+  deps: { voici: VoiciStorage; calls: VoiciCallStorage; pushRing?: VoiciRingPusher; now?: () => number },
   username: string,
   body: unknown,
 ): Promise<HandlerResponseWithHeaders> {
@@ -162,9 +169,9 @@ export async function handleVoiciRing(
   const expiresAt = now + VOICI_RING_TTL_MS;
   await deps.calls.putRing({ pageId: page.pageId, conv: ring.conv, ringId: ring.ringId, hint: ring.hint, media: ring.media, issuedAt: ring.issuedAt, expiresAt });
   let pushed = 0;
-  if (deps.pushRelay && channel.targets.length) {
+  if (deps.pushRing && channel.username) {
     try {
-      pushed = await deps.pushRelay.deliver(channel.targets.map((sealed) => ({ sealed, payload: { kind: "voici-ring", ringId: ring.ringId, hint: ring.hint }, kind: "call" as const, expiresAt })));
+      pushed = await deps.pushRing(channel.username, { kind: "voici-ring", ringId: ring.ringId, hint: ring.hint }, expiresAt);
     } catch {
       pushed = 0;
     }
@@ -179,3 +186,39 @@ export async function voiciRingForThread(calls: Pick<VoiciCallStorage, "getRing"
 }
 
 export const voiciPowSecret = (hex: string | undefined): Uint8Array | undefined => (hex && /^[0-9a-f]{64}$/.test(hex) ? hexToBytes(hex) : undefined);
+
+/**
+ * The ring push (today's push path): every device of the caller's account, VoIP pushes where a device registered a
+ * PushKit token (the call must ring through CallKit), else its ordinary push token; never a browser's Web Push. The
+ * payload is {kind:"voici-ring", ringId, hint, room}: no text; the hint is sealed to the caller's thread key.
+ */
+export function buildVoiciRingPusher(deps: {
+  pushTokens: Pick<PushTokenStorage, "listByUser">;
+  calls: Pick<VoiciCallStorage, "listVoipTokens" | "deleteVoipToken">;
+  forward?: (args: InviteNoticeForward) => Promise<unknown>;
+  voip?: (tokens: string[], call: Record<string, string>, expiresAtSec: number, gone?: (token: string) => void) => Promise<number>;
+  apex: string;
+}): VoiciRingPusher {
+  return async (username, payload, expiresAt) => {
+    const data = { kind: payload.kind, ringId: payload.ringId, hint: payload.hint, room: deps.apex };
+    const voip = await deps.calls.listVoipTokens(username);
+    const voipDevices = new Set(voip.map((t) => t.deviceId));
+    let n = 0;
+    if (voip.length && deps.voip) {
+      n += await deps.voip(
+        voip.map((t) => t.token),
+        data,
+        Math.floor(expiresAt / 1000),
+        (gone) => void Promise.all(voip.filter((t) => t.token === gone).map((t) => deps.calls.deleteVoipToken(username, t.deviceId))),
+      );
+    }
+    const rest = (await deps.pushTokens.listByUser(username)).filter((t) => !voipDevices.has(t.deviceId) && t.platform !== "webpush");
+    if (rest.length && deps.forward) {
+      await deps.forward({ targets: rest.map((t) => ({ tokenId: t.tokenId, platform: t.platform, providerToken: t.providerToken })), category: VOICI_RING_PUSH_CATEGORY, sealedPayloadHex: "", displayData: data });
+      n += rest.length;
+    }
+    return n;
+  };
+}
+
+export const VOICI_RING_PUSH_CATEGORY = "voici-ring";

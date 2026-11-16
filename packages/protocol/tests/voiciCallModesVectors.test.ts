@@ -1,4 +1,4 @@
-// Page call modes, anonymous calls, the ring-back channel, the ring and sealed push tokens against
+// Page call modes, anonymous calls, the ring-back channel and the ring against
 // test-vectors/voici-call-modes (tools/voici-call-modes-vectors.ts).
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -27,18 +27,6 @@ describe("voici call modes vectors", () => {
     expect(P.voiciAnonConv(V.pageId, V.anon.browserPub)).toBe(V.anon.body.conv);
     for (const c of V.anon.checks) expect(code(P.checkVoiciCallRequestAnon(c.input, V.anon.ctx)), c.name).toBe(c.expect);
     for (const c of V.anon.modeChecks) expect(code(P.checkVoiciCallRequestAnon(V.anon.signed, { ...V.anon.ctx, callsFrom: c.callsFrom })), c.name).toBe(c.expect);
-  });
-
-  it("sealed push tokens open only at the relay, each seal fresh", () => {
-    const seed = h(V.pushToken.relaySeed);
-    expect(H(P.hybridSealKeygen(seed).publicKey)).toBe(V.pushToken.relayPub);
-    for (const s of V.pushToken.sealed) {
-      expect(P.b64Encode(P.sealPushToken(h(V.pushToken.relayPub), s.plain, V.pushToken.now, h(s.randomness)))).toBe(s.sealed);
-      expect(P.canonicalJson(P.openPushToken(seed, P.b64Decode(s.sealed)!))).toBe(P.canonicalJson(s.plain));
-    }
-    for (const b of V.pushToken.badPlains) expect(P.parsePushTokenPlain(b.plain), b.name).toBeNull();
-    expect(P.openPushToken(seed, P.b64Decode(V.pushToken.wrongRelaySealed)!)).toBeNull();
-    expect(V.pushToken.freshTwice[0]).not.toBe(V.pushToken.freshTwice[1]);
   });
 
   it("the ring-back channel", () => {

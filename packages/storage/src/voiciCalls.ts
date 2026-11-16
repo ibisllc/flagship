@@ -32,11 +32,11 @@ export interface VoiciCallKeyRecord {
   registeredAt: number;
 }
 
-/** A caller's ring-back channel (flagship/voici-ring-back/v1; migration 0149): sealed push tokens only. */
+/** A caller's ring-back channel (flagship/voici-ring-back/v1; migration 0149); `username` when the caller's app attached it. */
 export interface VoiciRingBackRecord {
   pageId: string;
   conv: string;
-  targets: string[];
+  username: string | null;
   issuedAt: number;
   expiresAt: number;
 }
@@ -223,6 +223,7 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
     await this.db.prepare("DELETE FROM voici_voip_tokens WHERE username = ?1").bind(username).run();
     await this.db.prepare("DELETE FROM voici_live_calls WHERE username = ?1").bind(username).run();
     await this.db.prepare("DELETE FROM voici_call_keys WHERE username = ?1").bind(username).run();
+    await this.db.prepare("DELETE FROM voici_ring_backs WHERE username = ?1").bind(username).run();
   }
 
   async putCallKey(rec: VoiciCallKeyRecord) {
@@ -260,28 +261,20 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
   async putRingBack(rec: VoiciRingBackRecord) {
     const r = await this.db
       .prepare(
-        "INSERT INTO voici_ring_backs (page_id, conv, targets_json, issued_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5) " +
-          "ON CONFLICT (page_id, conv) DO UPDATE SET targets_json = ?3, issued_at = ?4, expires_at = ?5 WHERE voici_ring_backs.issued_at < ?4",
+        "INSERT INTO voici_ring_backs (page_id, conv, username, issued_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5) " +
+          "ON CONFLICT (page_id, conv) DO UPDATE SET username = COALESCE(?3, voici_ring_backs.username), issued_at = ?4, expires_at = ?5 WHERE voici_ring_backs.issued_at < ?4",
       )
-      .bind(rec.pageId, rec.conv, JSON.stringify(rec.targets), rec.issuedAt, rec.expiresAt)
+      .bind(rec.pageId, rec.conv, rec.username, rec.issuedAt, rec.expiresAt)
       .run();
     return (r.meta.changes ?? 0) === 1;
   }
 
   async getRingBack(pageId: string, conv: string, now: number) {
     const r = await this.db
-      .prepare("SELECT page_id, conv, targets_json, issued_at, expires_at FROM voici_ring_backs WHERE page_id = ?1 AND conv = ?2 AND expires_at > ?3")
+      .prepare("SELECT page_id, conv, username, issued_at, expires_at FROM voici_ring_backs WHERE page_id = ?1 AND conv = ?2 AND expires_at > ?3")
       .bind(pageId, conv, now)
-      .first<{ page_id: string; conv: string; targets_json: string; issued_at: number; expires_at: number }>();
-    if (!r) return null;
-    let targets: string[] = [];
-    try {
-      const t = JSON.parse(r.targets_json);
-      targets = Array.isArray(t) ? t.filter((x): x is string => typeof x === "string") : [];
-    } catch {
-      targets = [];
-    }
-    return { pageId: r.page_id, conv: r.conv, targets, issuedAt: r.issued_at, expiresAt: r.expires_at };
+      .first<{ page_id: string; conv: string; username: string | null; issued_at: number; expires_at: number }>();
+    return r ? { pageId: r.page_id, conv: r.conv, username: r.username ?? null, issuedAt: r.issued_at, expiresAt: r.expires_at } : null;
   }
 
   async deleteRingBack(pageId: string, conv: string) {
@@ -408,6 +401,7 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   async deleteCallsForAccount(username: string) {
     for (const k of [...this.voip.keys()]) if (k.startsWith(`${username}|`)) this.voip.delete(k);
     for (const k of [...this.callKeys.keys()]) if (k.startsWith(`${username}|`)) this.callKeys.delete(k);
+    for (const [k, r] of [...this.ringBacks]) if (r.username === username) this.ringBacks.delete(k);
     this.live.delete(username);
   }
   async putCallKey(rec: VoiciCallKeyRecord) {
@@ -430,12 +424,12 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     const k = `${rec.pageId}|${rec.conv}`;
     const cur = this.ringBacks.get(k);
     if (cur && cur.issuedAt >= rec.issuedAt) return false;
-    this.ringBacks.set(k, { ...rec, targets: [...rec.targets] });
+    this.ringBacks.set(k, { ...rec, username: rec.username ?? cur?.username ?? null });
     return true;
   }
   async getRingBack(pageId: string, conv: string, now: number) {
     const r = this.ringBacks.get(`${pageId}|${conv}`);
-    return r && r.expiresAt > now ? { ...r, targets: [...r.targets] } : null;
+    return r && r.expiresAt > now ? { ...r } : null;
   }
   async deleteRingBack(pageId: string, conv: string) {
     this.ringBacks.delete(`${pageId}|${conv}`);

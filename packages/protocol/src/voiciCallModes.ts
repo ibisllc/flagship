@@ -16,17 +16,18 @@
  *            that SHA-256(challenge "|" nonce) starts with `bits` zero bits. Good for 2 minutes, spent once.
  *
  * Ringing a caller back (the pseudonymous side always dials out; no bare name of it is ever used):
- *   channel  flagship/voici-ring-back/v1|<pageId>|<conv>|<attach|stop>|<H(canonicalJson(targets))>|<issuedAt>
- *            by the caller: Ed25519 by the pseudonym P (the visitor's app), or P-256 by the browser key B with the
- *            message cred (attestation, delegation, thread statement), as a message is. targets: up to 8 sealed push
- *            tokens (pushTokenSeal.ts), empty for stop; an attach may carry none (a browser has no push token: the
- *            open voi.ci tab and the visitor's app see a ring in the thread fetch). `.com` keeps the targets under (page, conv), never a token.
+ *   channel  flagship/voici-ring-back/v1|<pageId>|<conv>|<attach|stop>|<issuedAt>
+ *            by the caller: Ed25519 by the pseudonym P (the visitor's app, which also sends its device headers so
+ *            `.com` can push to that account's devices), or P-256 by the browser key B with the message cred
+ *            (attestation, delegation, thread statement), as a message is (a browser channel rings only the open
+ *            voi.ci tab and the visitor's apps through their thread fetch). Owner correction 2026-11-15: no sealed
+ *            tokens and no relay split; `.com` knows the conversation can ring the caller's phone, and says so.
  *   ring     flagship/voici-ring/v1|<pageId>|<conv>|<ringId>|<H(hint bytes)>|<media>|<issuedAt>
  *            Ed25519 by the page's ownerSignPub. The owner taps Call in a thread that has a channel.
  *   hint     flagship/hybrid-seal/v1, purpose "flagship/voici-ring-hint/v1", context [conv, ringId], to the
  *            visitor's thread key T (from the conversation's thread statement); plaintext canonical JSON
  *            {v:1, pageId, username, conv, ringId, media, issuedAt}. It rides in the content-free push (the relay
- *            sees only ciphertext): the visitor's app opens it with its T for that page and dials out to the page.
+ *            push carries no content): the visitor's app opens it with its T for that page and dials out to the page.
  */
 import { p256 } from "@noble/curves/nist.js";
 import { hmac } from "@noble/hashes/hmac";
@@ -35,10 +36,9 @@ import { hex } from "./canonicalBase.js";
 import { ed } from "./edSync.js";
 import { checkMessagesKeyAttestation } from "./messagesAttestation.js";
 import { hybridOpen, hybridSealWithRandomness, HYBRID_SEAL_PUBLIC_KEY_LEN, HYBRID_SEAL_RANDOMNESS_LEN, parseHybridSealPublicKey } from "./pqHybrid.js";
-import { parseSealedPushToken } from "./pushTokenSeal.js";
 import type { Bytes } from "./types.js";
 import { checkWebDelegation } from "./webDelegation.js";
-import { canonicalJsonBytes, ed25519VerifyHex, hexToBytes, isLowerHex, p256VerifyP1363, sha256Hex } from "./webEnvelope.js";
+import { b64Decode, canonicalJsonBytes, ed25519VerifyHex, hexToBytes, isLowerHex, p256VerifyP1363, sha256Hex } from "./webEnvelope.js";
 import { canonicalVoiciThreadStatement, parseVoiciThreadStatement, voiciConv } from "./voiciMessages.js";
 import { checkVoiciCallSdp, VOICI_CALL_MAX_REQUEST_BYTES, VOICI_CALL_MEDIA, VOICI_CALL_SKEW_MS, voiciCallSdpHash, type VoiciCallMedia } from "./voiciCalls.js";
 
@@ -54,7 +54,6 @@ export const VOICI_CALL_POW_MIN_BITS = 12;
 export const VOICI_CALL_POW_MAX_BITS = 26;
 /** Default difficulty: about 260,000 SHA-256 in the browser, a second or two on a phone. */
 export const VOICI_CALL_POW_BITS = 18;
-export const VOICI_RING_BACK_MAX_TARGETS = 8;
 /** A channel lasts 90 days from its last attach, then the caller has to allow call-back again. */
 export const VOICI_RING_BACK_TTL_MS = 90 * 86_400_000;
 /** A ring lasts as long as an incoming call rings. */
@@ -248,19 +247,16 @@ export interface VoiciRingBackOrder {
   pageId: string;
   conv: string;
   op: "attach" | "stop";
-  targets: string[];
   issuedAt: number;
 }
 
 export function canonicalVoiciRingBack(o: VoiciRingBackOrder): Bytes {
-  if (!PAGE_ID.test(o.pageId) || !isLowerHex(o.conv, 32) || (o.op !== "attach" && o.op !== "stop") || !isTime(o.issuedAt) || !Array.isArray(o.targets)) throw new Error(`${TAG_VOICI_RING_BACK}: bad field`);
-  if (o.op === "stop" ? o.targets.length !== 0 : o.targets.length > VOICI_RING_BACK_MAX_TARGETS) throw new Error(`${TAG_VOICI_RING_BACK}: bad targets`);
-  if (o.targets.some((t) => !parseSealedPushToken(t)) || new Set(o.targets).size !== o.targets.length) throw new Error(`${TAG_VOICI_RING_BACK}: bad targets`);
-  return join([TAG_VOICI_RING_BACK, o.pageId, o.conv, o.op, sha256Hex(canonicalJsonBytes(o.targets)), o.issuedAt]);
+  if (!PAGE_ID.test(o.pageId) || !isLowerHex(o.conv, 32) || (o.op !== "attach" && o.op !== "stop") || !isTime(o.issuedAt)) throw new Error(`${TAG_VOICI_RING_BACK}: bad field`);
+  return join([TAG_VOICI_RING_BACK, o.pageId, o.conv, o.op, o.issuedAt]);
 }
 
 export function parseVoiciRingBackOrder(v: unknown): VoiciRingBackOrder | null {
-  if (!isObj(v) || !exactKeys(v, ["pageId", "conv", "op", "targets", "issuedAt"])) return null;
+  if (!isObj(v) || !exactKeys(v, ["pageId", "conv", "op", "issuedAt"])) return null;
   try {
     canonicalVoiciRingBack(v as unknown as VoiciRingBackOrder);
   } catch {
@@ -360,7 +356,7 @@ export function openVoiciRingHint(threadSeed: Bytes, conv: string, ringId: strin
 
 export function canonicalVoiciRing(r: VoiciRing): Bytes {
   if (!PAGE_ID.test(r.pageId) || !isLowerHex(r.conv, 32) || !isLowerHex(r.ringId, 16) || typeof r.hint !== "string" || !isMedia(r.media) || !isTime(r.issuedAt)) throw new Error(`${TAG_VOICI_RING}: bad field`);
-  return join([TAG_VOICI_RING, r.pageId, r.conv, r.ringId, sha256Hex(parseSealedPushToken(r.hint) ?? utf8("")), r.media, r.issuedAt]);
+  return join([TAG_VOICI_RING, r.pageId, r.conv, r.ringId, sha256Hex(b64Decode(r.hint) ?? utf8("")), r.media, r.issuedAt]);
 }
 
 export function signVoiciRing(r: VoiciRing, ownerSignSeed: Bytes): string {
@@ -369,7 +365,7 @@ export function signVoiciRing(r: VoiciRing, ownerSignSeed: Bytes): string {
 
 export function parseVoiciRing(v: unknown): VoiciRing | null {
   if (!isObj(v) || !exactKeys(v, ["pageId", "conv", "ringId", "hint", "media", "issuedAt"])) return null;
-  if (typeof v.hint !== "string" || !parseSealedPushToken(v.hint)) return null;
+  if (typeof v.hint !== "string" || v.hint.length > 4096 || !b64Decode(v.hint)) return null;
   try {
     canonicalVoiciRing(v as unknown as VoiciRing);
   } catch {

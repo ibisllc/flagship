@@ -1,6 +1,6 @@
 /**
  * Shared vectors for page call modes, anonymous calls, the ring-back channel and the ring
- * (packages/protocol/src/voiciCallModes.ts) and sealed push tokens (pushTokenSeal.ts). Read by TS
+ * (packages/protocol/src/voiciCallModes.ts). Read by TS
  * (packages/protocol/tests/voiciCallModesVectors.test.ts) and the browser (packages/flagship-web), and by Swift,
  * Kotlin and Rust as their ports land.
  *
@@ -103,58 +103,25 @@ const anonModeChecks = [
 ];
 for (const c of anonModeChecks) if (code(P.checkVoiciCallRequestAnon(anon, { ...anonCtx, callsFrom: c.callsFrom })) !== c.expect) throw new Error(c.name);
 
-// ── sealed push tokens ──
-const relaySeed = fill(32, 0x71);
-const relayPub = P.hybridSealKeygen(relaySeed).publicKey;
-const tokens: P.PushTokenPlain[] = [
-  { v: 1, platform: "apns", token: "ab".repeat(32), env: "production", topic: "com.flagshipserver.app" },
-  { v: 1, platform: "apns-voip", token: "cd".repeat(32), env: "sandbox", topic: "com.flagshipserver.app.voip" },
-  { v: 1, platform: "fcm", token: "fcm-token:APA91b_x" },
-  { v: 1, platform: "unifiedpush", endpoint: "https://ntfy.example/up/abc" },
-  { v: 1, platform: "webpush", endpoint: "https://fcm.googleapis.com/fcm/send/xyz", p256dh: Buffer.from(p256.getPublicKey(fill(32, 9), false)).toString("base64url"), auth: Buffer.from(fill(16, 3)).toString("base64url") },
-];
-const sealRand = (i: number) => fill(32 + P.HYBRID_SEAL_RANDOMNESS_LEN, 0x80 + i);
-const sealed = tokens.map((t, i) => ({ plain: t, randomness: H(sealRand(i)), sealed: P.b64Encode(P.sealPushToken(relayPub, t, NOW, sealRand(i))) }));
-for (const s of sealed) if (P.canonicalJson(P.openPushToken(relaySeed, P.b64Decode(s.sealed)!)) !== P.canonicalJson(s.plain)) throw new Error("push token round trip");
-const twice = [P.b64Encode(P.sealPushToken(relayPub, tokens[0]!, NOW, sealRand(10))), P.b64Encode(P.sealPushToken(relayPub, tokens[0]!, NOW, sealRand(11)))];
-if (twice[0] === twice[1]) throw new Error("fresh randomness must differ");
-const badPlains: [string, unknown][] = [
-  ["apns token uppercase", { ...tokens[0], token: "AB".repeat(32) }],
-  ["apns with a voip topic", { ...tokens[0], topic: "com.flagshipserver.app.voip" }],
-  ["voip without the voip topic", { ...tokens[1], topic: "com.flagshipserver.app" }],
-  ["apns env unknown", { ...tokens[0], env: "dev" }],
-  ["fcm extra key", { ...tokens[2], env: "production" }],
-  ["unifiedpush over http", { ...tokens[3], endpoint: "http://ntfy.example/up/abc" }],
-  ["unifiedpush with credentials", { ...tokens[3], endpoint: "https://u:p@ntfy.example/up" }],
-  ["webpush short auth", { ...tokens[4], auth: "AAAA" }],
-  ["unknown platform", { v: 1, platform: "sms", token: "x" }],
-  ["v2", { ...tokens[2], v: 2 }],
-];
-for (const [n, p] of badPlains) if (P.parsePushTokenPlain(p) !== null) throw new Error(`push plain ${n}`);
-const otherRelay = P.hybridSealKeygen(fill(32, 0x72));
-const wrongRelaySealed = P.b64Encode(P.sealPushToken(otherRelay.publicKey, tokens[0]!, NOW, sealRand(12)));
-if (P.openPushToken(relaySeed, P.b64Decode(wrongRelaySealed)!) !== null) throw new Error("other relay");
-
 // ── the ring-back channel ──
 const pseudonymSeed = h(D.pseudonymSeed);
-const attach: P.VoiciRingBackOrder = { pageId: PAGE_ID, conv: D.conv, op: "attach", targets: [sealed[1]!.sealed, sealed[2]!.sealed], issuedAt: NOW };
+const attach: P.VoiciRingBackOrder = { pageId: PAGE_ID, conv: D.conv, op: "attach", issuedAt: NOW };
 const byApp = P.signVoiciRingBackPseudonym(attach, pseudonymSeed);
 const cred = clone(M.message.envelope.cred);
-const browserAttach: P.VoiciRingBackOrder = { ...attach, targets: [] };
+const browserAttach: P.VoiciRingBackOrder = { ...attach };
 const byBrowser = P.signVoiciRingBackBrowserP256(browserAttach, D.pseudonymPub, cred, h(M.keys.browserPriv));
-const stop = P.signVoiciRingBackPseudonym({ pageId: PAGE_ID, conv: D.conv, op: "stop", targets: [], issuedAt: NOW }, pseudonymSeed);
+const stop = P.signVoiciRingBackPseudonym({ pageId: PAGE_ID, conv: D.conv, op: "stop", issuedAt: NOW }, pseudonymSeed);
 const rbCtx = { pageId: PAGE_ID, origin: ORIGIN, caKeys: [M.keys.caPub], now: NOW };
 const ringBackChecks = expectAll(
   "ring-back",
   [
     ["app attach", byApp, "ok"],
-    ["browser attach without targets", byBrowser, "ok"],
+    ["browser attach", byBrowser, "ok"],
     ["stop", stop, "ok"],
-    ["targets swapped after signing", tweak(byApp, (o) => ((o.order as O).targets = [sealed[3]!.sealed])), "bad-signature"],
+    ["time changed after signing", tweak(byApp, (o) => ((o.order as O).issuedAt = NOW + 1)), "bad-signature"],
     ["op flipped after signing", tweak(stop, (o) => ((o.order as O).op = "attach")), "bad-signature"],
-    ["stop with targets", tweak(stop, (o) => ((o.order as O).targets = [sealed[0]!.sealed])), "malformed"],
-    ["nine targets", tweak(byApp, (o) => ((o.order as O).targets = Array.from({ length: 9 }, (_, i) => P.b64Encode(P.sealPushToken(relayPub, tokens[2]!, NOW, sealRand(20 + i)))))), "malformed"],
-    ["the same target twice", tweak(byApp, (o) => ((o.order as O).targets = [sealed[1]!.sealed, sealed[1]!.sealed])), "malformed"],
+    ["extra key in the order", tweak(byApp, (o) => ((o.order as O).targets = [])), "malformed"],
+    ["unknown op", tweak(byApp, (o) => ((o.order as O).op = "pause")), "malformed"],
     ["another pseudonym's conv", tweak(byApp, (o) => (o.from = D.otherPagePseudonymPub)), "wrong-conv"],
     ["another page", tweak(byApp, (o) => ((o.order as O).pageId = "ab".repeat(16))), "wrong-audience"],
     ["stale", P.signVoiciRingBackPseudonym({ ...attach, issuedAt: NOW - 11 * 60_000 }, pseudonymSeed), "stale"],
@@ -186,14 +153,13 @@ if (!opened || opened.username !== "alice") throw new Error("hint open");
 if (P.openVoiciRingHint(h(D.threadSeed), D.conv, "00".repeat(16), P.b64Decode(hint)!) !== null) throw new Error("hint ring id");
 
 const doc = {
-  description: "voi.ci call modes, anonymous calls, the ring-back channel and the ring, sealed push tokens (docs/voici-calls.md). Generated by tools/voici-call-modes-vectors.ts.",
+  description: "voi.ci call modes, anonymous calls, the ring-back channel and the ring (docs/voici-calls.md). Generated by tools/voici-call-modes-vectors.ts.",
   now: NOW,
   pageId: PAGE_ID,
   origin: ORIGIN,
   caPub: M.keys.caPub,
   pow: { secret: H(powSecret), challenge, nonce, wrongNonce, bits: 12, checks: powChecks, minBits: P.VOICI_CALL_POW_MIN_BITS, maxBits: P.VOICI_CALL_POW_MAX_BITS, ttlMs: P.VOICI_CALL_POW_TTL_MS },
   anon: { browserPriv: H(browserPriv), browserPub, body: anonBody, signed: anon, canonical: new TextDecoder().decode(P.canonicalVoiciCallRequestAnon(anon)), hash: P.sha256Hex(P.canonicalVoiciCallRequestAnon(anon)), ctx: anonCtx, checks: anonChecks, modeChecks: anonModeChecks },
-  pushToken: { relaySeed: H(relaySeed), relayPub: H(relayPub), now: NOW, sealed, badPlains: badPlains.map(([name, plain]) => ({ name, plain })), wrongRelaySealed, freshTwice: twice },
   ringBack: { app: byApp, browser: byBrowser, stop, canonical: new TextDecoder().decode(P.canonicalVoiciRingBack(attach)), ctx: rbCtx, checks: ringBackChecks },
   ring: { order: ring, signature: ringSig, canonical: new TextDecoder().decode(P.canonicalVoiciRing(ring)), hintPlain: { v: 1, ...hintBody }, hintEseed: H(hintEseed), threadSeed: D.threadSeed, threadPub: D.threadPub, ownerSignPub: D.ownerSignPub, checks: ringChecks },
 };

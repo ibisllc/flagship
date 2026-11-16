@@ -649,7 +649,11 @@ export async function handleVoiciInbox(deps: VoiciOwnerDeps, username: string, s
 }
 
 /** Body {block:{pageId, pseudonymPub, op, issuedAt}, signature}, by the page's current ownerSignPub. `unblock` also accepts. */
-export async function handleVoiciBlock(deps: Pick<VoiciOwnerDeps, "voici" | "now">, username: string, body: unknown): Promise<HandlerResponseWithHeaders> {
+export async function handleVoiciBlock(
+  deps: Pick<VoiciOwnerDeps, "voici" | "now"> & { calls?: Pick<VoiciCallStorage, "deleteRingBack"> },
+  username: string,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
   const b = body as { block?: unknown; signature?: unknown };
   const order = parseVoiciBlock(b?.block);
@@ -659,6 +663,8 @@ export async function handleVoiciBlock(deps: Pick<VoiciOwnerDeps, "voici" | "now
   if (Math.abs(now - order.issuedAt) > VOICI_SEND_SKEW_MS) return voiciRefusal(403, "stale");
   if (!verifyVoiciBlock(order, b.signature, page.ownerSignPub)) return voiciRefusal(403, "bad-signature");
   await deps.voici.setBlock({ ...order, signature: b.signature }, now);
+  // A blocked caller's conversation is over: its ring-back channel goes (docs/voici-calls.md, ringing a caller back).
+  if (order.op === "block") await deps.calls?.deleteRingBack(order.pageId, voiciConv(order.pageId, order.pseudonymPub));
   return okNoStore({ ok: true });
 }
 
