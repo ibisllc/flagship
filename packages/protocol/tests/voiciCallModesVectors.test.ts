@@ -14,6 +14,16 @@ const code = (r: { ok: boolean; code?: string }) => (r.ok ? "ok" : r.code);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
 
 describe("voici call modes vectors", () => {
+  it("anonymous requests the browser built, as a ringing device receives them", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const B: any = JSON.parse(readFileSync(join(import.meta.dirname, "..", "test-vectors", "voici-call-modes", "browser-built.json"), "utf8"));
+    for (const [kind, r] of Object.entries(B.requests)) {
+      expect(code(P.checkVoiciCallRequestAnon(r, B.ctx)), kind).toBe("ok");
+      for (const callsFrom of ["accepted", "signed-in", "callback"]) expect(code(P.checkVoiciCallRequestAnon(r, { ...B.ctx, callsFrom })), `${kind} ${callsFrom}`).toBe("not-allowed");
+      expect(code(P.checkVoiciCallRequestAnon(r, { ...B.ctx, acceptsCalls: false })), kind).toBe("calls-off");
+    }
+  });
+
   it("proof of work: issue, solve, check", () => {
     expect(P.voiciCallPowSolves(V.pow.challenge, V.pow.nonce)).toBe(true);
     expect(P.voiciCallPowSolves(V.pow.challenge, V.pow.wrongNonce)).toBe(false);

@@ -1690,7 +1690,19 @@ class VoiciCenter(
             revoked = local.revoked.toSet(),
             nicknames = state.nicknames.mapValues { it.value.name },
             callsFrom = idx.body.callsFrom ?: "accepted",
+            liveMode = { liveCallMode(u, idx.body.pageId, maxOf(idx.body.seq, local.ladderSeq)) },
         )
+    }
+
+    /**
+     * The page's live call mode (acceptsCalls, callsFrom) from its current signed index on `.com`, checked under the
+     * account's sensitive key, for this page and never older than [seen]; null when it can't be read or doesn't check.
+     */
+    suspend fun liveCallMode(username: String, pageId: String, seen: Long): Pair<Boolean, String>? {
+        val keys = client.accountKeys(username) ?: return null
+        val idx = VoiciPage.checkVoiciPageIndex(client.page(username) ?: return null, username, keys.sensitiveKind, keys.sensitivePub, seen.takeIf { it > 0 }, pageId)
+            .valueOrNull() ?: return null
+        return idx.body.takesCalls to (idx.body.callsFrom ?: "accepted")
     }
 
     /** The CA keys, for the sign-in screen's own check of `.com`'s attestation. */

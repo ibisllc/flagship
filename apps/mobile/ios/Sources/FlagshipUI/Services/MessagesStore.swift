@@ -1369,11 +1369,21 @@ public final class MessagesStore {
         for e in stride(from: idx.inboxEpoch, through: 1, by: -1) {
             if let key = try? VoiciMessages.deriveVoiciInboxKey(umk: k.umk, pageId: idx.pageId, inboxEpoch: e) { inbox.append(key.seed) }
         }
-        return VoiciCallKeys(
+        var keys = VoiciCallKeys(
             username: username, deviceId: deviceId, deviceKey: device, pageId: idx.pageId, acceptsCalls: idx.takesCalls,
             ownerSignSeed: k.sign.seed, ownerSignPub: k.signPub, inboxSeeds: inbox, caKeys: await client.caKeys(),
             origin: Endpoints.voiciOrigin, blocked: Set(state.blocks + local.blocks), revoked: Set(local.revoked),
             nicknames: state.nicknames.mapValues(\.name), callsFrom: idx.callsFrom ?? "accepted")
+        // This copy of the index is refreshed only while the Social tab is open, so another device's change of "Who can
+        // call" may not be here yet: an anonymous call this copy refuses is checked against the live signed index, and
+        // a newer one is taken in.
+        let username = username, pageId = idx.pageId, seen = max(local.highestSeq, idx.seq)
+        keys.liveMode = { [weak self] in
+            guard let live = await VoiciCallModes.liveCallMode(client: client, username: username, pageId: pageId, highestSeenSeq: seen) else { return nil }
+            if live.index.seq > seen { Task { @MainActor in await self?.refresh() } }
+            return live.mode
+        }
+        return keys
     }
 
     /// Hands the phone endpoint what it needs to take deliveries while this admin phone is open and unlocked.

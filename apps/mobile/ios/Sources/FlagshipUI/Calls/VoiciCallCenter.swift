@@ -155,7 +155,10 @@ public final class VoiciCallCenter: NSObject {
     /// A VoIP push (CallKit) or an alert push reaching the open app (no CallKit).
     private func incoming(_ call: VoiciCallPush) async {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        guard session == nil, push == nil, now - call.issuedAt <= VoiciCalls.ringMs else { return }
+        guard session == nil, push == nil, now - call.issuedAt <= VoiciCalls.ringMs else {
+            voiciCallLog.notice("call not taken: \(self.session != nil || self.push != nil ? "busy" : "late", privacy: .public)")
+            return
+        }
         push = call
         callerName = String(localized: "Someone on voi.ci")
         offersVideo = false
@@ -167,6 +170,7 @@ public final class VoiciCallCenter: NSObject {
             // "Answer calls while Flagship is locked" is on: the call key answers; the caller stays "Someone on voi.ci".
             join(call, locked)
         } else {
+            voiciCallLog.notice("call waits: needs-unlock")
             phase = .needsUnlock
         }
     }
@@ -187,8 +191,14 @@ public final class VoiciCallCenter: NSObject {
     /// The call key of this device's account, while the setting is on (it was made and bound on an unlocked device).
     private func lockedKeys() async -> VoiciCallKeys? {
         guard let k = VoiciCallKeyStore.currentAccountKey else { return nil }
-        let ca = await MessagesStore.shared.client?.caKeys() ?? []
-        return VoiciCallKeys.locked(k, caKeys: ca, origin: Endpoints.voiciOrigin)
+        let client = MessagesStore.shared.client
+        let ca = await client?.caKeys() ?? []
+        var keys = VoiciCallKeys.locked(k, caKeys: ca, origin: Endpoints.voiciOrigin)
+        // A locked device keeps no copy of the page's call mode: an anonymous call is checked against the live index.
+        if let client {
+            keys.liveMode = { await VoiciCallModes.liveCallMode(client: client, username: k.username, pageId: k.pageId)?.mode }
+        }
+        return keys
     }
 
     /// The account was unlocked while a call rings: join the room now.
@@ -333,6 +343,7 @@ public final class VoiciCallCenter: NSObject {
         u.supportsDTMF = false
         guard let provider, ringing == nil, session == nil, push == nil, hint != nil || Keystore.messagesUMKIfCached() == nil else {
             // A second ring, or a hint none of this account's pages opens: reported, then ended at once.
+            voiciCallLog.notice("ring-back not taken: \(hint == nil ? "not-ours" : "busy", privacy: .public)")
             let p = provider ?? CXProvider(configuration: CXProviderConfiguration())
             p.reportNewIncomingCall(with: id, update: u) { _ in
                 Task { @MainActor in p.reportCall(with: id, endedAt: nil, reason: .failed); completion() }
@@ -350,6 +361,7 @@ public final class VoiciCallCenter: NSObject {
             try? await Task.sleep(nanoseconds: UInt64(VoiciRings.ttlMs) * 1_000_000)
             if let r = self.ringing, r.id == id, self.ringBack == nil {
                 self.ringing = nil
+                voiciCallLog.notice("ring-back ended: unanswered")
                 provider.reportCall(with: id, endedAt: nil, reason: .unanswered)
             }
         }
@@ -360,6 +372,7 @@ public final class VoiciCallCenter: NSObject {
         guard let r = ringing, let client = MessagesStore.shared.client else { return }
         guard let hint = r.hint else {
             // Locked when the push came: no page to dial. The owner's ring still shows in the conversation on voi.ci.
+            voiciCallLog.notice("ring-back ended: locked-no-page")
             ringing = nil
             provider?.reportCall(with: r.id, endedAt: nil, reason: .failed)
             return
@@ -390,6 +403,7 @@ public final class VoiciCallCenter: NSObject {
     }
 
     private func finish(_ code: String) {
+        voiciCallLog.notice("call ended: \(code, privacy: .public)")
         if let call = push, let peer = incomingPeer, let outcome = Self.incomingOutcome(code: code, wasConnected: connectedAt != nil) {
             let end = Int64(clock().timeIntervalSince1970 * 1000)
             VoiciCallHistory.shared.record(VoiciCallRecord(callId: call.callId, direction: .incoming, outcome: outcome, peer: peer, video: offersVideo,
@@ -459,6 +473,8 @@ extension VoiciCallCenter: PKPushRegistryDelegate {
                     guard error == nil, let call, !busy, self.shouldRing(issuedAt: call.issuedAt) else {
                         // A malformed, late or second call, or Do Not Disturb here: reported (Apple requires it), then
                         // ended at once.
+                        let why = error != nil ? "callkit-refused" : call == nil ? "malformed-push" : busy ? "busy" : "late-or-do-not-disturb"
+                        voiciCallLog.notice("call not taken: \(why, privacy: .public)")
                         provider.reportCall(with: id, endedAt: nil, reason: call == nil || busy ? .failed : .unanswered)
                         return completion()
                     }

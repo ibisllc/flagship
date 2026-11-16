@@ -124,6 +124,22 @@ object VoiciCallModes {
         return VoiciOutcome.Ok(VoiciCallRequest(f.pageId, f.conv, f.callId, f.browserPub, f.xpub, f.sdp, f.at, f.browserPub, f.o, f.media ?: VoiciCalls.MEDIA_AUDIO))
     }
 
+    /**
+     * [checkAnon] against the phone's own copy of the page's call mode, then, only when that copy refuses the mode
+     * itself ("calls-off", "not-allowed"), once more against the live mode [live] reads from the page's signed index
+     * (acceptsCalls, callsFrom). The copy can be older than the page `.com` rang for (the mode was changed on another
+     * device). Every other refusal stands without a fetch.
+     */
+    suspend fun checkAnonLive(
+        input: JsonElement?, pageId: String, acceptsCalls: Boolean, callsFrom: String, now: Long, blocked: Set<String>? = null,
+        live: suspend () -> Pair<Boolean, String>?,
+    ): VoiciOutcome<VoiciCallRequest> {
+        val first = checkAnon(input, pageId, acceptsCalls, callsFrom, now, blocked)
+        if (first !is VoiciOutcome.Refused || (first.reason != "calls-off" && first.reason != "not-allowed")) return first
+        val m = live() ?: return first
+        return checkAnon(input, pageId, m.first, m.second, now, blocked)
+    }
+
     // ── the ring-back channel ──
 
     fun canonicalRingBack(pageId: String, conv: String, op: String, issuedAt: Long): ByteArray {

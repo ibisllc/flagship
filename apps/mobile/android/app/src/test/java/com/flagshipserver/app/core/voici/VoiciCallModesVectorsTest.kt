@@ -7,6 +7,7 @@ package com.flagshipserver.app.core.voici
 import com.flagshipserver.app.core.voici.VoiciVectorsTest.Companion.H
 import com.flagshipserver.app.core.voici.VoiciVectorsTest.Companion.h
 import com.flagshipserver.app.core.voici.VoiciVectorsTest.Companion.vectorsFile
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -51,6 +52,37 @@ class VoiciCallModesVectorsTest {
         // The answering phone hashes an anonymous request by its kind (the answer names this hash).
         assertEquals(a.s("hash"), VoiciCalls.requestHash(a["signed"]!!))
         assertTrue(VoiciCallModes.isAnon(a["signed"]))
+    }
+
+    /**
+     * Anonymous requests packages/flagship-web built from real Chromium offers, as the room hands them to a ringing
+     * device; and a mode refusal from this device's own (older) copy of the index asks the live index once.
+     */
+    @Test fun theBrowsersAnonymousRequestsAndTheLiveMode() = runBlocking {
+        val b = load("packages/protocol/test-vectors/voici-call-modes/browser-built.json")
+        val ctx = b.o("ctx")
+        val requests = b.o("requests")
+        assertEquals(setOf("audio", "video"), requests.keys)
+        for ((kind, r) in requests) {
+            val check = { on: Boolean, from: String -> code(VoiciCallModes.checkAnon(r, ctx.s("pageId"), on, from, ctx.l("now"))) }
+            assertEquals(kind, "ok", check(true, "anyone"))
+            for (from in listOf("accepted", "signed-in", "callback")) assertEquals("$kind $from", "not-allowed", check(true, from))
+            assertEquals(kind, "calls-off", check(false, "anyone"))
+        }
+        val r = requests["audio"]
+        var asked = 0
+        suspend fun run(pageId: String, on: Boolean, from: String, now: Long, m: Pair<Boolean, String>?) =
+            code(VoiciCallModes.checkAnonLive(r, pageId, on, from, now, null) { asked++; m })
+        val pageId = ctx.s("pageId")
+        val now = ctx.l("now")
+        assertEquals("ok", run(pageId, true, "signed-in", now, true to "anyone"))
+        assertEquals("ok", run(pageId, false, "accepted", now, true to "anyone"))
+        assertEquals("not-allowed", run(pageId, true, "signed-in", now, true to "callback"))
+        assertEquals("not-allowed", run(pageId, true, "signed-in", now, null))
+        assertEquals(4, asked)
+        assertEquals("wrong-audience", run("00".repeat(16), true, "signed-in", now, true to "anyone"))
+        assertEquals("stale", run(pageId, true, "anyone", now + 3_600_000, true to "anyone"))
+        assertEquals(4, asked)
     }
 
     @Test fun ringBackChannelOrders() {
