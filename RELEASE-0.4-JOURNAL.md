@@ -787,6 +787,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   export for production push tokens). **Blocked:** Apple requires the owner to accept the new Program License
   Agreement before it registers the new app id.
 
+- 2026-11-16: **delete-gate merged** (shell **v223**). Deleting a conversation asks Face ID / Touch ID or the
+  passcode on iOS (`DestructiveAuth.askToDeleteConversation`), the BiometricPrompt on Android (as Sign out), and a
+  passkey assertion with UV on the webapp (passphrase if the browser has no custody passkey). A cancelled prompt
+  deletes and sends nothing (tests on all three). A phone with no screen lock deletes without a prompt (same rule as
+  Sign out). Checks: tsc, i18n, parity 0 red, web 3655; Android 7/7, iOS 6/6, iOS app builds.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
@@ -798,7 +804,7 @@ State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branc
 - org directory with SCIM/LDAP connectors (all three apps);
 - restore, enterprise, retail, cloud fixes; terms and privacy wording for 0.4.
 
-Shell **v222**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
+Shell **v223**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
 running.
 
 Next steps for whoever resumes:
