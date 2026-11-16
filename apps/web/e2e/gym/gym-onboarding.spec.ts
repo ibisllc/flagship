@@ -14,9 +14,14 @@
  */
 
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
-import { PASSPHRASE, createAccount, mock, reachHome, sawToast, shot, toastMark, unlock, watchToasts, type Mock } from "./gymKit.js";
+import { PASSPHRASE, createAccount, mock, passkeyAuthenticator, reachHome, sawToast, shot, toastMark, unlock, watchToasts, type Mock } from "./gymKit.js";
 
-test.use({ viewport: { width: 430, height: 932 } });
+// Opening an account seals the admin key under a passkey at once, and WebAuthn refuses an IP address as the
+// relying party: these run on localhost (same static server) with a virtual authenticator.
+test.use({ viewport: { width: 430, height: 932 }, baseURL: `http://localhost:${Number(process.env.GYM_WEBAPP_PORT ?? "8799")}` });
+test.beforeEach(async ({ page }) => {
+  await passkeyAuthenticator(page);
+});
 
 const FIRST = "braveotter";
 const SECOND = "quietfalcon";
