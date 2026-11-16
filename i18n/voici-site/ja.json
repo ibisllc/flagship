@@ -130,5 +130,17 @@
   "This call link was already used or has expired. Start the call again from your Flagship app.": "この通話リンクは使用済みか、期限が切れています。Flagship アプリから通話をやり直してください。",
   "This call link isn't valid. Start the call again from your Flagship app.": "この通話リンクは無効です。Flagship アプリから通話をやり直してください。",
   "Getting the call from your Flagship app…": "Flagship アプリから通話を受け取っています…",
-  "Your Flagship app is ready to call {0}.": "Flagship アプリで {0} に発信する準備ができました。"
+  "Your Flagship app is ready to call {0}.": "Flagship アプリで {0} に発信する準備ができました。",
+  "They take calls only from people they can call back. Choose \"Call and allow call-back\".": "折り返し電話できる相手からの通話だけを受け付けています。「通話して折り返しを許可」を選んでください。",
+  "The call couldn't start. Try again.": "通話を開始できませんでした。もう一度お試しください。",
+  "Call anonymously": "匿名で通話",
+  "Call and allow call-back": "通話して折り返しを許可",
+  "Let {0} call you back?": "{0} からの折り返しを許可しますか？",
+  "{0} takes calls only from people they can call back.": "{0} は折り返し電話できる相手からの通話だけを受け付けています。",
+  "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": "{0} にはあなたが誰かは伝わりません。この会話であなたの電話を鳴らせることは Flagship に伝わります。",
+  "Answer": "応答",
+  "Not now": "今はしない",
+  "{0} is calling you back.": "{0} から折り返しの着信です。",
+  "Getting ready to call…": "通話を準備しています…",
+  "Stop call-backs": "折り返しを停止"
 }

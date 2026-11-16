@@ -66,3 +66,27 @@ test("a handoff link opens once: a second tab with the same link is refused", as
   await expect(b.getByText("This call link was already used or has expired.", { exact: false })).toBeVisible({ timeout: 30_000 });
   await ctx.close();
 });
+
+test("an anonymous visitor calls a page open to anyone from the pop-up (proof of work, no account)", async ({ browser }) => {
+  const open = await startCallWorld({ callsFrom: "anyone" });
+  try {
+    const phoneCtx = await browser.newContext();
+    const phone = await phoneCtx.newPage();
+    await phone.goto(`${open.origin}/__phone`);
+    const ctx = await browser.newContext();
+    const tab = await ctx.newPage();
+    await tab.goto(`${open.origin}/alice`);
+    await tab.locator("#app").getByRole("button", { name: "Call" }).click();
+    await expect(tab.getByText("Let Alice Martin call you back?")).toBeVisible();
+    await expect(tab.getByText("Alice Martin won't learn who you are. Flagship will know this conversation can ring your phone.")).toBeVisible();
+    await tab.getByRole("button", { name: "Call anonymously" }).click();
+    await expect(phone.locator("#s")).toHaveText("won", { timeout: 30_000 });
+    await expect(tab.getByText("Connecting…")).toBeVisible({ timeout: 30_000 });
+    expect(open.log.requestRefusal).toBeUndefined();
+    expect((open.log.request as unknown as { kind: string }).kind).toBe("voici-call-request-anon");
+    await ctx.close();
+    await phoneCtx.close();
+  } finally {
+    await open.close();
+  }
+});

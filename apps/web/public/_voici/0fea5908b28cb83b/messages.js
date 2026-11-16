@@ -207,6 +207,18 @@ function showThread(ctx, session) {
     },
   });
   const list = h(doc, "div", { class: "thread", role: "log", "aria-live": "polite", "aria-label": t("Conversation") });
+  // "Stop call-backs" (docs/voici-calls.md): shown while this browser allowed the page owner to ring it back.
+  const stopBtn = h(doc, "button", { class: "btn-ghost sign-out", type: "button", hidden: true }, t("Stop call-backs"));
+  lib.ringBackAttached(ctx.store, page.index.pageId).then((on) => (stopBtn.hidden = !on));
+  stopBtn.addEventListener("click", async () => {
+    stopBtn.disabled = true;
+    const r = await lib.postRingBack(session, "stop", { apiBase: cfg.apiBase, store: ctx.store });
+    stopBtn.disabled = false;
+    if (r.ok) {
+      stopBtn.hidden = true;
+      (await import("./call.js")).stopWatchingRings();
+    }
+  });
   const gap = h(doc, "p", { class: "callout", hidden: true }, t("Some messages haven't arrived yet."));
   const confirmBar = h(doc, "div", { class: "confirm-bar", hidden: true });
   const area = h(doc, "textarea", { class: "compose-input", rows: 2, maxlength: 4000, "aria-label": t("Message"), placeholder: t("Write a message"), enterkeyhint: "send", spellcheck: "true" });
@@ -231,6 +243,7 @@ function showThread(ctx, session) {
       h(doc, "li", {}, icon(doc, "flag", "icon icon-sm"), t("Messages are private. If someone reports your message, Flagship can see which account sent it.")),
       h(doc, "li", {}, icon(doc, "lock", "icon icon-sm"), t("You appear here as {0}. They never see your username.", me)),
     ),
+    stopBtn,
     h(doc, "button", { class: "btn-ghost sign-out", type: "button", on: { click: signOutHere } }, t("Sign out of this page")),
   );
 
@@ -388,12 +401,18 @@ function showThread(ctx, session) {
     items.set(v.envelope.msgId, { env: v.envelope, text: v.plaintext.text, mine: v.mine, status });
   }
 
+  const rings = new Set();
   async function poll() {
     if (closed) return;
     if (doc.visibilityState === "hidden") return schedule();
     const r = await lib.fetchThread(session, { apiBase: cfg.apiBase, since: cursor });
     if (closed) return;
     if (r.ok) {
+      const ring = lib.ringOf(r);
+      if (ring && !rings.has(ring.ringId)) {
+        rings.add(ring.ringId);
+        (await import("./call.js")).showIncomingRing(ctx, session, ring);
+      }
       for (const it of r.items) addVerified(it.envelope, it);
       cursor = r.next;
       delay = POLL_MS;

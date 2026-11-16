@@ -130,5 +130,17 @@
   "This call link was already used or has expired. Start the call again from your Flagship app.": "此通话链接已被使用或已过期。请在 Flagship 应用中重新发起通话。",
   "This call link isn't valid. Start the call again from your Flagship app.": "此通话链接无效。请在 Flagship 应用中重新发起通话。",
   "Getting the call from your Flagship app…": "正在从你的 Flagship 应用接收通话…",
-  "Your Flagship app is ready to call {0}.": "你的 Flagship 应用已准备好呼叫 {0}。"
+  "Your Flagship app is ready to call {0}.": "你的 Flagship 应用已准备好呼叫 {0}。",
+  "They take calls only from people they can call back. Choose \"Call and allow call-back\".": "这里只接受可以回拨的人的来电。请选择“拨打并允许回拨”。",
+  "The call couldn't start. Try again.": "无法发起通话。请重试。",
+  "Call anonymously": "匿名拨打",
+  "Call and allow call-back": "拨打并允许回拨",
+  "Let {0} call you back?": "允许 {0} 回拨给你吗？",
+  "{0} takes calls only from people they can call back.": "{0} 只接受可以回拨的人的来电。",
+  "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": "{0} 不会知道你是谁。Flagship 会知道这个对话可以让你的手机响铃。",
+  "Answer": "接听",
+  "Not now": "暂不",
+  "{0} is calling you back.": "{0} 正在回拨给你。",
+  "Getting ready to call…": "正在准备通话…",
+  "Stop call-backs": "停止回拨"
 }

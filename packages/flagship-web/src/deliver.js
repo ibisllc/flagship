@@ -160,7 +160,8 @@ export async function fetchThread(session, o) {
     if (!j || !Array.isArray(j.items)) return { ok: false, code: "malformed" };
     const items = j.items.map(threadItemOf).filter(Boolean);
     const next = typeof j.next === "string" && /^[A-Za-z0-9_-]{0,64}$/.test(j.next) ? j.next : o.since ?? "";
-    return { ok: true, items, next };
+    // While the page owner rings this conversation back, the answer carries the ring (callModes.js ringOf).
+    return { ok: true, items, next, ...(j.ring && typeof j.ring === "object" ? { ring: j.ring } : {}) };
   } catch {
     return { ok: false, code: "unreachable" };
   }

@@ -130,5 +130,17 @@
   "This call link was already used or has expired. Start the call again from your Flagship app.": "Ce lien d'appel a déjà servi ou a expiré. Relancez l'appel depuis votre app Flagship.",
   "This call link isn't valid. Start the call again from your Flagship app.": "Ce lien d'appel n'est pas valide. Relancez l'appel depuis votre app Flagship.",
   "Getting the call from your Flagship app…": "Récupération de l'appel depuis votre app Flagship…",
-  "Your Flagship app is ready to call {0}.": "Votre app Flagship est prête à appeler {0}."
+  "Your Flagship app is ready to call {0}.": "Votre app Flagship est prête à appeler {0}.",
+  "They take calls only from people they can call back. Choose \"Call and allow call-back\".": "Ici, seules les personnes qu'on peut rappeler peuvent appeler. Choisissez « Appeler et autoriser le rappel ».",
+  "The call couldn't start. Try again.": "L'appel n'a pas pu démarrer. Réessayez.",
+  "Call anonymously": "Appeler anonymement",
+  "Call and allow call-back": "Appeler et autoriser le rappel",
+  "Let {0} call you back?": "Autoriser {0} à vous rappeler ?",
+  "{0} takes calls only from people they can call back.": "{0} n'accepte que les appels de personnes qu'il est possible de rappeler.",
+  "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": "{0} ne saura pas qui vous êtes. Flagship saura que cette conversation peut faire sonner votre téléphone.",
+  "Answer": "Répondre",
+  "Not now": "Pas maintenant",
+  "{0} is calling you back.": "{0} vous rappelle.",
+  "Getting ready to call…": "Préparation de l'appel…",
+  "Stop call-backs": "Arrêter les rappels"
 }

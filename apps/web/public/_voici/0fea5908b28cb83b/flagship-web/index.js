@@ -9,6 +9,7 @@
 //   verify.js    verify the admin-signed page index, its pieces and the thread's envelopes BEFORE parsing further
 //   store.js     IndexedDB key-value store (memory fallback)
 //   alerts.js    opt-in reply alerts: Web Push bound to one conversation by a B-signed order
+//   callModes.js anonymous calls (proof of work), the ring-back channel, the page owner's ring
 //   handoff.js   a call the visitor's Flagship app hands to this browser (`#call=…` over /qr-pipe, one call)
 //   call.js      a voi.ci call: the signed request, the room WebSocket, WebRTC to the owner's phone over TURN,
 //                every frame sealed again in callWorker.js (callProtocol.js holds the bytes)
@@ -26,4 +27,5 @@ export * from "./store.js";
 export * from "./alerts.js";
 export * from "./call.js";
 export * from "./handoff.js";
+export * from "./callModes.js";
 export * as protocol from "./proto/lib/voiciProtocol.js";

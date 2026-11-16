@@ -130,5 +130,17 @@
   "This call link was already used or has expired. Start the call again from your Flagship app.": "Dieser Anruf-Link wurde schon benutzt oder ist abgelaufen. Starte den Anruf erneut in deiner Flagship-App.",
   "This call link isn't valid. Start the call again from your Flagship app.": "Dieser Anruf-Link ist ungültig. Starte den Anruf erneut in deiner Flagship-App.",
   "Getting the call from your Flagship app…": "Der Anruf wird von deiner Flagship-App übernommen…",
-  "Your Flagship app is ready to call {0}.": "Deine Flagship-App ist bereit, {0} anzurufen."
+  "Your Flagship app is ready to call {0}.": "Deine Flagship-App ist bereit, {0} anzurufen.",
+  "They take calls only from people they can call back. Choose \"Call and allow call-back\".": "Hier sind nur Anrufe von Leuten möglich, die zurückgerufen werden dürfen. Wähle „Anrufen und Rückruf erlauben“.",
+  "The call couldn't start. Try again.": "Der Anruf konnte nicht starten. Versuch es noch einmal.",
+  "Call anonymously": "Anonym anrufen",
+  "Call and allow call-back": "Anrufen und Rückruf erlauben",
+  "Let {0} call you back?": "Darf {0} dich zurückrufen?",
+  "{0} takes calls only from people they can call back.": "{0} nimmt nur Anrufe von Leuten an, die zurückgerufen werden dürfen.",
+  "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": "{0} erfährt nicht, wer du bist. Flagship weiß, dass diese Unterhaltung dein Telefon klingeln lassen kann.",
+  "Answer": "Annehmen",
+  "Not now": "Nicht jetzt",
+  "{0} is calling you back.": "{0} ruft dich zurück.",
+  "Getting ready to call…": "Anruf wird vorbereitet…",
+  "Stop call-backs": "Rückrufe beenden"
 }
