@@ -15381,5 +15381,57 @@
   "Ringing them. When they answer, your phone rings.": {
     "en": "Ringing them. When they answer, your phone rings.",
     "ctx": "webapp/views/thread.js"
+  },
+  "People whose conversation you accepted": {
+    "en": "People whose conversation you accepted",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Anyone signed in with Flagship": {
+    "en": "Anyone signed in with Flagship",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Anyone on the internet": {
+    "en": "Anyone on the internet",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Only people you can call back": {
+    "en": "Only people you can call back",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Accept calls": {
+    "en": "Accept calls",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Who can call": {
+    "en": "Who can call",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Only at certain hours": {
+    "en": "Only at certain hours",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Days": {
+    "en": "Days",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "From": {
+    "en": "From",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "To": {
+    "en": "To",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Time zone": {
+    "en": "Time zone",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": {
+    "en": "Calls ring only during these hours. Your page shows them to anyone, with the time zone.",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "These hours don't work. Pick at least one day and different start and end times.": {
+    "en": "These hours don't work. Pick at least one day and different start and end times.",
+    "ctx": "webapp/views/page-editor.js"
   }
 }

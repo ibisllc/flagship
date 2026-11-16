@@ -3770,5 +3770,18 @@
   "Messages already on {0}'s device stay there.": "{0} のデバイスにすでにあるメッセージはそのまま残ります。",
   "{0} ({1})": "{0}（{1}）",
   "Call back": "折り返し電話",
-  "Ringing them. When they answer, your phone rings.": "相手を呼び出しています。相手が応答すると、あなたの電話が鳴ります。"
+  "Ringing them. When they answer, your phone rings.": "相手を呼び出しています。相手が応答すると、あなたの電話が鳴ります。",
+  "People whose conversation you accepted": "会話を承認した人",
+  "Anyone signed in with Flagship": "Flagship でサインインしている人なら誰でも",
+  "Anyone on the internet": "インターネット上の誰でも",
+  "Only people you can call back": "折り返し電話できる人だけ",
+  "Accept calls": "通話を受け付ける",
+  "Who can call": "通話できる人",
+  "Only at certain hours": "特定の時間だけ",
+  "Days": "曜日",
+  "From": "開始",
+  "To": "終了",
+  "Time zone": "タイムゾーン",
+  "Calls ring only during these hours. Your page shows them to anyone, with the time zone.": "通話はこの時間帯にだけ鳴ります。この時間帯とタイムゾーンは、あなたのページで誰でも見られます。",
+  "These hours don't work. Pick at least one day and different start and end times.": "この時間帯は使えません。少なくとも 1 日を選び、開始と終了を別の時刻にしてください。"
 }

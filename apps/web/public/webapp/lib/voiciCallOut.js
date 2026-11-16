@@ -208,3 +208,28 @@ export async function startHandoffCall(page, media = "audio", deps = {}) {
 }
 
 export const isCallablePeer = (peer) => peer?.kind === "page" && PAGE_ID.test(peer.pageId ?? "") && USERNAME.test(peer.username ?? "");
+
+// ── the page's call hours, for the Calls sheet (views/page-editor.js) ──
+
+/** The browser's time zone (the hours' default), else UTC. */
+export function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/** "<days> <HHMM>-<HHMM> <zone>" from the sheet's fields (days Monday first, times "HH:MM"). */
+export function callHoursValue(days, from, to, zone) {
+  const hhmm = (t) => String(t ?? "").replace(":", "");
+  return `${days.map((d) => (d ? "1" : "0")).join("")} ${hhmm(from)}-${hhmm(to)} ${zone}`;
+}
+
+/** The sheet's fields from a stored value (or the defaults: weekdays, 09:00 to 17:00, the browser's zone). */
+export function callHoursFields(value) {
+  const m = /^([01]{7}) (\d{2})(\d{2})-(\d{2})(\d{2}) (\S+)$/.exec(value ?? "");
+  if (!m) return { on: false, days: [true, true, true, true, true, false, false], from: "09:00", to: "17:00", zone: browserTimeZone() };
+  return { on: true, days: [...m[1]].map((c) => c === "1"), from: `${m[2]}:${m[3]}`, to: `${m[4]}:${m[5]}`, zone: m[6] };
+}
+
