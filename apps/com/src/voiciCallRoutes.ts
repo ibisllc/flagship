@@ -22,6 +22,7 @@ import {
   handleVoiciCallRequest,
   handleVoiciRing,
   handleVoiciRingBack,
+  handleVoiciAnonBlock,
   buildVoiciRingPusher,
   authorizeActiveDevice,
   voiciPowSecret,
@@ -62,7 +63,7 @@ export interface VoiciCallEnv extends RateLimitEnv {
 }
 
 const CALL_PATH = /^\/api\/voici\/calls\/([0-9a-f]{32})\/(caller|device)$/;
-const PAGE_CALLS = /^\/api\/voici\/pages\/([^/]+)\/(call-allow|calls|call-challenge|ring)$/;
+const PAGE_CALLS = /^\/api\/voici\/pages\/([^/]+)\/(call-allow|calls|call-challenge|ring|anon-block)$/;
 const RING_BACK = "/api/voici/web/ring-back";
 const VOIP_TOKEN = /^\/api\/accounts\/([^/]+)\/voici-voip-token$/;
 const CALL_KEY = /^\/api\/accounts\/([^/]+)\/voici-call-key(\/revoke)?$/;
@@ -215,6 +216,19 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
   if ((m = path.match(PAGE_CALLS)) && m[2] === "call-challenge" && method === "GET") {
     const username = decodeURIComponent(m[1]!).toLowerCase();
     return toResponse(await handleVoiciCallChallenge({ voici: storage.voici, ...(powSecret ? { powSecret } : {}), limitIp: () => wait(env, "voici-call-challenge", request, undefined, ctx) }, username));
+  }
+
+  if ((m = path.match(PAGE_CALLS)) && m[2] === "anon-block" && method === "POST") {
+    const username = decodeURIComponent(m[1]!).toLowerCase();
+    const w = await wait(env, "voici-owner", request, undefined, ctx);
+    if (w !== null) return toResponse(voiciRefusal(429, "rate-limited", { retryAfterSec: w }));
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      body = undefined;
+    }
+    return toResponse(await handleVoiciAnonBlock({ voici: storage.voici, calls: storage.voiciCalls }, username, body));
   }
 
   if ((m = path.match(PAGE_CALLS)) && m[2] === "ring" && method === "POST") {

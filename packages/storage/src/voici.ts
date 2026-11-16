@@ -172,6 +172,8 @@ export interface VoiciStorage {
 
   /** Newest issuedAt wins; false when a newer or equal order is stored. */
   setBlock(rec: VoiciBlockRecord, at: number): Promise<boolean>;
+  /** Delete = forget: the owner's block or accept for one pseudonym goes with its conversation. */
+  deleteBlock(pageId: string, pseudonymPub: string): Promise<void>;
   getBlock(pageId: string, pseudonymPub: string): Promise<VoiciBlockRecord | null>;
   listBlocked(pageId: string): Promise<string[]>;
 
@@ -594,6 +596,10 @@ export class D1VoiciStorage implements VoiciStorage {
       this.db.prepare("SELECT page_id FROM voici_pseudonym_pages WHERE pseudonym_pub = ?1").bind(pseudonymPub),
     ]);
     return ((read?.results ?? []) as { page_id: string }[])[0]?.page_id ?? pageId;
+  }
+
+  async deleteBlock(pageId: string, pseudonymPub: string) {
+    await this.db.prepare("DELETE FROM voici_blocks WHERE page_id = ?1 AND pseudonym_pub = ?2").bind(pageId, pseudonymPub).run();
   }
 
   async setBlock(rec: VoiciBlockRecord, at: number) {
@@ -1048,6 +1054,10 @@ export class InMemoryVoiciStorage implements VoiciStorage {
   async bindPseudonymPage(pseudonymPub: string, pageId: string, _at: number) {
     if (!this.pseudonymPages.has(pseudonymPub)) this.pseudonymPages.set(pseudonymPub, pageId);
     return this.pseudonymPages.get(pseudonymPub)!;
+  }
+
+  async deleteBlock(pageId: string, pseudonymPub: string) {
+    this.blocks.delete(InMemoryVoiciStorage.pk(pageId, pseudonymPub));
   }
 
   async setBlock(rec: VoiciBlockRecord, _at: number) {

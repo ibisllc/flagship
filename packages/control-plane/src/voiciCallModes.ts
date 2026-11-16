@@ -19,6 +19,8 @@ import {
   checkVoiciCallPowChallenge,
   checkVoiciCallRequestAnon,
   checkVoiciConvDelete,
+  parseVoiciAnonBlock,
+  verifyVoiciAnonBlock,
   checkVoiciRingBackOrder,
   issueVoiciCallPow,
   parseVoiciCallPow,
@@ -247,7 +249,34 @@ export async function handleVoiciConvDelete(
   if (typeof delegatePub === "string" && from && (await deps.voici.isRevoked(delegatePub, from, now))) revoked.add(delegatePub);
   const r = checkVoiciConvDelete(body, { pageId: page.pageId, ownerSignPub: page.ownerSignPub, origin: deps.origin, caKeys: deps.caKeys(now), now, revoked });
   if (!r.ok) return voiciRefusal(r.code === "malformed" ? 400 : 403, r.code);
+  // The conversation's block (or accept) goes with it: a caller who writes again arrives as a new request. The
+  // caller's pseudonym is the signer's, or, for the owner's delete, the sender of the conversation's mail.
+  const pseudonym = isObj(body) && body.signer !== "owner" ? from : (await deps.voici.listThread(page.pageId, r.del.conv, 0, 50)).find((m) => m.kind === "voici-message")?.fromPub;
+  if (pseudonym) await deps.voici.deleteBlock(page.pageId, pseudonym);
   await deps.voici.deleteConversation(page.pageId, r.del.conv);
   await deps.calls?.deleteConversationCalls(page.pageId, r.del.conv);
+  return ok({ ok: true });
+}
+
+/**
+ * POST /api/voici/pages/<u>/anon-block {block:{pageId, conv, op, issuedAt}, signature} by the page's ownerSignPub
+ * (flagship/voici-anon-block/v1): an anonymous caller's conversation (its browser key, the identity its proof of work
+ * was for) can't call again until the owner unblocks it or deletes the conversation.
+ */
+export async function handleVoiciAnonBlock(
+  deps: { voici: VoiciStorage; calls: VoiciCallStorage; now?: () => number },
+  username: string,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  const b = isObj(body) ? body : {};
+  const order = parseVoiciAnonBlock(b.block);
+  if (!order || typeof b.signature !== "string") return voiciRefusal(400, "malformed");
+  const page = await deps.voici.getPage(username.toLowerCase());
+  if (!page || page.pageId !== order.pageId) return voiciRefusal(404, "not-found");
+  if (Math.abs(now - order.issuedAt) > VOICI_CALL_SKEW_MS) return voiciRefusal(403, "stale");
+  if (!verifyVoiciAnonBlock(order, b.signature, page.ownerSignPub)) return voiciRefusal(403, "bad-signature");
+  if (order.op === "block") await deps.calls.blockAnon(page.pageId, order.conv, Number.MAX_SAFE_INTEGER);
+  else await deps.calls.unblockAnon(page.pageId, order.conv);
   return ok({ ok: true });
 }

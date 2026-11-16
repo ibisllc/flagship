@@ -98,6 +98,11 @@ export interface VoiciCallStorage {
   /** Spends a proof-of-work challenge once; false when it was spent already. */
   spendPow(challengeHash: string, expiresAt: number): Promise<boolean>;
   blockAnon(pageId: string, conv: string, expiresAt: number): Promise<void>;
+  unblockAnon(pageId: string, conv: string): Promise<void>;
+  /** The page's blocked anonymous conversations (the owner's inbox lists them). */
+  listAnonBlocks(pageId: string, now: number): Promise<string[]>;
+  /** The page's conversations with a live ring-back channel (the owner's inbox flags them). */
+  listRingBackConvs(pageId: string, now: number): Promise<string[]>;
   /** Delete = forget: the conversation's ring-back channel, ring, call allow and missed calls go at once. */
   deleteConversationCalls(pageId: string, conv: string): Promise<void>;
   /** Rows still held for one conversation in the call tables (tests: a deleted conversation leaves none). */
@@ -305,7 +310,7 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
   }
 
   async deleteConversationCalls(pageId: string, conv: string) {
-    for (const t of ["voici_ring_backs", "voici_rings", "voici_call_allows", "voici_missed_calls"]) {
+    for (const t of ["voici_ring_backs", "voici_rings", "voici_call_allows", "voici_missed_calls", "voici_anon_blocks"]) {
       await this.db.prepare(`DELETE FROM ${t} WHERE page_id = ?1 AND conv = ?2`).bind(pageId, conv).run();
     }
   }
@@ -328,6 +333,20 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
       .prepare("INSERT INTO voici_anon_blocks (page_id, conv, expires_at) VALUES (?1, ?2, ?3) ON CONFLICT (page_id, conv) DO UPDATE SET expires_at = ?3")
       .bind(pageId, conv, expiresAt)
       .run();
+  }
+
+  async unblockAnon(pageId: string, conv: string) {
+    await this.db.prepare("DELETE FROM voici_anon_blocks WHERE page_id = ?1 AND conv = ?2").bind(pageId, conv).run();
+  }
+
+  async listAnonBlocks(pageId: string, now: number) {
+    const r = await this.db.prepare("SELECT conv FROM voici_anon_blocks WHERE page_id = ?1 AND expires_at > ?2 ORDER BY conv").bind(pageId, now).all<{ conv: string }>();
+    return (r.results ?? []).map((x) => x.conv);
+  }
+
+  async listRingBackConvs(pageId: string, now: number) {
+    const r = await this.db.prepare("SELECT conv FROM voici_ring_backs WHERE page_id = ?1 AND expires_at > ?2").bind(pageId, now).all<{ conv: string }>();
+    return (r.results ?? []).map((x) => x.conv);
   }
 
   async isAnonBlocked(pageId: string, conv: string, now: number) {
@@ -465,6 +484,7 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     this.ringBacks.delete(k);
     this.rings.delete(k);
     this.allows.delete(k);
+    this.anonBlocks.delete(k);
     this.missed = this.missed.filter((m) => !(m.pageId === pageId && m.conv === conv));
   }
   async conversationCallRowCount(pageId: string, conv: string) {
@@ -478,6 +498,15 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
   }
   async blockAnon(pageId: string, conv: string, expiresAt: number) {
     this.anonBlocks.set(`${pageId}|${conv}`, expiresAt);
+  }
+  async unblockAnon(pageId: string, conv: string) {
+    this.anonBlocks.delete(`${pageId}|${conv}`);
+  }
+  async listAnonBlocks(pageId: string, now: number) {
+    return [...this.anonBlocks].filter(([k, exp]) => k.startsWith(`${pageId}|`) && exp > now).map(([k]) => k.slice(pageId.length + 1)).sort();
+  }
+  async listRingBackConvs(pageId: string, now: number) {
+    return [...this.ringBacks.values()].filter((r) => r.pageId === pageId && r.expiresAt > now).map((r) => r.conv);
   }
   async isAnonBlocked(pageId: string, conv: string, now: number) {
     return (this.anonBlocks.get(`${pageId}|${conv}`) ?? 0) > now;

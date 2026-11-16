@@ -32,6 +32,12 @@ describe("webapp voici conversation port", () => {
     }
     expect(P.openVoiciBodyAny(P.b64Decode(C.wrongConv.body), { conv: CV.conv, msgId: C.wrongConv.msgId }, P.hexToBytes(C.inboxSeed)).code).toBe("inner-schema");
   });
+  it("blocking an anonymous caller", () => {
+    expect(dec(P.canonicalVoiciAnonBlock(CV.anonBlock.order))).toBe(CV.anonBlock.canonical);
+    expect(P.signVoiciAnonBlock(CV.anonBlock.order, P.hexToBytes(CV.reveal.pageSignSeed))).toBe(CV.anonBlock.signature);
+    expect(dec(P.canonicalVoiciConvDelete(CV.anonBlock.ownerDelete.del))).toContain(CV.anonBlock.order.conv);
+  });
+
   it("call hours", () => {
     const X = CM.callHours;
     for (const c of X.shapes) expect(P.isVoiciCallHours(c.value), c.name).toBe(c.expect);

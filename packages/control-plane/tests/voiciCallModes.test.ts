@@ -8,9 +8,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { InMemoryVoiciCallStorage, InMemoryVoiciStorage } from "@flagship/storage";
-import { canonicalVoiciThreadFetch, hexToBytes, signVoiciBlock, signVoiciRing, signVoiciRingBackPseudonym } from "@flagship/protocol";
+import { canonicalVoiciThreadFetch, hexToBytes, signVoiciAnonBlock, signVoiciBlock, signVoiciRing, signVoiciRingBackPseudonym } from "@flagship/protocol";
 import { p256 } from "@noble/curves/nist.js";
-import { handleVoiciBlock, handleVoiciConvDelete, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
+import { handleVoiciAnonBlock, handleVoiciBlock, handleVoiciConvDelete, handleVoiciInbox, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -191,5 +191,77 @@ describe("delete = forget (docs/voici-calls.md, owner 2026-11-16)", () => {
     const { w, d } = await filled();
     expect(code(await handleVoiciConvDelete(d, { ...CV.delete.owner, sig: "00".repeat(64) }))).toBe("bad-signature");
     expect(await w.voici.conversationRowCount(K.pageId, conv)).toBe(2);
+  });
+});
+
+describe("hours, blocking and the inbox's ring-back flag (release-manager decisions 2026-11-16)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const CV: any = JSON.parse(readFileSync(join(here, "../../protocol/test-vectors/voici-conversation/vectors.json"), "utf8"));
+  const conv: string = M.derivations.conv;
+
+  async function withHours(callsFrom: string, callHours: string) {
+    const w = await world(callsFrom);
+    const index = { ...V.pageV2.signed, callsFrom, callHours };
+    await w.voici.publishPage({ username: "alice", pageId: K.pageId, seq: 9, issuedAt: NOW, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: K.ownerSignPub, indexJson: JSON.stringify(index), publishedAt: NOW }, 8);
+    return w;
+  }
+
+  it("a page's hours close calls for anonymous and signed-in callers alike", async () => {
+    // NOW is a Friday at 03:00 UTC; hours from 09:00 to 17:00 UTC on every day are closed then.
+    const shut = await withHours("anyone", "1111111 0900-1700 UTC");
+    expect(code(await handleVoiciCallRequest(shut.deps, body(CM.anon.signed)))).toBe("closed");
+    const shutSigned = await withHours("signed-in", "1111111 0900-1700 UTC");
+    expect(code(await handleVoiciCallRequest(shutSigned.deps, body(V.request.signed)))).toBe("closed");
+    const open = await withHours("anyone", "1111111 0000-2359 UTC");
+    expect((await handleVoiciCallRequest(open.deps, body(CM.anon.signed))).status).toBe(200);
+  });
+
+  it("the owner blocks an anonymous caller until unblocked; a forged or stale order is refused", async () => {
+    const w = await world("anyone");
+    const anonConv = CM.anon.signed.conv;
+    const order = { pageId: K.pageId, conv: anonConv, op: "block" as const, issuedAt: NOW };
+    const sig = signVoiciAnonBlock(order, hexToBytes(M.derivations.ownerSignSeed));
+    expect(code(await handleVoiciAnonBlock({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { block: order, signature: signVoiciAnonBlock(order, hexToBytes(M.derivations.pseudonymSeed)) }))).toBe("bad-signature");
+    expect(code(await handleVoiciAnonBlock({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { block: { ...order, op: "unblock" }, signature: sig }))).toBe("bad-signature");
+    expect(code(await handleVoiciAnonBlock({ voici: w.voici, calls: w.calls, now: () => NOW + 11 * 60_000 }, "alice", { block: order, signature: sig }))).toBe("stale");
+    expect(code(await handleVoiciAnonBlock({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { block: order, signature: sig }))).toBe("ok");
+    expect(code(await handleVoiciCallRequest(w.deps, body(CM.anon.signed)))).toBe("calls-off");
+    // It lasts: a year on, still blocked.
+    expect(await w.calls.isAnonBlocked(K.pageId, anonConv, NOW + 365 * 86_400_000)).toBe(true);
+    const un = { ...order, op: "unblock" as const, issuedAt: NOW + 1 };
+    await handleVoiciAnonBlock({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { block: un, signature: signVoiciAnonBlock(un, hexToBytes(M.derivations.ownerSignSeed)) });
+    expect(await w.calls.isAnonBlocked(K.pageId, anonConv, NOW)).toBe(false);
+  });
+
+  it("deleting a conversation lifts its block: a caller who writes again is a new request", async () => {
+    const w = await world("callback");
+    const d = { voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW };
+    await w.voici.setBlock({ pageId: K.pageId, pseudonymPub: M.derivations.pseudonymPub, op: "block", issuedAt: NOW, signature: "00" }, NOW);
+    await w.voici.insertMessage({ pageId: K.pageId, conv, msgId: "12".repeat(16), kind: "voici-message", fromPub: M.derivations.pseudonymPub, delegatePub: M.keys.browserPub, sentAt: NOW, envelope: "{}", size: 2, direct: false, pushed: false, storedAt: NOW });
+    expect((await handleVoiciConvDelete(d, CV.delete.owner)).status).toBe(200);
+    expect(await w.voici.getBlock(K.pageId, M.derivations.pseudonymPub)).toBeNull();
+    // An anonymous caller's conversation: the owner deletes it, and its block goes too.
+    await w.calls.blockAnon(K.pageId, CV.anonBlock.order.conv, Number.MAX_SAFE_INTEGER);
+    expect((await handleVoiciConvDelete(d, CV.anonBlock.ownerDelete)).status).toBe(200);
+    expect(await w.calls.conversationCallRowCount(K.pageId, CV.anonBlock.order.conv)).toBe(0);
+  });
+
+  it("inbox items say whether their conversation can be rung back", async () => {
+    const w = await world("callback");
+    await w.voici.insertMessage({ pageId: K.pageId, conv, msgId: "13".repeat(16), kind: "voici-message", fromPub: M.derivations.pseudonymPub, delegatePub: M.keys.browserPub, sentAt: NOW, envelope: JSON.stringify(M.message.envelope), size: 2, direct: false, pushed: false, storedAt: NOW });
+    const owner = {
+      voici: w.voici,
+      calls: w.calls,
+      readTokens: { secret: undefined, usernames: { get: async () => ({ username: "alice", isDemo: true }) } as never, identities: {} as never, servers: {} as never, demoUsers: { get: async () => ({ username: "alice" }) } as never, nonces: { claim: async () => true } },
+      directory: {} as never,
+      now: () => NOW,
+    };
+    const before = await handleVoiciInbox(owner, "alice", "", null);
+    expect(before.status, JSON.stringify(before.body)).toBe(200);
+    expect((before.body as { items: { ringBack: boolean }[] }).items.map((i) => i.ringBack)).toEqual([false]);
+    await handleVoiciRingBack({ voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW }, CM.ringBack.app, "visitor");
+    await w.voici.insertMessage({ pageId: K.pageId, conv, msgId: "14".repeat(16), kind: "voici-message", fromPub: M.derivations.pseudonymPub, delegatePub: M.keys.browserPub, sentAt: NOW, envelope: JSON.stringify(M.message.envelope), size: 2, direct: false, pushed: false, storedAt: NOW });
+    const after = await handleVoiciInbox(owner, "alice", "", null);
+    expect((after.body as { items: { ringBack: boolean }[] }).items.map((i) => i.ringBack)).toEqual([true, true]);
   });
 });

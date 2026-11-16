@@ -4,6 +4,115 @@
   "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
   "conv": "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
   "ownerSignPub": "1a8510d10236497b4f4680d57c05d61f8a69eade52a3eab1fad1f858c97ac5a2",
+  "anonBlock": {
+    "order": {
+      "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "conv": "a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0",
+      "op": "block",
+      "issuedAt": 1800000030000
+    },
+    "signature": "580a04b6194fe511ed651d69d1301dfe0d8e28ea958c572f204604afffb9804439c3bdd4ff55d282531d0dd72eb602c05149c7a9c98860ea5d098ed7bd82e006",
+    "canonical": "flagship/voici-anon-block/v1|0f1e2d3c4b5a69788796a5b4c3d2e1f0|a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0|block|1800000030000",
+    "checks": [
+      {
+        "name": "ok",
+        "block": {
+          "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "conv": "a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0",
+          "op": "block",
+          "issuedAt": 1800000030000
+        },
+        "signature": "580a04b6194fe511ed651d69d1301dfe0d8e28ea958c572f204604afffb9804439c3bdd4ff55d282531d0dd72eb602c05149c7a9c98860ea5d098ed7bd82e006",
+        "expect": true
+      },
+      {
+        "name": "op flipped after signing",
+        "block": {
+          "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "conv": "a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0",
+          "op": "unblock",
+          "issuedAt": 1800000030000
+        },
+        "signature": "580a04b6194fe511ed651d69d1301dfe0d8e28ea958c572f204604afffb9804439c3bdd4ff55d282531d0dd72eb602c05149c7a9c98860ea5d098ed7bd82e006",
+        "expect": false
+      },
+      {
+        "name": "conv swapped after signing",
+        "block": {
+          "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "conv": "b0d0b0d0b0d0b0d0b0d0b0d0b0d0b0d0",
+          "op": "block",
+          "issuedAt": 1800000030000
+        },
+        "signature": "580a04b6194fe511ed651d69d1301dfe0d8e28ea958c572f204604afffb9804439c3bdd4ff55d282531d0dd72eb602c05149c7a9c98860ea5d098ed7bd82e006",
+        "expect": false
+      },
+      {
+        "name": "signed by the pseudonym",
+        "block": {
+          "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "conv": "a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0",
+          "op": "block",
+          "issuedAt": 1800000030000
+        },
+        "signature": "28c7907a224d8a08651481d1f3e9bc55cc2f8c8b1c5291f257ffa73ce6f91ceffe222c895cd23c3175a66a3ad9fc56c9ac9b1811b4660449e4437850efb5560c",
+        "expect": false
+      }
+    ],
+    "shapes": [
+      {
+        "name": "ok",
+        "input": {
+          "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "conv": "a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0",
+          "op": "block",
+          "issuedAt": 1800000030000
+        },
+        "expect": true
+      },
+      {
+        "name": "a signed-in conversation (32 bytes)",
+        "input": {
+          "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "conv": "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+          "op": "block",
+          "issuedAt": 1800000030000
+        },
+        "expect": false
+      },
+      {
+        "name": "unknown op",
+        "input": {
+          "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "conv": "a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0",
+          "op": "mute",
+          "issuedAt": 1800000030000
+        },
+        "expect": false
+      },
+      {
+        "name": "extra key",
+        "input": {
+          "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "conv": "a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0",
+          "op": "block",
+          "issuedAt": 1800000030000,
+          "until": 1
+        },
+        "expect": false
+      }
+    ],
+    "ownerDelete": {
+      "del": {
+        "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "conv": "a0c0a0c0a0c0a0c0a0c0a0c0a0c0a0c0",
+        "issuedAt": 1800000030000,
+        "side": "owner"
+      },
+      "signer": "owner",
+      "sig": "ce09fcd4bbd9cc367f6b519bee94e5a26da2c0cc033c988caac53cf436115b3ac712e488561d245fbc76c468484b95b417d44da0712be9662de8ec9851e0010b"
+    }
+  },
   "delete": {
     "ctx": {
       "pageId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",

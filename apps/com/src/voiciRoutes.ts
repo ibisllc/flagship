@@ -354,7 +354,7 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
       return toResponse(
         tail === "inbox"
           ? await handleVoiciInbox(owner, username, url.searchParams.get("since") ?? "", request.headers.get("authorization"))
-          : await handleVoiciBlock({ ...owner, ...(voiciCallsEnabled(env) ? { calls: storage.voiciCalls } : {}) }, username, await readJson(request)),
+          : await handleVoiciBlock(owner, username, await readJson(request)),
       );
     }
   }
@@ -419,6 +419,7 @@ function ownerDeps(env: VoiciEnv, storage: D1Storage) {
       nonces,
     },
     directory: { identities: storage.deviceIdentities, nonces },
+    ...(voiciCallsEnabled(env) ? { calls: storage.voiciCalls } : {}),
   };
 }
 

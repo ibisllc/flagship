@@ -41,6 +41,7 @@ import {
   verifyVoiciCallAllow,
   voiciCallDeviceRef,
   voiciPageAcceptsCalls,
+  voiciCallHoursOpen,
   VOICI_CALL_MAX_MS,
   VOICI_CALL_MAX_REQUEST_BYTES,
   VOICI_CALL_RECEIPT_TTL_MS,
@@ -79,11 +80,11 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const callDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 /** The calls setting a stored page carries: v2 index acceptsCalls / callsFrom; a v1 index takes no calls. */
-export function voiciPageCalls(page: Pick<VoiciPageRecord, "indexJson" | "takenDownAt" | "removedAt">): { on: boolean; from: VoiciCallsFrom; inboxPub: string | null } {
+export function voiciPageCalls(page: Pick<VoiciPageRecord, "indexJson" | "takenDownAt" | "removedAt">): { on: boolean; from: VoiciCallsFrom; inboxPub: string | null; callHours?: string } {
   if (page.takenDownAt !== null || page.removedAt !== null) return { on: false, from: "accepted", inboxPub: null };
   const idx = parseVoiciPageIndex(page.indexJson);
   if (!idx) return { on: false, from: "accepted", inboxPub: null };
-  return { on: voiciPageAcceptsCalls(idx), from: idx.callsFrom ?? "accepted", inboxPub: idx.inboxPub };
+  return { on: voiciPageAcceptsCalls(idx), from: idx.callsFrom ?? "accepted", inboxPub: idx.inboxPub, ...(idx.callHours !== undefined ? { callHours: idx.callHours } : {}) };
 }
 
 /**
@@ -181,6 +182,8 @@ export async function handleVoiciCallRequest(deps: VoiciCallRequestDeps, bodyTex
   if (!page) return voiciRefusal(404, "not-found");
   const calls = voiciPageCalls(page);
   if (!calls.on || !calls.inboxPub) return voiciRefusal(403, "calls-off");
+  // The page's hours (docs/voici-calls.md, release-manager decisions 2026-11-16), for every caller.
+  if (!voiciCallHoursOpen(calls.callHours, now)) return voiciRefusal(403, "closed");
   const [block, banned] = await Promise.all([deps.voici.getBlock(page.pageId, r.from), deps.isPseudonymBanned(r.from)]);
   if (block?.op === "block" || banned) return voiciRefusal(403, "calls-off");
   const delegatePub = isObj(r.cred) && isObj(r.cred.delegation) ? r.cred.delegation.delegatePub : undefined;
@@ -225,6 +228,7 @@ async function handleAnonymousCallRequest(deps: VoiciCallRequestDeps, raw: Recor
   if (!page) return voiciRefusal(404, "not-found");
   const calls = voiciPageCalls(page);
   if (!calls.on || !calls.inboxPub) return voiciRefusal(403, "calls-off");
+  if (!voiciCallHoursOpen(calls.callHours, now)) return voiciRefusal(403, "closed");
   const ipWait = await deps.limitIp();
   if (ipWait !== null) return voiciRefusal(429, "rate-limited", { retryAfterSec: ipWait });
   const checked = await checkAnonymousCall(

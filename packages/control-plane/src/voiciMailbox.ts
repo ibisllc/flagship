@@ -612,6 +612,8 @@ export async function handleVoiciRevoke(deps: VoiciThreadDeps, body: unknown): P
 
 export interface VoiciOwnerDeps {
   voici: VoiciStorage;
+  /** voi.ci calls (absent while calls are off): which conversations can be rung back, and blocked anonymous callers. */
+  calls?: Pick<VoiciCallStorage, "listRingBackConvs" | "listAnonBlocks">;
   readTokens: AccountReadTokenDeps;
   directory: Pick<AccountDirectoryDeps, "identities" | "nonces" | "now" | "freshnessMs">;
   now?: () => number;
@@ -634,11 +636,15 @@ export async function handleVoiciInbox(deps: VoiciOwnerDeps, username: string, s
   ]);
   const out = rows.slice(0, VOICI_FETCH_LIMIT);
   if (out.length) await deps.voici.markFetched(page.pageId, after, out[out.length - 1]!.id, now);
+  // Each item says whether its conversation can be rung back now, so the apps show Call back disabled from the start.
+  const [ringBack, anonBlocks] = deps.calls ? await Promise.all([deps.calls.listRingBackConvs(page.pageId, now), deps.calls.listAnonBlocks(page.pageId, now)]) : [[], []];
+  const rb = new Set(ringBack);
   return {
     status: 200,
     body: {
       pageId: page.pageId,
-      items: out.map(wireMessage),
+      items: out.map((m) => ({ ...wireMessage(m), ringBack: rb.has(m.conv) })),
+      ...(deps.calls ? { anonBlocks } : {}),
       cursor: out.length ? String(out[out.length - 1]!.id) : since,
       more: rows.length > VOICI_FETCH_LIMIT,
       blocks,

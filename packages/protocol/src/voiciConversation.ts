@@ -3,7 +3,12 @@
  * "No logs", "Reveal who I am", "What the reveal shows"). Shared vectors: packages/protocol/test-vectors/voici-conversation/
  * (tools/voici-conversation-vectors.ts).
  *
- *   delete   flagship/voici-conv-delete/v1|<pageId>|<conv>|<owner|caller>|<issuedAt>
+ *   delete   flagship/voici-conv-delete/v1|<pageId>|<conv>|<owner|caller>|<issuedAt>   (conv 32 bytes, or the 16 of an
+ *            anonymous caller's conversation, which only the owner can delete)
+ *   block    flagship/voici-anon-block/v1|<pageId>|<conv (16 bytes)>|<block|unblock>|<issuedAt>   Ed25519 by the page's
+ *            ownerSignPub: an anonymous caller's conversation (its browser key, the identity its proof of work was for)
+ *            can't call again until the owner unblocks it or deletes the conversation. Signed-in callers are blocked
+ *            by pseudonym with flagship/voici-block/v1.
  *            owner: Ed25519 by the page's ownerSignPub. caller: Ed25519 by the pseudonym P (the caller's app), or
  *            P-256 by the browser key B carrying the message cred, as a message is. `.com` drops the conversation's
  *            mailbox rows, ring-back channel, ring, call allow and missed calls at once and keeps nothing (no archive,
@@ -30,6 +35,7 @@ import { checkVoiciText } from "./voiciText.js";
 
 export const TAG_VOICI_CONV_DELETE = "flagship/voici-conv-delete/v1";
 export const TAG_VOICI_REVEAL = "flagship/voici-reveal/v1";
+export const TAG_VOICI_ANON_BLOCK = "flagship/voici-anon-block/v1";
 /** Set-up records further than this from the receiver's clock are refused (as the call set-up). */
 export const VOICI_CONV_SKEW_MS = 10 * 60_000;
 
@@ -53,7 +59,7 @@ export interface VoiciConvDelete {
 }
 
 export function canonicalVoiciConvDelete(d: VoiciConvDelete): Bytes {
-  if (!PAGE_ID.test(d.pageId) || !isLowerHex(d.conv, 32) || (d.side !== "owner" && d.side !== "caller") || !isTime(d.issuedAt)) throw new Error(`${TAG_VOICI_CONV_DELETE}: bad field`);
+  if (!PAGE_ID.test(d.pageId) || !(isLowerHex(d.conv, 32) || isLowerHex(d.conv, 16)) || (d.side !== "owner" && d.side !== "caller") || !isTime(d.issuedAt)) throw new Error(`${TAG_VOICI_CONV_DELETE}: bad field`);
   return join([TAG_VOICI_CONV_DELETE, d.pageId, d.conv, d.side, d.issuedAt]);
 }
 
@@ -178,4 +184,36 @@ export function checkVoiciReveal(v: unknown, ctx: { conv: string; pageSignPub: s
   if (r.conv !== ctx.conv) return { ok: false, code: "wrong-conv" };
   if (!ed25519VerifyHex(r.sig, canonicalVoiciReveal(r), ctx.pageSignPub)) return { ok: false, code: "bad-signature" };
   return { ok: true, reveal: r };
+}
+
+// ── blocking an anonymous caller ─────────────────────────────────────────
+
+export interface VoiciAnonBlock {
+  pageId: string;
+  conv: string;
+  op: "block" | "unblock";
+  issuedAt: number;
+}
+
+export function canonicalVoiciAnonBlock(b: VoiciAnonBlock): Bytes {
+  if (!PAGE_ID.test(b.pageId) || !isLowerHex(b.conv, 16) || (b.op !== "block" && b.op !== "unblock") || !isTime(b.issuedAt)) throw new Error(`${TAG_VOICI_ANON_BLOCK}: bad field`);
+  return join([TAG_VOICI_ANON_BLOCK, b.pageId, b.conv, b.op, b.issuedAt]);
+}
+
+export function parseVoiciAnonBlock(v: unknown): VoiciAnonBlock | null {
+  if (!isObj(v) || !exactKeys(v, ["pageId", "conv", "op", "issuedAt"])) return null;
+  try {
+    canonicalVoiciAnonBlock(v as unknown as VoiciAnonBlock);
+  } catch {
+    return null;
+  }
+  return v as unknown as VoiciAnonBlock;
+}
+
+export function signVoiciAnonBlock(b: VoiciAnonBlock, ownerSignSeed: Bytes): string {
+  return hex(ed.sign(canonicalVoiciAnonBlock(b), ownerSignSeed));
+}
+
+export function verifyVoiciAnonBlock(b: VoiciAnonBlock, signature: unknown, ownerSignPub: string): boolean {
+  return typeof signature === "string" && isLowerHex(signature, 64) && ed25519VerifyHex(signature, canonicalVoiciAnonBlock(b), ownerSignPub);
 }
