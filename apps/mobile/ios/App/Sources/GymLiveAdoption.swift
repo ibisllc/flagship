@@ -79,7 +79,6 @@ enum GymLiveAdoption {
     static func adopt(
         _ args: Args,
         app: AppState,
-        dev: DeveloperSettings,
         store: any SessionStoring,
         privacy: PrivacySettings,
         urlSession: URLSession
@@ -114,7 +113,6 @@ enum GymLiveAdoption {
         if !app.isPaired {
             app.completeOnboarding(username: args.username, pods: [])
         }
-        dev.useLiveClient = true
 
         // 3. Mint the box paired session (IRK-signed add-paired-session order).
         //    serverId == the box FQDN (the daemon enforces it). Sign with the
