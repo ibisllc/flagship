@@ -712,6 +712,20 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Checks here: tsc, i18n, parity 0 red, vitest web + protocol + .com 7028/0. Not run: a real browser against a real
   `.com`/box; the iOS app build (only `OrgViewModel.swift` changed). calls-callback renumbers to v221 at its merge.
 
+- 2026-11-16: **libwebrtc merged** (option A, our own build). CI `.github/workflows/libwebrtc.yml` green on run
+  43884507084 (7 jobs: webrtc + TURN for iOS and Android, package, media tests). Pin `tools/libwebrtc/artifacts.sha256`
+  (WebRTC.xcframework.zip 198 MB, libwebrtc.aar 38 MB, FlagshipTurn.xcframework.zip 19 MB, flagship-turn-android.zip).
+  Built locally against those exact files: Android APK carries the WebRTC and TURN .so for 3 ABIs, call unit tests
+  pass; iOS `CallMediaBundledTests` 2/2 (real engine linked, TURN answers STUN, refuses HTTP). Fixes: build dirs inside
+  `src/`, Chromium Java 25 patched to 17 (`apply-overlay.py`), `SHA256SUMS` now lists all four files.
+  **Blocked on the owner:** the agent's `gh release create libwebrtc-157-43884507084` (pre-release on
+  ibisllc/flagship, target `6a687243f`) was refused by the permission system; the owner approved GitHub hosting, but
+  the command needs the owner to run or approve it. Files ready in the scratchpad `rel/` folder (244 MB). Until then
+  the apps build with `StubCallMediaEngine` unless `tools/libwebrtc/use-artifacts.sh` unpacks a CI run. After the
+  release: `tools/libwebrtc/pin-release.sh libwebrtc-157-43884507084`, build both apps once, commit `release.env` and
+  `Package.swift`. Open: builds not byte-reproducible (pin names one run), no browser-to-phone call yet, the caller's
+  video not shown in the call screens, DTLS 1.3 PQ group unchecked (not required).
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
