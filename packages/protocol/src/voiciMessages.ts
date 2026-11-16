@@ -56,6 +56,7 @@ import {
   WEB_ENVELOPE_MAX_BYTES,
   type WebEnvelope,
 } from "./webEnvelope.js";
+import { parseVoiciRevealControl } from "./voiciConversation.js";
 import { checkVoiciText, type VoiciTextRefusal } from "./voiciText.js";
 import { isVoiciJpeg, parseVoiciPost, parseVoiciProfile, type VoiciPost, type VoiciProfile } from "./voiciPage.js";
 
@@ -174,7 +175,20 @@ export interface VoiciSealRandomness {
   eseeds: Bytes[];
 }
 
-function plaintextBytes(p: VoiciPlaintext): Bytes {
+/**
+ * A conversation control instead of text (docs/voici-calls.md, "Reveal who I am"): {v:1, control:<reveal|unreveal>}
+ * (voiciConversation.ts). Old readers refuse it as inner-schema and show nothing.
+ */
+export interface VoiciControlPlaintext {
+  v: 1;
+  control: Record<string, unknown>;
+}
+
+function plaintextBytes(p: VoiciPlaintext | VoiciControlPlaintext): Bytes {
+  if ("control" in p) {
+    if (!isObj(p.control)) throw new Error("voici body: bad control");
+    return canonicalJsonBytes({ v: 1, control: p.control });
+  }
   const t = checkVoiciText("messageText", p.text);
   if (t) throw new Error(`voici body: text refused (${t})`);
   if (p.replyTo !== null && !isLowerHex(p.replyTo, 16)) throw new Error("voici body: bad replyTo");
@@ -183,7 +197,7 @@ function plaintextBytes(p: VoiciPlaintext): Bytes {
 
 /** Seals `plaintext` for a message (recipients [inboxPub, threadPub]) or a reply ([threadPub, inboxPub]). */
 export function sealVoiciBody(
-  o: { conv: string; msgId: string; sentAt: number; fromPub: string; recipients: [Bytes, Bytes]; plaintext: VoiciPlaintext },
+  o: { conv: string; msgId: string; sentAt: number; fromPub: string; recipients: [Bytes, Bytes]; plaintext: VoiciPlaintext | VoiciControlPlaintext },
   rnd?: VoiciSealRandomness,
 ): Bytes {
   if (!isLowerHex(o.msgId, 16) || !isLowerHex(o.conv, 32) || !isLowerHex(o.fromPub)) throw new Error("voici body: bad ids");
@@ -243,6 +257,21 @@ export function openVoiciBody(
   o: { conv: string; msgId: string },
   recipientSeed: Bytes,
 ): { ok: true; plaintext: VoiciPlaintext } | { ok: false; code: VoiciOpenRefusal } {
+  const r = openVoiciBodyAny(bodyBytes, o, recipientSeed);
+  if (!r.ok) return r;
+  return "plaintext" in r ? r : { ok: false, code: "inner-schema" };
+}
+
+/**
+ * As openVoiciBody, also taking a conversation control ({v:1, control}): the control comes back as it was sealed,
+ * strictly shaped by `parseVoiciRevealControl` (voiciConversation.ts) and for this conversation; the caller checks
+ * a reveal's signature (checkVoiciReveal).
+ */
+export function openVoiciBodyAny(
+  bodyBytes: Bytes,
+  o: { conv: string; msgId: string },
+  recipientSeed: Bytes,
+): { ok: true; plaintext: VoiciPlaintext } | { ok: true; control: Record<string, unknown> } | { ok: false; code: VoiciOpenRefusal } {
   const b = parseVoiciSealedBody(bodyBytes);
   if (!b) return { ok: false, code: "malformed" };
   const myId = hex(pqKeyId(SUITE_HYBRID_SEAL_V1, hybridSealKeygen(recipientSeed).publicKey));
@@ -263,6 +292,16 @@ export function openVoiciBody(
     r = JSON.parse(text);
   } catch {
     return { ok: false, code: "inner-schema" };
+  }
+  if (isObj(r) && exactKeys(r, ["v", "control"]) && r.v === 1) {
+    const c = parseVoiciRevealControl(r.control);
+    if (!c || c.conv !== o.conv) return { ok: false, code: "inner-schema" };
+    try {
+      if (canonicalJson(r) !== text) return { ok: false, code: "inner-schema" };
+    } catch {
+      return { ok: false, code: "inner-schema" };
+    }
+    return { ok: true, control: c as unknown as Record<string, unknown> };
   }
   if (!isObj(r) || !exactKeys(r, ["v", "text", "replyTo"]) || r.v !== 1 || typeof r.text !== "string") return { ok: false, code: "inner-schema" };
   if (r.replyTo !== null && !isLowerHex(r.replyTo, 16)) return { ok: false, code: "inner-schema" };

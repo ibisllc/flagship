@@ -45,3 +45,4 @@ export * from "./voiciCore.js";
 export * from "./voiciText.js";
 export * from "./voiciPage.js";
 export * from "./voiciMessages.js";
+export * from "./voiciReveal.js";

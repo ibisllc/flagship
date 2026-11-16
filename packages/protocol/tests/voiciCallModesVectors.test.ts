@@ -42,6 +42,19 @@ describe("voici call modes vectors", () => {
     expect(P.openVoiciRingHint(h(V.ring.threadSeed), V.ring.order.conv, V.ring.order.ringId, P.b64Decode(hint)!)).toEqual(V.ring.hintPlain);
   });
 
+  it("call hours: shape, open at an instant, the index bytes", () => {
+    const X = V.callHours;
+    for (const c of X.shapes) expect(P.isVoiciCallHours(c.value), c.name).toBe(c.expect);
+    for (const c of X.open) expect(P.voiciCallHoursOpen(c.hours ?? undefined, c.now), c.name).toBe(c.expect);
+    expect(dec(P.canonicalVoiciPageIndex(X.withHours))).toBe(X.withHoursCanonical);
+    expect(dec(P.canonicalVoiciPageIndex(X.noHours))).toBe(X.noHoursCanonical);
+    for (const c of X.index) {
+      const parsed = P.parseVoiciPageIndex(c.index);
+      expect(parsed !== null, c.name).toBe(c.ok);
+      if (parsed && c.signatureHolds === false) expect(P.ed25519VerifyHex(c.index.signature, P.canonicalVoiciPageIndex(parsed), c.index.signerPub)).toBe(false);
+    }
+  });
+
   it("a v2 index carries the new modes", () => {
     for (const from of ["anyone", "callback"]) expect(P.VOICI_CALLS_FROM_VALUES as readonly string[]).toContain(from);
   });

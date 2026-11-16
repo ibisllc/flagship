@@ -22,6 +22,16 @@ describe("voici conversation vectors", () => {
     for (const c of V.reveal.checks) expect(code(P.checkVoiciReveal(c.input, V.reveal.ctx)), c.name).toBe(c.expect);
     for (const c of V.reveal.unrevealShapes) expect(P.parseVoiciRevealControl(c.input) !== null, c.name).toBe(c.expect);
   });
+  it("a reveal and an unreveal sealed in the conversation; old readers refuse them", () => {
+    const C = V.control;
+    for (const k of ["reveal", "unreveal"] as const) {
+      const r = P.openVoiciBodyAny(P.b64Decode(C[k].body)!, { conv: V.conv, msgId: C[k].msgId }, P.hexToBytes(C.inboxSeed));
+      expect(r.ok && "control" in r ? r.control : null).toEqual(C[k].control);
+      expect(P.openVoiciBody(P.b64Decode(C[k].body)!, { conv: V.conv, msgId: C[k].msgId }, P.hexToBytes(C.inboxSeed))).toEqual({ ok: false, code: "inner-schema" });
+    }
+    expect(P.openVoiciBodyAny(P.b64Decode(C.wrongConv.body)!, { conv: V.conv, msgId: C.wrongConv.msgId }, P.hexToBytes(C.inboxSeed))).toEqual({ ok: false, code: C.wrongConv.expect });
+  });
+
   it("the vectors file is fresh", () => {
     execFileSync("npx", ["tsx", join(import.meta.dirname, "..", "..", "..", "tools", "voici-conversation-vectors.ts"), "--check"], { stdio: "pipe" });
   }, 60_000);
