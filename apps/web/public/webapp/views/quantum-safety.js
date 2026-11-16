@@ -1,7 +1,8 @@
 // Settings → Quantum-safe protection on the webapp (architecture v2 milestone 4,
-// docs/architecture-v2/pq-suites.md §13.6). VIEW ONLY: a browser holds no post-quantum key
-// (the keyless-web rule), so it can show where each server stands but cannot turn strict on
-// or off; the owner does that from the Flagship app on an admin phone or tablet.
+// docs/architecture-v2/pq-suites.md §13.6). A browser whose admin key's ML-DSA half is the one on
+// record (lib/keyCustody.js) turns strict on or off for a server, signed hybrid
+// (lib/policySigning.js); any other browser only shows where each server stands. Returning to
+// strict after a compatibility period stays on the phone (it needs re-entry evidence).
 //
 // Each server's chain is replayed here with the gate under the admin root this browser holds
 // (lib/assurancePolicy.js, lib/pqBinding.js); a state the browser could not verify is shown as
@@ -18,9 +19,13 @@ import { verifyCriticalSignature, verifyPqKeyBinding } from "../lib/pqBinding.js
 import { adminRootPubHex } from "../keystore.js";
 
 import { tr } from "../lib/i18n.js";
+import { inlineConfirm } from "../lib/modal.js";
+import { toast } from "../lib/toast.js";
+import { LEAVING_STRICT_LOSS, compatibilityChange, policyRefusalText, policySignerProblem, signAndPostPolicyChange, strictChange } from "../lib/policySigning.js";
 registerView("view-quantum-safety");
 
 export const BROWSER_LOSS = "browser-without-pq-authentication";
+export const WEB_CAN_CHANGE = tr("This browser's admin key has its quantum-safe half on record, so it can turn strict protection on or off. Each change asks for your passkey.");
 export const WEB_CANNOT_CHANGE =
   tr("This browser signs admin orders quantum-safe when its admin key's quantum-safe half is the one on record, but it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.");
 
@@ -93,7 +98,8 @@ async function render() {
     host.innerHTML = `<p class="note">${tr("Sign in first.")}</p>`;
     return;
   }
-  host.innerHTML = `<p class="note">${escapeHtml(WEB_CANNOT_CHANGE)}</p><p class="note">${tr("These protections are new and pending an external review.")}</p><div id="qs-rows"><p class="note">${tr("Loading…")}</p></div>`;
+  const canSign = policySignerProblem(s?.adminRootSeed) === null;
+  host.innerHTML = `<p class="note">${escapeHtml(canSign ? WEB_CAN_CHANGE : WEB_CANNOT_CHANGE)}</p><p class="note">${tr("These protections are new and pending an external review.")}</p><div id="qs-rows"><p class="note">${tr("Loading…")}</p></div>`;
   const base = controlApex();
   const rootHex = s?.adminRootSeed ? (await adminRootPubHex(s.adminRootSeed)).toLowerCase() : null;
   const grants = await getJson(`${base}/api/users/${encodeURIComponent(user)}/device-grants`).catch(() => null);
@@ -105,6 +111,8 @@ async function render() {
       adminBinding = null;
     }
   }
+  const signs = canSign && adminBinding && adminBinding.mldsaPubHex === s.adminRootSeed.mldsaPubHex;
+  const states = new Map();
   const pods = (await getJson(`${base}/api/users/${encodeURIComponent(user)}/pods`).catch(() => null))?.pods ?? [];
   const rows = [];
   for (const p of pods) {
@@ -120,9 +128,69 @@ async function render() {
     const appHtml = apps.length
       ? `<p class="note">${tr("Apps on this server (set from the Flagship app):")}</p><ul class="qs-apps">${apps.map((a) => `<li data-service="${escapeHtml(a.id)}">${escapeHtml(a.id)}: ${escapeHtml(a.line)}</li>`).join("")}</ul>`
       : "";
-    rows.push(`<div class="fs-card qs-row" data-fqdn="${escapeHtml(fqdn)}"><p class="fs-row-title">${escapeHtml(p.name ?? fqdn)}</p><p class="note">${escapeHtml(d.line)}</p>${appHtml}</div>`);
+    states.set(fqdn, { state: mine.state, name: p.name ?? fqdn });
+    rows.push(`<div class="fs-card qs-row" data-fqdn="${escapeHtml(fqdn)}"><p class="fs-row-title">${escapeHtml(p.name ?? fqdn)}</p><p class="note">${escapeHtml(d.line)}</p>${appHtml}${signs && verified ? controlsFor(mine.state) : ""}</div>`);
   }
   $("qs-rows").innerHTML = rows.length ? rows.join("") : `<p class="note">${tr("You have no servers yet.")}</p>`;
+  if (signs) bindControls(user, rootHex, states, s.adminRootSeed);
+}
+
+/** The buttons for one server's state. Exported for tests. */
+export function controlsFor(state) {
+  if (strictInForce(state)) return `<button class="secondary" data-qs-off>${tr("Turn off quantum-safe protection")}</button>`;
+  if (state.enforcedEver) return `<p class="note">${tr("Turning strict on again needs a fresh check of every device, a rekey and a tested recovery. Do it from the Flagship app on an admin phone.")}</p>`;
+  return `<p class="note">${tr("Can browsers still reach this server once it's strict?")}</p>
+    <button data-qs-on="browsers">${tr("Turn on, browsers may reach it")}</button>
+    <button data-qs-on="app-only">${tr("Turn on, only the Flagship app")}</button>`;
+}
+
+function bindControls(user, rootHex, states, key) {
+  for (const row of document.querySelectorAll(".qs-row")) {
+    const fqdn = row.dataset.fqdn;
+    const held = states.get(fqdn);
+    if (!held) continue;
+    const scope = { kind: "installation", id: fqdn };
+    const run = async (build, done) => {
+      try {
+        const code = await signAndPostPolicyChange(await build(), key);
+        if (code === null) toast(done, "ok");
+        else toast(policyRefusalText(code), "err");
+      } catch (e) {
+        toast(e?.userMessage ?? policyRefusalText(e?.code ?? "failed"), "err");
+      }
+      await render();
+    };
+    for (const b of row.querySelectorAll("[data-qs-on]")) {
+      b.addEventListener("click", async () => {
+        const browsersAllowed = b.dataset.qsOn === "browsers";
+        const ok = await inlineConfirm({
+          title: tr("Turn on quantum-safe protection for {0}?", held.name),
+          message: browsersAllowed
+            ? tr("Browsers can still reach it: a browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate.")
+            : tr("Only the Flagship app will reach it. This browser will be refused by this server."),
+          okLabel: tr("Turn on"),
+        });
+        if (!ok) return;
+        await run(
+          () => strictChange({ account: user, scope, state: held.state, browsersAllowed, peers: [fqdn], signerKeyId: rootHex }),
+          tr("Quantum-safe protection is on for {0}. It takes effect when the server next checks in, within 15 minutes.", held.name),
+        );
+      });
+    }
+    row.querySelector("[data-qs-off]")?.addEventListener("click", async () => {
+      const ok = await inlineConfirm({
+        title: tr("Turn off quantum-safe protection for {0}?", held.name),
+        message: tr("Classical signatures and classical key exchange will be accepted again, and browsers can reach it. Turning strict on again later needs a fresh check of every device and your recovery."),
+        okLabel: tr("Turn off"),
+        danger: true,
+      });
+      if (!ok) return;
+      await run(
+        () => compatibilityChange({ account: user, scope, state: held.state, loss: LEAVING_STRICT_LOSS, peers: [fqdn], signerKeyId: rootHex }),
+        tr("{0} is back to compatibility.", held.name),
+      );
+    });
+  }
 }
 
 export function initQuantumSafetyView() {

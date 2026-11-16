@@ -15,10 +15,10 @@
 //
 // Must pass packages/protocol/test-vectors/server-order/vectors.json.
 
+import { sensitiveHybridSigner, signedParts } from "./adminSigning.js";
 import { podStk } from "./serverPins.js";
 import { getSession } from "./state.js";
 import { bytesToHex } from "../keystore.js";
-import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex } from "./apex.js";
 import { getActiveProfile } from "./profiles.js";
 import { isDemoProfile } from "./demoAccount.js";
@@ -64,9 +64,9 @@ export async function buildSignedServerOrder({ username, stks }, deps = {}) {
     issuedAt: (deps.now ?? Date.now)(),
     nonce: deps.nonceHex ?? bytesToHex(nonce),
   };
-  const sign = deps.sign ?? sensitiveSigner();
-  const sig = await sign(umk, canonicalServerOrderBytes(order));
-  return { order, signature: bytesToHex(sig) };
+  const sign = deps.sign ?? sensitiveHybridSigner();
+  const { signature, pqSignature } = signedParts(await sign(umk, canonicalServerOrderBytes(order)));
+  return { order, signature: bytesToHex(signature), ...(pqSignature ? { pqSignature } : {}) };
 }
 
 // ── The order this browser knows, per account ─────────────────────────

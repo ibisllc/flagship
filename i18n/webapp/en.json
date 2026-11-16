@@ -14865,5 +14865,81 @@
   "This browser signs admin orders quantum-safe when its admin key's quantum-safe half is the one on record, but it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.": {
     "en": "This browser signs admin orders quantum-safe when its admin key's quantum-safe half is the one on record, but it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.",
     "ctx": "webapp/views/quantum-safety.js:25"
+  },
+  "The server isn't ready yet: every device, the server and your recovery need their post-quantum keys first.": {
+    "en": "The server isn't ready yet: every device, the server and your recovery need their post-quantum keys first.",
+    "ctx": "webapp/lib/policySigning.js:104"
+  },
+  "This browser's admin key has no quantum-safe half on record. Use the Flagship app on the admin phone that set the account up.": {
+    "en": "This browser's admin key has no quantum-safe half on record. Use the Flagship app on the admin phone that set the account up.",
+    "ctx": "webapp/lib/policySigning.js:109"
+  },
+  "Only an admin device of this account can change quantum-safe protection.": {
+    "en": "Only an admin device of this account can change quantum-safe protection.",
+    "ctx": "webapp/lib/policySigning.js:111"
+  },
+  "Another device changed this at the same time. Refresh and try again.": {
+    "en": "Another device changed this at the same time. Refresh and try again.",
+    "ctx": "webapp/lib/policySigning.js:114"
+  },
+  "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery. Do it from the Flagship app on an admin phone.": {
+    "en": "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery. Do it from the Flagship app on an admin phone.",
+    "ctx": "webapp/lib/policySigning.js:116"
+  },
+  "Couldn't reach flagshipserver.com. Check your connection and try again.": {
+    "en": "Couldn't reach flagshipserver.com. Check your connection and try again.",
+    "ctx": "webapp/lib/policySigning.js:118"
+  },
+  "flagshipserver.com didn't accept the change ({0}).": {
+    "en": "flagshipserver.com didn't accept the change ({0}).",
+    "ctx": "webapp/lib/policySigning.js:120"
+  },
+  "This browser's admin key has its quantum-safe half on record, so it can turn strict protection on or off. Each change asks for your passkey.": {
+    "en": "This browser's admin key has its quantum-safe half on record, so it can turn strict protection on or off. Each change asks for your passkey.",
+    "ctx": "webapp/views/quantum-safety.js:28"
+  },
+  "Turn off quantum-safe protection": {
+    "en": "Turn off quantum-safe protection",
+    "ctx": "webapp/views/quantum-safety.js:140"
+  },
+  "Can browsers still reach this server once it's strict?": {
+    "en": "Can browsers still reach this server once it's strict?",
+    "ctx": "webapp/views/quantum-safety.js:142"
+  },
+  "Turn on, browsers may reach it": {
+    "en": "Turn on, browsers may reach it",
+    "ctx": "webapp/views/quantum-safety.js:143"
+  },
+  "Turn on, only the Flagship app": {
+    "en": "Turn on, only the Flagship app",
+    "ctx": "webapp/views/quantum-safety.js:144"
+  },
+  "Turn on quantum-safe protection for {0}?": {
+    "en": "Turn on quantum-safe protection for {0}?",
+    "ctx": "webapp/views/quantum-safety.js:167"
+  },
+  "Browsers can still reach it: a browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate.": {
+    "en": "Browsers can still reach it: a browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate.",
+    "ctx": "webapp/views/quantum-safety.js:169"
+  },
+  "Only the Flagship app will reach it. This browser will be refused by this server.": {
+    "en": "Only the Flagship app will reach it. This browser will be refused by this server.",
+    "ctx": "webapp/views/quantum-safety.js:170"
+  },
+  "Quantum-safe protection is on for {0}. It takes effect when the server next checks in, within 15 minutes.": {
+    "en": "Quantum-safe protection is on for {0}. It takes effect when the server next checks in, within 15 minutes.",
+    "ctx": "webapp/views/quantum-safety.js:176"
+  },
+  "Turn off quantum-safe protection for {0}?": {
+    "en": "Turn off quantum-safe protection for {0}?",
+    "ctx": "webapp/views/quantum-safety.js:182"
+  },
+  "Classical signatures and classical key exchange will be accepted again, and browsers can reach it. Turning strict on again later needs a fresh check of every device and your recovery.": {
+    "en": "Classical signatures and classical key exchange will be accepted again, and browsers can reach it. Turning strict on again later needs a fresh check of every device and your recovery.",
+    "ctx": "webapp/views/quantum-safety.js:183"
+  },
+  "{0} is back to compatibility.": {
+    "en": "{0} is back to compatibility.",
+    "ctx": "webapp/views/quantum-safety.js:190"
   }
 }

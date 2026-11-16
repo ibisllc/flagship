@@ -2,6 +2,7 @@
 // Also hosts the per-server "auto-unlock" toggle (auto_unlock_lease_design.md)
 // and the P13 per-server kill-switch danger zone.
 
+import { sensitiveHybridSigner } from "../lib/adminSigning.js";
 import { $, registerView, show } from "../lib/router.js";
 import { ScreensError, boxClient } from "../lib/api.js";
 import { accountPods, anyCopying, appSandboxNotice, fetchServerApps, isPodOnline, loadAccountPods, podFqdn, preferLeaderAsCurrent, serverAppsHtml, watchWhileCopying } from "../lib/appPlacement.js";
@@ -2154,7 +2155,7 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
         // Slice D: the update order is a SENSITIVE order — signed with the
         // admin root (when present); the co-signed mailbox-auth stays the
         // IRK (tag-routed by the gated signer).
-        signWithIrk: sensitiveSigner(),
+        signWithIrk: sensitiveHybridSigner(),
       }, { targetTag: tagFor(targetCommit) });
     } catch (e) {
       errEl.textContent = humanError(e);

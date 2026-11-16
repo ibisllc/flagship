@@ -581,6 +581,7 @@ const OPTIONAL_SHELL = [
   "/lib/pqBinding.js",
   "/lib/keyCustody.js",
   "/lib/adminSigning.js",
+  "/lib/policySigning.js",
   "/lib/pqSign.js",
   "/lib/mldsaWasm.js",
   "/vendor/mldsa-wasm/mldsa65.wasm",

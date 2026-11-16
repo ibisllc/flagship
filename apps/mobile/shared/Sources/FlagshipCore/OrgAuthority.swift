@@ -193,7 +193,7 @@ extension OrgAuthority {
         try need(size > 0 && overturnThreshold(r) <= size && overturnThreshold(r) <= kMax, "bylaws", "overturnK")
         try need(r.bylaws.vetoK >= 1 && r.bylaws.vetoK <= kMax, "bylaws", "vetoK")
         if r.bylaws.hardwareAdmins {
-            for a in r.admins { try need(a.custody == .hardware, "custody", "\(a.seatId): the bylaws need hardware custody for admins") }
+            for a in r.admins { try need(a.custody == .hardware, "custody", a.seatId) }
         }
     }
 

@@ -182,7 +182,7 @@ object OrgAuthority {
         val size = overturnSet(r).size
         need(size > 0 && overturnThreshold(r) <= size && overturnThreshold(r) <= K_MAX, "bylaws", "overturnK")
         need(r.bylaws.vetoK in 1..K_MAX, "bylaws", "vetoK")
-        if (r.bylaws.hardwareAdmins) r.admins.forEach { need(it.custody == OrgCustody.HARDWARE, "custody", "${it.seatId}: the bylaws need hardware custody for admins") }
+        if (r.bylaws.hardwareAdmins) r.admins.forEach { need(it.custody == OrgCustody.HARDWARE, "custody", it.seatId) }
     }
 
     /** The bylaws' quorum rule: a quorum of two or more needs a hardware-custody approval, unless turned off. */

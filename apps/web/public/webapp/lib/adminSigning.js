@@ -14,6 +14,7 @@ import { bytesToHex, signWithAdminRoot } from "../keystore.js";
 import { controlApex } from "./apex.js";
 import { getSession } from "./state.js";
 import { isAdminRootKey, setCustodyBindHook, withAdminRoot } from "./keyCustody.js";
+import { SENSITIVE_TAGS, canonicalTag, sensitiveSigner } from "./adminRoot.js";
 import { hybridEnvelope, signPqKeyBinding } from "./pqSign.js";
 
 /**
@@ -31,6 +32,29 @@ export async function signAdminOrder(key, canonical, { reason = "" } = {}) {
     },
     { reason },
   );
+}
+
+/**
+ * The sensitive-order signer, hybrid where it can be: `(umk, bytes) => { signature, pqSignature }`.
+ * A sensitive tag on a device holding the admin root signs both halves under one passkey prompt;
+ * anything else goes through the classical gated signer (lib/adminRoot.js) with no companion.
+ */
+export function sensitiveHybridSigner(session = getSession()) {
+  const classical = sensitiveSigner();
+  return async (umk, bytes) => {
+    const key = session?.adminRootSeed;
+    if (isAdminRootKey(key) && SENSITIVE_TAGS.has(canonicalTag(bytes))) {
+      const s = await signAdminOrder(key, bytes);
+      return { signature: s.signature, pqSignature: s.pqSignature };
+    }
+    return { signature: await classical(umk, bytes), pqSignature: null };
+  };
+}
+
+/** A signer's answer as `{ signature, pqSignature }`, whether it returned bytes or that object. */
+export function signedParts(r) {
+  if (r instanceof Uint8Array) return { signature: r, pqSignature: null };
+  return { signature: r.signature, pqSignature: r.pqSignature ?? null };
 }
 
 /** PUT the admin root's binding; true when `.com` holds this ML-DSA key, false when another key holds the root. */
