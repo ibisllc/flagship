@@ -69,7 +69,7 @@ describe("retail host files", () => {
     has("Group=flagship-claim");
     has("SupplementaryGroups=flagship-keyd-clients flagship-powerkey");
     for (const line of [
-      "NoNewPrivileges=yes", "CapabilityBoundingSet=", "AmbientCapabilities=", "ProtectSystem=strict", "ReadWritePaths=/var/lib/flagship-retail",
+      "NoNewPrivileges=yes", "CapabilityBoundingSet=", "AmbientCapabilities=", "ProtectSystem=strict", "StateDirectory=flagship-retail", "StateDirectoryMode=0700", "ReadWritePaths=/var/lib/flagship-retail",
       "ProtectHome=yes", "PrivateTmp=yes", "DevicePolicy=closed", "DeviceAllow=char-input r", "DeviceAllow=/dev/tty1 w",
       "ProtectKernelTunables=yes", "ProtectKernelModules=yes", "ProtectKernelLogs=yes", "ProtectControlGroups=yes", "ProtectClock=yes",
       "RestrictNamespaces=yes", "RestrictSUIDSGID=yes", "LockPersonality=yes", "SystemCallArchitectures=native", "LimitCORE=0",

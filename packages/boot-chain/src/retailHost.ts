@@ -218,6 +218,10 @@ NoNewPrivileges=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
 ProtectSystem=strict
+# systemd makes the folder before it sets up the namespace: a missing ReadWritePaths= fails every
+# start with 226/NAMESPACE, ExecStartPre included.
+StateDirectory=flagship-retail
+StateDirectoryMode=0700
 ReadWritePaths=/var/lib/flagship-retail
 ProtectHome=yes
 PrivateTmp=yes
