@@ -1,4 +1,4 @@
-# Task 5: Compose flake, webapp gym specs, adversarial review (cloud session). PARTIAL: (b) final rerun pending
+# Task 5: Compose flake, webapp gym specs, adversarial review (cloud session). COMPLETE
 
 ## URGENT: the webapp does not boot on release/0.4 since calls round 3
 `apps/web/public/webapp/lib/voiciOwner.js` imports `checkVoiciPageIndex` **twice** (lines 19 and 35, the second added by
@@ -25,35 +25,25 @@ the notice, not the card. Production `FSCard` is unchanged.
 **Proof.** Before: failed in 5 of the last 6 full-suite runs (reports 01, 03, 04, plus two today). After: **5 of 5 full `:app:testDebugUnitTest`
 runs green** (`--rerun-tasks`, 3065 tests, 0 failures each), the last three while a 372-scenario Playwright gym ran on the same 4 vCPUs.
 
-## (b) Webapp Playwright gym specs
-Config `apps/web/e2e/gym/playwright.gym.config.ts` (static server, no backend; 1 worker).
+## (b) Webapp Playwright gym specs: **all 375 pass on `0.4/gym-cloudfix`**
+Config `apps/web/e2e/gym/playwright.gym.config.ts` (static server, no backend, 1 worker).
 
-**Run 1, at `e46b6eb88`** (before b34cf9971): **355 passed, 17 failed** of 372 (44 min). Each failing test was rerun alone on an
-otherwise idle machine, and **all 17 failed again, so none are load flakes.**
+**Run 1, at `e46b6eb88`:** 355 passed, 17 failed of 372. Every failure was rerun alone on an idle machine and **all 17 failed
+again, so none are load flakes.** At the newer tip (`6487ff1c2`), every scenario fails first on the boot break above.
 
-Cluster A, 13 tests: Home's "Add / Restore a server" click is dropped. **REAL but stale tests, not a product bug.** The button
-deliberately ignores a tap for 450 ms after anything is inserted above it (`lib/settleGuard.js`, added 2026-10-18). Home inserts banners
-just after it paints, and these tests click within that window, so the dialog never opens. Evidence: with the guard at 0 ms the tests
-pass. With the guard at 450 ms and a 3 s wait before the click, there are 0 mutations and the dialog opens.
-- Direct: `gym-servers:185` (demo account), `:200`, `:223` (Add/Restore choices), `:276` (lock closes menus), `gym-gone:36`,
-  `gym-notices:69`: "dialog[aria-label="Add or restore a server"] not found".
-- Timeouts (90–120 s) behind the same click: `gym-archive:465,:539,:608,:641`, `gym-backups:322`, `gym-misc:870,:919`.
-- Plus `gym-servers:200` expected 3 menu buttons: `aff641ecf` added "Set up a box from a store".
-These match CI's daily web-gym failures (home-demo-account, add-import-choices, lock-closes-menus).
+**Final run:** branch **`0.4/gym-cloudfix`** = `6487ff1c2` + the boot fix (`d2cb7331e`) + 5 commits: **375 passed, 0 failed**
+(28 min). The commits, oldest first (each cherry-picks on its own):
 
-**Fix on `0.4/gym-cloudfix`** (in progress; rebased onto the boot fix): a `clickAddServer(page)` helper in `gymKit.ts` waits for
-500 ms of quiet in `#view-home` (and the paused line) before tapping, the way a person would. It replaces all 18
-`page.click("#home-add-server")`, and the menu list now includes the store-box choice. A full rerun is in progress.
+| commit | kind | what |
+|---|---|---|
+| `44cd54cb0` | stale tests (13) | Home's "Add / Restore a server" ignores a tap for 450 ms after anything is inserted above it (`lib/settleGuard.js`). Home adds banners just after it paints, and the tests clicked at once, so the dialog never opened. Proof: with the guard at 0 ms they pass; at 450 ms with a 3 s wait there are 0 mutations and the dialog opens. The new `clickAddServer()` in gymKit waits for 500 ms of quiet, used at all 18 call sites. Also: the menu lists "Set up a box from a store" (`aff641ecf`). `main` and `nav` now sit inside `.app-shell`, which the account-gone screen and the update lock make inert, so those checks use `closest("[inert]")`. **The page behind the lock is still inert; it was not a regression.** The restore-merge refusal uses the custody-round-two sentence. These match CI's daily web-gym failures. |
+| `e8d717bd2` | stale tests (3, tip only) | Custody round two refuses to create an account without a PRF passkey (`custody-unsupported`). The onboarding scenarios had no authenticator and ran on `127.0.0.1`, which WebAuthn refuses as a relying party. They now use a CDP virtual authenticator with `hasPrf` (`gymKit.prfAuthenticator`, the setup gym-custody already had) on `localhost`. |
+| **`6391e2e45`** | **REAL product bug** | **Restore-merge's Undo and "Delete now" confirmations can't be clicked in the webapp.** `inlineConfirm` (and every inline prompt in `lib/modal.js`) draws a fixed overlay at the end of `body`. The restore-merge window is a `<dialog>` opened with `showModal()`, which is in the top layer and makes the rest of the page inert, so the confirmation opens *behind* it ("dialog … subtree intercepts pointer events" until the 120 s timeout). Fix: `ensureHost()` mounts the host inside the topmost open modal dialog, and stays at the end of `body` otherwise. All 331 webapp vitest files are still green. The same trap applies to any other inline prompt opened from a modal dialog. |
+| `ce962ab67` | env-dependent test | The Social tab opens a voi.ci page in a new window that the page-level mock doesn't see, so the test needed the live voi.ci (unreachable here, so the popup URL read `""`). Now the browser context answers voi.ci. |
+| `9259c47ac` | stale test | Since the wide list/detail layout (`6ee7706c0`), Home's list starts at y≈595 on the gym's 1280×720 window. The office card's drag handle sat below the viewport, the press hit nothing, and no drag started. It passed at phone width. The drag helper now scrolls both cards into view. |
 
-Other failures from run 1, being re-checked on the fixed tree:
-- `gym-servers:85` drag reorder: the saved order is missing `office.smoketest…` (expected [office, home, …]).
-- `gym-messages:617`: "a reply on a voi.ci page this account wrote to shows once". The link is `""`, expected `https://voi.ci/bob`.
-- `gym-sweep:359`: "presses every control on an app's pages". `#view-service-detail` is hidden.
-- `gym-restoremerge:196`: the admin restore-merge scenario times out (120 s).
-
-New-feature specs: **restore-merge** has 4 scenarios; 3 pass and :196 times out (above). There is **no gym spec for org-join or calls** at
-e46b6eb88 or at the tip (`grep` of `apps/web/e2e/gym`: no org-join or voi.ci-call scenarios; calls have their own lane in
-`apps/web/e2e/voici-calls`, which Task 6 covers).
+**New-feature coverage:** restore-merge has 4 scenarios, all pass with the fixes; one found the bug above. **There are no gym
+scenarios for org-join or calls** (`apps/web/e2e/gym` has none; calls have their own lane in `apps/web/e2e/voici-calls`, which Task 6 covers).
 
 ## (c) Adversarial review
 Published as **`cloud-reports/05c-adversarial-review.md`**, with failing tests on **`0.4/review-cloud`** (4 commits): 5 Medium
