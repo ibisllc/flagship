@@ -9,7 +9,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { HOME, OFFICE, livePod, mock, reachHome, sawToast, sensitive, serverDetail, shot, signer, type Call, type Keys, type Mock } from "./gymKit.js";
+import { clickAddServer, HOME, OFFICE, livePod, mock, reachHome, sawToast, sensitive, serverDetail, shot, signer, type Call, type Keys, type Mock } from "./gymKit.js";
 
 test.use({ viewport: { width: 430, height: 932 }, timezoneId: "America/Chicago" });
 
@@ -328,7 +328,7 @@ test.describe("gym webapp backups", () => {
       `flagship/rck-register/v1|${r.username}|${r.subdomain}|${r.rckPubKey}|${r.issuedAt}`;
     m.post("/api/routing/register-rck", sensitive(page, keys, rckCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
     await page.evaluate(async () => (await import("/views/home.js")).renderHome());
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     // Nothing is preselected; Create stays off until the owner picks, and the two choices come in order

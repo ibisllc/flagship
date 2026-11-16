@@ -399,6 +399,36 @@ export function serverDetail(fqdn: string, extra: Record<string, unknown> = {}):
 }
 
 /** Render Home again (after the router is installed). */
+/**
+ * Taps Home's "Add / Restore a server" the way a person would: after Home has
+ * stopped moving. The button ignores a tap for SETTLE_MS (450 ms,
+ * lib/settleGuard.js) after anything is inserted above it, and Home adds its
+ * banners just after it paints, so a click the moment Home renders is dropped.
+ */
+export async function clickAddServer(page: Page): Promise<void> {
+  await page.evaluate(
+    (quietMs) =>
+      new Promise<void>((resolve) => {
+        const view = document.getElementById("view-home");
+        if (!view) return resolve();
+        const observer = new MutationObserver(() => {
+          clearTimeout(timer);
+          timer = setTimeout(done, quietMs);
+        });
+        const done = () => {
+          observer.disconnect();
+          resolve();
+        };
+        let timer = setTimeout(done, quietMs);
+        observer.observe(view, { childList: true });
+        const paused = document.getElementById("home-status-paused");
+        if (paused) observer.observe(paused, { attributes: true, attributeFilter: ["class"] });
+      }),
+    500,
+  );
+  await page.click("#home-add-server");
+}
+
 export async function renderHome(page: Page): Promise<void> {
   await page.evaluate(async () => {
     const { renderHome } = await import("/views/home.js");
