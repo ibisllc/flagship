@@ -19,6 +19,7 @@ import com.flagshipserver.app.ui.screens.SignedInSitesScreen
 import com.flagshipserver.app.ui.screens.SocialScreen
 import com.flagshipserver.app.ui.screens.SocialSection
 import com.flagshipserver.app.ui.screens.ThreadScreen
+import com.flagshipserver.app.ui.screens.VoiciCallHistoryScreen
 
 @Composable
 fun MessagesTab() {
@@ -55,5 +56,6 @@ fun MessagesTab() {
             PostEditorScreen(nav, e.arguments?.getString("id").orEmpty())
         }
         composable("signed-in-sites") { SignedInSitesScreen(nav) }
+        composable("calls") { VoiciCallHistoryScreen(nav) }
     }
 }

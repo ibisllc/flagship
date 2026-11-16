@@ -64,4 +64,54 @@ object VoiciCopy {
 
     /** "Visitor 4F3A" (§6.2): the generated name, never text the visitor chose. */
     fun visitorName(pseudonymPub: String): String = FSStrings.get(R.string.voici_visitor_name, VoiciText.voiciPseudonymCode(pseudonymPub))
+
+    // ── calling from the app (docs/voici-calls.md "Calling from the app") ──
+
+    /** The string id for a call history row's outcome. */
+    fun callOutcome(r: com.flagshipserver.app.calls.VoiciCallRecord): Int = when (r.outcome) {
+        "missed" -> if (r.video) R.string.voici_calls_missed_video else R.string.voici_calls_missed
+        "declined" -> R.string.voici_calls_history_declined
+        "no-answer" -> R.string.voici_calls_history_no_answer
+        "cancelled" -> R.string.voici_calls_history_cancelled
+        "failed" -> R.string.voici_calls_history_failed
+        "browser" -> R.string.voici_calls_history_browser
+        else -> if (r.direction == "out") R.string.voici_calls_history_outgoing else R.string.voici_calls_history_incoming
+    }
+
+    /** Who a history row is with: the page called, or a visitor of this account's page by their nickname or code. */
+    fun callPeer(r: com.flagshipserver.app.calls.VoiciCallRecord, nicknames: Map<String, String>): String = when {
+        r.peerUsername != null -> FSStrings.get(R.string.voici_calls_peer_page, r.peerUsername)
+        r.pseudonymPub != null -> nicknames[r.pseudonymPub] ?: visitorName(r.pseudonymPub)
+        else -> FSStrings.get(R.string.voici_call_someone)
+    }
+
+    /** The status line of a call this app is placing to [name]. */
+    fun outgoingStatus(s: com.flagshipserver.app.calls.VoiciOutgoingState, name: String): String = when (s) {
+        com.flagshipserver.app.calls.VoiciOutgoingState.Preparing -> FSStrings.get(R.string.voici_call_calling, name)
+        com.flagshipserver.app.calls.VoiciOutgoingState.Ringing -> FSStrings.get(R.string.voici_call_ringing)
+        com.flagshipserver.app.calls.VoiciOutgoingState.Connecting -> FSStrings.get(R.string.voici_call_connecting)
+        is com.flagshipserver.app.calls.VoiciOutgoingState.Connected -> FSStrings.get(R.string.voici_call_connected)
+        com.flagshipserver.app.calls.VoiciOutgoingState.Browser -> FSStrings.get(R.string.voici_call_in_browser, name)
+        is com.flagshipserver.app.calls.VoiciOutgoingState.Ended -> when (s.reason) {
+            "no-answer" -> FSStrings.get(R.string.voici_call_no_answer)
+            "decline" -> FSStrings.get(R.string.voici_call_declined)
+            "busy" -> FSStrings.get(R.string.voici_call_busy)
+            "limit" -> FSStrings.get(R.string.voici_call_limit)
+            "failed" -> FSStrings.get(R.string.voici_call_failed)
+            else -> FSStrings.get(R.string.voici_call_ended)
+        }
+        is com.flagshipserver.app.calls.VoiciOutgoingState.Failed -> callFailure(s.code)
+    }
+
+    /** A refusal or failure of a call this app placed (`.com`'s codes and the app's own). */
+    fun callFailure(code: String): String = when (code) {
+        "calls-off" -> FSStrings.get(R.string.voici_call_off)
+        "not-allowed" -> FSStrings.get(R.string.voici_call_not_allowed)
+        "busy" -> FSStrings.get(R.string.voici_call_busy)
+        "rate-limited" -> FSStrings.get(R.string.voici_call_rate_limited)
+        "locked" -> FSStrings.get(R.string.voici_calls_answer_locked_unlock)
+        "browser-unreachable" -> FSStrings.get(R.string.voici_call_no_browser)
+        "first-contact-limit", "device-limit", "banned", "unattested-too-new" -> signInRefusal(code, null)
+        else -> FSStrings.get(R.string.voici_call_failed)
+    }
 }

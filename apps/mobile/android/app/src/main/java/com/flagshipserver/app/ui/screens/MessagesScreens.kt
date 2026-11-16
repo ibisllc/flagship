@@ -29,10 +29,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Videocam
+import com.flagshipserver.app.core.voici.CallVisitorOutcome
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -189,6 +192,19 @@ fun ThreadScreen(nav: NavController, conv: String) {
     var link by remember { mutableStateOf<Pair<String, String>?>(null) }
     val blocked = c.pseudonymPub in ui.state.blocks
     val request = ui.isRequest(c)
+    // Ringing the caller back (owner decision 2026-11-15): only through the conversation's ring-back channel, so Call
+    // is disabled once `.com` said this caller didn't allow call-backs (VoiciCenter.ringBackOff).
+    val historyVersion by center.callHistoryVersion.collectAsState()
+    val canRingBack = remember(conv, historyVersion) { conv !in center.ringBackOff() }
+    val ringBack: (Boolean) -> Unit = { video ->
+        scope.launch {
+            when (val r = center.callVisitor(conv, video)) {
+                is CallVisitorOutcome.Ringing -> toasts.success(FSStrings.get(R.string.voici_call_back_ringing))
+                CallVisitorOutcome.NoCallBack -> toasts.error(FSStrings.get(R.string.voici_call_back_off))
+                is CallVisitorOutcome.Failed -> toasts.error(VoiciCopy.callFailure(r.code))
+            }
+        }
+    }
     val listState = rememberLazyListState()
     val ordered = c.ordered
     LaunchedEffect(conv, ordered.size) {
@@ -202,6 +218,14 @@ fun ThreadScreen(nav: NavController, conv: String) {
         titleTag = "thread-title",
         scrollable = false,
         actions = {
+            if (center.page.value.callsOn && !blocked) {
+                IconButton(onClick = { ringBack(false) }, enabled = canRingBack, modifier = Modifier.testTag("thread-call")) {
+                    Icon(Icons.Outlined.Call, contentDescription = stringResource(R.string.voici_call_action))
+                }
+                IconButton(onClick = { ringBack(true) }, enabled = canRingBack, modifier = Modifier.testTag("thread-video-call")) {
+                    Icon(Icons.Outlined.Videocam, contentDescription = stringResource(R.string.voici_call_video_action))
+                }
+            }
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.testTag("thread-menu")) {
                     Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.voici_more))
@@ -273,7 +297,7 @@ fun ThreadScreen(nav: NavController, conv: String) {
                         val m = e.message
                         Bubble(m, showStatus = m.msgId == lastMine, onLink = { u, h -> link = u to h }, onLongPress = { if (!m.mine) reporting = m.msgId })
                     }
-                    is VoiciThreadEntry.MissedCall -> MissedCallRow(e.call)
+                    is VoiciThreadEntry.MissedCall -> MissedCallRow(e.call, canRingBack && !blocked && center.page.value.callsOn) { ringBack(e.call.video) }
                 }
             }
         }
@@ -360,7 +384,7 @@ private fun Bubble(m: StoredVoiciMessage, showStatus: Boolean, onLink: (String, 
 }
 
 @Composable
-private fun MissedCallRow(call: VoiciMissedCallRow) {
+private fun MissedCallRow(call: VoiciMissedCallRow, canCallBack: Boolean, onCallBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().testTag("thread-missed-call"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
         Text(
             stringResource(if (call.video) R.string.voici_calls_missed_video else R.string.voici_calls_missed),
@@ -368,6 +392,7 @@ private fun MissedCallRow(call: VoiciMissedCallRow) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(shortTime(call.ringingAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FSGhostButton(stringResource(R.string.voici_call_back), onCallBack, enabled = canCallBack, modifier = Modifier.testTag("thread-missed-call-back"))
     }
 }
 

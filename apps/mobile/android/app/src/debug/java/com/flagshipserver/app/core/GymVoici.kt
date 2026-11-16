@@ -80,6 +80,14 @@ object GymVoici {
         runBlocking { c.publish(OTHER, VoiciPage.signVoiciPageIndex(body, OTHER_ROOT).toJson()) }
     }
 
+    /** Ana turns calls on for anyone signed in (docs/voici-calls.md "Calling from the app": a page this account can call). */
+    fun anaTakesCalls() {
+        val c = client
+        val old = VoiciPage.parseVoiciPageIndex(c.storedIndex(OTHER))!!.body
+        val body = old.copy(seq = old.seq + 1, issuedAt = System.currentTimeMillis(), signerPub = "", acceptsCalls = 1, callsFrom = "signed-in")
+        runBlocking { c.publish(OTHER, VoiciPage.signVoiciPageIndex(body, OTHER_ROOT).toJson()) }
+    }
+
     /** The link a voi.ci tab on Ana's page would show (C's fragment form: the browser key and nonce ride in it). */
     fun signInLink(): String {
         val pk = ByteArray(32) { 0x55 }

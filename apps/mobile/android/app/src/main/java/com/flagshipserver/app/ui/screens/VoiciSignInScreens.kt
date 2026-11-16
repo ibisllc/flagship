@@ -141,6 +141,8 @@ fun SignedInSitesScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     val toasts = LocalToastCenter.current
     LaunchedEffect(center) { runCatching { center.syncState() } }
+    // Pages this device signed in to know their username, so they can be called from here.
+    val callable = center.callablePages().associateBy { it.pageId }
     FSScreen(title = stringResource(R.string.voici_sites), onBack = { nav.popBackStack() }, titleTag = "messages-sites-title") {
         FSGroup {
             if (ui.state.signedInSites.isEmpty()) {
@@ -152,9 +154,12 @@ fun SignedInSitesScreen(nav: NavController) {
                     subtitle = stringResource(R.string.voici_site_signed_in, DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(s.at))),
                     icon = Icons.Outlined.Public,
                     trailing = {
-                        FSGhostButton(stringResource(R.string.voici_sign_out), {
-                            scope.launch { center.signOutSite(s)?.let { toasts.error(VoiciCopy.sendError(it)) } }
-                        }, modifier = Modifier.testTag("messages-site-sign-out"))
+                        androidx.compose.foundation.layout.Row {
+                            callable[s.pageId]?.let { VoiciCallButtons(it, "messages-site-call") }
+                            FSGhostButton(stringResource(R.string.voici_sign_out), {
+                                scope.launch { center.signOutSite(s)?.let { toasts.error(VoiciCopy.sendError(it)) } }
+                            }, modifier = Modifier.testTag("messages-site-sign-out"))
+                        }
                     },
                 )
             }
