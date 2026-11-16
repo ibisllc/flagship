@@ -17,6 +17,7 @@
 import { test, expect, type Page, type WebSocketRoute } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import {
+  clickAddServer,
   ACCOUNT_ID,
   CONTROL,
   DEVICE_ID,
@@ -876,7 +877,7 @@ test.describe("gym webapp misc", () => {
       `flagship/rck-register/v1|${r.username}|${r.subdomain}|${r.rckPubKey}|${r.issuedAt}`;
     m.post("/api/routing/register-rck", sensitive(page, keys, rckCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
     await page.evaluate(async () => (await import("/views/home.js")).renderHome());
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     await page.fill("#cs-server-name", "attic");
@@ -925,7 +926,7 @@ test.describe("gym webapp misc", () => {
       `flagship/rck-register/v1|${r.username}|${r.subdomain}|${r.rckPubKey}|${r.issuedAt}`;
     m.post("/api/routing/register-rck", sensitive(page, keys, rckCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
     await page.evaluate(async () => (await import("/views/home.js")).renderHome());
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     await page.fill("#cs-server-name", "attic");

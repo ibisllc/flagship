@@ -13,7 +13,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { HOME, livePod, mock, reachHome, shot, type Mock } from "./gymKit.js";
+import { clickAddServer, HOME, livePod, mock, reachHome, shot, type Mock } from "./gymKit.js";
 import { DAY, authority, lockBody, maintenanceBody } from "./noticeKit.js";
 
 test.use({ viewport: { width: 430, height: 932 } });
@@ -73,7 +73,7 @@ test.describe("gym webapp security notices", () => {
 
     // A menu is open when the lock arrives: it must not survive.
     await page.evaluate(async () => (await import("/views/home.js")).renderHome());
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await expect(page.locator('dialog[aria-label="Add or restore a server"]')).toBeVisible();
 
     await refresh(page, a.pin);
@@ -92,7 +92,7 @@ test.describe("gym webapp security notices", () => {
     await shot(page, testInfo, "update-lock");
 
     // The page behind it is inert.
-    const inert = await page.evaluate(() => ["header", "main", "nav"].map((s) => document.querySelector(s)?.hasAttribute("inert")));
+    const inert = await page.evaluate(() => ["header", "main", "nav"].map((s) => !!document.querySelector(s)?.closest("[inert]")));
     expect(inert).toEqual([true, true, true]);
 
     // Nothing leaves the page but reads from .com and the shell.

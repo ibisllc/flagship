@@ -311,7 +311,7 @@ test.describe("gym webapp restore into a server", () => {
     await page.locator(`[data-bk-restore="${fx.archiveId}"]`).click();
     const dlg = dialog(page);
     await expect(dlg.locator("[data-rm-error]")).toHaveText(
-      "This server needs a quantum-safe signature, which the webapp can't make. Restore it from the Flagship app on an admin phone.",
+      "This server needs a quantum-safe signature, and this browser's admin key has no quantum-safe half that the server accepts. Restore it from the Flagship app on the admin phone that set the account up.",
       { timeout: 15_000 },
     );
     expect(s.stages).toHaveLength(1);
