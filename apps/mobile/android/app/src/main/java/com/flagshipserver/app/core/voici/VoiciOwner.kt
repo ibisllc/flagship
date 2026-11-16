@@ -59,6 +59,8 @@ data class StoredVoiciMessage(
     val status: String = "sent",
     /** The envelope as received, kept so the owner can report it. */
     val envelope: JsonObject? = null,
+    /** A conversation control instead of text (a reveal or unreveal, docs/voici-calls.md): kept for its seq, never shown. */
+    val control: JsonObject? = null,
 )
 
 @Serializable
@@ -71,7 +73,9 @@ data class StoredVoiciConversation(
 ) {
     val visitorMessages: List<StoredVoiciMessage> get() = messages.filter { !it.mine }
     val lastAt: Long get() = messages.maxOfOrNull { it.sentAt } ?: 0
-    val ordered: List<StoredVoiciMessage> get() = messages.sortedWith(compareBy({ it.sentAt }, { it.msgId }))
+    val ordered: List<StoredVoiciMessage> get() = messages.filter { it.control == null }.sortedWith(compareBy({ it.sentAt }, { it.msgId }))
+    /** The newest control (reveal or unreveal) the caller sent, or null. */
+    val lastControl: StoredVoiciMessage? get() = messages.filter { it.control != null }.maxWithOrNull(compareBy({ it.sentAt }, { it.msgId }))
 
     /** A gap in the visitor's `seq` (§7.3): "Some messages haven't arrived yet". */
     val hasGap: Boolean get() {
@@ -196,8 +200,12 @@ object VoiciOwner {
                 if (existing?.messages?.any { it.msgId == env.msgId } == true) return VoiciInboxOutcome.Dropped("duplicate")
                 if (existing?.visitorMessages?.any { it.seq == env.seq } == true) return VoiciInboxOutcome.Dropped("replayed-seq")
                 val body = WebEnvelopes.b64Decode(env.bodyB64) ?: return VoiciInboxOutcome.Dropped("malformed")
-                val pt = open(body, env.conv, env.msgId, inboxSeeds) ?: return VoiciInboxOutcome.Dropped("decrypt-failed")
-                val msg = StoredVoiciMessage(env.msgId, env.from, env.seq, env.sentAt, pt.text, pt.replyTo, mine = false, status = status, envelope = envelope)
+                val opened = openAny(body, env.conv, env.msgId, inboxSeeds) ?: return VoiciInboxOutcome.Dropped("decrypt-failed")
+                val msg = when (opened) {
+                    is VoiciPlaintext -> StoredVoiciMessage(env.msgId, env.from, env.seq, env.sentAt, opened.text, opened.replyTo, mine = false, status = status, envelope = envelope)
+                    is VoiciMessages.VoiciBodyControl -> StoredVoiciMessage(env.msgId, env.from, env.seq, env.sentAt, "", null, mine = false, status = status, control = opened.control)
+                    else -> return VoiciInboxOutcome.Dropped("inner-schema")
+                }
                 val conv = (existing ?: StoredVoiciConversation(env.conv, pageId, env.from, c.cred.threadStmt.threadPub)).let { it.copy(messages = it.messages + msg) }
                 return VoiciInboxOutcome.Added(conv, msg)
             }
@@ -216,6 +224,11 @@ object VoiciOwner {
             }
             else -> return VoiciInboxOutcome.Dropped("wrong-kind")
         }
+    }
+
+    private fun openAny(body: ByteArray, conv: String, msgId: String, seeds: List<ByteArray>): Any? {
+        for (s in seeds) VoiciMessages.openVoiciBodyAny(body, conv, msgId, s).valueOrNull()?.let { return it }
+        return null
     }
 
     private fun open(body: ByteArray, conv: String, msgId: String, seeds: List<ByteArray>): VoiciPlaintext? {

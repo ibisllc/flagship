@@ -235,10 +235,17 @@ object VoiciCalls {
         return try { f.bytes(); f } catch (_: IllegalArgumentException) { null }
     }
 
-    fun requestHash(request: JsonElement): String? = fields(request)?.let { WebEnvelopes.sha256Hex(it.bytes()) }
+    /** H(request bytes) for a signed-in request or, by its kind, an anonymous one (VoiciCallModes). */
+    fun requestHash(request: JsonElement): String? = requestBytes(request)?.let { WebEnvelopes.sha256Hex(it) }
 
     /** The canonical bytes of a wire request (the frame keys' transcript), null when it doesn't parse. */
-    fun requestBytes(request: JsonElement): ByteArray? = fields(request)?.bytes()
+    fun requestBytes(request: JsonElement): ByteArray? =
+        if (VoiciCallModes.isAnon(request)) VoiciCallModes.anonBytes(request) else fields(request)?.bytes()
+
+    /** A signed-in request's check, or by its kind an anonymous one's (an "anyone" page; [callsFrom] is the page's rule). */
+    fun checkAnyRequest(input: JsonElement?, ctx: VoiciCallRequestCheckContext, callsFrom: String): VoiciOutcome<VoiciCallRequest> =
+        if (VoiciCallModes.isAnon(input)) VoiciCallModes.checkAnon(input, ctx.pageId, ctx.acceptsCalls, callsFrom, ctx.now, ctx.blocked, ctx.skipFresh)
+        else checkRequest(input, ctx)
 
     /**
      * The request checks, cheapest first (§6): size, shape, page, calls on, blocked, revoked, rate limits, attestation,
@@ -434,10 +441,11 @@ object VoiciCalls {
 
     fun checkAnswer(v: JsonElement?, request: JsonElement, ownerSignPub: String, now: Long? = null): VoiciOutcome<VoiciCallAnswerBody> {
         val (a, sig) = parseAnswer(v) ?: return no("malformed")
-        val rf = fields(request) ?: return no("malformed")
-        if (a.callId != rf.callId) return no("wrong-call")
-        if (a.requestHash != WebEnvelopes.sha256Hex(rf.bytes())) return no("wrong-request")
-        val reqMedia = rf.media ?: MEDIA_AUDIO
+        val ro = VoiciJs.obj(request) ?: return no("malformed")
+        val rBytes = requestBytes(request) ?: return no("malformed")
+        if (a.callId != str(ro["callId"])) return no("wrong-call")
+        if (a.requestHash != WebEnvelopes.sha256Hex(rBytes)) return no("wrong-request")
+        val reqMedia = str(ro["media"]) ?: MEDIA_AUDIO
         if (a.media == MEDIA_VIDEO && reqMedia != MEDIA_VIDEO) return no("bad-sdp")
         if (checkSdp(a.answerSdp, reqMedia) != null) return no("bad-sdp")
         if (!WebEnvelopes.ed25519VerifyHex(sig, canonicalAnswer(a), ownerSignPub)) return no("bad-signature")
@@ -655,7 +663,7 @@ object VoiciCalls {
         val ringing = VoiciJs.time(o["ringingAt"]) ?: return null
         val ended = VoiciJs.time(o["endedAt"])?.takeIf { it >= ringing } ?: return null
         val reason = str(o["reason"])?.takeIf { it in MISSED_REASONS } ?: return null
-        val r = checkRequest(o["request"], VoiciCallRequestCheckContext(pageId, true, origin, caKeys, ringing, skipFresh = true)).valueOrNull() ?: return null
+        val r = checkAnyRequest(o["request"], VoiciCallRequestCheckContext(pageId, true, origin, caKeys, ringing, skipFresh = true), VoiciCallModes.FROM_ANYONE).valueOrNull() ?: return null
         if (r.callId != callId) return null
         return VoiciMissedCall(r, ringing, ended, reason)
     }
