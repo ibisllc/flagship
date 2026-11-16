@@ -8,9 +8,9 @@
 // address update and the v2 hint are for the phones). Must pass
 // packages/protocol/test-vectors/direct-access/vectors.json.
 
+import { sensitiveHybridSigner, signedParts } from "./adminSigning.js";
 import { sha256 } from "../vendor/noble-hashes/sha2.js";
 import { bytesToHex, hexToBytes, verifyWithEd25519Pub } from "../keystore.js";
-import { sensitiveSigner } from "./adminRoot.js";
 import { getSession } from "./state.js";
 
 export const TAG_DIRECT_ACCESS = "flagship/direct-access/v1";
@@ -246,7 +246,7 @@ export async function signDirectAccessOrder(order, deps = {}) {
   if (problem) throw new DirectOrderRefused(problem);
   const umk = deps.umk ?? getSession()?.umk;
   if (!umk) throw new DirectOrderRefused("locked");
-  const sign = deps.sign ?? sensitiveSigner();
-  const sig = await sign(umk, canonicalDirectAccessOrder(order));
-  return { order, signatureHex: bytesToHex(sig) };
+  const sign = deps.sign ?? sensitiveHybridSigner();
+  const { signature, pqSignature } = signedParts(await sign(umk, canonicalDirectAccessOrder(order)));
+  return { order, signatureHex: bytesToHex(signature), ...(pqSignature ? { pqSignature } : {}) };
 }

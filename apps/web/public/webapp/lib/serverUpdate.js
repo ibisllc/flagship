@@ -20,6 +20,7 @@
 // `canonicalUpdateOrder`:
 //   flagship/server-update/v1|serverDomain|targetCommit|fromCommit|nonce|issuedAt
 
+import { signedParts } from "./adminSigning.js";
 import { controlApex } from "./apex.js";
 
 import { tr } from "./i18n.js";
@@ -148,7 +149,8 @@ export async function depositUpdateOrder(args, deps = {}) {
     nonce: randHex(32, deps.getRandomValues),
     issuedAt: now,
   };
-  const orderSig = await signWithIrk(umk, canonicalUpdateOrderBytes(order));
+  // A hybrid signer (lib/adminSigning.js) also returns the order's quantum-safe companion.
+  const { signature: orderSig, pqSignature } = signedParts(await signWithIrk(umk, canonicalUpdateOrderBytes(order)));
 
   // IRK mailbox-auth — same shape as the transfer deposits. The
   // gated signer tag-routes device-endpoint-claim to the membership IRK.
@@ -161,7 +163,7 @@ export async function depositUpdateOrder(args, deps = {}) {
     expiresAt: now + 120_000,
     nonce: authNonceHex,
   };
-  const authSig = await signWithIrk(
+  const authSig = signedParts(await signWithIrk(
     umk,
     canonicalMailboxAuthBytes({
       username,
@@ -171,7 +173,7 @@ export async function depositUpdateOrder(args, deps = {}) {
       expiresAt: auth.expiresAt,
       nonceHex: authNonceHex,
     }),
-  );
+  )).signature;
 
   const body = {
     auth,
@@ -182,6 +184,7 @@ export async function depositUpdateOrder(args, deps = {}) {
     },
     order,
     signature: toHex(orderSig),
+    ...(pqSignature ? { pqSignature } : {}),
   };
   let resp;
   try {

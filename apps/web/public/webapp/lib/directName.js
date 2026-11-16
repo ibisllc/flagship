@@ -7,8 +7,8 @@
 // Port of packages/protocol/src/directName.ts. Must pass
 // packages/protocol/test-vectors/direct-name/vectors.json.
 
+import { sensitiveHybridSigner, signedParts } from "./adminSigning.js";
 import { bytesToHex, hexToBytes, verifyWithEd25519Pub } from "../keystore.js";
-import { sensitiveSigner } from "./adminRoot.js";
 import { getSession } from "./state.js";
 import { canonicalIp, isPublicAddress, DIRECT_MAX_ADDRESSES, DirectOrderRefused } from "./directAccess.js";
 
@@ -108,7 +108,7 @@ export async function signDirectNameOrder(order, deps = {}) {
   if (problem) throw new DirectOrderRefused(problem);
   const umk = deps.umk ?? getSession()?.umk;
   if (!umk) throw new DirectOrderRefused("locked");
-  const sign = deps.sign ?? sensitiveSigner();
-  const sig = await sign(umk, canonicalDirectNameOrder(order));
-  return { order, signatureHex: bytesToHex(sig) };
+  const sign = deps.sign ?? sensitiveHybridSigner();
+  const { signature, pqSignature } = signedParts(await sign(umk, canonicalDirectNameOrder(order)));
+  return { order, signatureHex: bytesToHex(signature), ...(pqSignature ? { pqSignature } : {}) };
 }
