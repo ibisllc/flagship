@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Gym and unit tests only: an in-memory `.com` for voi.ci pages and Messages that answers the routes the apps call
 /// with the same checks `.com` runs (the publish check, piece signatures, seq compare-and-set, the state version
@@ -148,6 +149,70 @@ public final class MockVoiciComClient: VoiciComClient, @unchecked Sendable {
     public func missedCalls(username: String) async throws -> [VoiciMissedCallItem] {
         try down()
         return w { missedCallItems[username.lowercased()] ?? [] }
+    }
+
+    /// Call requests this app placed, and `.com`'s answer (nil: a refusal with `placeRefusal`'s code).
+    public private(set) var placedCalls: [JSONValue] = []
+    public var placeRefusal: (status: Int, code: String)?
+
+    public func placeCall(request: JSONValue) async throws -> VoiciPlacedCall {
+        try down()
+        if let r = placeRefusal { throw VoiciComError(status: r.status, code: r.code) }
+        guard let callId = request["callId"]?.string else { throw VoiciComError(status: 400, code: "malformed") }
+        w { placedCalls.append(request) }
+        return VoiciPlacedCall(callId: callId, room: "wss://\(Endpoints.controlHost)/api/voici/calls/\(callId)/caller",
+                               token: String(repeating: "7a", count: 32), ringMs: VoiciCalls.ringMs)
+    }
+
+    /// Ring-back channels attached by conversation (`pageId|conv` -> the caller's account), and the owner's rings.
+    public var ringBackChannels: [String: String] = [:]
+    public private(set) var rings: [JSONValue] = []
+
+    public func ring(username: String, ring: JSONValue, signature: String) async throws {
+        try down()
+        let u = username.lowercased()
+        guard let idx = w({ pages[u] }).flatMap({ VoiciPage.parseVoiciPageIndex($0) }), ring["pageId"]?.string == idx.pageId,
+              VoiciRings.verifyRing(ring, signature: signature, ownerSignPub: idx.ownerSignPub)
+        else { throw VoiciComError(status: 403, code: "bad-signature") }
+        guard let conv = ring["conv"]?.string, w({ ringBackChannels["\(idx.pageId)|\(conv)"] }) != nil else { throw VoiciComError(status: 404, code: "no-ring-back") }
+        w { rings.append(ring) }
+    }
+
+    public private(set) var convDeletes: [JSONValue] = []
+    public private(set) var anonBlocks: [JSONValue] = []
+
+    public func anonBlock(username: String, signed: JSONValue) async throws {
+        try down()
+        guard let idx = w({ pages[username.lowercased()] }).flatMap({ VoiciPage.parseVoiciPageIndex($0) }), signed["block"]?["pageId"]?.string == idx.pageId,
+              let sig = signed["signature"]?.string, VoiciConversations.verifyAnonBlock(signed["block"], signature: sig, ownerSignPub: idx.ownerSignPub)
+        else { throw VoiciComError(status: 403, code: "bad-signature") }
+        w { anonBlocks.append(signed) }
+    }
+
+    public func deleteConversation(_ signed: JSONValue) async throws {
+        try down()
+        guard let d = signed["del"], let p = d["pageId"]?.string, let c = d["conv"]?.string, let side = d["side"]?.string, let at = d["issuedAt"]?.time,
+              let sig = signed["sig"]?.string, let bytes = try? VoiciConversations.canonicalDelete(pageId: p, conv: c, side: side, issuedAt: at)
+        else { throw VoiciComError(status: 400, code: "malformed") }
+        let owner = w({ pages.values.compactMap { VoiciPage.parseVoiciPageIndex($0) }.first { $0.pageId == p } })?.ownerSignPub ?? ""
+        let signer = side == "owner" ? owner : (signed["from"]?.string ?? "")
+        guard CanonicalJson.ed25519VerifyHex(sig, bytes, signer), side == "owner" || (try? VoiciMessages.voiciConv(pageId: p, pseudonymPub: signer)) == c
+        else { throw VoiciComError(status: 403, code: "bad-signature") }
+        w {
+            convDeletes.append(signed)
+            for k in mailbox.keys { mailbox[k]?.removeAll { $0.envelope["conv"]?.string == c } }
+            ringBackChannels["\(p)|\(c)"] = nil
+        }
+    }
+
+    public func ringBack(order: JSONValue, account: String, device: VoiciDeviceSigner) async throws {
+        try down()
+        guard let o = order["order"], let p = o["pageId"]?.string, let c = o["conv"]?.string, let op = o["op"]?.string, let at = o["issuedAt"]?.time,
+              let from = order["from"]?.string, let sig = order["sig"]?.string,
+              let bytes = try? VoiciRings.canonicalRingBack(pageId: p, conv: c, op: op, issuedAt: at), CanonicalJson.ed25519VerifyHex(sig, bytes, from),
+              (try? VoiciMessages.voiciConv(pageId: p, pseudonymPub: from)) == c
+        else { throw VoiciComError(status: 403, code: "bad-signature") }
+        w { ringBackChannels["\(p)|\(c)"] = op == "attach" ? account.lowercased() : nil }
     }
 
     public private(set) var callKeys: [String: JSONValue] = [:]

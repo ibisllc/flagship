@@ -102,8 +102,10 @@ public struct VoiciPageIndex: Equatable, Sendable {
     public var acceptsMessages: Int64
     /// Calls (docs/voici-calls.md §6): set on a v2 index only; nil on v1 (calls off).
     public var acceptsCalls: Int64?
-    /// "accepted" or "signed-in" on a v2 index.
+    /// "accepted", "signed-in", "anyone" or "callback" on a v2 index.
     public var callsFrom: String?
+    /// The hours calls ring (v2 only, optional): "<days> <HHMM>-<HHMM> <time zone>" (VoiciPage.isCallHours).
+    public var callHours: String?
     public var inboxEpoch: Int64
     public var inboxPub: String
     public var ownerSignPub: String
@@ -137,6 +139,7 @@ public struct VoiciPageIndex: Equatable, Sendable {
         if isV2 {
             o["acceptsCalls"] = acceptsCalls.map { .int($0) } ?? .null
             o["callsFrom"] = callsFrom.map { .string($0) } ?? .null
+            if let callHours { o["callHours"] = .string(callHours) }
         }
         return .object(o)
     }
@@ -329,6 +332,7 @@ public enum VoiciPage {
         if b.isV2 {
             guard let c = b.acceptsCalls, c == 0 || c == 1, ["accepted", "signed-in", "anyone", "callback"].contains(b.callsFrom ?? "") else { throw bad("calls") }
         }
+        if let h = b.callHours { guard b.isV2, isCallHours(h) else { throw bad("callHours") } }
         guard CanonicalJson.isTime(b.inboxEpoch), b.inboxEpoch >= 1 else { throw bad("inboxEpoch") }
         guard CanonicalJson.isLowerHex(b.inboxPub, bytes: 1216), CanonicalJson.isLowerHex(b.ownerSignPub, bytes: 32) else { throw bad("keys") }
         if let pp = piecesProblem(b.pieces) { throw bad(pp) }
@@ -337,7 +341,49 @@ public enum VoiciPage {
         let calls = b.isV2 ? [String(b.acceptsCalls!), b.callsFrom!] : []
         return CanonicalJson.join([b.isV2 ? tagVoiciPageV2 : tagVoiciPage, b.username, b.pageId, String(b.seq), String(b.issuedAt), String(b.acceptsMessages)]
                                   + calls + [String(b.inboxEpoch), b.inboxPub, b.ownerSignPub, b.pieces.map(\.key).joined(separator: ","),
-                                   b.signerKind, b.signerPub])
+                                   b.signerKind, b.signerPub] + (b.callHours.map { [$0] } ?? []))
+    }
+
+    /// A call-hours value: seven 0/1 days from Monday, start and end HHMM (different), and a time zone this device knows.
+    public static func isCallHours(_ v: String) -> Bool {
+        guard v.utf8.count <= 80 else { return false }
+        let f = v.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        guard f.count == 3, f[0].utf8.count == 7, f[0].utf8.allSatisfy({ $0 == 0x30 || $0 == 0x31 }), f[0] != "0000000" else { return false }
+        let t = f[1].split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+        guard t.count == 2, let a = hhmm(t[0]), let b = hhmm(t[1]), a != b else { return false }
+        let zone = f[2]
+        if zone == "UTC" { return true }
+        let parts = zone.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard (2...3).contains(parts.count), (1...32).contains(parts[0].utf8.count), parts[0].unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) && $0.isASCII }),
+              parts.dropFirst().allSatisfy({ (1...32).contains($0.utf8.count) && $0.unicodeScalars.allSatisfy { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "_+-".unicodeScalars.contains($0)) } })
+        else { return false }
+        return TimeZone(identifier: zone) != nil
+    }
+
+    public static func hhmm(_ s: String) -> Int? {
+        guard s.utf8.count == 4, s.utf8.allSatisfy({ (0x30...0x39).contains($0) }), let n = Int(s) else { return nil }
+        let h = n / 100, m = n % 100
+        return h <= 23 && m <= 59 ? h * 60 + m : nil
+    }
+
+    /// Whether calls ring at `now` (ms) under these hours (nil: always). A bad value or unknown zone: never.
+    public static func callHoursOpen(_ hours: String?, now: Int64) -> Bool {
+        guard let hours else { return true }
+        guard isCallHours(hours) else { return false }
+        let f = hours.split(separator: " ").map(String.init)
+        let t = f[1].split(separator: "-").map(String.init)
+        let start = hhmm(t[0])!, end = hhmm(t[1])!
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = f[2] == "UTC" ? TimeZone(identifier: "UTC")! : TimeZone(identifier: f[2])!
+        let date = Date(timeIntervalSince1970: TimeInterval(now) / 1000)
+        let c = cal.dateComponents([.weekday, .hour, .minute], from: date)
+        guard let wd = c.weekday, let h = c.hour, let m = c.minute else { return false }
+        let day = (wd + 5) % 7 // Monday 0 … Sunday 6
+        let min = h * 60 + m
+        let days = Array(f[0].utf8)
+        let on = { (d: Int) in days[(d + 7) % 7] == 0x31 }
+        if start < end { return on(day) && min >= start && min < end }
+        return (on(day) && min >= start) || (on(day - 1) && min < end)
     }
 
     /// Sorts the pieces, sets signerPub from the seed, signs (randomized Ed25519: verify, never compare bytes).
@@ -361,7 +407,8 @@ public enum VoiciPage {
         }
         guard let r = v.object, r["kind"]?.string == "VoiciPage" else { return nil }
         let v2 = r["version"]?.safeInt == 2
-        guard (r["version"]?.isOne == true && exactKeys(r, indexKeys)) || (v2 && exactKeys(r, indexKeys.union(["acceptsCalls", "callsFrom"]))),
+        guard (r["version"]?.isOne == true && exactKeys(r, indexKeys))
+                || (v2 && (exactKeys(r, indexKeys.union(["acceptsCalls", "callsFrom"])) || exactKeys(r, indexKeys.union(["acceptsCalls", "callsFrom", "callHours"])))),
               CanonicalJson.isLowerHex(r["signature"], bytes: 64),
               let username = r["username"]?.string, let pageId = r["pageId"]?.string, let seq = r["seq"]?.safeInt,
               let issuedAt = r["issuedAt"]?.safeInt, let accepts = r["acceptsMessages"]?.safeInt, let epoch = r["inboxEpoch"]?.safeInt,
@@ -380,6 +427,7 @@ public enum VoiciPage {
         if v2 {
             guard let c = r["acceptsCalls"]?.safeInt, let from = r["callsFrom"]?.string else { return nil }
             out.acceptsCalls = c; out.callsFrom = from
+            if let h = r["callHours"] { guard let hs = h.string else { return nil }; out.callHours = hs }
         }
         return (try? canonicalVoiciPageIndex(out)) != nil ? out : nil
     }

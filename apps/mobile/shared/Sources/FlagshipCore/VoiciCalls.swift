@@ -296,6 +296,8 @@ public enum VoiciCalls {
 
     /// The canonical bytes of a wire request (the frame keys' transcript), nil when it doesn't parse.
     public static func requestBytes(_ request: JSONValue) -> [UInt8]? {
+        // An anonymous request (a page open to anyone) hashes by its own kind.
+        if request["kind"]?.string == VoiciCallModes.anonKind { return VoiciCallModes.requestAnonBytes(request) }
         guard let f = requestFields(request) else { return nil }
         return try? canonicalRequest(pageId: f.pageId, conv: f.conv, callId: f.callId, callerXwingPub: f.xpub, offerSdp: f.sdp, issuedAt: f.at, media: f.media)
     }
@@ -687,9 +689,17 @@ public enum VoiciCalls {
         guard let o = openCanonical(inboxSeed, purpose: tagMissedCall, callId: callId, sealed: sealed),
               Set(o.keys) == ["v", "request", "ringingAt", "endedAt", "reason"], o["v"]?.isOne == true,
               let ringing = o["ringingAt"]?.time, let ended = o["endedAt"]?.time, ended >= ringing,
-              let reason = o["reason"]?.string, missedReasons.contains(reason), let req = o["request"],
-              case .ok(let r) = checkRequest(req, VoiciCallRequestCheckContext(pageId: pageId, acceptsCalls: true, origin: origin, caKeys: caKeys, now: ringing, skipFresh: true)),
-              r.callId == callId else { return nil }
+              let reason = o["reason"]?.string, missedReasons.contains(reason), let req = o["request"] else { return nil }
+        // An anonymous caller (a page open to anyone) missed: its own kind, checked as the phone checked it then.
+        let checked: VoiciCallRequest?
+        if req["kind"]?.string == VoiciCallModes.anonKind {
+            checked = VoiciCallModes.checkRequestAnon(req, pageId: pageId, acceptsCalls: true, callsFrom: "anyone", now: ringing, skipFresh: true).value
+        } else if case .ok(let r) = checkRequest(req, VoiciCallRequestCheckContext(pageId: pageId, acceptsCalls: true, origin: origin, caKeys: caKeys, now: ringing, skipFresh: true)) {
+            checked = r
+        } else {
+            checked = nil
+        }
+        guard let r = checked, r.callId == callId else { return nil }
         return MissedCall(request: r, ringingAt: ringing, endedAt: ended, reason: reason)
     }
 }

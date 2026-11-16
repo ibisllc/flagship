@@ -41,8 +41,11 @@ public struct VoiciInboxItem: Equatable, Sendable {
     public var fetchedAt: Int64?
     /// Forwarded by the owner's phone after a direct delivery.
     public var direct: Bool
-    public init(envelope: JSONValue, storedAt: Int64, fetchedAt: Int64? = nil, direct: Bool = false) {
-        self.envelope = envelope; self.storedAt = storedAt; self.fetchedAt = fetchedAt; self.direct = direct
+    /// `.com`'s flag on the owner's inbox items (release-manager decision 4): whether the conversation has a live
+    /// ring-back channel, so Call back shows disabled from the start. Nil from a `.com` that doesn't send it yet.
+    public var ringBack: Bool?
+    public init(envelope: JSONValue, storedAt: Int64, fetchedAt: Int64? = nil, direct: Bool = false, ringBack: Bool? = nil) {
+        self.envelope = envelope; self.storedAt = storedAt; self.fetchedAt = fetchedAt; self.direct = direct; self.ringBack = ringBack
     }
 }
 
@@ -121,6 +124,37 @@ public protocol VoiciComClient: Sendable {
     func registerCallKey(username: String, proof: JSONValue, device: VoiciDeviceSigner) async throws
     /// A signed revocation (`POST /api/accounts/<u>/voici-call-key/revoke`, `{revoke, signature}`).
     func revokeCallKey(username: String, revoke: JSONValue, signature: String) async throws
+    /// This app placing a call to a page it knows (`POST /api/voici/calls {request}`, docs/voici-calls.md "Calling from
+    /// the app"): the room WebSocket and its one-time token.
+    func placeCall(request: JSONValue) async throws -> VoiciPlacedCall
+    /// The page owner rings a caller back in a conversation with a ring-back channel (`POST /api/voici/pages/<u>/ring`,
+    /// `{ring, signature}`); `no-ring-back` when the caller didn't allow call-back there.
+    func ring(username: String, ring: JSONValue, signature: String) async throws
+    /// This account, as a caller, attaches or stops a conversation's ring-back channel (`POST /api/voici/web/ring-back
+    /// ?u=<account>`, device headers so the ring reaches this account's devices).
+    func ringBack(order: JSONValue, account: String, device: VoiciDeviceSigner) async throws
+    /// Delete = forget: either side's signed delete (`POST /api/voici/web/conv-delete`); `.com` drops the conversation's
+    /// mailbox, ring-back channel, ring and missed calls at once.
+    func deleteConversation(_ signed: JSONValue) async throws
+    /// The owner blocks (or unblocks) an anonymous caller's conversation (`POST /api/voici/pages/<u>/anon-block`).
+    func anonBlock(username: String, signed: JSONValue) async throws
+}
+
+/// `.com`'s answer to a call request: `{callId, room, token, ringMs}`.
+public struct VoiciPlacedCall: Equatable, Sendable {
+    public var callId: String
+    public var room: String
+    public var token: String
+    public var ringMs: Int64
+    public init(callId: String, room: String, token: String, ringMs: Int64) {
+        self.callId = callId; self.room = room; self.token = token; self.ringMs = ringMs
+    }
+
+    static func parse(_ v: JSONValue?) -> VoiciPlacedCall? {
+        guard let callId = v?["callId"]?.string, CanonicalJson.isLowerHex(callId, bytes: 16), let room = v?["room"]?.string,
+              let token = v?["token"]?.string, CanonicalJson.isLowerHex(token, bytes: 32) else { return nil }
+        return VoiciPlacedCall(callId: callId, room: room, token: token, ringMs: v?["ringMs"]?.time ?? VoiciCalls.ringMs)
+    }
 }
 
 public extension VoiciComClient {
@@ -128,6 +162,11 @@ public extension VoiciComClient {
     func callAllow(username: String, allow: JSONValue, signature: String) async throws { throw VoiciComError(status: 0, code: "unsupported") }
     func registerCallKey(username: String, proof: JSONValue, device: VoiciDeviceSigner) async throws { throw VoiciComError(status: 0, code: "unsupported") }
     func revokeCallKey(username: String, revoke: JSONValue, signature: String) async throws { throw VoiciComError(status: 0, code: "unsupported") }
+    func placeCall(request: JSONValue) async throws -> VoiciPlacedCall { throw VoiciComError(status: 0, code: "unsupported") }
+    func ring(username: String, ring: JSONValue, signature: String) async throws { throw VoiciComError(status: 0, code: "unsupported") }
+    func ringBack(order: JSONValue, account: String, device: VoiciDeviceSigner) async throws { throw VoiciComError(status: 0, code: "unsupported") }
+    func deleteConversation(_ signed: JSONValue) async throws { throw VoiciComError(status: 0, code: "unsupported") }
+    func anonBlock(username: String, signed: JSONValue) async throws { throw VoiciComError(status: 0, code: "unsupported") }
 }
 
 public enum VoiciComPaths {
@@ -279,7 +318,8 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
             guard let v = try await read(r, username: username) else { return out }
             out.items += (v["messages"]?.array ?? v["items"]?.array ?? []).compactMap { i -> VoiciInboxItem? in
                 guard let e = i["envelope"], let at = i["storedAt"]?.time else { return nil }
-                return VoiciInboxItem(envelope: e, storedAt: at, fetchedAt: i["fetchedAt"]?.time, direct: i["direct"] == .bool(true))
+                let ringBack: Bool? = i["ringBack"] == .bool(true) ? true : i["ringBack"] == .bool(false) ? false : nil
+                return VoiciInboxItem(envelope: e, storedAt: at, fetchedAt: i["fetchedAt"]?.time, direct: i["direct"] == .bool(true), ringBack: ringBack)
             }
             out.cursor = v["cursor"]?.string ?? out.cursor
             out.blocks = (v["blocks"]?.array ?? []).compactMap(\.string)
@@ -379,6 +419,33 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
 
     public func revokeCallKey(username: String, revoke: JSONValue, signature: String) async throws {
         try await call(try json("POST", VoiciComPaths.callKey(username) + "/revoke", ["revoke": revoke, "signature": .string(signature)]))
+    }
+
+    public func placeCall(request: JSONValue) async throws -> VoiciPlacedCall {
+        // The route answers CORS for the voi.ci origin; the app says it speaks for a voi.ci visitor the same way.
+        let v = try await call(try json("POST", "/api/voici/calls", ["request": request], headers: ["origin": Endpoints.voiciOrigin]))
+        guard let placed = VoiciPlacedCall.parse(v) else { throw VoiciComError(status: 200, code: "malformed") }
+        return placed
+    }
+
+    public func ring(username: String, ring: JSONValue, signature: String) async throws {
+        try await call(try json("POST", VoiciComPaths.page(username) + "/ring", ["ring": ring, "signature": .string(signature)]))
+    }
+
+    public func deleteConversation(_ signed: JSONValue) async throws {
+        try await call(try json("POST", "/api/voici/web/conv-delete", signed))
+    }
+
+    public func anonBlock(username: String, signed: JSONValue) async throws {
+        try await call(try json("POST", VoiciComPaths.page(username) + "/anon-block", signed))
+    }
+
+    public func ringBack(order: JSONValue, account: String, device: VoiciDeviceSigner) async throws {
+        let path = "/api/voici/web/ring-back"
+        guard let a = await device("POST", path) else { throw VoiciComError(status: 0, code: "no-device-key") }
+        var r = try json("POST", path, order, headers: Self.deviceHeaders(a))
+        r.url = url(path, query: [URLQueryItem(name: "u", value: account.lowercased())])
+        try await call(r)
     }
 }
 
