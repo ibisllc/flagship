@@ -115,7 +115,7 @@ public struct SecurityNoticePq: Equatable, Sendable {
 /// `node scripts/pq-release-key.mjs pin`; a test checks they match. Empty: no release PQ key yet.
 public enum ReleasePqPin {
     // BEGIN RELEASE_PQ_KEY_IDS (generated)
-    public static let keyIds: [String] = ["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]
+    public static let keyIds: [String] = [] // GYM TEST BRANCH ONLY: classical gym release key
     // END RELEASE_PQ_KEY_IDS
 }
 
