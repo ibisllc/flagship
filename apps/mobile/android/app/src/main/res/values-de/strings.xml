@@ -2318,7 +2318,7 @@
     <string name="couldnt_rotate_the_admin_key_try">Der Admin-Schlüssel konnte nicht rotiert werden. Versuche es erneut.</string>
     <string name="couldnt_update_the_recovery_backup_try">Das Wiederherstellungs-Backup konnte nicht aktualisiert werden. Versuche es erneut.</string>
     <string name="secure_your_account">Dein Konto absichern</string>
-    <string name="back_up_your_account_now_so">Sichere dein Konto jetzt, damit du wieder hineinkommst, falls du dieses Gerät verlierst. Niemand – auch wir nicht – kann es für dich wiederherstellen.</string>
+    <string name="back_up_your_account_now_so">Sichere dein Konto jetzt, damit du wieder hineinkommst, falls du dieses Gerät verlierst. Wir können es nicht für dich wiederherstellen.</string>
     <string name="back_up_with_your_passkey">Mit deinem Passkey sichern</string>
     <string name="recover_with_your_google_passkey_or">Stelle mit deinem Google-Passkey oder Passwortmanager wieder her.</string>
     <string name="passkeys_arent_available_on_this_device">Passkeys sind auf diesem Gerät nicht verfügbar – verwende eine Backup-Datei.</string>

@@ -1,13 +1,16 @@
 // "Secure your account" — the SKIPPABLE backup nudge on the NEW-account
 // onboarding path. Shown once, after the account is opened, before the
-// app shell. Cloud (passkey) is pre-selected when available; otherwise
-// it's disabled and nothing is pre-selected (file / skip still work).
+// app shell. Cloud (passkey) backup and a backup file are two independent
+// ticks, both off at first; cloud is disabled when the device can't make a
+// passkey (file / skip still work). Continue runs every ticked one:
 //
 //   Cloud → run the passkey-PRF ceremony inline (reuses
 //           PasskeyRecoveryManager + Recovery + BlockStoreUmkStore,
-//           exactly like RecoveryScreen) → into the app.
-//   File  → open the existing KeyfileExportScreen → into the app.
-//   Skip  → confirm dialog → into the app.
+//           exactly like RecoveryScreen); its recovery passphrase shows
+//           inside the cloud row only while cloud is ticked.
+//   File  → then open the existing KeyfileExportScreen (its own
+//           passphrase) → into the app.
+//   Skip  → a warning anchored to the Skip button → into the app.
 //
 // Both methods stay reachable later from Settings (Recovery + Back up
 // your account key), so the "anytime in Settings" promise holds.
@@ -47,12 +50,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import com.flagshipserver.app.ui.components.DropdownMenu
+import androidx.compose.foundation.layout.widthIn
 import com.flagshipserver.app.ui.components.AlertDialog
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import com.flagshipserver.app.ui.components.RadioButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
@@ -170,7 +175,8 @@ fun SecureAccountScreen(
     val vm = remember(passkeyAvailable) {
         SecureAccountViewModel(passkeyAvailable = passkeyAvailable)
     }
-    val selected by vm.selected.collectAsState()
+    val cloudSelected by vm.cloudSelected.collectAsState()
+    val fileSelected by vm.fileSelected.collectAsState()
     val showSkipConfirm by vm.showSkipConfirm.collectAsState()
 
     val passkeys = remember(ctx) { PasskeyRecoveryManager(ctx.applicationContext) }
@@ -181,8 +187,10 @@ fun SecureAccountScreen(
     var passphrase by remember { mutableStateOf("") }
     var passphraseConfirm by remember { mutableStateOf("") }
     var note by remember { mutableStateOf<String?>(null) }
+    // Cloud backup finished on an earlier Continue (the file is still to do).
+    var cloudDone by remember { mutableStateOf(false) }
 
-    fun configureCloudThenContinue() {
+    fun configureCloudThenContinue(then: () -> Unit) {
         if (activity == null) {
             error = FSStrings.get(R.string.open_this_screen_from_the_foreground)
             return
@@ -235,7 +243,8 @@ fun SecureAccountScreen(
                 RecoveryProviderStore.write(ctx, ceremony.lastProvider)
                 passphrase = ""; passphraseConfirm = ""
                 toasts.success(FSStrings.get(R.string.cloud_backup_configured))
-                onDone()
+                cloudDone = true
+                then()
             } catch (t: Throwable) {
                 // Never trap the user: surface the error and let them
                 // pick the file option or skip instead.
@@ -249,6 +258,7 @@ fun SecureAccountScreen(
 
     FSScreen(
         title = SecureAccountViewModel.TITLE,
+        largeTitle = false,
         modifier = Modifier.semantics { contentDescription = "secure-account" },
         subtitle = SecureAccountViewModel.BODY,
     ) {
@@ -259,45 +269,48 @@ fun SecureAccountScreen(
                     SecureAccountViewModel.CLOUD_SUBLABEL
                 else
                     SecureAccountViewModel.CLOUD_UNAVAILABLE_HINT,
-                selected = selected == SecureAccountOption.Cloud,
-                enabled = passkeyAvailable && !working,
+                checked = cloudSelected || cloudDone,
+                enabled = passkeyAvailable && !working && !cloudDone,
                 cd = "secure-account-option-cloud",
-                onClick = { vm.select(SecureAccountOption.Cloud) },
+                onClick = { vm.toggle(SecureAccountOption.Cloud) },
             )
+            // The recovery passphrase hardens the cloud blob (mirrors
+            // recovery.js #enroll) and belongs to cloud backup only, so it
+            // shows inside the cloud row while cloud is ticked.
+            if (cloudSelected && !cloudDone) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(FS.space.s2),
+                    modifier = Modifier.padding(start = FS.space.s4, end = FS.space.s4, bottom = FS.space.s4),
+                ) {
+                    FSSectionHeader(stringResource(R.string.recovery_passphrase))
+                    FSField(
+                        value = passphrase,
+                        onValueChange = { passphrase = it },
+                        label = stringResource(R.string.recovery_passphrase_8_characters),
+                        helper = recoveryPassphraseHelper(passphrase),
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.semantics { contentDescription = "secure-account-passphrase" },
+                    )
+                    FSField(
+                        value = passphraseConfirm,
+                        onValueChange = { passphraseConfirm = it },
+                        label = stringResource(R.string.confirm_passphrase),
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.semantics { contentDescription = "secure-account-passphrase-confirm" },
+                    )
+                }
+            }
             FSDivider()
             OptionRow(
                 title = SecureAccountViewModel.FILE_LABEL,
                 subtitle = SecureAccountViewModel.FILE_SUBLABEL,
-                selected = selected == SecureAccountOption.File,
+                checked = fileSelected,
                 enabled = !working,
                 cd = "secure-account-option-file",
-                onClick = { vm.select(SecureAccountOption.File) },
+                onClick = { vm.toggle(SecureAccountOption.File) },
             )
         }
 
-        // Cloud backup is gated on a recovery passphrase that hardens the
-        // cloud blob (mirrors recovery.js #enroll). Surfaced only when the
-        // cloud option is selected so the file / skip flows stay one-tap.
-        if (selected == SecureAccountOption.Cloud) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                FSSectionHeader(stringResource(R.string.recovery_passphrase))
-                FSField(
-                    value = passphrase,
-                    onValueChange = { passphrase = it },
-                    label = stringResource(R.string.recovery_passphrase_8_characters),
-                    helper = recoveryPassphraseHelper(passphrase),
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.semantics { contentDescription = "secure-account-passphrase" },
-                )
-                FSField(
-                    value = passphraseConfirm,
-                    onValueChange = { passphraseConfirm = it },
-                    label = stringResource(R.string.confirm_passphrase),
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.semantics { contentDescription = "secure-account-passphrase-confirm" },
-                )
-            }
-        }
         if (working && note != null) {
             FSCard(padding = PaddingValues(FS.space.s3)) {
                 Text(note!!, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
@@ -310,13 +323,10 @@ fun SecureAccountScreen(
             }
         }
 
+        val cloudPending = cloudSelected && !cloudDone
         val cloudReady = passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE &&
             passphrase == passphraseConfirm
-        val canContinue = when (selected) {
-            SecureAccountOption.Cloud -> cloudReady
-            SecureAccountOption.File -> true
-            null -> false
-        }
+        val canContinue = (cloudPending || fileSelected) && (!cloudPending || cloudReady)
         Column(
             verticalArrangement = Arrangement.spacedBy(FS.space.s3),
             modifier = Modifier.padding(top = FS.space.s2),
@@ -324,45 +334,62 @@ fun SecureAccountScreen(
             FSPrimaryButton(
                 label = if (working) stringResource(R.string.setting_up) else SecureAccountViewModel.CONTINUE,
                 onClick = {
-                    when (selected) {
-                        SecureAccountOption.Cloud -> configureCloudThenContinue()
-                        SecureAccountOption.File -> onSaveFile()
-                        null -> {}
-                    }
+                    // Every ticked backup runs: cloud first (it stays here for
+                    // its passphrase and passkey), then the file export.
+                    val afterCloud = { if (fileSelected) onSaveFile() else onDone() }
+                    if (cloudPending) configureCloudThenContinue(afterCloud) else afterCloud()
                 },
                 block = true,
                 enabled = canContinue && !working,
                 modifier = Modifier.semantics { contentDescription = "secure-account-continue" },
             )
-            FSSecondaryButton(
-                label = SecureAccountViewModel.SKIP,
-                onClick = { vm.requestSkip() },
-                block = true,
-                enabled = !working,
-                modifier = Modifier.semantics { contentDescription = "secure-account-skip" },
-            )
+            // The skip warning drops down from the Skip button itself.
+            Box {
+                FSSecondaryButton(
+                    label = SecureAccountViewModel.SKIP,
+                    onClick = { vm.requestSkip() },
+                    block = true,
+                    enabled = !working,
+                    modifier = Modifier.semantics { contentDescription = "secure-account-skip" },
+                )
+                DropdownMenu(
+                    expanded = showSkipConfirm,
+                    onDismissRequest = { vm.cancelSkip() },
+                    modifier = Modifier.widthIn(max = 320.dp),
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(FS.space.s2),
+                        modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2),
+                    ) {
+                        Text(
+                            SecureAccountViewModel.SKIP_WARNING,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.semantics { contentDescription = "secure-account-skip-warning" },
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(FS.space.s2, Alignment.End),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            TextButton(
+                                onClick = { vm.cancelSkip() },
+                                modifier = Modifier.semantics { contentDescription = "secure-account-skip-back" },
+                            ) {
+                                Text(SecureAccountViewModel.SKIP_BACK)
+                            }
+                            TextButton(
+                                onClick = {
+                                    vm.cancelSkip()
+                                    onDone()
+                                },
+                                modifier = Modifier.semantics { contentDescription = "secure-account-skip-anyway" },
+                            ) {
+                                Text(SecureAccountViewModel.SKIP_CONFIRM, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+            }
         }
-    }
-
-    if (showSkipConfirm) {
-        AlertDialog(
-            onDismissRequest = { vm.cancelSkip() },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.cancelSkip()
-                    onDone()
-                }) {
-                    Text(SecureAccountViewModel.SKIP_CONFIRM, color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { vm.cancelSkip() }) {
-                    Text(SecureAccountViewModel.SKIP_BACK)
-                }
-            },
-            title = { Text(SecureAccountViewModel.TITLE) },
-            text = { Text(SecureAccountViewModel.SKIP_WARNING) },
-        )
     }
 }
 
@@ -370,12 +397,12 @@ fun SecureAccountScreen(
 private fun OptionRow(
     title: String,
     subtitle: String,
-    selected: Boolean,
+    checked: Boolean,
     enabled: Boolean,
     cd: String,
     onClick: () -> Unit,
 ) {
-    val alpha = if (enabled) 1f else 0.5f
+    val alpha = if (enabled || checked) 1f else 0.5f
     ListItem(
         headlineContent = {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
@@ -384,12 +411,12 @@ private fun OptionRow(
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
         },
         leadingContent = {
-            RadioButton(selected = selected, onClick = null, enabled = enabled)
+            Checkbox(checked = checked, onCheckedChange = null, enabled = enabled)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier
             .fillMaxWidth()
-            .fsFocusRing(8.dp).selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .fsFocusRing(8.dp).toggleable(value = checked, enabled = enabled, role = Role.Checkbox, onValueChange = { onClick() })
             .semantics { contentDescription = cd },
     )
 }

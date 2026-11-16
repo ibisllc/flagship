@@ -2316,7 +2316,7 @@
   "couldnt_rotate_the_admin_key_try": "管理者キーをローテーションできませんでした。もう一度お試しください。",
   "couldnt_update_the_recovery_backup_try": "リカバリーバックアップを更新できませんでした。もう一度お試しください。",
   "secure_your_account": "アカウントを保護",
-  "back_up_your_account_now_so": "いまアカウントをバックアップして、このデバイスを紛失しても戻れるようにしましょう。誰も、私たちでさえも、代わりに復旧することはできません。",
+  "back_up_your_account_now_so": "いまアカウントをバックアップして、このデバイスを紛失しても戻れるようにしましょう。私たちが代わりに復旧することはできません。",
   "back_up_with_your_passkey": "パスキーでバックアップ",
   "recover_with_your_google_passkey_or": "Google のパスキーまたはパスワードマネージャーで復旧します。",
   "passkeys_arent_available_on_this_device": "このデバイスではパスキーを利用できません。バックアップファイルを使ってください。",

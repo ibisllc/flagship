@@ -2316,7 +2316,7 @@
   "couldnt_rotate_the_admin_key_try": "Impossible de renouveler la clé d’administrateur. Réessayez.",
   "couldnt_update_the_recovery_backup_try": "Impossible de mettre à jour la sauvegarde de récupération. Réessayez.",
   "secure_your_account": "Sécurisez votre compte",
-  "back_up_your_account_now_so": "Sauvegardez votre compte dès maintenant pour pouvoir y revenir si vous perdez cet appareil. Personne — pas même nous — ne peut le récupérer à votre place.",
+  "back_up_your_account_now_so": "Sauvegardez votre compte dès maintenant pour pouvoir y revenir si vous perdez cet appareil. Nous ne pouvons pas le récupérer à votre place.",
   "back_up_with_your_passkey": "Sauvegarder avec votre clé d’accès",
   "recover_with_your_google_passkey_or": "Récupérez avec votre clé d’accès Google ou votre gestionnaire de mots de passe.",
   "passkeys_arent_available_on_this_device": "Les clés d’accès ne sont pas disponibles sur cet appareil — utilisez un fichier de sauvegarde.",

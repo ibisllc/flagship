@@ -2318,7 +2318,7 @@
     <string name="couldnt_rotate_the_admin_key_try">无法轮换管理员密钥。请重试。</string>
     <string name="couldnt_update_the_recovery_backup_try">无法更新恢复备份。请重试。</string>
     <string name="secure_your_account">保护你的账户</string>
-    <string name="back_up_your_account_now_so">现在就备份你的账户，这样即使丢失此设备也能重新进入。没有人（包括我们）能替你恢复它。</string>
+    <string name="back_up_your_account_now_so">现在就备份你的账户，这样即使丢失此设备也能重新进入。我们无法替你恢复它。</string>
     <string name="back_up_with_your_passkey">使用通行密钥备份</string>
     <string name="recover_with_your_google_passkey_or">使用你的 Google 通行密钥或密码管理器恢复。</string>
     <string name="passkeys_arent_available_on_this_device">此设备上无法使用通行密钥：请改用备份文件。</string>
