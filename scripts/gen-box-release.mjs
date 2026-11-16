@@ -108,7 +108,7 @@ export const BOX_RELEASE_SEQUENCE = ${v.sequence};
 /// The box release new servers install: the default \`installerGitRef\` is this exact commit.
 public enum BoxRelease {
     public static let commit = "${v.commit}"
-    public static let sequence = ${v.sequence}
+    public static let sequence: Int64 = ${v.sequence}
 }
 `,
     "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BoxRelease.kt": `// ${BANNER}
