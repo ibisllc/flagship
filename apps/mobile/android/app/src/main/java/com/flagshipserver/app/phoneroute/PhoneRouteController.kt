@@ -2,8 +2,9 @@
 // foreground-only facility. Coming to the foreground, every device says hello to the phone holding
 // the bare name; an admin device then makes the TLS key if there is none, orders a certificate only
 // when one is due, and, while a valid one is held, opens the tunnel and claims (refused while
-// another phone holds it: it waits as a standby). Leaving the foreground closes the tunnel; the
-// relay makes the route vacant at once.
+// another phone holds it: it waits as a standby). Leaving the foreground closes the tunnel and the
+// relay makes the route vacant at once, unless a voi.ci call rings or runs here (callStarted): its
+// media reaches the phone only through the bare name.
 
 package com.flagshipserver.app.phoneroute
 
@@ -67,8 +68,49 @@ object PhoneRouteController {
         store = PhoneCertStore(context.applicationContext.getSharedPreferences("flagship.phone-route", Context.MODE_PRIVATE))
     }
 
+    private val lifecycle = PhoneRouteLifecycle()
+
     @Synchronized
     fun appForeground() {
+        lifecycle.enterForeground()
+        open()
+    }
+
+    @Synchronized
+    fun appBackground() {
+        if (!lifecycle.enterBackground()) close()
+    }
+
+    /** A voi.ci call rings on this device: hold the bare name until it ends, foreground or not. Balanced by [callEnded]. */
+    @Synchronized
+    fun callStarted() {
+        lifecycle.callStarted()
+        open()
+    }
+
+    @Synchronized
+    fun callEnded() {
+        if (!lifecycle.callEnded()) close()
+    }
+
+    /** Waits until this device holds its bare name, or [ms] pass. True when it holds it. */
+    suspend fun awaitHolding(ms: Long): Boolean {
+        val until = System.currentTimeMillis() + ms
+        while (System.currentTimeMillis() < until) {
+            when (_state.value) {
+                is PhoneTunnelState.Holding -> return true
+                is PhoneTunnelState.Lost, is PhoneTunnelState.Closed -> synchronized(this) { close(); open() }
+                else -> synchronized(this) { if (job?.isActive != true && client == null) open() }
+            }
+            // Nothing to wait for: no account here, or a device that holds no bare name.
+            if (synchronized(this) { job?.isActive != true && client == null }) return false
+            kotlinx.coroutines.delay(100)
+        }
+        return _state.value is PhoneTunnelState.Holding
+    }
+
+    @Synchronized
+    private fun open() {
         if (job?.isActive == true || client != null) return
         val app = appState ?: return
         val http = okHttp ?: return
@@ -121,7 +163,7 @@ object PhoneRouteController {
     }
 
     @Synchronized
-    fun appBackground() {
+    private fun close() {
         job?.cancel()
         job = null
         client?.stop()

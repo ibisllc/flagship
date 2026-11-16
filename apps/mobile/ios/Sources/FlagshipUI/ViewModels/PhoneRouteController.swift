@@ -8,7 +8,8 @@ import FlagshipCore
 /// the foreground, every device says a signed hello to `https://<account>.<apex>/`; an admin device then makes its TLS
 /// key if there is none, orders a certificate only when one is due, and while a valid one is held, opens the tunnel and
 /// claims (refused while another phone holds the name: it waits as a standby). Leaving the foreground closes the
-/// tunnel and the relay makes the route vacant at once. No background wake: a phone not in the foreground claims nothing.
+/// tunnel and the relay makes the route vacant at once, unless a voi.ci call rings or runs here (`callStarted`): its media
+/// reaches the phone only through the bare name, and CallKit answers with the app in the background.
 @MainActor
 public enum PhoneRouteController {
     private static weak var app: AppState?
@@ -27,6 +28,45 @@ public enum PhoneRouteController {
     }
 
     public static func appForeground() {
+        _ = lifecycle.enterForeground()
+        open()
+    }
+
+    public static func appBackground() {
+        if !lifecycle.enterBackground() { close() }
+    }
+
+    /// A voi.ci call rings on this device: hold the bare name until it ends, foreground or not, so the caller's TURN
+    /// stream reaches this phone (docs/voici-calls.md §4). Balanced by `callEnded`.
+    public static func callStarted() {
+        _ = lifecycle.callStarted()
+        open()
+    }
+
+    public static func callEnded() {
+        if !lifecycle.callEnded() { close() }
+    }
+
+    /// Waits until this device holds its bare name, or `seconds` pass. True when it holds it.
+    public static func waitUntilHolding(seconds: Double) async -> Bool {
+        let until = Date().addingTimeInterval(seconds)
+        while Date() < until {
+            switch state {
+            case .holding: return true
+            case .lost, .closed: close(); open()
+            default: if task == nil, client == nil { open() }
+            }
+            // Nothing to wait for: no account here, or a device that holds no bare name (not an admin device).
+            if task == nil, client == nil { return false }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        if case .holding = state { return true }
+        return false
+    }
+
+    private static var lifecycle = PhoneRouteLifecycle()
+
+    private static func open() {
         guard client == nil, task == nil, let app, let user = app.currentUser, !user.isEmpty, !app.isDemoAccount,
               let deviceId = app.activeProfile?.deviceId, !deviceId.isEmpty,
               let deviceKey = Keystore.sessionAccountDeviceKey(accountId: user, deviceId: deviceId) else { return }
@@ -56,7 +96,7 @@ public enum PhoneRouteController {
         }
     }
 
-    public static func appBackground() {
+    private static func close() {
         task?.cancel()
         task = nil
         client?.stop()
