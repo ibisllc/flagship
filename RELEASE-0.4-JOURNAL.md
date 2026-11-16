@@ -767,6 +767,11 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   vectors, parity row `voici-conv-forget`. Checks: tsc, i18n, parity 0 red, vitest web + protocol 6074; Swift 12, iOS
   21, iOS app builds; Android 91. Open: a device offline > 30 days after a delete can bring entries back once; older
   iOS "deletes" stay archived only; old builds can't read v2 (pre-release: accepted).
+- 2026-11-16: **Retail VM test runs in GitHub Actions** (branch `0.4/retail-ci`, not merged):
+  `.github/workflows/retail-vm.yml` on `ubuntu-24.04` with KVM, ~4 min, green. It found one real bug, fixed: the
+  claim unit's `ReadWritePaths=/var/lib/flagship-retail` failed every start with 226/NAMESPACE on a fresh image (now
+  `StateDirectory=`). Test-only fixes: the guest reads the journal with `--merge` (the layer empties machine-id) and
+  triggers the power key udev rule (no reboot). No KVM host needed any more.
 
 - 2026-11-16: Owner: **deleting a conversation is gated by biometrics** (agent on `0.4/delete-gate`: Face ID /
   BiometricPrompt, passkey user verification on the webapp). Retail VM test moves to **GitHub Actions** (standard

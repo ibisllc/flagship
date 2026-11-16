@@ -664,23 +664,28 @@ unique is printed per box.
 - **Wi-Fi chipset and stack** (owner, §15.3). Firmware packages (`non-free-firmware`) and the stack the claim's Wi-Fi
   join uses (`network.ts` speaks `nmcli` today) are chosen with the SKU, and with them the privileges the join needs
   (the claim service is unprivileged: a polkit rule for its account, or a third helper step).
-- **Bluetooth controller firmware** (H4) and the per-SKU metal build in CI. No workflow runs the retail layer yet.
+- **Bluetooth controller firmware** (H4) and the per-SKU metal build in CI. The retail layer runs in CI only in the VM
+  smoke test (16.4), on Debian's generic cloud image, not a SKU's image.
 
 ### 16.3 Still open, not hardware-bound
 
-- **One run of the VM smoke test** (16.4) on a cloud machine; nothing of 16.1 has run in a VM yet.
 - **A claim end to end in a VM**: a phone stand-in claiming over the virtual controller, then the first boot through
   registration at a gym `.com`. The VM test stops at the advert.
 
 ### 16.4 The VM smoke test (`tools/retail-vm/`)
 
-For a cloud machine with KVM (Linux x86-64; `qemu-system-x86`, `qemu-utils`, `cloud-image-utils`, `curl`, `xz`,
-Node 24): from a checkout of the branch, `bash tools/retail-vm/run.sh [workdir]`. It builds the tree, boots Debian
+CI runs it: `.github/workflows/retail-vm.yml` on GitHub's `ubuntu-24.04` runner (it has `/dev/kvm` once a udev rule
+opens it), on a push that touches the retail paths or by hand (`workflow_dispatch`, from the default branch); about
+4 minutes, the guest's `serial.log` kept as the `retail-vm-logs` artifact. By hand, on any Linux x86-64 machine with KVM
+(`qemu-system-x86`, `qemu-utils`, `cloud-image-utils`, `curl`, `xz`, Node 24; not a Mac): from a checkout of the
+branch, `bash tools/retail-vm/run.sh [workdir]`. It builds the tree, boots Debian
 13's generic cloud image (the cloud kernel has no Bluetooth), gives the guest the tree on a raw tar disk, and the
 guest (`guest.sh`) applies the retail layer, starts two linked virtual controllers (`btvirt -l2` over `hci_vhci`),
 then checks: no box key on the image; keyd makes one at its first start and keeps it on restart; the claim
 service runs as `flagship-claim` (its uid from `/proc`) with no capabilities, the daemon stays off, and the claim
 helper refuses a power request from the claim account; hci0 has an active advertising instance; a scan from hci1
 finds the claim service UUID. Verdict lines start `RETAIL-VM:` in `<workdir>/serial.log`; exit 0 on PASS. It does
-not install the signed box release (the guest gets the tree) and has no LUKS factory key, radio or button. First
-run, confirm that Debian ships `btvirt` in `bluez-test-tools`.
+not install the signed box release (the guest gets the tree) and has no LUKS factory key, radio or button. The guest
+never reboots after the layer, so it applies the power key udev rule itself and reads the journal with `--merge`
+(the layer empties `/etc/machine-id`). First green run 2026-11-16 (Debian 13 ships `btvirt` in `bluez-test-tools`);
+it found the claim unit's missing state folder (226/NAMESPACE, now `StateDirectory=`).
