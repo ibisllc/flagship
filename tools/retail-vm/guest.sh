@@ -52,6 +52,9 @@ wait_for 20 test -e /sys/class/bluetooth/hci1 || fail "btvirt made no controller
 systemctl daemon-reload
 systemctl reload dbus.service
 udevadm control --reload
+# A real image gets the power key rule at its first boot; this guest never reboots, so apply it now.
+udevadm trigger --subsystem-match=input --action=change
+udevadm settle
 systemctl restart bluetooth.service
 say "virtual controllers up: $(ls /sys/class/bluetooth | tr '\n' ' ')"
 
