@@ -4216,4 +4216,9 @@
     <string name="activity_social_answered_length">Answered · %1$s</string>
     <string name="activity_social_video_call_length">Video call · %1$s</string>
     <string name="voici_calls_history_line_length">%1$s · %2$s · %3$s</string>
+    <string name="voici_call_step_route">Opening your line…</string>
+    <string name="voici_call_step_secure">Securing the line (quantum-safe)…</string>
+    <string name="voici_call_step_path">Opening a direct path…</string>
+    <string name="voici_call_step_audio">Starting audio…</string>
+    <string name="voici_call_slow">This is taking longer than usual</string>
 </resources>

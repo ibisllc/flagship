@@ -143,5 +143,10 @@
   "{0} is calling you back.": "{0} から折り返しの着信です。",
   "Getting ready to call…": "通話を準備しています…",
   "Stop call-backs": "折り返しを停止",
-  "No microphone found on this device. Connect one, or call from your phone.": "このデバイスにマイクが見つかりません。マイクを接続するか、スマートフォンから発信してください。"
+  "No microphone found on this device. Connect one, or call from your phone.": "このデバイスにマイクが見つかりません。マイクを接続するか、スマートフォンから発信してください。",
+  "Reaching their phone…": "相手の電話に接続しています…",
+  "Securing the line (quantum-safe)…": "回線を保護しています（量子耐性）…",
+  "Opening a direct path…": "直接の経路を開いています…",
+  "Starting audio…": "音声を開始しています…",
+  "This is taking longer than usual": "通常より時間がかかっています"
 }

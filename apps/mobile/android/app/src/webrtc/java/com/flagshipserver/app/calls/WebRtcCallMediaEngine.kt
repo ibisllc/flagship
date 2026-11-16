@@ -48,6 +48,8 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
     override var onLocalIce: ((String?) -> Unit)? = null
     override var onConnected: (() -> Unit)? = null
     override var onFailed: (() -> Unit)? = null
+    @Volatile private var onPathOpen: (() -> Unit)? = null
+    override fun setOnPathOpen(f: () -> Unit) { onPathOpen = f }
 
     private val lock = Any()
     private var egl: EglBase? = null
@@ -313,7 +315,11 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
             }
         }
         override fun onSignalingChange(state: PeerConnection.SignalingState) {}
-        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {}
+        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+            if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
+                onPathOpen?.also { onPathOpen = null }?.invoke()
+            }
+        }
         override fun onIceConnectionReceivingChange(receiving: Boolean) {}
         override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {}
         override fun onAddStream(stream: MediaStream) {}

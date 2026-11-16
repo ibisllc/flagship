@@ -578,5 +578,25 @@
   "No microphone found on this device. Connect one, or call from your phone.": {
     "en": "No microphone found on this device. Connect one, or call from your phone.",
     "ctx": "voici-site/call.js:29"
+  },
+  "Reaching their phone…": {
+    "en": "Reaching their phone…",
+    "ctx": "voici-site/call.js"
+  },
+  "Securing the line (quantum-safe)…": {
+    "en": "Securing the line (quantum-safe)…",
+    "ctx": "voici-site/call.js"
+  },
+  "Opening a direct path…": {
+    "en": "Opening a direct path…",
+    "ctx": "voici-site/call.js"
+  },
+  "Starting audio…": {
+    "en": "Starting audio…",
+    "ctx": "voici-site/call.js"
+  },
+  "This is taking longer than usual": {
+    "en": "This is taking longer than usual",
+    "ctx": "voici-site/call.js"
   }
 }

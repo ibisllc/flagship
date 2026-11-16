@@ -4142,5 +4142,10 @@
   "scheduled_backup_finished": "073c8161ce7f",
   "activity_social_answered_length": "283233208abd",
   "activity_social_video_call_length": "2078d758701c",
-  "voici_calls_history_line_length": "269fbdddf13b"
+  "voici_calls_history_line_length": "269fbdddf13b",
+  "voici_call_step_route": "6647a246c6a2",
+  "voici_call_step_secure": "4a16cbba1b0b",
+  "voici_call_step_path": "e2107a4a10dd",
+  "voici_call_step_audio": "7147905891f5",
+  "voici_call_slow": "48c129867053"
 }

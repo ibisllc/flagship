@@ -4211,4 +4211,9 @@
     <string name="activity_social_answered_length">Angenommen · %1$s</string>
     <string name="activity_social_video_call_length">Videoanruf · %1$s</string>
     <string name="voici_calls_history_line_length">%1$s · %2$s · %3$s</string>
+    <string name="voici_call_step_route">Deine Leitung wird geöffnet…</string>
+    <string name="voici_call_step_secure">Leitung wird gesichert (quantensicher)…</string>
+    <string name="voici_call_step_path">Direkter Weg wird geöffnet…</string>
+    <string name="voici_call_step_audio">Audio wird gestartet…</string>
+    <string name="voici_call_slow">Das dauert länger als üblich</string>
 </resources>

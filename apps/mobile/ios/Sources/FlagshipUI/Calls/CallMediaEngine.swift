@@ -84,9 +84,12 @@ public protocol CallMediaEngine: AnyObject {
     func applyAnswer(sdp: String, iceServer: CallerIceServer) async throws
     /// The answer checked out: media may flow under these keys (`CallFrameCrypto.caller`).
     func startCaller(_ crypto: CallFrameCrypto)
+    /// Called once ICE connects through the caller's TURN stream (the call screen's "Starting audio…" step).
+    func setOnPathOpen(_ f: @escaping () -> Void)
 }
 
 public extension CallMediaEngine {
+    func setOnPathOpen(_ f: @escaping () -> Void) {}
     func offer(video: Bool) async throws -> String { throw CallMediaUnavailable() }
     func applyAnswer(sdp: String, iceServer: CallerIceServer) async throws { throw CallMediaUnavailable() }
     func startCaller(_ crypto: CallFrameCrypto) {}

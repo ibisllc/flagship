@@ -21,6 +21,9 @@ public struct VoiciCallScreen: View {
                 Spacer()
                 Text(center.callerName).font(.largeTitle.weight(.semibold)).multilineTextAlignment(.center)
                 Text(status).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                if center.phase == .connecting, center.connectSlow {
+                    Text("This is taking longer than usual").font(.callout).foregroundStyle(.secondary)
+                }
                 if center.phase == .connected, center.remoteCamera == "on" {
                     Text("\(center.callerName) turned on their camera").font(.callout)
                 } else if center.phase == .connected, center.remoteCamera == "paused" {
@@ -41,7 +44,7 @@ public struct VoiciCallScreen: View {
 
     private var visible: Bool { VoiciCallScreenModel.visible(center.phase, noRingMode: center.noRingMode) }
 
-    private var status: String { VoiciCallScreenModel.status(center.phase) }
+    private var status: String { VoiciCallScreenModel.status(center.phase, step: center.connectStep) }
 
     @ViewBuilder private var controls: some View {
         switch center.phase {
@@ -83,11 +86,18 @@ enum VoiciCallScreenModel {
         }
     }
 
-    static func status(_ phase: VoiciCallCenter.Phase) -> String {
+    static func status(_ phase: VoiciCallCenter.Phase, step: VoiciCallConnectStep? = nil) -> String {
         switch phase {
         case .ringing: return String(localized: "voi.ci call")
         case .needsUnlock: return String(localized: "Unlock Flagship to answer")
-        case .connecting: return String(localized: "Connecting…")
+        case .connecting:
+            switch step {
+            case .route: return String(localized: "Opening your line…")
+            case .secure: return String(localized: "Securing the line (quantum-safe)…")
+            case .path: return String(localized: "Opening a direct path…")
+            case .audio: return String(localized: "Starting audio…")
+            case nil: return String(localized: "Connecting…")
+            }
         case .connected: return String(localized: "Quantum-safe call")
         case .idle: return ""
         case .ended(let code):

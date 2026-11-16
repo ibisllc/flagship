@@ -4208,5 +4208,10 @@
   "scheduled_backup_finished": "Geplantes Backup abgeschlossen",
   "activity_social_answered_length": "Angenommen · %1$s",
   "activity_social_video_call_length": "Videoanruf · %1$s",
-  "voici_calls_history_line_length": "%1$s · %2$s · %3$s"
+  "voici_calls_history_line_length": "%1$s · %2$s · %3$s",
+  "voici_call_step_route": "Deine Leitung wird geöffnet…",
+  "voici_call_step_secure": "Leitung wird gesichert (quantensicher)…",
+  "voici_call_step_path": "Direkter Weg wird geöffnet…",
+  "voici_call_step_audio": "Audio wird gestartet…",
+  "voici_call_slow": "Das dauert länger als üblich"
 }

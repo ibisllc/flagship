@@ -64,6 +64,9 @@ interface CallMediaEngine {
     suspend fun applyAnswer(sdp: String, iceServer: CallerIceServer): Unit = throw CallMediaUnavailable()
     /** The answer checked out: media may flow under these (caller-direction) keys. */
     fun startCaller(crypto: CallFrameCrypto) {}
+
+    /** Called once ICE connects through the caller's TURN stream (the call screen's "Starting audio…" step). */
+    fun setOnPathOpen(f: () -> Unit) {}
 }
 
 /** No WebRTC library in this build: every answer is refused, so a call can ring but never connects. */

@@ -16562,5 +16562,21 @@
   "Outgoing call · %@ · %@": {
     "en": "Outgoing call · %@ · %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (Calls list row; first %@ is the date and time, second the call's length, e.g. 4:32)"
+  },
+  "Securing the line (quantum-safe)…": {
+    "en": "Securing the line (quantum-safe)…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
+  },
+  "Opening a direct path…": {
+    "en": "Opening a direct path…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
+  },
+  "Starting audio…": {
+    "en": "Starting audio…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
+  },
+  "Opening your line…": {
+    "en": "Opening your line…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
   }
 }

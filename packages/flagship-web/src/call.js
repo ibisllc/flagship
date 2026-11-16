@@ -13,8 +13,9 @@
 //                               the camera is asked for on the tap that calls it. onCamera(state) reports the other
 //                               side's camera: "on", "off" or "paused".
 //
-// States: "requesting", "ringing", "connecting", "connected", "ended" with detail {reason} or "failed" {code,
-// retryAfterSec?}. The offer is made before the request (its hash is signed) and applied only once the answer brings
+// States: "requesting", "ringing", "connecting" (again with {step, slow} per step, VOICI_CALL_STEPS), "connected",
+// "ended" with detail {reason} or "failed" {code, retryAfterSec?}; connecting past VOICI_CALL_CONNECT_LIMIT_MS fails
+// with "unreachable". The offer is made before the request (its hash is signed) and applied only once the answer brings
 // the phone's one-time TURN credential, so no candidate is gathered before the call is answered.
 
 import {
@@ -45,6 +46,56 @@ export const VOICI_CALL_AUDIO = { audio: AUDIO, video: false };
 
 /** The camera constraints of a call's video (360p by default, voici-calls-v2.md §1.3). */
 export const VOICI_CALL_VIDEO = { video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24, max: 24 }, facingMode: "user" }, audio: false };
+
+/**
+ * The steps of connecting once the phone answered, in the order they happen (the caller's status line): the quantum-safe
+ * key exchange of the signed answer ("secure"), the TURN allocation on their phone's bare name ("reach"), the ICE checks
+ * through it ("path"), then DTLS until the first media ("audio").
+ */
+export const VOICI_CALL_STEPS = ["secure", "reach", "path", "audio"];
+/** One step this long shows "This is taking longer than usual"; connecting this long in all ends the call as unreachable. */
+export const VOICI_CALL_STEP_SLOW_MS = 20_000;
+export const VOICI_CALL_CONNECT_LIMIT_MS = 45_000;
+
+/**
+ * The step line's clock: step(name) moves forward only (a later event never shows an earlier step), reports each step
+ * once with {slow: false}, again with {slow: true} after VOICI_CALL_STEP_SLOW_MS on it, and calls onGiveUp once
+ * VOICI_CALL_CONNECT_LIMIT_MS have passed since the first step. stop() ends both clocks.
+ */
+export function voiciCallSteps({ onStep, onGiveUp, timers = globalThis }) {
+  let current = null;
+  let slow = null;
+  let limit = null;
+  let done = false;
+  const stop = () => {
+    done = true;
+    timers.clearTimeout(slow);
+    timers.clearTimeout(limit);
+  };
+  return {
+    get current() {
+      return current;
+    },
+    step(name) {
+      if (done || !VOICI_CALL_STEPS.includes(name)) return;
+      if (current !== null && VOICI_CALL_STEPS.indexOf(name) <= VOICI_CALL_STEPS.indexOf(current)) return;
+      current = name;
+      if (limit === null) {
+        limit = timers.setTimeout(() => {
+          if (done) return;
+          stop();
+          onGiveUp();
+        }, VOICI_CALL_CONNECT_LIMIT_MS);
+      }
+      timers.clearTimeout(slow);
+      slow = timers.setTimeout(() => {
+        if (!done && current === name) onStep(name, { slow: true });
+      }, VOICI_CALL_STEP_SLOW_MS);
+      onStep(name, { slow: false });
+    },
+    stop,
+  };
+}
 
 /** Whether this browser has a camera at all (no permission asked): decides whether the request offers video. */
 export async function voiciCallVideoAble(mediaDevices = globalThis.navigator?.mediaDevices) {
@@ -105,6 +156,7 @@ export function startVoiciCall(o) {
     RTCPeerConnection: o.deps?.RTCPeerConnection ?? globalThis.RTCPeerConnection,
     RTCRtpScriptTransform: o.deps?.RTCRtpScriptTransform ?? globalThis.RTCRtpScriptTransform,
     now: o.deps?.now ?? (() => Date.now()),
+    timers: o.deps?.timers ?? { setTimeout: (f, ms) => globalThis.setTimeout(f, ms), clearTimeout: (t) => globalThis.clearTimeout(t) },
   };
   const { index, cfg } = o;
   // An anonymous call signs with the browser's anonymous key; a signed-in one with B (the session's key).
@@ -127,9 +179,20 @@ export function startVoiciCall(o) {
   const set = (s, detail = {}) => {
     if (state === "ended" || state === "failed") return;
     state = s;
+    if (s !== "connecting") steps.stop();
     o.onState?.(s, detail);
     if (s === "ended" || s === "failed") cleanup();
   };
+  // While connecting, "connecting" is reported again with {step, slow} as each step starts and when one runs long.
+  const steps = voiciCallSteps({
+    timers: deps.timers,
+    onStep: (step, d) => {
+      if (state === "connecting") o.onState?.("connecting", { step, slow: d.slow });
+    },
+    onGiveUp: () => {
+      if (state === "connecting") set("failed", { code: "unreachable" });
+    },
+  });
   const cleanup = () => {
     clearTimeout(limitTimer);
     try {
@@ -166,7 +229,12 @@ export function startVoiciCall(o) {
     remoteStream.addTrack(e.track);
   };
   pc.onicecandidate = (e) => {
+    // A candidate here is a relay candidate: their phone's TURN allocated it.
+    if (e.candidate) steps.step("path");
     if (state === "connecting" || state === "connected") send({ t: "ice", candidate: e.candidate ? e.candidate.candidate : null });
+  };
+  pc.oniceconnectionstatechange = () => {
+    if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") steps.step("audio");
   };
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === "connected") set("connected");
@@ -177,6 +245,7 @@ export function startVoiciCall(o) {
     const r = checkVoiciCallAnswer(answer, { request, ownerSignPub: index.ownerSignPub, now: deps.now(), username: o.username });
     if (!r.ok) return set("failed", { code: "bad-answer" });
     set("connecting");
+    steps.step("secure");
     const ss = voiciCallDecapsulate(hexToBytes(answer.xwingCiphertext), callerKey.seed);
     const rb = request.kind === "voici-call-request-anon" ? canonicalVoiciCallRequestAnon(request) : canonicalVoiciCallRequest(request);
     const ab = canonicalVoiciCallAnswer(answer);
@@ -188,6 +257,7 @@ export function startVoiciCall(o) {
     pc.setConfiguration({ iceServers: [voiciCallIceServer(o.username, cfg.services, answer)], iceTransportPolicy: "relay", bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
     await pc.setLocalDescription({ type: "offer", sdp: request.offerSdp });
     await pc.setRemoteDescription({ type: "answer", sdp: answer.answerSdp });
+    steps.step("reach");
     for (const c of pendingIce.splice(0)) await pc.addIceCandidate(c === null ? null : { candidate: c, sdpMid: "0" }).catch(() => {});
     limitTimer = setTimeout(() => set("ended", { reason: "limit" }), VOICI_CALL_MAX_MS);
   }

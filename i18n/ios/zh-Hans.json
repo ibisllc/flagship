@@ -3881,5 +3881,9 @@
   "Answered · %@": "已接听 · %@",
   "Video call · %@": "视频通话 · %@",
   "Incoming call · %@ · %@": "来电 · %@ · %@",
-  "Outgoing call · %@ · %@": "去电 · %@ · %@"
+  "Outgoing call · %@ · %@": "去电 · %@ · %@",
+  "Securing the line (quantum-safe)…": "正在保护线路（抗量子）…",
+  "Opening a direct path…": "正在打开直接通道…",
+  "Starting audio…": "正在启动音频…",
+  "Opening your line…": "正在打开你的线路…"
 }

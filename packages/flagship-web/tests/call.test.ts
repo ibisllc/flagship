@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as C from "../src/callProtocol.js";
 import * as P from "../src/proto/lib/voiciProtocol.js";
-import { buildVoiciCallRequest, voiciCallIceServer, VOICI_CALL_AUDIO } from "../src/call.js";
+import { buildVoiciCallRequest, voiciCallIceServer, voiciCallSteps, VOICI_CALL_AUDIO, VOICI_CALL_CONNECT_LIMIT_MS, VOICI_CALL_STEP_SLOW_MS, VOICI_CALL_STEPS } from "../src/call.js";
 import { p256 } from "../src/proto/vendor/noble-post-quantum/pq-seal.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -219,5 +219,60 @@ describe("receiveVoiciCallHandoff (the voi.ci tab's side of the pipe)", () => {
     expect(W.takeVoiciCallHandoffFragment(win)).toBe(hash);
     expect(replaced).toBe("/alice");
     expect(W.takeVoiciCallHandoffFragment({ location: { hash: "#x" } })).toBeNull();
+  });
+});
+
+describe("the connecting steps (the status line while a call connects)", () => {
+  const clock = () => {
+    let now = 0;
+    let next = 1;
+    const due = new Map<number, { at: number; f: () => void }>();
+    return {
+      timers: {
+        setTimeout: (f: () => void, ms: number) => (due.set(next, { at: now + ms, f }), next++),
+        clearTimeout: (id: number) => void due.delete(id),
+      },
+      advance(ms: number) {
+        now += ms;
+        for (const [id, t] of [...due].sort((a, b) => a[1].at - b[1].at)) {
+          if (t.at <= now && due.has(id)) {
+            due.delete(id);
+            t.f();
+          }
+        }
+      },
+    };
+  };
+
+  it("goes forward only, says when a step runs long, and gives up at the limit", () => {
+    const c = clock();
+    const seen: string[] = [];
+    let gaveUp = 0;
+    const s = voiciCallSteps({ timers: c.timers, onStep: (n: string, d: { slow: boolean }) => seen.push(d.slow ? `${n}:slow` : n), onGiveUp: () => gaveUp++ });
+    s.step("secure");
+    s.step("reach");
+    s.step("secure");
+    s.step("reach");
+    expect(seen).toEqual(["secure", "reach"]);
+    c.advance(VOICI_CALL_STEP_SLOW_MS);
+    expect(seen.at(-1)).toBe("reach:slow");
+    s.step("path");
+    c.advance(VOICI_CALL_CONNECT_LIMIT_MS - VOICI_CALL_STEP_SLOW_MS);
+    expect(gaveUp).toBe(1);
+    s.step("audio");
+    expect(seen.at(-1)).toBe("path:slow");
+  });
+
+  it("stops both clocks once connected", () => {
+    const c = clock();
+    const seen: string[] = [];
+    let gaveUp = 0;
+    const s = voiciCallSteps({ timers: c.timers, onStep: (n: string) => seen.push(n), onGiveUp: () => gaveUp++ });
+    s.step("secure");
+    s.stop();
+    c.advance(VOICI_CALL_CONNECT_LIMIT_MS * 2);
+    expect(gaveUp).toBe(0);
+    expect(seen).toEqual(["secure"]);
+    expect(VOICI_CALL_STEPS).toEqual(["secure", "reach", "path", "audio"]);
   });
 });

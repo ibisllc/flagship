@@ -4208,5 +4208,10 @@
   "scheduled_backup_finished": "计划备份已完成",
   "activity_social_answered_length": "已接听 · %1$s",
   "activity_social_video_call_length": "视频通话 · %1$s",
-  "voici_calls_history_line_length": "%1$s · %2$s · %3$s"
+  "voici_calls_history_line_length": "%1$s · %2$s · %3$s",
+  "voici_call_step_route": "正在打开你的线路…",
+  "voici_call_step_secure": "正在保护线路（抗量子）…",
+  "voici_call_step_path": "正在打开直接通道…",
+  "voici_call_step_audio": "正在启动音频…",
+  "voici_call_slow": "这比平时用的时间长"
 }

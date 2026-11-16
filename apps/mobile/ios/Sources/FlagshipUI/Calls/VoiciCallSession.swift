@@ -92,6 +92,8 @@ final class VoiciCallSession {
         case request(VoiciCallRequest)
         case won
         case connected
+        /// ICE connected through the caller's TURN stream; DTLS and the first media follow.
+        case pathOpen
         /// A room reason (hangup, cancel, no-answer, limit, ...), "answered-elsewhere", "decline", "left" or "failed".
         case ended(String)
         case remoteCamera(String)
@@ -122,6 +124,7 @@ final class VoiciCallSession {
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         media.onLocalIce = { [weak self] c in Task { @MainActor in self?.send(["t": "ice", "candidate": c.map { .string($0) } ?? .null]) } }
         media.onConnected = { [weak self] in Task { @MainActor in self?.onEvent(.connected) } }
+        media.setOnPathOpen { [weak self] in Task { @MainActor in self?.onEvent(.pathOpen) } }
         media.onFailed = { [weak self] in Task { @MainActor in self?.end("failed", why: "media-failed") } }
         let t = VoiciCallNetwork.session.webSocketTask(with: req)
         task = t
