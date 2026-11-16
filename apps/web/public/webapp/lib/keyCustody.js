@@ -310,9 +310,8 @@ export async function loadAdminRootKey(umkGetter, { profileId, userName = "Flags
       const salt = random(32);
       let made;
       try {
-        made = typeof record.credentialId === "string"
-          ? { credentialId: record.credentialId, prf: (await a.get({ credentialId: record.credentialId, salt })).prf }
-          : await a.create({ salt, userName });
+        const cred = typeof record.credentialId === "string" ? record.credentialId : await custodyCredential(pid());
+        made = cred ? { credentialId: cred, prf: (await a.get({ credentialId: cred, salt })).prf } : await a.create({ salt, userName });
       } catch (e) {
         edSeed.fill(0);
         throw normalize(e);
@@ -331,6 +330,7 @@ export async function loadAdminRootKey(umkGetter, { profileId, userName = "Flags
         };
         const sealed = await seal(next, made.prf, umk, edSeed, mldsaSeed);
         await kvPut(recordKey, sealed);
+        if (!(await kvGet(`${PASSKEY_RECORD}.${pid()}`))) await kvPut(`${PASSKEY_RECORD}.${pid()}`, { credentialId: made.credentialId });
         record = sealed;
         const bound = await bind(record, { edSeed, mldsaSeed });
         if (bound !== null) {
@@ -348,6 +348,74 @@ export async function loadAdminRootKey(umkGetter, { profileId, userName = "Flags
     },
   };
   return handle;
+}
+
+/* ---------- other sealed keys (org seat admin keys) ---------- */
+
+const PASSKEY_RECORD = "flagship.custodyPasskey.v1";
+
+/** The passkey this browser seals its keys under, if it has made one (shared by every sealed key of the profile). */
+async function custodyCredential(profileId) {
+  const r = await kvGet(`${PASSKEY_RECORD}.${profileId}`);
+  if (r && typeof r.credentialId === "string") return r.credentialId;
+  const admin = await kvGet(adminRootRecordKey(profileId));
+  return typeof admin?.credentialId === "string" ? admin.credentialId : null;
+}
+
+async function prfFor(profileId, salt, userName) {
+  const a = authenticator();
+  const cred = await custodyCredential(profileId);
+  try {
+    if (cred) return { credentialId: cred, prf: (await a.get({ credentialId: cred, salt })).prf };
+    const made = await a.create({ salt, userName });
+    await kvPut(`${PASSKEY_RECORD}.${profileId}`, { credentialId: made.credentialId });
+    return made;
+  } catch (e) {
+    throw normalize(e);
+  }
+}
+
+/**
+ * Seals `plain` (a key's seeds) under a passkey and the account key at `recordKey`, labelled by
+ * `label` (bound into the ciphertext). One passkey prompt; the same passkey as the admin root's.
+ */
+export async function sealUnderPasskey({ recordKey, label, plain, umk, profileId = activeProfileId(), userName = "Flagship", meta = {} }) {
+  if (!(umk instanceof Uint8Array) || umk.length !== 32) throw fail("custody-locked");
+  const { shellAllowsSigning } = await import("./shellTrust.js");
+  if (!(await shellAllowsSigning())) throw fail("custody-shell-unsigned");
+  const salt = random(32);
+  const got = await prfFor(profileId, salt, userName);
+  try {
+    const key = await kek(got.prf, umk);
+    const nonce = random(12);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: new TextEncoder().encode(`${KEK_INFO}|${label}`) }, key, plain));
+    await kvPut(recordKey, { version: RECORD_VERSION, custody: CUSTODY_BROWSER, credentialId: got.credentialId, prfSalt: bytesToHex(salt), label, ...meta, nonce: bytesToHex(nonce), ciphertext: bytesToHex(ct) });
+  } finally {
+    got.prf.fill(0);
+  }
+}
+
+/** Opens a key `sealUnderPasskey` sealed (one passkey prompt). The caller wipes the result. */
+export async function openUnderPasskey({ recordKey, umk }) {
+  if (!(umk instanceof Uint8Array) || umk.length !== 32) throw fail("custody-locked");
+  const { shellAllowsSigning } = await import("./shellTrust.js");
+  if (!(await shellAllowsSigning())) throw fail("custody-shell-unsigned");
+  const r = await kvGet(recordKey);
+  if (!r || r.version !== RECORD_VERSION || typeof r.label !== "string") throw fail("not-admin");
+  let got;
+  try {
+    got = await authenticator().get({ credentialId: r.credentialId, salt: hexToBytes(r.prfSalt) });
+  } catch (e) {
+    throw normalize(e);
+  }
+  try {
+    const key = await kek(got.prf, umk);
+    return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: hexToBytes(r.nonce), additionalData: new TextEncoder().encode(`${KEK_INFO}|${r.label}`) }, key, hexToBytes(r.ciphertext)));
+  } catch {
+    throw fail("custody-wrong-passkey");
+  } finally {
+    got.prf.fill(0);
+  }
 }
 
 /** What Settings shows for this browser's admin key: null (not an admin device), or its custody. */

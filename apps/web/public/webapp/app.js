@@ -144,6 +144,7 @@ import { initPendingServerView, enterPendingServer } from "./views/pending-serve
 import { initTrustedDevicesView } from "./views/trusted-devices.js";
 import { initAccountSecurityView } from "./views/account-security.js";
 import { initQuantumSafetyView } from "./views/quantum-safety.js";
+import { initOrgsView } from "./views/orgs.js";
 import { initLocalAiView } from "./views/local-ai.js";
 import { initAddDeviceView } from "./views/add-device.js";
 import { initJoinView, enterJoin } from "./views/join.js";
@@ -211,6 +212,7 @@ const SUB_VIEW_TABS = {
   "view-settings": "settings",
   "view-account-security": "settings",
   "view-quantum-safety": "settings",
+  "view-orgs": "settings",
   "view-add-device": "settings",
   "view-recovery": "settings",
   "view-post-recovery": "settings",
@@ -353,6 +355,7 @@ function wireSettingsTabEntries() {
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-quantum-safety", () => show("view-quantum-safety"));
+  wire("settings-tab-orgs", () => show("view-orgs"));
   wire("settings-tab-join-account", async () => {
     const { openScanOrLink } = await import("./views/join.js");
     await openScanOrLink();
@@ -595,6 +598,7 @@ async function boot() {
   initTrustedDevicesView();
   initAccountSecurityView();
   initQuantumSafetyView();
+  initOrgsView();
   initLocalAiView();
   initAddDeviceView();
   initJoinView();
