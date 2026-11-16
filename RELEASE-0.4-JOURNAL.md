@@ -851,6 +851,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   Test-only: onboarding uses the virtual PRF passkey on localhost (`gymKit.passkeyAuthenticator`); four specs updated
   to the current shell. Whole webapp gym 375/375; vitest 3661; tsc, i18n, parity 0 red.
 
+- 2026-11-16: Live gym test after anon-fix: ringing and answering work; both sides then stay on "Connecting…" (no
+  media). Relay log: the phone holds `fleet-perch.gym.flagship.services` (generation 11), then Fly proxy
+  `tcp-backhaul: unexpected end of file` every ~8 s: connections to the phone route die. Agent on `0.4/media-fix`
+  to find and fix the break and redeploy the gym. Owner request: a one-line connecting progress ("Reaching their
+  phone…", "Securing the line (quantum-safe)…", …) on both sides, with a slow-step hint.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
