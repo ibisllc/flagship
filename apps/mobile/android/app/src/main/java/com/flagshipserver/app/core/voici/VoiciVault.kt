@@ -58,6 +58,10 @@ data class VoiciLocal(
     val ladderSeq: Long = 0,
     /** "Everything you put on your page is public" was answered with Make it public on this device. */
     val publicWarned: Boolean = false,
+    /** Calls this device placed or answered (docs/voici-calls.md "Calling from the app"): this device only, never synced. */
+    val callHistory: List<com.flagshipserver.app.calls.VoiciCallRecord> = emptyList(),
+    /** Owner side: conversations whose caller didn't allow call-backs (conv → when a ring was refused), this device only. */
+    val ringBackOff: Map<String, Long> = emptyMap(),
 )
 
 /** Where the sealed files live. */

@@ -60,6 +60,15 @@ enum class PagePublicStep {
     }
 }
 
+/** What ringing a visitor of this account's page back did (VoiciCenter.callVisitor). */
+sealed interface CallVisitorOutcome {
+    /** `.com` pushed the ring to the caller's devices; their app dials out to this page while it rings. */
+    data class Ringing(val ringId: String, val until: Long) : CallVisitorOutcome
+    /** The caller didn't choose "Call and allow call-back" (no ring-back channel): Call is disabled for them. */
+    data object NoCallBack : CallVisitorOutcome
+    data class Failed(val code: String) : CallVisitorOutcome
+}
+
 data class VoiciPageUi(
     val username: String = "",
     val loaded: Boolean = false,
@@ -813,7 +822,9 @@ class VoiciCenter(
     private suspend fun refreshMissedCalls(u: String, umk: ByteArray, idx: VoiciPageIndex, ca: List<String>) {
         val items = runCatching { client.missedCalls(u) }.getOrNull() ?: return
         val seeds = (idx.body.inboxEpoch downTo 1L).map { VoiciMessages.deriveVoiciInboxKey(umk, idx.body.pageId, it).seed }
-        _messages.value = _messages.value.copy(missedCalls = com.flagshipserver.app.calls.VoiciMissedCalls.open(items, seeds, idx.body.pageId, origin(), ca))
+        val rows = com.flagshipserver.app.calls.VoiciMissedCalls.open(items, seeds, idx.body.pageId, origin(), ca)
+        _messages.value = _messages.value.copy(missedCalls = rows)
+        for (r in rows) clearRingBackOff(r.conv, r.ringingAt)
     }
 
     /** The thread menu's "Allow calls from them" / "Don't allow calls from them" (`flagship/voici-call-allow/v1`). Null on success, else a code. */
@@ -1051,6 +1062,92 @@ class VoiciCenter(
     }
 
     fun previousAttestation(pageId: String): JsonObject? = withLocal { _, _, l -> l.attestations[pageId] }
+
+    // ── calls from the app and the call history (docs/voici-calls.md "Calling from the app") ──
+
+    /** Pages this account signed in to, so it can call them as their visitor. */
+    fun callablePages(): List<com.flagshipserver.app.calls.VoiciCallTarget> =
+        withLocal { _, _, l -> l.signInPages.toSortedMap().map { (pageId, user) -> com.flagshipserver.app.calls.VoiciCallTarget(user, pageId) } } ?: emptyList()
+
+    /** This device's calls merged with the page's missed calls, newest first. */
+    fun callHistory(): List<com.flagshipserver.app.calls.VoiciCallRecord> =
+        com.flagshipserver.app.calls.VoiciCallHistory.merge(withLocal { _, _, l -> l.callHistory } ?: emptyList(), _messages.value.missedCalls)
+
+    private val _callHistoryVersion = MutableStateFlow(0)
+    /** Bumps when a call is recorded, so the history screen reads [callHistory] again. */
+    val callHistoryVersion: StateFlow<Int> = _callHistoryVersion.asStateFlow()
+
+    suspend fun recordCall(r: com.flagshipserver.app.calls.VoiciCallRecord) {
+        update { it.copy(callHistory = com.flagshipserver.app.calls.VoiciCallHistory.add(it.callHistory, r)) }
+        _callHistoryVersion.value += 1
+        if (r.direction == "in") r.conv?.let { clearRingBackOff(it, r.at) }
+    }
+
+    /** A call from this app to a page it signed in to. Media through [engine]; without one the call goes to a voi.ci tab. */
+    fun outgoingCall(
+        target: com.flagshipserver.app.calls.VoiciCallTarget,
+        video: Boolean,
+        integrity: VoiciIntegrity,
+        engine: com.flagshipserver.app.calls.CallMediaEngine,
+        room: com.flagshipserver.app.calls.VoiciCallerRoom,
+        handoff: com.flagshipserver.app.calls.VoiciCallHandoffPipe,
+        openBrowser: (String) -> Unit,
+    ) = com.flagshipserver.app.calls.VoiciOutgoingCall(target, video, this, keyring, integrity, engine, room, handoff, openBrowser, scope, now, origin)
+
+    /**
+     * Conversations whose caller didn't allow call-backs, as `.com` last answered a ring here (no read of a channel
+     * exists, so this device learns it from a refused ring). Call is disabled for them until the caller writes or
+     * calls again, which may come with a fresh "Call and allow call-back".
+     */
+    fun ringBackOff(): Set<String> = withLocal { _, _, l -> l.ringBackOff.keys } ?: emptySet()
+
+    /**
+     * Ring a visitor of this account's page back (owner decision 2026-11-15: through the conversation's ring-back
+     * channel when the caller chose "Call and allow call-back", disabled otherwise). Signs a `flagship/voici-ring/v1`
+     * with the page's owner messages key, the hint sealed to the caller's thread key, and posts it; `.com` pushes it to
+     * the caller's devices, and their app dials out to this page, so the call then rings here as any call does. The
+     * caller stays a pseudonym: no username or bare name of theirs is ever used.
+     */
+    suspend fun callVisitor(conv: String, video: Boolean = false): CallVisitorOutcome {
+        val u = user() ?: return CallVisitorOutcome.Failed("locked")
+        val umk = keyring.umk() ?: return CallVisitorOutcome.Failed("locked")
+        val local = withLocal { _, _, l -> l } ?: return CallVisitorOutcome.Failed("locked")
+        val keys = ownerKeys(local, umk) ?: return CallVisitorOutcome.Failed("not-found")
+        val c = local.conversations.firstOrNull { it.conv == conv } ?: return CallVisitorOutcome.Failed("not-found")
+        val t = now()
+        val ringId = VoiciOwner.randomHex(16)
+        val media = if (video) VoiciCalls.MEDIA_VIDEO else VoiciCalls.MEDIA_AUDIO
+        val hint = try {
+            val eseed = ByteArray(com.flagshipserver.app.core.pq.PqHybrid.HYBRID_SEAL_RANDOMNESS_LEN).also { java.security.SecureRandom().nextBytes(it) }
+            WebEnvelopes.b64Encode(VoiciRings.sealHint(WebEnvelopes.hexToBytes(c.threadPub), keys.pageId, u, conv, ringId, media, t, eseed))
+        } catch (e: Exception) {
+            return CallVisitorOutcome.Failed("failed")
+        }
+        val ring = VoiciRing(keys.pageId, conv, ringId, hint, media, t)
+        val body = JsonObject(mapOf("ring" to ring.toJson(), "signature" to JsonPrimitive(VoiciRings.signRing(ring, keys.sign.seed))))
+        return try {
+            client.ring(u, body)
+            CallVisitorOutcome.Ringing(ringId, t + VoiciRings.RING_TTL_MS)
+        } catch (e: VoiciHttpError) {
+            if (e.code == "no-ring-back") {
+                update { it.copy(ringBackOff = it.ringBackOff + (conv to t)) }
+                _callHistoryVersion.value += 1
+                CallVisitorOutcome.NoCallBack
+            } else {
+                CallVisitorOutcome.Failed(e.code ?: "network")
+            }
+        } catch (e: Exception) {
+            CallVisitorOutcome.Failed("network")
+        }
+    }
+
+    /** The caller wrote or called again after a refused ring: they may have allowed call-backs since, so Call comes back. */
+    private suspend fun clearRingBackOff(conv: String, at: Long) {
+        if ((withLocal { _, _, l -> l.ringBackOff[conv] } ?: Long.MAX_VALUE) < at) {
+            update { it.copy(ringBackOff = it.ringBackOff - conv) }
+            _callHistoryVersion.value += 1
+        }
+    }
 
     /** Sign a browser out (§6.4): signed by P, sent to `.com`, dropped from the list. */
     suspend fun signOutSite(site: MessagesSignedInSite): String? {

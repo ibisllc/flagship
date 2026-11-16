@@ -55,6 +55,9 @@ data class VoiciInboxPage(val items: List<VoiciInboxItem>, val cursor: String, v
 data class VoiciDraftItem(val envelope: JsonObject, val at: Long)
 
 /** One stored missed call, sealed to the page's inbox key (`flagship/voici-missed-call/v1`, docs/voici-calls.md §6). */
+/** `.com`'s answer to a call this app placed (docs/voici-calls.md §6): the caller's room and its one-time token. */
+data class VoiciCallPlaced(val callId: String, val room: String, val token: String, val ringMs: Long)
+
 data class VoiciMissedCallItem(val id: String, val callId: String, val sealed: String, val storedAt: Long)
 
 /** The account's public keys from `GET /api/username/<u>`: the sensitive key is the admin root, else the IRK. */
@@ -102,6 +105,10 @@ interface VoiciClient {
     suspend fun registerCallKey(username: String, device: VoiciDeviceSigner, proof: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
     /** A signed revocation (`POST /api/accounts/<u>/voici-call-key/revoke`, `{revoke, signature}`). */
     suspend fun revokeCallKey(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
+    /** `POST /api/voici/calls` {request}: this app calls a page as its visitor ("Calling from the app"). */
+    suspend fun placeCall(request: JsonObject): VoiciCallPlaced = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
+    /** `POST /api/voici/pages/<u>/ring` {ring, signature}: ring a caller back through the conversation's channel. */
+    suspend fun ring(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
 }
 
 class LiveVoiciClient(
@@ -236,6 +243,18 @@ class LiveVoiciClient(
 
     override suspend fun revokeCallKey(username: String, body: JsonObject) {
         postJson("${base()}/api/accounts/${enc(username)}/voici-call-key/revoke", body)
+    }
+
+    override suspend fun placeCall(request: JsonObject): VoiciCallPlaced {
+        val o = postJson("${base()}/api/voici/calls", JsonObject(mapOf("request" to request))) ?: throw VoiciHttpError(200, "unavailable", JsonObject(emptyMap()))
+        val p = runCatching {
+            VoiciCallPlaced((o["callId"] as JsonPrimitive).content, (o["room"] as JsonPrimitive).content, (o["token"] as JsonPrimitive).content, (o["ringMs"] as JsonPrimitive).content.toLong())
+        }.getOrNull()
+        return p ?: throw VoiciHttpError(200, "unavailable", o)
+    }
+
+    override suspend fun ring(username: String, body: JsonObject) {
+        postJson("${base()}/api/voici/pages/${enc(username)}/ring", body)
     }
 
     override suspend fun send(envelope: JsonObject, direct: Boolean) {

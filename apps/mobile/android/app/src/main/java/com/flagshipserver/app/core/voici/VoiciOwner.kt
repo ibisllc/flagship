@@ -378,10 +378,13 @@ object VoiciOwner {
         attestation: JsonObject,
         attestationExpiresAt: Long,
         now: Long,
+        /** A delegation that lasts at most this long from its (backdated) issue time; null = as long as the attestation. */
+        maxLifetimeMs: Long? = null,
     ): JsonObject {
         // E: issued 5 minutes back, so a browser or `.com` whose clock runs behind this phone's still finds them valid.
         val issued = maxOf(0L, now - SIGN_IN_BACKDATE_MS)
-        val d = WebDelegation("voici-messages", req.origin, req.pageId, visitor.pseudonymPub, "p256", req.delegatePub, issued, attestationExpiresAt, req.nonce)
+        val expires = maxLifetimeMs?.let { minOf(attestationExpiresAt, issued + it) } ?: attestationExpiresAt
+        val d = WebDelegation("voici-messages", req.origin, req.pageId, visitor.pseudonymPub, "p256", req.delegatePub, issued, expires, req.nonce)
         val ts = VoiciThreadStatement(req.pageId, visitor.pseudonymPub, visitor.threadPub, issued)
         return JsonObject(
             linkedMapOf(
