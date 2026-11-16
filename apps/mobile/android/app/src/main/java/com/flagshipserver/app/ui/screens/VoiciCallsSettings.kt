@@ -89,9 +89,15 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
             FSDivider(0.dp)
             Column(Modifier.testTag("page-calls-from")) {
                 Text(stringResource(R.string.voici_calls_who), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2))
-                for ((value, res) in listOf(VoiciCallSettings.FROM_ACCEPTED to R.string.voici_calls_from_accepted, VoiciCallSettings.FROM_SIGNED_IN to R.string.voici_calls_from_signed_in)) {
+                // Owner-approved modes (docs/voici-calls.md "Who may call a page"): anyone on the internet, or signed-in
+                // callers who allow a call-back. An older page's mode shows with neither picked until one is chosen.
+                for ((value, res) in listOf(
+                    VoiciCallSettings.FROM_ANYONE to (R.string.voici_calls_from_anyone to R.string.voici_calls_from_anyone_note),
+                    VoiciCallSettings.FROM_CALLBACK to (R.string.voici_calls_from_callback to R.string.voici_calls_from_callback_note),
+                )) {
                     FSRow(
-                        title = stringResource(res),
+                        title = stringResource(res.first),
+                        subtitle = stringResource(res.second),
                         enabled = v.canEdit && !busy,
                         modifier = Modifier
                             .selectable(selected = from == value, enabled = v.canEdit && !busy, onClick = { change(true, value) })
@@ -102,6 +108,7 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
             }
         }
     }
+    if (v.showsWho && page.callsOn) CallHoursEditor(center, page, v.canEdit, onError, ::pickTime, ::label)
     Text(
         stringResource(
             when (v.note) {
@@ -173,3 +180,65 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
     )
 }
 
+
+/**
+ * Call hours (next to who can call): off = calls ring any time; on = only on the picked days between From and Until,
+ * in this device's time zone, published in the page index so `.com` honours it for every caller.
+ */
+@Composable
+private fun CallHoursEditor(center: VoiciCenter, page: VoiciPageUi, canEdit: Boolean, onError: (String) -> Unit, pickTime: (Int, (Int) -> Unit) -> Unit, label: (Int) -> String) {
+    val scope = rememberCoroutineScope()
+    val zone = remember { java.util.TimeZone.getDefault().id }
+    val published = VoiciCallSettings.CallHours.parse(page.callHours)
+    var draft by remember(page.callHours) { mutableStateOf(published ?: VoiciCallSettings.CallHours.default(zone)) }
+    var busy by remember { mutableStateOf(false) }
+    fun publish(h: VoiciCallSettings.CallHours?) {
+        if (h != null && !h.valid) return
+        busy = true
+        scope.launch {
+            if (!center.setCallHours(h?.value(), FSStrings.get(R.string.voici_publish_reason))) center.page.value.error?.let { onError(VoiciCopy.publishError(it)) }
+            busy = false
+        }
+    }
+    val enabled = canEdit && !busy
+    FSGroup(header = stringResource(R.string.voici_calls_hours)) {
+        FSRow(
+            title = stringResource(R.string.voici_calls_hours_switch),
+            enabled = enabled,
+            trailing = {
+                Switch(checked = published != null, onCheckedChange = { on -> publish(if (on) draft else null) }, enabled = enabled, modifier = Modifier.testTag("calls-hours"))
+            },
+        )
+        if (published != null) {
+            FSDivider(0.dp)
+            androidx.compose.foundation.layout.Row(
+                Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2).testTag("calls-hours-days"),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s1),
+            ) {
+                for (d in 0..6) {
+                    val name = java.time.DayOfWeek.of(d + 1).getDisplayName(java.time.format.TextStyle.NARROW, java.util.Locale.getDefault())
+                    androidx.compose.material3.FilterChip(
+                        selected = d in draft.days,
+                        enabled = enabled,
+                        onClick = {
+                            val next = draft.copy(days = if (d in draft.days) draft.days - d else draft.days + d)
+                            if (next.valid) { draft = next; publish(next) }
+                        },
+                        label = { Text(name) },
+                        modifier = Modifier.testTag("calls-hours-day-$d"),
+                    )
+                }
+            }
+            FSRow(title = stringResource(R.string.voici_calls_dnd_from), enabled = enabled, onClick = { pickTime(draft.start) { m -> draft.copy(start = m).takeIf { it.valid }?.let { draft = it; publish(it) } } },
+                trailing = { Text(label(draft.start)) }, modifier = Modifier.testTag("calls-hours-from"))
+            FSRow(title = stringResource(R.string.voici_calls_dnd_until), enabled = enabled, onClick = { pickTime(draft.end) { m -> draft.copy(end = m).takeIf { it.valid }?.let { draft = it; publish(it) } } },
+                trailing = { Text(label(draft.end)) }, modifier = Modifier.testTag("calls-hours-until"))
+        }
+    }
+    Text(
+        stringResource(R.string.voici_calls_hours_footer, published?.zone ?: zone),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = FS.space.s4),
+    )
+}

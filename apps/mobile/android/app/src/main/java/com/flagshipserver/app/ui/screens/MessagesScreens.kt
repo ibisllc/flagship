@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Public
@@ -287,6 +288,7 @@ fun ThreadScreen(nav: NavController, conv: String) {
             modifier = Modifier.fillMaxSize().testTag("thread-list"),
             verticalArrangement = Arrangement.spacedBy(FS.space.s2),
         ) {
+            center.reveal(conv)?.let { r -> item(key = "reveal") { RevealPill(r) } }
             if (request) item { FSNote(stringResource(R.string.voici_request_banner), Modifier.testTag("thread-request-banner")) }
             if (c.hasGap) item { FSNote(stringResource(R.string.voici_thread_gap), Modifier.testTag("thread-gap")) }
             val lastMine = ordered.lastOrNull { it.mine }?.msgId
@@ -328,11 +330,15 @@ fun ThreadScreen(nav: NavController, conv: String) {
     if (deleting) AlertDialog(
         onDismissRequest = { deleting = false },
         title = { Text(stringResource(R.string.voici_delete_title)) },
-        text = { Text(stringResource(R.string.voici_delete_body)) },
+        // Delete = forget (docs/voici-calls.md): `.com` drops the conversation at once; the caller's own copy stays with them.
+        text = { Text(stringResource(R.string.voici_delete_forget_body, name)) },
         confirmButton = {
             FSGhostButton(stringResource(R.string.voici_delete), {
                 deleting = false
-                scope.launch { center.archive(conv); nav.popBackStack() }
+                scope.launch {
+                    val err = center.deleteConversation(conv)
+                    if (err == null) nav.popBackStack() else toasts.error(VoiciCopy.sendError(err))
+                }
             }, modifier = Modifier.testTag("thread-delete-confirm"))
         },
         dismissButton = { FSGhostButton(stringResource(R.string.voici_cancel), { deleting = false }) },
@@ -394,6 +400,35 @@ private fun MissedCallRow(call: VoiciMissedCallRow, canCallBack: Boolean, onCall
         Text(shortTime(call.ringingAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FSGhostButton(stringResource(R.string.voici_call_back), onCallBack, enabled = canCallBack, modifier = Modifier.testTag("thread-missed-call-back"))
     }
+}
+
+/**
+ * The caller's checked reveal (docs/voici-calls.md "What the reveal shows"): "Display Name (username)", or the
+ * username alone, with the info icon beside the chosen name: the page key proves the username, nothing proves a name.
+ */
+@Composable
+internal fun RevealPill(r: com.flagshipserver.app.core.voici.VoiciRevealShown) {
+    var info by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().testTag("thread-reveal-pill"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Text(
+            r.displayName?.let { stringResource(R.string.voici_reveal_pill, it, r.username) } ?: r.username,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        IconButton(onClick = { info = true }, modifier = Modifier.testTag("thread-reveal-info")) {
+            Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.voici_reveal_info))
+        }
+    }
+    if (info) AlertDialog(
+        onDismissRequest = { info = false },
+        title = { Text(stringResource(R.string.voici_reveal_info_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                if (r.displayName != null) Text(stringResource(R.string.voici_reveal_name_unchecked))
+                Text(stringResource(R.string.voici_reveal_username_line, r.username))
+            }
+        },
+        confirmButton = { FSGhostButton(stringResource(R.string.voici_call_close), { info = false }, modifier = Modifier.testTag("thread-reveal-info-close")) },
+    )
 }
 
 @Composable

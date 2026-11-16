@@ -207,6 +207,9 @@ class GymMessagesTest : GymBase() {
                 tagCount("reply-notice-call-audio") > 0
             }
             tap("reply-notice-call-audio")
+            // The call-back pop-up: allowing it attaches the conversation's ring-back channel at .com.
+            tap("reply-notice-call-allow-back")
+            eventually(15_000, "the channel is attached") { GymVoici.client.ringBackOrders.isNotEmpty() }
             eventually(20_000, "handed to the browser") { handed != null }
             assertTrue(opened!!.startsWith("https://voi.ci/${GymVoici.OTHER}#call=${handed!!.first}."))
             waitUntilExists("outgoing-call-status")

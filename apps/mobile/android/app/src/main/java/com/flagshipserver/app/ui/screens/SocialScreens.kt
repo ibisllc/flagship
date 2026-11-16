@@ -863,6 +863,12 @@ private fun SocialMessages(center: VoiciCenter, ui: com.flagshipserver.app.core.
             onClick = { nav.navigate("calls") },
             modifier = Modifier.testTag("messages-calls"),
         )
+        FSRow(
+            title = stringResource(R.string.voici_my_conversations),
+            icon = Icons.Outlined.ChatBubbleOutline,
+            onClick = { nav.navigate("visitor-threads") },
+            modifier = Modifier.testTag("messages-visitor-threads"),
+        )
     }
     if (replies.isNotEmpty() && !showRequests) {
         FSGroup {
