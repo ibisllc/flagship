@@ -694,6 +694,12 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   anonymous hours + blocking in 0.4; `.com` flags `ringBack` on inbox items. Agent resumed for the `.com`/webapp
   half; the forks for native.
 
+- 2026-11-16: Owner approved the privacy wording fix for 0.4: §2.11 now says "Our relay doesn't pass your IP
+  address on: the page owner's phone sees only the relay." (Last updated 2026-11-16; not deployed, ships with 0.4.)
+  Found while testing it: 20 webapp tests fail on release/0.4 itself (`webappCoManagerInvites`,
+  `webappShareServerFlows`: "Couldn't read your invites from this server"); given to the webapp-custody agent.
+  All agents hit the usage limit and were resumed.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
