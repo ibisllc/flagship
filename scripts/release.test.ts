@@ -726,7 +726,7 @@ describe("the app browser ships on only if the release gym proves it (owner deci
     const r = spawnSync("bash", [GYM_RUN, "--skip-refresh"], {
       cwd: ROOT,
       encoding: "utf8",
-      env: { PATH: `${bin}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: dir, GYM_SECRETS_FILE: secrets, FLAGSHIP_GYM_LOCK: join(dir, "gym.lock"), GYM_INSTALLER_GIT_REF: "a".repeat(40) },
+      env: { PATH: `${bin}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: dir, GYM_SECRETS_FILE: secrets, FLAGSHIP_GYM_LOCK: join(dir, "gym.lock"), GYM_INSTALLER_GIT_REF: "a".repeat(40), GYM_RELAYS_DRY_RUN: "1" },
       timeout: 60_000,
     });
     const out = `${r.stdout}${r.stderr}`;
@@ -747,6 +747,9 @@ describe("the app browser ships on only if the release gym proves it (owner deci
     expect(r.verdict).toBe("fail");
     expect(r.out).toMatch(/policed app browser \(appBrowser (true|false)\): fail/);
     expect(r.out).toContain("the app browser must ship off");
+    // The relays come up for the run (no refresh: gym-relays.sh on) and stop when it ends.
+    expect(r.out).toContain("bash scripts/gym-relays.sh on");
+    expect(r.out).toMatch(/DRY-RUN would list machines, turn autostart off and stop each machine/);
   });
 
   it("another group failing too is arch-v2 not ready (5), not a browser-only verdict", () => {

@@ -21,7 +21,9 @@
 #             skipped — no secrets") is a FAILURE here, not a soft pass.
 #   Phase 2   cleanup (trap EXIT, runs even on failure): destroy every gym-labelled
 #             UpCloud server and gym DNS record still left (the runner already
-#             tears its fleet down; this is the net), scale Fly back to 0, and
+#             tears its fleet down; this is the net), stop the gym relays
+#             (scripts/gym-relays.sh off: stopped, autostart off, so nothing wakes them
+#             and Fly stops billing until the next run's Phase 0 starts them), and
 #             shut down the AVD if WE booted it.
 #
 # Usage:
@@ -32,13 +34,12 @@
 #   --skip-ios-sim     don't touch the iOS simulator (its leg will self-skip)
 #   --skip-avd         don't boot the Android AVD (its leg will self-skip)
 #   --skip-sims        both of the above
-#   --no-scale-down    leave the gym Fly app scaled up after the run
+#   --no-scale-down    leave the gym relays running after the run
 #   --skip-refresh     don't run gym-refresh.sh (debugging reruns only)
 #   --dry-run          walk every phase, execute NOTHING external (also
 #                      GYM_WEEKLY_DRY_RUN=1) — the CI-less self-test
 #
 # Env:
-#   GYM_FLY_APP        the gym Fly app (default flagship-services-gym)
 #   GYM_HEALTH_URL     gym Worker health (default https://gym.flagshipserver.com/api/health)
 #   GYM_WEEKLY_DRY_RUN =1 for --dry-run
 #   + everything .gym-secrets.env provides (GYM_ADMIN_SECRET etc — required,
@@ -51,7 +52,6 @@ cd "$(dirname "$0")/.." || exit 2
 REPO="$(pwd)"
 export PATH="$HOME/.fly/bin:$PATH"
 
-FLY_APP="${GYM_FLY_APP:-flagship-services-gym}"
 HEALTH_URL="${GYM_HEALTH_URL:-https://gym.flagshipserver.com/api/health}"
 DRY="${GYM_WEEKLY_DRY_RUN:-0}"
 
@@ -103,10 +103,10 @@ cleanup() {
   echo "▸ destroying any gym-labelled UpCloud server + gym DNS still left"
   try npx tsx tools/live-e2e/fleet-cli.ts sweep --destroy
   if [ "$scale_down" -eq 1 ]; then
-    echo "▸ scaling $FLY_APP back to 0 machines"
-    try flyctl scale count 0 -a "$FLY_APP" --yes
+    echo "▸ stopping the gym relays (gym-relays.sh off)"
+    try bash scripts/gym-relays.sh off
   else
-    echo "▸ --no-scale-down: leaving $FLY_APP up"
+    echo "▸ --no-scale-down: leaving the gym relays running"
   fi
   if [ "$we_booted_avd" -eq 1 ]; then
     echo "▸ shutting down the headless AVD we booted"
@@ -120,7 +120,7 @@ trap cleanup EXIT
 phase "PHASE 0 — refresh the gym env (gym-refresh.sh)"
 if [ "$do_refresh" -eq 0 ]; then
   echo "▸ --skip-refresh: using the gym env as deployed"
-  try flyctl scale count 1 -a "$FLY_APP" --yes
+  run bash scripts/gym-relays.sh on
 elif [ "$DRY" = "1" ]; then
   bash scripts/gym-refresh.sh --dry-run
 else
