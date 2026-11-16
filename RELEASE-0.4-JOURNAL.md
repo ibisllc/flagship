@@ -778,6 +778,15 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   far, a transport survey, the shape of the work). Proposed: the IPv6-native pass in 0.4; overlay transports
   (Yggdrasil, Tor onion reachability, a Freenet prototype for voi.ci) after, one at a time.
 
+- 2026-11-16: **Gym call test bring-up** (branch `gym-0.4` = release/0.4 + gym commits + `eb43ae84c`; worktree
+  `~/flagship-gym-0.4`). Gym D1: 18 pending migrations applied (through 0150). Gym Worker `flagship-com-gym` deployed
+  from `gym-0.4` (version `9d3e3e01`), APNs secrets for bundle `com.flagshipserver.app.gym` (production APNs: the
+  key `FHZWTBFQCM` is refused by the sandbox), `VOICI_CALL_POW_SECRET` set. Gym relay deployed from `gym-0.4` (v85,
+  Rust, mesh); **gym relays left ON for the owner's test** (`scripts/gym-relays.sh off` after). iPhone "Flagship
+  Gym" app (separate bundle id, own keychain, never over the production app): `scripts/gym-ios-device.sh` (ad hoc
+  export for production push tokens). **Blocked:** Apple requires the owner to accept the new Program License
+  Agreement before it registers the new app id.
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
