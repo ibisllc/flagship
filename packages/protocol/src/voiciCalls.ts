@@ -75,7 +75,7 @@ import type { Bytes } from "./types.js";
 import { checkWebDelegation, type WebDelegation } from "./webDelegation.js";
 import { canonicalJson, canonicalJsonBytes, ed25519VerifyHex, hexToBytes, isLowerHex, p256VerifyP1363, sha256Hex } from "./webEnvelope.js";
 import { x25519 } from "@noble/curves/ed25519.js";
-import { canonicalVoiciCallRequestAnon, checkVoiciCallRequestAnon, type VoiciCallRequestAnon, type VoiciCallRequestAnonBody } from "./voiciCallModes.js";
+import { canonicalVoiciCallRequestAnon, checkVoiciCallRequestAnon, voiciAnonConv, type VoiciCallRequestAnon, type VoiciCallRequestAnonBody } from "./voiciCallModes.js";
 import { canonicalVoiciThreadStatement, checkVoiciSignInAnswer, parseVoiciThreadStatement, TAG_VOICI_SIGN_IN_REQUEST, voiciConv, type VoiciMessageCred, type VoiciSignInAnswer } from "./voiciMessages.js";
 
 export const TAG_VOICI_CALL_REQUEST = "flagship/voici-call-request/v1";
@@ -1020,14 +1020,21 @@ export function sealVoiciCallPush(inboxPub: Bytes, p: Omit<VoiciCallPush, "v">, 
   return hybridSealWithRandomness(inboxPub, sealOpts(TAG_VOICI_CALL_PUSH, p.from, issuedAt), [utf8(p.callId)], canonicalJsonBytes(body), eseed);
 }
 
-export function openVoiciCallPush(inboxSeed: Bytes, callId: string, sealed: Bytes): VoiciCallPush | null {
+/**
+ * Opens the push's sealed caller. A signed-in caller's `from` is its pseudonym and `conv` its conversation; an
+ * anonymous caller's `from` is its browser key (P-256, uncompressed hex) and `conv` the anonymous conversation
+ * (voiciAnonConv): then `anonymous` is true and the apps show "Anonymous caller".
+ */
+export function openVoiciCallPush(inboxSeed: Bytes, callId: string, sealed: Bytes): (VoiciCallPush & { anonymous?: true }) | null {
   try {
     const { plaintext } = hybridOpen(inboxSeed, TAG_VOICI_CALL_PUSH, [utf8(callId)], sealed);
     const text = new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
     const v = JSON.parse(text) as unknown;
     if (canonicalJson(v) !== text || !isObj(v) || !exactKeys(v, ["v", "callId", "pageId", "conv", "from"]) || v.v !== 1) return null;
     const p = v as unknown as VoiciCallPush;
-    if (p.callId !== callId || !PAGE_ID.test(p.pageId) || !isLowerHex(p.conv, 32) || !isLowerHex(p.from, 32) || voiciConv(p.pageId, p.from) !== p.conv) return null;
+    if (p.callId !== callId || !PAGE_ID.test(p.pageId)) return null;
+    if (isLowerHex(p.from, 65) && p.from.startsWith("04") && isLowerHex(p.conv, 16) && voiciAnonConv(p.pageId, p.from) === p.conv) return { ...p, anonymous: true };
+    if (!isLowerHex(p.conv, 32) || !isLowerHex(p.from, 32) || voiciConv(p.pageId, p.from) !== p.conv) return null;
     return p;
   } catch {
     return null;
