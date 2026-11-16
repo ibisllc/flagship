@@ -700,6 +700,18 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `webappShareServerFlows`: "Couldn't read your invites from this server"); given to the webapp-custody agent.
   All agents hit the usage limit and were resumed.
 
+- 2026-11-16: The 20 failing share tests were stale `dist/` in `~/flagship-0.4` (packages built before the custody
+  merge); after `npm i` (adds `ldapts`) and `npx tsc -b` they pass (44/44). Rule: rebuild `dist` in a worktree after
+  a merge that changes packages before trusting its webapp tests.
+- 2026-11-16: **webapp-custody round two merged** (shell **v220**, no migration). Swift/Kotlin `custody` and custody
+  bylaws with browser-seat vectors (5/5 each); the webapp as a full org seat (`lib/orgSeat.js`: join with the 6-digit
+  code, admin key under the passkey, approvals, admit, rotate); the org-directory console in the webapp
+  (`lib/orgDirectoryConsole.js`; 30 parity allowlist entries removed; mapping editor is text lines); hybrid server
+  order, direct access, direct names and update orders from the web, and the strict opt-in (re-entry stays on the
+  phone); gym `gym-custody.spec.ts` with Chrome's virtual PRF passkey (3/3). `SHELL_SIGNATURE_REQUIRED` still false.
+  Checks here: tsc, i18n, parity 0 red, vitest web + protocol + .com 7028/0. Not run: a real browser against a real
+  `.com`/box; the iOS app build (only `OrgViewModel.swift` changed). calls-callback renumbers to v221 at its merge.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
