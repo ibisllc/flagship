@@ -145,7 +145,8 @@ export const STRINGS = {
   "Too many reports from your network. Try again later.": "Demasiadas denuncias desde tu red. Vuelve a intentarlo más tarde.",
   "Couldn't send the report. Try again.": "No se ha podido enviar la denuncia. Inténtalo de nuevo.",
   "Thanks. Flagship will look at this page.": "Gracias. Flagship revisará esta página.",
-  "Close": "Cerrar"
+  "Close": "Cerrar",
+  "No microphone found on this device. Connect one, or call from your phone.": "No hay ningún micrófono en este dispositivo. Conecta uno o llama desde tu teléfono."
  },
  "fr": {
   "Language": "Langue",
@@ -291,7 +292,8 @@ export const STRINGS = {
   "Too many reports from your network. Try again later.": "Trop de signalements depuis votre réseau. Réessayez plus tard.",
   "Couldn't send the report. Try again.": "Impossible d’envoyer le signalement. Réessayez.",
   "Thanks. Flagship will look at this page.": "Merci. Flagship va examiner cette page.",
-  "Close": "Fermer"
+  "Close": "Fermer",
+  "No microphone found on this device. Connect one, or call from your phone.": "Aucun micro trouvé sur cet appareil. Branchez-en un, ou appelez depuis votre téléphone."
  },
  "de": {
   "Language": "Sprache",
@@ -437,7 +439,8 @@ export const STRINGS = {
   "Too many reports from your network. Try again later.": "Zu viele Meldungen aus deinem Netzwerk. Versuche es später noch einmal.",
   "Couldn't send the report. Try again.": "Die Meldung konnte nicht gesendet werden. Versuche es noch einmal.",
   "Thanks. Flagship will look at this page.": "Danke. Flagship sieht sich diese Seite an.",
-  "Close": "Schließen"
+  "Close": "Schließen",
+  "No microphone found on this device. Connect one, or call from your phone.": "Auf diesem Gerät wurde kein Mikrofon gefunden. Schließ eins an oder ruf vom Handy aus an."
  },
  "pt-BR": {
   "Language": "Idioma",
@@ -583,7 +586,8 @@ export const STRINGS = {
   "Too many reports from your network. Try again later.": "Denúncias demais a partir da sua rede. Tente novamente mais tarde.",
   "Couldn't send the report. Try again.": "Não foi possível enviar a denúncia. Tente novamente.",
   "Thanks. Flagship will look at this page.": "Obrigado. O Flagship vai analisar esta página.",
-  "Close": "Fechar"
+  "Close": "Fechar",
+  "No microphone found on this device. Connect one, or call from your phone.": "Nenhum microfone encontrado neste dispositivo. Conecte um ou ligue do seu celular."
  },
  "ja": {
   "Language": "言語",
@@ -729,7 +733,8 @@ export const STRINGS = {
   "Too many reports from your network. Try again later.": "お使いのネットワークからの報告が多すぎます。後でもう一度お試しください。",
   "Couldn't send the report. Try again.": "報告を送信できませんでした。もう一度お試しください。",
   "Thanks. Flagship will look at this page.": "ありがとうございます。Flagship がこのページを確認します。",
-  "Close": "閉じる"
+  "Close": "閉じる",
+  "No microphone found on this device. Connect one, or call from your phone.": "このデバイスにマイクが見つかりません。マイクを接続するか、スマートフォンから発信してください。"
  },
  "zh-Hans": {
   "Language": "语言",
@@ -875,6 +880,7 @@ export const STRINGS = {
   "Too many reports from your network. Try again later.": "来自你所在网络的举报过多。请稍后重试。",
   "Couldn't send the report. Try again.": "无法提交举报。请重试。",
   "Thanks. Flagship will look at this page.": "谢谢。Flagship 会查看此页面。",
-  "Close": "关闭"
+  "Close": "关闭",
+  "No microphone found on this device. Connect one, or call from your phone.": "此设备上没有找到麦克风。请连接一个，或用手机拨打。"
  }
 };
