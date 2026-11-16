@@ -693,6 +693,65 @@ const stateSealed = P.sealMessagesState(stateKey, USER, 4, stateA, fill(12, 0xf1
 want("state opens", P.openMessagesState(stateKey, USER, stateSealed), stateA);
 want("state other version", P.openMessagesState(stateKey, USER, { ...stateSealed, version: 5 }), null);
 
+// state blob v2: delete = forget (docs/voici-and-messages.md §10.1.1)
+const OTHER_PPUB = H(otherP.publicKey);
+const CONV2 = P.voiciConv(PAGE_ID, OTHER_PPUB);
+const ANON_CONV = "a5".repeat(16);
+const forgetBase: P.MessagesState = {
+  ...P.emptyMessagesState(),
+  nicknames: { [PPUB]: { name: "Bob from the café", at: T0 }, [OTHER_PPUB]: { name: "Carol", at: T0 } },
+  blocks: [PPUB],
+  accepted: [CONV, CONV2],
+  archived: [CONV],
+  readUpTo: { [CONV]: MSG_ID, [CONV2]: MSG_ID },
+};
+// Device A deletes CONV; device B, still on the old state, marks it read and then has to merge (a version conflict).
+const devA1 = P.forgetConversation(forgetBase, CONV, PPUB, T0 + 100);
+const devB1: P.MessagesState = { ...forgetBase, readUpTo: { ...forgetBase.readUpTo, [CONV]: "5e".repeat(16) } };
+const devB2 = P.mergeMessagesState(devB1, devA1, T0 + 200);
+const devA2 = P.mergeMessagesState(devA1, devB2, T0 + 300);
+// The same caller writes again: A accepts the new request; B, stale, merges the old state once more.
+const devA3: P.MessagesState = { ...devA2, accepted: [...devA2.accepted, CONV].sort() };
+const devB3 = P.mergeMessagesState(forgetBase, devA3, T0 + 400);
+// A device offline for 20 days, on the old state, syncs.
+const devC = P.mergeMessagesState(forgetBase, devA2, T0 + 20 * DAY);
+// After the keep window the marker is gone and the state is v1 again.
+const devLate = P.mergeMessagesState(devA2, devA2, T0 + 100 + P.VOICI_FORGET_KEEP_MS);
+// Two deletes of the same conversation: the newer marker wins, entries made between the two go.
+const devD = P.forgetConversation({ ...devA3, nicknames: { ...devA3.nicknames, [PPUB]: { name: "Bob again", at: T0 + 500 } } }, CONV, PPUB, T0 + 600);
+const devE = P.mergeMessagesState(devA3, devD, T0 + 700);
+const devAnon = P.forgetConversation(forgetBase, ANON_CONV, null, T0 + 100);
+want("forget A1 keeps CONV2", devA1.accepted, [CONV2]);
+want("forget B2 gone", [devB2.accepted, devB2.archived, CONV in devB2.readUpTo, PPUB in devB2.nicknames, devB2.blocks], [[CONV2], [], false, false, []]);
+want("forget both devices agree", devA2, devB2);
+want("forget re-accept stays", devB3.accepted, [CONV, CONV2].sort());
+want("forget offline device", devC, devA2);
+want("forget late v1", devLate.v, 1);
+want("forget newer wins", [devE.accepted, PPUB in devE.nicknames, devE.forgotten?.[CONV]?.at], [[CONV2], false, T0 + 600]);
+const forgetSealed = P.sealMessagesState(stateKey, USER, 7, devA1, fill(12, 0xf2));
+want("forget sealed opens", P.openMessagesState(stateKey, USER, forgetSealed), devA1);
+const v2 = clone(devA1) as unknown as Record<string, unknown>;
+const forgetParse: { name: string; input: unknown; expected: unknown }[] = [
+  { name: "v1 reads as v1", input: forgetBase, expected: forgetBase },
+  { name: "v2 with a marker", input: devA1, expected: devA1 },
+  { name: "v2 with an anonymous conversation", input: devAnon, expected: devAnon },
+  { name: "v2 with no marker reads as v1", input: { ...v2, forgotten: {} }, expected: P.parseMessagesState({ ...v2, forgotten: {} }) },
+  { name: "v1 carrying markers", input: { ...v2, v: 1 }, expected: null },
+  { name: "v2 without markers field", input: { ...v2, forgotten: undefined }, expected: null },
+  { name: "v3", input: { ...v2, v: 3 }, expected: null },
+  { name: "marker conv too short", input: { ...v2, forgotten: { ["ab".repeat(8)]: { at: T0, pseudonymPub: null } } }, expected: null },
+  { name: "marker conv upper case", input: { ...v2, forgotten: { [CONV.toUpperCase()]: { at: T0, pseudonymPub: null } } }, expected: null },
+  { name: "marker bad at", input: { ...v2, forgotten: { [CONV]: { at: -1, pseudonymPub: null } } }, expected: null },
+  { name: "marker bad pseudonym", input: { ...v2, forgotten: { [CONV]: { at: T0, pseudonymPub: "00" } } }, expected: null },
+  { name: "marker missing pseudonym", input: { ...v2, forgotten: { [CONV]: { at: T0 } } }, expected: null },
+  { name: "marker extra key", input: { ...v2, forgotten: { [CONV]: { at: T0, pseudonymPub: null, by: "x" } } }, expected: null },
+];
+for (const c of forgetParse) {
+  // JSON drops `undefined` keys, so the case is what the other ports read.
+  c.input = clone(c.input);
+  want(`forget parse ${c.name}`, P.parseMessagesState(c.input), c.expected);
+}
+
 // reports
 const report: P.VoiciMessageReport = { kind: "message", pageId: PAGE_ID, envelope: message, reason: "spam", attached: null, issuedAt: T0 + 9_000 };
 const reportSig = P.signVoiciMessageReport(report, ownerSign.seed);
@@ -844,9 +903,33 @@ const messages = {
     version: 4,
     a: stateA,
     b: stateB,
-    merged: P.mergeMessagesState(stateA, stateB),
+    merged: P.mergeMessagesState(stateA, stateB, T0),
     nonce: H(fill(12, 0xf1)),
     sealed: stateSealed,
+  },
+  stateForget: {
+    description:
+      "Delete = forget (docs/voici-and-messages.md §10.1.1). forget: forgetConversation(state, conv, pseudonymPub, at). merges: mergeMessagesState(local, remote, now) == merged, in order: device A deletes CONV, device B (old state plus a read mark) merges it, A merges B's write, A accepts the same caller's new request, a stale copy merges that, a device offline 20 days merges, the marker after the keep window, a second delete. parse: parseMessagesState(input) == expected (null = refused). sealed: sealMessagesState(stateKey, username, version, state, nonce).",
+    keepMs: P.VOICI_FORGET_KEEP_MS,
+    conv: CONV,
+    pseudonymPub: PPUB,
+    otherConv: CONV2,
+    forget: [
+      { name: "device A deletes CONV", state: forgetBase, conv: CONV, pseudonymPub: PPUB, at: T0 + 100, result: devA1 },
+      { name: "an anonymous conversation", state: forgetBase, conv: ANON_CONV, pseudonymPub: null, at: T0 + 100, result: devAnon },
+      { name: "a second delete", state: { ...devA3, nicknames: { ...devA3.nicknames, [PPUB]: { name: "Bob again", at: T0 + 500 } } }, conv: CONV, pseudonymPub: PPUB, at: T0 + 600, result: devD },
+    ],
+    merges: [
+      { name: "device B, on the old state, merges the delete", local: devB1, remote: devA1, now: T0 + 200, merged: devB2 },
+      { name: "device A merges B's write", local: devA1, remote: devB2, now: T0 + 300, merged: devA2 },
+      { name: "the same caller again: A's new accept stays against a stale copy", local: forgetBase, remote: devA3, now: T0 + 400, merged: devB3 },
+      { name: "a device offline 20 days", local: forgetBase, remote: devA2, now: T0 + 20 * DAY, merged: devC },
+      { name: "after the keep window the marker goes", local: devA2, remote: devA2, now: T0 + 100 + P.VOICI_FORGET_KEEP_MS, merged: devLate },
+      { name: "the newer of two deletes wins", local: devA3, remote: devD, now: T0 + 700, merged: devE },
+      { name: "the newer of two deletes wins, sides swapped", local: devD, remote: devA3, now: T0 + 700, merged: P.mergeMessagesState(devD, devA3, T0 + 700) },
+    ],
+    parse: forgetParse,
+    sealed: { username: USER, version: 7, state: devA1, nonce: H(fill(12, 0xf2)), blob: forgetSealed },
   },
   reports: {
     message: { report, canonical: new TextDecoder().decode(P.canonicalVoiciReport(report)), signature: reportSig },

@@ -221,7 +221,14 @@ describe("messages vectors (test-vectors/messages) in the webapp", () => {
     expect(P.p256VerifyP1363(M.threadFetch.signature, enc.encode(M.threadFetch.canonical), M.keys.browserPub)).toBe(true);
     const s = M.state;
     expect(P.parseMessagesState(s.a)).toEqual(s.a);
-    expect(P.mergeMessagesState(s.a, s.b)).toEqual(s.merged);
+    expect(P.mergeMessagesState(s.a, s.b, 1_800_000_000_000)).toEqual(s.merged);
+    const f = M.stateForget;
+    expect(P.VOICI_FORGET_KEEP_MS).toBe(f.keepMs);
+    for (const c of f.forget) expect(P.forgetConversation(c.state, c.conv, c.pseudonymPub, c.at), c.name).toEqual(c.result);
+    for (const c of f.merges) expect(P.mergeMessagesState(c.local, c.remote, c.now), c.name).toEqual(c.merged);
+    for (const c of f.parse) expect(P.parseMessagesState(c.input), c.name).toEqual(c.expected);
+    expect(P.sealMessagesState(h(d.stateKey), f.sealed.username, f.sealed.version, f.sealed.state, h(f.sealed.nonce))).toEqual(f.sealed.blob);
+    expect(P.openMessagesState(h(d.stateKey), f.sealed.username, f.sealed.blob)).toEqual(f.sealed.state);
     expect(P.sealMessagesState(h(d.stateKey), s.username, s.version, s.a, h(s.nonce))).toEqual(s.sealed);
     expect(P.openMessagesState(h(d.stateKey), s.username, s.sealed)).toEqual(s.a);
     expect(P.openMessagesState(h(d.stateKey), s.username, { ...s.sealed, version: s.version + 1 })).toBeNull();

@@ -36,7 +36,8 @@
 //                    checkMessagesKeyAttestation, checkVoiciMessage, checkVoiciReply, checkVoiciDraft,
 //                    canonical/sign/verifyVoiciAck, canonical/sign/verify/parseVoiciBlock, parseVoiciDraftOp,
 //                    sealVoiciDraft, parseVoiciDraftBody, openVoiciDraft, emptyMessagesState, parseMessagesState,
-//                    mergeMessagesState, sealMessagesState, openMessagesState, VOICI_REPORT_REASONS,
+//                    mergeMessagesState, forgetConversation, liveForgotten, VOICI_FORGET_KEEP_MS,
+//                    sealMessagesState, openMessagesState, VOICI_REPORT_REASONS,
 //                    canonicalVoiciReport, signVoiciMessageReport, verifyVoiciMessageReport,
 //                    verifyVoiciPageReportSignature, parseVoiciSignInRequest, checkVoiciSignInAnswer,
 //                    PHONE_WEB_ORIGINS(_GYM), PHONE_* constants, phoneWebCheck, parsePhoneLiveAnswer

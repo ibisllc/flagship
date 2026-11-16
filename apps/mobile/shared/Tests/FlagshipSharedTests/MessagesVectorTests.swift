@@ -283,6 +283,61 @@ final class MessagesVectorTests: XCTestCase {
         }
     }
 
+    func testStateForget() throws {
+        let v = try vectors()
+        let d = v["derivations"]!
+        let f = try XCTUnwrap(v["stateForget"])
+        XCTAssertEqual(VoiciMessages.forgetKeepMs, S.i(f["keepMs"]))
+        func st(_ x: JSONValue?) throws -> MessagesState { try XCTUnwrap(VoiciMessages.parseMessagesState(x)) }
+        for c in S.a(f["forget"]) {
+            let got = try VoiciMessages.forgetConversation(try st(c["state"]), conv: S.s(c["conv"]), pseudonymPub: c["pseudonymPub"]?.string, at: S.i(c["at"]))
+            XCTAssertEqual(S.cj(got.json), S.cj(c["result"]!), S.s(c["name"]))
+        }
+        for c in S.a(f["merges"]) {
+            let got = VoiciMessages.mergeMessagesState(local: try st(c["local"]), remote: try st(c["remote"]), now: S.i(c["now"]))
+            XCTAssertEqual(S.cj(got.json), S.cj(c["merged"]!), S.s(c["name"]))
+        }
+        for c in S.a(f["parse"]) {
+            let got = VoiciMessages.parseMessagesState(c["input"])
+            XCTAssertEqual(got.map { S.cj($0.json) } ?? "null", S.cj(c["expected"] ?? .null), S.s(c["name"]))
+        }
+        let x = try XCTUnwrap(f["sealed"])
+        let sealed = try VoiciMessages.sealMessagesState(stateKey: S.h(d["stateKey"]), username: S.s(x["username"]), version: S.i(x["version"]), state: try st(x["state"]), nonce: S.h(x["nonce"]))
+        XCTAssertEqual(S.cj(sealed.json), S.cj(x["blob"]!))
+        let opened = try XCTUnwrap(VoiciMessages.openMessagesState(stateKey: S.h(d["stateKey"]), username: S.s(x["username"]), blob: x["blob"]))
+        XCTAssertEqual(S.cj(opened.json), S.cj(x["state"]!))
+    }
+
+    /// Device A deletes; device B, holding the old state, syncs through a compare-and-set store; the conversation is
+    /// gone on both and stays gone.
+    func testStateForgetTwoDevices() throws {
+        let v = try vectors()
+        let f = try XCTUnwrap(v["stateForget"])
+        let conv = S.s(f["conv"]), p = S.s(f["pseudonymPub"]), other = S.s(f["otherConv"])
+        let base = try XCTUnwrap(VoiciMessages.parseMessagesState(S.a(f["forget"])[0]["state"]))
+        var server = (state: base, version: Int64(1))
+        func put(_ s: MessagesState, _ version: Int64) -> Bool {
+            guard version == server.version + 1 else { return false }
+            server = (VoiciMessages.parseMessagesState(s.json)!, version)
+            return true
+        }
+        var now: Int64 = 1_800_000_000_000
+        var a = (state: base, version: Int64(1)), b = (state: base, version: Int64(1))
+        now += 1; a.state = try VoiciMessages.forgetConversation(a.state, conv: conv, pseudonymPub: p, at: now)
+        XCTAssertTrue(put(a.state, a.version + 1)); a.version += 1
+        b.state.readUpTo[conv] = String(repeating: "77", count: 16)
+        XCTAssertFalse(put(b.state, b.version + 1))
+        now += 1; b = (VoiciMessages.mergeMessagesState(local: b.state, remote: server.state, now: now), server.version)
+        XCTAssertTrue(put(b.state, b.version + 1)); b.version += 1
+        now += 1; a = (VoiciMessages.mergeMessagesState(local: a.state, remote: server.state, now: now), server.version)
+        for s in [a.state, b.state, server.state] {
+            XCTAssertFalse(s.accepted.contains(conv)); XCTAssertFalse(s.archived.contains(conv)); XCTAssertNil(s.readUpTo[conv])
+            XCTAssertNil(s.nicknames[p]); XCTAssertFalse(s.blocks.contains(p)); XCTAssertTrue(s.accepted.contains(other))
+        }
+        now += 1
+        XCTAssertEqual(S.cj(VoiciMessages.mergeMessagesState(local: base, remote: a.state, now: now).json), S.cj(a.state.json))
+    }
+
     func testAckBlockStateReports() throws {
         let v = try vectors()
         let d = v["derivations"]!, keys = v["keys"]!
@@ -309,7 +364,7 @@ final class MessagesVectorTests: XCTestCase {
         let sa = try XCTUnwrap(VoiciMessages.parseMessagesState(s["a"]))
         let sb = try XCTUnwrap(VoiciMessages.parseMessagesState(s["b"]))
         XCTAssertEqual(S.cj(sa.json), S.cj(s["a"]!))
-        XCTAssertEqual(S.cj(VoiciMessages.mergeMessagesState(local: sa, remote: sb).json), S.cj(s["merged"]!))
+        XCTAssertEqual(S.cj(VoiciMessages.mergeMessagesState(local: sa, remote: sb, now: 1_800_000_000_000).json), S.cj(s["merged"]!))
         let sealed = try VoiciMessages.sealMessagesState(stateKey: S.h(d["stateKey"]), username: S.s(s["username"]), version: S.i(s["version"]), state: sa, nonce: S.h(s["nonce"]))
         XCTAssertEqual(S.cj(sealed.json), S.cj(s["sealed"]!))
         let opened = try XCTUnwrap(VoiciMessages.openMessagesState(stateKey: S.h(d["stateKey"]), username: S.s(s["username"]), blob: s["sealed"]))

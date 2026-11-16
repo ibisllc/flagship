@@ -3281,6 +3281,1292 @@
       "ct": "8KZQeisRgncpC6Xshsdx1izDv8AsM1rg/4FgvkpP9JnZfziKoFGIZC6hN2k6LgwNbqNXlzQSZD9MXtPM6p4kGrDcDR070So7sLysfslIpeJBPaYW5J5MS5HJAJ//V8n3qN3SpEa+UMLgaltZZBQ0kQATMHvu4CsfhWUhLWf7VzyfJOi3sT32/G4VzPK0QUW+Syu9iCxs48C5tpHeop+bcAAigqTuF+JhqE2KGXMy/KfMgdcfomAmq+eEHFEBTSMfQjgNo3LyQCX/MNwxVHMWO0PgvtiNZ67yEvFiCdV94vhtl1HomNXy2nAUA5GB7JIgBXiopHbMi1JMNbKZfY8/Ls4X1j7zQNEKu9toOrI9WFJsWb0tCiV8A52C0d9C2JrbrwL3EeR8SSFqkCJi/+Bl1NL2fzKMvyqao9+Dmd0aZqgUkt87MA9/Wetv+pY0eGMy4Tn/4SOlbSiVCbfYObNaXp+lorhYAAeb+2pABRJK9zPnJWcm1K3qAkSDbp083+1iJavN7NQdULPzJGfCPy227cq3TGwDWUhmBkjtfMvSeiMCY290fmjpJQE2Ruy/BPnYk+teQGhKh7OLHeP7k62uzYO8sqg3KQzO9ddtoqAa0AEmN9yR60Jk+iYTofQn18ZcUlkPEGWs/85eO4RpRDVmrgoSk4ttngWJFtvGLLDxtVssbO/eS3aplZWcWyaWShcpXr+J1rqgxHmlii5mdTanptRstpCeJPepM21KbAt6oOk0c4ICwwqyDh9uAk4RhdEfnJOfZZdap3NH5SwrAetR79m4vUfh5M2QGd0E3benGe6dpvKytDJ5TtNKgNj1T1C9NckH3hlZ0UUa18tCNsnCV69M2Kue9uqPQpRIbiFu/pVOD6dYRSKyIcKDDZ7JpuN/2Fc08FpxKiHF1FJvfKo="
     }
   },
+  "stateForget": {
+    "description": "Delete = forget (docs/voici-and-messages.md §10.1.1). forget: forgetConversation(state, conv, pseudonymPub, at). merges: mergeMessagesState(local, remote, now) == merged, in order: device A deletes CONV, device B (old state plus a read mark) merges it, A merges B's write, A accepts the same caller's new request, a stale copy merges that, a device offline 20 days merges, the marker after the keep window, a second delete. parse: parseMessagesState(input) == expected (null = refused). sealed: sealMessagesState(stateKey, username, version, state, nonce).",
+    "keepMs": 2592000000,
+    "conv": "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+    "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681",
+    "otherConv": "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8",
+    "forget": [
+      {
+        "name": "device A deletes CONV",
+        "state": {
+          "v": 1,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        },
+        "conv": "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+        "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681",
+        "at": 1800000000100,
+        "result": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      },
+      {
+        "name": "an anonymous conversation",
+        "state": {
+          "v": 1,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        },
+        "conv": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "pseudonymPub": null,
+        "at": 1800000000100,
+        "result": {
+          "v": 2,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5": {
+              "at": 1800000000100,
+              "pseudonymPub": null
+            }
+          }
+        }
+      },
+      {
+        "name": "a second delete",
+        "state": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            },
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob again",
+              "at": 1800000000500
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8",
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "conv": "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+        "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681",
+        "at": 1800000000600,
+        "result": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000600,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      }
+    ],
+    "merges": [
+      {
+        "name": "device B, on the old state, merges the delete",
+        "local": {
+          "v": 1,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        },
+        "remote": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "now": 1800000000200,
+        "merged": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      },
+      {
+        "name": "device A merges B's write",
+        "local": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "remote": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "now": 1800000000300,
+        "merged": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      },
+      {
+        "name": "the same caller again: A's new accept stays against a stale copy",
+        "local": {
+          "v": 1,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        },
+        "remote": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8",
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "now": 1800000000400,
+        "merged": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8",
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      },
+      {
+        "name": "a device offline 20 days",
+        "local": {
+          "v": 1,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        },
+        "remote": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "now": 1801728000000,
+        "merged": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      },
+      {
+        "name": "after the keep window the marker goes",
+        "local": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "remote": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "now": 1802592000100,
+        "merged": {
+          "v": 1,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        }
+      },
+      {
+        "name": "the newer of two deletes wins",
+        "local": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8",
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "remote": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000600,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "now": 1800000000700,
+        "merged": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000600,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      },
+      {
+        "name": "the newer of two deletes wins, sides swapped",
+        "local": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000600,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "remote": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8",
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "now": 1800000000700,
+        "merged": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000600,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      }
+    ],
+    "parse": [
+      {
+        "name": "v1 reads as v1",
+        "input": {
+          "v": 1,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        },
+        "expected": {
+          "v": 1,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        }
+      },
+      {
+        "name": "v2 with a marker",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "expected": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        }
+      },
+      {
+        "name": "v2 with an anonymous conversation",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5": {
+              "at": 1800000000100,
+              "pseudonymPub": null
+            }
+          }
+        },
+        "expected": {
+          "v": 2,
+          "nicknames": {
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681": {
+              "name": "Bob from the café",
+              "at": 1800000000000
+            },
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [
+            "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          ],
+          "accepted": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a"
+          ],
+          "readUpTo": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5": {
+              "at": 1800000000100,
+              "pseudonymPub": null
+            }
+          }
+        }
+      },
+      {
+        "name": "v2 with no marker reads as v1",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {}
+        },
+        "expected": {
+          "v": 1,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        }
+      },
+      {
+        "name": "v1 carrying markers",
+        "input": {
+          "v": 1,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "expected": null
+      },
+      {
+        "name": "v2 without markers field",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": []
+        },
+        "expected": null
+      },
+      {
+        "name": "v3",
+        "input": {
+          "v": 3,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000100,
+              "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+            }
+          }
+        },
+        "expected": null
+      },
+      {
+        "name": "marker conv too short",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "abababababababab": {
+              "at": 1800000000000,
+              "pseudonymPub": null
+            }
+          }
+        },
+        "expected": null
+      },
+      {
+        "name": "marker conv upper case",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "CD2E16457E6A476BD23C8DC7D23D52D7D68C1BEBB1BB38147A02C910FD52E63A": {
+              "at": 1800000000000,
+              "pseudonymPub": null
+            }
+          }
+        },
+        "expected": null
+      },
+      {
+        "name": "marker bad at",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": -1,
+              "pseudonymPub": null
+            }
+          }
+        },
+        "expected": null
+      },
+      {
+        "name": "marker bad pseudonym",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000000,
+              "pseudonymPub": "00"
+            }
+          }
+        },
+        "expected": null
+      },
+      {
+        "name": "marker missing pseudonym",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000000
+            }
+          }
+        },
+        "expected": null
+      },
+      {
+        "name": "marker extra key",
+        "input": {
+          "v": 2,
+          "nicknames": {
+            "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+              "name": "Carol",
+              "at": 1800000000000
+            }
+          },
+          "blocks": [],
+          "accepted": [
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+          ],
+          "archived": [],
+          "readUpTo": {
+            "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+          },
+          "signedInSites": [],
+          "pendingOps": [],
+          "forgotten": {
+            "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+              "at": 1800000000000,
+              "pseudonymPub": null,
+              "by": "x"
+            }
+          }
+        },
+        "expected": null
+      }
+    ],
+    "sealed": {
+      "username": "alice",
+      "version": 7,
+      "state": {
+        "v": 2,
+        "nicknames": {
+          "807643280b0690c0b30d3bf59563d64fb09485bdc668855f55fb3548a4eb6fde": {
+            "name": "Carol",
+            "at": 1800000000000
+          }
+        },
+        "blocks": [],
+        "accepted": [
+          "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8"
+        ],
+        "archived": [],
+        "readUpTo": {
+          "1048bbfa29f218eb633d079c9c9810dc757ad5f061e0bff828858cc3a00b31f8": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+        },
+        "signedInSites": [],
+        "pendingOps": [],
+        "forgotten": {
+          "cd2e16457e6a476bd23c8dc7d23d52d7d68c1bebb1bb38147a02c910fd52e63a": {
+            "at": 1800000000100,
+            "pseudonymPub": "a97886abee07437ccaa6e8ff95a3107444331a540a431072887cf1138a6d8681"
+          }
+        }
+      },
+      "nonce": "f2f2f2f2f2f2f2f2f2f2f2f2",
+      "blob": {
+        "version": 7,
+        "nonce": "f2f2f2f2f2f2f2f2f2f2f2f2",
+        "ct": "7wsSxEtBx61/+pymaq85skXZ1upzUycYK2vofeu7IdZI6aIM2/Z1Mc12GTr51rT/Q5QA22TqMAM0+L1RmB63lJJrFBhlLEszIGRoZw0P9AiRI4Z2x5ZXZjt8yBKj6A1cIEDmdnFwCAG51pq5HohClRooxx/jFXEpgRTYVnTG3sdB76KFlES0XI4isqIJomLi0ZP+vJN9jl/3dVlfut7o4jBlnuZSoZ43EeV6xoopL6BBEUq1sRxK+mJg7lOKNTYzna6r8kR8h6/d6veVkjDb/Ax54Hv6MQeeJEMjwzYVlYNYfpdEMtSOZVO6ghierHL3gKgNUONKpBHLYUF+Vr9UZdx9q4CgISLRp+z9mz6NPOw8DzZ3fB2YRsKJlefFps99AxxDme629A3dgYAlyd7dSWiMKVCFRmXO14lI4yrSk1LtwxEKn3NGoc4UXuwuX42pQl72BbIQv0TaAp2FiieyTL4Hc5LMICYWUY+IU9rhXm7rl4z+uFEtCt3ozI0SMwbCHyalnANQ1rmdjZczIHVda0k61W80XgYVs7f1FPBFTrCKEUP4Z2vadkfRUQsyvyPfRANO8DAUzjCjBMSH3ylsyEKP4Govjss4+WycfOLPBjrTI7/bFKuHnLmqV2A1OC3WzBGR0TdNpMwPilz0IP9TrCRfN+wpx3EppkJozW8ycWa2ltpOxxpwn6hwgqUXPnBjWsmOknoq6Wvtdr202c1Nmy1Hvf35Lyv41bi+ukiP8e440IMUoYljvHq1clEibCXKb0XFTQ=="
+      }
+    }
+  },
   "reports": {
     "message": {
       "report": {

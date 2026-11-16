@@ -656,13 +656,27 @@ export function openVoiciDraft(draftsKey, username, opId, bodyBytes) {
 }
 
 // ── Messages state blob (§10.1) ───────────────────────────────────────────
+// v2 (delete = forget, §10.1.1) adds `forgotten: {<conv>: {at, pseudonymPub|null}}`; a state is written as v1 while
+// it holds no marker.
+
+/** How long a deletion marker stays in the synced state. */
+export const VOICI_FORGET_KEEP_MS = 30 * 86_400_000;
+
+const STATE_V1_KEYS = ["v", "nicknames", "blocks", "accepted", "archived", "readUpTo", "signedInSites", "pendingOps"];
+const isForgetConv = (k) => isLowerHex(k, 32) || isLowerHex(k, 16);
 
 export function emptyMessagesState() {
   return { v: 1, nicknames: {}, blocks: [], accepted: [], archived: [], readUpTo: {}, signedInSites: [], pendingOps: [] };
 }
 
+/** Reads a v1 or a v2 state; answers the canonical form (v1 when no marker is left). */
 export function parseMessagesState(v) {
-  if (!isObj(v) || v.v !== 1 || !exactKeys(v, ["v", "nicknames", "blocks", "accepted", "archived", "readUpTo", "signedInSites", "pendingOps"])) return null;
+  if (!isObj(v)) return null;
+  if (v.v === 1) {
+    if (!exactKeys(v, STATE_V1_KEYS)) return null;
+  } else if (v.v === 2) {
+    if (!exactKeys(v, [...STATE_V1_KEYS, "forgotten"]) || !isObj(v.forgotten)) return null;
+  } else return null;
   if (!isObj(v.nicknames) || !isObj(v.readUpTo)) return null;
   const nick = {};
   for (const [k, n] of Object.entries(v.nicknames)) {
@@ -691,13 +705,71 @@ export function parseMessagesState(v) {
     if (!p) return null;
     ops.push(p);
   }
-  return { v: 1, nicknames: nick, blocks, accepted, archived, readUpTo: read, signedInSites: sites, pendingOps: ops };
+  const forgotten = {};
+  for (const [k, f] of Object.entries(isObj(v.forgotten) ? v.forgotten : {})) {
+    if (!isForgetConv(k) || !isObj(f) || !exactKeys(f, ["at", "pseudonymPub"]) || !isTime(f.at)) return null;
+    if (f.pseudonymPub !== null && !isLowerHex(f.pseudonymPub, 32)) return null;
+    forgotten[k] = { at: f.at, pseudonymPub: f.pseudonymPub };
+  }
+  return withForgotten({ v: 1, nicknames: nick, blocks, accepted, archived, readUpTo: read, signedInSites: sites, pendingOps: ops }, forgotten);
 }
 
 const uniqSorted = (a) => [...new Set(a)].sort();
+const sortKeys = (o) => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
 
-/** The compare-and-set merge (§10.1); deterministic (sorted output). */
-export function mergeMessagesState(local, remote) {
+function withForgotten(s, forgotten) {
+  const { forgotten: _drop, ...rest } = s;
+  return Object.keys(forgotten).length === 0 ? { ...rest, v: 1 } : { ...rest, v: 2, forgotten: sortKeys(forgotten) };
+}
+
+function stripConversation(s, conv, pseudonymPub) {
+  const nicknames = { ...s.nicknames };
+  const readUpTo = { ...s.readUpTo };
+  delete readUpTo[conv];
+  if (pseudonymPub) delete nicknames[pseudonymPub];
+  return {
+    ...s,
+    nicknames,
+    readUpTo,
+    blocks: pseudonymPub ? s.blocks.filter((x) => x !== pseudonymPub) : s.blocks,
+    accepted: s.accepted.filter((x) => x !== conv),
+    archived: s.archived.filter((x) => x !== conv),
+  };
+}
+
+/** The deletion markers still inside the keep window at `now`. */
+export function liveForgotten(s, now) {
+  const out = {};
+  for (const [k, f] of Object.entries(s.forgotten ?? {})) if (now - f.at < VOICI_FORGET_KEEP_MS) out[k] = f;
+  return out;
+}
+
+/** Delete = forget on this device's copy, plus the marker that makes the owner's other devices do the same. */
+export function forgetConversation(s, conv, pseudonymPub, at) {
+  if (!isForgetConv(conv) || (pseudonymPub !== null && !isLowerHex(pseudonymPub, 32)) || !isTime(at)) throw new Error(`${TAG_MESSAGES_STATE}: bad input`);
+  const live = liveForgotten(s, at);
+  const prev = live[conv];
+  const p = pseudonymPub ?? prev?.pseudonymPub ?? null;
+  live[conv] = { at: Math.max(prev?.at ?? 0, at), pseudonymPub: p };
+  return withForgotten(stripConversation(s, conv, p), live);
+}
+
+/**
+ * The compare-and-set merge (§10.1); deterministic (sorted output). Deletion markers (§10.1.1) go first: a side
+ * without a marker for a conversation, or with an older one, loses its entries for it before the union.
+ */
+export function mergeMessagesState(local, remote, now = Date.now()) {
+  const fl = liveForgotten(local, now);
+  const fr = liveForgotten(remote, now);
+  const forgotten = {};
+  for (const conv of new Set([...Object.keys(fl), ...Object.keys(fr)])) {
+    const l = fl[conv];
+    const r = fr[conv];
+    if (r && (!l || r.at > l.at)) local = stripConversation(local, conv, r.pseudonymPub ?? l?.pseudonymPub ?? null);
+    if (l && (!r || l.at > r.at)) remote = stripConversation(remote, conv, l.pseudonymPub ?? r?.pseudonymPub ?? null);
+    const win = !r || (l && l.at >= r.at) ? l : r;
+    forgotten[conv] = { at: win.at, pseudonymPub: win.pseudonymPub ?? (win === l ? r?.pseudonymPub : l?.pseudonymPub) ?? null };
+  }
   const nicknames = { ...remote.nicknames };
   for (const [k, n] of Object.entries(local.nicknames)) if (!nicknames[k] || n.at >= nicknames[k].at) nicknames[k] = n;
   const sites = new Map();
@@ -707,23 +779,26 @@ export function mergeMessagesState(local, remote) {
   }
   const ops = new Map();
   for (const o of [...remote.pendingOps, ...local.pendingOps]) ops.set(o.opId, o);
-  const sortKeys = (o) => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
-  return {
-    v: 1,
-    nicknames: sortKeys(nicknames),
-    blocks: uniqSorted([...local.blocks, ...remote.blocks]),
-    accepted: uniqSorted([...local.accepted, ...remote.accepted]),
-    archived: uniqSorted([...local.archived, ...remote.archived]),
-    readUpTo: sortKeys({ ...remote.readUpTo, ...local.readUpTo }),
-    signedInSites: [...sites.values()].sort((a, b) => (a.delegatePub < b.delegatePub ? -1 : 1)),
-    pendingOps: [...ops.values()].sort((a, b) => (a.opId < b.opId ? -1 : 1)),
-  };
+  return withForgotten(
+    {
+      v: 1,
+      nicknames: sortKeys(nicknames),
+      blocks: uniqSorted([...local.blocks, ...remote.blocks]),
+      accepted: uniqSorted([...local.accepted, ...remote.accepted]),
+      archived: uniqSorted([...local.archived, ...remote.archived]),
+      readUpTo: sortKeys({ ...remote.readUpTo, ...local.readUpTo }),
+      signedInSites: [...sites.values()].sort((a, b) => (a.delegatePub < b.delegatePub ? -1 : 1)),
+      pendingOps: [...ops.values()].sort((a, b) => (a.opId < b.opId ? -1 : 1)),
+    },
+    forgotten,
+  );
 }
 
 /** Seals the state under the state key: {version, nonce, ct}. */
 export function sealMessagesState(stateKey, username, version, s, nonce = rand(12)) {
-  if (!USERNAME.test(username) || !isTime(version) || version < 1 || nonce.length !== 12 || !parseMessagesState(s)) throw new Error(`${TAG_MESSAGES_STATE}: bad input`);
-  const pt = canonicalJsonBytes(s);
+  const canon = parseMessagesState(s);
+  if (!USERNAME.test(username) || !isTime(version) || version < 1 || nonce.length !== 12 || !canon) throw new Error(`${TAG_MESSAGES_STATE}: bad input`);
+  const pt = canonicalJsonBytes(canon);
   if (pt.length > VOICI_STATE_MAX_BYTES) throw new Error(`${TAG_MESSAGES_STATE}: too large`);
   const ct = aesGcm(stateKey, nonce, enc(`${TAG_MESSAGES_STATE}|${username}|${version}`)).encrypt(pt);
   return { version, nonce: hex(nonce), ct: b64Encode(ct) };
