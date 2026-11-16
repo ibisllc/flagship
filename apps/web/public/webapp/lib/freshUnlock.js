@@ -6,7 +6,7 @@
 import { inlinePrompt } from "./modal.js";
 import { unlockUmk } from "../keystore.js";
 import { getSession } from "./state.js";
-import { isLockedKey } from "./keyCustody.js";
+import { hasCustodyPasskey, isLockedKey, verifyUserWithPasskey } from "./keyCustody.js";
 
 import { tr } from "./i18n.js";
 export const FRESH_UNLOCK_WRONG = tr("That passphrase doesn't unlock this device.");
@@ -33,6 +33,52 @@ export async function confirmFreshUnlock({ title, message, okLabel = tr("Confirm
   const passphrase = await prompt({
     title,
     message: tr("{0} Enter this device's passphrase to sign it.", message),
+    placeholder: tr("Passphrase"),
+    type: "password",
+    okLabel,
+  });
+  if (passphrase === null || passphrase === undefined) return { ok: false, cancelled: true };
+  let seed;
+  try {
+    seed = await unlock(String(passphrase));
+  } catch {
+    return { ok: false, error: FRESH_UNLOCK_WRONG };
+  }
+  return sameBytes(seed, session?.umk) ? { ok: true } : { ok: false, error: FRESH_UNLOCK_WRONG };
+}
+
+/**
+ * The check before a delete that forgets something on every device (a voi.ci conversation, docs/voici-calls.md
+ * "Deleting a conversation"): the browser's stand-in for the phones' Face ID or fingerprint. With a custody passkey
+ * (lib/keyCustody.js) it is one passkey assertion with user verification required; without one, this device's
+ * passphrase, as before an admin order (always asked here, even when the session holds an admin-key handle).
+ * Resolves `{ok: true}`, `{ok: false, cancelled: true}` or `{ok: false, error}`; only `ok` may delete.
+ * `deps.hasPasskey` / `deps.verifyPasskey` / `deps.prompt` / `deps.unlock` / `deps.session` are test seams.
+ */
+export async function confirmUserForDelete({ title, message, okLabel = tr("Delete") }, deps = {}) {
+  const hasPasskey = deps.hasPasskey ?? hasCustodyPasskey;
+  const verifyPasskey = deps.verifyPasskey ?? verifyUserWithPasskey;
+  let passkey = false;
+  try {
+    passkey = await hasPasskey();
+  } catch {
+    passkey = false;
+  }
+  if (passkey) {
+    try {
+      await verifyPasskey();
+      return { ok: true };
+    } catch (e) {
+      if (e?.code === "custody-cancelled") return { ok: false, cancelled: true };
+      return { ok: false, error: e?.userMessage ?? tr("This browser couldn't check it's you. Nothing was deleted.") };
+    }
+  }
+  const prompt = deps.prompt ?? inlinePrompt;
+  const unlock = deps.unlock ?? unlockUmk;
+  const session = deps.session ?? getSession();
+  const passphrase = await prompt({
+    title,
+    message: tr("{0} Enter this device's passphrase to confirm.", message),
     placeholder: tr("Passphrase"),
     type: "password",
     okLabel,

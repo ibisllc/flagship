@@ -16,6 +16,7 @@ import {
   loadMessagesState,
   loadMissedCalls,
   loadPublishedPage,
+  postConversationDelete,
   updateMessagesState,
 } from "./voiciOwner.js";
 import { getSession, onSessionLock } from "./state.js";
@@ -164,6 +165,28 @@ export async function forgetConversationEverywhere(cv, deps = {}) {
   world.conversations = world.conversations.filter((x) => x.conv !== cv.conv);
   world.missedCalls = world.missedCalls.filter((m) => m.conv !== cv.conv);
   emitWorld();
+}
+
+/**
+ * The owner's delete, gated: the person confirms it's them (`confirm`, by default lib/freshUnlock.js
+ * confirmUserForDelete: a passkey assertion, else this device's passphrase); only then is the signed delete sent and
+ * the conversation forgotten. A cancelled or failed check deletes nothing and sends nothing. Resolves
+ * `{ok: true}`, `{ok: false, cancelled: true}` or `{ok: false, error}`; a refused send throws.
+ */
+export async function deleteConversationGated(cv, deps = {}) {
+  const confirm =
+    deps.confirm ??
+    (async () =>
+      (await import("./freshUnlock.js")).confirmUserForDelete({
+        title: tr("Delete this conversation?"),
+        message: tr("It goes from all your devices and from Flagship."),
+        okLabel: tr("Delete"),
+      }));
+  const gate = await confirm();
+  if (!gate?.ok) return gate?.cancelled ? { ok: false, cancelled: true } : { ok: false, error: gate?.error ?? null };
+  await (deps.post ?? postConversationDelete)(deps.page ?? world.page, cv.conv);
+  await forgetConversationEverywhere(cv, deps);
+  return { ok: true };
 }
 
 /** Every pending change: the drafts lane's, then this device's own not yet handed over or published. */

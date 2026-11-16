@@ -3783,5 +3783,8 @@
   "To": "Hasta",
   "Time zone": "Zona horaria",
   "These hours don't work. Pick at least one day and different start and end times.": "Este horario no sirve. Elige al menos un día y horas de inicio y fin distintas.",
-  "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "Fuera de este horario tus teléfonos no suenan y la llamada aparece como perdida. Solo tus dispositivos conocen el horario."
+  "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": "Fuera de este horario tus teléfonos no suenan y la llamada aparece como perdida. Solo tus dispositivos conocen el horario.",
+  "This browser couldn't check it's you. Nothing was deleted.": "Este navegador no pudo comprobar que eres tú. No se ha eliminado nada.",
+  "{0} Enter this device's passphrase to confirm.": "{0} Introduce la frase de contraseña de este dispositivo para confirmar.",
+  "It goes from all your devices and from Flagship.": "Desaparece de todos tus dispositivos y de Flagship."
 }

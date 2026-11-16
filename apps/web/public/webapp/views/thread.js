@@ -7,8 +7,8 @@ import { toast } from "../lib/toast.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { inlineAlert, inlineChoice, inlineConfirm, inlinePrompt } from "../lib/modal.js";
 import { findVoiciLinks, prepareVoiciText, VOICI_REPORT_REASONS } from "../lib/voiciProtocol.js";
-import { checkConversationReveal, isRequest, postBlock, postCallAllow, postConversationDelete, postMessageReport, postRing, sendReply, voiciWebOrigin } from "../lib/voiciOwner.js";
-import { changeState, emitWorld, findConversation, forgetConversationEverywhere, refreshWorld, visitorName, world } from "../lib/voiciWorld.js";
+import { checkConversationReveal, isRequest, postBlock, postCallAllow, postMessageReport, postRing, sendReply, voiciWebOrigin } from "../lib/voiciOwner.js";
+import { changeState, deleteConversationGated, emitWorld, findConversation, refreshWorld, visitorName, world } from "../lib/voiciWorld.js";
 import { voiciErrorText, voiciTextProblem } from "../lib/voiciCopy.js";
 
 import { tr } from "../lib/i18n.js";
@@ -315,8 +315,12 @@ async function deleteConv() {
   if (!ok) return;
   try {
     // Delete = forget (docs/voici-calls.md): `.com` drops the conversation's mail, ring-back channel and calls at once.
-    await postConversationDelete(world.page, cv.conv);
-    await forgetConversationEverywhere(cv);
+    // It forgets it on every device, so the person confirms it's them first (passkey, else passphrase).
+    const r = await deleteConversationGated(cv);
+    if (!r.ok) {
+      if (r.error) toast(r.error, "err");
+      return;
+    }
     await leave();
   } catch (e) {
     toast(voiciErrorText(e), "err");

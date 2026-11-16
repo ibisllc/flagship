@@ -15433,5 +15433,17 @@
   "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.": {
     "en": "Outside these hours your phones don't ring and the call shows as missed. Only your devices know the hours.",
     "ctx": "webapp/views/page-editor.js"
+  },
+  "This browser couldn't check it's you. Nothing was deleted.": {
+    "en": "This browser couldn't check it's you. Nothing was deleted.",
+    "ctx": "webapp/lib/freshUnlock.js"
+  },
+  "{0} Enter this device's passphrase to confirm.": {
+    "en": "{0} Enter this device's passphrase to confirm.",
+    "ctx": "webapp/lib/freshUnlock.js"
+  },
+  "It goes from all your devices and from Flagship.": {
+    "en": "It goes from all your devices and from Flagship.",
+    "ctx": "webapp/lib/voiciWorld.js"
   }
 }
