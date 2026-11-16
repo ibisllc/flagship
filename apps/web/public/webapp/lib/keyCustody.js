@@ -418,6 +418,28 @@ export async function openUnderPasskey({ recordKey, umk }) {
   }
 }
 
+/** True when this browser has made a custody passkey for the profile (the one its sealed keys open with). */
+export async function hasCustodyPasskey(profileId = activeProfileId()) {
+  return (await custodyCredential(profileId)) !== null;
+}
+
+/**
+ * One assertion of the profile's custody passkey with user verification required, opening nothing: a check that the
+ * person is here before an action that needs no key, such as deleting a conversation (docs/voici-calls.md). Throws a
+ * custody error; a closed prompt is `custody-cancelled`.
+ */
+export async function verifyUserWithPasskey(profileId = activeProfileId()) {
+  const cred = await custodyCredential(profileId);
+  if (!cred) throw fail("custody-no-passkey");
+  let got;
+  try {
+    got = await authenticator().get({ credentialId: cred, salt: random(32) });
+  } catch (e) {
+    throw normalize(e);
+  }
+  got?.prf?.fill?.(0);
+}
+
 /** What Settings shows for this browser's admin key: null (not an admin device), or its custody. */
 export async function adminKeyCustody(profileId = activeProfileId()) {
   const record = await kvGet(adminRootRecordKey(profileId));

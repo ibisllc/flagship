@@ -516,7 +516,9 @@
 //       views/calls.js: the call history).
 //  v222: deleting a conversation forgets it on every device: the Messages state's v2 deletion markers
 //       (lib/voiciMessages.js forgetConversation, lib/voiciWorld.js, lib/voiciCallOut.js forgetPlacedCalls).
-const SHELL_VERSION = "v222";
+//  v223: deleting a conversation asks the person first: a passkey assertion with user verification, else this
+//       device's passphrase (lib/freshUnlock.js confirmUserForDelete, lib/voiciWorld.js deleteConversationGated).
+const SHELL_VERSION = "v223";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
