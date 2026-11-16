@@ -15,7 +15,20 @@ import { tr } from "./i18n.js";
 
 const HOST_ID = "flagship-modal-host";
 
+/** A <dialog> opened with showModal() is in the top layer and makes the rest of the page inert, so an overlay
+ *  asked for from inside one goes into the topmost such dialog; otherwise it sat behind it and took no taps. */
+function topModalDialog() {
+  try {
+    const open = document.querySelectorAll("dialog:modal");
+    return open.length ? open[open.length - 1] : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ensureHost() {
+  const modal = topModalDialog();
+  if (modal) return modal;
   let host = document.getElementById(HOST_ID);
   if (host) return host;
   host = document.createElement("div");

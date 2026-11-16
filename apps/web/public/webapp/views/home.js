@@ -871,17 +871,19 @@ async function renderAllowance(username) {
     document.getElementById(ALLOWANCE_CARD_ID)?.remove();
     return;
   }
-  let host = document.getElementById(ALLOWANCE_CARD_ID);
-  if (!host) {
-    host = document.createElement("div");
-    host.id = ALLOWANCE_CARD_ID;
-    const list = document.getElementById("servers-list");
-    list?.parentNode?.insertBefore(host, list);
-  }
+  // Rendered detached and inserted only with a card to show: an empty host put in and taken out again moved
+  // Add / Restore a server, which then ignored the first tap after Home opened (lib/settleGuard.js).
+  const host = document.getElementById(ALLOWANCE_CARD_ID) ?? Object.assign(document.createElement("div"), { id: ALLOWANCE_CARD_ID });
   const status = await renderAllowanceCard(host, username);
   if (!status) {
     host.remove();
     return;
+  }
+  if (!host.isConnected) {
+    const other = document.getElementById(ALLOWANCE_CARD_ID);
+    const list = document.getElementById("servers-list");
+    if (other) other.replaceWith(host);
+    else list?.parentNode?.insertBefore(host, list);
   }
   // The upgrade CTA is a plain anchor to /pro; nothing to wire (full-page nav).
 }
