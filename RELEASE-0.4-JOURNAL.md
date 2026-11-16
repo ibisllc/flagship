@@ -726,6 +726,25 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `Package.swift`. Open: builds not byte-reproducible (pin names one run), no browser-to-phone call yet, the caller's
   video not shown in the call screens, DTLS 1.3 PQ group unchecked (not required).
 
+- 2026-11-16: Owner created the pre-release `libwebrtc-157-43884507084`. **libwebrtc pin merged** (`5223a9ab0`): both
+  apps download the libraries from it, checked by SHA-256 (`tools/libwebrtc/release.env`, `Package.swift`). Built
+  here against the download: Android APK with the WebRTC + TURN libraries, call tests pass; iOS app embeds
+  WebRTC.framework, `CallMediaBundledTests` 2/2. App CI jobs now download ~255 MB on a cold cache.
+- 2026-11-16: **calls-callback merged** (shell **v221**, D1 **0149**). TS/.com/webapp plus iOS (3 commits, app builds,
+  shared Swift 25 + iOS 28 tests) and Android (8 commits, compile + call/voici/push unit tests). Calls from the apps'
+  logs (handoff to a voi.ci tab until the engine takes the caller side), ringing callers back, call modes and the
+  call-back pop-up, anonymous calls with proof of work and blocking, delete = forget, reveal + name pill with the
+  unchecked-name info sheet, call hours. Rebase: shell renumbered to v221 after custody's v220; a first rebase loop
+  committed conflict markers into `buildInfo.js` / `service-worker.js`, fixed in the v221 commit; key inventory gains
+  `lib/voiciCallOut.js` (a 9-minute P-256 visitor session key). Checks: tsc, i18n, parity 0 red, web 3647, protocol +
+  calls 2614, forgery 1121. Not run: gym UI tests (iOS, Android), any device, a real browser-to-phone call.
+- 2026-11-16: Owner: **call hours are enforced on the phone only (option c)**: nothing about hours is published (the
+  page index's `callHours` would show the owner's time zone); outside hours the phone doesn't ring and logs a missed
+  call. Being built.
+- 2026-11-16: Owner: **Fly costs** ($18 bill; 23 accounts, 11 servers). Approved: take the two gym relays off between
+  gym runs (scanners kept waking them through auto-start since 2026-11-09) and run the gym IPv6-only (release
+  `flagship-services-gym`'s dedicated IPv4, $2/mo). Saves ~$8.40/mo; production stays one 512 MB machine + one IPv4.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:
