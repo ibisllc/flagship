@@ -48,9 +48,24 @@ class VoiciHttpError(val status: Int, val code: String?, val body: JsonObject) :
 class VoiciDeviceSigner(val deviceId: String, val pubHex: String, val signer: Ed25519Sign)
 
 /** One stored mailbox item: an envelope as `.com` keeps it. */
-data class VoiciInboxItem(val envelope: JsonObject, val storedAt: Long, val fetched: Boolean, val direct: Boolean)
+data class VoiciInboxItem(
+    val envelope: JsonObject,
+    val storedAt: Long,
+    val fetched: Boolean,
+    val direct: Boolean,
+    /** Whether the item's conversation can be rung back now (`.com`'s flag; null from a `.com` that doesn't send it). */
+    val ringBack: Boolean? = null,
+)
 
-data class VoiciInboxPage(val items: List<VoiciInboxItem>, val cursor: String, val blocks: List<String>, val revoked: List<String>, val more: Boolean = false)
+data class VoiciInboxPage(
+    val items: List<VoiciInboxItem>,
+    val cursor: String,
+    val blocks: List<String>,
+    val revoked: List<String>,
+    val more: Boolean = false,
+    /** Anonymous callers' conversations the owner blocked (null when `.com` sends none). */
+    val anonBlocks: List<String>? = null,
+)
 
 data class VoiciDraftItem(val envelope: JsonObject, val at: Long)
 
@@ -109,6 +124,12 @@ interface VoiciClient {
     suspend fun placeCall(request: JsonObject): VoiciCallPlaced = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
     /** `POST /api/voici/pages/<u>/ring` {ring, signature}: ring a caller back through the conversation's channel. */
     suspend fun ring(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
+    /** `POST /api/voici/web/ring-back?u=<u>` (device headers): this account's pseudonym attaches or stops a channel. */
+    suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
+    /** `POST /api/voici/pages/<u>/anon-block` {block, signature}: the owner blocks or unblocks an anonymous caller. */
+    suspend fun anonBlock(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
+    /** `POST /api/voici/web/conv-delete`: a signed delete; `.com` forgets the conversation. */
+    suspend fun deleteConversation(body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
 }
 
 class LiveVoiciClient(
@@ -253,6 +274,19 @@ class LiveVoiciClient(
         return p ?: throw VoiciHttpError(200, "unavailable", o)
     }
 
+    override suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject) {
+        val path = "/api/voici/web/ring-back"
+        postJson("${base()}$path?u=${enc(username)}", body, deviceHeaders(username, device, "POST", path))
+    }
+
+    override suspend fun anonBlock(username: String, body: JsonObject) {
+        postJson("${base()}/api/voici/pages/${enc(username)}/anon-block", body)
+    }
+
+    override suspend fun deleteConversation(body: JsonObject) {
+        postJson("${base()}/api/voici/web/conv-delete", body)
+    }
+
     override suspend fun ring(username: String, body: JsonObject) {
         postJson("${base()}/api/voici/pages/${enc(username)}/ring", body)
     }
@@ -349,11 +383,12 @@ class LiveVoiciClient(
                 val env = it["envelope"] as? JsonObject ?: return@mapNotNull null
                 fun bool(k: String) = (it[k] as? JsonPrimitive)?.contentOrNull == "true"
                 val fetched = bool("fetched") || ((it["fetchedAt"] as? JsonPrimitive)?.longOrNull != null)
-                VoiciInboxItem(env, (it["storedAt"] as? JsonPrimitive)?.longOrNull ?: 0, fetched, bool("direct"))
+                val rb = (it["ringBack"] as? JsonPrimitive)?.contentOrNull?.let { v -> if (v == "true") true else if (v == "false") false else null }
+                VoiciInboxItem(env, (it["storedAt"] as? JsonPrimitive)?.longOrNull ?: 0, fetched, bool("direct"), rb)
             }
             val cursor = (o["cursor"] as? JsonPrimitive)?.contentOrNull?.takeIf { CURSOR.matches(it) } ?: since
             val more = (o["more"] as? JsonPrimitive)?.contentOrNull == "true"
-            return VoiciInboxPage(items, cursor, strs("blocks"), strs("revoked"), more)
+            return VoiciInboxPage(items, cursor, strs("blocks"), strs("revoked"), more, if (o.containsKey("anonBlocks")) strs("anonBlocks") else null)
         }
 
         private val CURSOR = Regex("^[A-Za-z0-9_-]{0,64}$")

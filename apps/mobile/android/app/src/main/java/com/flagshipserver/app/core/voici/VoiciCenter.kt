@@ -99,6 +99,8 @@ data class VoiciPageUi(
     val callsOn: Boolean = false,
     /** Who may call while calls are on: "accepted" or "signed-in". */
     val callsFrom: String = "accepted",
+    /** When calls ring, as published ("<days> <HHMM>-<HHMM> <zone>"); null = any time. */
+    val callHours: String? = null,
     /** "Answer calls while Flagship is locked" is on here: this device holds a bound call key. */
     val answersWhileLocked: Boolean = false,
 )
@@ -224,6 +226,7 @@ class VoiciCenter(
             publicWarned = local.publicWarned,
             callsOn = idx != null && !local.removed && idx.body.takesCalls,
             callsFrom = com.flagshipserver.app.calls.VoiciCallSettings.read(idx?.body?.acceptsCalls, idx?.body?.callsFrom).second,
+            callHours = idx?.body?.callHours?.takeIf { !local.removed },
             answersWhileLocked = callKeyVault?.load(u) != null,
         )
         val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
@@ -428,7 +431,7 @@ class VoiciCenter(
      * other draft stays a draft; null publishes every pending change. [mayRepublish]: only the Public switch (after its
      * warning) brings back a page another device took down; any other publish that learns of it from a 409 stops.
      */
-    suspend fun publish(reason: String?, only: List<VoiciDraftOp>? = null, mayRepublish: Boolean = false, calls: Pair<Boolean, String>? = null): Boolean {
+    suspend fun publish(reason: String?, only: List<VoiciDraftOp>? = null, mayRepublish: Boolean = false, calls: Pair<Boolean, String>? = null, hours: Pair<Boolean, String?>? = null): Boolean {
         val u = user() ?: return false
         val umk = keyring.umk() ?: return false
         val acc = account ?: refreshAccount() ?: return fail("not-found")
@@ -465,6 +468,8 @@ class VoiciCenter(
                 val body = VoiciPageIndexBody(
                     u, pageId, seq, now(), working.acceptsMessages, keys.epoch, keys.inboxPub, keys.signPub,
                     plan.map { it.ref }, kind, acceptsCalls = fields.first, callsFrom = fields.second,
+                    // Call hours set elsewhere (another app) ride along while calls stay on.
+                    callHours = if (fields.first == null) null else if (hours != null) hours.second else if (!local.removed) idx?.body?.callHours else null,
                 )
                 val signed = VoiciPage.signVoiciPageIndex(body, seed)
                 try {
@@ -688,6 +693,18 @@ class VoiciCenter(
         return publish(reason, only = emptyList(), calls = on to from)
     }
 
+    /**
+     * Call hours (docs/voici-calls.md, release-manager decisions: hours for every call): when calls ring, published in
+     * the page index so `.com` honours them for every caller; null = any time. Only while calls are on.
+     */
+    suspend fun setCallHours(hours: String?, reason: String): Boolean {
+        val p = _page.value
+        if (!p.isPublic || !p.canPublish || !p.callsOn) return false
+        if (hours != null && !VoiciPage.isVoiciCallHours(hours)) return false
+        if (hours == p.callHours) return true
+        return publish(reason, only = emptyList(), calls = true to p.callsFrom, hours = true to hours)
+    }
+
     // ── answering while locked (docs/voici-calls.md, owner decisions 2026-11-15) ──
 
     /**
@@ -790,11 +807,16 @@ class VoiciCenter(
             val convs = local.conversations.associateBy { it.conv }.toMutableMap()
             var blocks: List<String> = local.inboxBlocks
             var revoked: List<String> = local.revoked
+            var anonBlocks: List<String> = local.anonBlocks
+            val ringBack = HashMap<String, Boolean>()
             var rounds = 0
             while (rounds++ < 10) {
                 val page = client.inbox(u, cursor)
                 blocks = page.blocks
                 revoked = page.revoked
+                page.anonBlocks?.let { anonBlocks = it }
+                // `.com` flags each item's conversation with whether it can be rung back now (Call back starts disabled).
+                for (item in page.items) item.ringBack?.let { rb -> VoiciJs.str(item.envelope["conv"])?.let { ringBack[it] = rb } }
                 val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
                 val epochs = (idx.body.inboxEpoch downTo 1L)
                 val seeds = epochs.map { VoiciMessages.deriveVoiciInboxKey(umk, idx.body.pageId, it).seed }
@@ -808,7 +830,15 @@ class VoiciCenter(
                 cursor = page.cursor
                 if (!more) break
             }
-            update { it.copy(conversations = convs.values.toList(), inboxCursor = cursor, inboxBlocks = blocks, revoked = revoked) }
+            val t = now()
+            update { l ->
+                l.copy(
+                    conversations = convs.values.toList(), inboxCursor = cursor, inboxBlocks = blocks, revoked = revoked, anonBlocks = anonBlocks,
+                    ringBackOff = l.ringBackOff - ringBack.filterValues { it }.keys + ringBack.filterValues { !it }.keys.associateWith { t },
+                )
+            }
+            if (ringBack.isNotEmpty()) _callHistoryVersion.value += 1
+            runCatching { checkReveals(convs.values) }
             _messages.value = _messages.value.copy(loading = false, error = null)
             refreshMissedCalls(u, umk, idx, ca)
         } catch (e: VoiciHttpError) {
@@ -1091,8 +1121,291 @@ class VoiciCenter(
         engine: com.flagshipserver.app.calls.CallMediaEngine,
         room: com.flagshipserver.app.calls.VoiciCallerRoom,
         handoff: com.flagshipserver.app.calls.VoiciCallHandoffPipe,
+        allowCallBack: Boolean = false,
         openBrowser: (String) -> Unit,
-    ) = com.flagshipserver.app.calls.VoiciOutgoingCall(target, video, this, keyring, integrity, engine, room, handoff, openBrowser, scope, now, origin)
+    ) = com.flagshipserver.app.calls.VoiciOutgoingCall(target, video, this, keyring, integrity, engine, room, handoff, openBrowser, scope, now, origin, allowCallBack = allowCallBack)
+
+    /**
+     * The caller's side of ringing back ("Call and allow call-back" / "Stop call-backs"): a ring-back order for this
+     * account's conversation on [pageId], signed by its pseudonym there and sent with the device headers, so `.com` can
+     * push the owner's ring to this account's devices. Null on success, else a code.
+     */
+    suspend fun setCallBack(pageId: String, allow: Boolean): String? {
+        val u = user() ?: return "locked"
+        val umk = keyring.umk() ?: return "locked"
+        val device = keyring.device() ?: return "locked"
+        val visitor = VoiciVisitorKeys.derive(umk, pageId)
+        val conv = VoiciMessages.voiciConv(pageId, visitor.pseudonymPub)
+        val body = VoiciCallModes.signRingBackPseudonym(pageId, conv, if (allow) "attach" else "stop", now(), visitor.pseudonym.seed)
+        return try {
+            client.ringBack(u, device, body)
+            update { it.copy(callBackPages = if (allow) (it.callBackPages + pageId).distinct().sorted() else it.callBackPages - pageId) }
+            null
+        } catch (e: VoiciHttpError) {
+            e.code ?: "network"
+        } catch (e: Exception) {
+            "network"
+        }
+    }
+
+    /** Anonymous callers' conversations this page blocked (`.com`'s list, from the last inbox read). */
+    fun anonBlocks(): Set<String> = withLocal { _, _, l -> l.anonBlocks.toSet() } ?: emptySet()
+
+    /**
+     * Block or unblock an anonymous caller (an "anyone" page; `flagship/voici-anon-block/v1` by the page's owner key):
+     * its conversation (its browser key, the identity its proof of work was for) can't call again until unblocked or
+     * deleted. Null on success, else a code.
+     */
+    suspend fun blockAnonymous(conv: String, block: Boolean): String? {
+        val u = user() ?: return "locked"
+        val umk = keyring.umk() ?: return "locked"
+        val local = withLocal { _, _, l -> l } ?: return "locked"
+        val keys = ownerKeys(local, umk) ?: return "not-found"
+        return try {
+            client.anonBlock(u, VoiciCallModes.signAnonBlock(keys.pageId, conv, if (block) "block" else "unblock", now(), keys.sign.seed))
+            update { it.copy(anonBlocks = if (block) (it.anonBlocks + conv).distinct() else it.anonBlocks - conv) }
+            _callHistoryVersion.value += 1
+            null
+        } catch (e: VoiciHttpError) {
+            e.code ?: "network"
+        } catch (e: Exception) {
+            "network"
+        }
+    }
+
+    // ── reveal who I am (docs/voici-calls.md "Reveal who I am", "What the reveal shows") ──
+
+    /** Owner side: the caller's checked reveal for [conv], or null (none, withdrawn, or it didn't check). */
+    fun reveal(conv: String): VoiciRevealShown? = withLocal { _, _, l -> l.reveals[conv] }
+
+    /**
+     * Owner side: the newest control in each conversation decides. A reveal counts only when it checks under the page
+     * key `.com` serves for its username (that page's verified index); anything else shows nothing.
+     */
+    private suspend fun checkReveals(convs: Collection<StoredVoiciConversation>) {
+        val local = withLocal { _, _, l -> l } ?: return
+        var reveals = local.reveals
+        for (c in convs) {
+            val last = c.lastControl ?: continue
+            when (val ctl = VoiciCallModes.parseRevealControl(last.control)) {
+                is VoiciCallModes.RevealControl.Hidden -> reveals = reveals - c.conv
+                is VoiciCallModes.RevealControl.Shown -> {
+                    if (reveals[c.conv]?.issuedAt == ctl.reveal.issuedAt) continue
+                    reveals = if (verifyReveal(last.control!!, c.conv, ctl.reveal.username)) {
+                        reveals + (c.conv to VoiciRevealShown(ctl.reveal.username, ctl.reveal.displayName, ctl.reveal.issuedAt))
+                    } else {
+                        reveals - c.conv
+                    }
+                }
+                null -> {}
+            }
+        }
+        if (reveals != local.reveals) update { it.copy(reveals = reveals) }
+    }
+
+    private suspend fun verifyReveal(control: JsonObject, conv: String, username: String): Boolean {
+        val keys = client.accountKeys(username) ?: return false
+        val idx = VoiciPage.checkVoiciPageIndex(client.page(username) ?: return false, username, keys.sensitiveKind, keys.sensitivePub).valueOrNull() ?: return false
+        return VoiciCallModes.checkReveal(control, conv, idx.body.ownerSignPub).ok
+    }
+
+    // ── the caller's side of a conversation this account started on another page ──
+
+    /** One message in a conversation this account started: its own, or the owner's reply. */
+    data class VisitorMessage(val msgId: String, val mine: Boolean, val text: String, val sentAt: Long)
+
+    data class VisitorThread(val target: com.flagshipserver.app.calls.VoiciCallTarget, val displayName: String, val messages: List<VisitorMessage>, val nextSeq: Long)
+
+    /** The parts every send and fetch of a visitor conversation needs. */
+    private class VisitorSession(
+        val u: String, val visitor: VoiciVisitorKeys, val att: MessagesKeyAttestation, val reader: ByteArray, val conv: String,
+        val idx: VoiciPageIndex, val cred: JsonObject,
+    )
+
+    private suspend fun visitorSession(target: com.flagshipserver.app.calls.VoiciCallTarget, integrity: VoiciIntegrity): VisitorSession? {
+        val u = user() ?: return null
+        val umk = keyring.umk() ?: return null
+        val device = keyring.device() ?: return null
+        val keys = client.accountKeys(target.username) ?: return null
+        val idx = VoiciPage.checkVoiciPageIndex(client.page(target.username) ?: return null, target.username, keys.sensitiveKind, keys.sensitivePub, pageId = target.pageId).valueOrNull() ?: return null
+        val visitor = VoiciVisitorKeys.derive(umk, target.pageId)
+        val t = now()
+        val att = VoiciVisitorAttestation.obtain(this, u, device, integrity, visitor, t) ?: return null
+        val reader = VoiciOwner.readerKey(VoiciMessages.deriveMessagesSecret(umk), target.pageId)
+        val nonce = WebEnvelopes.sha256Hex("${target.pageId}|${att.issuedAt}").take(32)
+        val d = WebDelegation("voici-messages", origin(), target.pageId, visitor.pseudonymPub, "p256", VoiciJs.hex(VoiciJs.p256PublicKey(reader)), att.issuedAt, att.expiresAt, nonce)
+        val ts = VoiciThreadStatement(target.pageId, visitor.pseudonymPub, visitor.threadPub, att.issuedAt)
+        val cred = JsonObject(
+            linkedMapOf(
+                "attestation" to att.toJson(), "delegation" to d.toJson(), "delegationSig" to JsonPrimitive(WebDelegations.signWebDelegation(d, visitor.pseudonym.seed)),
+                "threadStmt" to ts.toJson(), "threadSig" to JsonPrimitive(VoiciMessages.signVoiciThreadStatement(ts, visitor.pseudonym.seed)),
+            ),
+        )
+        return VisitorSession(u, visitor, att, reader, VoiciMessages.voiciConv(target.pageId, visitor.pseudonymPub), idx, cred)
+    }
+
+    /** The whole conversation this account has with [target]'s page: its own messages and the owner's replies, opened with T. */
+    suspend fun visitorThread(target: com.flagshipserver.app.calls.VoiciCallTarget, integrity: VoiciIntegrity = VoiciIntegrity.NONE): VisitorThread? {
+        val s = visitorSession(target, integrity) ?: return null
+        val out = ArrayList<VisitorMessage>()
+        var mySeq = 0L
+        var since = ""
+        var rounds = 0
+        while (rounds++ < 20) {
+            val (items, next, more) = client.thread(VoiciOwner.threadFetchBody(s.visitor, s.att, s.reader, since, now()))
+            for (item in items) {
+                val env = item.envelope
+                val msgId = VoiciJs.str(env["msgId"]) ?: continue
+                val body = WebEnvelopes.b64Decode(VoiciJs.str(env["body"]) ?: VoiciJs.str(env["bodyB64"])) ?: continue
+                val mine = VoiciJs.str(env["kind"]) == "voici-message"
+                if (mine) {
+                    if (VoiciJs.str(env["from"]) != s.visitor.pseudonymPub) continue
+                    mySeq = maxOf(mySeq, VoiciJs.time(env["seq"]) ?: 0)
+                } else if (!VoiciMessages.checkVoiciReply(env, target.pageId, s.idx.body.ownerSignPub, s.conv).ok) {
+                    continue
+                }
+                val pt = VoiciMessages.openVoiciBodyAny(body, s.conv, msgId, s.visitor.thread.seed).valueOrNull() as? VoiciPlaintext ?: continue
+                out += VisitorMessage(msgId, mine, pt.text, VoiciJs.time(env["sentAt"]) ?: item.storedAt)
+            }
+            val moved = next != since
+            since = next
+            if (!more || !moved) break
+        }
+        val name = runCatching {
+            val ref = s.idx.body.pieces.first { it.role == "profile" }
+            client.piece(target.username, target.pageId, ref.sha256)?.takeIf { WebEnvelopes.sha256Hex(it) == ref.sha256 }?.let(VoiciPage::parseVoiciProfilePiece)?.displayName
+        }.getOrNull() ?: target.username
+        return VisitorThread(target, name, out.sortedWith(compareBy({ it.sentAt }, { it.msgId })), mySeq + 1)
+    }
+
+    /** Sends [text] (or a control) as this account's pseudonym on the page: sealed to the owner's inbox key and our T. */
+    private suspend fun sendVisitorEnvelope(target: com.flagshipserver.app.calls.VoiciCallTarget, text: String?, control: JsonObject?, integrity: VoiciIntegrity): String? {
+        val s = visitorSession(target, integrity) ?: return "locked"
+        val thread = visitorThread(target, integrity) ?: return "network"
+        val t = now()
+        val msgId = VoiciOwner.randomHex(16)
+        val recipients = listOf(WebEnvelopes.hexToBytes(s.idx.body.inboxPub), s.visitor.thread.publicKey)
+        val body = if (control != null) VoiciMessages.sealVoiciControl(s.conv, msgId, t, s.visitor.pseudonymPub, recipients, control)
+        else VoiciMessages.sealVoiciBody(s.conv, msgId, t, s.visitor.pseudonymPub, recipients, VoiciPlaintext(text!!, null))
+        val env = WebEnvelope("voici-message", target.pageId, s.conv, s.visitor.pseudonymPub, msgId, thread.nextSeq, t, WebEnvelopes.b64Encode(body), s.cred)
+        return try {
+            client.send(WebEnvelopes.signWebEnvelopeP256(env, s.reader).toJson())
+            null
+        } catch (e: VoiciHttpError) {
+            e.code ?: "network"
+        } catch (e: Exception) {
+            "network"
+        }
+    }
+
+    suspend fun sendAsVisitor(target: com.flagshipserver.app.calls.VoiciCallTarget, text: String, integrity: VoiciIntegrity = VoiciIntegrity.NONE): String? {
+        val prepared = VoiciText.prepareVoiciText(VoiciTextField.messageText, text)
+        val t = prepared.valueOrNull() ?: return prepared.code
+        return sendVisitorEnvelope(target, t, null, integrity)
+    }
+
+    /** Pages where this account turned on "Show <name> who I am". */
+    fun revealedTo(): Set<String> = withLocal { _, _, l -> l.revealedTo.keys } ?: emptySet()
+
+    /**
+     * "Show <name> who I am": a reveal signed with this account's own page key (its username and its page's display
+     * name), or an unreveal, sent inside the sealed conversation. Needs a published page. Null on success, else a code.
+     */
+    suspend fun setReveal(target: com.flagshipserver.app.calls.VoiciCallTarget, on: Boolean, integrity: VoiciIntegrity = VoiciIntegrity.NONE): String? {
+        val u = user() ?: return "locked"
+        val umk = keyring.umk() ?: return "locked"
+        val local = withLocal { _, _, l -> l } ?: return "locked"
+        val umkConv = VoiciMessages.voiciConv(target.pageId, VoiciVisitorKeys.derive(umk, target.pageId).pseudonymPub)
+        val t = now()
+        val control = if (on) {
+            if (local.removed) return "no-page"
+            val keys = ownerKeys(local, umk) ?: return "no-page"
+            val name = VoiciOwner.parsePageState(local.publishedState)?.profile?.displayName?.takeIf { VoiciText.checkVoiciText(VoiciTextField.displayName, it) == null }
+            VoiciCallModes.signReveal(umkConv, u, name, t, keys.sign.seed)
+        } else {
+            VoiciCallModes.unreveal(umkConv, t)
+        }
+        sendVisitorEnvelope(target, null, control, integrity)?.let { return it }
+        update { it.copy(revealedTo = if (on) it.revealedTo + (target.pageId to t) else it.revealedTo - target.pageId) }
+        return null
+    }
+
+    /** Delete = forget, from the caller's side: a delete signed by this account's pseudonym, then this device's copy goes. */
+    suspend fun deleteVisitorConversation(target: com.flagshipserver.app.calls.VoiciCallTarget): String? {
+        val umk = keyring.umk() ?: return "locked"
+        val visitor = VoiciVisitorKeys.derive(umk, target.pageId)
+        val conv = VoiciMessages.voiciConv(target.pageId, visitor.pseudonymPub)
+        return try {
+            client.deleteConversation(VoiciCallModes.signConvDeletePseudonym(target.pageId, conv, now(), visitor.pseudonym.seed))
+            update {
+                it.copy(
+                    callBackPages = it.callBackPages - target.pageId, revealedTo = it.revealedTo - target.pageId,
+                    replyLatest = it.replyLatest - target.pageId, replySeen = it.replySeen - target.pageId, replyCursor = it.replyCursor - target.pageId,
+                    callHistory = it.callHistory.filterNot { r -> r.peerPageId == target.pageId },
+                )
+            }
+            null
+        } catch (e: VoiciHttpError) {
+            e.code ?: "network"
+        } catch (e: Exception) {
+            "network"
+        }
+    }
+
+    /**
+     * Delete = forget, from the owner's side: a delete signed by the page's owner key; `.com` drops the conversation's
+     * mail, ring-back channel and missed calls, and this device erases its copy. The caller's own copy stays with them.
+     */
+    suspend fun deleteConversation(conv: String): String? {
+        val umk = keyring.umk() ?: return "locked"
+        val local = withLocal { _, _, l -> l } ?: return "locked"
+        val keys = ownerKeys(local, umk) ?: return "not-found"
+        return try {
+            client.deleteConversation(VoiciCallModes.signConvDeleteOwner(keys.pageId, conv, now(), keys.sign.seed))
+            update {
+                it.copy(
+                    conversations = it.conversations.filter { c -> c.conv != conv }, reveals = it.reveals - conv, ringBackOff = it.ringBackOff - conv,
+                    callHistory = it.callHistory.filterNot { r -> r.conv == conv },
+                )
+            }
+            changeState { st -> st.copy(archived = st.archived - conv, accepted = st.accepted - conv) }
+            _messages.value = _messages.value.copy(missedCalls = _messages.value.missedCalls.filter { it.conv != conv })
+            _callHistoryVersion.value += 1
+            null
+        } catch (e: VoiciHttpError) {
+            e.code ?: "network"
+        } catch (e: Exception) {
+            "network"
+        }
+    }
+
+    /** Pages this account allowed to ring it back (this device's record; `.com` holds the channels). */
+    fun callBackPages(): Set<String> = withLocal { _, _, l -> l.callBackPages.toSet() } ?: emptySet()
+
+    /**
+     * An owner's ring (push category voici-ring): the hint opens only under this account's thread key for the page that
+     * rang, and must name that page as this device knows it (its sign-in). Null while locked or for an unknown page.
+     */
+    fun openRingHint(ringId: String, hintB64: String): com.flagshipserver.app.calls.VoiciRingHint? {
+        val umk = keyring.umk() ?: return null
+        val sealed = WebEnvelopes.b64Decode(hintB64) ?: return null
+        val pages = withLocal { _, _, l -> l.signInPages } ?: return null
+        val secret = VoiciMessages.deriveMessagesSecret(umk)
+        for ((pageId, username) in pages) {
+            val p = VoiciMessages.deriveMessagesPseudonymKey(secret, pageId)
+            val t = VoiciMessages.deriveMessagesThreadKey(secret, pageId)
+            val conv = VoiciMessages.voiciConv(pageId, VoiciJs.hex(p.publicKey))
+            val opened = runCatching {
+                com.flagshipserver.app.core.pq.PqHybrid.hybridOpen(t.seed, VoiciRings.TAG_RING_HINT, listOf(VoiciJs.utf8(conv), VoiciJs.utf8(ringId)), sealed).plaintext
+            }.getOrNull() ?: continue
+            val o = VoiciJs.parseJson(opened.decodeToString())?.let(VoiciJs::obj) ?: return null
+            if (!VoiciJs.exactKeys(o, listOf("v", "pageId", "username", "conv", "ringId", "media", "issuedAt")) || !VoiciJs.isNumEq(o["v"], 1)) return null
+            if (VoiciJs.str(o["pageId"]) != pageId || VoiciJs.str(o["username"]) != username || VoiciJs.str(o["conv"]) != conv || VoiciJs.str(o["ringId"]) != ringId) return null
+            val media = VoiciJs.str(o["media"])?.takeIf { it in VoiciCalls.MEDIA_VALUES } ?: return null
+            return com.flagshipserver.app.calls.VoiciRingHint(com.flagshipserver.app.calls.VoiciCallTarget(username, pageId), ringId, media == VoiciCalls.MEDIA_VIDEO, VoiciJs.time(o["issuedAt"]) ?: 0)
+        }
+        return null
+    }
 
     /**
      * Conversations whose caller didn't allow call-backs, as `.com` last answered a ring here (no read of a channel
@@ -1278,6 +1591,7 @@ class VoiciCenter(
             blocked = (local.inboxBlocks + state.blocks).toSet(),
             revoked = local.revoked.toSet(),
             nicknames = state.nicknames.mapValues { it.value.name },
+            callsFrom = idx.body.callsFrom ?: "accepted",
         )
     }
 

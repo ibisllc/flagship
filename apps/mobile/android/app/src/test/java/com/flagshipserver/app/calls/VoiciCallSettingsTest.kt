@@ -21,10 +21,24 @@ import java.util.TimeZone
 class VoiciCallSettingsTest {
     @Test fun indexFieldsAreV2OnlyWhileOn() {
         assertEquals(1 to "signed-in", VoiciCallSettings.indexFields(true, "signed-in"))
-        assertEquals(1 to "accepted", VoiciCallSettings.indexFields(true, "anyone"))
+        assertEquals(1 to "anyone", VoiciCallSettings.indexFields(true, "anyone"))
+        assertEquals(1 to "callback", VoiciCallSettings.indexFields(true, "callback"))
+        assertEquals(1 to "accepted", VoiciCallSettings.indexFields(true, "nobody"))
         assertEquals(null to null, VoiciCallSettings.indexFields(false, "signed-in"))
         assertEquals(false to "accepted", VoiciCallSettings.read(null, null))
         assertEquals(true to "signed-in", VoiciCallSettings.read(1, "signed-in"))
+    }
+
+    @Test fun callHoursRoundTripAndRefuseWhatTheIndexWouldRefuse() {
+        val h = VoiciCallSettings.CallHours(setOf(0, 1, 2, 3, 4), 9 * 60, 17 * 60 + 30, "Europe/Paris")
+        assertEquals("1111100 0900-1730 Europe/Paris", h.value())
+        assertEquals(h, VoiciCallSettings.CallHours.parse(h.value()))
+        assertTrue(h.valid)
+        assertFalse("no day", h.copy(days = emptySet()).valid)
+        assertFalse("start equals end", h.copy(end = h.start).valid)
+        assertFalse("unknown zone", h.copy(zone = "Mars/Olympus").valid)
+        assertNull(VoiciCallSettings.CallHours.parse("1111111 0900-2400 UTC"))
+        assertEquals(setOf(0, 1, 2, 3, 4), VoiciCallSettings.CallHours.default("UTC").days)
     }
 
     @Test fun viewState() {

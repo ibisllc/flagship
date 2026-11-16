@@ -151,7 +151,8 @@ class MockVoiciClient(
     override suspend fun inbox(username: String, since: String): VoiciInboxPage = synchronized(this) {
         val all = inbox[username].orEmpty()
         val from = since.toIntOrNull() ?: 0
-        VoiciInboxPage(all.drop(from), all.size.toString(), blocks[username].orEmpty().toList(), revoked.toList())
+        // As `.com`: each item says whether its conversation can be rung back now.
+        VoiciInboxPage(all.drop(from).map { it.copy(ringBack = VoiciJs.str(it.envelope["conv"]) in ringBacks) }, all.size.toString(), blocks[username].orEmpty().toList(), revoked.toList())
     }
 
     val missedCallItems = HashMap<String, MutableList<VoiciMissedCallItem>>()
@@ -209,7 +210,9 @@ class MockVoiciClient(
         val from = VoiciJs.str(request["from"]) ?: refuse(400, "malformed")
         if (blocks[owner]?.contains(from) == true) refuse(403, "calls-off")
         val ctx = com.flagshipserver.app.core.voici.VoiciCallRequestCheckContext(pageId, true, com.flagshipserver.app.core.Endpoints.voiciOrigin, listOf(caPub), now(),
-            allowed = { idx.body.callsFrom == "signed-in" })
+            // As `.com`: "signed-in" and "anyone" take every signed-in caller; "callback" only once the conversation's
+            // ring-back channel is attached.
+            allowed = { r -> idx.body.callsFrom == "signed-in" || idx.body.callsFrom == "anyone" || (idx.body.callsFrom == "callback" && VoiciJs.str(r["conv"]) in ringBacks) })
         when (val r = VoiciCalls.checkRequest(request, ctx)) {
             is com.flagshipserver.app.core.voici.VoiciOutcome.Refused -> refuse(if (r.reason == "malformed") 400 else 403, r.reason)
             is com.flagshipserver.app.core.voici.VoiciOutcome.Ok -> {
@@ -222,6 +225,38 @@ class MockVoiciClient(
 
     /** Conversations whose caller attached a ring-back channel ("Call and allow call-back"), and the rings sent. */
     val ringBacks = HashSet<String>()
+    val ringBackOrders = mutableListOf<JsonObject>()
+    val convDeletes = mutableListOf<JsonObject>()
+
+    override suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject): Unit = synchronized(this) {
+        val order = body["order"] as? JsonObject ?: refuse(400, "malformed")
+        val pageId = VoiciJs.str(order["pageId"]) ?: refuse(400, "malformed")
+        ownerOf(pageId) ?: refuse(404, "not-found")
+        when (val r = com.flagshipserver.app.core.voici.VoiciCallModes.checkRingBack(body, pageId, com.flagshipserver.app.core.Endpoints.voiciOrigin, listOf(caPub), now())) {
+            is com.flagshipserver.app.core.voici.VoiciOutcome.Refused -> refuse(403, r.reason)
+            is com.flagshipserver.app.core.voici.VoiciOutcome.Ok -> {
+                val conv = VoiciJs.str(order["conv"])!!
+                if (r.value == "attach") ringBacks += conv else ringBacks -= conv
+                ringBackOrders += body
+            }
+        }
+    }
+
+    override suspend fun deleteConversation(body: JsonObject): Unit = synchronized(this) {
+        val del = body["del"] as? JsonObject ?: refuse(400, "malformed")
+        val pageId = VoiciJs.str(del["pageId"]) ?: refuse(400, "malformed")
+        val owner = ownerOf(pageId) ?: refuse(404, "not-found")
+        val idx = VoiciPage.parseVoiciPageIndex(pages[owner]) ?: refuse(404, "not-found")
+        when (val r = com.flagshipserver.app.core.voici.VoiciCallModes.checkConvDelete(body, pageId, idx.body.ownerSignPub, com.flagshipserver.app.core.Endpoints.voiciOrigin, listOf(caPub), now())) {
+            is com.flagshipserver.app.core.voici.VoiciOutcome.Refused -> refuse(403, r.reason)
+            is com.flagshipserver.app.core.voici.VoiciOutcome.Ok -> {
+                // Delete = forget: the conversation's mail and channel go at once, and nothing is kept.
+                inbox[owner]?.removeAll { VoiciJs.str(it.envelope["conv"]) == r.value }
+                ringBacks -= r.value
+                convDeletes += body
+            }
+        }
+    }
     val rings = mutableListOf<JsonObject>()
 
     override suspend fun ring(username: String, body: JsonObject): Unit = synchronized(this) {

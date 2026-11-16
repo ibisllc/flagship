@@ -36,12 +36,12 @@ object VoiciOutgoingCalls {
     val current: StateFlow<VoiciOutgoingCall?> = _current.asStateFlow()
 
     /** Calls [target]; false when a call is already going or there is no account here. */
-    fun start(context: Context, target: VoiciCallTarget, video: Boolean): Boolean {
+    fun start(context: Context, target: VoiciCallTarget, video: Boolean, allowCallBack: Boolean = false): Boolean {
         val center = VoiciCenter.shared ?: return false
         val busy = _current.value?.state?.value
         if (busy != null && busy !is VoiciOutgoingState.Ended && busy !is VoiciOutgoingState.Failed && busy !is VoiciOutgoingState.Browser) return false
         val app = context.applicationContext
-        val call = center.outgoingCall(target, video, integrity, VoiciCallCenter.mediaFactory(), roomFactory(), pipeFactory()) { link ->
+        val call = center.outgoingCall(target, video, integrity, VoiciCallCenter.mediaFactory(), roomFactory(), pipeFactory(), allowCallBack) { link ->
             lastBrowserLink = link
             openBrowserOverride?.invoke(link) ?: openInBrowser(app, link)
         }

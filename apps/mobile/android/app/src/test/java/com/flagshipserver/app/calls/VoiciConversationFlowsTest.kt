@@ -1,0 +1,154 @@
+// Call-backs, the owner's ring, delete and reveal (docs/voici-calls.md, owner 2026-11-15/16) through the app against
+// the in-memory `.com` (MockVoiciClient checks the ring-back order, the ring, the delete and keeps the inbox flags):
+// "Call and allow call-back" attaches the channel and the owner's inbox flags it; the caller's app opens the owner's
+// ring hint for that page only; the owner's delete forgets the conversation; the caller's reveal shows on the owner's
+// side only when it checks under the caller's own page key, and an unreveal removes it.
+
+package com.flagshipserver.app.calls
+
+import com.flagshipserver.app.api.MockVoiciClient
+import com.flagshipserver.app.api.VoiciAccountKeys
+import com.flagshipserver.app.api.VoiciDeviceSigner
+import com.flagshipserver.app.core.voici.CallVisitorOutcome
+import com.flagshipserver.app.core.voici.MemoryVoiciVaultStore
+import com.flagshipserver.app.core.voici.VoiciCenter
+import com.flagshipserver.app.core.voici.VoiciIntegrity
+import com.flagshipserver.app.core.voici.VoiciJs
+import com.flagshipserver.app.core.voici.VoiciKeyring
+import com.flagshipserver.app.core.voici.VoiciPage
+import com.flagshipserver.app.core.voici.VoiciVault
+import com.flagshipserver.app.core.voici.VoiciVectorsTest
+import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+private class K(val user: String, val umkSeed: ByteArray, val rootSeed: ByteArray, val deviceSeed: ByteArray) : VoiciKeyring {
+    override fun username() = user
+    override fun umk() = umkSeed
+    override fun holdsSensitiveKey(account: VoiciAccountKeys) = true
+    override fun sensitiveNeedsPrompt() = false
+    override suspend fun sensitiveSeed(reason: String) = rootSeed to "admin-root"
+    override fun device() = VoiciDeviceSigner("d0".repeat(16), VoiciJs.hex(VoiciJs.edPub(deviceSeed)), Ed25519Sign(deviceSeed))
+    override suspend fun confirm(reason: String) {}
+    override fun displayName() = user
+}
+
+class VoiciConversationFlowsTest {
+    private val aliceUmk = ByteArray(32) { 1 }
+    private val aliceRoot = ByteArray(32) { 2 }
+    private val bobUmk = ByteArray(32) { 9 }
+    private val bobRoot = ByteArray(32) { 8 }
+    private val sdp: String by lazy {
+        val v = Json.parseToJsonElement(VoiciVectorsTest.vectorsFile("packages/protocol/test-vectors/voici-calls/vectors.json").readText()).jsonObject
+        VoiciJs.str((v["sdp"] as JsonObject)["offerRaw"])!!
+    }
+
+    private fun center(mock: MockVoiciClient, k: K) =
+        VoiciCenter(mock, k, VoiciVault(MemoryVoiciVaultStore()), { listOf(mock.caPub) }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
+
+    private class World(val mock: MockVoiciClient, val alice: VoiciCenter, val bob: VoiciCenter, val pageId: String, val conv: String)
+
+    /** alice's page takes calls; bob (who has a page of his own) wrote to it once. */
+    private fun world(): World = runBlocking {
+        val mock = MockVoiciClient()
+        mock.accounts["alice"] = VoiciAccountKeys("ee".repeat(32), VoiciJs.hex(VoiciJs.edPub(aliceRoot)))
+        mock.accounts["bob"] = VoiciAccountKeys("dd".repeat(32), VoiciJs.hex(VoiciJs.edPub(bobRoot)))
+        val alice = center(mock, K("alice", aliceUmk, aliceRoot, ByteArray(32) { 3 }))
+        alice.refresh()
+        alice.edit("accept-messages", accepts = 1)
+        alice.acceptRules()
+        assertTrue(alice.publish("test"))
+        assertTrue(alice.setCalls(true, VoiciCallSettings.FROM_CALLBACK, "test"))
+        val bob = center(mock, K("bob", bobUmk, bobRoot, ByteArray(32) { 7 }))
+        bob.refresh()
+        bob.acceptRules()
+        assertTrue(bob.publish("test"))
+        val pageId = VoiciPage.parseVoiciPageIndex(mock.storedIndex("alice"))!!.body.pageId
+        mock.visitorWrites("alice", bobUmk, "Hello Alice")
+        alice.refreshInbox()
+        World(mock, alice, bob, pageId, alice.messages.value.conversations.single().conv)
+    }
+
+    @Test fun callAndAllowCallBackAttachesTheChannelAndTheInboxFlagsIt() = runBlocking {
+        val w = world()
+        // The owner's inbox said this conversation has no channel: Call back starts disabled.
+        assertTrue(w.conv in w.alice.ringBackOff())
+        val call = w.bob.outgoingCall(VoiciCallTarget("alice", w.pageId), false, VoiciIntegrity.NONE, object : CallMediaEngine by StubCallMediaEngine() {
+            override suspend fun offer(video: Boolean) = sdp
+        }, object : VoiciCallerRoom {
+            override fun connect(url: String, onMessage: (String) -> Unit, onClosed: () -> Unit) {}
+            override fun send(text: String) {}
+            override fun close() {}
+        }, object : VoiciCallHandoffPipe {
+            override suspend fun deliver(sid: String, sealed: com.flagshipserver.app.core.voici.VoiciCallHandoffSealed, openBrowser: () -> Unit) {}
+        }, allowCallBack = true) {}
+        call.start()
+        assertEquals(VoiciOutgoingState.Ringing, call.state.value)
+        assertEquals("attach", VoiciJs.str((w.mock.ringBackOrders.single()["order"] as JsonObject)["op"]))
+        assertTrue(w.conv in w.mock.ringBacks)
+        assertTrue(w.bob.callBackPages().contains(w.pageId))
+        // A new item from that conversation carries the flag: Call back is on again.
+        w.mock.visitorWrites("alice", bobUmk, "Call me", seq = 2)
+        w.alice.refreshInbox()
+        assertTrue(w.conv !in w.alice.ringBackOff())
+        // Stop call-backs: the channel goes.
+        assertNull(w.bob.setCallBack(w.pageId, false))
+        assertTrue(w.conv !in w.mock.ringBacks)
+    }
+
+    @Test fun theCallersAppOpensTheOwnersRingForThatPageOnly() = runBlocking {
+        val w = world()
+        w.mock.ringBacks += w.conv
+        w.bob.recordSignIn(w.pageId, "alice", "04" + "11".repeat(64), JsonObject(emptyMap()))
+        assertTrue(w.alice.callVisitor(w.conv, video = true) is CallVisitorOutcome.Ringing)
+        val ring = w.mock.rings.single()
+        val hint = w.bob.openRingHint(VoiciJs.str(ring["ringId"])!!, VoiciJs.str(ring["hint"])!!)
+        assertNotNull(hint)
+        assertEquals(VoiciCallTarget("alice", w.pageId), hint!!.target)
+        assertTrue(hint.video)
+        // Another ring id (or another account's thread key) opens nothing.
+        assertNull(w.bob.openRingHint("ab".repeat(16), VoiciJs.str(ring["hint"])!!))
+        assertNull(w.alice.openRingHint(VoiciJs.str(ring["ringId"])!!, VoiciJs.str(ring["hint"])!!))
+    }
+
+    @Test fun deleteForgetsTheConversationOnBothSides() = runBlocking {
+        val w = world()
+        assertNull(w.alice.deleteConversation(w.conv))
+        assertEquals("owner", VoiciJs.str((w.mock.convDeletes.single()["del"] as JsonObject)["side"]))
+        assertTrue(w.alice.messages.value.conversations.none { it.conv == w.conv } || w.alice.messages.value.conversations.isEmpty())
+        // The caller deletes its side too: a delete signed by its pseudonym.
+        assertNull(w.bob.deleteVisitorConversation(VoiciCallTarget("alice", w.pageId)))
+        assertEquals("caller", VoiciJs.str((w.mock.convDeletes.last()["del"] as JsonObject)["side"]))
+    }
+
+    @Test fun theRevealShowsOnlyWhenItChecksAndAnUnrevealRemovesIt() = runBlocking {
+        val w = world()
+        val alicePage = VoiciCallTarget("alice", w.pageId)
+        val thread = w.bob.visitorThread(alicePage)!!
+        assertEquals(listOf("Hello Alice"), thread.messages.map { it.text })
+        assertNull(w.bob.setReveal(alicePage, true))
+        w.alice.refreshInbox()
+        val shown = w.alice.reveal(w.conv)
+        assertNotNull(shown)
+        assertEquals("bob", shown!!.username)
+        // The control is never shown as a message.
+        assertEquals(1, w.alice.messages.value.conversations.single().ordered.size)
+        assertNull(w.bob.setReveal(alicePage, false))
+        w.alice.refreshInbox()
+        assertNull(w.alice.reveal(w.conv))
+        // A message the caller writes from the app arrives as text in the same conversation.
+        assertNull(w.bob.sendAsVisitor(alicePage, "From the app"))
+        w.alice.refreshInbox()
+        assertTrue(w.alice.messages.value.conversations.single().ordered.any { it.text == "From the app" })
+    }
+}

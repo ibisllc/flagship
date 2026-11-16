@@ -1033,6 +1033,11 @@ class MainActivity : FragmentActivity() {
      *  actual URI→DeepLink translation lives in core.AppLink so it
      *  can be unit-tested without an activity. */
     private fun handleIntent(intent: Intent) {
+        // A page owner rang this account back and the person tapped Answer: dial out, and show Social's call panel.
+        if (com.flagshipserver.app.calls.VoiciRingCenter.answer(this, intent)) {
+            deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.Messages())
+            return
+        }
         val uri = intent.data ?: return
         val link = com.flagshipserver.app.core.AppLink.resolve(uri) ?: return
         deepLinker.enqueue(link)

@@ -19,7 +19,11 @@ import java.util.Calendar
 object VoiciCallSettings {
     const val FROM_ACCEPTED = "accepted"
     const val FROM_SIGNED_IN = "signed-in"
-    val FROM_VALUES = listOf(FROM_ACCEPTED, FROM_SIGNED_IN)
+    /** The two modes the Social page offers (owner-approved 2026-11-15); the older two stay readable. */
+    const val FROM_ANYONE = "anyone"
+    const val FROM_CALLBACK = "callback"
+    val FROM_VALUES = listOf(FROM_ACCEPTED, FROM_SIGNED_IN, FROM_ANYONE, FROM_CALLBACK)
+    val FROM_CHOICES = listOf(FROM_ANYONE, FROM_CALLBACK)
 
     /** The index fields for a calls setting: v2 fields while on, none (a v1 index) while off. */
     fun indexFields(on: Boolean, from: String): Pair<Int?, String?> =
@@ -28,6 +32,33 @@ object VoiciCallSettings {
     /** What a calls setting in a published index reads as: (on, from). */
     fun read(acceptsCalls: Int?, callsFrom: String?): Pair<Boolean, String> =
         (acceptsCalls == 1) to (callsFrom?.takeIf { it in FROM_VALUES } ?: FROM_ACCEPTED)
+
+    /**
+     * Call hours as the page index carries them: "<7 day bits, Mon..Sun> <HHMM>-<HHMM> <time zone>". [days] are 0 = Monday
+     * to 6 = Sunday; [start] and [end] minutes of the day (an end before the start runs past midnight).
+     */
+    data class CallHours(val days: Set<Int>, val start: Int, val end: Int, val zone: String) {
+        fun value(): String {
+            val bits = (0..6).joinToString("") { if (it in days) "1" else "0" }
+            fun hm(m: Int) = "%02d%02d".format(java.util.Locale.ROOT, m / 60, m % 60)
+            return "$bits ${hm(start)}-${hm(end)} $zone"
+        }
+        /** A value the page index takes (a day picked, start ≠ end, a known zone). */
+        val valid: Boolean get() = com.flagshipserver.app.core.voici.VoiciPage.isVoiciCallHours(value())
+
+        companion object {
+            /** Weekdays 9:00 to 17:00 in this device's zone: what the editor starts from. */
+            fun default(zone: String) = CallHours((0..4).toSet(), 9 * 60, 17 * 60, zone)
+
+            fun parse(v: String?): CallHours? {
+                if (!com.flagshipserver.app.core.voici.VoiciPage.isVoiciCallHours(v)) return null
+                val (bits, span, zone) = v!!.split(" ")
+                val (a, b) = span.split("-")
+                fun m(x: String) = x.substring(0, 2).toInt() * 60 + x.substring(2).toInt()
+                return CallHours((0..6).filter { bits[it] == '1' }.toSet(), m(a), m(b), zone)
+            }
+        }
+    }
 
     enum class Note { PublishFirst, AdminOnly }
 
@@ -81,7 +112,7 @@ class CallSettingsStore(context: Context) {
     }
 
     /** The last "who can call" picked here, for turning calls on again. */
-    fun lastFrom(): String = prefs.getString("from", null)?.takeIf { it in VoiciCallSettings.FROM_VALUES } ?: VoiciCallSettings.FROM_ACCEPTED
+    fun lastFrom(): String = prefs.getString("from", null)?.takeIf { it in VoiciCallSettings.FROM_CHOICES } ?: VoiciCallSettings.FROM_CALLBACK
 
     fun setLastFrom(from: String) {
         if (from in VoiciCallSettings.FROM_VALUES) prefs.edit().putString("from", from).apply()

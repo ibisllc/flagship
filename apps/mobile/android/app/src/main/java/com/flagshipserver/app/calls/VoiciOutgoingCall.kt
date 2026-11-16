@@ -157,6 +157,8 @@ class VoiciOutgoingCall(
     private val origin: () -> String = { Endpoints.voiciOrigin },
     private val apex: () -> String = { Endpoints.controlHost },
     private val servicesHost: (String) -> String = { Endpoints.userZoneHost(it) },
+    /** "Call and allow call-back": attach this conversation's ring-back channel before the call (the owner can ring back). */
+    val allowCallBack: Boolean = false,
 ) {
     private val rng = SecureRandom()
     private val _state = MutableStateFlow<VoiciOutgoingState>(VoiciOutgoingState.Preparing)
@@ -209,6 +211,9 @@ class VoiciOutgoingCall(
         val visitor = VoiciVisitorKeys.derive(umk, target.pageId)
         val t = now()
         val att = VoiciVisitorAttestation.obtain(center, u, device, integrity, visitor, t) ?: return fail("bad-attestation")
+        // The pseudonymous side always dials out; allowing a call-back only tells `.com` this conversation may ring this
+        // account's phones (said in the pop-up). The owner still never learns who calls.
+        if (allowCallBack) center.setCallBack(target.pageId, true)?.let { return fail(it) }
         val priv = newDelegateKey()
         delegatePriv = priv
         val req = VoiciSignInRequest(origin(), target.pageId, target.username, VoiciJs.hex(VoiciJs.p256PublicKey(priv)), randHex(16))
