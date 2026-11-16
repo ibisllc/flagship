@@ -1411,8 +1411,13 @@ class VoiciCenter(
         return null
     }
 
-    /** Delete = forget, from the caller's side: a delete signed by this account's pseudonym, then this device's copy goes. */
-    suspend fun deleteVisitorConversation(target: com.flagshipserver.app.calls.VoiciCallTarget): String? {
+    /**
+     * Delete = forget, from the caller's side: a delete signed by this account's pseudonym, then this device's copy goes.
+     * [authorize] is the biometric / device-credential prompt (docs/voici-calls.md "Deleting a conversation"): unless it
+     * answers true nothing is deleted or sent, and the answer is [DELETE_NOT_CONFIRMED].
+     */
+    suspend fun deleteVisitorConversation(target: com.flagshipserver.app.calls.VoiciCallTarget, authorize: suspend () -> Boolean): String? {
+        if (!authorize()) return DELETE_NOT_CONFIRMED
         val umk = keyring.umk() ?: return "locked"
         val visitor = VoiciVisitorKeys.derive(umk, target.pageId)
         val conv = VoiciMessages.voiciConv(target.pageId, visitor.pseudonymPub)
@@ -1438,8 +1443,11 @@ class VoiciCenter(
     /**
      * Delete = forget, from the owner's side: a delete signed by the page's owner key; `.com` drops the conversation's
      * mail, ring-back channel and missed calls, and this device erases its copy. The caller's own copy stays with them.
+     * [authorize] is the biometric / device-credential prompt: unless it answers true nothing is deleted or sent, and
+     * the answer is [DELETE_NOT_CONFIRMED].
      */
-    suspend fun deleteConversation(conv: String): String? {
+    suspend fun deleteConversation(conv: String, authorize: suspend () -> Boolean): String? {
+        if (!authorize()) return DELETE_NOT_CONFIRMED
         val umk = keyring.umk() ?: return "locked"
         val local = withLocal { _, _, l -> l } ?: return "locked"
         val keys = ownerKeys(local, umk) ?: return "not-found"
@@ -1680,6 +1688,9 @@ class VoiciCenter(
     suspend fun accountKeys(username: String): VoiciAccountKeys? = client.accountKeys(username)
 
     companion object {
+        /** A delete whose prompt was cancelled or failed: nothing was deleted or sent (the screen already said why). */
+        const val DELETE_NOT_CONFIRMED = "not-confirmed"
+
         /** Set by MainActivity; null until an account is open. */
         @Volatile var shared: VoiciCenter? = null
     }

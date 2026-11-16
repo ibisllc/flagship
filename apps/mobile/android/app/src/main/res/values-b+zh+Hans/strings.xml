@@ -4159,6 +4159,7 @@
     <string name="voici_ring_incoming">%1$s 正在回拨给你</string>
     <string name="voici_ring_incoming_locked">你写过信的人正在回拨给你。打开 Flagship 接听。</string>
     <string name="voici_delete_forget_body">它会立即从你的设备和 Flagship 中删除。已在 %1$s 设备上的消息会保留在那里。</string>
+    <string name="voici_delete_prompt_title">删除此对话</string>
     <string name="voici_anonymous_caller">匿名来电者</string>
     <string name="voici_my_conversations">你发起的对话</string>
     <string name="voici_my_conversations_empty">你在别人页面上发起的对话会显示在这里。</string>

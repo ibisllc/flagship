@@ -4157,6 +4157,7 @@
   "voici_ring_incoming": "%1$s から折り返しの着信",
   "voici_ring_incoming_locked": "メッセージを送った相手から折り返しの着信です。応答するには Flagship を開いてください。",
   "voici_delete_forget_body": "あなたのデバイスと Flagship からすぐに削除されます。%1$s のデバイスにあるメッセージはそのまま残ります。",
+  "voici_delete_prompt_title": "この会話を削除",
   "voici_anonymous_caller": "匿名の発信者",
   "voici_my_conversations": "あなたが始めた会話",
   "voici_my_conversations_empty": "他の人のページで始めた会話がここに表示されます。",

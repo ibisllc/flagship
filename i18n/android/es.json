@@ -4157,6 +4157,7 @@
   "voici_ring_incoming": "%1$s te está devolviendo la llamada",
   "voici_ring_incoming_locked": "Alguien a quien escribiste te está devolviendo la llamada. Abre Flagship para contestar.",
   "voici_delete_forget_body": "Se elimina de tus dispositivos y de Flagship al instante. Los mensajes que ya están en el dispositivo de %1$s se quedan allí.",
+  "voici_delete_prompt_title": "Eliminar esta conversación",
   "voici_anonymous_caller": "Llamada anónima",
   "voici_my_conversations": "Conversaciones que iniciaste",
   "voici_my_conversations_empty": "Aquí aparecen las conversaciones que inicias en páginas de otras personas.",

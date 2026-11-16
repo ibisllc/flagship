@@ -4164,6 +4164,7 @@
     <string name="voici_ring_incoming">%1$s is calling you back</string>
     <string name="voici_ring_incoming_locked">Someone you wrote to is calling you back. Open Flagship to answer.</string>
     <string name="voici_delete_forget_body">It\'s removed from your devices and from Flagship at once. Messages already on %1$s\'s device stay there.</string>
+    <string name="voici_delete_prompt_title">Delete this conversation</string>
     <string name="voici_anonymous_caller">Anonymous caller</string>
     <string name="voici_my_conversations">Conversations you started</string>
     <string name="voici_my_conversations_empty">Conversations you start on other people\'s pages show here.</string>

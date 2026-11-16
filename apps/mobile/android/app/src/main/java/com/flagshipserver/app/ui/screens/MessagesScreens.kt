@@ -78,6 +78,8 @@ import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.voici.StoredVoiciConversation
 import com.flagshipserver.app.core.voici.StoredVoiciMessage
 import com.flagshipserver.app.core.voici.VoiciCenter
+import androidx.fragment.app.FragmentActivity
+import com.flagshipserver.app.ui.shell.confirmConversationDelete
 import com.flagshipserver.app.core.voici.VoiciCopy
 import com.flagshipserver.app.core.voici.VoiciMessages
 import com.flagshipserver.app.core.voici.VoiciPageUi
@@ -177,6 +179,7 @@ fun VoiciOpenLinkDialog(url: String, host: String, onDismiss: () -> Unit) {
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ThreadScreen(nav: NavController, conv: String) {
+    val context = LocalContext.current
     val center = LocalVoiciCenter.current ?: return
     val ui by center.messages.collectAsState()
     val c = ui.conversations.firstOrNull { it.conv == conv } ?: return
@@ -336,8 +339,8 @@ fun ThreadScreen(nav: NavController, conv: String) {
             FSGhostButton(stringResource(R.string.voici_delete), {
                 deleting = false
                 scope.launch {
-                    val err = center.deleteConversation(conv)
-                    if (err == null) nav.popBackStack() else toasts.error(VoiciCopy.sendError(err))
+                    val err = center.deleteConversation(conv) { confirmConversationDelete(context as? FragmentActivity) { toasts.error(it) } }
+                    if (err == null) nav.popBackStack() else if (err != VoiciCenter.DELETE_NOT_CONFIRMED) toasts.error(VoiciCopy.sendError(err))
                 }
             }, modifier = Modifier.testTag("thread-delete-confirm"))
         },

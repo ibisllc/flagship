@@ -4159,6 +4159,7 @@
     <string name="voici_ring_incoming">%1$s está ligando de volta para você</string>
     <string name="voici_ring_incoming_locked">Alguém para quem você escreveu está ligando de volta. Abra o Flagship para atender.</string>
     <string name="voici_delete_forget_body">Ela é removida dos seus dispositivos e do Flagship na hora. As mensagens que já estão no dispositivo de %1$s continuam lá.</string>
+    <string name="voici_delete_prompt_title">Excluir esta conversa</string>
     <string name="voici_anonymous_caller">Chamada anônima</string>
     <string name="voici_my_conversations">Conversas que você começou</string>
     <string name="voici_my_conversations_empty">As conversas que você começa nas páginas de outras pessoas aparecem aqui.</string>
