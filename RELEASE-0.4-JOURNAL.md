@@ -683,6 +683,17 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   `peerBackupNetwork.sim` times out under build load on release/0.4 too (cloud run green): not this branch. Open: the
   webapp directory pieces wait for webapp-custody (hooks in `docs/org-directory.md` "Webapp hooks").
 
+- 2026-11-16: **calls-callback checkpoint** (pushed, not merged: the iOS/Android forks' native work is uncommitted in
+  its worktree). Built: call-key cleanup on revoke, the browser handoff (`voici-call-handoff/v1`), the Playwright lane
+  (3 cases), the webapp Calls view (shell **v219**), page call modes `anyone`/`callback`, anonymous requests with a
+  `.com`-MACed proof of work (needs secret `VOICI_CALL_POW_SECRET`), the ring-back channel and the owner's ring
+  (`voici-ring-back/v1`, `voici-ring/v1`, D1 **0149**), the voi.ci pop-up with the honest sentence, delete = forget
+  (`voici-conv-delete/v1`, zero rows test), the reveal record. Envelope forgery 1121/1121. Found: privacy §2.11 says
+  the owner's phone sees the caller's IP; no relay passes it. Release-manager decisions on its questions (doc
+  "Release-manager decisions"): delete keeps nothing; reveal switch in an app caller-side conversation screen;
+  anonymous hours + blocking in 0.4; `.com` flags `ringBack` on inbox items. Agent resumed for the `.com`/webapp
+  half; the forks for native.
+
 ## Resume point
 
 State (2026-11-15): `release/0.4` holds everything merged so far:

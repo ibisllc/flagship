@@ -609,3 +609,22 @@ in the call screen: "<pageName> ✓" (tapping it opens the page). A reveal that 
     carries it inside the sealed reveal, so the person viewing it makes no request at all (nothing tells `.com` who
     looked at whom). The viewer checks the signature against the pinned key and the expiry, offline.
   - Open for the owner: price, how checks are done (DNS TXT for domains, a post for social handles), renewal.
+
+#### Release-manager decisions on the calls-callback questions (2026-11-16, from the owner's answers)
+
+1. **Delete keeps nothing, even though `conv` is derived** (`H(pageId, pseudonym)`). The same caller writing again
+   after a delete arrives as a **new request** the owner accepts or ignores like any first message. That is what
+   "forget" means; no conv-hash tombstone.
+2. **The reveal switch lives in the apps.** The owner put it "on Bob's phone", and calls already start from the app's
+   call/chat logs, so the apps get a caller-side conversation screen (Social → the conversations this account
+   started on other people's pages: messages, Call, and Settings with "Show <name> who I am"). The app holds the
+   page key and signs the reveal; voi.ci tabs don't offer the switch. The `{v:1, control}` message body for reveal
+   and unreveal goes into all four ports.
+3. **Anonymous calls get hours and blocking in 0.4** ("every feature lands with 0.4"): an hours field in the page
+   index honoured for anonymous calls like signed-in ones, and an owner route to block a conversation (the caller
+   can't call or write again from that pseudonym; for an anonymous browser, the conversation's channel and the
+   proof-of-work identity it used). Block survives until the owner unblocks or deletes the conversation.
+4. **`.com` flags ring-back availability** on the owner's inbox items (`ringBack: true|false`), so the apps show
+   Call back disabled from the start instead of after a refused ring.
+5. **Privacy policy §2.11** overstates: no relay passes a visitor's IP to the owner's box or phone. Wording fix
+   proposed to the owner (legal text: owner approves).
