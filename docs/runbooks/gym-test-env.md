@@ -46,7 +46,21 @@ npx tsx tools/live-e2e/shared-run.ts --no-tail                 # every run also 
 npx tsx tools/live-e2e/shared-run.ts --all-boxes --keep       # leave the fleet up…
 npx tsx tools/live-e2e/shared-run.ts --reuse gym-results/<run>/fleet.json --groups runtimes   # …and reuse it
 npx tsx tools/live-e2e/fleet-cli.ts sweep [--destroy]         # list / destroy every gym server + gym DNS left
+bash scripts/gym-relays.sh off                                # after a hand run: stop the gym relays (status / on too)
 ```
+
+- **The gym relays are off between runs (owner, 2026-11-16).** Both Fly apps
+  (`flagship-services-gym` = gym-a, `flagship-services-gym-b` = gym-b) keep one
+  STOPPED machine with autostart off on every service, so stray traffic
+  (internet scanners woke them within seconds while autostart was on) cannot
+  start them and Fly bills only their root filesystems. `gym-refresh.sh` starts
+  both (`scripts/gym-relays.sh on`) before its deploy and health check;
+  `gym:weekly` (cleanup) and `gym-release-run.sh` (exit; `GYM_KEEP_RELAYS=1`
+  keeps them) run `gym-relays.sh off`. After a hand-run `shared-run.ts`, run
+  `bash scripts/gym-relays.sh off` yourself. `off` is refused while the gym lock
+  is held. The `fly.gym*.toml` files say `auto_start_machines = false`, so a
+  deploy keeps it off. A run that skips gym-refresh must call `gym-relays.sh on`
+  first, or every box tunnel fails.
 
 - **`scripts/gym-refresh.sh`** rebases the `gym` branch (main + the gym-only
   trust pin and app adoption seams) onto `origin/main` in its own worktree
