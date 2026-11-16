@@ -672,9 +672,14 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     expect(ok).toBe(true);
     await expect(page.locator("text=Thanks!")).toHaveCount(0);
     await shot(page, testInfo, "messages-reply-alert");
+    // The popup is a new page the page-level mock doesn't see: answer voi.ci for the whole context
+    // so the scenario never depends on the live site.
+    await page.context().route("https://voi.ci/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: "" }));
     const popup = page.waitForEvent("popup");
     await row.click();
-    expect((await popup).url()).toBe("https://voi.ci/bob");
+    const opened = await popup;
+    await opened.waitForURL("https://voi.ci/bob");
+    expect(opened.url()).toBe("https://voi.ci/bob");
     await expect(row).toHaveCount(0);
     // Seen: the next open shows nothing for the same reply.
     await page.click('[data-tab-target="home"]');
