@@ -177,7 +177,8 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
             let src = f.videoSource()
             let cap = RTCCameraVideoCapturer(delegate: src)
             // voici-calls-v2.md §1.3: 360p at 24 fps by default.
-            let fps = Int(min(24, format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 24))
+            let maxRate: Float64 = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 24
+            let fps = Int(min(24, maxRate))
             cap.startCapture(with: device, format: format, fps: fps)
             let track = f.videoTrack(with: src, trackId: "v")
             t.sender.track = track
@@ -190,10 +191,17 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
 
     /// The smallest format at least 640x360.
     private static func format(for device: AVCaptureDevice) -> AVCaptureDevice.Format? {
-        RTCCameraVideoCapturer.supportedFormats(for: device)
-            .map { ($0, CMVideoFormatDescriptionGetDimensions($0.formatDescription)) }
-            .filter { $0.1.width >= 640 && $0.1.height >= 360 }
-            .min { Int($0.1.width) * Int($0.1.height) < Int($1.1.width) * Int($1.1.height) }?.0
+        var best: AVCaptureDevice.Format?
+        var bestArea = Int.max
+        for f in RTCCameraVideoCapturer.supportedFormats(for: device) {
+            let d: CMVideoDimensions = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
+            let w = Int(d.width)
+            let h = Int(d.height)
+            guard w >= 640, h >= 360, w * h < bestArea else { continue }
+            best = f
+            bestArea = w * h
+        }
+        return best
     }
 
     private func stopCamera() {
