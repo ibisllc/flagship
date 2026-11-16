@@ -140,6 +140,19 @@ describe("the call room", () => {
     expect(room.state.phase).toBe("ended");
   });
 
+  it("after an answer, the answering device leaving ends the call and frees the account", () => {
+    const room = new VoiciCallRoomCore(VoiciCallRoomCore.start(init).state, ca);
+    const other = "b".repeat(64);
+    expect(room.deviceLeft(K.deviceRef, NOW)).toEqual([]);
+    room.message({ role: "device", deviceRef: K.deviceRef }, { t: "answer", answer: V.answer.signed }, NOW);
+    expect(room.deviceLeft(other, NOW)).toEqual([]);
+    expect(room.state.phase).toBe("answered");
+    const ended = room.deviceLeft(K.deviceRef, NOW + 45_000);
+    expect(ended.map((a) => a.kind)).toEqual(["send", "send", "release", "close-all"]);
+    expect(ended[0]).toEqual({ kind: "send", to: "caller", msg: { t: "ended", reason: "hangup" } });
+    expect(room.state.phase).toBe("ended");
+  });
+
   it("the 60-minute limit ends an answered call", () => {
     const room = new VoiciCallRoomCore(VoiciCallRoomCore.start(init).state, ca);
     room.message({ role: "device", deviceRef: K.deviceRef }, { t: "answer", answer: V.answer.signed }, NOW);

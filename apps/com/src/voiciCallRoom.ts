@@ -117,10 +117,18 @@ export class VoiciCallRoom implements DurableObject {
 
   async webSocketClose(ws: WebSocket): Promise<void> {
     const peer = (ws as Attachable).deserializeAttachment?.() as VoiciCallRoomPeer | undefined;
-    if (peer?.role !== "caller") return;
+    if (!peer) return;
+    // A socket replaced by a newer one from the same side (a caller reconnecting) is not that side leaving.
+    const same = this.state.getWebSockets(peer.role === "caller" ? CALLER : DEVICES).filter((o) => {
+      if (o === ws || o.readyState !== 1) return false;
+      if (peer.role === "caller") return true;
+      return ((o as Attachable).deserializeAttachment?.() as { deviceRef?: string } | undefined)?.deviceRef === peer.deviceRef;
+    });
+    if (same.length > 0) return;
     const s = await this.load();
     const core = s && this.core(s);
-    if (s && core) await this.perform(s, core.callerLeft(Date.now()));
+    if (!s || !core) return;
+    await this.perform(s, peer.role === "caller" ? core.callerLeft(Date.now()) : core.deviceLeft(peer.deviceRef, Date.now()));
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
