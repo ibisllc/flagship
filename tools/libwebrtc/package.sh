@@ -7,17 +7,17 @@ here="$(cd "$(dirname "$0")" && pwd)"
 out="$(cd "$1" && pwd)"
 cd "$out"
 files=()
-if [ -d WebRTC.xcframework ]; then
+if [ -d WebRTC.xcframework ] && [ ! -f WebRTC.xcframework.zip ]; then
   rm -f WebRTC.xcframework.zip
   # Fixed order and times, so the same build zips to the same bytes.
   find WebRTC.xcframework -exec touch -h -t 202001010000 {} +
   find WebRTC.xcframework | LC_ALL=C sort | zip -q -X -y -@ WebRTC.xcframework.zip
-  files+=(WebRTC.xcframework.zip)
 fi
-for f in libwebrtc.aar FlagshipTurn.xcframework.zip flagship-turn-android.zip; do
+for f in WebRTC.xcframework.zip libwebrtc.aar FlagshipTurn.xcframework.zip flagship-turn-android.zip; do
   [ -f "$f" ] && files+=("$f")
 done
-[ "${#files[@]}" -gt 0 ] || { echo "package: nothing to package in $out" >&2; exit 1; }
+# Every library must be there: a missing one would ship unpinned.
+[ "${#files[@]}" -eq 4 ] || { echo "package: expected 4 libraries in $out, found ${#files[@]}" >&2; exit 1; }
 shasum -a 256 "${files[@]}" > SHA256SUMS
 {
   printf '{\n  "webrtcMilestone": %s,\n  "webrtcBranch": %s,\n  "webrtcCommit": "%s",\n' \
