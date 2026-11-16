@@ -8215,8 +8215,8 @@
     "en": "Passkeys aren't available in this browser — use a backup file.",
     "ctx": "webapp/views/wizard.js:424"
   },
-  "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.": {
-    "en": "Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.",
+  "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.": {
+    "en": "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.",
     "ctx": "webapp/views/wizard.js:425"
   },
   "Backup method": {
@@ -8234,10 +8234,6 @@
   "An encrypted .flagshipkey you keep yourself.": {
     "en": "An encrypted .flagshipkey you keep yourself.",
     "ctx": "webapp/views/wizard.js:425"
-  },
-  "Skip backup?": {
-    "en": "Skip backup?",
-    "ctx": "webapp/views/wizard.js:487"
   },
   "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.": {
     "en": "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.",

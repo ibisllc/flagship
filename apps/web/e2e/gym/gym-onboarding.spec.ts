@@ -321,22 +321,34 @@ test.describe("gym webapp onboarding", () => {
     m.get("/api/users/", { pods: [] });
     await enterWizardAt(page, 2);
     await expect(await wizardTitle(page)).toHaveText("Secure your account");
-    // Chromium has passkeys, so the cloud option is offered and pre-chosen.
-    await expect(page.locator("#wizard-secure-cloud")).toBeChecked();
-    await page.locator("#wizard-secure-file").check();
+    // Chromium has passkeys, so cloud is offered; cloud and file are two
+    // independent ticks, both off, and Continue waits for one.
     await expect(page.locator("#wizard-secure-cloud")).not.toBeChecked();
-    await page.locator("#wizard-secure-cloud").check();
     await expect(page.locator("#wizard-secure-file")).not.toBeChecked();
+    await expect(page.locator("#wizard-secure-continue")).toBeDisabled();
+    await page.locator("#wizard-secure-file").check();
+    await expect(page.locator("#wizard-secure-continue")).toBeEnabled();
+    await page.locator("#wizard-secure-cloud").check();
+    await expect(page.locator("#wizard-secure-file")).toBeChecked();
+    await expect(page.locator("#wizard-secure-cloud")).toBeChecked();
     await shot(page, testInfo, "wizard-secure");
+    await page.locator("#wizard-secure-cloud").uncheck();
+    await page.locator("#wizard-secure-file").uncheck();
+    await expect(page.locator("#wizard-secure-continue")).toBeDisabled();
 
-    // Skip asks first; Back stays on the step.
+    // Skip asks first, in a popover at the Skip link; Back stays on the step.
     await page.click("#wizard-secure-skip");
-    await expect(page.locator(".modal-title")).toHaveText("Skip backup?");
-    await page.click("[data-modal-cancel]");
+    const pop = page.locator("#wizard-secure-skip-pop");
+    await expect(pop).toContainText("Without a backup, losing this device means losing your account for good.");
+    const linkBox = await page.locator("#wizard-secure-skip").boundingBox();
+    const popBox = await pop.boundingBox();
+    expect(linkBox && popBox && Math.abs(popBox.y + popBox.height - linkBox.y) < 40).toBeTruthy();
+    await page.click("#wizard-secure-skip-back");
+    await expect(pop).toHaveCount(0);
     await expect(await wizardTitle(page)).toHaveText("Secure your account");
     await page.click("#wizard-secure-skip");
-    await expect(page.locator("[data-modal-ok]")).toHaveText("Skip anyway");
-    await page.click("[data-modal-ok]");
+    await expect(page.locator("#wizard-secure-skip-anyway")).toHaveText("Skip anyway");
+    await page.click("#wizard-secure-skip-anyway");
 
     await expect(await wizardTitle(page)).toHaveText("Set recovery passphrase");
     await page.click("#wizard-skip-recovery");

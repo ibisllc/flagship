@@ -133,8 +133,9 @@ describe('"Secure your account" backup nudge step', () => {
   it("uses the approved verbatim title + body copy", () => {
     expect(VIEW_JS).toContain('label: tr("Secure your account")');
     expect(VIEW_JS).toMatch(
-      /Back up your account now so you can get back in if you lose this\s+device\. No one — not even us — can recover it for you\./,
+      /Back up your account now so you can get back in if you lose this\s+device\. We cannot recover it for you\./,
     );
+    expect(VIEW_JS).not.toContain("not even us");
   });
 
   it("offers both backup methods with the approved labels + sublabels", () => {
@@ -156,12 +157,15 @@ describe('"Secure your account" backup nudge step', () => {
     expect(VIEW_JS).toMatch(/runKeyfileExportCeremony/);
   });
 
-  it("guards skip with the approved warning + Skip-anyway / Back buttons", () => {
+  it("guards skip with the approved warning + Skip-anyway / Back buttons, at the Skip link", () => {
     expect(VIEW_JS).toContain(
       "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.",
     );
     expect(VIEW_JS).toContain('okLabel: tr("Skip anyway")');
     expect(VIEW_JS).toContain('cancelLabel: tr("Back")');
+    // The warning pops up at the Skip link, not as a centred modal.
+    expect(VIEW_JS).toMatch(/confirmAtButton\(anchor, \{/);
+    expect(VIEW_JS).not.toContain('title: tr("Skip backup?")');
     // Skipping pins the persistent home-screen recovery warning. Post P12
     // hard cut-over the write goes through the per-profile profilesStore;
     // the home-screen banner reads from the same slot.
@@ -182,7 +186,7 @@ describe('"Secure your account" backup nudge step', () => {
   });
 });
 
-describe('"Secure your account" pre-selection behaviour', () => {
+describe('"Secure your account" options', () => {
   // passkeysAvailable() reads globalThis.window at CALL time, and
   // renderSecureAccountStep() calls it fresh on each invocation — so one
   // static import suffices and we just swap window between cases.
@@ -196,21 +200,27 @@ describe('"Secure your account" pre-selection behaviour', () => {
     }
   });
 
-  it("pre-selects the cloud (passkey) option when WebAuthn is available", async () => {
+  it("offers cloud and file as two independent ticks, both off, when WebAuthn is available", async () => {
     (globalThis as { window?: unknown }).window = { PublicKeyCredential: function () {} };
     const { passkeysAvailable, renderSecureAccountStep } = await import(
       "../public/webapp/views/wizard.js"
     );
     expect(passkeysAvailable()).toBe(true);
     const html = renderSecureAccountStep();
-    // The cloud radio is checked + enabled; the file radio is not checked.
-    expect(html).toMatch(/id="wizard-secure-cloud"[^>]*checked/);
+    // Checkboxes, not one radio group: either, both or neither.
+    expect(html).toMatch(/type="checkbox"[^>]*id="wizard-secure-cloud"/);
+    expect(html).toMatch(/type="checkbox"[^>]*id="wizard-secure-file"/);
+    expect(html).not.toContain('type="radio"');
+    expect(html).not.toMatch(/id="wizard-secure-cloud"[^>]*checked/);
     expect(html).not.toMatch(/id="wizard-secure-cloud"[^>]*disabled/);
-    expect(html).toContain("Recover with your device passkey or password manager.");
     expect(html).not.toMatch(/id="wizard-secure-file"[^>]*checked/);
+    expect(html).toContain("Recover with your device passkey or password manager.");
+    // Continue waits for a tick; Skip is the way out.
+    expect(html).toMatch(/id="wizard-secure-continue"[^>]*disabled/);
+    expect(html).toContain('id="wizard-secure-skip"');
   });
 
-  it("does NOT pre-select cloud when passkeys are unavailable; file + skip still work", async () => {
+  it("disables cloud when passkeys are unavailable; file + skip still work", async () => {
     (globalThis as { window?: unknown }).window = {}; // no PublicKeyCredential
     const { passkeysAvailable, renderSecureAccountStep } = await import(
       "../public/webapp/views/wizard.js"
@@ -221,8 +231,9 @@ describe('"Secure your account" pre-selection behaviour', () => {
     expect(html).toMatch(/id="wizard-secure-cloud"[^>]*disabled/);
     expect(html).not.toMatch(/id="wizard-secure-cloud"[^>]*checked/);
     expect(html).toContain("Passkeys aren't available in this browser — use a backup file.");
-    // File is pre-selected instead so the step still works without passkeys.
-    expect(html).toMatch(/id="wizard-secure-file"[^>]*checked/);
+    // The file is offered unticked; ticking it turns Continue on.
+    expect(html).not.toMatch(/id="wizard-secure-file"[^>]*disabled/);
+    expect(html).not.toMatch(/id="wizard-secure-file"[^>]*checked/);
     // The skip link is always present (skip is the no-backup escape hatch).
     expect(html).toContain('id="wizard-secure-skip"');
   });

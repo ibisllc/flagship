@@ -47,8 +47,8 @@ export const WEB_ONBOARDING: readonly Scenario[] = [
     "gym onboarding the secure step's Skip asks first, then each later step skips to Home",
     {
       steps: [
-        { kind: "tap", describe: "Switch the backup method radios.", handle: "#wizard-secure-file" },
-        { kind: "tap", describe: "Skip → Back, Skip → Skip anyway.", handle: "#wizard-secure-skip" },
+        { kind: "tap", describe: "Tick and untick the two backup options (both start off, Continue waits).", handle: "#wizard-secure-file" },
+        { kind: "tap", describe: "Skip → the popover at the link → Back, Skip → Skip anyway.", handle: "#wizard-secure-skip" },
         { kind: "tap", describe: "Skip recovery ×2, Skip add server, Maybe later, Finish.", handle: "#wizard-skip-demo" },
       ],
       assertions: [{ describe: "Home", handle: "#view-home", expect: "present" }],

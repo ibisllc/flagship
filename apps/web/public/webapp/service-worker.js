@@ -518,7 +518,9 @@
 //       (lib/voiciMessages.js forgetConversation, lib/voiciWorld.js, lib/voiciCallOut.js forgetPlacedCalls).
 //  v223: deleting a conversation asks the person first: a passkey assertion with user verification, else this
 //       device's passphrase (lib/freshUnlock.js confirmUserForDelete, lib/voiciWorld.js deleteConversationGated).
-const SHELL_VERSION = "v223";
+//  v224: Secure your account: cloud and backup file are two independent ticks (both off), a shorter explainer, and
+//       the skip warning pops up at the Skip link (views/wizard.js confirmAtButton).
+const SHELL_VERSION = "v224";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
