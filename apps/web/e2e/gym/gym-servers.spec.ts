@@ -15,6 +15,7 @@
 
 import { test, expect, type Page } from "@playwright/test";
 import {
+  clickAddServer,
   HOME,
   MEDIA,
   OFFICE,
@@ -195,7 +196,7 @@ test.describe("gym webapp servers", () => {
     const isAdmin = await page.evaluate(async () => !!(await import("/lib/state.js")).getSession().adminRootSeed);
     expect(isAdmin).toBe(false);
     await shot(page, testInfo, "home-demo");
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await expect(page.locator("[data-choice-add]")).toBeVisible();
   });
 
@@ -212,7 +213,7 @@ test.describe("gym webapp servers", () => {
       return !!add && !!cards && !!(add.compareDocumentPosition(cards) & Node.DOCUMENT_POSITION_FOLLOWING);
     });
     expect(addAbove).toBe(true);
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await expect(page.locator("dialog[open] .modal-title")).toHaveText("Add / Restore a server");
     await expect(page.locator("dialog[open] button:not([data-choice-cancel])")).toHaveText([
       "Create a server",
@@ -231,14 +232,14 @@ test.describe("gym webapp servers", () => {
     const menu = page.locator('dialog[aria-label="Add or restore a server"]');
 
     // Cancel: the menu closes and Home stays.
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await expect(menu).toBeVisible();
     await menu.locator("[data-choice-cancel]").click();
     await expect(menu).toHaveCount(0);
     await expect(page.locator("#view-home")).toBeVisible();
 
     // Co-manage: asks for the owner's share link and refuses anything else.
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await menu.locator("[data-choice-co-manage]").click();
     await expect(page.locator(".modal-title")).toHaveText("Open a share link");
     await page.fill(".modal-input", "https://example.com/not-a-share");
@@ -250,7 +251,7 @@ test.describe("gym webapp servers", () => {
 
     // Restore from backup: the chooser lists the sources (no "From this device" in a browser);
     // From a file opens the picker dialog.
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await menu.locator("[data-choice-restore]").click();
     const chooser = page.locator('dialog[aria-label="Restore from backup"]');
     await expect(chooser.locator("button.choice-source .choice-source-title")).toHaveText(["From a file", "From other servers"]);
@@ -259,7 +260,7 @@ test.describe("gym webapp servers", () => {
     await shot(page, testInfo, "add-restore-chooser");
     await chooser.locator("[data-restore-cancel]").click();
     await expect(chooser).toHaveCount(0);
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await menu.locator("[data-choice-restore]").click();
     await chooser.locator("[data-restore-file]").click();
     const imp = page.locator('dialog[aria-label="Import a backup"]');
@@ -270,7 +271,7 @@ test.describe("gym webapp servers", () => {
 
     // Create a new server: the create form.
     await renderHome(page);
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     await shot(page, testInfo, "add-create-form");
@@ -294,7 +295,7 @@ test.describe("gym webapp servers", () => {
       });
 
     // The Add/Restore menu open, then Lock.
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await expect(page.locator('dialog[aria-label="Add or restore a server"]')).toBeVisible();
     await page.evaluate(async () => {
       const { lockToPin } = await import("/views/pinLock.js");
@@ -309,7 +310,7 @@ test.describe("gym webapp servers", () => {
     await unlock(page, "home");
     await seedSession(page, { kind: "admin", servers: [HOME] });
     await renderHome(page);
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator("[data-choice-restore]").click();
     await expect(page.locator('dialog[aria-label="Restore from backup"]')).toBeVisible();
     await page.evaluate(async () => {

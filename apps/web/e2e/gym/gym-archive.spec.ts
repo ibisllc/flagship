@@ -14,6 +14,7 @@
 
 import { test, expect, type Page } from "@playwright/test";
 import {
+  clickAddServer,
   HOME,
   MEDIA,
   OFFICE,
@@ -475,7 +476,7 @@ test.describe("gym webapp archive", () => {
     const box = restoreBox(m, NEW, fx.archiveId);
     await renderHome(page);
 
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-restore]').click();
     await page.locator('dialog[aria-label="Restore from backup"] [data-restore-file]').click();
     const dlg = page.locator('dialog[aria-label="Import a backup"]');
@@ -579,7 +580,7 @@ test.describe("gym webapp archive", () => {
     });
     await renderHome(page);
 
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-restore]').click();
     await page.locator('dialog[aria-label="Restore from backup"] [data-restore-peers]').click();
     const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
@@ -628,7 +629,7 @@ test.describe("gym webapp archive", () => {
     }, { HOME, backupText: fx.backupText, archiveId: fx.archiveId, bytes: fx.bytes, sha256: fx.sha256 });
     m.get((u) => u.pathname === `/api/peer-backup/root/${HOME}`, () => ({ json: sealed }));
     await renderHome(page);
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-restore]').click();
     await page.locator('dialog[aria-label="Restore from backup"] [data-restore-peers]').click();
     const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
@@ -644,7 +645,7 @@ test.describe("gym webapp archive", () => {
     m.get("/api/users/smoketest/pods", { pods: [livePod(OFFICE), livePod(HOME, { revokedAt: Date.now() - 1000, liveness: "unreachable" })] });
     m.post(at(OFFICE, "/api/screens/peer-backup/root"), () => ({ status: 404, json: { error: "No peer backup of that server was found." } }));
     await renderHome(page);
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-restore]').click();
     await page.locator('dialog[aria-label="Restore from backup"] [data-restore-peers]').click();
     const dlg = page.locator('dialog[aria-label="Restore from other servers"]');

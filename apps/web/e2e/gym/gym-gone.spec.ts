@@ -10,7 +10,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { HOME, livePod, mock, reachHome, shot, toasts, type Mock } from "./gymKit.js";
+import { clickAddServer, HOME, livePod, mock, reachHome, shot, toasts, type Mock } from "./gymKit.js";
 
 test.use({ viewport: { width: 430, height: 932 } });
 
@@ -37,7 +37,7 @@ test.describe("gym webapp account gone", () => {
     const m = await goneHome(page);
     // A menu is open when the answer arrives: it must not survive.
     await page.evaluate(async () => (await import("/views/home.js")).renderHome());
-    await page.click("#home-add-server");
+    await clickAddServer(page);
     await expect(page.locator('dialog[aria-label="Add or restore a server"]')).toBeVisible();
 
     m.first("GET", /\/api\/users\/smoketest\//, GONE);
