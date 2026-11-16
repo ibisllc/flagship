@@ -570,6 +570,26 @@ superseded. What we promise instead:
    and read marks, reveal, call records and ring-back state (`voici-and-messages.md` §10.1.1; the marker is ciphertext
    to `.com` and is dropped after 30 days).
 
+**Gated by the person (owner, 0.4).** Because a delete forgets the conversation on every device of the account and
+cannot be undone, every delete path asks the person first, after the "Delete this conversation?" sheet and before
+anything is signed or sent. A cancelled or failed check deletes nothing and sends nothing: no signed delete reaches
+`.com`, no deletion marker is written, the device keeps its copy.
+- **iOS:** Face ID / Touch ID with the device passcode as fallback (`BiometricGate`, `.deviceOwnerAuthentication`),
+  through `DestructiveAuth.askToDeleteConversation` in `MessagesStore.delete` (owner side) and
+  `VisitorConversationModel.delete` (caller side). A cancelled prompt shows "The conversation wasn't deleted."
+- **Android:** the BiometricPrompt used for sign-out (biometric or device PIN/pattern/password,
+  `AndroidVersionPolicy.promptAuthenticators` / `KeyAuthSpec`), through `confirmConversationDelete` in
+  `ui/shell/DestructiveAuth.kt`; `VoiciCenter.deleteConversation` and `deleteVisitorConversation` take the prompt as
+  a required `authorize` argument and answer `DELETE_NOT_CONFIRMED` without it. A cancel says nothing.
+- **Webapp** (owner side only; it has no caller-side conversation screen): when this browser has a custody passkey
+  (`lib/keyCustody.js`), one passkey assertion with user verification required (`verifyUserWithPasskey`); without
+  one, this device's passphrase, the re-prompt used before admin orders (`lib/freshUnlock.js`
+  `confirmUserForDelete`, which asks for it even when the session holds an admin-key handle). Chosen because the
+  passphrase is the only user-verification factor a browser without a passkey has; it checks the passphrase unwraps
+  the same account key the session holds. Wired through `lib/voiciWorld.js` `deleteConversationGated`.
+- **The Calls list** deletes no conversations on any surface, so it has no gate. A phone with no screen lock at all
+  has nothing to ask with and deletes without a prompt (as the lock screen's Sign out does).
+
 **No logs.** `.com` and the relays keep no record of mailboxes created, messages passed, rings sent or deletes,
 beyond the live mailbox rows themselves and the aggregate counters we already keep (hourly totals, no ids). Rate
 limits count in their existing Durable Objects and forget with their window.
