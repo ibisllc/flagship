@@ -857,6 +857,17 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   to find and fix the break and redeploy the gym. Owner request: a one-line connecting progress ("Reaching their
   phone…", "Securing the line (quantum-safe)…", …) on both sides, with a slow-step hint.
 
+- 2026-11-16: **media-fix** (branch `0.4/media-fix`, not merged yet; on the gym and the owner's iPhone): the phone held
+  its bare-name tunnel only in the foreground, so a call answered from CallKit had no TURN route and sat on
+  "Connecting…". Now the tunnel opens when a call rings and stays open until it ends; the answer waits up to 8 s for
+  the route (iOS + Android, `PhoneRouteLifecycle`). Also the connecting steps on both sides (voi.ci caller page,
+  iOS, Android), a slow-step hint at 20 s and a give-up at 45 s. Known limits: locked-call-key answers have no route;
+  Android cold-start may miss the tunnel. Merge after the owner's retest.
+- 2026-11-16: The website said "They're on another call" with no call: the stuck answered call kept
+  `voici_live_calls` for ~30 more minutes (the room only releases at its end or `VOICI_CALL_MAX_MS`; a caller who
+  leaves after an answer does nothing). Cleared the gym row by hand. **Open:** after an answer, end the room when
+  the caller's socket closes and no media connected (the 45 s give-up now covers the common case).
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
