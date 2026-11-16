@@ -1,16 +1,16 @@
 /**
  * Who may call a page, and ringing a caller back (docs/voici-calls.md, owner-approved 2026-11-15): anonymous calls
- * with a proof of work on "anyone" pages, the ring-back channel a "callback" page requires, the owner's ring, and
- * that `.com` never handles a raw push token or tells the push relay which conversation a ring is for.
+ * with a proof of work on "anyone" pages, the ring-back channel a "callback" page requires, the owner's ring and its
+ * content-free push to the caller's own account.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { InMemoryVoiciCallStorage, InMemoryVoiciStorage } from "@flagship/storage";
-import { canonicalVoiciThreadFetch, hexToBytes, signVoiciRing, signVoiciRingBackPseudonym } from "@flagship/protocol";
+import { canonicalVoiciThreadFetch, hexToBytes, signVoiciBlock, signVoiciRing, signVoiciRingBackPseudonym } from "@flagship/protocol";
 import { p256 } from "@noble/curves/nist.js";
-import { handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
+import { handleVoiciBlock, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,8 +96,7 @@ describe("ringing a caller back", () => {
     expect(code(await handleVoiciCallRequest(w.deps, body(req)))).toBe("ring-back-required");
     const rb = await handleVoiciRingBack({ voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW }, attach);
     expect(rb.status).toBe(200);
-    // `.com` keeps the sealed targets as they came: it has nothing to open them with.
-    expect((await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW))!.targets).toEqual(attach.order.targets);
+    expect((await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW))!.username).toBeNull();
     expect((await handleVoiciCallRequest(w.deps, body(req))).status).toBe(200);
   });
 
@@ -112,19 +111,21 @@ describe("ringing a caller back", () => {
     expect(code(await handleVoiciRingBack(d, { ...attach, sig: "00".repeat(64) }))).toBe("bad-signature");
   });
 
-  it("the owner's ring: the relay gets sealed targets and the ring id, never the conversation; the thread fetch shows it", async () => {
+  it("the owner's ring: a content-free push to the account the caller's app attached; the thread fetch shows it", async () => {
     const w = await world("callback");
-    await handleVoiciRingBack({ voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW }, attach);
-    const delivered: { sealed: string; payload: Record<string, string> }[] = [];
-    const pushRelay = { deliver: async (items: { sealed: string; payload: Record<string, string> }[]) => (delivered.push(...items), items.length) };
-    const r = await handleVoiciRing({ voici: w.voici, calls: w.calls, pushRelay, now: () => NOW }, "alice", { ring: CM.ring.order, signature: CM.ring.signature });
+    await handleVoiciRingBack({ voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW }, attach, "visitor");
+    const pushed: { username: string; payload: Record<string, string> }[] = [];
+    const pushRing = async (username: string, payload: { kind: "voici-ring"; ringId: string; hint: string }) => (pushed.push({ username, payload }), 2);
+    const r = await handleVoiciRing({ voici: w.voici, calls: w.calls, pushRing, now: () => NOW }, "alice", { ring: CM.ring.order, signature: CM.ring.signature });
     expect(r.status).toBe(200);
-    expect(delivered.map((d) => d.sealed)).toEqual(attach.order.targets);
-    for (const d of delivered) {
-      expect(Object.keys(d.payload).sort()).toEqual(["hint", "kind", "ringId"]);
-      expect(JSON.stringify(d.payload)).not.toContain(M.derivations.conv);
-      expect(JSON.stringify(d.payload)).not.toContain(K.pageId);
-    }
+    expect((r.body as { pushed: number }).pushed).toBe(2);
+    expect(pushed.map((p) => p.username)).toEqual(["visitor"]);
+    // No text: the ring id and the hint sealed to the caller's thread key.
+    expect(Object.keys(pushed[0]!.payload).sort()).toEqual(["hint", "kind", "ringId"]);
+    // A browser's later attach keeps the account the app named.
+    const again = signVoiciRingBackPseudonym({ ...attach.order, issuedAt: NOW + 1 }, hexToBytes(M.derivations.pseudonymSeed));
+    await handleVoiciRingBack({ voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW }, again);
+    expect((await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW))!.username).toBe("visitor");
     expect(code(await handleVoiciRing({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { ring: CM.ring.order, signature: CM.ring.checks[3].signature }))).toBe("bad-signature");
     // The caller's browser sees the ring in its thread fetch while it rings.
     const browserPriv = hexToBytes(M.keys.browserPriv);
@@ -138,5 +139,18 @@ describe("ringing a caller back", () => {
   it("no channel, no ring", async () => {
     const w = await world("callback");
     expect(code(await handleVoiciRing({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { ring: CM.ring.order, signature: CM.ring.signature }))).toBe("no-ring-back");
+  });
+});
+
+describe("the channel ends with the conversation", () => {
+  it("an owner's block deletes it; a browser order may not name an account", async () => {
+    const w = await world("callback");
+    const d = { voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW };
+    expect(code(await handleVoiciRingBack(d, CM.ringBack.browser, "visitor"))).toBe("malformed");
+    await handleVoiciRingBack(d, CM.ringBack.app, "visitor");
+    const block = { pageId: K.pageId, pseudonymPub: M.derivations.pseudonymPub, op: "block" as const, issuedAt: NOW };
+    const r = await handleVoiciBlock({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { block, signature: signVoiciBlock(block, hexToBytes(M.derivations.ownerSignSeed)) });
+    expect(r.status).toBe(200);
+    expect(await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW)).toBeNull();
   });
 });

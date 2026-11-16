@@ -22,6 +22,8 @@ import {
   handleVoiciCallRequest,
   handleVoiciRing,
   handleVoiciRingBack,
+  buildVoiciRingPusher,
+  authorizeActiveDevice,
   voiciPowSecret,
   handleVoiciMissedCalls,
   handleVoiciVoipToken,
@@ -141,7 +143,16 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
     } catch {
       body = undefined;
     }
-    return toResponse(await handleVoiciRingBack({ voici: storage.voici, calls: storage.voiciCalls, origin, caKeys }, body));
+    // From the caller's app, device headers name the account whose devices the ring push reaches (?u=<username>);
+    // a browser's order names none. Said to the caller in the pop-up: Flagship knows this conversation can ring them.
+    const u = (url.searchParams.get("u") ?? "").toLowerCase();
+    let account: string | null = null;
+    if (u) {
+      const dev = await authorizeActiveDevice(directory, deviceAuth(request, u, path), { accountId: u, method: "POST", path });
+      if (!dev) return toResponse(voiciRefusal(403, "forbidden"));
+      account = u;
+    }
+    return toResponse(await handleVoiciRingBack({ voici: storage.voici, calls: storage.voiciCalls, origin, caKeys }, body, account));
   }
 
   if (path === "/api/voici/calls" && method === "POST") {
@@ -216,9 +227,10 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
     } catch {
       body = undefined;
     }
-    // The push relay (sealed targets) is its own branch; until it lands and PUSH_RELAY is on, a ring reaches the
-    // caller's open voi.ci tab and app through their thread fetch only.
-    return toResponse(await handleVoiciRing({ voici: storage.voici, calls: storage.voiciCalls }, username, body));
+    const forward = buildOptionalPushForwarder(env as unknown as ControlPlaneEnv) ?? undefined;
+    const voip = voipSender(env);
+    const pushRing = buildVoiciRingPusher({ pushTokens: storage.pushTokens, calls: storage.voiciCalls, ...(forward ? { forward } : {}), ...(voip ? { voip } : {}), apex });
+    return toResponse(await handleVoiciRing({ voici: storage.voici, calls: storage.voiciCalls, pushRing }, username, body));
   }
 
   if ((m = path.match(PAGE_CALLS))) {
