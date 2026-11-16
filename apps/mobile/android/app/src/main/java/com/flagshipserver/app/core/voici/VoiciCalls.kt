@@ -486,6 +486,13 @@ object VoiciCalls {
             "side" to JsonPrimitive("owner"), "reason" to JsonPrimitive(reason), "issuedAt" to JsonPrimitive(issuedAt), "sig" to JsonPrimitive(sig)))
     }
 
+    /** The caller's end order, signed by the browser-like delegate key B (P-256, P1363): this app placing a call. */
+    fun signEndCaller(callId: String, reason: String, issuedAt: Long, delegatePriv: ByteArray): JsonObject {
+        val sig = VoiciJs.hex(VoiciJs.p256Sign(delegatePriv, canonicalEnd(callId, "caller", reason, issuedAt)))
+        return JsonObject(mapOf("v" to JsonPrimitive(1), "kind" to JsonPrimitive("voici-call-end"), "callId" to JsonPrimitive(callId),
+            "side" to JsonPrimitive("caller"), "reason" to JsonPrimitive(reason), "issuedAt" to JsonPrimitive(issuedAt), "sig" to JsonPrimitive(sig)))
+    }
+
     /** An end order for [callId]: the caller's under B (P-256), the owner's under ownerSignPub. Returns its reason. */
     fun checkEnd(v: JsonElement?, callId: String, callerPub: String, ownerSignPub: String): String? {
         val o = VoiciJs.obj(v) ?: return null

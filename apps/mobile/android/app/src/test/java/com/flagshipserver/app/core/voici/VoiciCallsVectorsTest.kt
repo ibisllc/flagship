@@ -238,4 +238,27 @@ class VoiciCallsVectorsTest {
             assertEquals(c.s("name"), c.s("expected"), code(VoiciPage.checkVoiciPageIndex(c["index"], ctx.s("username"), ctx.s("sensitiveKind"), ctx.s("sensitivePub"))))
         }
     }
+
+    /** docs/voici-calls.md "Calling from the app": the handoff the app builds and seals for a voi.ci tab. */
+    @Test fun handoff() {
+        val x = V.o("handoff")
+        val ho = x.o("handoff")
+        val priv = h(ho.s("delegatePriv"))
+        assertEquals(x.s("delegatePub"), VoiciCallHandoff.delegatePub(priv))
+        val built = VoiciCallHandoff.build(ho.s("username"), ho.s("pageId"), ho.s("media"), ho.l("issuedAt"), ho.l("expiresAt"), priv, ho.o("signIn"))
+        assertEquals(x.s("canonical"), utf8(WebEnvelopes.canonicalJsonBytes(built)))
+        val link = x.o("link")
+        assertEquals(link.s("url"), VoiciCallHandoff.link(link.s("host"), ho.s("username"), link.s("sid"), h(link.s("browserSecret"))))
+        val pipe = x.o("pipe")
+        val browserSecret = h(link.s("browserSecret"))
+        assertEquals(pipe.s("key"), H(VoiciCallHandoff.pipeKey(h(pipe.s("appSecret")), h(pipe.s("browserPub")))))
+        assertEquals(pipe.s("key"), H(VoiciCallHandoff.pipeKey(browserSecret, h(pipe.s("appPub")))))
+        val sealed = VoiciCallHandoff.seal(built, h(pipe.s("appSecret")), browserSecret, h(pipe.s("nonce")))
+        val want = pipe.o("sealed")
+        assertEquals(listOf(want.s("phonePk"), want.s("nonce"), want.s("ciphertext")), listOf(sealed.phonePk, sealed.nonce, sealed.ciphertext))
+        assertEquals("voi.ci", VoiciCallHandoff.host("https://voi.ci"))
+        // The app as caller signs its end with the delegate key, byte for byte as the browser's (RFC 6979).
+        val end = V.o("end").o("caller")
+        assertEquals(end, VoiciCalls.signEndCaller(end.s("callId"), end.s("reason"), end.l("issuedAt"), h(k.s("browserPriv"))))
+    }
 }
