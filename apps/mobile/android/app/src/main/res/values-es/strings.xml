@@ -4211,4 +4211,9 @@
     <string name="activity_social_answered_length">Respondida · %1$s</string>
     <string name="activity_social_video_call_length">Videollamada · %1$s</string>
     <string name="voici_calls_history_line_length">%1$s · %2$s · %3$s</string>
+    <string name="voici_call_step_route">Abriendo tu línea…</string>
+    <string name="voici_call_step_secure">Protegiendo la línea (a prueba de computación cuántica)…</string>
+    <string name="voici_call_step_path">Abriendo una ruta directa…</string>
+    <string name="voici_call_step_audio">Iniciando el audio…</string>
+    <string name="voici_call_slow">Está tardando más de lo habitual</string>
 </resources>

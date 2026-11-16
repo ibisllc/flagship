@@ -95,6 +95,10 @@ class VoiciCallActivity : ComponentActivity() {
                 Text(ui.name, style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(8.dp))
                 Text(statusLine(ui), style = MaterialTheme.typography.bodyLarge)
+                if (ui.phase == VoiciCallCenter.Phase.Connecting && ui.slow) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(stringResource(R.string.voici_call_slow), style = MaterialTheme.typography.bodyMedium)
+                }
                 remoteCameraLine(ui)?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodyMedium)
@@ -153,7 +157,13 @@ object VoiciCallScreenModel {
     fun status(ui: VoiciCallCenter.Ui): Int = when (ui.phase) {
         VoiciCallCenter.Phase.Ringing -> R.string.voici_call_incoming_title
         VoiciCallCenter.Phase.NeedsUnlock -> R.string.voici_call_unlock
-        VoiciCallCenter.Phase.Connecting -> R.string.voici_call_connecting
+        VoiciCallCenter.Phase.Connecting -> when (ui.step) {
+            VoiciCallConnectStep.Route -> R.string.voici_call_step_route
+            VoiciCallConnectStep.Secure -> R.string.voici_call_step_secure
+            VoiciCallConnectStep.Path -> R.string.voici_call_step_path
+            VoiciCallConnectStep.Audio -> R.string.voici_call_step_audio
+            null -> R.string.voici_call_connecting
+        }
         VoiciCallCenter.Phase.Connected -> R.string.voici_call_connected
         VoiciCallCenter.Phase.Idle, VoiciCallCenter.Phase.Ended -> when (ui.endCode) {
             "answered-elsewhere" -> R.string.voici_call_answered_elsewhere

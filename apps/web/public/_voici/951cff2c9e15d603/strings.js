@@ -146,7 +146,12 @@ export const STRINGS = {
   "Couldn't send the report. Try again.": "No se ha podido enviar la denuncia. Inténtalo de nuevo.",
   "Thanks. Flagship will look at this page.": "Gracias. Flagship revisará esta página.",
   "Close": "Cerrar",
-  "No microphone found on this device. Connect one, or call from your phone.": "No hay ningún micrófono en este dispositivo. Conecta uno o llama desde tu teléfono."
+  "No microphone found on this device. Connect one, or call from your phone.": "No hay ningún micrófono en este dispositivo. Conecta uno o llama desde tu teléfono.",
+  "Reaching their phone…": "Contactando con su teléfono…",
+  "Securing the line (quantum-safe)…": "Protegiendo la línea (a prueba de computación cuántica)…",
+  "Opening a direct path…": "Abriendo una ruta directa…",
+  "Starting audio…": "Iniciando el audio…",
+  "This is taking longer than usual": "Está tardando más de lo habitual"
  },
  "fr": {
   "Language": "Langue",
@@ -293,7 +298,12 @@ export const STRINGS = {
   "Couldn't send the report. Try again.": "Impossible d’envoyer le signalement. Réessayez.",
   "Thanks. Flagship will look at this page.": "Merci. Flagship va examiner cette page.",
   "Close": "Fermer",
-  "No microphone found on this device. Connect one, or call from your phone.": "Aucun micro trouvé sur cet appareil. Branchez-en un, ou appelez depuis votre téléphone."
+  "No microphone found on this device. Connect one, or call from your phone.": "Aucun micro trouvé sur cet appareil. Branchez-en un, ou appelez depuis votre téléphone.",
+  "Reaching their phone…": "Connexion à son téléphone…",
+  "Securing the line (quantum-safe)…": "Sécurisation de la ligne (résistante aux ordinateurs quantiques)…",
+  "Opening a direct path…": "Ouverture d'un chemin direct…",
+  "Starting audio…": "Démarrage de l'audio…",
+  "This is taking longer than usual": "Cela prend plus de temps que d'habitude"
  },
  "de": {
   "Language": "Sprache",
@@ -440,7 +450,12 @@ export const STRINGS = {
   "Couldn't send the report. Try again.": "Die Meldung konnte nicht gesendet werden. Versuche es noch einmal.",
   "Thanks. Flagship will look at this page.": "Danke. Flagship sieht sich diese Seite an.",
   "Close": "Schließen",
-  "No microphone found on this device. Connect one, or call from your phone.": "Auf diesem Gerät wurde kein Mikrofon gefunden. Schließ eins an oder ruf vom Handy aus an."
+  "No microphone found on this device. Connect one, or call from your phone.": "Auf diesem Gerät wurde kein Mikrofon gefunden. Schließ eins an oder ruf vom Handy aus an.",
+  "Reaching their phone…": "Telefon wird erreicht…",
+  "Securing the line (quantum-safe)…": "Leitung wird gesichert (quantensicher)…",
+  "Opening a direct path…": "Direkter Weg wird geöffnet…",
+  "Starting audio…": "Audio wird gestartet…",
+  "This is taking longer than usual": "Das dauert länger als üblich"
  },
  "pt-BR": {
   "Language": "Idioma",
@@ -587,7 +602,12 @@ export const STRINGS = {
   "Couldn't send the report. Try again.": "Não foi possível enviar a denúncia. Tente novamente.",
   "Thanks. Flagship will look at this page.": "Obrigado. O Flagship vai analisar esta página.",
   "Close": "Fechar",
-  "No microphone found on this device. Connect one, or call from your phone.": "Nenhum microfone encontrado neste dispositivo. Conecte um ou ligue do seu celular."
+  "No microphone found on this device. Connect one, or call from your phone.": "Nenhum microfone encontrado neste dispositivo. Conecte um ou ligue do seu celular.",
+  "Reaching their phone…": "Alcançando o telefone da pessoa…",
+  "Securing the line (quantum-safe)…": "Protegendo a linha (segura contra computação quântica)…",
+  "Opening a direct path…": "Abrindo um caminho direto…",
+  "Starting audio…": "Iniciando o áudio…",
+  "This is taking longer than usual": "Está demorando mais que o normal"
  },
  "ja": {
   "Language": "言語",
@@ -734,7 +754,12 @@ export const STRINGS = {
   "Couldn't send the report. Try again.": "報告を送信できませんでした。もう一度お試しください。",
   "Thanks. Flagship will look at this page.": "ありがとうございます。Flagship がこのページを確認します。",
   "Close": "閉じる",
-  "No microphone found on this device. Connect one, or call from your phone.": "このデバイスにマイクが見つかりません。マイクを接続するか、スマートフォンから発信してください。"
+  "No microphone found on this device. Connect one, or call from your phone.": "このデバイスにマイクが見つかりません。マイクを接続するか、スマートフォンから発信してください。",
+  "Reaching their phone…": "相手の電話に接続しています…",
+  "Securing the line (quantum-safe)…": "回線を保護しています（量子耐性）…",
+  "Opening a direct path…": "直接の経路を開いています…",
+  "Starting audio…": "音声を開始しています…",
+  "This is taking longer than usual": "通常より時間がかかっています"
  },
  "zh-Hans": {
   "Language": "语言",
@@ -881,6 +906,11 @@ export const STRINGS = {
   "Couldn't send the report. Try again.": "无法提交举报。请重试。",
   "Thanks. Flagship will look at this page.": "谢谢。Flagship 会查看此页面。",
   "Close": "关闭",
-  "No microphone found on this device. Connect one, or call from your phone.": "此设备上没有找到麦克风。请连接一个，或用手机拨打。"
+  "No microphone found on this device. Connect one, or call from your phone.": "此设备上没有找到麦克风。请连接一个，或用手机拨打。",
+  "Reaching their phone…": "正在联系对方的手机…",
+  "Securing the line (quantum-safe)…": "正在保护线路（抗量子）…",
+  "Opening a direct path…": "正在打开直接通道…",
+  "Starting audio…": "正在启动音频…",
+  "This is taking longer than usual": "这比平时用的时间长"
  }
 };

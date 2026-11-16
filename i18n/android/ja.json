@@ -4208,5 +4208,10 @@
   "scheduled_backup_finished": "スケジュールされたバックアップが完了しました",
   "activity_social_answered_length": "応答済み · %1$s",
   "activity_social_video_call_length": "ビデオ通話 · %1$s",
-  "voici_calls_history_line_length": "%1$s・%2$s・%3$s"
+  "voici_calls_history_line_length": "%1$s・%2$s・%3$s",
+  "voici_call_step_route": "回線を開いています…",
+  "voici_call_step_secure": "回線を保護しています（量子耐性）…",
+  "voici_call_step_path": "直接の経路を開いています…",
+  "voici_call_step_audio": "音声を開始しています…",
+  "voici_call_slow": "通常より時間がかかっています"
 }

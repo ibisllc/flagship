@@ -3881,5 +3881,9 @@
   "Answered · %@": "応答済み · %@",
   "Video call · %@": "ビデオ通話 · %@",
   "Incoming call · %@ · %@": "着信 · %@ · %@",
-  "Outgoing call · %@ · %@": "発信 · %@ · %@"
+  "Outgoing call · %@ · %@": "発信 · %@ · %@",
+  "Securing the line (quantum-safe)…": "回線を保護しています（量子耐性）…",
+  "Opening a direct path…": "直接の経路を開いています…",
+  "Starting audio…": "音声を開始しています…",
+  "Opening your line…": "回線を開いています…"
 }

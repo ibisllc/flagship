@@ -4208,5 +4208,10 @@
   "scheduled_backup_finished": "Copia de seguridad programada terminada",
   "activity_social_answered_length": "Respondida · %1$s",
   "activity_social_video_call_length": "Videollamada · %1$s",
-  "voici_calls_history_line_length": "%1$s · %2$s · %3$s"
+  "voici_calls_history_line_length": "%1$s · %2$s · %3$s",
+  "voici_call_step_route": "Abriendo tu línea…",
+  "voici_call_step_secure": "Protegiendo la línea (a prueba de computación cuántica)…",
+  "voici_call_step_path": "Abriendo una ruta directa…",
+  "voici_call_step_audio": "Iniciando el audio…",
+  "voici_call_slow": "Está tardando más de lo habitual"
 }

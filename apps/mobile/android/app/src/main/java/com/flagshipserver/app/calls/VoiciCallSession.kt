@@ -97,6 +97,8 @@ class VoiciCallSession(
         /** The room said this device's answer won (receipt checked) and the frame keys are with the media engine. */
         fun onWon()
         fun onConnected()
+        /** ICE connected through the caller's TURN stream; DTLS and the first media follow. */
+        fun onPathOpen() {}
         /** The call is over here: a room reason (hangup, cancel, no-answer, limit, ...), "answered-elsewhere" or "failed". */
         fun onEnded(reason: String)
         /** The caller's camera: "on", "off" or "paused" (voici-calls-v2.md §1.4). */
@@ -135,6 +137,7 @@ class VoiciCallSession(
         val req = b.build()
         media.onLocalIce = { c -> send(JsonObject(mapOf("t" to JsonPrimitive("ice"), "candidate" to (c?.let { JsonPrimitive(it) } ?: JsonNull)))) }
         media.onConnected = { listener.onConnected() }
+        media.setOnPathOpen { listener.onPathOpen() }
         media.onFailed = { end("failed", "media-failed") }
         ws = http.newWebSocket(req, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) = onRoom(text)

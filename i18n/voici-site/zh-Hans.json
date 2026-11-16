@@ -143,5 +143,10 @@
   "{0} is calling you back.": "{0} 正在回拨给你。",
   "Getting ready to call…": "正在准备通话…",
   "Stop call-backs": "停止回拨",
-  "No microphone found on this device. Connect one, or call from your phone.": "此设备上没有找到麦克风。请连接一个，或用手机拨打。"
+  "No microphone found on this device. Connect one, or call from your phone.": "此设备上没有找到麦克风。请连接一个，或用手机拨打。",
+  "Reaching their phone…": "正在联系对方的手机…",
+  "Securing the line (quantum-safe)…": "正在保护线路（抗量子）…",
+  "Opening a direct path…": "正在打开直接通道…",
+  "Starting audio…": "正在启动音频…",
+  "This is taking longer than usual": "这比平时用的时间长"
 }

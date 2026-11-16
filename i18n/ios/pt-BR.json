@@ -3883,5 +3883,9 @@
   "Answered · %@": "Atendida · %@",
   "Video call · %@": "Chamada de vídeo · %@",
   "Incoming call · %@ · %@": "Chamada recebida · %@ · %@",
-  "Outgoing call · %@ · %@": "Chamada feita · %@ · %@"
+  "Outgoing call · %@ · %@": "Chamada feita · %@ · %@",
+  "Securing the line (quantum-safe)…": "Protegendo a linha (segura contra computação quântica)…",
+  "Opening a direct path…": "Abrindo um caminho direto…",
+  "Starting audio…": "Iniciando o áudio…",
+  "Opening your line…": "Abrindo sua linha…"
 }

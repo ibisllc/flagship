@@ -36,6 +36,13 @@ public final class VoiciCallCenter: NSObject {
     public private(set) var remoteCamera = "off"
     /// No CallKit here (the China mainland storefront): calls ring only on the open app's screen.
     public private(set) var noRingMode = false
+    /// While connecting: the step under way, and whether it has run longer than usual (VoiciCallConnectSteps).
+    public private(set) var connectStep: VoiciCallConnectStep?
+    public private(set) var connectSlow = false
+    @ObservationIgnored private var steps = VoiciCallConnectSteps()
+    @ObservationIgnored private var slowTask: Task<Void, Never>?
+    @ObservationIgnored private var limitTask: Task<Void, Never>?
+    @ObservationIgnored private var gaveUp = false
 
     /// This device's Do Not Disturb hours (Settings → Messages → Calls); read when a call arrives.
     @ObservationIgnored public var quietHours: () -> CallQuietHours = { CallSettingsStore.quietHours() }
@@ -245,9 +252,12 @@ public final class VoiciCallCenter: NSObject {
     func answerNow() async -> Bool {
         guard phase == .ringing, let s = session else { return false }
         phase = .connecting
+        startConnectClock()
+        step(.route)
         // The answer sends the caller to this phone's TURN at once, and a caller's browser tries it only once.
         let holding = await PhoneRouteController.waitUntilHolding(seconds: 8)
         if !holding { voiciCallLog.notice("answering without the bare name held") }
+        step(.secure)
         if let code = await s.answer(cameraAble: cameraAble()) {
             s.leave()
             finish(code)
@@ -327,8 +337,12 @@ public final class VoiciCallCenter: NSObject {
     private func onSession(_ e: VoiciCallSession.Event) {
         switch e {
         case .request(let r): offersVideo = r.hasVideo
-        case .won: phase = .connecting
+        case .won:
+            phase = .connecting
+            step(.path)
+        case .pathOpen: step(.audio)
         case .connected:
+            stopConnectClock()
             phase = .connected
             connectedAt = Int64(clock().timeIntervalSince1970 * 1000)
             if let id = callUUID { provider?.reportOutgoingCall(with: id, connectedAt: nil) }
@@ -413,7 +427,52 @@ public final class VoiciCallCenter: NSObject {
         }
     }
 
+    // MARK: connecting steps
+
+    private func startConnectClock() {
+        steps = VoiciCallConnectSteps()
+        limitTask?.cancel()
+        limitTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(VoiciCallConnectSteps.limitSeconds * 1_000_000_000))
+            guard let self, !Task.isCancelled, self.phase == .connecting else { return }
+            voiciCallLog.notice("call gave up connecting at step \(self.connectStep?.rawValue ?? "-", privacy: .public)")
+            self.giveUp()
+        }
+    }
+
+    private func step(_ s: VoiciCallConnectStep) {
+        guard phase == .connecting, steps.advance(to: s) else { return }
+        connectStep = s
+        connectSlow = false
+        slowTask?.cancel()
+        slowTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(VoiciCallConnectSteps.slowSeconds * 1_000_000_000))
+            guard let self, !Task.isCancelled, self.connectStep == s, self.phase == .connecting else { return }
+            self.connectSlow = true
+        }
+    }
+
+    private func stopConnectClock() {
+        slowTask?.cancel()
+        limitTask?.cancel()
+        slowTask = nil
+        limitTask = nil
+        connectStep = nil
+        connectSlow = false
+    }
+
+    /// Connecting took too long: end the call for both sides, shown as "The call couldn't connect."
+    private func giveUp() {
+        gaveUp = true
+        session?.hangUp()
+        if session != nil { finish("failed") }
+    }
+
     private func finish(_ code: String) {
+        // A call that gave up connecting ends as "failed" (CallKit: failed), whatever its hang-up said.
+        let code = gaveUp ? "failed" : code
+        gaveUp = false
+        stopConnectClock()
         voiciCallLog.notice("call ended: \(code, privacy: .public)")
         if let call = push, let peer = incomingPeer, let outcome = Self.incomingOutcome(code: code, wasConnected: connectedAt != nil) {
             let end = Int64(clock().timeIntervalSince1970 * 1000)

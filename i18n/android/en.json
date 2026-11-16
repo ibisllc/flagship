@@ -17312,5 +17312,25 @@
   "voici_calls_history_line_length": {
     "en": "%1$s · %2$s · %3$s",
     "ctx": "voi.ci calls: call history row subtitle of an answered call; %1$s is the outcome (Incoming call, Outgoing call), %2$s the date and time, %3$s the call's length (4:32)"
+  },
+  "voici_call_step_route": {
+    "en": "Opening your line…",
+    "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_step_secure": {
+    "en": "Securing the line (quantum-safe)…",
+    "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_step_path": {
+    "en": "Opening a direct path…",
+    "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_step_audio": {
+    "en": "Starting audio…",
+    "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_slow": {
+    "en": "This is taking longer than usual",
+    "ctx": "voi.ci calls: connecting step"
   }
 }

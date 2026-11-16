@@ -3883,5 +3883,9 @@
   "Answered · %@": "Angenommen · %@",
   "Video call · %@": "Videoanruf · %@",
   "Incoming call · %@ · %@": "Eingehender Anruf · %@ · %@",
-  "Outgoing call · %@ · %@": "Ausgehender Anruf · %@ · %@"
+  "Outgoing call · %@ · %@": "Ausgehender Anruf · %@ · %@",
+  "Securing the line (quantum-safe)…": "Leitung wird gesichert (quantensicher)…",
+  "Opening a direct path…": "Direkter Weg wird geöffnet…",
+  "Starting audio…": "Audio wird gestartet…",
+  "Opening your line…": "Deine Leitung wird geöffnet…"
 }

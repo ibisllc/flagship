@@ -3877,5 +3877,9 @@
   "Answered · %@": "02c1802ba846",
   "Video call · %@": "99affff402b9",
   "Incoming call · %@ · %@": "2aaf960ad727",
-  "Outgoing call · %@ · %@": "3c4e72c46520"
+  "Outgoing call · %@ · %@": "3c4e72c46520",
+  "Securing the line (quantum-safe)…": "4a16cbba1b0b",
+  "Opening a direct path…": "e2107a4a10dd",
+  "Starting audio…": "7147905891f5",
+  "Opening your line…": "6647a246c6a2"
 }

@@ -15,6 +15,8 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     public var onLocalIce: ((String?) -> Void)?
     public var onConnected: (() -> Void)?
     public var onFailed: (() -> Void)?
+    private var onPathOpen: (() -> Void)?
+    public func setOnPathOpen(_ f: @escaping () -> Void) { lock.withLock { onPathOpen = f } }
 
     private static let gatherTimeout: TimeInterval = 3
     private static let configureAudio: Void = {
@@ -349,7 +351,11 @@ extension WebRTCCallMediaEngine: RTCPeerConnectionDelegate {
     public func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
     public func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
     public func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
-    public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {}
+    public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
+        guard newState == .connected || newState == .completed else { return }
+        let f: (() -> Void)? = lock.withLock { defer { onPathOpen = nil }; return onPathOpen }
+        f?()
+    }
     public func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
         // The callee bakes its one loopback candidate into the signed answer; the caller trickles its relay candidates.
         guard lock.withLock({ caller }) else { return }

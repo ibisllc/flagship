@@ -4208,5 +4208,10 @@
   "scheduled_backup_finished": "Sauvegarde planifiée terminée",
   "activity_social_answered_length": "Répondu · %1$s",
   "activity_social_video_call_length": "Appel vidéo · %1$s",
-  "voici_calls_history_line_length": "%1$s · %2$s · %3$s"
+  "voici_calls_history_line_length": "%1$s · %2$s · %3$s",
+  "voici_call_step_route": "Ouverture de votre ligne…",
+  "voici_call_step_secure": "Sécurisation de la ligne (résistante aux ordinateurs quantiques)…",
+  "voici_call_step_path": "Ouverture d'un chemin direct…",
+  "voici_call_step_audio": "Démarrage de l'audio…",
+  "voici_call_slow": "Cela prend plus de temps que d'habitude"
 }
