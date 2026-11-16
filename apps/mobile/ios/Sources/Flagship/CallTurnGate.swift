@@ -1,4 +1,8 @@
 import Foundation
+import os
+
+/// The calls log (same subsystem and category as FlagshipUI's `voiciCallLog`): states and codes only.
+let callPathLog = Logger(subsystem: "com.flagshipserver.app", category: "calls")
 
 /// One call's TURN connection behind the endpoint: bytes in from the caller's TLS stream, bytes back out.
 public protocol CallTurnConnection: AnyObject {
@@ -56,10 +60,16 @@ public final class CallTurnGate: @unchecked Sendable {
     }
 
     /// The answer carrying this credential was sent: one TURN connection may now open.
-    public func arm(_ c: Credential) { lock.withLock { armed = c; taken = false } }
+    public func arm(_ c: Credential) {
+        lock.withLock { armed = c; taken = false }
+        callPathLog.notice("turn gate: armed")
+    }
 
     /// The call ended (or this device didn't win): no TURN until the next answer.
-    public func disarm() { lock.withLock { armed = nil; taken = false } }
+    public func disarm() {
+        lock.withLock { armed = nil; taken = false }
+        callPathLog.notice("turn gate: disarmed")
+    }
 
     public var isArmed: Bool { lock.withLock { armed != nil } }
 
@@ -68,13 +78,21 @@ public final class CallTurnGate: @unchecked Sendable {
         lock.lock()
         let ready = armed != nil && !taken && _factory != nil
         let r = Self.route(firstByte: firstByte, turnReady: ready)
+        if r == .close {
+            let why = armed == nil ? "not-armed" : taken ? "already-taken" : "no-factory"
+            callPathLog.notice("turn gate: close (\(why, privacy: .public))")
+        }
         guard r == .turn, let cred = armed, let make = _factory else {
             lock.unlock()
             return (r, nil)
         }
         taken = true
         lock.unlock()
-        guard let conn = make(cred) else { return (.close, nil) }
+        guard let conn = make(cred) else {
+            callPathLog.notice("turn gate: close (factory-nil)")
+            return (.close, nil)
+        }
+        callPathLog.notice("turn gate: turn")
         return (.turn, conn)
     }
 }
