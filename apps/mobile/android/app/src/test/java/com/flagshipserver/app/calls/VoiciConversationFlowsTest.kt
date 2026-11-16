@@ -131,6 +131,49 @@ class VoiciConversationFlowsTest {
         assertEquals("caller", VoiciJs.str((w.mock.convDeletes.last()["del"] as JsonObject)["side"]))
     }
 
+    /** Delete = forget on every device (docs/voici-and-messages.md §10.1.1): the owner's second device, still on the old
+     *  state, syncs after the delete; the conversation is gone on both and stays gone. */
+    @Test fun deleteForgetsTheConversationOnTheOwnersOtherDevices() = runBlocking {
+        val w = world()
+        val pseudonym = w.alice.messages.value.conversations.single().pseudonymPub
+        assertNull(w.alice.accept(w.conv))
+        assertNull(w.alice.rename(pseudonym, "Bob"))
+        w.alice.syncState()
+        val alice2 = center(w.mock, K("alice", aliceUmk, aliceRoot, ByteArray(32) { 5 }))
+        alice2.refresh()
+        assertTrue(alice2.messages.value.conversations.any { it.conv == w.conv })
+        assertTrue(w.conv in alice2.messages.value.state.accepted)
+        assertTrue(w.conv in alice2.ringBackOff())
+
+        assertNull(w.alice.deleteConversation(w.conv))
+        w.alice.syncState()
+        // The second device marks it read on its old copy, then syncs (a conflict and a merge).
+        alice2.markRead(w.conv)
+        alice2.syncState()
+        alice2.refresh()
+        w.alice.syncState()
+        for (d in listOf(w.alice, alice2)) {
+            val m = d.messages.value
+            assertTrue(m.conversations.none { it.conv == w.conv })
+            assertTrue(w.conv !in m.state.accepted && w.conv !in m.state.archived && w.conv !in m.state.readUpTo)
+            assertNull(m.state.nicknames[pseudonym])
+            assertTrue(w.conv !in d.ringBackOff())
+        }
+        // Stays gone after another round on both.
+        alice2.refresh()
+        w.alice.refresh()
+        assertTrue(alice2.messages.value.conversations.none { it.conv == w.conv })
+        assertTrue(w.conv !in alice2.messages.value.state.accepted)
+        // The same caller writing again is a new request, and accepting it sticks against the marker.
+        w.mock.visitorWrites("alice", bobUmk, "Hello again", seq = 2)
+        alice2.refreshInbox()
+        assertTrue(alice2.messages.value.isRequest(alice2.messages.value.conversations.single { it.conv == w.conv }))
+        assertNull(alice2.accept(w.conv))
+        alice2.syncState()
+        w.alice.refresh()
+        assertTrue(w.conv in w.alice.messages.value.state.accepted)
+    }
+
     @Test fun theRevealShowsOnlyWhenItChecksAndAnUnrevealRemovesIt() = runBlocking {
         val w = world()
         val alicePage = VoiciCallTarget("alice", w.pageId)

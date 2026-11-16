@@ -34,6 +34,10 @@ final class VisitorConversationModel {
         var device: VoiciDeviceSigner?
         var defaults: UserDefaults = .standard
         var now: () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+        /// Delete = forget on this account's other devices: the synced state's deletion marker (conv, own pseudonym).
+        var forgetSynced: (_ conv: String, _ pseudonymPub: String) async -> Void = { conv, p in
+            await MessagesStore.shared.forgetVisitorConversation(conv: conv, pseudonymPub: p)
+        }
     }
 
     let callee: VoiciCallee
@@ -183,6 +187,7 @@ final class VisitorConversationModel {
             deps.defaults.removeObject(forKey: Self.revealKey(callee.pageId))
             messages = []
             deleted = true
+            await deps.forgetSynced(keys.conv, CanonicalJson.hex(keys.p.publicKey))
         } catch {
             note = MessagesStore.sentence(error)
         }

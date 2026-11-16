@@ -78,6 +78,9 @@ public final class MessagesStore {
         var handed: [String: String] = [:]
         var blocks: [String] = []
         var revoked: [String] = []
+        /// Delete = forget (docs/voici-and-messages.md §10.1.1): conv → the deletion marker's `at` this device already
+        /// acted on, so what it keeps of a conversation that came back after the delete stays.
+        var forgetApplied: [String: Int64] = [:]
     }
 
     public init() {}
@@ -387,8 +390,53 @@ public final class MessagesStore {
         let key = VoiciMessages.deriveMessagesStateKey(umk: Array(umk))
         guard let remote = VoiciMessages.openMessagesState(stateKey: key, username: username, blob: blob) else { return }
         local.stateVersion = blob["version"]?.time ?? local.stateVersion
-        state = VoiciMessages.mergeMessagesState(local: state, remote: remote)
+        state = VoiciMessages.mergeMessagesState(local: state, remote: remote, now: now())
+        applyForgotten()
         save()
+    }
+
+    /// For each deletion marker in the synced state this device hasn't acted on yet, everything it keeps by itself of
+    /// that conversation goes (§10.1.1): owner side, the stored messages, the checked reveal, ring-back flags, missed
+    /// calls and call records; caller side (the conversation is this account's own on another page), that page's
+    /// reveal switch and call records. What arrives after this stays.
+    func applyForgotten() {
+        let live = VoiciMessages.liveForgotten(state, now: now())
+        let fresh = live.filter { $0.value.at > (local.forgetApplied[$0.key] ?? -1) }
+        local.forgetApplied = live.mapValues(\.at).merging(local.forgetApplied.filter { live[$0.key] != nil }) { max($0, $1) }
+        guard !fresh.isEmpty else { return }
+        var pages: [String: String] = [:]
+        if let umk = Keystore.messagesUMKIfCached() {
+            let secret = VoiciMessages.deriveMessagesSecret(umk: Array(umk))
+            let candidates = Set(state.signedInSites.map(\.pageId) + VoiciCallHistory.shared.records.compactMap { $0.callablePage?.pageId })
+            for pid in candidates {
+                if let p = try? VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: secret, pageId: pid),
+                   let conv = try? VoiciMessages.voiciConv(pageId: pid, pseudonymPub: CanonicalJson.hex(p.publicKey)), fresh[conv] != nil {
+                    pages[pid] = conv
+                }
+            }
+        }
+        for conv in fresh.keys {
+            local.items.removeAll { $0.envelope["conv"]?.string == conv }
+            reveals[conv] = nil
+            ringBackFlags[conv] = nil
+            noRingBack.remove(conv)
+            missedCalls.removeAll { $0.conv == conv }
+        }
+        VoiciCallHistory.shared.forget { r in
+            switch r.peer {
+            case .visitor(let conv, _): return fresh[conv] != nil
+            case .page(_, let pid): return pages[pid] != nil
+            }
+        }
+        for pid in pages.keys { UserDefaults.standard.removeObject(forKey: VisitorConversationModel.revealKey(pid)) }
+        conversations.removeAll { fresh[$0.conv] != nil }
+        rebuild()
+    }
+
+    /// Caller side (VisitorConversationModel): the synced state's deletion marker for this account's own conversation on
+    /// another page, so its other devices forget it too.
+    func forgetVisitorConversation(conv: String, pseudonymPub: String) async {
+        await editState { s in if let next = try? VoiciMessages.forgetConversation(s, conv: conv, pseudonymPub: pseudonymPub, at: self.now()) { s = next } }
     }
 
     private func loadLane(_ client: any VoiciComClient, _ keys: VoiciAccountKeys) async {
@@ -1148,10 +1196,12 @@ public final class MessagesStore {
         reveals[c.conv] = nil
         ringBackFlags[c.conv] = nil
         missedCalls.removeAll { $0.conv == c.conv }
-        await editState { s in if !s.archived.contains(c.conv) { s.archived.append(c.conv) } }
         local.items.removeAll { $0.envelope["conv"]?.string == c.conv }
-        save()
         conversations.removeAll { $0.conv == c.conv }
+        // The synced state forgets it too; its marker makes the owner's other devices drop their copies.
+        let pseudonym = CanonicalJson.isLowerHex(c.pseudonymPub, bytes: 32) ? c.pseudonymPub : nil
+        await editState { s in if let next = try? VoiciMessages.forgetConversation(s, conv: c.conv, pseudonymPub: pseudonym, at: self.now()) { s = next } }
+        save()
         return nil
     }
 
@@ -1190,6 +1240,7 @@ public final class MessagesStore {
     /// Changes the state blob here and on `.com` (version compare-and-set; a conflict merges and retries).
     func editState(_ change: (inout MessagesState) -> Void) async {
         change(&state)
+        applyForgotten()
         save()
         guard let client, let umk = Keystore.messagesUMKIfCached(), let device else { return }
         let key = VoiciMessages.deriveMessagesStateKey(umk: Array(umk))
@@ -1202,7 +1253,8 @@ public final class MessagesStore {
                 return
             } catch let e as VoiciComError where e.code == "version-conflict" {
                 if let remote = VoiciMessages.openMessagesState(stateKey: key, username: username, blob: e.stored) {
-                    state = VoiciMessages.mergeMessagesState(local: state, remote: remote)
+                    state = VoiciMessages.mergeMessagesState(local: state, remote: remote, now: now())
+                    applyForgotten()
                 }
                 local.stateVersion = e.stored?["version"]?.time ?? local.stateVersion
             } catch {
@@ -1393,6 +1445,7 @@ public final class MessagesStore {
             "cursor": .string(local.cursor), "stateVersion": .int(local.stateVersion), "draftSeq": .int(local.draftSeq),
             "deliveredToPhone": .array(local.deliveredToPhone.sorted().map { .string($0) }),
             "handed": .object(local.handed.mapValues { .string($0) }),
+            "forgetApplied": .object(local.forgetApplied.mapValues { .int($0) }),
             "items": .array(local.items.map { ["envelope": $0.envelope, "storedAt": .int($0.storedAt), "fetchedAt": .optInt($0.fetchedAt), "direct": .bool($0.direct)] }),
             "ownOps": .array(ownOps.map(\.json)),
             "laneOps": .array(laneOps.map(\.json)),
@@ -1463,6 +1516,7 @@ public final class MessagesStore {
         local.draftSeq = v["draftSeq"]?.time ?? 0
         local.deliveredToPhone = Set((v["deliveredToPhone"]?.array ?? []).compactMap(\.string))
         local.handed = (v["handed"]?.object ?? [:]).compactMapValues(\.string)
+        local.forgetApplied = (v["forgetApplied"]?.object ?? [:]).compactMapValues(\.time)
         local.items = (v["items"]?.array ?? []).compactMap { i in
             guard let e = i["envelope"], let at = i["storedAt"]?.time else { return nil }
             return VoiciInboxItem(envelope: e, storedAt: at, fetchedAt: i["fetchedAt"]?.time, direct: i["direct"] == .bool(true))

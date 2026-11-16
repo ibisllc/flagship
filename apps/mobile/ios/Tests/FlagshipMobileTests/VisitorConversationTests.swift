@@ -15,6 +15,7 @@ final class VisitorConversationTests: XCTestCase {
     private var now: Int64 = 0
     private let umk = [UInt8](repeating: 0x5a, count: 32)
     private let ownSeed = [UInt8](repeating: 0x6b, count: 32)
+    private var forgotten: [(conv: String, pseudonymPub: String)] = []
 
     override func setUp() async throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -52,7 +53,8 @@ final class VisitorConversationTests: XCTestCase {
                 return VoiciSignInAnswer(pageId: pageId, pseudonymPub: pPub, cred: cred, threadSeed: CanonicalJson.hex(t.seed))
             },
             ownPage: { [ownSeed] in .init(username: "bob", pageId: String(repeating: "b0", count: 16), displayName: "Bob Rivera", signSeed: ownSeed) },
-            account: "bob", device: { _, _ in nil }, defaults: defaults, now: { [unowned self] in self.now })
+            account: "bob", device: { _, _ in nil }, defaults: defaults, now: { [unowned self] in self.now },
+            forgetSynced: { [unowned self] conv, p in self.forgotten.append((conv, p)) })
         return VisitorConversationModel(callee: VoiciCallee(username: "alice", pageId: calls["keys"]!["pageId"]!.string!), displayName: "Alice", deps: deps)
     }
 
@@ -102,6 +104,8 @@ final class VisitorConversationTests: XCTestCase {
         XCTAssertEqual(client.convDeletes.first?["del"]?["side"]?.string, "caller")
         XCTAssertTrue((client.mailbox["alice"] ?? []).isEmpty, ".com dropped the conversation's mailbox.")
         XCTAssertFalse(defaults.bool(forKey: VisitorConversationModel.revealKey(m.callee.pageId)))
+        // The account's other devices forget it too: the synced state's deletion marker for this conversation.
+        XCTAssertEqual(forgotten.map(\.conv), [m.conv])
     }
 
     func test_anOwnerBlocksAnAnonymousCaller() async throws {

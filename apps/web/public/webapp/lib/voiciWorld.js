@@ -4,8 +4,10 @@
 
 import {
   emptyMessagesState,
+  forgetConversation,
   voiciPseudonymCode,
 } from "./voiciProtocol.js";
+import { forgetPlacedCalls } from "./voiciCallOut.js";
 import {
   isRequest,
   isUnread,
@@ -95,6 +97,7 @@ export async function refreshWorld(deps = {}) {
     world.state = st.value.state;
     world.version = st.value.version;
     world.stateLoaded = true;
+    applyForgotten(deps);
   }
   if (world.page) {
     try {
@@ -137,8 +140,30 @@ export async function changeState(fn, deps = {}) {
   world.state = out.state;
   world.version = out.version;
   world.stateLoaded = true;
+  applyForgotten(deps);
   emitWorld();
   return out;
+}
+
+/** Another device's deletes reach what this browser keeps by itself: its placed calls (docs/voici-and-messages.md §10.1.1). */
+function applyForgotten(deps) {
+  try {
+    (deps.forgetPlacedCalls ?? forgetPlacedCalls)(world.state.forgotten ?? {}, deps);
+  } catch {
+    /* the history is a courtesy */
+  }
+}
+
+/**
+ * Delete = forget (docs/voici-calls.md, docs/voici-and-messages.md §10.1.1), after `.com` dropped the conversation: the
+ * synced state loses its accepted mark, archived flag, read mark, nickname and block and gains the marker that makes
+ * the owner's other devices drop theirs; the conversation and its missed calls leave this browser's view at once.
+ */
+export async function forgetConversationEverywhere(cv, deps = {}) {
+  await changeState((s) => forgetConversation(s, cv.conv, cv.pseudonymPub ?? null, (deps.now ?? Date.now)()), deps);
+  world.conversations = world.conversations.filter((x) => x.conv !== cv.conv);
+  world.missedCalls = world.missedCalls.filter((m) => m.conv !== cv.conv);
+  emitWorld();
 }
 
 /** Every pending change: the drafts lane's, then this device's own not yet handed over or published. */

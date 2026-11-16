@@ -73,6 +73,9 @@ data class VoiciLocal(
     /** The owner's call hours as last synced (opened {v:1, hours, updatedAt}) and the stored blob's version. */
     val callHoursSetting: JsonObject? = null,
     val callHoursVersion: Long = 0,
+    /** Delete = forget (docs/voici-and-messages.md §10.1.1): conv → the deletion marker's `at` this device already
+     *  acted on, so what it keeps of a conversation that came back after the delete stays. */
+    val forgetApplied: Map<String, Long> = emptyMap(),
 )
 
 /** A caller's reveal the owner's app checked against the page key `.com` serves for that username. */

@@ -514,7 +514,9 @@
 //       protection (lib/orgSeat.js, lib/orgDirectoryConsole.js, vendor/flagship-org, lib/policySigning.js).
 //  v221: calls from the webapp to pages this account knows, in a voi.ci tab (lib/voiciCallOut.js, voiciCallHandoff.js,
 //       views/calls.js: the call history).
-const SHELL_VERSION = "v221";
+//  v222: deleting a conversation forgets it on every device: the Messages state's v2 deletion markers
+//       (lib/voiciMessages.js forgetConversation, lib/voiciWorld.js, lib/voiciCallOut.js forgetPlacedCalls).
+const SHELL_VERSION = "v222";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
