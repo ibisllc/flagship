@@ -832,6 +832,16 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
   next unlock; it now sends it as soon as calls come on. Checks: tsc, i18n, parity 0 red, vitest 6163; Android 3072;
   iOS 38, app builds.
 
+- 2026-11-16: Live gym test: the phone rang for ~1 s and dropped an anonymous call. Phone log: the app closed the room
+  socket ~5 ms after joining, i.e. it refused the request itself. Cause: the phone checked the anonymous request
+  against a stale or missing copy of the page's call mode (iOS locked path never set `callsFrom`, default
+  "accepted"; unlocked paths on iOS and Android read a cached index refreshed only while Social is open).
+  **anon-fix merged** (`2346e1184`): when the local copy refuses on the mode, the phone reads the page's live mode
+  once (checked under the account key, no rollback) and checks again; every early call end logs a reason code
+  (iOS `Logger` subsystem `com.flagshipserver.app` category `calls`, Android tag `FlagshipCalls`). Browser-built
+  anonymous requests are now a shared vector (`voici-call-modes/browser-built.json`). Carried to `gym-0.4`
+  (`cc69cc67b`); the built gym app awaits install (phone unreachable).
+
 ## Resume point
 
 State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branch is merged:
