@@ -1,5 +1,5 @@
 // The one call this app is placing (docs/voici-calls.md "Calling from the app"), for the Calls screen and the Call
-// buttons: built with the app's media engine (VoiciCallCenter.mediaFactory), the pinning factory's client for the
+// buttons: built with the app's media engine (CallMediaFactory: our libwebrtc build, or the stub), the pinning factory's client for the
 // room and the /qr-pipe handoff, and the system browser for the fallback.
 
 package com.flagshipserver.app.calls
@@ -31,6 +31,8 @@ object VoiciOutgoingCalls {
     /** The link the last handoff opened (the mock gym reads it; the browser gets it in an intent). */
     @Volatile var lastBrowserLink: String? = null
     @Volatile var openBrowserOverride: ((String) -> Unit)? = null
+    /** A seam for tests and the mock gym; null = this build's engine (the stub hands the call to the browser). */
+    @Volatile var engineFactory: (() -> CallMediaEngine)? = null
 
     private val _current = MutableStateFlow<VoiciOutgoingCall?>(null)
     val current: StateFlow<VoiciOutgoingCall?> = _current.asStateFlow()
@@ -41,7 +43,8 @@ object VoiciOutgoingCalls {
         val busy = _current.value?.state?.value
         if (busy != null && busy !is VoiciOutgoingState.Ended && busy !is VoiciOutgoingState.Failed && busy !is VoiciOutgoingState.Browser) return false
         val app = context.applicationContext
-        val call = center.outgoingCall(target, video, integrity, VoiciCallCenter.mediaFactory(), roomFactory(), pipeFactory(), allowCallBack) { link ->
+        val engine = engineFactory?.invoke() ?: CallMediaFactory.make(app)
+        val call = center.outgoingCall(target, video, integrity, engine, roomFactory(), pipeFactory(), allowCallBack) { link ->
             lastBrowserLink = link
             openBrowserOverride?.invoke(link) ?: openInBrowser(app, link)
         }
