@@ -3,6 +3,7 @@ import AVFoundation
 import Flagship
 import FlagshipCore
 import Foundation
+import OSLog
 import WebRTC
 
 /// The real media half of a voi.ci call on iOS (docs/voici-calls.md §3, §4; voici-calls-v2.md §1): our libwebrtc build
@@ -68,10 +69,27 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         // One loopback host candidate: the signed answer carries it whole, so nothing trickles after it.
         await waitForGathering()
         guard !lock.withLock({ stopped }), let sdp = pc.localDescription?.sdp else { throw CallMediaUnavailable() }
+        let lines = sdp.components(separatedBy: "\n").filter { $0.hasPrefix("a=candidate:") }
+        voiciCallLog.notice("answer sdp: \(lines.count, privacy: .public) candidates [\(lines.map(Self.describeCandidate).joined(separator: "; "), privacy: .public)]")
         return sdp
     }
 
     private static let noConstraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
+
+    /// For the calls log: a candidate's type, protocol and address kind, never a non-loopback address. A loopback
+    /// candidate keeps its port (it is this phone's own, and tells the relay socket's side apart).
+    static func describeCandidate(_ sdp: String) -> String {
+        let f = sdp.replacingOccurrences(of: "a=", with: "").split(separator: " ").map(String.init)
+        guard f.count >= 8 else { return "unparsed" }
+        let proto = f[2].lowercased(), addr = f[4], port = f[5]
+        let typ = f.firstIndex(of: "typ").flatMap { $0 + 1 < f.count ? f[$0 + 1] : nil } ?? "?"
+        let kind: String
+        if addr == "127.0.0.1" || addr == "::1" { kind = "loopback:\(port)" }
+        else if addr.hasSuffix(".local") { kind = "mdns" }
+        else if addr.contains(":") { kind = "ipv6" }
+        else { kind = "ipv4" }
+        return "\(typ)/\(proto)/\(kind)"
+    }
 
     private func build(caller: Bool = false) -> RTCPeerConnection? {
         lock.withLock {
@@ -228,7 +246,11 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     }
 
     public func addRemoteIce(_ candidate: String?) {
-        guard let candidate else { return }
+        guard let candidate else {
+            voiciCallLog.notice("remote ice: end of candidates")
+            return
+        }
+        voiciCallLog.notice("remote ice: \(Self.describeCandidate(candidate), privacy: .public)")
         let pc: RTCPeerConnection? = lock.withLock {
             guard let pc = self.pc, pc.remoteDescription != nil else { pendingIce.append(candidate); return nil }
             return pc
@@ -330,12 +352,14 @@ extension WebRTCCallMediaEngine: RTCFlagshipFrameCryptoDelegate {
 
 extension WebRTCCallMediaEngine: RTCPeerConnectionDelegate {
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
+        voiciCallLog.notice("ice gathering: \(newState.rawValue, privacy: .public) (0 new, 1 gathering, 2 complete)")
         guard newState == .complete else { return }
         finishGathering()
         onLocalIce?(nil)
     }
 
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCPeerConnectionState) {
+        voiciCallLog.notice("peer connection: \(newState.rawValue, privacy: .public) (0 new, 1 connecting, 2 connected, 3 disconnected, 4 failed, 5 closed)")
         switch newState {
         case .connected:
             let first: Bool = lock.withLock { defer { connectedOnce = true }; return !connectedOnce }
@@ -352,12 +376,14 @@ extension WebRTCCallMediaEngine: RTCPeerConnectionDelegate {
     public func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
     public func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
+        voiciCallLog.notice("ice connection: \(newState.rawValue, privacy: .public) (0 new, 1 checking, 2 connected, 3 completed, 4 failed, 5 disconnected, 6 closed)")
         guard newState == .connected || newState == .completed else { return }
         let f: (() -> Void)? = lock.withLock { defer { onPathOpen = nil }; return onPathOpen }
         f?()
     }
     public func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
         // The callee bakes its one loopback candidate into the signed answer; the caller trickles its relay candidates.
+        voiciCallLog.notice("local ice: \(Self.describeCandidate(candidate.sdp), privacy: .public)")
         guard lock.withLock({ caller }) else { return }
         onLocalIce?(candidate.sdp)
     }

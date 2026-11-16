@@ -3,6 +3,7 @@ import Darwin
 import Flagship
 import FlagshipTurn
 import Foundation
+import OSLog
 import Security
 
 /// The phone's TURN responder for the call in progress (docs/voici-calls.md §4): `rust/crates/flagship-turn-lite`
@@ -25,11 +26,17 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
     private var toClient: ((Data) -> Void)?
     private var end: (() -> Void)?
     private var resumed = false
+    private var loggedClient = false
+    private var loggedToPeer = false
+    private var loggedFromPeer = false
 
     /// The relay socket and a native responder for one armed call; nil when either can't be made.
     static func open(_ c: CallTurnGate.Credential, rateBytesPerS: Int) -> TurnResponder? {
         let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
-        guard fd >= 0 else { return nil }
+        guard fd >= 0 else {
+            voiciCallLog.notice("turn responder: open failed (socket \(errno, privacy: .public))")
+            return nil
+        }
         var addr = sockaddr_in()
         addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         addr.sin_family = sa_family_t(AF_INET)
@@ -41,17 +48,25 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
                 bind(fd, sp, len) == 0 && getsockname(fd, sp, &len) == 0
             }
         }
-        guard bound else { Darwin.close(fd); return nil }
+        guard bound else {
+            voiciCallLog.notice("turn responder: open failed (bind \(errno, privacy: .public))")
+            Darwin.close(fd); return nil
+        }
         let port = UInt16(bigEndian: addr.sin_port)
         var nonce = [UInt8](repeating: 0, count: 16)
-        guard SecRandomCopyBytes(kSecRandomDefault, nonce.count, &nonce) == errSecSuccess else { Darwin.close(fd); return nil }
+        guard SecRandomCopyBytes(kSecRandomDefault, nonce.count, &nonce) == errSecSuccess else {
+            voiciCallLog.notice("turn responder: open failed (random)")
+            Darwin.close(fd); return nil
+        }
         let config = [realm, c.user, c.secret, nonce.map { String(format: "%02x", $0) }.joined(),
                       "127.0.0.1:\(port)", "127.0.0.1", String(rateBytesPerS)].joined(separator: "\n")
         let bytes = Array(config.utf8)
         guard let h = bytes.withUnsafeBufferPointer({ flagship_turn_new($0.baseAddress, $0.count) }) else {
+            voiciCallLog.notice("turn responder: open failed (native)")
             Darwin.close(fd)
             return nil
         }
+        voiciCallLog.notice("turn responder: open, relay loopback:\(port, privacy: .public)")
         return TurnResponder(handle: h, fd: fd)
     }
 
@@ -82,8 +97,23 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
                 Self.take(flagship_turn_client_bytes(h, raw.bindMemory(to: UInt8.self).baseAddress, raw.count, now))
             }
         }
-        guard let out, let r = Self.decode(out), r.status == 0 else { return nil }
-        for (port, d) in r.peers { send(d, port: port) }
+        guard let out, let r = Self.decode(out) else {
+            voiciCallLog.notice("turn responder: undecodable answer to client bytes")
+            return nil
+        }
+        guard r.status == 0 else {
+            voiciCallLog.notice("turn responder: client bytes status \(r.status, privacy: .public)")
+            return nil
+        }
+        let (firstClient, firstToPeer): (Bool, Bool) = lock.withLock {
+            defer { loggedClient = true; if !r.peers.isEmpty { loggedToPeer = true } }
+            return (!loggedClient, !loggedToPeer && !r.peers.isEmpty)
+        }
+        if firstClient {
+            let method = data.count >= 2 ? (UInt16(data[data.startIndex]) << 8 | UInt16(data[data.startIndex + 1])) : 0
+            voiciCallLog.notice("turn responder: first client message 0x\(String(format: "%04x", method), privacy: .public), \(r.client.count, privacy: .public) bytes back")
+        }
+        if firstToPeer, let p = r.peers.first { voiciCallLog.notice("turn responder: first datagram to peer loopback:\(p.0, privacy: .public)") }
         return r.client.isEmpty ? [] : [r.client]
     }
 
@@ -96,6 +126,8 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
         }
         guard n > 0, from.sin_addr.s_addr == inet_addr("127.0.0.1") else { return }
         let port = UInt16(bigEndian: from.sin_port)
+        let firstFromPeer: Bool = lock.withLock { defer { loggedFromPeer = true }; return !loggedFromPeer }
+        if firstFromPeer { voiciCallLog.notice("turn responder: first datagram from peer loopback:\(port, privacy: .public)") }
         // The native call runs under the lock; the client write does not.
         let (out, sink): (Data?, ((Data) -> Void)?) = lock.withLock {
             guard let h = handle else { return (nil, nil) }
@@ -104,6 +136,7 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
             return (o, toClient)
         }
         if let out, let r = Self.decode(out), !r.client.isEmpty { sink?(r.client) }
+        else if firstFromPeer { voiciCallLog.notice("turn responder: first peer datagram not forwarded (no permission or channel?)") }
     }
 
     private func send(_ d: Data, port: UInt16) {
@@ -132,7 +165,10 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
             if !resumed { resumed = true; source.resume() }
             return true
         }
-        if wasOpen { source.cancel() }
+        if wasOpen {
+            voiciCallLog.notice("turn responder: closed")
+            source.cancel()
+        }
     }
 
     deinit { if handle != nil { close() } }
