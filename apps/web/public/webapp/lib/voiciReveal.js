@@ -5,12 +5,14 @@
 //   canonicalVoiciConvDelete, signVoiciConvDeleteOwner          the owner's delete (the webapp holds the page key)
 //   canonicalVoiciReveal, voiciRevealNameHash, signVoiciReveal   the caller's reveal (by their own page key)
 //   parseVoiciRevealControl, checkVoiciReveal                    the owner's check before showing the pill
+//   canonicalVoiciAnonBlock, signVoiciAnonBlock                  blocking an anonymous caller
 
 import { ed25519SignHex, ed25519VerifyHex, isLowerHex, sha256Hex } from "./voiciCore.js";
 import { checkVoiciText } from "./voiciText.js";
 
 export const TAG_VOICI_CONV_DELETE = "flagship/voici-conv-delete/v1";
 export const TAG_VOICI_REVEAL = "flagship/voici-reveal/v1";
+export const TAG_VOICI_ANON_BLOCK = "flagship/voici-anon-block/v1";
 
 const te = new TextEncoder();
 const PAGE_ID = /^[0-9a-f]{32}$/;
@@ -20,7 +22,7 @@ const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const exactKeys = (r, keys) => Object.keys(r).length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(r, k));
 
 export function canonicalVoiciConvDelete(d) {
-  if (!PAGE_ID.test(d.pageId) || !isLowerHex(d.conv, 32) || (d.side !== "owner" && d.side !== "caller") || !isTime(d.issuedAt)) throw new Error(`${TAG_VOICI_CONV_DELETE}: bad field`);
+  if (!PAGE_ID.test(d.pageId) || !(isLowerHex(d.conv, 32) || isLowerHex(d.conv, 16)) || (d.side !== "owner" && d.side !== "caller") || !isTime(d.issuedAt)) throw new Error(`${TAG_VOICI_CONV_DELETE}: bad field`);
   return te.encode([TAG_VOICI_CONV_DELETE, d.pageId, d.conv, d.side, String(d.issuedAt)].join("|"));
 }
 
@@ -64,3 +66,10 @@ export function checkVoiciReveal(v, ctx) {
 
 /** The pill's text parts: the display name (if any) and the username, so the caller prints "Display Name (username)". */
 export const revealLabel = (r) => ({ displayName: r.displayName, username: r.username });
+
+export function canonicalVoiciAnonBlock(b) {
+  if (!PAGE_ID.test(b.pageId) || !isLowerHex(b.conv, 16) || (b.op !== "block" && b.op !== "unblock") || !isTime(b.issuedAt)) throw new Error(`${TAG_VOICI_ANON_BLOCK}: bad field`);
+  return te.encode([TAG_VOICI_ANON_BLOCK, b.pageId, b.conv, b.op, String(b.issuedAt)].join("|"));
+}
+
+export const signVoiciAnonBlock = (b, ownerSignSeed) => ed25519SignHex(canonicalVoiciAnonBlock(b), ownerSignSeed);

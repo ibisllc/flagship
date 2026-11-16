@@ -32,6 +32,14 @@ describe("voici conversation vectors", () => {
     expect(P.openVoiciBodyAny(P.b64Decode(C.wrongConv.body)!, { conv: V.conv, msgId: C.wrongConv.msgId }, P.hexToBytes(C.inboxSeed))).toEqual({ ok: false, code: C.wrongConv.expect });
   });
 
+  it("blocking an anonymous caller; the owner deletes its conversation", () => {
+    const X = V.anonBlock;
+    expect(dec(P.canonicalVoiciAnonBlock(X.order))).toBe(X.canonical);
+    for (const c of X.checks) expect(P.verifyVoiciAnonBlock(c.block, c.signature, V.ownerSignPub), c.name).toBe(c.expect);
+    for (const c of X.shapes) expect(P.parseVoiciAnonBlock(c.input) !== null, c.name).toBe(c.expect);
+    expect(code(P.checkVoiciConvDelete(X.ownerDelete, V.delete.ctx))).toBe("ok");
+  });
+
   it("the vectors file is fresh", () => {
     execFileSync("npx", ["tsx", join(import.meta.dirname, "..", "..", "..", "tools", "voici-conversation-vectors.ts"), "--check"], { stdio: "pipe" });
   }, 60_000);
