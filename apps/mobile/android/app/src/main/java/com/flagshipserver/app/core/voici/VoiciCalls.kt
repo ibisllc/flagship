@@ -646,13 +646,19 @@ object VoiciCalls {
     }
 
     /** The push's sealed caller: (pageId, conv, from), only for [callId] and a matching conv. */
+    /** Whether an opened push's caller is anonymous (its `from` is a browser key, not a pseudonym). */
+    fun isAnonymousCaller(from: String): Boolean = hex(from, 65) && from.startsWith("04")
+
     fun openPush(inboxSeed: ByteArray, callId: String, sealed: ByteArray): Triple<String, String, String>? {
         val o = openCanonical(inboxSeed, TAG_PUSH, callId, sealed) ?: return null
         if (!VoiciJs.exactKeys(o, listOf("v", "callId", "pageId", "conv", "from")) || !VoiciJs.isNumEq(o["v"], 1) || str(o["callId"]) != callId) return null
         val pageId = str(o["pageId"])?.takeIf { PAGE_ID.matches(it) } ?: return null
-        val conv = str(o["conv"])?.takeIf { hex(it, 32) } ?: return null
-        val from = str(o["from"])?.takeIf { hex(it, 32) } ?: return null
-        if (VoiciMessages.voiciConv(pageId, from) != conv) return null
+        val conv = str(o["conv"]) ?: return null
+        val from = str(o["from"]) ?: return null
+        // An anonymous caller (an "anyone" page): `from` is its browser key and `conv` the conversation that key derives.
+        // The apps name it "Anonymous caller" (VoiciCopy.visitorName refuses to make a visitor code from a browser key).
+        if (hex(from, 65) && from.startsWith("04") && hex(conv, 16) && VoiciCallModes.anonConv(pageId, from) == conv) return Triple(pageId, conv, from)
+        if (!hex(conv, 32) || !hex(from, 32) || VoiciMessages.voiciConv(pageId, from) != conv) return null
         return Triple(pageId, conv, from)
     }
 

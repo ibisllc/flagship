@@ -143,4 +143,14 @@ class VoiciCallModesVectorsTest {
             }
         }
     }
+
+    @Test fun anAnonymousCallersPushOpensAsAnonymous() {
+        val a = M.o("anonPush")
+        val o = VoiciCalls.openPush(h(a.s("inboxSeed")), a.s("callId"), WebEnvelopes.b64Decode(a.s("sealed"))!!)!!
+        val opened = a.o("opened")
+        assertEquals(Triple(opened.s("pageId"), opened.s("conv"), opened.s("from")), o)
+        assertTrue(VoiciCalls.isAnonymousCaller(o.third))
+        // A push whose conv belongs to another browser key is refused.
+        assertEquals(null, VoiciCalls.openPush(h(a.s("inboxSeed")), a.s("callId"), WebEnvelopes.b64Decode(a.s("badConvSealed"))!!))
+    }
 }
