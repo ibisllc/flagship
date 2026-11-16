@@ -16,7 +16,9 @@
 #               pointed at the gym D1, then `wrangler deploy --config wrangler.gym.toml`),
 #               then the gym Fly app, scaled to one machine. It NEVER runs `npm run
 #               deploy` and never touches flagship-webapp (the production static Worker
-#               that owns webapp./remote.flagshipserver.com).
+#               that owns webapp./remote.flagshipserver.com). Then every gym relay machine is
+#               started (scripts/gym-relays.sh on: flagship-services-gym and -gym-b); they stay
+#               stopped, with autostart off, between runs (`gym-relays.sh off` after a run).
 #   6. health   gym.flagshipserver.com and flagship-services-gym answer 200.
 #
 # Usage: bash scripts/gym-refresh.sh [--no-push] [--skip-fly-deploy] [--skip-deploy] [--dry-run]
@@ -343,12 +345,15 @@ else
         flyctl secrets list -a "$FLY_APP" 2>/dev/null | grep -w 'FLAGSHIP_RELAY_KEY_SEED' >/dev/null \
           || die "GYM_MESH=on but $FLY_APP has no FLAGSHIP_RELAY_KEY_SEED secret (docs/runbooks/relay-mesh.md \"Gym\")"
       fi
+      # The relays are stopped between runs: start them first so the deploy replaces a running machine.
+      bash "$REPO/scripts/gym-relays.sh" on || die "could not start the gym relays"
       (cd "$WT" && flyctl deploy -c "$FLY_CONFIG" -a "$FLY_APP" --remote-only --strategy=immediate --yes 2>&1 | tail -3 | sed 's/^/  /') \
         || die "gym Fly deploy failed"
     fi
   fi
 fi
 run flyctl scale count 1 -a "$FLY_APP" --yes
+run bash "$REPO/scripts/gym-relays.sh" on
 
 # ── 6. health ─────────────────────────────────────────────────────────────
 phase "6/6 health"

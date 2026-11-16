@@ -67,6 +67,8 @@ describe("gym-weekly.sh — dry-run self-test", () => {
       expect(r.stdout).toContain(marker);
     }
     expect(r.stdout).toContain("DRY-RUN OK");
+    // Cleanup stops the gym relays (stopped, autostart off) instead of leaving them billing.
+    expect(r.stdout).toContain("DRY-RUN would exec: bash scripts/gym-relays.sh off");
     // Nothing external ran — the booby-trapped stubs were never invoked.
     expect(trapped()).toBe("");
   });
@@ -111,7 +113,7 @@ describe("gym-weekly.sh — dry-run self-test", () => {
     expect(r.stdout).toContain("--skip-ios-sim");
     expect(r.stdout).toContain("--skip-avd");
     expect(r.stdout).toContain("--no-scale-down: leaving");
-    expect(r.stdout).not.toContain("scaling flagship-services-gym back to 0");
+    expect(r.stdout).not.toContain("stopping the gym relays");
   });
 
   it("an unknown argument is rejected", () => {

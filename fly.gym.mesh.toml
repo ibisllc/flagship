@@ -61,6 +61,10 @@ kill_timeout = "30s"
   FLAGSHIP_MESH_REBALANCE_MS = "60000"
   FLAGSHIP_MESH_MIN_MOVE_MS = "30000"
 
+# auto_start false, auto_stop off on every service (owner, 2026-11-16): the relay runs only while a gym run
+# goes. scripts/gym-relays.sh starts it (gym-refresh) and stops it (after a run); with autostart on, internet
+# scanners woke the stopped machine within seconds and it billed all month.
+
 # External :443 → internal :8443 (raw TCP, SNI passthrough). Identical to prod.
 # ⭐ ONE machine (vs prod's HA pair): a box opens its tunnel to a SINGLE hub
 # machine, and the in-memory registry is per-machine, so a :443 SNI connection
@@ -71,7 +75,7 @@ kill_timeout = "30s"
   protocol = "tcp"
   internal_port = 8443
   auto_stop_machines = "off"
-  auto_start_machines = true
+  auto_start_machines = false
   min_machines_running = 1
 
   [[services.ports]]
@@ -84,7 +88,7 @@ kill_timeout = "30s"
   protocol = "tcp"
   internal_port = 3000
   auto_stop_machines = "off"
-  auto_start_machines = true
+  auto_start_machines = false
   min_machines_running = 1
 
   [[services.ports]]
@@ -101,7 +105,7 @@ kill_timeout = "30s"
   protocol = "tcp"
   internal_port = 3001
   auto_stop_machines = "off"
-  auto_start_machines = true
+  auto_start_machines = false
   min_machines_running = 1
 
   [[services.ports]]
