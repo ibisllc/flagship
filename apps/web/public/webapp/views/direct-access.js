@@ -374,7 +374,7 @@ function nameRowHtml(st, row, now) {
         ${head}
         <p class="mono small truncate">${escapeHtml(row.fqdn)}</p>
         ${lines.join("")}
-        ${buttons.length ? `<div class="row-2 mt-1">${buttons.join("")}</div>` : ""}
+        ${buttons.length ? `<div class="dn-actions">${buttons.join("")}</div>` : ""}
         ${nameDraftHtml(st, row)}
       </div>`;
 }
