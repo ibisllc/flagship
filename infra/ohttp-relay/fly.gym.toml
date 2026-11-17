@@ -1,0 +1,31 @@
+# The interim OHTTP relay for the GYM only (docs/outbound-proxy.md "Interim relay"), pointed at the gym
+# Worker's gateway. Deployed for a gym run and destroyed after it:
+#   flyctl apps create flagship-ohttp-relay-gym
+#   flyctl deploy -c fly.gym.toml -a flagship-ohttp-relay-gym --remote-only --ha=false --yes   (from infra/ohttp-relay)
+#   flyctl apps destroy flagship-ohttp-relay-gym --yes
+# Autostart and autostop are off, so `flyctl machine stop` is a real outage (the ohttp-failure group).
+app = "flagship-ohttp-relay-gym"
+primary_region = "fra"
+
+[env]
+  GATEWAY_URL = "https://gym.flagshipserver.com/api/ohttp/gateway"
+  ALLOWED_ORIGINS = "https://webapp.gym.flagshipserver.com,https://remote.gym.flagshipserver.com"
+  PER_IP_PER_MINUTE = "120"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "5s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "3s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
