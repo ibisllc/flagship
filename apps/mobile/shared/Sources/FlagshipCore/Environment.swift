@@ -324,3 +324,16 @@ public extension EnvironmentValues {
         set { self[VoiciComClientKey.self] = newValue }
     }
 }
+
+/// Payments on `.com` (vouchers, the wallet, the plan): the live client, or the mock gym's. Nil until the app injects
+/// one (previews and unit tests build their own).
+private struct PaymentsComClientKey: EnvironmentKey {
+    static let defaultValue: (any PaymentsComClient)? = nil
+}
+
+public extension EnvironmentValues {
+    var paymentsComClient: (any PaymentsComClient)? {
+        get { self[PaymentsComClientKey.self] }
+        set { self[PaymentsComClientKey.self] = newValue }
+    }
+}

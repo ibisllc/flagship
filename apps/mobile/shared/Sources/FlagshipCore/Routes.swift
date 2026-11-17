@@ -166,6 +166,8 @@ public enum SettingsRoute: Hashable, Sendable {
     /// P7 — the dedicated tier-status / subscription screen, reached from
     /// the Settings "Subscription" nav row.
     case tierStatus
+    /// Settings → Plan: the plan, the voucher balance, auto-pay and the overage limit (docs/payments-privacy-and-rails.md).
+    case plan
     case recovery
     /// Settings → Account security. TOTP enroll/disable, recovery codes, and
     /// the Watch delegate. Reached via the account-security row — previously

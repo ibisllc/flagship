@@ -93,6 +93,7 @@ struct FlagshipApp: App {
         self.liveVoiciName = LiveVoiciNameClient(readTokens: readTokens)
         self.liveDirectNames = LiveDirectNamesClient(readTokens: readTokens)
         self.liveVoiciCom = LiveVoiciComClient(readTokens: readTokens, caKeys: { await TrustChecker().authorizedCaKeys() })
+        self.livePayments = LivePaymentsComClient(readTokens: readTokens)
         ServerShareServices.readTokens.set(readTokens)
         var pqLive = true
         #if DEBUG
@@ -604,6 +605,8 @@ struct FlagshipApp: App {
     private let liveDirectNames: any DirectNamesClient
     // voi.ci pages and Messages (`.com`, docs/voici-and-messages.md).
     private let liveVoiciCom: any VoiciComClient
+    // Payments (`.com`: vouchers, the sealed wallet, the plan; docs/payments-privacy-and-rails.md).
+    private let livePayments: any PaymentsComClient
     // Cross-device pairing relay (Add a device / Join an account): the live
     // /qr-pipe transport, or the in-process relay the gym and unit tests pair
     // through in a Debug build launched with mocks.
@@ -674,6 +677,8 @@ struct FlagshipApp: App {
     private let mockDirectNames = MockDirectNamesClient.shared
     // voi.ci pages and Messages: the in-memory `.com` the GymMessages scenarios seed.
     private let mockVoiciCom = MockVoiciComClient()
+    // Payments: the in-memory `.com` (free test vouchers on, like the gym's).
+    private let mockPayments = MockPaymentsComClient()
     // Server-migration lane client — hits `.com` (the migration orchestration
     // lane), not a box-pinned pipe; live/mock split as transfer.
     private let mockServerMigration = MockServerMigrationClient()
@@ -816,6 +821,12 @@ struct FlagshipApp: App {
         #endif
         return liveVoiciCom
     }
+    private var activePayments: any PaymentsComClient {
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockPayments }
+        #endif
+        return livePayments
+    }
     private var activeServerMigration: any ServerMigrationClient {
         #if DEBUG
         if GymLaunch.usesMocks { return mockServerMigration }
@@ -860,6 +871,7 @@ struct FlagshipApp: App {
                 .environment(\.voiciNameClient, activeVoiciName)
                 .environment(\.directNamesClient, activeDirectNames)
                 .environment(\.voiciComClient, activeVoiciCom)
+                .environment(\.paymentsComClient, activePayments)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .alert(
@@ -936,7 +948,11 @@ struct FlagshipApp: App {
                     MessagesStore.installWipeHook()
                     MessagesStore.shared.configure(client: activeVoiciCom, username: appState.currentUser,
                                                    deviceId: appState.activeProfile?.deviceId, isDemo: appState.isDemoAccount)
+                    // Payments: the phone holds the vouchers and pays a little at a time, ahead of need.
+                    PaymentsCenter.shared.configure(client: activePayments, username: appState.isUnlocked ? appState.currentUser : nil,
+                                                    deviceId: appState.activeProfile?.deviceId)
                     if appState.isUnlocked {
+                        await PaymentsCenter.shared.refreshAndTick()
                         await MessagesStore.shared.refresh()
                         VoiciCallCenter.shared.accountChanged()
                         VoiciCallCenter.shared.unlocked()
@@ -956,6 +972,7 @@ struct FlagshipApp: App {
                         Task { await ServingRenewal.appOpened() }
                         PhoneRouteController.appForeground()
                         Task { await MessagesStore.shared.checkReplies() }
+                        if appState.isUnlocked { Task { await PaymentsCenter.shared.refreshAndTick() } }
                         VoiciCallCenter.shared.appForegrounded()
                     }
                     // The relay forwarder is a listener on this phone's loopback: close it (and the
