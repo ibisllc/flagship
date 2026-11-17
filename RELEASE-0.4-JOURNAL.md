@@ -1059,3 +1059,11 @@ Next steps for whoever resumes:
   activation, connect and route change, plus its send stats (mic level, codec, target bitrate).
 - gym-0.4 rebased onto release/0.4 first. Gym Worker `f1a090fd`, voi.ci build `aa34cca9692c6c73`. Gym app
   reinstalled.
+
+### 2026-11-17 — Garbled phone→website audio: found and fixed
+- Browser diagnostics showed `open ok 0` for the whole call while 50 packets/s arrived and ~54 % of samples were
+  concealed: Chrome's audio receiver never got its opening transform (attached only in `ontrack`), so the phone's
+  sealed 88-byte frames went straight to the Opus decoder. Phone side was healthy (mic level, 24 kbit/s CBR, 0 loss).
+- Fix: every receiver gets its transform when its transceiver is made (`packages/flagship-web/src/call.js`), test
+  fails on the old code. gym-0.4 `b83e48abb` (voi.ci build `bb28bcf2069c38fc`, gym Worker `c010bd97`); media-fix
+  source + test cherry-picked (site rebuilt at merge). No phone build needed.
