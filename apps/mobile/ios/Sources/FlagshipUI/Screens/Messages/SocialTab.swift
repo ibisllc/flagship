@@ -10,11 +10,12 @@ enum MessagesRoute: Hashable {
     case visitor(username: String, pageId: String, title: String)
 }
 
-/// The Social tab (docs/social-tab.md): the account's voi.ci page, drawn as visitors see it and edited in place, and
-/// the conversations people started from it. Title row: "Your page", the Public switch, Page options. Under it,
-/// Profile / Messages. Changes wait in one bar that shows only while something is unpublished.
+/// The Social tab (docs/social-tab.md, docs/social-tabs.md): the account's voi.ci page, drawn as visitors see it and
+/// edited in place, and the conversations people started from it. Title row: "Your page", the Public switch, Page
+/// options. Under it, Profile / Inbox / Requests, each with its red count. A round call button floats in the bottom
+/// corner and opens Calls. Changes wait in one bar that shows only while something is unpublished.
 public struct SocialTab: View {
-    enum Section { case profile, messages }
+    enum Section { case profile, inbox, requests }
 
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
@@ -25,12 +26,15 @@ public struct SocialTab: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var path: [MessagesRoute] = []
     @State private var section: Section = .profile
-    @State private var segment = 0
+    /// How far the Profile has scrolled, and the profile box's height: past it, the compact header shows.
+    @State private var profileOffset: CGFloat = 0
+    @State private var profileBoxHeight: CGFloat = 320
     @State private var flow = PagePublicFlow()
     @State private var draft = PageDraft()
     @State private var showOptions = false
     @State private var calling: VoiciOutgoingCall?
     private let store = MessagesStore.shared
+    private let badges = SocialBadges.shared
 
     public init() {}
 
@@ -41,7 +45,7 @@ public struct SocialTab: View {
                 .navigationDestination(for: MessagesRoute.self) { route in
                     switch route {
                     case .thread(let conv): ThreadScreen(conv: conv)
-                    case .calls: VoiciCallsScreen()
+                    case .calls: VoiciCallsScreen().onAppear { badges.callsSeen() }.onDisappear { badges.callsSeen() }
                     case .visitor(let u, let p, let title):
                         if let client {
                             VisitorConversationScreen(model: .live(callee: VoiciCallee(username: u, pageId: p), displayName: title, client: client))
@@ -73,7 +77,7 @@ public struct SocialTab: View {
         case .messages?:
             _ = linker.consume()
             path = []
-            if !store.isSampleReadOnly { section = .messages }
+            if !store.isSampleReadOnly { section = store.requests.isEmpty || !store.accepted.filter(store.isUnread).isEmpty ? .inbox : .requests }
             Task { await store.refresh() }
         case .pageEditor?:
             _ = linker.consume()
@@ -112,20 +116,26 @@ public struct SocialTab: View {
                 switch section {
                 case .profile:
                     ScrollView {
-                        PageEditorView(draft: draft)
+                        PageEditorView(draft: draft, profileBoxHeight: $profileBoxHeight)
                             .padding(.horizontal, 12)
                             .padding(.top, 4)
-                            .padding(.bottom, 24)
+                            .padding(.bottom, 88)
                     }
                     .scrollDismissesKeyboard(.interactively)
                     .refreshable { await store.refresh() }
-                case .messages:
-                    messagesList
+                    .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y + $0.contentInsets.top }) { _, y in profileOffset = y }
+                    .overlay(alignment: .top) { compactHeader }
+                    .onAppear { badges.profileSeen() }
+                case .inbox:
+                    conversationList(requests: false)
+                case .requests:
+                    conversationList(requests: true)
                 }
             }
             .background(Color(.systemGroupedBackground))
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .bottom, spacing: 0) { publishBar }
+            .overlay(alignment: .bottomTrailing) { callButton }
             .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: draft.unpublished > 0 || store.isPublishing)
             .pagePublicFlow(flow)
             .sheet(isPresented: $showOptions) { PageOptionsSheet(flow: flow, draft: draft) }
@@ -136,7 +146,7 @@ public struct SocialTab: View {
 
     private var titleRow: some View {
         let title = VStack(alignment: .leading, spacing: 2) {
-            Text(section == .profile ? String(localized: "Your page") : String(localized: "Messages"))
+            Text(sectionTitle)
                 .font(.largeTitle.weight(.bold))
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("social-title")
@@ -201,12 +211,21 @@ public struct SocialTab: View {
         .accessibilityIdentifier("social-header")
     }
 
-    // MARK: Profile / Messages
+    private var sectionTitle: String {
+        switch section {
+        case .profile: return String(localized: "Your page")
+        case .inbox: return String(localized: "Inbox")
+        case .requests: return String(localized: "Requests")
+        }
+    }
+
+    // MARK: Profile / Inbox / Requests
 
     private var sectionPicker: some View {
         HStack(spacing: 2) {
-            sectionButton(.profile, String(localized: "Profile"), id: "social-tab-profile", badge: 0)
-            sectionButton(.messages, String(localized: "Messages"), id: "social-tab-messages", badge: store.requests.count)
+            sectionButton(.profile, String(localized: "Profile"), id: "social-tab-profile", badge: badges.profile)
+            sectionButton(.inbox, String(localized: "Inbox"), id: "social-tab-inbox", badge: badges.inbox)
+            sectionButton(.requests, String(localized: "Requests"), id: "social-tab-requests", badge: badges.requests)
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color(.tertiarySystemFill)))
@@ -215,19 +234,11 @@ public struct SocialTab: View {
     }
 
     private func sectionButton(_ s: Section, _ title: String, id: String, badge: Int) -> some View {
-        let c = FSColors.scheme(scheme)
         let on = section == s
         return Button { section = s } label: {
             HStack(spacing: 6) {
-                Text(verbatim: title).font(.subheadline.weight(.semibold))
-                if badge > 0 {
-                    Text(badge, format: .number)
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 5)
-                        .frame(minWidth: 18, minHeight: 18)
-                        .background(Capsule().fill(c.primaryFill))
-                        .foregroundStyle(c.onPrimary)
-                }
+                Text(verbatim: title).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                CountBadge(count: badge)
             }
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, minHeight: 34)
@@ -242,14 +253,65 @@ public struct SocialTab: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
+        .accessibilityValue(badge > 0 ? Text(CountBadge.spoken(badge)) : Text(verbatim: ""))
         .accessibilityIdentifier(id)
     }
 
-    // MARK: Messages
+    // MARK: compact header
 
-    private var messagesList: some View {
+    /// The page photo and name, pinned at the top once the profile box has scrolled away.
+    @ViewBuilder
+    private var compactHeader: some View {
+        if profileOffset > profileBoxHeight - 24 {
+            HStack(spacing: 10) {
+                AvatarView(sha: draft.avatar, bytes: draft.avatarBytes, size: 30)
+                    .accessibilityHidden(true)
+                Text(verbatim: draft.displayName.isEmpty ? store.username : draft.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 48)
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
+            .transition(.opacity)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("social-compact-header")
+        }
+    }
+
+    // MARK: call button
+
+    /// Round, in the bottom corner above everything on the page; opens Calls. Its count is the missed calls not
+    /// seen yet. It rides above the publish bar while that shows.
+    private var callButton: some View {
+        let c = FSColors.scheme(scheme)
+        let missed = badges.missedCalls
+        return Button { path.append(.calls) } label: {
+            Image(systemName: "phone.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(c.onPrimary)
+                .frame(width: 56, height: 56)
+                .background(Circle().fill(c.primaryFill))
+                .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
+                .overlay(alignment: .topTrailing) { CountBadge(count: missed).offset(x: 4, y: -4) }
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 16)
+        .padding(.bottom, draft.unpublished > 0 || store.isPublishing ? 72 : 16)
+        .accessibilityLabel(Text("Calls"))
+        .accessibilityValue(missed > 0 ? Text(CountBadge.spoken(missed)) : Text(verbatim: ""))
+        .accessibilityIdentifier("social-call-button")
+        .zIndex(10)
+    }
+
+    // MARK: Inbox / Requests
+
+    private func conversationList(requests: Bool) -> some View {
         List {
-            if !store.replyNotices.isEmpty && segment == 0 {
+            if !store.replyNotices.isEmpty && !requests {
                 SwiftUI.Section {
                     ForEach(store.replyNotices) { n in
                         HStack {
@@ -274,11 +336,7 @@ public struct SocialTab: View {
                     Text("Your conversations with other pages are on voi.ci.")
                 }
             }
-            SwiftUI.Section {
-                NavigationLink(value: MessagesRoute.calls) { Label("Calls", systemImage: "phone") }
-                    .accessibilityIdentifier("messages-calls")
-            }
-            if segment == 0 && !store.callablePages.isEmpty {
+            if !requests && !store.callablePages.isEmpty {
                 SwiftUI.Section {
                     ForEach(store.callablePages, id: \.pageId) { page in
                         NavigationLink(value: MessagesRoute.visitor(username: page.username, pageId: page.pageId, title: page.title)) {
@@ -290,20 +348,10 @@ public struct SocialTab: View {
                     Text("Your conversations on other pages")
                 }
             }
-            SwiftUI.Section {
-                Picker("Show", selection: $segment) {
-                    Text("Conversations").tag(0)
-                    Text(store.requests.isEmpty ? String(localized: "Requests") : String(localized: "Requests (\(store.requests.count))")).tag(1)
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-                .accessibilityIdentifier("messages-segment")
-            }
-            let rows = segment == 0 ? store.accepted : store.requests
+            let rows = requests ? store.requests : store.accepted
             if rows.isEmpty {
                 SwiftUI.Section {
-                    Text(emptyText)
+                    Text(emptyText(requests: requests))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("messages-empty")
@@ -322,11 +370,12 @@ public struct SocialTab: View {
         }
         .listStyle(.insetGrouped)
         .contentMargins(.top, 0, for: .scrollContent)
+        .contentMargins(.bottom, 80, for: .scrollContent)
         .refreshable { await store.refresh() }
     }
 
-    private var emptyText: String {
-        if segment == 1 { return String(localized: "No requests. New conversations wait here until you reply or accept them.") }
+    private func emptyText(requests: Bool) -> String {
+        if requests { return String(localized: "No requests. New conversations wait here until you reply or accept them.") }
         return String(localized: "No messages yet. Turn on Accept messages in Page options to get them.")
     }
 
@@ -508,6 +557,26 @@ struct PageOptionsSheet: View {
         .accessibilityAddTraits(on ? .isSelected : [])
         .accessibilityIdentifier("page-theme-\(id)")
     }
+}
+
+/// A red count circle (docs/social-tabs.md). Nothing at 0; "99+" past 99.
+struct CountBadge: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(verbatim: count > 99 ? String(localized: "99+") : count.formatted())
+                .font(.caption2.weight(.bold))
+                .monospacedDigit()
+                .padding(.horizontal, 5)
+                .frame(minWidth: 18, minHeight: 18)
+                .background(Capsule().fill(Color.red))
+                .foregroundStyle(.white)
+                .accessibilityHidden(true)
+        }
+    }
+
+    static func spoken(_ n: Int) -> String { String(localized: "\(n) new") }
 }
 
 struct ConversationRow: View {

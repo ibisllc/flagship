@@ -95,10 +95,13 @@ final class PageDraft {
 }
 
 /// The Social tab's Profile: the page drawn as voi.ci draws it, in its theme, minus voi.ci's footer (docs/social-tab.md).
-/// The photo, display name and bio read as live text with a pencil each and become editable only after the tap; links
-/// and posts sit as on the page with Edit links and New post. Changes are drafts, grayed "Not published yet".
+/// The photo, display name and bio read as live text with a round pencil each and become editable only after the tap;
+/// links sit in the profile box with Edit links; the posts are their own list below the box, with New post
+/// (docs/social-tabs.md). Changes are drafts, grayed "Not published yet".
 struct PageEditorView: View {
     @Bindable var draft: PageDraft
+    /// The profile box's height, for the Social tab's compact header.
+    var profileBoxHeight: Binding<CGFloat> = .constant(0)
     private let store = MessagesStore.shared
     @Environment(\.colorScheme) private var scheme
     @State private var photo: PhotosPickerItem?
@@ -114,14 +117,15 @@ struct PageEditorView: View {
 
     var body: some View {
         let t = VoiciPageTheme.of(draft.theme, scheme)
-        VStack(spacing: 0) {
-            head(t)
-            posts(t)
+        VStack(spacing: 12) {
+            themedBox(t) { head(t) }
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { profileBoxHeight.wrappedValue = $0 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("social-profile-box")
+            themedBox(t) { posts(t) }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("social-posts")
         }
-        .background(t.canvas)
-        .foregroundStyle(t.ink)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(t.rule, lineWidth: 1))
         .environment(\.colorScheme, t.scheme)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("social-profile")
@@ -152,6 +156,14 @@ struct PageEditorView: View {
         .sheet(item: $editingPost) { post in
             EditPostSheet(post: post) { text in Task { await store.editPost(VoiciPost(id: post.id, createdAt: post.createdAt, editedAt: nil, text: text, links: post.links)) } }
         }
+    }
+
+    private func themedBox<C: View>(_ t: VoiciPageTheme, @ViewBuilder _ content: () -> C) -> some View {
+        content()
+            .background(t.canvas)
+            .foregroundStyle(t.ink)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(t.rule, lineWidth: 1))
     }
 
     // MARK: head
@@ -273,7 +285,7 @@ struct PageEditorView: View {
 
     private func pencilButton(_ t: VoiciPageTheme, label: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: "pencil").font(.subheadline.weight(.semibold)).foregroundStyle(t.muted)
+            Image(systemName: "pencil.circle").font(.title3).foregroundStyle(t.muted)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
@@ -325,7 +337,7 @@ struct PageEditorView: View {
                 .accessibilityElement(children: .combine)
             }
             Button { editingLinks = true } label: {
-                Label(draft.links.isEmpty ? String(localized: "Add link") : String(localized: "Edit links"), systemImage: "pencil")
+                Label(draft.links.isEmpty ? String(localized: "Add link") : String(localized: "Edit links"), systemImage: "pencil.circle")
                     .font(.footnote)
                     .foregroundStyle(t.muted)
                     .frame(minHeight: 44)
@@ -371,7 +383,6 @@ struct PageEditorView: View {
             }
         }
         .padding(.bottom, 6)
-        .overlay(alignment: .top) { t.rule.frame(height: 1) }
     }
 
     private func postRow(_ post: VoiciPost, _ t: VoiciPageTheme, pending: Bool) -> some View {
@@ -441,18 +452,16 @@ struct PageEditorView: View {
     }
 }
 
-/// The round pencil on the photo.
+/// The round pencil on the photo: the standard pencil in a circle outline, on the page's surface so it reads over a photo.
 private struct PencilBadge: View {
     let t: VoiciPageTheme
     var filled = false
 
     var body: some View {
-        Image(systemName: "pencil")
-            .font(.footnote.weight(.semibold))
+        Image(systemName: "pencil.circle")
+            .font(.title2)
             .foregroundStyle(t.ink)
-            .frame(width: 32, height: 32)
-            .background(Circle().fill(t.surface))
-            .overlay(Circle().strokeBorder(t.ruleStrong, lineWidth: 1))
+            .background(Circle().fill(t.surface).padding(1))
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
             .offset(x: 8, y: 6)

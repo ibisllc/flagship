@@ -1495,6 +1495,7 @@ public final class MessagesStore {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(u).json"))
         }
         VoiciCallHistory.forget(username: username?.lowercased(), allProfiles: allProfiles)
+        SocialBadges.forget(username: username?.lowercased(), allProfiles: allProfiles)
         CallSettingsStore.setOwnerHours(nil)
     }
 

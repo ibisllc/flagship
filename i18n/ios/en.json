@@ -10346,10 +10346,6 @@
     "en": "Social",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:35"
   },
-  "Messages": {
-    "en": "Messages",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:128"
-  },
   "Page options": {
     "en": "Page options",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:159"
@@ -10370,20 +10366,8 @@
     "en": "Your conversations with other pages are on voi.ci.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:120"
   },
-  "Show": {
-    "en": "Show",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:124"
-  },
-  "Conversations": {
-    "en": "Conversations",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:263"
-  },
   "Requests": {
     "en": "Requests",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:126"
-  },
-  "Requests (%lld)": {
-    "en": "Requests (%lld)",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:126"
   },
   "No requests. New conversations wait here until you reply or accept them.": {
@@ -16461,5 +16445,42 @@
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": {
     "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:112"
+  },
+  "Hello. I am using the Flagship app, from flagshipserver.com": {
+    "en": "Hello. I am using the Flagship app, from flagshipserver.com",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:900"
+  },
+  "Inbox": {
+    "en": "Inbox",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:217"
+  },
+  "%lld new": {
+    "en": "%lld new",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:579"
+  },
+  "99+": {
+    "en": "99+",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:568",
+    "translatable": false
+  },
+  "Username or voi.ci link": {
+    "en": "Username or voi.ci link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:133"
+  },
+  "Who to call": {
+    "en": "Who to call",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:133"
+  },
+  "voi.ci/%@ doesn't take calls.": {
+    "en": "voi.ci/%@ doesn't take calls.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:182"
+  },
+  "There's no page at voi.ci/%@.": {
+    "en": "There's no page at voi.ci/%@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:178"
+  },
+  "Enter a voi.ci username, like voi.ci/alex.": {
+    "en": "Enter a voi.ci username, like voi.ci/alex.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:169"
   }
 }

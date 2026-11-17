@@ -342,3 +342,27 @@ final class VoiciOutgoingCallTests: XCTestCase {
     }
 
 }
+
+/// The Calls page's "Who to call" field and the Social page's missed-call count (docs/social-tabs.md).
+final class SocialTabsLogicTests: XCTestCase {
+    func test_callTargetTakesAUsernameOrAPageLink() {
+        for input in ["alex", " Alex ", "@alex", "voi.ci/alex", "https://voi.ci/alex", "https://voi.ci/alex/", "voi.ci/alex#call=x", "http://www.voi.ci/alex?x=1"] {
+            XCTAssertEqual(VoiciCallTarget.username(from: input), "alex", input)
+        }
+        XCTAssertEqual(VoiciCallTarget.username(from: "gym.voi.ci/bo-1", voiciHost: "gym.voi.ci"), "bo-1")
+        for input in ["", "   ", "-alex", "al ex", "voi.ci/", "https://example.com/alex", "+1 555 0100", String(repeating: "a", count: 64)] {
+            XCTAssertNil(VoiciCallTarget.username(from: input), input)
+        }
+    }
+
+    func test_missedCallsCountUntilSeen() {
+        func r(_ id: String, _ dir: VoiciCallRecord.Direction, _ out: VoiciCallRecord.Outcome, _ at: Int64) -> VoiciCallRecord {
+            VoiciCallRecord(callId: id, direction: dir, outcome: out, peer: .visitor(conv: "c", pseudonymPub: "p"), video: false, at: at)
+        }
+        let entries = [r("1", .incoming, .missed, 100), r("2", .incoming, .missed, 300), r("3", .incoming, .declined, 400),
+                       r("4", .outgoing, .noAnswer, 500), r("5", .incoming, .answered, 600)]
+        XCTAssertEqual(SocialBadges.unseenMissed(entries, seenAt: 0), 2)
+        XCTAssertEqual(SocialBadges.unseenMissed(entries, seenAt: 200), 1)
+        XCTAssertEqual(SocialBadges.unseenMissed(entries, seenAt: 300), 0)
+    }
+}
