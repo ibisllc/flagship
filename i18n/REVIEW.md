@@ -123,4 +123,6 @@ zh-Hans "代金券"; balance "saldo" / "solde" / "Guthaben" / "残高" / "余额
 Review first: the refunds paragraph (it must say plainly that we give no refunds and why, without sounding like a
 dodge), "signs them blind" (the cryptographic sense: it signs without seeing what it signs), the sentence on what the
 shops still know, the 72-hour grace line ("nothing lapses, and nothing is free"), the currency format of "$10 a month"
-and the 100 GB / $5 block line, and that "Settings, Plan" matches each app's menu names.
+and the 100 GB / $5 block line, that "Settings, Plan" matches each app's menu names, and the relay line (Oblivious Network
+is the independent main relay; "neither it nor Flagship sees both who you are and what you spend"; Flagship's relay is
+only the backup).
