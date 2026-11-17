@@ -1490,3 +1490,4 @@ Three agents started:
   `gym` superseded by `gym-0.4`. AGENTS.md status rewritten for 0.4.
 - Disk hit 0 bytes free during this work (another agent's 3.4 GB DerivedData in the shared scratchpad `dd-ios`);
   it recovered on its own.
+- Merged 0.4/release-prep: version 0.4 Beta (iOS 1.3 (9), Android 12 / Wear 1000012, Studio 0.4.0), shell v233, release notes and blog in 7 languages, store texts, docs/runbooks/0.4-deploy-sheet.md, release.sh at 48 steps (step 20 can no longer replace the mesh relay by accident), docs/runbooks/0.4-browser-tasks.md, AGENTS.md. Open: main has 2 commits release lacks (both duplicated here), so at the end rebase release/0.4 onto main (linear, per the 2026-10-24 decision); pro.html still describes the manual Pro (needs rewriting); 245 native store captures needed.
