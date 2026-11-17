@@ -1,6 +1,9 @@
 # Plans and the backup offer
 
-Status: **design, for owner review** (2026-11-17). Nothing is built. Release 0.4.
+Status: **design, for owner review** (2026-11-17). Release 0.4. **Business is built** on branch `0.4/business` with the
+recommended answers as **provisional** decisions (owner, 2026-11-17: "I meant putting the enterprise features in 0.4"):
+see §9 for which are taken and "As built" at the end for what exists. Cluster backup and the Vault (§4, §5) are not
+built and stay in 0.5.
 
 The owner's two questions:
 
@@ -377,7 +380,9 @@ Nothing is built by this doc. When the owner decides:
 
 ## 9. Owner decisions
 
-Recommended answer first.
+Recommended answer first. **Provisional (taken for the 0.4 build, 2026-11-17, open to change):** 1, 2, 3 (but the code
+says `business`, not `enterprise`: one id everywhere), 4, 5, 6, 13, 14. Every number is in `paymentsConfig.ts`
+`business`, so changing 2, 4 or 6 is a `PAYMENTS_CONFIG` setting, not a release. Not taken (0.5): 7 to 12, 15.
 
 1. **Lineup.** Keep Free, Pro, Pro Max; add Business per seat; "Enterprise" is a contract, not a plan. (Alternatives:
    rename Pro Max; fold org features into Pro Max.)
@@ -401,3 +406,79 @@ Recommended answer first.
     and the count, never the org, unless the company asks for the org name on it.
 14. **Staff perk.** Allow splitting a batch into voucher files for staff's personal plans.
 15. **Amend `monetization-free-tier-first.md`** for the cluster and vault lines (§8).
+
+## As built: Business (branch `0.4/business`, 2026-11-17)
+
+Not deployed, not run on a real box or phone. Decisions §9 1-6, 13 and 14 are provisional.
+
+**Numbers** (`packages/protocol/src/paymentsConfig.ts` `business`, overridable field by field with `PAYMENTS_CONFIG`
+on `.com`): 6 vouchers a seat a month, at least 3 seats, at most 10,000; 100 GB of egress per seat, pooled; a trial of
+10 seats for 30 days; invoiced batches of 100 to 5,000 vouchers. The plan id is `business` everywhere (the org row's
+`plan_tier`, the code); "Enterprise" is a word on the page only.
+
+**Plan state** (`packages/protocol/src/orgPlan.ts`, vectors `test-vectors/org-plan/`): `trial` until the trial ends
+(the trial's seats, or the paid seats if more), `paid` while paid seats are paid (the 72-hour grace included),
+`lapsed` otherwise. Paid time starts when the trial ends, so paying early never shortens the trial. A spend for a
+different seat count converts the time left at the ratio of the unit lengths, as a plan switch does. The trickle and
+overage rules are the personal wallet's, fed with `orgSeatUnitMs(seats)` (40 hours a voucher at 3 seats).
+
+**What is gated** (`.com` `orgPlanGate` in `packages/control-plane/src/orgPlan.ts`, used by `orgs.ts`,
+`orgServers.ts`, `orgConnectors.ts`). Before this branch every org feature was free with no end (a 10-seat trial that
+never expired; only a `paid_until` set by hand could lapse it). Now a lapsed org can't: admit a new seat (`org-plan-lapsed`;
+`org-seat-limit` past the seat limit while live), raise a seat's role, add a server, add an admin to its authority
+record (a `direct` version naming a seat no earlier record had), or turn a directory connector `active`. It can still:
+remove a seat, freeze, recover, overturn and veto, rotate keys (offboarding), export and read the log, write the
+directory, pause or retire a connector, approve ceremonies, and every app, server and seat keeps working. Nothing is
+ever wiped. The box enforces the same from the CA-signed attestation (below): a seat new to the box waits while the
+plan can't take it, and a directory connector proposes no new person while the org has lapsed (they are proposed once
+it is paid; removals and updates go on). Fleet setup and batch claims are not on `release/0.4`, so nothing gates them.
+
+**Attestation** (`flagship/org-plan-attestation/v1|<orgId>|<status>|<seatLimit>|<paidSeats>|<trialEndsAt>|<paidUntil>|<issuedAt>|<expiresAt>`,
+`planAttestation.ts`): CA-signed by `.com` at `GET /api/orgs/<id>/plan-attestation`, same chain and 26-hour life as the
+account variant. The box (`packages/server-daemon/src/orgPlanCheck.ts`) reads it hourly and keeps it on disk; one that
+is missing, expired or unverifiable means "plan unknown", which never blocks.
+
+**The org wallet** (`orgWallet.ts`): the personal wallet's format with `settings {seats, autoPay, overageCapUnits,
+updatedAt}`, sealed with AES-256-GCM under `HKDF(ring key, "flagship/org-voucher-wallet/v1|<orgId>")`, where the ring
+key is the newest version of a new org key-ring kind **`wallet`** (scope `*`, org admins only, never a box, rotated by
+offboarding like the directory key). `.com` keeps the ciphertext in `voucher_wallets` under the row `org:<orgId>`
+(`GET/PUT /api/orgs/<id>/voucher-wallet`, compare-and-set); every write carries one org admin's approval over
+`flagship/org-voucher-wallet-write/v1|<orgId>|<version>|<keyVersion>|<blobSha256>|<issuedAt>`. Because a voucher is a
+bearer token, an admin who left could have copied the unspent ones: after a `wallet` rotation the apps exchange every
+voucher the old key could read (`POST /api/vouchers/exchange`: spend n, blind-sign n fresh, all or nothing, through the
+OHTTP relay) and seal the wallet under the new key.
+
+**Spending** (`POST /api/vouchers/redeem` `{v:1, org, for:"business", seats, vouchers}` or `{v:1, org, for:"overage",
+vouchers}`): no credential, through the private relay like a personal spend; refused with `org-not-found`,
+`org-seats` (outside min..max), `org-seats-below-live`, `plan-paid-ahead`, `overage-needs-plan` (lapsed). Anyone may
+pay any org's seats (as for accounts); a stranger's spend with an odd seat count converts the time left, never loses
+value. `.com` updates the paid end with a compare-and-set (`setPlanIf`). D1 **0156** `org_plan_terms` keeps the
+trial's end and the paid seats (an org without a row is on the trial that began when it was created).
+
+**Egress**: `MeterDeps.orgEgressBytes` gives an org name `seatLimit × 100 GB` while on trial or paid (asked only once it
+is over Free's 25 GB), plus the month's prepaid blocks; lapsed orgs fall back to Free's 25 GB, slowed.
+
+**The invoiced batch** (`voucherBatch.ts`, `voucherRails.ts`): the buyer's browser makes a random 32-byte seed and
+derives every blinded request from it (`HKDF(seed, "flagship/voucher-batch/v1|<keyId>|<i>")`), so only the small
+batch key file is needed to finish on another computer. `POST /api/vouchers/stripe/batch-checkout` makes a Stripe
+Checkout Session in payment mode with `invoice_creation`, `tax_id_collection`, a required billing address and a
+customer: the invoice reads "Flagship vouchers" × units; the metadata carries the count, the key and the commitment,
+never an org, account or seat. `POST /api/vouchers/batch-issue` re-checks the paid session and the commitment and
+signs 100 at a time from `from` (a retry or another computer gets the same signatures; a bank transfer answers
+`payment-unpaid` until it lands; a refund or dispute stops further signing). The webapp then puts the batch into the
+org wallet or saves voucher files (`flagship-vouchers` JSON) of a chosen size for staff, which the personal Plan
+imports.
+
+**Clients.** Webapp (shell v234): Settings → Organizations shows each org's Plan (status, seats in use, price, the
+wallet's balance and auto-pay for org admins, the seat count to pay for, import voucher files, buy a batch, finish a
+batch from its key file, batch to the wallet or to staff files) and runs the org trickle while it is open; the
+personal Plan imports voucher files. iOS and Android: see their commits on this branch (the org's Plan in the org
+page, ports with vector tests, the store purchase into the org wallet; iOS has no voucher import or batch, per App
+Review 3.1.1 and §4.3 of `payments-privacy-and-rails.md`; Android imports voucher files). Pro page, release notes,
+blog and store texts carry Business in seven languages (machine drafts).
+
+**Open (owner):** whether the phones may import voucher files at all (Android does; iOS doesn't); a finance person
+with no Flagship account can't yet buy a batch (the webapp's batch shop sits in an org admin's Plan; the batch key
+file lets an admin finish it anywhere); the store texts' Business bullets ship only if orgs launch in 0.4; Stripe's
+yes for invoiced prepaid vouchers and bank transfers; the numbers on `pro.html` are written in the page and must be
+edited by hand if `PAYMENTS_CONFIG` changes them.
