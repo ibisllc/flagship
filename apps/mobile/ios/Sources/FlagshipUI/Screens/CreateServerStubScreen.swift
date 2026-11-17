@@ -598,6 +598,8 @@ public struct CreateServerStubScreen: View {
                 }
                 .padding(.leading, FS.space.s3)
                 .padding(.top, FS.space.s2)
+                // A container, so the fields and the Pro row keep their own ids under this one.
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("cs-outbound-proxy")
                 .task { await vm.loadAccountTier() }
             }

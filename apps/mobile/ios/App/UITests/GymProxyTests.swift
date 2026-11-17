@@ -13,7 +13,10 @@ final class GymProxyTests: GymSweepCase {
         launch(tab: "home", admin: true, ["-smoke-server-fresh"] + extra)
     }
 
-    private func alertLine(_ app: XCUIApplication) -> XCUIElement { any(app, "sd-proxy-alert") }
+    /// The red line's sentence. The id sits on a Label, so its icon carries it too: take the text.
+    private func alertLine(_ app: XCUIApplication) -> XCUIElement {
+        app.staticTexts.matching(identifier: "sd-proxy-alert").firstMatch
+    }
 
     /// Home → the Home server's page. Home's list springs into place after launch, and a tap during that
     /// settle is dropped, so wait, then tap again if the page didn't open.
@@ -29,14 +32,15 @@ final class GymProxyTests: GymSweepCase {
         XCTFail("Tapping Home should open its server page.", file: file, line: line)
     }
 
-    /// Add / Restore a server → Create a new server, with the button scrolled clear of the tab bar.
+    /// Add / Restore a server → Create a new server. The button sits at the top of Home: scrolling up would
+    /// park it under the navigation bar, which swallows the tap, so it is only nudged to the middle if needed.
     private func openCreate(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 15), file: file, line: line)
-        app.swipeUp()
         let create = app.buttons.matching(identifier: "home-add-new-server").firstMatch
         for _ in 0..<4 {
             sleep(2)
+            bringToMiddle(app, add)
             if add.isHittable { add.tap() }
             if create.waitForExistence(timeout: 6) { create.tap(); return }
         }
@@ -128,7 +132,8 @@ final class GymProxyTests: GymSweepCase {
         XCTAssertTrue(reveal(app, off))
         off.tap()
         expectProbe(app, "box proxy none")
-        expectProbe(app, "lane proxy none for home.")
+        // The box's own name (`boxDomain`), which the mock box gives as demo-home-….
+        expectProbe(app, "lane proxy none for demo-home-")
         XCTAssertTrue(text(app, containing: "Sent. The server picks up the change").waitForExistence(timeout: 10))
     }
 
