@@ -73,6 +73,7 @@ struct VoiciOutgoingCallScreen: View {
 /// visitor of this account's page can't be called back yet.
 struct VoiciCallsScreen: View {
     @Environment(\.voiciComClient) private var client
+    @Environment(\.colorScheme) private var scheme
     private let store = MessagesStore.shared
     private let history = VoiciCallHistory.shared
     @State private var calling: VoiciOutgoingCall?
@@ -85,16 +86,22 @@ struct VoiciCallsScreen: View {
 
     var body: some View {
         let entries = history.entries(missed: store.missedCalls)
+        let c = FSColors.scheme(scheme)
         List {
-            whoToCall
-            if let note { Text(verbatim: note).font(.footnote).foregroundStyle(.secondary) }
-            if entries.isEmpty {
-                Text("No calls yet. Calls you make, answer or miss show here, on this device only.")
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("voici-calls-empty")
+            Group {
+                whoToCall
+                if let note { Text(verbatim: note).font(.footnote).foregroundStyle(.secondary) }
+                if entries.isEmpty {
+                    Text("No calls yet. Calls you make, answer or miss show here, on this device only.")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("voici-calls-empty")
+                }
+                ForEach(entries) { r in row(r) }
             }
-            ForEach(entries) { r in row(r) }
+            .listRowBackground(c.surface)
         }
+        .scrollContentBackground(.hidden)
+        .background(c.bg.ignoresSafeArea())
         .navigationTitle(Text("Calls"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("voici-calls-list")
@@ -129,11 +136,15 @@ struct VoiciCallsScreen: View {
                     Label("Call", systemImage: "phone.fill").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: FS.radius.sm))
+                .foregroundStyle(FSColors.light.onPrimary)
                 .accessibilityIdentifier("voici-call-target-audio")
                 Button { Task { await call(video: true) } } label: {
                     Label("Video call", systemImage: "video.fill").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .buttonBorderShape(.roundedRectangle(radius: FS.radius.sm))
+                .foregroundStyle(FSColors.scheme(scheme).text)
                 .accessibilityIdentifier("voici-call-target-video")
             }
             .disabled(client == nil || resolving || target.trimmingCharacters(in: .whitespaces).isEmpty)
