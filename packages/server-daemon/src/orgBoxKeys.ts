@@ -19,6 +19,7 @@ import {
   buildOrgKeyRings,
   newestOrgKems,
   openOrgKeyRing,
+  orgKeyChainId,
   orgKemKeyPair,
   orgNewestRingFor,
   orgPendingRotations,
@@ -146,6 +147,32 @@ export async function adoptOrgKeys(dataDir: string, rings: OrgKeyRings, serverDo
   }
   if (changed) await writeFileDurable(path, JSON.stringify(file));
   return file;
+}
+
+/**
+ * Every version of the org CGK above `after` that is sealed to this box, oldest first, opened with the box's
+ * KEM key. keyd takes them one at a time (each must be one version up and link to the one it holds), so a box
+ * that missed some rotations hands each in turn. Stops at the first version that does not open.
+ */
+export async function openOrgCgkVersionsAfter(
+  dataDir: string,
+  rings: OrgKeyRings,
+  serverDomain: string,
+  after: number,
+): Promise<Array<{ bundle: OrgKeyRingBundle; key: Uint8Array }>> {
+  const me = `box:${serverDomain}`;
+  const chain = rings.chains.get(orgKeyChainId("cgk", "*")) ?? [];
+  const { kemSecret } = orgKemKeyPair(await orgBoxKemSeed(dataDir));
+  const out: Array<{ bundle: OrgKeyRingBundle; key: Uint8Array }> = [];
+  for (const b of chain) {
+    if (b.ring.version <= after || !b.recipients.some((x) => x.recipient === me)) continue;
+    try {
+      out.push({ bundle: b, key: openOrgKeyRing(b, me, kemSecret) });
+    } catch {
+      break;
+    }
+  }
+  return out;
 }
 
 /** Fetches `GET /api/orgs/<id>/keys` (the rings only; the box verifies them itself). */

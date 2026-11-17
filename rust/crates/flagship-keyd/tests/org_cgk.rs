@@ -142,6 +142,28 @@ fn pin_then_adopt_through_the_service() {
         call(&mut svc, "org.pin", pin.clone()).unwrap()["stored"],
         true
     );
+    // The daemon hands keyd its pinned chain at each sync: the head moves forward, never back, and
+    // a chain cut below it is refused from then on (05c F4), before any ring is adopted.
+    let full = adopt["chain"].clone();
+    let first = full[0].clone();
+    assert_eq!(
+        call(&mut svc, "org.head", json!({ "chain": full })).unwrap()["oarVersion"],
+        1
+    );
+    assert!(
+        call(&mut svc, "org.head", json!({ "chain": [first.clone()] }))
+            .unwrap_err()
+            .message
+            .starts_with("stale-chain")
+    );
+    let mut early_cut = adopt.clone();
+    early_cut["chain"] = json!([first]);
+    assert!(
+        call(&mut svc, "cgk.orgAdopt", early_cut)
+            .unwrap_err()
+            .message
+            .starts_with("stale-chain")
+    );
     let mut other = pin.clone();
     other["orgId"] = json!("ab".repeat(16));
     assert!(

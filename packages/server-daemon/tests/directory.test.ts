@@ -107,6 +107,10 @@ describe("SCIM 2.0 on an org box", () => {
     expect((await w.call("PUT", `/scim/v2/Users/${a.id}`, { userName: "b@acme.example" }))!.status).toBe(409);
     expect((await w.call("PUT", `/scim/v2/Users/${a.id}`, { userName: "a@acme.example", displayName: "Same name, own record" }))!.status).toBe(200);
     expect(w.data().users[a.id]!.userName).toBe("a@acme.example");
+    // A file that already holds a duplicate (older code allowed it) still takes a PATCH that leaves the name alone.
+    const b = Object.values(w.data().users).find((u) => u.userName === "b@acme.example")!;
+    w.data().users[b.id]!.userName = "A@acme.example";
+    expect((await patch([{ op: "replace", path: "active", value: "False" }]))!.status).toBe(200);
   });
 
   it("the audit line names a known resource kind or other (05c F9)", async () => {

@@ -720,6 +720,19 @@ fn verify_chain(chain: Option<&Value>, pin: &OrgCgkPin, now: u64) -> R<Vec<Recor
     Ok(records)
 }
 
+/// `org.head`: replays the chain and answers its head (version and hash), to move keyd's pinned
+/// head forward (never back).
+///
+/// # Errors
+/// [`OrgCgkError`] with the same code the TypeScript backend gives.
+pub fn verify_head(chain: Option<&Value>, pin: &OrgCgkPin, now: u64) -> R<(u64, String)> {
+    let records = verify_chain(chain, pin, now)?;
+    let Some(head) = records.last() else {
+        return fail("malformed", "chain");
+    };
+    Ok((head.version, head.hash()))
+}
+
 const RING_KEYS: &str =
     "issuedAt,keyCommitment,kind,oarVersion,orgId,prevSha256,recipientsHash,retired,scope,version";
 
@@ -793,12 +806,16 @@ pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> 
     if issued_at > now.saturating_add(MAX_SKEW_MS) {
         return fail("future", "");
     }
-    if pin
-        .cgk_ring_sha256
-        .as_ref()
-        .is_some_and(|held| version == pin.cgk_version.saturating_add(1) && prev != held)
-    {
-        return fail("prev-hash", "");
+    if let Some(held) = &pin.cgk_ring_sha256 {
+        if version != pin.cgk_version.saturating_add(1) {
+            return fail(
+                "version-gap",
+                format!("v{version} after v{}", pin.cgk_version),
+            );
+        }
+        if prev != held {
+            return fail("prev-hash", "");
+        }
     }
     let recips = list(args.get("recipients"), "recipients")?;
     let mut lines = Vec::new();

@@ -29,6 +29,8 @@ export function startDirectoryConnectors(deps: DirectoryWiringDeps): { handler: 
   const ldapNext = new Map<string, number>();
   const warned = new Set<string>();
   const path = (id: string) => join(deps.dataDir, "org-directory", `${id}.scim.json`);
+  let refused = 0;
+  let refusedNotedAt = -Infinity;
 
   async function load(id: string): Promise<ScimData> {
     const r = await readStateFile(path(id));
@@ -98,7 +100,13 @@ export function startDirectoryConnectors(deps: DirectoryWiringDeps): { handler: 
       const m = /^Bearer\s+(\S+)$/.exec(req.headers["authorization"] ?? "");
       const sha = m ? createHash("sha256").update(m[1]!).digest("hex") : "";
       for (const [id, h] of handlers) if (deps.rt.connector(id)?.setup.scimTokenSha256 === sha) return h(req);
-      deps.note("org.directory.scim", "SCIM request refused: no connector matched the token (401)", false);
+      // At most one Activity line a minute for refused requests (anyone can send them), with how many there were.
+      refused += 1;
+      if (now() - refusedNotedAt >= 60_000) {
+        deps.note("org.directory.scim", `SCIM request refused: no connector matched the token (401, ${refused} since the last note)`, false);
+        refused = 0;
+        refusedNotedAt = now();
+      }
       return { status: 401, headers: { "content-type": "application/scim+json" }, body: JSON.stringify({ schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"], status: "401", detail: "a valid connector token is required" }) };
     },
     stop: () => timers.forEach(clearInterval),

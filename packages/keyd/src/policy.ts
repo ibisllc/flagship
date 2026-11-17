@@ -291,6 +291,7 @@ export const DEFAULT_RATE_LIMITS: Record<string, { perSecond: number; burst: num
   "provision.swk": { perSecond: 0.1, burst: 3 },
   "provision.cgk": { perSecond: 0.1, burst: 3 },
   "org.pin": { perSecond: 0.1, burst: 3 },
+  "org.head": { perSecond: 0.1, burst: 10 },
   "cgk.orgAdopt": { perSecond: 0.1, burst: 10 },
   "policy.rename": { perSecond: 0.1, burst: 3 },
   "archive.pool.add": { perSecond: 0.1, burst: 5 },

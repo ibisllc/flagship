@@ -1087,6 +1087,32 @@ impl KeydService {
                 self.save_org_pin(pin)?;
                 done(obj! { "stored" => true })
             }
+            "org.head" => {
+                // TS `org.head`: the org chain the daemon pinned; keyd replays it and moves its head
+                // forward, never back, so a chain later cut below it is refused (05c review F4).
+                no_extra_args(a, &["chain"])?;
+                let Some(pin) = self.org_pin.clone() else {
+                    return Err(KeydError::forbidden("no org is pinned for this box"));
+                };
+                let now = u64::try_from((self.clock)()).unwrap_or(0);
+                let (ver, hash) =
+                    crate::org_cgk::verify_head(a.get("chain"), &pin, now).map_err(|e| {
+                        if e.code == "malformed" {
+                            KeydError::bad_request(e.to_string())
+                        } else {
+                            KeydError::forbidden(e.to_string())
+                        }
+                    })?;
+                let held = pin.oar_version;
+                if held.is_none_or(|h| ver > h) {
+                    self.save_org_pin(crate::org_cgk::OrgCgkPin {
+                        oar_version: Some(ver),
+                        oar_hash: Some(hash),
+                        ..pin
+                    })?;
+                }
+                done(obj! { "oarVersion" => ver.max(held.unwrap_or(0)) })
+            }
             "cgk.orgAdopt" => {
                 // TS `cgk.orgAdopt`: a rotated org CGK, only on evidence keyd checks itself.
                 no_extra_args(a, &["chain", "ring", "recipients", "approvals", "key"])?;

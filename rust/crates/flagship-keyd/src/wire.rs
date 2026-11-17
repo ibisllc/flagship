@@ -48,6 +48,7 @@ pub const OPS: &[&str] = &[
     "provision.swk",
     "provision.cgk",
     "org.pin",
+    "org.head",
     "cgk.orgAdopt",
     "policy.rename",
     "archive.pool.add",

@@ -21,7 +21,6 @@ import {
   type OrgApproval,
   type OrgAuditObjects,
   type OrgBoxKemBundle,
-  type OrgBoxLogHead,
   type OrgBoxLogHeadBundle,
   type OrgKemKey,
   type OrgKeyRingBundle,
@@ -279,7 +278,7 @@ export async function handleOrgBoxLogHead(deps: OrgServerDeps, orgId: string, bo
     }
     await deps.orgs.putObject(orgId, { kind: "box-log-head", key: b.head.serverDomain, bodyJson: JSON.stringify(b), issuedAt: b.head.issuedAt, storedAt: now }, true);
     // Every logged head stays, so the audit export can show the served head is the last one logged (05c review F5).
-    await deps.orgs.putObject(orgId, { kind: "box-log-head-seen", key: `${b.head.serverDomain}|${String(b.head.seq).padStart(16, "0")}|${b.head.headHash}`, bodyJson: JSON.stringify(b.head), issuedAt: b.head.issuedAt, storedAt: now }, true);
+    await deps.orgs.putObject(orgId, { kind: "box-log-head-seen", key: `${b.head.serverDomain}|${String(b.head.seq).padStart(16, "0")}|${b.head.headHash}`, bodyJson: JSON.stringify(b), issuedAt: b.head.issuedAt, storedAt: now }, true);
     await deps.orgs.appendLog(orgId, "box-log-head", orgSha256Hex(canonicalOrgBoxLogHead(b.head)), now);
     return ok({ serverDomain: b.head.serverDomain, seq: b.head.seq });
   } catch (e) {
@@ -332,6 +331,22 @@ export async function handleOrgKeyRingPost(deps: OrgServerDeps, orgId: string, b
   }
 }
 
+/**
+ * Each server's signed head as the log last names it: a head stored while the export was read (or whose log
+ * entry failed to append) is not served ahead of its log entry, so the export stays consistent (05c review F5).
+ */
+function lastLoggedHeads(log: ReadonlyArray<{ kind: string; refSha256: string }>, newest: OrgBoxLogHeadBundle[], seen: OrgBoxLogHeadBundle[]): OrgBoxLogHeadBundle[] {
+  const byRef = new Map<string, OrgBoxLogHeadBundle>();
+  for (const b of [...seen, ...newest]) byRef.set(orgSha256Hex(canonicalOrgBoxLogHead(b.head)), b);
+  const last = new Map<string, OrgBoxLogHeadBundle>();
+  for (const e of log) {
+    if (e.kind !== "box-log-head") continue;
+    const b = byRef.get(e.refSha256);
+    if (b) last.set(b.head.serverDomain, b);
+  }
+  return [...last.values()];
+}
+
 /** Everything an audit export holds; an org admin signs its statement on a phone, an auditor verifies it offline. */
 export async function handleOrgExport(deps: OrgServerDeps, orgId: string): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
@@ -345,7 +360,7 @@ export async function handleOrgExport(deps: OrgServerDeps, orgId: string): Promi
       deps.orgs.listLog(orgId, 0),
       orgServers(deps, orgId),
       listParsed<OrgBoxLogHeadBundle>(deps, orgId, "box-log-head"),
-      listParsed<OrgBoxLogHead>(deps, orgId, "box-log-head-seen"),
+      listParsed<OrgBoxLogHeadBundle>(deps, orgId, "box-log-head-seen"),
       listParsed<{ serverDomain: string; identityPubKeyHex: string }>(deps, orgId, "server-registration"),
     ]);
     const objects: OrgAuditObjects = {
@@ -364,8 +379,8 @@ export async function handleOrgExport(deps: OrgServerDeps, orgId: string): Promi
       }),
       log: log.map((e) => ({ seq: e.seq, prevHash: e.prevHash, entryHash: e.entryHash, kind: e.kind, refSha256: e.refSha256, at: e.at })),
       servers: servers.map((s) => ({ serverDomain: s.serverDomain, serial: s.serial, identityPubKeyHex: s.identityPubKeyHex })),
-      boxLogHeads: heads,
-      boxLogHeadHistory: seen,
+      boxLogHeads: lastLoggedHeads(log, heads, seen),
+      boxLogHeadHistory: seen.map((b) => b.head),
       registrations,
     };
     return ok({ ...objects, currentVersion: v.state.current.version, currentHash: v.state.currentHash });

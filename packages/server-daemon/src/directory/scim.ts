@@ -373,7 +373,7 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
       if (req.method === "PUT") {
         const f = userFields(body);
         if (typeof f === "string") return finish(scimError(400, f, "invalidValue"));
-        if (nameTaken(f.userName!)) return finish(scimError(409, "userName exists", "uniqueness"));
+        if (f.userName!.toLowerCase() !== u.userName.toLowerCase() && nameTaken(f.userName!)) return finish(scimError(409, "userName exists", "uniqueness"));
         Object.assign(u, { externalId: undefined, displayName: undefined, givenName: undefined, familyName: undefined, emails: undefined }, f, { lastModified: t });
         await save();
         return finish(json(200, userJson(u, data, host)));
@@ -389,7 +389,8 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
           const e = patchUser(draft, op, str(o.path, 256), o.value);
           if (e) return finish(scimError(400, e, "invalidPath"));
         }
-        if (nameTaken(draft.userName)) return finish(scimError(409, "userName exists", "uniqueness"));
+        // Only a changed name is checked: a file that already holds a duplicate must still take `active=false`.
+        if (draft.userName.toLowerCase() !== u.userName.toLowerCase() && nameTaken(draft.userName)) return finish(scimError(409, "userName exists", "uniqueness"));
         draft.lastModified = t;
         data.users[u.id] = draft;
         await save();
@@ -432,7 +433,7 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
       }
       if (req.method === "PUT") {
         const displayName = str(body.displayName, 256) ?? g.displayName;
-        if (groupNameTaken(displayName)) return finish(scimError(409, "displayName exists", "uniqueness"));
+        if (displayName !== g.displayName && groupNameTaken(displayName)) return finish(scimError(409, "displayName exists", "uniqueness"));
         g.displayName = displayName;
         g.externalId = str(body.externalId, 256);
         patchGroup(g, data, "replace", "members", body.members ?? []);
@@ -450,7 +451,7 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
           const e = patchGroup(draft, data, op, str(o.path, 256), o.value);
           if (e) return finish(scimError(400, e, "invalidPath"));
         }
-        if (groupNameTaken(draft.displayName)) return finish(scimError(409, "displayName exists", "uniqueness"));
+        if (draft.displayName !== g.displayName && groupNameTaken(draft.displayName)) return finish(scimError(409, "displayName exists", "uniqueness"));
         draft.lastModified = t;
         data.groups[g.id] = draft;
         await save();

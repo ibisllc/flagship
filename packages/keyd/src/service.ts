@@ -33,7 +33,7 @@ import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { TLS_SLOTS, TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage, type ActivateSlot } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
 import type { HeldRevocationsState } from "@flagship/protocol";
-import { OrgCgkError, checkOrgCgkPin, verifyOrgCgkAdoption, type OrgCgkPin } from "./orgCgk.js";
+import { OrgCgkError, checkOrgCgkPin, verifyOrgCgkAdoption, verifyOrgHeadForKeyd, type OrgCgkPin } from "./orgCgk.js";
 
 /** `org.json`, or null when there is none; a damaged one pins nothing (no adoption, fail closed). */
 function loadOrgPin(path: string | null): OrgCgkPin | null {
@@ -641,6 +641,22 @@ export class KeydService {
         this.#saveOrgPin(pin);
         return { result: { stored: true } };
       }
+      case "org.head": {
+        // The org chain the daemon pinned: keyd replays it and moves its head forward, never back, so a chain
+        // later cut below it is refused (05c review F4).
+        noExtraArgs(a, ["chain"]);
+        if (!this.#orgPin) throw new KeydError("forbidden", "no org is pinned for this box");
+        let head: { oarVersion: number; oarHash: string };
+        try {
+          head = verifyOrgHeadForKeyd(a.chain, this.#orgPin, this.#now());
+        } catch (e) {
+          if (e instanceof OrgCgkError) throw new KeydError(e.code === "malformed" ? "bad-request" : "forbidden", e.message);
+          throw new KeydError("failed", "internal error");
+        }
+        const held = this.#orgPin.oarVersion;
+        if (held === undefined || head.oarVersion > held) this.#saveOrgPin({ ...this.#orgPin, ...head });
+        return { result: { oarVersion: Math.max(head.oarVersion, held ?? 0) } };
+      }
       case "cgk.orgAdopt": {
         // A rotated org CGK, only on evidence keyd checks itself (orgCgk.ts): never the daemon's word.
         noExtraArgs(a, ["chain", "ring", "recipients", "approvals", "key"]);
@@ -656,7 +672,13 @@ export class KeydService {
         this.#cgk?.fill(0);
         this.#cgk = adopted.key;
         // The head and the ring keyd now holds: a later chain must reach this head, the next ring link to this one.
-        this.#saveOrgPin({ ...this.#orgPin, cgkVersion: adopted.version, oarVersion: adopted.oarVersion, oarHash: adopted.oarHash, cgkRingSha256: adopted.ringSha256 });
+        const keepHead = this.#orgPin.oarVersion !== undefined && this.#orgPin.oarVersion > adopted.oarVersion;
+        this.#saveOrgPin({
+          ...this.#orgPin,
+          cgkVersion: adopted.version,
+          cgkRingSha256: adopted.ringSha256,
+          ...(keepHead ? {} : { oarVersion: adopted.oarVersion, oarHash: adopted.oarHash }),
+        });
         return { result: { version: adopted.version } };
       }
       case "archive.pool.add":
