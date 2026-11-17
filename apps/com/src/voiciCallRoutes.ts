@@ -206,11 +206,10 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
       ? await authorizeVoiciCallKeyDevice({ voici: storage.voici, calls: storage.voiciCalls, usernames: storage.usernames, grants: storage.deviceCapabilityGrants }, u, callId, join, (code) =>
           console.log(`voici call join refused: call-key ${code}`),
         )
-      : await authorizeVoiciCallDevice({ usernames: storage.usernames, grants: storage.deviceCapabilityGrants, directory }, u, callId, deviceAuth(request, u, path));
-    if (!dev) {
-      if (!join) console.log("voici call join refused: device-key");
-      return toResponse(voiciRefusal(403, "forbidden"));
-    }
+      : await authorizeVoiciCallDevice({ usernames: storage.usernames, grants: storage.deviceCapabilityGrants, directory }, u, callId, deviceAuth(request, u, path), (code) =>
+          console.log(`voici call join refused: device-key ${code}`),
+        );
+    if (!dev) return toResponse(voiciRefusal(403, "forbidden"));
     const headers = new Headers(request.headers);
     headers.delete("x-voici-call-key-pub");
     headers.set("x-voici-device-ref", dev.deviceRef);
