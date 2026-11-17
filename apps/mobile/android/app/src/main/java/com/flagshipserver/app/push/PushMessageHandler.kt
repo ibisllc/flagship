@@ -80,6 +80,13 @@ object PushMessageHandler {
             data["deepLink"] = AccessListsPush.deepLink()
         }
 
+        // Content-free, like a generic wake: the tap opens Home, whose next `/pods` read shows the server's alert.
+        if (OutboundProxyPush.matches(data)) {
+            data["title"] = OutboundProxyPush.TITLE
+            data["body"] = OutboundProxyPush.BODY
+            data.remove("deepLink")
+        }
+
         // A `generic` push (§3a; `app-access` from an older box) names no
         // app or host: an app's internet request, or a build chat waiting on
         // the owner (ownerWake.ts). The phone asks its boxes over the paired

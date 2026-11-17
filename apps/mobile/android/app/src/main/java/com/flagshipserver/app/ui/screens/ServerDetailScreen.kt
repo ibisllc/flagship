@@ -394,6 +394,29 @@ fun ServerDetailScreen(
         val updatesRequired by appState.podsUpdateRequired.collectAsState()
         val updateRequired = (pod?.fqdn ?: serverFqdn)?.lowercase()?.let { updatesRequired[it] }?.takeIf { !revoked }
         updateRequired?.let { UpdateRequiredBanner(it) }
+        // A failing outbound proxy, from the box when it answers, else from `/pods` (docs/outbound-proxy.md).
+        val proxyAlerts by appState.podsProxyAlert.collectAsState()
+        val podsProxyAlert = (pod?.fqdn ?: serverFqdn)?.lowercase()?.let { proxyAlerts[it] }?.takeIf { !revoked }
+        val boxProxySummary = (detail as? LoadingState.Loaded)?.value?.outboundProxy
+        val proxyAlert = com.flagshipserver.app.core.OutboundProxyCopy.alertOf(
+            boxProxySummary?.status.takeIf { detail is LoadingState.Loaded && !offline },
+            podsProxyAlert,
+        )
+        OutboundProxyAlertBanner(proxyAlert, offline = offline || detail !is LoadingState.Loaded)
+        // The box can't be reached while its proxy fails: the owner can still fix or clear it through `.com`.
+        if (podsProxyAlert?.state == "failing" && (detail !is LoadingState.Loaded || offline)) {
+            val fqdn = pod?.fqdn ?: serverFqdn
+            if (fqdn != null) {
+                OutboundProxyCard(
+                    serverDomain = fqdn,
+                    summary = boxProxySummary,
+                    client = client,
+                    onSaved = { detailVm?.load() },
+                    boxUnreachable = true,
+                )
+                Spacer(Modifier.height(FS.space.s6))
+            }
+        }
         when (val d = detail) {
             is LoadingState.Loaded -> {
                 SyncServingFromBox(d.value)
@@ -460,7 +483,7 @@ fun ServerDetailScreen(
             LeaderCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             // Older daemons don't report a proxy: no section (docs/outbound-proxy.md).
-            d.value.outboundProxy?.let { summary ->
+            d.value.outboundProxy?.takeIf { !(podsProxyAlert?.state == "failing" && offline) }?.let { summary ->
                 OutboundProxyCard(
                     serverDomain = d.value.serverFqdn,
                     summary = summary,

@@ -42,9 +42,9 @@ object BoxProxyProtocol {
     val KINDS = listOf("none", "socks5", "http")
     val PRO_NOTE get() = FSStrings.get(R.string.an_outbound_proxy_is_part_of)
 
-    /** Free accounts can't set a proxy; an unknown plan doesn't block (the box
-     *  checks too, once .com has told it the plan). */
-    fun allowedForTier(tier: String?): Boolean = tier != "free"
+    /** Only Pro and Pro Max (`.com` tiers hobby and maker) set a proxy; an unknown plan (the read failed) doesn't
+     *  block (the box checks too, once .com has told it the plan). */
+    fun allowedForTier(tier: String?): Boolean = tier == null || tier == "hobby" || tier == "maker"
 
     private val HEX64 = Regex("^[0-9a-f]{64}$")
     private val HEX128 = Regex("^[0-9a-f]{128}$")

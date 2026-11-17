@@ -600,20 +600,16 @@ data class OutboundProxySummary(
     /** "Off", or "SOCKS5 · host:port" (+ " · needs a password"). */
     val label: String
         get() {
-            val p = proxy ?: return "Off"
+            val p = proxy ?: return FSStrings.get(R.string.off)
             val host = if (p.host.contains(':')) "[${p.host}]" else p.host
             val base = "${com.flagshipserver.app.core.BoxProxyProtocol.kindLabel(p.kind)} · $host:${p.port}"
             return if (p.auth) FSStrings.get(R.string.needs_a_password, base) else base
         }
 
-    /** The status line, or null when there's nothing to say. */
+    /** The quiet status line ("Working"), or null; a failing proxy is the server page's alert
+     *  ([com.flagshipserver.app.core.OutboundProxyCopy]), never the box's English `lastError`. */
     val statusLine: String?
-        get() = when (status.state) {
-            "ok" -> if (proxy != null) "Working" else null
-            "failing" -> FSStrings.get(R.string.not_working, status.lastError ?: "the proxy isn't answering.")
-            "fallback" -> FSStrings.get(R.string.using_a_direct_connection_the_proxy)
-            else -> null
-        }
+        get() = if (status.state == "ok" && proxy != null) FSStrings.get(R.string.proxy_status_working) else null
 }
 
 @Serializable
@@ -631,7 +627,10 @@ data class OutboundProxyStatus(
     /** "direct" | "ok" | "failing" | "fallback". */
     val state: String = "direct",
     val since: Long = 0,
+    /** The box's English detail, for logs only: the apps say [code]'s sentence. */
     val lastError: String? = null,
+    /** Why it fails: `unreachable` | `auth` | `refused` | `protocol`; absent from older boxes. */
+    val code: String? = null,
 )
 
 /** `POST /api/screens/outbound-proxy`. */

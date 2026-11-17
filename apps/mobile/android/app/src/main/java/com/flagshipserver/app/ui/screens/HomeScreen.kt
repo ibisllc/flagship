@@ -221,6 +221,8 @@ fun HomeScreen(
     /** Servers that run a release this `.com` no longer fully serves (a 0.2
      *  box under 0.3), lowercased fqdn → what `/pods` says; their row says so. */
     updateRequired: Map<String, com.flagshipserver.app.api.UpdateRequiredWire> = emptyMap(),
+    /** Servers whose outbound proxy isn't working (lowercased fqdn → `/pods` `proxyAlert`); their row says so. */
+    proxyAlerts: Map<String, com.flagshipserver.app.api.ProxyAlertWire> = emptyMap(),
     /** "Build a service" (iOS's quick action): opens the Services tab's
      *  build chooser. Null hides it. */
     onBuildService: (() -> Unit)? = null,
@@ -407,6 +409,7 @@ fun HomeScreen(
                             backupWait = backupWait,
                             onSendBackup = { onSendBackup(pod) },
                             needsUpdate = updateRequired.containsKey(pod.fqdn.lowercase()),
+                            proxyFailing = proxyAlerts.containsKey(pod.fqdn.lowercase()),
                             onSetLeader = { onMakeLeader(pod) },
                             onDelete = { onDeleteServer(pod) },
                             leader = leader?.takeIf { it.podId == pod.podId },
@@ -769,6 +772,7 @@ fun ServerRow(
     onSendBackup: () -> Unit = {},
     /** The server runs a release from before the one `.com` needs (`/pods` `updateRequired`). */
     needsUpdate: Boolean = false,
+    proxyFailing: Boolean = false,
     /** Delete releases the name, an admin order (AdminOrderGate). */
     canDelete: Boolean = true,
 ) {
@@ -874,6 +878,13 @@ fun ServerRow(
                                 label = stringResource(R.string.needs_an_update),
                                 kind = FSPillKind.Renewing,
                                 modifier = Modifier.testTag("pod-card-update-required"),
+                            )
+                        }
+                        if (proxyFailing && liveness != PodInfo.LivenessState.REVOKED) {
+                            FSPill(
+                                label = stringResource(R.string.proxy_home_badge),
+                                kind = FSPillKind.Offline,
+                                modifier = Modifier.testTag("pod-card-proxy-alert"),
                             )
                         }
                     }

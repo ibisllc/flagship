@@ -142,8 +142,14 @@ interface FlagshipServerClient {
     suspend fun listAuditEvents(username: String, sinceSeq: Int = 0, limit: Int = 20): AuditEventListResponse
 
     /** The account's plan ("free", "hobby" = Pro, "maker" = Pro Max) from
-     *  `GET /api/users/:u/allowance` (account read token); null when unknown. */
+     *  `GET /api/users/:u/plan-attestation` (account read token; the effective plan); null when unknown. */
     suspend fun accountTier(username: String): String? = null
+
+    /** The outbound proxy's fallback lane (docs/outbound-proxy.md "Failure handling"): leave an owner-signed
+     *  `flagship/box-proxy/v1` order for a server the phone can't reach, `POST /api/server/<domain>/proxy-order`,
+     *  no auth header (`.com` verifies the signature, the box again). Never carries credentials. */
+    suspend fun postProxyOrder(serverDomain: String, order: com.flagshipserver.app.core.BoxProxyWire): Unit =
+        error("proxy lane unavailable")
 
     /** Retail box claim (docs/retail-box-setup.md §4 step 8): registers the box key from the claim
      *  receipt under the recipe's AuthCode (`POST /api/box-claim/key`), before the Wi-Fi password leaves. */
@@ -1819,12 +1825,22 @@ class LiveFlagshipServerClient(
             responseSerializer = BoxClaimMailboxRead.serializer(),
         ).messages.orEmpty()
 
+    override suspend fun postProxyOrder(serverDomain: String, order: com.flagshipserver.app.core.BoxProxyWire) {
+        val domain = java.net.URLEncoder.encode(serverDomain.lowercase(), "UTF-8")
+        transport.postJson(
+            "$base/api/server/$domain/proxy-order", order,
+            serializer = com.flagshipserver.app.core.BoxProxyWire.serializer(),
+            accept = setOf(200),
+        )
+    }
+
     override suspend fun accountTier(username: String): String? {
         val encoded = java.net.URLEncoder.encode(username, "UTF-8")
         return runCatching {
             AccountReadTokens.authorize(username) { auth ->
                 transport.getJson(
-                    "$base/api/users/$encoded/allowance",
+                    // The effective plan, the Plan screen's source too (a lapsed paid period reads free).
+                    "$base/api/users/$encoded/plan-attestation",
                     responseSerializer = AccountTierResponse.serializer(),
                     extraHeaders = auth,
                 )

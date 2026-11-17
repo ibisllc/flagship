@@ -285,6 +285,14 @@ class AppState(
         val next = outdated.mapKeys { it.key.lowercase() }
         if (_podsUpdateRequired.value != next) _podsUpdateRequired.value = next
     }
+    /** Servers whose outbound proxy isn't working, per lowercased fqdn, from `/pods` `proxyAlert` (relayed by
+     *  `.com`, so Home and the server page show it even while the box can't be reached). */
+    private val _podsProxyAlert = MutableStateFlow<Map<String, com.flagshipserver.app.api.ProxyAlertWire>>(emptyMap())
+    val podsProxyAlert: StateFlow<Map<String, com.flagshipserver.app.api.ProxyAlertWire>> = _podsProxyAlert.asStateFlow()
+    fun setPodsProxyAlert(alerts: Map<String, com.flagshipserver.app.api.ProxyAlertWire>) {
+        val next = alerts.mapKeys { it.key.lowercase() }
+        if (_podsProxyAlert.value != next) _podsProxyAlert.value = next
+    }
     fun clearAwaitingBackup(fqdn: String) {
         _podsAwaitingBackup.value = _podsAwaitingBackup.value - fqdn.lowercase()
     }

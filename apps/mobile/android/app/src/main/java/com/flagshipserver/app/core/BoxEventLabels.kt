@@ -76,7 +76,16 @@ object BoxEventLabels {
         // The relay mesh (relay-mesh.md sections 9.3, 9.4): the detail is the box's own sentence.
         "server.relay.moved" to FSStrings.get(R.string.activity_relay_moved),
         "server.relay.move-refused" to FSStrings.get(R.string.activity_relay_move_refused),
+        // The outbound proxy (docs/outbound-proxy.md "Failure handling").
+        "server.proxy.failing" to FSStrings.get(R.string.activity_proxy_failing),
+        "server.proxy.fallback" to FSStrings.get(R.string.activity_proxy_fallback),
+        "server.proxy.ok" to FSStrings.get(R.string.activity_proxy_ok),
     )
+
+    /** Kinds shown as a warning whatever the entry's `ok` says. */
+    private val warningKinds = setOf("server.proxy.failing", "server.proxy.fallback")
+
+    fun isWarning(kind: String?): Boolean = kind in warningKinds
 
     private val genericWrite = Regex("^(get|post|put|patch|delete) /", RegexOption.IGNORE_CASE)
 

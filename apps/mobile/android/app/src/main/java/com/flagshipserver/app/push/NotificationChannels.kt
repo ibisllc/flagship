@@ -63,13 +63,19 @@ object NotificationChannels {
         FSStrings.get(R.string.abuse_channel_desc),
         NotificationManager.IMPORTANCE_HIGH,
     )
+    /** A server's outbound proxy stopped working (docs/outbound-proxy.md). */
+    val OUTBOUND_PROXY get() = Channel(
+        "flagship.outbound-proxy", FSStrings.get(R.string.proxy_channel_name),
+        FSStrings.get(R.string.proxy_channel_desc),
+        NotificationManager.IMPORTANCE_HIGH,
+    )
     val GENERAL get() = Channel(
         "flagship.alerts", FSStrings.get(R.string.other_alerts),
         FSStrings.get(R.string.everything_else_from_flagship),
         NotificationManager.IMPORTANCE_DEFAULT,
     )
 
-    val all = listOf(APPROVALS, SETUP, SECURITY, APPS, BUILDS, REMINDERS, MESSAGES, PAGE_DRAFTS, ACCOUNT_NOTICES, GENERAL)
+    val all = listOf(APPROVALS, SETUP, SECURITY, APPS, BUILDS, REMINDERS, MESSAGES, PAGE_DRAFTS, ACCOUNT_NOTICES, OUTBOUND_PROXY, GENERAL)
 
     const val MESSAGES_CATEGORY = "messages"
     const val PAGE_DRAFTS_CATEGORY = "page-drafts"
@@ -97,6 +103,7 @@ object NotificationChannels {
         category == MESSAGES_CATEGORY -> MESSAGES
         category == PAGE_DRAFTS_CATEGORY -> PAGE_DRAFTS
         category == ABUSE_NOTICE_CATEGORY || kind == ABUSE_NOTICE_CATEGORY -> ACCOUNT_NOTICES
+        category == OutboundProxyPush.CATEGORY || kind == OutboundProxyPush.CATEGORY -> OUTBOUND_PROXY
         else -> GENERAL
     }
 
