@@ -532,7 +532,10 @@
 //       server (docs/activity-social.md; lib/socialActivity.js, views/activity.js).
 //  v229: the first publish's warning names only what really starts on (calls alone when Accept messages was turned
 //       off), and Accept messages turned off and on again is no unpublished change (lib/voiciPageControl.js).
-const SHELL_VERSION = "v229";
+//  v230: Settings has Plan: the plan and time left, the prepaid voucher balance synced sealed between the account's
+//       devices, auto-pay as a trickle of one-voucher spends, the overage cap and a shop not on sale yet
+//       (docs/payments-privacy-and-rails.md; lib/vouchers.js, lib/plan.js, views/plan.js).
+const SHELL_VERSION = "v230";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -742,6 +745,8 @@ const OPTIONAL_SHELL = [
   "/lib/socialActivity.js",
   "/lib/voiciReveal.js",
   "/lib/voiciCallSettings.js",
+  "/lib/vouchers.js",
+  "/lib/plan.js",
   "/views/messages.js",
   "/views/thread.js",
   "/views/calls.js",
@@ -839,6 +844,7 @@ const OPTIONAL_SHELL = [
   "/views/app-db.js",
   "/views/paired-sessions.js",
   "/views/tier-status.js",
+  "/views/plan.js",
   "/views/marketplace.js",
   "/views/developer.js",
   "/views/name-dibs.js",
