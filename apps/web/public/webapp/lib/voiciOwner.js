@@ -339,10 +339,21 @@ async function uploadPiece(username, pageId, piece, signer, c) {
 }
 
 /**
+ * A brand-new page's first post (docs/social-tabs.md): an ordinary post-add, plain text with no link, dated just
+ * before the page's other new posts so it stays the first.
+ */
+export function firstPostOp(text, ops = [], { deviceId, now = Date.now() } = {}) {
+  const added = ops.filter((o) => o.op === "post-add" && Number.isSafeInteger(o.post?.createdAt)).map((o) => o.post.createdAt);
+  const at = Math.min(now, (added.length ? Math.min(...added) : now + 1) - 1);
+  return makeDraftOp("post-add", { post: { id: randHex(16), createdAt: at, editedAt: null, text, links: [] } }, { deviceId, now: at });
+}
+
+/**
  * Publishes `ops` (draft ops: this device's and other devices') on top of the current page. On a seq conflict it
  * reads the newer page, merges again and retries, at most 3 times (§5.3). Returns the new published model.
+ * `firstPost`: the text a page that was never published (nor removed) starts with; never added to a page that exists.
  */
-export async function publishVoiciPage({ ops = [], images = new Map(), rotate = false, calls }, deps = {}) {
+export async function publishVoiciPage({ ops = [], images = new Map(), rotate = false, calls, firstPost }, deps = {}) {
   const c = ctx(deps);
   const username = usernameOf(c);
   const umk = umkOf(c);
@@ -354,7 +365,8 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
   if (!published && deps.removed) published = deps.removed;
   for (let attempt = 0; attempt < 3; attempt++) {
     const base = published ?? newVoiciPageBase(username);
-    const merged = mergeVoiciPage(base, ops);
+    const first = !published && firstPost ? [firstPostOp(firstPost, ops, { deviceId: deps.deviceId, now: c.now() })] : [];
+    const merged = mergeVoiciPage(base, [...first, ...ops]);
     const allImages = new Map([...(published?.pieces ?? new Map()), ...images]);
     // A first publish turns calls on (signed-in callers); any other carries the index it replaces.
     const callsNow = calls ?? (published ? undefined : { acceptsCalls: VOICI_FIRST_PUBLISH.acceptsCalls, callsFrom: VOICI_FIRST_PUBLISH.callsFrom });

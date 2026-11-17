@@ -184,7 +184,9 @@ export async function publishPending() {
   emitWorld();
   try {
     const images = new Map([...opImages(ops), ...localImages]);
-    const page = await publishVoiciPage({ ops, images }, { published: world.page ?? null, removed: world.removed ?? undefined });
+    // A page that was never published starts with one ordinary post (docs/social-tabs.md), in this browser's language.
+    const firstPost = tr("Hello. I am using the Flagship app, from flagshipserver.com");
+    const page = await publishVoiciPage({ ops, images, firstPost }, { published: world.page ?? null, removed: world.removed ?? undefined, deviceId: deviceId() });
     const laneIds = world.drafts.map((d) => d.op.opId).filter((id) => ops.some((o) => o.opId === id));
     const wasPublic = Boolean(world.page);
     world.page = page;
