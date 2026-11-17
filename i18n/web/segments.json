@@ -7864,8 +7864,8 @@
       "status/index.html"
     ]
   },
-  "s15358ff539": {
-    "en": "Flagship is free. Pro and Pro Max add public traffic and custom domains, paid with $1 vouchers that our server signs blind, so it never learns which account a purchase paid for.",
+  "s971c3d680d": {
+    "en": "Flagship is free. Pro and Pro Max add public traffic and custom domains, and Business is for teams. You pay with $1 vouchers that our server signs blind, so it never learns which account a purchase paid for.",
     "kind": "attr",
     "ctx": "meta[content]",
     "pages": [
@@ -8016,6 +8016,38 @@
       "pro.html"
     ]
   },
+  "s93823e35fd": {
+    "en": "<1>Business</1>",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s7e6cc25fdc": {
+    "en": "100&nbsp;GB per seat, shared by the whole organization",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s42377701b6": {
+    "en": "Seats instead",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s45ac735489": {
+    "en": "$6 a seat a month, at least 3 seats",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
   "sd03a6db9db": {
     "en": "<1>Custom domains.</1> Use <2>www.example.com</2> for an app instead of an address under <3>flagship.services</3>. You point a CNAME record at your Flagship address. Your server still holds the certificate, so we still can't read the traffic.",
     "kind": "text",
@@ -8054,6 +8086,70 @@
   },
   "scfb764507e": {
     "en": "Past 25&nbsp;GB, a Free account is slowed, not cut off, until the month ends. Most people never get near it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s27c98bb8ed": {
+    "en": "Business: for a team",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "scf669a59e3": {
+    "en": "Free, Pro and Pro Max are for one person or a family. Business is for an organization: several people with admin rights over its servers and apps. Each person is a seat.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s797139fb05": {
+    "en": "<1>Everything an organization needs.</1> Seats, admins scoped to some servers or apps, approvals that need several admins, freezing a seat, rules for the organization, re-keying when someone leaves, an audit export you can check offline, and SCIM and LDAP directory connectors.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s1478ebf936": {
+    "en": "<1>A 30-day trial.</1> A new organization gets 10 seats for 30 days. Paid time starts when the trial ends.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s392b4bf86d": {
+    "en": "<1>Nothing is lost if payment stops.</1> A lapsed organization keeps every seat, app and record. You can still remove people and export everything. Adding people, servers or connectors waits until it is paid again.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s5e0e6d98fa": {
+    "en": "<1>The organization's own wallet.</1> Its admins hold it, encrypted under a key only they share. It pays $6 a seat a month in vouchers, a little at a time, like a personal plan.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s4d6b862377": {
+    "en": "<1>An invoice for the company, not for its people.</1> A company can buy a batch of at least 100 vouchers on the web, with an invoice in its name and its tax ID. The invoice names the company and the number of vouchers, never the organization, an account or a seat. The vouchers are signed blind like any others. They go into the organization's wallet, or into voucher files that staff spend on their own Pro.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s1dd52aa43a": {
+    "en": "Enterprise is Business with a contract: invoice terms, an on-site setup or support. Over 50 seats, or need one of those? Write to us.",
     "kind": "text",
     "ctx": "p",
     "pages": [

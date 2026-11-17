@@ -2,7 +2,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pro · Flagship</title>
-  <meta name="description" content="Flagship 是免费的。Pro 和 Pro Max 增加公开流量和自定义域名，用 1 美元代金券支付；我们的服务器对代金券做盲签名，因此永远不知道一笔购买是为哪个账户付的。">
+  <meta name="description" content="Flagship 是免费的。Pro 和 Pro Max 增加公开流量和自定义域名，Business 面向团队。你用 1 美元代金券付款，我们的服务器以盲签名方式签发，因此永远不知道某次购买为哪个账户付款。">
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -77,6 +77,7 @@
         <tr><td><strong>免费</strong></td><td>25&nbsp;GB，超出后限速，从不断开</td><td>无</td><td>5</td><td>$0</td></tr>
         <tr><td><strong>Pro</strong></td><td>250&nbsp;GB，超出后限速，除非你购买更多流量</td><td>1</td><td>10</td><td class="nowrap">每月 10 美元</td></tr>
         <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB，超出后限速，除非你购买更多流量</td><td>不限</td><td>25</td><td class="nowrap">每月 20 美元</td></tr>
+        <tr><td><strong>Business</strong></td><td>每个席位 100&nbsp;GB，由整个组织共享</td><td>不限</td><td>改用席位</td><td class="nowrap">每个席位每月 6 美元，至少 3 个席位</td></tr>
       </tbody></table>
       <ul>
         <li><strong>自定义域名。</strong>为应用使用 <code>www.example.com</code>，而不是 <code>flagship.services</code> 下的地址。你只需把一条 CNAME 记录指向你的 Flagship 地址。证书仍由你的服务器持有，所以我们依然无法读取流量。</li>
@@ -85,6 +86,19 @@
         <li><strong>所有套餐都有直接访问。</strong>当你的服务器可以从互联网访问时，应用可以获得一个直接地址。访客会直接连接到你的服务器，这部分流量不计入任何套餐。</li>
       </ul>
       <p>超过 25&nbsp;GB 后，Free 账户会被限速到月底，但不会被断开。大多数人根本用不到这么多。</p>
+    </section>
+
+    <section id="business">
+      <h2>Business：面向团队</h2>
+      <p>Free、Pro 和 Pro Max 面向个人或家庭。Business 面向组织：多人对其服务器和应用拥有管理员权限。每个人是一个席位。</p>
+      <ul>
+        <li><strong>组织所需的一切。</strong>席位、只管理部分服务器或应用的管理员、需多名管理员批准的操作、冻结席位、组织规则、有人离开时更换密钥、可离线验证的审计导出，以及 SCIM 和 LDAP 目录连接器。</li>
+        <li><strong>30 天试用。</strong>新组织可在 30 天内使用 10 个席位。付费时间从试用结束时开始计算。</li>
+        <li><strong>停止付款也不会丢失任何东西。</strong>已过期的组织保留所有席位、应用和记录。你仍可移除成员并导出全部内容。添加成员、服务器或连接器要等到再次付款后才能进行。</li>
+        <li><strong>组织自己的钱包。</strong>由管理员保管，并用只有他们共享的密钥加密。它像个人套餐一样，用代金券逐步支付每个席位每月 6 美元。</li>
+        <li><strong>发票开给公司，而不是公司里的人。</strong>公司可以在网上批量购买至少 100 张代金券，并获得写有公司名称和税号的发票。发票只写明公司和代金券数量，绝不写明组织、账户或席位。这些代金券和其他代金券一样以盲签名方式签发。它们可以放进组织的钱包，也可以做成代金券文件，供员工支付自己的 Pro。</li>
+      </ul>
+      <p>Enterprise 即带合同的 Business：发票付款条件、现场部署或支持。超过 50 个席位，或需要其中任何一项？请联系我们。</p>
     </section>
 
     <section id="buy">

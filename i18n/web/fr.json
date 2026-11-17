@@ -961,7 +961,6 @@
   "s623469b2de": "Les appels nécessitent l’app 0.4 sur le téléphone que vous appelez. Les noms directs partagent le quota hebdomadaire de certificats de Let's Encrypt pour fshp.app jusqu’à ce que notre hausse soit accordée ; un nouveau nom peut donc attendre quelques jours son certificat.",
   "s1081177031": "<1><2>→</2><3>Nouveautés de la 0.4 : des appels depuis votre page, des adresses directes, des forfaits privés</3></1>",
   "s8868ad9adf": "<1>Nouveautés de la 0.4</1>",
-  "s15358ff539": "Flagship est gratuit. Pro et Pro Max ajoutent du trafic public et des domaines personnalisés, payés avec des bons de 1 $ que notre serveur signe à l'aveugle : il ne sait jamais quel compte un achat a payé.",
   "s0b28a50f72": "Flagship est gratuit, et le forfait Free garde toutes les fonctions. Pro et Pro Max ajoutent de la marge pour le trafic public et quelques extras. Vous payez avec des bons de 1 $ que notre serveur signe à l'aveugle : il ne sait jamais quel compte un achat a payé.",
   "s479eedd3a5": "Ce que comprend chaque forfait",
   "se2029d278b": "Rien de ce qui tourne sur votre propre matériel n'est jamais compté : serveurs, apps, données, stockage et appareils. Ce que nous mesurons, c'est le trafic public que notre relais transporte entre vos serveurs et leurs visiteurs, parce que c'est cela qui nous coûte de l'argent.",
@@ -1004,5 +1003,18 @@
   "s6cc6119a73": "Un changement de nom par compte tous les 30 jours.",
   "se113968350": "Pourquoi payer ?",
   "s0d96cc73ac": "Vous n'y êtes pas obligé, et la plupart des gens ne le feront jamais. Flagship fonctionne sans publicité, sans capital-risque et sans vendre vos données ; le relais, le DNS et les certificats coûtent de l'argent réel. Un forfait, même jamais rempli, garde le projet indépendant et l'offre gratuite gratuite pour tous les autres.",
-  "s33d6de4f03": "<1>Un relais privé pour les dépenses.</1> Les dépenses passent par un relais privé exploité par une entreprise indépendante, Oblivious Network : ni elle ni Flagship ne voient à la fois qui vous êtes et ce que vous dépensez. Un relais de secours exploité par Flagship n'est utilisé que s'il est en panne."
+  "s33d6de4f03": "<1>Un relais privé pour les dépenses.</1> Les dépenses passent par un relais privé exploité par une entreprise indépendante, Oblivious Network : ni elle ni Flagship ne voient à la fois qui vous êtes et ce que vous dépensez. Un relais de secours exploité par Flagship n'est utilisé que s'il est en panne.",
+  "s971c3d680d": "Flagship est gratuit. Pro et Pro Max ajoutent du trafic public et des domaines personnalisés, et Business est fait pour les équipes. Vous payez avec des bons de 1 $ que notre serveur signe à l'aveugle : il ne sait jamais quel compte un achat a payé.",
+  "s93823e35fd": "<1>Business</1>",
+  "s7e6cc25fdc": "100&nbsp;Go par siège, partagés par toute l'organisation",
+  "s42377701b6": "Des sièges à la place",
+  "s45ac735489": "6 $ par siège et par mois, au moins 3 sièges",
+  "s27c98bb8ed": "Business : pour une équipe",
+  "scf669a59e3": "Free, Pro et Pro Max sont faits pour une personne ou une famille. Business est fait pour une organisation : plusieurs personnes avec des droits d'administration sur ses serveurs et ses apps. Chaque personne est un siège.",
+  "s797139fb05": "<1>Tout ce dont une organisation a besoin.</1> Des sièges, des administrateurs limités à certains serveurs ou apps, des approbations par plusieurs administrateurs, le gel d'un siège, des règles pour l'organisation, de nouvelles clés quand quelqu'un part, un export d'audit vérifiable hors ligne, et des connecteurs d'annuaire SCIM et LDAP.",
+  "s1478ebf936": "<1>Un essai de 30 jours.</1> Une nouvelle organisation reçoit 10 sièges pendant 30 jours. La période payée commence à la fin de l'essai.",
+  "s392b4bf86d": "<1>Rien n'est perdu si le paiement s'arrête.</1> Une organisation expirée garde chaque siège, chaque app et chaque enregistrement. Vous pouvez toujours retirer des personnes et tout exporter. Ajouter des personnes, des serveurs ou des connecteurs attend que l'organisation soit à nouveau payée.",
+  "s5e0e6d98fa": "<1>Le portefeuille propre à l'organisation.</1> Ses administrateurs le détiennent, chiffré sous une clé qu'eux seuls partagent. Il paie 6 $ par siège et par mois en bons, petit à petit, comme un forfait personnel.",
+  "s4d6b862377": "<1>Une facture pour l'entreprise, pas pour ses employés.</1> Une entreprise peut acheter sur le web un lot d'au moins 100 bons, avec une facture à son nom et à son numéro de TVA. La facture indique l'entreprise et le nombre de bons, jamais l'organisation, un compte ou un siège. Les bons sont signés à l'aveugle comme tous les autres. Ils vont dans le portefeuille de l'organisation, ou dans des fichiers de bons que le personnel utilise pour son propre Pro.",
+  "s1dd52aa43a": "Enterprise, c'est Business avec un contrat : des conditions de facturation, une installation sur site ou du support. Plus de 50 sièges, ou besoin de l'un de ces services ? Écrivez-nous."
 }
