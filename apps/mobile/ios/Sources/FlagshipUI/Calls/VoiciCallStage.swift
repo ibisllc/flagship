@@ -145,13 +145,7 @@ struct VoiciCallStage: View {
     }
 
     private func avatar(size: CGFloat) -> some View {
-        let initial = state.name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? "?"
-        return ZStack {
-            Circle().fill(LinearGradient(colors: [Color(white: 0.45), Color(white: 0.28)], startPoint: .top, endPoint: .bottom))
-            Text(verbatim: initial).font(FS.font.glyph(size * 0.42, weight: .medium)).foregroundStyle(.white)
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
+        CallStageAvatar(name: state.name, size: size)
     }
 
     @ViewBuilder private var controls: some View {
@@ -242,6 +236,22 @@ struct VoiciCallStage: View {
         #else
         Color.black
         #endif
+    }
+}
+
+/// The other person's initial in a large circle, the same on the ringing and the in-call screens.
+struct CallStageAvatar: View {
+    var name: String
+    var size: CGFloat
+
+    var body: some View {
+        let initial = name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? "?"
+        ZStack {
+            Circle().fill(LinearGradient(colors: [Color(white: 0.45), Color(white: 0.28)], startPoint: .top, endPoint: .bottom))
+            Text(verbatim: initial).font(FS.font.glyph(size * 0.42, weight: .medium)).foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
