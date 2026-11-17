@@ -535,7 +535,10 @@
 //  v230: Settings has Plan: the plan and time left, the prepaid voucher balance synced sealed between the account's
 //       devices, auto-pay as a trickle of one-voucher spends, the overage cap and a shop not on sale yet
 //       (docs/payments-privacy-and-rails.md; lib/vouchers.js, lib/plan.js, views/plan.js).
-const SHELL_VERSION = "v230";
+//  v231: Plan's shop sells vouchers by card through Stripe Checkout: the browser blinds the pack, pays on Stripe's
+//       page, and on its return asks for the signatures and adds them to the balance (lib/plan.js buyWithStripe,
+//       finishShopOrders; docs/payments-privacy-and-rails.md §11).
+const SHELL_VERSION = "v231";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
