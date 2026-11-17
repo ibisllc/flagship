@@ -232,6 +232,33 @@ describe("direct names", () => {
     expect((await h.storage.directAccess.getName(`game--${U}`))?.publishReason).toBe("off");
   });
 
+  it("a reconcile that wrote the zone from an older row goes again, so the zone ends as the newest order says", async () => {
+    const h = await harness();
+    await handlePostDirectAccessOrder(h.deps, U, signedAccess(accessOrder(), h.admin));
+    await handlePostDirectName(h.deps, U, signedName(nameOrder(), h.admin));
+    const stale = (await h.storage.directAccess.getName(`game--${U}`))!;
+    // While the older pass is still writing (after its first record), direct access goes off and a newer pass runs
+    // to the end; the older pass then writes its remaining records.
+    const create = h.zone.createRecord.bind(h.zone);
+    let raced = false;
+    h.zone.createRecord = async (r) => {
+      const out = await create(r);
+      if (!raced) {
+        raced = true;
+        h.tick(1000);
+        await handlePostDirectAccessOrder(h.deps, U, signedAccess(accessOrder({ enabled: false, addresses: [], prefixes: [], issuedAt: h.now() }), h.admin));
+        await reconcileDirectName(h.deps, (await h.storage.directAccess.getName(`game--${U}`))!);
+        expect(h.zone.at(NAME)).toEqual([]);
+      }
+      return out;
+    };
+    const r = await reconcileDirectName(h.deps, stale);
+    expect(raced).toBe(true);
+    expect(h.zone.at(NAME)).toEqual([]);
+    expect(r).toEqual({ state: "empty", reason: "direct-access-off" });
+    expect((await h.storage.directAccess.getName(`game--${U}`))?.publishState).toBe("empty");
+  });
+
   it("publishes exactly the owner's own addresses, and no CAA when the owner turned it off", async () => {
     const h = await harness();
     await handlePostDirectName(h.deps, U, signedName(nameOrder({ addresses: ["2606:4700:4700::1111", "8.8.8.8"], caa: "off" }), h.admin));
