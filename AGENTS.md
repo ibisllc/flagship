@@ -1705,11 +1705,13 @@ Not compiled since the rebase: the iOS and Android code on any branch.
   UI in any app (removed 2026-10-13 in `209a6298`; the branch brings it all
   back on top of marketplace); keep the branch's Pro wording at launch.
   Remaining: live e2e, Stripe price ids.
-- **`feat/outbound-proxy`** (off marketplace; Pro): a box's outbound traffic
-  through an owner-set SOCKS5/HTTP proxy, and its setup calls through an
-  OHTTP relay to `.com`'s gateway (`docs/outbound-proxy.md`). It holds D1
-  migration **0099** (`relay_health`): `main` skips 0099. Owner: pick the
-  relay (Oblivious Network first) and set the relay secrets.
+- **`feat/outbound-proxy`** (off marketplace; Pro): folded into `release/0.4`; finished on `0.4/outbound-proxy`
+  (2026-11-17, not merged): Pro gate on the CA-signed plan attestation, failure handling (loud alerts, `/pods`
+  `proxyAlert`, push, the `.com` lane that fixes or clears a proxy keeping a box offline), OHTTP voucher spends in all
+  three apps with shared vectors, `.com`-served relay list (`GET /api/ohttp/config`, never Cloudflare), an interim
+  relay (`infra/ohttp-relay/`, run by Flagship, labelled so). D1 **0154** (relay health, was 0099) and **0155** (the
+  lane); webapp shell v232. Owner: a third-party relay contract or run the interim one, `OHTTP_GATEWAY_KEYS`,
+  `OHTTP_RELAYS`/`OHTTP_RELAY_URL` (`docs/outbound-proxy.md` "As built (0.4)").
 - **Phone USB burn (in 0.3):** validate the OTG write on a real phone + stick
   (`docs/runbooks/0.3-hardware-acceptance.md` step 4); the release script publishes the seed
   (`scripts/publish-iso-seed.sh`) and sets `FLAGSHIP_ISO_SEED`.
@@ -1725,7 +1727,7 @@ Not compiled since the rebase: the iOS and Android code on any branch.
   through OHTTP (RFC 9458): third-party relay (Oblivious Network planned, not
   Cloudflare), our own gateway in the `.com` Worker
   (`/.well-known/ohttp-keys`, `/api/ohttp/gateway`), direct fallback marked
-  and counted (migration 0099; `main` skips it), /status/ warns "Private relay down", daily
+  and counted (migration 0154 on 0.4, was 0099), /status/ warns "Private relay down", daily
   probe opens an issue. The Go unseal helper can seal/open unlock calls
   (`ohttp-seal`/`ohttp-open`); wiring it into the initramfs is design only,
   so unlock still goes direct. Owner to provision the relay + `OHTTP_GATEWAY_KEYS`. Webapp
