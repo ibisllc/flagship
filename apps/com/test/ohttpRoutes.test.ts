@@ -145,3 +145,19 @@ describe("the Worker's OHTTP endpoints", () => {
     ]);
   });
 });
+
+describe("rate-limit keys for relayed requests", () => {
+  it("keys a relayed spend by the account it pays for, a lane call by its server, and direct calls by address", async () => {
+    const { clientKey, markRelayed, endpointFor } = await import("../src/rateLimit.js");
+    const relayed = markRelayed(new Request("https://flagshipserver.com/api/vouchers/redeem", { method: "POST" }));
+    expect(clientKey(relayed, "vouchers-redeem", "/api/vouchers/redeem", undefined, { username: "Alice" })).toBe("relay:redeem:alice");
+    expect(clientKey(relayed, "vouchers-redeem", "/api/vouchers/redeem", undefined, {})).toBe("relay");
+    const path = "/api/server/home.alice.flagship.services/proxy-order";
+    expect(endpointFor("GET", path)).toBe("box-proxy-lane");
+    expect(endpointFor("POST", "/api/server/home.alice.flagship.services/proxy-alert")).toBe("box-proxy-lane");
+    const lane = markRelayed(new Request(`https://flagshipserver.com${path}`));
+    expect(clientKey(lane, "box-proxy-lane", path, undefined)).toBe("relay:lane:home.alice.flagship.services");
+    const direct = new Request("https://flagshipserver.com/api/vouchers/redeem", { method: "POST", headers: { "cf-connecting-ip": "198.51.100.7" } });
+    expect(clientKey(direct, "vouchers-redeem", "/api/vouchers/redeem", undefined, { username: "alice" })).toBe("198.51.100.7");
+  });
+});
