@@ -91,6 +91,8 @@ data class SmokeModeConfig(
     /** "Set up a box from a store" runs on a scripted box (MockBoxClaimRadio.Scenario wire name), or
      *  "keyMismatch" (the gym's `.com` lists another key) or "certSlow" (no certificate ever). */
     val retail: String? = null,
+    /** The Home box's outbound proxy scenario (GymSeams.proxy). */
+    val proxy: String? = null,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -118,6 +120,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_PLAN = "flagship.smokePlan"
         const val EXTRA_SMOKE_SEPARATE_LISTS = "flagship.smokeSeparateLists"
         const val EXTRA_SMOKE_RETAIL = "flagship.smokeRetail"
+        const val EXTRA_SMOKE_PROXY = "flagship.smokeProxy"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -160,6 +163,8 @@ data class SmokeModeConfig(
                     ?.takeIf { it == "pro" || it == "free" },
                 separateLists = intent.getBooleanExtra(EXTRA_SMOKE_SEPARATE_LISTS, false),
                 retail = intent.getStringExtra(EXTRA_SMOKE_RETAIL)?.trim()?.takeIf { it.isNotEmpty() },
+                proxy = intent.getStringExtra(EXTRA_SMOKE_PROXY)?.trim()?.lowercase()
+                    ?.takeIf { Regex("^(failing|fallback)-(unreachable|auth|refused|protocol|down)$").matches(it) },
             )
         }
     }
@@ -273,6 +278,16 @@ object SmokeMode {
         config.rateLimited?.let { GymSeams.rateLimited += it }
         GymSeams.listsPlan = config.listsPlan
         GymSeams.separateLists = config.separateLists
+        GymSeams.proxy = config.proxy
+        // `/pods` relays the box's proxy alert, so Home shows it even while the box can't be reached.
+        appState.setPodsProxyAlert(
+            config.proxy?.let { sc ->
+                val home = appState.pods.value.firstOrNull { it.name == "Home" } ?: return@let emptyMap()
+                val parts = sc.split('-')
+                val code = parts[1].takeIf { it != "down" } ?: "unreachable"
+                mapOf(home.fqdn to com.flagshipserver.app.api.ProxyAlertWire(parts[0], code, System.currentTimeMillis() - 600_000))
+            } ?: emptyMap(),
+        )
         GymSeams.bypassBiometricGates = true
 
         if (config.seedTrustUntrusted) {

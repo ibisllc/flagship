@@ -73,6 +73,46 @@ class MockScreensClient(
     /** Replaces the applied `lastUpdate` (a rollback, a refusal, one kept in recovery). */
     var lastUpdateFixture: LastUpdate? = null
 
+    /** The box's outbound proxy, set only when the gym asks for one (GymSeams.proxy): a SOCKS5 proxy with a
+     *  password, failing or falling back with the scenario's code. "failing-down" also makes the box unreachable. */
+    private var proxyFixture: OutboundProxySummary? = null
+    private fun proxyScenario(): OutboundProxySummary? {
+        val sc = com.flagshipserver.app.core.GymSeams.proxy ?: return null
+        proxyFixture?.let { return it }
+        val parts = sc.split('-')
+        val state = parts[0]
+        val code = parts.getOrNull(1)?.takeIf { it != "down" } ?: "unreachable"
+        return OutboundProxySummary(
+            proxy = OutboundProxySetting("socks5", "proxy.example.net", 1080, auth = true, fallbackDirect = state == "fallback"),
+            hasCredentials = true,
+            status = OutboundProxyStatus(state, now() - 600_000, "connect ECONNREFUSED", code),
+            available = true,
+        )
+    }
+    private fun proxyBoxDown() = com.flagshipserver.app.core.GymSeams.proxy == "failing-down"
+    /** Orders the box took, in order (the gym reads them). */
+    val proxyOrders = java.util.concurrent.CopyOnWriteArrayList<OutboundProxySetRequest>()
+
+    override suspend fun outboundProxy(): OutboundProxySummary {
+        tick()
+        if (proxyBoxDown()) throw java.io.IOException("$podContext isn't answering")
+        return proxyScenario() ?: OutboundProxySummary()
+    }
+
+    override suspend fun outboundProxySet(req: OutboundProxySetRequest): OutboundProxySetResponse {
+        tick()
+        if (proxyBoxDown()) throw java.io.IOException("$podContext isn't answering")
+        proxyOrders += req
+        val p = req.proxy
+        proxyFixture = OutboundProxySummary(
+            proxy = if (p.kind == "none") null else OutboundProxySetting(p.kind, p.host, p.port, p.auth, p.fallbackDirect, p.issuedAt),
+            hasCredentials = p.auth,
+            status = OutboundProxyStatus(if (p.kind == "none") "direct" else "ok", now()),
+            available = true,
+        )
+        return OutboundProxySetResponse(ok = true, outboundProxy = proxyFixture)
+    }
+
     /** The box's dead-man setting (server-detail `serving`): a 7-day policy renewed an hour ago. */
     var servingFixture: ServingView? = ServingView(
         grace = "7d", onLapse = "stop-apps", until = System.currentTimeMillis() + 7L * 86_400_000 - 3_600_000,
@@ -101,6 +141,7 @@ class MockScreensClient(
     override suspend fun serverDetail(): ServerDetailResponse {
         tick()
         if (podContext in unreachablePodContexts) throw java.io.IOException("$podContext isn't answering")
+        if (proxyBoxDown() && podContext == "home") throw java.io.IOException("$podContext isn't answering")
         storeDetails[podContext]?.let { return it }
         val day = 24L * 3600 * 1000
         val pod = podContext
@@ -129,6 +170,7 @@ class MockScreensClient(
                 previousCommit = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
             ),
             debugAccess = debugAccessState,
+            outboundProxy = if (podContext == "home") proxyScenario() else null,
             serving = servingFixture,
             storage = ServerStorage(
                 brake = "off",

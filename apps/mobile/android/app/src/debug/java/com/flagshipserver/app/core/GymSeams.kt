@@ -28,6 +28,11 @@ object GymSeams {
     @Volatile
     var listsPlan: String? = null
 
+    /** The Home box's outbound proxy (docs/outbound-proxy.md): "<failing|fallback>-<code>" or "failing-down"
+     *  (failing and the box can't be reached); `/pods` carries the same alert. null = no proxy. */
+    @Volatile
+    var proxy: String? = null
+
     /** The mock box gives Plants a separate access list on each server. */
     @Volatile
     var separateLists: Boolean = false
