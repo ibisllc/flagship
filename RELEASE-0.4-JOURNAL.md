@@ -1008,3 +1008,11 @@ Next steps for whoever resumes:
   device-key` and `room-join-refused-<status>-<kind>` (gym `d17b67796`, media-fix `ae1892c86`), and `.com` logs the
   refusing check for call-key joins (`4aed7e41b` / `15d90ac1b`; gym Worker `59db4a90`). The gym has one bound call
   key for fleet-perch (device 2e191c3260…).
+
+### 2026-11-16 — Merged `0.4/call-length`; call fix found
+- Owner: call history stays per device (not synced); show call length. `004a32692`: "Answered · 4:32" in Activity and
+  the length on answered rows of the Calls page (iOS, Android; localized digits). SocialActivity tests green on both.
+- Call failure root cause: diagnostics commit `e640a8ab0` (gym-0.4/media-fix only) dropped the responder's
+  `send` to the peer. Restored with errno logging and a real-libwebrtc loopback test (`CallMediaLoopbackTests`); gym app
+  reinstalled. Music-time failures were a 403 on the device room join; refusal logging added (phone + gym Worker
+  `59db4a90`). Waiting on the owner's retest.
