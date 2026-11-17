@@ -950,8 +950,9 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           log(`[server-archive] the saved-backup hook failed: ${(e as Error).message}`);
         }
         await applyRetention();
+        // A scheduled run has its own kind, so Activity can say a scheduled backup finished (docs/activity-social.md).
         note(
-          "server.backup.created",
+          trigger === "schedule" ? "server.backup.scheduled" : "server.backup.created",
           `${trigger === "schedule" ? "Scheduled backup" : "Backup"} saved and checked on this server: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.` +
             (r.left.length > 0 ? ` Left out: ${r.left.map((x) => x.name).join(", ")} (no source to rebuild from).` : ""),
           r.left.length === 0,

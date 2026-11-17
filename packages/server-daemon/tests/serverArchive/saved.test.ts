@@ -316,6 +316,9 @@ describe("saved backups", () => {
     const v = (await call(w.svc, "GET", SAVED_PATH)).json();
     expect(v.keysLeft).toBe(20);
     expect(v.lastRun).toMatchObject({ ok: true, trigger: "schedule" });
+    // Activity tells a finished scheduled backup apart from one asked for by hand.
+    expect(w.events.map((e) => e.kind)).toContain("server.backup.scheduled");
+    expect(w.events.map((e) => e.kind)).not.toContain("server.backup.created");
     expect(v.backups.length).toBeGreaterThanOrEqual(9);
     expect(v.backups.length).toBeLessThanOrEqual(11);
     const ages = v.backups.map((b: { createdAt: number }) => Math.round((w.clock.t - DAY - b.createdAt) / DAY));
