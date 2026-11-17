@@ -8,12 +8,14 @@ on:
       - "packages/flagship-builder/engine/**"
       - ".github/workflows/android.yml"
   push:
-    branches: [main]
+    branches: [main, "release/**"]
     paths:
       - "apps/mobile/android/**"
       - "apps/mobile/README.md"
       - "packages/flagship-builder/engine/**"
       - ".github/workflows/android.yml"
+
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -106,4 +108,17 @@ jobs:
           target: google_apis
           profile: pixel_6
           working-directory: apps/mobile/android
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.flagshipserver.app.gym.GymEveryMergeTest
+          # On a failure the gym's own tree dump (tag GYMTREE) and the app's errors go to the log
+          # and to the uploaded artifact, so a red run says what the screen showed.
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.flagshipserver.app.gym.GymEveryMergeTest || (mkdir -p app/build/gym-logcat && adb logcat -d > app/build/gym-logcat/logcat.txt; grep -E "GYMTREE|AndroidRuntime" app/build/gym-logcat/logcat.txt | head -400; exit 1)
+
+      - name: Upload the gym report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-gym-report
+          path: |
+            apps/mobile/android/app/build/reports/androidTests/
+            apps/mobile/android/app/build/outputs/androidTest-results/
+            apps/mobile/android/app/build/gym-logcat/
+          retention-days: 7

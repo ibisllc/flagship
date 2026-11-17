@@ -14,13 +14,15 @@ on:
       - "scripts/ios-release-clean.mjs"
       - ".github/workflows/ios.yml"
   push:
-    branches: [main]
+    branches: [main, "release/**"]
     paths:
       - "apps/mobile/ios/**"
       - "apps/mobile/shared/**"
       - "apps/mobile/test-vectors/**"
       - "scripts/ios-release-clean.mjs"
       - ".github/workflows/ios.yml"
+
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -63,6 +65,29 @@ jobs:
         working-directory: apps/mobile/ios
         run: xcodebuild test -scheme FlagshipMobile-Package -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" -quiet
 
+      # A few no-backend UI gym scenarios on the real app (smoke mode, mock client): the app
+      # launches, renders its tabs and navigates. The full gym stays on the owner's Mac.
+      # Runs even when the unit tests failed, so one run shows every red step.
+      - name: App UI smoke (simulator)
+        if: ${{ !cancelled() && steps.sim.outcome == 'success' }}
+        run: |
+          xcodebuild test -project apps/mobile/ios/App/FlagshipApp.xcodeproj -scheme FlagshipApp \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -resultBundlePath "$RUNNER_TEMP/ui-smoke.xcresult" \
+            -only-testing:FlagshipAppUITests/GymSmokeTests \
+            -only-testing:FlagshipAppUITests/GymEveryMergeTests \
+            CODE_SIGNING_ALLOWED=NO -quiet
+
+      - name: Upload the UI smoke result
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ui-smoke-xcresult
+          path: ${{ runner.temp }}/ui-smoke.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
+
       # A Release build for a device, then `strings` over every binary in the bundle.
       - name: Release build carries no mock data, gym seams or developer mode
+        if: ${{ !cancelled() && steps.sim.outcome == 'success' }}
         run: node scripts/ios-release-clean.mjs --build
