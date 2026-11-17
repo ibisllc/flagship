@@ -1400,3 +1400,6 @@ Fixes (branch `0.4/gym-r1-fixes`, fast-forwarded into release/0.4 at `24f836458`
 - Leftovers: none. UpCloud lists only `playstore-test-0725`; gym servers 0, gym DNS records 0; gym relays stopped
   (autostart off); gym-d's VM and DNS gone and retired; its seed kept as `gym-relay-d.seed.retired-2026-11-17`.
 
+- 0.4/outbound-proxy (OHTTP clients on all apps, the relay list from `.com`, fail-safe handling, the Pro gate, the interim relay in infra/ohttp-relay) is built at 02cc07749, not merged.
+  - A finishing agent is making the history linear (D1 0154 and 0155, shell v232), fixing Android GymPlanTest (an expectation left stale by rails), finding why iOS GymProxyTests fail on tapping Home's server row, and rerunning two vitest flakes.
+- My miss: the payments-rails merge left parity's signed-tags red (`flagship/voucher-order/v1` is web-only). Fixed with an allowlist entry.
