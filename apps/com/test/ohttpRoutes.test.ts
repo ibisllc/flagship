@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ohttpRelayFrom, parseOhttpKeys, sendPrivately } from "@flagship/protocol";
+import { boxProxyLaneAuth, ed, ohttpRelayFrom, parseOhttpKeys, sendPrivately, signBoxProxy } from "@flagship/protocol";
+import { D1Storage } from "@flagship/storage";
+import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
 import { route, type RouteEnv } from "../src/route.js";
 import { relayFromEnv } from "../src/ohttpRoutes.js";
 import { memoryRateLimits } from "./rateLimitFakes.js";
@@ -43,22 +45,45 @@ describe("the Worker's OHTTP endpoints", () => {
     expect(await none.json()).toEqual({ v: 1, keyConfigHex: null, relays: [] });
   });
 
-  it("takes a voucher spend and the lane's poll through the gateway", async () => {
-    const env = makeEnv();
+  it("takes the box's lane calls through the gateway against D1: report, /pods, the owner's order, the poll", async () => {
+    const sqlite = createSqliteD1();
+    const env = makeEnv({ DB: sqlite as never });
+    const db = new D1Storage(sqlite as never);
+    const irk = { privateKey: new Uint8Array(32).fill(1), publicKey: ed.getPublicKey(new Uint8Array(32).fill(1)) };
+    const stk = new Uint8Array(32).fill(2);
+    const D = "home.alice.flagship.services";
+    await db.usernames.put({ username: "alice", irkPubHex: Buffer.from(irk.publicKey).toString("hex"), claimedAt: 1 });
+    await db.servers.put({ serverDomain: D, username: "alice", identityPubKeyHex: Buffer.from(ed.getPublicKey(stk)).toString("hex"), registeredAt: 1 });
     const relay = relayFromEnv(env)!;
-    const spend = await sendPrivately(
-      { url: "https://flagshipserver.com/api/vouchers/redeem", method: "POST", headers: [["content-type", "application/json"]], body: "{}" },
+    const alertPath = `/api/server/${D}/proxy-alert`;
+    const body = new TextEncoder().encode(JSON.stringify({ state: "failing", code: "auth", since: Date.now() }));
+    const rep = await sendPrivately(
+      { url: `https://flagshipserver.com${alertPath}`, method: "POST", headers: [["authorization", boxProxyLaneAuth(D, "POST", alertPath, Date.now(), body, stk)], ["content-type", "application/json"]], body },
       { relay, fetch: relayInto(env) },
     );
-    expect(spend.path).toBe("ohttp");
-    expect(spend.status).not.toBe(403);
+    expect(rep).toMatchObject({ path: "ohttp", status: 200 });
+    expect((await db.boxProxyLane.alertsForUser("alice"))[0]).toMatchObject({ state: "failing", code: "auth" });
+    // The owner's app leaves "turn it off" directly at .com.
+    const off = { serverDomain: D, kind: "none" as const, host: "", port: 0, auth: false, fallbackDirect: false, issuedAt: Date.now(), nonce: "ab".repeat(32) };
+    const dep = await route(
+      new Request(`https://flagshipserver.com/api/server/${D}/proxy-order`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ proxy: off, signature: signBoxProxy(off, irk) }),
+      }),
+      env,
+    );
+    expect(dep.status).toBe(200);
+    const orderPath = `/api/server/${D}/proxy-order`;
     const poll = await sendPrivately(
-      { url: "https://flagshipserver.com/api/server/home.alice.flagship.services/proxy-order", method: "GET" },
+      { url: `https://flagshipserver.com${orderPath}`, method: "GET", headers: [["authorization", boxProxyLaneAuth(D, "GET", orderPath, Date.now(), new Uint8Array(0), stk)]] },
       { relay, fetch: relayInto(env) },
     );
-    expect(poll.path).toBe("ohttp");
-    expect(poll.status).not.toBe(403);
+    expect(poll).toMatchObject({ path: "ohttp", status: 200 });
+    expect(JSON.parse(new TextDecoder().decode(poll.body)).order.proxy).toEqual(off);
+    sqlite.close();
   });
+
 
   it("publishes the gateway key at /.well-known/ohttp-keys", async () => {
     const res = await route(new Request("https://flagshipserver.com/.well-known/ohttp-keys"), makeEnv());
