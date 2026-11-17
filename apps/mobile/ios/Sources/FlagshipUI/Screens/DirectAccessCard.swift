@@ -195,6 +195,33 @@ struct DirectAccessCard: View {
         }
     }
 
+    /// A direct name's buttons: outlined, so they read as buttons, and stacked when a language's words don't fit
+    /// on one line (they used to break mid-word).
+    @ViewBuilder
+    private func nameActions(_ vm: DirectAccessViewModel, _ row: DirectAccessViewModel.Row) -> some View {
+        if vm.canManage {
+            if row.isOn {
+                FSSecondaryButton(String(localized: "Settings")) { vm.editName(row) }
+                    .fixedSize()
+                    .accessibilityIdentifier("sd-direct-name-edit-\(row.serviceId)")
+                FSSecondaryButton(String(localized: "Turn off")) { Task { await vm.turnOffName(row) } }
+                    .fixedSize()
+                    .accessibilityIdentifier("sd-direct-name-off-\(row.serviceId)")
+            } else if vm.isOn {
+                FSSecondaryButton(String(localized: "Turn on")) { Task { await vm.turnOnName(row) } }
+                    .fixedSize()
+                    .disabled(vm.busy)
+                    .accessibilityIdentifier("sd-direct-name-on-\(row.serviceId)")
+            }
+        }
+        if row.state?.isPublished == true {
+            FSSecondaryButton(String(localized: "Check from outside")) { Task { await vm.probe(row) } }
+                .fixedSize()
+                .disabled(vm.busy)
+                .accessibilityIdentifier("sd-direct-name-probe-btn-\(row.serviceId)")
+        }
+    }
+
     @ViewBuilder
     private func nameRow(_ vm: DirectAccessViewModel, _ row: DirectAccessViewModel.Row, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s1) {
@@ -235,25 +262,11 @@ struct DirectAccessCard: View {
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
                         .accessibilityIdentifier("sd-direct-name-state-\(row.serviceId)")
                 }
-                HStack(spacing: FS.space.s2) {
-                    if vm.canManage {
-                        if row.isOn {
-                            FSGhostButton(String(localized: "Settings")) { vm.editName(row) }
-                                .accessibilityIdentifier("sd-direct-name-edit-\(row.serviceId)")
-                            FSGhostButton(String(localized: "Turn off")) { Task { await vm.turnOffName(row) } }
-                                .accessibilityIdentifier("sd-direct-name-off-\(row.serviceId)")
-                        } else if vm.isOn {
-                            FSGhostButton(String(localized: "Turn on")) { Task { await vm.turnOnName(row) } }
-                                .disabled(vm.busy)
-                                .accessibilityIdentifier("sd-direct-name-on-\(row.serviceId)")
-                        }
-                    }
-                    if row.state?.isPublished == true {
-                        FSGhostButton(String(localized: "Check from outside")) { Task { await vm.probe(row) } }
-                            .disabled(vm.busy)
-                            .accessibilityIdentifier("sd-direct-name-probe-btn-\(row.serviceId)")
-                    }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: FS.space.s2) { nameActions(vm, row) }
+                    VStack(alignment: .leading, spacing: FS.space.s2) { nameActions(vm, row) }
                 }
+                .padding(.top, FS.space.s1)
             } else {
                 Text(DirectAccessViewModel.otherCreator)
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
