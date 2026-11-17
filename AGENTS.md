@@ -228,51 +228,38 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-23**.
+> Last updated **2026-11-17**.
 
-### Release 0.4: "let's start 0.4"
+### Release 0.4 (in progress, 2026-11-17)
 
-When the owner says "let's start 0.4", follow the playbook at the top of `docs/release-0.4-list.md`: close out 0.3
-after the store reviews, gather every advisor's open findings (Windows device-test agent, security reviewers, store
-agents) into that list, then build it.
+Branch **`release/0.4`** (worktree `~/flagship-0.4`; not on `main`, nothing deployed). Plan, Log and resume point:
+`RELEASE-0.4-JOURNAL.md` on that branch ("resume 0.4" = read it). Product version **0.4 Beta**: iOS 1.3 (9), Android
+12 (Wear 1000012), Studio 0.4.0. It launches what was parked on branches (marketplace fold: Pro / Pro Max with $1
+blind-signed vouchers sold through Stripe, App Store and Play; custom domains and names; the outbound proxy with OHTTP),
+plus voi.ci calls (audio/video, own libwebrtc build), the Social tab, Activity for calls and messages, direct access on
+`fshp.app`, restore into a running server, UnifiedPush, the Firefox extension, webapp custody and the responsive webapp,
+retail box setup (software), organizations and quantum-safe stage 1. Live gym green on both stacks (R1, R2 groups).
+Ship with `docs/runbooks/0.4-deploy-sheet.md` (order, D1 0090-0094 and 0132-0155, secrets, DNS clean-up, stores) and
+`scripts/release.sh` (48 steps; new step 11 signs the webapp shell); every web console step is in
+`docs/runbooks/0.4-browser-tasks.md` for a browser session. Release notes: `docs/release-notes/0.4.md`, the blog post
+`blog/flagship-0-4.html`, `store/listings/*.json` (machine drafts for review). `main` holds two commits `release/0.4`
+lacks as ancestors (terms text, gym relays off): the deploy sheet §1 says how to make the fast-forward possible.
 
-**0.4 work order also on branch `claude/sleepy-archimedes-pme2jy` (owner, 2026-11-08; not merged to `main`).** Before
-building 0.4, read that branch's `docs/release-0.4-list.md` section "voi.ci (owner, 2026-11-08)" and fold it in:
-voi.ci calls (plan `docs/voici-calls.md`, spike `docs/voici-calls-spike.md`, harness `tools/spikes/voici-calls/`), one
-report entry in the voi.ci footer, a floating "Send me a message" button, and the iPhone page-photo refusal (iOS
-encoder, iPhone formats, a crop step in every app). The same branch also holds the abuse-page and privacy wording fix
-("a report never lets us read a message"); bring that commit (`66e490b`) to `main` too.
+0.3 shipped: App Store 1.2 (8) and Play 11 / Wear 1000011 approved 2026-11-08 (Play then rejected Wear 1000011 on its
+listing; the fixed listing is in review). Its open owner steps (the 0.2 update notice, the runtime manifest re-sign
+before ~2026-12-20, the demo server) are the journal's P items. Never edit `scripts/gym-*.sh`, `scripts/lib/*` or
+`tools/live-e2e` while a gym run is going.
 
-### fshp.tech mirror domain (2026-11-08); fshp.app is the direct domain (0.4)
+### fshp.tech mirror domain; fshp.app is the direct domain (0.4)
 
 `apps/com/src/mirrorDomains.ts`: the bare `fshp.tech` serves the apex site with visible
 `flagshipserver.com` / `flagship.services` mentions in HTML rewritten to the mirror (scripts, styles, JS, API bodies
 and email addresses untouched); `www.` → bare mirror; `webapp./remote./recovery./boot.` → their `flagshipserver.com`
 twin; any other name → the same name under `flagship.services`. Zone routes in `apps/com/wrangler.toml`; proxied
 `AAAA 100::` records at `@`, `*`, `www`. Limit: the Cloudflare edge cert covers one level only, so a deep name
-(`home.alice.fshp.tech`) fails TLS before its redirect. On branch `0.4/direct-access-com`, `fshp.app` left the
-mirror (docs/direct-access-and-domains.md §2): its bare apex 308s to the site, its names are DNS-only direct names
-`.com` publishes; the old proxied `*` and `www` records there go once direct names exist (owner, Cloudflare).
-
-### Release 0.3 (in progress, 2026-10-25)
-
-Branch `release/0.3` (not on `main` yet; only `main` is deployed). The plan, the Log and the open items are in
-`RELEASE-0.3-JOURNAL.md`. It ships arch-v2 (Rust keyd/broker, Podman, WASI, GPU, local AI), the boot-chain refresh,
-phone USB burn and data sovereignty (rescue + offline control, iOS and Android). Done: code landed, adversarial and
-independent security review (fixes in; the OPEN list in the journal is for the owner), unit/adversarial/Rust tests, Android
-emulator gym for offline control, CI QEMU lane for a burned stick. Still to do: the live release gym twice (D2/D3), store
-screenshots, `TODO-RM` markers, version bump to 0.3, the hardware acceptance run
-(`docs/runbooks/0.3-hardware-acceptance.md`) and the deploy (`docs/runbooks/0.3-deploy-sheet.md`, `scripts/release.sh`).
-**2026-10-30 additions to 0.3 (plan G, H and Appendices G, H, I in the journal):** the Rust migration continues
-(G1 updater, G2 verifiable Node runtime, G3 endpoint table + address pool + reconciler and G5 access journal rules,
-admin orders, invite and share envelopes and entry verification in `rust/crates/flagship-{core,crypto}`, each with
-shared vectors that pass in TypeScript and Rust; G7 the Rust relay is built, `GYM_RELAY=rust` runs the gym on it);
-phone/box TLS, routing claims, the 7-day / 30-day / indefinite serving lease and revocable recovery are designed
-(`docs/architecture-v2/issuance-and-lease-records.md`, journal Appendices H and I) and not built. GPU hardware run:
-bases pinned in `tools/gpu/bases.env` (CUDA 12.4 for Debian 13's driver 550). Never edit `scripts/gym-*.sh`,
-`scripts/lib/*` or `tools/live-e2e` while a gym run is going.
-Known: 0.3 ships classical-only endorsement until the PQ release key ceremony (`docs/runbooks/pq-release-key.md`); the crypto-graph
-strict check stays red until then. Webapp shell is v184.
+(`home.alice.fshp.tech`) fails TLS before its redirect. On `release/0.4`, `fshp.app` is the direct domain
+(docs/direct-access-and-domains.md): its bare apex 308s to the site, its names are DNS-only records `.com` publishes;
+the old proxied `*` and `www` records there are deleted at the 0.4 deploy (deploy sheet, DNS clean-up).
 
 ### Launch
 
@@ -1670,6 +1657,13 @@ published (not CI) appliance, the Android fixes landed after `eb08dcdc4`.
     placeholders until payments.
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
+
+**0.4 state (2026-11-17, F13):** `feat/marketplace`, `feat/custom-names`, `feat/custom-domains` and
+`feat/outbound-proxy` are folded into `release/0.4` and retire when it lands; `feat/browser-extension` (a design doc)
+is superseded by the Firefox extension built on `release/0.4`; `gym-0.4` (= `release/0.4` + the gym seams) replaces
+`gym` once 0.4 is on `main`. Not rebased, each conflicts with `release/0.4`: `feat/other-os-installers` (18 files, the
+preseed engine and its vectors), `alpine` (31), `feat/retail` (39; mostly superseded by the 0.4 retail build). Rebase
+them onto `main` after 0.4 lands, smallest first, one per session.
 
 All rebased onto `main` 2026-10-16 (the earlier tips are kept as
 `backup/<slug>-pre-rebase-<date>`; `main` has moved since, so they are behind again). `scripts/rebase-features.sh` reports
