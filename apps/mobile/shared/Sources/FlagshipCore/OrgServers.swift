@@ -23,7 +23,7 @@ public struct OrgServerCode: Equatable {
     }
 }
 
-public enum OrgKeyKind: String, CaseIterable { case cgk, directoryKey = "directory-key", archiveKeys = "archive-keys", diskKey = "disk-key" }
+public enum OrgKeyKind: String, CaseIterable { case cgk, directoryKey = "directory-key", archiveKeys = "archive-keys", diskKey = "disk-key", wallet }
 
 public struct OrgKeyRing: Equatable {
     public var orgId: String, kind: OrgKeyKind, scope: String, version: Int64, prevSha256: String, keyCommitment: String, recipientsHash: String
@@ -135,7 +135,7 @@ extension OrgAuthority {
 
     // MARK: the key ring
 
-    static func orgWide(_ k: OrgKeyKind) -> Bool { k == .cgk || k == .directoryKey }
+    static func orgWide(_ k: OrgKeyKind) -> Bool { k == .cgk || k == .directoryKey || k == .wallet }
 
     public static func canonicalKeyRing(_ r: OrgKeyRing) throws -> [UInt8] {
         try need(isHex(r.orgId, 32), "malformed", "orgId")

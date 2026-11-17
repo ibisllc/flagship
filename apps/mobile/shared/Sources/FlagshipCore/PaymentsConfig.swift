@@ -18,6 +18,17 @@ public struct PaymentsConfig: Equatable, Sendable, Codable {
         public var blockUnits: Int64; public var blockGb: Int64; public var defaultCapUnits: Int64; public var maxCapUnits: Int64; public var buyBelowGb: Int64
     }
     public struct Trickle: Equatable, Sendable, Codable { public var lowWaterDays: Int64; public var highWaterDays: Int64 }
+    /// The Business plan for orgs (docs/plans-and-backup-offer.md §3): seats paid from the org's own wallet.
+    public struct Business: Equatable, Sendable, Codable {
+        public var unitsPerSeatMonth: Int64
+        public var minSeats: Int64
+        public var maxSeats: Int64
+        public var egressGbPerSeat: Int64
+        public var trialSeats: Int64
+        public var trialDays: Int64
+        public var batchMinUnits: Int64
+        public var batchMaxUnits: Int64
+    }
 
     public var unitUsd: Int64
     public var monthDays: Int64
@@ -30,13 +41,16 @@ public struct PaymentsConfig: Equatable, Sendable, Codable {
     public var activationDelayMaxHours: Int64
     public var packs: [Int64]
     public var maxPerRequest: Int64
+    public var business: Business
 
     public static let defaults = PaymentsConfig(
         unitUsd: 1, monthDays: 30,
         pro: Plan(unitsPerMonth: 10, includedGb: 250), proMax: Plan(unitsPerMonth: 20, includedGb: 500),
         overage: Overage(blockUnits: 5, blockGb: 100, defaultCapUnits: 10, maxCapUnits: 100, buyBelowGb: 10),
         graceHours: 72, maxAheadDays: 35, trickle: Trickle(lowWaterDays: 3, highWaterDays: 10),
-        activationDelayMaxHours: 24, packs: [10, 30, 120], maxPerRequest: 30)
+        activationDelayMaxHours: 24, packs: [10, 30, 120], maxPerRequest: 30,
+        business: Business(unitsPerSeatMonth: 6, minSeats: 3, maxSeats: 10_000, egressGbPerSeat: 100, trialSeats: 10, trialDays: 30,
+                           batchMinUnits: 100, batchMaxUnits: 5000))
 
     public func plan(_ p: PaidPlan) -> Plan { p == .pro ? pro : proMax }
 
@@ -45,13 +59,22 @@ public struct PaymentsConfig: Equatable, Sendable, Codable {
     /// How long one voucher keeps `plan` running (Pro 3 days, Pro Max 36 hours by default).
     public func unitMs(_ p: PaidPlan) -> Int64 { (monthDays * Self.dayMs) / plan(p).unitsPerMonth }
 
+    /// How long one voucher keeps an org of `seats` paid seats on Business (3 seats: 40 hours).
+    public func orgSeatUnitMs(_ seats: Int64) -> Int64 { (monthDays * Self.dayMs) / (max(1, seats) * business.unitsPerSeatMonth) }
+
+    /// Vouchers a month of Business costs for `seats` seats.
+    public func orgMonthlyUnits(_ seats: Int64) -> Int64 { seats * business.unitsPerSeatMonth }
+
+    /// A seat count an org may pay for: a whole number from `minSeats` to `maxSeats`.
+    public func isOrgSeatCount(_ seats: Int64) -> Bool { seats >= business.minSeats && seats <= business.maxSeats }
+
     /// The served config; any missing or invalid field keeps the default (the server already merged its overrides).
     public static func parse(_ v: JSONValue?) -> PaymentsConfig {
         let d = defaults
         guard let o = v?.object else { return d }
         func num(_ x: JSONValue?, _ fallback: Int64) -> Int64 { x?.safeInt.flatMap { $0 > 0 ? $0 : nil } ?? fallback }
         func plan(_ x: JSONValue?, _ f: Plan) -> Plan { Plan(unitsPerMonth: num(x?["unitsPerMonth"], f.unitsPerMonth), includedGb: num(x?["includedGb"], f.includedGb)) }
-        let ov = o["overage"], tr = o["trickle"]
+        let ov = o["overage"], tr = o["trickle"], bz = o["business"], db = d.business
         let packs = o["packs"]?.array?.compactMap { $0.safeInt }.filter { $0 > 0 }
         var c = PaymentsConfig(
             unitUsd: num(o["unitUsd"], d.unitUsd), monthDays: num(o["monthDays"], d.monthDays),
@@ -62,7 +85,12 @@ public struct PaymentsConfig: Equatable, Sendable, Codable {
             graceHours: num(o["graceHours"], d.graceHours), maxAheadDays: num(o["maxAheadDays"], d.maxAheadDays),
             trickle: Trickle(lowWaterDays: num(tr?["lowWaterDays"], d.trickle.lowWaterDays), highWaterDays: num(tr?["highWaterDays"], d.trickle.highWaterDays)),
             activationDelayMaxHours: num(o["activationDelayMaxHours"], d.activationDelayMaxHours),
-            packs: (packs?.isEmpty == false ? packs! : d.packs).sorted(), maxPerRequest: num(o["maxPerRequest"], d.maxPerRequest))
+            packs: (packs?.isEmpty == false ? packs! : d.packs).sorted(), maxPerRequest: num(o["maxPerRequest"], d.maxPerRequest),
+            business: Business(unitsPerSeatMonth: num(bz?["unitsPerSeatMonth"], db.unitsPerSeatMonth), minSeats: num(bz?["minSeats"], db.minSeats),
+                               maxSeats: num(bz?["maxSeats"], db.maxSeats), egressGbPerSeat: num(bz?["egressGbPerSeat"], db.egressGbPerSeat),
+                               trialSeats: num(bz?["trialSeats"], db.trialSeats), trialDays: num(bz?["trialDays"], db.trialDays),
+                               batchMinUnits: num(bz?["batchMinUnits"], db.batchMinUnits), batchMaxUnits: num(bz?["batchMaxUnits"], db.batchMaxUnits)))
+        if c.business.maxSeats < c.business.minSeats || c.business.batchMaxUnits < c.business.batchMinUnits { c.business = db }
         if c.trickle.highWaterDays <= c.trickle.lowWaterDays { c.trickle = d.trickle }
         return c
     }
