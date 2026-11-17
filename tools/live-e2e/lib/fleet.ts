@@ -49,6 +49,8 @@ export interface Box {
   /** The AuthCode serial a gym-provisioned box registered with (its install events are keyed by it). */
   serial?: string;
   ipv4?: string | null;
+  /** The public IPv6 address, for a box provisioned with one (`provisionExtras: { ipv6: true }`). */
+  ipv6?: string | null;
 }
 
 export interface DemoKeys {
@@ -292,7 +294,7 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
     r = await provision();
   }
   assert(r.status === 200, `gym provision ${r.status}: ${short(r.text, 300)}`);
-  const box: Box = { account: acct.username, serverName, fqdn: serverDomain, serverId: r.json.serverId, via: "gym-provision", online: false, serial: authCode.serial, ipv4: r.json.ipv4 ?? null };
+  const box: Box = { account: acct.username, serverName, fqdn: serverDomain, serverId: r.json.serverId, via: "gym-provision", online: false, serial: authCode.serial, ipv4: r.json.ipv4 ?? null, ...(r.json.ipv6 ? { ipv6: r.json.ipv6 } : {}) };
   acct.boxes.push(box);
   return box;
 }
