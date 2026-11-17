@@ -104,16 +104,18 @@ export interface PaymentsConfigDeps {
   keys: VoucherSigningKey[];
   /** The gym's free test issue is on (env `VOUCHER_TEST_ISSUE=1`; never in production). */
   testIssue: boolean;
+  /** Which rails sell and the store product ids (voucherRails.ts railsSummary). */
+  rails?: { rails: { stripe: boolean; apple: boolean; google: boolean }; products: { units: number; productId: string }[] };
   now?: () => number;
 }
 
-/** `GET /api/payments/config` (public): the payment numbers, the voucher keys still accepted, and the gym flag. */
+/** `GET /api/payments/config` (public): the payment numbers, the voucher keys still accepted, the gym flag and the rails. */
 export function handlePaymentsConfig(deps: PaymentsConfigDeps): HandlerResponseWithHeaders {
   const now = (deps.now ?? Date.now)();
   const keys = deps.keys
     .filter((k) => k.acceptUntil === 0 || now < k.acceptUntil)
     .map((k) => ({ ...k.pub, issueUntil: k.issueUntil, acceptUntil: k.acceptUntil, issuing: k.issueUntil === 0 || now < k.issueUntil }));
-  return ok({ config: deps.config, keys, testIssue: deps.testIssue }, { "cache-control": "public, max-age=300" });
+  return ok({ config: deps.config, keys, testIssue: deps.testIssue, ...(deps.rails ?? {}) }, { "cache-control": "public, max-age=300" });
 }
 
 /** The config the Worker serves: the defaults with `PAYMENTS_CONFIG` overrides. */
