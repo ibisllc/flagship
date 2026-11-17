@@ -75,8 +75,6 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0097",
   // Erase the plaintext auto-unlock leases (v1 is gone).
   "0098",
-  // How proxy servers' setup calls reached .com: private relay or direct (feat/outbound-proxy).
-  "0099",
   // Who signed each service invite (admin or member tier) and from which device.
   "0100",
   // Hourly counts of rate-limit refusals and near-limit passes.
@@ -167,6 +165,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0152",
   // Payment rails: a hash of each payment that bought vouchers (no account), so a retry gets the same signatures.
   "0153",
+  // How proxy servers' setup calls reached .com: private relay or direct (was 0099 on feat/outbound-proxy).
+  "0154",
+  // The outbound proxy's fallback lane: an order left for an unreachable box, and its proxy-failing report.
+  "0155",
 ];
 
 export interface SchemaStatusDeps {
