@@ -36,7 +36,8 @@ export interface DemoCreateSettings {
       username: string;
       sshKeyId?: number;
       fallbackServerTypes?: readonly string[];
-    }): Promise<{ serverId: string; ipv4: string | null }>;
+      ipv6?: boolean;
+    }): Promise<{ serverId: string; ipv4: string | null; ipv6?: string | null }>;
   };
   defaultRegion: string;
   defaultSize: string;
