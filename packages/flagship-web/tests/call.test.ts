@@ -331,3 +331,44 @@ describe("startVoiciCall attaches every transform before media can arrive", () =
     ]);
   });
 });
+
+describe("the call screen's camera helpers (docs/voici-calls.md \"Call screen\")", () => {
+  it("faces the person or away from them, with the same size and rate", async () => {
+    const { voiciCallVideoFacing, VOICI_CALL_VIDEO } = await import("../src/call.js");
+    expect(voiciCallVideoFacing("environment").video.facingMode).toBe("environment");
+    expect(voiciCallVideoFacing("user").video.facingMode).toBe("user");
+    expect(voiciCallVideoFacing("sideways").video.facingMode).toBe("user");
+    expect({ ...voiciCallVideoFacing("environment").video, facingMode: "user" }).toEqual(VOICI_CALL_VIDEO.video);
+    expect(VOICI_CALL_VIDEO.video.facingMode).toBe("user");
+  });
+
+  it("counts the cameras without asking for one", async () => {
+    const { voiciCallCameraCount } = await import("../src/call.js");
+    const md = (kinds: string[]) => ({ enumerateDevices: async () => kinds.map((kind) => ({ kind })) });
+    expect(await voiciCallCameraCount(md(["audioinput", "videoinput", "videoinput"]) as any)).toBe(2);
+    expect(await voiciCallCameraCount(md(["audioinput"]) as any)).toBe(0);
+    expect(await voiciCallCameraCount({ enumerateDevices: async () => { throw new Error("no"); } } as any)).toBe(0);
+  });
+
+  it("can't flip a camera that isn't running", async () => {
+    const { startVoiciCall } = await import("../src/call.js");
+    class FakePc {
+      addTrack() { return {}; }
+      addTransceiver() { return { sender: {}, receiver: {} }; }
+      getTransceivers() { return []; }
+      createOffer() { return new Promise(() => {}); }
+      close() {}
+    }
+    (globalThis as any).MediaStream ??= class { addTrack() {} };
+    const call = startVoiciCall({
+      username: "alex", index: { pageId: "p" }, cfg: { apiBase: "https://x", services: "s" }, session: {},
+      worker: { postMessage() {}, addEventListener() {} }, videoAble: true,
+      stream: { getAudioTracks: () => [{}], getTracks: () => [] },
+      deps: { fetch: () => new Promise(() => {}), WebSocket: class {}, RTCPeerConnection: FakePc, RTCRtpScriptTransform: class { constructor(public w: unknown, public options: unknown) {} }, timers: { setTimeout: () => 0, clearTimeout() {} } },
+    } as any);
+    let asked = 0;
+    expect(await call.flipCamera(async () => { asked++; return { getVideoTracks: () => [{ stop() {} }] }; })).toBe(false);
+    expect(asked).toBe(0);
+    expect(call.cameraFacing).toBe("user");
+  });
+});
