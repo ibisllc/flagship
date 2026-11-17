@@ -96,6 +96,9 @@ rules (main only deploys, feature branches for unlaunched features, i18n for eve
   those `_acme-challenge` writes (and any other DNS write `.com` still makes) behind the broker, or a small dedicated
   Worker, with a policy that allows only challenge TXT under names `.com` has an open order for, set `DNS_BROKER_URL`,
   then delete the token from `.com`. Also make release step 20 skip itself while `DNS_BROKER_URL` is unset.
+  BUILT on `0.4/ci` (2026-11-17): broker `POST /service` (`apps/dns-broker/src/service.ts`), `.com`
+  `brokerZone.ts`, release step 20 skips without `DNS_BROKER_URL`; owner steps in
+  `docs/runbooks/issuance-migration.md` §5.
 - **A hybrid release catalog (owner, 2026-11-05).** The catalog root and timestamp keys are Ed25519 only
   (`tools/release-catalog/catalog.ts`). A forged catalog can only delay or withhold releases, since every release it
   names also needs the hybrid endorsement and a hybrid-signed artifact, but it belongs with the quantum-safe item.

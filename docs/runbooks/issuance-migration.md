@@ -26,8 +26,8 @@ The service's own valid authorizations (it reuses them, which saves CA calls) ar
    ```
    Keep an offline copy of the key (a lost key means a new account URI and a CAA change).
 2. **Deploy `.com`.** `GET https://flagshipserver.com/api/certificates/account` answers the account URI; write it
-   down. `.com` must hold `CLOUDFLARE_DNS_API_TOKEN` + `CLOUDFLARE_SERVICES_ZONE_ID` (the service does not use the
-   broker).
+   down. The service writes its challenge records with `CLOUDFLARE_DNS_API_TOKEN` + `CLOUDFLARE_SERVICES_ZONE_ID`, or,
+   from 0.4, through the DNS broker when `.com` has `DNS_BROKER_URL` + `DNS_BROKER_SECRET` (section 5).
 3. **Redeploy (or delete) the dns-broker** so its challenge writer is closed too:
    `cd apps/dns-broker && npm run deploy` (or `npx wrangler delete` if nothing else uses it).
 4. **Boxes update** (the endorsed 0.3 box release). On start each box keeps serving its old combined certificate, orders
@@ -70,3 +70,26 @@ The service's own valid authorizations (it reuses them, which saves CA calls) ar
   `reserveControlNames`; feeding it every registered control name from `.com` is the relay's (H3) work.
 - Let's Encrypt's own limits are the published defaults; ask for a rate-limit adjustment for the service account
   before the fleet grows past a few hundred boxes (250 orders per 3 hours is the service's own ceiling).
+
+## 5. The zone token off `.com` (0.4, item F6)
+
+Cloudflare can't scope a token by record type, so `.com`'s `CLOUDFLARE_DNS_API_TOKEN` could rewrite the whole zone
+(the root wildcard, the CAA pair). From 0.4 the issuance service writes its `_acme-challenge` records through the
+broker's `POST /service` (`apps/dns-broker/src/service.ts`: challenge TXT only, at account and box names, digest of the
+pinned ACME account), and `.com` drops the token:
+
+1. Broker secrets: `cd apps/dns-broker && npx wrangler secret put CLOUDFLARE_DNS_API_TOKEN` (the same token `.com`
+   holds today, or a fresh Zone:DNS:Edit token on `flagship.services` only), and `openssl rand -hex 32` put as
+   `DNS_BROKER_SECRET` on the broker and on `flagship-com` (same value).
+2. Pin the account: `apps/dns-broker/wrangler.toml` `ACME_ACCOUNT_THUMBPRINTS` = the `thumbprint` of
+   `GET https://flagshipserver.com/api/certificates/account`. Set `DNS_BROKER_URL` in `apps/com/wrangler.toml` to the
+   broker's workers.dev URL. Commit both on `main`.
+3. Release step 20 (`dnsbroker`) deploys the broker and checks `/service` answers 401 without the secret; step 22
+   deploys `.com`.
+4. Check one order issues through the broker (a box's renewal, or the gym's `issuance` group against a gym broker);
+   `npm run zone-health` still passes (it reads the zone through the broker).
+5. Delete the token from `.com`: `cd apps/com && npx wrangler secret delete CLOUDFLARE_DNS_API_TOKEN`. What stops
+   with it: the per-event clean-up of the old per-account address records (revoke, delete, transfer, reclaim, demo and
+   gym teardown) and the admin DNS GC routes, all moot under the root wildcard; the reap can still plan but deletes only
+   challenge records. The broker's hourly cron takes over the stale-challenge clean-up.
+6. Rollback: put the token back on `flagship-com` (`wrangler secret put`) and remove `DNS_BROKER_URL`; redeploy `.com`.

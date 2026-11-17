@@ -500,18 +500,16 @@ UPCLOUD_PLAN = "STARTER-2xCPU-4GB"
 # Debian 13 (Trixie): 0.3 boxes need OpenSSL 3.5+ to check the artifact's ML-DSA half (Bookworm has 3.0).
 UPCLOUD_TEMPLATE = "01000000-0000-4000-8000-000020080100"
 UPCLOUD_STORAGE_GB = "30"
-# DnsBroker Worker (Task #13) — when set, the main Worker forwards ALL
-# DNS mutations to the broker. Production posture: drop
-# CLOUDFLARE_DNS_API_TOKEN from this Worker entirely and set this var
-# to the broker's public URL. The broker holds the only copy of the CF
-# DNS token. See `apps/dns-broker/README.md`.
-# DNS_BROKER_URL = "https://flagship-dns-broker.workers.dev"
+# The DNS broker (apps/dns-broker, 0.4 item F6): with DNS_BROKER_URL here and the DNS_BROKER_SECRET
+# secret, the issuance service writes its _acme-challenge TXT records through the broker (POST /service,
+# challenge records only) and the reap route reads the zone through it. Release step 20 deploys the
+# broker only while this is set. Then, once an order has issued through the broker:
+#   cd apps/com && npx wrangler secret delete CLOUDFLARE_DNS_API_TOKEN
+# so .com holds no token that can rewrite the zone (the root wildcard, CAA, NS).
+# DNS_BROKER_URL = "https://flagship-dns-broker.<account>.workers.dev"
 #
-# Legacy: CLOUDFLARE_DNS_API_TOKEN was set via:
+# Until then, CLOUDFLARE_DNS_API_TOKEN (Zone:DNS:Edit on flagship.services) is a secret here:
 #   wrangler secret put CLOUDFLARE_DNS_API_TOKEN
-# (Cloudflare API token with Zone:DNS:Edit on flagship.services.)
-# Once DNS_BROKER_URL is set above, this secret can — and SHOULD — be
-# deleted from this Worker via `wrangler secret delete`.
 # Cloudflare Worker → Fly app shared secret. Set with:
 #   wrangler secret put SERVICES_HMAC_KEY
 # (NOT in this file — secrets live in CF dashboard.)

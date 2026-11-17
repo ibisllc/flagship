@@ -551,6 +551,16 @@ describe("release.sh parsers against captured tool output", () => {
     expect(fx("wrangler-secret-list.json")).not.toMatch(/"value"/);
   });
 
+  it("DNS_BROKER_URL from apps/com/wrangler.toml: commented out or absent means none (step 20 skips)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-url-"));
+    const f = join(dir, "wrangler.toml");
+    writeFileSync(f, 'A = "1"\n# DNS_BROKER_URL = "https://commented.example"\n');
+    expect(sh(`dns_broker_url ${f}`, "").out).toBe("");
+    writeFileSync(f, 'A = "1"\n# DNS_BROKER_URL = "https://commented.example"\nDNS_BROKER_URL = "https://flagship-dns-broker.example.workers.dev"\n');
+    expect(sh(`dns_broker_url ${f}`, "").out).toBe("https://flagship-dns-broker.example.workers.dev");
+    expect(sh(`dns_broker_url ${join(ROOT, "apps/com/wrangler.toml")}`, "").out).toBe("");
+  });
+
   it("gh secret list -> names", () => {
     expect(sh("gh_secret_names", fx("gh-secret-list.txt")).out).toBe("BILLING_MIRROR_DEPLOY_KEY");
     expect(sh("gh_secret_names", "").out).toBe("");

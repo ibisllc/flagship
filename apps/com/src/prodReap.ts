@@ -101,6 +101,8 @@ export interface ReapEnv {
   SERVICES_APEX?: string;
   CLOUDFLARE_DNS_API_TOKEN?: string;
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
+  DNS_BROKER_URL?: string;
+  DNS_BROKER_SECRET?: string;
   UPCLOUD_TOKEN?: string;
   /** Comma list of accounts protected IN ADDITION to PROTECTED_DNS_ACCOUNTS (which can never be un-protected). */
   REAP_PROTECTED_ACCOUNTS?: string;
