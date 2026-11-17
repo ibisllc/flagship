@@ -162,7 +162,7 @@ struct RestoreMergeAppSheet: View {
                                 Text(allowed ? RestoreMergeViewModel.consequence(action, app) : RestoreMergeViewModel.refusal(app.disallowed[action] ?? ""))
                                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                                 if action == app.recommended {
-                                    Text("Suggested").font(FS.font.caption()).foregroundColor(c.accent)
+                                    Text("Suggested").font(FS.font.caption()).foregroundColor(c.textMuted)
                                 }
                             }
                             Spacer()

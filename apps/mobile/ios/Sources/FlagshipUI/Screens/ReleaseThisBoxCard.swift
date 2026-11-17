@@ -30,7 +30,7 @@ struct ReleaseThisBoxCard: View {
                             .foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                         if vm.released {
-                            Text("The box is being wiped. It restarts as a new box.")
+                            Text("The server is being wiped. It restarts as a new server.")
                                 .font(FS.font.bodySm().weight(.semibold))
                                 .foregroundColor(c.text)
                                 .accessibilityIdentifier("sd-release-done")

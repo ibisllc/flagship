@@ -1398,7 +1398,7 @@ struct TierBreakdownCard: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text(tier.tier.uppercased())
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(FS.font.scaled(12, weight: .semibold))
                     .tracking(1)
                     .foregroundColor(c.textMuted)
                 if let day = tier.llmCreditsRemainingDay {

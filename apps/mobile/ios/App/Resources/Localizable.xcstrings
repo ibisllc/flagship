@@ -136108,43 +136108,43 @@
         }
       }
     },
-    "Purchase it to install on your box.": {
+    "Purchase it to install on your server.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cómprala para instalarla en tu equipo."
+            "value": "Cómprala para instalarla en tu servidor."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Achetez-la pour l'installer sur votre boîtier."
+            "value": "Achetez-la pour l'installer sur votre serveur."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kaufe sie, um sie auf deiner Box zu installieren."
+            "value": "Kaufe sie, um sie auf deinem Server zu installieren."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Compre para instalar na sua caixa."
+            "value": "Compre para instalar no seu servidor."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "購入するとボックスにインストールできます。"
+            "value": "購入するとサーバーにインストールできます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "购买后即可安装到你的主机。"
+            "value": "购买后即可安装到你的服务器。"
           }
         }
       }
@@ -141069,43 +141069,43 @@
         }
       }
     },
-    "If the box stays off, press the power button once.": {
+    "If the server stays off, press the power button once.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Si el equipo sigue apagado, pulsa el botón de encendido una vez."
+            "value": "Si el servidor sigue apagado, pulsa el botón de encendido una vez."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Si le boîtier reste éteint, appuyez une fois sur le bouton d'alimentation."
+            "value": "Si le serveur reste éteint, appuyez une fois sur le bouton d'alimentation."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wenn die Box aus bleibt, drücke einmal den Einschaltknopf."
+            "value": "Wenn der Server aus bleibt, drücke einmal den Einschaltknopf."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Se a caixa continuar desligada, aperte o botão liga/desliga uma vez."
+            "value": "Se o servidor continuar desligado, aperte o botão liga/desliga uma vez."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ボックスの電源が入らない場合は、電源ボタンを 1 回押してください。"
+            "value": "サーバーの電源が入らない場合は、電源ボタンを 1 回押してください。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "如果主机没有启动，请按一下电源键。"
+            "value": "如果服务器没有启动，请按一下电源键。"
           }
         }
       }
@@ -142463,43 +142463,43 @@
         }
       }
     },
-    "No new box appeared": {
+    "No new server appeared": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "No apareció ningún equipo nuevo"
+            "value": "No apareció ningún servidor nuevo"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun nouveau boîtier n'est apparu"
+            "value": "Aucun nouveau serveur n'est apparu"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keine neue Box erschienen"
+            "value": "Kein neuer Server erschienen"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhuma caixa nova apareceu"
+            "value": "Nenhum servidor novo apareceu"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "新しいボックスが見つかりませんでした"
+            "value": "新しいサーバーが見つかりませんでした"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "没有出现新主机"
+            "value": "没有出现新服务器"
           }
         }
       }
@@ -150540,43 +150540,43 @@
         }
       }
     },
-    "The box is being wiped. It restarts as a new box.": {
+    "The server is being wiped. It restarts as a new server.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "El equipo se está borrando. Se reiniciará como un equipo nuevo."
+            "value": "El servidor se está borrando. Se reiniciará como un servidor nuevo."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le boîtier est en cours d’effacement. Il redémarrera comme un boîtier neuf."
+            "value": "Le serveur est en cours d’effacement. Il redémarrera comme un serveur neuf."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Die Box wird gelöscht. Sie startet als neue Box neu."
+            "value": "Der Server wird gelöscht. Er startet als neuer Server neu."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "A caixa está sendo apagada. Ela reinicia como uma caixa nova."
+            "value": "O servidor está sendo apagado. Ele reinicia como um servidor novo."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ボックスを消去しています。新しいボックスとして再起動します。"
+            "value": "サーバーを消去しています。新しいサーバーとして再起動します。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在清除主机。它将以全新主机的状态重启。"
+            "value": "正在清除服务器。它将以全新服务器的状态重启。"
           }
         }
       }
