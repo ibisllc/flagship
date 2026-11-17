@@ -22,8 +22,8 @@ final class RecordingPaymentsCom: PaymentsComClient, @unchecked Sendable {
         try await inner.putWallet(username: username, sealed: sealed, device: device)
         events.append("put")
     }
-    func redeem(username: String, for what: String, vouchers: [Voucher]) async throws -> VoucherRedeemResult {
-        try await inner.redeem(username: username, for: what, vouchers: vouchers)
+    func redeem(username: String, for what: String, vouchers: [Voucher], route: SpendRoute) async throws -> VoucherRedeemResult {
+        try await inner.redeem(username: username, for: what, vouchers: vouchers, route: route)
     }
     func testIssue(keyId: String, blinded: [String]) async throws -> [String] { try await inner.testIssue(keyId: keyId, blinded: blinded) }
     func paidIssue(rail: String, proof: JSONValue, keyId: String, blinded: [String]) async throws -> PaidIssueResult {
