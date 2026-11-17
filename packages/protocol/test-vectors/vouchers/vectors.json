@@ -1,0 +1,654 @@
+{
+  "about": "flagship/voucher/v1 + flagship/voucher-wallet/v1 (protocol voucher.ts, voucherWallet.ts, paymentsConfig.ts). Regenerate: npx tsx packages/protocol/tests/genVoucherVectors.ts. The private key in test-rsa-key.json is for these vectors only.",
+  "key": {
+    "keyId": "8b74a89d9ba741d4",
+    "nHex": "ca47bd4509ece4eb68046250e4b5b40f0f8bc7b189cc848a1991f3b1424c27eba729f059b5a5c168aa9a3795cc0bfc181b3f7342840df305631ffe3477d11b6c503e571c77af33d5a55911e494d7f992405c1c3e0a5c06b1b266f269596e8656d25c7587decb7637d29092cbaab9ee18d2e8d042cf67ca5be48496424a03db1947f1cbff0b339201a8785847ce2daaa52ae68d81f5ed2bdec4c9d5bff05666c63354cc0800c91d5fb465fe28eef0c77814b6f20ffb0592793f132ad9f60fdd63dbd581ba1c3319b573136539d1e7093f63436eff294535ad3e54c9dabaec328277f65ceb1ae1605ea21febe9543944a14fe6acf3eb9dbc95c1cfd596ad70376b",
+    "eHex": "010001"
+  },
+  "defaultConfig": {
+    "v": 1,
+    "unitUsd": 1,
+    "monthDays": 30,
+    "plans": {
+      "pro": {
+        "unitsPerMonth": 10,
+        "includedGb": 250
+      },
+      "pro-max": {
+        "unitsPerMonth": 20,
+        "includedGb": 500
+      }
+    },
+    "overage": {
+      "blockUnits": 5,
+      "blockGb": 100,
+      "defaultCapUnits": 10,
+      "maxCapUnits": 100,
+      "buyBelowGb": 10
+    },
+    "graceHours": 72,
+    "maxAheadDays": 35,
+    "trickle": {
+      "lowWaterDays": 3,
+      "highWaterDays": 10
+    },
+    "activationDelayMaxHours": 24,
+    "packs": [
+      10,
+      30,
+      120
+    ],
+    "maxPerRequest": 30
+  },
+  "unitMs": {
+    "pro": 259200000,
+    "pro-max": 129600000
+  },
+  "blind": [
+    {
+      "nonceHex": "1111111111111111111111111111111111111111111111111111111111111111",
+      "prefixHex": "2121212121212121212121212121212121212121212121212121212121212121",
+      "saltHex": "313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131",
+      "rHex": "aa27d9d89128263a499288b0fa2d7be8a9c4a0ab123aa1c5d92750d03d556065318ab15796232c1bd83c89b5024be5a8c06fbf9ee4cc969b0168abdaad749f5da4ed4ba52dc38991c984266af4b6faa90704b9b3765d1cdebe85e7921cc8306e1b182382834c11205fe5104390f7c8d20a2d17b1c8146005e4418d67e9fd5340bdd81ab233bceb6ad233cd1871509320a18d0335a891cf98730990e8923e1dda04f3358e9c7e1c3d16b16f408cfafb6af53254ef3023ed2436533808b6ca99335bbb2f9ae511a92a9d23385ed1a1bf6c00dbe2d0996f7ad176e6476775ad59d80375eb6dd43bc00b5e41b6faa023c86fa5ad4db303011fb49b351cc9412233b4",
+      "messageHex": "666c6167736869702f766f75636865722f76317c1111111111111111111111111111111111111111111111111111111111111111",
+      "preparedHex": "2121212121212121212121212121212121212121212121212121212121212121666c6167736869702f766f75636865722f76317c1111111111111111111111111111111111111111111111111111111111111111",
+      "blinded": "iuKGJfPOgwWpNrmHt4ZnhC3385weRfY3K8kJg+qC7sPr18r2mtRBI4MjSpjjK1ee7gyMSq8nNIPhdltSavcnQIRfQuFpbOa4LO9EgSfNXm/APJcqV160EbTf6UgQp4xZRGOzZpunW3QXPeVVYHtOiTAo37I5KMdRYY01InsiGGrY9s6K87P6CHu0/7eQUSD9+xR4tdTfgWrRHaG9wywFwLk/FpCEKE2iFITHVF2qvhr6IJoNhQ1f4Ee3zLHA1X9v1i0mjfNRNVKXnSmzmQq+01x+TnuvtxQ1BV/N/f+WAGFrJ//3/1yjWx6wExQAVhPYeWRUcn1WWD7sYDZPlihGmg==",
+      "invHex": "aed6541241439a9a52b1c2c4a38350fee359d2ff69ed9421c9ad2590e7539dc622728be791f28a29280b2b37f74a0e9f93448353f0d6da405a69f0fd1a2be3b73540a08b6978ed9e5117cc3874fb8105bfeac239a639f58ae00adc22b39fa41703005d6ac192b09465b03ee141bbf97814813f37e9fb824cdc5623ad9cf646aea6775b7c4e0e83041f15eb5ed1f27bc57f4183c2ae6dca98e7f0a1532571fa0db72d222fb290102b42835617877e08a8bd8ccc20e78a896101a39b9797590cf868260a565c5993b4bfb3a92adb0aef64c42c57fdab8b86133c6435165cefa6cc01a1f844975dbe2e7442803636323d565a6ffda633fd23deae3d8adad4d79869",
+      "blindSig": "xmQ20rVViOagS8UOjar4iux681Arew4ktnDVIdYYtwVVnSuuRa59AKZON8LeeQQZ555kPb9inCqgPscKX2+84rWp/bzu2CT+RjsXywfM4fgQAn+5GdwUUSnVC28Aslpk2RQAB/zp8iaDaEVfX3wUAXuFrj0FJtL/gHOfftTikay9KoDKEmv7hjXaI76HTYSmhk1LzE0BGjE4IpOLqTXp3zIWZXgah8h5fBP3rVTyFs4nPxymPez1EwLa/sC+VHsuV9LskFwmTFtV7VRntOGjkq8h28SnXIhURXUKPd7Bp4R5GJ+xTkEVnKBZiVlx/cbQPlTVjsBf1vgAJKL/KfHMPw==",
+      "voucher": {
+        "k": "8b74a89d9ba741d4",
+        "p": "2121212121212121212121212121212121212121212121212121212121212121",
+        "n": "1111111111111111111111111111111111111111111111111111111111111111",
+        "s": "K66TLrh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg=="
+      },
+      "nullifier": "508562f6f86ef1e5263d0a45d49fab59ed2b360a139d5483c498406db93104ae"
+    },
+    {
+      "nonceHex": "1212121212121212121212121212121212121212121212121212121212121212",
+      "prefixHex": "2222222222222222222222222222222222222222222222222222222222222222",
+      "saltHex": "323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232",
+      "rHex": "125127437908cd6b99ae0d8a61537f52592a8c147e166b807dada54074c25da9990458d7257d876279138add8ca912983897b7e5cff949ee67fcf9f4278608d7be6b45cba1b95c2c6e93420aca8a0e5372993b367712fc4c816bae16a603753ab7a9d5ad630be66864343db5ade6ef9695b97641c448f5dd6abe6f48312e074af4df84984e068cfbadcd1d16f94dff0028a231929158bcba800b5584aa7efde320a7ee01774a404eb0d778d7756dfa51227c8d14fd9bcb40dcf13b2df3dde14cb47ed71b75226e864392c69b5a94ca79833b2427d6b0a860fde2819e1525e489e5ad53bff77a390b1496c02059126a124bcd82b3da9975bb05f8f74efbbe575a",
+      "messageHex": "666c6167736869702f766f75636865722f76317c1212121212121212121212121212121212121212121212121212121212121212",
+      "preparedHex": "2222222222222222222222222222222222222222222222222222222222222222666c6167736869702f766f75636865722f76317c1212121212121212121212121212121212121212121212121212121212121212",
+      "blinded": "gjVM6ZtZzA6cPhkMDNiXgbAC5Le75jv1VDdBo7xODhxwoyWr0LL++Ud5xIbqIpQeA6e0VpbWdi4KM/XOJjFI1xykKxUgVa0xIIt5aFj54M5bqGp4SFDVSyzlK7t/Lkx5Ivh5IPiThBeh++AU/yqPNj6ogj4lIHzPU6WApvbNC3r02KvG/qloevb6fZRiP5kDct9vQF83fL9uuSUB568NeLI+F/xk5F/24atLWxZ1jYvhAK6QMrGwJtbMUeVHRsn0pQQk2O4LQyobwaHQfEV8Mf9geST/lZVKMTaZvE7PNG90BXG9ebvMahe3iCOIMv3cNsmOAKkSAGOVovxjDW6IYA==",
+      "invHex": "1d5b8781f964ba3d3573ad23399e17538c75efee51c94d0011b7431e10ec6b2c0eb17b927a069f77eccc408041c5ee1cb9f7ef951438331612507aa08c26c7d29e13a09bd3e29998a906333669ff7e8b19f95fd028562fa599fb200df4c3a966cbe9374595bb376c4367ee1c81f5b1d2ed19db416ea659b2d711cb890072cc20df138dba211adf54a9e037e4ce9e478c6752a6d002c6ce042fcf5d68630f76ff737f682f21bf2ad9f2db61cc95993e2c3d8cc9ab31ed9eabf2458c44ad08550b709fc298171fc5fb7f21a1d843692b88596a838a79fd89042755df13e5b808f4e323e09bed8df814927c169ff075e9a3159146bdb4832c144d8c02e6df21fa67",
+      "blindSig": "EDo3LwyXbhCIwry26Fzzue7qx34QqJCvg5/LhGHWwuypABYEBHdgDF26DtGnXRtBo58hXbipog+0cU6B+tbydBiaX6BMaAgjG1B6FVO7PrrqNTZdPGsY72X8v5mq/k4rhqIkBcZnrHdDQuTPlA+0fKubMbLerkvClFm6wsCvx3tidXD6CBSmvYqzxfrh4fwApubiz3ODx43/1MEf8qUQeoEqKaXv5DGSqrsGUVwQRQgPch0tIbJtfP6VrtuURIiaiDGtFyiTHEK8jVfzsJ6KvCAi+8U9dxyhy+OaORzsElOstfimgn2ZTjRpRKicjqPQMCiMKWNC2HJyl+tNv2tgPg==",
+      "voucher": {
+        "k": "8b74a89d9ba741d4",
+        "p": "2222222222222222222222222222222222222222222222222222222222222222",
+        "n": "1212121212121212121212121212121212121212121212121212121212121212",
+        "s": "D3RT+l6luU1ZZoZz5fbS+mDLOPW6RGbGeAG7IOr6sa7JjScfSqaKeClCUdCYGCwXv15tjyKesnl6xdfueGW5uPTtFTKiXOGS39xD7koL5HqbNcwkRxfHl6xvu9AQ+G8iKMqTc+Wpc9+PmZrKTVc+gj1wq0gcoa7pV8NdgaY6h1YFefx43ThbawkfE8r23knLrxr1YvSdAK2/BtTMyV294DR4gXRwJCCZcxcKG6r8zgqc3RyBEemqAaoxLOm8/bw4hsb79hbT5Vu7FEKX04O1evcSjlS5ll3hp0XXhfBDbYTYrCTWxLMNlJ/Drz+fqf/r1cpX9Pp+9jE8KNU/mVMP+A=="
+      },
+      "nullifier": "22ac51e30d26e03018232698dc1337af93ff8fbf93f95e02cf514c3eb768c452"
+    },
+    {
+      "nonceHex": "1313131313131313131313131313131313131313131313131313131313131313",
+      "prefixHex": "2323232323232323232323232323232323232323232323232323232323232323",
+      "saltHex": "333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+      "rHex": "85a5cd2030f372c5d5fe744f40781da69332c05e403bd1601723cc108d4353c18c9bbe077e87f86c159094b6d57422739e00af9ecab94948f105304ce4fc4272fb9e5a3f877d16e22b8eddd4297dcdd9de385ce09593b878a43b4e882e65353e8e122896d1d2f64e603b690a17f548e9bcd656f2c4bf78383f61beece3755017d7d671e06a65ee04e4bfd657d4e4ea41161005b5b7c24abd79cbd0737a01b944d88a34591a5352b7ab4549de550b2d0730b8305bb6a856b4004f4032e431f30328c32e508e64485942a5d874a40a9e6c0a84ae6dbf96b9f5fd3a3172fdd58332c8de38a67ab3bdfc321e65c5167008fdc3e8e671e53da9f1012e2c06487e2ddd",
+      "messageHex": "666c6167736869702f766f75636865722f76317c1313131313131313131313131313131313131313131313131313131313131313",
+      "preparedHex": "2323232323232323232323232323232323232323232323232323232323232323666c6167736869702f766f75636865722f76317c1313131313131313131313131313131313131313131313131313131313131313",
+      "blinded": "AfX7rTrkLG62zji1ew1PDA44U55isbGaoyOQa+O2OUkM7e3CsTq8J9t3exR2P/CC7bHPod9gaBZjImQmUmoyyKV5a4U9hBCixbu9LbUQ9xZVyGHQQvZV2+M7MpV5dNEGZpm13zVN1gBgJmvvdICOJ1VXaw/xQePPFXMz7IB5NQyFMZUqredv/5+QeBWIhgWvso0q6PZPv9uYzBtwD4NKDXZklXFaNjPE2S478xuJlk0a2tu0qRgyc3HWZy9wD3EN9GwaibDOz7RzFxl4jOkiLg0XoBRXSGddqm4qbmb65EyKe3qlbT2iMrOhRAaN9SKDloxoLpJr6faGpD5WrgNg4g==",
+      "invHex": "78754bc65b120c81f8c82e28bd1f835e3923860121b7c82d11849df6ab4419028e674be1a44fcde03ba3d7dbb06e26c91bf3ab36f6dc34200530147d31e21dec5f3e69917aaca226fc5ca975ce291a59cdde2085b36c1bf20d7e97e5a58e5e822ca568c0481663754cf61ed9af05486ae3ec5eef2c7827d158d7140d72c616fd068130cd4609768af488ee68694c7a2c1635cec8214c56e886350b367b6b88a6b98aacd1f50b1455db6cc1d2f01f3286bb5440bcbebc22601926b2b1b1edb763b00fafdeffac060f30f0a57d7474624766c02601a5fe5e07b76e50342444bd82e37443a238dd6c062398f1fbbfa501a1e3ea976c57812dd923b9bc35358902d7",
+      "blindSig": "IjMJs74zfBmHArx/tHb3cyHwpddZGoGy6bDW4LRQ8Rgu2ld906p1G+tgYtlnwafXuR+224gmSwht/PcFZTtOmt3YaSlqrz2CTTFbFfwoGsf2wXDB74OM9x8mcz8q2wuxL/ixaIUa7zijD3pye2X1bpZ9OWcKHklWi0PaOivkyGXhJwXiiRAnBLRFtH5iNm+prm7+FJ8Cp9gWBv0Sb20zsu6YRBhreur8T77K6ao+fUpOXcgAsmFAOZsb+QpgB0yNNQP+SmUjNEvpNNMU7/Lq2po7+2n5vruuC8hMeAnf2d42j/t2etBKo1Tod1ayeYZKw1pUToQA/Ugpt4DR/3iF0w==",
+      "voucher": {
+        "k": "8b74a89d9ba741d4",
+        "p": "2323232323232323232323232323232323232323232323232323232323232323",
+        "n": "1313131313131313131313131313131313131313131313131313131313131313",
+        "s": "biydWGUr23jSU6ooRF/raykLg6PUuv8Hcxx6bGS41iGdbo5Ch8IIFvVYTCIbSW0sby1Sxx45hO7N0h+7dW7nZ2SKMAK7rX5cBaSD4FQWJzduT9n641oE9KLcXa4ty5KfLprOBOTfAmw8ln4ARUSshEpytWjnyzVcbTjJXk4GIZt4C96XeWRajD2pJVoHak+BZYVo2xIPRrYNdsx1VvR92w8eITiYleL3KrG2vHqhq8tzIGGZTK8VvZorP6gmuFB7qJO14quJilGO+qTlZslor/5CaaixG+QYGSbi42CCH1rIUGjNDJat2N6liFnMk0wmCXHJMzBrZ7Rq8ikB13cmZg=="
+      },
+      "nullifier": "e4f6617052d00f6e6b9647951b5131cc526bf60eef77a35117a3de212c458da8"
+    }
+  ],
+  "bad": [
+    {
+      "voucher": {
+        "k": "8b74a89d9ba741d4",
+        "p": "2121212121212121212121212121212121212121212121212121212121212121",
+        "n": "1111111111111111111111111111111111111111111111111111111111111111",
+        "s": "K66TLAh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg=="
+      },
+      "why": "signature changed"
+    },
+    {
+      "voucher": {
+        "k": "8b74a89d9ba741d4",
+        "p": "2121212121212121212121212121212121212121212121212121212121212121",
+        "n": "1212121212121212121212121212121212121212121212121212121212121212",
+        "s": "K66TLrh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg=="
+      },
+      "why": "another voucher's nonce"
+    },
+    {
+      "voucher": {
+        "k": "8b74a89d9ba741d4",
+        "p": "2222222222222222222222222222222222222222222222222222222222222222",
+        "n": "1111111111111111111111111111111111111111111111111111111111111111",
+        "s": "K66TLrh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg=="
+      },
+      "why": "another voucher's prefix"
+    },
+    {
+      "voucher": {
+        "k": "0000000000000000",
+        "p": "2121212121212121212121212121212121212121212121212121212121212121",
+        "n": "1111111111111111111111111111111111111111111111111111111111111111",
+        "s": "K66TLrh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg=="
+      },
+      "why": "unknown key id"
+    }
+  ],
+  "wallet": {
+    "umkSeedHex": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "keyHex": "746cfe1502c59a36bdd97050f3dd62a8e5efdb80be8fee37b6b4c254bb3d9c15",
+    "version": 3,
+    "nonceHex": "444444444444444444444444",
+    "wallet": {
+      "v": 1,
+      "vouchers": [
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "2222222222222222222222222222222222222222222222222222222222222222",
+          "n": "1212121212121212121212121212121212121212121212121212121212121212",
+          "s": "D3RT+l6luU1ZZoZz5fbS+mDLOPW6RGbGeAG7IOr6sa7JjScfSqaKeClCUdCYGCwXv15tjyKesnl6xdfueGW5uPTtFTKiXOGS39xD7koL5HqbNcwkRxfHl6xvu9AQ+G8iKMqTc+Wpc9+PmZrKTVc+gj1wq0gcoa7pV8NdgaY6h1YFefx43ThbawkfE8r23knLrxr1YvSdAK2/BtTMyV294DR4gXRwJCCZcxcKG6r8zgqc3RyBEemqAaoxLOm8/bw4hsb79hbT5Vu7FEKX04O1evcSjlS5ll3hp0XXhfBDbYTYrCTWxLMNlJ/Drz+fqf/r1cpX9Pp+9jE8KNU/mVMP+A=="
+        },
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "2121212121212121212121212121212121212121212121212121212121212121",
+          "n": "1111111111111111111111111111111111111111111111111111111111111111",
+          "s": "K66TLrh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg=="
+        }
+      ],
+      "spent": [],
+      "settings": {
+        "plan": "pro",
+        "autoPay": true,
+        "overageCapUnits": 10,
+        "delayStart": false,
+        "startAt": 0,
+        "updatedAt": 1763000000000
+      },
+      "overage": {
+        "period": "2026-11",
+        "units": 5
+      }
+    },
+    "plaintext": "{\"overage\":{\"period\":\"2026-11\",\"units\":5},\"pad\":\"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"settings\":{\"autoPay\":true,\"delayStart\":false,\"overageCapUnits\":10,\"plan\":\"pro\",\"startAt\":0,\"updatedAt\":1763000000000},\"spent\":[],\"v\":1,\"vouchers\":[{\"k\":\"8b74a89d9ba741d4\",\"n\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"p\":\"2121212121212121212121212121212121212121212121212121212121212121\",\"s\":\"K66TLrh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg==\"},{\"k\":\"8b74a89d9ba741d4\",\"n\":\"1212121212121212121212121212121212121212121212121212121212121212\",\"p\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"s\":\"D3RT+l6luU1ZZoZz5fbS+mDLOPW6RGbGeAG7IOr6sa7JjScfSqaKeClCUdCYGCwXv15tjyKesnl6xdfueGW5uPTtFTKiXOGS39xD7koL5HqbNcwkRxfHl6xvu9AQ+G8iKMqTc+Wpc9+PmZrKTVc+gj1wq0gcoa7pV8NdgaY6h1YFefx43ThbawkfE8r23knLrxr1YvSdAK2/BtTMyV294DR4gXRwJCCZcxcKG6r8zgqc3RyBEemqAaoxLOm8/bw4hsb79hbT5Vu7FEKX04O1evcSjlS5ll3hp0XXhfBDbYTYrCTWxLMNlJ/Drz+fqf/r1cpX9Pp+9jE8KNU/mVMP+A==\"}]}",
+    "plaintextLength": 4096,
+    "sealed": {
+      "version": 3,
+      "nonce": "444444444444444444444444",
+      "ct": "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"
+    }
+  },
+  "merge": {
+    "local": {
+      "v": 1,
+      "vouchers": [
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "2121212121212121212121212121212121212121212121212121212121212121",
+          "n": "1111111111111111111111111111111111111111111111111111111111111111",
+          "s": "K66TLrh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg=="
+        },
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "2222222222222222222222222222222222222222222222222222222222222222",
+          "n": "1212121212121212121212121212121212121212121212121212121212121212",
+          "s": "D3RT+l6luU1ZZoZz5fbS+mDLOPW6RGbGeAG7IOr6sa7JjScfSqaKeClCUdCYGCwXv15tjyKesnl6xdfueGW5uPTtFTKiXOGS39xD7koL5HqbNcwkRxfHl6xvu9AQ+G8iKMqTc+Wpc9+PmZrKTVc+gj1wq0gcoa7pV8NdgaY6h1YFefx43ThbawkfE8r23knLrxr1YvSdAK2/BtTMyV294DR4gXRwJCCZcxcKG6r8zgqc3RyBEemqAaoxLOm8/bw4hsb79hbT5Vu7FEKX04O1evcSjlS5ll3hp0XXhfBDbYTYrCTWxLMNlJ/Drz+fqf/r1cpX9Pp+9jE8KNU/mVMP+A=="
+        }
+      ],
+      "spent": [],
+      "settings": {
+        "plan": "pro",
+        "autoPay": true,
+        "overageCapUnits": 10,
+        "delayStart": false,
+        "startAt": 0,
+        "updatedAt": 100
+      },
+      "overage": {
+        "period": "2026-10",
+        "units": 10
+      }
+    },
+    "remote": {
+      "v": 1,
+      "vouchers": [
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "2222222222222222222222222222222222222222222222222222222222222222",
+          "n": "1212121212121212121212121212121212121212121212121212121212121212",
+          "s": "D3RT+l6luU1ZZoZz5fbS+mDLOPW6RGbGeAG7IOr6sa7JjScfSqaKeClCUdCYGCwXv15tjyKesnl6xdfueGW5uPTtFTKiXOGS39xD7koL5HqbNcwkRxfHl6xvu9AQ+G8iKMqTc+Wpc9+PmZrKTVc+gj1wq0gcoa7pV8NdgaY6h1YFefx43ThbawkfE8r23knLrxr1YvSdAK2/BtTMyV294DR4gXRwJCCZcxcKG6r8zgqc3RyBEemqAaoxLOm8/bw4hsb79hbT5Vu7FEKX04O1evcSjlS5ll3hp0XXhfBDbYTYrCTWxLMNlJ/Drz+fqf/r1cpX9Pp+9jE8KNU/mVMP+A=="
+        },
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "2323232323232323232323232323232323232323232323232323232323232323",
+          "n": "1313131313131313131313131313131313131313131313131313131313131313",
+          "s": "biydWGUr23jSU6ooRF/raykLg6PUuv8Hcxx6bGS41iGdbo5Ch8IIFvVYTCIbSW0sby1Sxx45hO7N0h+7dW7nZ2SKMAK7rX5cBaSD4FQWJzduT9n641oE9KLcXa4ty5KfLprOBOTfAmw8ln4ARUSshEpytWjnyzVcbTjJXk4GIZt4C96XeWRajD2pJVoHak+BZYVo2xIPRrYNdsx1VvR92w8eITiYleL3KrG2vHqhq8tzIGGZTK8VvZorP6gmuFB7qJO14quJilGO+qTlZslor/5CaaixG+QYGSbi42CCH1rIUGjNDJat2N6liFnMk0wmCXHJMzBrZ7Rq8ikB13cmZg=="
+        }
+      ],
+      "spent": [
+        "22ac51e30d26e03018232698dc1337af93ff8fbf93f95e02cf514c3eb768c452"
+      ],
+      "settings": {
+        "plan": "pro-max",
+        "autoPay": true,
+        "overageCapUnits": 20,
+        "delayStart": false,
+        "startAt": 0,
+        "updatedAt": 200
+      },
+      "overage": {
+        "period": "2026-11",
+        "units": 5
+      }
+    },
+    "merged": {
+      "v": 1,
+      "vouchers": [
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "2121212121212121212121212121212121212121212121212121212121212121",
+          "n": "1111111111111111111111111111111111111111111111111111111111111111",
+          "s": "K66TLrh2GXNgeIhpXd6AkdN1CrpzbS3cvNrS+TsRs1KzjYZ9Jq93i3R/FlmsSzhkoSF6zAC9iwhb/TdWpezt76kgoaVv7QLd4mo50MBsFaAT+ILRzeeVuvCQ7HYA3KEa5hS5POIsk5MLt2JutJglKBnEDva03T8VKj+U8OYICP9b6Wc8nELsOBAf0c+EAYl/w1pckb8ljgmMJYF8wpkC2IPaWTAbXz1u2ZonmZ+KhUngDjmTo+mNExCOQf2X2OVkvIlTfuK1XVoN/Rn1VL8po/5n3A7tU5ywlLO6oBa1yvGVGm93EV1ctoGzV0/383pSbZ16v1hkakq0ur3nfQMOsg=="
+        },
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "2323232323232323232323232323232323232323232323232323232323232323",
+          "n": "1313131313131313131313131313131313131313131313131313131313131313",
+          "s": "biydWGUr23jSU6ooRF/raykLg6PUuv8Hcxx6bGS41iGdbo5Ch8IIFvVYTCIbSW0sby1Sxx45hO7N0h+7dW7nZ2SKMAK7rX5cBaSD4FQWJzduT9n641oE9KLcXa4ty5KfLprOBOTfAmw8ln4ARUSshEpytWjnyzVcbTjJXk4GIZt4C96XeWRajD2pJVoHak+BZYVo2xIPRrYNdsx1VvR92w8eITiYleL3KrG2vHqhq8tzIGGZTK8VvZorP6gmuFB7qJO14quJilGO+qTlZslor/5CaaixG+QYGSbi42CCH1rIUGjNDJat2N6liFnMk0wmCXHJMzBrZ7Rq8ikB13cmZg=="
+        }
+      ],
+      "spent": [
+        "22ac51e30d26e03018232698dc1337af93ff8fbf93f95e02cf514c3eb768c452"
+      ],
+      "settings": {
+        "plan": "pro-max",
+        "autoPay": true,
+        "overageCapUnits": 20,
+        "delayStart": false,
+        "startAt": 0,
+        "updatedAt": 200
+      },
+      "overage": {
+        "period": "2026-11",
+        "units": 5
+      }
+    }
+  },
+  "trickle": [
+    {
+      "name": "off",
+      "input": {
+        "now": 1763400000000,
+        "enabled": false,
+        "balance": 30,
+        "aheadMs": 432000000,
+        "startAt": 0,
+        "nextSpendAt": 0,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.5,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 0
+      }
+    },
+    {
+      "name": "empty wallet",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 0,
+        "aheadMs": 432000000,
+        "startAt": 0,
+        "nextSpendAt": 0,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.5,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 0
+      }
+    },
+    {
+      "name": "delayed start",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 30,
+        "aheadMs": 0,
+        "startAt": 1763403600000,
+        "nextSpendAt": 7,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.5,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 7
+      }
+    },
+    {
+      "name": "lapsed: catch up at once",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 30,
+        "aheadMs": 0,
+        "startAt": 0,
+        "nextSpendAt": 0,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.25,
+      "out": {
+        "spend": 1,
+        "nextSpendAt": 1763464800000
+      }
+    },
+    {
+      "name": "inside the grace: catch up the gap",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 30,
+        "aheadMs": -86400000,
+        "startAt": 0,
+        "nextSpendAt": 0,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.75,
+      "out": {
+        "spend": 2,
+        "nextSpendAt": 1763594400000
+      }
+    },
+    {
+      "name": "pro max lapsed: two units",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 30,
+        "aheadMs": 0,
+        "startAt": 0,
+        "nextSpendAt": 0,
+        "unitMs": 129600000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.1,
+      "out": {
+        "spend": 2,
+        "nextSpendAt": 1763412960000
+      }
+    },
+    {
+      "name": "catch up limited by balance",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 1,
+        "aheadMs": -172800000,
+        "startAt": 0,
+        "nextSpendAt": 0,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.3,
+      "out": {
+        "spend": 1,
+        "nextSpendAt": 1763477760000
+      }
+    },
+    {
+      "name": "well ahead: nothing",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 30,
+        "aheadMs": 1036800000,
+        "startAt": 0,
+        "nextSpendAt": 1763399999999,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.5,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 0
+      }
+    },
+    {
+      "name": "schedule the next spend",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 30,
+        "aheadMs": 432000000,
+        "startAt": 0,
+        "nextSpendAt": 0,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.5,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 1763529600000
+      }
+    },
+    {
+      "name": "spend due",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 30,
+        "aheadMs": 432000000,
+        "startAt": 0,
+        "nextSpendAt": 1763399999000,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.9,
+      "out": {
+        "spend": 1,
+        "nextSpendAt": 1763633280000
+      }
+    },
+    {
+      "name": "not yet due",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 30,
+        "aheadMs": 432000000,
+        "startAt": 0,
+        "nextSpendAt": 1763400001000,
+        "unitMs": 259200000,
+        "lowWaterMs": 259200000,
+        "highWaterMs": 864000000,
+        "maxPerRequest": 30
+      },
+      "rand": 0.9,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 1763400001000
+      }
+    }
+  ],
+  "overage": [
+    {
+      "name": "buy",
+      "input": {
+        "paid": true,
+        "remainingBytes": 5368709120,
+        "buyBelowBytes": 10737418240,
+        "capUnits": 10,
+        "spentUnits": 0,
+        "blockUnits": 5,
+        "balance": 20
+      },
+      "out": true
+    },
+    {
+      "name": "free plan never buys",
+      "input": {
+        "paid": false,
+        "remainingBytes": 5368709120,
+        "buyBelowBytes": 10737418240,
+        "capUnits": 10,
+        "spentUnits": 0,
+        "blockUnits": 5,
+        "balance": 20
+      },
+      "out": false
+    },
+    {
+      "name": "plenty left",
+      "input": {
+        "paid": true,
+        "remainingBytes": 53687091200,
+        "buyBelowBytes": 10737418240,
+        "capUnits": 10,
+        "spentUnits": 0,
+        "blockUnits": 5,
+        "balance": 20
+      },
+      "out": false
+    },
+    {
+      "name": "cap reached",
+      "input": {
+        "paid": true,
+        "remainingBytes": 5368709120,
+        "buyBelowBytes": 10737418240,
+        "capUnits": 10,
+        "spentUnits": 10,
+        "blockUnits": 5,
+        "balance": 20
+      },
+      "out": false
+    },
+    {
+      "name": "second block fits the cap",
+      "input": {
+        "paid": true,
+        "remainingBytes": 5368709120,
+        "buyBelowBytes": 10737418240,
+        "capUnits": 10,
+        "spentUnits": 5,
+        "blockUnits": 5,
+        "balance": 20
+      },
+      "out": true
+    },
+    {
+      "name": "wallet too small",
+      "input": {
+        "paid": true,
+        "remainingBytes": 5368709120,
+        "buyBelowBytes": 10737418240,
+        "capUnits": 10,
+        "spentUnits": 0,
+        "blockUnits": 5,
+        "balance": 4
+      },
+      "out": false
+    }
+  ],
+  "planAhead": [
+    {
+      "name": "same plan",
+      "plan": "pro",
+      "paid": {
+        "plan": "pro",
+        "paidUntil": 1763745600000
+      },
+      "now": 1763400000000,
+      "out": 345600000
+    },
+    {
+      "name": "inside the grace",
+      "plan": "pro",
+      "paid": {
+        "plan": "pro",
+        "paidUntil": 1763313600000
+      },
+      "now": 1763400000000,
+      "out": -86400000
+    },
+    {
+      "name": "past the grace",
+      "plan": "pro",
+      "paid": {
+        "plan": "pro",
+        "paidUntil": 1763054400000
+      },
+      "now": 1763400000000,
+      "out": 0
+    },
+    {
+      "name": "free",
+      "plan": "pro",
+      "paid": {
+        "plan": null,
+        "paidUntil": 0
+      },
+      "now": 1763400000000,
+      "out": 0
+    },
+    {
+      "name": "pro to pro max halves",
+      "plan": "pro-max",
+      "paid": {
+        "plan": "pro",
+        "paidUntil": 1763918400000
+      },
+      "now": 1763400000000,
+      "out": 259200000
+    },
+    {
+      "name": "pro max to pro doubles",
+      "plan": "pro",
+      "paid": {
+        "plan": "pro-max",
+        "paidUntil": 1763659200000
+      },
+      "now": 1763400000000,
+      "out": 518400000
+    },
+    {
+      "name": "switch inside the grace starts fresh",
+      "plan": "pro-max",
+      "paid": {
+        "plan": "pro",
+        "paidUntil": 1763313600000
+      },
+      "now": 1763400000000,
+      "out": 0
+    }
+  ]
+}

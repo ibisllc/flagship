@@ -1,0 +1,14 @@
+{
+  "about": "TEST ONLY: the voucher vectors signing key. Never used outside tests.",
+  "jwk": {
+    "kty": "RSA",
+    "n": "yke9RQns5OtoBGJQ5LW0Dw-Lx7GJzISKGZHzsUJMJ-unKfBZtaXBaKqaN5XMC_wYGz9zQoQN8wVjH_40d9EbbFA-Vxx3rzPVpVkR5JTX-ZJAXBw-ClwGsbJm8mlZboZW0lx1h97LdjfSkJLLqrnuGNLo0ELPZ8pb5ISWQkoD2xlH8cv_CzOSAah4WEfOLaqlKuaNgfXtK97EydW_8FZmxjNUzAgAyR1ftGX-KO7wx3gUtvIP-wWSeT8TKtn2D91j29WBuhwzGbVzE2U50ecJP2NDbv8pRTWtPlTJ2rrsMoJ39lzrGuFgXqIf6-lUOUShT-as8-udvJXBz9WWrXA3aw",
+    "e": "AQAB",
+    "d": "G_6dtSZQgMYLmT-6Dk0PZF40bCin94QIUM2gOlIAlC3K7sTyxW7xO3kQ6sxydt4mv-6iFvyLqax_MXhO7p4j-3OHjSrFbZvw33daQJZQ5ZtWCOlntKtTydf042utEtzIu0hMg8dTxUKog5WtVi1xREI8MkZsyeJ5oUCwQvBXZET2F_4QLRcJyQkx-hrNM31miAu5TY7vIjE5X-5e90eweXd9pR7HMr_ZzDjq-BCIFo2LJeScM_da0Y6aCFQV6yT_t10AmOvfbuWCA8j-vDW7pSOcAKyFc333jGAOKQx2SlrFv-WOASr_tu4uKRuBJ6onQl9m6aRqMq1VlNFPmsBGIQ",
+    "p": "_Mrhwqofa5z1AtqfKu9quzfQyuYgBnIu5yJ2XKZSTXY2JVJHVruLt4DZt6L94YqRbJoS3sB5cfVbTVL8S5L8W_R6he3Ui_5Eo1mm6c2mbzBvDjwJlc3-JmNYW2s_iGYujIFYUF4mKDra5qKX8Ok5yttC9XYieFcrMg8bzA6xhkM",
+    "q": "zNjIsyxu5YfI_oOtSUD_rGDfatl42jfXnmW6h21HVmo9OYGkxOFIXqUpSQklKI2ieUZ7cVblzbvngpXQ9TFSwMRHn1XVuhvsEngexUkNLhoKBYwinpX_nLEciUZBjCMBN8Il6aI6YDicdeCOdZHE-7KaT0_aw0_dmVhTJ12Me7k",
+    "dp": "d4s51-S7lxhShVb9jkBKKN7sTgclfebhZ0xUzNuacCdG079lHQ7zs4OrcbwSc2Yj_0edRNmglNOCqb5ksRiBXrrudgdSTCGiM91hoY8u9cXhvsmFfuI7Hcw9LH47PTWVLby9FsRvJvcuLYMWd0bTnaqyr4F-K4qNUs7yRj1sliE",
+    "dq": "qgoVZ22tzEhPlr21HUagNPXg3zAQeou6Jxjoojwa6Ged1NuB64_Z4_6Ta7X0q1oOkT7pfyaT8ZhVz3cPEklUGQGVNnUoyakd6CLf4AIIt8kTopE1t5BpsybtuiGgjXQNMbyufeaVMIQtlEfH2V4cNpaGMunlfRURrJW9yMKFt7k",
+    "qi": "dFh61a14qpn8_L9p-abmxTTVuX2hqSjcd4-bm1V5Gq_ej8tqw1-kSJSGaWmXFhsOmZkOwRs76e_Lo5t8JC6os70on_69UBef8nnOsEKcHjrBHXI-7Ex2agzGxEqcg9j6Qydk4W2Dt_2P6QKVGOYDlIGolMXJiR18hKIyl-hlWp0"
+  }
+}
