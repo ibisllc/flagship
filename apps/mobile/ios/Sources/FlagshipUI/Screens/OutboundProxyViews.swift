@@ -201,7 +201,7 @@ struct OutboundProxyCard: View {
                     if !boxUnreachable, let status = OutboundProxyCopy.statusLine(shown.status) {
                         Text(status)
                             .font(FS.font.caption())
-                            .foregroundColor(shown.status.state == "ok" ? c.textMuted : c.danger)
+                            .foregroundColor(shown.status.state == "ok" ? c.textMuted : (shown.status.state == "fallback" ? c.warning : c.danger))
                             .accessibilityIdentifier("sd-proxy-status")
                     }
                     if let saved = controller?.savedMessage {
