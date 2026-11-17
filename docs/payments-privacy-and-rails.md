@@ -2,9 +2,11 @@
 
 Status: **design 2026-11-13; payments steps 1-3 built 2026-11-17** on
 `0.4/payments` (voucher core, phone-held wallet with trickle spending, Plan
-screens). Release 0.4, item F2 "Subscriptions". Section 5.11 replaces the
-server-held stash of 5.3 and 5.4 with the owner's decision of 2026-11-17;
-section 11 says what is built.
+screens); steps 4 and 5 (the Stripe web shop, App Store and Play in-app
+purchases, packs only) built 2026-11-17 on `0.4/payments-rails`. Release 0.4,
+item F2 "Subscriptions". Section 5.11 replaces the server-held stash of 5.3
+and 5.4 with the owner's decision of 2026-11-17; section 11 says how the
+rails are built; the owner's setup is `docs/runbooks/payments-setup.md`.
 
 The owner's decision (2026-11-13): "Everything launches now. We need to weigh
 the privacy and convenience of mixing Apple/google/stripe and
