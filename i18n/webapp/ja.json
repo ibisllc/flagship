@@ -3926,5 +3926,6 @@
   "Save the files": "ファイルを保存",
   "Saved {0} voucher file. Each one is like cash: hand it over privately.": "バウチャーファイルを {0} 件保存しました。現金と同じなので、本人にだけ渡してください。",
   "Saved {0} voucher files. Each one is like cash: hand them over privately.": "バウチャーファイルを {0} 件保存しました。どれも現金と同じなので、本人にだけ渡してください。",
-  "A voucher file from your employer or a friend adds its vouchers to your balance.": "勤務先や友人からのバウチャーファイルを読み込むと、そのバウチャーが残高に加わります。"
+  "A voucher file from your employer or a friend adds its vouchers to your balance.": "勤務先や友人からのバウチャーファイルを読み込むと、そのバウチャーが残高に加わります。",
+  "No messages yet. People who sign in on your page can write to you here.": "まだメッセージはありません。あなたのページでサインインした人は、ここからメッセージを送れます。"
 }

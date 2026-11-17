@@ -16005,5 +16005,9 @@
   "A voucher file from your employer or a friend adds its vouchers to your balance.": {
     "en": "A voucher file from your employer or a friend adds its vouchers to your balance.",
     "ctx": "webapp/views/plan.js:157"
+  },
+  "No messages yet. People who sign in on your page can write to you here.": {
+    "en": "No messages yet. People who sign in on your page can write to you here.",
+    "ctx": "webapp/views/messages.js:46"
   }
 }
