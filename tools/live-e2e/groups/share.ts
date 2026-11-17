@@ -347,7 +347,11 @@ async function viewOnHome(A: Account, B: Account, rec: Rec, b: Box): Promise<voi
     return "IRK 403; offered → accepted; second accept 409; wrong token 404";
   });
   if (offered) {
-    const providerToken = `gym-push-${randomBytes(8).toString("hex")}`;
+    // A Web Push subscription .com accepts (RFC 8291 key sizes, a public endpoint); nothing is ever sent to it.
+    const providerToken = JSON.stringify({
+      endpoint: `https://fcm.googleapis.com/fcm/send/gym-${randomBytes(8).toString("hex")}`,
+      keys: { p256dh: Buffer.concat([Buffer.from([4]), randomBytes(64)]).toString("base64url"), auth: randomBytes(16).toString("base64url") },
+    });
     const push = (op: "put" | "delete") => {
       const p: ServerSharePush = { serverDomain: b.fqdn, shareId: sh.shareId, memberPubHex: sh.memberPubHex, op, platform: "webpush", tokenSha256: shareSha256Hex(providerToken), issuedAt: Date.now() };
       return postJson(`https://${CONTROL}/api/server-shares/${sh.shareId}/push`, { push: p, signature: bytesToHex(signServerSharePush(p, sh.member)), ...(op === "put" ? { providerToken } : {}) }, th);
