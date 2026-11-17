@@ -20,7 +20,8 @@ export interface ProxyUpstream {
  * - `auth`: the proxy refused the credentials (or wants some).
  * - `refused`: the proxy answered but won't make this connection.
  * - `protocol`: the proxy spoke something else.
- * Only `unreachable` and `auth` mean the proxy itself is down or misconfigured.
+ * `unreachable`, `auth` and `protocol` mean the proxy itself is down or misconfigured
+ * (OutboundNet also counts `refused` for the hub, which takes the box offline).
  */
 export type ProxyErrorCode = "unreachable" | "auth" | "refused" | "protocol";
 

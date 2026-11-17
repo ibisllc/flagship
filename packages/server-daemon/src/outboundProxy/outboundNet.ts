@@ -16,7 +16,7 @@ import { connect as tlsConnect, type ConnectionOptions, type TLSSocket } from "n
 import type { Duplex } from "node:stream";
 import { Agent as UndiciAgent, buildConnector, setGlobalDispatcher, type Dispatcher } from "undici";
 import { isPublicAddress } from "../egress/policy.js";
-import { openProxiedSocket, ProxyError, type ProxyUpstream } from "./connect.js";
+import { openProxiedSocket, ProxyError, type ProxyErrorCode, type ProxyUpstream } from "./connect.js";
 
 export interface OutboundProxySetting {
   upstream: ProxyUpstream;
@@ -31,6 +31,8 @@ export interface OutboundStatus {
   since: number;
   /** A plain reason, never the credentials. */
   lastError?: string;
+  /** Why, for the apps to say in the owner's language (failing and fallback only). */
+  code?: ProxyErrorCode;
 }
 
 export interface OutboundNetOptions {
@@ -73,6 +75,8 @@ export class OutboundNet {
   private readonly open: typeof openProxiedSocket;
   private readonly timeoutMs: number;
   private readonly directTls = buildConnector({});
+  private criticalHosts = new Set<string>();
+  private readonly stateListeners: Array<(s: OutboundStatus, prev: OutboundStatus, how: { configured: boolean }) => void> = [];
 
   constructor(opts: OutboundNetOptions = {}) {
     this.now = opts.now ?? Date.now;
@@ -80,6 +84,16 @@ export class OutboundNet {
     this.open = opts.openProxied ?? openProxiedSocket;
     this.timeoutMs = opts.connectTimeoutMs ?? 15_000;
     this.stat = { state: "direct", since: this.now() };
+  }
+
+  /** Hosts the box can't work without (the tunnel hub): a proxy that refuses them counts as failing. */
+  setCriticalHosts(hosts: readonly string[]): void {
+    this.criticalHosts = new Set(hosts.map((h) => h.toLowerCase()));
+  }
+
+  /** Called whenever the state (or the failure's code) changes; `configured` when a new setting caused it. */
+  onStateChange(fn: (s: OutboundStatus, prev: OutboundStatus, how: { configured: boolean }) => void): void {
+    this.stateListeners.push(fn);
   }
 
   current(): OutboundProxySetting | null {
@@ -93,7 +107,7 @@ export class OutboundNet {
   /** Switch to `setting` (null = direct). Existing connections are left to their owners. */
   configure(setting: OutboundProxySetting | null): void {
     this.setting = setting;
-    this.setState(setting ? "ok" : "direct");
+    this.setState(setting ? "ok" : "direct", undefined, undefined, true);
     // Pooled connections were opened under the old setting; drop them so the
     // next request uses the new path.
     const old = this.undici;
@@ -145,17 +159,20 @@ export class OutboundNet {
       return sock;
     } catch (e) {
       const err = e instanceof ProxyError ? e : new ProxyError("unreachable", "Can't reach the proxy.");
-      const proxyDown = err.code === "unreachable" || err.code === "auth";
+      // The proxy itself is down or broken; or it refuses the hub, which takes the box offline just the same.
+      const proxyDown =
+        err.code === "unreachable" || err.code === "auth" || err.code === "protocol" ||
+        (err.code === "refused" && this.criticalHosts.has(host.toLowerCase()));
       if (!proxyDown) throw err;
       if (this.setting === s) {
         if (s.fallbackDirect) {
-          if (this.stat.state !== "fallback") {
+          if (this.stat.state !== "fallback" || this.stat.code !== err.code) {
             this.log(`[outbound-proxy] ${err.message} Connecting directly (the owner allowed it).`);
-            this.setState("fallback", err.message);
+            this.setState("fallback", err.message, err.code);
           }
         } else if (this.stat.state !== "failing" || this.stat.lastError !== err.message) {
           this.log(`[outbound-proxy] ${err.message}`);
-          this.setState("failing", err.message);
+          this.setState("failing", err.message, err.code);
         }
       }
       if (s.fallbackDirect) return this.direct(host, port);
@@ -260,8 +277,22 @@ export class OutboundNet {
     });
   }
 
-  private setState(state: OutboundState, lastError?: string): void {
-    this.stat = { state, since: this.now(), ...(lastError ? { lastError } : {}) };
+  private setState(state: OutboundState, lastError?: string, code?: ProxyErrorCode, configured = false): void {
+    const prev = this.stat;
+    this.stat = { state, since: this.now(), ...(lastError ? { lastError } : {}), ...(code ? { code } : {}) };
+    if (prev.state === state && prev.code === code) return;
+    for (const fn of this.stateListeners) {
+      try {
+        fn({ ...this.stat }, prev, { configured });
+      } catch {
+        /* a listener never breaks a connection */
+      }
+    }
+  }
+
+  /** A direct TCP connection, never through the proxy (the lane and its relay calls). */
+  connectDirect(host: string, port: number): Promise<Socket> {
+    return this.direct(host, port);
   }
 }
 

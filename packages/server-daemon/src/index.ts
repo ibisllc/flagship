@@ -2268,13 +2268,27 @@ async function main(): Promise<void> {
           readOrderIssuedAt: () => serverOrder.current()?.order.issuedAt ?? 0,
         }
       : {}),
-    onAccountTier: (tier: string) => outboundProxy?.setAccountTier(tier),
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
     readRuns: () => servicePlatformRefForServer.current?.list().map((a) => a.slug),
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
     readAwaitingBackup: () => restoreWait?.heartbeatView() ?? null,
   });
   statusHeartbeatRef.current = statusHeartbeat;
+  // The owner's proxy failing: Activity, a report to .com (push + /pods), and the lane that
+  // lets the owner fix or clear it while the box is offline (docs/outbound-proxy.md "Failure handling").
+  if (outboundProxy) {
+    const hub = hostPortOf(resolvedTunnelHub);
+    outboundProxy.net.setCriticalHosts([hub.host]);
+    void outboundProxy
+      .startLane({
+        controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+        signAsBox: (msg) => custodian.signAsBox(msg),
+        note: (kind, detail, o) => activityLog.note(kind, detail, o),
+        ohttpConfigPath: `${dataDir}/ohttp-config.json`,
+        probeTarget: () => hostPortOf(resolvedTunnelHub),
+      })
+      .catch((e: Error) => console.warn(`[outbound-proxy] lane didn't start: ${e.message}`));
+  }
   const liveCertInfoRef: {
     current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
   } = { current: null };
@@ -6007,6 +6021,8 @@ async function wireOwnerHandlers(deps: {
       log: (m) => console.warn(m),
     });
     await plan.load();
+    // The outbound proxy is Pro (docs/outbound-proxy.md): the same CA-signed attestation gates it.
+    outboundProxy?.setPlan({ state: () => plan.state(), refresh: () => plan.refresh() });
     const scopeAuthority = {
       ownerIrkPub: cfg.irkPublicKey,
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),

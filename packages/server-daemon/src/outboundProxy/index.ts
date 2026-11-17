@@ -6,7 +6,8 @@
 import acme from "acme-client";
 import { startOutboundBridge, type BridgeHandle } from "./bridge.js";
 import { OUTBOUND_PROXY_CURLRC, syncCurlrc } from "./curlrc.js";
-import { buildOutboundProxyHttp, outboundProxySummary, type OutboundProxySummary } from "./http.js";
+import { buildOutboundProxyHttp, outboundProxySummary, type OutboundProxySummary, type PlanGate } from "./http.js";
+import { startProxyLane, type ProxyLane, type ProxyLaneDeps } from "./lane.js";
 import { outboundNet as defaultNet, type OutboundNet } from "./outboundNet.js";
 import { OutboundProxyStore, settingOf, type OutboundProxyAuthority, type StoredOutboundProxy } from "./store.js";
 
@@ -17,8 +18,10 @@ export interface OutboundProxyRuntime {
   store: OutboundProxyStore;
   net: OutboundNet;
   summary(): OutboundProxySummary;
-  /** Record the account's plan from `.com`'s heartbeat reply (Pro gate). */
-  setAccountTier(tier: string): void;
+  /** The box's plan check (Pro gate); until set, the plan is unknown and nothing is refused. */
+  setPlan(plan: PlanGate): void;
+  /** Start the failure alerts and the fallback lane once the box can sign (docs/outbound-proxy.md "Failure handling"). */
+  startLane(deps: Omit<ProxyLaneDeps, "net" | "store" | "authority" | "activate">): Promise<ProxyLane>;
   /** Called after every switch (the tunnel reconnects so the hub sees the new path). */
   onChange(fn: () => void): void;
   /** The screens handler; `probeTarget` is the hub. */
@@ -37,8 +40,12 @@ export async function setUpOutboundProxy(opts: {
   const store = new OutboundProxyStore(`${opts.dataDir}/outbound-proxy.json`, opts.authority, log);
   const listeners: Array<() => void> = [];
   let bridge: BridgeHandle | null = null;
-  let accountTier: string | null = null;
-  const readTier = () => accountTier;
+  let plan: PlanGate | undefined;
+  const planGate: PlanGate = {
+    state: () => plan?.state() ?? "unknown",
+    refresh: () => plan?.refresh() ?? Promise.resolve("unknown"),
+  };
+  let lane: ProxyLane | null = null;
 
   const activate = async (stored: StoredOutboundProxy | null) => {
     const setting = settingOf(stored);
@@ -82,12 +89,19 @@ export async function setUpOutboundProxy(opts: {
   return {
     store,
     net,
-    summary: () => outboundProxySummary(store, net, readTier),
-    setAccountTier: (tier) => {
-      accountTier = tier;
+    summary: () => outboundProxySummary(store, net, planGate),
+    setPlan: (p) => {
+      plan = p;
+    },
+    startLane: async (d) => {
+      if (!lane) {
+        lane = startProxyLane({ ...d, net, store, authority: opts.authority, activate });
+        await lane.start();
+      }
+      return lane;
     },
     onChange: (fn) => listeners.push(fn),
     http: (probeTarget) =>
-      buildOutboundProxyHttp({ store, net, authority: opts.authority, probeTarget, activate, accountTier: readTier }),
+      buildOutboundProxyHttp({ store, net, authority: opts.authority, probeTarget, activate, plan: planGate }),
   };
 }

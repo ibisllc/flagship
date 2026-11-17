@@ -384,7 +384,11 @@ describe("the outbound proxy store and endpoint", () => {
     }
   });
 
-  function endpoint(probeResult: string | null, now = NOW, tier: { current: string | null } = { current: null }) {
+  function endpoint(
+    probeResult: string | null,
+    now = NOW,
+    plan: { current: "pro" | "free" | "unknown"; afterRefresh?: "pro" | "free" | "unknown"; refreshes?: number } = { current: "unknown" },
+  ) {
     const d = dir();
     const store = new OutboundProxyStore(join(d, "outbound-proxy.json"), authority);
     const net = new OutboundNet();
@@ -398,7 +402,14 @@ describe("the outbound proxy store and endpoint", () => {
       activate: (s) => void activated.push(s),
       now: () => now,
       switchDelayMs: 0,
-      accountTier: () => tier.current,
+      plan: {
+        state: () => plan.current,
+        refresh: async () => {
+          plan.refreshes = (plan.refreshes ?? 0) + 1;
+          if (plan.afterRefresh) plan.current = plan.afterRefresh;
+          return plan.current;
+        },
+      },
     });
     const post = (body: unknown, companion = false) =>
       handle(OUTBOUND_PROXY_PATH, "POST", { method: "POST", path: OUTBOUND_PROXY_PATH, headers: {}, body: Buffer.from(JSON.stringify(body)) }, { companion });
@@ -447,15 +458,15 @@ describe("the outbound proxy store and endpoint", () => {
     expect(JSON.parse(String(r?.body)).error).toBe("Enter the proxy's username and password.");
   });
 
-  it("takes no new proxy once .com says the account is on Free, but still turns one off", async () => {
-    const tier: { current: string | null } = { current: null };
-    const e = endpoint(null, NOW, tier);
+  it("takes no new proxy once the CA-signed plan says Free, but still turns one off", async () => {
+    const plan: { current: "pro" | "free" | "unknown"; afterRefresh?: "pro" | "free" | "unknown"; refreshes?: number } = { current: "unknown" };
+    const e = endpoint(null, NOW, plan);
     expect(JSON.parse(String((await e.get())?.body)).available).toBe(true);
-    // Before .com has answered, a box doesn't refuse (it may need the proxy to ask).
+    // Before the box holds an attestation, it doesn't refuse (it may need the proxy to ask).
     const p = order();
     expect((await e.post({ proxy: p, signature: signBoxProxy(p, irk) }))?.status).toBe(200);
 
-    tier.current = "free";
+    plan.current = "free";
     expect(JSON.parse(String((await e.get())?.body)).available).toBe(false);
     const change = order({ host: "other.example.net", issuedAt: NOW + 1 });
     const r = await e.post({ proxy: change, signature: signBoxProxy(change, irk) });
@@ -466,9 +477,12 @@ describe("the outbound proxy store and endpoint", () => {
     const off = order({ kind: "none", host: "", port: 0, issuedAt: NOW + 2 });
     expect((await e.post({ proxy: off, signature: signBoxProxy(off, irk) }))?.status).toBe(200);
 
-    tier.current = "hobby";
+    // The owner just bought Pro: the box asks for a fresh attestation before refusing.
+    plan.afterRefresh = "pro";
+    const before = plan.refreshes ?? 0;
     const again = order({ issuedAt: NOW + 3 });
     expect((await e.post({ proxy: again, signature: signBoxProxy(again, irk) }))?.status).toBe(200);
+    expect(plan.refreshes).toBe(before + 1);
   });
 
   it("keeps the old setting when the new proxy fails its test", async () => {
