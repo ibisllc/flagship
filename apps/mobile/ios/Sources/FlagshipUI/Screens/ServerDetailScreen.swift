@@ -63,6 +63,9 @@ public struct ServerDetailScreen: View {
     /// `.com` needs (a 0.2 box under 0.3). Shows the banner and moves the
     /// Software update card to the top. nil: it needs none.
     let updateRequired: UpdateRequiredWire?
+    /// `/pods` `proxyAlert`: the box's outbound proxy isn't working. Shown
+    /// even when the box itself can't be reached (its own status wins when it answers).
+    let proxyAlert: ProxyAlertWire?
     /// The owner revoked this box (lost / stolen / decommissioned). It can't
     /// connect, so its BFF never answers; the page offers Un-revoke instead.
     let revoked: Bool
@@ -108,6 +111,7 @@ public struct ServerDetailScreen: View {
         verifiedCertStatus: DaemonStatusReport? = nil,
         health: BoxHealth? = nil,
         updateRequired: UpdateRequiredWire? = nil,
+        proxyAlert: ProxyAlertWire? = nil,
         revoked: Bool = false,
         identityPubKeyHex: String = "",
         apps: ServerAppsController? = nil,
@@ -136,6 +140,7 @@ public struct ServerDetailScreen: View {
         self.verifiedCertStatus = verifiedCertStatus
         self.health = health
         self.updateRequired = updateRequired
+        self.proxyAlert = proxyAlert
         self.revoked = revoked
         self.identityPubKeyHex = identityPubKeyHex
         self.apps = apps
@@ -184,6 +189,20 @@ public struct ServerDetailScreen: View {
         return false
     }
 
+    /// The box doesn't answer (its page failed to load, or `.com` says it's offline).
+    private var boxUnreachable: Bool {
+        if case .failed = state { return true }
+        return offline && !isLoaded
+    }
+
+    /// The proxy alert to show: the box's own status when it answers and reports one, else `/pods`.
+    private var shownProxyAlert: (state: String, code: String?)? {
+        if case .loaded(let d) = state, let st = d.outboundProxy?.status {
+            return st.state == "failing" || st.state == "fallback" ? (st.state, st.code) : nil
+        }
+        return proxyAlert.map { ($0.state, $0.code) }
+    }
+
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
@@ -217,6 +236,19 @@ public struct ServerDetailScreen: View {
                 }
                 if let updateRequired, !revoked {
                     UpdateRequiredBanner(view: updateRequired)
+                }
+                if let alert = shownProxyAlert, !revoked {
+                    OutboundProxyAlertBanner(state: alert.state, code: alert.code, offline: offline || boxUnreachable)
+                    // The box can't be reached and its proxy is why: fix or clear it through `.com`'s lane.
+                    if boxUnreachable, alert.state == "failing", let fqdn = approvalFqdn, !fqdn.isEmpty {
+                        OutboundProxyCard(
+                            serverDomain: fqdn,
+                            summary: OutboundProxyLastKnown.load(fqdn: fqdn)
+                                ?? OutboundProxySummary(proxy: nil, hasCredentials: false,
+                                                        status: .init(state: "failing", since: proxyAlert?.since ?? 0, code: alert.code)),
+                            boxUnreachable: true,
+                            onRefreshDetail: onRefreshDetail)
+                    }
                 }
                 switch state {
                 case .idle, .loading:

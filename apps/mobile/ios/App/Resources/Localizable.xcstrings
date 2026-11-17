@@ -161527,6 +161527,949 @@
           }
         }
       }
+    },
+    "Not on sale yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no está a la venta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore en vente"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nicht im Verkauf"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não está à venda"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まだ販売していません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未开售"
+          }
+        }
+      }
+    },
+    "Card": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarjeta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Karte"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cartão"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カード"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "银行卡"
+          }
+        }
+      }
+    },
+    "Coming soon": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Próximamente"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bientôt disponible"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demnächst"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Em breve"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "近日公開"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即将推出"
+          }
+        }
+      }
+    },
+    "Buying isn't available yet. Nothing here charges you.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todavía no se puede comprar. Nada aquí te cobra."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'achat n'est pas encore disponible. Rien ici ne vous est facturé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaufen ist noch nicht möglich. Hier wird dir nichts berechnet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não é possível comprar. Nada aqui gera cobrança."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "購入はまだできません。ここで料金が発生することはありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂时还不能购买。这里不会向你收取任何费用。"
+          }
+        }
+      }
+    },
+    "The outbound proxy isn't working": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El proxy de salida no funciona"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le proxy sortant ne fonctionne pas"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ausgehende Proxy funktioniert nicht"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O proxy de saída não está funcionando"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信プロキシが機能していません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出站代理无法使用"
+          }
+        }
+      }
+    },
+    "Connecting directly: the outbound proxy isn't working": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conexión directa: el proxy de salida no funciona"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion directe : le proxy sortant ne fonctionne pas"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direkte Verbindung: Der ausgehende Proxy funktioniert nicht"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectando diretamente: o proxy de saída não está funcionando"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直接接続中：送信プロキシが機能していません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在直接连接：出站代理无法使用"
+          }
+        }
+      }
+    },
+    "The outbound proxy works again": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El proxy de salida vuelve a funcionar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le proxy sortant fonctionne à nouveau"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ausgehende Proxy funktioniert wieder"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O proxy de saída voltou a funcionar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信プロキシが再び機能しています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出站代理已恢复正常"
+          }
+        }
+      }
+    },
+    "Outbound proxy not working": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El proxy de salida no funciona"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy sortant en panne"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgehender Proxy funktioniert nicht"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy de saída sem funcionar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信プロキシが機能していません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出站代理无法使用"
+          }
+        }
+      }
+    },
+    "The outbound proxy isn't working: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El proxy de salida no funciona: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le proxy sortant ne fonctionne pas : %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ausgehende Proxy funktioniert nicht: %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O proxy de saída não está funcionando: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信プロキシが機能していません：%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出站代理无法使用：%@"
+          }
+        }
+      }
+    },
+    "The outbound proxy isn't working, so this server is connecting directly: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El proxy de salida no funciona, así que este servidor se conecta directamente: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le proxy sortant ne fonctionne pas, ce serveur se connecte donc directement : %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ausgehende Proxy funktioniert nicht, daher verbindet sich dieser Server direkt: %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O proxy de saída não está funcionando, então este servidor está se conectando diretamente: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信プロキシが機能していないため、このサーバーは直接接続しています：%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出站代理无法使用，因此此服务器正在直接连接：%@"
+          }
+        }
+      }
+    },
+    "The proxy refused the username or password.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El proxy rechazó el usuario o la contraseña."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le proxy a refusé le nom d'utilisateur ou le mot de passe."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Proxy hat den Benutzernamen oder das Passwort abgelehnt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O proxy recusou o nome de usuário ou a senha."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロキシがユーザー名またはパスワードを拒否しました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理拒绝了用户名或密码。"
+          }
+        }
+      }
+    },
+    "The proxy refused the connection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El proxy rechazó la conexión."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le proxy a refusé la connexion."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Proxy hat die Verbindung abgelehnt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O proxy recusou a conexão."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロキシが接続を拒否しました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理拒绝了连接。"
+          }
+        }
+      }
+    },
+    "The proxy gave an answer the server doesn't understand.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El proxy dio una respuesta que el servidor no entiende."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le proxy a donné une réponse que le serveur ne comprend pas."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Proxy hat eine Antwort gegeben, die der Server nicht versteht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O proxy deu uma resposta que o servidor não entende."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロキシがサーバーの理解できない応答を返しました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理返回了服务器无法理解的响应。"
+          }
+        }
+      }
+    },
+    "Can't reach the proxy.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se puede contactar con el proxy."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de joindre le proxy."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Proxy ist nicht erreichbar."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível alcançar o proxy."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロキシに接続できません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接到代理。"
+          }
+        }
+      }
+    },
+    "This server is offline until its proxy works again or you change it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor está sin conexión hasta que su proxy vuelva a funcionar o lo cambies."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce serveur est hors ligne jusqu'à ce que son proxy fonctionne à nouveau ou que vous le changiez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Server ist offline, bis sein Proxy wieder funktioniert oder du ihn änderst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor está offline até que o proxy volte a funcionar ou você o altere."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロキシが再び機能するか、あなたが変更するまで、このサーバーはオフラインです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在代理恢复正常或你更改它之前，此服务器处于离线状态。"
+          }
+        }
+      }
+    },
+    "Sent. The server picks up the change within a few minutes, even while its proxy is down.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviado. El servidor aplicará el cambio en unos minutos, aunque su proxy no funcione."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyé. Le serveur prendra en compte le changement d'ici quelques minutes, même si son proxy est en panne."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesendet. Der Server übernimmt die Änderung innerhalb weniger Minuten, auch wenn sein Proxy ausgefallen ist."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviado. O servidor aplica a mudança em alguns minutos, mesmo com o proxy fora do ar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信しました。プロキシが停止していても、サーバーは数分以内に変更を取り込みます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已发送。即使代理不可用，服务器也会在几分钟内获取此更改。"
+          }
+        }
+      }
+    },
+    "Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship nunca transporta contraseñas de proxy. Para usar una contraseña nueva, cámbiala desde la misma red que el servidor o desactiva primero el proxy."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship ne transporte jamais les mots de passe de proxy. Pour utiliser un nouveau mot de passe, modifiez-le depuis le même réseau que le serveur, ou désactivez d'abord le proxy."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship überträgt niemals Proxy-Passwörter. Um ein neues Passwort zu verwenden, ändere es aus demselben Netzwerk wie der Server oder schalte den Proxy zuerst aus."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Flagship nunca transporta senhas de proxy. Para usar uma senha nova, altere-a na mesma rede do servidor ou desative o proxy primeiro."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship はプロキシのパスワードを中継しません。新しいパスワードを使うには、サーバーと同じネットワークから変更するか、先にプロキシをオフにしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 从不传输代理密码。要使用新密码，请在与服务器相同的网络中更改，或先关闭代理。"
+          }
+        }
+      }
+    },
+    "The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El relé privado no responde. Los pagos esperan y se reintentan; tu plan sigue activo mientras tanto."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le relais privé ne répond pas. Les paiements attendent et réessaient ; votre offre reste active en attendant."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das private Relay antwortet nicht. Zahlungen warten und werden erneut versucht; dein Tarif bleibt so lange aktiv."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O relay privado não está respondendo. Os pagamentos aguardam e tentam de novo; seu plano continua ativo enquanto isso."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プライベートリレーが応答していません。支払いは待機して再試行します。その間もプランは有効なままです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "私密中继没有响应。付款会等待并重试；在此期间你的套餐保持有效。"
+          }
+        }
+      }
+    },
+    "The private relay wasn't answering, so the last payment went straight to Flagship.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El relé privado no respondía, así que el último pago fue directo a Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le relais privé ne répondait pas, le dernier paiement est donc allé directement à Flagship."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das private Relay hat nicht geantwortet, daher ging die letzte Zahlung direkt an Flagship."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O relay privado não estava respondendo, então o último pagamento foi direto para a Flagship."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プライベートリレーが応答しなかったため、前回の支払いは Flagship に直接送られました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "私密中继没有响应，因此上一笔付款直接发送给了 Flagship。"
+          }
+        }
+      }
+    },
+    "Payments go through %@'s private relay, so Flagship doesn't see your network address when you pay.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los pagos pasan por el relé privado de %@, así que Flagship no ve tu dirección de red cuando pagas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les paiements passent par le relais privé de %@, Flagship ne voit donc pas votre adresse réseau quand vous payez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zahlungen laufen über das private Relay von %@, daher sieht Flagship deine Netzwerkadresse beim Bezahlen nicht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os pagamentos passam pelo relay privado de %@, então a Flagship não vê seu endereço de rede quando você paga."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支払いは %@ のプライベートリレーを経由するため、支払い時に Flagship があなたのネットワークアドレスを見ることはありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "付款经由 %@ 的私密中继，因此你付款时 Flagship 看不到你的网络地址。"
+          }
+        }
+      }
+    },
+    "Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los pagos pasan por un relé privado que por ahora gestiona Flagship. Mantiene tu dirección fuera de los registros de pago, pero aún no es un operador independiente."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les paiements passent par un relais privé que Flagship exploite pour l'instant. Il garde votre adresse hors des journaux de paiement, mais ce n'est pas encore un opérateur indépendant."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zahlungen laufen über ein privates Relay, das vorerst Flagship betreibt. Es hält deine Adresse aus den Zahlungsprotokollen heraus, ist aber noch kein unabhängiger Betreiber."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os pagamentos passam por um relay privado que, por enquanto, a Flagship opera. Ele mantém seu endereço fora dos registros de pagamento, mas ainda não é um operador independente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支払いは、当面 Flagship が運営するプライベートリレーを経由します。支払いログにアドレスは残りませんが、まだ独立した運営者ではありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "付款经由目前由 Flagship 运营的私密中继。它让你的地址不出现在付款日志中，但还不是独立运营方。"
+          }
+        }
+      }
+    },
+    "Flagship can see your network address when you pay. It keeps none of it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship puede ver tu dirección de red cuando pagas. No guarda nada de ella."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship peut voir votre adresse réseau quand vous payez. Il n'en conserve rien."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship kann deine Netzwerkadresse sehen, wenn du bezahlst. Es speichert nichts davon."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Flagship pode ver seu endereço de rede quando você paga. Ela não guarda nada disso."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支払い時、Flagship はあなたのネットワークアドレスを見ることができます。何も保存しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你付款时 Flagship 能看到你的网络地址，但不会保留任何记录。"
+          }
+        }
+      }
+    },
+    "One of your servers can't use its outbound proxy. Open Flagship to see why.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uno de tus servidores no puede usar su proxy de salida. Abre Flagship para ver por qué."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un de vos serveurs ne peut pas utiliser son proxy sortant. Ouvrez Flagship pour savoir pourquoi."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einer deiner Server kann seinen ausgehenden Proxy nicht nutzen. Öffne Flagship, um zu sehen, warum."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um dos seus servidores não consegue usar o proxy de saída. Abra a Flagship para ver o motivo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの 1 台が送信プロキシを使用できません。理由は Flagship を開いて確認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的一台服务器无法使用其出站代理。打开 Flagship 查看原因。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

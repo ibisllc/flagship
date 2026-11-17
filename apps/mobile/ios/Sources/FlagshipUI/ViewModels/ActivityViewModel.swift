@@ -190,6 +190,10 @@ public enum BoxEventLabels {
         // The relay mesh (relay-mesh.md §9.3, §9.4): the detail is the box's own sentence.
         "server.relay.moved": String(localized: "Moved to another Flagship relay"),
         "server.relay.move-refused": String(localized: "Stayed on its current relay"),
+        // The outbound proxy (docs/outbound-proxy.md "Failure UX"); the detail is the box's line.
+        "server.proxy.failing": String(localized: "The outbound proxy isn't working"),
+        "server.proxy.fallback": String(localized: "Connecting directly: the outbound proxy isn't working"),
+        "server.proxy.ok": String(localized: "The outbound proxy works again"),
         "access.lists.merged": String(localized: "Back to one access list"),
     ]
 
@@ -207,9 +211,18 @@ public enum BoxEventLabels {
         return (labels[key] ?? human) + by
     }
 
+    /// Kinds shown in the warning style even when the box logged them as ok.
+    static let warningKinds: Set<String> = ["server.proxy.failing", "server.proxy.fallback"]
+
+    /// The row is a warning: a refusal or failure, or a kind that needs the owner.
+    public static func isWarning(_ e: BoxActivityEntry) -> Bool {
+        !e.ok || warningKinds.contains(e.kind ?? e.action)
+    }
+
     public static func symbol(_ e: BoxActivityEntry) -> String {
         let key = e.kind ?? e.action
-        if !e.ok { return "exclamationmark.triangle.fill" }
+        if isWarning(e) { return "exclamationmark.triangle.fill" }
+        if key.hasPrefix("server.proxy") { return "network" }
         if key.hasPrefix("server.backup") || key.hasPrefix("server.restore") { return "externaldrive.fill" }
         if key.hasPrefix("server.decommission") || key.hasPrefix("server.migration") { return "shippingbox.fill" }
         if key.hasPrefix("server.update") { return "arrow.up.circle.fill" }

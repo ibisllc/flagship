@@ -306,6 +306,7 @@ public struct HomeTab: View {
                     path.append(.importBackup(targetFqdn: pod.fqdn))
                 }
                 .updatesRequired(app.podsUpdateRequired)
+                .proxyAlerts(app.podsProxyAlert)
                 .untrusted(untrustedServers)
             } else {
                 ProgressView()
@@ -1098,6 +1099,7 @@ struct ServerDetailContainer: View {
                     },
                     health: pod.flatMap { app.podHealth[$0.fqdn.lowercased()] },
                     updateRequired: pod.flatMap { app.podsUpdateRequired[$0.fqdn.lowercased()] },
+                    proxyAlert: pod.flatMap { app.podsProxyAlert[$0.fqdn.lowercased()] },
                     revoked: pod?.isRevoked ?? false,
                     identityPubKeyHex: shownPod?.identityPubKeyHex ?? "",
                     apps: serverApps,

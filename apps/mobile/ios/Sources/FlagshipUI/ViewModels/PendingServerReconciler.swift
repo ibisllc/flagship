@@ -126,6 +126,9 @@ public struct PendingServerReconciler {
         var outdated: [String: UpdateRequiredWire] = [:]
         for entry in registeredEntries { if let u = entry.updateRequired { outdated[entry.serverDomain.lowercased()] = u } }
         if app.podsUpdateRequired != outdated { app.podsUpdateRequired = outdated }
+        var proxyAlerts: [String: ProxyAlertWire] = [:]
+        for entry in registeredEntries { if let a = entry.proxyAlert { proxyAlerts[entry.serverDomain.lowercased()] = a } }
+        if app.podsProxyAlert != proxyAlerts { app.podsProxyAlert = proxyAlerts }
         // A server revoked for any reason the owner can't undo was deleted,
         // transferred or retired: drop it if an earlier pass listed it.
         for entry in directory.pods where entry.revokedAt != nil {

@@ -16796,5 +16796,108 @@
   "Paid through the App Store.": {
     "en": "Paid through the App Store.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:230"
+  },
+  "Not on sale yet": {
+    "en": "Not on sale yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:184"
+  },
+  "App Store": {
+    "en": "App Store",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212",
+    "translatable": false
+  },
+  "Card": {
+    "en": "Card",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212"
+  },
+  "Monero": {
+    "en": "Monero",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212",
+    "translatable": false
+  },
+  "Coming soon": {
+    "en": "Coming soon",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:193"
+  },
+  "Buying isn't available yet. Nothing here charges you.": {
+    "en": "Buying isn't available yet. Nothing here charges you.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:208"
+  },
+  "The outbound proxy isn't working": {
+    "en": "The outbound proxy isn't working",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:194"
+  },
+  "Connecting directly: the outbound proxy isn't working": {
+    "en": "Connecting directly: the outbound proxy isn't working",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:195"
+  },
+  "The outbound proxy works again": {
+    "en": "The outbound proxy works again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:196"
+  },
+  "Outbound proxy not working": {
+    "en": "Outbound proxy not working",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:966"
+  },
+  "The outbound proxy isn't working: %@": {
+    "en": "The outbound proxy isn't working: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:66"
+  },
+  "The outbound proxy isn't working, so this server is connecting directly: %@": {
+    "en": "The outbound proxy isn't working, so this server is connecting directly: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:67"
+  },
+  "The proxy refused the username or password.": {
+    "en": "The proxy refused the username or password.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:56"
+  },
+  "The proxy refused the connection.": {
+    "en": "The proxy refused the connection.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:57"
+  },
+  "The proxy gave an answer the server doesn't understand.": {
+    "en": "The proxy gave an answer the server doesn't understand.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:58"
+  },
+  "Can't reach the proxy.": {
+    "en": "Can't reach the proxy.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:59"
+  },
+  "This server is offline until its proxy works again or you change it.": {
+    "en": "This server is offline until its proxy works again or you change it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:72"
+  },
+  "Sent. The server picks up the change within a few minutes, even while its proxy is down.": {
+    "en": "Sent. The server picks up the change within a few minutes, even while its proxy is down.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:73"
+  },
+  "Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.": {
+    "en": "Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OutboundProxyViewModel.swift:74"
+  },
+  "The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.": {
+    "en": "The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:182"
+  },
+  "The private relay wasn't answering, so the last payment went straight to Flagship.": {
+    "en": "The private relay wasn't answering, so the last payment went straight to Flagship.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:184"
+  },
+  "Payments go through %@'s private relay, so Flagship doesn't see your network address when you pay.": {
+    "en": "Payments go through %@'s private relay, so Flagship doesn't see your network address when you pay.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:186"
+  },
+  "Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet.": {
+    "en": "Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:188"
+  },
+  "Flagship can see your network address when you pay. It keeps none of it.": {
+    "en": "Flagship can see your network address when you pay. It keeps none of it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:190"
+  },
+  "One of your servers can't use its outbound proxy. Open Flagship to see why.": {
+    "en": "One of your servers can't use its outbound proxy. Open Flagship to see why.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
   }
 }

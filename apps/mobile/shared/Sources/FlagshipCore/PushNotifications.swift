@@ -70,9 +70,14 @@ public final class PushNotifications: NSObject {
     public nonisolated static let shareStartupKind = "share-start-up"
 
     /// Pushes that carry only their category and whose APNs alert already says
-    /// what happened: a box's relay-trust SOS and a newly registered server.
-    /// They name no server, so a tap just opens the app, where Home shows it.
-    public nonisolated static let accountNoticeCategories: Set<String> = ["cert-alert", "server-registered"]
+    /// what happened: a box's relay-trust SOS, a newly registered server, and a
+    /// server whose outbound proxy stopped working. They name no server, so a
+    /// tap just opens the app, where Home (refreshing `/pods`) shows it.
+    public nonisolated static let accountNoticeCategories: Set<String> = ["cert-alert", "server-registered", outboundProxyCategory]
+
+    /// A server's outbound proxy isn't working (docs/outbound-proxy.md "Failure UX"): content-free; Home marks
+    /// the server from `/pods` `proxyAlert`.
+    public nonisolated static let outboundProxyCategory = "outbound-proxy"
 
     /// A non-admin device of this account invited someone to one of its apps
     /// (sent to admin devices only, content-free). Its `deepLink` opens the

@@ -76,6 +76,7 @@ public enum GymSweepSeams {
         home(args, app, operations, mocks)
         firstContact(args, app, mocks)
         server(args, app, mocks)
+        proxy(args, app, mocks)
         apps(args, app, mocks)
         settings(args, app, mocks)
         build(args, app, operations, mocks)

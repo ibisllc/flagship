@@ -108,15 +108,65 @@ struct OutboundProxyProNote: View {
     }
 }
 
+/// The server page's loud proxy line (docs/outbound-proxy.md "Failure UX"): red while the proxy fails (and, when
+/// the server can't be reached, that it stays offline until the proxy is fixed), a warning while it connects around it.
+struct OutboundProxyAlertBanner: View {
+    @Environment(\.colorScheme) private var scheme
+    let state: String
+    let code: String?
+    let offline: Bool
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        if let line = OutboundProxyCopy.alertLine(state: state, code: code) {
+            let failing = state == "failing"
+            VStack(alignment: .leading, spacing: FS.space.s1) {
+                Label(line, systemImage: failing ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
+                    .font(FS.font.bodySm().weight(.semibold))
+                    .foregroundColor(failing ? c.danger : c.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("sd-proxy-alert")
+                if failing && offline {
+                    Text(OutboundProxyCopy.offlineUntilFixed)
+                        .font(FS.font.caption())
+                        .foregroundColor(c.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("sd-proxy-alert-offline")
+                }
+            }
+            .padding(FS.space.s3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background((failing ? c.dangerWash : c.warningWash))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+            .accessibilityElement(children: .contain)
+        }
+    }
+}
+
+/// The proxy each server last reported (no secrets: kind, host, port, flags), so the page can still offer
+/// "keep the password" through `.com`'s lane while the box is offline.
+enum OutboundProxyLastKnown {
+    private static func key(_ fqdn: String) -> String { "flagship.outboundProxy.lastKnown.\(fqdn.lowercased())" }
+    static func save(_ s: OutboundProxySummary, fqdn: String) {
+        if let d = try? JSONEncoder().encode(s) { UserDefaults.standard.set(d, forKey: key(fqdn)) }
+    }
+    static func load(fqdn: String) -> OutboundProxySummary? {
+        UserDefaults.standard.data(forKey: key(fqdn)).flatMap { try? JSONDecoder().decode(OutboundProxySummary.self, from: $0) }
+    }
+}
+
 /// The server page's "Outbound proxy" section. Hidden when the box doesn't
-/// report one (older daemons).
+/// report one (older daemons). With `boxUnreachable` (the box's proxy keeps it
+/// offline) changes go through `.com`'s lane.
 struct OutboundProxyCard: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var serverClient
     @Environment(AppState.self) private var app
 
     let serverDomain: String
     let summary: OutboundProxySummary
+    var boxUnreachable: Bool = false
     var onRefreshDetail: () async -> Void = {}
 
     @State private var controller: OutboundProxyController?
@@ -124,7 +174,8 @@ struct OutboundProxyCard: View {
 
     private func ctl() -> OutboundProxyController {
         if let controller { return controller }
-        let made = OutboundProxyController(serverDomain: serverDomain, summary: summary, client: client)
+        let made = OutboundProxyController(serverDomain: serverDomain, summary: summary, client: client,
+                                           lane: serverClient, boxUnreachable: boxUnreachable)
         controller = made
         return made
     }
@@ -135,6 +186,8 @@ struct OutboundProxyCard: View {
         // The box says `available: false` once .com has told it the account is
         // on Free: no new proxy, but one already set can still be turned off.
         let pro = shown.available != false
+        // Offline, a proxy is set even when this phone never saw which one.
+        let hasProxy = shown.proxy != nil || boxUnreachable
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text(OutboundProxyCopy.title.uppercased())
                 .font(.system(size: 12, weight: .semibold))
@@ -142,11 +195,13 @@ struct OutboundProxyCard: View {
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text(OutboundProxyCopy.summaryLine(shown.proxy))
-                        .font(FS.font.bodySm())
-                        .foregroundColor(c.text)
-                        .accessibilityIdentifier("sd-proxy-summary")
-                    if let status = OutboundProxyCopy.statusLine(shown.status) {
+                    if shown.proxy != nil || !boxUnreachable {
+                        Text(OutboundProxyCopy.summaryLine(shown.proxy))
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.text)
+                            .accessibilityIdentifier("sd-proxy-summary")
+                    }
+                    if !boxUnreachable, let status = OutboundProxyCopy.statusLine(shown.status) {
                         Text(status)
                             .font(FS.font.caption())
                             .foregroundColor(shown.status.state == "ok" ? c.textMuted : c.danger)
@@ -161,7 +216,7 @@ struct OutboundProxyCard: View {
                     if !pro {
                         OutboundProxyProNote()
                     }
-                    if !app.isDemoAccount && (pro || shown.proxy != nil) {
+                    if !app.isDemoAccount && (pro || hasProxy) {
                         HStack(spacing: FS.space.s2) {
                             if pro {
                                 FSSecondaryButton(OutboundProxyCopy.change) {
@@ -170,7 +225,7 @@ struct OutboundProxyCard: View {
                                 }
                                 .accessibilityIdentifier("sd-proxy-change")
                             }
-                            if shown.proxy != nil {
+                            if hasProxy {
                                 FSGhostButton(OutboundProxyCopy.turnOff) {
                                     let vm = ctl()
                                     Task {
@@ -185,6 +240,8 @@ struct OutboundProxyCard: View {
             }
         }
         .onChange(of: summary) { controller?.update(summary: summary) }
+        .onChange(of: boxUnreachable) { controller?.boxUnreachable = boxUnreachable }
+        .onAppear { if !boxUnreachable { OutboundProxyLastKnown.save(summary, fqdn: serverDomain) } }
         .sheet(isPresented: $showSheet) {
             NavigationStack {
                 OutboundProxySheet(controller: ctl(), onSaved: {

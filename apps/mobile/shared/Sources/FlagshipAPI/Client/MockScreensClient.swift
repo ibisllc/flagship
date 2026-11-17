@@ -82,6 +82,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         detail.appSandbox = appSandboxFixture
         if let lastUpdateFixture { detail.lastUpdate = lastUpdateFixture }
         detail.serving = servingFixture
+        if outboundProxyInDetail { detail.outboundProxy = outboundProxySummary }
         return detail
     }
 
@@ -588,11 +589,14 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public private(set) var outboundProxySetCalls: [OutboundProxySetRequest] = []
     /// Thrown by `outboundProxySet` (after recording the call), once.
     public var outboundProxySetError: Error?
+    /// Server detail carries `outboundProxySummary` (the server page's proxy card and alert line).
+    public var outboundProxyInDetail = false
 
     public func outboundProxy() async throws -> OutboundProxySummary { outboundProxySummary }
 
     public func outboundProxySet(_ req: OutboundProxySetRequest) async throws -> OutboundProxySetResponse {
         outboundProxySetCalls.append(req)
+        GymProbe.note("box proxy \(req.proxy.kind)\(req.credentials == nil ? "" : " with credentials")")
         if let e = outboundProxySetError { outboundProxySetError = nil; throw e }
         let p = req.proxy
         let keep = outboundProxySummary.hasCredentials && req.credentials == nil && p.auth

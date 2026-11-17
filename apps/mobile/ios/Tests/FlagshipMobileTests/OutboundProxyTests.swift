@@ -125,10 +125,150 @@ final class OutboundProxyTests: XCTestCase {
                                                            fallbackDirect: false, issuedAt: 1)),
                        "SOCKS5 · [2001:db8::7]:9050 · needs a password")
         XCTAssertNil(OutboundProxyCopy.statusLine(.init(state: "direct", since: 0)))
-        XCTAssertEqual(OutboundProxyCopy.statusLine(.init(state: "failing", since: 0, lastError: "Can't reach the proxy.")),
-                       "Not working: Can't reach the proxy.")
+        XCTAssertEqual(OutboundProxyCopy.statusLine(.init(state: "failing", since: 0, lastError: "box English", code: "auth")),
+                       "The outbound proxy isn't working: The proxy refused the username or password.")
         XCTAssertEqual(OutboundProxyCopy.statusLine(.init(state: "fallback", since: 0)),
-                       "Using a direct connection: the proxy isn't answering")
+                       "The outbound proxy isn't working, so this server is connecting directly: Can't reach the proxy.")
+    }
+
+    // MARK: failure codes, /pods alerts and the .com lane
+
+    func test_codeToSentence() {
+        XCTAssertEqual(OutboundProxyCopy.reason(code: "unreachable"), "Can't reach the proxy.")
+        XCTAssertEqual(OutboundProxyCopy.reason(code: "auth"), "The proxy refused the username or password.")
+        XCTAssertEqual(OutboundProxyCopy.reason(code: "refused"), "The proxy refused the connection.")
+        XCTAssertEqual(OutboundProxyCopy.reason(code: "protocol"), "The proxy gave an answer the server doesn't understand.")
+        XCTAssertEqual(OutboundProxyCopy.reason(code: nil), "Can't reach the proxy.")
+        XCTAssertEqual(OutboundProxyCopy.reason(code: "new-one"), "Can't reach the proxy.")
+        XCTAssertEqual(OutboundProxyCopy.alertLine(state: "failing", code: "refused"),
+                       "The outbound proxy isn't working: The proxy refused the connection.")
+        XCTAssertNil(OutboundProxyCopy.alertLine(state: "ok", code: nil))
+        XCTAssertNil(OutboundProxyCopy.alertLine(state: "direct", code: "auth"))
+    }
+
+    func test_statusAndPodsAlertDecodeTolerantly() throws {
+        let s = try JSONDecoder().decode(OutboundProxySummary.Status.self, from: Data(#"{"state":"failing","since":5,"code":"protocol"}"#.utf8))
+        XCTAssertEqual(s.code, "protocol")
+        let old = try JSONDecoder().decode(OutboundProxySummary.Status.self, from: Data(#"{"state":"ok","since":5,"code":7}"#.utf8))
+        XCTAssertNil(old.code)
+        let pod = #"{"serverDomain":"home.u.flagship.services","identityPubKey":"aa","proxyAlert":{"state":"failing","code":"auth","since":9}}"#
+        let a = try JSONDecoder().decode(PodDirectoryEntry.self, from: Data(pod.utf8))
+        XCTAssertEqual(a.proxyAlert, ProxyAlertWire(state: "failing", code: "auth", since: 9))
+        let bad = #"{"serverDomain":"h","identityPubKey":"aa","proxyAlert":"yes"}"#
+        XCTAssertNil(try JSONDecoder().decode(PodDirectoryEntry.self, from: Data(bad.utf8)).proxyAlert)
+        let unknown = #"{"serverDomain":"h","identityPubKey":"aa","proxyAlert":{"state":"weird"}}"#
+        XCTAssertNil(try JSONDecoder().decode(PodDirectoryEntry.self, from: Data(unknown.utf8)).proxyAlert)
+        let none = #"{"serverDomain":"h","identityPubKey":"aa"}"#
+        XCTAssertNil(try JSONDecoder().decode(PodDirectoryEntry.self, from: Data(none.utf8)).proxyAlert)
+    }
+
+    func test_laneDecision() {
+        XCTAssertTrue(OutboundProxyLane.allows(credentials: nil))
+        XCTAssertFalse(OutboundProxyLane.allows(credentials: BoxProxyCredentials(username: "a", password: "b")))
+        XCTAssertTrue(OutboundProxyLane.boxUnreachable(URLError(.timedOut)))
+        XCTAssertTrue(OutboundProxyLane.boxUnreachable(URLError(.cannotConnectToHost)))
+        XCTAssertTrue(OutboundProxyLane.boxUnreachable(ScreensClientError.http(status: 502, message: "")))
+        XCTAssertFalse(OutboundProxyLane.boxUnreachable(ScreensClientError.http(status: 422, message: #"{"error":"Can't reach the proxy."}"#)))
+        XCTAssertFalse(OutboundProxyLane.boxUnreachable(ScreensClientError.http(status: 400, message: "")))
+    }
+
+    private func laneController(_ client: MockScreensClient, _ server: MockFlagshipServerClient, summary: OutboundProxySummary? = nil,
+                                unreachable: Bool) -> OutboundProxyController {
+        let key = self.key
+        return OutboundProxyController(serverDomain: "home.bright-maple.flagship.services", summary: summary, client: client,
+                                       lane: server, boxUnreachable: unreachable, signer: { _ in key }, now: { 1_760_000_000_000 })
+    }
+
+    func test_aTimeoutSendsTheSameSignedOrderThroughTheLane() async throws {
+        let client = makeClient()
+        client.outboundProxySetError = URLError(.timedOut)
+        let server = MockFlagshipServerClient()
+        let vm = laneController(client, server, unreachable: false)
+        let ok = await vm.turnOff()
+        XCTAssertTrue(ok)
+        XCTAssertTrue(vm.sentByLane)
+        XCTAssertEqual(vm.savedMessage, OutboundProxyCopy.laneSent)
+        let sent = try XCTUnwrap(server.proxyLaneCalls.first)
+        XCTAssertEqual(sent.serverDomain, "home.bright-maple.flagship.services")
+        XCTAssertEqual(sent.req.proxy, client.outboundProxySetCalls.first?.proxy)
+        XCTAssertEqual(sent.req.signature, client.outboundProxySetCalls.first?.signature)
+        XCTAssertTrue(key.publicKey.isValidSignature(try XCTUnwrap(HexUtil.decode(sent.req.signature)), for: try BoxProxy(sent.req.proxy).canonicalBytes()))
+        // The lane's body never names credentials.
+        let body = String(decoding: try JSONEncoder().encode(sent.req), as: UTF8.self)
+        XCTAssertFalse(body.contains("credentials"))
+    }
+
+    func test_aBoxAnswerIsNotRetriedThroughTheLane() async {
+        let client = makeClient()
+        client.outboundProxySetError = ScreensClientError.http(status: 422, message: #"{"error":"Can't reach the proxy."}"#)
+        let server = MockFlagshipServerClient()
+        let vm = laneController(client, server, unreachable: false)
+        vm.beginEdit()
+        vm.host = "10.0.0.2"
+        let ok = await vm.save()
+        XCTAssertFalse(ok)
+        XCTAssertTrue(server.proxyLaneCalls.isEmpty)
+    }
+
+    func test_offlineBoxGoesStraightToTheLaneAndKeepsThePassword() async throws {
+        let client = makeClient()
+        let server = MockFlagshipServerClient()
+        let summary = OutboundProxySummary(proxy: .init(kind: "socks5", host: "proxy.example.net", port: 1080, auth: true, fallbackDirect: false, issuedAt: 1),
+                                           hasCredentials: true, status: .init(state: "failing", since: 1, code: "unreachable"))
+        let vm = laneController(client, server, summary: summary, unreachable: true)
+        vm.beginEdit()
+        vm.fallbackDirect = true
+        XCTAssertTrue(vm.keepsCredentials)
+        let ok = await vm.save()
+        XCTAssertTrue(ok)
+        XCTAssertTrue(client.outboundProxySetCalls.isEmpty, "Nothing goes to the unreachable box.")
+        let sent = try XCTUnwrap(server.proxyLaneCalls.first)
+        XCTAssertTrue(sent.req.proxy.auth, "The same proxy keeps the password the box holds.")
+        XCTAssertTrue(sent.req.proxy.fallbackDirect)
+    }
+
+    func test_laneRefusesANewPasswordBeforeSigning() async {
+        let client = makeClient()
+        let server = MockFlagshipServerClient()
+        var prompted = false
+        let key = self.key
+        let vm = OutboundProxyController(serverDomain: "home.bright-maple.flagship.services", summary: nil, client: client, lane: server,
+                                         boxUnreachable: true, signer: { _ in prompted = true; return key })
+        vm.beginEdit()
+        vm.host = "proxy.example.net"
+        vm.username = "alice"
+        vm.password = "new"
+        let ok = await vm.save()
+        XCTAssertFalse(ok)
+        XCTAssertFalse(prompted, "No biometric for an order the lane can't carry.")
+        XCTAssertEqual(vm.errorMessage, OutboundProxyCopy.laneNoPassword)
+        XCTAssertTrue(server.proxyLaneCalls.isEmpty)
+
+        // Reachable box, timeout, new password: refused too, nothing to .com.
+        let client2 = makeClient()
+        client2.outboundProxySetError = URLError(.timedOut)
+        let server2 = MockFlagshipServerClient()
+        let vm2 = laneController(client2, server2, unreachable: false)
+        vm2.beginEdit()
+        vm2.host = "proxy.example.net"
+        vm2.username = "alice"
+        vm2.password = "new"
+        let ok2 = await vm2.save()
+        XCTAssertFalse(ok2)
+        XCTAssertEqual(vm2.errorMessage, OutboundProxyCopy.laneNoPassword)
+        XCTAssertTrue(server2.proxyLaneCalls.isEmpty)
+    }
+
+    func test_planScreenPrivacyLines() {
+        XCTAssertEqual(PlanDisplay.privacyLine(.relayWaiting),
+                       "The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.")
+        XCTAssertEqual(PlanDisplay.privacyLine(.wentDirect),
+                       "The private relay wasn't answering, so the last payment went straight to Flagship.")
+        XCTAssertEqual(PlanDisplay.privacyLine(.thirdPartyRelay(operator: "Example Relay Co")),
+                       "Payments go through Example Relay Co's private relay, so Flagship doesn't see your network address when you pay.")
+        XCTAssertEqual(PlanDisplay.privacyLine(.interimRelay),
+                       "Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet.")
+        XCTAssertEqual(PlanDisplay.privacyLine(.noRelay), "Flagship can see your network address when you pay. It keeps none of it.")
     }
 
     func test_serverDetailDecodesTheSummaryAndToleratesOlderBoxes() throws {
