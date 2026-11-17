@@ -41,7 +41,10 @@ function lastLine(cv) {
   return m ? m.text.replace(/\s+/g, " ").slice(0, 140) : "";
 }
 
-const EMPTY_MESSAGES = () => tr("No messages yet. Turn on Accept messages in Page options to get them.");
+const EMPTY_MESSAGES = () =>
+  world.page?.acceptsMessages === 1
+    ? tr("No messages yet. People who sign in on your page can write to you here.")
+    : tr("No messages yet. Turn on Accept messages in Page options to get them.");
 
 function listHtml() {
   const list = conversationsIn(side === "requests" ? "requests" : "messages");
