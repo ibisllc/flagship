@@ -1260,30 +1260,375 @@ body.has-sheet {
     transition-duration: 0.01ms !important;
   }
 }
-.call-video {
-  display: block;
+/* ── the call screen (docs/voici-calls.md "Call screen"): dark in every theme, like the phone apps ── */
+
+body.has-call {
+  overflow: hidden;
+}
+.call-stage {
+  --call-ink: #fff;
+  --call-dim: rgba(255, 255, 255, 0.75);
+  --call-faint: rgba(255, 255, 255, 0.55);
+  --call-glass: rgba(255, 255, 255, 0.16);
+  --call-red: #e5393a;
+  --call-green: #2fb457;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  background: linear-gradient(180deg, #1c2130, #080a12);
+  color: var(--call-ink);
+  color-scheme: dark;
+  outline: none;
+  animation: fade 200ms ease-out;
+}
+.call-stage :focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.call-remote {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  max-height: 60vh;
-  margin: 12px 0 0;
-  border-radius: 12px;
-  background: #000;
-  object-fit: contain;
-}
-.call-self {
-  display: block;
-  width: 96px;
-  margin: 8px 0 0 auto;
-  border-radius: 8px;
-  transform: scaleX(-1);
+  height: 100%;
+  object-fit: cover;
   background: #000;
 }
-.call-video[hidden],
-.call-self[hidden],
-.call-camera-note[hidden] {
+.call-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 30%, transparent 60%, rgba(0, 0, 0, 0.6));
+  transition: opacity 200ms ease;
+}
+.call-stage.is-video .call-shade {
+  opacity: 1;
+}
+.call-ui {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: max(10vh, env(safe-area-inset-top, 0px) + 24px) 16px max(24px, env(safe-area-inset-bottom, 0px) + 16px);
+  transition: opacity 200ms ease, visibility 200ms;
+}
+.call-stage.has-remote .call-ui {
+  padding-top: max(16px, env(safe-area-inset-top, 0px) + 8px);
+}
+.call-stage.controls-hidden .call-ui,
+.call-stage.controls-hidden .call-shade {
+  opacity: 0;
+  visibility: hidden;
+}
+.call-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  text-align: center;
+}
+.call-avatar .avatar {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.call-avatar .avatar-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 46px;
+  font-weight: 500;
+  color: #fff;
+  background: linear-gradient(180deg, #737373, #474747);
+}
+.call-stage.has-remote .call-avatar,
+.call-stage.has-remote .call-e2e {
   display: none;
 }
-.call-camera-note {
-  margin: 8px 0 0;
+.call-name {
+  margin: 4px 0 0;
+  max-width: 100%;
+  font-size: clamp(26px, 8vw, 34px);
+  font-weight: 600;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.call-stage.has-remote .call-name {
+  font-size: 20px;
+}
+.call-stage .call-status,
+.call-stage .call-timer {
+  margin: 0;
+  font-size: 19px;
+  color: var(--call-dim);
+}
+.call-stage .call-timer {
+  font-variant-numeric: tabular-nums;
+}
+.call-stage .call-status.call-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.call-note {
+  margin: 0;
+  font-size: 14px;
+  color: var(--call-dim);
+}
+.call-e2e {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--call-faint);
+}
+.call-e2e .icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.call-spacer {
+  flex: 1 1 16px;
+}
+.call-why {
+  max-width: 420px;
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--call-faint);
   text-align: center;
-  color: var(--ink-muted);
+}
+.call-why summary {
+  cursor: pointer;
+}
+.call-why p {
+  margin: 8px 0 0;
+  text-align: left;
+}
+.call-stage.is-video .call-why,
+.call-stage.is-over .call-why {
+  display: none;
+}
+.call-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  width: 100%;
+}
+.call-row {
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-start;
+  width: 100%;
+}
+.call-row-ring {
+  justify-content: space-evenly;
+  margin-bottom: 16px;
+}
+.call-round {
+  display: inline-flex;
+  flex: 0 1 25%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: none;
+  border-radius: 12px;
+  background: none;
+  color: var(--call-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.call-round[hidden] {
+  display: none;
+}
+.call-round-disc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(54px, 17vw, 68px);
+  height: clamp(54px, 17vw, 68px);
+  border-radius: 50%;
+  background: var(--call-glass);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  transition: background 150ms ease, transform 100ms ease;
+}
+.call-round:active .call-round-disc {
+  transform: scale(0.94);
+}
+.call-round .icon {
+  width: 26px;
+  height: 26px;
+}
+.call-round.is-on .call-round-disc {
+  background: #fff;
+  color: #000;
+}
+.call-round.is-end .call-round-disc {
+  background: var(--call-red);
+}
+.call-round.is-end .icon {
+  transform: rotate(135deg);
+}
+.call-round.is-answer .call-round-disc {
+  background: var(--call-green);
+}
+.call-round:hover .call-round-disc {
+  filter: brightness(1.12);
+}
+.call-round-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.call-end-row {
+  display: flex;
+  justify-content: center;
+}
+.call-end-row .call-round {
+  flex: none;
+  min-width: 96px;
+}
+.call-self {
+  position: absolute;
+  z-index: 2;
+  width: 140px;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 14px;
+  background: #000;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+  touch-action: none;
+  transition: top 300ms cubic-bezier(0.2, 0.9, 0.3, 1.1), left 300ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+.call-self.is-mirrored {
+  transform: scaleX(-1);
+}
+.call-self.is-dragging {
+  cursor: grabbing;
+}
+.call-stage.has-remote .call-self {
+  width: 104px;
+}
+.call-self.at-tl,
+.call-self.at-tr {
+  top: max(56px, env(safe-area-inset-top, 0px) + 40px);
+}
+.call-stage.has-remote .call-self.at-tl,
+.call-stage.has-remote .call-self.at-tr {
+  top: max(96px, env(safe-area-inset-top, 0px) + 80px);
+}
+.call-self.at-bl,
+.call-self.at-br {
+  top: calc(100% - 236px - 140px * 16 / 9);
+}
+.call-stage.has-remote .call-self.at-bl,
+.call-stage.has-remote .call-self.at-br {
+  top: calc(100% - 236px - 104px * 16 / 9);
+}
+.call-self.at-tl,
+.call-self.at-bl {
+  left: 16px;
+}
+.call-self.at-tr,
+.call-self.at-br {
+  left: calc(100% - 16px - 140px);
+}
+.call-stage.has-remote .call-self.at-tr,
+.call-stage.has-remote .call-self.at-br {
+  left: calc(100% - 16px - 104px);
+}
+.call-self[hidden],
+.call-remote[hidden],
+.call-notice[hidden],
+.call-menu[hidden],
+.call-note[hidden],
+.call-timer[hidden] {
+  display: none;
+}
+.call-notice {
+  position: absolute;
+  z-index: 3;
+  top: max(16px, env(safe-area-inset-top, 0px) + 8px);
+  left: 16px;
+  right: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(30, 32, 40, 0.92);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+}
+.call-menu {
+  position: absolute;
+  z-index: 4;
+  left: 16px;
+  right: 16px;
+  bottom: max(200px, env(safe-area-inset-bottom, 0px) + 184px);
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(30, 32, 40, 0.96);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.call-menu-item {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.call-menu-item:hover,
+.call-menu-item:focus-visible {
+  background: var(--call-glass);
+}
+.call-menu-item[aria-checked="true"] {
+  font-weight: 600;
+}
+.call-menu-item[aria-checked="true"]::after {
+  content: " ✓";
+}
+@media (max-height: 560px) {
+  .call-avatar {
+    display: none;
+  }
+  .call-ui {
+    padding-top: max(16px, env(safe-area-inset-top, 0px) + 8px);
+  }
+  .call-bottom {
+    gap: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .call-self,
+  .call-ui,
+  .call-shade {
+    transition: none;
+  }
 }

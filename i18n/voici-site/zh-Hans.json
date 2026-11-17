@@ -113,7 +113,6 @@
   "Call ended": "通话已结束",
   "Calling {0}…": "正在呼叫 {0}…",
   "Mute": "静音",
-  "Hang up": "挂断",
   "Quantum-safe call": "抗量子通话",
   "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.": "通话直接连到对方的手机。每一段声音都用未来的量子计算机也无法破解的密钥加密，Flagship 也无法收听。",
   "Unmute": "取消静音",
@@ -125,7 +124,6 @@
   "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.": "voi.ci 需要使用你的摄像头来显示你的视频。请在浏览器中允许，或者不开摄像头继续通话。",
   "Camera": "摄像头",
   "Camera off": "关闭摄像头",
-  "{0} turned on their camera.": "{0} 打开了摄像头。",
   "Camera paused": "摄像头已暂停",
   "This call link was already used or has expired. Start the call again from your Flagship app.": "此通话链接已被使用或已过期。请在 Flagship 应用中重新发起通话。",
   "This call link isn't valid. Start the call again from your Flagship app.": "此通话链接无效。请在 Flagship 应用中重新发起通话。",
@@ -139,7 +137,6 @@
   "{0} takes calls only from people they can call back.": "{0} 只接受可以回拨的人的来电。",
   "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": "{0} 不会知道你是谁。Flagship 会知道这个对话可以让你的手机响铃。",
   "Answer": "接听",
-  "Not now": "暂不",
   "{0} is calling you back.": "{0} 正在回拨给你。",
   "Getting ready to call…": "正在准备通话…",
   "Stop call-backs": "停止回拨",
@@ -148,5 +145,13 @@
   "Securing the line (quantum-safe)…": "正在保护线路（抗量子）…",
   "Opening a direct path…": "正在打开直接通道…",
   "Starting audio…": "正在启动音频…",
-  "This is taking longer than usual": "这比平时用的时间长"
+  "This is taking longer than usual": "这比平时用的时间长",
+  "Decline": "拒绝",
+  "End-to-end encrypted · quantum-safe": "端到端加密 · 抗量子",
+  "Their camera": "对方的摄像头",
+  "Your camera": "你的摄像头",
+  "Flip": "翻转",
+  "End": "挂断",
+  "Audio": "音频",
+  "Audio output {0}": "音频输出 {0}"
 }

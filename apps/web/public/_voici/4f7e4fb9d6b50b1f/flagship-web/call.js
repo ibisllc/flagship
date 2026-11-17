@@ -8,6 +8,8 @@
 //                               (a module Worker of callWorker.js), onState(state, detail), deps? (fetch, WebSocket,
 //                               RTCPeerConnection, RTCRtpScriptTransform, now)}
 //   call.hangUp(), call.setMuted(bool), call.remoteStream
+//   call.flipCamera(getUserMedia) -> Promise<bool>     front or back camera while ours runs; call.cameraFacing
+//                               ("user" or "environment") says which (the preview mirrors only "user")
 //   call.setCamera(on, getUserMedia) -> Promise<bool>   video as an upgrade of the audio call (voici-calls-v2.md §1.4):
 //                               only when o.videoAble (this browser has a camera) made the offer carry a video section;
 //                               the camera is asked for on the tap that calls it. onCamera(state) reports the other
@@ -97,6 +99,20 @@ export function voiciCallSteps({ onStep, onGiveUp, timers = globalThis }) {
   };
 }
 
+/** VOICI_CALL_VIDEO facing the person ("user") or away from them ("environment"). */
+export function voiciCallVideoFacing(facing) {
+  return { ...VOICI_CALL_VIDEO, video: { ...VOICI_CALL_VIDEO.video, facingMode: facing === "environment" ? "environment" : "user" } };
+}
+
+/** How many cameras this browser has (no permission asked): Flip shows only with two or more. */
+export async function voiciCallCameraCount(mediaDevices = globalThis.navigator?.mediaDevices) {
+  try {
+    return (await mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput").length;
+  } catch {
+    return 0;
+  }
+}
+
 /** Whether this browser has a camera at all (no permission asked): decides whether the request offers video. */
 export async function voiciCallVideoAble(mediaDevices = globalThis.navigator?.mediaDevices) {
   try {
@@ -170,11 +186,13 @@ export function startVoiciCall(o) {
   let request = null;
   let callerKey = null;
   let limitTimer = null;
+  let statsTimer = null;
   const pendingIce = [];
   const track = o.stream.getAudioTracks()[0];
   const videoAble = !!o.videoAble;
   let video = null;
   let camera = null;
+  let facing = "user";
 
   const set = (s, detail = {}) => {
     if (state === "ended" || state === "failed") return;
@@ -195,6 +213,7 @@ export function startVoiciCall(o) {
   });
   const cleanup = () => {
     clearTimeout(limitTimer);
+    clearInterval(statsTimer);
     try {
       ws?.close(1000);
     } catch {
@@ -214,18 +233,29 @@ export function startVoiciCall(o) {
     if (ws?.readyState === 1) ws.send(JSON.stringify(m));
   };
 
+  // Every receiver gets its opening transform before any media can arrive. Attaching it only in `ontrack` left the
+  // audio receiver without one in Chrome: the phone's sealed frames went straight to the Opus decoder (garble).
+  const opened = new WeakSet();
+  const attachReceive = (receiver, kind) => {
+    if (!receiver || opened.has(receiver)) return;
+    opened.add(receiver);
+    attachTransform(deps, o.worker, receiver, "receive", kind);
+  };
+  const receiverOf = (s) => pc.getTransceivers?.().find((t) => t.sender === s)?.receiver;
   const sender = pc.addTrack(track, o.stream);
   if (!attachTransform(deps, o.worker, sender, "send")) {
     queueMicrotask(() => set("failed", { code: "unsupported" }));
-    return { hangUp() {}, setMuted() {}, async setCamera() { return false; }, remoteStream };
+    return { hangUp() {}, setMuted() {}, async setCamera() { return false; }, async flipCamera() { return false; }, cameraFacing: "user", remoteStream };
   }
+  attachReceive(receiverOf(sender), "audio");
   if (videoAble) {
     // Negotiated now, sending nothing until the camera is turned on: no new offer when it is (voici-calls-v2.md §1.4).
     video = pc.addTransceiver("video", { direction: "sendrecv" });
     attachTransform(deps, o.worker, video.sender, "send", "video");
+    attachReceive(video.receiver, "video");
   }
   pc.ontrack = (e) => {
-    attachTransform(deps, o.worker, e.receiver, "receive", e.track.kind === "video" ? "video" : "audio");
+    attachReceive(e.receiver, e.track.kind === "video" ? "video" : "audio");
     remoteStream.addTrack(e.track);
   };
   const diag = (...a) => {
@@ -235,6 +265,51 @@ export function startVoiciCall(o) {
       /* no console */
     }
   };
+  // Diagnostics (sizes and counters only): the worker's frame counts and the audio receive stats, every 2 s.
+  const onWorkerStats = (e) => {
+    const m = e?.data;
+    if (m?.kind !== "frame-stats") return;
+    const f = (c) => `seal ok ${c.sealOk} refused ${c.sealRefused} (in max ${c.sealMax} B); open ok ${c.openOk} size ${c.openSize} fail ${c.openFail} nokey ${c.openNoKey} (in max ${c.openMax} B, out max ${c.outMax} B)`;
+    diag("frames audio:", f(m.audio));
+    if (m.video.sealOk + m.video.openOk + m.video.openFail + m.video.openSize > 0) diag("frames video:", f(m.video));
+  };
+  try {
+    o.worker.addEventListener?.("message", onWorkerStats);
+  } catch {
+    /* no events */
+  }
+  let lastIn = null;
+  const pollStats = async () => {
+    let report;
+    try {
+      report = await pc.getStats();
+    } catch {
+      return;
+    }
+    const all = new Map();
+    report.forEach((r) => all.set(r.id, r));
+    for (const r of all.values()) {
+      if (r.type === "inbound-rtp" && r.kind === "audio") {
+        const codec = r.codecId ? all.get(r.codecId) : null;
+        const d = (k) => (lastIn && typeof r[k] === "number" && typeof lastIn[k] === "number" ? r[k] - lastIn[k] : r[k]);
+        diag(
+          "audio in:",
+          `packets +${d("packetsReceived")} lost +${d("packetsLost")} discarded +${d("packetsDiscarded") ?? "?"}`,
+          `concealed +${d("concealedSamples")} of +${d("totalSamplesReceived")} samples`,
+          `jitter ${r.jitter ?? "?"} s, buffer delay +${typeof d("jitterBufferDelay") === "number" ? d("jitterBufferDelay").toFixed(3) : "?"} s / +${d("jitterBufferEmittedCount") ?? "?"}`,
+          `level ${typeof r.audioLevel === "number" ? r.audioLevel.toFixed(3) : "?"}`,
+          `codec ${codec ? `${codec.mimeType} ${codec.clockRate} Hz ${codec.channels ?? "?"} ch ${codec.sdpFmtpLine ?? ""}` : "?"}`,
+          `decoder ${r.decoderImplementation ?? "?"}`,
+        );
+        lastIn = { ...r };
+      }
+      if (r.type === "outbound-rtp" && r.kind === "audio") diag("audio out:", `packets ${r.packetsSent ?? "?"} bytes ${r.bytesSent ?? "?"}`);
+    }
+  };
+  const startStats = () => {
+    if (!statsTimer) statsTimer = setInterval(pollStats, 2000);
+  };
+
   pc.onicecandidate = (e) => {
     // A candidate here is a relay candidate: their phone's TURN allocated it.
     diag("local candidate", e.candidate ? `${e.candidate.type ?? "?"}/${e.candidate.protocol ?? "?"}` : "end");
@@ -249,7 +324,10 @@ export function startVoiciCall(o) {
   };
   pc.onconnectionstatechange = () => {
     diag("connection", pc.connectionState);
-    if (pc.connectionState === "connected") set("connected");
+    if (pc.connectionState === "connected") {
+      startStats();
+      set("connected");
+    }
     if (pc.connectionState === "failed") set("failed", { code: "unreachable" });
   };
 
@@ -348,6 +426,7 @@ export function startVoiciCall(o) {
         return true;
       }
       if (camera) return true;
+      facing = "user";
       let s;
       try {
         s = await getUserMedia(VOICI_CALL_VIDEO);
@@ -368,8 +447,36 @@ export function startVoiciCall(o) {
       send({ t: "camera", state: "on" });
       return true;
     },
+    /** The other camera while ours runs. A phone opens one camera at a time, so ours stops first; when the other
+     * can't start, the one we had comes back (and if that fails too, the camera is off). */
+    async flipCamera(getUserMedia) {
+      if (!video || !camera || (state !== "connecting" && state !== "connected")) return false;
+      const was = facing;
+      const next = was === "user" ? "environment" : "user";
+      camera.stop();
+      for (const f of [next, was]) {
+        let t = null;
+        try {
+          t = (await getUserMedia(voiciCallVideoFacing(f))).getVideoTracks()[0] ?? null;
+        } catch {
+          t = null;
+        }
+        if (!t) continue;
+        camera = t;
+        facing = f;
+        await video.sender.replaceTrack(t);
+        return f === next;
+      }
+      camera = null;
+      await video.sender.replaceTrack(null);
+      send({ t: "camera", state: "off" });
+      return false;
+    },
     get cameraTrack() {
       return camera;
+    },
+    get cameraFacing() {
+      return facing;
     },
   };
 }
