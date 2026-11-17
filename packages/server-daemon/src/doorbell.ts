@@ -27,6 +27,8 @@
  * FLAGSHIP_DOORBELL=0 turns the skipping off.
  */
 
+import { AccountGoneGate, accountGoneGate, accountOfPath } from "./accountGone.js";
+
 export type DoorbellLane =
   | "swk"
   | "cgk"
@@ -57,6 +59,8 @@ export interface DoorbellOptions {
   safetyMs?: number;
   /** Off switch; defaults to FLAGSHIP_DOORBELL=0. */
   disabled?: boolean;
+  /** Holds calls while `.com` says the account is gone (default: the daemon's one gate). */
+  gate?: AccountGoneGate;
   log?: (m: string) => void;
 }
 
@@ -163,6 +167,24 @@ export class Doorbell {
 
   /** The wrapper to hand to a poller as its `fetchImpl`. */
   readonly fetch: typeof fetch = async (input, init) => {
+    // `.com` said the account is gone: calls about it stay on the box for a while (accountGone.ts).
+    let account: string | null = null;
+    try {
+      account = accountOfPath(new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url).pathname);
+    } catch {
+      account = null;
+    }
+    const gate = this.opts.gate ?? accountGoneGate;
+    if (account !== null) {
+      if (gate.held(account)) return AccountGoneGate.localAnswer();
+      const res = await this.ringing(input, init);
+      if (res.headers.get("x-flagship-doorbell") === null) await gate.observe(account, res);
+      return res;
+    }
+    return this.ringing(input, init);
+  };
+
+  private readonly ringing: typeof fetch = async (input, init) => {
     const rung = this.fresh();
     const method = (init?.method ?? (typeof input === "object" && "method" in input ? input.method : "GET")).toUpperCase();
     if (!rung || method !== "GET") return this.real(input, init);
