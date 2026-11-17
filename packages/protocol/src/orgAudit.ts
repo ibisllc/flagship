@@ -282,7 +282,14 @@ function checkLoggedObjectsPresent(x: OrgAuditExport, servers: Map<string, strin
   if (previous) {
     const at = x.log[previous.logSeq - 1];
     if (previous.logSeq > x.log.length || (previous.logSeq > 0 && at?.entryHash !== previous.logHeadHash)) fail("order-mismatch", "the log does not extend the one verified before");
+    // A server registered again since then is a new box whose Activity chain starts over.
+    const reregistered = new Set<string>();
+    for (const e of x.log.slice(previous.logSeq)) {
+      const r = e.kind === "server-registered" ? regByRef.get(e.refSha256) : undefined;
+      if (r) reregistered.add(r.serverDomain);
+    }
     for (const k of previous.boxLogHeads ?? []) {
+      if (reregistered.has(k.serverDomain)) continue;
       const now = heads.find((s) => s.serverDomain === k.serverDomain);
       if (!now) fail("order-mismatch", `server ${k.serverDomain} had a box log head before and has none now`);
       if (now!.seq < k.seq || (now!.seq === k.seq && now!.headHash !== k.headHash)) fail("order-mismatch", `the box log head of ${k.serverDomain} is older than, or differs from, the one verified before`);

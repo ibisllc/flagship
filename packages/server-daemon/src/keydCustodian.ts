@@ -247,6 +247,11 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
   pinOrg(pin: { orgId: string; genesisHash: string; serverDomain: string; cgkVersion: number; oarVersion?: number; oarHash?: string }, ceremonyToken: string): void {
     this.#client.call("org.pin", { ...pin, ceremony: ceremonyToken });
   }
+  /** The org chain this box pinned: keyd replays it and moves its own pinned head forward (never back). */
+  advanceOrgHead(chain: unknown[]): number {
+    const r = this.#client.call("org.head", { chain }) as { oarVersion?: number };
+    return Number(r.oarVersion);
+  }
   /**
    * A rotated org CGK: keyd replays the org chain from the genesis it pinned, checks the ring's org
    * approval, version and commitment itself (packages/keyd/src/orgCgk.ts), then switches.

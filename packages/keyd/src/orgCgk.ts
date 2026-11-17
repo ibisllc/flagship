@@ -21,8 +21,11 @@
  *    an org admin there with the same keys, and an approval under an older record was made before the
  *    record after it existed;
  *  - keyd keeps the chain head it last verified (`oarVersion`, `oarHash`) and refuses a chain that
- *    ends below it or forks from it, so a truncated chain cannot bring back a removed admin; and the
- *    hash of the ring it holds, so the next version must link to it (`prevSha256`).
+ *    ends below it or forks from it, so a truncated chain cannot bring back a removed admin. The head
+ *    moves forward on every adoption and on `org.head`, which the daemon calls at each org sync with
+ *    the chain it pinned (keyd replays it; a head only ever moves forward);
+ *  - once keyd holds a ring it took this way, the next one must be exactly one version up and link to
+ *    it (`prevSha256`), so no jump can make every later rotation "stale".
  *
  * The Rust backend (`rust/crates/flagship-keyd/src/org_cgk.rs`) implements the same rule and both
  * read `packages/protocol/test-vectors/keyd-org-cgk/vectors.json`.
@@ -252,6 +255,13 @@ export function verifyOrgChainForKeyd(chain: unknown, pin: OrgCgkPin, now: numbe
   return records;
 }
 
+/** `org.head`: replays the chain and answers its head, to move keyd's pinned head forward (never back). */
+export function verifyOrgHeadForKeyd(chain: unknown, pin: OrgCgkPin, now: number): { oarVersion: number; oarHash: string } {
+  const records = verifyOrgChainForKeyd(chain, pin, now);
+  const head = records[records.length - 1]!;
+  return { oarVersion: head.version, oarHash: orgAuthorityHash(head) };
+}
+
 const RING_KEYS = "issuedAt,keyCommitment,kind,oarVersion,orgId,prevSha256,recipientsHash,retired,scope,version";
 
 /**
@@ -277,7 +287,10 @@ export function verifyOrgCgkAdoption(
   if (ring.kind !== "cgk") fail("not-cgk");
   if (ring.version <= pin.cgkVersion) fail("stale", `v${ring.version} is not above v${pin.cgkVersion}`);
   if (ring.issuedAt > now + ORG_MAX_SKEW_MS) fail("future");
-  if (pin.cgkRingSha256 !== undefined && ring.version === pin.cgkVersion + 1 && ring.prevSha256 !== pin.cgkRingSha256) fail("prev-hash");
+  if (pin.cgkRingSha256 !== undefined) {
+    if (ring.version !== pin.cgkVersion + 1) fail("version-gap", `v${ring.version} after v${pin.cgkVersion}`);
+    if (ring.prevSha256 !== pin.cgkRingSha256) fail("prev-hash");
+  }
   if (!Array.isArray(args.recipients)) fail("malformed", "recipients");
   const recipients = (args.recipients as unknown[]).map((x) => {
     const o = obj(x, "recipient");

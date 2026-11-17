@@ -63,6 +63,12 @@ describe("the cgk.orgAdopt and org.pin operations", () => {
       expect(() => svc.handle({ id: 1, op: "cgk.orgAdopt", args: adopt })).toThrow(/no org is pinned/);
       expect(() => svc.handle({ id: 2, op: "org.pin", args: { ...V.pin, ceremony: hex(new Uint8Array(32)) } })).toThrow(/boot ceremony/);
       expect(svc.handle({ id: 3, op: "org.pin", args: { ...V.pin, ceremony: hex(TOKEN) } }).result).toEqual({ stored: true });
+      // The daemon hands keyd its pinned chain at each sync: the head moves forward, never back, and a chain cut
+      // below it is refused from then on (05c F4), before any ring is adopted.
+      expect(svc.handle({ id: 11, op: "org.head", args: { chain: chain(ok.chain) } }).result).toEqual({ oarVersion: 1 });
+      expect(() => svc.handle({ id: 12, op: "org.head", args: { chain: chain(ok.chain).slice(0, 1) } })).toThrow(/stale-chain/);
+      expect(JSON.parse(readFileSync(join(dir, "org.json"), "utf8")).oarVersion).toBe(1);
+      expect(() => svc.handle({ id: 13, op: "cgk.orgAdopt", args: { ...adopt, chain: chain(ok.chain).slice(0, 1) } })).toThrow(/stale-chain/);
       expect(() => svc.handle({ id: 4, op: "org.pin", args: { ...V.pin, orgId: "ab".repeat(16), ceremony: hex(TOKEN) } })).toThrow(/already pinned/);
       const before = svc.handle({ id: 5, op: "cgk.seal", args: { pt: "00" } });
       expect(svc.handle({ id: 6, op: "cgk.orgAdopt", args: adopt }).result).toEqual({ version: 2 });

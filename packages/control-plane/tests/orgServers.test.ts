@@ -175,6 +175,12 @@ describe(".com org servers", () => {
     const all = exp as unknown as { boxLogHeadHistory: Array<{ seq: number }>; registrations: Array<{ serverDomain: string; identityPubKeyHex: string }> };
     expect(all.boxLogHeadHistory.map((h) => h.seq)).toEqual([5, 9]);
     expect(all.registrations).toEqual([{ serverDomain: SERVER, identityPubKeyHex: stkPub }]);
+    // A head stored but not (yet) logged, as when an export reads between the two writes, is not served ahead
+    // of its log entry: the export keeps serving the last logged one.
+    const late = head(12, "ff".repeat(32), at + 5);
+    await d.orgs.putObject(ORG, { kind: "box-log-head", key: SERVER, bodyJson: JSON.stringify(late), issuedAt: late.head.issuedAt, storedAt: at + 5 }, true);
+    const exp2 = (await handleOrgExport(d, ORG)).body as { boxLogHeads: Array<{ head: { seq: number } }> };
+    expect(exp2.boxLogHeads.map((b) => b.head.seq)).toEqual([9]);
   });
 
   it("refuses a new server once the org's plan has lapsed", async () => {

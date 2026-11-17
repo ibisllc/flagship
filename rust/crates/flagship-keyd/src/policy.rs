@@ -748,6 +748,13 @@ pub const DEFAULT_RATE_LIMITS: &[(&str, Limit)] = &[
         },
     ),
     (
+        "org.head",
+        Limit {
+            per_second: 0.1,
+            burst: 10.0,
+        },
+    ),
+    (
         "cgk.orgAdopt",
         Limit {
             per_second: 0.1,

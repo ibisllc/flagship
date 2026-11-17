@@ -74,6 +74,7 @@ const archive = buildOrgKeyRing({ orgId: ORG, kind: "archive-keys", scope: SERVE
 const underV0 = buildOrgKeyRing({ orgId: ORG, kind: "cgk", scope: "*", prev: v1.ring, key: cgk2, recipients: recips, retired: [], oarVersion: 0, issuedAt: RT, randomness: rnd(0x20) });
 const EARLY = T1 - 60_000;
 const underV0Early = buildOrgKeyRing({ orgId: ORG, kind: "cgk", scope: "*", prev: v1.ring, key: cgk2, recipients: recips, retired: [], oarVersion: 0, issuedAt: EARLY, randomness: rnd(0x20) });
+const jump = buildOrgKeyRing({ orgId: ORG, kind: "cgk", scope: "*", prev: v2.ring, key: cgk2, recipients: recips, retired: [], oarVersion: 1, issuedAt: RT + 60_000, randomness: rnd(0x40) });
 const HEAD = { oarVersion: 1, oarHash: orgAuthorityHash(base[1].record) };
 const far = buildOrgKeyRing({ orgId: ORG, kind: "cgk", scope: "*", prev: v1.ring, key: cgk2, recipients: recips, retired: [], oarVersion: 5, issuedAt: RT, randomness: rnd(0x20) });
 
@@ -150,6 +151,13 @@ const cases: Case[] = [
   { name: "a chain that forks from the head keyd verified", chain: "base", pin: { ...HEAD, oarHash: "ab".repeat(32) }, args: adopt(), expect: no("stale-chain") },
   { name: "a chain that reaches the head keyd verified", chain: "base", pin: HEAD, args: adopt(), expect: ok2 },
   { name: "the next version links to the ring keyd holds", chain: "base", pin: { cgkRingSha256: orgKeyRingSha256(v1.ring) }, args: adopt(), expect: ok2 },
+  {
+    name: "once keyd holds a ring, a jump past the next version",
+    chain: "base",
+    pin: { cgkRingSha256: orgKeyRingSha256(v1.ring) },
+    args: adopt(jump, [approve(A, canonicalOrgKeyRing(jump.ring), 1, RT + 60_000)]),
+    expect: no("version-gap"),
+  },
   { name: "a next version that does not link to the ring keyd holds", chain: "base", pin: { cgkRingSha256: "ab".repeat(32) }, args: adopt(), expect: no("prev-hash") },
   // keyd is never handed the freezes: a frozen admin's approval still counts in its narrower rule.
   { name: "keyd does not see freezes", chain: "v1 while B was frozen by C", args: adopt(), expect: ok2 },
