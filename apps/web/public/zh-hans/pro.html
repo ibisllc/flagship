@@ -2,7 +2,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pro · Flagship</title>
-  <meta name="description" content="Flagship 免费。Pro 是为真正在运行项目的人准备的会员：更多公共带宽，只凭用户名私密付款，不关联任何身份。">
+  <meta name="description" content="Flagship 是免费的。Pro 和 Pro Max 增加公开流量和自定义域名，用 1 美元代金券支付；我们的服务器对代金券做盲签名，因此永远不知道一笔购买是为哪个账户付的。">
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -34,27 +34,16 @@
       padding: var(--space-6); margin: var(--space-6) 0;
     }
     .callout h3 { margin: 0 0 var(--space-2); }
-    .pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin: var(--space-4) 0; }
-    @media (max-width: 720px) { .pay-grid { grid-template-columns: 1fr; } }
+    .pay-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin: var(--space-4) 0; }
+    @media (max-width: 900px) { .pay-grid { grid-template-columns: 1fr; } }
     .pay-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-5); background: var(--surface); }
     .pay-card h4 { margin: 0 0 var(--space-2); display: flex; align-items: center; gap: 8px; }
     .pay-card .priv { font-size: var(--caption-size); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     .priv.good { color: var(--success); }
     .priv.meh  { color: var(--warning, #c08a00); }
-    .fill { font-family: var(--font-mono); background: var(--surface-sunken, rgba(127,127,127,0.12)); padding: 2px 6px; border-radius: 4px; }
-    .voucher-form { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
-    .voucher-form label { font-size: var(--caption-size); color: var(--text-muted); font-weight: 600; }
-    .voucher-form input { width: 100%; box-sizing: border-box; padding: var(--space-3); font-size: var(--body-sm-size);
-      border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-family: var(--font-mono); }
-    .voucher-form input:focus, .voucher-form select:focus { outline: 2px solid var(--accent, #14B8A6); outline-offset: 1px; }
-    .voucher-form select { width: 100%; box-sizing: border-box; padding: var(--space-3); font-size: var(--body-sm-size);
-      border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); }
-    .voucher-form .btn { margin-top: var(--space-2); padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-sm);
-      background: var(--accent, #14B8A6); color: #042f2a; font-weight: 600; cursor: pointer; font-size: var(--body-sm-size); }
-    .voucher-form .btn:disabled { opacity: 0.6; cursor: default; }
-    .voucher-msg { font-size: var(--body-sm-size); margin: 0; min-height: 1.2em; }
-    .voucher-msg.ok { color: var(--success, #15803d); }
-    .voucher-msg.err { color: var(--danger, #b91c1c); }
+    .pay-card p + p { margin-top: var(--space-2); }
+    .muted { color: var(--text-muted); }
+    .nowrap { white-space: nowrap; }
     code.addr { font-family: var(--font-mono); font-size: 0.86em; word-break: break-all; }
   </style>
   <link rel="stylesheet" href="/theme-ui.css">
@@ -75,97 +64,90 @@
 
   <section class="page-hero">
     <h1>Flagship Pro</h1>
-    <p class="lede">Flagship 是真正免费的：没有催促，也没有保留功能。Pro 是给少数运行<em>真正</em>项目的人准备的会员：更多公共带宽、你自己的域名，以及让项目保持独立的方式。我们只需要一个用户名，不需要你的名字。</p>
+    <p class="lede">Flagship 是免费的，Free 套餐保留所有功能。Pro 和 Pro Max 为公开流量提供更多空间，外加一些额外功能。你用 1 美元代金券付款；我们的服务器对代金券做盲签名，因此永远不知道一笔购买是为哪个账户付的。</p>
   </section>
 
   <div class="legal">
 
-    <section>
-      <h2>大多数人永远用不到</h2>
-      <p>在你的硬件上运行的一切（应用、数据、存储、设备）都是免费的，我们不设任何限制。唯一花我们钱的是通过我们的中继把你的<strong>公共</strong>流量送给访客的共享通道，所以我们只计量这一项。只要你的公共流量保持在个人使用范围内，你就永远不会被收费，甚至可能注意不到有付费档。</p>
+    <section id="plans">
+      <h2>各套餐包含什么</h2>
+      <p>在你自己的硬件上运行的一切都不计量：服务器、应用、数据、存储和设备。我们计量的是我们的中继在你的服务器和访客之间传输的公开流量，因为这才是我们要花钱的地方。</p>
       <table class="t">
-        <tbody><tr><th>档位</th><th>公共带宽 / 月</th><th>自定义域名</th><th>价格</th></tr>
-        <tr><td><strong>免费</strong></td><td>25&nbsp;GB <span style="color:var(--text-muted)">（个人网站、相册、朋友聊天绰绰有余）</span></td><td>—</td><td>$0</td></tr>
-        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB，超出后 $0.05/GB</td><td>1</td><td>每月 $10（也可一次买多个月）</td></tr>
-        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB，超出后 $0.05/GB</td><td>不限</td><td>每月 $20（也可一次买多个月）</td></tr>
+        <tbody><tr><th>套餐</th><th>每月公开流量</th><th>自定义域名</th><th>共同管理者</th><th>价格</th></tr>
+        <tr><td><strong>免费</strong></td><td>25&nbsp;GB，超出后限速，从不断开</td><td>无</td><td>5</td><td>$0</td></tr>
+        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB，超出后限速，除非你购买更多流量</td><td>1</td><td>10</td><td class="nowrap">每月 10 美元</td></tr>
+        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB，超出后限速，除非你购买更多流量</td><td>不限</td><td>25</td><td class="nowrap">每月 20 美元</td></tr>
       </tbody></table>
-      <p>服务器、应用和设备想用多少就用多少，从不计数。Pro 适用于公共流量真的超出个人使用的时候，或者你只是想支持这个项目。</p>
-      <p style="color:var(--text-muted)">Flagship 市场里的单个应用是另一回事：想要时购买，不是订阅。Pro 关乎带宽余量、你自己的域名，以及让项目持续运转。</p>
-      <p>自定义域名（用 <code>www.example.com</code> 代替 <code>&lt;server&gt;.&lt;you&gt;.flagship.services</code>）在应用的服务页面中添加。你把该域名的 CNAME 记录指向你的 Flagship 地址来证明它归你所有；只有在你的套餐包含它时我们才路由它，证书仍由你的主机持有，所以我们依然无法读取流量。</p>
+      <ul>
+        <li><strong>自定义域名。</strong>为应用使用 <code>www.example.com</code>，而不是 <code>flagship.services</code> 下的地址。你只需把一条 CNAME 记录指向你的 Flagship 地址。证书仍由你的服务器持有，所以我们依然无法读取流量。</li>
+        <li><strong>你自己的出站代理。</strong>在 Pro 和 Pro Max 上，你的服务器流量可以通过你选择的 SOCKS5 或 HTTP 代理发出。</li>
+        <li><strong>共同管理者</strong>是与你共享服务器的其他账户。</li>
+        <li><strong>所有套餐都有直接访问。</strong>当你的服务器可以从互联网访问时，应用可以获得一个直接地址。访客会直接连接到你的服务器，这部分流量不计入任何套餐。</li>
+      </ul>
+      <p>超过 25&nbsp;GB 后，Free 账户会被限速到月底，但不会被断开。大多数人根本用不到这么多。</p>
     </section>
 
-    <section>
-      <h2 id="privacy">关于私密付款</h2>
-      <div class="callout">
-        <h3>如果用银行卡付款，你就变得可识别。</h3>
-        <p>我们从不询问你的名字，也看不到你的卡。但你的卡组织和银行<strong>确实</strong>会记录你向 Flagship 付过款，能强制调取这些记录的对手就可能把你的真实身份和账户联系起来。这是银行卡支付的本质，不在我们的控制范围内。</p>
-        <p>如果这在你的威胁模型之内，<strong>请改用 Monero 付款。</strong>不会关联任何身份：我们只知道你自己选的用户名，它不透露你是谁。</p>
-      </div>
-      <p>这与 Flagship 其他部分的承诺一样，不看内容：TLS 在你的主机上终止，所以我们读不到你的流量；付款只要方式得当，也不会留下指向你的痕迹。</p>
-    </section>
-
-    <section>
-      <h2>如何升级到 Pro</h2>
-      <p>目前是人工处理，这是有意为之。没有收集你资料的自动结账。你汇款，告诉我们你的<strong>用户名</strong>，我们手动把你的账户切换为 Pro。</p>
-
-      <h3>1 · 告诉我们你的用户名</h3>
-      <p>你账户的用户名（即 <code class="addr">&lt;server&gt;.&lt;you&gt;.flagship.services</code> 中的那个）。我们只需要它来找到你的账户。请随付款一起提供。</p>
-
-      <h3>2 · 付款</h3>
+    <section id="buy">
+      <h2>如何购买</h2>
+      <p>在任一应用中，前往<em>设置、套餐</em>。你购买一包代金券（10 美元、30 美元或 120 美元），应用会把它加入你账户的预付余额。然后你选择 Pro 或 Pro Max，由余额支付。只有账户的管理员设备才能购买、选择套餐或使用余额。</p>
       <div class="pay-grid">
         <div class="pay-card">
-          <h4>Monero (XMR) <span class="priv good">私密</span></h4>
-          <p>把相应月数的金额发送到：</p>
-          <p><code class="addr">[ 你的 Monero 地址：发布前填写 ]</code></p>
-          <p style="color:var(--text-muted);font-size:var(--body-sm-size)">然后把你的用户名和交易密钥发到 <code class="addr">harry@flagship.services</code>，以便我们核对。（如果连这一点也不想关联，请用一次性邮箱。）</p>
+          <h4>iPhone 和 iPad</h4>
+          <p>通过 Apple 进行的 App 内购买。Apple 能看到你的 Apple 账户，以及你购买了 Flagship 代金券。</p>
         </div>
         <div class="pay-card">
-          <h4>银行卡 / Stripe <span class="priv meh">方便，但不够私密</span></h4>
-          <p>一键银行卡结账。很方便，但请看上面的说明：支付处理方会知道你是客户。</p>
-          <form id="checkout-form" class="voucher-form" autocomplete="off"><label for="c-username">你的用户名</label> <input id="c-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="c-tier">套餐</label><select id="c-tier" name="tier">
-              <option value="hobby">Pro：250 GB / 月</option>
-              <option value="maker">Pro Max：500 GB / 月</option>
-            </select><button type="submit" class="btn">继续银行卡结账</button><p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
-          </form>
+          <h4>Android</h4>
+          <p>通过 Google Play 进行的购买。Google 能看到你的 Google 账户，以及你购买了 Flagship 代金券。</p>
         </div>
         <div class="pay-card">
-          <h4>兑换码 <span class="priv good">私密</span></h4>
-          <p>如果你拿到了 Flagship 兑换码，请在下面兑换。兑换码就是不关联身份的预付 Pro：持有兑换码的人可以为任意用户名兑换。</p>
-          <form id="voucher-form" class="voucher-form" autocomplete="off"><label for="v-username">你的用户名</label> <input id="v-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="v-code">兑换码</label> <input id="v-code" name="code" type="text" placeholder="FLAG-XXXXX-XXXXX-XXXXX-XXXXX" required="" spellcheck="false" autocapitalize="characters"> <button type="submit" class="btn">兑换</button><p id="voucher-msg" class="voucher-msg" role="status" aria-live="polite"></p>
-          </form>
+          <h4>网页应用</h4>
+          <p>在 <a href="https://webapp.flagshipserver.com/">Webapp</a> 中通过 Stripe 用银行卡付款。Stripe、你的卡组织和你的银行能看到你的卡，以及你向 Flagship 付了款。</p>
         </div>
       </div>
-
-      <div id="pro-messages" hidden="">
-        <p data-msg="bad-username">请输入你的用户名（3–30 个小写字母或数字）。</p>
-        <p data-msg="redeeming">正在兑换…</p>
-        <p data-msg="redeemed-pro">兑换成功：“<span data-arg=""></span>”的 Pro 已生效。更高的额度会在几分钟内生效。</p>
-        <p data-msg="redeemed-max">兑换成功：“<span data-arg=""></span>”的 Pro Max（500 GB）已生效。更高的额度会在几分钟内生效。</p>
-        <p data-msg="redeem-failed">该兑换码无法兑换。</p>
-        <p data-msg="network">网络错误，请重试。</p>
-        <p data-msg="checkout-starting">正在开始结账…</p>
-        <p data-msg="checkout-off">银行卡结账尚未开启，请使用上面的 Monero 或兑换码。</p>
-        <p data-msg="checkout-failed">无法开始结账。</p>
+      <div class="callout">
+        <h3>商店知道什么，我们不知道什么</h3>
+        <p>收款的一方知道你购买了 Flagship 代金券。代金券让这件事不出现在我们的记录里，但不会从他们的记录里消失。他们谁都不会知道你的 Flagship 账户，而我们也永远不知道哪笔购买为哪个账户付了款。</p>
       </div>
+    </section>
 
-      <h3>3 · 我们开通 Pro</h3>
-      <p>款项到账后，我们会在你支付的期限内把账户设为 Pro。更高的额度会在切换后几分钟内生效。如有疑问，请写信至 <code class="addr">harry@flagship.services</code>。</p>
+    <section id="vouchers">
+      <h2>代金券：设计上就是匿名的</h2>
+      <p>一张代金券价值 1 美元。购买时，你的设备生成代金券，我们的服务器对它们做盲签名：服务器核对付款后签名，但看不到自己签过的代金券。之后代金券被使用时，没有任何东西能把它和那笔付款联系起来。Flagship 无法把一笔付款和一个账户关联起来。</p>
+      <ul>
+        <li><strong>钱包由你的管理员设备持有。</strong>余额以你账户的密钥加密保存。我们的服务器存储它以便你的设备同步，但无法打开它。代金券不会过期。</li>
+        <li><strong>一点一点地花。</strong>没有按月扣款。你的设备会在随机时刻花掉一张 1 美元代金券，让套餐始终提前几天付清。一张代金券可买 3 天 Pro 或 36 小时 Pro Max，所以每个账户的支出看起来都一样。</li>
+        <li><strong>72 小时宽限期。</strong>如果该付款时你的设备处于关机状态，套餐在到期后仍可使用 72 小时。宽限期内的付款从套餐结束的时间点接着算：不会中断，也不会白送。</li>
+        <li><strong>如果你愿意，可以随机开始。</strong>我们的服务器可能看到一次购买和一次升级紧挨着发生。如果你在意这一点，可以让套餐在接下来 24 小时内的随机时间开始。</li>
+        <li><strong>用于付款的私有中继。</strong>付款经由一个中继，因此你付款时我们的服务器看不到你的网络地址。目前这个中继由 Flagship 自己运营，还不是独立的运营方。</li>
+      </ul>
+      <p>我们能看到的：每个账户的套餐及其付清到哪一天，因为中继需要它们来计量流量。永远看不到是用什么支付的。</p>
+    </section>
+
+    <section id="data">
+      <h2>更多流量</h2>
+      <p>超出套餐包含的流量后，Pro 和 Pro Max 可以从余额中以 5 美元购买 100&nbsp;GB 的流量包。当本月剩余不足 10&nbsp;GB 时会自动购买，直到你设定的每月上限：默认 10 美元。超过上限后，你的流量会像 Free 一样被限速。我们从不事后收费。</p>
+    </section>
+
+    <section id="refunds">
+      <h2>退款</h2>
+      <p>我们不提供退款。坦白说原因是：代金券的设计让它们与购买它们的付款之间没有任何联系。签名之后，我们无法分辨一笔付款产生了哪些代金券，因此既无法收回，也无法退钱。</p>
+      <p>通过 Apple 或 Google Play 进行的购买遵循这些商店自己的退款规则，我们无法控制。</p>
     </section>
 
     <section id="names">
       <h2>更改你的名字</h2>
-      <p>每个账户一开始都是随机名字。购买一张一次性兑换码，你可以随时把名字换成自己的，仅限一次：</p>
+      <p>每个账户一开始都有一个随机名称。改成你自己的名称是一次性费用，与套餐分开：</p>
       <table class="t">
-        <tbody><tr><th>兑换码</th><th>用途</th><th>价格</th></tr>
+        <tbody><tr><th>更改</th><th>用途</th><th>价格</th></tr>
         <tr><td><strong>更名</strong></td><td>把你的账户移到任意空闲的名字</td><td>$10，一次性</td></tr>
         <tr><td><strong>优先认领</strong></td><td>领取与你已证明控制权的 <code>.com</code> 相匹配的名字（<a href="/zh-hans/dibs">优先认领如何运作</a>）</td><td>$20，一次性</td></tr>
       </tbody></table>
-      <p>购买方式和 Pro 一样（Monero 或银行卡），并说明你要哪种兑换码，而不是用户名。我们会发给你一个代码；更改名字时在应用里输入。兑换码在兑换前不关联任何账户，只有更改成功才会被用掉。每个账户每 30 天只能更名一次。已完成的更名不予退款。</p>
+      <p>每个账户每 30 天只能更改一次名称。</p>
     </section>
 
     <section>
-      <h2>既然没到上限，为什么还要付费？</h2>
-      <p>你不必付费，大多数人也永远不会。但 Flagship 不靠广告、不靠风投、也不卖你的数据；中继、DNS 和证书的维护都要真金白银。Pro 会员（哪怕你从不用到带宽）是让项目保持独立、让免费档对所有人保持免费的最干净的方式。价格相同，隐私选项相同，随时都能买，不必等到碰到上限。</p>
+      <h2>为什么要付费？</h2>
+      <p>你不必付费，大多数人也永远不会付费。Flagship 没有广告、没有风险投资，也不出售你的数据；而中继、DNS 和证书都要花真金白银。一个套餐，哪怕你从未用满，也能让项目保持独立，并让其他所有人的免费套餐继续免费。</p>
     </section>
 
   </div>
@@ -208,105 +190,6 @@
   </div>
   <div class="footer-bottom"><span>© 2026 Flagship · 专利申请中 · BUSL-1.1 → 2030-05-03 转为 Apache 2.0</span> <span><a href="/privacy">隐私</a> · <a href="/terms">条款</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span></div>
 </footer>
-
-<script>
-// The sentences live in #pro-messages so the page's translations reach them (docs/i18n.md "Website pages").
-function proMsg(key, arg) {
-  var c = document.querySelector('#pro-messages [data-msg="' + key + '"]').cloneNode(true);
-  var slot = c.querySelector("[data-arg]");
-  if (slot) slot.textContent = String(arg == null ? "" : arg);
-  return c.textContent.replace(/\s+/g, " ").trim();
-}
-
-(function () {
-  var form = document.getElementById("voucher-form");
-  if (!form) return;
-  var msg = document.getElementById("voucher-msg");
-  var btn = form.querySelector("button[type=submit]");
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var username = form.username.value.trim().toLowerCase();
-    var code = form.code.value.trim();
-    msg.className = "voucher-msg";
-    msg.textContent = "";
-    if (!/^[a-z0-9]{3,30}$/.test(username)) {
-      msg.className = "voucher-msg err";
-      msg.textContent = proMsg("bad-username");
-      return;
-    }
-    btn.disabled = true;
-    var prev = btn.textContent;
-    btn.textContent = proMsg("redeeming");
-    fetch("/api/voucher/redeem", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: username, code: code }),
-    })
-      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
-      .then(function (res) {
-        if (res.ok && res.body && res.body.ok) {
-          msg.className = "voucher-msg ok";
-          msg.textContent = proMsg(res.body.tier === "maker" ? "redeemed-max" : "redeemed-pro", username);
-          form.code.value = "";
-        } else {
-          msg.className = "voucher-msg err";
-          msg.textContent = (res.body && res.body.error) || proMsg("redeem-failed");
-        }
-      })
-      .catch(function () {
-        msg.className = "voucher-msg err";
-        msg.textContent = proMsg("network");
-      })
-      .finally(function () { btn.disabled = false; btn.textContent = prev; });
-  });
-})();
-
-(function () {
-  var form = document.getElementById("checkout-form");
-  if (!form) return;
-  var msg = document.getElementById("checkout-msg");
-  var btn = form.querySelector("button[type=submit]");
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var username = form.username.value.trim().toLowerCase();
-    var tier = form.tier.value;
-    msg.className = "voucher-msg";
-    msg.textContent = "";
-    if (!/^[a-z0-9]{3,30}$/.test(username)) {
-      msg.className = "voucher-msg err";
-      msg.textContent = proMsg("bad-username");
-      return;
-    }
-    btn.disabled = true;
-    var prev = btn.textContent;
-    btn.textContent = proMsg("checkout-starting");
-    fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: username, tier: tier }),
-    })
-      .then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); })
-      .then(function (res) {
-        if (res.body && res.body.ok && res.body.url) {
-          window.location.href = res.body.url; // → Stripe-hosted Checkout
-          return;
-        }
-        msg.className = "voucher-msg err";
-        msg.textContent = res.status === 503
-          ? proMsg("checkout-off")
-          : (res.body && res.body.error) || proMsg("checkout-failed");
-        btn.disabled = false;
-        btn.textContent = prev;
-      })
-      .catch(function () {
-        msg.className = "voucher-msg err";
-        msg.textContent = proMsg("network");
-        btn.disabled = false;
-        btn.textContent = prev;
-      });
-  });
-})();
-</script>
 
 
 

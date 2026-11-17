@@ -230,13 +230,33 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     }
   });
 
-  it("/pro sells the $10 name-change and $20 dibs-claim vouchers", async () => {
+  it("/pro lists the $10 name change and the $20 dibs claim", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/pro.html" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain('id="names"');
     expect(r.body).toContain("$10, once");
     expect(r.body).toContain("$20, once");
+  });
+
+  it("/pro describes the 0.4 voucher plans, not the old hand-operated checkout", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/pro.html" });
+    expect(r.statusCode).toBe(200);
+    for (const id of ["plans", "buy", "vouchers", "data", "refunds"]) expect(r.body).toContain(`id="${id}"`);
+    expect(r.body).toContain("$10 a month");
+    expect(r.body).toContain("$20 a month");
+    expect(r.body).toContain("through Apple");
+    expect(r.body).toContain("Google Play");
+    expect(r.body).toContain("Stripe");
+    expect(r.body).toContain("72-hour grace period");
+    expect(r.body).toContain("100&nbsp;GB for $5");
+    expect(r.body).toContain("$10 by default");
+    expect(r.body).toContain("We don't give refunds.");
+    // Monero isn't in 0.4, and a plan is never sold against a username or a typed code.
+    expect(r.body).not.toMatch(/Monero|XMR/);
+    expect(r.body).not.toMatch(/\/api\/stripe\/checkout|\/api\/voucher\/redeem|<form/);
+    expect(r.body).not.toMatch(/hand-operated|tell us your username/i);
   });
 
   it("/dibs explains the .com-only claim, its price and both proof locations", async () => {
