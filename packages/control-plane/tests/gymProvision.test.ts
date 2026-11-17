@@ -68,6 +68,7 @@ interface FakeHetzner extends ProvisioningHetznerClient {
     username: string;
     sshKeyId?: number;
     fallbackServerTypes?: readonly string[];
+    ipv6?: boolean;
   }>;
   failNext?: Error;
 }
@@ -405,6 +406,30 @@ describe("handleGymProvision (Phase 1)", () => {
     const userData = String((hetzner.calls[0] as { userData?: string }).userData ?? "");
     const blocks = [...userData.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)].map((m) => Buffer.from(m[1]!, "base64").toString("utf8"));
     expect(blocks.some((b) => b.includes(`printf '%s' '${swkHex}' > /var/flagship/swk.hex`) && b.includes("FLAGSHIP_BACKUP_INTERVAL_MS=90000"))).toBe(true);
+  });
+
+  it("asks for a public IPv6 address only when the body says ipv6: true, and returns it", async () => {
+    const { deps, hetzner } = await mkDeps();
+    const { blobJson, blobSigHex } = composeRecipe();
+    hetzner.createServerWithUserData = async function (args) {
+      hetzner.calls.push(args);
+      return { serverId: "srv-gym-v6", ipv4: "192.0.2.10", ...(args.ipv6 ? { ipv6: "2a04:3540:1000:310::1" } : {}) };
+    };
+    const r = await handleGymProvision(deps, { installBlob: blobJson, blobSignature: blobSigHex, irkPrivHex: IRK_PRIV_HEX, ipv6: true });
+    expect(r.status).toBe(200);
+    expect((hetzner.calls[0] as { ipv6?: boolean }).ipv6).toBe(true);
+    expect((r.body as { ipv6?: string }).ipv6).toBe("2a04:3540:1000:310::1");
+    const bad = await handleGymProvision(deps, { installBlob: blobJson, blobSignature: blobSigHex, irkPrivHex: IRK_PRIV_HEX, ipv6: "yes" });
+    expect(bad.status).toBe(400);
+  });
+
+  it("leaves IPv6 off by default", async () => {
+    const { deps, hetzner } = await mkDeps();
+    const { blobJson, blobSigHex } = composeRecipe();
+    const r = await handleGymProvision(deps, { installBlob: blobJson, blobSignature: blobSigHex, irkPrivHex: IRK_PRIV_HEX });
+    expect(r.status).toBe(200);
+    expect(hetzner.calls[0]).not.toHaveProperty("ipv6");
+    expect(r.body).not.toHaveProperty("ipv6");
   });
 
   it("rejects an expired authCode (400)", async () => {
