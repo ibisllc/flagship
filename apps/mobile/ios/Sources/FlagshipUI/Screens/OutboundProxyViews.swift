@@ -189,10 +189,7 @@ struct OutboundProxyCard: View {
         // Offline, a proxy is set even when this phone never saw which one.
         let hasProxy = shown.proxy != nil || boxUnreachable
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(OutboundProxyCopy.title.uppercased())
-                .font(FS.font.scaled(12, weight: .semibold))
-                .tracking(1)
-                .foregroundColor(c.textMuted)
+            FSSectionLabel(OutboundProxyCopy.title)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     if shown.proxy != nil || !boxUnreachable {
