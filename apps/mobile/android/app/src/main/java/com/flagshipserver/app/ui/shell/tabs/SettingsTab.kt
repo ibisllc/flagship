@@ -108,7 +108,12 @@ fun SettingsTab() {
         composable("organization/{o}/{s}") { e ->
             val rt = com.flagshipserver.app.viewmodels.LocalOrgs.current
             val seat = rt?.keys?.seats()?.firstOrNull { it.orgId == e.arguments?.getString("o") && it.seatId == e.arguments?.getString("s") }
-            if (seat != null) com.flagshipserver.app.ui.screens.OrgDetailScreen(seat)
+            if (seat != null) com.flagshipserver.app.ui.screens.OrgDetailScreen(seat, onOpenPlan = { nav.navigate("organization/${seat.orgId}/${seat.seatId}/plan") })
+        }
+        composable("organization/{o}/{s}/plan") { e ->
+            val rt = com.flagshipserver.app.viewmodels.LocalOrgs.current
+            val seat = rt?.keys?.seats()?.firstOrNull { it.orgId == e.arguments?.getString("o") && it.seatId == e.arguments?.getString("s") }
+            if (seat != null) com.flagshipserver.app.ui.screens.OrgPlanScreen(seat, nav)
         }
         composable("delete-account") { AccountDeletionScreen(nav) }
         composable("trusted-devices") { TrustedDevicesScreen(nav) }
