@@ -49,7 +49,9 @@ import {
   type PolicyState,
 } from "@flagship/protocol";
 import type { OrgObjectKind, OrgRecord, OrgStorage, UsernameStorage } from "@flagship/storage";
+import { DEFAULT_PAYMENTS_CONFIG, orgTrialTerms, type PaymentsConfig } from "@flagship/protocol";
 import { isReservedName, validateUserLabel } from "./labels.js";
+import { orgPlanGate } from "./orgPlan.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
 /**
@@ -87,8 +89,10 @@ export interface OrgDeps {
   orgs: OrgStorage;
   usernames: UsernameStorage;
   now?: () => number;
-  /** The seat limit for a new org's trial (null = none). */
+  /** The seat limit for a new org's trial (null = none); default `business.trialSeats`. */
   trialSeatLimit?: number | null;
+  /** The payment numbers (`PAYMENTS_CONFIG`); the Business plan's trial, seats and prices come from here. */
+  payments?: PaymentsConfig;
 }
 
 const ORG_ID = /^[0-9a-f]{32}$/;
@@ -192,14 +196,17 @@ export async function handleOrgCreate(deps: OrgDeps, body: unknown): Promise<Han
     return refuse(e);
   }
   const orgId = b.entry.record.orgId;
+  const trial = orgTrialTerms(deps.payments ?? DEFAULT_PAYMENTS_CONFIG, now);
   const created = await deps.orgs.createOrg({
     orgId,
     name: v.label,
     genesisHash,
-    planTier: "enterprise-trial",
-    seatLimit: deps.trialSeatLimit === undefined ? 10 : deps.trialSeatLimit,
+    planTier: "business",
+    seatLimit: deps.trialSeatLimit === undefined ? trial.trialSeats : deps.trialSeatLimit,
     paidUntil: null,
     createdAt: now,
+    trialEndsAt: trial.trialEndsAt,
+    paidSeats: 0,
   });
   if (!created) return conflict("org id or name taken");
   await deps.orgs.putObject(orgId, { kind: "authority", key: pad(0), bodyJson: JSON.stringify(b.entry), issuedAt: b.entry.record.issuedAt, storedAt: now });
@@ -234,6 +241,11 @@ export async function handleOrgAuthorityAppend(deps: OrgDeps, orgId: string, bod
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
     const st = verifyOrgAuthorityChain([...v.entries, entry], { genesisHash: v.org.genesisHash, now, freezes: v.freezes, overturns: v.overturns, vetoes: v.vetoes });
+    // A lapsed org may remove, freeze, recover and overturn, but adds no new admin (docs/plans-and-backup-offer.md §3.4).
+    if (entry.via === "direct" && st.current.admins.some((a) => !v.state.records.some((r) => r.admins.some((x) => x.seatId === a.seatId)))) {
+      const gate = orgPlanGate(deps.payments ?? DEFAULT_PAYMENTS_CONFIG, v.org, now, "add-admin");
+      if (gate) return { status: 403, body: { error: gate, code: gate } };
+    }
     const version = st.current.version;
     const stored = await deps.orgs.putObject(orgId, { kind: "authority", key: pad(version), bodyJson: JSON.stringify(entry), issuedAt: entry.record.issuedAt, storedAt: now });
     if (!stored) return conflict("version already recorded");
@@ -250,11 +262,12 @@ function liveSeats(v: OrgView): number {
   return [...v.book.seats.keys()].filter((s) => !v.book.revoked.has(s)).length;
 }
 
-function planGate(v: OrgView, now: number, seatId: string, roles: readonly OrgSeatRole[]): string | null {
-  const lapsed = v.org.paidUntil !== null && v.org.paidUntil < now;
+/** The Business plan's gate for a seat change (orgPlan.ts orgPlanGate): new seats and role raises need a live plan. */
+function planGate(deps: OrgDeps, v: OrgView, now: number, seatId: string, roles: readonly OrgSeatRole[]): string | null {
+  const cfg = deps.payments ?? DEFAULT_PAYMENTS_CONFIG;
   const isNew = !v.book.seats.has(seatId);
-  if (lapsed && (isNew || orgRolesRaiseAdmin(roles))) return "org-plan-lapsed";
-  if (isNew && v.org.seatLimit !== null && liveSeats(v) >= v.org.seatLimit) return "org-seat-limit";
+  if (isNew) return orgPlanGate(cfg, v.org, now, "new-seat", liveSeats(v));
+  if (orgRolesRaiseAdmin(roles)) return orgPlanGate(cfg, v.org, now, "raise-role");
   return null;
 }
 
@@ -274,7 +287,7 @@ export async function handleOrgInviteCreate(deps: OrgDeps, orgId: string, body: 
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
     if (v.book.revoked.has(b.invite.seatId) || v.book.seats.has(b.invite.seatId)) return conflict("seat exists");
-    const gate = planGate(v, now, b.invite.seatId, b.roles);
+    const gate = planGate(deps, v, now, b.invite.seatId, b.roles);
     if (gate) return { status: 403, body: { error: gate, code: gate } };
     authorizeOrgOrder({ state: v.state, book: v.book, action: { kind: "seat-invite" }, order, approvals: b.approvals.map(orgApprovalFromWire), now });
     const stored = await deps.orgs.putObject(orgId, {
@@ -380,7 +393,7 @@ export async function handleOrgSeatGrant(deps: OrgDeps, orgId: string, body: unk
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
     if (v.book.revoked.has(g.grant.seatId)) return { status: 403, body: { error: "seat revoked", code: "org-seat-revoked" } };
-    const gate = planGate(v, now, g.grant.seatId, g.roles);
+    const gate = planGate(deps, v, now, g.grant.seatId, g.roles);
     if (gate) return { status: 403, body: { error: gate, code: gate } };
     const invite = await deps.orgs.getObject(orgId, "invite", g.grant.seatId);
     if (!v.book.seats.has(g.grant.seatId)) {

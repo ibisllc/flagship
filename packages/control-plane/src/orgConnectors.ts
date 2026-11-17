@@ -17,6 +17,8 @@ import {
   type OrgProposalDecisionStatement,
   type OrgSeatRole,
 } from "@flagship/protocol";
+import { DEFAULT_PAYMENTS_CONFIG } from "@flagship/protocol";
+import { orgPlanGate } from "./orgPlan.js";
 import { loadOrg, type OrgDeps } from "./orgs.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -104,6 +106,9 @@ export async function handleOrgConnectorPut(deps: OrgDeps, orgId: string, body: 
       ...(setup ? { setup } : {}),
       ...(mappingSealed ? { mappingSealed } : {}),
     };
+    if (b.connector.status === "active" && orgPlanGate(deps.payments ?? DEFAULT_PAYMENTS_CONFIG, v.org, now, "start-connector")) {
+      return { status: 403, body: { error: "org-plan-lapsed", code: "org-plan-lapsed" } };
+    }
     verifyOrgConnector({ state: v.state, book: v.book, servers: await servers(deps, orgId), now }, bundle, prev?.connector ?? null);
     await deps.orgs.putObject(orgId, { kind: "connector", key: b.connector.connectorId, bodyJson: JSON.stringify(bundle), issuedAt: b.connector.issuedAt, storedAt: now }, true);
     await deps.orgs.appendLog(orgId, `connector-${b.connector.status}`, orgSha256Hex(order), now);
