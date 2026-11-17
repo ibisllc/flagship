@@ -11,6 +11,7 @@ export * from "./pqTrust.js";
 export * from "./voici.js";
 export * from "./voiciCalls.js";
 export * from "./blindVouchers.js";
+export * from "./voucherPayments.js";
 export * from "./names.js";
 export * from "./accountRename.js";
 export * from "./relayHealth.js";
