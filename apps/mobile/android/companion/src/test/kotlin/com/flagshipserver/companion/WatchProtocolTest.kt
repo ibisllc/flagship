@@ -40,31 +40,46 @@ class WatchProtocolTest {
     @Test fun eventsNewestFirstDedupedAndTrimmed() {
         val ctx = WatchContext(recentEvents = (1..8).map { SecurityAlert(it, "device-added") } + SecurityAlert(8, "dup"))
         assertEquals(listOf(8, 7, 6, 5, 4), WatchProjection.events(ctx).map { it.seq })
-        assertEquals("Added device", WatchProjection.eventLabel("device-added"))
-        assertEquals("Something new", WatchProjection.eventLabel("something-new"))
+        assertEquals("Something new", WatchProjection.unknownEventLabel("something-new"))
     }
 
     @Test fun tileLines() {
         val pods = PodStatusSnapshot("u", listOf(pod("a").copy(name = "Home", isLeader = true), pod("b")))
-        assertEquals(WatchProjection.TileLines("2/2 up", "Leader: Home", false), WatchProjection.tileLines(WatchContext(status = pods)))
+        assertEquals(
+            WatchProjection.TileLines(WatchText.Up(2, 2), WatchText.Leader("Home"), false),
+            WatchProjection.tileLines(WatchContext(status = pods)),
+        )
         val one = WatchContext(status = pods, pendingApprovals = listOf(PendingApproval(null, "a.u.flagship.services", "Home")))
-        assertEquals(WatchProjection.TileLines("1 waiting", "Home", true), WatchProjection.tileLines(one))
+        assertEquals(WatchProjection.TileLines(WatchText.Waiting(1), WatchText.Name("Home"), true), WatchProjection.tileLines(one))
+        val two = one.copy(pendingApprovals = one.pendingApprovals + PendingApproval(null, "b.u.flagship.services"))
+        assertEquals(WatchProjection.TileLines(WatchText.Waiting(2), WatchText.TapToApprove, true), WatchProjection.tileLines(two))
         val failed = one.copy(provision = ProvisionTimeline("S", "Office", phase = "error"))
-        assertEquals(WatchProjection.TileLines("Problem", "Office", true), WatchProjection.tileLines(failed))
-        assertEquals(WatchProjection.TileLines("No servers", null, false), WatchProjection.tileLines(WatchContext.EMPTY))
+        assertEquals(WatchProjection.TileLines(WatchText.Phase("error"), WatchText.Name("Office"), true), WatchProjection.tileLines(failed))
+        val unnamed = WatchContext(provision = ProvisionTimeline("S", phase = "sealing"))
+        assertEquals(WatchProjection.TileLines(WatchText.Phase("sealing"), WatchText.NewServer, false), WatchProjection.tileLines(unnamed))
+    }
+
+    @Test fun emptyTellsThePersonWhatToDo() {
+        // Never heard from the phone, or the phone is signed out: open Flagship there.
+        assertEquals(WatchProjection.TileLines(WatchText.OpenPhone, null, false), WatchProjection.tileLines(WatchContext.EMPTY))
+        assertEquals(WatchText.OpenPhone, WatchProjection.shortText(WatchContext.EMPTY))
+        assertEquals(WatchText.OpenPhone, WatchProjection.shortText(WatchContext(updatedAt = 5)))
+        // Signed in with no servers: add one on the phone.
+        val none = WatchContext(status = PodStatusSnapshot("u", emptyList()), updatedAt = 5)
+        assertEquals(WatchText.NoServers, WatchProjection.shortText(none))
+        assertEquals(WatchProjection.TileLines(WatchText.NoServers, WatchText.AddOnPhone, false), WatchProjection.tileLines(none))
     }
 
     @Test fun shortTextPrefersInstallThenWaitingThenCount() {
         val pods = PodStatusSnapshot("u", listOf(pod("a"), pod("b", "offline")))
-        assertEquals("No servers", WatchProjection.shortText(WatchContext.EMPTY))
-        assertEquals("1/2 up", WatchProjection.shortText(WatchContext(status = pods)))
+        assertEquals(WatchText.Up(1, 2), WatchProjection.shortText(WatchContext(status = pods)))
         val waiting = WatchContext(status = pods, pendingApprovals = listOf(PendingApproval(null, "a.u.flagship.services")))
-        assertEquals("1 waiting", WatchProjection.shortText(waiting))
+        assertEquals(WatchText.Waiting(1), WatchProjection.shortText(waiting))
         val installing = waiting.copy(provision = ProvisionTimeline("S", phase = "sealing"))
-        assertEquals("Sealing", WatchProjection.shortText(installing))
+        assertEquals(WatchText.Phase("sealing"), WatchProjection.shortText(installing))
         assertEquals(6f / 9f, WatchProjection.provisionFraction(installing)!!, 0.001f)
         val done = waiting.copy(provision = ProvisionTimeline("S", phase = "live"))
-        assertEquals("1 waiting", WatchProjection.shortText(done))
+        assertEquals(WatchText.Waiting(1), WatchProjection.shortText(done))
         assertNull(WatchProjection.provisionFraction(done))
     }
 }

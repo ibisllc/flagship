@@ -108,6 +108,35 @@ data class ApproveReply(
 
 private val JSON = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+/**
+ * What a watch line says, without the words: the watch turns each into text from its own string
+ * resources ([WatchProjection] runs on the watch, over the raw [WatchContext] the phone sent), so the
+ * tile, complication and app read in the watch's language, not the phone's, and this module stays
+ * free of user-facing English.
+ */
+sealed interface WatchText {
+    /** An install's phase, the short form ("Sealing"). */
+    data class Phase(val phase: String) : WatchText
+    /** [count] boxes wait for a boot approval. */
+    data class Waiting(val count: Int) : WatchText
+    /** [online] of [total] servers are up. */
+    data class Up(val online: Int, val total: Int) : WatchText
+    /** Nothing from the phone yet, or the phone is signed out: open Flagship there. */
+    data object OpenPhone : WatchText
+    /** The phone's account has no servers. */
+    data object NoServers : WatchText
+    /** Under [NoServers]: where to add one. */
+    data object AddOnPhone : WatchText
+    /** An install with no name yet. */
+    data object NewServer : WatchText
+    /** Several boxes wait: tap to pick one. */
+    data object TapToApprove : WatchText
+    /** The leading server's name, marked as leader. */
+    data class Leader(val name: String) : WatchText
+    /** A name from the owner's data, shown as is. */
+    data class Name(val name: String) : WatchText
+}
+
 /** Pure projections behind the watch views, tile and complication (iOS's
  *  SecurityAlertsProjection + the complication's text). */
 object WatchProjection {
@@ -124,33 +153,42 @@ object WatchProjection {
     fun events(ctx: WatchContext): List<SecurityAlert> =
         ctx.recentEvents.distinctBy { it.seq }.sortedByDescending { it.seq }.take(MAX_EVENTS)
 
+    /** No account on the phone's side (never heard from it, or it is signed out): the
+     *  person has to open Flagship there before the watch can show anything. */
+    fun needsPhone(ctx: WatchContext): Boolean =
+        ctx.status.pods.isEmpty() && ctx.status.username == null &&
+            ctx.pendingApprovals.isEmpty() && ctx.provision == null
+
     /** Short complication / tile text: an install's phase, else how many boxes
      *  wait, else how many servers are online. */
-    fun shortText(ctx: WatchContext): String {
-        ctx.provision?.takeIf { it.active }?.let { return phaseShort(it.phase) }
+    fun shortText(ctx: WatchContext): WatchText {
+        ctx.provision?.takeIf { it.active }?.let { return WatchText.Phase(it.phase) }
         val waiting = approvals(ctx).size
-        if (waiting > 0) return "$waiting waiting"
+        if (waiting > 0) return WatchText.Waiting(waiting)
         val pods = ctx.status.pods
-        if (pods.isEmpty()) return "No servers"
-        return "${pods.count { it.statusRaw == "online" }}/${pods.size} up"
+        if (pods.isEmpty()) return if (needsPhone(ctx)) WatchText.OpenPhone else WatchText.NoServers
+        return WatchText.Up(pods.count { it.statusRaw == "online" }, pods.size)
     }
 
     /** The tile's two lines. [attention] when a box waits or an install failed. */
-    data class TileLines(val headline: String, val detail: String?, val attention: Boolean)
+    data class TileLines(val headline: WatchText, val detail: WatchText?, val attention: Boolean)
 
     fun tileLines(ctx: WatchContext): TileLines {
         ctx.provision?.let { p ->
-            if (p.active) return TileLines(phaseShort(p.phase), p.podName ?: "New server", attention = false)
-            if (p.phase == "error") return TileLines(phaseShort(p.phase), p.podName ?: "New server", attention = true)
+            val name = p.podName?.let { WatchText.Name(it) } ?: WatchText.NewServer
+            if (p.active) return TileLines(WatchText.Phase(p.phase), name, attention = false)
+            if (p.phase == "error") return TileLines(WatchText.Phase(p.phase), name, attention = true)
         }
         val waiting = approvals(ctx)
         if (waiting.isNotEmpty()) {
             val first = waiting.first()
-            val detail = if (waiting.size == 1) first.serverName ?: first.serverFqdn else "Tap to approve"
-            return TileLines("${waiting.size} waiting", detail, attention = true)
+            val detail = if (waiting.size == 1) WatchText.Name(first.serverName ?: first.serverFqdn) else WatchText.TapToApprove
+            return TileLines(WatchText.Waiting(waiting.size), detail, attention = true)
         }
+        val short = shortText(ctx)
+        if (short == WatchText.NoServers) return TileLines(short, WatchText.AddOnPhone, attention = false)
         val leader = ctx.status.headline
-        return TileLines(shortText(ctx), leader?.let { if (it.isLeader) "Leader: ${it.name}" else it.name }, attention = false)
+        return TileLines(short, leader?.let { if (it.isLeader) WatchText.Leader(it.name) else WatchText.Name(it.name) }, attention = false)
     }
 
     /** Install progress 0..1 for a ranged complication, or null when idle. */
@@ -165,52 +203,17 @@ object WatchProjection {
         "registering", "sealing", "installed", "pairing", "live",
     )
 
-    fun phaseShort(phase: String): String = when (phase) {
-        "booting" -> "Booting"
-        "partitioning" -> "Disk"
-        "installing" -> "Install"
-        "downloading" -> "Download"
-        "registering" -> "Register"
-        "sealing" -> "Sealing"
-        "installed" -> "Unplug"
-        "pairing" -> "Pairing"
-        "live" -> "Live"
-        "error" -> "Problem"
-        else -> "Setup"
-    }
+    /** The install phases the watch names (provisionStatus.ts); any other shows a generic "setting up". */
+    val PHASES = LADDER + "error"
 
-    /** Canonical phase title (provisionStatus.ts PHASE_TITLES). */
-    fun phaseTitle(phase: String): String = when (phase) {
-        "booting" -> "Booting up"
-        "downloading" -> "Downloading"
-        "partitioning" -> "Partitioning disk"
-        "installing" -> "Installing"
-        "installed" -> "Install complete"
-        "registering" -> "Registering with Flagship"
-        "sealing" -> "Sealing your disk key"
-        "pairing" -> "Pairing with your phone"
-        "live" -> "Your server is live"
-        "error" -> "Setup hit a problem"
-        else -> phase
-    }
+    /** The audit event kinds the watch names (iOS SecurityAlertsProjection.label); any other shows its
+     *  kind with the dashes as spaces, as iOS does. */
+    val EVENT_KINDS = listOf(
+        "device-disconnected", "device-replaced", "device-added", "wipe-restart", "recovery-set-up",
+        "recovery-rotated", "app-renamed", "server-created", "server-online", "server-revoked",
+        "server-unrevoked", "demo-vps-provisioned", "totp-enrolled", "totp-disabled", "re-pair-initiated",
+    )
 
-    /** Human label for an audit event kind (iOS SecurityAlertsProjection.label). */
-    fun eventLabel(kind: String): String = when (kind) {
-        "device-disconnected" -> "Disconnected device"
-        "device-replaced" -> "Replaced device"
-        "device-added" -> "Added device"
-        "wipe-restart" -> "Wiped & restarted"
-        "recovery-set-up" -> "Set up recovery"
-        "recovery-rotated" -> "Rotated recovery passkey"
-        "app-renamed" -> "Renamed app URL"
-        "server-created" -> "Created server"
-        "server-online" -> "Server came online"
-        "server-revoked" -> "Revoked server"
-        "server-unrevoked" -> "Restored server"
-        "demo-vps-provisioned" -> "Demo server provisioned"
-        "totp-enrolled" -> "Turned on authenticator codes"
-        "totp-disabled" -> "Turned off authenticator codes"
-        "re-pair-initiated" -> "Started device replacement"
-        else -> kind.replace('-', ' ').replaceFirstChar { it.uppercase() }
-    }
+    /** An event kind the watch has no label for, made readable. */
+    fun unknownEventLabel(kind: String): String = kind.replace('-', ' ').replaceFirstChar { it.uppercase() }
 }

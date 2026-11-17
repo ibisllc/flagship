@@ -8,7 +8,7 @@ them, and the next render picks the files up with no other change.
 ## The contract
 
 * **Output path:** `store/captures/<platform>/<lang>/<device>/<id>.png`, `platform` `ios` or `android`, `lang` the
-  code from `i18n/locales.json` (`en`, `es`, `fr`, `de`, `pt-BR`, `ja`, `zh-Hans`), `id` the slide (`01`…`07`, `07b`).
+  code from `i18n/locales.json` (`en`, `es`, `fr`, `de`, `pt-BR`, `ja`, `zh-Hans`), `id` the slide (`01`…`07`, `07b`, `07c`).
   The renderer lists every missing path (`node scripts/store-assets/render.mjs check`).
 * **Pixel size** (`store/store.json` `captureSize`; another size is scaled and reported):
 
@@ -67,6 +67,7 @@ Fix the clock to the same moment the webapp captures use (2026-10-21 09:00 UTC) 
 | 06 | Messages (0.3, H11): the one conversation in the world's `messages` block (someone wrote from voi.ci/river-otter, the owner answered and renamed them), opened; texts and nickname in the capture's language (the only per-language content in the world) | `-smoke-tab messages`; tap the `messages-row-*` row, wait for `thread-receipt` | `smokeTab=messages`; tap the `messages-row-*` row, wait for `bubble-status` |
 | 07 | Watch: servers list, both online, nothing waiting | Watch UI test on the Ultra simulator (`WatchApp` target) | Wear AVD: a `wear` androidTest (none exists yet: add `wear/src/androidTest`) launching `WearMainActivity` with the same world over the Data Layer mock |
 | 07b | Watch: `cabin` waiting, the Approve button | as 07 with the waiting flag (`-smoke-watch-waiting`) | as 06 with cabin waiting |
+| 07c | Wear OS only: the tile (both servers up, `home` the leader), bare, no frame | none (watchOS has no tiles) | `wear/src/test` `StoreTileCaptureTest`: the tile's real layout (`statusTileLayout`) drawn by the Tiles renderer under Robolectric, 384 × 384 |
 
 `08` (closing) and the feature graphic need no capture. The App Store strip is 01-06 and 08 (7 of its 10); Play's
 phone and tablets are 01-08 (its maximum of 8), so adding a slide there means cutting one (the watch first, brief §4).
@@ -75,7 +76,7 @@ phone and tablets are 01-08 (its maximum of 8), so adding a slide there means cu
 
 The tests exist (2026-11-01): iOS `StoreCaptureTests` (UI test) and the Watch app's `-watch-store-world` launch;
 Android `StoreCaptureTest` (instrumented) and the Wear OS app's `StoreWatchCaptureTest` (Robolectric, since the phone
-emulator can't hold the watch build). Each platform has one wrapper that builds, runs every ga language and device,
+emulator can't hold the watch build) and `StoreTileCaptureTest` (the tile, `07c`). Each platform has one wrapper that builds, runs every ga language and device,
 and cleans up after itself:
 
 ```sh
@@ -91,3 +92,23 @@ Android boots `flagship_api35` headless without saving a snapshot, lifts the AVD
 `-smoke-store-waiting` / `flagship.smokeStoreWaiting` has cabin ask to start. Times are relative to the moment of
 capture (the app's clock is not fixed), so absolute dates on the backups slide are the capture day. The Android phone
 runs at 370 dpi (the AVD's 420 is reset after) so slide 04 holds the Members-only switch and all three members.
+
+### The Wear OS tile: screenshot and picker preview
+
+`StoreTileCaptureTest` renders the tile from the same layout code the tile service sends (`statusTileLayout` in
+`StatusTileService.kt`), so the screenshot and the preview cannot drift from the tile. It writes two things:
+
+```sh
+cd apps/mobile/android
+STORE_CAPTURE_WEAR=1 ./gradlew :wear:testDebugUnitTest --tests com.flagshipserver.wear.StoreTileCaptureTest --rerun
+    # store/captures/android/<lang>/wear/07c.png (capture-android.sh --device wear runs it)
+WEAR_TILE_PREVIEW=1 ./gradlew :wear:testDebugUnitTest --tests com.flagshipserver.wear.StoreTileCaptureTest --rerun
+    # wear/src/main/res/drawable[-<lang>]-nodpi/tile_preview.png: the tile picker's preview (the manifest's
+    # androidx.wear.tiles.PREVIEW), 384 x 384, one per ga language. Rerun and commit after changing the tile's
+    # layout or its words.
+```
+
+Play takes Wear OS screenshots bare (no device frame) at 384 × 384 or larger; the `watch` template keeps the round
+content as captured. To check one by hand on a Wear OS AVD instead: add the tile from the watch face's tile
+carousel, then `adb -s <watch> exec-out screencap -p > 07c.png`.
+

@@ -2,7 +2,8 @@
 # Native Android store captures (docs/store-assets/capture-plan.md): StoreCaptureTest on one phone AVD, resized
 # for the 7" and 10" tablets, every ga language, into store/captures/android/<lang>/<device>/<id>.png; and the
 # Wear OS app's 07/07b (wear/src/test StoreWatchCaptureTest, Robolectric: the phone emulator can't hold the watch
-# build, which shares the phone's applicationId) into store/captures/android/<lang>/wear/.
+# build, which shares the phone's applicationId) and its tile, 07c (StoreTileCaptureTest, the Tiles renderer), into
+# store/captures/android/<lang>/wear/.
 #
 #   bash scripts/store-assets/capture-android.sh [--lang ja,de] [--device phone,tablet-7,tablet-10,wear] [--avd flagship_api35]
 #
@@ -33,7 +34,8 @@ WORLD="$(base64 < "$ROOT/store/demo-world.json" | tr -d '\n')"
 if [[ ",$DEVICES," == *,wear,* ]]; then
   echo "== wear $LANGS -> store/captures/android/<lang>/wear"
   (cd "$ROOT/apps/mobile/android" && STORE_CAPTURE_WEAR=1 STORE_LANGS="$LANGS" \
-    ./gradlew -q :wear:testDebugUnitTest --tests com.flagshipserver.wear.StoreWatchCaptureTest --rerun)
+    ./gradlew -q :wear:testDebugUnitTest --tests com.flagshipserver.wear.StoreWatchCaptureTest \
+      --tests com.flagshipserver.wear.StoreTileCaptureTest --rerun)
   DEVICES="$(echo ",$DEVICES," | sed 's/,wear,/,/; s/^,//; s/,$//')"
   [ -n "$DEVICES" ] || { echo "done: store/captures/android"; exit 0; }
 fi

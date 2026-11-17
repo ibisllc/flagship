@@ -120,7 +120,7 @@ private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
                     Chip(
                         onClick = {},
                         label = { Text(p.podName ?: stringResource(R.string.new_server), maxLines = 1) },
-                        secondaryLabel = { Text(p.detail?.takeIf { p.phase == "error" } ?: WatchProjection.phaseTitle(p.phase), maxLines = 2) },
+                        secondaryLabel = { Text(p.detail?.takeIf { p.phase == "error" } ?: WatchStrings.phaseTitle(LocalContext.current, p.phase), maxLines = 2) },
                         colors = ChipDefaults.secondaryChipColors(),
                         modifier = Modifier.fillMaxWidth().testTag("watch-provision"),
                     )
@@ -157,16 +157,19 @@ private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
                 item { ListHeader { Text(stringResource(R.string.recent_activity)) } }
                 items(events) { e ->
                     Text(
-                        WatchProjection.eventLabel(e.kind),
+                        WatchStrings.eventLabel(LocalContext.current, e.kind),
                         style = MaterialTheme.typography.caption1,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                     )
                 }
             }
             if (data.status.pods.isEmpty() && approvals.isEmpty() && data.provision == null) {
+                // Nothing from the phone (or it is signed out): open Flagship there. Signed in with no
+                // servers: add one there.
+                val empty = if (WatchProjection.needsPhone(data)) R.string.open_flagship_on_your_phone_to else R.string.watch_no_servers_add_one
                 item {
                     Text(
-                        stringResource(R.string.open_flagship_on_your_phone_to),
+                        stringResource(empty),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.caption2,
                         modifier = Modifier.padding(8.dp),

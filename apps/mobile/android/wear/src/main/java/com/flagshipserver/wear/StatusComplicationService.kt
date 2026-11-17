@@ -1,7 +1,7 @@
 // The Flagship complication, the twin of the Apple Watch's provision-phase
 // complication: a ranged value while a server installs, otherwise short text
-// (how many boxes wait for approval, else how many servers are up). A tap
-// opens the app.
+// (how many boxes wait for approval, else how many servers are up; with nothing
+// from the phone, "Open phone"). A tap opens the app. Text in the watch's language.
 
 package com.flagshipserver.wear
 
@@ -29,6 +29,7 @@ class StatusComplicationService : SuspendingComplicationDataSourceService() {
             type,
             WatchContext(
                 status = PodStatusSnapshot(
+                    username = "example",
                     pods = listOf(PodStatusSnapshot.Pod("home", "Home", "home.example.flagship.services", "online", true)),
                 ),
                 pendingApprovals = listOf(PendingApproval(null, "home.example.flagship.services")),
@@ -36,8 +37,9 @@ class StatusComplicationService : SuspendingComplicationDataSourceService() {
         )
 
     private fun build(type: ComplicationType, ctx: WatchContext): ComplicationData? {
-        val text = WatchProjection.shortText(ctx)
-        val description = PlainComplicationText.Builder("Flagship: $text").build()
+        val what = WatchProjection.shortText(ctx)
+        val text = WatchStrings.short(this, what)
+        val description = PlainComplicationText.Builder(WatchStrings.description(this, what)).build()
         val tap = PendingIntent.getActivity(
             this, 0, Intent(this, WearMainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,

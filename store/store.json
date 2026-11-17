@@ -9,6 +9,7 @@
     { "id": "06", "theme": "messages", "strings": "messages", "state": "messages",        "screen": "Messages: a conversation someone started from voi.ci/river-otter, nicknamed, answered by the owner (0.3, H11)" },
     { "id": "07", "theme": "glance",  "strings": "slide6", "state": "home-two-servers", "screen": "Watch / Wear OS: two servers online, nothing waiting", "watch": true },
     { "id": "07b", "theme": "glance", "strings": null,     "state": "unlock-request",   "screen": "Watch / Wear OS: cabin waiting for approval", "watch": true, "rawOnly": true },
+    { "id": "07c", "theme": "glance", "strings": null,     "state": "home-two-servers", "screen": "Wear OS tile (not the app): two servers up, home the leader", "watch": true, "rawOnly": true },
     { "id": "08", "theme": "closing", "strings": "closing", "closing": true },
     { "id": "feature", "theme": "feature", "strings": "feature" },
     { "id": "icon", "theme": "icon", "strings": null, "neutral": true }
@@ -20,7 +21,7 @@
     { "store": "playstore", "class": "phone",       "w": 1080, "h": 1920, "template": "phone",   "device": "android-phone", "captures": { "platform": "android", "device": "phone" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "phone", "slides": ["01", "02", "03", "04", "05", "06", "07", "08"] },
     { "store": "playstore", "class": "tablet-7",    "w": 1200, "h": 1920, "template": "tablet",  "device": "android-tablet", "captures": { "platform": "android", "device": "tablet-7" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "tablet", "slides": ["01", "02", "03", "04", "05", "06", "07", "08"] },
     { "store": "playstore", "class": "tablet-10",   "w": 1600, "h": 2560, "template": "tablet",  "device": "android-tablet", "captures": { "platform": "android", "device": "tablet-10" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "tablet", "slides": ["01", "02", "03", "04", "05", "06", "07", "08"] },
-    { "store": "playstore", "class": "wear",        "w": 384,  "h": 384,  "template": "watch",   "device": "wear-os", "captures": { "platform": "android", "device": "wear" }, "slides": ["07", "07b"] },
+    { "store": "playstore", "class": "wear",        "w": 384,  "h": 384,  "template": "watch",   "device": "wear-os", "captures": { "platform": "android", "device": "wear" }, "slides": ["07", "07b", "07c"] },
     { "store": "playstore", "class": "feature",     "w": 1024, "h": 500,  "template": "feature", "slides": ["feature"] },
     { "store": "playstore", "class": "icon",        "w": 512,  "h": 512,  "template": "icon",    "slides": ["icon"], "neutral": true }
   ],

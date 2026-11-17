@@ -101,5 +101,197 @@
   "leader": {
     "en": "Leader",
     "ctx": "apps/mobile/android/wear/src/main/java/com/flagshipserver/wear/WearMainActivity.kt:148"
+  },
+  "watch_open_flagship_on_your_phone": {
+    "en": "Open Flagship on your phone",
+    "ctx": "watch tile headline when the watch has nothing from the phone yet (or the phone is signed out); an instruction, up to 3 short lines on a round tile"
+  },
+  "watch_open_phone_short": {
+    "en": "Open phone",
+    "ctx": "watch complication text when the watch has nothing from the phone yet: as short as possible (a complication shows about 7 characters); means 'open Flagship on your phone'"
+  },
+  "watch_no_servers": {
+    "en": "No servers",
+    "ctx": "watch tile headline / complication text: the account has no servers yet; very short"
+  },
+  "watch_add_one_on_your_phone": {
+    "en": "Add one in Flagship on your phone",
+    "ctx": "watch tile line under 'No servers': where to add a server"
+  },
+  "watch_no_servers_add_one": {
+    "en": "No servers yet. Add one in Flagship on your phone.",
+    "ctx": "watch app, empty list when the account has no servers"
+  },
+  "watch_servers_up": {
+    "en": "%1$d/%2$d up",
+    "ctx": "watch tile headline / complication: %1$d of %2$d servers are online; very short"
+  },
+  "watch_tap_to_approve": {
+    "en": "Tap to approve",
+    "ctx": "watch tile line under 'N waiting' when several servers wait for a start-up approval"
+  },
+  "watch_leader_name": {
+    "en": "Leader: %1$s",
+    "ctx": "watch tile line: %1$s is the name of the leading server"
+  },
+  "watch_complication_description": {
+    "en": "Flagship: %1$s",
+    "ctx": "watch complication's spoken description; %1$s is its short text (for example '2/3 up')"
+  },
+  "watch_phase_short_booting": {
+    "en": "Booting",
+    "ctx": "watch tile/complication: install phase, one short word"
+  },
+  "watch_phase_short_partitioning": {
+    "en": "Disk",
+    "ctx": "watch tile/complication: install phase (partitioning the disk), one short word"
+  },
+  "watch_phase_short_installing": {
+    "en": "Install",
+    "ctx": "watch tile/complication: install phase (installing), one short word"
+  },
+  "watch_phase_short_downloading": {
+    "en": "Download",
+    "ctx": "watch tile/complication: install phase (downloading), one short word"
+  },
+  "watch_phase_short_registering": {
+    "en": "Register",
+    "ctx": "watch tile/complication: install phase (registering with Flagship), one short word"
+  },
+  "watch_phase_short_sealing": {
+    "en": "Sealing",
+    "ctx": "watch tile/complication: install phase (sealing the disk key), one short word"
+  },
+  "watch_phase_short_installed": {
+    "en": "Unplug",
+    "ctx": "watch tile/complication: install finished, unplug the USB stick; one short word"
+  },
+  "watch_phase_short_pairing": {
+    "en": "Pairing",
+    "ctx": "watch tile/complication: install phase (pairing with the phone), one short word"
+  },
+  "watch_phase_short_live": {
+    "en": "Live",
+    "ctx": "watch tile/complication: the server is live, one short word"
+  },
+  "watch_phase_short_error": {
+    "en": "Problem",
+    "ctx": "watch tile/complication: the install hit a problem, one short word"
+  },
+  "watch_phase_short_other": {
+    "en": "Setup",
+    "ctx": "watch tile/complication: an install step without its own name, one short word"
+  },
+  "watch_phase_booting": {
+    "en": "Booting up",
+    "ctx": "watch app: install phase title (provisionStatus.ts)"
+  },
+  "watch_phase_downloading": {
+    "en": "Downloading",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_partitioning": {
+    "en": "Partitioning disk",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_installing": {
+    "en": "Installing",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_installed": {
+    "en": "Install complete",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_registering": {
+    "en": "Registering with Flagship",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_sealing": {
+    "en": "Sealing your disk key",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_pairing": {
+    "en": "Pairing with your phone",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_live": {
+    "en": "Your server is live",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_error": {
+    "en": "Setup hit a problem",
+    "ctx": "watch app: install phase title"
+  },
+  "watch_phase_other": {
+    "en": "Setting up",
+    "ctx": "watch app: an install step without its own title"
+  },
+  "watch_event_device_disconnected": {
+    "en": "Disconnected device",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_device_replaced": {
+    "en": "Replaced device",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_device_added": {
+    "en": "Added device",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_wipe_restart": {
+    "en": "Wiped & restarted",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_recovery_set_up": {
+    "en": "Set up recovery",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_recovery_rotated": {
+    "en": "Rotated recovery passkey",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_app_renamed": {
+    "en": "Renamed app URL",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_server_created": {
+    "en": "Created server",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_server_online": {
+    "en": "Server came online",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_server_revoked": {
+    "en": "Revoked server",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_server_unrevoked": {
+    "en": "Restored server",
+    "ctx": "watch app, recent activity: account event (a revoked server was un-revoked)"
+  },
+  "watch_event_demo_vps_provisioned": {
+    "en": "Demo server provisioned",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_totp_enrolled": {
+    "en": "Turned on authenticator codes",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_totp_disabled": {
+    "en": "Turned off authenticator codes",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_event_re_pair_initiated": {
+    "en": "Started device replacement",
+    "ctx": "watch app, recent activity: account event"
+  },
+  "watch_waiting": {
+    "en": {
+      "one": "%1$d waiting",
+      "other": "%1$d waiting"
+    },
+    "ctx": "watch tile headline / complication: %1$d servers wait for a start-up approval; very short",
+    "plural": true
   }
 }

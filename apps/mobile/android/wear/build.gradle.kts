@@ -115,6 +115,11 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.13")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("androidx.compose.ui:ui-test-junit4")
+    // Renders the tile's layout for its picker preview and the store screenshot (StoreTileCaptureTest).
+    // Debug only (unit tests see a library's resources only through the variant): never in a release build.
+    debugImplementation("androidx.wear.tiles:tiles-renderer:1.4.1")
+    // The renderer brings Guava at runtime only, which empties listenablefuture on the debug compile path.
+    debugImplementation("com.google.guava:guava:33.2.1-android")
     testImplementation("androidx.compose.ui:ui-test-manifest")
     // The test host activity the Compose rule launches (debug builds only).
     debugImplementation("androidx.compose.ui:ui-test-manifest")
