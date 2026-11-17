@@ -921,3 +921,17 @@ Next steps for whoever resumes:
 - Owner's call test (pre-logging build): call connected; phone heard the room (same room as laptop); laptop got
   static that varied with ambient sound (phone→laptop audio damaged: suspect frames over 63 bytes dropped);
   mid-call camera never answered by the phone. Waiting on the next run's Console + `[voici-call]` logs and dump.
+
+### 2026-11-16 — Calls: phone tunnel dropped a stream's first bytes (TURN-over-TLS hung)
+- Evidence: phone log (`log collect`, 19:35 local): 4 relayed streams, 2 "tls ready", none with any plaintext,
+  then -9816 when the browser gave up 30 s later; browser 701 "Failed to establish connection". Cert chain fine.
+- Cause: both relays (TS `phoneTunnel.ts`, Rust `phone.rs`, the shared tunnel registry) send OPEN then the visitor's
+  bytes at once, without waiting for an ack. iOS `PhoneTunnelClient` registered the stream only after the TLS listener
+  was ready plus a queue hop, so the data frames behind OPEN (the ClientHello) were silently dropped.
+  Android registers synchronously on OPEN (`PhoneTunnel.kt` `openStream` returns the stream), so it isn't affected.
+- Fix: `3fee8f256` gym-0.4 / `3ea2d8cdf` 0.4/media-fix. The stream is registered on OPEN and holds data in order
+  (at most 256 KiB, then it's closed). A close that arrives while it opens is honoured. While a call is armed, it logs
+  bytes each way per stream, frames for unknown streams, the TLS version and the terminator's plaintext count.
+- Clean-cache build fixes: `122a0ade3` gym-0.4 / `4d123dd35` media-fix. The ContentView body was split in three after
+  a type-checker timeout, and the gym adoption closure captures `self.privacy`. Swift unit tests not run (no `.build`,
+  not enough disk); the gym app is installed.
