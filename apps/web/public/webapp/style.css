@@ -1962,8 +1962,11 @@ section h2.fs-hero-title::before { content: none; }
   display: flex;
   align-items: center;
   gap: 8px;
+  box-sizing: border-box;
+  height: 40px;
   padding: 8px 0;
-  margin: 0 0 2px;
+  /* Takes no room while hidden: the large title sits right under what comes before it. */
+  margin: 0 0 -40px;
   font-family: var(--font-sans);
   font-weight: 500;
   font-size: 16px;
@@ -1997,6 +2000,10 @@ section h2.fs-hero-title::before { content: none; }
   -webkit-overflow-scrolling: touch;
   padding: 2px 1px;
   margin: 0 0 14px;
+}
+/* On a phone the chips run to the screen edge, so a cut-off chip reads as "scroll for more". */
+@media (max-width: 400px) {
+  .fs-chip-row { margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px; }
 }
 .fs-chip-row::-webkit-scrollbar { display: none; }
 .fs-chip {
