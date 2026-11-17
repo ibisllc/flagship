@@ -164,6 +164,20 @@ export function studioOutdated(url: URL, minSetting: unknown): boolean {
   return level < min;
 }
 
+/**
+ * The refusal, answered by the Worker itself before the upgrade budget and the session object (journal F15): a 0.2
+ * Mac Studio opens a fresh session the moment one is refused, tens of times a minute, so each refusal costing two
+ * Durable Object calls (the rate counter and a session) was the cost of that loop, and every attempt past the budget
+ * was logged as a rate-limit refusal. The Studio gets the same one line and no session.
+ */
+export function refuseOutdatedStudio(): Response {
+  const { client, server } = createWebSocketPair();
+  server.accept();
+  // Every Studio closes on this frame (the session object sends the same and leaves the close to the Studio).
+  server.send(JSON.stringify({ kind: "error", reason: STUDIO_OUTDATED_REASON }));
+  return makeUpgradeResponse(client);
+}
+
 export class BuilderRelaySession implements DurableObject {
   private readonly state: BuilderRelayDurableObjectState;
   private createdAt = 0;
