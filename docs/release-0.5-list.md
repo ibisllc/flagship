@@ -7,14 +7,7 @@ over once "let's start 0.5" is said.
 
 1. **The overlay network** (owner, 2026-11-16): key-derived ULA addresses, trusted peers direct and strangers through
    relays, a PQ transport, and one relay mesh. Design: `docs/networking-vision.md`, overlay section.
-2. **Business / Enterprise plan** (owner, 2026-11-17: "implement the enterprise concept in 0.5, given that paid features
-   are already coming, and corporate features too"). The design and 15 open decisions are in
-   `docs/plans-and-backup-offer.md`. The recommendation there:
-   - keep Free, Pro and Pro Max as personal plans;
-   - add Business at $6 a seat (minimum 3), holding the org features (seats, quorums, SCIM and LDAP, audit);
-   - "Enterprise" means Business plus a contract;
-   - invoiced blind voucher batches for companies.
-   The owner answers the decision list before the build starts.
+2. ~~Business / Enterprise plan~~: moved into 0.4 (owner, 2026-11-17: "I meant putting the enterprise features in 0.4").
 3. **Cluster backup** (the owner's own servers back each other up, orchestrated by Flagship; a paid feature) and
    **Flagship Vault** (end-to-end encrypted off-site backup space, included in plans plus prepaid blocks). Both are in
    `docs/plans-and-backup-offer.md`.
