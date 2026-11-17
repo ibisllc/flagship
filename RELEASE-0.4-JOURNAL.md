@@ -1092,3 +1092,18 @@ Next steps for whoever resumes:
   `0.4/call-screen-ports`). Android unit tests 35 green, web 120 green; not run on a real Android phone.
 - gym-0.4 has all of it; gym Worker `fd0355ef` serves voi.ci `4f7e4fb9d6b50b1f`; iOS gym app with the freeze fix
   and the iOS screen installed. Open: German "Ihre/Deine Kamera" mismatch on iOS; no "other side muted" signal.
+
+### 2026-11-17 — Merged `0.4/media-fix` (calls work end to end); desktop call layout on `0.4/call-desktop`
+- media-fix rebased onto release/0.4 (i18n JSON 3-way merged, catalogs and voi.ci rebuilt; one fix after the rebase:
+  `fd650f864` restores the Who-to-call card's Android imports). Checked: `tsc -b`, `npm run i18n`, parity, voi.ci
+  `--check`, 2634 call/voi.ci/protocol vitest tests, Android debug + calls unit tests, iOS simulator
+  `CallMediaLoopbackTests` + `VoiciOutgoingCallTests` (11). release/0.4 fast-forwarded to `fd650f864`; worktree
+  removed. Shell stays v228.
+- `0.4/call-desktop` `d1ff9165b` (not merged): on ≥768 px or landscape, their video letterboxed full width, controls
+  in a floating auto-hiding bar, 16:9 draggable self tile, Full screen and Picture in picture where supported;
+  `remoteVideoLive` (room on + track flowing + frame within 1.2 s) returns to the audio layout otherwise, no black
+  rectangle. Phones already return to audio on the room's camera-off; no native change. Headless Chrome 1280×800 and
+  390×844 through audio → video → video+self → stalled → resumed → audio: classes right, no horizontal scroll.
+- gym-0.4 rebuilt as release/0.4 + the 20 gym-only commits + `d1ff9165b` (calls duplicates dropped; backup
+  `backup/gym-0.4-pre-rebase-202611170118`); gym Worker `2428b015`, voi.ci `bf2243dbf587b369`. No iOS change, so the
+  phone app was not reinstalled.
