@@ -20,9 +20,27 @@ export const WEB_PLAN: readonly Scenario[] = [
       assertions: [
         { describe: "Balance after the test issue", handle: "#plan-balance-amount", expect: "text", text: "$29" },
         { describe: "Plan", handle: "#plan-current-name", expect: "text", text: "Pro" },
-        { describe: "Shop not on sale", handle: "[data-testid=plan-shop]", expect: "present" },
+        { describe: "Shop present (card payments off in this scenario)", handle: "[data-testid=plan-shop]", expect: "present" },
       ],
       screenshots: [shot("plan-empty", "Plan before any voucher."), shot("plan-pro", "Plan on Pro with the balance.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-total-plan-stripe-shop",
+    "Settings → Plan with card payments on: Buy $30 asks .com for a Stripe Checkout Session that names nobody (no credential, cookie or device header), opens Stripe's page, and on the return the paid session's blind signatures fill the balance to $30 while the wallet reaches .com sealed (docs/payments-privacy-and-rails.md §11).",
+    "gym plan buying a pack by card goes through Stripe Checkout and fills the balance, unlinked",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home and open Settings → Plan with the Stripe rail on." },
+        { kind: "tap", describe: "Buy $30.", handle: "[data-testid=plan-pack-30]" },
+        { kind: "assert", describe: "Back from Stripe, Plan opens again and asks for the signatures.", handle: "#plan-balance-amount" },
+      ],
+      assertions: [
+        { describe: "Balance after the purchase", handle: "#plan-balance-amount", expect: "text", text: "$30" },
+        { describe: "Shop", handle: "[data-testid=plan-shop]", expect: "present" },
+      ],
+      screenshots: [shot("plan-shop", "Plan's card shop."), shot("plan-bought", "Plan after a card purchase.")],
       dimension: "D4",
     },
   ),
