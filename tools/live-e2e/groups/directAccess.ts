@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
+  canonicalIp,
   signDirectAccessOrder,
   signDirectNameOrder,
   type DirectAccessOrder,
@@ -85,7 +86,8 @@ export const directAccess: Group = {
     });
     if (!made || !box) return;
     const b = box;
-    const v6 = b.ipv6!;
+    // UpCloud spells addresses with leading zeros (…:0fd5); orders, the box and DNS use RFC 5952 text.
+    const v6 = canonicalIp(b.ipv6!) ?? b.ipv6!;
     const session = { "x-flagship-session": await pair(A, b) };
 
     const sees = await rec.check("the box sees the IPv6 address on its own interface (direct-access view endpoints)", async () => {
