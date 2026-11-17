@@ -4276,5 +4276,27 @@
   "payments_balance_months": {
     "one": "Environ %1$s mois de %2$s",
     "other": "Environ %1$s mois de %2$s"
-  }
+  },
+  "payments_privacy_relay_waiting": "Le relais privé ne répond pas. Les paiements attendent et réessaient ; ton forfait reste actif en attendant.",
+  "payments_privacy_relay_went_direct": "Le relais privé ne répondait pas, donc le dernier paiement est allé directement à Flagship.",
+  "payments_privacy_relay_third_party": "Les paiements passent par le relais privé de %1$s : Flagship ne voit donc pas ton adresse réseau quand tu paies.",
+  "payments_privacy_relay_interim": "Les paiements passent par un relais privé que Flagship gère pour l'instant. Il garde ton adresse hors des journaux de paiement, mais ce n'est pas encore un opérateur indépendant.",
+  "payments_privacy_no_relay": "Flagship peut voir ton adresse réseau quand tu paies. Elle n'en garde rien.",
+  "proxy_status_working": "Fonctionne",
+  "proxy_code_unreachable": "Impossible de joindre le proxy.",
+  "proxy_code_auth": "Le proxy a refusé le nom d'utilisateur ou le mot de passe.",
+  "proxy_code_refused": "Le proxy a refusé la connexion.",
+  "proxy_code_protocol": "Le proxy a donné une réponse que le serveur ne comprend pas.",
+  "proxy_alert_failing": "Le proxy sortant ne fonctionne pas : %1$s",
+  "proxy_alert_offline": "Ce serveur est hors ligne jusqu'à ce que son proxy refonctionne ou que tu le changes.",
+  "proxy_alert_fallback": "Le proxy sortant ne fonctionne pas, donc ce serveur se connecte directement : %1$s",
+  "proxy_home_badge": "Proxy sortant en panne",
+  "activity_proxy_failing": "Le proxy sortant ne fonctionne pas",
+  "activity_proxy_fallback": "Connexion directe : le proxy sortant ne fonctionne pas",
+  "activity_proxy_ok": "Le proxy sortant fonctionne à nouveau",
+  "proxy_push_body": "L'un de tes serveurs ne peut pas utiliser son proxy sortant. Ouvre Flagship pour voir pourquoi.",
+  "proxy_channel_name": "Proxy sortant",
+  "proxy_channel_desc": "Le proxy sortant d'un serveur a cessé de fonctionner.",
+  "proxy_lane_sent": "Envoyé. Le serveur récupère le changement en quelques minutes, même si son proxy est en panne.",
+  "proxy_lane_needs_password": "Flagship ne transporte jamais les mots de passe de proxy. Pour utiliser un nouveau mot de passe, change-le depuis le même réseau que le serveur, ou désactive d'abord le proxy."
 }

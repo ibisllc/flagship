@@ -4286,4 +4286,26 @@
         <item quantity="one">About %1$s month of %2$s</item>
         <item quantity="other">About %1$s months of %2$s</item>
     </plurals>
+    <string name="payments_privacy_relay_waiting">The private relay isn\'t answering. Payments wait and try again; your plan stays active meanwhile.</string>
+    <string name="payments_privacy_relay_went_direct">The private relay wasn\'t answering, so the last payment went straight to Flagship.</string>
+    <string name="payments_privacy_relay_third_party">Payments go through %1$s\'s private relay, so Flagship doesn\'t see your network address when you pay.</string>
+    <string name="payments_privacy_relay_interim">Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn\'t an independent operator yet.</string>
+    <string name="payments_privacy_no_relay">Flagship can see your network address when you pay. It keeps none of it.</string>
+    <string name="proxy_status_working">Working</string>
+    <string name="proxy_code_unreachable">Can\'t reach the proxy.</string>
+    <string name="proxy_code_auth">The proxy refused the username or password.</string>
+    <string name="proxy_code_refused">The proxy refused the connection.</string>
+    <string name="proxy_code_protocol">The proxy gave an answer the server doesn\'t understand.</string>
+    <string name="proxy_alert_failing">The outbound proxy isn\'t working: %1$s</string>
+    <string name="proxy_alert_offline">This server is offline until its proxy works again or you change it.</string>
+    <string name="proxy_alert_fallback">The outbound proxy isn\'t working, so this server is connecting directly: %1$s</string>
+    <string name="proxy_home_badge">Outbound proxy not working</string>
+    <string name="activity_proxy_failing">The outbound proxy isn\'t working</string>
+    <string name="activity_proxy_fallback">Connecting directly: the outbound proxy isn\'t working</string>
+    <string name="activity_proxy_ok">The outbound proxy works again</string>
+    <string name="proxy_push_body">One of your servers can\'t use its outbound proxy. Open Flagship to see why.</string>
+    <string name="proxy_channel_name">Outbound proxy</string>
+    <string name="proxy_channel_desc">A server\'s outbound proxy stopped working.</string>
+    <string name="proxy_lane_sent">Sent. The server picks up the change within a few minutes, even while its proxy is down.</string>
+    <string name="proxy_lane_needs_password">Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.</string>
 </resources>

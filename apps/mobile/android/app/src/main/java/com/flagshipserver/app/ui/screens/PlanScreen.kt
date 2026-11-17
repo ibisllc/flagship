@@ -32,6 +32,7 @@ import com.flagshipserver.app.core.payments.PaymentsCenter
 import com.flagshipserver.app.core.payments.PaymentsConfig
 import com.flagshipserver.app.core.payments.PaymentsUi
 import com.flagshipserver.app.core.payments.PlanFormat
+import com.flagshipserver.app.core.payments.RelayPrivacyLine
 import com.flagshipserver.app.core.payments.ShopNotice
 import com.flagshipserver.app.core.payments.ShopUi
 import com.flagshipserver.app.core.payments.VoucherShop
@@ -54,6 +55,15 @@ object PaymentsCopy {
         "no-key", "issue-off", "rail-off" -> FSStrings.get(R.string.payments_error_not_available)
         "unavailable" -> FSStrings.get(R.string.payments_error_unavailable)
         else -> FSStrings.get(R.string.payments_error_generic)
+    }
+
+    /** The line under the plan saying who can see the phone's address when it pays. */
+    fun privacy(line: RelayPrivacyLine): String = when (line) {
+        RelayPrivacyLine.Waiting -> FSStrings.get(R.string.payments_privacy_relay_waiting)
+        RelayPrivacyLine.WentDirect -> FSStrings.get(R.string.payments_privacy_relay_went_direct)
+        is RelayPrivacyLine.ThirdParty -> FSStrings.get(R.string.payments_privacy_relay_third_party, line.operator)
+        RelayPrivacyLine.Interim -> FSStrings.get(R.string.payments_privacy_relay_interim)
+        RelayPrivacyLine.None -> FSStrings.get(R.string.payments_privacy_no_relay)
     }
 
     /** The sentence for the shop's last step. */
@@ -126,6 +136,13 @@ private fun PlanBody(center: PaymentsCenter, s: PaymentsUi, shop: VoucherShop?, 
             }
         }
         Text(line, style = MaterialTheme.typography.bodyMedium, color = FS.colors.textMuted, modifier = Modifier.testTag("plan-time-left"))
+        val privacy = RelayPrivacyLine.of(s)
+        Text(
+            PaymentsCopy.privacy(privacy),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (privacy == RelayPrivacyLine.Waiting || privacy == RelayPrivacyLine.WentDirect) FS.colors.warning else FS.colors.textMuted,
+            modifier = Modifier.padding(top = FS.space.s2).testTag("plan-privacy"),
+        )
     }
 
     // Balance, as round amounts.

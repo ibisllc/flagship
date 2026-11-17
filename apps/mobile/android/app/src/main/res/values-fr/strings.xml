@@ -4279,4 +4279,26 @@
         <item quantity="one">Environ %1$s mois de %2$s</item>
         <item quantity="other">Environ %1$s mois de %2$s</item>
     </plurals>
+    <string name="payments_privacy_relay_waiting">Le relais privé ne répond pas. Les paiements attendent et réessaient ; ton forfait reste actif en attendant.</string>
+    <string name="payments_privacy_relay_went_direct">Le relais privé ne répondait pas, donc le dernier paiement est allé directement à Flagship.</string>
+    <string name="payments_privacy_relay_third_party">Les paiements passent par le relais privé de %1$s : Flagship ne voit donc pas ton adresse réseau quand tu paies.</string>
+    <string name="payments_privacy_relay_interim">Les paiements passent par un relais privé que Flagship gère pour l\'instant. Il garde ton adresse hors des journaux de paiement, mais ce n\'est pas encore un opérateur indépendant.</string>
+    <string name="payments_privacy_no_relay">Flagship peut voir ton adresse réseau quand tu paies. Elle n\'en garde rien.</string>
+    <string name="proxy_status_working">Fonctionne</string>
+    <string name="proxy_code_unreachable">Impossible de joindre le proxy.</string>
+    <string name="proxy_code_auth">Le proxy a refusé le nom d\'utilisateur ou le mot de passe.</string>
+    <string name="proxy_code_refused">Le proxy a refusé la connexion.</string>
+    <string name="proxy_code_protocol">Le proxy a donné une réponse que le serveur ne comprend pas.</string>
+    <string name="proxy_alert_failing">Le proxy sortant ne fonctionne pas : %1$s</string>
+    <string name="proxy_alert_offline">Ce serveur est hors ligne jusqu\'à ce que son proxy refonctionne ou que tu le changes.</string>
+    <string name="proxy_alert_fallback">Le proxy sortant ne fonctionne pas, donc ce serveur se connecte directement : %1$s</string>
+    <string name="proxy_home_badge">Proxy sortant en panne</string>
+    <string name="activity_proxy_failing">Le proxy sortant ne fonctionne pas</string>
+    <string name="activity_proxy_fallback">Connexion directe : le proxy sortant ne fonctionne pas</string>
+    <string name="activity_proxy_ok">Le proxy sortant fonctionne à nouveau</string>
+    <string name="proxy_push_body">L\'un de tes serveurs ne peut pas utiliser son proxy sortant. Ouvre Flagship pour voir pourquoi.</string>
+    <string name="proxy_channel_name">Proxy sortant</string>
+    <string name="proxy_channel_desc">Le proxy sortant d\'un serveur a cessé de fonctionner.</string>
+    <string name="proxy_lane_sent">Envoyé. Le serveur récupère le changement en quelques minutes, même si son proxy est en panne.</string>
+    <string name="proxy_lane_needs_password">Flagship ne transporte jamais les mots de passe de proxy. Pour utiliser un nouveau mot de passe, change-le depuis le même réseau que le serveur, ou désactive d\'abord le proxy.</string>
 </resources>

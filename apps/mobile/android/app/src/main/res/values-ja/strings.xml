@@ -4279,4 +4279,26 @@
         <item quantity="one">%2$s 約 %1$s か月分</item>
         <item quantity="other">%2$s 約 %1$s か月分</item>
     </plurals>
+    <string name="payments_privacy_relay_waiting">プライベートリレーが応答していません。支払いは待機して再試行します。その間もプランは有効なままです。</string>
+    <string name="payments_privacy_relay_went_direct">プライベートリレーが応答しなかったため、前回の支払いは Flagship に直接送られました。</string>
+    <string name="payments_privacy_relay_third_party">支払いは %1$s のプライベートリレーを経由するため、支払い時に Flagship があなたのネットワークアドレスを見ることはありません。</string>
+    <string name="payments_privacy_relay_interim">支払いは、現在 Flagship が運営するプライベートリレーを経由します。支払いログにあなたのアドレスは残りませんが、まだ独立した運営者ではありません。</string>
+    <string name="payments_privacy_no_relay">支払い時、Flagship はあなたのネットワークアドレスを見ることができます。それを保存することは一切ありません。</string>
+    <string name="proxy_status_working">動作中</string>
+    <string name="proxy_code_unreachable">プロキシに接続できません。</string>
+    <string name="proxy_code_auth">プロキシがユーザー名またはパスワードを拒否しました。</string>
+    <string name="proxy_code_refused">プロキシが接続を拒否しました。</string>
+    <string name="proxy_code_protocol">プロキシがサーバーの理解できない応答を返しました。</string>
+    <string name="proxy_alert_failing">送信プロキシが動作していません：%1$s</string>
+    <string name="proxy_alert_offline">プロキシが再び動作するか、あなたが変更するまで、このサーバーはオフラインです。</string>
+    <string name="proxy_alert_fallback">送信プロキシが動作していないため、このサーバーは直接接続しています：%1$s</string>
+    <string name="proxy_home_badge">送信プロキシ停止中</string>
+    <string name="activity_proxy_failing">送信プロキシが動作していません</string>
+    <string name="activity_proxy_fallback">直接接続中：送信プロキシが動作していません</string>
+    <string name="activity_proxy_ok">送信プロキシが再び動作しています</string>
+    <string name="proxy_push_body">サーバーの 1 台が送信プロキシを使えません。Flagship を開いて理由を確認してください。</string>
+    <string name="proxy_channel_name">送信プロキシ</string>
+    <string name="proxy_channel_desc">サーバーの送信プロキシが動作しなくなりました。</string>
+    <string name="proxy_lane_sent">送信しました。プロキシが停止していても、サーバーは数分以内に変更を受け取ります。</string>
+    <string name="proxy_lane_needs_password">Flagship がプロキシのパスワードを運ぶことはありません。新しいパスワードを使うには、サーバーと同じネットワークから変更するか、先にプロキシをオフにしてください。</string>
 </resources>

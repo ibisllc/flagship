@@ -4276,5 +4276,27 @@
   "payments_balance_months": {
     "one": "Aproximadamente %1$s mes de %2$s",
     "other": "Aproximadamente %1$s meses de %2$s"
-  }
+  },
+  "payments_privacy_relay_waiting": "El relé privado no responde. Los pagos esperan y se reintentan; tu plan sigue activo mientras tanto.",
+  "payments_privacy_relay_went_direct": "El relé privado no respondía, así que el último pago fue directo a Flagship.",
+  "payments_privacy_relay_third_party": "Los pagos pasan por el relé privado de %1$s, así que Flagship no ve tu dirección de red cuando pagas.",
+  "payments_privacy_relay_interim": "Los pagos pasan por un relé privado que por ahora gestiona Flagship. Mantiene tu dirección fuera de los registros de pago, pero aún no es un operador independiente.",
+  "payments_privacy_no_relay": "Flagship puede ver tu dirección de red cuando pagas. No guarda nada de ella.",
+  "proxy_status_working": "Funciona",
+  "proxy_code_unreachable": "No se puede conectar con el proxy.",
+  "proxy_code_auth": "El proxy rechazó el usuario o la contraseña.",
+  "proxy_code_refused": "El proxy rechazó la conexión.",
+  "proxy_code_protocol": "El proxy dio una respuesta que el servidor no entiende.",
+  "proxy_alert_failing": "El proxy de salida no funciona: %1$s",
+  "proxy_alert_offline": "Este servidor está desconectado hasta que su proxy vuelva a funcionar o lo cambies.",
+  "proxy_alert_fallback": "El proxy de salida no funciona, así que este servidor se conecta directamente: %1$s",
+  "proxy_home_badge": "Proxy de salida sin funcionar",
+  "activity_proxy_failing": "El proxy de salida no funciona",
+  "activity_proxy_fallback": "Conexión directa: el proxy de salida no funciona",
+  "activity_proxy_ok": "El proxy de salida vuelve a funcionar",
+  "proxy_push_body": "Uno de tus servidores no puede usar su proxy de salida. Abre Flagship para ver por qué.",
+  "proxy_channel_name": "Proxy de salida",
+  "proxy_channel_desc": "El proxy de salida de un servidor dejó de funcionar.",
+  "proxy_lane_sent": "Enviado. El servidor recoge el cambio en unos minutos, aunque su proxy esté caído.",
+  "proxy_lane_needs_password": "Flagship nunca transporta contraseñas de proxy. Para usar una contraseña nueva, cámbiala desde la misma red que el servidor o desactiva primero el proxy."
 }

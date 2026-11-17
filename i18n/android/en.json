@@ -17578,5 +17578,96 @@
     },
     "ctx": "plan and payments (Settings)",
     "plural": true
+  },
+  "payments_privacy_relay_waiting": {
+    "en": "The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.",
+    "ctx": "plan and payments: privacy line under the plan"
+  },
+  "payments_privacy_relay_went_direct": {
+    "en": "The private relay wasn't answering, so the last payment went straight to Flagship.",
+    "ctx": "plan and payments: privacy line under the plan"
+  },
+  "payments_privacy_relay_third_party": {
+    "en": "Payments go through %1$s's private relay, so Flagship doesn't see your network address when you pay.",
+    "ctx": "plan and payments: privacy line under the plan; %1$s is the relay operator's name",
+    "args": 1
+  },
+  "payments_privacy_relay_interim": {
+    "en": "Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet.",
+    "ctx": "plan and payments: privacy line under the plan"
+  },
+  "payments_privacy_no_relay": {
+    "en": "Flagship can see your network address when you pay. It keeps none of it.",
+    "ctx": "plan and payments: privacy line under the plan"
+  },
+  "proxy_status_working": {
+    "en": "Working",
+    "ctx": "server page: outbound proxy status"
+  },
+  "proxy_code_unreachable": {
+    "en": "Can't reach the proxy.",
+    "ctx": "server page: why the outbound proxy fails"
+  },
+  "proxy_code_auth": {
+    "en": "The proxy refused the username or password.",
+    "ctx": "server page: why the outbound proxy fails"
+  },
+  "proxy_code_refused": {
+    "en": "The proxy refused the connection.",
+    "ctx": "server page: why the outbound proxy fails"
+  },
+  "proxy_code_protocol": {
+    "en": "The proxy gave an answer the server doesn't understand.",
+    "ctx": "server page: why the outbound proxy fails"
+  },
+  "proxy_alert_failing": {
+    "en": "The outbound proxy isn't working: %1$s",
+    "ctx": "server page: red alert; %1$s is why (a sentence)",
+    "args": 1
+  },
+  "proxy_alert_offline": {
+    "en": "This server is offline until its proxy works again or you change it.",
+    "ctx": "server page: red alert, second line"
+  },
+  "proxy_alert_fallback": {
+    "en": "The outbound proxy isn't working, so this server is connecting directly: %1$s",
+    "ctx": "server page: warning; %1$s is why (a sentence)",
+    "args": 1
+  },
+  "proxy_home_badge": {
+    "en": "Outbound proxy not working",
+    "ctx": "Home: short red tag on a server row"
+  },
+  "activity_proxy_failing": {
+    "en": "The outbound proxy isn't working",
+    "ctx": "Activity: a server event"
+  },
+  "activity_proxy_fallback": {
+    "en": "Connecting directly: the outbound proxy isn't working",
+    "ctx": "Activity: a server event"
+  },
+  "activity_proxy_ok": {
+    "en": "The outbound proxy works again",
+    "ctx": "Activity: a server event"
+  },
+  "proxy_push_body": {
+    "en": "One of your servers can't use its outbound proxy. Open Flagship to see why.",
+    "ctx": "push notification body (names no server)"
+  },
+  "proxy_channel_name": {
+    "en": "Outbound proxy",
+    "ctx": "Android notification channel name"
+  },
+  "proxy_channel_desc": {
+    "en": "A server's outbound proxy stopped working.",
+    "ctx": "Android notification channel description"
+  },
+  "proxy_lane_sent": {
+    "en": "Sent. The server picks up the change within a few minutes, even while its proxy is down.",
+    "ctx": "server page: the proxy change was left at Flagship for an unreachable server"
+  },
+  "proxy_lane_needs_password": {
+    "en": "Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.",
+    "ctx": "server page: why a proxy change with a new password can't go through Flagship"
   }
 }

@@ -4279,4 +4279,26 @@
         <item quantity="one">Aproximadamente %1$s mes de %2$s</item>
         <item quantity="other">Aproximadamente %1$s meses de %2$s</item>
     </plurals>
+    <string name="payments_privacy_relay_waiting">El relé privado no responde. Los pagos esperan y se reintentan; tu plan sigue activo mientras tanto.</string>
+    <string name="payments_privacy_relay_went_direct">El relé privado no respondía, así que el último pago fue directo a Flagship.</string>
+    <string name="payments_privacy_relay_third_party">Los pagos pasan por el relé privado de %1$s, así que Flagship no ve tu dirección de red cuando pagas.</string>
+    <string name="payments_privacy_relay_interim">Los pagos pasan por un relé privado que por ahora gestiona Flagship. Mantiene tu dirección fuera de los registros de pago, pero aún no es un operador independiente.</string>
+    <string name="payments_privacy_no_relay">Flagship puede ver tu dirección de red cuando pagas. No guarda nada de ella.</string>
+    <string name="proxy_status_working">Funciona</string>
+    <string name="proxy_code_unreachable">No se puede conectar con el proxy.</string>
+    <string name="proxy_code_auth">El proxy rechazó el usuario o la contraseña.</string>
+    <string name="proxy_code_refused">El proxy rechazó la conexión.</string>
+    <string name="proxy_code_protocol">El proxy dio una respuesta que el servidor no entiende.</string>
+    <string name="proxy_alert_failing">El proxy de salida no funciona: %1$s</string>
+    <string name="proxy_alert_offline">Este servidor está desconectado hasta que su proxy vuelva a funcionar o lo cambies.</string>
+    <string name="proxy_alert_fallback">El proxy de salida no funciona, así que este servidor se conecta directamente: %1$s</string>
+    <string name="proxy_home_badge">Proxy de salida sin funcionar</string>
+    <string name="activity_proxy_failing">El proxy de salida no funciona</string>
+    <string name="activity_proxy_fallback">Conexión directa: el proxy de salida no funciona</string>
+    <string name="activity_proxy_ok">El proxy de salida vuelve a funcionar</string>
+    <string name="proxy_push_body">Uno de tus servidores no puede usar su proxy de salida. Abre Flagship para ver por qué.</string>
+    <string name="proxy_channel_name">Proxy de salida</string>
+    <string name="proxy_channel_desc">El proxy de salida de un servidor dejó de funcionar.</string>
+    <string name="proxy_lane_sent">Enviado. El servidor recoge el cambio en unos minutos, aunque su proxy esté caído.</string>
+    <string name="proxy_lane_needs_password">Flagship nunca transporta contraseñas de proxy. Para usar una contraseña nueva, cámbiala desde la misma red que el servidor o desactiva primero el proxy.</string>
 </resources>
