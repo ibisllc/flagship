@@ -1275,3 +1275,9 @@ storage 4357 passed; webapp gym messages+activity 12/12; iOS PageControlsTests 2
 Also seen: the voi.ci site checks the phone's answer attestation with the browser's clock (`checkVoiciSignInAnswer`);
 a browser behind `.com` by more than the round trip would refuse it the same way. Android's empty Inbox says "Turn on
 Accept messages" even while messages are on.
+
+### 2026-11-17 resume (owner: "resume all")
+- A network outage (ENOTFOUND) cut off R1, the live gym run. Its arch-v2 pass ended rc=2 at gym-relays teardown. R1 was resumed to: check that the relays are off and nothing leaked, summarise the results, rerun the real failures, and push 0.4/gym-r1-fixes (52f97e293, 03ffa6f99, 834bbc2de; not pushed yet).
+- Android libwebrtc JNI agent: still waiting on CI run 44099203173.
+- Payments steps 1-3 started on 0.4/payments: voucher core (ported from feat/marketplace), the phone-held wallet with trickle spend, and the plan screens. The defaults are provisional and kept in one config place.
+- Resume point: merge R1's fixes, then the libwebrtc pin, then payments; after that come D11 CI, R2-R4 and the E UI pass.
