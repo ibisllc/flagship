@@ -1,6 +1,7 @@
 // GYM Android — Settings → Plan and payments (docs/payments-privacy-and-rails.md "As built"), against the mock `.com`
-// (MockPaymentsClient): the shop's rails are placeholders, test credit arrives as a round amount, choosing Pro spends
-// from the phone's wallet at once and the plan shows its time left, and a non-admin device sees it read only.
+// (MockPaymentsClient) and a scripted Google Play (MockPlayBilling): a pack bought through Play arrives in the balance,
+// test credit arrives as a round amount, choosing Pro spends from the phone's wallet at once and the plan shows its time
+// left, and a non-admin device sees it read only with no shop.
 // NO BACKEND.
 
 package com.flagshipserver.app.gym
@@ -18,12 +19,20 @@ class GymPlanTest : GymBase() {
     }
 
     @Test
-    fun railsArePlaceholdersAndTestCreditStartsPro() {
+    fun aPlayPackRaisesTheBalance() {
         openPlan(admin = true)
-        waitUntilExists("plan-rail-play")
-        waitUntilExists("plan-rail-card")
-        waitUntilExists("plan-rail-monero")
-        waitText("Not on sale yet")
+        waitUntilExists("plan-pack-10", 20_000)
+        waitUntilExists("plan-pack-120")
+        assertTrue(tagCount("plan-rail-card") == 0 && tagCount("plan-rail-monero") == 0)
+        tap("plan-pack-30")
+        eventually(30_000, "the balance shows \$30") { textOfTag("plan-balance").contains("30") }
+        assertTrue(textOfTag("plan-shop-notice").contains("30"))
+        gymShot("bought")
+    }
+
+    @Test
+    fun testCreditStartsPro() {
+        openPlan(admin = true)
         tap("plan-test-add", 20_000)
         eventually(20_000, "the balance shows \$30") { textOfTag("plan-balance").contains("30") }
         gymShot("balance")
@@ -37,6 +46,7 @@ class GymPlanTest : GymBase() {
     fun nonAdminDeviceIsReadOnly() {
         openPlan(admin = false)
         waitUntilExists("plan-read-only", 15_000)
+        assertTrue(tagCount("plan-pack-10") == 0)
         gymShot("read-only")
     }
 }

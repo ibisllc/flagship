@@ -1,7 +1,7 @@
 // Settings → Plan and payments (docs/payments-privacy-and-rails.md §6 and "As built"), the Android port in spirit of
 // iOS PlanScreen: the plan and time left, the prepaid balance in round amounts, the plan choice with the optional
-// random start, automatic paying, the monthly limit for extra traffic, and the shop, whose rails are placeholders until
-// later steps fill them in. Never a code field, a scan or a file import for vouchers.
+// random start, automatic paying, the monthly limit for extra traffic, and the Google Play shop (§11: packs at Play's
+// price, admin devices only). Never a code field, a scan, a file import or a web-shop link for vouchers.
 
 package com.flagshipserver.app.ui.screens
 
@@ -32,6 +32,9 @@ import com.flagshipserver.app.core.payments.PaymentsCenter
 import com.flagshipserver.app.core.payments.PaymentsConfig
 import com.flagshipserver.app.core.payments.PaymentsUi
 import com.flagshipserver.app.core.payments.PlanFormat
+import com.flagshipserver.app.core.payments.ShopNotice
+import com.flagshipserver.app.core.payments.ShopUi
+import com.flagshipserver.app.core.payments.VoucherShop
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDivider
 import com.flagshipserver.app.ui.components.FSGroup
@@ -48,9 +51,26 @@ import java.util.Date
 object PaymentsCopy {
     fun error(code: String): String = when (code) {
         "overage-needs-plan" -> FSStrings.get(R.string.payments_error_overage_needs_plan)
-        "no-key", "issue-off" -> FSStrings.get(R.string.payments_error_not_available)
+        "no-key", "issue-off", "rail-off" -> FSStrings.get(R.string.payments_error_not_available)
         "unavailable" -> FSStrings.get(R.string.payments_error_unavailable)
         else -> FSStrings.get(R.string.payments_error_generic)
+    }
+
+    /** The sentence for the shop's last step. */
+    fun shop(n: ShopNotice, cfg: PaymentsConfig): String = when (n.kind) {
+        ShopNotice.Kind.ADDED -> FSStrings.get(R.string.payments_shop_added, PlanFormat.usd(n.units, cfg))
+        ShopNotice.Kind.PENDING -> FSStrings.get(R.string.payments_shop_pending)
+        ShopNotice.Kind.RETRY -> FSStrings.get(R.string.payments_shop_retry)
+        ShopNotice.Kind.REFUNDED -> FSStrings.get(R.string.payments_shop_refunded)
+        ShopNotice.Kind.CAP -> FSStrings.get(R.string.payments_shop_cap, PlanFormat.usd(VoucherShop.CAP_UNITS, cfg))
+        ShopNotice.Kind.PLAY_FAILED -> FSStrings.get(R.string.payments_shop_play_failed)
+        ShopNotice.Kind.REFUSED -> when (n.code) {
+            "payment-used" -> FSStrings.get(R.string.payments_shop_used)
+            "payment-invalid" -> FSStrings.get(R.string.payments_shop_invalid)
+            "payment-unpaid", "rail-unreachable" -> FSStrings.get(R.string.payments_shop_retry)
+            "payment-refunded" -> FSStrings.get(R.string.payments_shop_refunded)
+            else -> this.error(n.code ?: "")
+        }
     }
 
     fun planName(plan: String?): String = when (plan) {
@@ -70,21 +90,24 @@ fun PlanScreen(nav: NavController) {
         return
     }
     val s by center.state.collectAsState()
+    val shop = VoucherShop.shared
+    val shopUi by (shop?.state ?: remember { kotlinx.coroutines.flow.MutableStateFlow(ShopUi()) }).collectAsState()
     LaunchedEffect(Unit) {
         center.refresh()
         center.tick()
+        shop?.load()
     }
     FSScreen(
         title = stringResource(R.string.payments_title),
         titleTag = "plan-title",
         onBack = { nav.popBackStack() },
     ) {
-        PlanBody(center, s)
+        PlanBody(center, s, shop, shopUi)
     }
 }
 
 @Composable
-private fun PlanBody(center: PaymentsCenter, s: PaymentsUi) {
+private fun PlanBody(center: PaymentsCenter, s: PaymentsUi, shop: VoucherShop?, shopUi: ShopUi) {
     val scope = rememberCoroutineScope()
     val now = System.currentTimeMillis()
     val cfg = s.config
@@ -198,23 +221,40 @@ private fun PlanBody(center: PaymentsCenter, s: PaymentsUi) {
         )
     }
 
-    // The shop: placeholders until the rails land.
-    FSGroup(header = stringResource(R.string.payments_buy_title)) {
-        cfg.packs.forEachIndexed { i, units ->
-            if (i > 0) FSDivider(0.dp)
-            FSRow(
-                title = fsString(R.string.payments_pack_add, PlanFormat.usd(units, cfg)),
-                subtitle = stringResource(R.string.payments_buy_not_yet),
-                enabled = false,
-                modifier = Modifier.testTag("plan-pack-$units"),
+    // The shop: Google Play packs, on an admin device only (like every spend control).
+    if (s.canSpend) {
+        FSGroup(header = stringResource(R.string.payments_buy_title)) {
+            if (shop != null && shopUi.available) {
+                shopUi.products.forEachIndexed { i, p ->
+                    if (i > 0) FSDivider(0.dp)
+                    FSRow(
+                        title = fsString(R.string.payments_pack_add, PlanFormat.usd(p.units, cfg)),
+                        subtitle = p.price,
+                        enabled = !shopUi.working && !s.busy,
+                        onClick = { scope.launch { shop.buy(p) } },
+                        modifier = Modifier.testTag("plan-pack-${p.units}"),
+                    )
+                }
+            } else {
+                FSRow(title = stringResource(R.string.payments_shop_unavailable), enabled = false, modifier = Modifier.testTag("plan-shop-unavailable"))
+            }
+        }
+        if (shopUi.working) {
+            Text(stringResource(R.string.payments_shop_working), style = MaterialTheme.typography.bodySmall, color = FS.colors.textMuted, modifier = Modifier.padding(horizontal = FS.space.s4).testTag("plan-shop-working"))
+        }
+        shopUi.notice?.let { n ->
+            val ok = n.kind == ShopNotice.Kind.ADDED || n.kind == ShopNotice.Kind.PENDING
+            Text(
+                PaymentsCopy.shop(n, cfg),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (ok) FS.colors.textMuted else MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = FS.space.s4).testTag("plan-shop-notice"),
             )
         }
-        for ((res, tag) in listOf(R.string.payments_rail_play to "play", R.string.payments_rail_card to "card", R.string.payments_rail_monero to "monero")) {
-            FSDivider(0.dp)
-            FSRow(title = stringResource(res), subtitle = stringResource(R.string.payments_buy_not_yet), enabled = false, modifier = Modifier.testTag("plan-rail-$tag"))
+        if (shopUi.available) {
+            Text(stringResource(R.string.payments_buy_note_play), style = MaterialTheme.typography.bodySmall, color = FS.colors.textMuted, modifier = Modifier.padding(horizontal = FS.space.s4))
         }
     }
-    Text(stringResource(R.string.payments_buy_note), style = MaterialTheme.typography.bodySmall, color = FS.colors.textMuted, modifier = Modifier.padding(horizontal = FS.space.s4))
 
     if (s.testIssue && s.canSpend) {
         FSSecondaryButton(
