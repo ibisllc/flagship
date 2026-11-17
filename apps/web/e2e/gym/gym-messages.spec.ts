@@ -302,25 +302,25 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     // Nothing is published yet: the change is grayed, the first publish waits for Publish.
     await expect(page.locator("[data-testid=page-pending-note]")).toHaveText("Not published yet");
     await page.click("#page-options");
-    await page.click("#page-accepts");
+    // A page never published shows Accept messages on: the first publish turns it on, so it is no change.
     await expect(page.locator("#page-accepts")).toHaveAttribute("aria-checked", "true");
-    await expect(page.locator("[data-testid=accepts-pending]")).toHaveText("Not published yet");
+    await expect(page.locator("[data-testid=accepts-pending]")).toHaveCount(0);
     await page.click("[data-sheet-done]");
     await page.click("#page-new-post-open");
     await page.fill("#post-text", "Hello from the web.");
     await page.click("#post-save");
     await expect(page.locator("[data-testid=page-post-pending] [data-post-pending]")).toHaveText("Not published yet");
-    // One bar counts every change: the profile (one change however many fields), Accept messages, the post.
-    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("3 changes not published");
+    // One bar counts every change: the profile (one change however many fields) and the post.
+    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("2 changes not published");
     // The drafts are in the account's lane (one profile change, the older ones consumed), not only in memory: a
     // session that forgot them (a reload, a lock) reads them back.
-    await expect.poll(() => com.drafts.length).toBe(3);
+    await expect.poll(() => com.drafts.length).toBe(2);
     await page.evaluate(async () => {
       const W = await import("/lib/voiciWorld.js");
       Object.assign(W.world, { localOps: [], drafts: [], pageLoaded: false });
     });
     await openSocial(page, "profile");
-    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("3 changes not published");
+    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("2 changes not published");
     await expect(page.locator("[data-testid=page-name-text]")).toHaveText("Smoke Test");
     expect(com.index).toBeNull();
     await shot(page, testInfo, "page-editor-pending");
@@ -330,14 +330,15 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     await page.click("[data-modal-ok]");
     await expect(page.locator(".modal-title")).toHaveText("Make your page public?");
     await expect(page.locator(".modal-message")).toHaveText(
-      "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.",
+      "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them. Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
     );
     await page.click("[data-modal-ok]");
     await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
     await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Public");
     await expect(page.locator("[data-testid=pe-publish-bar]")).toHaveCount(0);
     await expect(page.locator("[data-testid=page-post-pending]")).toHaveCount(0);
-    await expect(page.locator("[data-testid=page-post]")).toHaveCount(1);
+    // The owner's post and the first publish's own first post.
+    await expect(page.locator("[data-testid=page-post]")).toHaveCount(2);
 
     // Signed by the admin root at seq 1; the photo is a clean JPEG within the cap.
     expect(com.index.seq).toBe(1);
