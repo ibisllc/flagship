@@ -17332,5 +17332,45 @@
   "voici_call_slow": {
     "en": "This is taking longer than usual",
     "ctx": "voi.ci calls: connecting step"
+  },
+  "voici_call_audio": {
+    "en": "Audio",
+    "ctx": "voi.ci calls: the call screen"
+  },
+  "voici_call_flip": {
+    "en": "Flip",
+    "ctx": "voi.ci calls: the call screen"
+  },
+  "voici_call_end": {
+    "en": "End",
+    "ctx": "voi.ci calls: the call screen"
+  },
+  "voici_call_your_camera": {
+    "en": "Your camera",
+    "ctx": "voi.ci calls: the call screen"
+  },
+  "voici_call_their_camera": {
+    "en": "Their camera",
+    "ctx": "voi.ci calls: the call screen"
+  },
+  "voici_call_e2e": {
+    "en": "End-to-end encrypted · quantum-safe",
+    "ctx": "voi.ci calls: the call screen"
+  },
+  "voici_call_route_phone": {
+    "en": "Phone",
+    "ctx": "voi.ci calls: where the call's sound goes"
+  },
+  "voici_call_route_speaker": {
+    "en": "Speaker",
+    "ctx": "voi.ci calls: where the call's sound goes"
+  },
+  "voici_call_route_bluetooth": {
+    "en": "Bluetooth",
+    "ctx": "voi.ci calls: where the call's sound goes"
+  },
+  "voici_call_route_wired": {
+    "en": "Headphones",
+    "ctx": "voi.ci calls: where the call's sound goes"
   }
 }

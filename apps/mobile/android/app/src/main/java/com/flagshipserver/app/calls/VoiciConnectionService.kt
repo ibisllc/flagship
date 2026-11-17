@@ -24,6 +24,10 @@ class VoiciConnection(private val service: ConnectionService) : Connection() {
     override fun onReject() = VoiciCallCenter.decline()
     override fun onDisconnect() = VoiciCallCenter.hangUp()
     override fun onAbort() = VoiciCallCenter.hangUp()
+
+    // Deprecated in API 34 for onCallEndpointChanged; Telecom still reports the route here on every level.
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
+    override fun onCallAudioStateChanged(state: android.telecom.CallAudioState?) = CallAudioRouter.onTelecom(state)
 }
 
 class VoiciConnectionService : ConnectionService() {

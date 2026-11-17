@@ -51,6 +51,10 @@ object VoiciCallCenter {
         val video: Boolean = false,
         val muted: Boolean = false,
         val cameraOn: Boolean = false,
+        /** Our camera is the front one (the preview shows mirrored). */
+        val cameraFront: Boolean = true,
+        /** When the call connected (ms since the epoch): the call screen's timer runs from it. */
+        val connectedAt: Long? = null,
         /** The caller's camera: "on", "off" or "paused". */
         val remoteCamera: String = "off",
         /** Why the call ended or couldn't connect, as a code the screen turns into a sentence. */
@@ -76,6 +80,8 @@ object VoiciCallCenter {
 
     @Volatile private var session: VoiciCallSession? = null
     @Volatile private var media: CallMediaEngine? = null
+    /** The call's media engine, for the call screen's video pictures. */
+    val mediaEngine: CallMediaEngine? get() = media
     /** This device holds its bare name for the call in progress (PhoneRouteController.callStarted). */
     @Volatile private var holdsRoute = false
     private val steps = VoiciCallConnectSteps()
@@ -282,9 +288,15 @@ object VoiciCallCenter {
         if (media?.setCamera(on) != true) return false
         pausedByBackground = false
         session?.sendCamera(if (on) "on" else "off")
-        update { it.copy(cameraOn = on) }
+        update { it.copy(cameraOn = on, cameraFront = if (on && !it.cameraOn) true else it.cameraFront) }
         if (on) VoiciCallService.start(context)
         return true
+    }
+
+    /** Front or back camera while ours runs. */
+    fun flipCamera() {
+        if (!_ui.value.cameraOn || media?.flipCamera() != true) return
+        update { it.copy(cameraFront = !it.cameraFront) }
     }
 
     /** The call screen left the foreground: pause our camera (voici-calls-v2.md §1.4). */
@@ -362,7 +374,8 @@ object VoiciCallCenter {
         }
         connection = null
         if (::app.isInitialized) VoiciCallService.stop(app)
-        update { it.copy(phase = Phase.Ended, endCode = code, cameraOn = false, step = null, slow = false) }
+        CallAudioRouter.reset()
+        update { it.copy(phase = Phase.Ended, endCode = code, cameraOn = false, step = null, slow = false, connectedAt = null) }
     }
 
     private val listener = object : VoiciCallSession.Listener {
@@ -376,8 +389,9 @@ object VoiciCallCenter {
         override fun onPathOpen() = step(VoiciCallConnectStep.Audio)
         override fun onConnected() {
             stopConnectClock()
-            connectedAt = System.currentTimeMillis()
-            update { it.copy(phase = Phase.Connected, step = null, slow = false) }
+            val at = System.currentTimeMillis()
+            connectedAt = at
+            update { it.copy(phase = Phase.Connected, step = null, slow = false, connectedAt = at) }
         }
         override fun onEnded(reason: String) = finish(reason)
         override fun onRemoteCamera(state: String) {

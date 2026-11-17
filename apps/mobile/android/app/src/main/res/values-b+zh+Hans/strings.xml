@@ -4216,4 +4216,14 @@
     <string name="voici_call_step_path">正在打开直接通道…</string>
     <string name="voici_call_step_audio">正在启动音频…</string>
     <string name="voici_call_slow">这比平时用的时间长</string>
+    <string name="voici_call_audio">音频</string>
+    <string name="voici_call_flip">翻转</string>
+    <string name="voici_call_end">挂断</string>
+    <string name="voici_call_your_camera">你的摄像头</string>
+    <string name="voici_call_their_camera">对方的摄像头</string>
+    <string name="voici_call_e2e">端到端加密 · 抗量子</string>
+    <string name="voici_call_route_phone">听筒</string>
+    <string name="voici_call_route_speaker">扬声器</string>
+    <string name="voici_call_route_bluetooth">蓝牙</string>
+    <string name="voici_call_route_wired">耳机</string>
 </resources>

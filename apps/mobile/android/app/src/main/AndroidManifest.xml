@@ -22,6 +22,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- libwebrtc's audio device module puts the call in communication mode (voi.ci calls). -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- The screen goes dark against the ear in an audio call (PROXIMITY_SCREEN_OFF_WAKE_LOCK). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />

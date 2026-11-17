@@ -4216,4 +4216,14 @@
     <string name="voici_call_step_path">Direkter Weg wird geöffnet…</string>
     <string name="voici_call_step_audio">Audio wird gestartet…</string>
     <string name="voici_call_slow">Das dauert länger als üblich</string>
+    <string name="voici_call_audio">Audio</string>
+    <string name="voici_call_flip">Wechseln</string>
+    <string name="voici_call_end">Auflegen</string>
+    <string name="voici_call_your_camera">Deine Kamera</string>
+    <string name="voici_call_their_camera">Kamera der anderen Person</string>
+    <string name="voici_call_e2e">Ende-zu-Ende-verschlüsselt · quantensicher</string>
+    <string name="voici_call_route_phone">Telefon</string>
+    <string name="voici_call_route_speaker">Lautsprecher</string>
+    <string name="voici_call_route_bluetooth">Bluetooth</string>
+    <string name="voici_call_route_wired">Kopfhörer</string>
 </resources>

@@ -36,7 +36,9 @@ import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpTransceiver
 import org.webrtc.SdpObserver
+import org.webrtc.RendererCommon
 import org.webrtc.SessionDescription
+import org.webrtc.SurfaceViewRenderer
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
@@ -71,11 +73,49 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
     @Volatile private var keys: CallFrameCrypto? = null
     @Volatile private var stopped = false
     @Volatile private var connectedOnce = false
+    @Volatile private var front = true
 
     /** The remote camera, for a renderer: our build's EGL context and the caller's video track once it arrives. */
     @Volatile var remoteVideo: VideoTrack? = null
         private set
     val eglContext: EglBase.Context? get() = egl?.eglBaseContext
+
+    override val hasRemoteVideo: Boolean get() = remoteVideo != null
+
+    override fun videoView(context: Context, local: Boolean): CallVideoView? = synchronized(lock) {
+        val egl = egl ?: return null
+        val track = (if (local) videoTrack else remoteVideo) ?: return null
+        val r = SurfaceViewRenderer(context)
+        r.init(egl.eglBaseContext, null)
+        r.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+        r.setEnableHardwareScaler(true)
+        if (local) {
+            // The corner tile draws over the other side's picture.
+            r.setZOrderMediaOverlay(true)
+            r.setMirror(front)
+        }
+        track.addSink(r)
+        object : CallVideoView {
+            override val view = r
+            override fun setMirror(mirror: Boolean) = r.setMirror(mirror)
+            override fun release() {
+                // The track may be gone already (the camera turned off, the call ended): then it dropped its sinks.
+                runCatching { track.removeSink(r) }
+                r.release()
+            }
+        }
+    }
+
+    override fun flipCamera(): Boolean = synchronized(lock) {
+        val cap = capturer ?: return false
+        cap.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+            override fun onCameraSwitchDone(isFrontCamera: Boolean) {
+                front = isFrontCamera
+            }
+            override fun onCameraSwitchError(error: String?) {}
+        })
+        true
+    }
 
     override suspend fun answer(offerSdp: String, video: Boolean, turn: CallTurnCredential): String {
         val rate = if (video) TurnResponder.VIDEO_RATE_BYTES_PER_S else TurnResponder.AUDIO_RATE_BYTES_PER_S
@@ -241,6 +281,7 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
         val egl = egl ?: return false
         val enumerator = Camera2Enumerator(context)
         val name = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) } ?: enumerator.deviceNames.firstOrNull() ?: return false
+        front = enumerator.isFrontFacing(name)
         val cap = enumerator.createCapturer(name, null) ?: return false
         val src = f.createVideoSource(false)
         val helper = SurfaceTextureHelper.create("flagship-camera", egl.eglBaseContext)
