@@ -801,3 +801,42 @@ needed; anonymous calls stay refused, since only `anyone` takes them). The share
   (`test_firstPublish*`, `test_aRepublishKeepsTheOwnersChoices`), `VoiciCallsViewModelTests`; Android `VoiciAppTest`
   (`aFirstPublish*`, `aRepublishKeepsTheOwnersChoices`), `VoiciCallSettingsTest`; gym `GymMessagesTest` checks the
   warning line and that the first publish is a signed-in calls index. Webapp shell **v225**.
+
+## Call screen (owner, 2026-11-17: "take inspiration from leading apps")
+
+**iOS, as built** (`FlagshipUI/Calls/VoiciCallStage.swift`, used by `VoiciCallScreen` for calls answered here and by
+`VoiciOutgoingCallScreen` for calls placed from the app):
+- Dark gradient background. The other person's initial in a large circle, their name, then the status line ("Opening
+  a direct path…" and the other steps) until connected, then a m:ss / h:mm:ss timer in the locale's digits. A small
+  "End-to-end encrypted · quantum-safe" line with a lock.
+- One row of 68 pt round translucent buttons with labels under them: Audio (the system route menu: iPhone, Speaker,
+  AirPods/Bluetooth, via `AVRoutePickerView`), Mute (white when on), Camera (when the call negotiated video), Flip
+  (only while our camera runs). Under them, a red End button. Ended calls show Close. The ringing screen (no CallKit)
+  uses the same look with red Decline and green Answer.
+- Video: their camera fills the screen (aspect fill, `RTCMTLVideoView`) when they turned it on; our camera floats in a
+  rounded corner tile (`RTCCameraPreviewView`) that drags and snaps to the nearest corner; a tap hides or shows the
+  controls; the header shrinks to name and timer over the video. "Camera paused" shows when theirs is paused.
+- The screen sleeps against the ear in an audio-only connected call (proximity monitoring).
+- Buttons scale with Dynamic Type (`@ScaledMetric`); every control has an accessibility label and an identifier
+  (`voici-call-mute`, `-camera`, `-flip`, `-end`, `-audio-route`, `-close`).
+- Not shown: whether the other side is muted (no signal exists; the room's `camera` message is the only peer state).
+
+**To port (same layout, same strings in spirit):**
+- **Android** (`calls/VoiciCallActivity.kt` and the outgoing call screen): Compose; dark gradient; a `Box` with the
+  remote `SurfaceViewRenderer` (scale fill) under a column of name/status/timer and a row of 68 dp round buttons
+  (Material icons `VolumeUp` with an output picker from `AudioManager.availableCommunicationDevices`, `Mic`/`MicOff`,
+  `Videocam`/`VideocamOff`, `Cameraswitch`) over a red `CallEnd` button; the local renderer in a draggable corner
+  card snapping to corners; tap toggles controls; `PROXIMITY_SCREEN_OFF_WAKE_LOCK` in audio calls. The engine needs a
+  `flipCamera()` (`CameraVideoCapturer.switchCamera`).
+- **voi.ci browser** (`apps/voici-site/src/call.js` and its CSS): the same dark stage, the remote `<video>`
+  object-fit cover full-bleed, our preview as a draggable corner tile, round buttons (Mute, Camera, Flip when the
+  browser has two cameras, red End), timer under the name; tap or mouse-move shows the controls. No audio-route
+  button on the web (`setSinkId` where supported could come later).
+- Strings already in iOS: "Audio", "Flip", "End", "Your camera", "Their camera", "End-to-end encrypted ·
+  quantum-safe"; add them to `i18n/android` and `i18n/voici-site` with the same translations.
+
+**Freeze fix (2026-11-17):** the iOS engine read the frame keys under its main lock from WebRTC's worker and encoder
+threads, while the main thread held that lock calling libwebrtc setters (mute, camera) that block on those threads:
+the app froze once the caller's video frames flowed. The keys now have their own lock and no libwebrtc call is made
+under the engine lock; hang-up ends locally if CallKit's end hasn't run in 3 s. Android was not affected (its keys are
+a `@Volatile` field read without the engine lock).
