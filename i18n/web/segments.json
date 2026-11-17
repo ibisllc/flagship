@@ -3827,7 +3827,8 @@
     "kind": "text",
     "ctx": "option",
     "pages": [
-      "security.html"
+      "security.html",
+      "pro.html"
     ]
   },
   "s6ec6bfb707": {
@@ -7863,8 +7864,8 @@
       "status/index.html"
     ]
   },
-  "s24b8261563": {
-    "en": "Flagship is free. Pro is the membership for people running real things — more public bandwidth, paid privately with just a username, no identity attached.",
+  "s15358ff539": {
+    "en": "Flagship is free. Pro and Pro Max add public traffic and custom domains, paid with $1 vouchers that our server signs blind, so it never learns which account a purchase paid for.",
     "kind": "attr",
     "ctx": "meta[content]",
     "pages": [
@@ -7879,40 +7880,40 @@
       "pro.html"
     ]
   },
-  "sc6609e0419": {
-    "en": "Flagship is free — genuinely, with no nags and nothing held back. Pro is the membership for the few who are running <1>real</1> things: more public bandwidth, your own domain names, and a way to keep the project independent. All we ever need is a username. Not your name.",
+  "s0b28a50f72": {
+    "en": "Flagship is free, and the Free plan keeps every feature. Pro and Pro Max add room for public traffic and a few extras. You pay with $1 vouchers that our server signs blind, so it never learns which account a purchase paid for.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "s3788b8bbca": {
-    "en": "Most people never need this",
+  "s479eedd3a5": {
+    "en": "What each plan includes",
     "kind": "text",
     "ctx": "h2",
     "pages": [
       "pro.html"
     ]
   },
-  "sed8345782f": {
-    "en": "Everything that runs on your hardware — your apps, data, storage, devices — is free, with no limits we impose. The only thing that costs us money is the shared pipe that carries your <1>public</1> traffic to visitors through our relay, so that's the only thing we meter. If your public traffic stays in personal-use range, you'll never see a charge — you may never even notice there's a paid tier at all.",
+  "se2029d278b": {
+    "en": "Everything that runs on your own hardware is never counted: servers, apps, data, storage and devices. What we meter is the public traffic our relay carries between your servers and their visitors, because that is what costs us money.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "s3be5e0138c": {
-    "en": "Tier",
+  "s6af3d8d655": {
+    "en": "Plan",
     "kind": "text",
     "ctx": "th",
     "pages": [
       "pro.html"
     ]
   },
-  "sa362069c1d": {
-    "en": "Public bandwidth / month",
+  "s32cc847aa0": {
+    "en": "Public traffic a month",
     "kind": "text",
     "ctx": "th",
     "pages": [
@@ -7921,6 +7922,14 @@
   },
   "s6e829bf75d": {
     "en": "Custom domains",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s157f1fee9b": {
+    "en": "Co-managers",
     "kind": "text",
     "ctx": "th",
     "pages": [
@@ -7943,24 +7952,32 @@
       "pro.html"
     ]
   },
-  "s824dc4601c": {
-    "en": "25&nbsp;GB <1>(plenty for a personal site, an album, a chat for friends)</1>",
+  "s7386b988c6": {
+    "en": "25&nbsp;GB, then slowed, never cut",
     "kind": "text",
     "ctx": "td",
     "pages": [
       "pro.html"
     ]
   },
-  "sc4c6004ef1": {
-    "en": "250&nbsp;GB, then $0.05/GB",
+  "sc1c0f28d48": {
+    "en": "None",
     "kind": "text",
     "ctx": "td",
     "pages": [
       "pro.html"
     ]
   },
-  "scc7a9efdcf": {
-    "en": "$10 / month (or buy months at a time)",
+  "sd9ac4c488b": {
+    "en": "250&nbsp;GB, then slowed unless you buy more data",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sa117749e43": {
+    "en": "$10 a month",
     "kind": "text",
     "ctx": "td",
     "pages": [
@@ -7975,8 +7992,8 @@
       "pro.html"
     ]
   },
-  "sf858350355": {
-    "en": "500&nbsp;GB, then $0.05/GB",
+  "sf12be904e5": {
+    "en": "500&nbsp;GB, then slowed unless you buy more data",
     "kind": "text",
     "ctx": "td",
     "pages": [
@@ -7991,335 +8008,222 @@
       "pro.html"
     ]
   },
-  "sa967573db4": {
-    "en": "$20 / month (or buy months at a time)",
+  "sf923bf2bd5": {
+    "en": "$20 a month",
     "kind": "text",
     "ctx": "td",
     "pages": [
       "pro.html"
     ]
   },
-  "s0e852f80ad": {
-    "en": "Run as many servers, apps, and devices as you like — those are never counted. Pro is for when your public traffic genuinely outgrows personal use, or when you simply want to back the project.",
+  "sd03a6db9db": {
+    "en": "<1>Custom domains.</1> Use <2>www.example.com</2> for an app instead of an address under <3>flagship.services</3>. You point a CNAME record at your Flagship address. Your server still holds the certificate, so we still can't read the traffic.",
     "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "sb8ead65a51": {
-    "en": "One-off apps from the Flagship marketplace are a separate thing — you buy those when you want them, not as a subscription. Pro is about bandwidth headroom, your own domains, and keeping the lights on.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "sa382c7b18e": {
-    "en": "A custom domain (<1>www.example.com</1> instead of <2>&lt;server&gt;.&lt;you&gt;.flagship.services</2>) is added from the service page in the app. You prove it's yours by pointing a CNAME record from it to your Flagship address; we route it only while your plan includes it, and your box still holds the certificate, so we still can't read the traffic.",
-    "kind": "text",
-    "ctx": "p",
+    "ctx": "li",
     "verbatim": [
       "www.example.com",
-      "<server>.<you>.flagship.services"
+      "flagship.services"
     ],
     "pages": [
       "pro.html"
     ]
   },
-  "s07c644e545": {
-    "en": "A note on paying privately",
+  "s3447ff7e64": {
+    "en": "<1>Your own outbound proxy.</1> On Pro and Pro Max, your server's traffic can go out through a SOCKS5 or HTTP proxy you choose.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s4d2affea4c": {
+    "en": "<1>Co-managers</1> are other accounts you share a server with.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s87e9c38ae0": {
+    "en": "<1>Direct access is on every plan.</1> When your server can be reached from the internet, an app can get a direct address. Visitors then connect straight to your server, and that traffic doesn't count against any plan.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "scfb764507e": {
+    "en": "Past 25&nbsp;GB, a Free account is slowed, not cut off, until the month ends. Most people never get near it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sa092ffe3a8": {
+    "en": "How to buy",
     "kind": "text",
     "ctx": "h2",
     "pages": [
       "pro.html"
     ]
   },
-  "s11f1343ecb": {
-    "en": "If you pay with a card, you become identifiable.",
+  "s613ce71550": {
+    "en": "In every app, go to <1>Settings, Plan</1>. You buy a pack of vouchers ($10, $30 or $120), and the app adds it to your account's prepaid balance. Then you choose Pro or Pro Max, and the balance pays for it. Only an admin device of the account can buy, choose a plan or spend the balance.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s72034d1a5d": {
+    "en": "iPhone and iPad",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s26dc6f9029": {
+    "en": "An in-app purchase through Apple. Apple sees your Apple Account and that you bought Flagship vouchers.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "sacd3ddbdb4": {
+    "en": "A purchase through Google Play. Google sees your Google account and that you bought Flagship vouchers.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s9577c04fda": {
+    "en": "A card payment through Stripe, in the <1>webapp</1>. Stripe, your card network and your bank see your card and that you paid Flagship.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "pro.html"
+    ]
+  },
+  "s28c3361685": {
+    "en": "What the shops know, and what we don't",
     "kind": "text",
     "ctx": "h3",
     "pages": [
       "pro.html"
     ]
   },
-  "s5aee95d870": {
-    "en": "We never ask your name and never see your card. But your card network and bank <1>do</1> keep a record that you paid Flagship — and an adversary who could compel those records could tie your real identity to your account. That's the nature of card rails; it's outside our walls.",
+  "sfe702a12ad": {
+    "en": "Whoever takes your money knows you bought Flagship vouchers. Vouchers keep that out of our records, not out of theirs. None of them ever learns your Flagship account, and we never learn which purchase paid for which account.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "s96c94e574c": {
-    "en": "If that's in your threat model, <1>pay with Monero instead.</1> No identity is ever attached — we only learn your username, which you chose, and which says nothing about who you are.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s98acec296a": {
-    "en": "It's the same content-blind promise as the rest of Flagship: your box terminates its own TLS, so we can't read your traffic; and your payment, done right, leaves no trail back to you.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "sb14d1fc9e6": {
-    "en": "How to go Pro",
+  "s72d510ee1b": {
+    "en": "Vouchers: anonymous by design",
     "kind": "text",
     "ctx": "h2",
     "pages": [
       "pro.html"
     ]
   },
-  "sae16acbd29": {
-    "en": "It's hand-operated for now — on purpose. There's no automated checkout collecting your details. You send money, you tell us your <1>username</1>, and we flip your account to Pro by hand.",
+  "s0ae4129101": {
+    "en": "A voucher is worth $1. When you buy, your device makes the vouchers and our server signs them blind: it checks the payment and signs, without seeing the vouchers it signed. When a voucher is spent later, nothing ties it to that payment. Flagship can't link a payment to an account.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "s939a854f9d": {
-    "en": "1 · Tell us your username",
+  "s171ddee439": {
+    "en": "<1>Your admin devices hold the wallet.</1> The balance is kept encrypted under your account's key. Our server stores it for your devices to sync, and can't open it. Vouchers don't expire.",
     "kind": "text",
-    "ctx": "h3",
+    "ctx": "li",
     "pages": [
       "pro.html"
     ]
   },
-  "s13cd55f9e7": {
-    "en": "The username on your account (the one in <1>&lt;server&gt;.&lt;you&gt;.flagship.services</1>). That's the only thing we need to find your account. Include it with your payment.",
+  "s21895ef98c": {
+    "en": "<1>They spend a little at a time.</1> There is no monthly charge. Your device spends one $1 voucher at a random moment, keeping your plan a few days ahead. One voucher buys 3 days of Pro or 36 hours of Pro Max, so every account's spends look the same.",
     "kind": "text",
-    "ctx": "p",
-    "verbatim": [
-      "<server>.<you>.flagship.services"
-    ],
+    "ctx": "li",
     "pages": [
       "pro.html"
     ]
   },
-  "scb9b3d3051": {
-    "en": "2 · Send the money",
+  "sf683d0a5ff": {
+    "en": "<1>A 72-hour grace period.</1> If your devices are off when a spend is due, your plan keeps working for 72 hours past its end. A spend in that time continues from where the plan ended: nothing lapses, and nothing is free.",
     "kind": "text",
-    "ctx": "h3",
+    "ctx": "li",
     "pages": [
       "pro.html"
     ]
   },
-  "s4b0d8884c6": {
-    "en": "Monero (XMR) <1>private</1>",
+  "s0e57c01bd8": {
+    "en": "<1>A random start, if you want one.</1> Our server can see a purchase and an upgrade that happen close together. If that matters to you, start the plan at a random time within the next 24 hours.",
     "kind": "text",
-    "ctx": "h4",
+    "ctx": "li",
     "pages": [
       "pro.html"
     ]
   },
-  "s58cc8988f8": {
-    "en": "Send the equivalent of your months to:",
+  "s1cc4a6ac03": {
+    "en": "<1>A private relay for spends.</1> Spends go through a relay, so our server doesn't see your network address when you pay. For now Flagship runs that relay itself; it isn't an independent operator yet.",
     "kind": "text",
-    "ctx": "p",
+    "ctx": "li",
     "pages": [
       "pro.html"
     ]
   },
-  "seab8c3c1b3": {
-    "en": "[ your Monero address — fill in before publishing ]",
-    "kind": "text",
-    "ctx": "code",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s3c356d110a": {
-    "en": "Then send your username + the transaction key to <1>harry@flagship.services</1> so we can match it. (Use a throwaway address if you'd rather not link even that.)",
-    "kind": "text",
-    "ctx": "p",
-    "verbatim": [
-      "harry@flagship.services"
-    ],
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s5df413039c": {
-    "en": "Card / Stripe <1>convenient, less private</1>",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s5aa7550995": {
-    "en": "One-click card checkout. Convenient — but see the note above: the payment processor will know you're a customer.",
+  "sf3b6702d5c": {
+    "en": "What we do see: each account's plan and the date it is paid until, because the relay needs them to count traffic. Never what paid for it.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "s6d5c781350": {
-    "en": "<1>Your username</1> <2/> <3>Plan</3>",
+  "sbec520e448": {
+    "en": "More data",
     "kind": "text",
-    "ctx": "form",
+    "ctx": "h2",
     "pages": [
       "pro.html"
     ]
   },
-  "sba461b40b1": {
-    "en": "<1>Continue to card checkout</1>",
-    "kind": "text",
-    "ctx": "form",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s0e80255865": {
-    "en": "alice",
-    "kind": "attr",
-    "ctx": "input[placeholder]",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s1feaa93332": {
-    "en": "Pro — 250 GB / month",
-    "kind": "text",
-    "ctx": "option",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "sd643016703": {
-    "en": "Pro Max — 500 GB / month",
-    "kind": "text",
-    "ctx": "option",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s349ec09553": {
-    "en": "A voucher code <1>private</1>",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s4838421478": {
-    "en": "If you were handed a Flagship voucher code, redeem it below. A voucher is just prepaid Pro with no identity attached — whoever holds the code redeems it against any username.",
+  "s638472a47e": {
+    "en": "Past the traffic a plan includes, Pro and Pro Max can buy more in blocks of 100&nbsp;GB for $5, paid from the balance. A block is bought automatically when less than 10&nbsp;GB is left for the month, up to a monthly cap you set: $10 by default. Past the cap your traffic is slowed, as on Free. We never bill you after the fact.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "s4c7fe843c9": {
-    "en": "<1>Your username</1> <2/> <3>Voucher code</3> <4/> <5>Redeem</5>",
+  "se7019eb2d1": {
+    "en": "Refunds",
     "kind": "text",
-    "ctx": "form",
+    "ctx": "h2",
     "pages": [
       "pro.html"
     ]
   },
-  "s2d8d1feb0b": {
-    "en": "FLAG-XXXXX-XXXXX-XXXXX-XXXXX",
-    "kind": "attr",
-    "ctx": "input[placeholder]",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "sa6e668d3b2": {
-    "en": "Enter your username (3–30 lowercase letters or digits).",
+  "sdb5f9554c9": {
+    "en": "We don't give refunds. The honest reason: vouchers are built so that nothing links them back to the payment that bought them. Once they are signed, we can't tell which vouchers a payment produced, so we can't take them back or pay them out.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "sba431f090d": {
-    "en": "Redeeming…",
+  "sedcfed515c": {
+    "en": "Purchases made through Apple or Google Play follow those stores' own refund rules, which we don't control.",
     "kind": "text",
     "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s49ee5c7974": {
-    "en": "Redeemed — Pro is now active on “<1/>”. Your higher allowance applies within a few minutes.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s8be7f29283": {
-    "en": "Redeemed — Pro Max (500 GB) is now active on “<1/>”. Your higher allowance applies within a few minutes.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s7ab7b7954a": {
-    "en": "That code couldn't be redeemed.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s836ea1b8a4": {
-    "en": "Network error — please try again.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "sf4602f0ad5": {
-    "en": "Starting checkout…",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s9a0a80f97c": {
-    "en": "Card checkout isn't switched on yet — use Monero or a voucher above.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s6f596af3e0": {
-    "en": "Couldn't start checkout.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "s9b19220af8": {
-    "en": "3 · We turn on Pro",
-    "kind": "text",
-    "ctx": "h3",
-    "pages": [
-      "pro.html"
-    ]
-  },
-  "se40ffbb91f": {
-    "en": "Once the money lands, we set your account to Pro for the period you paid. Your higher allowance applies within a few minutes of the change. If anything's unclear, write to <1>harry@flagship.services</1>.",
-    "kind": "text",
-    "ctx": "p",
-    "verbatim": [
-      "harry@flagship.services"
-    ],
     "pages": [
       "pro.html"
     ]
@@ -8332,16 +8236,16 @@
       "pro.html"
     ]
   },
-  "se3bbf45f56": {
-    "en": "Every account starts with a random name. You can switch to a name of your own once, any time, by buying a single-use voucher:",
+  "sda98aff98f": {
+    "en": "Every account starts with a random name. Moving to a name of your own is a one-time price, separate from the plans:",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "s5e0a186ef5": {
-    "en": "Voucher",
+  "s64ab9f095a": {
+    "en": "Change",
     "kind": "text",
     "ctx": "th",
     "pages": [
@@ -8407,24 +8311,24 @@
       "pro.html"
     ]
   },
-  "s30fae2c912": {
-    "en": "Buy them exactly like Pro — Monero or card — and say which voucher you want instead of a username. We send back a code; you enter it in the app when you change your name. A voucher isn't tied to an account until it's redeemed, and it's used up only when the change goes through. One name change per account every 30 days. Name changes aren't refunded once they're done.",
+  "s6cc6119a73": {
+    "en": "One name change per account every 30 days.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "pro.html"
     ]
   },
-  "sc00539f313": {
-    "en": "Why pay at all, if you're under the limit?",
+  "se113968350": {
+    "en": "Why pay at all?",
     "kind": "text",
     "ctx": "h2",
     "pages": [
       "pro.html"
     ]
   },
-  "sd95d56b63a": {
-    "en": "You don't have to — most people never will. But Flagship runs on no ads, no venture capital, and no selling of your data; the relay, DNS, and certificates cost real money to keep up. A Pro membership (even if you never touch the bandwidth) is the cleanest way to keep the project independent and the free tier free for everyone else. Same price, same privacy options — buy it any time, not just when you hit a cap.",
+  "s0d96cc73ac": {
+    "en": "You don't have to, and most people never will. Flagship runs with no ads, no venture capital and no selling of your data; the relay, DNS and certificates cost real money to keep up. A plan, even one you never fill, keeps the project independent and the free tier free for everyone else.",
     "kind": "text",
     "ctx": "p",
     "pages": [

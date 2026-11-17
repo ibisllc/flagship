@@ -2,7 +2,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pro · Flagship</title>
-  <meta name="description" content="Flagship は無料です。Pro は本格的に運用する人のためのメンバーシップです。公開帯域が増え、ユーザー名だけで匿名に支払えます。身元は一切ひも付きません。">
+  <meta name="description" content="Flagship は無料です。Pro と Pro Max では公開トラフィックとカスタムドメインが増えます。支払いは 1 ドルのバウチャーで、当社のサーバーはそれをブラインド署名するため、購入がどのアカウントの支払いになったかを知ることはありません。">
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -34,27 +34,16 @@
       padding: var(--space-6); margin: var(--space-6) 0;
     }
     .callout h3 { margin: 0 0 var(--space-2); }
-    .pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin: var(--space-4) 0; }
-    @media (max-width: 720px) { .pay-grid { grid-template-columns: 1fr; } }
+    .pay-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin: var(--space-4) 0; }
+    @media (max-width: 900px) { .pay-grid { grid-template-columns: 1fr; } }
     .pay-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-5); background: var(--surface); }
     .pay-card h4 { margin: 0 0 var(--space-2); display: flex; align-items: center; gap: 8px; }
     .pay-card .priv { font-size: var(--caption-size); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     .priv.good { color: var(--success); }
     .priv.meh  { color: var(--warning, #c08a00); }
-    .fill { font-family: var(--font-mono); background: var(--surface-sunken, rgba(127,127,127,0.12)); padding: 2px 6px; border-radius: 4px; }
-    .voucher-form { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
-    .voucher-form label { font-size: var(--caption-size); color: var(--text-muted); font-weight: 600; }
-    .voucher-form input { width: 100%; box-sizing: border-box; padding: var(--space-3); font-size: var(--body-sm-size);
-      border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-family: var(--font-mono); }
-    .voucher-form input:focus, .voucher-form select:focus { outline: 2px solid var(--accent, #14B8A6); outline-offset: 1px; }
-    .voucher-form select { width: 100%; box-sizing: border-box; padding: var(--space-3); font-size: var(--body-sm-size);
-      border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); }
-    .voucher-form .btn { margin-top: var(--space-2); padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-sm);
-      background: var(--accent, #14B8A6); color: #042f2a; font-weight: 600; cursor: pointer; font-size: var(--body-sm-size); }
-    .voucher-form .btn:disabled { opacity: 0.6; cursor: default; }
-    .voucher-msg { font-size: var(--body-sm-size); margin: 0; min-height: 1.2em; }
-    .voucher-msg.ok { color: var(--success, #15803d); }
-    .voucher-msg.err { color: var(--danger, #b91c1c); }
+    .pay-card p + p { margin-top: var(--space-2); }
+    .muted { color: var(--text-muted); }
+    .nowrap { white-space: nowrap; }
     code.addr { font-family: var(--font-mono); font-size: 0.86em; word-break: break-all; }
   </style>
   <link rel="stylesheet" href="/theme-ui.css">
@@ -75,97 +64,90 @@
 
   <section class="page-hero">
     <h1>Flagship Pro</h1>
-    <p class="lede">Flagship は本当に無料です。しつこい勧誘も機能制限もありません。Pro は<em>本格的な</em>運用をしている一部の人のためのメンバーシップです。公開帯域が増え、独自ドメインが使え、プロジェクトの独立を支えられます。必要なのはユーザー名だけ。あなたの名前は要りません。</p>
+    <p class="lede">Flagship は無料で、Free プランでもすべての機能を使えます。Pro と Pro Max では公開トラフィックの枠が広がり、いくつかの追加機能が付きます。支払いは 1 ドルのバウチャーで、当社のサーバーはそれをブラインド署名するため、購入がどのアカウントの支払いになったかを知ることはありません。</p>
   </section>
 
   <div class="legal">
 
-    <section>
-      <h2>ほとんどの人には必要ありません</h2>
-      <p>あなたのハードウェアで動くもの（アプリ、データ、ストレージ、デバイス）はすべて無料で、私たちが課す制限はありません。費用がかかるのは、<strong>公開</strong>トラフィックをリレー経由で訪問者に届ける共有の回線だけなので、計測するのもそれだけです。公開トラフィックが個人利用の範囲なら料金は発生せず、有料プランがあることに気づかないかもしれません。</p>
+    <section id="plans">
+      <h2>各プランの内容</h2>
+      <p>あなた自身のハードウェアで動くものは一切数えません。サーバー、アプリ、データ、ストレージ、デバイスのどれもです。計測するのは、当社のリレーがあなたのサーバーと訪問者の間で運ぶ公開トラフィックだけです。費用がかかるのはそこだからです。</p>
       <table class="t">
-        <tbody><tr><th>プラン</th><th>公開帯域 / 月</th><th>独自ドメイン</th><th>料金</th></tr>
-        <tr><td><strong>無料</strong></td><td>25&nbsp;GB <span style="color:var(--text-muted)">（個人サイト、アルバム、友人とのチャットには十分）</span></td><td>—</td><td>$0</td></tr>
-        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB、超過分は $0.05/GB</td><td>1</td><td>月額 $10（まとめて数か月分の購入も可）</td></tr>
-        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB、超過分は $0.05/GB</td><td>無制限</td><td>月額 $20（まとめて数か月分の購入も可）</td></tr>
+        <tbody><tr><th>プラン</th><th>月あたりの公開トラフィック</th><th>独自ドメイン</th><th>共同管理者</th><th>料金</th></tr>
+        <tr><td><strong>無料</strong></td><td>25&nbsp;GB、超えると低速化（停止はしません）</td><td>なし</td><td>5</td><td>$0</td></tr>
+        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB、超えると低速化（追加データを買わない場合）</td><td>1</td><td>10</td><td class="nowrap">月 10 ドル</td></tr>
+        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB、超えると低速化（追加データを買わない場合）</td><td>無制限</td><td>25</td><td class="nowrap">月 20 ドル</td></tr>
       </tbody></table>
-      <p>サーバー、アプリ、デバイスはいくつでも使えます。数は一切数えません。Pro は公開トラフィックが本当に個人利用を超えたとき、または単にプロジェクトを応援したいときのためのものです。</p>
-      <p style="color:var(--text-muted)">Flagship マーケットプレイスの単品アプリは別物です。必要なときに買うもので、サブスクリプションではありません。Pro は帯域の余裕、独自ドメイン、そしてプロジェクトの運営を支えるためのものです。</p>
-      <p>独自ドメイン（<code>&lt;server&gt;.&lt;you&gt;.flagship.services</code> の代わりに <code>www.example.com</code>）は、アプリのサービスページから追加します。そのドメインから Flagship のアドレスへ CNAME レコードを向けることで所有を証明します。プランに含まれている間だけルーティングし、証明書はあなたのボックスが持ち続けるので、私たちは通信を読めません。</p>
+      <ul>
+        <li><strong>カスタムドメイン。</strong><code>flagship.services</code> 配下のアドレスの代わりに、<code>www.example.com</code> をアプリに使えます。CNAME レコードをあなたの Flagship アドレスに向けるだけです。証明書は引き続きあなたのサーバーが持つので、当社がトラフィックを読めないことに変わりはありません。</li>
+        <li><strong>自分の送信プロキシ。</strong>Pro と Pro Max では、サーバーのトラフィックを好きな SOCKS5 または HTTP プロキシ経由で送り出せます。</li>
+        <li><strong>共同管理者</strong>とは、サーバーを共有している他のアカウントのことです。</li>
+        <li><strong>直接アクセスはすべてのプランで使えます。</strong>サーバーがインターネットから到達可能なら、アプリに直接アドレスを付けられます。訪問者はあなたのサーバーに直接つながり、そのトラフィックはどのプランにも数えられません。</li>
+      </ul>
+      <p>25&nbsp;GB を超えると、Free アカウントは月末まで低速になりますが、止まることはありません。ほとんどの人はそこまで使いません。</p>
     </section>
 
-    <section>
-      <h2 id="privacy">匿名で支払うことについて</h2>
-      <div class="callout">
-        <h3>カードで支払うと、身元が特定できるようになります。</h3>
-        <p>私たちは名前を尋ねず、カード情報も見ません。しかしカードネットワークと銀行は、あなたが Flagship に支払った記録を<strong>残します</strong>。その記録を強制的に入手できる相手なら、あなたの実名とアカウントを結び付けられます。カード決済の性質上、これは私たちの手の届かないところです。</p>
-        <p>それが脅威モデルに含まれるなら、<strong>代わりに Monero で支払ってください。</strong>身元は一切ひも付きません。私たちが知るのはあなたが選んだユーザー名だけで、それはあなたが誰かを何も語りません。</p>
-      </div>
-      <p>Flagship の他の部分と同じ、内容を見ないという約束です。TLS はあなたのボックスで終端するので私たちは通信を読めません。支払いも正しく行えば、あなたにたどり着く痕跡は残りません。</p>
-    </section>
-
-    <section>
-      <h2>Pro にするには</h2>
-      <p>今のところ、あえて手作業で行っています。あなたの情報を集める自動決済はありません。お金を送り、<strong>ユーザー名</strong>を伝えてもらえれば、私たちが手作業でアカウントを Pro にします。</p>
-
-      <h3>1 · ユーザー名を伝える</h3>
-      <p>アカウントのユーザー名（<code class="addr">&lt;server&gt;.&lt;you&gt;.flagship.services</code> の部分）です。アカウントを見つけるのに必要なのはこれだけです。支払いの際に添えてください。</p>
-
-      <h3>2 · 送金する</h3>
+    <section id="buy">
+      <h2>購入方法</h2>
+      <p>どのアプリでも <em>設定、プラン</em> を開きます。バウチャーのパック（10 ドル、30 ドル、120 ドル）を購入すると、アプリがアカウントの前払い残高に追加します。次に Pro か Pro Max を選ぶと、残高から支払われます。購入、プランの選択、残高の利用ができるのは、アカウントの管理者デバイスだけです。</p>
       <div class="pay-grid">
         <div class="pay-card">
-          <h4>Monero (XMR) <span class="priv good">匿名</span></h4>
-          <p>希望の月数に相当する額を次の宛先へ送ってください：</p>
-          <p><code class="addr">[ Monero アドレス：公開前に記入 ]</code></p>
-          <p style="color:var(--text-muted);font-size:var(--body-sm-size)">その後、ユーザー名とトランザクションキーを <code class="addr">harry@flagship.services</code> に送ってください。照合に使います。（それすら結び付けたくない場合は使い捨てのアドレスを使ってください。）</p>
+          <h4>iPhone と iPad</h4>
+          <p>Apple を通じたアプリ内課金です。Apple にはあなたの Apple アカウントと、Flagship のバウチャーを購入したことがわかります。</p>
         </div>
         <div class="pay-card">
-          <h4>カード / Stripe <span class="priv meh">手軽だが匿名性は低い</span></h4>
-          <p>ワンクリックのカード決済。手軽ですが、上の注意をご覧ください。決済代行業者はあなたが顧客だと知ることになります。</p>
-          <form id="checkout-form" class="voucher-form" autocomplete="off"><label for="c-username">ユーザー名</label> <input id="c-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="c-tier">プラン</label><select id="c-tier" name="tier">
-              <option value="hobby">Pro：250 GB / 月</option>
-              <option value="maker">Pro Max：500 GB / 月</option>
-            </select><button type="submit" class="btn">カード決済へ進む</button><p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
-          </form>
+          <h4>Android</h4>
+          <p>Google Play を通じた購入です。Google にはあなたの Google アカウントと、Flagship のバウチャーを購入したことがわかります。</p>
         </div>
         <div class="pay-card">
-          <h4>バウチャーコード <span class="priv good">匿名</span></h4>
-          <p>Flagship のバウチャーコードを受け取ったら、下で引き換えてください。バウチャーは身元のひも付かない前払いの Pro です。コードを持っている人なら誰でも、任意のユーザー名に対して引き換えられます。</p>
-          <form id="voucher-form" class="voucher-form" autocomplete="off"><label for="v-username">ユーザー名</label> <input id="v-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="v-code">バウチャーコード</label> <input id="v-code" name="code" type="text" placeholder="FLAG-XXXXX-XXXXX-XXXXX-XXXXX" required="" spellcheck="false" autocapitalize="characters"> <button type="submit" class="btn">引き換える</button><p id="voucher-msg" class="voucher-msg" role="status" aria-live="polite"></p>
-          </form>
+          <h4>Web アプリ</h4>
+          <p><a href="https://webapp.flagshipserver.com/">Webapp</a> での Stripe によるカード払いです。Stripe、カードブランド、銀行には、あなたのカードと Flagship に支払ったことがわかります。</p>
         </div>
       </div>
-
-      <div id="pro-messages" hidden="">
-        <p data-msg="bad-username">ユーザー名を入力してください（小文字の英字または数字で 3〜30 文字）。</p>
-        <p data-msg="redeeming">引き換え中…</p>
-        <p data-msg="redeemed-pro">引き換え完了：「<span data-arg=""></span>」で Pro が有効になりました。より大きな上限は数分以内に適用されます。</p>
-        <p data-msg="redeemed-max">引き換え完了：「<span data-arg=""></span>」で Pro Max（500 GB）が有効になりました。より大きな上限は数分以内に適用されます。</p>
-        <p data-msg="redeem-failed">そのコードは引き換えられませんでした。</p>
-        <p data-msg="network">ネットワークエラーです。もう一度お試しください。</p>
-        <p data-msg="checkout-starting">決済を開始しています…</p>
-        <p data-msg="checkout-off">カード決済はまだ有効になっていません。上の Monero かバウチャーをお使いください。</p>
-        <p data-msg="checkout-failed">決済を開始できませんでした。</p>
+      <div class="callout">
+        <h3>販売元が知ること、当社が知らないこと</h3>
+        <p>代金を受け取る側は、あなたが Flagship のバウチャーを買ったことを知っています。バウチャーはその事実を当社の記録から遠ざけますが、相手の記録からは消えません。どの販売元もあなたの Flagship アカウントを知ることはなく、当社もどの購入がどのアカウントの支払いになったかを知ることはありません。</p>
       </div>
+    </section>
 
-      <h3>3 · Pro を有効にします</h3>
-      <p>入金を確認したら、支払われた期間だけアカウントを Pro にします。より大きな上限は変更から数分以内に適用されます。不明な点があれば <code class="addr">harry@flagship.services</code> までご連絡ください。</p>
+    <section id="vouchers">
+      <h2>バウチャー：設計から匿名</h2>
+      <p>バウチャー 1 枚は 1 ドルです。購入すると、あなたのデバイスがバウチャーを作り、当社のサーバーがそれをブラインド署名します。サーバーは支払いを確認して署名しますが、署名したバウチャーそのものは見えません。あとでバウチャーが使われても、それをその支払いと結びつけるものはありません。Flagship は支払いとアカウントを結びつけられません。</p>
+      <ul>
+        <li><strong>ウォレットを持つのは管理者デバイスです。</strong>残高はアカウントの鍵で暗号化して保存されます。当社のサーバーはデバイス間の同期のために保管しますが、開くことはできません。バウチャーに有効期限はありません。</li>
+        <li><strong>少しずつ使われます。</strong>月ごとの請求はありません。デバイスがランダムなタイミングで 1 ドルのバウチャーを 1 枚ずつ使い、プランを数日先まで支払い済みに保ちます。バウチャー 1 枚で Pro なら 3 日、Pro Max なら 36 時間分になるため、どのアカウントの支払いも同じように見えます。</li>
+        <li><strong>72 時間の猶予期間。</strong>支払いのタイミングでデバイスの電源が切れていても、プランは期限後 72 時間使えます。その間の支払いはプランが終わった時点から続くので、途切れることも、ただになることもありません。</li>
+        <li><strong>希望すればランダムな開始。</strong>当社のサーバーには、購入とアップグレードが続けて起きたことが見えることがあります。気になる場合は、今後 24 時間以内のランダムな時刻にプランを開始できます。</li>
+        <li><strong>支払い用のプライベートリレー。</strong>支払いはリレーを経由するため、支払いの際に当社のサーバーにはあなたのネットワークアドレスが見えません。現在このリレーは Flagship 自身が運営しており、まだ独立した運営者ではありません。</li>
+      </ul>
+      <p>当社に見えるもの：各アカウントのプランと支払い済みの期限です。リレーがトラフィックを数えるのに必要だからです。何で支払われたかは見えません。</p>
+    </section>
+
+    <section id="data">
+      <h2>追加データ</h2>
+      <p>プランに含まれるトラフィックを超えた分は、Pro と Pro Max なら 100&nbsp;GB のブロックを 5 ドルで残高から購入できます。その月の残りが 10&nbsp;GB を切ると、あなたが決めた月の上限（初期値 10 ドル）まで自動でブロックを購入します。上限を超えると、Free と同じように低速になります。後から請求することはありません。</p>
+    </section>
+
+    <section id="refunds">
+      <h2>返金</h2>
+      <p>返金は行いません。正直な理由はこうです。バウチャーは、それを買った支払いと何も結びつかないように作られています。署名した後は、ある支払いからどのバウチャーが生まれたのか当社にはわからないため、取り戻すことも払い戻すこともできません。</p>
+      <p>Apple や Google Play を通じた購入には、それぞれのストアの返金ルールが適用されます。当社はそれを管理していません。</p>
     </section>
 
     <section id="names">
       <h2>名前を変更する</h2>
-      <p>アカウントは最初、ランダムな名前で始まります。使い切りのバウチャーを買えば、いつでも一度だけ好きな名前に変えられます：</p>
+      <p>どのアカウントもランダムな名前で始まります。自分で選んだ名前に変えるのは、プランとは別の一回限りの料金です：</p>
       <table class="t">
-        <tbody><tr><th>バウチャー</th><th>内容</th><th>料金</th></tr>
+        <tbody><tr><th>変更</th><th>内容</th><th>料金</th></tr>
         <tr><td><strong>名前の変更</strong></td><td>アカウントを空いている任意の名前に移します</td><td>$10（1 回）</td></tr>
         <tr><td><strong>優先権の請求</strong></td><td>管理を証明した <code>.com</code> と一致する名前を取得します（<a href="/ja/dibs">優先権の仕組み</a>）</td><td>$20（1 回）</td></tr>
       </tbody></table>
-      <p>Pro と同じ方法（Monero またはカード）で購入し、ユーザー名の代わりにどのバウチャーが欲しいかを伝えてください。コードをお送りするので、名前を変更するときにアプリで入力します。バウチャーは引き換えるまでどのアカウントにもひも付かず、変更が完了したときにだけ消費されます。名前の変更はアカウントごとに 30 日に 1 回まで。完了した名前の変更は返金されません。</p>
+      <p>名前の変更は、1 アカウントにつき 30 日に 1 回までです。</p>
     </section>
 
     <section>
-      <h2>上限以下なら、なぜ払うのですか？</h2>
-      <p>払う必要はありません。ほとんどの人は払わないでしょう。ただ Flagship は広告もベンチャー資金もなく、データを売ることもなく運営しています。リレー、DNS、証明書の維持には実際にお金がかかります。Pro メンバーシップは（帯域を使わなくても）プロジェクトの独立を保ち、無料プランを皆にとって無料のままにする最もすっきりした方法です。同じ料金、同じプライバシーの選択肢で、上限に達したときだけでなくいつでも購入できます。</p>
+      <h2>なぜ支払うのか</h2>
+      <p>支払う必要はありませんし、ほとんどの人は支払わないでしょう。Flagship は広告もベンチャーキャピタルもなく、あなたのデータを売ることもなく運営しています。リレー、DNS、証明書には実際にお金がかかります。使い切らないプランでも、プロジェクトの独立を保ち、ほかのみんなの無料プランを無料のままにします。</p>
     </section>
 
   </div>
@@ -208,105 +190,6 @@
   </div>
   <div class="footer-bottom"><span>© 2026 Flagship · 特許出願中 · BUSL-1.1 → 2030-05-03 に Apache 2.0 へ</span> <span><a href="/privacy">プライバシー</a> · <a href="/terms">利用規約</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span></div>
 </footer>
-
-<script>
-// The sentences live in #pro-messages so the page's translations reach them (docs/i18n.md "Website pages").
-function proMsg(key, arg) {
-  var c = document.querySelector('#pro-messages [data-msg="' + key + '"]').cloneNode(true);
-  var slot = c.querySelector("[data-arg]");
-  if (slot) slot.textContent = String(arg == null ? "" : arg);
-  return c.textContent.replace(/\s+/g, " ").trim();
-}
-
-(function () {
-  var form = document.getElementById("voucher-form");
-  if (!form) return;
-  var msg = document.getElementById("voucher-msg");
-  var btn = form.querySelector("button[type=submit]");
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var username = form.username.value.trim().toLowerCase();
-    var code = form.code.value.trim();
-    msg.className = "voucher-msg";
-    msg.textContent = "";
-    if (!/^[a-z0-9]{3,30}$/.test(username)) {
-      msg.className = "voucher-msg err";
-      msg.textContent = proMsg("bad-username");
-      return;
-    }
-    btn.disabled = true;
-    var prev = btn.textContent;
-    btn.textContent = proMsg("redeeming");
-    fetch("/api/voucher/redeem", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: username, code: code }),
-    })
-      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
-      .then(function (res) {
-        if (res.ok && res.body && res.body.ok) {
-          msg.className = "voucher-msg ok";
-          msg.textContent = proMsg(res.body.tier === "maker" ? "redeemed-max" : "redeemed-pro", username);
-          form.code.value = "";
-        } else {
-          msg.className = "voucher-msg err";
-          msg.textContent = (res.body && res.body.error) || proMsg("redeem-failed");
-        }
-      })
-      .catch(function () {
-        msg.className = "voucher-msg err";
-        msg.textContent = proMsg("network");
-      })
-      .finally(function () { btn.disabled = false; btn.textContent = prev; });
-  });
-})();
-
-(function () {
-  var form = document.getElementById("checkout-form");
-  if (!form) return;
-  var msg = document.getElementById("checkout-msg");
-  var btn = form.querySelector("button[type=submit]");
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var username = form.username.value.trim().toLowerCase();
-    var tier = form.tier.value;
-    msg.className = "voucher-msg";
-    msg.textContent = "";
-    if (!/^[a-z0-9]{3,30}$/.test(username)) {
-      msg.className = "voucher-msg err";
-      msg.textContent = proMsg("bad-username");
-      return;
-    }
-    btn.disabled = true;
-    var prev = btn.textContent;
-    btn.textContent = proMsg("checkout-starting");
-    fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: username, tier: tier }),
-    })
-      .then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); })
-      .then(function (res) {
-        if (res.body && res.body.ok && res.body.url) {
-          window.location.href = res.body.url; // → Stripe-hosted Checkout
-          return;
-        }
-        msg.className = "voucher-msg err";
-        msg.textContent = res.status === 503
-          ? proMsg("checkout-off")
-          : (res.body && res.body.error) || proMsg("checkout-failed");
-        btn.disabled = false;
-        btn.textContent = prev;
-      })
-      .catch(function () {
-        msg.className = "voucher-msg err";
-        msg.textContent = proMsg("network");
-        btn.disabled = false;
-        btn.textContent = prev;
-      });
-  });
-})();
-</script>
 
 
 

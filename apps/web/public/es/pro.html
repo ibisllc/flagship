@@ -2,7 +2,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pro · Flagship</title>
-  <meta name="description" content="Flagship es gratis. Pro es la membresía para quien tiene cosas de verdad en marcha: más ancho de banda público, pagado de forma privada solo con un nombre de usuario, sin identidad asociada.">
+  <meta name="description" content="Flagship es gratis. Pro y Pro Max añaden tráfico público y dominios personalizados, y se pagan con vales de $1 que nuestro servidor firma a ciegas, así que nunca sabe qué cuenta pagó una compra.">
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -34,27 +34,16 @@
       padding: var(--space-6); margin: var(--space-6) 0;
     }
     .callout h3 { margin: 0 0 var(--space-2); }
-    .pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin: var(--space-4) 0; }
-    @media (max-width: 720px) { .pay-grid { grid-template-columns: 1fr; } }
+    .pay-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin: var(--space-4) 0; }
+    @media (max-width: 900px) { .pay-grid { grid-template-columns: 1fr; } }
     .pay-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-5); background: var(--surface); }
     .pay-card h4 { margin: 0 0 var(--space-2); display: flex; align-items: center; gap: 8px; }
     .pay-card .priv { font-size: var(--caption-size); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     .priv.good { color: var(--success); }
     .priv.meh  { color: var(--warning, #c08a00); }
-    .fill { font-family: var(--font-mono); background: var(--surface-sunken, rgba(127,127,127,0.12)); padding: 2px 6px; border-radius: 4px; }
-    .voucher-form { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
-    .voucher-form label { font-size: var(--caption-size); color: var(--text-muted); font-weight: 600; }
-    .voucher-form input { width: 100%; box-sizing: border-box; padding: var(--space-3); font-size: var(--body-sm-size);
-      border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-family: var(--font-mono); }
-    .voucher-form input:focus, .voucher-form select:focus { outline: 2px solid var(--accent, #14B8A6); outline-offset: 1px; }
-    .voucher-form select { width: 100%; box-sizing: border-box; padding: var(--space-3); font-size: var(--body-sm-size);
-      border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); }
-    .voucher-form .btn { margin-top: var(--space-2); padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-sm);
-      background: var(--accent, #14B8A6); color: #042f2a; font-weight: 600; cursor: pointer; font-size: var(--body-sm-size); }
-    .voucher-form .btn:disabled { opacity: 0.6; cursor: default; }
-    .voucher-msg { font-size: var(--body-sm-size); margin: 0; min-height: 1.2em; }
-    .voucher-msg.ok { color: var(--success, #15803d); }
-    .voucher-msg.err { color: var(--danger, #b91c1c); }
+    .pay-card p + p { margin-top: var(--space-2); }
+    .muted { color: var(--text-muted); }
+    .nowrap { white-space: nowrap; }
     code.addr { font-family: var(--font-mono); font-size: 0.86em; word-break: break-all; }
   </style>
   <link rel="stylesheet" href="/theme-ui.css">
@@ -75,97 +64,90 @@
 
   <section class="page-hero">
     <h1>Flagship Pro</h1>
-    <p class="lede">Flagship es gratis, de verdad: sin avisos insistentes y sin nada reservado. Pro es la membresía para los pocos que tienen cosas <em>de verdad</em> en marcha: más ancho de banda público, tus propios dominios y una forma de mantener el proyecto independiente. Lo único que necesitamos es un nombre de usuario. No tu nombre.</p>
+    <p class="lede">Flagship es gratis, y el plan Free conserva todas las funciones. Pro y Pro Max añaden margen para el tráfico público y algunos extras. Pagas con vales de $1 que nuestro servidor firma a ciegas, así que nunca sabe qué cuenta pagó una compra.</p>
   </section>
 
   <div class="legal">
 
-    <section>
-      <h2>La mayoría nunca lo necesita</h2>
-      <p>Todo lo que funciona en tu hardware (tus apps, datos, almacenamiento y dispositivos) es gratis, sin límites impuestos por nosotros. Lo único que nos cuesta dinero es el canal compartido que lleva tu tráfico <strong>público</strong> a los visitantes a través de nuestro relé, así que es lo único que medimos. Si tu tráfico público se mantiene en un uso personal, nunca verás un cargo; puede que ni notes que existe un plan de pago.</p>
+    <section id="plans">
+      <h2>Qué incluye cada plan</h2>
+      <p>Nada de lo que funciona en tu propio hardware se cuenta nunca: servidores, apps, datos, almacenamiento y dispositivos. Lo que medimos es el tráfico público que nuestro relé lleva entre tus servidores y sus visitantes, porque eso es lo que nos cuesta dinero.</p>
       <table class="t">
-        <tbody><tr><th>Plan</th><th>Ancho de banda público / mes</th><th>Dominios propios</th><th>Precio</th></tr>
-        <tr><td><strong>Gratis</strong></td><td>25&nbsp;GB <span style="color:var(--text-muted)">(de sobra para un sitio personal, un álbum o un chat con amigos)</span></td><td>—</td><td>$0</td></tr>
-        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB, luego 0,05 $/GB</td><td>1</td><td>10 $ / mes (o compra varios meses a la vez)</td></tr>
-        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB, luego 0,05 $/GB</td><td>Ilimitados</td><td>20 $ / mes (o compra varios meses a la vez)</td></tr>
+        <tbody><tr><th>Plan</th><th>Tráfico público al mes</th><th>Dominios propios</th><th>Cogestores</th><th>Precio</th></tr>
+        <tr><td><strong>Gratis</strong></td><td>25&nbsp;GB, después más lento, nunca cortado</td><td>Ninguno</td><td>5</td><td>$0</td></tr>
+        <tr><td><strong>Pro</strong></td><td>250&nbsp;GB, después más lento salvo que compres más datos</td><td>1</td><td>10</td><td class="nowrap">$10 al mes</td></tr>
+        <tr><td><strong>Pro Max</strong></td><td>500&nbsp;GB, después más lento salvo que compres más datos</td><td>Ilimitados</td><td>25</td><td class="nowrap">$20 al mes</td></tr>
       </tbody></table>
-      <p>Usa tantos servidores, apps y dispositivos como quieras: nunca se cuentan. Pro es para cuando tu tráfico público supera de verdad el uso personal, o cuando simplemente quieres apoyar el proyecto.</p>
-      <p style="color:var(--text-muted)">Las apps sueltas del marketplace de Flagship son otra cosa: las compras cuando las quieres, no como suscripción. Pro trata del margen de ancho de banda, tus propios dominios y mantener las luces encendidas.</p>
-      <p>Un dominio propio (<code>www.example.com</code> en vez de <code>&lt;server&gt;.&lt;you&gt;.flagship.services</code>) se añade desde la página del servicio en la app. Demuestras que es tuyo apuntando un registro CNAME desde él a tu dirección de Flagship; lo enrutamos solo mientras tu plan lo incluya, y tu equipo sigue guardando el certificado, así que seguimos sin poder leer el tráfico.</p>
+      <ul>
+        <li><strong>Dominios personalizados.</strong> Usa <code>www.example.com</code> para una app en lugar de una dirección bajo <code>flagship.services</code>. Apuntas un registro CNAME a tu dirección de Flagship. Tu servidor sigue teniendo el certificado, así que seguimos sin poder leer el tráfico.</li>
+        <li><strong>Tu propio proxy saliente.</strong> Con Pro y Pro Max, el tráfico de tu servidor puede salir a través de un proxy SOCKS5 o HTTP que tú elijas.</li>
+        <li><strong>Los cogestores</strong> son otras cuentas con las que compartes un servidor.</li>
+        <li><strong>El acceso directo está en todos los planes.</strong> Cuando tu servidor es accesible desde internet, una app puede tener una dirección directa. Los visitantes se conectan entonces directamente a tu servidor, y ese tráfico no cuenta en ningún plan.</li>
+      </ul>
+      <p>Pasados los 25&nbsp;GB, una cuenta Free va más lenta, sin cortarse, hasta que termina el mes. La mayoría de la gente nunca se acerca.</p>
     </section>
 
-    <section>
-      <h2 id="privacy">Una nota sobre pagar de forma privada</h2>
-      <div class="callout">
-        <h3>Si pagas con tarjeta, pasas a ser identificable.</h3>
-        <p>Nunca te pedimos el nombre ni vemos tu tarjeta. Pero la red de tu tarjeta y tu banco <strong>sí</strong> guardan constancia de que pagaste a Flagship, y un adversario que pudiera exigir esos registros podría vincular tu identidad real con tu cuenta. Así funcionan los pagos con tarjeta; está fuera de nuestro alcance.</p>
-        <p>Si eso entra en tu modelo de amenazas, <strong>paga con Monero.</strong> Nunca se asocia ninguna identidad: solo conocemos tu nombre de usuario, que elegiste tú y que no dice nada de quién eres.</p>
-      </div>
-      <p>Es la misma promesa de no ver el contenido que en el resto de Flagship: tu equipo termina su propio TLS, así que no podemos leer tu tráfico; y tu pago, bien hecho, no deja rastro que lleve a ti.</p>
-    </section>
-
-    <section>
-      <h2>Cómo pasarte a Pro</h2>
-      <p>Por ahora se hace a mano, a propósito. No hay un pago automático que recoja tus datos. Envías el dinero, nos dices tu <strong>nombre de usuario</strong> y activamos Pro en tu cuenta a mano.</p>
-
-      <h3>1 · Dinos tu nombre de usuario</h3>
-      <p>El nombre de usuario de tu cuenta (el que aparece en <code class="addr">&lt;server&gt;.&lt;you&gt;.flagship.services</code>). Es lo único que necesitamos para encontrar tu cuenta. Inclúyelo con tu pago.</p>
-
-      <h3>2 · Envía el dinero</h3>
+    <section id="buy">
+      <h2>Cómo comprar</h2>
+      <p>En cualquier app, ve a <em>Ajustes, Plan</em>. Compras un paquete de vales ($10, $30 o $120) y la app lo añade al saldo prepago de tu cuenta. Después eliges Pro o Pro Max, y el saldo lo paga. Solo un dispositivo administrador de la cuenta puede comprar, elegir un plan o gastar el saldo.</p>
       <div class="pay-grid">
         <div class="pay-card">
-          <h4>Monero (XMR) <span class="priv good">privado</span></h4>
-          <p>Envía el equivalente de tus meses a:</p>
-          <p><code class="addr">[ tu dirección de Monero: rellénala antes de publicar ]</code></p>
-          <p style="color:var(--text-muted);font-size:var(--body-sm-size)">Después envía tu nombre de usuario y la clave de la transacción a <code class="addr">harry@flagship.services</code> para que podamos cuadrarlo. (Usa una dirección desechable si no quieres vincular ni eso).</p>
+          <h4>iPhone y iPad</h4>
+          <p>Una compra dentro de la app a través de Apple. Apple ve tu cuenta de Apple y que compraste vales de Flagship.</p>
         </div>
         <div class="pay-card">
-          <h4>Tarjeta / Stripe <span class="priv meh">cómodo, menos privado</span></h4>
-          <p>Pago con tarjeta en un clic. Cómodo, pero lee la nota de arriba: el procesador de pagos sabrá que eres cliente.</p>
-          <form id="checkout-form" class="voucher-form" autocomplete="off"><label for="c-username">Tu nombre de usuario</label> <input id="c-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="c-tier">Plan</label><select id="c-tier" name="tier">
-              <option value="hobby">Pro: 250 GB / mes</option>
-              <option value="maker">Pro Max: 500 GB / mes</option>
-            </select><button type="submit" class="btn">Continuar al pago con tarjeta</button><p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
-          </form>
+          <h4>Android</h4>
+          <p>Una compra a través de Google Play. Google ve tu cuenta de Google y que compraste vales de Flagship.</p>
         </div>
         <div class="pay-card">
-          <h4>Un código de cupón <span class="priv good">privado</span></h4>
-          <p>Si te han dado un código de cupón de Flagship, canjéalo abajo. Un cupón es simplemente Pro prepagado sin identidad asociada: quien tenga el código lo canjea para cualquier nombre de usuario.</p>
-          <form id="voucher-form" class="voucher-form" autocomplete="off"><label for="v-username">Tu nombre de usuario</label> <input id="v-username" name="username" type="text" inputmode="latin" placeholder="alice" required="" pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none"> <label for="v-code">Código de cupón</label> <input id="v-code" name="code" type="text" placeholder="FLAG-XXXXX-XXXXX-XXXXX-XXXXX" required="" spellcheck="false" autocapitalize="characters"> <button type="submit" class="btn">Canjear</button><p id="voucher-msg" class="voucher-msg" role="status" aria-live="polite"></p>
-          </form>
+          <h4>App web</h4>
+          <p>Un pago con tarjeta a través de Stripe, en la <a href="https://webapp.flagshipserver.com/">webapp</a>. Stripe, la red de tu tarjeta y tu banco ven tu tarjeta y que pagaste a Flagship.</p>
         </div>
       </div>
-
-      <div id="pro-messages" hidden="">
-        <p data-msg="bad-username">Escribe tu nombre de usuario (3–30 letras minúsculas o dígitos).</p>
-        <p data-msg="redeeming">Canjeando…</p>
-        <p data-msg="redeemed-pro">Canjeado: Pro ya está activo en “<span data-arg=""></span>”. Tu límite mayor se aplica en unos minutos.</p>
-        <p data-msg="redeemed-max">Canjeado: Pro Max (500 GB) ya está activo en “<span data-arg=""></span>”. Tu límite mayor se aplica en unos minutos.</p>
-        <p data-msg="redeem-failed">No se pudo canjear ese código.</p>
-        <p data-msg="network">Error de red: inténtalo de nuevo.</p>
-        <p data-msg="checkout-starting">Iniciando el pago…</p>
-        <p data-msg="checkout-off">El pago con tarjeta aún no está activado: usa Monero o un cupón de arriba.</p>
-        <p data-msg="checkout-failed">No se pudo iniciar el pago.</p>
+      <div class="callout">
+        <h3>Lo que saben las tiendas y lo que nosotros no sabemos</h3>
+        <p>Quien recibe tu dinero sabe que compraste vales de Flagship. Los vales lo mantienen fuera de nuestros registros, no de los suyos. Ninguno de ellos llega a saber tu cuenta de Flagship, y nosotros nunca sabemos qué compra pagó qué cuenta.</p>
       </div>
+    </section>
 
-      <h3>3 · Activamos Pro</h3>
-      <p>Cuando llega el dinero, ponemos tu cuenta en Pro por el periodo pagado. Tu límite mayor se aplica pocos minutos después del cambio. Si algo no está claro, escribe a <code class="addr">harry@flagship.services</code>.</p>
+    <section id="vouchers">
+      <h2>Vales: anónimos por diseño</h2>
+      <p>Un vale vale $1. Cuando compras, tu dispositivo crea los vales y nuestro servidor los firma a ciegas: comprueba el pago y firma, sin ver los vales que firmó. Cuando un vale se gasta más tarde, nada lo une a ese pago. Flagship no puede vincular un pago con una cuenta.</p>
+      <ul>
+        <li><strong>Tus dispositivos administradores guardan la cartera.</strong> El saldo se guarda cifrado con la clave de tu cuenta. Nuestro servidor lo almacena para que tus dispositivos lo sincronicen, y no puede abrirlo. Los vales no caducan.</li>
+        <li><strong>Se gastan poco a poco.</strong> No hay un cargo mensual. Tu dispositivo gasta un vale de $1 en un momento al azar y mantiene tu plan unos días por delante. Un vale compra 3 días de Pro o 36 horas de Pro Max, así que los gastos de todas las cuentas se ven iguales.</li>
+        <li><strong>Un periodo de gracia de 72 horas.</strong> Si tus dispositivos están apagados cuando toca un gasto, tu plan sigue funcionando 72 horas después de su fin. Un gasto en ese tiempo continúa desde donde terminó el plan: nada caduca y nada es gratis.</li>
+        <li><strong>Un inicio al azar, si lo quieres.</strong> Nuestro servidor puede ver una compra y una mejora de plan que ocurren muy juntas. Si eso te importa, inicia el plan en un momento al azar dentro de las próximas 24 horas.</li>
+        <li><strong>Un relé privado para los gastos.</strong> Los gastos pasan por un relé, así que nuestro servidor no ve tu dirección de red cuando pagas. Por ahora ese relé lo gestiona Flagship; todavía no es un operador independiente.</li>
+      </ul>
+      <p>Lo que sí vemos: el plan de cada cuenta y la fecha hasta la que está pagado, porque el relé los necesita para contar el tráfico. Nunca con qué se pagó.</p>
+    </section>
+
+    <section id="data">
+      <h2>Más datos</h2>
+      <p>Pasado el tráfico que incluye un plan, Pro y Pro Max pueden comprar más en bloques de 100&nbsp;GB por $5, pagados con el saldo. Un bloque se compra automáticamente cuando quedan menos de 10&nbsp;GB en el mes, hasta un límite mensual que tú fijas: $10 por defecto. Pasado el límite, tu tráfico va más lento, como en Free. Nunca te cobramos después.</p>
+    </section>
+
+    <section id="refunds">
+      <h2>Reembolsos</h2>
+      <p>No hacemos reembolsos. La razón honesta: los vales están hechos para que nada los vincule con el pago que los compró. Una vez firmados, no podemos saber qué vales produjo un pago, así que no podemos recuperarlos ni devolver su dinero.</p>
+      <p>Las compras hechas a través de Apple o Google Play siguen las normas de reembolso de esas tiendas, que no controlamos.</p>
     </section>
 
     <section id="names">
       <h2>Cambiar tu nombre</h2>
-      <p>Cada cuenta empieza con un nombre aleatorio. Puedes cambiar a un nombre propio una vez, cuando quieras, comprando un cupón de un solo uso:</p>
+      <p>Cada cuenta empieza con un nombre al azar. Cambiar a un nombre propio tiene un precio único, aparte de los planes:</p>
       <table class="t">
-        <tbody><tr><th>Cupón</th><th>Qué hace</th><th>Precio</th></tr>
+        <tbody><tr><th>Cambio</th><th>Qué hace</th><th>Precio</th></tr>
         <tr><td><strong>Cambio de nombre</strong></td><td>Mueve tu cuenta a cualquier nombre libre</td><td>10 $, una vez</td></tr>
         <tr><td><strong>Reclamación de reserva</strong></td><td>Toma el nombre que coincide con un <code>.com</code> que has demostrado controlar (<a href="/es/dibs">cómo funciona la reserva</a>)</td><td>20 $, una vez</td></tr>
       </tbody></table>
-      <p>Cómpralos igual que Pro (Monero o tarjeta) e indica qué cupón quieres en lugar de un nombre de usuario. Te enviamos un código; lo introduces en la app al cambiar de nombre. Un cupón no se vincula a ninguna cuenta hasta que se canjea, y solo se gasta cuando el cambio se completa. Un cambio de nombre por cuenta cada 30 días. Los cambios de nombre ya hechos no se reembolsan.</p>
+      <p>Un cambio de nombre por cuenta cada 30 días.</p>
     </section>
 
     <section>
-      <h2>¿Por qué pagar si estás por debajo del límite?</h2>
-      <p>No tienes por qué: la mayoría nunca lo hará. Pero Flagship funciona sin anuncios, sin capital riesgo y sin vender tus datos; el relé, el DNS y los certificados cuestan dinero de verdad. Una membresía Pro (aunque nunca toques el ancho de banda) es la forma más limpia de mantener el proyecto independiente y el plan gratuito gratis para todos. Mismo precio, mismas opciones de privacidad: cómprala cuando quieras, no solo al llegar a un límite.</p>
+      <h2>¿Por qué pagar?</h2>
+      <p>No tienes por qué, y la mayoría de la gente nunca lo hará. Flagship funciona sin anuncios, sin capital riesgo y sin vender tus datos; el relé, el DNS y los certificados cuestan dinero de verdad. Un plan, aunque nunca lo llenes, mantiene el proyecto independiente y el plan gratuito gratis para todos los demás.</p>
     </section>
 
   </div>
@@ -208,105 +190,6 @@
   </div>
   <div class="footer-bottom"><span>© 2026 Flagship · Patente en trámite · BUSL-1.1 → Apache 2.0 el 2030-05-03</span> <span><a href="/privacy">Privacidad</a> · <a href="/terms">Términos</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span></div>
 </footer>
-
-<script>
-// The sentences live in #pro-messages so the page's translations reach them (docs/i18n.md "Website pages").
-function proMsg(key, arg) {
-  var c = document.querySelector('#pro-messages [data-msg="' + key + '"]').cloneNode(true);
-  var slot = c.querySelector("[data-arg]");
-  if (slot) slot.textContent = String(arg == null ? "" : arg);
-  return c.textContent.replace(/\s+/g, " ").trim();
-}
-
-(function () {
-  var form = document.getElementById("voucher-form");
-  if (!form) return;
-  var msg = document.getElementById("voucher-msg");
-  var btn = form.querySelector("button[type=submit]");
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var username = form.username.value.trim().toLowerCase();
-    var code = form.code.value.trim();
-    msg.className = "voucher-msg";
-    msg.textContent = "";
-    if (!/^[a-z0-9]{3,30}$/.test(username)) {
-      msg.className = "voucher-msg err";
-      msg.textContent = proMsg("bad-username");
-      return;
-    }
-    btn.disabled = true;
-    var prev = btn.textContent;
-    btn.textContent = proMsg("redeeming");
-    fetch("/api/voucher/redeem", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: username, code: code }),
-    })
-      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
-      .then(function (res) {
-        if (res.ok && res.body && res.body.ok) {
-          msg.className = "voucher-msg ok";
-          msg.textContent = proMsg(res.body.tier === "maker" ? "redeemed-max" : "redeemed-pro", username);
-          form.code.value = "";
-        } else {
-          msg.className = "voucher-msg err";
-          msg.textContent = (res.body && res.body.error) || proMsg("redeem-failed");
-        }
-      })
-      .catch(function () {
-        msg.className = "voucher-msg err";
-        msg.textContent = proMsg("network");
-      })
-      .finally(function () { btn.disabled = false; btn.textContent = prev; });
-  });
-})();
-
-(function () {
-  var form = document.getElementById("checkout-form");
-  if (!form) return;
-  var msg = document.getElementById("checkout-msg");
-  var btn = form.querySelector("button[type=submit]");
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var username = form.username.value.trim().toLowerCase();
-    var tier = form.tier.value;
-    msg.className = "voucher-msg";
-    msg.textContent = "";
-    if (!/^[a-z0-9]{3,30}$/.test(username)) {
-      msg.className = "voucher-msg err";
-      msg.textContent = proMsg("bad-username");
-      return;
-    }
-    btn.disabled = true;
-    var prev = btn.textContent;
-    btn.textContent = proMsg("checkout-starting");
-    fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: username, tier: tier }),
-    })
-      .then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); })
-      .then(function (res) {
-        if (res.body && res.body.ok && res.body.url) {
-          window.location.href = res.body.url; // → Stripe-hosted Checkout
-          return;
-        }
-        msg.className = "voucher-msg err";
-        msg.textContent = res.status === 503
-          ? proMsg("checkout-off")
-          : (res.body && res.body.error) || proMsg("checkout-failed");
-        btn.disabled = false;
-        btn.textContent = prev;
-      })
-      .catch(function () {
-        msg.className = "voucher-msg err";
-        msg.textContent = proMsg("network");
-        btn.disabled = false;
-        btn.textContent = prev;
-      });
-  });
-})();
-</script>
 
 
 

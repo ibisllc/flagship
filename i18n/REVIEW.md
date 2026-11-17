@@ -114,3 +114,13 @@ to fit. Review first: the words for "tile" and "complication" must match what We
 drafts use es "tarjeta", fr "carte", de "Kachel", pt-BR "bloco", ja "タイル", zh-Hans "卡片" and "表盘组件", each with the
 English word in brackets for Google's reviewer); keep the English word in brackets. Recount after any change: fr and de
 have almost no room left.
+
+**The Pro page rewritten for 0.4 (`i18n/web`, 2026-11-17, drafted by an agent, needs native review).** 44 segments of
+`pro.html` (plans, how to buy, vouchers, more data, refunds, name change); the 55 segments of the old hand-operated page
+are gone. Words follow the webapp's Plan screen: voucher es/pt-BR "vale", fr "bon", de "Gutschein", ja "バウチャー",
+zh-Hans "代金券"; balance "saldo" / "solde" / "Guthaben" / "残高" / "余额"; plan es/pt-BR "plan(o)", fr "forfait", de
+"Tarif"; co-manager es "cogestor", fr "cogestionnaire", de "Mitverwalter", pt-BR "coadministrador", ja/zh-Hans "共同管理者".
+Review first: the refunds paragraph (it must say plainly that we give no refunds and why, without sounding like a
+dodge), "signs them blind" (the cryptographic sense: it signs without seeing what it signs), the sentence on what the
+shops still know, the 72-hour grace line ("nothing lapses, and nothing is free"), the currency format of "$10 a month"
+and the 100 GB / $5 block line, and that "Settings, Plan" matches each app's menu names.
