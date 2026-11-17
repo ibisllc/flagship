@@ -743,3 +743,20 @@ so ("Payments go through a private relay that Flagship runs for now …").
   interim relay; generate `OHTTP_GATEWAY_KEYS` (`<keyId>:<64 hex>`) and set it
   as a Worker secret; apply D1 0154 and 0155 before the `.com` deploy; an
   endorsed box release for the box side; store builds for the phones.
+
+### The relay in use (2026-11-17)
+
+- **Main relay: Oblivious Network**, `https://relay.oblivious.network/flagship`, forwarding to
+  `https://flagshipserver.com/api/ohttp/gateway`. It was created on the trial; the owner decides on the $15/month plan
+  (2.62M requests and 2.63 GiB a month).
+- **Checks (2026-11-17):**
+  - It is served by Fly (`server: Fly/…`, `via: 2 fly.io`), with no Cloudflare headers, so it is a different operator
+    from the gateway's.
+  - CORS answers `access-control-allow-origin: *` for POST with `Content-Type`.
+  - Oblivious Network LLC (US) forwards only Content-Type and Content-Length. Its privacy policy keeps derived
+    statistics (request volumes, IP threat scores) "as long as needed", with no fixed retention period.
+- **The webapp's CSP** lists it in `connect-src` (`OHTTP_RELAY_ORIGINS` in `apps/com/src/securityHeaders.ts`). Any
+  relay added to `OHTTP_RELAYS` must be added there too, or the browser refuses the call.
+- **`.com` setting for the 0.4 deploy:**
+  `OHTTP_RELAYS=[{"url":"https://relay.oblivious.network/flagship","operator":"Oblivious Network","interim":false}]`.
+  Add the interim Oracle relay as the second entry once it runs, with its origin in `OHTTP_RELAY_ORIGINS`.
