@@ -1194,6 +1194,22 @@ self.addEventListener("push", (event) => {
     return;
   }
 
+  // The owner's outbound proxy fails (docs/outbound-proxy.md "Failure handling"). Names no server
+  // or proxy; Home shows which server and why, from /pods.
+  if (data && (data.category === "outbound-proxy" || data.kind === "outbound-proxy")) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: "One of your servers can't use its outbound proxy. Open Flagship to see why.",
+        tag: "flagship-outbound-proxy",
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: "outbound-proxy", deepLink: "/" },
+      }),
+    );
+    return;
+  }
+
   // A server shared with this account waits to start (docs/share-a-server.md
   // §5.4). The push names no server; Home shows which one and the Approve button.
   if (data && data.kind === "share-start-up") {
