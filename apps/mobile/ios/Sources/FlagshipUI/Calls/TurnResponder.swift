@@ -32,6 +32,7 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
     /// What crosses the relay socket, by direction and kind (STUN method/class/error, DTLS, RTP, RTCP), for the
     /// device log: every 2 s and at close. "c>p" is the caller to this phone's peer connection, "p>c" the way back.
     private var mix: [String: Int] = [:]
+    private var loggedSendError = false
     private var mixAt = TurnResponder.nowMs()
     private var usernames: Set<String> = []
 
@@ -119,7 +120,10 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
             voiciCallLog.notice("turn responder: first client message 0x\(String(format: "%04x", method), privacy: .public), \(r.client.count, privacy: .public) bytes back")
         }
         if firstToPeer, let p = r.peers.first { voiciCallLog.notice("turn responder: first datagram to peer loopback:\(p.0, privacy: .public)") }
-        for (port, d) in r.peers { note("c>p:\(port)", d) }
+        for (port, d) in r.peers {
+            note("c>p:\(port)", d)
+            send(d, port: port)
+        }
         return r.client.isEmpty ? [] : [r.client]
     }
 
@@ -157,12 +161,17 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
         to.sin_family = sa_family_t(AF_INET)
         to.sin_addr.s_addr = inet_addr("127.0.0.1")
         to.sin_port = port.bigEndian
-        _ = d.withUnsafeBytes { raw in
+        let sent = d.withUnsafeBytes { raw in
             withUnsafePointer(to: &to) { p in
                 p.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                     sendto(fd, raw.baseAddress, raw.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
                 }
             }
+        }
+        if sent != d.count {
+            let e = errno
+            let first: Bool = lock.withLock { defer { loggedSendError = true }; return !loggedSendError }
+            if first { voiciCallLog.notice("turn responder: send to peer loopback:\(port, privacy: .public) failed, errno \(e, privacy: .public)") }
         }
     }
 
