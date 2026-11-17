@@ -119,6 +119,59 @@ describe("the box's address update to .com", () => {
   });
 });
 
+describe("turning direct access off reaches .com through the box too", () => {
+  it("hands .com the owner's off order once (a replay counts as delivered), and again after a restart only as a replay", async () => {
+    ifaces = { eth0: [iface("2a02:8010:6400:7::1")] };
+    const dir = mkdtempSync(join(tmpdir(), "direct-off-"));
+    const opts = {
+      serverDomain: SERVER,
+      authority: () => ({ ownerIrkPub: irk.publicKey, adminRootPub: admin.publicKey, username: "alice", activeGrants: [] }),
+      statePath: join(dir, "direct-access.json"),
+      interfaces: () => ifaces,
+      now: () => NOW + 1000,
+    };
+    const c = new DirectAccessController(opts);
+    const on = accessOrder();
+    expect((await c.take({ order: on, signatureHex: hex(signDirectAccessOrder(on, admin)) })).ok).toBe(true);
+    const off: DirectAccessOrder = { ...on, enabled: false, addresses: [], prefixes: [], issuedAt: NOW + 500 };
+    const offSig = hex(signDirectAccessOrder(off, admin));
+    expect((await c.take({ order: off, signatureHex: offSig })).ok).toBe(true);
+    const posts: Array<{ url: string; body: { order: DirectAccessOrder; signatureHex: string } }> = [];
+    let status = 503;
+    const names = (ctl: DirectAccessController) =>
+      new DirectNames({
+        controller: ctl,
+        comBaseUrl: "https://flagshipserver.com/",
+        username: "alice",
+        serverFqdn: SERVER,
+        signAsBox: (m) => ed.sign(m, stk.privateKey),
+        readFetch: async () => new Response(JSON.stringify({ apex: "fshp.app", servers: [], names: [] }), { status: 200 }),
+        fetchImpl: (async (url: string, init: RequestInit) => {
+          posts.push({ url, body: JSON.parse(String(init.body)) });
+          return new Response(JSON.stringify(status === 409 ? { code: "replayed" } : { ok: true }), { status });
+        }) as typeof fetch,
+        log: () => {},
+      });
+    const d = names(c);
+    expect(await d.pushAddress()).toBe("failed");
+    status = 200;
+    expect(await d.pushAddress()).toBe("withdrawn");
+    expect(await d.pushAddress()).toBe("off");
+    expect(posts.length).toBe(2);
+    expect(posts[1]!.url).toBe("https://flagshipserver.com/api/accounts/alice/direct-access");
+    expect(posts[1]!.body).toEqual({ order: off, signatureHex: offSig });
+    // After a restart the box still holds the off order; `.com` answers replayed, which counts as delivered.
+    status = 409;
+    const d2 = names(new DirectAccessController(opts));
+    expect(await d2.pushAddress()).toBe("withdrawn");
+    expect(await d2.pushAddress()).toBe("off");
+    // A box whose direct access was never on sends nothing.
+    const fresh = new DirectAccessController({ ...opts, statePath: join(dir, "never.json") });
+    expect(await names(fresh).pushAddress()).toBe("off");
+    expect(posts.length).toBe(3);
+  });
+});
+
 describe("the names the box serves", () => {
   it("keeps only names whose owner-signed order names this box and verifies here", async () => {
     const c = await controller();
