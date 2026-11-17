@@ -1329,3 +1329,9 @@ Accept messages" even while messages are on.
 - Owner rule (2026-11-17): if infrastructure we provide fails (the OHTTP relay or gateway, and the later overlay), the system keeps working; spends wait, then go direct before a plan would lapse. If the owner's own proxy setting fails, alert loudly, and the order that fixes the setting always gets through. Passed to the 0.4/outbound-proxy agent.
 - Merged 0.4/wear-listing: the Play listing names the Wear tile and complication in 7 languages. Owner runbook: docs/runbooks/play-wear-listing-fix.md; no new bundle needed. Wear quality follow-ups WO-V10, WO-V9, a tile screenshot and the hard-coded tile strings went to an agent.
 - Merged 0.4/wear-quality (853a52c6f, rebased): the tile preview image, the empty state that says open Flagship on your phone, tile and complication text localized on the watch, and a tile store screenshot (slide 07c). Wear 30/30, companion 12/12, app 3113 pass, release-clean ok. Ships in the next Android bundle.
+- Merged payments steps 4-5 (0.4/payments-rails, iOS from 0.4/payments-rails-ios folded in).
+  - Built: Stripe Checkout, Apple and Google proof checks, refunds, D1 0153 and shell v231; Play Billing on Android and StoreKit 2 on iOS; the `voucher-shop` parity row.
+  - Checks: tsc and i18n green; vitest 9771 pass; MESH05 passes on its own (the earlier failure came from machine load). The first-publish warning scenario, unregistered on release/0.4 before this, is now registered.
+  - iOS: 19 tests run, 18 pass; the StoreKitTest case skips under SwiftPM (it needs an app-hosted test target). The Plan UI gym passes.
+  - Android: GymPlanTest not run (disk).
+  - Owner runbook: docs/runbooks/payments-setup.md.
