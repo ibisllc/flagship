@@ -4,7 +4,8 @@
 //   GET  /api/payments/config                none                 → {config, keys:[{keyId,nHex,eHex,...}], testIssue}
 //   GET  /api/accounts/<u>/voucher-wallet    read token           → {version, nonce, ct} | 404
 //   PUT  /api/accounts/<u>/voucher-wallet    device headers       → {ok, version} | 409 {code:"version-conflict", wallet}
-//   POST /api/vouchers/redeem                NONE (no token, no device headers: a spend names nobody but the account)
+//   POST /api/vouchers/redeem                NONE (no token, no device headers: a spend names nobody but the account),
+//                                            sent through the OHTTP relays `.com` lists in the config's `ohttp`
 //   POST /api/vouchers/test-issue            none (the gym only)  → {k, sigs}
 //   POST /api/vouchers/paid-issue            NONE (a payment buys signatures, never an account link) → {k, sigs, units}
 //   GET  /api/users/<u>/plan-attestation     read token           → {tier, paidUntil, ...}
@@ -18,6 +19,10 @@ import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
+import com.flagshipserver.app.core.ohttp.OhttpClient
+import com.flagshipserver.app.core.ohttp.OhttpPublicConfig
+import com.flagshipserver.app.core.ohttp.PrivateRequest
+import com.flagshipserver.app.core.ohttp.raw
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -27,8 +32,11 @@ import kotlinx.serialization.json.longOrNull
 import java.net.URLEncoder
 import java.security.SecureRandom
 
-/** A `.com` refusal: [code] is the machine code (`voucher-spent`, `version-conflict`, ...), [body] the whole answer. */
-class PaymentsHttpError(val status: Int, val code: String?, val body: JsonObject) : RuntimeException("payments $status ${code ?: ""}")
+/**
+ * A `.com` refusal: [code] is the machine code (`voucher-spent`, `version-conflict`, ...), [body] the whole answer.
+ * [via] is "ohttp" when a relay carried the refusal (the relay worked), "direct" when it went straight to `.com`.
+ */
+class PaymentsHttpError(val status: Int, val code: String?, val body: JsonObject, val via: String? = null) : RuntimeException("payments $status ${code ?: ""}")
 
 /** The account's plan as `.com` signs it for its boxes: [tier] free | hobby (Pro) | maker (Pro Max). */
 data class PlanState(val tier: String, val paidUntil: Long)
@@ -37,6 +45,9 @@ data class PlanState(val tier: String, val paidUntil: Long)
 data class PaidIssue(val k: String, val sigs: List<String>, val units: Long)
 
 data class AllowanceState(val usedBytes: Long, val quotaBytes: Long, val remainingBytes: Long)
+
+/** A spend's answer and how it travelled: [path] "ohttp" or "direct"; [fallbackReason] why it went direct. */
+data class Redeemed(val answer: JsonObject, val path: String = "ohttp", val fallbackReason: String? = null)
 
 interface PaymentsClient {
     suspend fun config(): JsonObject?
@@ -47,6 +58,14 @@ interface PaymentsClient {
     suspend fun allowance(username: String): AllowanceState?
     /** The answer on 200, else [PaymentsHttpError]. */
     suspend fun redeem(body: JsonObject): JsonObject
+    /**
+     * The spend through the private relays in [relay] (docs/outbound-proxy.md "Failure handling"). When every relay
+     * failed, [mayGoDirect] decides whether it goes straight to `.com`, marked; if not, it throws
+     * [com.flagshipserver.app.core.ohttp.RelayUnavailableException]. The inner answer is handled like [redeem]'s.
+     * Fakes that don't model the relay answer as if it carried the spend.
+     */
+    suspend fun redeemPrivately(body: JsonObject, relay: OhttpPublicConfig, mayGoDirect: (reason: String) -> Boolean): Redeemed =
+        Redeemed(redeem(body))
     /** The blind signatures, in order. */
     suspend fun testIssue(keyId: String, blinded: List<String>): List<String>
     /**
@@ -124,6 +143,24 @@ class LivePaymentsClient(
         // about who sent it (the route is also open through the OHTTP relay).
         val r = transport.execute("POST", "${base()}/api/vouchers/redeem", body.toString().toByteArray(), "application/json; charset=utf-8", emptyMap(), setOf(200))
         parse(r.body) ?: JsonObject(emptyMap())
+    }
+
+    override suspend fun redeemPrivately(body: JsonObject, relay: OhttpPublicConfig, mayGoDirect: (reason: String) -> Boolean): Redeemed {
+        // The relay is a third-party https host, checked by the system trust store like any web host; only `.com`
+        // and the boxes carry Flagship's own pins, and the shared client applies them by host.
+        val r = OhttpClient.sendThroughRelays(
+            transport.raw(),
+            PrivateRequest("${base()}/api/vouchers/redeem", "POST", listOf("content-type" to "application/json"), body.toString().toByteArray()),
+            relay.keyConfig,
+            relay.relays.map { it.url },
+            mayGoDirect,
+        )
+        val parsed = parse(r.body)
+        if (r.status != 200) {
+            val b = parsed ?: JsonObject(emptyMap())
+            throw PaymentsHttpError(r.status, (b["code"] as? JsonPrimitive)?.contentOrNull, b, r.path)
+        }
+        return Redeemed(parsed ?: JsonObject(emptyMap()), r.path, r.fallbackReason)
     }
 
     override suspend fun testIssue(keyId: String, blinded: List<String>): List<String> = call {

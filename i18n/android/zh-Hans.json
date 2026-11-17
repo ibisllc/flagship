@@ -4276,5 +4276,27 @@
   "payments_balance_months": {
     "one": "约 %1$s 个月的 %2$s",
     "other": "约 %1$s 个月的 %2$s"
-  }
+  },
+  "payments_privacy_relay_waiting": "私密中继没有响应。付款会等待并重试；在此期间你的套餐保持有效。",
+  "payments_privacy_relay_went_direct": "私密中继没有响应，因此上一笔付款直接发送给了 Flagship。",
+  "payments_privacy_relay_third_party": "付款经由 %1$s 的私密中继，因此你付款时 Flagship 看不到你的网络地址。",
+  "payments_privacy_relay_interim": "付款经由目前由 Flagship 运营的私密中继。它让你的地址不出现在付款日志中，但还不是独立的运营方。",
+  "payments_privacy_no_relay": "你付款时 Flagship 能看到你的网络地址，但不会保存任何相关信息。",
+  "proxy_status_working": "正常工作",
+  "proxy_code_unreachable": "无法连接到代理。",
+  "proxy_code_auth": "代理拒绝了用户名或密码。",
+  "proxy_code_refused": "代理拒绝了连接。",
+  "proxy_code_protocol": "代理返回了服务器无法理解的响应。",
+  "proxy_alert_failing": "出站代理无法工作：%1$s",
+  "proxy_alert_offline": "在代理恢复工作或你更改它之前，此服务器处于离线状态。",
+  "proxy_alert_fallback": "出站代理无法工作，因此此服务器正在直接连接：%1$s",
+  "proxy_home_badge": "出站代理故障",
+  "activity_proxy_failing": "出站代理无法工作",
+  "activity_proxy_fallback": "直接连接：出站代理无法工作",
+  "activity_proxy_ok": "出站代理已恢复工作",
+  "proxy_push_body": "你的一台服务器无法使用其出站代理。打开 Flagship 查看原因。",
+  "proxy_channel_name": "出站代理",
+  "proxy_channel_desc": "某台服务器的出站代理停止工作。",
+  "proxy_lane_sent": "已发送。即使代理已中断，服务器也会在几分钟内获取此更改。",
+  "proxy_lane_needs_password": "Flagship 从不传递代理密码。要使用新密码，请在与服务器相同的网络中更改，或先关闭代理。"
 }

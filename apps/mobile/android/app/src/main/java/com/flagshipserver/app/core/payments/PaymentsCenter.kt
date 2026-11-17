@@ -9,12 +9,19 @@
 //   when the plan is about to lapse; the overage rule buys one prepaid block when the month's bytes run low, within
 //   the owner's cap. A spend carries no credential and no device id.
 // - Choosing a paid plan that spends at once is a consent: the biometric prompt comes first.
+// - Every spend goes through the private relays `.com` lists (OHTTP, docs/outbound-proxy.md "Failure handling"). Our
+//   relay failing never lapses a plan: the spend the owner just asked for goes direct (marked), a trickle spend waits
+//   and retries with a backoff until the plan would lapse within a day, and an overage block simply waits.
 
 package com.flagshipserver.app.core.payments
 
 import com.flagshipserver.app.api.PaymentsClient
 import com.flagshipserver.app.api.PaymentsHttpError
 import com.flagshipserver.app.api.VoiciDeviceSigner
+import com.flagshipserver.app.core.ohttp.OhttpPrivacy
+import com.flagshipserver.app.core.ohttp.OhttpPublicConfig
+import com.flagshipserver.app.core.ohttp.PrivateSpendKind
+import com.flagshipserver.app.core.ohttp.RelayUnavailableException
 import com.flagshipserver.app.core.voici.VoiciJs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,9 +47,17 @@ interface PaymentsKeyring {
     suspend fun confirm(reason: String)
 }
 
-/** Device-local state: when the next unhurried spend is due (never synced). */
+/**
+ * How the private relay has done for this account's spends: [failures] rounds in a row in which every relay failed
+ * and a spend had to wait, when to try again, and whether the last spend went direct because the relay failed.
+ */
+data class RelayState(val failures: Int = 0, val retryAt: Long = 0, val lastSpendDirect: Boolean = false)
+
+/** Device-local state: when the next unhurried spend is due, and the relay's record per account (never synced). */
 interface PaymentsLocalStore {
     var nextSpendAt: Long
+    fun relay(username: String): RelayState
+    fun setRelay(username: String, state: RelayState)
 }
 
 class PrefsPaymentsLocalStore(context: android.content.Context) : PaymentsLocalStore {
@@ -50,10 +65,54 @@ class PrefsPaymentsLocalStore(context: android.content.Context) : PaymentsLocalS
     override var nextSpendAt: Long
         get() = prefs.getLong("nextSpendAt", 0)
         set(v) { prefs.edit().putLong("nextSpendAt", v).apply() }
+
+    override fun relay(username: String) = RelayState(
+        prefs.getInt("relayFailures.$username", 0),
+        prefs.getLong("relayRetryAt.$username", 0),
+        prefs.getBoolean("relayLastDirect.$username", false),
+    )
+
+    override fun setRelay(username: String, state: RelayState) {
+        prefs.edit()
+            .putInt("relayFailures.$username", state.failures)
+            .putLong("relayRetryAt.$username", state.retryAt)
+            .putBoolean("relayLastDirect.$username", state.lastSpendDirect)
+            .apply()
+    }
 }
 
 class MemoryPaymentsLocalStore : PaymentsLocalStore {
     override var nextSpendAt: Long = 0
+    private val relays = HashMap<String, RelayState>()
+    override fun relay(username: String) = relays[username] ?: RelayState()
+    override fun setRelay(username: String, state: RelayState) { relays[username] = state }
+}
+
+/** The privacy line under the plan, in the order the Plan screen picks it. */
+sealed interface RelayPrivacyLine {
+    /** The relay is failing and spends are waiting; the plan stays active meanwhile. */
+    data object Waiting : RelayPrivacyLine
+    /** The last spend went straight to `.com` because the relay failed (until the next relay success). */
+    data object WentDirect : RelayPrivacyLine
+    /** The first relay is a third party's. */
+    data class ThirdParty(val operator: String) : RelayPrivacyLine
+    /** The first relay is Flagship's own, for now. */
+    data object Interim : RelayPrivacyLine
+    /** No relay: `.com` sees the address. */
+    data object None : RelayPrivacyLine
+
+    companion object {
+        fun of(s: PaymentsUi): RelayPrivacyLine {
+            val first = s.ohttp.relays.firstOrNull()
+            return when {
+                first != null && s.relay.failures > 0 -> Waiting
+                s.relay.lastSpendDirect -> WentDirect
+                first == null -> None
+                !first.interim -> ThirdParty(first.operator)
+                else -> Interim
+            }
+        }
+    }
 }
 
 data class PaymentsUi(
@@ -78,6 +137,9 @@ data class PaymentsUi(
     val busy: Boolean = false,
     /** The last refusal code (PaymentsCopy turns it into a sentence). */
     val error: String? = null,
+    /** The private relays spends go through (`ohttp` in the payments config). */
+    val ohttp: OhttpPublicConfig = OhttpPublicConfig.EMPTY,
+    val relay: RelayState = RelayState(),
 ) {
     val balance: Int get() = wallet?.balance ?: 0
     val chosenPlan: String? get() = wallet?.settings?.plan
@@ -90,6 +152,8 @@ class PaymentsCenter(
     private val local: PaymentsLocalStore = MemoryPaymentsLocalStore(),
     private val now: () -> Long = System::currentTimeMillis,
     private val rand: () -> Double = { SecureRandom().nextDouble() },
+    /** The control apex (no scheme, no port): relays on it or on Cloudflare are dropped. */
+    private val controlApex: () -> String? = { runCatching { com.flagshipserver.app.core.Endpoints.controlHost.substringBefore(':') }.getOrNull() },
 ) {
     private val mutex = Mutex()
     private val _state = MutableStateFlow(PaymentsUi())
@@ -109,6 +173,7 @@ class PaymentsCenter(
             val k = VoucherKey(VoiciJs.str(o["keyId"]) ?: return@mapNotNull null, VoiciJs.str(o["nHex"]) ?: return@mapNotNull null, VoiciJs.str(o["eHex"]) ?: return@mapNotNull null)
             if (Vouchers.rsa(k) == null) null else k to ((o["issuing"] as? JsonPrimitive)?.contentOrNull != "false")
         }
+        val ohttp = if (cfgJson != null) OhttpPrivacy.parsePublicConfig(cfgJson["ohttp"], controlApex()) else _state.value.ohttp
         val plan = runCatching { client.plan(u) }.getOrNull()
         val allowance = client.allowance(u)
         val umk = keyring.umk()
@@ -144,6 +209,8 @@ class PaymentsCenter(
                 canOpen = umk != null,
                 remainingBytes = allowance?.remainingBytes ?: it.remainingBytes,
                 quotaBytes = allowance?.quotaBytes ?: it.quotaBytes,
+                ohttp = ohttp,
+                relay = local.relay(u),
             )
         }
     }
@@ -193,7 +260,7 @@ class PaymentsCenter(
         }
         val ok = write { w -> w.copy(settings = w.settings.copy(plan = plan, delayStart = delayStart, startAt = startAt, updatedAt = t)) }
         local.nextSpendAt = 0
-        if (ok) tickLocked()
+        if (ok) tickLocked(interactive = plan != null && !delayStart)
         ok
     }
 
@@ -216,9 +283,10 @@ class PaymentsCenter(
     }
 
     /** One tick of the trickle and the overage rule (foreground, Plan screen open). Never prompts. */
-    suspend fun tick() = mutex.withLock { tickLocked() }
+    suspend fun tick() = mutex.withLock { tickLocked(interactive = false) }
 
-    private suspend fun tickLocked() {
+    /** [interactive]: the owner just chose a plan that starts at once, so its spend may go direct if the relay fails. */
+    private suspend fun tickLocked(interactive: Boolean) {
         val s = _state.value
         val w = s.wallet ?: return
         if (!s.canSpend) return
@@ -242,7 +310,7 @@ class PaymentsCenter(
                 rand(),
             )
             local.nextSpendAt = out.nextSpendAt
-            if (out.spend > 0) spend(out.spend.toInt(), plan, retry = true)
+            if (out.spend > 0) spend(out.spend.toInt(), plan, retry = true, kind = if (interactive) PrivateSpendKind.INTERACTIVE else PrivateSpendKind.TRICKLE)
         }
         val after = _state.value
         val ww = after.wallet ?: return
@@ -260,13 +328,23 @@ class PaymentsCenter(
                 balance = ww.balance.toLong(),
             ),
         )
-        if (buy) spend(cfg.overage.blockUnits.toInt(), OVERAGE, retry = true)
+        if (buy) spend(cfg.overage.blockUnits.toInt(), OVERAGE, retry = true, kind = PrivateSpendKind.OVERAGE)
     }
 
     /** Spend [n] vouchers for [what] ("pro", "pro-max" or "overage"). */
-    private suspend fun spend(n: Int, what: String, retry: Boolean) {
+    private suspend fun spend(n: Int, what: String, retry: Boolean, kind: PrivateSpendKind) {
         val u = user() ?: return
         val w = _state.value.wallet ?: return
+        val t0 = now()
+        val s0 = _state.value
+        val lapseInMs = OhttpPrivacy.planLapseInMs(if (s0.plan != null) s0.paidUntil else 0, s0.config.graceHours * 3_600_000L, t0)
+        val mayGoDirect = OhttpPrivacy.spendMayGoDirect(kind, lapseInMs)
+        val relayState = local.relay(u)
+        // Backing off after the relay failed: don't knock again before the retry time unless this spend may go direct.
+        if (kind != PrivateSpendKind.INTERACTIVE && t0 < relayState.retryAt && !mayGoDirect) {
+            if (kind == PrivateSpendKind.TRICKLE) local.nextSpendAt = relayState.retryAt
+            return
+        }
         val vouchers = VoucherWallets.take(w, n)
         if (vouchers.size < n && what == OVERAGE) return
         if (vouchers.isEmpty()) return
@@ -280,7 +358,15 @@ class PaymentsCenter(
         )
         _state.update { it.copy(busy = true, error = null) }
         try {
-            val r = client.redeem(body)
+            val sent = client.redeemPrivately(body, s0.ohttp) { mayGoDirect }
+            val r = sent.answer
+            noteRelay(u) { cur ->
+                when {
+                    sent.path == "ohttp" -> RelayState()
+                    sent.fallbackReason != null && sent.fallbackReason != "unconfigured" -> cur.copy(lastSpendDirect = true)
+                    else -> cur.copy(lastSpendDirect = false)
+                }
+            }
             val t = now()
             val period = VoucherWallets.overagePeriod(t)
             write { cur ->
@@ -300,11 +386,12 @@ class PaymentsCenter(
                 )
             }
         } catch (e: PaymentsHttpError) {
+            if (e.via == "ohttp") noteRelay(u) { RelayState() }
             when (e.code) {
                 "voucher-spent" -> {
                     val listed = (e.body["spent"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
                     write { VoucherWallets.markSpent(it, listed) }
-                    if (retry && listed.isNotEmpty()) return spend(n, what, retry = false)
+                    if (retry && listed.isNotEmpty()) return spend(n, what, retry = false, kind = kind)
                 }
                 "bad-voucher" -> {
                     (e.body["nullifier"] as? JsonPrimitive)?.contentOrNull?.let { nf -> write { VoucherWallets.markSpent(it, listOf(nf)) } }
@@ -312,11 +399,28 @@ class PaymentsCenter(
                 "plan-paid-ahead" -> Unit
                 else -> _state.update { it.copy(error = e.code ?: "unavailable") }
             }
+        } catch (e: RelayUnavailableException) {
+            // Nothing was spent: the vouchers stay in the wallet and the plan stays as it is. With no relay set up
+            // there is nothing to back off from; a failing relay is tried again after the backoff.
+            if (e.reason != "unconfigured") {
+                val next = noteRelay(u) { cur ->
+                    val failures = cur.failures + 1
+                    cur.copy(failures = failures, retryAt = now() + OhttpPrivacy.relayRetryAfterMs(failures))
+                }
+                if (kind == PrivateSpendKind.TRICKLE) local.nextSpendAt = next.retryAt
+            }
         } catch (_: Exception) {
             _state.update { it.copy(error = "unavailable") }
         } finally {
             _state.update { it.copy(busy = false) }
         }
+    }
+
+    private fun noteRelay(username: String, change: (RelayState) -> RelayState): RelayState {
+        val next = change(local.relay(username))
+        local.setRelay(username, next)
+        _state.update { it.copy(relay = next) }
+        return next
     }
 
     /** The served key [keyId] (issuing or only accepting), or null. */

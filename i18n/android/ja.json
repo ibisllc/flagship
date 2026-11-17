@@ -4276,5 +4276,27 @@
   "payments_balance_months": {
     "one": "%2$s 約 %1$s か月分",
     "other": "%2$s 約 %1$s か月分"
-  }
+  },
+  "payments_privacy_relay_waiting": "プライベートリレーが応答していません。支払いは待機して再試行します。その間もプランは有効なままです。",
+  "payments_privacy_relay_went_direct": "プライベートリレーが応答しなかったため、前回の支払いは Flagship に直接送られました。",
+  "payments_privacy_relay_third_party": "支払いは %1$s のプライベートリレーを経由するため、支払い時に Flagship があなたのネットワークアドレスを見ることはありません。",
+  "payments_privacy_relay_interim": "支払いは、現在 Flagship が運営するプライベートリレーを経由します。支払いログにあなたのアドレスは残りませんが、まだ独立した運営者ではありません。",
+  "payments_privacy_no_relay": "支払い時、Flagship はあなたのネットワークアドレスを見ることができます。それを保存することは一切ありません。",
+  "proxy_status_working": "動作中",
+  "proxy_code_unreachable": "プロキシに接続できません。",
+  "proxy_code_auth": "プロキシがユーザー名またはパスワードを拒否しました。",
+  "proxy_code_refused": "プロキシが接続を拒否しました。",
+  "proxy_code_protocol": "プロキシがサーバーの理解できない応答を返しました。",
+  "proxy_alert_failing": "送信プロキシが動作していません：%1$s",
+  "proxy_alert_offline": "プロキシが再び動作するか、あなたが変更するまで、このサーバーはオフラインです。",
+  "proxy_alert_fallback": "送信プロキシが動作していないため、このサーバーは直接接続しています：%1$s",
+  "proxy_home_badge": "送信プロキシ停止中",
+  "activity_proxy_failing": "送信プロキシが動作していません",
+  "activity_proxy_fallback": "直接接続中：送信プロキシが動作していません",
+  "activity_proxy_ok": "送信プロキシが再び動作しています",
+  "proxy_push_body": "サーバーの 1 台が送信プロキシを使えません。Flagship を開いて理由を確認してください。",
+  "proxy_channel_name": "送信プロキシ",
+  "proxy_channel_desc": "サーバーの送信プロキシが動作しなくなりました。",
+  "proxy_lane_sent": "送信しました。プロキシが停止していても、サーバーは数分以内に変更を受け取ります。",
+  "proxy_lane_needs_password": "Flagship がプロキシのパスワードを運ぶことはありません。新しいパスワードを使うには、サーバーと同じネットワークから変更するか、先にプロキシをオフにしてください。"
 }

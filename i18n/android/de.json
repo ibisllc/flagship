@@ -4276,5 +4276,27 @@
   "payments_balance_months": {
     "one": "Etwa %1$s Monat %2$s",
     "other": "Etwa %1$s Monate %2$s"
-  }
+  },
+  "payments_privacy_relay_waiting": "Das private Relay antwortet nicht. Zahlungen warten und werden erneut versucht; dein Tarif bleibt so lange aktiv.",
+  "payments_privacy_relay_went_direct": "Das private Relay hat nicht geantwortet, deshalb ging die letzte Zahlung direkt an Flagship.",
+  "payments_privacy_relay_third_party": "Zahlungen laufen über das private Relay von %1$s, daher sieht Flagship deine Netzwerkadresse beim Bezahlen nicht.",
+  "payments_privacy_relay_interim": "Zahlungen laufen über ein privates Relay, das vorerst Flagship betreibt. Es hält deine Adresse aus den Zahlungsprotokollen heraus, ist aber noch kein unabhängiger Betreiber.",
+  "payments_privacy_no_relay": "Flagship kann beim Bezahlen deine Netzwerkadresse sehen. Gespeichert wird nichts davon.",
+  "proxy_status_working": "Funktioniert",
+  "proxy_code_unreachable": "Der Proxy ist nicht erreichbar.",
+  "proxy_code_auth": "Der Proxy hat den Benutzernamen oder das Passwort abgelehnt.",
+  "proxy_code_refused": "Der Proxy hat die Verbindung abgelehnt.",
+  "proxy_code_protocol": "Der Proxy hat eine Antwort gegeben, die der Server nicht versteht.",
+  "proxy_alert_failing": "Der ausgehende Proxy funktioniert nicht: %1$s",
+  "proxy_alert_offline": "Dieser Server ist offline, bis sein Proxy wieder funktioniert oder du ihn änderst.",
+  "proxy_alert_fallback": "Der ausgehende Proxy funktioniert nicht, deshalb verbindet sich dieser Server direkt: %1$s",
+  "proxy_home_badge": "Ausgehender Proxy gestört",
+  "activity_proxy_failing": "Der ausgehende Proxy funktioniert nicht",
+  "activity_proxy_fallback": "Direkte Verbindung: Der ausgehende Proxy funktioniert nicht",
+  "activity_proxy_ok": "Der ausgehende Proxy funktioniert wieder",
+  "proxy_push_body": "Einer deiner Server kann seinen ausgehenden Proxy nicht nutzen. Öffne Flagship, um den Grund zu sehen.",
+  "proxy_channel_name": "Ausgehender Proxy",
+  "proxy_channel_desc": "Der ausgehende Proxy eines Servers funktioniert nicht mehr.",
+  "proxy_lane_sent": "Gesendet. Der Server übernimmt die Änderung innerhalb weniger Minuten, auch wenn sein Proxy ausgefallen ist.",
+  "proxy_lane_needs_password": "Flagship überträgt nie Proxy-Passwörter. Um ein neues Passwort zu verwenden, ändere es im selben Netzwerk wie der Server oder schalte den Proxy zuerst aus."
 }
