@@ -152,11 +152,12 @@ object CallStageModel {
     }
 }
 
-internal val CallTop = Color(0xFF1C2130)
-internal val CallBottom = Color(0xFF080A12)
+// The design system's warm near-black and cream ink (as iOS CallStageColors and voi.ci), not a navy gradient.
+internal val CallCanvas = Color(0xFF0F0E0C)
+internal val CallInk = Color(0xFFECE7D6)
+private val CallAvatar = Color(0xFF2E2B24)
 private val CallRed = Color(0xFFE5393A)
 private val CallGreen = Color(0xFF2FB457)
-private val CallBackground = Brush.verticalGradient(listOf(CallTop, CallBottom))
 
 @Composable
 fun VoiciCallStage(state: CallStageState, actions: CallStageActions, tag: String) {
@@ -174,7 +175,7 @@ fun VoiciCallStage(state: CallStageState, actions: CallStageActions, tag: String
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(CallBackground)
+            .background(CallCanvas)
             // Only a video call's stage taps to hide the controls. A disabled clickable would still merge every
             // label under it into one disabled node (TalkBack read the whole stage as one; tests found no status).
             .then(
@@ -212,7 +213,7 @@ fun VoiciCallStage(state: CallStageState, actions: CallStageActions, tag: String
         state.notice?.let { n ->
             Text(
                 n,
-                color = Color.White,
+                color = CallInk,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
@@ -220,7 +221,7 @@ fun VoiciCallStage(state: CallStageState, actions: CallStageActions, tag: String
                     .safeDrawingPadding()
                     .padding(16.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.16f))
+                    .background(CallInk.copy(alpha = 0.16f))
                     .clickable { actions.dismissNotice() }
                     .padding(12.dp)
                     .semantics { liveRegion = LiveRegionMode.Polite },
@@ -235,7 +236,7 @@ private fun Header(state: CallStageState, compact: Boolean, tag: String) {
         if (!compact) Avatar(state.name, 112)
         Text(
             state.name,
-            color = Color.White,
+            color = CallInk,
             style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
@@ -246,14 +247,14 @@ private fun Header(state: CallStageState, compact: Boolean, tag: String) {
         StatusLine(state, compact, tag)
         if (!compact) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                Icon(Icons.Filled.Lock, contentDescription = null, tint = Color.White.copy(alpha = 0.55f), modifier = Modifier.size(14.dp))
-                Text(stringResource(R.string.voici_call_e2e), color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                Icon(Icons.Filled.Lock, contentDescription = null, tint = CallInk.copy(alpha = 0.55f), modifier = Modifier.size(14.dp))
+                Text(stringResource(R.string.voici_call_e2e), color = CallInk.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
             }
         }
         if (state.remoteCameraPaused) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Filled.VideocamOff, contentDescription = null, tint = Color.White.copy(alpha = 0.75f), modifier = Modifier.size(16.dp))
-                Text(stringResource(R.string.voici_call_camera_paused), color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.bodySmall)
+                Icon(Icons.Filled.VideocamOff, contentDescription = null, tint = CallInk.copy(alpha = 0.75f), modifier = Modifier.size(16.dp))
+                Text(stringResource(R.string.voici_call_camera_paused), color = CallInk.copy(alpha = 0.75f), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -275,7 +276,7 @@ private fun StatusLine(state: CallStageState, compact: Boolean, tag: String) {
     } else state.status
     Text(
         text,
-        color = Color.White.copy(alpha = 0.75f),
+        color = CallInk.copy(alpha = 0.75f),
         style = style,
         textAlign = TextAlign.Center,
         modifier = Modifier.testTag("$tag-status").let { if (since == null || state.over) it.semantics { liveRegion = LiveRegionMode.Polite } else it },
@@ -285,10 +286,10 @@ private fun StatusLine(state: CallStageState, compact: Boolean, tag: String) {
 @Composable
 private fun Avatar(name: String, sizeDp: Int) {
     Box(
-        Modifier.size(sizeDp.dp).clip(CircleShape).background(Brush.verticalGradient(listOf(Color(0xFF737373), Color(0xFF474747)))),
+        Modifier.size(sizeDp.dp).clip(CircleShape).background(CallAvatar).border(1.dp, CallInk.copy(alpha = 0.12f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(CallStageModel.initial(name), color = Color.White, fontSize = MaterialTheme.typography.displayMedium.fontSize, fontWeight = FontWeight.Medium)
+        Text(CallStageModel.initial(name), color = CallInk, fontSize = MaterialTheme.typography.displayMedium.fontSize, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -331,8 +332,8 @@ enum class CallButtonStyle { Plain, Selected, End, Answer }
 @Composable
 fun CallRoundButton(icon: ImageVector, label: String, style: CallButtonStyle, onClick: () -> Unit, modifier: Modifier = Modifier, state: String? = null) {
     val fill = when (style) {
-        CallButtonStyle.Plain -> Color.White.copy(alpha = 0.16f)
-        CallButtonStyle.Selected -> Color.White
+        CallButtonStyle.Plain -> CallInk.copy(alpha = 0.16f)
+        CallButtonStyle.Selected -> CallInk
         CallButtonStyle.End -> CallRed
         CallButtonStyle.Answer -> CallGreen
     }
@@ -349,9 +350,9 @@ fun CallRoundButton(icon: ImageVector, label: String, style: CallButtonStyle, on
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.size(68.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = if (style == CallButtonStyle.Selected) Color.Black else Color.White, modifier = Modifier.size(28.dp))
+            Icon(icon, contentDescription = null, tint = if (style == CallButtonStyle.Selected) CallCanvas else CallInk, modifier = Modifier.size(28.dp))
         }
-        Text(label, color = Color.White, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(label, color = CallInk, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }
 
@@ -446,7 +447,7 @@ private fun LocalTile(state: CallStageState, stageW: Float, stageH: Float, compa
             .height(h.dp)
             .shadow(8.dp, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+            .border(1.dp, CallInk.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
             .pointerInput(stageW, stageH, compact) {
                 detectDragGestures(
                     onDragEnd = { corner = CallStageModel.nearestCorner(x.value + w / 2, y.value + h / 2, stageW, stageH) },
@@ -488,7 +489,7 @@ private fun proximityLock(context: Context): PowerManager.WakeLock? {
  */
 @Composable
 fun VoiciRingingStage(name: String, status: String, onDecline: () -> Unit, onAnswer: (() -> Unit)?, onOpenApp: (() -> Unit)?) {
-    Box(Modifier.fillMaxSize().background(CallBackground)) {
+    Box(Modifier.fillMaxSize().background(CallCanvas)) {
         Column(
             Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -496,9 +497,9 @@ fun VoiciRingingStage(name: String, status: String, onDecline: () -> Unit, onAns
             Spacer(Modifier.height(80.dp))
             Avatar(name, 112)
             Spacer(Modifier.height(12.dp))
-            Text(name, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+            Text(name, color = CallInk, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(12.dp))
-            Text(status, color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.testTag("voici-call-status").semantics { liveRegion = LiveRegionMode.Polite })
+            Text(status, color = CallInk.copy(alpha = 0.75f), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.testTag("voici-call-status").semantics { liveRegion = LiveRegionMode.Polite })
             Spacer(Modifier.weight(1f))
             Row(Modifier.fillMaxWidth().padding(bottom = 32.dp), verticalAlignment = Alignment.Top) {
                 CallRoundButton(Icons.Filled.CallEnd, stringResource(R.string.voici_call_decline), CallButtonStyle.End, onDecline, Modifier.weight(1f).testTag("voici-call-decline"))
