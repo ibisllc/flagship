@@ -40,7 +40,8 @@ class GymActivityTest : GymBase() {
         waitText("App installed")
         assertEquals("the owner's own writes stay out", 0, textCount("/api/screens/services"))
         assertEquals("the account's events wait in their own section", 0, textCount("A device joined the account"))
-        val time = textOfTag("activity-row-time")
+        // A server row opens its server, so its words merge into one button: read the time from the unmerged tree.
+        val time = textOfTag("activity-row-time", unmerged = true)
         assertTrue("date and time to the minute, got $time", Regex("^[A-Z][a-z]{2} \\d{1,2}, (\\d{4}, )?\\d{1,2}:\\d{2} [AP]M$").matches(time))
         gymShot("activity-server-open")
         openSection("account")
@@ -66,18 +67,18 @@ class GymActivityTest : GymBase() {
         tapText("Refresh")
         openSection("server")
         // 90 rows are three full pages; the page after them comes back short.
-        var rows = tagCount("activity-row-time")
+        var rows = tagCount("activity-row-time", unmerged = true)
         while (tagCount("activity-everything") == 0) {
             // The list scrolls inside the page: press the button by its action, wherever it sits.
             waitUntilExists("activity-load-more-server", 20_000)
             composeRule.onNodeWithTag("activity-load-more-server")
                 .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
             val before = rows
-            composeRule.waitUntil(20_000) { tagCount("activity-row-time") > before || tagCount("activity-everything") > 0 }
-            rows = tagCount("activity-row-time")
+            composeRule.waitUntil(20_000) { tagCount("activity-row-time", unmerged = true) > before || tagCount("activity-everything") > 0 }
+            rows = tagCount("activity-row-time", unmerged = true)
         }
         waitUntilExists("activity-everything", 20_000)
-        assertEquals(90, tagCount("activity-row-time"))
+        assertEquals(90, tagCount("activity-row-time", unmerged = true))
         gymShot("activity-everything")
     }
 
