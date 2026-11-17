@@ -1123,3 +1123,30 @@ Plan (in order; at most 2-3 agents at once, security and UI never on the same fi
   `0.4/ui-pass`, before/after page (private Artifact) for the owner to approve per change.
 Owner at the end: phone-to-phone call test, YubiKey steps (0.2 update notice, runtime manifest re-sign before
 ~2026-12-20), sign the webapp shell, manual testing.
+
+### 2026-11-17 — Plan A: call-desktop and the cloud fixes merged (merge agent)
+- `0.4/call-desktop` → `1858687f2` (rebased over the two journal commits; voi.ci `--check` clean, 56 voi.ci tests).
+- `0.4/webapp-boot-cloudfix`: nothing to merge. release already had the fix (`e11927161`) and its own
+  `apps/web/tests/webappModulesParse.test.ts`; release's version kept.
+- `0.4/vitest-cloudfix` → `50ae6efd4`, `2e35bf0f7` (pg guard; voi.ci call tables in the rename lists. Review the
+  classification: call keys and revocations are not renamed, so a device binds its call key again after a rename).
+- `0.4/keyd-clippy-cloudfix`: already on release as `e46b6eb88` (the rebase dropped it); keyd clippy and tests green.
+- `0.4/compose-flake-cloudfix` → `7ea537af3`.
+- `0.4/gym-cloudfix` → `89b167e9e`, `f273487ba`, `33ced0241`. Skipped as already on release: `d2cb7331e` (boot
+  fix), `e8d717bd2` (onboarding passkey: `cdb36782f` did it with `passkeyAuthenticator`), `6391e2e45` (modal in
+  the top dialog: `fd8a79cd3`).
+- `000940994`: the page-editor gym scenario failed on release itself (first publish turns messages on and adds a
+  first post, `3e4dcc328`/`23d44a7be`); the test now follows those defaults. Product note for the owner: the public
+  warning still says "Messages and calls ... are on" when the owner turned Accept messages off before the first
+  publish, and turning the switch off and on again counts as two unpublished changes.
+- `99bd4bd8e`: iOS German "Ihre Kamera" → "Deine Kamera" (`i18n/ios/de.json`, `i18n-ios.mjs build`). Two other
+  formal strings remain in iOS German, not on the call screen: "Ihr Server führt das offizielle Node.js-Binary…" and
+  "Führen Sie diese Befehle…".
+- Checks at `99bd4bd8e`: `tsc -b`, `npm run i18n`, parity green. Webapp gym 375/375 (374 + the fixed scenario,
+  7/7 in its spec after the fix). Full vitest 18219 passed, 2 failed: `apps/com/test/cronBudget.test.ts` fails
+  every time on this Mac and at the pre-merge base `8af14570f` too (voici-names+voici-gc 2.8× calibration against a
+  2.2 budget: not caused by these merges, open); `relayMesh.test.ts` MESH07b is a flake (the failing variant moves
+  between runs, 33 s to 965 s, passes at the base, no relay code changed). Android `:app:testDebugUnitTest` 3094,
+  1 failure `RetailClaimFlowTest.alarmWhenTheCertificateDoesNotMatch` (15 s wall-clock wait under load; 11/11 alone
+  three times).
+- Temporary worktree removed. Next: plan B (review-cloud F1-F9).
