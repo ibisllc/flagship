@@ -19,7 +19,8 @@ const MAX_KEYS = 8;
 /** Direct names (docs/direct-access-and-domains.md §8) a box may serve, and keys for them (one serving, one renewing). */
 export const MAX_DIRECT_NAMES = 16;
 const MAX_DIRECT_KEYS = 2 * MAX_DIRECT_NAMES;
-export const DIRECT_APEX = "fshp.app";
+// gym: the gym's own direct apex under its zone, so the gym never writes into production's fshp.app zone.
+export const DIRECT_APEX = "fshp.gym.flagship.services";
 const DIRECT_SLUG = /^[a-z0-9](?:-?[a-z0-9]){0,29}$/;
 const DIRECT_USER = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 const HANDLE = /^[0-9a-f]{32}$/;
