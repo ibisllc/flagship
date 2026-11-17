@@ -982,3 +982,14 @@ Next steps for whoever resumes:
 - ice-fix agent: local harness (turn-lite + headless Chrome) passes in every mode, so the fault is on the phone's
   WebRTC side; new `turn mix:` / `ice ufrags:` diagnostics built (gym-0.4 `e738cb1fe`, media-fix `de4ca8a16`), not
   installed: iPhone out of storage (needs ~150 MB).
+
+### 2026-11-16 — Merged `0.4/activity-social` (shell v228)
+- Activity on iOS, Android, webapp: All / Servers / Social filter; call, conversation, request, page and post entries
+  rebuilt on each draw from device data (nothing stored, nothing new on `.com`; conv-forget already removes a deleted
+  conversation's entries on every device); taps open the thread, Calls, Profile or the server. Box: scheduled backups
+  record `server.backup.scheduled` ("Scheduled backup finished"; needs an endorsed box release).
+- Tested: iOS simulator unit tests (SocialActivity, MessagesForget, ActivityViewModel, ServerArchive, VoiciOutgoingCall),
+  Android 3082 unit tests, daemon serverArchive 179, webapp 3679; i18n and parity green after the rebase. Gym UI specs
+  for Activity not run (section count may shift).
+- Owner questions: sync answered/placed calls to other devices (would put a sealed call log on `.com`)? Show call
+  length?
