@@ -993,7 +993,6 @@
   "s21895ef98c": "<1>Se gastan poco a poco.</1> No hay un cargo mensual. Tu dispositivo gasta un vale de $1 en un momento al azar y mantiene tu plan unos días por delante. Un vale compra 3 días de Pro o 36 horas de Pro Max, así que los gastos de todas las cuentas se ven iguales.",
   "sf683d0a5ff": "<1>Un periodo de gracia de 72 horas.</1> Si tus dispositivos están apagados cuando toca un gasto, tu plan sigue funcionando 72 horas después de su fin. Un gasto en ese tiempo continúa desde donde terminó el plan: nada caduca y nada es gratis.",
   "s0e57c01bd8": "<1>Un inicio al azar, si lo quieres.</1> Nuestro servidor puede ver una compra y una mejora de plan que ocurren muy juntas. Si eso te importa, inicia el plan en un momento al azar dentro de las próximas 24 horas.",
-  "s1cc4a6ac03": "<1>Un relé privado para los gastos.</1> Los gastos pasan por un relé, así que nuestro servidor no ve tu dirección de red cuando pagas. Por ahora ese relé lo gestiona Flagship; todavía no es un operador independiente.",
   "sf3b6702d5c": "Lo que sí vemos: el plan de cada cuenta y la fecha hasta la que está pagado, porque el relé los necesita para contar el tráfico. Nunca con qué se pagó.",
   "sbec520e448": "Más datos",
   "s638472a47e": "Pasado el tráfico que incluye un plan, Pro y Pro Max pueden comprar más en bloques de 100&nbsp;GB por $5, pagados con el saldo. Un bloque se compra automáticamente cuando quedan menos de 10&nbsp;GB en el mes, hasta un límite mensual que tú fijas: $10 por defecto. Pasado el límite, tu tráfico va más lento, como en Free. Nunca te cobramos después.",
@@ -1004,5 +1003,6 @@
   "s64ab9f095a": "Cambio",
   "s6cc6119a73": "Un cambio de nombre por cuenta cada 30 días.",
   "se113968350": "¿Por qué pagar?",
-  "s0d96cc73ac": "No tienes por qué, y la mayoría de la gente nunca lo hará. Flagship funciona sin anuncios, sin capital riesgo y sin vender tus datos; el relé, el DNS y los certificados cuestan dinero de verdad. Un plan, aunque nunca lo llenes, mantiene el proyecto independiente y el plan gratuito gratis para todos los demás."
+  "s0d96cc73ac": "No tienes por qué, y la mayoría de la gente nunca lo hará. Flagship funciona sin anuncios, sin capital riesgo y sin vender tus datos; el relé, el DNS y los certificados cuestan dinero de verdad. Un plan, aunque nunca lo llenes, mantiene el proyecto independiente y el plan gratuito gratis para todos los demás.",
+  "s33d6de4f03": "<1>Un relé privado para los gastos.</1> Los gastos pasan por un relé privado que gestiona una empresa independiente, Oblivious Network, así que ni ella ni Flagship ven a la vez quién eres y qué gastas. Solo si está caído se usa un relé de respaldo que gestiona Flagship."
 }
