@@ -51,7 +51,11 @@ enum VoiciVisitorSession {
         let sig = try MessagesAttestations.signMessagesKeyAttestationRequest(request, deviceSeed: Array(device.rawRepresentation))
         let raw = try await client.attest(username: username, request: request, signature: sig, integrity: evidence.json,
                                           previous: renewOf.isEmpty ? nil : kept?.json, device: signer)
-        guard case .ok(let att) = MessagesAttestations.checkMessagesKeyAttestation(raw, caKeys: ca, now: now, pseudonymPub: pseudonymPub) else {
+        // `.com`'s clock may run a little ahead of this phone's (and it answers after `now` was read): judge a
+        // just-issued attestation at its own issuedAt, as Android does.
+        let issued = MessagesAttestations.parseMessagesKeyAttestation(raw)?.issuedAt ?? now
+        let checkAt = issued > now && issued - now <= VoiciMessages.sendSkewMs ? issued : now
+        guard case .ok(let att) = MessagesAttestations.checkMessagesKeyAttestation(raw, caKeys: ca, now: checkAt, pseudonymPub: pseudonymPub) else {
             throw VoiciComError(status: 200, code: "bad-attestation")
         }
         if let text = try? CanonicalJson.canonicalJson(att.json) { UserDefaults.standard.set(text, forKey: storeKey) }
