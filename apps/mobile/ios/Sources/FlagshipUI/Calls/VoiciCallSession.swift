@@ -115,6 +115,8 @@ final class VoiciCallSession {
     private static func now() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
     private static func randHex(_ n: Int) -> String { CanonicalJson.hex((0..<n).map { _ in UInt8.random(in: 0...255) }) }
 
+    private var joinKind = "device-key"
+
     func connect() {
         let path = "/api/voici/calls/\(push.callId)/device"
         guard let url = URL(string: "wss://\(push.room)\(path)?u=\(keys.username)"), let headers = keys.roomHeaders(callId: push.callId, path: path) else {
@@ -122,6 +124,9 @@ final class VoiciCallSession {
         }
         var req = URLRequest(url: url, timeoutInterval: 20)
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        // Which join this is (the call key while Flagship is locked, else the device key), so a refused join says which.
+        joinKind = keys.callKey == nil ? "device-key" : "call-key"
+        voiciCallLog.notice("room join: \(self.joinKind, privacy: .public)")
         media.onLocalIce = { [weak self] c in Task { @MainActor in self?.send(["t": "ice", "candidate": c.map { .string($0) } ?? .null]) } }
         media.onConnected = { [weak self] in Task { @MainActor in self?.onEvent(.connected) } }
         media.setOnPathOpen { [weak self] in Task { @MainActor in self?.onEvent(.pathOpen) } }
@@ -143,7 +148,13 @@ final class VoiciCallSession {
                 case .success:
                     self.receive()
                 case .failure:
-                    self.end("failed", why: "room-socket-closed")
+                    // A refused upgrade (403: the server didn't accept this device's join) reads differently from a drop.
+                    let status = (self.task?.response as? HTTPURLResponse)?.statusCode
+                    if let status, status != 101 {
+                        self.end("failed", why: "room-join-refused-\(status)-\(self.joinKind)")
+                    } else {
+                        self.end("failed", why: "room-socket-closed")
+                    }
                 }
             }
         }
