@@ -3839,8 +3839,6 @@
   "More data": "Mehr Daten",
   "When the month's data runs low, buy more from the balance, up to:": "Wenn die Daten des Monats knapp werden, mehr vom Guthaben kaufen, bis zu:",
   "Add to your balance": "Guthaben aufladen",
-  "Not on sale yet. Buying opens in a later update.": "Noch nicht im Verkauf. Kaufen ist in einem späteren Update möglich.",
-  "Card": "Karte",
   "Coming soon": "Demnächst",
   "Monero": "Monero",
   "In the iPhone and Android apps": "In den iPhone- und Android-Apps",
@@ -3848,5 +3846,16 @@
   "Test server only: free vouchers for trying the plans.": "Nur auf dem Testserver: kostenlose Gutscheine zum Ausprobieren der Tarife.",
   "Start {0}?": "{0} starten?",
   "This spends from your prepaid balance.": "Das wird von deinem Prepaid-Guthaben bezahlt.",
-  "Added 30 test vouchers.": "30 Testgutscheine hinzugefügt."
+  "Added 30 test vouchers.": "30 Testgutscheine hinzugefügt.",
+  "Card payments aren't available right now.": "Kartenzahlungen sind gerade nicht verfügbar.",
+  "The payment hasn't gone through yet. Your vouchers will appear once it does.": "Die Zahlung ist noch nicht durch. Deine Gutscheine erscheinen, sobald sie es ist.",
+  "That payment was refunded or disputed, so it added nothing.": "Diese Zahlung wurde erstattet oder angefochten und hat daher nichts hinzugefügt.",
+  "That payment couldn't be added to this balance.": "Diese Zahlung konnte diesem Guthaben nicht hinzugefügt werden.",
+  "The payment service didn't answer. Your purchase is kept; try again in a moment.": "Der Zahlungsdienst hat nicht geantwortet. Dein Kauf bleibt erhalten; versuche es gleich noch einmal.",
+  "Pay by card with Stripe. Stripe sees your card; Flagship sees that vouchers were bought, never which account they go to.": "Mit Karte über Stripe bezahlen. Stripe sieht deine Karte; Flagship sieht, dass Gutscheine gekauft wurden, nie, an welches Konto sie gehen.",
+  "Buy {0}": "{0} kaufen",
+  "Vouchers don't expire and aren't refunded.": "Gutscheine verfallen nicht und werden nicht erstattet.",
+  "Waiting for a payment to go through.": "Warte darauf, dass eine Zahlung durchgeht.",
+  "Added {0} to your balance.": "{0} zu deinem Guthaben hinzugefügt.",
+  "Payment cancelled. Nothing was charged.": "Zahlung abgebrochen. Es wurde nichts berechnet."
 }

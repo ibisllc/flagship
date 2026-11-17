@@ -1,12 +1,22 @@
 // Settings → Plan in the webapp (lib/plan.js, views/plan.js) against `.com`'s real voucher handlers
 // (control-plane blindVouchers.ts) behind a fake fetch: test vouchers, the sealed wallet's compare-and-set and
-// merge, the trickle, the overage block, and the section's text (round dollars, never units; not on sale yet).
+// merge, the trickle, the overage block, the Stripe shop (checkout, the return, the paid issue), and the section's
+// text (round dollars, never units).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_PAYMENTS_CONFIG } from "@flagship/protocol";
-import { InMemoryBlindVoucherStorage, InMemoryMeterStorage, InMemoryTierStorage } from "@flagship/storage";
-import { handlePaymentsConfig, handleVoucherIssue, handleVoucherRedeem, voucherSigningKeysFromEnv } from "@flagship/control-plane";
+import { InMemoryBlindVoucherStorage, InMemoryMeterStorage, InMemoryTierStorage, InMemoryVoucherPaymentStorage } from "@flagship/storage";
+import {
+  handlePaidIssue,
+  handlePaymentsConfig,
+  handleStripeVoucherCheckout,
+  handleVoucherIssue,
+  handleVoucherRedeem,
+  railsSummary,
+  voucherSigningKeysFromEnv,
+  type VoucherRailsDeps,
+} from "@flagship/control-plane";
 
 vi.mock("../public/webapp/lib/router.js", () => ({ $: () => null, registerView: () => {}, show: () => {} }));
 vi.mock("../public/webapp/lib/toast.js", () => ({ toast: () => {} }));
@@ -28,13 +38,56 @@ function fakeCom(now: () => number, opts: { remainingBytes?: number } = {}) {
   const meter = new InMemoryMeterStorage();
   const wallet: { version: number; blob: unknown | null } = { version: 0, blob: null };
   const calls: Array<{ path: string; init: RequestInit | undefined }> = [];
+  // A stand-in for Stripe's API behind `.com`'s real rail handlers: sessions keep the form's metadata; `paid` flips them.
+  const stripe = { sessions: new Map<string, Record<string, unknown>>(), paid: true };
+  const rails: VoucherRailsDeps = {
+    keys,
+    config: DEFAULT_PAYMENTS_CONFIG,
+    payments: new InMemoryVoucherPaymentStorage(),
+    now,
+    stripe: {
+      secretKey: "rk_test_webapp",
+      livemode: false,
+      successUrl: "https://webapp.flagshipserver.test/?shop=stripe&session_id={CHECKOUT_SESSION_ID}",
+      cancelUrl: "https://webapp.flagshipserver.test/?shop=cancel",
+      taxBehavior: "inclusive",
+      taxCode: "txcd_10000000",
+      fetch: (async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          const form = new URLSearchParams(String(init.body));
+          const id = `cs_test_${String(stripe.sessions.size).padStart(8, "0")}`;
+          const units = Number(form.get("line_items[0][quantity]"));
+          stripe.sessions.set(id, {
+            id,
+            livemode: false,
+            mode: "payment",
+            currency: "usd",
+            amount_subtotal: units * 100,
+            metadata: Object.fromEntries([...form.entries()].filter(([k]) => k.startsWith("metadata[")).map(([k, v]) => [k.slice(9, -1), v])),
+          });
+          return new Response(JSON.stringify({ id, url: `https://checkout.stripe.com/c/pay/${id}` }));
+        }
+        const s = stripe.sessions.get(decodeURIComponent(url.split("/").pop()!));
+        if (!s) return new Response("{}", { status: 404 });
+        return new Response(JSON.stringify({ ...s, status: stripe.paid ? "complete" : "open", payment_status: stripe.paid ? "paid" : "unpaid" }));
+      }) as typeof fetch,
+    },
+  };
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   const fetch = async (url: string, init?: RequestInit) => {
     const path = new URL(url).pathname;
     calls.push({ path, init });
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (path === "/api/payments/config") {
-      const r = handlePaymentsConfig({ config: DEFAULT_PAYMENTS_CONFIG, keys, testIssue: true, now });
+      const r = handlePaymentsConfig({ config: DEFAULT_PAYMENTS_CONFIG, keys, testIssue: true, rails: railsSummary(rails), now });
+      return json(r.status, r.body);
+    }
+    if (path === "/api/vouchers/stripe/checkout") {
+      const r = await handleStripeVoucherCheckout(rails, body);
+      return json(r.status, r.body);
+    }
+    if (path === "/api/vouchers/paid-issue") {
+      const r = await handlePaidIssue(rails, body);
       return json(r.status, r.body);
     }
     if (path === "/api/vouchers/test-issue") {
@@ -68,7 +121,7 @@ function fakeCom(now: () => number, opts: { remainingBytes?: number } = {}) {
     if (path === `/api/users/${U}/allowance`) return json(200, { remainingBytes: opts.remainingBytes ?? 200 * GB });
     return json(404, {});
   };
-  return { fetch, readFetch, store, tiers, meter, wallet, calls };
+  return { fetch, readFetch, store, tiers, meter, wallet, calls, stripe, rails };
 }
 
 let t = Date.UTC(2026, 10, 17, 12);
@@ -93,6 +146,63 @@ const deps = (com: ReturnType<typeof fakeCom>, extra: Record<string, unknown> = 
 
 beforeEach(() => {
   t = Date.UTC(2026, 10, 17, 12);
+});
+
+describe("webapp plan: the Stripe shop against .com's rail handlers", () => {
+  it("buys a pack: a checkout that names nobody, the return, signatures for the paid session, vouchers in the wallet", async () => {
+    const com = fakeCom(now);
+    const d = deps(com);
+    const { url, sessionId } = await P.buyWithStripe(30, d);
+    expect(url).toBe(`https://checkout.stripe.com/c/pay/${sessionId}`);
+    const order = com.calls.find((c) => c.path === "/api/vouchers/stripe/checkout")!;
+    expect(order.init?.credentials).toBe("omit");
+    expect(JSON.stringify(JSON.parse(String(order.init?.body)))).not.toContain(U);
+    expect(P.pendingShopOrders(d.store)).toHaveLength(1);
+
+    // Not paid yet: the order waits.
+    com.stripe.paid = false;
+    expect(await P.finishShopOrders(d)).toMatchObject({ added: 0, refused: [] });
+    expect(P.pendingShopOrders(d.store)).toHaveLength(1);
+
+    com.stripe.paid = true;
+    const res = await P.finishShopOrders(d);
+    expect(res.added).toBe(30);
+    expect(res.wallet.wallet.vouchers).toHaveLength(30);
+    expect(P.pendingShopOrders(d.store)).toHaveLength(0);
+    const issue = com.calls.find((c) => c.path === "/api/vouchers/paid-issue")!;
+    expect(issue.init?.credentials).toBe("omit");
+    expect(Object.keys(issue.init?.headers as Record<string, string>)).toEqual(["content-type"]);
+    // The wallet `.com` holds is sealed and has the 30 vouchers.
+    const loaded = await P.loadWallet(DEFAULT_PAYMENTS_CONFIG, d);
+    expect(loaded.wallet.vouchers).toHaveLength(30);
+  });
+
+  it("drops an order .com refuses for good and keeps another account's orders for that account", async () => {
+    const com = fakeCom(now);
+    const d = deps(com);
+    await P.buyWithStripe(10, d);
+    const orders = P.pendingShopOrders(d.store);
+    d.store.set("flagship.shop.pending", JSON.stringify([{ ...orders[0], blinded: orders[0].blinded.slice(1) }, { ...orders[0], sessionId: "cs_test_other000", username: "someone-else" }]));
+    const res = await P.finishShopOrders(d);
+    expect(res).toMatchObject({ added: 0, refused: ["payment-invalid"] });
+    expect(P.pendingShopOrders(d.store).map((o: { username: string }) => o.username)).toEqual(["someone-else"]);
+  });
+
+  it("notes the return from Stripe and tidies the address", () => {
+    const session = new Map<string, string>();
+    const ss = { getItem: (k: string) => session.get(k) ?? null, setItem: (k: string, v: string) => void session.set(k, v), removeItem: (k: string) => void session.delete(k) };
+    let replaced = "";
+    const hist = { replaceState: (_: unknown, __: string, u: string) => void (replaced = u) };
+    expect(P.takeShopReturn({ href: "https://webapp.flagshipserver.com/?shop=stripe&session_id=cs_test_x#plan" }, hist, ss)).toBe("stripe");
+    expect(replaced).toBe("/#plan");
+    expect(P.consumeShopReturn(ss)).toBe("stripe");
+    expect(P.consumeShopReturn(ss)).toBeNull();
+    expect(P.takeShopReturn({ href: "https://webapp.flagshipserver.com/?wake=1" }, hist, ss)).toBeNull();
+  });
+
+  it("commits to the blinded set exactly as .com does", () => {
+    expect(W.voucherOrderCommit("0123456789abcdef", ["AA==", "BB=="])).toBe("696591b0a66965fb43af0cfe2eb68de883fa1a6d1bc42cf739c68157830fb01d");
+  });
 });
 
 describe("webapp plan: wallet, trickle and overage against .com's handlers", () => {
@@ -196,12 +306,15 @@ describe("webapp plan: the section", () => {
     expect(html).toContain("$20 a month, 500 GB");
   });
 
-  it("offers the shop disabled, the test button only on the gym, and reads only on other devices", () => {
-    const m = { config: cfg, wallet: wallet(0, null), planState: { plan: null, paidUntil: 0 }, admin: true, testIssue: true, now: t };
+  it("offers the card shop when Stripe is on, the test button only on the gym, and reads only on other devices", () => {
+    const m = { config: cfg, wallet: wallet(0, null), planState: { plan: null, paidUntil: 0 }, admin: true, testIssue: true, now: t, rails: { stripe: true, apple: true, google: false } };
     const html = V.planViewHtml(m);
-    expect(html).toContain("Not on sale yet.");
-    for (const p of cfg.packs) expect(html).toMatch(new RegExp(`disabled data-testid="plan-pack-${p}"`));
+    for (const p of cfg.packs) expect(html).toContain(`data-buy="${p}" data-testid="plan-pack-${p}">Buy $${p}<`);
+    expect(html).toContain("never which account they go to");
     expect(html).toContain("In the iPhone and Android apps");
+    expect(V.planViewHtml({ ...m, rails: { stripe: false, apple: false, google: false } })).toContain("Card payments aren't available right now.");
+    expect(V.planViewHtml({ ...m, pendingOrders: 1 })).toContain('data-testid="plan-shop-waiting"');
+    expect(V.planViewHtml({ ...m, admin: false })).toContain('data-testid="plan-pack-30" disabled');
     expect(html).toContain('id="plan-add-test"');
     expect(V.planViewHtml({ ...m, testIssue: false })).not.toContain("plan-add-test");
     const ro = V.planViewHtml({ ...m, admin: false });
@@ -220,12 +333,12 @@ describe("webapp plan: the section", () => {
 
 describe("webapp plan: wiring", () => {
   const read = (p: string) => readFileSync(join(root, "apps/web/public/webapp", p), "utf8");
-  it("has a Settings row, a view, a precached module set and the v230 shell", () => {
+  it("has a Settings row, a view, a precached module set and the v231 shell", () => {
     expect(read("index.html")).toContain('id="settings-tab-plan"');
     expect(read("index.html")).toContain('id="view-plan"');
     expect(read("app.js")).toContain('wire("settings-tab-plan", enterPlan)');
     const sw = read("service-worker.js");
     for (const f of ["/lib/vouchers.js", "/lib/plan.js", "/views/plan.js"]) expect(sw).toContain(`"${f}"`);
-    expect(sw).toContain('SHELL_VERSION = "v230"');
+    expect(sw).toContain('SHELL_VERSION = "v231"');
   });
 });

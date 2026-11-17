@@ -1,7 +1,7 @@
 // Settings → Plan (docs/payments-privacy-and-rails.md §6 and "As built"): the account's plan and time left, the
 // prepaid balance shown as round dollars, the plan choice, auto-pay, the random start, the monthly overage cap and
-// the shop (not on sale yet: the card, Monero and app store rails come in later steps). Only an admin device of the
-// account changes anything or spends; every other device reads.
+// the shop (cards through Stripe Checkout, §11; Monero comes later; the phone apps sell through their stores). Only an
+// admin device of the account changes anything, buys or spends; every other device reads.
 
 import { $, registerView, show } from "../lib/router.js";
 import { toast } from "../lib/toast.js";
@@ -9,7 +9,19 @@ import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 import { canSignAdminOrders } from "../lib/addServerGate.js";
 import { dateLocale, tr, trn } from "../lib/i18n.js";
-import { addTestVouchers, loadPaymentsConfig, loadPlanState, loadWallet, PlanError, saveSettings, spendTick } from "../lib/plan.js";
+import {
+  addTestVouchers,
+  buyWithStripe,
+  consumeShopReturn,
+  finishShopOrders,
+  loadPaymentsConfig,
+  loadPlanState,
+  loadWallet,
+  pendingShopOrders,
+  PlanError,
+  saveSettings,
+  spendTick,
+} from "../lib/plan.js";
 import { isPaidPlan, monthsOfPlan } from "../lib/vouchers.js";
 
 registerView("view-plan");
@@ -33,6 +45,18 @@ export function planErrorText(code) {
       return tr("Test vouchers aren't available here.");
     case "rate-limited":
       return tr("Too many tries. Try again in a few minutes.");
+    case "rail-off":
+      return tr("Card payments aren't available right now.");
+    case "payment-unpaid":
+      return tr("The payment hasn't gone through yet. Your vouchers will appear once it does.");
+    case "payment-refunded":
+      return tr("That payment was refunded or disputed, so it added nothing.");
+    case "payment-used":
+    case "payment-invalid":
+    case "wrong-count":
+      return tr("That payment couldn't be added to this balance.");
+    case "rail-unreachable":
+      return tr("The payment service didn't answer. Your purchase is kept; try again in a moment.");
     default:
       return tr("Something went wrong. Try again.");
   }
@@ -70,6 +94,8 @@ export function overageCapOptions(cfg) {
 /** The section's HTML for a model; pure so tests can read it. */
 export function planViewHtml(m) {
   const { config: cfg, wallet, planState, admin, testIssue, now } = m;
+  const rails = m.rails ?? { stripe: false, apple: false, google: false };
+  const waiting = m.pendingOrders ?? 0;
   const s = wallet.settings;
   const dis = admin ? "" : " disabled";
   const bal = balanceText(cfg, wallet);
@@ -108,13 +134,18 @@ export function planViewHtml(m) {
     </div>
     <h2 class="mt-4">${escapeHtml(tr("Add to your balance"))}</h2>
     <div class="card" data-testid="plan-shop">
-      <p class="note">${escapeHtml(tr("Not on sale yet. Buying opens in a later update."))}</p>
+      ${
+        rails.stripe
+          ? `<p class="caption">${escapeHtml(tr("Pay by card with Stripe. Stripe sees your card; Flagship sees that vouchers were bought, never which account they go to."))}</p>
       <div class="row-2">
-        ${cfg.packs.map((p) => `<button class="secondary" disabled data-testid="plan-pack-${p}">${escapeHtml(usd(p * cfg.unitUsd))}</button>`).join("")}
+        ${cfg.packs.map((p) => `<button class="secondary" id="plan-buy-${p}" data-buy="${p}" data-testid="plan-pack-${p}"${dis}>${escapeHtml(tr("Buy {0}", usd(p * cfg.unitUsd)))}</button>`).join("")}
       </div>
-      <div class="row"><span class="label">${escapeHtml(tr("Card"))}</span><span class="pill">${escapeHtml(tr("Coming soon"))}</span></div>
+      <p class="caption">${escapeHtml(tr("Vouchers don't expire and aren't refunded."))}</p>`
+          : `<p class="note">${escapeHtml(tr("Card payments aren't available right now."))}</p>`
+      }
+      ${waiting > 0 ? `<p class="caption" data-testid="plan-shop-waiting">${escapeHtml(tr("Waiting for a payment to go through."))}</p>` : ""}
       <div class="row"><span class="label">${escapeHtml(tr("Monero"))}</span><span class="pill">${escapeHtml(tr("Coming soon"))}</span></div>
-      <div class="row"><span class="label">${escapeHtml(tr("In the iPhone and Android apps"))}</span><span class="pill">${escapeHtml(tr("Coming soon"))}</span></div>
+      <div class="row"><span class="label">${escapeHtml(tr("In the iPhone and Android apps"))}</span><span class="pill">${escapeHtml(rails.apple || rails.google ? tr("Available") : tr("Coming soon"))}</span></div>
     </div>
     ${testIssue && admin ? `<div class="card mt-3" data-testid="plan-test"><button class="secondary" id="plan-add-test">${escapeHtml(tr("Add 30 test vouchers"))}</button><p class="caption">${escapeHtml(tr("Test server only: free vouchers for trying the plans."))}</p></div>` : ""}
   `;
@@ -125,7 +156,7 @@ let model = null;
 async function loadModel() {
   const pc = await loadPaymentsConfig();
   const [planState, cur] = await Promise.all([loadPlanState().catch(() => ({ plan: null, paidUntil: 0 })), loadWallet(pc.config)]);
-  return { ...pc, planState, cur, wallet: cur.wallet, admin: canSignAdminOrders(), now: Date.now() };
+  return { ...pc, planState, cur, wallet: cur.wallet, admin: canSignAdminOrders(), now: Date.now(), pendingOrders: pendingShopOrders().length };
 }
 
 function paint() {
@@ -138,6 +169,33 @@ function paint() {
   $("plan-delay-start")?.addEventListener("change", (e) => change({ delayStart: e.target.checked }));
   $("plan-overage-cap")?.addEventListener("change", (e) => change({ overageCapUnits: Number(e.target.value) }));
   $("plan-add-test")?.addEventListener("click", () => addTest());
+  root.querySelectorAll("[data-buy]").forEach((el) => el.addEventListener("click", () => buy(Number(el.dataset.buy))));
+}
+
+async function buy(units) {
+  try {
+    const { url } = await buyWithStripe(units, { paymentsConfig: model });
+    globalThis.location.assign(url);
+  } catch (e) {
+    toast(planErrorText(e instanceof PlanError ? e.code : "failed"), "err");
+  }
+}
+
+/** Pays out orders this browser bought, then says how it went if we just came back from Stripe. */
+async function finishOrders() {
+  const back = consumeShopReturn();
+  let res = { added: 0, refused: [] };
+  try {
+    res = await finishShopOrders();
+  } catch (e) {
+    if (back) toast(planErrorText(e instanceof PlanError ? e.code : "failed"), "err");
+    return { back, added: 0 };
+  }
+  if (res.added > 0) toast(tr("Added {0} to your balance.", usd(res.added)), "ok");
+  for (const code of res.refused) toast(planErrorText(code), "err");
+  if (back === "cancel") toast(tr("Payment cancelled. Nothing was charged."));
+  else if (back === "stripe" && res.added === 0 && res.refused.length === 0) toast(planErrorText("payment-unpaid"));
+  return { back, added: res.added };
 }
 
 async function run(work) {
@@ -187,18 +245,27 @@ export async function renderPlan() {
 
 /** The automatic spend on start and whenever the Plan section opens; quiet on any failure. */
 export async function planTick() {
+  let back = null;
+  try {
+    if (pendingShopOrders().length > 0 || sessionStorage.getItem("flagship.shop.return")) back = (await finishOrders()).back;
+  } catch {
+    /* tried again on the next tick */
+  }
+  if (back && !document.getElementById("view-plan")?.classList.contains("hidden")) back = null;
   try {
     await spendTick();
   } catch {
     /* the next tick tries again; the grace period covers a missed day */
   }
+  if (back) await enterPlan(false);
 }
 
 let lastTick = 0;
 
 /** planTick at most once an hour per tab: Home calls it on every visit (the "on app start" tick). */
 export function planTickSoon(now = Date.now()) {
-  if (now - lastTick < 3_600_000) return;
+  // A purchase waiting to be paid out (or just back from Stripe) doesn't wait for the hourly tick.
+  if (now - lastTick < 3_600_000 && pendingShopOrders().length === 0 && !hasShopReturn()) return;
   lastTick = now;
   void planTick();
 }
@@ -207,9 +274,17 @@ export function initPlanView() {
   $("plan-back")?.addEventListener("click", () => show("view-settings"));
 }
 
-export async function enterPlan() {
+function hasShopReturn() {
+  try {
+    return !!sessionStorage.getItem("flagship.shop.return");
+  } catch {
+    return false;
+  }
+}
+
+export async function enterPlan(tick = true) {
   show("view-plan");
   model = null;
-  await planTick();
+  if (tick) await planTick();
   await renderPlan();
 }
