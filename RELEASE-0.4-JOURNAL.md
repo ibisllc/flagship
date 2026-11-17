@@ -1494,3 +1494,28 @@ Three agents started:
 - Merged 0.4/pro-page: pro.html describes the 0.4 plans, buying by voucher on each rail, the Oblivious main relay, $5 data blocks, and the no-refund reason, in 7 languages (machine drafts). Owner decides: keep the name-change section (no purchase flow in 0.4), whether to drop noindex at launch, and final prices.
 - Merged docs/plans-and-backup-offer.md: recommends keeping Free/Pro/Pro Max, adding Business at $6/seat (min 3), cluster backup on Pro+, Flagship Vault (E2E off-site backup, included plus prepaid blocks), and invoiced blind voucher batches for companies. 15 owner decisions. Design only; nothing in 0.4 changes.
 - Owner, 2026-11-17: the enterprise concept is built in 0.5 (docs/release-0.5-list.md started).
+
+### 2026-11-17 — F6, F11, F15 done on `0.4/ci` (pushed, not merged; tip after `31d8640d8`)
+- **F11 green.** Android run 44180321542 and iOS run 44180316036 (both on `31d8640d8`): unit tests, emulator / UI
+  smoke and the iOS release-clean build all pass. Fixes it took: Android gym runs on mocks make no account calls to
+  `.com` (no read-token minter, no PQ binder, account-gone names nothing: a stray 404 had put the account-removed screen
+  over every later scenario); iOS CI fetches `@ibisllc/maintainers` (the conformance vectors) and uploads the unit
+  result bundle on failure; iOS CallKit's start-up `providerDidReset` showed "Call ended" over the whole app on an idle
+  phone (four UI smoke failures; a real bug, not only CI); PolishRules (fixed sizes, rounded fields, teal text, four
+  "box" strings, renamed in all seven languages) were already red on `release/0.4` from the folded branches; voi.ci call
+  sockets now go through the update lock. `main`'s iOS workflow has been red since 2026-11-06 for the same reasons.
+- **F15.** `builder-pipe-upgrade`: `.com` answers an outdated Studio itself before the upgrade budget and the session
+  object (`refuseOutdatedStudio`), and the Mac Studio waits 5/10/20/40/60 s before a new session after one the relay
+  never accepted (as Windows and Linux do; build + 19 pairing tests green). `account-resolve`: boxes hold their calls
+  about an account `.com` says is gone (15 min doubling to 6 h; `accountGone.ts`), and mocked Android gym runs no
+  longer mint read tokens for the fixture account. Re-check `npm run rate-limits` a week after the deploy.
+- **F6 (code done, owner steps left).** The broker's `POST /service` writes and deletes only `_acme-challenge` TXT
+  (pinned ACME account digest when set) and reads the zone; `.com` uses it when `DNS_BROKER_URL` + `DNS_BROKER_SECRET`
+  are set; release step 20 deploys it. Owner: deploy the broker, set both, issue one certificate through it, then
+  `wrangler secret delete CLOUDFLARE_DNS_API_TOKEN`. After that `.com`'s legacy DNS clean-ups (account-event record
+  removal, demo/gym teardown records, the opt-in legacy sweep, its own stale-challenge cron) skip quietly; the broker's
+  hourly cron removes stale challenges, and the wildcard layout writes no per-account records.
+- Checks: vitest (com, dns-broker, server-daemon, release) 5,717 green; `npm run i18n` ok; `npx tsc -b` clean. The 66
+  `tsc --noEmit -p apps/com` errors are in files this work did not touch (40 in `controlPlaneRoutes.ts`, tests,
+  `servingAuthority.ts`) and predate it; `tsc -b` is the gate.
+- Resume point for 0.4/ci: merge it into `release/0.4`, then tick F6 (owner steps pending), F11 and F15 above.
