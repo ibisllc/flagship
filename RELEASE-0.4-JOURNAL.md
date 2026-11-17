@@ -1536,3 +1536,5 @@ Three agents started:
 - Resume point: wait for the four agents; merge the UI pass and Business (renumbering the shell), then voici-front. Phone-apps is docs only; its copy waits for the owner. Then the owner's browser tasks, then the deploy.
 
 - Merged `0.4/phone-apps` (docs only). Proposal: a spike in 0.5, then forms/polls in 0.6 and shops/booking in 0.7, about 118 engineer-days. Rules are data, interpreted in the app (Apple 2.5.2); 8 owner decisions are in the doc.
+
+- Merged `0.4/voici-front`: the voi.ci root now serves a static front door (French first, App Store and Play links, works when storage is down), and every page has a "Make your own page" footer. Gates green. Owner decisions are in `docs/voici-front-door.md` (trademark, calls are off in prod, noindex, share image, vous/tu, native review).
