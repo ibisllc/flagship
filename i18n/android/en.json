@@ -17660,5 +17660,165 @@
   "proxy_lane_needs_password": {
     "en": "Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.",
     "ctx": "server page: why a proxy change with a new password can't go through Flagship"
+  },
+  "org_plan_title": {
+    "en": "Plan",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_status_trial": {
+    "en": {
+      "one": "Business, trial: %1$s day left",
+      "other": "Business, trial: %1$s days left"
+    },
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)",
+    "plural": true
+  },
+  "org_plan_status_paid": {
+    "en": "Business: paid through %1$s",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_status_lapsed": {
+    "en": "Business has lapsed",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_lapsed_note": {
+    "en": "You can still use every app, remove people and export the org. Adding people, servers or connectors needs a paid plan.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_lapsed_refusal": {
+    "en": "This org's plan has lapsed. Pay for seats on the Plan to add people.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_trial_note": {
+    "en": "Paid time starts when the trial ends.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_seats_title": {
+    "en": "Seats",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_seats_used": {
+    "en": "%1$s of %2$s seats in use",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_seats_paid": {
+    "en": "Pay for %1$s seats",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_price": {
+    "en": "%1$s a seat a month: %2$s a month",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_seats_less": {
+    "en": "Fewer seats",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_seats_more": {
+    "en": "More seats",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_admins_only": {
+    "en": "Only org admins can see the balance and pay.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_balance_title": {
+    "en": "Balance",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_balance_empty": {
+    "en": "No balance yet",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_balance_months": {
+    "en": {
+      "one": "About %1$s month for %2$s seats",
+      "other": "About %1$s months for %2$s seats"
+    },
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)",
+    "plural": true
+  },
+  "org_plan_balance_under_month": {
+    "en": "Less than a month for %1$s seats",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_locked": {
+    "en": "Unlock to see the org's balance",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_autopay": {
+    "en": "Pay automatically",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_autopay_note": {
+    "en": "A little at a time from the org's balance, ahead of the end date.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_buy_title": {
+    "en": "Buy vouchers for this org",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_pack_add": {
+    "en": "Add %1$s to the org",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_buy_unavailable": {
+    "en": "Buying isn't available on this phone.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_import": {
+    "en": "Import a voucher file",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_batch_note": {
+    "en": "Companies can buy an invoiced batch on the web.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_added": {
+    "en": "%1$s added to the org's balance.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_file_bad": {
+    "en": "This isn't a Flagship voucher file, or it was changed.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_file_unknown_key": {
+    "en": "These vouchers aren't signed by a key Flagship accepts now.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_file_too_many": {
+    "en": "The org's balance can't hold that many vouchers.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_error_locked": {
+    "en": "Unlock this phone to pay from the org's balance.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_error_below_live": {
+    "en": "More people hold seats than that. Raise the seat count first.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_error_seats": {
+    "en": "That seat count isn't allowed on this plan.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_error_not_found": {
+    "en": "Flagship doesn't know this org any more.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_error_not_admin": {
+    "en": "Only an org admin can change the org's balance.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_error_generic": {
+    "en": "Something went wrong. Try again.",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_plan_open_reason": {
+    "en": "Open the org's balance",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "org_key_wallet": {
+    "en": "The org's balance key",
+    "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
   }
 }
