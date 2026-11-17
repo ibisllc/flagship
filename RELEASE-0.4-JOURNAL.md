@@ -1503,7 +1503,7 @@ Three agents started:
   result bundle on failure; iOS CallKit's start-up `providerDidReset` showed "Call ended" over the whole app on an idle
   phone (four UI smoke failures; a real bug, not only CI); PolishRules (fixed sizes, rounded fields, teal text, four
   "box" strings, renamed in all seven languages) were already red on `release/0.4` from the folded branches; voi.ci call
-  sockets now go through the update lock. `main`'s iOS workflow has been red since 2026-11-06 for the same reasons.
+  sockets now go through the update lock. `main`'s iOS workflow has been red since 2026-11-06 (not looked at; `main` fails PolishRules on `MessagesTabIcon.swift`).
 - **F15.** `builder-pipe-upgrade`: `.com` answers an outdated Studio itself before the upgrade budget and the session
   object (`refuseOutdatedStudio`), and the Mac Studio waits 5/10/20/40/60 s before a new session after one the relay
   never accepted (as Windows and Linux do; build + 19 pairing tests green). `account-resolve`: boxes hold their calls
