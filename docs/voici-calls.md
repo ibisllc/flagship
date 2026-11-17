@@ -821,19 +821,33 @@ needed; anonymous calls stay refused, since only `anyone` takes them). The share
   (`voici-call-mute`, `-camera`, `-flip`, `-end`, `-audio-route`, `-close`).
 - Not shown: whether the other side is muted (no signal exists; the room's `camera` message is the only peer state).
 
-**To port (same layout, same strings in spirit):**
-- **Android** (`calls/VoiciCallActivity.kt` and the outgoing call screen): Compose; dark gradient; a `Box` with the
-  remote `SurfaceViewRenderer` (scale fill) under a column of name/status/timer and a row of 68 dp round buttons
-  (Material icons `VolumeUp` with an output picker from `AudioManager.availableCommunicationDevices`, `Mic`/`MicOff`,
-  `Videocam`/`VideocamOff`, `Cameraswitch`) over a red `CallEnd` button; the local renderer in a draggable corner
-  card snapping to corners; tap toggles controls; `PROXIMITY_SCREEN_OFF_WAKE_LOCK` in audio calls. The engine needs a
-  `flipCamera()` (`CameraVideoCapturer.switchCamera`).
-- **voi.ci browser** (`apps/voici-site/src/call.js` and its CSS): the same dark stage, the remote `<video>`
-  object-fit cover full-bleed, our preview as a draggable corner tile, round buttons (Mute, Camera, Flip when the
-  browser has two cameras, red End), timer under the name; tap or mouse-move shows the controls. No audio-route
-  button on the web (`setSinkId` where supported could come later).
-- Strings already in iOS: "Audio", "Flip", "End", "Your camera", "Their camera", "End-to-end encrypted ·
-  quantum-safe"; add them to `i18n/android` and `i18n/voici-site` with the same translations.
+**Android, as built** (`calls/VoiciCallStage.kt`, used by `VoiciCallActivity` for calls answered here and, in a
+full-screen dialog, by `VoiciOutgoingCallPanel` for calls placed from the app):
+- The same dark gradient, initial in a 112 dp circle, name, status then a m:ss / h:mm:ss timer, the lock line; one row
+  of 68 dp round buttons with labels (Material icons) over a red `CallEnd`; Close when over. The ringing and "unlock
+  to answer" screens (`VoiciRingingStage`) use the same look with red Decline, green Answer, or Open Flagship.
+- Audio route (`CallAudioRouter`): a call answered here has a self-managed Telecom connection, so the route comes
+  from its `CallAudioState` and changes with `Connection.setAudioRoute`; a placed call has none, so the router sets
+  `MODE_IN_COMMUNICATION` and picks the device with `setCommunicationDevice` (Android 12+) or the speakerphone / SCO
+  switches (10, 11). The button switches earpiece/speaker, or opens a menu when a Bluetooth or wired headset is
+  there. Video calls move from the earpiece to the speaker.
+- Video: the engine hands out `SurfaceViewRenderer`s (`CallMediaEngine.videoView`), theirs scale-fill under the
+  controls, ours in a rounded corner tile (mirrored for the front camera) that drags and snaps to the nearest
+  corner; a tap hides or shows the controls; `flipCamera()` is `CameraVideoCapturer.switchCamera`.
+- `PROXIMITY_SCREEN_OFF_WAKE_LOCK` while a connected audio-only call is on the earpiece.
+- Test tags `voici-call-*` (incoming) and `outgoing-call-*` (placed): `-status`, `-mute`, `-camera`, `-flip`,
+  `-end`, `-audio-route`, `-close`. Unit tests: `VoiciCallStageTest`.
+
+**voi.ci, as built** (`apps/voici-site/src/call.js`, `style.css`): the call and the call-back ring open a
+full-screen stage (a modal dialog that keeps focus inside, dark in every theme) instead of a sheet: photo or initial,
+name, status, the timer (`role="timer"`; the status line keeps one hidden "Quantum-safe call" for screen readers),
+the lock line; round buttons with visible labels (Mute, Camera, Flip with two cameras, End), Close and Call again
+when over. Their `<video>` covers the stage; ours is a tile that moves to the corner it is dragged to or that an
+arrow key points to (the site sets no inline style, so the tile jumps between corner classes with a transition). A
+tap hides or shows the controls; a mouse move, a key or focus shows them. Audio shows only where the browser can
+choose: `selectAudioOutput` (its own picker) or `setSinkId` with a menu of outputs. `flagship-web` gained
+`call.flipCamera` / `cameraFacing` and `voiciCallCameraCount`. Tests: `apps/voici-site/tests/callStage.test.ts`,
+`packages/flagship-web/tests/call.test.ts`. The webapp has no call screen of its own (it hands calls to a voi.ci tab).
 
 **Freeze fix (2026-11-17):** the iOS engine read the frame keys under its main lock from WebRTC's worker and encoder
 threads, while the main thread held that lock calling libwebrtc setters (mute, camera) that block on those threads:
