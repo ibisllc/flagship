@@ -33,7 +33,7 @@ fun MessagesTab() {
             is DeepLink.Messages -> {
                 deepLinker.consume()
                 nav.popBackStack("messages", inclusive = false)
-                SocialSection.current.value = SocialSection.MESSAGES
+                SocialSection.current.value = SocialSection.INBOX
                 link.conv?.let { nav.navigate("thread/$it") }
             }
             DeepLink.PageEditor -> {

@@ -3236,8 +3236,6 @@
     <string name="voici_publish_reason">发布你的页面</string>
     <string name="voici_your_page">你的页面</string>
     <string name="voici_waiting_for_admin">正在等待管理员设备发布</string>
-    <string name="voici_segment_messages">消息</string>
-    <string name="voici_segment_requests">请求 (%1$d)</string>
     <string name="voici_segment_requests_none">请求</string>
     <string name="voici_visitor_name">访客 %1$s</string>
     <string name="voici_empty_requests">没有消息请求。</string>
@@ -3635,7 +3633,6 @@
     <string name="voici_rotate_short">轮换</string>
     <string name="voici_publishing_page">正在发布你的页面…</string>
     <string name="voici_reply_footer">你与其他页面的对话在 voi.ci 上。</string>
-    <string name="voici_segment_conversations">对话</string>
     <string name="voici_empty_messages_options">还没有消息。在“页面选项”中打开“接收消息”即可收到消息。</string>
     <string name="push_service">推送服务</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
@@ -4182,4 +4179,15 @@
     <string name="voici_calls_hours_footer">在这些时段之外，你的任何设备都不会响铃，来电会成为未接来电。只有你自己的设备知道这些时段。时区：%1$s。</string>
     <string name="voici_first_publish_defaults">来自用 Flagship 登录的人的消息和通话已开启。你可以在页面选项中关闭它们。</string>
     <string name="voici_calls_from_signed_in_note">来电者使用 Flagship 登录。对你而言他们保持匿名。</string>
+    <string name="social_inbox">收件箱</string>
+    <string name="social_who_to_call">呼叫谁</string>
+    <string name="social_who_to_call_hint">用户名或 voi.ci 链接</string>
+    <string name="social_call_target_invalid">请输入 voi.ci 用户名，例如 voi.ci/alex。</string>
+    <string name="social_call_target_no_page">voi.ci/%1$s 上没有页面。</string>
+    <string name="social_call_target_no_calls">voi.ci/%1$s 不接受通话。</string>
+    <plurals name="social_count_new">
+        <item quantity="one">%1$d 条新动态</item>
+        <item quantity="other">%1$d 条新动态</item>
+    </plurals>
+    <string name="social_first_post">你好。我正在使用来自 flagshipserver.com 的 Flagship 应用</string>
 </resources>

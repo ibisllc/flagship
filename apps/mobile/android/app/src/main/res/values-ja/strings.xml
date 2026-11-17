@@ -3236,8 +3236,6 @@
     <string name="voici_publish_reason">ページを公開</string>
     <string name="voici_your_page">あなたのページ</string>
     <string name="voici_waiting_for_admin">管理者デバイスによる公開を待っています</string>
-    <string name="voici_segment_messages">メッセージ</string>
-    <string name="voici_segment_requests">リクエスト (%1$d)</string>
     <string name="voici_segment_requests_none">リクエスト</string>
     <string name="voici_visitor_name">訪問者 %1$s</string>
     <string name="voici_empty_requests">メッセージのリクエストはありません。</string>
@@ -3635,7 +3633,6 @@
     <string name="voici_rotate_short">更新</string>
     <string name="voici_publishing_page">ページを公開しています…</string>
     <string name="voici_reply_footer">ほかのページとの会話は voi.ci にあります。</string>
-    <string name="voici_segment_conversations">会話</string>
     <string name="voici_empty_messages_options">まだメッセージはありません。「ページのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。</string>
     <string name="push_service">プッシュサービス</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
@@ -4182,4 +4179,15 @@
     <string name="voici_calls_hours_footer">この時間帯以外は、どのデバイスでも着信音が鳴らず、不在着信になります。この時間帯を知っているのはあなたのデバイスだけです。タイムゾーン：%1$s</string>
     <string name="voici_first_publish_defaults">Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。</string>
     <string name="voici_calls_from_signed_in_note">発信者は Flagship でサインインします。あなたには匿名のままです。</string>
+    <string name="social_inbox">受信箱</string>
+    <string name="social_who_to_call">通話の相手</string>
+    <string name="social_who_to_call_hint">ユーザー名または voi.ci のリンク</string>
+    <string name="social_call_target_invalid">voi.ci のユーザー名を入力してください（例: voi.ci/alex）。</string>
+    <string name="social_call_target_no_page">voi.ci/%1$s にページはありません。</string>
+    <string name="social_call_target_no_calls">voi.ci/%1$s は通話を受け付けていません。</string>
+    <plurals name="social_count_new">
+        <item quantity="one">新着 %1$d 件</item>
+        <item quantity="other">新着 %1$d 件</item>
+    </plurals>
+    <string name="social_first_post">こんにちは。flagshipserver.com の Flagship アプリを使っています</string>
 </resources>

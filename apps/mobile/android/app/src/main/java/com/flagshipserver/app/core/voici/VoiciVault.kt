@@ -60,6 +60,10 @@ data class VoiciLocal(
     val publicWarned: Boolean = false,
     /** Calls this device placed or answered (docs/voici-calls.md "Calling from the app"): this device only, never synced. */
     val callHistory: List<com.flagshipserver.app.calls.VoiciCallRecord> = emptyList(),
+    /** The Social page's call button counts missed calls newer than this: when the Calls page was last open (docs/social-tabs.md). */
+    val callsSeenAt: Long = 0,
+    /** When the Social page's Profile tab last showed: comments and reactions will count from here once they exist. */
+    val profileSeenAt: Long = 0,
     /** Owner side: conversations whose caller didn't allow call-backs (conv → when a ring was refused), this device only. */
     val ringBackOff: Map<String, Long> = emptyMap(),
     /** Caller side: pages whose conversation this account allowed to ring it back (this device's record). */

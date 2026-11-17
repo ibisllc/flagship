@@ -53,8 +53,7 @@ class GymMessagesTest : GymBase() {
         eventually(15_000, "the bar goes once published") { tagCount("page-publish-bar") == 0 }
 
         runBlocking { GymVoici.client.visitorWrites(account(), visitor, "Hi! Your photos on https://example.com/gallery are lovely.") }
-        tap("social-tab-messages")
-        tap("messages-segment-requests")
+        tap("social-tab-requests")
         eventually(15_000, "the request arrives") {
             runBlocking { com.flagshipserver.app.core.voici.VoiciCenter.shared!!.refreshInbox() }
             tagCount("messages-empty") == 0
@@ -94,8 +93,7 @@ class GymMessagesTest : GymBase() {
         tap("page-options-done")
 
         runBlocking { GymVoici.client.visitorWrites(account(), visitor, "Can I call you?") }
-        tap("social-tab-messages")
-        tap("messages-segment-requests")
+        tap("social-tab-requests")
         eventually(15_000, "the request arrives") {
             runBlocking { com.flagshipserver.app.core.voici.VoiciCenter.shared!!.refreshInbox() }
             tagCount("messages-empty") == 0
@@ -168,7 +166,7 @@ class GymMessagesTest : GymBase() {
         // Ana answers; the app (on open, no push) offers "You have a reply on voi.ci/ana-page".
         GymVoici.anaReplies()
         tap("tab-messages")
-        tap("social-tab-messages")
+        tap("social-tab-inbox")
         eventually(15_000, "the reply notice") {
             runBlocking { com.flagshipserver.app.core.voici.VoiciCenter.shared!!.checkReplies() }
             tagCount("messages-reply-notice") > 0
@@ -207,7 +205,7 @@ class GymMessagesTest : GymBase() {
         com.flagshipserver.app.calls.VoiciOutgoingCalls.openBrowserOverride = { opened = it }
         try {
             tap("tab-messages")
-            tap("social-tab-messages")
+            tap("social-tab-inbox")
             eventually(15_000, "the reply notice") {
                 runBlocking { com.flagshipserver.app.core.voici.VoiciCenter.shared!!.checkReplies() }
                 tagCount("reply-notice-call-audio") > 0
@@ -221,7 +219,8 @@ class GymMessagesTest : GymBase() {
             waitUntilExists("outgoing-call-status")
             gymShot("calls-outgoing-browser")
             tap("outgoing-call-close")
-            tap("messages-calls")
+            tap("social-call-button")
+            waitUntilExists("calls-target", 15_000)
             waitUntilExists("calls-row", 15_000)
             assertTrue(textOfTag("calls-row").contains("voi.ci/${GymVoici.OTHER}"))
             gymShot("calls-history")

@@ -3234,8 +3234,6 @@
   "voici_publish_reason": "Publier votre page",
   "voici_your_page": "Votre page",
   "voici_waiting_for_admin": "En attente de publication par un appareil administrateur",
-  "voici_segment_messages": "Messages",
-  "voici_segment_requests": "Demandes (%1$d)",
   "voici_segment_requests_none": "Demandes",
   "voici_visitor_name": "Visiteur %1$s",
   "voici_empty_requests": "Aucune demande de message.",
@@ -3633,7 +3631,6 @@
   "voici_rotate_short": "Changer",
   "voici_publishing_page": "Publication de votre page…",
   "voici_reply_footer": "Vos conversations avec d’autres pages sont sur voi.ci.",
-  "voici_segment_conversations": "Conversations",
   "voici_empty_messages_options": "Pas encore de messages. Activez Accepter les messages dans Options de la page pour en recevoir.",
   "push_service": "Service de notifications push",
   "push_service_unifiedpush": "UnifiedPush",
@@ -4179,5 +4176,16 @@
   "voici_calls_hours_switch": "Seulement à certaines heures",
   "voici_calls_hours_footer": "En dehors de ces heures, les appels ne sonnent sur aucun de vos appareils et deviennent des appels manqués. Seuls vos propres appareils connaissent ces heures. Fuseau horaire : %1$s.",
   "voici_first_publish_defaults": "Les messages et les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page.",
-  "voici_calls_from_signed_in_note": "Les appelants se connectent avec Flagship. Ils restent anonymes pour vous."
+  "voici_calls_from_signed_in_note": "Les appelants se connectent avec Flagship. Ils restent anonymes pour vous.",
+  "social_inbox": "Réception",
+  "social_who_to_call": "Qui appeler",
+  "social_who_to_call_hint": "Nom d’utilisateur ou lien voi.ci",
+  "social_call_target_invalid": "Saisissez un nom d’utilisateur voi.ci, comme voi.ci/alex.",
+  "social_call_target_no_page": "Il n’y a pas de page à l’adresse voi.ci/%1$s.",
+  "social_call_target_no_calls": "voi.ci/%1$s n’accepte pas les appels.",
+  "social_count_new": {
+    "one": "%1$d nouveau",
+    "other": "%1$d nouveaux"
+  },
+  "social_first_post": "Bonjour. J’utilise l’app Flagship, de flagshipserver.com"
 }

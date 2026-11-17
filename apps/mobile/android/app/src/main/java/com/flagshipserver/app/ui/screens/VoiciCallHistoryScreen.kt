@@ -1,4 +1,5 @@
-// Social → Calls (docs/voici-calls.md "Calling from the app"): the call history (incoming, outgoing and missed, newest
+// Social → Calls, behind the Social page's round call button (docs/voici-calls.md "Calling from the app",
+// docs/social-tabs.md): "Who to call" on top, then the call history (incoming, outgoing and missed, newest
 // first, kept on this device; missed calls from `.com`), Call / Video call on every page this account can call, and
 // the call this app is placing. A visitor of this account's own page is rung back from their thread (tapping the
 // row opens it), only through the conversation's ring-back channel (VoiciCenter.callVisitor).
@@ -134,8 +135,11 @@ fun VoiciCallHistoryScreen(nav: NavController) {
     val anonBlocked = remember(version) { center.anonBlocks() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val toasts = com.flagshipserver.app.core.LocalToastCenter.current
+    // Every missed call so far counts as seen once this page is open (the Social call button's count).
+    LaunchedEffect(history) { center.callsSeen() }
     FSScreen(title = stringResource(R.string.voici_calls_header), onBack = { nav.popBackStack() }, titleTag = "calls-title") {
         current?.let { VoiciOutgoingCallPanel(it) }
+        WhoToCall(center)
         if (history.isEmpty()) {
             FSEmptyState(title = stringResource(R.string.voici_calls_history_empty), icon = Icons.Outlined.Call, modifier = Modifier.testTag("calls-empty"))
         } else {
@@ -149,6 +153,96 @@ fun VoiciCallHistoryScreen(nav: NavController) {
             }
         }
         Text(stringResource(R.string.voici_calls_history_footer), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * "Who to call": a voi.ci username or link today (phone numbers later). The page is checked under its account's key
+ * as a call checks it, then the same call-back question and outgoing call as a row's Call button.
+ */
+@Composable
+private fun WhoToCall(center: com.flagshipserver.app.core.voici.VoiciCenter) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var input by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf<String?>(null) }
+    var resolving by remember { mutableStateOf(false) }
+    var asking by remember { mutableStateOf<Pair<VoiciCallTarget, Boolean>?>(null) }
+    var pending by remember { mutableStateOf<Triple<VoiciCallTarget, Boolean, Boolean>?>(null) }
+    val mic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        pending?.let { (t, video, allow) -> VoiciOutgoingCalls.start(context, t, video, allowCallBack = allow) }
+        pending = null
+    }
+    val invalid = stringResource(R.string.social_call_target_invalid)
+    val call = { video: Boolean ->
+        val host = com.flagshipserver.app.core.Endpoints.voiciOrigin.removePrefix("https://")
+        val username = com.flagshipserver.app.calls.VoiciCallTargetInput.username(input, host)
+        if (username == null) {
+            problem = invalid
+        } else if (!resolving) {
+            resolving = true
+            scope.launch {
+                problem = try {
+                    val keys = center.accountKeys(username)
+                    val raw = if (keys != null) center.client.page(username) else null
+                    val idx = if (keys != null && raw != null) {
+                        com.flagshipserver.app.core.voici.VoiciPage.checkVoiciPageIndex(raw, username, keys.sensitiveKind, keys.sensitivePub).valueOrNull()
+                    } else null
+                    when {
+                        idx == null -> com.flagshipserver.app.core.FSStrings.get(R.string.social_call_target_no_page, username)
+                        !idx.body.takesCalls -> com.flagshipserver.app.core.FSStrings.get(R.string.social_call_target_no_calls, username)
+                        else -> {
+                            asking = VoiciCallTarget(username, idx.body.pageId) to video
+                            null
+                        }
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    com.flagshipserver.app.core.FSStrings.get(R.string.social_call_target_no_page, username)
+                }
+                resolving = false
+            }
+        }
+    }
+    FSCard(modifier = Modifier.testTag("calls-who")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            com.flagshipserver.app.ui.components.OutlinedTextField(
+                value = input,
+                onValueChange = { input = it.take(256); problem = null },
+                label = { Text(stringResource(R.string.social_who_to_call)) },
+                placeholder = { Text(stringResource(R.string.social_who_to_call_hint)) },
+                singleLine = true,
+                isError = problem != null,
+                supportingText = if (problem != null) { { Text(problem.orEmpty(), modifier = Modifier.testTag("calls-target-problem")) } } else null,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri,
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Go,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { call(false) }),
+                modifier = Modifier.fillMaxWidth().testTag("calls-target"),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                val ready = input.isNotBlank() && !resolving
+                FSPrimaryButton(stringResource(R.string.voici_call_action), { call(false) }, enabled = ready, modifier = Modifier.weight(1f).testTag("calls-target-audio"))
+                FSSecondaryButton(stringResource(R.string.voici_call_video_action), { call(true) }, enabled = ready, modifier = Modifier.weight(1f).testTag("calls-target-video"))
+            }
+        }
+    }
+    asking?.let { (target, video) ->
+        val name = stringResource(R.string.voici_calls_peer_page, target.username)
+        val go = { allow: Boolean ->
+            asking = null
+            pending = Triple(target, video, allow)
+            mic.launch(Manifest.permission.RECORD_AUDIO)
+        }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { asking = null },
+            title = { Text(stringResource(R.string.voici_call_back_prompt_title, name)) },
+            text = { Text(stringResource(R.string.voici_call_back_prompt_body, name)) },
+            confirmButton = { FSPrimaryButton(stringResource(R.string.voici_call_and_allow_back), { go(true) }, modifier = Modifier.testTag("calls-target-allow-back")) },
+            dismissButton = { FSGhostButton(stringResource(R.string.voici_call_without_back), { go(false) }, modifier = Modifier.testTag("calls-target-no-back")) },
+        )
     }
 }
 

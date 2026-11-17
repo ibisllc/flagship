@@ -3174,8 +3174,6 @@
   "voici_publish_reason": "3cb02fb8b8a9",
   "voici_your_page": "daf1799242cd",
   "voici_waiting_for_admin": "5cbdae2e3d03",
-  "voici_segment_messages": "1c7c0485ac91",
-  "voici_segment_requests": "fa93e50025f5",
   "voici_segment_requests_none": "ad5608e95cb0",
   "voici_visitor_name": "fb91556fa25c",
   "voici_empty_requests": "9b0268918090",
@@ -3570,7 +3568,6 @@
   "voici_rotate_short": "306d409f8a1c",
   "voici_publishing_page": "42ece524bd89",
   "voici_reply_footer": "e3ab6c7852b5",
-  "voici_segment_conversations": "7b28776e1ef7",
   "voici_empty_messages_options": "d2008954fca4",
   "push_service": "f3cff889079e",
   "push_service_unifiedpush": "92dbcb7d3faf",
@@ -4116,5 +4113,13 @@
   "voici_calls_hours_switch": "f2e73a357e96",
   "voici_calls_hours_footer": "322b47c58d9e",
   "voici_first_publish_defaults": "34c4a6e9362a",
-  "voici_calls_from_signed_in_note": "d23fae6991da"
+  "voici_calls_from_signed_in_note": "d23fae6991da",
+  "social_inbox": "c2c0b354370c",
+  "social_who_to_call": "6def0f265cb6",
+  "social_who_to_call_hint": "973f200762ec",
+  "social_call_target_invalid": "7c86aa809bed",
+  "social_call_target_no_page": "7e144dd4d9b4",
+  "social_call_target_no_calls": "b4ccc9156d03",
+  "social_count_new": "678bc667ac3a",
+  "social_first_post": "917a4655f092"
 }
