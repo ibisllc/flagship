@@ -3193,7 +3193,6 @@
   "Approve this sign-in?": "Diese Anmeldung bestätigen?",
   "voi.ci will be able to send messages to {0} as Visitor {1}.": "voi.ci kann {0} als Besucher {1} Nachrichten senden.",
   "Signed in. You can go back to voi.ci.": "Angemeldet. Du kannst zu voi.ci zurückkehren.",
-  "Messages": "Nachrichten",
   "Requests": "Anfragen",
   "More": "Mehr",
   "Sign in to voi.ci": "Bei voi.ci anmelden",
@@ -3438,7 +3437,6 @@
   "Remove page": "Seite entfernen",
   "Rotate your inbox key?": "Posteingangsschlüssel erneuern?",
   "Your page is published again with the new key.": "Deine Seite wird mit dem neuen Schlüssel neu veröffentlicht.",
-  "Conversations": "Unterhaltungen",
   "Social": "Social",
   "One more approval for {0}: authorize it to join your cloud.": "Noch eine Freigabe für {0}: erlaube ihm, deiner Cloud beizutreten.",
   "Another approval is still running. Wait for it to finish, then try again.": "Eine andere Freigabe läuft noch. Warte, bis sie fertig ist, und versuche es dann erneut.",
@@ -3786,5 +3784,15 @@
   "This browser couldn't check it's you. Nothing was deleted.": "Dieser Browser konnte nicht prüfen, ob du es bist. Es wurde nichts gelöscht.",
   "{0} Enter this device's passphrase to confirm.": "{0} Gib zur Bestätigung die Passphrase dieses Geräts ein.",
   "It goes from all your devices and from Flagship.": "Sie verschwindet von all deinen Geräten und von Flagship.",
-  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Nachrichten und Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten."
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Nachrichten und Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten.",
+  "Inbox": "Posteingang",
+  "{0} new item": "{0} neu",
+  "{0} new items": "{0} neu",
+  "Calls, {0}": "Anrufe, {0}",
+  "Who to call": "Wen anrufen",
+  "Username or voi.ci link": "Benutzername oder voi.ci-Link",
+  "Enter a voi.ci username, like voi.ci/alex.": "Gib einen voi.ci-Benutzernamen ein, etwa voi.ci/alex.",
+  "There's no page at voi.ci/{0}.": "Unter voi.ci/{0} gibt es keine Seite.",
+  "voi.ci/{0} doesn't take calls.": "voi.ci/{0} nimmt keine Anrufe an.",
+  "Hello. I am using the Flagship app, from flagshipserver.com": "Hallo. Ich nutze die Flagship-App von flagshipserver.com"
 }

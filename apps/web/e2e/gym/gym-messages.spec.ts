@@ -204,15 +204,15 @@ async function deviceGrant(page: Page) {
   }, ADMIN_SEED_HEX);
 }
 
-/** The Social tab, on its Profile or its Messages side (docs/social-tab.md). */
-async function openSocial(page: Page, side: "profile" | "messages"): Promise<void> {
+/** The Social tab, on its Profile, Inbox or Requests side (docs/social-tab.md, docs/social-tabs.md). */
+async function openSocial(page: Page, side: "profile" | "inbox" | "requests"): Promise<void> {
   await page.click('[data-tab-target="messages"]');
   await expect(page.locator("#view-messages")).toBeVisible();
   await page.click(`[data-social-side="${side}"]`);
   await expect(page.locator(side === "profile" ? "#social-profile" : "#social-messages")).toBeVisible();
 }
 
-const openMessagesTab = (page: Page) => openSocial(page, "messages");
+const openMessagesTab = (page: Page) => openSocial(page, "inbox");
 
 test.describe("gym webapp voi.ci pages and the Social tab", () => {
   test("gym messages owner reads a verified message and replies", async ({ page }, testInfo) => {
@@ -223,10 +223,10 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     com.inbox.push({ envelope: v.envelope, storedAt: Date.now() }, { envelope: { ...v.envelope, msgId: "ee".repeat(16) }, storedAt: Date.now() });
     await openMessagesTab(page);
     await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
-    await expect(page.locator("[data-testid=social-title]")).toHaveText("Messages");
+    await expect(page.locator("[data-testid=social-title]")).toHaveText("Inbox");
     // A first message is a request until the owner replies or accepts.
     await expect(page.locator("#messages-list [data-conv]")).toHaveCount(0);
-    await page.click('[data-messages-tab="requests"]');
+    await page.click('[data-social-side="requests"]');
     const row = page.locator("#messages-list [data-conv]");
     await expect(row).toHaveCount(1);
     const code = await page.evaluate(async (pub) => (await import("/lib/voiciProtocol.js")).voiciPseudonymCode(pub), v.pseudonymPub);
@@ -458,7 +458,7 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     const v = await visitorMessage(page, com, "buy cheap stuff");
     com.inbox.push({ envelope: v.envelope, storedAt: Date.now() });
     await openMessagesTab(page);
-    await page.click('[data-messages-tab="requests"]');
+    await page.click('[data-social-side="requests"]');
     await page.click("#messages-list [data-conv]");
     await expect(page.locator("#view-thread")).toBeVisible();
 
