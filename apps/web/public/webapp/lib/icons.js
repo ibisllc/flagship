@@ -51,6 +51,8 @@ export const alertTriangleIcon = `<svg ${COMMON}><path d="M10.29 3.86 1.82 18a2 
 export const refreshIcon = `<svg ${COMMON}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
 
 export const pencilIcon = `<svg ${COMMON}><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
+/** The standard pencil inside a circle outline: the Social page's edit buttons (docs/social-tabs.md). */
+export const pencilCircleIcon = `<svg ${COMMON}><circle cx="12" cy="12" r="10"/><path d="M14.6 7.4a1.5 1.5 0 0 1 2 2L10 16l-2.8.8.8-2.8Z"/></svg>`;
 
 export const monitorIcon = `<svg ${COMMON}><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
 

@@ -77,8 +77,8 @@ describe("home page-welcome wiring", () => {
     expect(STYLE).not.toMatch(/\.tab-bar-btn\[data-tab-target="messages"\] \.icon \{/);
   });
 
-  it("the tab opens on the title row, then Profile / Messages", () => {
-    expect(INDEX).toMatch(/<section id="view-messages"[^>]*>\s*<div id="social-head"[^>]*><\/div>\s*<div class="fs-segmented social-switch"[^>]*>[^]*?data-social-side="profile"[^]*?data-social-side="messages"/);
+  it("the tab opens on the title row, then Profile / Inbox / Requests (docs/social-tabs.md)", () => {
+    expect(INDEX).toMatch(/<section id="view-messages"[^>]*>\s*<div id="social-head"[^>]*><\/div>\s*<div class="fs-segmented social-switch"[^>]*>[^]*?data-social-side="profile"[^]*?data-social-side="inbox"[^]*?data-social-side="requests"/);
     expect(INDEX).not.toContain('id="view-page-editor"');
     expect(INDEX).not.toContain('id="view-messages-settings"');
   });

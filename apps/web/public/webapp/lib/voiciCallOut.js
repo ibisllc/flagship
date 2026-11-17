@@ -18,8 +18,9 @@ import { hex } from "./voiciCore.js";
 import { signVoiciThreadStatement, signWebDelegation, TAG_VOICI_SIGN_IN, voiciConv } from "./voiciProtocol.js";
 import { sealVoiciCallHandoff, TAG_VOICI_CALL_HANDOFF, VOICI_CALL_HANDOFF_SESSION_MS, voiciCallHandoffLink } from "./voiciCallHandoff.js";
 import { getAttestation, pagePseudonym } from "./voiciSignIn.js";
-import { voiciWebOrigin, VoiciError } from "./voiciOwner.js";
-import { controlHost } from "./apex.js";
+import { fetchAccountKeys, voiciWebOrigin, VoiciError } from "./voiciOwner.js";
+import { controlApex, controlHost } from "./apex.js";
+import { checkVoiciPageIndex, voiciPageAcceptsCalls } from "./voiciPage.js";
 import { getSession } from "./state.js";
 
 const PAGE_ID = /^[0-9a-f]{32}$/;
@@ -106,6 +107,39 @@ export function callHistory(missedCalls = [], deps = {}) {
     peer: { kind: "visitor", conv: m.conv, pseudonymPub: m.pseudonymPub ?? null, anonymous: m.anonymous === true },
   }));
   return [...placed, ...missed].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : 1));
+}
+
+/**
+ * What the Calls page's "Who to call" field takes (docs/social-tabs.md): a voi.ci username, `voi.ci/<username>`,
+ * `@<username>` or the page's https link. Phone numbers come later. Null when it isn't one.
+ */
+export function callTargetUsername(input, voiciHost = "voi.ci") {
+  let s = String(input ?? "").trim().toLowerCase();
+  for (const p of ["https://", "http://"]) if (s.startsWith(p)) s = s.slice(p.length);
+  for (const p of [`www.${voiciHost}/`, `${voiciHost}/`, "voi.ci/", "@"]) if (s.startsWith(p)) s = s.slice(p.length);
+  s = s.split(/[?#]/)[0].replace(/\/+$/, "");
+  return USERNAME.test(s) ? s : null;
+}
+
+/**
+ * The page behind what was typed, checked under its account's key as a call checks it: `{ok: true, page: {username,
+ * pageId}}`, or `{ok: false, code}` with code "bad-target", "no-page" or "calls-off".
+ */
+export async function resolveCallTarget(input, deps = {}) {
+  const username = callTargetUsername(input, deps.voiciHost ?? new URL(deps.origin ?? voiciWebOrigin()).host);
+  if (!username) return { ok: false, code: "bad-target" };
+  try {
+    const f = deps.fetch ?? ((...a) => globalThis.fetch(...a));
+    const r = await f(`${deps.apex ?? controlApex()}/api/voici/pages/${encodeURIComponent(username)}`, { cache: "no-store" });
+    if (!r.ok) return { ok: false, code: "no-page", username };
+    const keys = deps.accountKeys ?? (await fetchAccountKeys(username, deps));
+    const idx = checkVoiciPageIndex((await r.json())?.index, { username, sensitiveKind: keys.kind, sensitivePub: keys.pub });
+    if (!idx.ok) return { ok: false, code: "no-page", username };
+    if (!voiciPageAcceptsCalls(idx.index)) return { ok: false, code: "calls-off", username };
+    return { ok: true, page: { username, pageId: idx.index.pageId } };
+  } catch {
+    return { ok: false, code: "no-page", username };
+  }
 }
 
 /** The owner calling a pseudonymous visitor back: not built until the owner decides how (docs/voici-calls.md). */

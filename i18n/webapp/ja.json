@@ -3193,7 +3193,6 @@
   "Approve this sign-in?": "このサインインを承認しますか？",
   "voi.ci will be able to send messages to {0} as Visitor {1}.": "voi.ci は訪問者 {1} として {0} にメッセージを送れるようになります。",
   "Signed in. You can go back to voi.ci.": "サインインしました。voi.ci に戻れます。",
-  "Messages": "メッセージ",
   "Requests": "リクエスト",
   "More": "その他",
   "Sign in to voi.ci": "voi.ci にサインイン",
@@ -3438,7 +3437,6 @@
   "Remove page": "ページを削除",
   "Rotate your inbox key?": "受信トレイの鍵を更新しますか？",
   "Your page is published again with the new key.": "ページは新しい鍵で再公開されます。",
-  "Conversations": "会話",
   "Social": "ソーシャル",
   "One more approval for {0}: authorize it to join your cloud.": "{0} の承認があと1つあります: クラウドへの参加を許可してください。",
   "Another approval is still running. Wait for it to finish, then try again.": "別の承認がまだ実行中です。完了するまで待ってから、もう一度お試しください。",
@@ -3786,5 +3784,15 @@
   "This browser couldn't check it's you. Nothing was deleted.": "このブラウザーで本人確認ができませんでした。何も削除されていません。",
   "{0} Enter this device's passphrase to confirm.": "{0} 確認のため、このデバイスのパスフレーズを入力してください。",
   "It goes from all your devices and from Flagship.": "すべてのデバイスと Flagship から削除されます。",
-  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。"
+  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。",
+  "Inbox": "受信箱",
+  "{0} new item": "新着 {0} 件",
+  "{0} new items": "新着 {0} 件",
+  "Calls, {0}": "通話、{0}",
+  "Who to call": "通話の相手",
+  "Username or voi.ci link": "ユーザー名または voi.ci のリンク",
+  "Enter a voi.ci username, like voi.ci/alex.": "voi.ci のユーザー名を入力してください（例: voi.ci/alex）。",
+  "There's no page at voi.ci/{0}.": "voi.ci/{0} にページはありません。",
+  "voi.ci/{0} doesn't take calls.": "voi.ci/{0} は通話を受け付けていません。",
+  "Hello. I am using the Flagship app, from flagshipserver.com": "こんにちは。flagshipserver.com の Flagship アプリを使っています"
 }

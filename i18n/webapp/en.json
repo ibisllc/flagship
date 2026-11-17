@@ -13070,10 +13070,6 @@
     "en": "Signed in. You can go back to voi.ci.",
     "ctx": "webapp/views/voici-sign-in.js:127"
   },
-  "Messages": {
-    "en": "Messages",
-    "ctx": "webapp/index.html"
-  },
   "Requests": {
     "en": "Requests",
     "ctx": "webapp/index.html"
@@ -14049,10 +14045,6 @@
   "Your page is published again with the new key.": {
     "en": "Your page is published again with the new key.",
     "ctx": "webapp/views/page-editor.js:640"
-  },
-  "Conversations": {
-    "en": "Conversations",
-    "ctx": "webapp/index.html"
   },
   "Social": {
     "en": "Social",
@@ -15445,5 +15437,45 @@
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": {
     "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
     "ctx": "webapp/lib/voiciCopy.js:27"
+  },
+  "Inbox": {
+    "en": "Inbox",
+    "ctx": "webapp/index.html"
+  },
+  "{0} new item": {
+    "en": "{0} new item",
+    "ctx": "webapp/views/messages.js:140"
+  },
+  "{0} new items": {
+    "en": "{0} new items",
+    "ctx": "webapp/views/messages.js:140"
+  },
+  "Calls, {0}": {
+    "en": "Calls, {0}",
+    "ctx": "webapp/views/messages.js:147"
+  },
+  "Who to call": {
+    "en": "Who to call",
+    "ctx": "webapp/views/calls.js:62"
+  },
+  "Username or voi.ci link": {
+    "en": "Username or voi.ci link",
+    "ctx": "webapp/views/calls.js:69"
+  },
+  "Enter a voi.ci username, like voi.ci/alex.": {
+    "en": "Enter a voi.ci username, like voi.ci/alex.",
+    "ctx": "webapp/views/calls.js:50"
+  },
+  "There's no page at voi.ci/{0}.": {
+    "en": "There's no page at voi.ci/{0}.",
+    "ctx": "webapp/views/calls.js:51"
+  },
+  "voi.ci/{0} doesn't take calls.": {
+    "en": "voi.ci/{0} doesn't take calls.",
+    "ctx": "webapp/views/calls.js:52"
+  },
+  "Hello. I am using the Flagship app, from flagshipserver.com": {
+    "en": "Hello. I am using the Flagship app, from flagshipserver.com",
+    "ctx": "webapp/lib/voiciPageControl.js:188"
   }
 }

@@ -133,7 +133,7 @@ export async function dispatchInitialView() {
     }
     if (q.view === "view-messages") {
       const { enterMessages } = await import("../views/messages.js");
-      return enterMessages({ side: "messages" });
+      return enterMessages({ side: "inbox" });
     }
     if (q.view === "view-page-editor") {
       const { enterYourPage } = await import("../views/messages.js");

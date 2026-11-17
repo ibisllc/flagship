@@ -524,7 +524,10 @@
 //       warning says so (lib/voiciOwner.js VOICI_FIRST_PUBLISH, lib/voiciPageControl.js confirmGoPublic).
 //  v226: the webapp loads again (voiciOwner imported a name twice), Home's first tap works, confirms open inside
 //       an open dialog.
-const SHELL_VERSION = "v226";
+//  v227: Social has Profile / Inbox / Requests with red counts, a round call button opening Calls with Who to call,
+//       the posts in their own box under the profile box, and a new page's first post (docs/social-tabs.md;
+//       lib/socialCounts.js, views/messages.js, views/calls.js, lib/voiciOwner.js firstPostOp).
+const SHELL_VERSION = "v227";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -730,6 +733,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciReplies.js",
   "/lib/voiciCallHandoff.js",
   "/lib/voiciCallOut.js",
+  "/lib/socialCounts.js",
   "/lib/voiciReveal.js",
   "/lib/voiciCallSettings.js",
   "/views/messages.js",

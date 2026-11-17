@@ -45,7 +45,7 @@ import {
   removePage,
 } from "../lib/voiciPageControl.js";
 import { avatarUrl, displayUrl } from "./page-header.js";
-import { copyIcon, moreHorizontalIcon, pencilIcon, plusIcon, sendIcon, userIcon, xIcon } from "../lib/icons.js";
+import { copyIcon, moreHorizontalIcon, pencilCircleIcon, plusIcon, sendIcon, userIcon, xIcon } from "../lib/icons.js";
 import { VOICI_ACCEPT_NOTE, VOICI_NOT_PUBLISHED, VOICI_RULES_TEXT, VOICI_RULES_TITLE, VOICI_WAITING_ADMIN, voiciErrorText, voiciTextProblem } from "../lib/voiciCopy.js";
 
 import { dateLocale, tr, trn } from "../lib/i18n.js";
@@ -141,7 +141,7 @@ async function publishFromBar() {
 // ── render ────────────────────────────────────────────────────────────────
 
 function pencilButton(id, label) {
-  return `<button type="button" class="vp-pencil" id="${id}" aria-label="${escapeHtml(label)}"><span class="icon" aria-hidden="true">${pencilIcon}</span></button>`;
+  return `<button type="button" class="vp-pencil" id="${id}" aria-label="${escapeHtml(label)}"><span class="icon" aria-hidden="true">${pencilCircleIcon}</span></button>`;
 }
 
 function nameHtml(m) {
@@ -215,10 +215,10 @@ export function renderProfile() {
   const photoLabel = p.avatar ? tr("Change photo") : tr("Add photo");
   root.innerHTML = `
     <div class="vp" data-page-theme="${escapeHtml(p.theme)}" data-testid="social-profile">
-      <div class="vp-head${m.profilePending ? " is-pending" : ""}">
+      <div class="vp-box vp-head${m.profilePending ? " is-pending" : ""}" data-testid="social-profile-box">
         <div class="vp-photo">
           ${avatarUrl(p.avatar) ? `<img class="vp-avatar" id="page-avatar-img" alt="" />` : `<span class="vp-avatar vp-avatar-empty icon" aria-hidden="true">${userIcon}</span>`}
-          <button type="button" class="vp-pencil vp-photo-pencil" id="page-edit-photo" aria-label="${escapeHtml(photoLabel)}"><span class="icon" aria-hidden="true">${pencilIcon}</span></button>
+          <button type="button" class="vp-pencil vp-photo-pencil" id="page-edit-photo" aria-label="${escapeHtml(photoLabel)}"><span class="icon" aria-hidden="true">${pencilCircleIcon}</span></button>
           <input type="file" id="page-photo" accept="image/*" hidden />
         </div>
         ${nameHtml(m)}
@@ -226,8 +226,9 @@ export function renderProfile() {
         <p class="vp-err${edit.note ? "" : " hidden"}" data-profile-note role="alert"></p>
         ${m.profilePending ? `<p class="vp-muted" data-testid="page-pending-note">${escapeHtml(pendingLabel())}</p>` : ""}
         <div class="vp-links">${linksHtml(p.links)}</div>
-        <button type="button" class="vp-text-btn" id="page-edit-links"><span class="icon" aria-hidden="true">${pencilIcon}</span>${escapeHtml(p.links.length ? tr("Edit links") : tr("Add link"))}</button>
+        <button type="button" class="vp-text-btn" id="page-edit-links"><span class="icon" aria-hidden="true">${pencilCircleIcon}</span>${escapeHtml(p.links.length ? tr("Edit links") : tr("Add link"))}</button>
       </div>
+      <div class="vp-box vp-posts" data-testid="social-posts">
       <div class="vp-posts-head">
         <h3 class="vp-label mono">${escapeHtml(tr("Posts"))}</h3>
         <button type="button" class="vp-fill-btn" id="page-new-post-open"><span class="icon" aria-hidden="true">${plusIcon}</span>${escapeHtml(tr("New post"))}</button>
@@ -235,6 +236,7 @@ export function renderProfile() {
       ${!posts.length && !m.removing.length ? `<p class="vp-muted vp-empty">${escapeHtml(tr("No posts yet."))}</p>` : ""}
       ${m.removing.map((x) => postHtml(x, { removing: true })).join("")}
       ${posts.map((x) => postHtml(x, { pending: m.pendingPosts.has(x.id) })).join("")}
+      </div>
     </div>`;
 
   const nameText = root.querySelector("[data-testid=page-name-text]");

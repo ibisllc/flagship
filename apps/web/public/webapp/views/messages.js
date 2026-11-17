@@ -1,5 +1,6 @@
-// The Social tab (docs/social-tab.md, docs/voici-and-messages.md §11): the title row ("Your page", the Public switch,
-// Page options), Profile / Messages, the conversations, and the websites this account is signed in to (Page options).
+// The Social tab (docs/social-tab.md, docs/social-tabs.md, docs/voici-and-messages.md §11): the title row ("Your
+// page", the Public switch, Page options), Profile / Inbox / Requests with their red counts, the conversations, the
+// round call button that opens Calls, and the websites this account is signed in to (Page options).
 // Text only: every value a visitor wrote reaches the page through textContent (escapeHtml in templates), never as
 // HTML (§12.1).
 
@@ -10,25 +11,28 @@ import { formatWhen } from "../lib/dateFormat.js";
 import { inlinePrompt } from "../lib/modal.js";
 import { getSession } from "../lib/state.js";
 import { isUnread } from "../lib/voiciOwner.js";
-import { changeState, conversationsIn, onWorldChange, refreshWorld, unreadCount, visitorName, world } from "../lib/voiciWorld.js";
+import { changeState, conversationsIn, onWorldChange, refreshWorld, visitorName, world } from "../lib/voiciWorld.js";
 import { revokeSignedInSite, parseVoiciSignInLink } from "../lib/voiciSignIn.js";
 import { voiciErrorText, VOICI_PUBLISH_ADMIN_ONLY } from "../lib/voiciCopy.js";
-import { canPublishPage } from "../lib/voiciPageControl.js";
+import { canPublishPage, editorModel, pageUsername } from "../lib/voiciPageControl.js";
 import { moreHorizontalIcon } from "../lib/icons.js";
-import { displayUrl, publicSwitchHtml, renderSamplePage, wirePublicSwitches } from "./page-header.js";
+import { avatarUrl, displayUrl, publicSwitchHtml, renderSamplePage, wirePublicSwitches } from "./page-header.js";
 import { isEditingField, openPageOptions, renderBar, renderProfile, resetProfileEdit } from "./page-editor.js";
 import { checkReplies, markReplySeen, visitedPages } from "../lib/voiciReplies.js";
 import { callButtons } from "./calls.js";
+import { callHistory } from "../lib/voiciCallOut.js";
+import { callsSeenAt, markProfileSeen, socialCounts, unseenMissed } from "../lib/socialCounts.js";
+
 import { voiciWebOrigin } from "../lib/voiciOwner.js";
 
-import { tr } from "../lib/i18n.js";
+import { tr, trn } from "../lib/i18n.js";
 
 registerView("view-messages", { tab: "messages" });
 registerView("view-signed-in-sites", { tab: "messages" });
 
-/** Which side of the tab shows: "profile" or "messages". */
+/** Which side of the tab shows: "profile", "inbox" or "requests". */
 let side = "profile";
-let segment = "messages";
+const SIDES = ["profile", "inbox", "requests"];
 /** Replies waiting on pages this account wrote to from voi.ci: [{pageId, username, at}]. */
 let replyAlerts = [];
 
@@ -40,9 +44,9 @@ function lastLine(cv) {
 const EMPTY_MESSAGES = () => tr("No messages yet. Turn on Accept messages in Page options to get them.");
 
 function listHtml() {
-  const list = conversationsIn(segment);
+  const list = conversationsIn(side === "requests" ? "requests" : "messages");
   if (!list.length) {
-    const text = segment === "requests" ? tr("No message requests.") : EMPTY_MESSAGES();
+    const text = side === "requests" ? tr("No message requests.") : EMPTY_MESSAGES();
     return `<div class="card placeholder" data-testid="messages-empty">${escapeHtml(text)}</div>`;
   }
   return `<div class="fs-group">${list
@@ -64,7 +68,7 @@ function listHtml() {
     .join("")}</div>`;
 }
 
-/** The title row: "Your page" (or "Messages"), voi.ci/<u>, Public / Not public with the switch, and ⋯. */
+/** The title row: "Your page" (or "Inbox", "Requests"), voi.ci/<u>, Public / Not public with the switch, and ⋯. */
 function renderHead() {
   const root = $("social-head");
   if (!root) return;
@@ -85,7 +89,7 @@ function renderHead() {
       </div>`
       }
     </div>`;
-  root.querySelector("#social-title").textContent = side === "messages" && !world.sample ? tr("Messages") : tr("Your page");
+  root.querySelector("#social-title").textContent = world.sample || side === "profile" ? tr("Your page") : side === "inbox" ? tr("Inbox") : tr("Requests");
   root.querySelector("[data-testid=social-address]").textContent = displayUrl();
   $("page-options")?.addEventListener("click", () => openPageOptions());
   wirePublicSwitches(root);
@@ -107,12 +111,69 @@ function renderNotes() {
 function renderSides() {
   const profile = side === "profile" || world.sample;
   $("social-switch")?.classList.toggle("hidden", world.sample);
-  for (const b of document.querySelectorAll("[data-social-side]")) b.setAttribute("aria-checked", String(b.getAttribute("data-social-side") === (profile ? "profile" : "messages")));
+  $("social-call-button")?.classList.toggle("hidden", world.sample);
+  for (const b of document.querySelectorAll("[data-social-side]")) b.setAttribute("aria-checked", String(b.getAttribute("data-social-side") === (profile ? "profile" : side)));
   $("social-profile")?.classList.toggle("hidden", !profile);
   $("social-messages")?.classList.toggle("hidden", profile);
-  const requests = world.sample ? 0 : conversationsIn("requests").length;
-  const count = $("social-requests-count");
-  if (count) count.textContent = requests ? String(requests) : "";
+  if (!profile) $("social-compact")?.classList.add("hidden");
+  renderCounts();
+}
+
+/** The four red counts (docs/social-tabs.md) and their total on the Social tab. */
+export function currentCounts() {
+  if (world.sample) return socialCounts();
+  const inbox = conversationsIn("messages");
+  return socialCounts({
+    inboxUnread: inbox.filter((cv) => isUnread(cv, world.state)).length,
+    requests: conversationsIn("requests").length,
+    replyAlerts: replyAlerts.length,
+    missedCalls: unseenMissed(callHistory(world.missedCalls), callsSeenAt()),
+  });
+}
+
+function renderCounts() {
+  const c = currentCounts();
+  const put = (id, n) => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = n > 99 ? "99+" : n ? String(n) : "";
+    el.setAttribute("aria-label", n ? trn(n, "{0} new item", "{0} new items") : "");
+  };
+  put("social-count-profile", c.profile);
+  put("social-count-inbox", c.inbox);
+  put("social-count-requests", c.requests);
+  put("social-count-calls", c.calls);
+  const fab = $("social-call-button");
+  if (fab) fab.setAttribute("aria-label", c.calls ? tr("Calls, {0}", trn(c.calls, "{0} new item", "{0} new items")) : tr("Calls"));
+  updateBadge(c);
+}
+
+/** The page photo and name, pinned at the top once the profile box has scrolled away. */
+let compactWatch = null;
+function watchCompactHeader() {
+  compactWatch?.disconnect();
+  compactWatch = null;
+  const head = document.querySelector("#social-profile .vp-head");
+  const bar = $("social-compact");
+  if (!head || !bar || typeof IntersectionObserver !== "function") return;
+  const p = editorModel().merged.profile;
+  bar.replaceChildren();
+  const url = avatarUrl(p.avatar);
+  if (url) {
+    const img = document.createElement("img");
+    img.className = "social-compact-avatar";
+    img.alt = "";
+    img.src = url;
+    bar.appendChild(img);
+  }
+  const name = document.createElement("strong");
+  name.textContent = p.displayName || pageUsername();
+  bar.appendChild(name);
+  compactWatch = new IntersectionObserver(([e]) => {
+    const away = !e.isIntersecting && e.boundingClientRect.bottom < (e.rootBounds?.top ?? 0) + 1;
+    bar.classList.toggle("hidden", !away || side !== "profile");
+  });
+  compactWatch.observe(head);
 }
 
 /** Draws the whole tab. */
@@ -125,16 +186,16 @@ export function renderMessages() {
     $("pe-bar-slot")?.replaceChildren();
     return;
   }
-  if (side === "profile") renderProfile();
-  else renderBar();
+  if (side === "profile") {
+    renderProfile();
+    watchCompactHeader();
+    markProfileSeen();
+  } else renderBar();
+  renderReplyAlerts();
   renderList();
 }
 
 function renderList() {
-  const requests = conversationsIn("requests").length;
-  const count = $("messages-requests-count");
-  if (count) count.textContent = requests ? `(${requests})` : "";
-  for (const b of document.querySelectorAll("[data-messages-tab]")) b.setAttribute("aria-checked", String(b.getAttribute("data-messages-tab") === segment));
   const list = $("messages-list");
   if (!list) return;
   if (world.inboxError && !world.conversations.length) {
@@ -179,6 +240,7 @@ function renderReplyAlerts() {
   const root = $("messages-reply-alerts");
   if (!root) return;
   root.replaceChildren();
+  if (side !== "inbox") return;
   for (const a of replyAlerts) {
     const line = document.createElement("div");
     line.className = "row";
@@ -197,7 +259,7 @@ function renderReplyAlerts() {
       markReplySeen(a.pageId, a.at);
       replyAlerts = replyAlerts.filter((x) => x.pageId !== a.pageId);
       renderReplyAlerts();
-      updateBadge();
+      renderCounts();
       window.open(`${voiciWebOrigin()}/${a.username}`, "_blank", "noopener,noreferrer");
     });
     line.append(b, callButtons({ pageId: a.pageId, username: a.username }));
@@ -219,11 +281,11 @@ async function refreshReplyAlerts() {
     replyAlerts = [];
   }
   renderReplyAlerts();
-  updateBadge();
+  renderCounts();
 }
 
 async function enterSocial(which) {
-  if (which) side = which;
+  if (which) side = which === "messages" ? "inbox" : SIDES.includes(which) ? which : "profile";
   resetProfileEdit();
   show("view-messages");
   if (!world.pageLoaded) {
@@ -237,7 +299,7 @@ async function enterSocial(which) {
   renderMessages();
 }
 
-/** The tab as the bar opens it (and the `messages` deep link): the side last shown, Messages for a deep link. */
+/** The tab as the bar opens it (and the `messages` deep link): the side last shown, Inbox for a deep link. */
 export async function enterMessages({ side: which } = {}) {
   await enterSocial(which);
 }
@@ -248,10 +310,10 @@ export async function enterYourPage() {
   window.scrollTo({ top: 0 });
 }
 
-function updateBadge() {
+function updateBadge(c = currentCounts()) {
   const badge = $("messages-tab-badge");
   if (!badge) return;
-  const n = unreadCount() + replyAlerts.length;
+  const n = c.total;
   badge.textContent = n > 99 ? "99+" : String(n);
   badge.classList.toggle("hidden", n === 0);
 }
@@ -327,18 +389,13 @@ const typingInProfile = () => {
 export function initMessagesView() {
   for (const b of document.querySelectorAll("[data-social-side]")) {
     b.addEventListener("click", () => {
-      side = b.getAttribute("data-social-side") === "messages" ? "messages" : "profile";
+      const want = b.getAttribute("data-social-side");
+      side = SIDES.includes(want) ? want : "profile";
       renderMessages();
     });
   }
-  for (const b of document.querySelectorAll("[data-messages-tab]")) {
-    b.addEventListener("click", () => {
-      segment = b.getAttribute("data-messages-tab") === "requests" ? "requests" : "messages";
-      renderList();
-    });
-  }
   $("signed-in-sites-back")?.addEventListener("click", () => void enterMessages());
-  $("messages-calls")?.addEventListener("click", () => void import("./calls.js").then((m) => m.enterCalls()));
+  $("social-call-button")?.addEventListener("click", () => void import("./calls.js").then((m) => m.enterCalls()));
   // A publish, a draft or a refresh elsewhere: draw again (the field being typed in is kept).
   onWorldChange(() => {
     updateBadge();
