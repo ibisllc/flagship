@@ -20,3 +20,14 @@ unzip -l "$out/libwebrtc.aar" | grep -q 'classes.jar' || { echo "build-android: 
 unzip -p "$out/libwebrtc.aar" classes.jar > "$work/classes.jar"
 unzip -l "$work/classes.jar" | grep -q 'org/webrtc/FlagshipFrameCrypto.class' \
   || { echo "build-android: FlagshipFrameCrypto is not in the AAR" >&2; exit 1; }
+# Every generated JNI bridge a class calls must be in the jar: libwebrtc-157-43884507084 shipped without
+# org/webrtc/PeerConnectionFactoryJni (jni_zero output left out), so the first call threw NoClassDefFoundError.
+python3 - "$work/classes.jar" <<'PY'
+import re, sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+names = set(z.namelist())
+missing = sorted({m.decode() + ".class" for n in names if n.endswith(".class")
+                  for m in re.findall(rb"org/webrtc/[A-Za-z0-9_$]*Jni(?=[;\x00-\x1f]|$)", z.read(n))} - names)
+if missing:
+    sys.exit("build-android: classes.jar lacks the JNI bridges " + ", ".join(missing[:10]))
+PY
