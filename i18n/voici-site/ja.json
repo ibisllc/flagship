@@ -151,6 +151,9 @@
   "Their camera": "相手のカメラ",
   "Your camera": "自分のカメラ",
   "Flip": "切り替え",
+  "Full screen": "全画面表示",
+  "Exit full screen": "全画面表示を終了",
+  "Picture in picture": "ピクチャ・イン・ピクチャ",
   "End": "終了",
   "Audio": "オーディオ",
   "Audio output {0}": "オーディオ出力 {0}"
