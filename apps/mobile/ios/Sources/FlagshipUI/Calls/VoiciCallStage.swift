@@ -179,6 +179,8 @@ struct VoiciCallStage: View {
                 CallRoundButton(symbol: "phone.down.fill", title: String(localized: "End"), style: .end, action: actions.hangUp)
                     .accessibilityIdentifier("voici-call-end")
             }
+            // On an iPad the row would spread its buttons across the whole screen; keep it a hand's width.
+            .frame(maxWidth: 440)
         }
     }
 

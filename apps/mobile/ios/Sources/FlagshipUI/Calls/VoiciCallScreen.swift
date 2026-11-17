@@ -110,6 +110,7 @@ struct VoiciRingingStage: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
+                .frame(maxWidth: 440)
                 .padding(.bottom, 24)
             }
             .padding(.top, geo.size.height * 0.1)
