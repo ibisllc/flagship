@@ -23,7 +23,8 @@ import { canonicalIp, DIRECT_MAX_ADDRESSES } from "./directAccess.js";
 import type { Bytes, Keypair } from "./types.js";
 
 export const TAG_DIRECT_NAME = "flagship/direct-name/v1";
-export const DIRECT_APEX = "fshp.app";
+// gym: the gym's own direct apex under its zone, so the gym never writes into production's fshp.app zone.
+export const DIRECT_APEX = "fshp.gym.flagship.services";
 
 export type DirectNameCaa = "pin" | "off";
 export type DirectNameKind = "derived" | "vanity";
