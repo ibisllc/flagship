@@ -82,14 +82,14 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     expect(r.code).toBe(0);
     const steps = planSteps(r.out);
-    expect(steps).toHaveLength(47);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 47 }, (_, i) => i + 1));
+    expect(steps).toHaveLength(48);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 48 }, (_, i) => i + 1));
     const phases = [...r.out.matchAll(/^ {4}phase ([AB]) \|/gm)].map((m) => m[1]);
-    expect(phases).toHaveLength(47);
-    expect(phases.slice(0, 32).every((p) => p === "A")).toBe(true);
-    expect(phases.slice(32).every((p) => p === "B")).toBe(true);
-    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(47);
-    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(47);
+    expect(phases).toHaveLength(48);
+    expect(phases.slice(0, 33).every((p) => p === "A")).toBe(true);
+    expect(phases.slice(33).every((p) => p === "B")).toBe(true);
+    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(48);
+    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(48);
     expect(calls(env)).toBe("");
   });
 
@@ -104,7 +104,7 @@ describe("release.sh", () => {
     // | 7 .com (+ zone-health post-check) | 8a-8f the relay mesh (key, admission, certs, feed on, Rust iad1, watch)
     // | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
     expect(sections).toEqual([
-      "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "3d", "9", "5", "6", "1b", "1c", "1d", "1e", "4", "8", "7a", "6a", "7",
+      "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "3d", "3e", "9", "5", "6", "1b", "1c", "1d", "1e", "4", "8", "7a", "6a", "7",
       "8a", "8b", "8c", "8d", "8e", "8f", "14", "9", "9", "9",
       "9b", "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11d", "11b", "13",
     ]);
@@ -135,9 +135,9 @@ describe("release.sh", () => {
     expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("iOS: Release-clean"));
     expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("Android: release-clean"));
     expect(idx("PQ release key")).toBeLessThan(idx("Endorse"));
-    expect(idx("Write DEPLOYED-FINAL")).toBe(32);
+    expect(idx("Write DEPLOYED-FINAL")).toBe(33);
     // the canary opens phase B: after the release is published, before the scrub and the stores
-    expect(idx("Canary cohorts")).toBe(33);
+    expect(idx("Canary cohorts")).toBe(34);
     // the relay mesh (journal I3/I4): .com's prerequisites before the first .com deploy binds them; the mesh relay
     // only after .com has admitted it, its certificates exist and the feed publishes a directory naming it
     expect(idx("R2 buckets the new .com binds")).toBeLessThan(idx("Deploy .com"));
@@ -160,6 +160,21 @@ describe("release.sh", () => {
     expect(idx("PQ release key")).toBeLessThan(idx("Sign and commit the runtime manifest"));
     expect(idx("Canary cohorts")).toBeGreaterThan(idx("Sign and publish the release catalog"));
     expect(idx("Canary cohorts")).toBeGreaterThan(idx("Deploy .com"));
+    // 0.4: the webapp shell is signed after the version bump and before the .com deploy that publishes it
+    expect(idx("Sign the webapp shell")).toBeGreaterThan(idx("Bump the product version"));
+    expect(idx("Sign the webapp shell")).toBeLessThan(idx("Deploy .com"));
+  });
+
+  it("signs the webapp shell only on --sign and refuses to replace a live relay mesh with the TS hub (0.4)", () => {
+    const body = SOURCE.slice(SOURCE.indexOf("run_shellsig() {"), SOURCE.indexOf("canary_percent() {"));
+    expect(body.indexOf("webapp-shell.ts sign\n")).toBeLessThan(body.indexOf('confirm "Sign webapp shell'));
+    expect(body).toContain('with_maintainers XA "$WT" npx tsx scripts/webapp-shell.ts sign --sign');
+    expect(body).toContain("land_commits");
+    const services = SOURCE.slice(SOURCE.indexOf("run_services() {"), SOURCE.indexOf("relay_ips() {"));
+    expect(services.indexOf("directory_lists")).toBeLessThan(services.indexOf("flyctl deploy"));
+    expect(services).toContain("mesh-off-rollback");
+    for (const n of ["VOUCHER_SIGNING_KEYS", "OHTTP_GATEWAY_KEYS", "CLOUDFLARE_DIRECT_DNS_API_TOKEN", "WEBPUSH_VAPID_PRIVATE_KEY_PEM"])
+      expect(SOURCE).toMatch(new RegExp(`KNOWN_SECRETS=\\([^)]*\\b${n}\\b`));
   });
 
   it("signs the runtime manifest only on --sign, never in a dry run, and the .com step refuses a null one without a typed reason (G2)", () => {
@@ -190,7 +205,7 @@ describe("release.sh", () => {
   it("--list --phase B lists only phase B", () => {
     const r = run(sandbox(), ["--list", "--short", "--phase", "B"]);
     const steps = planSteps(r.out);
-    expect(steps[0]!.n).toBe(33);
+    expect(steps[0]!.n).toBe(34);
     expect(steps).toHaveLength(15);
   });
 
@@ -200,7 +215,7 @@ describe("release.sh", () => {
     expect(r.code, r.err).toBe(0);
     expect(r.out).toContain("[dry-run]");
     const steps = planSteps(r.out);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 32 }, (_, i) => i + 1));
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 33 }, (_, i) => i + 1));
     expect(r.out).toContain("npm run deploy");
     expect(r.out).toContain("bash scripts/gym-release-run.sh");
     expect(r.out).toContain("node scripts/check-versions.mjs --write");
@@ -282,7 +297,7 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
       encoding: "utf8",
       env: { PATH: process.env.PATH ?? "", HOME: env.home, FLAGSHIP_RELEASE_HOME: home },
     });
-    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=31"]);
+    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=32"]);
     expect(JSON.parse(readFileSync(join(home, "state.json"), "utf8")).done).toEqual(["2"]);
   });
 
