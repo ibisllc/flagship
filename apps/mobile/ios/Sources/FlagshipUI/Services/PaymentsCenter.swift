@@ -12,7 +12,7 @@ import FlagshipCore
 @MainActor
 @Observable
 public final class PaymentsCenter {
-    public static let shared = PaymentsCenter()
+    public static let shared = PaymentsCenter(store: StoreKitVoucherStore(), vault: KeychainShopVault())
 
     public private(set) var info: PaymentsInfo?
     public private(set) var wallet: VoucherWallet?
@@ -32,10 +32,24 @@ public final class PaymentsCenter {
     @ObservationIgnored private var contextProvider: (String) -> VoucherWalletEngine.Context
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored public var random: (() -> Double)?
+    /// The in-app shop (StoreKit); nil where no store is wired (unit tests of the plan alone).
+    public private(set) var shop: VoucherShop?
 
-    public init(defaults: UserDefaults = .standard, context: ((String) -> VoucherWalletEngine.Context)? = nil) {
+    public init(defaults: UserDefaults = .standard, context: ((String) -> VoucherWalletEngine.Context)? = nil,
+                store: (any VoucherStoreSource)? = nil, vault: (any ShopVault)? = nil) {
         self.defaults = defaults
         self.contextProvider = context ?? { u in Self.keystoreContext(username: u) }
+        if let store { setShop(store: store, vault: vault ?? KeychainShopVault()) }
+    }
+
+    /// Replace the purchase source (the mock gym's stand-in for StoreKit).
+    public func setShop(store: any VoucherStoreSource, vault: any ShopVault) {
+        shop?.stopListening()
+        let s = VoucherShop(store: store, vault: vault) { [weak self] in self?.fresh() }
+        s.now = { [weak self] in self?.now() ?? Int64(Date().timeIntervalSince1970 * 1000) }
+        s.onChange = { [weak self] in self?.mirror() }
+        shop = s
+        if engine != nil { s.startListening() }
     }
 
     /// Admin status, the UMK and the device signer from this session's keys (never prompts).
@@ -65,6 +79,7 @@ public final class PaymentsCenter {
         if let engine {
             engine.now = { [weak self] in self?.now() ?? Int64(Date().timeIntervalSince1970 * 1000) }
             if let random { engine.random = random }
+            shop?.startListening()
         }
         mirror()
     }
@@ -94,6 +109,22 @@ public final class PaymentsCenter {
         await e.tick()
         isLoading = false
         mirror()
+        if let shop {
+            await shop.loadProducts(info)
+            await shop.resumeUnfinished()
+            mirror()
+        }
+    }
+
+    /// Buy a pack through the store; the vouchers land in the wallet before the purchase is finished.
+    @discardableResult
+    public func buy(units: Int64) async -> Bool {
+        guard let shop, fresh() != nil else { return false }
+        isWorking = true
+        let ok = await shop.buy(units: units)
+        isWorking = false
+        mirror()
+        return ok
     }
 
     private func run(_ f: (VoucherWalletEngine) async -> Bool) async -> Bool {
@@ -170,6 +201,27 @@ public enum PlanDisplay {
     /// GB the cap buys.
     public static func capGb(_ units: Int64, _ cfg: PaymentsConfig) -> Int64 {
         cfg.overage.blockUnits > 0 ? (units / cfg.overage.blockUnits) * cfg.overage.blockGb : 0
+    }
+
+    /// The sentence for what a store purchase did (`VoucherShop.outcome`), nil when there is nothing to say.
+    public static func shopOutcome(_ code: String, units: Int64, _ cfg: PaymentsConfig) -> String {
+        let amount = dollars(units, cfg)
+        switch code {
+        case "added": return String(localized: "Added \(amount) to your balance.")
+        case "purchase-pending": return String(localized: "Waiting for the purchase to be approved. It's added to your balance once it is.")
+        case "device-cap":
+            return String(localized: "This device can buy up to \(dollars(VoucherShop.capUnits, cfg)) of credit in 30 days. Try a smaller amount or try again later.")
+        case "store-failed": return String(localized: "The App Store couldn't complete the purchase. Try again.")
+        case "payment-unverified": return String(localized: "The App Store couldn't verify this purchase, so nothing was added.")
+        case "payment-invalid": return String(localized: "Flagship couldn't confirm this purchase with the App Store, so nothing was added. If you were charged, you can ask Apple for a refund.")
+        case "payment-unpaid": return String(localized: "The App Store hasn't confirmed the payment yet. Your purchase is kept and added to your balance once it has.")
+        case "payment-refunded": return String(localized: "This purchase was refunded, so nothing was added.")
+        case "payment-used": return String(localized: "This purchase was already added to a balance, maybe on another device.")
+        case "rail-off": return String(localized: "Buying in the app isn't available right now.")
+        case "no-device-key", "forbidden": return error(code)
+        // no-key, rail-unreachable, network, malformed, too-many, wrong-count: the transaction stays unfinished.
+        default: return String(localized: "Couldn't add your purchase of \(amount) yet. It's kept, and Flagship adds it to your balance later.")
+        }
     }
 
     /// The sentence for a refusal or failure code.
