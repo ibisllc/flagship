@@ -15477,5 +15477,61 @@
   "Hello. I am using the Flagship app, from flagshipserver.com": {
     "en": "Hello. I am using the Flagship app, from flagshipserver.com",
     "ctx": "webapp/lib/voiciPageControl.js:188"
+  },
+  "Missed call from {0}": {
+    "en": "Missed call from {0}",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "Declined a call from {0}": {
+    "en": "Declined a call from {0}",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "Call with {0}": {
+    "en": "Call with {0}",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "You called {0}": {
+    "en": "You called {0}",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "New conversation with {0}": {
+    "en": "New conversation with {0}",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "Message request from {0}": {
+    "en": "Message request from {0}",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "Your page went public": {
+    "en": "Your page went public",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "Your page was updated": {
+    "en": "Your page was updated",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "You posted on your page": {
+    "en": "You posted on your page",
+    "ctx": "webapp/lib/socialActivity.js (Activity: a call or social entry)"
+  },
+  "Show": {
+    "en": "Show",
+    "ctx": "webapp/views/activity.js (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "Calls and messages": {
+    "en": "Calls and messages",
+    "ctx": "webapp/views/activity.js (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "No calls or messages yet.": {
+    "en": "No calls or messages yet.",
+    "ctx": "webapp/views/activity.js (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "Opens the server": {
+    "en": "Opens the server",
+    "ctx": "webapp/views/activity.js (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "Scheduled backup finished": {
+    "en": "Scheduled backup finished",
+    "ctx": "webapp/lib/activityFeed.js (Activity: a box event title)"
   }
 }

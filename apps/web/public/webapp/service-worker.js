@@ -527,7 +527,10 @@
 //  v227: Social has Profile / Inbox / Requests with red counts, a round call button opening Calls with Who to call,
 //       the posts in their own box under the profile box, and a new page's first post (docs/social-tabs.md;
 //       lib/socialCounts.js, views/messages.js, views/calls.js, lib/voiciOwner.js firstPostOp).
-const SHELL_VERSION = "v227";
+//  v228: Activity has an All / Servers / Social filter and a Calls and messages section built in this browser
+//       (calls, conversations, the page), a scheduled backup has its own title, and a server log entry opens its
+//       server (docs/activity-social.md; lib/socialActivity.js, views/activity.js).
+const SHELL_VERSION = "v228";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -734,6 +737,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciCallHandoff.js",
   "/lib/voiciCallOut.js",
   "/lib/socialCounts.js",
+  "/lib/socialActivity.js",
   "/lib/voiciReveal.js",
   "/lib/voiciCallSettings.js",
   "/views/messages.js",

@@ -3794,5 +3794,19 @@
   "Enter a voi.ci username, like voi.ci/alex.": "请输入 voi.ci 用户名，例如 voi.ci/alex。",
   "There's no page at voi.ci/{0}.": "voi.ci/{0} 上没有页面。",
   "voi.ci/{0} doesn't take calls.": "voi.ci/{0} 不接受通话。",
-  "Hello. I am using the Flagship app, from flagshipserver.com": "你好。我正在使用来自 flagshipserver.com 的 Flagship 应用"
+  "Hello. I am using the Flagship app, from flagshipserver.com": "你好。我正在使用来自 flagshipserver.com 的 Flagship 应用",
+  "Missed call from {0}": "来自 {0} 的未接来电",
+  "Declined a call from {0}": "已拒接 {0} 的来电",
+  "Call with {0}": "与 {0} 的通话",
+  "You called {0}": "你呼叫了 {0}",
+  "New conversation with {0}": "与 {0} 的新对话",
+  "Message request from {0}": "来自 {0} 的消息请求",
+  "Your page went public": "你的页面已公开",
+  "Your page was updated": "你的页面已更新",
+  "You posted on your page": "你在页面上发布了帖子",
+  "Show": "显示",
+  "Calls and messages": "通话和消息",
+  "No calls or messages yet.": "还没有通话或消息。",
+  "Opens the server": "打开服务器",
+  "Scheduled backup finished": "计划备份已完成"
 }

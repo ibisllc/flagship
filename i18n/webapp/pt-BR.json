@@ -3794,5 +3794,19 @@
   "Enter a voi.ci username, like voi.ci/alex.": "Digite um nome de usuário do voi.ci, como voi.ci/alex.",
   "There's no page at voi.ci/{0}.": "Não há nenhuma página em voi.ci/{0}.",
   "voi.ci/{0} doesn't take calls.": "voi.ci/{0} não aceita chamadas.",
-  "Hello. I am using the Flagship app, from flagshipserver.com": "Olá. Estou usando o app Flagship, do flagshipserver.com"
+  "Hello. I am using the Flagship app, from flagshipserver.com": "Olá. Estou usando o app Flagship, do flagshipserver.com",
+  "Missed call from {0}": "Chamada perdida de {0}",
+  "Declined a call from {0}": "Você recusou uma chamada de {0}",
+  "Call with {0}": "Chamada com {0}",
+  "You called {0}": "Você ligou para {0}",
+  "New conversation with {0}": "Nova conversa com {0}",
+  "Message request from {0}": "Solicitação de mensagem de {0}",
+  "Your page went public": "Sua página ficou pública",
+  "Your page was updated": "Sua página foi atualizada",
+  "You posted on your page": "Você publicou na sua página",
+  "Show": "Mostrar",
+  "Calls and messages": "Chamadas e mensagens",
+  "No calls or messages yet.": "Ainda não há chamadas nem mensagens.",
+  "Opens the server": "Abre o servidor",
+  "Scheduled backup finished": "Backup agendado concluído"
 }

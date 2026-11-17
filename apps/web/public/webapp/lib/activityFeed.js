@@ -18,6 +18,7 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "server.decommission.closed": { label: tr("Server retired"), icon: "⏏️" },
   "server.backup.started": { label: tr("Backup started"), icon: "💾" },
   "server.backup.created": { label: tr("Backup ready"), icon: "💾" },
+  "server.backup.scheduled": { label: tr("Scheduled backup finished"), icon: "💾" },
   "server.backup.downloaded": { label: tr("Backup downloaded"), icon: "⬇️" },
   "server.backup.failed": { label: tr("Backup failed"), icon: "⚠️" },
   "server.restore.started": { label: tr("Import started"), icon: "📥" },
@@ -66,7 +67,7 @@ function humanize(s) {
  * records every owner write as a generic `post /api/screens/...` line; those
  * say nothing a person would read, so they are left out.
  */
-export function boxEntryRow(e, serverName = "") {
+export function boxEntryRow(e, serverName = "", fqdn = "") {
   if (!e || typeof e.ts !== "number") return null;
   const key = e.kind || e.action;
   if (!e.kind && /^(get|post|put|patch|delete) \//i.test(String(e.action))) return null;
@@ -77,6 +78,8 @@ export function boxEntryRow(e, serverName = "") {
     at: e.ts,
     source: "server",
     server: serverName,
+    /** The server the entry came from, when known: a tap opens it. */
+    fqdn,
     icon: known?.icon ?? (e.ok === false ? "⚠️" : "•"),
     title,
     detail: e.detail || (e.target && !e.detail ? String(e.target) : ""),
@@ -89,7 +92,7 @@ export function mergeFeed({ boxes = [], audit = [], auditLabel, auditIcon, audit
   const rows = [];
   for (const b of boxes) {
     for (const e of b.entries ?? []) {
-      const r = boxEntryRow(e, b.serverName);
+      const r = boxEntryRow(e, b.serverName, b.fqdn ?? "");
       if (r) rows.push(r);
     }
   }
