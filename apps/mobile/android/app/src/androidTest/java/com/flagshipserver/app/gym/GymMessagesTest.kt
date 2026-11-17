@@ -108,6 +108,13 @@ class GymMessagesTest : GymBase() {
         eventually(15_000, "calls on at .com") {
             VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.let { it.acceptsCalls == 1 && it.callsFrom == "signed-in" } == true
         }
+        // Messages are on now: the empty Inbox says where they will come from, not to turn them on.
+        val ctx = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        tap("social-tab-inbox")
+        waitUntilExists("messages-empty")
+        eventually(10_000, "the empty Inbox knows messages are on") { textCount(ctx.getString(com.flagshipserver.app.R.string.voici_empty_messages_on)) == 1 }
+        assertEquals(0, textCount(ctx.getString(com.flagshipserver.app.R.string.voici_empty_messages_options)))
+        tap("social-tab-profile")
         tap("page-options")
         waitUntilExists("page-calls-from")
         waitUntilExists("page-calls-from-signed-in")

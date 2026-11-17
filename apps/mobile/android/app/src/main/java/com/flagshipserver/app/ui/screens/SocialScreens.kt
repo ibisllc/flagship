@@ -1000,8 +1000,16 @@ private fun SocialConversations(center: VoiciCenter, ui: com.flagshipserver.app.
     }
     val list = if (showRequests) ui.requests else ui.accepted
     if (list.isEmpty()) {
+        val page by center.page.collectAsState()
+        val messagesOn = page.isPublic && page.published?.acceptsMessages == 1
         FSEmptyState(
-            title = stringResource(if (showRequests) R.string.voici_empty_requests else R.string.voici_empty_messages_options),
+            title = stringResource(
+                when {
+                    showRequests -> R.string.voici_empty_requests
+                    messagesOn -> R.string.voici_empty_messages_on
+                    else -> R.string.voici_empty_messages_options
+                },
+            ),
             icon = Icons.Outlined.ChatBubbleOutline,
             modifier = Modifier.testTag("messages-empty"),
         )
