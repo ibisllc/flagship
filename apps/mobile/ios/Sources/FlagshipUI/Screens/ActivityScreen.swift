@@ -202,7 +202,8 @@ public struct ActivityScreen: View {
         // Top-right, above the large title. The PodSwitcher now presents its
         // panel as a popover, so it is no longer clipped by the nav bar here.
         .toolbar {
-            if pods.count > 1 {
+            // Calls and messages belong to no server, so the server picker steps aside on Social.
+            if pods.count > 1, filter != .social {
                 ToolbarItem(placement: .topBarTrailing) {
                     podSwitcherIfMulti
                 }
