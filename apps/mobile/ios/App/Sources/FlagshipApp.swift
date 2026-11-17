@@ -886,7 +886,7 @@ struct FlagshipApp: App {
                 }
                 .onAppear {
                     #if DEBUG
-                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy,
+                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: self.privacy,
                                                    screens: mockClient, mocks: gymMocks)
                     GymSweepSeams.applyOnboarding(args: ProcessInfo.processInfo.arguments, mocks: gymMocks)
                     #endif
