@@ -61,9 +61,29 @@ jobs:
           id=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']))")
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
+      # MaintainersConformanceTests replay the vectors published in @ibisllc/maintainers, read from
+      # node_modules. Only that package is needed, at the lockfile's version (no full npm ci).
+      - name: Maintainers conformance vectors
+        run: |
+          v=$(node -p 'require("./package-lock.json").packages["node_modules/@ibisllc/maintainers"].version')
+          mkdir -p node_modules/@ibisllc/maintainers
+          npm pack "@ibisllc/maintainers@$v" --silent --pack-destination "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/ibisllc-maintainers-$v.tgz" -C node_modules/@ibisllc/maintainers --strip-components=1
+          test -f node_modules/@ibisllc/maintainers/conformance/manifest.json
+
       - name: App unit tests (simulator)
         working-directory: apps/mobile/ios
-        run: xcodebuild test -scheme FlagshipMobile-Package -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" -quiet
+        run: xcodebuild test -scheme FlagshipMobile-Package -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" -resultBundlePath "$RUNNER_TEMP/unit.xcresult" -quiet
+
+      # -quiet hides the assertion text; the result bundle keeps it (xcrun xcresulttool get test-results tests).
+      - name: Upload the unit test result
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unit-xcresult
+          path: ${{ runner.temp }}/unit.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
 
       # A few no-backend UI gym scenarios on the real app (smoke mode, mock client): the app
       # launches, renders its tabs and navigates. The full gym stays on the owner's Mac.
