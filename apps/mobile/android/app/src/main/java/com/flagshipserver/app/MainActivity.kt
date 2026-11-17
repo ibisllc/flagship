@@ -228,9 +228,15 @@ class MainActivity : FragmentActivity() {
         // after launch (after a gym launch has reset the previous run's state).
         com.flagshipserver.app.core.SecurityNoticeCenter.install(applicationContext)
         com.flagshipserver.app.core.RelayAddressCenter.install(applicationContext).start()
-        // Which names are this device's own account, for the account-removed screen.
-        com.flagshipserver.app.core.AccountGone.ownNames = {
-            listOfNotNull(appState.currentUser.value, appState.activeCloudName.value)
+        // Which names are this device's own account, for the account-removed screen. A gym run on mocks has no
+        // `.com` account: a stray live call's 404 for the fixture account must not cover every screen (CI F11).
+        if (useLive) {
+            com.flagshipserver.app.core.AccountGone.ownNames = {
+                listOfNotNull(appState.currentUser.value, appState.activeCloudName.value)
+            }
+        } else {
+            com.flagshipserver.app.core.AccountGone.ownNames = { emptyList() }
+            com.flagshipserver.app.core.AccountGone.clear()
         }
 
         // The leader becomes the current server only when this device can
@@ -343,7 +349,9 @@ class MainActivity : FragmentActivity() {
         // of the account's servers, devices and apps on `.com` carries one.
         // Minted with the account device key (no prompt on Android) or the IRK
         // when the biometric session is already fresh — never a prompt.
-        com.flagshipserver.app.core.AccountReadTokens.shared = com.flagshipserver.app.core.AccountReadTokens(
+        // A gym run on mocks mints nothing: the fixture account does not exist on `.com`, and each refused mint
+        // was charged to the account-resolve budget (journal F15).
+        com.flagshipserver.app.core.AccountReadTokens.shared = if (!useLive) null else com.flagshipserver.app.core.AccountReadTokens(
             transport = OkHttpJsonTransport(okHttp),
             store = com.flagshipserver.app.keystore.KeystoreReadTokenStore(),
             signers = { username ->
@@ -435,7 +443,7 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.keystore.PqSessionKek.onOpened = { runCatching { pqKeyStore.rewrapUnderSessionKek() } }
         // Milestone 4: the servers this phone holds as strict, and the PQ tunnel to them.
         com.flagshipserver.app.keystore.QuantumSafetyService.attach(applicationContext, pqKeyStore, com.flagshipserver.app.core.BoxKeyPins.shared)
-        com.flagshipserver.app.keystore.PqIdentityUpgrade.binder = com.flagshipserver.app.core.pq.PqIdentityBinder(
+        com.flagshipserver.app.keystore.PqIdentityUpgrade.binder = if (!useLive) null else com.flagshipserver.app.core.pq.PqIdentityBinder(
             store = pqKeyStore,
             client = com.flagshipserver.app.core.pq.LivePqKeyBindingClient(
                 OkHttpJsonTransport(okHttp), { com.flagshipserver.app.core.Endpoints.controlBaseUrl },
