@@ -16,6 +16,10 @@ public struct PaymentsComError: Error, Equatable, Sendable {
     public var path: PrivatePath?
     /// A `wrong-count` 409 from `paid-issue`: the units the payment bought.
     public var units: Int64?
+    /// An org spend's refusal: `org-seats-below-live` names the live seats, `org-seats` the allowed range.
+    public var liveSeats: Int64?
+    public var minSeats: Int64?
+    public var maxSeats: Int64?
 
     public init(status: Int, code: String, stored: JSONValue? = nil, spent: [String] = [], nullifier: String? = nil, units: Int64? = nil) {
         self.status = status; self.code = code; self.stored = stored; self.spent = spent; self.nullifier = nullifier; self.units = units
@@ -23,8 +27,12 @@ public struct PaymentsComError: Error, Equatable, Sendable {
 
     static func from(status: Int, data: Data) -> PaymentsComError {
         let v = JSONValue.parse(utf8: Array(data))
-        return PaymentsComError(status: status, code: v?["code"]?.string ?? (status == 0 ? "network" : "http-\(status)"), stored: v?["wallet"],
-                                spent: (v?["spent"]?.array ?? []).compactMap(\.string), nullifier: v?["nullifier"]?.string, units: v?["units"]?.safeInt)
+        var e = PaymentsComError(status: status, code: v?["code"]?.string ?? (status == 0 ? "network" : "http-\(status)"), stored: v?["wallet"],
+                                 spent: (v?["spent"]?.array ?? []).compactMap(\.string), nullifier: v?["nullifier"]?.string, units: v?["units"]?.safeInt)
+        e.liveSeats = v?["liveSeats"]?.safeInt
+        e.minSeats = v?["min"]?.safeInt
+        e.maxSeats = v?["max"]?.safeInt
+        return e
     }
 }
 
