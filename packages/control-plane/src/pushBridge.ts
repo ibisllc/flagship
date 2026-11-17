@@ -282,6 +282,8 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   "server-registered": { title: "Flagship", body: "A new server was added to your account." },
   "cert-alert": { title: "Flagship", body: "One of your servers needs your attention." },
   "app-access": { title: "Flagship", body: "One of your apps wants to reach the internet." },
+  // The owner's outbound proxy fails (docs/outbound-proxy.md "Failure handling"): names no server or proxy.
+  "outbound-proxy": { title: "Flagship", body: "One of your servers can't use its outbound proxy. Open Flagship to see why." },
   "invite-created": { title: "Flagship", body: "A device on your account invited someone to one of your apps." },
   // voi.ci Messages (docs/voici-and-messages.md §8.3): content-free, kinds `message` and `message-request`.
   messages: { title: "Flagship", body: "New message" },

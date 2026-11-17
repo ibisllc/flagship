@@ -106,6 +106,8 @@ export interface PaymentsConfigDeps {
   testIssue: boolean;
   /** Which rails sell and the store product ids (voucherRails.ts railsSummary). */
   rails?: { rails: { stripe: boolean; apple: boolean; google: boolean }; products: { units: number; productId: string }[] };
+  /** The private relay the apps send spends through (docs/outbound-proxy.md "Failure handling"). */
+  ohttp?: unknown;
   now?: () => number;
 }
 
@@ -115,7 +117,10 @@ export function handlePaymentsConfig(deps: PaymentsConfigDeps): HandlerResponseW
   const keys = deps.keys
     .filter((k) => k.acceptUntil === 0 || now < k.acceptUntil)
     .map((k) => ({ ...k.pub, issueUntil: k.issueUntil, acceptUntil: k.acceptUntil, issuing: k.issueUntil === 0 || now < k.issueUntil }));
-  return ok({ config: deps.config, keys, testIssue: deps.testIssue, ...(deps.rails ?? {}) }, { "cache-control": "public, max-age=300" });
+  return ok(
+    { config: deps.config, keys, testIssue: deps.testIssue, ...(deps.rails ?? {}), ...(deps.ohttp !== undefined ? { ohttp: deps.ohttp } : {}) },
+    { "cache-control": "public, max-age=300" },
+  );
 }
 
 /** The config the Worker serves: the defaults with `PAYMENTS_CONFIG` overrides. */

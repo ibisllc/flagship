@@ -16,7 +16,14 @@ import {
   utcDay,
   type PrivateRelayStatus,
 } from "@flagship/control-plane";
-import { encodeOhttpKeyConfig, ohttpRelayFrom, RELAY_FALLBACK_HEADER, type OhttpRelay } from "@flagship/protocol";
+import {
+  encodeOhttpKeyConfig,
+  ohttpRelayFrom,
+  ohttpRelaysFromEnv,
+  RELAY_FALLBACK_HEADER,
+  type OhttpPublicConfig,
+  type OhttpRelay,
+} from "@flagship/protocol";
 import { D1Storage, type D1Database } from "@flagship/storage";
 
 export interface OhttpEnv {
@@ -25,19 +32,45 @@ export interface OhttpEnv {
   OHTTP_GATEWAY_KEYS?: string;
   /** The relay URL boxes use (the provider forwards it to OHTTP_GATEWAY_PATH). */
   OHTTP_RELAY_URL?: string;
+  /** Who runs `OHTTP_RELAY_URL`, shown in the apps (default "Flagship (interim)"). */
+  OHTTP_RELAY_OPERATOR?: string;
+  /** "0" when `OHTTP_RELAY_URL` is a third party's relay; unset or anything else = interim, run by Flagship. */
+  OHTTP_RELAY_INTERIM?: string;
+  /** JSON `[{url, operator, interim}]`, tried in order; replaces the three above. Never a Cloudflare host. */
+  OHTTP_RELAYS?: string;
   GITHUB_ISSUES_TOKEN?: string;
   GITHUB_ISSUES_REPO?: string;
 }
 
+export const OHTTP_CONFIG_PATH = "/api/ohttp/config";
+
 type WaitUntil = { waitUntil(p: Promise<unknown>): void } | undefined;
 
-/** The relay as boxes see it: its URL and our current gateway key. */
-export function relayFromEnv(env: OhttpEnv): OhttpRelay | null {
+function currentKeyConfigHex(env: OhttpEnv): string | null {
   const key = ohttpGatewayKeysFromEnv(env.OHTTP_GATEWAY_KEYS)[0];
   if (!key) return null;
   let hex = "";
   for (const b of encodeOhttpKeyConfig(key)) hex += b.toString(16).padStart(2, "0");
-  return ohttpRelayFrom(env.OHTTP_RELAY_URL, hex);
+  return hex;
+}
+
+/** `GET /api/ohttp/config` and `ohttp` in `/api/payments/config`: the gateway key and the relays, in order. */
+export function ohttpPublicConfig(env: OhttpEnv, apex: string): OhttpPublicConfig {
+  const keyConfigHex = currentKeyConfigHex(env);
+  if (!keyConfigHex) return { v: 1, keyConfigHex: null, relays: [] };
+  return { v: 1, keyConfigHex, relays: ohttpRelaysFromEnv(env, apex) };
+}
+
+/** Every relay as boxes and the probe see them: URL and our current gateway key. */
+export function relaysFromEnv(env: OhttpEnv, apex: string): OhttpRelay[] {
+  const c = ohttpPublicConfig(env, apex);
+  if (!c.keyConfigHex) return [];
+  return c.relays.map((r) => ohttpRelayFrom(r.url, c.keyConfigHex)).filter((r): r is OhttpRelay => r !== null);
+}
+
+/** The first relay (the probe's and the status page's), or null. */
+export function relayFromEnv(env: OhttpEnv, apex = "flagshipserver.com"): OhttpRelay | null {
+  return relaysFromEnv(env, apex)[0] ?? null;
 }
 
 /** Count a direct request a proxy box sent because the relay failed it. */
@@ -56,6 +89,17 @@ export async function tryOhttp(
   dispatch: (req: Request) => Promise<Response>,
 ): Promise<Response | null> {
   if (url.hostname !== hosts.apex) return null;
+  if (url.pathname === OHTTP_CONFIG_PATH && request.method === "GET") {
+    return new Response(JSON.stringify(ohttpPublicConfig(env, hosts.apex)), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "public, max-age=300",
+        // The webapp reads it from its own origin.
+        "access-control-allow-origin": "*",
+      },
+    });
+  }
   if (url.pathname === OHTTP_KEYS_PATH && request.method === "GET") {
     return ohttpKeysResponse(ohttpGatewayKeysFromEnv(env.OHTTP_GATEWAY_KEYS));
   }
@@ -102,9 +146,26 @@ export async function runRelayProbeCron(
 ): Promise<void> {
   if (!env.DB) return;
   const storage = new D1Storage(env.DB);
+  const relays = relaysFromEnv(env, hosts.apex);
+  // The fallback relays first (their failures page but don't overwrite the primary's record), then the primary.
+  for (const extra of relays.slice(1)) {
+    await runRelayProbe({
+      storage: {
+        bump: (d, p) => storage.relayHealth.bump(d, p),
+        counts: (d) => storage.relayHealth.counts(d),
+        lastProbe: () => storage.relayHealth.lastProbe(),
+        recordProbe: async () => {},
+      },
+      relay: extra,
+      apexHost: hosts.apex,
+      now: () => now.getTime(),
+      fetch: fetchImpl as never,
+      notifyOperator: async (detail) => console.error(`[relay-probe] fallback relay ${extra.relayUrl}: ${detail}`),
+    });
+  }
   await runRelayProbe({
     storage: storage.relayHealth,
-    relay: relayFromEnv(env),
+    relay: relays[0] ?? null,
     apexHost: hosts.apex,
     now: () => now.getTime(),
     fetch: fetchImpl as never,
