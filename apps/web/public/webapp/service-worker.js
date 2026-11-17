@@ -538,7 +538,10 @@
 //  v231: Plan's shop sells vouchers by card through Stripe Checkout: the browser blinds the pack, pays on Stripe's
 //       page, and on its return asks for the signatures and adds them to the balance (lib/plan.js buyWithStripe,
 //       finishShopOrders; docs/payments-privacy-and-rails.md §11).
-const SHELL_VERSION = "v231";
+//  v232: voucher spends go through the private relay (OHTTP, lib/ohttp.js) and wait rather than lapse a plan when it
+//       is down; the outbound proxy says loudly why it fails, Home shows it from /pods, and Turn off reaches a box the
+//       proxy keeps offline through .com's lane (docs/outbound-proxy.md "Failure handling").
+const SHELL_VERSION = "v232";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -750,6 +753,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciCallSettings.js",
   "/lib/vouchers.js",
   "/lib/plan.js",
+  "/lib/ohttp.js",
   "/views/messages.js",
   "/views/thread.js",
   "/views/calls.js",

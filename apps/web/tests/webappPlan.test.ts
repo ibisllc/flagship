@@ -5,7 +5,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_PAYMENTS_CONFIG } from "@flagship/protocol";
+import {
+  DEFAULT_PAYMENTS_CONFIG,
+  decapsulateOhttpRequest,
+  decodeBhttpRequest,
+  encapsulateOhttpResponse,
+  encodeBhttpResponse,
+  encodeOhttpKeyConfig,
+  ohttpGatewayKey,
+} from "@flagship/protocol";
 import { InMemoryBlindVoucherStorage, InMemoryMeterStorage, InMemoryTierStorage, InMemoryVoucherPaymentStorage } from "@flagship/storage";
 import {
   handlePaidIssue,
@@ -77,7 +85,8 @@ function fakeCom(now: () => number, opts: { remainingBytes?: number } = {}) {
   const fetch = async (url: string, init?: RequestInit) => {
     const path = new URL(url).pathname;
     calls.push({ path, init });
-    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    const raw = init?.body instanceof Uint8Array ? new TextDecoder().decode(init.body) : init?.body;
+    const body = raw ? JSON.parse(String(raw)) : undefined;
     if (path === "/api/payments/config") {
       const r = handlePaymentsConfig({ config: DEFAULT_PAYMENTS_CONFIG, keys, testIssue: true, rails: railsSummary(rails), now });
       return json(r.status, r.body);
@@ -333,12 +342,87 @@ describe("webapp plan: the section", () => {
 
 describe("webapp plan: wiring", () => {
   const read = (p: string) => readFileSync(join(root, "apps/web/public/webapp", p), "utf8");
-  it("has a Settings row, a view, a precached module set and the v231 shell", () => {
+  it("has a Settings row, a view, a precached module set and the v232 shell", () => {
     expect(read("index.html")).toContain('id="settings-tab-plan"');
     expect(read("index.html")).toContain('id="view-plan"');
     expect(read("app.js")).toContain('wire("settings-tab-plan", enterPlan)');
     const sw = read("service-worker.js");
     for (const f of ["/lib/vouchers.js", "/lib/plan.js", "/views/plan.js"]) expect(sw).toContain(`"${f}"`);
-    expect(sw).toContain('SHELL_VERSION = "v231"');
+    expect(sw).toContain('SHELL_VERSION = "v232"');
+  });
+});
+
+describe("webapp plan: spends through the private relay (docs/outbound-proxy.md \"Failure handling\")", () => {
+  const gw = ohttpGatewayKey(9, new Uint8Array(32).fill(0x44));
+  const ohttp = {
+    v: 1,
+    keyConfigHex: Buffer.from(encodeOhttpKeyConfig(gw)).toString("hex"),
+    relays: [{ url: "https://relay.test/flagship", operator: "Test Relay Co", interim: false }],
+  };
+  function relayed(com: ReturnType<typeof fakeCom>, state: { relay: "up" | "down" }, log: string[]) {
+    return async (url: string, init?: RequestInit) => {
+      if (url.startsWith("https://relay.test")) {
+        if (state.relay === "down") throw new TypeError("Failed to fetch");
+        log.push("relay");
+        const g = decapsulateOhttpRequest([gw], init!.body as Uint8Array);
+        const inner = decodeBhttpRequest(g.request);
+        const res = await com.fetch(`https://${inner.authority}${inner.path}`, { method: inner.method, headers: Object.fromEntries(inner.headers), body: inner.body });
+        const bh = encodeBhttpResponse({ status: res.status, headers: [["content-type", "application/json"]], body: new Uint8Array(await res.arrayBuffer()) });
+        return new Response(encapsulateOhttpResponse(g.context, bh), { status: 200, headers: { "content-type": "message/ohttp-res" } });
+      }
+      if (new URL(url).pathname === "/api/vouchers/redeem") log.push(`direct#${(init?.headers as Record<string, string>)["x-flagship-relay-fallback"] ?? ""}`);
+      return com.fetch(url, init);
+    };
+  }
+
+  it("relay up, relay down (waits, plan safe), near the lapse goes direct, then back through the relay", async () => {
+    const com = fakeCom(now);
+    const state = { relay: "up" as "up" | "down" };
+    const log: string[] = [];
+    const d = deps(com, { fetch: relayed(com, state, log), ohttp });
+    await P.addTestVouchers(30, d);
+    await P.saveSettings(DEFAULT_PAYMENTS_CONFIG, { plan: "pro" }, d);
+    expect((await P.spendTick({ ...d, interactive: true })).planSpent).toBe(1);
+    expect(log).toEqual(["relay"]);
+    expect(P.relayPrivacyLine(ohttp, P.relayStateOf(d), t).id).toBe("third-party");
+
+    // The relay goes down while the plan is days ahead: nothing is spent, nothing breaks.
+    state.relay = "down";
+    t += 2 * DAY;
+    const waiting = await P.spendTick(d);
+    expect(waiting.planSpent).toBe(0);
+    expect(waiting.waiting).toBe(true);
+    expect(log.filter((x) => x.startsWith("direct"))).toEqual([]);
+    expect(P.relayStateOf(d).failures).toBe(1);
+    expect(P.relayPrivacyLine(ohttp, P.relayStateOf(d), t).id).toBe("waiting");
+    expect((await com.tiers.get(U))?.tier).toBe("hobby");
+
+    // Still down when the plan would lapse within a day (end + grace): the spend goes direct, marked.
+    const end = (await com.tiers.get(U))!.currentPeriodEnd!;
+    t = end + 72 * 3_600_000 - 12 * 3_600_000;
+    const urgent = await P.spendTick(d);
+    expect(urgent.planSpent).toBeGreaterThan(0);
+    expect(log.at(-1)).toBe("direct#relay-unreachable");
+    expect(P.relayPrivacyLine(ohttp, P.relayStateOf(d), t).id).toBe("went-direct");
+
+    // The relay is back: spends go through it again and the line says so.
+    state.relay = "up";
+    t += 2 * DAY;
+    await P.spendTick(d);
+    expect(log.at(-1)).toBe("relay");
+    expect(P.relayStateOf(d)).toEqual({ failures: 0, retryAt: 0, wentDirect: false });
+  });
+
+  it("an interactive start goes direct when the relay is down; no relay at all says so plainly", async () => {
+    const com = fakeCom(now);
+    const state = { relay: "down" as "up" | "down" };
+    const log: string[] = [];
+    const d = deps(com, { fetch: relayed(com, state, log), ohttp });
+    await P.addTestVouchers(30, d);
+    await P.saveSettings(DEFAULT_PAYMENTS_CONFIG, { plan: "pro" }, d);
+    expect((await P.spendTick({ ...d, interactive: true })).planSpent).toBe(1);
+    expect(log).toEqual(["direct#relay-unreachable"]);
+    expect(P.relayPrivacyLine({ v: 1, keyConfigHex: null, relays: [] }, P.relayStateOf(d), t).id).toBe("none");
+    expect(P.relayPrivacyLine({ ...ohttp, relays: [{ ...ohttp.relays[0], interim: true }] }, { failures: 0, retryAt: 0, wentDirect: false }, t).id).toBe("interim");
   });
 });

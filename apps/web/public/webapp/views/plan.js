@@ -19,6 +19,8 @@ import {
   loadWallet,
   pendingShopOrders,
   PlanError,
+  relayPrivacyLine,
+  relayStateOf,
   saveSettings,
   spendTick,
 } from "../lib/plan.js";
@@ -112,6 +114,10 @@ export function planViewHtml(m) {
       <div class="row"><span class="label">${escapeHtml(tr("Prepaid balance"))}</span><span class="value" id="plan-balance-amount">${escapeHtml(bal.amount)}</span></div>
       <p class="caption" id="plan-balance-detail">${escapeHtml(bal.detail)}</p>
       <p class="caption">${escapeHtml(tr("Your balance stays on your devices. Flagship sees when time is added to your plan, never what paid for it."))}</p>
+      ${(() => {
+        const line = relayPrivacyLine(m.ohttp, m.relay ?? { failures: 0, retryAt: 0, wentDirect: false }, now);
+        return `<p class="caption" id="plan-relay-line" data-relay="${line.id}">${escapeHtml(line.text)}</p>`;
+      })()}
     </div>
     ${admin ? "" : `<div class="card mt-3 warn" data-testid="plan-read-only"><p class="note">${escapeHtml(tr("Only an admin device of this account can change the plan or spend the balance."))}</p></div>`}
     <h2 class="mt-4">${escapeHtml(tr("Choose a plan"))}</h2>
@@ -156,7 +162,16 @@ let model = null;
 async function loadModel() {
   const pc = await loadPaymentsConfig();
   const [planState, cur] = await Promise.all([loadPlanState().catch(() => ({ plan: null, paidUntil: 0 })), loadWallet(pc.config)]);
-  return { ...pc, planState, cur, wallet: cur.wallet, admin: canSignAdminOrders(), now: Date.now(), pendingOrders: pendingShopOrders().length };
+  return {
+    ...pc,
+    planState,
+    cur,
+    wallet: cur.wallet,
+    admin: canSignAdminOrders(),
+    now: Date.now(),
+    pendingOrders: pendingShopOrders().length,
+    relay: relayStateOf(),
+  };
 }
 
 function paint() {
@@ -207,10 +222,11 @@ async function run(work) {
   await renderPlan();
 }
 
-async function change(patch) {
+async function change(patch, { interactive = false } = {}) {
   await run(async () => {
     model.cur = await saveSettings(model.config, patch, { current: model.cur });
-    await spendTick({ paymentsConfig: model, current: model.cur });
+    // A plan the owner just chose (and is waiting for) may go directly if the private relay is down.
+    await spendTick({ paymentsConfig: model, current: model.cur, interactive });
   });
 }
 
@@ -221,7 +237,7 @@ async function choosePlan(value) {
     const ok = await confirmFreshUnlock({ title: tr("Start {0}?", planName(plan)), message: tr("This spends from your prepaid balance.") });
     if (!ok.ok) return paint();
   }
-  await change({ plan });
+  await change({ plan }, { interactive: !!plan && !model.wallet.settings.delayStart });
 }
 
 async function addTest() {

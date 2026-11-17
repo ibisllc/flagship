@@ -15729,5 +15729,101 @@
   "Payment cancelled. Nothing was charged.": {
     "en": "Payment cancelled. Nothing was charged.",
     "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "Not on sale yet. Buying opens in a later update.": {
+    "en": "Not on sale yet. Buying opens in a later update.",
+    "ctx": "webapp/views/plan.js:111"
+  },
+  "Card": {
+    "en": "Card",
+    "ctx": "webapp/views/plan.js:8"
+  },
+  "The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.": {
+    "en": "The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.",
+    "ctx": "webapp/lib/plan.js"
+  },
+  "The private relay wasn't answering, so the last payment went straight to Flagship.": {
+    "en": "The private relay wasn't answering, so the last payment went straight to Flagship.",
+    "ctx": "webapp/lib/plan.js"
+  },
+  "Payments go through {0}'s private relay, so Flagship doesn't see your network address when you pay.": {
+    "en": "Payments go through {0}'s private relay, so Flagship doesn't see your network address when you pay.",
+    "ctx": "webapp/lib/plan.js"
+  },
+  "Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet.": {
+    "en": "Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet.",
+    "ctx": "webapp/lib/plan.js"
+  },
+  "Flagship can see your network address when you pay. It keeps none of it.": {
+    "en": "Flagship can see your network address when you pay. It keeps none of it.",
+    "ctx": "webapp/lib/plan.js"
+  },
+  "{0} · needs a password": {
+    "en": "{0} · needs a password",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "The proxy refused the username or password.": {
+    "en": "The proxy refused the username or password.",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "The proxy refused the connection.": {
+    "en": "The proxy refused the connection.",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "The proxy gave an answer the server doesn't understand.": {
+    "en": "The proxy gave an answer the server doesn't understand.",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "The outbound proxy isn't working: {0}": {
+    "en": "The outbound proxy isn't working: {0}",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "The outbound proxy isn't working, so this server is connecting directly: {0}": {
+    "en": "The outbound proxy isn't working, so this server is connecting directly: {0}",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "Working": {
+    "en": "Working",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.": {
+    "en": "Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "Couldn't send the change. Try again.": {
+    "en": "Couldn't send the change. Try again.",
+    "ctx": "webapp/lib/boxProxy.js"
+  },
+  "The outbound proxy isn't working": {
+    "en": "The outbound proxy isn't working",
+    "ctx": "webapp/lib/activityFeed.js"
+  },
+  "Connecting directly: the outbound proxy isn't working": {
+    "en": "Connecting directly: the outbound proxy isn't working",
+    "ctx": "webapp/lib/activityFeed.js"
+  },
+  "The outbound proxy works again": {
+    "en": "The outbound proxy works again",
+    "ctx": "webapp/lib/activityFeed.js"
+  },
+  "The outbound proxy was changed from the app": {
+    "en": "The outbound proxy was changed from the app",
+    "ctx": "webapp/lib/activityFeed.js"
+  },
+  "A proxy change from the app couldn't be used": {
+    "en": "A proxy change from the app couldn't be used",
+    "ctx": "webapp/lib/activityFeed.js"
+  },
+  "This server is offline until its proxy works again or you change it.": {
+    "en": "This server is offline until its proxy works again or you change it.",
+    "ctx": "webapp/views/home.js"
+  },
+  "Turn off the proxy": {
+    "en": "Turn off the proxy",
+    "ctx": "webapp/views/home.js"
+  },
+  "Sent. The server picks up the change within a few minutes, even while its proxy is down.": {
+    "en": "Sent. The server picks up the change within a few minutes, even while its proxy is down.",
+    "ctx": "webapp/views/home.js"
   }
 }

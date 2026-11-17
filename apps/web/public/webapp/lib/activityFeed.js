@@ -38,6 +38,12 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "server.debug-access.expired": { label: tr("Debug access ended"), icon: "🔒" },
   "server.debug-access.revoked": { label: tr("Debug access turned off"), icon: "🔒" },
   "server.state.corrupt": { label: tr("This server found a damaged settings file and locked it down"), icon: "⚠️" },
+  // The owner's outbound proxy (docs/outbound-proxy.md "Failure handling").
+  "server.proxy.failing": { label: tr("The outbound proxy isn't working"), icon: "⚠️" },
+  "server.proxy.fallback": { label: tr("Connecting directly: the outbound proxy isn't working"), icon: "⚠️" },
+  "server.proxy.ok": { label: tr("The outbound proxy works again"), icon: "✅" },
+  "server.proxy.changed": { label: tr("The outbound proxy was changed from the app"), icon: "🔧" },
+  "server.proxy.lane-refused": { label: tr("A proxy change from the app couldn't be used"), icon: "⚠️" },
   "server.bootchain.refreshed": { label: tr("Updated how this server unlocks at start-up"), icon: "🔐" },
   "server.bootchain.rolled-back": { label: tr("Kept the previous start-up unlock"), icon: "⚠️" },
   "server.sandbox.removed": { label: tr("Turned off this server's extra sandbox after it kept failing to start"), icon: "⚠️" },

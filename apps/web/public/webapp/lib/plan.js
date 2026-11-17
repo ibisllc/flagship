@@ -39,6 +39,15 @@ import {
   voucherOrderCommit,
 } from "./vouchers.js";
 import { accountReadFetch } from "./accountRead.js";
+import { tr } from "./i18n.js";
+import {
+  ohttpSpendMayGoDirect,
+  parseOhttpPublicConfig,
+  planLapseInMs,
+  relayRetryAfterMs,
+  RelayUnavailableError,
+  sendThroughRelays,
+} from "./ohttp.js";
 import { canSignAdminOrders } from "./addServerGate.js";
 import { controlApex } from "./apex.js";
 import { getActiveProfile } from "./profiles.js";
@@ -108,6 +117,53 @@ const browserStore = {
   },
 };
 const nextSpendKey = (u) => `flagship.vouchers.nextSpendAt.${u}`;
+const relayKey = (u) => `flagship.vouchers.relay.${u}`;
+
+/**
+ * How spends reached `.com` lately, per browser and account (docs/outbound-proxy.md "Failure handling"):
+ * `{failures, retryAt, wentDirect}`. Never money; only when to try the private relay again and what the Plan
+ * section says about it.
+ */
+export function relayStateOf(deps = {}) {
+  const c = ctx(deps);
+  try {
+    const v = JSON.parse(c.store.get(relayKey(usernameOf(c))) ?? "null");
+    if (v && typeof v === "object") {
+      return { failures: Number(v.failures) || 0, retryAt: Number(v.retryAt) || 0, wentDirect: v.wentDirect === true };
+    }
+  } catch {
+    /* unreadable: start fresh */
+  }
+  return { failures: 0, retryAt: 0, wentDirect: false };
+}
+
+function saveRelayState(c, s) {
+  c.store.set(relayKey(usernameOf(c)), JSON.stringify(s));
+}
+
+/**
+ * The one privacy line under the plan: waiting for the relay, the last spend went direct, who runs the relay, or
+ * no relay. Returns `{text, tone}`; tone is "info" (never an error: our relay failing breaks nothing).
+ */
+export function relayPrivacyLine(ohttp, relay, now = Date.now()) {
+  const first = ohttp?.relays?.[0] ?? null;
+  if (first && relay.failures > 0 && relay.retryAt > now) {
+    return { id: "waiting", text: tr("The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.") };
+  }
+  if (first && relay.wentDirect) {
+    return { id: "went-direct", text: tr("The private relay wasn't answering, so the last payment went straight to Flagship.") };
+  }
+  if (first && !first.interim) {
+    return { id: "third-party", text: tr("Payments go through {0}'s private relay, so Flagship doesn't see your network address when you pay.", first.operator) };
+  }
+  if (first) {
+    return {
+      id: "interim",
+      text: tr("Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet."),
+    };
+  }
+  return { id: "none", text: tr("Flagship can see your network address when you pay. It keeps none of it.") };
+}
 
 // ── reads ──────────────────────────────────────────────────────────────────
 
@@ -119,10 +175,17 @@ export async function loadPaymentsConfig(deps = {}) {
     if (!r.ok) throw await readError(r);
     const body = await r.json();
     const keys = Array.isArray(body?.keys) ? body.keys.filter((k) => rsaFromVoucherKey(k) !== null) : [];
+    const ohttp = parseOhttpPublicConfig(body?.ohttp, new URL(c.apex).hostname);
     const rails = { stripe: body?.rails?.stripe === true, apple: body?.rails?.apple === true, google: body?.rails?.google === true };
-    return { config: mergePaymentsConfig(body?.config), keys, testIssue: body?.testIssue === true, rails };
+    return { config: mergePaymentsConfig(body?.config), keys, testIssue: body?.testIssue === true, rails, ohttp };
   } catch {
-    return { config: mergePaymentsConfig(null), keys: [], testIssue: false, rails: { stripe: false, apple: false, google: false } };
+    return {
+      config: mergePaymentsConfig(null),
+      keys: [],
+      testIssue: false,
+      rails: { stripe: false, apple: false, google: false },
+      ohttp: parseOhttpPublicConfig(null),
+    };
   }
 }
 
@@ -193,18 +256,45 @@ export async function updateWallet(cfg, change, deps = {}) {
 
 // ── spending ───────────────────────────────────────────────────────────────
 
-/** POST /api/vouchers/redeem: `{ok, credited, spent, paidUntil?, topUpBytes?}` or a PlanError with `.body.spent`. */
+/**
+ * POST /api/vouchers/redeem through the private relay (`deps.ohttp`, docs/outbound-proxy.md "Failure handling"):
+ * `{ok, credited, spent, paidUntil?, topUpBytes?}` or a PlanError with `.body.spent`. When every relay fails, the
+ * spend goes directly (marked) only if `ohttpSpendMayGoDirect(deps.spendKind, deps.lapseInMs)` allows; otherwise a
+ * PlanError `relay-waiting` (nothing was sent, so nothing is spent).
+ */
 export async function redeemVouchers(username, forWhat, vouchers, deps = {}) {
   const c = ctx(deps);
-  const r = await c.fetch(`${c.apex}/api/vouchers/redeem`, {
-    method: "POST",
-    credentials: "omit",
-    cache: "no-store",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ v: 1, username, for: forWhat, vouchers }),
-  });
-  if (!r.ok) throw await readError(r);
-  return r.json();
+  const kind = deps.spendKind ?? (forWhat === "overage" ? "overage" : "trickle");
+  const lapseInMs = deps.lapseInMs === undefined ? null : deps.lapseInMs;
+  let r;
+  try {
+    r = await sendThroughRelays(
+      {
+        url: `${c.apex}/api/vouchers/redeem`,
+        method: "POST",
+        headers: [["content-type", "application/json"]],
+        body: new TextEncoder().encode(JSON.stringify({ v: 1, username, for: forWhat, vouchers })),
+      },
+      { config: deps.ohttp ?? null, mayGoDirect: (reason) => reason === "unconfigured" || ohttpSpendMayGoDirect(kind, lapseInMs), fetch: c.fetch },
+    );
+  } catch (e) {
+    if (e instanceof RelayUnavailableError) throw new PlanError("relay-waiting", { reason: e.reason });
+    throw e;
+  }
+  const relay = relayStateOf(deps);
+  if (r.path === "ohttp") saveRelayState(c, { failures: 0, retryAt: 0, wentDirect: false });
+  else if (r.fallbackReason !== "unconfigured") saveRelayState(c, { ...relay, wentDirect: true });
+  let body = null;
+  try {
+    body = JSON.parse(new TextDecoder().decode(r.body));
+  } catch {
+    /* no body */
+  }
+  if (r.status < 200 || r.status >= 300) {
+    const code = typeof body?.code === "string" ? body.code : r.status === 404 ? "not-found" : r.status === 429 ? "rate-limited" : "failed";
+    throw new PlanError(code, { status: r.status, body });
+  }
+  return body;
 }
 
 /**
@@ -226,7 +316,13 @@ async function spendAndRecord(cfg, cur, forWhat, vouchers, deps) {
     if (e.code === "voucher-spent" && Array.isArray(e.body?.spent)) drop = e.body.spent;
     else if (e.code === "bad-voucher" && typeof e.body?.nullifier === "string") drop = [e.body.nullifier];
     else if (e.code === "plan-paid-ahead" || e.code === "overage-needs-plan" || e.code === "overage-block-size") drop = [];
-    else throw e;
+    else if (e.code === "relay-waiting") {
+      // Nothing left the browser: try the relay again later (5 min doubling, at most 6 h).
+      const r = relayStateOf(deps);
+      const failures = r.failures + 1;
+      saveRelayState(c, { ...r, failures, retryAt: c.now() + relayRetryAfterMs(failures) });
+      return { credited: 0, refused: "relay-waiting", saved: cur, paidUntil: null };
+    } else throw e;
   }
   const credited = res?.credited ?? 0;
   const period = overagePeriod(c.now());
@@ -254,10 +350,12 @@ export async function spendTick(deps = {}) {
   if (!c.isAdmin()) return { skipped: "not-admin" };
   if (!(c.session?.umk instanceof Uint8Array)) return { skipped: "locked" };
   const u = usernameOf(c);
-  const { config: cfg } = deps.paymentsConfig ?? (await loadPaymentsConfig(deps));
+  const pc = deps.paymentsConfig ?? (await loadPaymentsConfig(deps));
+  const cfg = pc.config;
+  const ohttp = deps.ohttp ?? pc.ohttp ?? null;
   let cur = deps.current ?? (await loadWallet(cfg, deps));
   const s = cur.wallet.settings;
-  const did = { planSpent: 0, overageSpent: 0 };
+  const did = { planSpent: 0, overageSpent: 0, waiting: false };
   if (!isPaidPlan(s.plan) || !s.autoPay) return { ...did, wallet: cur };
   const now = c.now();
   const paid = deps.planState ?? (await loadPlanState(deps));
@@ -280,9 +378,21 @@ export async function spendTick(deps = {}) {
   );
   c.store.set(nextSpendKey(u), String(step.nextSpendAt));
   let planNow = paid;
-  if (step.spend > 0) {
+  const graceMs = cfg.graceHours * 3_600_000;
+  const lapseInMs = planLapseInMs(paid.plan ? paid.paidUntil : 0, graceMs, now);
+  const spendKind = deps.interactive ? "interactive" : "trickle";
+  // The relay failed lately: wait for its retry time unless this spend may go direct anyway.
+  const relay = relayStateOf(deps);
+  const waitRelay = (kind, lapse) =>
+    (ohttp?.relays?.length ?? 0) > 0 && relay.failures > 0 && now < relay.retryAt && !ohttpSpendMayGoDirect(kind, lapse);
+  if (step.spend > 0 && waitRelay(spendKind, lapseInMs)) did.waiting = true;
+  else if (step.spend > 0) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const out = await spendAndRecord(cfg, cur, s.plan, takeVouchers(cur.wallet, step.spend), deps);
+      const out = await spendAndRecord(cfg, cur, s.plan, takeVouchers(cur.wallet, step.spend), { ...deps, ohttp, spendKind, lapseInMs });
+      if (out.refused === "relay-waiting") {
+        did.waiting = true;
+        break;
+      }
       cur = out.saved;
       did.planSpent += out.credited;
       if (out.paidUntil) planNow = { plan: s.plan, paidUntil: out.paidUntil };
@@ -305,9 +415,14 @@ export async function spendTick(deps = {}) {
         balance: cur.wallet.vouchers.length,
       })
     ) {
-      const out = await spendAndRecord(cfg, cur, "overage", takeVouchers(cur.wallet, cfg.overage.blockUnits), deps);
-      cur = out.saved;
-      did.overageSpent += out.credited;
+      if (waitRelay("overage", null)) {
+        did.waiting = true;
+      } else {
+        const out = await spendAndRecord(cfg, cur, "overage", takeVouchers(cur.wallet, cfg.overage.blockUnits), { ...deps, ohttp, spendKind: "overage" });
+        cur = out.saved;
+        did.overageSpent += out.credited;
+        if (out.refused === "relay-waiting") did.waiting = true;
+      }
     }
   }
   return { ...did, wallet: cur };

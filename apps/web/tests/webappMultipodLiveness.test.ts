@@ -185,6 +185,17 @@ describe("Fix A — classifyServer reads the liveness field", () => {
     expect(html).not.toContain("Connecting");
   });
 
+  it("renderServerCard shows a failing outbound proxy loudly, with a lane Turn off", () => {
+    const failing = renderServerCard(BASE_SERVER, { liveness: "unreachable", lastSeenMsAgo: 3600_000, proxyAlert: { state: "failing", code: "auth", since: 1 } });
+    expect(failing).toContain('data-proxy-alert="failing"');
+    expect(failing).toContain("The proxy refused the username or password.");
+    expect(failing).toContain("js-proxy-off-lane");
+    const fallback = renderServerCard(BASE_SERVER, { liveness: "online", lastSeenMsAgo: 1000, proxyAlert: { state: "fallback", code: "unreachable", since: 1 } });
+    expect(fallback).toContain("connecting directly");
+    expect(fallback).not.toContain("js-proxy-off-lane");
+    expect(renderServerCard(BASE_SERVER, { liveness: "online", lastSeenMsAgo: 1000 })).not.toContain("data-proxy-alert");
+  });
+
   it("renderServerCard with liveness:never past grace shows never-came-online + Delete", () => {
     const pod = { liveness: "never", registeredAt: Date.now() - 2 * COMING_ONLINE_GRACE_MS };
     const html = renderServerCard(BASE_SERVER, pod);
