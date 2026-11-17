@@ -1463,3 +1463,9 @@ Fixes (branch `0.4/gym-r1-fixes`, fast-forwarded into release/0.4 at `24f836458`
   and Google purchases (no test keys), the phones' OHTTP clients (only the webapp's code ran).
 - Resume point: merge `0.4/gym-r2-fixes` (owner), then D11, R2-R4 and the E UI pass.
 - Merged 0.4/gym-r2-fixes: the voucher redeem bug (with several vouchers per redeem, only the first was credited and the rest were consumed; fix 417c59cc1) plus the vouchers, outbound-proxy and ohttp-failure live groups. R2 live: core 30, vouchers 10, outbound-proxy 8, ohttp-failure 7, update 9, all green.
+
+### 2026-11-17 — Owner: "do all that is left … keep going until the app is ready"; browser steps go to a Claude-in-browser session
+Three agents started:
+- 0.4/ci: F11 (Android emulator smoke API 34, iOS CI green), F6 (DNS token off `.com`), F15 (rate-limit client loops).
+- 0.4/release-prep: R2 (version bump), R3 (release notes in 7 languages, store texts), R4 (docs/runbooks/0.4-deploy-sheet.md), F13 (feature-branch rebases, AGENTS.md), and docs/runbooks/0.4-browser-tasks.md, the brief for the owner's browser Claude (App Store Connect, Play, Stripe, Oblivious, Cloudflare; secrets never pasted into chat).
+- 0.4/ui-pass: E. Screenshots of every screen before and after, the critique, one commit per change, and a before/after page for the owner to approve per change. Includes the iOS empty Inbox text.
