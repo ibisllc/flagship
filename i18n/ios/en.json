@@ -16733,38 +16733,68 @@
     "en": "Add $30 of test credit",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:199"
   },
-  "Not on sale yet": {
-    "en": "Not on sale yet",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:184"
-  },
-  "App Store": {
-    "en": "App Store",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212",
-    "translatable": false
-  },
-  "Card": {
-    "en": "Card",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212"
-  },
-  "Monero": {
-    "en": "Monero",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212",
-    "translatable": false
-  },
-  "Coming soon": {
-    "en": "Coming soon",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:193"
-  },
   "Add to your balance": {
     "en": "Add to your balance",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:206"
   },
-  "Buying isn't available yet. Nothing here charges you.": {
-    "en": "Buying isn't available yet. Nothing here charges you.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:208"
-  },
   "Pro, Pro Max and your balance": {
     "en": "Pro, Pro Max and your balance",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:548"
+  },
+  "Added %@ to your balance.": {
+    "en": "Added %@ to your balance.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:210"
+  },
+  "Waiting for the purchase to be approved. It's added to your balance once it is.": {
+    "en": "Waiting for the purchase to be approved. It's added to your balance once it is.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:211"
+  },
+  "This device can buy up to %@ of credit in 30 days. Try a smaller amount or try again later.": {
+    "en": "This device can buy up to %@ of credit in 30 days. Try a smaller amount or try again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:213"
+  },
+  "The App Store couldn't complete the purchase. Try again.": {
+    "en": "The App Store couldn't complete the purchase. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:214"
+  },
+  "The App Store couldn't verify this purchase, so nothing was added.": {
+    "en": "The App Store couldn't verify this purchase, so nothing was added.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:215"
+  },
+  "Flagship couldn't confirm this purchase with the App Store, so nothing was added. If you were charged, you can ask Apple for a refund.": {
+    "en": "Flagship couldn't confirm this purchase with the App Store, so nothing was added. If you were charged, you can ask Apple for a refund.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:216"
+  },
+  "The App Store hasn't confirmed the payment yet. Your purchase is kept and added to your balance once it has.": {
+    "en": "The App Store hasn't confirmed the payment yet. Your purchase is kept and added to your balance once it has.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:217"
+  },
+  "This purchase was refunded, so nothing was added.": {
+    "en": "This purchase was refunded, so nothing was added.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:218"
+  },
+  "This purchase was already added to a balance, maybe on another device.": {
+    "en": "This purchase was already added to a balance, maybe on another device.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:219"
+  },
+  "Buying in the app isn't available right now.": {
+    "en": "Buying in the app isn't available right now.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:220"
+  },
+  "Couldn't add your purchase of %@ yet. It's kept, and Flagship adds it to your balance later.": {
+    "en": "Couldn't add your purchase of %@ yet. It's kept, and Flagship adds it to your balance later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:223"
+  },
+  "Adding your purchase to your balance…": {
+    "en": "Adding your purchase to your balance…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:208"
+  },
+  "Buying isn't available here yet.": {
+    "en": "Buying isn't available here yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:228"
+  },
+  "Paid through the App Store.": {
+    "en": "Paid through the App Store.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:230"
   }
 }
