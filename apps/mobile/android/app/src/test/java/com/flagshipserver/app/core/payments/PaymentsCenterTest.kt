@@ -94,6 +94,8 @@ class PaymentsCenterTest {
             return JsonObject(mapOf("ok" to JsonPrimitive(true), "paidUntil" to JsonPrimitive(paidUntil), "spent" to JsonArray(already.map(::JsonPrimitive))))
         }
 
+        override suspend fun paidIssue(rail: String, proof: JsonObject, keyId: String, blinded: List<String>) = error("not used")
+
         override suspend fun testIssue(keyId: String, blinded: List<String>): List<String> = blinded.map { b ->
             val m = BigInteger(1, WebEnvelopes.b64Decode(b)!!)
             WebEnvelopes.b64Encode(Vouchers.i2osp(m.modPow(d, n), (n.bitLength() + 7) / 8))
