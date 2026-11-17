@@ -34,7 +34,12 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     private var videoSource: RTCVideoSource?
     private var videoTrack: RTCVideoTrack?
     private var capturer: RTCCameraVideoCapturer?
+    private var usingFront = true
     private var frames: RTCFlagshipFrameCrypto?
+    /// The frame keys have their own lock: the frame callbacks run on WebRTC's worker and encoder threads, and must
+    /// never wait on `lock`, which the main thread may hold while libwebrtc blocks on those same threads (the
+    /// mid-call freeze when the caller turned their camera on).
+    private let keysLock = NSLock()
     private var keys: CallFrameCrypto?
     private var pendingIce: [String] = []
     private var gathered: CheckedContinuation<Void, Never>?
@@ -200,7 +205,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         k?.resume()
     }
 
-    public func start(_ crypto: CallFrameCrypto) { lock.withLock { keys = crypto } }
+    public func start(_ crypto: CallFrameCrypto) { keysLock.withLock { keys = crypto } }
 
     // MARK: placing a call (calling from the app)
 
@@ -247,7 +252,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     }
 
     /// Keys for the caller's direction (`CallFrameCrypto.caller`: sends c2p, opens p2c).
-    public func startCaller(_ crypto: CallFrameCrypto) { lock.withLock { keys = crypto } }
+    public func startCaller(_ crypto: CallFrameCrypto) { keysLock.withLock { keys = crypto } }
 
     /// An in-app call has no CallKit call to hand WebRTC the audio session: take it here (voice chat, the speaker
     /// route the system picks), and give it back on stop. A call CallKit answered (a ring-back) already has it.
@@ -278,34 +283,73 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         pc?.add(RTCIceCandidate(sdp: candidate, sdpMLineIndex: 0, sdpMid: "0")) { _ in }
     }
 
-    public func setMuted(_ muted: Bool) { lock.withLock { audioTrack?.isEnabled = !muted } }
+    public func setMuted(_ muted: Bool) {
+        // Never inside `lock`: the track's setter blocks on WebRTC's threads.
+        let t: RTCAudioTrack? = lock.withLock { audioTrack }
+        t?.isEnabled = !muted
+    }
 
+    /// Starts or stops this side's camera. libwebrtc is only called outside `lock` (its setters block on WebRTC's
+    /// threads, which the frame callbacks run on).
     public func setCamera(_ on: Bool) -> Bool {
-        lock.withLock {
-            guard let t = videoTransceiver, let f = factory else { return false }
-            guard on else {
-                stopCamera()
-                t.sender.track = nil
-                return true
+        let snap: (t: RTCRtpTransceiver, f: RTCPeerConnectionFactory, running: Bool)? = lock.withLock {
+            guard let t = videoTransceiver, let f = factory, !stopped else { return nil }
+            return (t, f, videoTrack != nil)
+        }
+        guard let snap else { return false }
+        guard on else {
+            let cap: RTCCameraVideoCapturer? = lock.withLock {
+                defer { capturer = nil; videoTrack = nil; videoSource = nil }
+                return capturer
             }
-            if videoTrack != nil { return true }
-            guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized,
-                  let device = RTCCameraVideoCapturer.captureDevices().first(where: { $0.position == .front })
-                    ?? RTCCameraVideoCapturer.captureDevices().first,
-                  let format = Self.format(for: device) else { return false }
-            let src = f.videoSource()
-            let cap = RTCCameraVideoCapturer(delegate: src)
-            // voici-calls-v2.md §1.3: 360p at 24 fps by default.
-            let maxRate: Float64 = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 24
-            let fps = Int(min(24, maxRate))
-            cap.startCapture(with: device, format: format, fps: fps)
-            let track = f.videoTrack(with: src, trackId: "v")
-            t.sender.track = track
+            cap?.stopCapture()
+            snap.t.sender.track = nil
+            return true
+        }
+        if snap.running { return true }
+        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized,
+              let device = Self.camera(front: true), let format = Self.format(for: device) else { return false }
+        let src = snap.f.videoSource()
+        let cap = RTCCameraVideoCapturer(delegate: src)
+        cap.startCapture(with: device, format: format, fps: Self.fps(format))
+        let track = snap.f.videoTrack(with: src, trackId: "v")
+        snap.t.sender.track = track
+        lock.withLock {
             capturer = cap
             videoSource = src
             videoTrack = track
-            return true
+            usingFront = device.position != .back
         }
+        return true
+    }
+
+    /// Front or back camera while the camera runs; false when it isn't running or there's no other camera.
+    public func flipCamera() -> Bool {
+        let snap: (cap: RTCCameraVideoCapturer, front: Bool)? = lock.withLock {
+            guard let c = capturer else { return nil }
+            return (c, usingFront)
+        }
+        guard let snap, let device = Self.camera(front: !snap.front), let format = Self.format(for: device) else { return false }
+        snap.cap.startCapture(with: device, format: format, fps: Self.fps(format))
+        lock.withLock { usingFront = !snap.front }
+        return true
+    }
+
+    /// This side's capture session, for a local preview (RTCCameraPreviewView); nil while the camera is off.
+    public var localCaptureSession: AVCaptureSession? { lock.withLock { capturer?.captureSession } }
+
+    /// Whether the running camera is the front one (the preview is mirrored then).
+    public var cameraIsFront: Bool { lock.withLock { usingFront } }
+
+    private static func camera(front: Bool) -> AVCaptureDevice? {
+        let all = RTCCameraVideoCapturer.captureDevices()
+        return all.first(where: { $0.position == (front ? .front : .back) }) ?? (front ? all.first : nil)
+    }
+
+    /// voici-calls-v2.md §1.3: 360p at 24 fps by default.
+    private static func fps(_ format: AVCaptureDevice.Format) -> Int {
+        let maxRate: Float64 = format.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 24
+        return Int(min(24, maxRate))
     }
 
     /// The smallest format at least 640x360.
@@ -321,13 +365,6 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
             bestArea = w * h
         }
         return best
-    }
-
-    private func stopCamera() {
-        capturer?.stopCapture()
-        capturer = nil
-        videoTrack = nil
-        videoSource = nil
     }
 
     /// Every 2 s while connected: the audio session's format and route, and WebRTC's audio send/receive stats (sizes,
@@ -391,12 +428,16 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         if let obs { NotificationCenter.default.removeObserver(obs) }
         CallTurnGate.shared.factory = nil
         frameStats.end()
+        var camera: RTCCameraVideoCapturer?
         let pc: RTCPeerConnection? = lock.withLock {
             stopped = true
-            keys = nil
+            keysLock.withLock { keys = nil }
             frames?.detach()
             frames = nil
-            stopCamera()
+            camera = capturer
+            capturer = nil
+            videoTrack = nil
+            videoSource = nil
             let p = self.pc
             self.pc = nil
             audioTrack = nil
@@ -405,6 +446,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
             factory = nil
             return p
         }
+        camera?.stopCapture()
         pc?.close()
         finishGathering()
         if lock.withLock({ defer { ownsAudio = false }; return ownsAudio }) {
@@ -417,7 +459,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
 
 extension WebRTCCallMediaEngine: RTCFlagshipFrameCryptoDelegate {
     public func sealFrame(_ frame: Data, video: Bool) -> Data? {
-        guard let k = lock.withLock({ keys }) else {
+        guard let k = keysLock.withLock({ keys }) else {
             frameStats.count(video ? "v-seal-nokey" : "a-seal-nokey", size: frame.count)
             return nil
         }
@@ -427,7 +469,7 @@ extension WebRTCCallMediaEngine: RTCFlagshipFrameCryptoDelegate {
     }
 
     public func openFrame(_ frame: Data, video: Bool) -> Data? {
-        guard let k = lock.withLock({ keys }) else {
+        guard let k = keysLock.withLock({ keys }) else {
             frameStats.count(video ? "v-open-nokey" : "a-open-nokey", size: frame.count)
             return nil
         }
