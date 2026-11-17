@@ -66,12 +66,26 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(post.body).toContain('<li><a href="/adapters.html">Repo adapters</a></li>');
     expect(post.body).toContain("pending external review");
     expect(post.body).not.toMatch(/Stripe|\$\d|Pro plan|subscription/);
-    for (const path of ["/", "/blog/"]) {
-      const r = await app.inject({ method: "GET", url: path });
-      expect(r.body, path).toContain('href="/blog/flagship-0-3"');
-    }
+    const blog = await app.inject({ method: "GET", url: "/blog/" });
+    expect(blog.body).toContain('href="/blog/flagship-0-3"');
     const rss = await app.inject({ method: "GET", url: "/blog/rss.xml" });
     expect(rss.body).toContain("<link>https://flagshipserver.com/blog/flagship-0-3</link>");
+  });
+
+  it("the 0.4 release notes are a blog post, linked from the landing page, the blog and the feed", async () => {
+    const app = buildServer();
+    const post = await app.inject({ method: "GET", url: "/blog/flagship-0-4.html" });
+    expect(post.statusCode).toBe(200);
+    expect(post.body).toContain("What's new in Flagship 0.4");
+    expect(post.body).toContain("Patent Pending");
+    // plans are paid privately: the post never names a payment company or a crypto rail
+    expect(post.body).not.toMatch(/Stripe|Monero|Apple Pay|Google Pay/);
+    for (const path of ["/", "/blog/"]) {
+      const r = await app.inject({ method: "GET", url: path });
+      expect(r.body, path).toContain('href="/blog/flagship-0-4"');
+    }
+    const rss = await app.inject({ method: "GET", url: "/blog/rss.xml" });
+    expect(rss.body).toContain("<link>https://flagshipserver.com/blog/flagship-0-4</link>");
   });
 
   it("/blog/rss.xml is well-formed RSS 2.0 with the canonical channel link", async () => {

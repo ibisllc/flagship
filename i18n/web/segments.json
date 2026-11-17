@@ -68,6 +68,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -152,6 +153,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -251,8 +253,8 @@
       "index.html"
     ]
   },
-  "sa383976a0f": {
-    "en": "<1><2>→</2><3>What's new in 0.3: local AI, a server you can check is yours, seven languages</3></1>",
+  "s1081177031": {
+    "en": "<1><2>→</2><3>What's new in 0.4: calls from your page, direct addresses, private plans</3></1>",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -273,6 +275,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -841,6 +844,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -864,6 +868,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -887,6 +892,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -896,8 +902,8 @@
       "marketplace/index.html"
     ]
   },
-  "se31f2cd95d": {
-    "en": "<1>What's new in 0.3</1>",
+  "s8868ad9adf": {
+    "en": "<1>What's new in 0.4</1>",
     "kind": "text",
     "ctx": "li",
     "pages": [
@@ -918,6 +924,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -941,6 +948,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -964,6 +972,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -987,6 +996,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -1010,6 +1020,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/hall-of-fame.html",
       "status/index.html",
@@ -1031,6 +1042,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -1054,6 +1066,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -1077,6 +1090,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -1100,6 +1114,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "security/hall-of-fame.html",
       "status/index.html"
     ]
@@ -1118,6 +1133,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -1141,6 +1157,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -1165,6 +1182,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -1188,6 +1206,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -1211,6 +1230,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/hall-of-fame.html",
       "status/index.html",
@@ -1247,6 +1267,7 @@
       "adapters.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -3905,6 +3926,7 @@
       "docs/index.html",
       "blog/index.html",
       "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html",
       "dibs.html",
       "security/runtime.html",
       "security/iso-seed.html",
@@ -5257,7 +5279,8 @@
     "ctx": "link[title]",
     "pages": [
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html"
     ]
   },
   "s1e60a4effc": {
@@ -5282,7 +5305,8 @@
     "ctx": "nav",
     "pages": [
       "blog/index.html",
-      "blog/flagship-0-3.html"
+      "blog/flagship-0-3.html",
+      "blog/flagship-0-4.html"
     ]
   },
   "s8fc4e92202": {
@@ -5295,6 +5319,22 @@
   },
   "s4bc920353e": {
     "en": "Field notes from building a personal-cloud product that takes self-hosting seriously. Subscribe via the RSS link above; we keep this page rate-limited (no surveillance pixels, no newsletter capture).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "s25a1b78cee": {
+    "en": "<1>What's new in Flagship 0.4</1>",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "s182e248337": {
+    "en": "People can call you from your voi.ci page, apps get direct addresses that skip our relay, and plans are paid with vouchers that never name your account. Free stays free.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -5939,6 +5979,254 @@
     "ctx": "p",
     "pages": [
       "blog/flagship-0-3.html"
+    ]
+  },
+  "s65b3ba1a1f": {
+    "en": "What's new in Flagship 0.4 · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s00a0688c0c": {
+    "en": "Flagship 0.4: people can call you from your voi.ci page, apps get direct addresses that skip our relay, and Pro plans are paid with vouchers that never name your account. Free stays free.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s8660f99960": {
+    "en": "What's new in Flagship 0.4",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sa67853168d": {
+    "en": "Calls from your voi.ci page, direct addresses that skip our relay, and plans paid with private vouchers. Free stays free.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sdef9ca1440": {
+    "en": "What's new in Flagship 0.4",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sdaabd74f36": {
+    "en": "Release notes. The Free plan keeps every feature it had; Pro and Pro Max add room and a few extras.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "se576555cee": {
+    "en": "Flagship 0.4 opens the things that were waiting: the people who visit your page can call you, an app can get a direct address that skips our relay, and you can pay for a bigger plan without telling us who you are.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sd4e0da541d": {
+    "en": "Calls from your page",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s085c52ab57": {
+    "en": "<1>People can call you from voi.ci/your-name.</1> Audio first, and video when both of you turn it on. Your phone rings like a phone call, even when it is locked, and your iPad can ring too.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s096611ae2c": {
+    "en": "<1>Call back from Social.</1> A missed call shows in the conversation and in Activity, and you can call back from there.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sd92ed8a682": {
+    "en": "<1>You choose who can call:</1> people you have talked to, anyone signed in with Flagship, or anyone at all (with spam limits), or nobody. Call hours keep your phone quiet at night, and they stay on your own devices.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sbf5d1516ac": {
+    "en": "<1>Calls are end-to-end encrypted</1> and go straight to your phone. Flagship sees that a call happened and how long it lasted, not what was said.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s06d32304a0": {
+    "en": "Social, the new home of your page",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sd5b99abc0b": {
+    "en": "<1>Messages is now Social.</1> Your page is the tab: you see it as visitors do, edit each part where it is, and publish when you are ready. Messages and calls sit beside it.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "se224995591": {
+    "en": "<1>Activity shows calls and messages</1> next to your servers' events, and deleting a conversation removes it from every device of your account.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s1913c15dad": {
+    "en": "Plans, paid privately",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s487098877e": {
+    "en": "<1>Pro and Pro Max.</1> Pro adds 250 GB of public traffic a month and one custom domain; Pro Max 500 GB and as many domains as you like. Free stays at 25 GB, slowed but never cut past it.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sf7ebfac2a3": {
+    "en": "<1>Paid with $1 vouchers.</1> Buy a pack in the app or on the web, and your phone keeps the vouchers and spends them on your plan. Our server signs them blind, so it never learns which account a purchase paid for.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "se56598f3d5": {
+    "en": "<1>Send your server's traffic through your own proxy</1> on Pro. If our private relay is ever down, nothing stops: payments wait, then go direct before your plan would lapse. If your proxy fails, the app tells you at once, and the fix always gets through.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "se30c6133be": {
+    "en": "Direct access: skip the relay",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sbbaa97c1e2": {
+    "en": "<1>Give an app a direct address</1> like game--you.fshp.app when your server can be reached from the internet. Visitors connect straight to your server, encryption still ends on it, and the traffic doesn't count against your plan.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sa5fad6fb42": {
+    "en": "<1>Only what you sign is published.</1> Turn a name off and its record goes. We never point a direct name at our relay, and never move it while your server is down.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s706a9c2d08": {
+    "en": "More control",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s79b89a8f49": {
+    "en": "<1>Restore into a server you already have.</1> Choose app by app what to install, keep or replace from a backup, with seven days to undo.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "se9a6f491e3": {
+    "en": "<1>The webapp on a computer</1> has a sidebar and side-by-side lists, and it can keep your admin key wrapped by a passkey.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sbcc6410120": {
+    "en": "<1>Share with more people on bigger plans:</1> 5 co-managers on Free, 10 on Pro, 25 on Pro Max.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sad36e7f77d": {
+    "en": "<1>Notifications without Google</1> on Android, through UnifiedPush.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "sb73c0526ff": {
+    "en": "<1>Quantum-safe signatures reach further:</1> your admin key and device grants now carry a post-quantum half.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s79c23ec84a": {
+    "en": "Coming from 0.3",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s6fc8fd8366": {
+    "en": "Update the app, then update each server from its page when it offers 0.4. The new features need both.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s623469b2de": {
+    "en": "Calls need the 0.4 app on the phone you call. Direct names share Let's Encrypt's weekly certificate budget for fshp.app until our rate-limit increase is granted, so a new name can wait a few days for its certificate.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-4.html"
     ]
   },
   "s65e3d8599d": {
