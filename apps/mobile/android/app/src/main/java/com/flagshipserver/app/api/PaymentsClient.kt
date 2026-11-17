@@ -6,6 +6,7 @@
 //   PUT  /api/accounts/<u>/voucher-wallet    device headers       → {ok, version} | 409 {code:"version-conflict", wallet}
 //   POST /api/vouchers/redeem                NONE (no token, no device headers: a spend names nobody but the account)
 //   POST /api/vouchers/test-issue            none (the gym only)  → {k, sigs}
+//   POST /api/vouchers/paid-issue            NONE (a payment buys signatures, never an account link) → {k, sigs, units}
 //   GET  /api/users/<u>/plan-attestation     read token           → {tier, paidUntil, ...}
 //   GET  /api/users/<u>/allowance            read token           → {tier, usedBytes, quotaBytes, remainingBytes, ...}
 
@@ -32,6 +33,9 @@ class PaymentsHttpError(val status: Int, val code: String?, val body: JsonObject
 /** The account's plan as `.com` signs it for its boxes: [tier] free | hobby (Pro) | maker (Pro Max). */
 data class PlanState(val tier: String, val paidUntil: Long)
 
+/** A paid issue's answer: the blind signatures under [k], in order, for the [units] the payment bought. */
+data class PaidIssue(val k: String, val sigs: List<String>, val units: Long)
+
 data class AllowanceState(val usedBytes: Long, val quotaBytes: Long, val remainingBytes: Long)
 
 interface PaymentsClient {
@@ -45,6 +49,13 @@ interface PaymentsClient {
     suspend fun redeem(body: JsonObject): JsonObject
     /** The blind signatures, in order. */
     suspend fun testIssue(keyId: String, blinded: List<String>): List<String>
+    /**
+     * Blind signatures bought by a store payment ([rail] `google` with proof `{productId, purchaseToken}`). Idempotent:
+     * the same payment with the same blinded set answers the same signatures. Refusals are [PaymentsHttpError] with
+     * `payment-invalid`, `payment-unpaid`, `payment-refunded`, `payment-used`, `wrong-count` (+`units`), `rail-off`,
+     * `no-key`, `rail-unreachable`, `malformed` or `too-many`.
+     */
+    suspend fun paidIssue(rail: String, proof: JsonObject, keyId: String, blinded: List<String>): PaidIssue
 }
 
 class LivePaymentsClient(
@@ -119,5 +130,25 @@ class LivePaymentsClient(
         val body = JsonObject(mapOf("k" to JsonPrimitive(keyId), "blinded" to JsonArray(blinded.map(::JsonPrimitive))))
         val r = transport.execute("POST", "${base()}/api/vouchers/test-issue", body.toString().toByteArray(), "application/json; charset=utf-8", emptyMap(), setOf(200))
         (parse(r.body)?.get("sigs") as? JsonArray).orEmpty().map { (it as JsonPrimitive).content }
+    }
+
+    override suspend fun paidIssue(rail: String, proof: JsonObject, keyId: String, blinded: List<String>): PaidIssue = call {
+        // Like redeem: no authorization, no device headers, no cookies. The proof of payment is the only thing it carries.
+        val body = JsonObject(
+            linkedMapOf(
+                "v" to JsonPrimitive(1),
+                "rail" to JsonPrimitive(rail),
+                "proof" to proof,
+                "k" to JsonPrimitive(keyId),
+                "blinded" to JsonArray(blinded.map(::JsonPrimitive)),
+            ),
+        )
+        val r = transport.execute("POST", "${base()}/api/vouchers/paid-issue", body.toString().toByteArray(), "application/json; charset=utf-8", emptyMap(), setOf(200))
+        val o = parse(r.body) ?: JsonObject(emptyMap())
+        PaidIssue(
+            (o["k"] as? JsonPrimitive)?.contentOrNull ?: keyId,
+            (o["sigs"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+            o.long("units") ?: 0,
+        )
     }
 }

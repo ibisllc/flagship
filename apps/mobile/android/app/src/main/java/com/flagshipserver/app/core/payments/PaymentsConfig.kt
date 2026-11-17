@@ -109,3 +109,39 @@ data class PaymentsConfig(
         }
     }
 }
+
+/** Which rails sell vouchers (`GET /api/payments/config` `rails`; absent: none). */
+data class PaymentRails(val stripe: Boolean = false, val apple: Boolean = false, val google: Boolean = false) {
+    companion object {
+        fun parse(raw: JsonElement?): PaymentRails {
+            val o = VoiciJs.obj(raw) ?: return PaymentRails()
+            fun on(k: String) = (o[k] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+            return PaymentRails(on("stripe"), on("apple"), on("google"))
+        }
+    }
+}
+
+/** One pack as the stores sell it: [units] vouchers under [productId] (the same id on both stores). */
+data class VoucherProduct(val units: Long, val productId: String) {
+    companion object {
+        const val PREFIX = "com.flagshipserver.app.vouchers."
+
+        fun productId(units: Long) = "$PREFIX$units"
+
+        /** The pack size a store product id names, or null for an id that isn't ours. */
+        fun units(productId: String): Long? =
+            productId.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.takeIf { it.matches(Regex("^[1-9][0-9]{0,3}$")) }?.toLong()
+
+        /** The served `products` (one per pack); when absent or unusable, one per pack of [cfg] by the fixed id rule. */
+        fun parse(raw: JsonElement?, cfg: PaymentsConfig): List<VoucherProduct> {
+            val served = VoiciJs.arr(raw)?.mapNotNull { e ->
+                val o = VoiciJs.obj(e) ?: return@mapNotNull null
+                val n = VoiciJs.safeInt(o["units"])?.takeIf { it in 1..1000 } ?: return@mapNotNull null
+                val id = VoiciJs.str(o["productId"])?.takeIf { units(it) == n } ?: return@mapNotNull null
+                VoucherProduct(n, id)
+            }
+            if (!served.isNullOrEmpty()) return served.distinctBy { it.productId }.sortedBy { it.units }
+            return cfg.packs.map { VoucherProduct(it, productId(it)) }
+        }
+    }
+}
