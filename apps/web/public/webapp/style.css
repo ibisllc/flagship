@@ -205,6 +205,9 @@ html, body {
 body {
   max-width: 640px;
   margin: 0 auto;
+  /* Geist Mono joins "--" into one long dash, so app names like plants--alice read as struck through.
+     Names, addresses and keys must show every character as typed. */
+  font-variant-ligatures: none;
   padding:
     env(safe-area-inset-top)
     env(safe-area-inset-right)
