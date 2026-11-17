@@ -207,8 +207,9 @@ class GymMessagesTest : GymBase() {
 
     /**
      * docs/voici-calls.md "Calling from the app": after signing in to Ana's page, the reply notice and Social → Calls
-     * call her. This build has no media engine, so the call is handed to a voi.ci tab over /qr-pipe (a scripted pipe
-     * here), and the call history keeps it on this device.
+     * call her. Without a media engine (the stub: a build with -Pflagship.webrtc=stub, set here so the test is the same
+     * with libwebrtc bundled) the call is handed to a voi.ci tab over /qr-pipe (a scripted pipe here), and the call
+     * history keeps it on this device. WebRtcLibraryTest covers the bundled engine itself.
      */
     @Test fun callingAnasPageFromTheAppHandsTheCallToTheBrowser() {
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -233,6 +234,7 @@ class GymMessagesTest : GymBase() {
             }
         }
         com.flagshipserver.app.calls.VoiciOutgoingCalls.openBrowserOverride = { opened = it }
+        com.flagshipserver.app.calls.VoiciOutgoingCalls.engineFactory = { com.flagshipserver.app.calls.StubCallMediaEngine() }
         try {
             tap("tab-messages")
             tap("social-tab-inbox")
@@ -257,6 +259,7 @@ class GymMessagesTest : GymBase() {
         } finally {
             com.flagshipserver.app.calls.VoiciOutgoingCalls.pipeFactory = livePipe
             com.flagshipserver.app.calls.VoiciOutgoingCalls.openBrowserOverride = null
+            com.flagshipserver.app.calls.VoiciOutgoingCalls.engineFactory = null
         }
     }
 }
