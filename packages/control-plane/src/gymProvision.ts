@@ -95,6 +95,8 @@ export interface GymProvisionBody {
   debugSshPublicKey?: unknown;
   /** FLAGSHIP_BACKUP_INTERVAL_MS for the box (≥ 60000). */
   backupIntervalMs?: unknown;
+  /** True: the box also gets a public IPv6 address (the direct-access live group, docs/direct-access-and-domains.md). */
+  ipv6?: unknown;
 }
 
 interface ParsedAuthCode {
@@ -410,7 +412,8 @@ export async function handleGymProvision(
   //    key (Hetzner) so the box is debug-able.
   const region = typeof body?.region === "string" ? body.region : deps.defaultRegion;
   const size = typeof body?.size === "string" ? body.size : deps.defaultSize;
-  let prov: { serverId: string; ipv4: string | null };
+  if (body.ipv6 !== undefined && typeof body.ipv6 !== "boolean") return malformed("ipv6 must be a boolean");
+  let prov: { serverId: string; ipv4: string | null; ipv6?: string | null };
   try {
     prov = await deps.cloud.createServerWithUserData({
       name: `flagship-gym-${blob.username}-${bytesToHex(rand(4))}`,
@@ -423,6 +426,7 @@ export async function handleGymProvision(
       ...(deps.fallbackServerTypes
         ? { fallbackServerTypes: deps.fallbackServerTypes }
         : {}),
+      ...(body.ipv6 === true ? { ipv6: true } : {}),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -441,6 +445,7 @@ export async function handleGymProvision(
       serverDomain: blob.serverDomain,
       serverId: prov.serverId,
       ipv4: prov.ipv4,
+      ...(prov.ipv6 ? { ipv6: prov.ipv6 } : {}),
     },
   };
 }

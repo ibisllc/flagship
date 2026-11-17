@@ -112,6 +112,23 @@ describe("UpCloud client", () => {
     expect(servers[1]!.login_user).toEqual({ create_password: "no", ssh_keys: { ssh_key: ["ssh-ed25519 AAAA k"] } });
   });
 
+  it("attaches a public IPv6 interface only when asked, and returns its address", async () => {
+    const withV6 = serverBody("maintenance");
+    withV6.server.ip_addresses.ip_address.push({ access: "public", family: "IPv6", address: "2a04:3540:1000:310::1" });
+    const { fn, calls } = fakeFetch(() => ({ status: 202, body: withV6 }));
+    const client = createUpCloudClient({ token: "t", template: TEMPLATE, fetch: fn });
+    const args = { name: "n", location: "de-fra1", serverType: "P", userData: "x", username: "u" };
+    const plain = await client.createServerWithUserData(args);
+    const v6 = await client.createServerWithUserData({ ...args, ipv6: true });
+    const ifaces = calls.map((c) => (c.body as { server: { networking: { interfaces: { interface: Array<Record<string, unknown>> } } } })
+      .server.networking.interfaces.interface);
+    expect(ifaces[0]).toHaveLength(2);
+    expect(ifaces[1]).toHaveLength(3);
+    expect(ifaces[1]![2]).toEqual({ type: "public", ip_addresses: { ip_address: [{ family: "IPv6" }] } });
+    expect(plain).toEqual({ serverId: UUID, ipv4: "94.237.1.2" });
+    expect(v6).toEqual({ serverId: UUID, ipv4: "94.237.1.2", ipv6: "2a04:3540:1000:310::1" });
+  });
+
   it("finds a demo server by its label and exact title", async () => {
     const { fn, calls } = fakeFetch((call) => call.url.includes("?label=")
       ? { status: 200, body: { servers: { server: [

@@ -11,5 +11,7 @@ export interface ProvisioningHetznerClient {
     username: string;
     sshKeyId?: number;
     fallbackServerTypes?: readonly string[];
-  }): Promise<{ serverId: string; ipv4: string | null }>;
+    /** Also give the server a public IPv6 address (UpCloud only; others ignore it). */
+    ipv6?: boolean;
+  }): Promise<{ serverId: string; ipv4: string | null; ipv6?: string | null }>;
 }
