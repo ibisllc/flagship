@@ -1321,3 +1321,8 @@ Accept messages" even while messages are on.
   - iOS: the voucher tests 15/15, PaymentsCenterTests 4/4 and the Plan UI gym test pass.
   - Shell v230, D1 0152.
   - Still to do: an OHTTP client in the apps; the live gym (needs the `VOUCHER_SIGNING_KEYS` gym secret and a refresh); the owner's questions; then steps 4-7 (Stripe, IAP, Monero, paid apps).
+
+### 2026-11-17 owner: set up all of payments; OHTTP and bring-your-proxy live in 0.4; fix the Play Wear rejection
+- 0.4/payments-rails: the Stripe web shop and in-app purchases (StoreKit 2, Play Billing) selling blind vouchers. Owner runbook: docs/runbooks/payments-setup.md. The owner has a Stripe account and a bank account.
+- 0.4/outbound-proxy: feat/outbound-proxy ported (Pro-gated), plus OHTTP clients on all three apps for voucher redeem. The relay must not be Cloudflare (`.com` runs on Cloudflare). An interim relay run by Flagship, labelled as such, until a third-party contract.
+- 0.4/wear-listing: Play rejected Wear versionCode 1000011 because the listing doesn't mention the tile or the complication. Fixing the listing text in i18n/store; owner runbook for resubmitting.
