@@ -12,6 +12,8 @@ public struct PaymentsComError: Error, Equatable, Sendable {
     public var spent: [String] = []
     /// A `bad-voucher` 400: the nullifier of the voucher that didn't verify.
     public var nullifier: String?
+    /// A spend's refusal: how it travelled (the relay answered, or it went direct and why).
+    public var path: PrivatePath?
     /// A `wrong-count` 409 from `paid-issue`: the units the payment bought.
     public var units: Int64?
 
@@ -42,9 +44,26 @@ public struct VoucherRedeemResult: Equatable, Sendable {
     public var spent: [String]
     public var paidUntil: Int64?
     public var topUpBytes: Int64?
-    public init(credited: Int64, spent: [String], paidUntil: Int64? = nil, topUpBytes: Int64? = nil) {
-        self.credited = credited; self.spent = spent; self.paidUntil = paidUntil; self.topUpBytes = topUpBytes
+    /// How it travelled: through a private relay, or directly (and why).
+    public var path: PrivatePath?
+    public init(credited: Int64, spent: [String], paidUntil: Int64? = nil, topUpBytes: Int64? = nil, path: PrivatePath? = nil) {
+        self.credited = credited; self.spent = spent; self.paidUntil = paidUntil; self.topUpBytes = topUpBytes; self.path = path
     }
+}
+
+/// How a spend reaches `.com` (docs/outbound-proxy.md "Failure handling"): the relays to try, in order, and whether it
+/// may go directly (marked `x-flagship-relay-fallback`) once every relay failed. A relay outage costs privacy or time,
+/// never the plan.
+public struct SpendRoute: Sendable {
+    public var config: OhttpPublicConfig
+    public var mayGoDirect: @Sendable (String) -> Bool
+    /// The relays failed recently and rest until their retry time: skip them, with this reason.
+    public var skipRelaysReason: String?
+    public init(config: OhttpPublicConfig, skipRelaysReason: String? = nil, mayGoDirect: @escaping @Sendable (String) -> Bool) {
+        self.config = config; self.skipRelaysReason = skipRelaysReason; self.mayGoDirect = mayGoDirect
+    }
+    /// No relay, direct allowed (tests and tools).
+    public static let direct = SpendRoute(config: .empty, mayGoDirect: { _ in true })
 }
 
 /// The account's plan as `.com` attests it (`GET /api/users/<u>/plan-attestation`).
@@ -74,8 +93,10 @@ public protocol PaymentsComClient: Sendable {
     func wallet(username: String) async throws -> JSONValue?
     /// `PUT` with `version` = stored + 1 (device headers); 409 `version-conflict` carries the stored blob.
     func putWallet(username: String, sealed: JSONValue, device: VoiciDeviceSigner) async throws
-    /// `POST /api/vouchers/redeem`: no credential and no cookie, by design (anyone may pay anyone's bill).
-    func redeem(username: String, for what: String, vouchers: [Voucher]) async throws -> VoucherRedeemResult
+    /// `POST /api/vouchers/redeem`: no credential and no cookie, by design (anyone may pay anyone's bill), through the
+    /// private relays in `route`. Throws `RelayUnavailableError` when every relay failed and `route` keeps it from
+    /// going directly.
+    func redeem(username: String, for what: String, vouchers: [Voucher], route: SpendRoute) async throws -> VoucherRedeemResult
     /// `POST /api/vouchers/test-issue` (the gym only): blind signatures for `blinded`.
     func testIssue(keyId: String, blinded: [String]) async throws -> [String]
     /// `POST /api/vouchers/paid-issue`: blind signatures for a store payment (`rail` "apple" with `proof` {"jws"}).
@@ -84,6 +105,23 @@ public protocol PaymentsComClient: Sendable {
     func paidIssue(rail: String, proof: JSONValue, keyId: String, blinded: [String]) async throws -> PaidIssueResult
     func plan(username: String) async throws -> AccountPlanState
     func allowance(username: String) async throws -> AccountAllowance
+}
+
+extension PaymentsComClient {
+    /// A spend with no relay (tests and tools).
+    public func redeem(username: String, for what: String, vouchers: [Voucher]) async throws -> VoucherRedeemResult {
+        try await redeem(username: username, for: what, vouchers: vouchers, route: .direct)
+    }
+
+    static func redeemBody(username: String, for what: String, vouchers: [Voucher]) throws -> [UInt8] {
+        let body: JSONValue = ["v": 1, "username": .string(username.lowercased()), "for": .string(what), "vouchers": .array(vouchers.map(\.json))]
+        return Array(try CanonicalJson.canonicalJson(body).utf8)
+    }
+
+    static func redeemResult(_ v: JSONValue?, path: PrivatePath?) -> VoucherRedeemResult {
+        VoucherRedeemResult(credited: v?["credited"]?.time ?? 0, spent: (v?["spent"]?.array ?? []).compactMap(\.string),
+                            paidUntil: v?["paidUntil"]?.time, topUpBytes: v?["topUpBytes"]?.time, path: path)
+    }
 }
 
 public final class LivePaymentsComClient: PaymentsComClient, @unchecked Sendable {
@@ -143,14 +181,24 @@ public final class LivePaymentsComClient: PaymentsComClient, @unchecked Sendable
         ]))
     }
 
-    public func redeem(username: String, for what: String, vouchers: [Voucher]) async throws -> VoucherRedeemResult {
-        var r = try request("POST", "/api/vouchers/redeem", ["v": 1, "username": .string(username.lowercased()), "for": .string(what),
-                                                               "vouchers": .array(vouchers.map(\.json))])
-        // Nothing that names the caller: no cookie, no authorization header.
-        r.httpShouldHandleCookies = false
-        let v = try await call(r)
-        return VoucherRedeemResult(credited: v?["credited"]?.time ?? 0, spent: (v?["spent"]?.array ?? []).compactMap(\.string),
-                                   paidUntil: v?["paidUntil"]?.time, topUpBytes: v?["topUpBytes"]?.time)
+    public func redeem(username: String, for what: String, vouchers: [Voucher], route: SpendRoute) async throws -> VoucherRedeemResult {
+        let url = URL(string: base.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/vouchers/redeem")!
+        let session = self.session
+        // Nothing that names the caller: no cookie, no authorization header; through the relay `.com` sees no address.
+        let res = try await OhttpClient.send(
+            url: url, method: "POST", headers: [("content-type", "application/json")],
+            body: try Self.redeemBody(username: username, for: what, vouchers: vouchers),
+            config: route.config, timeout: 15, mayGoDirect: route.mayGoDirect, transport: { r in
+            let (data, response) = try await session.gatedData(for: r)
+            let http = response as? HTTPURLResponse
+            return (http?.statusCode ?? 0, http?.value(forHTTPHeaderField: "content-type"), Array(data))
+        }, skipRelaysReason: route.skipRelaysReason)
+        guard (200..<300).contains(res.status) else {
+            var e = PaymentsComError.from(status: res.status, data: Data(res.body))
+            e.path = res.path
+            throw e
+        }
+        return Self.redeemResult(res.body.isEmpty ? nil : JSONValue.parse(utf8: res.body), path: res.path)
     }
 
     public func testIssue(keyId: String, blinded: [String]) async throws -> [String] {

@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 
 /// Pro and Pro Max (`.com` tiers hobby and maker).
 public enum PaidPlan: String, CaseIterable, Sendable, Codable {
@@ -107,7 +108,7 @@ public enum VoucherProducts {
 }
 
 /// `GET /api/payments/config`: the numbers, the keys still accepted (each checked: its id must match its numbers),
-/// and whether this `.com` gives free test vouchers (the gym only).
+/// whether this `.com` gives free test vouchers (the gym only), and the private relays spends go through (`ohttp`).
 public struct PaymentsInfo: Equatable, Sendable {
     public var config: PaymentsConfig
     public var keys: [PublishedVoucherKey]
@@ -115,12 +116,15 @@ public struct PaymentsInfo: Equatable, Sendable {
     public var rails: PaymentRails
     /// One per pack (served, else derived from `config.packs`).
     public var products: [VoucherProduct]
-    public init(config: PaymentsConfig, keys: [PublishedVoucherKey], testIssue: Bool, rails: PaymentRails = .off, products: [VoucherProduct]? = nil) {
-        self.config = config; self.keys = keys; self.testIssue = testIssue; self.rails = rails
+    public var ohttp: OhttpPublicConfig
+    public init(config: PaymentsConfig, keys: [PublishedVoucherKey], testIssue: Bool, rails: PaymentRails = .off, products: [VoucherProduct]? = nil,
+                ohttp: OhttpPublicConfig = .empty) {
+        self.config = config; self.keys = keys; self.testIssue = testIssue; self.rails = rails; self.ohttp = ohttp
         self.products = products ?? config.packs.map { VoucherProduct(units: $0, productId: VoucherProducts.productId(units: $0)) }
     }
 
-    public static func parse(_ v: JSONValue?) -> PaymentsInfo {
+    /// `controlApex` drops relays on our own or Cloudflare's names (`isForbiddenRelayHost`).
+    public static func parse(_ v: JSONValue?, controlApex: String = Endpoints.controlHost) -> PaymentsInfo {
         let keys: [PublishedVoucherKey] = (v?["keys"]?.array ?? []).compactMap { k in
             guard let id = k["keyId"]?.string, let n = k["nHex"]?.string, let e = k["eHex"]?.string else { return nil }
             let key = VoucherPublicKey(keyId: id, nHex: n, eHex: e)
@@ -137,7 +141,8 @@ public struct PaymentsInfo: Equatable, Sendable {
             }
         }
         return PaymentsInfo(config: PaymentsConfig.parse(v?["config"]), keys: keys, testIssue: v?["testIssue"] == .bool(true), rails: rails,
-                            products: served?.isEmpty == false ? served : nil)
+                            products: served?.isEmpty == false ? served : nil,
+                            ohttp: OhttpPrivacy.parseConfig(v?["ohttp"], controlApex: controlApex))
     }
 
     /// The key new vouchers are made under.
