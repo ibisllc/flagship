@@ -1281,3 +1281,32 @@ Accept messages" even while messages are on.
 - Android libwebrtc JNI agent: still waiting on CI run 44099203173.
 - Payments steps 1-3 started on 0.4/payments: voucher core (ported from feat/marketplace), the phone-held wallet with trickle spend, and the plan screens. The defaults are provisional and kept in one config place.
 - Resume point: merge R1's fixes, then the libwebrtc pin, then payments; after that come D11 CI, R2-R4 and the E UI pass.
+
+### 2026-11-17 — Android calls fixed: libwebrtc JNI bridges, new pin (agent `0.4/webrtc-android`)
+- **Root cause.** In M157 `generate_jni()` puts each `org/webrtc/*Jni` class in its own `<name>_java` library;
+  upstream's `dist_jar("libwebrtc")` takes direct deps only, so none were packed, and by default those classes call
+  hashed natives on `J.N`, which only an APK's final JNI step writes. The AAR had neither (the .so exported only
+  `Java_J_N_M*`). Fix in `apply-overlay.py` / `build-android.sh`: jni_zero per-file natives (new GN arg
+  `jni_zero_per_file_natives`, `use_hashed_jni_names=false`), every non-test bridge library plus `dav1d_java` and
+  rtc_base's and jni_zero's bridges in the jar, `libaom_av1_encoder_jni` linked (upstream shipped LibaomAv1Encoder's
+  Java without its native). New guard `tools/libwebrtc/check-aar.py`: every org/webrtc, org/jni_zero, J/ class the
+  jar uses is in it, and every native method has its symbol in each ABI's .so; a refused AAR is kept as an artifact.
+- **CI.** Run 44087165096 failed the guard (Dav1dDecoder missing; LibaomAv1Encoder unlinked: per-file binding itself
+  worked). Run **44099203173 green** (all 7 jobs; check-aar: 517 classes, 196 native methods bound on 3 ABIs).
+- **Pin `libwebrtc-157-44099203173`** (pre-release, created by this agent). Only `libwebrtc.aar` is new; the
+  iOS WebRTC zip is the previous release's bytes (Package.swift changes its URL only) and both TURN zips were
+  byte-identical. `manifest.json` names the run of each file.
+- **Tests** (`flagship_gym` AVD, API 35 arm64, against the new AAR): `WebRtcLibraryTest` (new, instrumented:
+  initialize, peer connection, FlagshipFrameCrypto) 1/1, `GymMessagesTest` 7/7 incl.
+  `callingAnasPageFromTheAppHandsTheCallToTheBrowser`; unit `*calls*`+`*phoneroute*` 61/61 incl. the new
+  `WebRtcBridgesTest` (fails on the old AAR with ClassNotFoundException). The handoff test now pins the stub engine
+  (with libwebrtc bundled the app calls by itself). It also found an app bug: the call stage was a disabled clickable
+  outside video, merging every label into one disabled node (TalkBack, and the gym could not see the status); clickable
+  only in video now.
+- **voi.ci**: `signIn.js` judges a just-issued answer (attestation and delegation) at its own issuedAt within the
+  10-minute send skew, also when a stored session loads; site rebuilt. **Android Inbox**: empty state says people who
+  sign in can write here while the published page accepts messages (`voici_empty_messages_on`, 7 languages); gym
+  checks it. iOS has the same empty-state wording issue (`SocialTab.swift` emptyText), not changed here.
+- Checks: `tsc -b`, `npm run i18n`, parity green; vitest flagship-web + voici-site 55, apps/com voici 41. Not run:
+  a real phone call, the iOS app (its bytes are unchanged).
+- Commits: 4e70edb1e 8b4eae61c ac5150525 b6ed3a7c4 4d28a675d 4119039ad 8b17ec9c5 14bcafc84 
