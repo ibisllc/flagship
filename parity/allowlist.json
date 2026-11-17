@@ -765,6 +765,16 @@
       "check": "signed-tags",
       "key": "web:flagship/voici-ring-back/v1",
       "reason": "The ring-back channel is the caller's order, signed in the caller's voi.ci tab (packages/flagship-web/src/callModes.js) or by the caller's app; the webapp's calls to known pages go through a voi.ci tab, which attaches it there."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/voucher-order/v1",
+      "reason": "The web shop's Stripe order commitment: only the webapp buys by card. iOS and Android sell through their own store (StoreKit, Play Billing) and never make a Stripe order."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/voucher-order/v1",
+      "reason": "The web shop's Stripe order commitment: only the webapp buys by card. iOS and Android sell through their own store (StoreKit, Play Billing) and never make a Stripe order."
     }
   ]
 }
