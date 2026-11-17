@@ -16578,5 +16578,29 @@
   "Opening your line…": {
     "en": "Opening your line…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallScreen.swift"
+  },
+  "Their camera": {
+    "en": "Their camera",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Your camera": {
+    "en": "Your camera",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "End-to-end encrypted · quantum-safe": {
+    "en": "End-to-end encrypted · quantum-safe",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "End": {
+    "en": "End",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Flip": {
+    "en": "Flip",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Audio": {
+    "en": "Audio",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
   }
 }
