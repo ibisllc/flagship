@@ -1266,24 +1266,24 @@ body.has-call {
   overflow: hidden;
 }
 .call-stage {
-  --call-ink: #fff;
-  --call-dim: rgba(255, 255, 255, 0.75);
-  --call-faint: rgba(255, 255, 255, 0.55);
-  --call-glass: rgba(255, 255, 255, 0.16);
+  --call-ink: #ece7d6;
+  --call-dim: rgba(236, 231, 214, 0.75);
+  --call-faint: rgba(236, 231, 214, 0.55);
+  --call-glass: rgba(236, 231, 214, 0.16);
   --call-red: #e5393a;
   --call-green: #2fb457;
   position: fixed;
   inset: 0;
   z-index: 60;
   overflow: hidden;
-  background: linear-gradient(180deg, #1c2130, #080a12);
+  background: #0f0e0c;
   color: var(--call-ink);
   color-scheme: dark;
   outline: none;
   animation: fade 200ms ease-out;
 }
 .call-stage :focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--call-ink);
   outline-offset: 3px;
 }
 .call-remote {
@@ -1356,8 +1356,9 @@ body.has-call {
   justify-content: center;
   font-size: 46px;
   font-weight: 500;
-  color: #fff;
-  background: linear-gradient(180deg, #737373, #474747);
+  color: var(--call-ink);
+  background: #2e2b24;
+  box-shadow: inset 0 0 0 1px rgba(236, 231, 214, 0.12);
 }
 .call-stage.has-remote .call-avatar,
 .call-stage.has-remote .call-e2e {
@@ -1485,8 +1486,8 @@ body.has-call {
   height: 26px;
 }
 .call-round.is-on .call-round-disc {
-  background: #fff;
-  color: #000;
+  background: var(--call-ink);
+  color: #0f0e0c;
 }
 .call-round.is-end .call-round-disc {
   background: var(--call-red);
@@ -1518,10 +1519,10 @@ body.has-call {
 .call-self {
   position: absolute;
   z-index: 2;
-  width: 140px;
+  width: 104px;
   aspect-ratio: 9 / 16;
   object-fit: cover;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(236, 231, 214, 0.25);
   border-radius: 14px;
   background: #000;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
@@ -1548,11 +1549,11 @@ body.has-call {
 }
 .call-self.at-bl,
 .call-self.at-br {
-  top: calc(100% - 236px - 140px * 16 / 9);
+  top: calc(100% - 284px - 104px * 16 / 9);
 }
 .call-stage.has-remote .call-self.at-bl,
 .call-stage.has-remote .call-self.at-br {
-  top: calc(100% - 236px - 104px * 16 / 9);
+  top: calc(100% - 284px - 104px * 16 / 9);
 }
 .call-self.at-tl,
 .call-self.at-bl {
@@ -1560,7 +1561,7 @@ body.has-call {
 }
 .call-self.at-tr,
 .call-self.at-br {
-  left: calc(100% - 16px - 140px);
+  left: calc(100% - 16px - 104px);
 }
 .call-stage.has-remote .call-self.at-tr,
 .call-stage.has-remote .call-self.at-br {
@@ -1584,8 +1585,8 @@ body.has-call {
   margin: 0 auto;
   padding: 12px;
   border-radius: 12px;
-  background: rgba(30, 32, 40, 0.92);
-  color: #fff;
+  background: rgba(36, 33, 27, 0.94);
+  color: var(--call-ink);
   font-size: 14px;
   text-align: center;
 }
@@ -1599,7 +1600,7 @@ body.has-call {
   margin: 0 auto;
   padding: 6px;
   border-radius: 14px;
-  background: rgba(30, 32, 40, 0.96);
+  background: rgba(36, 33, 27, 0.97);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 .call-menu-item {
@@ -1609,7 +1610,7 @@ body.has-call {
   border: none;
   border-radius: 10px;
   background: none;
-  color: #fff;
+  color: var(--call-ink);
   font: inherit;
   text-align: left;
   cursor: pointer;

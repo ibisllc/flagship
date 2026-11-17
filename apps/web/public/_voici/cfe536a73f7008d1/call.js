@@ -309,7 +309,9 @@ export function showIncomingRing(ctx, session, ring) {
       stageAvatar(ctx),
       h(doc, "h2", { class: "call-name", id: "call-stage-name" }, page.profile.displayName),
       h(doc, "p", { class: "call-status", role: "status" }, t("{0} is calling you back.", page.profile.displayName)),
+      h(doc, "p", { class: "call-e2e" }, icon(doc, "lock"), h(doc, "span", {}, t("End-to-end encrypted · quantum-safe"))),
     ),
+    h(doc, "div", { class: "call-spacer" }),
     h(doc, "div", { class: "call-bottom" }, h(doc, "div", { class: "call-row call-row-ring" }, decline.el, answer.el)),
   );
   answer.el.focus();
@@ -345,7 +347,7 @@ async function startCall(ctx, session, opts = {}) {
   const head = h(doc, "div", { class: "call-head" }, stageAvatar(ctx), h(doc, "h2", { class: "call-name", id: "call-stage-name" }, name), status, timer, slowNote, e2e, paused);
   const audio = h(doc, "audio", { autoplay: true });
   const remoteVideo = h(doc, "video", { class: "call-remote", autoplay: true, playsinline: true, muted: true, hidden: true, "aria-label": t("Their camera") });
-  const selfView = h(doc, "video", { class: "call-self at-tr", autoplay: true, playsinline: true, muted: true, hidden: true, tabindex: "0", "aria-label": t("Your camera") });
+  const selfView = h(doc, "video", { class: "call-self at-br", autoplay: true, playsinline: true, muted: true, hidden: true, tabindex: "0", "aria-label": t("Your camera") });
   const notice = h(doc, "p", { class: "call-notice", role: "status", hidden: true });
   const shade = h(doc, "div", { class: "call-shade", "aria-hidden": "true" });
   let muted = false;
@@ -397,12 +399,23 @@ async function startCall(ctx, session, opts = {}) {
   if (route) stageEl.append(route.menu);
 
   // ── the video layout: their picture fills, ours is a corner tile; a tap hides the controls ──
-  let corner = "tr";
+  // Our tile keeps one corner while their video shows and another while only ours runs: low on the right by
+  // default, so it never covers the name and status of the audio layout.
+  const corners = { video: "tr", self: "br" };
+  let corner = corners.self;
   let hideTimer = null;
   // Their video is "live" (has-remote) only while remoteVideoLive says so; the element keeps decoding underneath
   // (transparent, not display:none) so the frame watch can see it come back.
   const videoMode = () => stageEl.classList.contains("has-remote");
+  const applyCorner = () => {
+    const c = corners[videoMode() ? "video" : "self"];
+    if (c === corner) return;
+    selfView.classList.remove("at-" + corner);
+    corner = c;
+    selfView.classList.add("at-" + corner);
+  };
   const layout = () => {
+    applyCorner();
     const mode = callLayout(videoMode(), cameraOn);
     stageEl.classList.toggle("is-video", mode === "video");
     stageEl.classList.toggle("has-self", cameraOn);
@@ -493,9 +506,8 @@ async function startCall(ctx, session, opts = {}) {
   });
   stageEl.addEventListener("focusin", () => showControls());
   const moveTile = (c) => {
-    selfView.classList.remove("at-" + corner);
-    corner = c;
-    selfView.classList.add("at-" + corner);
+    corners[videoMode() ? "video" : "self"] = c;
+    applyCorner();
   };
   let dragging = null;
   selfView.addEventListener("pointerdown", (e) => {
