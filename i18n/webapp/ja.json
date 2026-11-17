@@ -3794,5 +3794,19 @@
   "Enter a voi.ci username, like voi.ci/alex.": "voi.ci のユーザー名を入力してください（例: voi.ci/alex）。",
   "There's no page at voi.ci/{0}.": "voi.ci/{0} にページはありません。",
   "voi.ci/{0} doesn't take calls.": "voi.ci/{0} は通話を受け付けていません。",
-  "Hello. I am using the Flagship app, from flagshipserver.com": "こんにちは。flagshipserver.com の Flagship アプリを使っています"
+  "Hello. I am using the Flagship app, from flagshipserver.com": "こんにちは。flagshipserver.com の Flagship アプリを使っています",
+  "Missed call from {0}": "{0} からの不在着信",
+  "Declined a call from {0}": "{0} からの着信を拒否しました",
+  "Call with {0}": "{0} との通話",
+  "You called {0}": "{0} に発信しました",
+  "New conversation with {0}": "{0} との新しい会話",
+  "Message request from {0}": "{0} からのメッセージリクエスト",
+  "Your page went public": "ページを公開しました",
+  "Your page was updated": "ページを更新しました",
+  "You posted on your page": "ページに投稿しました",
+  "Show": "表示",
+  "Calls and messages": "通話とメッセージ",
+  "No calls or messages yet.": "まだ通話やメッセージはありません。",
+  "Opens the server": "サーバーを開きます",
+  "Scheduled backup finished": "スケジュールされたバックアップが完了しました"
 }

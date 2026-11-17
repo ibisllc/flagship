@@ -200,6 +200,7 @@
 
       <!-- View 3b: Activity tab — unlock approvals + install progress + audit log -->
       <section id="view-activity" class="hidden" data-tab="activity">
+        <div id="activity-filter-slot"></div>
         <div id="activity-no-server" hidden></div>
         <div id="activity-approvals" role="region" aria-labelledby="activity-approvals-heading">
           <h2 id="activity-approvals-heading">Server approvals <span class="pill warn" id="activity-approvals-count" hidden>0</span></h2>
@@ -222,6 +223,8 @@
           <h2 id="activity-browser-heading" class="mt-5">Browser access requests</h2>
           <div id="activity-browser-content"></div>
         </div>
+
+        <div id="activity-social" role="region" aria-labelledby="activity-social-heading"></div>
 
         <div id="activity-with-server">
         <h2 class="mt-5">Install progress</h2>

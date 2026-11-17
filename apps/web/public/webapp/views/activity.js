@@ -3,6 +3,8 @@
 // shares) merged with the account events from flagshipserver.com, plus the
 // post-recovery card. Mirrors apps/mobile/{ios,android} ActivityScreen +
 // ActivityViewModel. Sources are fetched in parallel.
+// A filter at the top (All / Servers / Social, docs/activity-social.md) adds the calls and social entries built in this
+// browser (lib/socialActivity.js) and can show them alone.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl, setPodBaseUrl, boxClient } from "../lib/api.js";
@@ -29,11 +31,119 @@ import { tr } from "../lib/i18n.js";
 import { noServerCardHtml } from "../lib/noServerCard.js";
 import { renderChatSection } from "../lib/chatAlerts.js";
 import { renderBrowserGrantSection } from "../lib/browserGrantAlerts.js";
+import { buildSocialActivity, socialEntryDetail, socialEntryIcon, socialEntryTitle } from "../lib/socialActivity.js";
+import { refreshWorld, visibleConversations, visitorName, world } from "../lib/voiciWorld.js";
+import { isRequest } from "../lib/voiciOwner.js";
+import { callHistory } from "../lib/voiciCallOut.js";
 registerView("view-activity", { tab: "activity" });
 
 // The user's online pods (statusByDomain map values), fetched alongside the
 // feed so the multi-pod switcher can render. Empty until the first load.
 let activityPods = [];
+
+/** "all", "servers" or "social" (docs/activity-social.md). */
+let activityFilter = "all";
+const FILTERS = ["all", "servers", "social"];
+
+function filterLabel(f) {
+  return f === "servers" ? tr("Servers") : f === "social" ? tr("Social") : tr("All");
+}
+
+/** All / Servers / Social, above everything else on the tab. */
+function renderFilter() {
+  const slot = $("activity-filter-slot");
+  if (!slot) return;
+  slot.innerHTML = `
+    <div class="fs-chip-row" role="radiogroup" aria-label="${escapeHtml(tr("Show"))}" data-testid="activity-filter">
+      ${FILTERS.map(
+        (f) =>
+          `<button type="button" class="fs-chip${f === activityFilter ? " is-selected" : ""}" role="radio" aria-checked="${f === activityFilter}" data-activity-filter="${f}">${escapeHtml(filterLabel(f))}</button>`,
+      ).join("")}
+    </div>`;
+  slot.querySelectorAll("[data-activity-filter]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const next = b.getAttribute("data-activity-filter");
+      if (next === activityFilter) return;
+      activityFilter = next;
+      renderActivity().catch(() => {});
+    }),
+  );
+}
+
+/** The calls, conversations and page entries this browser can build (empty for a sample account or while locked). */
+export function currentSocialEntries() {
+  if (world.sample) return [];
+  return buildSocialActivity({
+    history: callHistory(world.missedCalls),
+    conversations: visibleConversations(),
+    isRequest: (cv) => isRequest(cv, world.state),
+    name: visitorName,
+    page: world.page,
+  });
+}
+
+async function openSocialEntry(e) {
+  if (e.target.kind === "thread") {
+    const { enterThread } = await import("./thread.js");
+    return enterThread(e.target.conv);
+  }
+  if (e.target.kind === "calls") {
+    const { enterCalls } = await import("./calls.js");
+    return enterCalls();
+  }
+  const { enterYourPage } = await import("./messages.js");
+  return enterYourPage();
+}
+
+/** The "Calls and messages" section: a tap opens the conversation, the Calls page or the page. */
+async function renderSocialSection() {
+  const root = $("activity-social");
+  if (!root) return;
+  if (activityFilter === "servers") {
+    root.hidden = true;
+    root.replaceChildren();
+    return;
+  }
+  root.hidden = false;
+  if (!world.pageLoaded && !world.sample) await refreshWorld().catch(() => {});
+  const entries = currentSocialEntries();
+  const list = entries.length === 0
+    ? `<div class="card placeholder" data-testid="activity-social-empty">${escapeHtml(tr("No calls or messages yet."))}</div>`
+    : `<div class="fs-group">${entries
+        .map(
+          (e, i) => `
+      <button type="button" class="fs-row" data-social-entry="${i}" data-testid="activity-social-${escapeHtml(e.kind)}">
+        <span class="fs-row-body">
+          <span class="fs-row-title"><span aria-hidden="true">${escapeHtml(socialEntryIcon(e))}</span> ${escapeHtml(socialEntryTitle(e))}</span>
+          ${socialEntryDetail(e) ? `<span class="fs-row-subtitle">${escapeHtml(socialEntryDetail(e))}</span>` : ""}
+          <span class="fs-row-subtitle">${escapeHtml(fmtDate(e.at))}</span>
+        </span>
+      </button>`,
+        )
+        .join("")}</div>`;
+  root.innerHTML = `
+    <h2 id="activity-social-heading" class="${activityFilter === "social" ? "" : "mt-5"}">${escapeHtml(tr("Calls and messages"))}</h2>
+    ${list}`;
+  root.querySelectorAll("[data-social-entry]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const e = entries[Number(b.getAttribute("data-social-entry"))];
+      if (e) openSocialEntry(e).catch(() => {});
+    }),
+  );
+}
+
+/** Social shows only the calls and social entries; the servers' parts hide. */
+function applyFilterVisibility(noServer) {
+  const social = activityFilter === "social";
+  $("activity-approvals")?.toggleAttribute("hidden", social);
+  const noServerSlot = $("activity-no-server");
+  if (noServerSlot) noServerSlot.hidden = social || !noServer;
+  $("activity-with-server")?.toggleAttribute("hidden", social || noServer);
+  if (social) {
+    $("activity-chat")?.toggleAttribute("hidden", true);
+    $("activity-browser")?.toggleAttribute("hidden", true);
+  }
+}
 
 /** Render the multi-pod switcher for the Activity feed (parity with the
  *  Services switcher). "All servers" (first option) = the default, combined
@@ -149,7 +259,7 @@ async function fetchBoxEvents() {
         .fetch("/api/screens/activity?limit=100")
         .then((b) => b?.entries ?? [])
         .catch(() => []);
-      return { serverName: label ? podShortName(fqdn) : "", entries };
+      return { serverName: label ? podShortName(fqdn) : "", fqdn, entries };
     }),
   );
 }
@@ -163,6 +273,12 @@ const eventKindLabel = auditLabel;
 export async function renderActivity() {
   const root = $("activity-feed");
   if (!root) return;  // shell renders the static section without the feed slot
+  renderFilter();
+  void renderSocialSection().catch(() => {});
+  if (activityFilter === "social") {
+    applyFilterVisibility(false);
+    return;
+  }
   root.innerHTML = skeletonCards(2);
   // Refresh the online-pod set so the multi-pod switcher reflects the current
   // fleet (parity with the Services switcher). Best-effort + non-blocking: a
@@ -185,6 +301,7 @@ export async function renderActivity() {
     noServerSlot.hidden = !noServer;
   }
   $("activity-with-server")?.toggleAttribute("hidden", noServer);
+  applyFilterVisibility(noServer);
   if (noServer) {
     $("activity-chat")?.toggleAttribute("hidden", true);
     $("activity-browser")?.toggleAttribute("hidden", true);
@@ -218,8 +335,8 @@ export async function renderActivity() {
     });
     const feed = rows.length === 0
       ? `<div class="card placeholder">${tr("Nothing has happened yet.")}</div>`
-      : rows.map((r) => `
-        <div class="card${r.ok ? "" : " warning"}">
+      : rows.map((r, i) => `
+        <div class="card${r.ok ? "" : " warning"}${r.fqdn ? " is-clickable" : ""}"${r.fqdn ? ` role="button" tabindex="0" data-feed-server="${i}" title="${escapeHtml(tr("Opens the server"))}"` : ""}>
           <div class="row">
             <span class="value"><span aria-hidden="true">${escapeHtml(r.icon)}</span> ${escapeHtml(r.title)}</span>
             <span class="pill">${escapeHtml(fmtDate(r.at))}</span>
@@ -235,6 +352,19 @@ export async function renderActivity() {
       <button class="secondary full-width mt-2" id="activity-see-all-audit">${tr("See all account history")}</button>
     `;
     wireActivityPodSwitcher(root);
+    // A server's log entry opens that server.
+    root.querySelectorAll("[data-feed-server]").forEach((card) => {
+      const open = async () => {
+        const fqdn = rows[Number(card.getAttribute("data-feed-server"))]?.fqdn;
+        if (!fqdn) return;
+        const { enterServerDetail } = await import("./server-detail.js");
+        await enterServerDetail(fqdn);
+      };
+      card.addEventListener("click", () => { open().catch(() => {}); });
+      card.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open().catch(() => {}); }
+      });
+    });
     $("activity-feed-open-recovery")?.addEventListener("click", async () => {
       const { enterPostRecovery } = await import("./post-recovery.js");
       enterPostRecovery({ back: "view-activity" });
