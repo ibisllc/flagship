@@ -1,4 +1,5 @@
 import { pinnedStk, podStk } from "../lib/serverPins.js";
+import { planTickSoon } from "./plan.js";
 import { sendPendingWildcardGrants } from "../lib/firstContact.js";
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
@@ -2099,6 +2100,7 @@ export async function enterHome() {
   decorateHomeGrid(document);
   await renderHome();
   await renderActiveProviderChip();
+  planTickSoon();
 }
 
 export function initHomeView({ onSettings }) {
