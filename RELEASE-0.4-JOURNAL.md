@@ -161,7 +161,7 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
       all languages.
 
 ### R. Release
-- [ ] R1 Gym on the test CA, full run green (one green run per group is enough; LE failures are logged, not rerun).
+- [x] R1 Gym on the test CA, full run green (one green run per group is enough; LE failures are logged, not rerun). Done 2026-11-17: every group green on both stacks (the gym issues from Let's Encrypt, not a test CA; see the entry of that day).
 - [ ] R2 Version bump to 0.4 (`release/version.json`, `node scripts/check-versions.mjs --write`; store numbers climb).
 - [ ] R3 Store art, release notes, blog, translations.
 - [ ] R4 Deploy sheet for 0.4 (migrations, `.com`, `.services`, endorsed box release, store builds, Studios,
@@ -1335,3 +1335,68 @@ Accept messages" even while messages are on.
   - iOS: 19 tests run, 18 pass; the StoreKitTest case skips under SwiftPM (it needs an app-hosted test target). The Plan UI gym passes.
   - Android: GymPlanTest not run (disk).
   - Owner runbook: docs/runbooks/payments-setup.md.
+
+### 2026-11-17 — R1: full live gym, every group green on both stacks
+- gym-0.4 rebased onto release/0.4 (backup `backup/gym-0.4-pre-rebase-202611171200`; clean, the merged direct-access and
+  call-desktop commits dropped). Gym artifact `f83a8d3023c4` (seq 202611171210), update target `3cdead624427`, rollback
+  drill `e6a8b3e0b26e`; gym D1 0151 applied; gym Worker deployed the gym way (last `fae163a4`). Issuer: Let's Encrypt.
+- Third mesh relay: gym-c's id was retired on 11-09 and ids are never reused, so it ran as **gym-d** (new seed, VM,
+  admitted, directory v6) and was taken down and retired after (directory v7). caddyserver.com refused every Caddy build
+  with caddy-l4 (400); built with xcaddy on the VM, and the provision script now does that itself.
+- A network outage (ENOTFOUND) ended the first arch-v2 pass during lifecycle/one-list and its teardown, and stopped
+  the classic pass before it started; the fleet was torn down by hand after (`shared-run.ts --teardown --reuse`).
+
+| group | arch-v2 | classic | | group | arch-v2 | classic |
+|---|---|---|---|---|---|---|
+| core | 30/0 | 30/0 | | phone-route | 9/0 | |
+| languages | 7/0 | | | phone-endpoint | 8/0 | |
+| gating | 21/0 | 21/0 | | serving | 6/0 | 5/1 → **6/0** |
+| invites | 16/0 | 16/0 | | quota | 7/0 (3 skip: dedicated DB) | |
+| enforcement | 6/0 | | | backups | 9/0 | 8/0 (1 skip: arch-v2 only) |
+| server-order | 8/0 | | | named-links | 11/0 | |
+| runtimes | 10/0 | | | browser-grants | 7/0 | |
+| real-account | 10/0 | | | app-names | 6/0 | |
+| free-plan | 15/0 | | | chat-cross-owner | 7/0 | |
+| access-lists | 7/0 | | | update | 9/0 | 9/0 |
+| ai-staging | 4/0 | | | update-rollback | 7/0 | 7/0 |
+| share | 19/1 → **20/0** | | | app-isolation | 5/0 | |
+| api-keys | 10/0 | | | adversarial | 21/0 | |
+| remote | 8/0 | | | issuance | 12/0 (1 skip: CAA owner step) | |
+| ai-chat | 5/0 | | | relay-authority | skip (mesh on) | |
+| migrate | 10/0 | | | relay-mesh | 10/0 (1 skip: feed pause) | |
+| app-copy | 7/0 | | | rust-core | 13/0 | |
+| archive | 8/0 | | | rust-custody | 6/0 | |
+| mcp-ide | 9/0 | | | voici | 23/0 | |
+| activity | 9/0 (2 skip after share) | | | stack-switch | 0 (classic only) | 10/0 |
+| direct-access | 15/1 → 15/1 → **16/0** | | | one-list | 4/2 (outage) → **6/0** | 6/0 |
+| first-contact | 5/0 | | | lifecycle | 0/1 (outage) → **7/0** | |
+| passkey-recovery | 5/0 | | | release-catalog | 2/0 | |
+| server-seen | 3/0 | | | canary | 3/0 | |
+| origin-generation | 4/0 | | | ai-consent | 5/0 | |
+| upstream-sync | 5/0 | | | wasi-apps | 13/0 | |
+| app-groups-db | 7/0 | | | local-ai | 12/0 | |
+| gpu-sim | 0/1 (core quota) → **95/0** | | | local-ai-cpu | 0/1 (core quota) → **13/0** | |
+| gpu-real | skip (owner hardware) | | | | | |
+
+First arch-v2 pass: 58 groups, 498 passed, 7 failed, 9 skipped; classic: 126 passed, 1 failed, 1 skipped. Every
+failure then rerun green (bold). Accepted skips as in 0.3: gpu-real, 3 quota DB checks, issuance I-10 (production CAA
+owner step), relay-authority under the mesh, relay-mesh feed pause, classic backups' arch-v2 check.
+
+Fixes (branch `0.4/gym-r1-fixes`, fast-forwarded into release/0.4 at `24f836458`; mirrored on gym-0.4):
+- **Product** `f0811f049` `.com` direct access: the same order posted again is taken (200), not 409 replayed. Since
+  `e3c55db43` the box hands `.com` the owner's off order, so the app's own post arrived second and iOS showed "A newer
+  change is already saved". Test in `directAccess.test.ts`.
+- **Product** `e744141a0` direct names: two reconciles overlap (every order reconciles in the background, plus the
+  cron); one working from an older row wrote a CAA after the newer one finished, its `setPublished` was skipped, and
+  the row said empty while the zone kept the CAA. The losing pass now reconciles again from the current row (twice,
+  then leaves it pending). Race test fails on the old code.
+- Harness: `72825bef2` share registers a real Web Push subscription (`.com` checks the shape since UnifiedPush);
+  `24f836458` serving accepts a policy the box already took from `.com`'s heartbeat; `1ee90bb26` configurable third
+  relay id (`GYM_RELAY_C_ID`) and an xcaddy fallback for Caddy.
+- Checks: tsc, i18n, parity 0 red, control-plane + `.com` 2969 tests, direct suites + live-e2e unit tests 153.
+- Cost: UpCloud credits 585.51 → 332.07 (about €2.53: three 8-core artifact builds, two fleets of up to 8 boxes,
+  the gym-d relay VM, four rerun fleets); Fly gym relays on about 5.5 h; Let's Encrypt for every gym box certificate
+  and two direct-name certificates. Time about 12:00-17:45 UTC.
+- Leftovers: none. UpCloud lists only `playstore-test-0725`; gym servers 0, gym DNS records 0; gym relays stopped
+  (autostart off); gym-d's VM and DNS gone and retired; its seed kept as `gym-relay-d.seed.retired-2026-11-17`.
+
