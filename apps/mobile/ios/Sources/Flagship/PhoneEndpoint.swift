@@ -184,13 +184,23 @@ final class PhoneTlsTerminator: @unchecked Sendable {
         // A draft envelope may be 1 MiB (docs/voici-and-messages.md §5.2); the deliver handler applies each kind's cap.
         var reader = HttpRequestReader(maxBytes: VoiciMessages.draftMaxEnvelopeBytes + 16 * 1024)
         var decided = false
+        var plaintext = 0
         // Only while a call is armed, so the log carries the call path and not every message delivery.
         let duringCall = CallTurnGate.shared.isArmed
         if duringCall { callPathLog.notice("relayed stream accepted (call armed)") }
         c.stateUpdateHandler = { st in
             guard duringCall else { return }
             switch st {
-            case .ready: callPathLog.notice("relayed stream: tls ready")
+            case .ready:
+                var version = "?"
+                if let m = c.metadata(definition: NWProtocolTLS.definition) as? NWProtocolTLS.Metadata {
+                    switch sec_protocol_metadata_get_negotiated_tls_protocol_version(m.securityProtocolMetadata) {
+                    case .TLSv13: version = "1.3"
+                    case .TLSv12: version = "1.2"
+                    default: version = "other"
+                    }
+                }
+                callPathLog.notice("relayed stream: tls ready (TLS \(version, privacy: .public))")
             case .failed(let e): callPathLog.notice("relayed stream: tls failed \(String(describing: e), privacy: .public)")
             case .waiting(let e): callPathLog.notice("relayed stream: tls waiting \(String(describing: e), privacy: .public)")
             default: break
@@ -199,6 +209,7 @@ final class PhoneTlsTerminator: @unchecked Sendable {
         func read() {
             c.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [responder] data, _, done, err in
                 if let data, !data.isEmpty {
+                    plaintext += data.count
                     // The first byte after TLS picks HTTP or a call's TURN stream (CallTurnGate, docs/voici-calls.md §4).
                     if !decided, let first = data.first {
                         decided = true
@@ -228,7 +239,8 @@ final class PhoneTlsTerminator: @unchecked Sendable {
                         return
                     }
                 }
-                if let err, duringCall { callPathLog.notice("relayed stream: read error \(String(describing: err), privacy: .public)") }
+                if let err, duringCall { callPathLog.notice("relayed stream: read error \(String(describing: err), privacy: .public) after \(plaintext, privacy: .public) B") }
+                else if done, duringCall { callPathLog.notice("relayed stream: ended after \(plaintext, privacy: .public) B") }
                 if done || err != nil { c.cancel() } else { read() }
             }
         }
@@ -284,7 +296,10 @@ public final class PhoneTunnelClient: @unchecked Sendable {
     private let grants: [[String: Any]]
     private let queue = DispatchQueue(label: "flagship.phone-tunnel")
     private var task: URLSessionWebSocketTask?
-    private var streams: [UInt32: NWConnection] = [:]
+    /// Relayed streams by id; touched only on `queue`. A stream exists from its open frame on: data that arrives before
+    /// its loopback connection is made is held (in order, bounded) and flushed once it is.
+    private var streams: [UInt32: RelayedStream] = [:]
+    private var droppedFrames = 0
     private var beat: DispatchSourceTimer?
     private var pending: RouteClaim?
     public private(set) var held: RouteClaim?
@@ -423,22 +438,36 @@ public final class PhoneTunnelClient: @unchecked Sendable {
             }
             open(f.streamId, t)
         case TunnelFrames.data:
-            streams[f.streamId]?.send(content: f.payload, completion: .idempotent)
+            guard let s = streams[f.streamId] else {
+                droppedFrames += 1
+                if CallTurnGate.shared.isArmed { callPathLog.notice("tunnel: data for unknown stream \(f.streamId, privacy: .public) dropped (\(self.droppedFrames, privacy: .public) so far)") }
+                return
+            }
+            if !s.deliver(f.payload) {
+                if CallTurnGate.shared.isArmed { callPathLog.notice("tunnel: stream \(f.streamId, privacy: .public) held too much before opening; closed") }
+                end(f.streamId, t)
+            }
         case TunnelFrames.close, TunnelFrames.closeRemote:
-            streams.removeValue(forKey: f.streamId)?.cancel()
+            if let s = streams.removeValue(forKey: f.streamId) {
+                s.log(f.streamId, why: "relay closed")
+                s.cancel()
+            }
         default:
             break
         }
     }
 
-    /// One relayed stream: a loopback connection into the TLS listener, its local port registered first.
+    /// One relayed stream: a loopback connection into the TLS listener, its local port registered first. Runs on
+    /// `queue`; the stream is registered at once so the data frames right behind the open frame are kept.
     private func open(_ id: UInt32, _ t: URLSessionWebSocketTask) {
+        let s = RelayedStream(armed: CallTurnGate.shared.isArmed)
+        streams[id] = s
         terminator.whenReady { [weak self] in
             guard let self, let port = self.terminator.port else { return }
-            let params = NWParameters.tcp
-            let c = NWConnection(host: "127.0.0.1", port: port, using: params)
             self.queue.async {
-                self.streams[id] = c
+                // Closed (by either side) while the listener was getting ready.
+                guard self.streams[id] === s else { return }
+                let c = NWConnection(host: "127.0.0.1", port: port, using: NWParameters.tcp)
                 c.stateUpdateHandler = { [weak self] st in
                     guard let self else { return }
                     if case .preparing = st, case .hostPort(_, let p)? = c.currentPath?.localEndpoint { self.terminator.expect(p.rawValue) }
@@ -447,24 +476,77 @@ public final class PhoneTunnelClient: @unchecked Sendable {
                     if case .cancelled = st { self.end(id, t) }
                 }
                 c.start(queue: self.queue)
-                self.pump(id, c, t)
+                s.attach(c)
+                self.pump(id, s, c, t)
             }
         }
     }
 
-    private func pump(_ id: UInt32, _ c: NWConnection, _ t: URLSessionWebSocketTask) {
+    private func pump(_ id: UInt32, _ s: RelayedStream, _ c: NWConnection, _ t: URLSessionWebSocketTask) {
         c.receive(minimumIncompleteLength: 1, maximumLength: 256 * 1024) { [weak self] data, _, done, err in
             guard let self else { return }
-            if let data, !data.isEmpty { t.send(.data(TunnelFrames.encode(id, TunnelFrames.data, data))) { _ in } }
-            if done || err != nil { self.end(id, t) } else { self.pump(id, c, t) }
+            if let data, !data.isEmpty {
+                s.outBytes += data.count
+                t.send(.data(TunnelFrames.encode(id, TunnelFrames.data, data))) { _ in }
+            }
+            if done || err != nil { self.end(id, t) } else { self.pump(id, s, c, t) }
         }
     }
 
     private func end(_ id: UInt32, _ t: URLSessionWebSocketTask) {
         queue.async {
-            guard let c = self.streams.removeValue(forKey: id) else { return }
-            c.cancel()
+            guard let s = self.streams.removeValue(forKey: id) else { return }
+            s.log(id, why: "phone closed")
+            s.cancel()
             t.send(.data(TunnelFrames.encode(id, TunnelFrames.close))) { _ in }
         }
+    }
+}
+
+/// One relayed stream on the phone tunnel's queue (not thread-safe on its own): before its loopback connection exists
+/// it holds the relay's bytes in order, up to `maxHeld`; then it forwards them straight through.
+final class RelayedStream {
+    static let maxHeld = 256 * 1024
+    private(set) var connection: NWConnection?
+    private var held: [Data] = []
+    private var heldBytes = 0
+    private var cancelled = false
+    /// Bytes relay to phone and phone to relay, for the call-path log.
+    var inBytes = 0
+    var outBytes = 0
+    let armed: Bool
+
+    init(armed: Bool) { self.armed = armed }
+
+    /// The relay's bytes for this stream; false when too much piled up before the connection was made.
+    func deliver(_ d: Data) -> Bool {
+        inBytes += d.count
+        if let c = connection {
+            c.send(content: d, completion: .idempotent)
+            return true
+        }
+        heldBytes += d.count
+        guard heldBytes <= Self.maxHeld else { return false }
+        held.append(d)
+        return true
+    }
+
+    func attach(_ c: NWConnection) {
+        guard !cancelled else { c.cancel(); return }
+        connection = c
+        for d in held { c.send(content: d, completion: .idempotent) }
+        held = []
+        heldBytes = 0
+    }
+
+    func cancel() {
+        cancelled = true
+        held = []
+        connection?.cancel()
+    }
+
+    func log(_ id: UInt32, why: String) {
+        guard armed || CallTurnGate.shared.isArmed else { return }
+        callPathLog.notice("tunnel stream \(id, privacy: .public) ended (\(why, privacy: .public)): relay->phone \(self.inBytes, privacy: .public) B, phone->relay \(self.outBytes, privacy: .public) B")
     }
 }
