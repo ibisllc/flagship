@@ -57,7 +57,7 @@ public struct VoiciCallScreen: View {
         .overlay(alignment: .top) {
             if cameraRefused {
                 Text("Flagship needs the camera to show your video. You can keep talking without it.")
-                    .font(.callout).foregroundStyle(.white).multilineTextAlignment(.center)
+                    .font(.callout).foregroundStyle(CallStageColors.ink).multilineTextAlignment(.center)
                     .padding(12).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
                     .onTapGesture { cameraRefused = false }
             }
@@ -90,17 +90,16 @@ struct VoiciRingingStage: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(red: 0.11, green: 0.13, blue: 0.19), Color(red: 0.03, green: 0.04, blue: 0.07)],
-                           startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            CallStageColors.canvas.ignoresSafeArea()
             GeometryReader { geo in
             VStack(spacing: 12) {
                 CallStageAvatar(name: name, size: 112)
-                Text(verbatim: name).font(.largeTitle.weight(.semibold)).foregroundStyle(.white)
+                Text(verbatim: name).font(.largeTitle.weight(.semibold)).foregroundStyle(CallStageColors.ink)
                     .lineLimit(2).multilineTextAlignment(.center).minimumScaleFactor(0.7)
-                Text(verbatim: status).font(.title3).foregroundStyle(.white.opacity(0.75)).multilineTextAlignment(.center)
+                Text(verbatim: status).font(.title3).foregroundStyle(CallStageColors.ink.opacity(0.75)).multilineTextAlignment(.center)
                 Label("End-to-end encrypted · quantum-safe", systemImage: "lock.fill")
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(CallStageColors.ink.opacity(0.55))
                     .padding(.top, 4)
                 Spacer(minLength: 16)
                 HStack {
