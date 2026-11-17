@@ -17,6 +17,13 @@
  * services apex. Inline styles stay allowed: the views set `style=`
  * attributes throughout.
  */
+/**
+ * The OHTTP relays the webapp may send voucher spends through
+ * (docs/outbound-proxy.md "OHTTP"). A relay `.com` lists in `OHTTP_RELAYS`
+ * must also be here, or the browser refuses the call and the spend waits.
+ */
+export const OHTTP_RELAY_ORIGINS = ["https://relay.oblivious.network"] as const;
+
 export function shellCspFor(apex: string, services: string): string {
   return (
     "default-src 'self'; " +
@@ -25,7 +32,7 @@ export function shellCspFor(apex: string, services: string): string {
     "img-src 'self' data: blob:; " +
     "font-src 'self'; " +
     `connect-src 'self' https://${apex} wss://${apex} https://*.${apex} wss://*.${apex} ` +
-    `https://*.${services} wss://*.${services}; ` +
+    `https://*.${services} wss://*.${services} ${OHTTP_RELAY_ORIGINS.join(" ")}; ` +
     "worker-src 'self'; " +
     "manifest-src 'self'; " +
     "media-src 'self' blob:; " +
