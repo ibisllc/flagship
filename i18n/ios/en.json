@@ -14280,8 +14280,8 @@
     "en": "This is a paid app (%@).",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ServicesTab.swift:1005"
   },
-  "Purchase it to install on your box.": {
-    "en": "Purchase it to install on your box.",
+  "Purchase it to install on your server.": {
+    "en": "Purchase it to install on your server.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ServicesTab.swift:1009"
   },
   "This app was graded F. Deploy is blocked unless you explicitly choose “Install anyway.”": {
@@ -14784,8 +14784,8 @@
     "en": "Plug the network cable into your router if you can. Then plug in the power. The box starts by itself.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:99"
   },
-  "If the box stays off, press the power button once.": {
-    "en": "If the box stays off, press the power button once.",
+  "If the server stays off, press the power button once.": {
+    "en": "If the server stays off, press the power button once.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:102"
   },
   "Found your box": {
@@ -14920,8 +14920,8 @@
     "en": "Plug it into your router before the power. Then your Wi-Fi password never has to travel over the air.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:68"
   },
-  "No new box appeared": {
-    "en": "No new box appeared",
+  "No new server appeared": {
+    "en": "No new server appeared",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Retail/RetailClaimScreen.swift:108"
   },
   "Not supported": {
@@ -15708,8 +15708,8 @@
     "en": "Release this box",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
   },
-  "The box is being wiped. It restarts as a new box.": {
-    "en": "The box is being wiped. It restarts as a new box.",
+  "The server is being wiped. It restarts as a new server.": {
+    "en": "The server is being wiped. It restarts as a new server.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ReleaseThisBoxViewModel.swift"
   },
   "Releasing…": {

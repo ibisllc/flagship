@@ -148,7 +148,7 @@ struct VoiciCallStage: View {
         let initial = state.name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? "?"
         return ZStack {
             Circle().fill(LinearGradient(colors: [Color(white: 0.45), Color(white: 0.28)], startPoint: .top, endPoint: .bottom))
-            Text(verbatim: initial).font(.system(size: size * 0.42, weight: .medium)).foregroundStyle(.white)
+            Text(verbatim: initial).font(FS.font.glyph(size * 0.42, weight: .medium)).foregroundStyle(.white)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
@@ -258,7 +258,7 @@ struct CallRoundButton: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: symbol)
-                    .font(.system(size: size * 0.36, weight: .medium))
+                    .font(FS.font.glyph(size * 0.36, weight: .medium))
                     .frame(width: size, height: size)
                     .foregroundStyle(style == .selected ? Color.black : Color.white)
                     .background(Circle().fill(fill))
@@ -291,7 +291,7 @@ struct AudioRouteButton: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle().fill(.ultraThinMaterial)
-                Image(systemName: "speaker.wave.2.fill").font(.system(size: size * 0.36, weight: .medium)).foregroundStyle(.white)
+                Image(systemName: "speaker.wave.2.fill").font(FS.font.glyph(size * 0.36, weight: .medium)).foregroundStyle(.white)
                 RoutePicker().frame(width: size, height: size).opacity(0.02)
             }
             .frame(width: size, height: size)

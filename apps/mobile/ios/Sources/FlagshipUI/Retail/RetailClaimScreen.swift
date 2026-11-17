@@ -86,7 +86,7 @@ public struct RetailClaimScreen: View {
             TextField(String(localized: "Or type the 20-character code"), text: $pasted)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
-                .textFieldStyle(.roundedBorder)
+                .fsInputBox()
                 .accessibilityIdentifier("rc-code-field")
             FSPrimaryButton(String(localized: "Continue"), enabled: BoxClaim.normalizeSetupCode(pasted) != nil, block: true) {
                 vm.startWithCode(pasted)
@@ -100,13 +100,13 @@ public struct RetailClaimScreen: View {
                    String(localized: "Plug the network cable into your router if you can. Then plug in the power. The box starts by itself."), c: c)
             spinner(c)
             if hint == .pressOnce {
-                Text("If the box stays off, press the power button once.")
+                Text("If the server stays off, press the power button once.")
                     .font(FS.font.body()).foregroundColor(c.text).accessibilityIdentifier("rc-press-once")
             }
             if hint == .noBox {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
-                        Text("No new box appeared").font(FS.font.h4()).foregroundColor(c.text)
+                        Text("No new server appeared").font(FS.font.h4()).foregroundColor(c.text)
                         Text(RetailClaimCopy.resetInstructions).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     }
                 }
@@ -123,7 +123,7 @@ public struct RetailClaimScreen: View {
             header(String(localized: "Press the power button now"),
                    String(localized: "Once, briefly. A short press does not switch the box off."), c: c)
             Image(systemName: "power.circle.fill")
-                .font(.system(size: 96)).foregroundColor(c.accent)
+                .font(FS.font.glyph(96)).foregroundColor(c.accent)
                 .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("rc-press-now")
         case .signing:
@@ -162,7 +162,7 @@ public struct RetailClaimScreen: View {
         case .wifiPassword(let ssid):
             header(String(localized: "Wi-Fi password"), ssid, c: c)
             SecureField(String(localized: "Password"), text: $password)
-                .textFieldStyle(.roundedBorder)
+                .fsInputBox()
                 .accessibilityIdentifier("rc-password")
             if passwordRefused {
                 Text("A Wi-Fi password has 8 to 63 characters.").font(FS.font.bodySm()).foregroundColor(c.danger)
@@ -220,7 +220,7 @@ public struct RetailClaimScreen: View {
 
     private func alarmPage(_ alarm: RetailClaimAlarm, domain: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s5) {
-            Image(systemName: "exclamationmark.octagon.fill").font(.system(size: 64)).foregroundColor(.white)
+            Image(systemName: "exclamationmark.octagon.fill").font(FS.font.glyph(64)).foregroundColor(.white)
             Text("Don't use this server").font(FS.font.h1()).foregroundColor(.white)
             Text(alarm.message).font(FS.font.body()).foregroundColor(.white)
                 .accessibilityIdentifier("rc-alarm")

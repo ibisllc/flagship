@@ -448,7 +448,7 @@ public struct ServiceDetailScreen: View {
                             // Same treatment as the section label, but
                             // right-floated on the same line.
                             Text(cooldownLabel(remaining))
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(FS.font.scaled(11, weight: .semibold))
                                 .tracking(1)
                                 .foregroundColor(c.textMuted)
                                 .monospacedDigit()

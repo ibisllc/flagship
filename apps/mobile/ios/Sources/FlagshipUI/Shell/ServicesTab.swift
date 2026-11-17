@@ -774,9 +774,9 @@ struct MarketplaceContainer: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Marketplace").font(.system(size: 32, weight: .medium)).foregroundColor(c.text)
+                Text("Marketplace").font(FS.font.scaled(32, weight: .medium)).foregroundColor(c.text)
                 Text("Services your neighbours built. One tap to install.")
-                    .font(.system(size: 17)).foregroundColor(c.textMuted)
+                    .font(FS.font.scaled(17)).foregroundColor(c.textMuted)
                 if app.pods.isEmpty {
                     // The marketplace is a catalog, browsable before you
                     // own a server. Until the central catalog ships, show
@@ -819,7 +819,7 @@ struct MarketplaceContainer: View {
     private func listingRow(listing: MarketplaceListing, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text(listing.title).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
+                Text(listing.title).font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
                 Text("by \(listing.creator)").font(FS.font.caption()).foregroundColor(c.textMuted)
                 Text(listing.summary).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 HStack(spacing: FS.space.s2) {
@@ -1006,7 +1006,7 @@ struct MarketplaceDetailContainer: View {
                         : "This is a paid app.")
                         .font(FS.font.bodySm())
                         .foregroundColor(c.text)
-                    Text("Purchase it to install on your box.")
+                    Text("Purchase it to install on your server.")
                         .font(FS.font.bodySm())
                         .foregroundColor(c.textMuted)
                 }

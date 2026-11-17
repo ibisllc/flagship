@@ -89,7 +89,7 @@ struct VisitorConversationScreen: View {
                 Text(verbatim: note).font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
             }
             HStack {
-                TextField("Message", text: $draft, axis: .vertical).textFieldStyle(.roundedBorder)
+                TextField("Message", text: $draft, axis: .vertical).fsInputBox()
                 Button {
                     let text = draft
                     sending = true
