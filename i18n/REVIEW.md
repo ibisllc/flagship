@@ -103,3 +103,14 @@ and the rewritten findings line there and on `security.html`. In `store/listings
 What's new bullets and a rewritten Google Play What's new (500 characters at most). Review first: the suspension
 exceptions sentence (CSAM, active phishing, malware), "Rescue my data" (must match the app's Settings label), and the
 relay word (es mixes "relé" and "relay" across older pages).
+
+**Google Play Wear OS section, added 2026-11-17 (drafted by an agent, needs native review).** In
+`store/listings/<lang>.json`, `playstore.fullDescription`: the new "On your Wear OS watch" block (watch app, tile,
+complication, needs the phone app) replaces the old one-line Wear OS bullet, because Google Play rejected the Wear
+bundle for a description that did not name the tile and the complication (runbook
+`docs/runbooks/play-wear-listing-fix.md`). The duplicate "make the installer USB stick with your phone" bullet under
+"New in 0.3" was dropped to stay under 4,000 characters (fr and de sit at about 3,995), and fr and de were tightened
+to fit. Review first: the words for "tile" and "complication" must match what Wear OS calls them in each language (the
+drafts use es "tarjeta", fr "carte", de "Kachel", pt-BR "bloco", ja "タイル", zh-Hans "卡片" and "表盘组件", each with the
+English word in brackets for Google's reviewer); keep the English word in brackets. Recount after any change: fr and de
+have almost no room left.
