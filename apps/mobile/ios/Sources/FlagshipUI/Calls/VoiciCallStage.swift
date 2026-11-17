@@ -94,8 +94,7 @@ struct VoiciCallStage: View {
     }
 
     private var background: some View {
-        LinearGradient(colors: [Color(red: 0.11, green: 0.13, blue: 0.19), Color(red: 0.03, green: 0.04, blue: 0.07)],
-                       startPoint: .top, endPoint: .bottom)
+        CallStageColors.canvas
             .ignoresSafeArea()
     }
 
@@ -104,22 +103,22 @@ struct VoiciCallStage: View {
             if !compact { avatar(size: 112) }
             Text(verbatim: state.name)
                 .font(compact ? .title3.weight(.semibold) : .largeTitle.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(CallStageColors.ink)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.7)
             statusLine
                 .font(compact ? .subheadline : .title3)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(CallStageColors.ink.opacity(0.75))
                 .multilineTextAlignment(.center)
             if !compact {
                 Label("End-to-end encrypted · quantum-safe", systemImage: "lock.fill")
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(CallStageColors.ink.opacity(0.55))
                     .padding(.top, 4)
             }
             if state.remoteCameraPaused {
-                Label("Camera paused", systemImage: "video.slash.fill").font(.footnote).foregroundStyle(.white.opacity(0.75))
+                Label("Camera paused", systemImage: "video.slash.fill").font(.footnote).foregroundStyle(CallStageColors.ink.opacity(0.75))
             }
         }
         .accessibilityElement(children: .combine)
@@ -213,7 +212,7 @@ struct VoiciCallStage: View {
         localVideo
             .frame(width: w, height: h)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.white.opacity(0.25), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(CallStageColors.ink.opacity(0.25), lineWidth: 1))
             .shadow(radius: 8)
             .position(x: x + drag.width, y: y + drag.height)
             .gesture(DragGesture()
@@ -244,6 +243,14 @@ struct VoiciCallStage: View {
     }
 }
 
+/// The call screens' own colours, dark in every theme: the app's warm near-black and cream (docs/design-system.md
+/// §2.2), a flat background with no gradient.
+enum CallStageColors {
+    static let canvas = Color(red: 0x0F / 255, green: 0x0E / 255, blue: 0x0C / 255)
+    static let ink = Color(red: 0xEC / 255, green: 0xE7 / 255, blue: 0xD6 / 255)
+    static let avatar = Color(red: 0x2E / 255, green: 0x2B / 255, blue: 0x24 / 255)
+}
+
 /// The other person's initial in a large circle, the same on the ringing and the in-call screens.
 struct CallStageAvatar: View {
     var name: String
@@ -252,8 +259,8 @@ struct CallStageAvatar: View {
     var body: some View {
         let initial = name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? "?"
         ZStack {
-            Circle().fill(LinearGradient(colors: [Color(white: 0.45), Color(white: 0.28)], startPoint: .top, endPoint: .bottom))
-            Text(verbatim: initial).font(FS.font.glyph(size * 0.42, weight: .medium)).foregroundStyle(.white)
+            Circle().fill(CallStageColors.avatar).overlay(Circle().stroke(CallStageColors.ink.opacity(0.12), lineWidth: 1))
+            Text(verbatim: initial).font(FS.font.glyph(size * 0.42, weight: .medium)).foregroundStyle(CallStageColors.ink)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
@@ -275,11 +282,11 @@ struct CallRoundButton: View {
                 Image(systemName: symbol)
                     .font(FS.font.glyph(size * 0.36, weight: .medium))
                     .frame(width: size, height: size)
-                    .foregroundStyle(style == .selected ? Color.black : Color.white)
+                    .foregroundStyle(style == .selected ? CallStageColors.canvas : CallStageColors.ink)
                     .background(Circle().fill(fill))
                 Text(verbatim: title)
                     .font(.footnote)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(CallStageColors.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -291,7 +298,7 @@ struct CallRoundButton: View {
     private var fill: AnyShapeStyle {
         switch style {
         case .plain: AnyShapeStyle(.ultraThinMaterial)
-        case .selected: AnyShapeStyle(Color.white)
+        case .selected: AnyShapeStyle(CallStageColors.ink)
         case .end: AnyShapeStyle(Color.red)
         case .answer: AnyShapeStyle(Color.green)
         }
@@ -306,11 +313,11 @@ struct AudioRouteButton: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle().fill(.ultraThinMaterial)
-                Image(systemName: "speaker.wave.2.fill").font(FS.font.glyph(size * 0.36, weight: .medium)).foregroundStyle(.white)
+                Image(systemName: "speaker.wave.2.fill").font(FS.font.glyph(size * 0.36, weight: .medium)).foregroundStyle(CallStageColors.ink)
                 RoutePicker().frame(width: size, height: size).opacity(0.02)
             }
             .frame(width: size, height: size)
-            Text("Audio").font(.footnote).foregroundStyle(.white).lineLimit(1)
+            Text("Audio").font(.footnote).foregroundStyle(CallStageColors.ink).lineLimit(1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("Audio"))
