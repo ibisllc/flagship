@@ -16,6 +16,7 @@ import { reencodeAvatar } from "./voiciImage.js";
 import { emitWorld, pendingOps, world } from "./voiciWorld.js";
 import { clearRemovedSnapshot, hasSeenPublicWarning, markPublicWarningSeen, saveRemovedSnapshot } from "./voiciPagePublic.js";
 import {
+  VOICI_FIRST_PUBLISH_CALLS_ONLY,
   VOICI_FIRST_PUBLISH_DEFAULTS,
   VOICI_PUBLIC_WARNING,
   VOICI_PUBLIC_WARNING_TITLE,
@@ -61,7 +62,10 @@ export function editorModel() {
     pendingPosts,
     removing,
     profilePending: ops.some((o) => o.op === "profile" && o.at > base.issuedAt),
-    acceptsPending: ops.some((o) => o.op === "accept-messages" && o.at > base.issuedAt),
+    // Accept messages is pending only while it differs from the page: off and on again is no change.
+    acceptsPending: merged.acceptsMessages !== base.acceptsMessages,
+    /** Changes waiting: every draft but Accept messages, which counts once and only while it differs. */
+    pendingCount: ops.filter((o) => o.op !== "accept-messages").length + (merged.acceptsMessages !== base.acceptsMessages ? 1 : 0),
   };
 }
 
@@ -78,14 +82,19 @@ export function pageImageBytes(sha) {
  */
 export async function addPageOp(op) {
   if (busy) return;
-  if (op.op === "profile") {
-    world.localOps = world.localOps.filter((o) => o.op !== "profile");
+  if (op.op === "profile" || op.op === "accept-messages") {
+    world.localOps = world.localOps.filter((o) => o.op !== op.op);
     if (canPublishPage()) {
-      const older = world.drafts.filter((d) => d.op.op === "profile").map((d) => d.op.opId);
+      const older = world.drafts.filter((d) => d.op.op === op.op).map((d) => d.op.opId);
       if (older.length) {
         world.drafts = world.drafts.filter((d) => !older.includes(d.op.opId));
         void consumeDraftOps(older).catch(() => undefined);
       }
+    }
+    // Accept messages set back to what the page has, with no earlier draft left to override: no change at all.
+    if (op.op === "accept-messages" && op.accepts === basePage().acceptsMessages && !world.drafts.some((d) => d.op.op === op.op)) {
+      emitWorld();
+      return;
     }
   }
   world.localOps.push(op);
@@ -157,7 +166,7 @@ function storageFlag(k) {
 
 /** Before a page goes public: the rules sheet once (§9.7), then the public warning once per account (§3.3). A first
  *  publish always shows the warning, with what the page starts with: messages and signed-in calls on. */
-export async function confirmGoPublic(username = pageUsername(), firstPublish = !world.page && !world.removed) {
+export async function confirmGoPublic(username = pageUsername(), firstPublish = !world.page && !world.removed, acceptsMessages = Boolean(editorModel().merged.acceptsMessages)) {
   if (!storageFlag(RULES_KEY)) {
     const ok = await inlineConfirm({ title: VOICI_RULES_TITLE(), message: VOICI_RULES_TEXT(), okLabel: tr("I agree") });
     if (!ok) return false;
@@ -168,7 +177,9 @@ export async function confirmGoPublic(username = pageUsername(), firstPublish = 
     }
   }
   if (hasSeenPublicWarning(username) && !firstPublish) return true;
-  const message = firstPublish ? `${VOICI_PUBLIC_WARNING()} ${VOICI_FIRST_PUBLISH_DEFAULTS()}` : VOICI_PUBLIC_WARNING();
+  // What the first publish turns on: calls always (signed-in people); messages as the Accept messages switch stands.
+  const defaults = acceptsMessages ? VOICI_FIRST_PUBLISH_DEFAULTS() : VOICI_FIRST_PUBLISH_CALLS_ONLY();
+  const message = firstPublish ? `${VOICI_PUBLIC_WARNING()} ${defaults}` : VOICI_PUBLIC_WARNING();
   const ok = await inlineConfirm({ title: VOICI_PUBLIC_WARNING_TITLE(), message, okLabel: tr("Make it public"), cancelLabel: tr("Cancel") });
   if (ok) markPublicWarningSeen(username);
   return ok;

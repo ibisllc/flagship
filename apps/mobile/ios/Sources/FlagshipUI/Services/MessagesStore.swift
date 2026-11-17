@@ -173,7 +173,14 @@ public final class MessagesStore {
     /// defaults (messages on, calls on from signed-in people); every later publish keeps the owner's choices.
     public var isFirstPublish: Bool { index == nil && !isRemoved && local.highestSeq == 0 }
 
-    public var pendingCount: Int { Set((ownOps + laneOps).map(\.opId)).count }
+    /// Changes waiting to be published. Accept messages counts once, and only while it differs from the published page,
+    /// so turning it off and on again counts as nothing (a handed-off draft can stay in the lane until the next publish).
+    public var pendingCount: Int {
+        Set((ownOps + laneOps).filter { $0.op != "accept-messages" }.map(\.opId)).count + (acceptsUnpublished ? 1 : 0)
+    }
+
+    /// Accept messages differs from the published page (or, before the first publish, from its default).
+    public var acceptsUnpublished: Bool { preview.acceptsMessages != base.acceptsMessages }
 
     /// Post ids changed by an edit not yet published (shown grayed: "Not published yet").
     public var unpublishedPostIds: Set<String> {
@@ -184,7 +191,7 @@ public final class MessagesStore {
         return s
     }
 
-    public var profileUnpublished: Bool { (ownOps + laneOps).contains { $0.op == "profile" || $0.op == "accept-messages" } }
+    public var profileUnpublished: Bool { (ownOps + laneOps).contains { $0.op == "profile" } }
 
     public var acceptsMessages: Bool { preview.acceptsMessages == 1 }
 
@@ -709,7 +716,11 @@ public final class MessagesStore {
         var q = base.profile
         q.displayName = preview.profile.displayName
         q.avatar = preview.profile.avatar
-        await publishQuick([VoiciDraftOp(opId: newId(), op: "profile", at: max(now(), base.issuedAt + 1), deviceId: deviceId, profile: q)], mayRepublish: true)
+        // Accept messages goes up as the switch shows it, so the page never takes messages the owner turned off.
+        let accepts = acceptsUnpublished ? [VoiciDraftOp(opId: newId(), op: "accept-messages", at: max(now(), base.issuedAt + 1), deviceId: deviceId,
+                                                         accepts: preview.acceptsMessages)] : []
+        await publishQuick([VoiciDraftOp(opId: newId(), op: "profile", at: max(now(), base.issuedAt + 1), deviceId: deviceId, profile: q)] + accepts,
+                           mayRepublish: true)
     }
 
     /// Publishes exactly `ops` (never the other drafts).

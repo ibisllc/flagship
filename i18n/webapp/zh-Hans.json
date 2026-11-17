@@ -3785,6 +3785,7 @@
   "{0} Enter this device's passphrase to confirm.": "{0} 请输入此设备的密码短语以确认。",
   "It goes from all your devices and from Flagship.": "它会从你的所有设备和 Flagship 中删除。",
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "来自用 Flagship 登录的人的消息和通话已开启。你可以在页面选项中关闭它们。",
+  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": "来自用 Flagship 登录的人的通话已开启。你可以在页面选项中关闭它们。",
   "Inbox": "收件箱",
   "{0} new item": "{0} 条新动态",
   "{0} new items": "{0} 条新动态",

@@ -3785,6 +3785,7 @@
   "{0} Enter this device's passphrase to confirm.": "{0} Saisissez la phrase secrète de cet appareil pour confirmer.",
   "It goes from all your devices and from Flagship.": "Elle disparaît de tous vos appareils et de Flagship.",
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Les messages et les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page.",
+  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": "Les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page.",
   "Inbox": "Réception",
   "{0} new item": "{0} nouveau",
   "{0} new items": "{0} nouveaux",

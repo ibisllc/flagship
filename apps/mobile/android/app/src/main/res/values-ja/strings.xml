@@ -4178,6 +4178,7 @@
     <string name="voici_calls_hours_switch">特定の時間帯のみ</string>
     <string name="voici_calls_hours_footer">この時間帯以外は、どのデバイスでも着信音が鳴らず、不在着信になります。この時間帯を知っているのはあなたのデバイスだけです。タイムゾーン：%1$s</string>
     <string name="voici_first_publish_defaults">Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。</string>
+    <string name="voici_first_publish_defaults_calls">Flagship でサインインした人からの通話はオンになっています。ページのオプションでオフにできます。</string>
     <string name="voici_calls_from_signed_in_note">発信者は Flagship でサインインします。あなたには匿名のままです。</string>
     <string name="social_inbox">受信箱</string>
     <string name="social_who_to_call">通話の相手</string>

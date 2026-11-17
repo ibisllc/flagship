@@ -3785,6 +3785,7 @@
   "{0} Enter this device's passphrase to confirm.": "{0} 確認のため、このデバイスのパスフレーズを入力してください。",
   "It goes from all your devices and from Flagship.": "すべてのデバイスと Flagship から削除されます。",
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。",
+  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": "Flagship でサインインした人からの通話はオンになっています。ページのオプションでオフにできます。",
   "Inbox": "受信箱",
   "{0} new item": "新着 {0} 件",
   "{0} new items": "新着 {0} 件",

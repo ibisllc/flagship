@@ -257,16 +257,19 @@ class VoiciCenter(
         val base = publishedState(u, local)
         val acc = account
         val idx = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex)
+        val working = VoiciPage.mergeVoiciPage(base, ops)
+        val acceptsDiffer = working.acceptsMessages != base.acceptsMessages
         _page.value = VoiciPageUi(
             username = u,
             loaded = true,
             publishedSeq = idx?.body?.seq ?: 0,
             published = VoiciOwner.parsePageState(local.publishedState),
-            working = VoiciPage.mergeVoiciPage(base, ops),
+            working = working,
             pendingPostIds = ops.mapNotNull { it.post?.id ?: it.postId }.toSet(),
             pendingProfile = ops.any { it.op == "profile" },
-            pendingAccepts = ops.any { it.op == "accept-messages" },
-            pendingCount = ops.size,
+            // Accept messages counts once, and only while it differs from the page: off and on again is no change.
+            pendingAccepts = acceptsDiffer,
+            pendingCount = ops.count { it.op != "accept-messages" } + if (acceptsDiffer) 1 else 0,
             canPublish = acc != null && keyring.holdsSensitiveKey(acc),
             publishing = _page.value.publishing,
             error = _page.value.error,
@@ -678,7 +681,12 @@ class VoiciCenter(
         val working = VoiciPage.mergeVoiciPage(base, ops(local))
         val q = base.profile.copy(displayName = working.profile.displayName, avatar = working.profile.avatar)
         val deviceId = keyring.device()?.deviceId ?: "device"
-        return publish(reason, only = listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "profile", maxOf(now(), base.issuedAt + 1), deviceId.take(64), profile = q)), mayRepublish = true)
+        val at = maxOf(now(), base.issuedAt + 1)
+        // Accept messages goes up as the switch shows it, so the page never takes messages the owner turned off.
+        val accepts = if (working.acceptsMessages != base.acceptsMessages) {
+            listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "accept-messages", at, deviceId.take(64), accepts = working.acceptsMessages))
+        } else emptyList()
+        return publish(reason, only = listOf(VoiciDraftOp(VoiciOwner.randomHex(16), "profile", at, deviceId.take(64), profile = q)) + accepts, mayRepublish = true)
     }
 
     /**

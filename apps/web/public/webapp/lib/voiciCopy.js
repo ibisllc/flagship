@@ -24,6 +24,9 @@ export const VOICI_PUBLIC_WARNING = () =>
 /** Under the public warning before a first publish: what the page starts with (VOICI_FIRST_PUBLISH). */
 export const VOICI_FIRST_PUBLISH_DEFAULTS = () =>
   tr("Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.");
+/** The same when the owner turned Accept messages off before the first publish: only calls start on. */
+export const VOICI_FIRST_PUBLISH_CALLS_ONLY = () =>
+  tr("Calls from people signed in with Flagship are on. You can turn them off in Page options.");
 export const VOICI_REMOVE_TITLE = () => tr("Remove your page from voi.ci?");
 export const VOICI_REMOVE_TEXT = () =>
   tr("Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.");

@@ -530,7 +530,9 @@
 //  v228: Activity has an All / Servers / Social filter and a Calls and messages section built in this browser
 //       (calls, conversations, the page), a scheduled backup has its own title, and a server log entry opens its
 //       server (docs/activity-social.md; lib/socialActivity.js, views/activity.js).
-const SHELL_VERSION = "v228";
+//  v229: the first publish's warning names only what really starts on (calls alone when Accept messages was turned
+//       off), and Accept messages turned off and on again is no unpublished change (lib/voiciPageControl.js).
+const SHELL_VERSION = "v229";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
