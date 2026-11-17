@@ -258,7 +258,8 @@ export function parseEmittedDeepLinks(src) {
   const seg = "([a-z0-9-]+(?:\\/[a-z0-9-]+)?)";
   return uniq([
     ...allMatches(code, new RegExp(`["'\`]flagship:\\/\\/${seg}`, "g")),
-    ...allMatches(code, new RegExp(`["'\`]https:\\/\\/[^/"'\`]+\\/app\\/${seg}`, "g")),
+    // apps.apple.com/app/id… is the App Store listing, not one of our app links.
+    ...allMatches(code, new RegExp(`["'\`]https:\\/\\/(?!apps\\.apple\\.com\\/)[^/"'\`]+\\/app\\/${seg}`, "g")),
     ...allMatches(code, new RegExp(`appRouteLink\\(\\s*["'\`]${seg}`, "g")),
   ]);
 }
