@@ -123,18 +123,18 @@ then the advisor sweep, then the features. UX testing feedback from the owner ru
 - [~] F5 (2026-11-14 also merged: Swift/Kotlin companions on rotate/add-device/create, re-pair + demo grants, CI vector check, IRK-signed box orders hybrid under strict; graph 16/18 strict targets reachable, 74 fallen, 59 paths. OPEN: webapp passes grantPqSignature (shell bump), rest of IRK sealing/boot. Stage 1 part merged 2026-11-14: hybrid admin root, rotation + device-grant PQ companions, TS/Rust vectors, box + .com, D1 0138; crypto-graph 74 -> 65 bypasses, 18/18 strict targets still reachable; next: Swift/Kotlin signing of companions, then split key.irk) Quantum-safe everywhere, three stages (0.4 list): close the crypto-graph bypasses (hybrid admin root first;
       strict check green); hybrid channel on by default with classical fallback and a fallback count; strict default
       for new accounts after the external review. Also the hybrid release catalog and the boot client's ML-DSA key.
-- [ ] F6 Take the zone-wide DNS token off `.com` (challenge TXT through the broker; release step 20 skips when unset).
+- [x] F6 (merged 2026-11-17; owner: deploy the broker, set DNS_BROKER_URL and DNS_BROKER_SECRET, issue one cert, then delete CLOUDFLARE_DNS_API_TOKEN) Take the zone-wide DNS token off `.com` (challenge TXT through the broker; release step 20 skips when unset).
 - [x] F7 (merged 2026-11-14: Web Push to UnifiedPush endpoints from .com with an SSRF guard, Android distributor-first transport, Settings row; D1 0136; needs WEBPUSH_VAPID_* secrets, an Android store build, a real ntfy test) UnifiedPush for de-Googled Android.
 - [x] F8 (merged 2026-11-14: correction window, weekly cooldown, account claim budget, 30-day custom-domain lapse grace; D1 0137; owner Qs in named-links §8.5) Human `voi.ci` service names (`docs/voici-service-names-todo.md`).
 - [~] F9 (2026-11-14 merged: W19, silent second boot approval, first-boot restarts (order resumes across restarts incl. direct names), Unlocking lingering, W14 partly (taps never ignored, 90 s stop, review-period sentence; OWNER: may a device under review unlock boots?). Earlier merged 2026-11-13: Android stale recovery banner, "another account" backup refusal, W3 hint, W10, W26, raw recipe error, remaster temp folders, sealing stall at 12 min. LEFT: W14, W19, silent second boot approval, first-boot restarts, lingering Unlocking, window close, keep-awake log, MessageBox Pane) Windows acceptance findings (0.4 list section): W14, the silent second boot approval, first-boot daemon
       restarts restarting the certificate order, W19 empty Home, Android stale recovery banner and "another account"
       backup refusal, the Studio for Windows items, W3 Continue hint.
 - [x] F10 (merged 2026-11-13) In-app rules sheet names the nudity / violence rule (all apps, all languages).
-- [ ] F11 CI: Android emulator smoke on API 34; iOS CI green.
+- [x] F11 (merged 2026-11-17: iOS and Android CI green) CI: Android emulator smoke on API 34; iOS CI green.
 - [x] F12 (merged 2026-11-13; all three Studios show the refusal and stop; Windows WPF needs a Windows CI build) The Studio pairing refusal must be visible: a 0.2 Studio refused by `STUDIO_PIPE_MIN` loops on new QR codes
       (found 2026-11-13 on the owner's Mac); the current Studios must show the relay's `error` reason and stop.
 - [ ] F13 Repo housekeeping: rebase the remaining feature branches and `gym` (0.4 list), smallest first.
-- [ ] F15 Rate limits (first check, 2026-11-13, 30 days): `builder-pipe-upgrade` refused 2,685 from 339 sources (likely 0.2
+- [x] F15 (merged 2026-11-17: Studio and box loops fixed, old Studios refused before the budget) Rate limits (first check, 2026-11-13, 30 days): `builder-pipe-upgrade` refused 2,685 from 339 sources (likely 0.2
       Studios looping on the STUDIO_PIPE_MIN refusal, see F12); `account-resolve` refused 6,019 across 1,224 usernames
       with 23 accounts in D1 (enumeration, or a client looping on unknown names?): find the callers' pattern, fix.
 - [~] F16 (merged 2026-11-14: MV3 Firefox 140+, QR pairing from iOS/Android, cert pinning, knock bar, 6 languages, 52 tests; OWNER: AMO account + listed/unlisted; needs a live run; strict servers checked classical only) Firefox extension (owner 2026-11-14): cert pinning + cross-site knock, QR-paired key-light session; AMO listing later.
@@ -1519,3 +1519,4 @@ Three agents started:
   `tsc --noEmit -p apps/com` errors are in files this work did not touch (40 in `controlPlaneRoutes.ts`, tests,
   `servingAuthority.ts`) and predate it; `tsc -b` is the gate.
 - Resume point for 0.4/ci: merge it into `release/0.4`, then tick F6 (owner steps pending), F11 and F15 above.
+- Merged 0.4/ci: CI green on iOS and Android; F6 broker path; F15 loop fixes; iOS 'Call ended' at launch fixed (CallKit reset); PolishRules fixed. main's iOS workflow has been red since 2026-11-06 (it goes green when release/0.4 lands).
