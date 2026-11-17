@@ -10,7 +10,7 @@ import com.flagshipserver.app.calls.VoiciCallRecord
 data class SocialCounts(
     /** New comments and reactions on the owner's posts. Not built yet (docs/social-tab.md §3.3), so 0 for now. */
     val profile: Int = 0,
-    /** Conversations with an unread message, requests left out (they have their own count). */
+    /** Conversations with an unread message (requests left out: they have their own count), and replies waiting on pages this account wrote to. */
     val inbox: Int = 0,
     /** Message requests waiting for a reply or an accept. */
     val requests: Int = 0,
@@ -20,8 +20,8 @@ data class SocialCounts(
     val total: Int get() = profile + inbox + requests + missedCalls
 
     companion object {
-        fun of(ui: VoiciMessagesUi, history: List<VoiciCallRecord>, callsSeenAt: Long): SocialCounts = SocialCounts(
-            inbox = ui.accepted.count { ui.unread(it) },
+        fun of(ui: VoiciMessagesUi, history: List<VoiciCallRecord>, callsSeenAt: Long, replies: Int = 0): SocialCounts = SocialCounts(
+            inbox = ui.accepted.count { ui.unread(it) } + replies,
             requests = ui.requests.size,
             missedCalls = unseenMissed(history, callsSeenAt),
         )
