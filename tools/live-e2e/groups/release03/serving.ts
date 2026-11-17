@@ -83,7 +83,10 @@ export const serving: Group = {
       const c = await postJson(`https://${CONTROL}/api/accounts/${acct.username}/serving-policy`, body);
       assert(c.status === 200, `.com policy ${c.status}: ${short(c.text)}`);
       const x = await postJson(`https://${b.fqdn}/api/screens/serving`, { policy: { record: p, signature: body.signature } }, session);
-      assert(x.status === 200 && x.json?.policyAdopted === true, `box policy ${x.status}: ${short(x.text)}`);
+      // The box may already hold this policy from .com (its heartbeat ran between the two posts): then it is not
+      // adopted again, and the box's serving view names it.
+      const held = x.json?.policyAdopted === true || (x.json?.serving?.policyGen === p.policyGen && (x.json?.refused ?? []).length === 0);
+      assert(x.status === 200 && held, `box policy ${x.status}: ${short(x.text)}`);
     };
     let lastNotAfter = 0;
     // Like the apps (webapp lib/servingAuthority.js), a lease goes to `.com` AND to the box: a mesh relay takes leases
