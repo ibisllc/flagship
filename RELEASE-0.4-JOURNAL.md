@@ -1462,3 +1462,4 @@ Fixes (branch `0.4/gym-r1-fixes`, fast-forwarded into release/0.4 at `24f836458`
 - Not covered live: the box lane while the relay is also down (goes direct, marked: unit-tested only), Stripe, Apple
   and Google purchases (no test keys), the phones' OHTTP clients (only the webapp's code ran).
 - Resume point: merge `0.4/gym-r2-fixes` (owner), then D11, R2-R4 and the E UI pass.
+- Merged 0.4/gym-r2-fixes: the voucher redeem bug (with several vouchers per redeem, only the first was credited and the rest were consumed; fix 417c59cc1) plus the vouchers, outbound-proxy and ohttp-failure live groups. R2 live: core 30, vouchers 10, outbound-proxy 8, ohttp-failure 7, update 9, all green.
