@@ -24,6 +24,7 @@ import { cronPlan, TEN_MINUTE_CRON } from "../src/cronPlan.js";
 import { ISSUANCE_LIMITS } from "@flagship/control-plane";
 import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
 import { accountKeyPem, FakeAcme, FakeDns, makeCsr } from "./support/fakeAcme.js";
+import { handleServiceRequest, type ZoneApi } from "../../dns-broker/src/service.js";
 
 const ORIGIN = "https://flagshipserver.com";
 const APEX = "flagship.services";
@@ -1023,6 +1024,77 @@ describe("issuance: direct names on the direct domain", () => {
       directZone(w);
       expect((await ask(w, { cls: "direct", names: [NAME, "other--alice.fshp.app"], directName: LABEL })).json.code).toBe("issuance-csr-names");
       expect((await ask(w, { cls: "direct", names: [NAME], directName: LABEL })).res.status).toBe(202);
+    } finally {
+      w.close();
+    }
+  });
+});
+
+describe("challenge records through the DNS broker (0.4 F6: no zone token on .com)", () => {
+  const BROKER = "https://dns-broker.test";
+  const SECRET = "s".repeat(40);
+
+  /** The broker's real /service handler over the fake zone, reached through the service's fetch. */
+  async function viaBroker(w: World, thumbprints: string) {
+    const acct = (await tryIssuanceRoute(new Request(`${ORIGIN}/api/certificates/account`), w.env, w.deps))!;
+    const { thumbprint } = (await acct.json()) as { thumbprint: string };
+    const zone: ZoneApi = {
+      list: async (o = {}) =>
+        [...w.dns.records.entries()]
+          .filter(([, r]) => !o.name || r.name === o.name)
+          .map(([id, r]) => ({ id, type: "TXT", name: r.name, content: r.value })),
+      get: async (id) => {
+        const r = w.dns.records.get(id);
+        return r ? { id, type: "TXT", name: r.name, content: r.value } : null;
+      },
+      createTxt: async (name, value) => ({ ...(await w.dns.createTxt({ name, value })), type: "TXT", name, content: value }),
+      delete: (id) => w.dns.deleteById(id),
+    };
+    const brokerEnv = { DNS_BROKER_SECRET: SECRET, FLAGSHIP_APEX: APEX, ACME_ACCOUNT_THUMBPRINTS: thumbprints.replace("$OURS", thumbprint) };
+    const brokerCalls: string[] = [];
+    const caFetch = w.deps.fetchImpl!;
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (!url.startsWith(BROKER)) return caFetch(input, init);
+      const req = new Request(url, init);
+      brokerCalls.push(String(((await req.clone().json()) as { op: string }).op));
+      return handleServiceRequest(req, brokerEnv, zone);
+    }) as typeof fetch;
+    const { dns: _direct, ...rest } = w.deps;
+    w.deps = { ...rest, fetchImpl };
+    w.env = { ...w.env, DNS_BROKER_URL: BROKER, DNS_BROKER_SECRET: SECRET };
+    return { brokerCalls, thumbprint };
+  }
+
+  it("issues with the broker writing and removing the challenge record, and no DNS token on .com", async () => {
+    const w = await setup();
+    try {
+      const { brokerCalls } = await viaBroker(w, "$OURS");
+      expect(w.env.CLOUDFLARE_DNS_API_TOKEN).toBeUndefined();
+      const { done } = await issue(w, { cls: "apps", names: [`*.${SERVER}`, `*.alice.${APEX}`], grant: true });
+      expect(done).toMatchObject({ status: "issued" });
+      expect(new Set(w.dns.written)).toEqual(new Set([`_acme-challenge.${SERVER}`, `_acme-challenge.alice.${APEX}`]));
+      expect(w.dns.records.size).toBe(0);
+      expect(brokerCalls.filter((c) => c === "challenge.create")).toHaveLength(2);
+      expect(brokerCalls.filter((c) => c === "challenge.delete")).toHaveLength(2);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("writes nothing when the broker pins another ACME account", async () => {
+    const w = await setup();
+    try {
+      await viaBroker(w, "A".repeat(43));
+      const r = await ask(w, { cls: "control", names: [SERVER] });
+      expect(r.res.status).toBe(202);
+      for (let i = 0; i < 4; i++) {
+        await poll(w, String(r.json.orderId));
+        w.clock.t += 1000;
+      }
+      expect(w.dns.written).toEqual([]);
+      expect(w.ca.orders.size).toBeGreaterThan(0);
+      expect([...w.ca.orders.values()].every((o) => o.status !== "valid")).toBe(true);
     } finally {
       w.close();
     }

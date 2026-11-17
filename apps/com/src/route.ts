@@ -53,6 +53,7 @@ import { CANARY_REPORT_PATH, UPDATE_RECEIPT_PATH, handleCanaryReport, handleUpda
 import { handleVoiciAbuseRoute, isVoiciAbusePath } from "./voiciAbuseRoutes.js";
 import { handleOutboundHosts, isOutboundHostsPath } from "./outboundHosts.js";
 import { handleReapRoute, REAP_PATH_PREFIX } from "./prodReap.js";
+import { brokerZoneOf } from "./brokerZone.js";
 import { handleVoiciApi, isVoiciApiPath, isVoiciHost, serveVoiciHost, voiciCorsHeaders, type VoiciEnv } from "./voiciRoutes.js";
 import { CloudflareDnsClient } from "@flagship/control-plane";
 import { createUpCloudClient } from "./upcloud.js";
@@ -751,10 +752,13 @@ async function routeImpl(
   // docs/runbooks/pre-ga-scrub.md. Admin secret; classifies, deletes one item.
   if (url.pathname.startsWith(REAP_PATH_PREFIX)) {
     return handleReapRoute(request, env, {
+      // Through the DNS broker when configured: zone-health and the plan read; deletes of anything but a challenge
+      // record are refused there (the zone token is off `.com`, 0.4 F6).
       makeDns: (e) =>
-        e.CLOUDFLARE_DNS_API_TOKEN && e.CLOUDFLARE_SERVICES_ZONE_ID
+        brokerZoneOf(e) ??
+        (e.CLOUDFLARE_DNS_API_TOKEN && e.CLOUDFLARE_SERVICES_ZONE_ID
           ? new CloudflareDnsClient({ apiToken: e.CLOUDFLARE_DNS_API_TOKEN, zoneId: e.CLOUDFLARE_SERVICES_ZONE_ID })
-          : undefined,
+          : undefined),
       makeCloud: (e) => (e.UPCLOUD_TOKEN ? createUpCloudClient({ token: e.UPCLOUD_TOKEN }) : undefined),
     });
   }

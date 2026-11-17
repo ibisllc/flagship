@@ -58,6 +58,7 @@ import {
 } from "@flagship/protocol";
 import type { D1Database, DeviceCapabilityGrantStorage, UsernameRecord, UsernameStorage } from "@flagship/storage";
 import { servingBundle } from "./servingAuthority.js";
+import { brokerZoneOf } from "./brokerZone.js";
 
 export interface IssuanceEnv {
   DB?: D1Database;
@@ -69,6 +70,9 @@ export interface IssuanceEnv {
   ISSUANCE_ACME_CONTACT?: string;
   CLOUDFLARE_DNS_API_TOKEN?: string;
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
+  /** The DNS broker (brokerZone.ts): with both set, challenge records go through it and the token is not used. */
+  DNS_BROKER_URL?: string;
+  DNS_BROKER_SECRET?: string;
   SERVICES_APEX?: string;
   FLAGSHIP_ADMIN_SECRET?: string;
   /** The direct domain's zone (docs/direct-access-and-domains.md): its own token, allowed only that zone's records. */
@@ -79,14 +83,15 @@ export interface IssuanceEnv {
 }
 
 export interface IssuanceDns {
-  createTxt(opts: { name: string; value: string; ttl?: number }): Promise<{ id: string }>;
+  /** `token` is the ACME challenge token: the broker checks the value answers the pinned account's challenge. */
+  createTxt(opts: { name: string; value: string; ttl?: number; token?: string }): Promise<{ id: string }>;
   deleteById(id: string): Promise<unknown>;
 }
 
 export interface IssuanceDeps {
   usernames: Pick<UsernameStorage, "get">;
   grants: Pick<DeviceCapabilityGrantStorage, "listForUser">;
-  /** Default: Cloudflare with the Worker's DNS token. */
+  /** Default: the DNS broker when configured, else Cloudflare with the Worker's DNS token. */
   dns?: IssuanceDns;
   /** The direct zone's records (the `direct` class). Default: Cloudflare with the direct zone's token. */
   directDns?: IssuanceDns;
@@ -388,6 +393,7 @@ function service(env: IssuanceEnv, deps: IssuanceDeps, now: number): Promise<Ser
   const pem = env.ISSUANCE_ACME_ACCOUNT_KEY;
   const dns =
     deps.dns ??
+    brokerZoneOf(env, deps.fetchImpl) ??
     (env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
       ? new CloudflareDnsClient({ apiToken: env.CLOUDFLARE_DNS_API_TOKEN, zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID })
       : null);
@@ -895,7 +901,7 @@ async function stepNew(s: Service, row: OrderRow, st: AcmeState, client: AcmeCli
       const ch = a.challenges.find((c) => c.type === "dns-01");
       if (!ch) throw new AcmeError(400, "no-dns01", `no DNS-01 challenge for ${identifier}`);
       const value = await dns01Value(ch.token, s.key.thumbprint);
-      const record = await dnsFor(s, next).createTxt({ name: `_acme-challenge.${a.identifier.value.replace(/^\*\./, "")}`, value, ttl: 60 });
+      const record = await dnsFor(s, next).createTxt({ name: `_acme-challenge.${a.identifier.value.replace(/^\*\./, "")}`, value, ttl: 60, token: ch.token });
       next.authz.push({ url, identifier, status: a.status, challengeUrl: ch.url, recordId: record.id });
     }
   } catch (e) {
@@ -1178,7 +1184,7 @@ async function adminRevoke(s: Service, request: Request): Promise<Response> {
       }
       const ch = a.challenges.find((c) => c.type === "dns-01");
       if (!ch) throw new AcmeError(400, "no-dns01", a.identifier.value);
-      const record = await s.dns.createTxt({ name: `_acme-challenge.${a.identifier.value}`, value: await dns01Value(ch.token, s.key.thumbprint), ttl: 60 });
+      const record = await s.dns.createTxt({ name: `_acme-challenge.${a.identifier.value}`, value: await dns01Value(ch.token, s.key.thumbprint), ttl: 60, token: ch.token });
       st.authz.push({ url, identifier: a.identifier.value, status: a.status, challengeUrl: ch.url, recordId: record.id });
     }
     if (st.authz.some((a) => a.status !== "valid")) {

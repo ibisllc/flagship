@@ -243,14 +243,15 @@ EOF
 meta_dnsbroker() {
   TITLE="Deploy the DNS broker (before .com)"
   RUNBOOK="7a. Deploy the DNS broker"
-  WHAT="The broker re-checks every challenge record .com asks for. 0.3 adds the server-wildcard authority (a box's own certificate for *.<user>), which must be live before boxes on 0.3 renew. Deploys apps/dns-broker and checks it answers."
+  WHAT="The broker is the only holder of the zone-wide Cloudflare DNS token: .com's issuance service writes its _acme-challenge TXT records through it (POST /service, apps/dns-broker/src/service.ts) and holds no token itself. Skipped while apps/com/wrangler.toml sets no DNS_BROKER_URL (then .com still uses its own CLOUDFLARE_DNS_API_TOKEN). Otherwise checks the broker's secrets (CLOUDFLARE_DNS_API_TOKEN, DNS_BROKER_SECRET), deploys apps/dns-broker and checks /service answers 401 without the secret."
   read -r -d '' CMDS <<'EOF' || true
-(cd apps/dns-broker && npx wrangler deployments list)
+grep '^DNS_BROKER_URL' apps/com/wrangler.toml      (unset: step skipped)
+(cd apps/dns-broker && npx wrangler secret list)   (CLOUDFLARE_DNS_API_TOKEN, DNS_BROKER_SECRET)
 (cd apps/dns-broker && npm run deploy)
-(cd apps/dns-broker && npx wrangler deployments list)
+curl -s -o /dev/null -w '%{http_code}' -X POST <DNS_BROKER_URL>/service   (401)
 EOF
-  GATE="The new deployment is listed; .com's next dns-01 publish for a box with a grant succeeds (the gym's app-names group covers it)."
-  ROLLBACK="npx wrangler rollback in apps/dns-broker (the previous deployment refuses only the new authority)."
+  GATE="Skipped with no DNS_BROKER_URL; else the deployment is listed and /service answers 401 without the secret. After the .com deploy, a certificate order reaches issued (its challenge records went through the broker)."
+  ROLLBACK="npx wrangler rollback in apps/dns-broker. To take .com off the broker: remove DNS_BROKER_URL from apps/com/wrangler.toml, put CLOUDFLARE_DNS_API_TOKEN back on flagship-com, redeploy .com."
 }
 meta_uxchecks() {
   TITLE="Translations, store art and voi.ci (from feat/UX)"
@@ -1680,12 +1681,30 @@ run_canary() {
   return 20
 }
 
+# The broker URL .com is configured for (an uncommented DNS_BROKER_URL in its wrangler.toml), or nothing.
+dns_broker_url() {
+  sed -n 's/^[[:space:]]*DNS_BROKER_URL[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1
+}
+
 run_dnsbroker() {
   ensure_wt
+  local url names code n
+  url=$(dns_broker_url "$WT/apps/com/wrangler.toml")
+  if [ -z "$url" ]; then
+    warn "apps/com/wrangler.toml sets no DNS_BROKER_URL: .com keeps its own DNS token; nothing to deploy (step skipped)"
+    return 0
+  fi
+  names=$(cd "$WT/apps/dns-broker" && npx wrangler secret list 2>/dev/null | json_names || true)
+  for n in CLOUDFLARE_DNS_API_TOKEN DNS_BROKER_SECRET; do
+    printf '%s\n' "$names" | grep -qx "$n" || fail "the broker has no $n secret: (cd apps/dns-broker && npx wrangler secret put $n)"
+  done
   XA "$WT/apps/dns-broker" npx wrangler deployments list
   confirm "Deploy the DNS broker (apps/dns-broker) from $(short "$PIN") now?" || return 10
   XA "$WT/apps/dns-broker" npm run deploy
   XA "$WT/apps/dns-broker" npx wrangler deployments list
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${url%/}/service" || true)
+  [ "$code" = 401 ] || fail "$url/service answered $code without the secret (expected 401)"
+  ok "the broker answers at $url"
 }
 
 run_uxchecks() {
@@ -1749,6 +1768,12 @@ run_secrets() {
   for n in "${KNOWN_SECRETS[@]}"; do
     if echo "$prod" | grep -qx "$n"; then ok "$n is set on prod"; else warn "$n is NOT on prod (create: cd apps/com && wrangler secret put $n)"; missing=1; fi
   done
+  # The DNS broker (step $(step_index dnsbroker)): .com needs the shared secret; the zone token comes off .com only after
+  # the .com deploy that names the broker and a certificate order issued through it (0.4 deploy notes, F6).
+  if [ -n "$(dns_broker_url "$WT/apps/com/wrangler.toml")" ]; then
+    if echo "$prod" | grep -qx DNS_BROKER_SECRET; then ok "DNS_BROKER_SECRET is set on prod"; else warn "DNS_BROKER_SECRET is NOT on prod (the value the broker holds: cd apps/com && wrangler secret put DNS_BROKER_SECRET)"; missing=1; fi
+    echo "$prod" | grep -qx CLOUDFLARE_DNS_API_TOKEN && say "  CLOUDFLARE_DNS_API_TOKEN is still on prod: delete it after the .com deploy, once an order issued through the broker"
+  fi
   if [ "$missing" = 1 ]; then confirm "Some names are missing on prod. Continue anyway?" || return 10; fi
   # Settings that used to be secrets and are now plain [vars] in wrangler.toml: a deploy fails while a secret of the
   # same name exists, so the secret goes first (free AI reads as unavailable for the minutes until the deploy).
