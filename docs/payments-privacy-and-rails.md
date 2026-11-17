@@ -733,3 +733,94 @@ steps 3 to 5.
 - OHTTP relay terms (Oblivious Network): browser CORS, volume, cost.
 - US gift-card rules, unclaimed property, prepaid access rules; EU voucher
   VAT rules.
+
+## 11. As built: the rails (steps 4 and 5, branch `0.4/payments-rails`, 2026-11-17)
+
+Three rails sell the same $1 vouchers: Stripe Checkout on the web (the webapp's Plan section), Apple in-app
+purchase (StoreKit 2) on iPhone and iPad, Google Play Billing on Android. Packs only (`config.packs`, 10, 30 and 120
+by default); subscriptions (5.3) are a later step. Prices are the voucher count in dollars on every rail; the store
+fee is absorbed. Owner setup: `docs/runbooks/payments-setup.md`.
+
+**One rule for every rail:** a payment buys the right to N blind signatures, never an account link. The device makes
+N voucher requests (`newVoucherRequest`) and keeps them (nonce, prefix, blinding inverse) until the signatures are
+back and the voucher wallet is saved; only then does it finish the store transaction. `.com` checks the proof of
+payment, signs, and records only that the payment was used: `voucher_payments` (D1 **0153**) holds
+`SHA-256("flagship/voucher-payment/v1|" + rail + "|" + payment id)`, the rail, the units, the key, the SHA-256 of the
+blinded set, the UTC day and a state (`signed` | `refunded`). Never an account, an address, an email, a store
+country or a time finer than the day. The issue call carries no credential, cookie or device header.
+
+### The issue call (all rails)
+
+`POST /api/vouchers/paid-issue`
+
+```
+{ "v": 1, "rail": "apple" | "google" | "stripe", "proof": {…}, "k": "<keyId>", "blinded": ["<base64>", …] }
+  apple   proof { "jws": "<the signed transaction, VerificationResult.jwsRepresentation>" }
+  google  proof { "productId": "com.flagshipserver.app.vouchers.30", "purchaseToken": "…" }
+  stripe  proof { "sessionId": "cs_…" }
+200 { "k", "sigs": ["<base64>", …], "units" }
+```
+
+- `blinded.length` must equal the units the payment bought (pack × quantity), at most 200 per call.
+- Idempotent: the same payment with the same blinded set returns the same signatures (a device that lost the answer
+  asks again); a different set for a used payment is refused `payment-used`.
+- Refusals (`code`): `malformed`, `too-many`, `rail-off` (404, rail not configured), `no-key` (409),
+  `payment-invalid` (400: the proof doesn't verify, another app, an unknown product, a test purchase in production),
+  `payment-unpaid` (402: Stripe session not paid yet, Play purchase pending; retry later), `payment-refunded` (409),
+  `payment-used` (409), `wrong-count` (409, with `units`), `rail-unreachable` (502: Stripe or Google didn't answer;
+  retry).
+- Rate limit `vouchers-paid-issue`: 30 a minute, 300 an hour per address (counted, never stored).
+
+`GET /api/payments/config` now also answers
+`"rails": {"stripe": bool, "apple": bool, "google": bool}` and
+`"products": [{"units": 10, "productId": "com.flagshipserver.app.vouchers.10"}, …]` (one per pack). Product ids are
+`com.flagshipserver.app.vouchers.<units>` on both stores (`voucherPackProductId`, `voucherPackUnits`).
+
+### Stripe (the webapp)
+
+1. The browser makes the N requests, keeps them in `localStorage` (`flagship.shop.pending`, deleted once the wallet
+   is saved) and asks `POST /api/vouchers/stripe/checkout` `{v: 1, units, k, commit}` where
+   `commit = SHA-256 hex of "flagship/voucher-order/v1|" + k + "|" + blinded.join("|")` (`voucherOrderCommit`).
+2. `.com` creates a Checkout Session (payment mode, one line: product "Flagship", $1 × units, Stripe Tax on,
+   `metadata: {flagship_kind: "vouchers", flagship_units, flagship_key, flagship_commit}`; no customer, no username, no
+   `client_reference_id`) and returns `{url, sessionId}`. Success returns to
+   `https://webapp.<apex>/?shop=stripe&session_id={CHECKOUT_SESSION_ID}`; cancel to `?shop=cancel`.
+3. Back in the webapp (unlocked), `paid-issue` with `{sessionId}`: `.com` retrieves the session from Stripe and needs
+   `status: complete`, `payment_status: paid`, the metadata, the subtotal = units × $1 in USD, livemode as configured,
+   and `voucherOrderCommit(k, blinded)` = `flagship_commit` (so a leaked session id is useless to anyone else).
+4. `POST /api/stripe/webhook` (the existing endpoint and secret) also takes `charge.refunded` and
+   `charge.dispute.created`: it finds the voucher session of the payment intent and marks its row `refunded` (or
+   writes a refused row when nothing was signed yet). Other events go to the older handler as before.
+
+### Apple (iOS, StoreKit 2)
+
+- Consumables `com.flagshipserver.app.vouchers.10|30|120`. Never `appAccountToken`. The iOS app sells only through
+  in-app purchase and shows no web-shop link anywhere (owner choice for 0.4, also outside the US; 4.1 allows a plain
+  link on the US storefront, which a later release may add).
+- `.com` verifies the JWS itself: ES256, the `x5c` chain to Apple Root CA - G3 (pinned by SHA-256
+  `63343abf…3e9179`), the intermediate's marker 1.2.840.113635.100.6.2.1 and the leaf's 1.2.840.113635.100.6.11.1,
+  each certificate's dates; then `bundleId` (`APPLE_BUNDLE_ID`), `type: Consumable`, a known product, no
+  `revocationDate`, `environment` in `APPLE_IAP_ENVIRONMENTS` (production: `Production`; gym: `Sandbox`). Payment id:
+  `transactionId`; units = pack × `quantity`.
+- `POST /api/vouchers/apple/notifications` (App Store Server Notifications V2, same verification of
+  `signedPayload` and its `signedTransactionInfo`): `REFUND` and `REVOKE` mark the payment `refunded`.
+
+### Google (Android, Play Billing)
+
+- In-app products `com.flagshipserver.app.vouchers.10|30|120`, consumed after the wallet holds the vouchers. Never
+  `setObfuscatedAccountId` / `setObfuscatedProfileId`.
+- `.com` asks the Play Developer API (`purchases.products.get`) with a service-account token
+  (`GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, scope `androidpublisher`): `purchaseState` 0, no obfuscated ids,
+  `purchaseType` absent (a real purchase) unless `GOOGLE_PLAY_ALLOW_TEST=1` (gym, licence testers). Payment id: the
+  purchase token; units = pack × `quantity`. It then acknowledges the purchase (best effort) so Google does not refund
+  it after three days if the phone dies before consuming.
+- Refunds: not followed yet (Voided Purchases API or RTDN later); the loss is accepted as below.
+
+### Refunds without an account
+
+A store refund or a card dispute cannot reach vouchers already signed: `.com` cannot tell which vouchers a payment
+produced, by design. Accepted loss at these prices (owner rule: no refunds of our own; Apple and Google refund under
+their rules). What limits it: `.com` refuses to sign for a payment it already knows is refunded; the stores' own refund
+abuse controls; and each phone caps its own store purchases at 240 vouchers in 30 days (kept in the Keychain or the
+Android keystore-backed preferences, so a reinstall doesn't reset it). Refund counts per day are visible to the owner
+in the D1 rows' `state` (no per-buyer data exists to act on).
