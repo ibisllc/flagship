@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
@@ -48,6 +49,7 @@ import com.flagshipserver.app.calls.VoiciOutgoingCalls
 import com.flagshipserver.app.calls.VoiciOutgoingState
 import com.flagshipserver.app.core.voici.SocialActivity
 import com.flagshipserver.app.core.voici.VoiciCopy
+import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDivider
 import com.flagshipserver.app.ui.components.FSEmptyState
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -55,6 +57,7 @@ import com.flagshipserver.app.ui.components.FSGroup
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSRow
 import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
