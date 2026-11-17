@@ -171,3 +171,152 @@ export function verifyCaSignedPlanAttestation(
   }
   return { ok: false, reason: "signature-unverified" };
 }
+
+// ── the org variant (docs/plans-and-backup-offer.md "As built") ─────────────
+
+/**
+ * `.com`'s CA signature over an org's Business plan, so an org box can enforce the gating (a lapsed org starts no
+ * new directory connector and admits no seat past its limit) without trusting the network path. Same chain and the
+ * same fail-closed rule as the account variant: an attestation that doesn't verify means "plan unknown", never
+ * "lapsed".
+ *
+ *   flagship/org-plan-attestation/v1|<orgId>|<status>|<seatLimit>|<paidSeats>|<trialEndsAt>|<paidUntil>|<issuedAt>|<expiresAt>
+ *
+ * `status` is `trial`, `paid` or `lapsed` at `issuedAt` (orgPlan.ts orgPlanState); `paidSeats` and `paidUntil` are 0
+ * before the first spend.
+ */
+export const TAG_ORG_PLAN_ATTESTATION = "flagship/org-plan-attestation/v1";
+
+export const ORG_PLAN_ATTESTATION_STATUSES = ["trial", "paid", "lapsed"] as const;
+export type OrgPlanAttestationStatus = (typeof ORG_PLAN_ATTESTATION_STATUSES)[number];
+
+export interface OrgPlanAttestationBody {
+  orgId: string;
+  status: OrgPlanAttestationStatus;
+  seatLimit: number;
+  paidSeats: number;
+  trialEndsAt: number;
+  paidUntil: number;
+  issuedAt: number;
+  expiresAt: number;
+}
+
+export interface OrgPlanAttestation extends OrgPlanAttestationBody {
+  kind: "OrgPlanAttestation";
+  version: 1;
+  signedBy: string;
+  signatures: { pubkey: string; sig: string }[];
+}
+
+const ORG_ID_RE = /^[0-9a-f]{32}$/;
+
+export function canonicalOrgPlanAttestation(b: OrgPlanAttestationBody): Bytes {
+  if (typeof b.orgId !== "string" || !ORG_ID_RE.test(b.orgId)) throw new Error(`${TAG_ORG_PLAN_ATTESTATION}: bad orgId`);
+  if (!(ORG_PLAN_ATTESTATION_STATUSES as readonly string[]).includes(b.status)) throw new Error(`${TAG_ORG_PLAN_ATTESTATION}: bad status`);
+  for (const [k, v] of [
+    ["seatLimit", b.seatLimit],
+    ["paidSeats", b.paidSeats],
+    ["trialEndsAt", b.trialEndsAt],
+    ["paidUntil", b.paidUntil],
+    ["issuedAt", b.issuedAt],
+    ["expiresAt", b.expiresAt],
+  ] as const) {
+    if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0) throw new Error(`${TAG_ORG_PLAN_ATTESTATION}: bad ${k}`);
+  }
+  if (b.expiresAt <= b.issuedAt) throw new Error(`${TAG_ORG_PLAN_ATTESTATION}: expires before it is issued`);
+  return new TextEncoder().encode(
+    [
+      TAG_ORG_PLAN_ATTESTATION,
+      b.orgId,
+      b.status,
+      String(b.seatLimit),
+      String(b.paidSeats),
+      String(b.trialEndsAt),
+      String(b.paidUntil),
+      String(b.issuedAt),
+      String(b.expiresAt),
+    ].join("|"),
+  );
+}
+
+export function signOrgPlanAttestation(body: OrgPlanAttestationBody, caKeypair: Keypair): OrgPlanAttestation {
+  const sig = ed.sign(canonicalOrgPlanAttestation(body), caKeypair.privateKey);
+  const signedBy = bytesToHex(caKeypair.publicKey);
+  return {
+    kind: "OrgPlanAttestation",
+    version: 1,
+    orgId: body.orgId,
+    status: body.status,
+    seatLimit: body.seatLimit,
+    paidSeats: body.paidSeats,
+    trialEndsAt: body.trialEndsAt,
+    paidUntil: body.paidUntil,
+    issuedAt: body.issuedAt,
+    expiresAt: body.expiresAt,
+    signedBy,
+    signatures: [{ pubkey: signedBy, sig: bytesToHex(sig) }],
+  };
+}
+
+/** Shape-check an untrusted org attestation (no signature check). */
+export function parseOrgPlanAttestation(v: unknown): OrgPlanAttestation | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  if (r.kind !== "OrgPlanAttestation" || r.version !== 1 || typeof r.signedBy !== "string" || !Array.isArray(r.signatures)) return null;
+  const signatures: { pubkey: string; sig: string }[] = [];
+  for (const s of r.signatures) {
+    const e = s as Record<string, unknown> | null;
+    if (!e || typeof e.pubkey !== "string" || typeof e.sig !== "string") return null;
+    signatures.push({ pubkey: e.pubkey, sig: e.sig });
+  }
+  const a = {
+    kind: "OrgPlanAttestation" as const,
+    version: 1 as const,
+    orgId: r.orgId as string,
+    status: r.status as OrgPlanAttestationStatus,
+    seatLimit: r.seatLimit as number,
+    paidSeats: r.paidSeats as number,
+    trialEndsAt: r.trialEndsAt as number,
+    paidUntil: r.paidUntil as number,
+    issuedAt: r.issuedAt as number,
+    expiresAt: r.expiresAt as number,
+    signedBy: r.signedBy,
+    signatures,
+  };
+  try {
+    canonicalOrgPlanAttestation(a);
+  } catch {
+    return null;
+  }
+  return a;
+}
+
+/** The same chokepoint as `verifyCaSignedPlanAttestation`, for the org variant. */
+export function verifyCaSignedOrgPlanAttestation(
+  a: OrgPlanAttestation,
+  chain: CaTrustChain | null,
+  now: number,
+  pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,
+): { ok: true } | { ok: false; reason: CaArtifactReject } {
+  const gate = authorizedCaKeysOrFailClosed(chain, now, pinnedMandateHash);
+  if (!gate.ok) return gate;
+  if (!(now >= a.issuedAt && now < a.expiresAt)) return { ok: false, reason: "artifact-expired" };
+  let msg: Bytes;
+  try {
+    msg = canonicalOrgPlanAttestation(a);
+  } catch {
+    return { ok: false, reason: "signature-unverified" };
+  }
+  const authorized = new Set(gate.keys.map((k) => k.toLowerCase()));
+  const signedBy = a.signedBy.toLowerCase();
+  for (const entry of a.signatures) {
+    const pub = entry.pubkey.toLowerCase();
+    if (!authorized.has(pub) || pub !== signedBy) continue;
+    try {
+      if (ed.verify(hexToBytes(entry.sig), msg, hexToBytes(pub))) return { ok: true };
+    } catch {
+      /* try the next */
+    }
+  }
+  return { ok: false, reason: "signature-unverified" };
+}

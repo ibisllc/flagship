@@ -38,7 +38,17 @@
       30,
       120
     ],
-    "maxPerRequest": 30
+    "maxPerRequest": 30,
+    "business": {
+      "unitsPerSeatMonth": 6,
+      "minSeats": 3,
+      "maxSeats": 10000,
+      "egressGbPerSeat": 100,
+      "trialSeats": 10,
+      "trialDays": 30,
+      "batchMinUnits": 100,
+      "batchMaxUnits": 5000
+    }
   },
   "unitMs": {
     "pro": 259200000,

@@ -1,0 +1,670 @@
+{
+  "about": "Business plan for orgs: orgPlan.ts, orgWallet.ts, voucherBatch.ts, planAttestation.ts (org variant), paymentsConfig.ts business. Regenerate: npx tsx packages/protocol/tests/genOrgPlanVectors.ts. Keys here are for these vectors only (the RSA key is test-vectors/vouchers/test-rsa-key.json).",
+  "config": {
+    "v": 1,
+    "unitUsd": 1,
+    "monthDays": 30,
+    "plans": {
+      "pro": {
+        "unitsPerMonth": 10,
+        "includedGb": 250
+      },
+      "pro-max": {
+        "unitsPerMonth": 20,
+        "includedGb": 500
+      }
+    },
+    "overage": {
+      "blockUnits": 5,
+      "blockGb": 100,
+      "defaultCapUnits": 10,
+      "maxCapUnits": 100,
+      "buyBelowGb": 10
+    },
+    "graceHours": 72,
+    "maxAheadDays": 35,
+    "trickle": {
+      "lowWaterDays": 3,
+      "highWaterDays": 10
+    },
+    "activationDelayMaxHours": 24,
+    "packs": [
+      10,
+      30,
+      120
+    ],
+    "maxPerRequest": 30,
+    "business": {
+      "unitsPerSeatMonth": 6,
+      "minSeats": 3,
+      "maxSeats": 10000,
+      "egressGbPerSeat": 100,
+      "trialSeats": 10,
+      "trialDays": 30,
+      "batchMinUnits": 100,
+      "batchMaxUnits": 5000
+    }
+  },
+  "unitMs": {
+    "3": 144000000,
+    "10": 43200000
+  },
+  "monthlyUnits": {
+    "3": 18,
+    "10": 60
+  },
+  "state": [
+    {
+      "name": "trial",
+      "terms": {
+        "trialEndsAt": 1765128000000,
+        "trialSeats": 10,
+        "paidSeats": 0,
+        "paidUntil": 0
+      },
+      "now": 1763400000000,
+      "out": {
+        "trialEndsAt": 1765128000000,
+        "trialSeats": 10,
+        "paidSeats": 0,
+        "paidUntil": 0,
+        "status": "trial",
+        "seatLimit": 10,
+        "coveredUntil": 1765128000000
+      }
+    },
+    {
+      "name": "trial with 12 paid seats",
+      "terms": {
+        "trialEndsAt": 1765128000000,
+        "trialSeats": 10,
+        "paidSeats": 12,
+        "paidUntil": 1765992000000
+      },
+      "now": 1763400000000,
+      "out": {
+        "trialEndsAt": 1765128000000,
+        "trialSeats": 10,
+        "paidSeats": 12,
+        "paidUntil": 1765992000000,
+        "status": "trial",
+        "seatLimit": 12,
+        "coveredUntil": 1765992000000
+      }
+    },
+    {
+      "name": "trial ended, nothing paid",
+      "terms": {
+        "trialEndsAt": 1765128000000,
+        "trialSeats": 10,
+        "paidSeats": 0,
+        "paidUntil": 0
+      },
+      "now": 1765128000001,
+      "out": {
+        "trialEndsAt": 1765128000000,
+        "trialSeats": 10,
+        "paidSeats": 0,
+        "paidUntil": 0,
+        "status": "lapsed",
+        "seatLimit": 10,
+        "coveredUntil": 1765128000000
+      }
+    },
+    {
+      "name": "paid",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000
+      },
+      "now": 1763400000000,
+      "out": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000,
+        "status": "paid",
+        "seatLimit": 3,
+        "coveredUntil": 1763832000000
+      }
+    },
+    {
+      "name": "inside the grace",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000
+      },
+      "now": 1764087600000,
+      "out": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000,
+        "status": "paid",
+        "seatLimit": 3,
+        "coveredUntil": 1763832000000
+      }
+    },
+    {
+      "name": "past the grace",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000
+      },
+      "now": 1764094800000,
+      "out": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000,
+        "status": "lapsed",
+        "seatLimit": 3,
+        "coveredUntil": 1763832000000
+      }
+    }
+  ],
+  "spend": [
+    {
+      "name": "during the trial: paid time starts at its end",
+      "terms": {
+        "trialEndsAt": 1765128000000,
+        "trialSeats": 10,
+        "paidSeats": 0,
+        "paidUntil": 0
+      },
+      "seats": 3,
+      "n": 1,
+      "now": 1763400000000,
+      "out": 1765272000000,
+      "ahead": 1728000000
+    },
+    {
+      "name": "same seats: continues",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000
+      },
+      "seats": 3,
+      "n": 6,
+      "now": 1763400000000,
+      "out": 1764696000000,
+      "ahead": 432000000
+    },
+    {
+      "name": "more seats: time left converts",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000
+      },
+      "seats": 6,
+      "n": 0,
+      "now": 1763400000000,
+      "out": 1763616000000,
+      "ahead": 216000000
+    },
+    {
+      "name": "fewer seats: time left converts",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 6,
+        "paidUntil": 1763832000000
+      },
+      "seats": 3,
+      "n": 1,
+      "now": 1763400000000,
+      "out": 1764408000000,
+      "ahead": 864000000
+    },
+    {
+      "name": "inside the grace: continues from the old end",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000
+      },
+      "seats": 3,
+      "n": 1,
+      "now": 1763918400000,
+      "out": 1763976000000,
+      "ahead": -86400000
+    },
+    {
+      "name": "past the grace: starts now",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000
+      },
+      "seats": 3,
+      "n": 1,
+      "now": 1764177600000,
+      "out": 1764321600000,
+      "ahead": 0
+    },
+    {
+      "name": "switch inside the grace starts fresh",
+      "terms": {
+        "trialEndsAt": 1759944000000,
+        "trialSeats": 10,
+        "paidSeats": 3,
+        "paidUntil": 1763832000000
+      },
+      "seats": 4,
+      "n": 1,
+      "now": 1763918400000,
+      "out": 1764026400000,
+      "ahead": 0
+    }
+  ],
+  "trickle": [
+    {
+      "name": "trial well ahead: nothing",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 100,
+        "terms": {
+          "trialEndsAt": 1765128000000,
+          "trialSeats": 10,
+          "paidSeats": 0,
+          "paidUntil": 0
+        },
+        "seats": 3,
+        "nextSpendAt": 0
+      },
+      "rand": 0.5,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 0
+      }
+    },
+    {
+      "name": "trial nearly over: schedule",
+      "input": {
+        "now": 1764696000000,
+        "enabled": true,
+        "balance": 100,
+        "terms": {
+          "trialEndsAt": 1765128000000,
+          "trialSeats": 10,
+          "paidSeats": 0,
+          "paidUntil": 0
+        },
+        "seats": 3,
+        "nextSpendAt": 0
+      },
+      "rand": 0.5,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 1764768000000
+      }
+    },
+    {
+      "name": "lapsed: catch up at once",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 100,
+        "terms": {
+          "trialEndsAt": 1759944000000,
+          "trialSeats": 10,
+          "paidSeats": 3,
+          "paidUntil": 1762536000000
+        },
+        "seats": 3,
+        "nextSpendAt": 0
+      },
+      "rand": 0.25,
+      "out": {
+        "spend": 2,
+        "nextSpendAt": 1763436000000
+      }
+    },
+    {
+      "name": "ten seats lapsed: catch up limited by the request",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 100,
+        "terms": {
+          "trialEndsAt": 1759944000000,
+          "trialSeats": 10,
+          "paidSeats": 10,
+          "paidUntil": 1762536000000
+        },
+        "seats": 10,
+        "nextSpendAt": 0
+      },
+      "rand": 0.25,
+      "out": {
+        "spend": 6,
+        "nextSpendAt": 1763410800000
+      }
+    },
+    {
+      "name": "spend due",
+      "input": {
+        "now": 1763400000000,
+        "enabled": true,
+        "balance": 100,
+        "terms": {
+          "trialEndsAt": 1759944000000,
+          "trialSeats": 10,
+          "paidSeats": 3,
+          "paidUntil": 1763832000000
+        },
+        "seats": 3,
+        "nextSpendAt": 1763399999999
+      },
+      "rand": 0.9,
+      "out": {
+        "spend": 1,
+        "nextSpendAt": 1763529600000
+      }
+    },
+    {
+      "name": "auto-pay off",
+      "input": {
+        "now": 1763400000000,
+        "enabled": false,
+        "balance": 100,
+        "terms": {
+          "trialEndsAt": 1759944000000,
+          "trialSeats": 10,
+          "paidSeats": 3,
+          "paidUntil": 1763832000000
+        },
+        "seats": 3,
+        "nextSpendAt": 1763399999999
+      },
+      "rand": 0.9,
+      "out": {
+        "spend": 0,
+        "nextSpendAt": 0
+      }
+    }
+  ],
+  "egress": [
+    {
+      "name": "trial",
+      "out": 1000
+    },
+    {
+      "name": "trial with 12 paid seats",
+      "out": 1200
+    },
+    {
+      "name": "trial ended, nothing paid",
+      "out": null
+    },
+    {
+      "name": "paid",
+      "out": 300
+    },
+    {
+      "name": "inside the grace",
+      "out": 300
+    },
+    {
+      "name": "past the grace",
+      "out": null
+    }
+  ],
+  "attestation": {
+    "caSeedHex": "5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c",
+    "caPubHex": "ed6a47a39da869b5446155e40b2d93f1e3f0167be26732bae7a3ef9d8e3a3fd3",
+    "body": {
+      "orgId": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "status": "paid",
+      "seatLimit": 3,
+      "paidSeats": 3,
+      "trialEndsAt": 1759944000000,
+      "paidUntil": 1763832000000,
+      "issuedAt": 1763400000000,
+      "expiresAt": 1763493600000
+    },
+    "canonical": "flagship/org-plan-attestation/v1|0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f|paid|3|3|1759944000000|1763832000000|1763400000000|1763493600000",
+    "signed": {
+      "kind": "OrgPlanAttestation",
+      "version": 1,
+      "orgId": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "status": "paid",
+      "seatLimit": 3,
+      "paidSeats": 3,
+      "trialEndsAt": 1759944000000,
+      "paidUntil": 1763832000000,
+      "issuedAt": 1763400000000,
+      "expiresAt": 1763493600000,
+      "signedBy": "ed6a47a39da869b5446155e40b2d93f1e3f0167be26732bae7a3ef9d8e3a3fd3",
+      "signatures": [
+        {
+          "pubkey": "ed6a47a39da869b5446155e40b2d93f1e3f0167be26732bae7a3ef9d8e3a3fd3",
+          "sig": "42fb745179c8cd3610bf9cb17a297b88002295722954c6901478d3678c0f0f880f0033aa68faa5dc2e95766956dfc0276b726b0c63f456d58a27edf4c459d903"
+        }
+      ]
+    }
+  },
+  "key": {
+    "keyId": "8b74a89d9ba741d4",
+    "nHex": "ca47bd4509ece4eb68046250e4b5b40f0f8bc7b189cc848a1991f3b1424c27eba729f059b5a5c168aa9a3795cc0bfc181b3f7342840df305631ffe3477d11b6c503e571c77af33d5a55911e494d7f992405c1c3e0a5c06b1b266f269596e8656d25c7587decb7637d29092cbaab9ee18d2e8d042cf67ca5be48496424a03db1947f1cbff0b339201a8785847ce2daaa52ae68d81f5ed2bdec4c9d5bff05666c63354cc0800c91d5fb465fe28eef0c77814b6f20ffb0592793f132ad9f60fdd63dbd581ba1c3319b573136539d1e7093f63436eff294535ad3e54c9dabaec328277f65ceb1ae1605ea21febe9543944a14fe6acf3eb9dbc95c1cfd596ad70376b",
+    "eHex": "010001"
+  },
+  "batch": {
+    "seedHex": "6161616161616161616161616161616161616161616161616161616161616161",
+    "units": 3,
+    "requests": [
+      {
+        "k": "8b74a89d9ba741d4",
+        "p": "daec633d11d8bfe209f60e2cfb74e37d14480cb5f330c86f446c1327c81008e3",
+        "n": "ee8cf39f10f4c252ad344545326bd1b19976cc0da98ee4719fb88e44e54cc159",
+        "inv": "b09699de49f7bb34c568f01b83ce98a50d2c267e368a68c1e2c357201f676d625a675857d001ee210db71d08330fd6937de162c5027ac916e01c61243c7d8eb17481e606c2bd1156f8d2bbab3551f3457fafab31cb1a24644681975d1c3b14a8c248ae22f11123fd8b0b18c9038fa996fa5c9a1e360d09fd3a9a2b832c7dc4867ce376b928b4d8fc6a55d3a7952c8bf000bdeed3182541d4e9c80a8629ed6a8ad78080d4dc561a4f4fc6ac9fcfc26c008c60422ecc7f8230bb7d848dbbc594658376efb44e45d97a794c43a822a415a7685917f419bafa079f01c522746fb1acb39197abdb8d95371f24fb138dd2343057115900f9ee5cb3179a9583c991b046",
+        "blinded": "LsuBvMnp4zni9nNZulDXcco4sG59CCzT1uq6fFuCqORFCbY06kevm0BXB9vtjINwgvYQ2JKMCGja2aSi4ie5f46JB+ZhuiDxtFktOZTPMUxPI1h8YEPYL0B50jE6MyHS4uNeYCfUIBQJK2r6TBZuTPHEuC/ZMpLt9nBLhFvg64MMwkTGtPDYnaquDl1i8z4XB2kEXUqG1Z1Kb9ysDCcj9Z9JbnwITQyZMgKcWbRW7X+M5e34zWpx+tkVecXiB14YmJSqgH0X1G4RSDg1COUlJzGUSD0YH5IsOD0RtFtY+I319EQDz7W9nWvABb3H6q4xeh0uEWLmjPVBMfK3dkPX9w=="
+      },
+      {
+        "k": "8b74a89d9ba741d4",
+        "p": "bcd0ac6aa19c48013484f32bd997596596933c07a59c3dd45ba1fbad233d6437",
+        "n": "bf11c21683b5a73626fd45bcd349505a7a572b99c42fc00df430903343462b3f",
+        "inv": "4889a97fe24d00a8189924049ad0120228d67de1d23660b7bffe403fff1566b7a7652ca1f39b48a95aa65524c9e08100f014097ea3f304906168b151d181f24427319a52e27fdeedec838704cf30658f3502f1489e97e2de9d3ee9fa1a24d9ad26fabc908102c4e7bed2d3113caf3ba1fe01026d1f9860c4cb7ce99b7ff8e998a587bbbaaab51011affb2db1efce6b968c5ceefd6cfd6171dd01a4ac6753484c87eea76ebe787889c54453ab694a2bb7fd2c1be333da84ae291ae9e4bbec1e17a54c4c7f3d67b312db53a422999b0f279713cb187537b2f4934c3f1df7a1b830f2e640720dfb604ad87e6a1729aecab8a7b7865ff4d659aa80cac37ba5000694",
+        "blinded": "ET4Z/aMrIPCN3pdmcpICnKcEAjY62hGcq7MU7CbfipTh9FjadZdC/YPWhgoJ1sOmBKnbuVb5L/KwLSyRdWSXxIX7G9obTuDIXCjnEqYgRTiSJBLxqJwwUuQO8JOGOJ507FkSnRTL+dailx6r3poiborKm2IBEIX5FweRRPNXGhGotSHwwbTPPKSRufHpHMfgjYt6tO6blncpg+HVJiqyyKipLC2Gnxvy/f1oNZY1C9H5eEGEN4qIrjh8y5R/nFh1+oajv06zKAEO4N/S0CrWjUyW23a2fQhBFspsNJMxhNO0SAv/CVREJ9M1v+9tRO5QY0CMDWqtdliG1EeuUvGRLA=="
+      },
+      {
+        "k": "8b74a89d9ba741d4",
+        "p": "906e8d2e68d90a19ec04aa432d8195c947d62b23f75179f6f9da0080a34f60b5",
+        "n": "8768721098fda1d0e4e201174324209e7a81828bfc73fc6469df35f0024c13aa",
+        "inv": "5d12eac87c1f8b39029cccd0e6cfb9ff57032a0789b434c474b2d3e413377c3d5a1192e97f5934312ced9032826d6e41661438b577d312d7cbe68a661b7efe3b71673cfdc37d0679392dd440ab307001573fe90fd668d9fae60f148f78225bf847d4186be399c51cfca3b26869e6ce10a7f5ffa7cdb667ab151a816a5b48bc9a894c46f1f2e889338f09b07247b40eab8f394c8db99eb3a815e75df849c779feb3714d7d584ff73cc42610b42aaaa46d27734f863c41b41b923652b164cfddb2115ad78ccc7770228215e048496a0c241659b7282839aec114164bdf5b78fa6b6ac29c522e617e99201f698f3827f49d3c62821acb6a178b4e959df60e398f07",
+        "blinded": "ns2G0FO+BOEK6wrkNCjHIp8nD79f2N8Ua/jLdKVax5gu00W2tmr/koLwP7ny1itBt3zJd6a5IMqPigbtCyC/8qyVK/4qEFeeP+SWYHQzuju9jqNUVyJG5NQd8h8rqaZOheWcHnemgRc3g92y6CzGggKHjAZeeJPEFu8qsUURs0GjmF20mQhDjCHurdX5ZwmvcVnEf4ssXpvV8k9QQQydc9MqIqV2P5YgM98/KgT5miF1qFg0OnR1uvl1NixIAcSHOI8bwnRUT1W0qnH8497zZjnEk5MOITfaMlh7TeCS1OJj1x8cwMljoy2ldO6NAGYa3os539NOXjMVea8yqd8fiA=="
+      }
+    ],
+    "commit": "5093507e0408470fa59a98a082e421422ba635bed81fd4b8938a8ba70323802a",
+    "sigs": [
+      "UEDMgDsKzCbpRqvtrGTli/C0MIKY1HJ1jBGnkQa/tVT7zwd7i4wUWHW3LMFlwBgRQyBpLCWysjnLb5EwWUET/5/1WN5WZBMIorgZ+5TTjy6PLBqIQ093J66gjsbgpymoJbfQ+Ut8uNzbG9EaScbnXZCkOspU7isJ2BScLvqCx5eFysFrTlKf6DA0E9HlQA48BSbWjVXpFo+q8LZKR6o7rN12iZfvP6FEYkOOWQyzzWxqFEvKTbTiH2CaBMk+r118HgxZjz2ZptHbpgMguJAUdAO4EH3tQbwNROVc9XOUHVJRNTOdom+UVygBIr1tW48GMYXf0fYLxSYhUoaNrrDVkQ==",
+      "sjiHR47jah8X8kLV526OL3k5hFrnzS2ADqhkpOSSol7QN6nwn88XeaAiSNQpeYUsiPFAYPJkKJBmDXKZNxzkEzq/wqV0FC4U8p0MbKCCR6skvPM3+U1/kycMAE5h+MF1gtEOTCG4xGFvAth729DhMWnVoCvTrBo4ZlhkbUZxTOWf+nRuK/qu1J+72f7LTw7eNqpjmt5gHRMZxgiBhRWzbVuNTkuQe2QoG1vki9oDaHocOiFQ0J2/kreHXhDV5a7FUrGWazVvgVZ5cz3QdA/h4UpOqwhCyTy4Fy8x9jTH9yhHm92H7gq0wLrafUq6Pv3HhaNjt5FREcehU4wT88Fkxw==",
+      "IGqFEm2qN01ibFTA+XNNJZBEoqwVwDV1tQgR6IbWbz7ExY0BB6IZfwF5u4pkYxLlsjgXHCPLMU7BREGBghtU8q68qr1jQYUPdE57iKXZWY3MuWh8Quv4lP+WovMUA/JrkURMSluOxo8LGpWPzpOxT5k/u4E5marnahWt3zQMPitS78ipzjn4lSV6kyyqNNnFIR4Ku2nuKGDZe5x6mlpONuGLyQMhs/wNJNaOvdL5hH7fnKhDJ0v2/kSaW6utPiqRLkUEEhEN+wljRGWP5zFEXX1Rwp5cqoDrDD/skHxWwJIzqVKG+zGOleSzZ3xHL6fWjAyr7x5WFzD/5vBi8VUBAA=="
+    ],
+    "vouchers": [
+      {
+        "k": "8b74a89d9ba741d4",
+        "p": "daec633d11d8bfe209f60e2cfb74e37d14480cb5f330c86f446c1327c81008e3",
+        "n": "ee8cf39f10f4c252ad344545326bd1b19976cc0da98ee4719fb88e44e54cc159",
+        "s": "n1bETCmQDNCwx8rqH+k/kAIA/BuYPLFtA5a4P3JBrXKzK5FAnKs3Y/Zlm4Ig3IScEEOhQ4TT6B8jZOUJ+AaYA68vaqTjdbcocjd+2/W7xeZk/Sksk9VWrZHRH2qGJE3siuYlOdqGvueGvk55WgkmeemydBT5f3YCS08iKu60rO1ZyR1mxFH8PlIZzDzTQWItr0DgDtdGckDFwWL+hAvdx6GifsG2QIgyHzcPNeOejKp0NSXliM3EaPNzYr2eG7siBd5IIfJn7jfJ2r9Q68W4O5OFlfD46u5Q6hMXvk2A1FxBLdIfZo//ZNi9hZ8OmuAHvKakGQ9ri/2nd8FS16+xPA=="
+      },
+      {
+        "k": "8b74a89d9ba741d4",
+        "p": "bcd0ac6aa19c48013484f32bd997596596933c07a59c3dd45ba1fbad233d6437",
+        "n": "bf11c21683b5a73626fd45bcd349505a7a572b99c42fc00df430903343462b3f",
+        "s": "fQ+aGLyKL3d6rge79UeT8UKxRDnb2Kvqxk7fWuJ9mwGXtEJoFKFEXnuJLosgJ3uf8Y8SR/ITnaJM/XxXbvvVSkz9OIiRKPyjXoaw6o9xMoaw++Y1GSg0MF1ZMIuXTTimqZd8ByjyJlcGrz98fePnQOr+7d6pwkOv1KJgwqTcijLs7VhWbDqiEnivT6FErUc/uL6/xhhtjbmhVhdGFhhFvDsACkW3GTPO3mpzcipq1XGQCHZNx5lrw1rird1xbGlyPNXvn+C/f3aIcRO5Rbz++uZcPrGEGJsQMydhAi+uSV4qZw5BpJfJ5CwGMwsa8qXZL5mlQoteTyE2v4WmnACazg=="
+      },
+      {
+        "k": "8b74a89d9ba741d4",
+        "p": "906e8d2e68d90a19ec04aa432d8195c947d62b23f75179f6f9da0080a34f60b5",
+        "n": "8768721098fda1d0e4e201174324209e7a81828bfc73fc6469df35f0024c13aa",
+        "s": "XwTW9isox0l5zlPtW2LzyIjwBOnC+978swsMFkyIebcK9EaW1uczb4oidys57hDfBsRbQCa0pgnZ/b0tSexOJFS8UQKSKBorY3MaT5nF55m1MyDT5CGI36YhHIiNc8/HP8wKulpTpQK49iT/5YTH3jvkiGUqQCFFSGdfDutsc/Q3Yqtte4tniRgm1nGsX1VwL6jZKQ3pGxxcSXnC2u+wwDqThZLb263Hl9/Ut4Wpq8sxSaXgtfx3JzIpMbQQrptl58u85t0+T8leS/1M6My3Ebvw4qlpAk16TZaI2SruLcsdEwuWut2v0odZyNwN0V/RCYfiV2N6EDtnU1r3F9vLiQ=="
+      }
+    ],
+    "keyFile": "{\"k\":\"8b74a89d9ba741d4\",\"kind\":\"flagship-voucher-batch\",\"seed\":\"6161616161616161616161616161616161616161616161616161616161616161\",\"session\":\"cs_test_a1B2c3D4e5F6g7H8\",\"units\":3,\"v\":1}"
+  },
+  "voucherFile": {
+    "text": "{\"kind\":\"flagship-vouchers\",\"v\":1,\"vouchers\":[{\"k\":\"8b74a89d9ba741d4\",\"n\":\"8768721098fda1d0e4e201174324209e7a81828bfc73fc6469df35f0024c13aa\",\"p\":\"906e8d2e68d90a19ec04aa432d8195c947d62b23f75179f6f9da0080a34f60b5\",\"s\":\"XwTW9isox0l5zlPtW2LzyIjwBOnC+978swsMFkyIebcK9EaW1uczb4oidys57hDfBsRbQCa0pgnZ/b0tSexOJFS8UQKSKBorY3MaT5nF55m1MyDT5CGI36YhHIiNc8/HP8wKulpTpQK49iT/5YTH3jvkiGUqQCFFSGdfDutsc/Q3Yqtte4tniRgm1nGsX1VwL6jZKQ3pGxxcSXnC2u+wwDqThZLb263Hl9/Ut4Wpq8sxSaXgtfx3JzIpMbQQrptl58u85t0+T8leS/1M6My3Ebvw4qlpAk16TZaI2SruLcsdEwuWut2v0odZyNwN0V/RCYfiV2N6EDtnU1r3F9vLiQ==\"},{\"k\":\"8b74a89d9ba741d4\",\"n\":\"bf11c21683b5a73626fd45bcd349505a7a572b99c42fc00df430903343462b3f\",\"p\":\"bcd0ac6aa19c48013484f32bd997596596933c07a59c3dd45ba1fbad233d6437\",\"s\":\"fQ+aGLyKL3d6rge79UeT8UKxRDnb2Kvqxk7fWuJ9mwGXtEJoFKFEXnuJLosgJ3uf8Y8SR/ITnaJM/XxXbvvVSkz9OIiRKPyjXoaw6o9xMoaw++Y1GSg0MF1ZMIuXTTimqZd8ByjyJlcGrz98fePnQOr+7d6pwkOv1KJgwqTcijLs7VhWbDqiEnivT6FErUc/uL6/xhhtjbmhVhdGFhhFvDsACkW3GTPO3mpzcipq1XGQCHZNx5lrw1rird1xbGlyPNXvn+C/f3aIcRO5Rbz++uZcPrGEGJsQMydhAi+uSV4qZw5BpJfJ5CwGMwsa8qXZL5mlQoteTyE2v4WmnACazg==\"},{\"k\":\"8b74a89d9ba741d4\",\"n\":\"ee8cf39f10f4c252ad344545326bd1b19976cc0da98ee4719fb88e44e54cc159\",\"p\":\"daec633d11d8bfe209f60e2cfb74e37d14480cb5f330c86f446c1327c81008e3\",\"s\":\"n1bETCmQDNCwx8rqH+k/kAIA/BuYPLFtA5a4P3JBrXKzK5FAnKs3Y/Zlm4Ig3IScEEOhQ4TT6B8jZOUJ+AaYA68vaqTjdbcocjd+2/W7xeZk/Sksk9VWrZHRH2qGJE3siuYlOdqGvueGvk55WgkmeemydBT5f3YCS08iKu60rO1ZyR1mxFH8PlIZzDzTQWItr0DgDtdGckDFwWL+hAvdx6GifsG2QIgyHzcPNeOejKp0NSXliM3EaPNzYr2eG7siBd5IIfJn7jfJ2r9Q68W4O5OFlfD46u5Q6hMXvk2A1FxBLdIfZo//ZNi9hZ8OmuAHvKakGQ9ri/2nd8FS16+xPA==\"}]}",
+    "id": "6efb92c6",
+    "split2": [
+      "{\"kind\":\"flagship-vouchers\",\"v\":1,\"vouchers\":[{\"k\":\"8b74a89d9ba741d4\",\"n\":\"bf11c21683b5a73626fd45bcd349505a7a572b99c42fc00df430903343462b3f\",\"p\":\"bcd0ac6aa19c48013484f32bd997596596933c07a59c3dd45ba1fbad233d6437\",\"s\":\"fQ+aGLyKL3d6rge79UeT8UKxRDnb2Kvqxk7fWuJ9mwGXtEJoFKFEXnuJLosgJ3uf8Y8SR/ITnaJM/XxXbvvVSkz9OIiRKPyjXoaw6o9xMoaw++Y1GSg0MF1ZMIuXTTimqZd8ByjyJlcGrz98fePnQOr+7d6pwkOv1KJgwqTcijLs7VhWbDqiEnivT6FErUc/uL6/xhhtjbmhVhdGFhhFvDsACkW3GTPO3mpzcipq1XGQCHZNx5lrw1rird1xbGlyPNXvn+C/f3aIcRO5Rbz++uZcPrGEGJsQMydhAi+uSV4qZw5BpJfJ5CwGMwsa8qXZL5mlQoteTyE2v4WmnACazg==\"},{\"k\":\"8b74a89d9ba741d4\",\"n\":\"ee8cf39f10f4c252ad344545326bd1b19976cc0da98ee4719fb88e44e54cc159\",\"p\":\"daec633d11d8bfe209f60e2cfb74e37d14480cb5f330c86f446c1327c81008e3\",\"s\":\"n1bETCmQDNCwx8rqH+k/kAIA/BuYPLFtA5a4P3JBrXKzK5FAnKs3Y/Zlm4Ig3IScEEOhQ4TT6B8jZOUJ+AaYA68vaqTjdbcocjd+2/W7xeZk/Sksk9VWrZHRH2qGJE3siuYlOdqGvueGvk55WgkmeemydBT5f3YCS08iKu60rO1ZyR1mxFH8PlIZzDzTQWItr0DgDtdGckDFwWL+hAvdx6GifsG2QIgyHzcPNeOejKp0NSXliM3EaPNzYr2eG7siBd5IIfJn7jfJ2r9Q68W4O5OFlfD46u5Q6hMXvk2A1FxBLdIfZo//ZNi9hZ8OmuAHvKakGQ9ri/2nd8FS16+xPA==\"}]}",
+      "{\"kind\":\"flagship-vouchers\",\"v\":1,\"vouchers\":[{\"k\":\"8b74a89d9ba741d4\",\"n\":\"8768721098fda1d0e4e201174324209e7a81828bfc73fc6469df35f0024c13aa\",\"p\":\"906e8d2e68d90a19ec04aa432d8195c947d62b23f75179f6f9da0080a34f60b5\",\"s\":\"XwTW9isox0l5zlPtW2LzyIjwBOnC+978swsMFkyIebcK9EaW1uczb4oidys57hDfBsRbQCa0pgnZ/b0tSexOJFS8UQKSKBorY3MaT5nF55m1MyDT5CGI36YhHIiNc8/HP8wKulpTpQK49iT/5YTH3jvkiGUqQCFFSGdfDutsc/Q3Yqtte4tniRgm1nGsX1VwL6jZKQ3pGxxcSXnC2u+wwDqThZLb263Hl9/Ut4Wpq8sxSaXgtfx3JzIpMbQQrptl58u85t0+T8leS/1M6My3Ebvw4qlpAk16TZaI2SruLcsdEwuWut2v0odZyNwN0V/RCYfiV2N6EDtnU1r3F9vLiQ==\"}]}"
+    ]
+  },
+  "wallet": {
+    "orgId": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "ringKeyHex": "7777777777777777777777777777777777777777777777777777777777777777",
+    "keyHex": "f48c8fe63ea240b66fedb99c2c3b834c38a4721b1e042d28a319f14d76557ec4",
+    "keyVersion": 2,
+    "version": 7,
+    "nonceHex": "454545454545454545454545",
+    "wallet": {
+      "v": 1,
+      "vouchers": [
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "bcd0ac6aa19c48013484f32bd997596596933c07a59c3dd45ba1fbad233d6437",
+          "n": "bf11c21683b5a73626fd45bcd349505a7a572b99c42fc00df430903343462b3f",
+          "s": "fQ+aGLyKL3d6rge79UeT8UKxRDnb2Kvqxk7fWuJ9mwGXtEJoFKFEXnuJLosgJ3uf8Y8SR/ITnaJM/XxXbvvVSkz9OIiRKPyjXoaw6o9xMoaw++Y1GSg0MF1ZMIuXTTimqZd8ByjyJlcGrz98fePnQOr+7d6pwkOv1KJgwqTcijLs7VhWbDqiEnivT6FErUc/uL6/xhhtjbmhVhdGFhhFvDsACkW3GTPO3mpzcipq1XGQCHZNx5lrw1rird1xbGlyPNXvn+C/f3aIcRO5Rbz++uZcPrGEGJsQMydhAi+uSV4qZw5BpJfJ5CwGMwsa8qXZL5mlQoteTyE2v4WmnACazg=="
+        },
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "daec633d11d8bfe209f60e2cfb74e37d14480cb5f330c86f446c1327c81008e3",
+          "n": "ee8cf39f10f4c252ad344545326bd1b19976cc0da98ee4719fb88e44e54cc159",
+          "s": "n1bETCmQDNCwx8rqH+k/kAIA/BuYPLFtA5a4P3JBrXKzK5FAnKs3Y/Zlm4Ig3IScEEOhQ4TT6B8jZOUJ+AaYA68vaqTjdbcocjd+2/W7xeZk/Sksk9VWrZHRH2qGJE3siuYlOdqGvueGvk55WgkmeemydBT5f3YCS08iKu60rO1ZyR1mxFH8PlIZzDzTQWItr0DgDtdGckDFwWL+hAvdx6GifsG2QIgyHzcPNeOejKp0NSXliM3EaPNzYr2eG7siBd5IIfJn7jfJ2r9Q68W4O5OFlfD46u5Q6hMXvk2A1FxBLdIfZo//ZNi9hZ8OmuAHvKakGQ9ri/2nd8FS16+xPA=="
+        }
+      ],
+      "spent": [],
+      "settings": {
+        "seats": 3,
+        "autoPay": true,
+        "overageCapUnits": 10,
+        "updatedAt": 1763000000000
+      },
+      "overage": {
+        "period": "2026-11",
+        "units": 5
+      }
+    },
+    "plaintext": "{\"overage\":{\"period\":\"2026-11\",\"units\":5},\"pad\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"settings\":{\"autoPay\":true,\"overageCapUnits\":10,\"seats\":3,\"updatedAt\":1763000000000},\"spent\":[],\"v\":1,\"vouchers\":[{\"k\":\"8b74a89d9ba741d4\",\"n\":\"bf11c21683b5a73626fd45bcd349505a7a572b99c42fc00df430903343462b3f\",\"p\":\"bcd0ac6aa19c48013484f32bd997596596933c07a59c3dd45ba1fbad233d6437\",\"s\":\"fQ+aGLyKL3d6rge79UeT8UKxRDnb2Kvqxk7fWuJ9mwGXtEJoFKFEXnuJLosgJ3uf8Y8SR/ITnaJM/XxXbvvVSkz9OIiRKPyjXoaw6o9xMoaw++Y1GSg0MF1ZMIuXTTimqZd8ByjyJlcGrz98fePnQOr+7d6pwkOv1KJgwqTcijLs7VhWbDqiEnivT6FErUc/uL6/xhhtjbmhVhdGFhhFvDsACkW3GTPO3mpzcipq1XGQCHZNx5lrw1rird1xbGlyPNXvn+C/f3aIcRO5Rbz++uZcPrGEGJsQMydhAi+uSV4qZw5BpJfJ5CwGMwsa8qXZL5mlQoteTyE2v4WmnACazg==\"},{\"k\":\"8b74a89d9ba741d4\",\"n\":\"ee8cf39f10f4c252ad344545326bd1b19976cc0da98ee4719fb88e44e54cc159\",\"p\":\"daec633d11d8bfe209f60e2cfb74e37d14480cb5f330c86f446c1327c81008e3\",\"s\":\"n1bETCmQDNCwx8rqH+k/kAIA/BuYPLFtA5a4P3JBrXKzK5FAnKs3Y/Zlm4Ig3IScEEOhQ4TT6B8jZOUJ+AaYA68vaqTjdbcocjd+2/W7xeZk/Sksk9VWrZHRH2qGJE3siuYlOdqGvueGvk55WgkmeemydBT5f3YCS08iKu60rO1ZyR1mxFH8PlIZzDzTQWItr0DgDtdGckDFwWL+hAvdx6GifsG2QIgyHzcPNeOejKp0NSXliM3EaPNzYr2eG7siBd5IIfJn7jfJ2r9Q68W4O5OFlfD46u5Q6hMXvk2A1FxBLdIfZo//ZNi9hZ8OmuAHvKakGQ9ri/2nd8FS16+xPA==\"}]}",
+    "plaintextLength": 4096,
+    "sealed": {
+      "version": 7,
+      "keyVersion": 2,
+      "nonce": "454545454545454545454545",
+      "ct": "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"
+    },
+    "blobSha256": "8f2fe152afe522cb1be532838ee17ecde37fe520b56fbe2892f2a729cbd93ef2",
+    "write": {
+      "orgId": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "version": 7,
+      "keyVersion": 2,
+      "blobSha256": "8f2fe152afe522cb1be532838ee17ecde37fe520b56fbe2892f2a729cbd93ef2",
+      "issuedAt": 1763400000000
+    },
+    "writeCanonical": "flagship/org-voucher-wallet-write/v1|0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f|7|2|8f2fe152afe522cb1be532838ee17ecde37fe520b56fbe2892f2a729cbd93ef2|1763400000000"
+  },
+  "merge": {
+    "local": {
+      "v": 1,
+      "vouchers": [
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "daec633d11d8bfe209f60e2cfb74e37d14480cb5f330c86f446c1327c81008e3",
+          "n": "ee8cf39f10f4c252ad344545326bd1b19976cc0da98ee4719fb88e44e54cc159",
+          "s": "n1bETCmQDNCwx8rqH+k/kAIA/BuYPLFtA5a4P3JBrXKzK5FAnKs3Y/Zlm4Ig3IScEEOhQ4TT6B8jZOUJ+AaYA68vaqTjdbcocjd+2/W7xeZk/Sksk9VWrZHRH2qGJE3siuYlOdqGvueGvk55WgkmeemydBT5f3YCS08iKu60rO1ZyR1mxFH8PlIZzDzTQWItr0DgDtdGckDFwWL+hAvdx6GifsG2QIgyHzcPNeOejKp0NSXliM3EaPNzYr2eG7siBd5IIfJn7jfJ2r9Q68W4O5OFlfD46u5Q6hMXvk2A1FxBLdIfZo//ZNi9hZ8OmuAHvKakGQ9ri/2nd8FS16+xPA=="
+        },
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "bcd0ac6aa19c48013484f32bd997596596933c07a59c3dd45ba1fbad233d6437",
+          "n": "bf11c21683b5a73626fd45bcd349505a7a572b99c42fc00df430903343462b3f",
+          "s": "fQ+aGLyKL3d6rge79UeT8UKxRDnb2Kvqxk7fWuJ9mwGXtEJoFKFEXnuJLosgJ3uf8Y8SR/ITnaJM/XxXbvvVSkz9OIiRKPyjXoaw6o9xMoaw++Y1GSg0MF1ZMIuXTTimqZd8ByjyJlcGrz98fePnQOr+7d6pwkOv1KJgwqTcijLs7VhWbDqiEnivT6FErUc/uL6/xhhtjbmhVhdGFhhFvDsACkW3GTPO3mpzcipq1XGQCHZNx5lrw1rird1xbGlyPNXvn+C/f3aIcRO5Rbz++uZcPrGEGJsQMydhAi+uSV4qZw5BpJfJ5CwGMwsa8qXZL5mlQoteTyE2v4WmnACazg=="
+        }
+      ],
+      "spent": [],
+      "settings": {
+        "seats": 3,
+        "autoPay": true,
+        "overageCapUnits": 10,
+        "updatedAt": 100
+      },
+      "overage": {
+        "period": "2026-10",
+        "units": 10
+      }
+    },
+    "remote": {
+      "v": 1,
+      "vouchers": [
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "bcd0ac6aa19c48013484f32bd997596596933c07a59c3dd45ba1fbad233d6437",
+          "n": "bf11c21683b5a73626fd45bcd349505a7a572b99c42fc00df430903343462b3f",
+          "s": "fQ+aGLyKL3d6rge79UeT8UKxRDnb2Kvqxk7fWuJ9mwGXtEJoFKFEXnuJLosgJ3uf8Y8SR/ITnaJM/XxXbvvVSkz9OIiRKPyjXoaw6o9xMoaw++Y1GSg0MF1ZMIuXTTimqZd8ByjyJlcGrz98fePnQOr+7d6pwkOv1KJgwqTcijLs7VhWbDqiEnivT6FErUc/uL6/xhhtjbmhVhdGFhhFvDsACkW3GTPO3mpzcipq1XGQCHZNx5lrw1rird1xbGlyPNXvn+C/f3aIcRO5Rbz++uZcPrGEGJsQMydhAi+uSV4qZw5BpJfJ5CwGMwsa8qXZL5mlQoteTyE2v4WmnACazg=="
+        },
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "906e8d2e68d90a19ec04aa432d8195c947d62b23f75179f6f9da0080a34f60b5",
+          "n": "8768721098fda1d0e4e201174324209e7a81828bfc73fc6469df35f0024c13aa",
+          "s": "XwTW9isox0l5zlPtW2LzyIjwBOnC+978swsMFkyIebcK9EaW1uczb4oidys57hDfBsRbQCa0pgnZ/b0tSexOJFS8UQKSKBorY3MaT5nF55m1MyDT5CGI36YhHIiNc8/HP8wKulpTpQK49iT/5YTH3jvkiGUqQCFFSGdfDutsc/Q3Yqtte4tniRgm1nGsX1VwL6jZKQ3pGxxcSXnC2u+wwDqThZLb263Hl9/Ut4Wpq8sxSaXgtfx3JzIpMbQQrptl58u85t0+T8leS/1M6My3Ebvw4qlpAk16TZaI2SruLcsdEwuWut2v0odZyNwN0V/RCYfiV2N6EDtnU1r3F9vLiQ=="
+        }
+      ],
+      "spent": [
+        "f935effe83c2a376ef957560a559ed0282de5f041129496711da650a3003dc23"
+      ],
+      "settings": {
+        "seats": 5,
+        "autoPay": false,
+        "overageCapUnits": 20,
+        "updatedAt": 200
+      },
+      "overage": {
+        "period": "2026-11",
+        "units": 5
+      }
+    },
+    "merged": {
+      "v": 1,
+      "vouchers": [
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "906e8d2e68d90a19ec04aa432d8195c947d62b23f75179f6f9da0080a34f60b5",
+          "n": "8768721098fda1d0e4e201174324209e7a81828bfc73fc6469df35f0024c13aa",
+          "s": "XwTW9isox0l5zlPtW2LzyIjwBOnC+978swsMFkyIebcK9EaW1uczb4oidys57hDfBsRbQCa0pgnZ/b0tSexOJFS8UQKSKBorY3MaT5nF55m1MyDT5CGI36YhHIiNc8/HP8wKulpTpQK49iT/5YTH3jvkiGUqQCFFSGdfDutsc/Q3Yqtte4tniRgm1nGsX1VwL6jZKQ3pGxxcSXnC2u+wwDqThZLb263Hl9/Ut4Wpq8sxSaXgtfx3JzIpMbQQrptl58u85t0+T8leS/1M6My3Ebvw4qlpAk16TZaI2SruLcsdEwuWut2v0odZyNwN0V/RCYfiV2N6EDtnU1r3F9vLiQ=="
+        },
+        {
+          "k": "8b74a89d9ba741d4",
+          "p": "daec633d11d8bfe209f60e2cfb74e37d14480cb5f330c86f446c1327c81008e3",
+          "n": "ee8cf39f10f4c252ad344545326bd1b19976cc0da98ee4719fb88e44e54cc159",
+          "s": "n1bETCmQDNCwx8rqH+k/kAIA/BuYPLFtA5a4P3JBrXKzK5FAnKs3Y/Zlm4Ig3IScEEOhQ4TT6B8jZOUJ+AaYA68vaqTjdbcocjd+2/W7xeZk/Sksk9VWrZHRH2qGJE3siuYlOdqGvueGvk55WgkmeemydBT5f3YCS08iKu60rO1ZyR1mxFH8PlIZzDzTQWItr0DgDtdGckDFwWL+hAvdx6GifsG2QIgyHzcPNeOejKp0NSXliM3EaPNzYr2eG7siBd5IIfJn7jfJ2r9Q68W4O5OFlfD46u5Q6hMXvk2A1FxBLdIfZo//ZNi9hZ8OmuAHvKakGQ9ri/2nd8FS16+xPA=="
+        }
+      ],
+      "spent": [
+        "f935effe83c2a376ef957560a559ed0282de5f041129496711da650a3003dc23"
+      ],
+      "settings": {
+        "seats": 5,
+        "autoPay": false,
+        "overageCapUnits": 20,
+        "updatedAt": 200
+      },
+      "overage": {
+        "period": "2026-11",
+        "units": 5
+      }
+    }
+  }
+}
