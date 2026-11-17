@@ -1520,3 +1520,4 @@ Three agents started:
   `servingAuthority.ts`) and predate it; `tsc -b` is the gate.
 - Resume point for 0.4/ci: merge it into `release/0.4`, then tick F6 (owner steps pending), F11 and F15 above.
 - Merged 0.4/ci: CI green on iOS and Android; F6 broker path; F15 loop fixes; iOS 'Call ended' at launch fixed (CallKit reset); PolishRules fixed. main's iOS workflow has been red since 2026-11-06 (it goes green when release/0.4 lands).
+- Owner correction, 2026-11-17: the enterprise features go in 0.4, not 0.5. Agent on 0.4/business: the Business plan at $6/seat (min 3), org gating, a 10-seat 30-day trial, the org wallet, and invoiced blind voucher batches, with the plans doc's recommended answers as provisional defaults. Cluster backup and Vault stay in 0.5 unless the owner says otherwise.
