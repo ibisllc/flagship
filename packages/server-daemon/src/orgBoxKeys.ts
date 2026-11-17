@@ -28,6 +28,7 @@ import {
   verifyOrgInstallBlob,
   type OrgInstallBlob,
   type OrgKeyKind,
+  type OrgKeyRing,
   type OrgKeyRingBundle,
   type OrgKeyRings,
 } from "@flagship/protocol";
@@ -150,27 +151,16 @@ export async function adoptOrgKeys(dataDir: string, rings: OrgKeyRings, serverDo
 }
 
 /**
- * Every version of the org CGK above `after` that is sealed to this box, oldest first, opened with the box's
- * KEM key. keyd takes them one at a time (each must be one version up and link to the one it holds), so a box
- * that missed some rotations hands each in turn. Stops at the first version that does not open.
+ * The org CGK ring versions strictly between `held` and `target` (the rings only, oldest first), which keyd needs
+ * to check that the newest version links back to the ring it holds (05c review F4). Empty when one is missing.
  */
-export async function openOrgCgkVersionsAfter(
-  dataDir: string,
-  rings: OrgKeyRings,
-  serverDomain: string,
-  after: number,
-): Promise<Array<{ bundle: OrgKeyRingBundle; key: Uint8Array }>> {
-  const me = `box:${serverDomain}`;
+export function cgkRingsBetween(rings: OrgKeyRings, held: number, target: number): OrgKeyRing[] {
   const chain = rings.chains.get(orgKeyChainId("cgk", "*")) ?? [];
-  const { kemSecret } = orgKemKeyPair(await orgBoxKemSeed(dataDir));
-  const out: Array<{ bundle: OrgKeyRingBundle; key: Uint8Array }> = [];
-  for (const b of chain) {
-    if (b.ring.version <= after || !b.recipients.some((x) => x.recipient === me)) continue;
-    try {
-      out.push({ bundle: b, key: openOrgKeyRing(b, me, kemSecret) });
-    } catch {
-      break;
-    }
+  const out: OrgKeyRing[] = [];
+  for (let v = held + 1; v < target; v++) {
+    const b = chain.find((x) => x.ring.version === v);
+    if (!b) return [];
+    out.push(b.ring);
   }
   return out;
 }

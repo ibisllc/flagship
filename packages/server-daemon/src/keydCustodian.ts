@@ -256,7 +256,7 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
    * A rotated org CGK: keyd replays the org chain from the genesis it pinned, checks the ring's org
    * approval, version and commitment itself (packages/keyd/src/orgCgk.ts), then switches.
    */
-  adoptOrgCgk(args: { chain: unknown[]; ring: unknown; recipients: unknown[]; approvals: unknown[]; key: Bytes }): number {
+  adoptOrgCgk(args: { chain: unknown[]; ring: unknown; recipients: unknown[]; approvals: unknown[]; key: Bytes; between?: unknown[] }): number {
     const r = this.#client.call("cgk.orgAdopt", { ...args, key: hex(args.key) }) as { version?: number };
     this.#hasCgk = true;
     return Number(r.version);

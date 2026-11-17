@@ -659,7 +659,7 @@ export class KeydService {
       }
       case "cgk.orgAdopt": {
         // A rotated org CGK, only on evidence keyd checks itself (orgCgk.ts): never the daemon's word.
-        noExtraArgs(a, ["chain", "ring", "recipients", "approvals", "key"]);
+        noExtraArgs(a, ["chain", "ring", "recipients", "approvals", "key", "between"]);
         if (!this.#orgPin) throw new KeydError("forbidden", "no org is pinned for this box");
         let adopted: ReturnType<typeof verifyOrgCgkAdoption>;
         try {
