@@ -889,7 +889,7 @@ State (2026-11-16, `release/0.4` at `4bb402875` + this entry): every agent branc
 - org directory with SCIM/LDAP connectors (all three apps);
 - restore, enterprise, retail, cloud fixes; terms and privacy wording for 0.4.
 
-Shell **v226**; D1 migrations up to **0150**. Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
+Shell **v226**; D1 migrations up to **0151** (0151: voi.ci call-key per-account revocations, 05c review F1). Parity 0 red. Nothing is deployed; only `main` deploys. No agent is
 running.
 
 Next steps for whoever resumes:
@@ -1186,3 +1186,56 @@ Owner at the end: phone-to-phone call test, YubiKey steps (0.2 update notice, ru
   2488 protocol/control-plane/daemon/com tests, 8288 webapp+daemon tests.
 - Owner before launch: delete production's old proxied `*.fshp.app` / `www` records (direct-access doc step 6); set the
   two direct-zone secrets on production `.com`; LE rate-limit request for `fshp.app` (F17).
+
+### 2026-11-17 — 05c adversarial review: findings fixed (branch `0.4/review-fixes`)
+
+The reviewer's failing tests (`037423994`, `649bcdc29`, `9b99f84ce`, `9bd5fef61`) were cherry-picked first
+(`5348ba22f`..`f59e1c05c`), confirmed failing, and now pass. Per finding:
+- **F1 (Medium), `87622b939`:** a binding proves no possession of the call key, so any account could bind and revoke
+  another's key. Only a self-signed (P-256) revocation stays global; an owner-signed one goes to the new
+  `voici_call_key_account_revocations` (D1 **0151**, in `KNOWN_MIGRATIONS`) and refuses the key for that account only.
+  `isCallKeyRevoked(username, key)`. Tests in `voiciCallKeys.test.ts` (incl. bind-then-revoke by another account).
+- **F6 (Low), `87622b939`:** a call-key join is claimed in the nonce store per (call, key) until it can no longer
+  verify; decline stays ringing-only (room test). Note: a failed room fetch after the claim burns that join; the
+  apps do not reconnect today.
+- **F2, F8 (Medium, Low), `496566e6e`:** SCIM stores and the engine's users/links are null-prototype, read by own
+  property; `__proto__`/`constructor`/`prototype` are never ids; older files are rebuilt on load.
+- **F3 (Medium), `496566e6e`:** `linkSeats` links only on a proposal under the connector's own key, a decision and an
+  invite each approved by an org admin under the pinned chain, the decision naming that proposal, the seat in the
+  pinned book. `.com` `/seats` now serves the invites' approvals. The old happy-path test carries real approvals.
+- **F7 (Low), `496566e6e`, `e39434dcd`:** PATCH works on a copy, swapped in only when every op is valid; PUT/PATCH
+  refuse a duplicate `userName` (and group `displayName`), checked only when the name changes.
+- **F9 (Low):** already closed by `0987698d5` (closed resource set); test added. Refused (401) SCIM requests now add at
+  most one Activity line a minute (`e39434dcd`).
+- **F5 (Medium), `663d8f9cd`, `e39434dcd`:** `.com` keeps every logged head and registration and the export carries
+  them (`boxLogHeadHistory`, `registrations`); the verifier fails on a logged one that is missing or a served head that
+  is not the last logged; `--previous <older export>` makes the CLI check the log extends it and no head went back.
+  The export serves each server's last logged head (no false failure from a head stored mid-read).
+- **F4 (Medium), `697ad06e4`, `e39434dcd`, `025e110f6` (TS and Rust keyd):** every signer must still be an org admin
+  with the same keys in the newest record shown, and an approval under an older record must predate the next one
+  (`stale-oar`). keyd keeps its chain head (`oarVersion`, `oarHash`), moved forward by each adoption and by a new op
+  `org.head` that the daemon calls with its pinned chain at every sync; a chain below or forking from it is refused
+  (`stale-chain`). Once it holds a ring, the one it takes must link back by `prevSha256` through `between` (the
+  versions in between; `version-gap`, `prev-hash`). 10 new shared vector cases, both backends.
+- **F10, F11 (Info): left as they are.** F10: the root re-check in the retail claim helper reads state the claim
+  user owns, so it adds nothing against a compromised claim service; the doc should stop calling it a defence, or
+  bind the recipe to `.com`'s claim receipt. F11: Rust refuses binding `"v": 1.0`, which TS accepts (fails closed).
+
+Independent check (fresh agent, diff + report only): F1, F2, F3, F6, F8 and F9 held. It found an F4 bypass (keyd's head
+moved only on adoption; a version jump skipped the link), then, on recheck, that adopting one version at a time could
+lock the CGK when an intermediate version's approver had left. Both are fixed (`e39434dcd`, `025e110f6`). It also
+found regressions in F7 (a stored duplicate blocked `active=false`), F5 (the mid-export race; `--previous` after a
+re-registration) and the SCIM 401 flood; all are fixed in `e39434dcd`.
+Remaining limits, for the owner:
+- keyd has no fresh source of the chain head of its own. A daemon that is compromised, or a `.com` that withholds
+  the removal record, before the box syncs that record can still use a truncated chain. A signed, fresh head
+  attestation would close this.
+- `.com` could invent a re-registration under an STK it controls, because the server code names domain and serial,
+  not the STK.
+- After a real re-registration the old box's head is served until the new box posts one.
+
+Checks after rebasing on `89084c81d`: `tsc -b`, `npm run i18n`, parity 0 red, vitest over control-plane, storage,
+protocol, keyd, server-daemon, apps/com, org-audit and adversarial: 12217 passed, 1 failed. The failure is the known
+`cronBudget.test.ts` (pre-existing on this Mac). Rust: clippy `-D warnings` clean and `cargo test --workspace --locked` green (120 suites).
+`relay_core` `http_surface` failed once under load earlier and passed on rerun. Nothing is deployed. Migration 0151 joins the
+`.com` deploy list.
