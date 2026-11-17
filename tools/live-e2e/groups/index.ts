@@ -18,6 +18,8 @@ import { mcpIde } from "./mcpIde.js";
 import { migrate } from "./migrate.js";
 import { namedLinks } from "./namedLinks.js";
 import { oneList } from "./oneList.js";
+import { ohttpFailure } from "./ohttpFailure.js";
+import { outboundProxy } from "./outboundProxy.js";
 import { quota } from "./quota.js";
 import { realAccount } from "./realAccount.js";
 import { remote } from "./remote.js";
@@ -26,6 +28,7 @@ import { serverOrder } from "./serverOrder.js";
 import { share } from "./share.js";
 import type { Group } from "./types.js";
 import { update } from "./update.js";
+import { vouchers } from "./vouchers.js";
 import { RELEASE_03_GROUPS } from "./release03/index.js";
 
 export type { Group, GroupCtx, Slot } from "./types.js";
@@ -56,6 +59,9 @@ export const GROUPS: Group[] = [
   oneList,
   namedLinks,
   directAccess,
+  vouchers,
+  outboundProxy,
+  ohttpFailure,
   update,
   lifecycle,
   ...RELEASE_03_GROUPS,
