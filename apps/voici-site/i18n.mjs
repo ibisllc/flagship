@@ -44,6 +44,8 @@ const KEEP = new Map([
   // the worker's fallback when IndexedDB holds no notice; flagship-web's enableReplyAlerts stores the localized
   // {title, body} (t("You have a reply on voi.ci.")) before it subscribes, so a visitor never sees this one
   ["sw.js", new Set(["You have a reply on voi.ci."])],
+  // the stores' own names, shown as each store spells them in every language
+  ["front.js", new Set(["App Store", "Google Play"])],
 ]);
 /** The hard-coded text in one source file's lines (`f` names the file in the messages and in KEEP). */
 export function hardCodedIn(f, source) {

@@ -141,6 +141,15 @@ describe("voi.ci renderer", () => {
     expect([...closed.walk()].some((e) => (e.getAttribute("class") ?? "").includes("message-cta"))).toBe(false);
   });
 
+  it("the footer offers a visitor a page of their own, on the front door of this voi.ci (docs/voici-front-door.md)", () => {
+    const own = (host: string) => [...page({ host }).walk()].filter((e) => e.getAttribute("class") === "make-own");
+    expect(own("voi.ci")).toHaveLength(1);
+    expect(own("voi.ci")[0]!.getAttribute("href")).toBe("https://voi.ci/");
+    expect(own("voi.ci")[0]!.textContent).toContain("Make your own page");
+    expect(own("gym.voi.ci")[0]!.getAttribute("href")).toBe("https://gym.voi.ci/");
+    expect(own("voi.ci")[0]!.getAttribute("target")).toBeNull();
+  });
+
   it("the dom helper refuses event-handler and unknown attributes and unsafe URLs", () => {
     const doc = new FakeDoc() as unknown as Document;
     expect(() => h(doc, "a", { onclick: "x" } as never)).toThrow();

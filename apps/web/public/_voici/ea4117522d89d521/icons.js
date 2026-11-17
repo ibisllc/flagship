@@ -17,6 +17,7 @@ const PATHS = {
   lock: ["M7 11V8.5a5 5 0 0 1 10 0V11", "M5.5 11h13v9h-13z"],
   alert: ["M12 4 21 19.5H3z", "M12 10v4.5", "M12 17.2v.3"],
   globe: ["M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Z", "M3.5 12h17", "M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5Z"],
+  moon: ["M19.5 14.6A8 8 0 1 1 9.4 4.5a6.5 6.5 0 0 0 10.1 10.1Z"],
   bell: ["M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z", "M10 20.5a2.2 2.2 0 0 0 4 0"],
   call: ["M8.2 4.5 6 4.6a2 2 0 0 0-1.9 2.2 14.5 14.5 0 0 0 13.1 13.1 2 2 0 0 0 2.2-1.9l.1-2.2a1 1 0 0 0-.8-1l-3.1-.7a1 1 0 0 0-1 .4l-1.1 1.5a11 11 0 0 1-5-5l1.5-1.1a1 1 0 0 0 .4-1l-.7-3.1a1 1 0 0 0-1-.8Z"],
   phone: ["M8.5 3.5h7a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 7 19V5a1.5 1.5 0 0 1 1.5-1.5Z", "M11 17.5h2"],
@@ -32,6 +33,9 @@ const PATHS = {
   contract: ["M9 4v5H4", "M15 4v5h5", "M9 20v-5H4", "M15 20v-5h5"],
   pip: ["M3.5 5.5h17v13h-17z", "M12 12h6.5v5H12z"],
 };
+
+/** The paths themselves, for the front door rendered at build time (front.js). */
+export const ICON_PATHS = PATHS;
 
 export function icon(doc, name, cls = "icon") {
   const d = PATHS[name] ?? PATHS.link;

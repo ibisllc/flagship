@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { OUT, buildSite } from "../build.mjs";
+import { parseAcceptLanguage, pickLanguage } from "../src/lang.js";
 import { M, SAMPLE_USERS, sampleThread, samplePage } from "./fixture.mjs";
 
 const TYPES = { ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
@@ -55,7 +56,7 @@ export function startDevServer({ port = 4173, images = {} } = {}) {
     const url = new URL(req.url, origin);
     const p = url.pathname;
     let m;
-    if ((m = /^\/_\/([0-9a-f]{16})\/(.+)$/.exec(p)) && m[1] === build.dir) {
+    if ((m = /^\/-\/([0-9a-f]{16})\/(.+)$/.exec(p)) && m[1] === build.dir) {
       const f = join(OUT, m[1], m[2]);
       if (!existsSync(f) || !build.files.has(m[2])) return json(res, 404, { error: "not found" });
       res.writeHead(200, { ...headers, "content-type": TYPES[f.slice(f.lastIndexOf("."))] ?? "application/octet-stream" });
@@ -93,7 +94,15 @@ export function startDevServer({ port = 4173, images = {} } = {}) {
       return json(res, 200, { items: threads.get(body.conv) ?? [], next: "" });
     }
     if (p === "/api/voici/reports" && req.method === "POST") return json(res, 200, { ok: true });
-    if (p === "/" || p === "/favicon.ico") return json(res, 404, { error: "not found" });
+    if (p === "/") {
+      // The front door (docs/voici-front-door.md), filled as the Worker fills it, in the language it would pick.
+      const codes = Object.keys(build.front);
+      const q = url.searchParams.get("lang");
+      const lang = q && codes.includes(q) ? q : pickLanguage(parseAcceptLanguage(req.headers["accept-language"]), codes);
+      res.writeHead(200, { ...headers, "content-type": "text/html; charset=utf-8", "content-language": lang });
+      return res.end(build.front[lang].replaceAll("%ORIGIN%", origin).replaceAll("%APEX%", `127.0.0.1:${port}`));
+    }
+    if (p === "/favicon.ico") return json(res, 404, { error: "not found" });
     res.writeHead(200, { ...headers, "content-type": "text/html; charset=utf-8" });
     res.end(shell);
   });
