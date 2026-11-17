@@ -135,11 +135,7 @@ struct DirectAccessCard: View {
     private func form(_ vm: DirectAccessViewModel, c: FSColors) -> some View {
         @Bindable var vm = vm
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(DirectAccessViewModel.warning)
-                .font(FS.font.caption().weight(.semibold))
-                .foregroundColor(c.danger)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("sd-direct-access-warning")
+            FSCallout(DirectAccessViewModel.warning, tone: .warning, identifier: "sd-direct-access-warning")
             Text("Public addresses (an IPv4 forwarded on your router, or a fixed IPv6), one per line")
                 .font(FS.font.caption()).foregroundColor(c.textMuted)
             TextField("81.2.69.142", text: $vm.addressesText, axis: .vertical)
