@@ -93,6 +93,8 @@ data class SmokeModeConfig(
     val retail: String? = null,
     /** The Home box's outbound proxy scenario (GymSeams.proxy). */
     val proxy: String? = null,
+    /** An org's Business plan against the mock `.com` (GymSeams.orgPlan): trial | paid | lapsed, "-member" for a non-admin seat. */
+    val orgPlan: String? = null,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -121,6 +123,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_SEPARATE_LISTS = "flagship.smokeSeparateLists"
         const val EXTRA_SMOKE_RETAIL = "flagship.smokeRetail"
         const val EXTRA_SMOKE_PROXY = "flagship.smokeProxy"
+        const val EXTRA_SMOKE_ORG_PLAN = "flagship.smokeOrgPlan"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -165,6 +168,8 @@ data class SmokeModeConfig(
                 retail = intent.getStringExtra(EXTRA_SMOKE_RETAIL)?.trim()?.takeIf { it.isNotEmpty() },
                 proxy = intent.getStringExtra(EXTRA_SMOKE_PROXY)?.trim()?.lowercase()
                     ?.takeIf { Regex("^(failing|fallback)-(unreachable|auth|refused|protocol|down)$").matches(it) },
+                orgPlan = intent.getStringExtra(EXTRA_SMOKE_ORG_PLAN)?.trim()?.lowercase()
+                    ?.takeIf { Regex("^(trial|paid|lapsed)(-member)?$").matches(it) },
             )
         }
     }
@@ -246,6 +251,7 @@ object SmokeMode {
         GymSeams.deviceRank = config.deviceRank
         GymSeams.rescueScenario = config.rescue
         GymSeams.retail = config.retail
+        GymSeams.orgPlan = config.orgPlan
         GymSeams.bypassBiometricGates = !config.realBiometrics
         GymSeams.refuseBiometricGates = config.refuseBiometrics
         if (config.realBiometrics) appState.setRequireBiometricAtLaunch(true)

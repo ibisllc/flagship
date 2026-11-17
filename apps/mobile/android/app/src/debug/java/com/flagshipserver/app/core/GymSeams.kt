@@ -105,6 +105,10 @@ object GymSeams {
     @Volatile
     var retail: String? = null
 
+    /** An org's Business plan against the mock `.com` (MockOrgPlan): trial | paid | lapsed, "-member" for a non-admin seat. */
+    @Volatile
+    var orgPlan: String? = null
+
     /** Back to production behaviour (a launch without the gym's extras). */
     fun reset() {
         forceAdminRoot = false
@@ -120,5 +124,6 @@ object GymSeams {
         noticeFetcher = null
         rescueScenario = null
         retail = null
+        orgPlan = null
     }
 }
