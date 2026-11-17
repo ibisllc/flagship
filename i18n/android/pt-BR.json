@@ -3234,8 +3234,6 @@
   "voici_publish_reason": "Publicar sua página",
   "voici_your_page": "Sua página",
   "voici_waiting_for_admin": "Aguardando um dispositivo administrador publicar",
-  "voici_segment_messages": "Mensagens",
-  "voici_segment_requests": "Solicitações (%1$d)",
   "voici_segment_requests_none": "Solicitações",
   "voici_visitor_name": "Visitante %1$s",
   "voici_empty_requests": "Nenhuma solicitação de mensagem.",
@@ -3633,7 +3631,6 @@
   "voici_rotate_short": "Trocar",
   "voici_publishing_page": "Publicando sua página…",
   "voici_reply_footer": "Suas conversas com outras páginas ficam no voi.ci.",
-  "voici_segment_conversations": "Conversas",
   "voici_empty_messages_options": "Ainda não há mensagens. Ative Aceitar mensagens em Opções da página para recebê-las.",
   "push_service": "Serviço de notificações push",
   "push_service_unifiedpush": "UnifiedPush",
@@ -4179,5 +4176,16 @@
   "voici_calls_hours_switch": "Só em certos horários",
   "voici_calls_hours_footer": "Fora desses horários as chamadas não tocam em nenhum dos seus dispositivos e viram chamadas perdidas. Só os seus próprios dispositivos conhecem esses horários. Fuso horário: %1$s.",
   "voici_first_publish_defaults": "Mensagens e chamadas de pessoas conectadas com o Flagship estão ativadas. Você pode desativá-las em Opções da página.",
-  "voici_calls_from_signed_in_note": "Quem liga entra com o Flagship. A pessoa continua anônima para você."
+  "voici_calls_from_signed_in_note": "Quem liga entra com o Flagship. A pessoa continua anônima para você.",
+  "social_inbox": "Entrada",
+  "social_who_to_call": "Para quem ligar",
+  "social_who_to_call_hint": "Nome de usuário ou link do voi.ci",
+  "social_call_target_invalid": "Digite um nome de usuário do voi.ci, como voi.ci/alex.",
+  "social_call_target_no_page": "Não há nenhuma página em voi.ci/%1$s.",
+  "social_call_target_no_calls": "voi.ci/%1$s não aceita chamadas.",
+  "social_count_new": {
+    "one": "%1$d novo",
+    "other": "%1$d novos"
+  },
+  "social_first_post": "Olá. Estou usando o app Flagship, do flagshipserver.com"
 }

@@ -3236,8 +3236,6 @@
     <string name="voici_publish_reason">Publicar tu página</string>
     <string name="voici_your_page">Tu página</string>
     <string name="voici_waiting_for_admin">Esperando a que un dispositivo administrador publique</string>
-    <string name="voici_segment_messages">Mensajes</string>
-    <string name="voici_segment_requests">Solicitudes (%1$d)</string>
     <string name="voici_segment_requests_none">Solicitudes</string>
     <string name="voici_visitor_name">Visitante %1$s</string>
     <string name="voici_empty_requests">No hay solicitudes de mensajes.</string>
@@ -3635,7 +3633,6 @@
     <string name="voici_rotate_short">Cambiar</string>
     <string name="voici_publishing_page">Publicando tu página…</string>
     <string name="voici_reply_footer">Tus conversaciones con otras páginas están en voi.ci.</string>
-    <string name="voici_segment_conversations">Conversaciones</string>
     <string name="voici_empty_messages_options">Aún no hay mensajes. Activa Aceptar mensajes en Opciones de la página para recibirlos.</string>
     <string name="push_service">Servicio de notificaciones push</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
@@ -4182,4 +4179,15 @@
     <string name="voici_calls_hours_footer">Fuera de este horario las llamadas no suenan en ninguno de tus dispositivos y quedan como llamadas perdidas. Solo tus propios dispositivos conocen este horario. Zona horaria: %1$s.</string>
     <string name="voici_first_publish_defaults">Los mensajes y las llamadas de personas que iniciaron sesión con Flagship están activados. Puedes desactivarlos en Opciones de la página.</string>
     <string name="voici_calls_from_signed_in_note">Quien llama inicia sesión con Flagship. Sigue siendo anónimo para ti.</string>
+    <string name="social_inbox">Recibidos</string>
+    <string name="social_who_to_call">A quién llamar</string>
+    <string name="social_who_to_call_hint">Nombre de usuario o enlace de voi.ci</string>
+    <string name="social_call_target_invalid">Escribe un nombre de usuario de voi.ci, como voi.ci/alex.</string>
+    <string name="social_call_target_no_page">No hay ninguna página en voi.ci/%1$s.</string>
+    <string name="social_call_target_no_calls">voi.ci/%1$s no acepta llamadas.</string>
+    <plurals name="social_count_new">
+        <item quantity="one">%1$d nuevo</item>
+        <item quantity="other">%1$d nuevos</item>
+    </plurals>
+    <string name="social_first_post">Hola. Estoy usando la app Flagship, de flagshipserver.com</string>
 </resources>

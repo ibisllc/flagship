@@ -1,6 +1,7 @@
-// The Social tab (docs/social-tab.md): the account's voi.ci page, drawn as visitors see it and edited in place, and
-// the conversations people started from it. Title row: "Your page", the Public switch, Page options. Under it,
-// Profile / Messages. Changes wait in one bar that shows only while something is unpublished. Mirrors iOS
+// The Social tab (docs/social-tab.md, docs/social-tabs.md): the account's voi.ci page, drawn as visitors see it and
+// edited in place, and the conversations people started from it. Title row: "Your page", the Public switch, Page
+// options. Under it, Profile / Inbox / Requests, each with its red count; a round call button floats in the corner
+// and opens Calls. Changes wait in one bar that shows only while something is unpublished. Mirrors iOS
 // SocialTab.swift and PageEditorScreen.swift.
 
 package com.flagshipserver.app.ui.screens
@@ -37,6 +38,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.Add
@@ -55,6 +57,8 @@ import androidx.compose.material.icons.outlined.NorthEast
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -96,7 +100,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -142,11 +150,30 @@ import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
-/** Which side of the Social tab shows; deep links set it (`messages` → Messages, `page-editor` → Profile). */
+/** Which side of the Social tab shows; deep links set it (`messages` → Inbox or Requests, `page-editor` → Profile). */
 object SocialSection {
     const val PROFILE = "profile"
-    const val MESSAGES = "messages"
+    const val INBOX = "inbox"
+    const val REQUESTS = "requests"
     val current = MutableStateFlow(PROFILE)
+}
+
+/** The Social page's counts, read again whenever what they come from moves. */
+@Composable
+fun rememberSocialCounts(center: VoiciCenter): com.flagshipserver.app.core.voici.SocialCounts {
+    val ui by center.messages.collectAsState()
+    val calls by center.callHistoryVersion.collectAsState()
+    val seen by center.seenVersion.collectAsState()
+    return remember(ui, calls, seen) { center.socialCounts() }
+}
+
+/** A red count circle (docs/social-tabs.md): nothing at 0, "99+" past 99. */
+@Composable
+fun CountBadge(count: Int, modifier: Modifier = Modifier) {
+    if (count <= 0) return
+    Badge(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError, modifier = modifier) {
+        Text(if (count > 99) "99+" else count.toString())
+    }
 }
 
 private enum class PageField { Name, Bio }
@@ -177,8 +204,21 @@ fun SocialScreen(nav: NavController) {
     PagePublicDialogs(flow)
 
     val profileSide = section == SocialSection.PROFILE
+    val counts = rememberSocialCounts(center)
+    // The profile box's bottom and the switch's bottom, on screen: once the box has scrolled under the switch, the
+    // compact header shows.
+    var boxBottom by remember { mutableStateOf(Float.MAX_VALUE) }
+    var switchBottom by remember { mutableStateOf(0f) }
+    val collapsed = profileSide && boxBottom < switchBottom
+    LaunchedEffect(profileSide) { if (profileSide) center.profileSeen() }
     FSScreen(
-        title = stringResource(if (profileSide) R.string.voici_your_page else R.string.voici_segment_messages),
+        title = stringResource(
+            when (section) {
+                SocialSection.INBOX -> R.string.social_inbox
+                SocialSection.REQUESTS -> R.string.voici_segment_requests_none
+                else -> R.string.voici_your_page
+            },
+        ),
         titleTag = "social-title",
         subtitle = "voi.ci/${page.username}",
         subtitleTag = "social-address",
@@ -197,7 +237,13 @@ fun SocialScreen(nav: NavController) {
                 Icon(Icons.Outlined.MoreHoriz, contentDescription = stringResource(R.string.voici_page_options))
             }
         },
-        topPinned = { SectionSwitch(section, ui.requests.size) },
+        topPinned = {
+            Column {
+                Box(Modifier.onGloballyPositioned { switchBottom = it.boundsInRoot().bottom }) { SectionSwitch(section, counts) }
+                if (collapsed) CompactHeader(center, page)
+            }
+        },
+        floatingActionButton = { CallButton(counts.missedCalls) { nav.navigate("calls") } },
         bottomBar = {
             PagePublishBar(page, editor.unpublished(page)) {
                 scope.launch { if (editor.commit()) flow.publishAll() }
@@ -209,38 +255,84 @@ fun SocialScreen(nav: NavController) {
         }
         if (page.takenDown) FSNote(VoiciCopy.publishError("taken-down"), Modifier.testTag("page-taken-down"))
         page.error?.let { Text(VoiciCopy.publishError(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("page-publish-error")) }
-        if (profileSide) {
-            PageProfile(center, page, editor, nav)
-        } else {
-            SocialMessages(center, ui, nav)
+        when (section) {
+            SocialSection.INBOX -> SocialConversations(center, ui, nav, requests = false)
+            SocialSection.REQUESTS -> SocialConversations(center, ui, nav, requests = true)
+            else -> PageProfile(center, page, editor, nav) { boxBottom = it }
         }
+        // Room under the last row for the call button.
+        Spacer(Modifier.size(72.dp))
     }
     if (showOptions) PageOptionsSheet(center, page, flow, editor, nav, onDismiss = { showOptions = false }, onError = { toasts.error(it) })
 }
 
-/** Profile / Messages under the title row; Messages carries the number of waiting requests. */
+/** Profile / Inbox / Requests under the title row, each with its red count. */
 @Composable
-private fun SectionSwitch(section: String, requests: Int) {
+private fun SectionSwitch(section: String, counts: com.flagshipserver.app.core.voici.SocialCounts) {
+    val sides = listOf(
+        Triple(SocialSection.PROFILE, R.string.voici_profile, counts.profile),
+        Triple(SocialSection.INBOX, R.string.social_inbox, counts.inbox),
+        Triple(SocialSection.REQUESTS, R.string.voici_segment_requests_none, counts.requests),
+    )
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth()) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = FS.space.s4, vertical = FS.space.s2)) {
-            SegmentedButton(
-                selected = section == SocialSection.PROFILE,
-                onClick = { SocialSection.current.value = SocialSection.PROFILE },
-                shape = SegmentedButtonDefaults.itemShape(0, 2),
-                modifier = Modifier.testTag("social-tab-profile"),
-            ) { Text(stringResource(R.string.voici_profile)) }
-            SegmentedButton(
-                selected = section == SocialSection.MESSAGES,
-                onClick = { SocialSection.current.value = SocialSection.MESSAGES },
-                shape = SegmentedButtonDefaults.itemShape(1, 2),
-                modifier = Modifier.testTag("social-tab-messages"),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    Text(stringResource(R.string.voici_segment_messages))
-                    if (requests > 0) Badge(containerColor = FS.colors.fill, contentColor = FS.colors.onAccent) { Text(requests.toString()) }
+            sides.forEachIndexed { i, (id, label, count) ->
+                val spoken = if (count > 0) pluralStringResource(R.plurals.social_count_new, count, count) else null
+                SegmentedButton(
+                    selected = section == id,
+                    onClick = { SocialSection.current.value = id },
+                    shape = SegmentedButtonDefaults.itemShape(i, sides.size),
+                    icon = {},
+                    modifier = Modifier.testTag("social-tab-$id").semantics { spoken?.let { stateDescription = it } },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        CountBadge(count, Modifier.clearAndSetSemantics {})
+                    }
                 }
             }
         }
+    }
+}
+
+/** The page photo and name, pinned under the switch once the profile box has scrolled away. */
+@Composable
+private fun CompactHeader(center: VoiciCenter, page: VoiciPageUi) {
+    val profile = page.working?.profile
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth().testTag("social-compact-header")) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = FS.space.s4),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+        ) {
+            PageAvatar(center.image(profile?.avatar), 30.dp)
+            Text(
+                profile?.displayName?.ifEmpty { null } ?: page.username,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
+            )
+        }
+    }
+}
+
+/** Round, in the bottom corner over the page; opens Calls. Its count is the missed calls not seen yet. */
+@Composable
+private fun CallButton(missed: Int, onClick: () -> Unit) {
+    val label = stringResource(R.string.voici_calls_header)
+    val spoken = if (missed > 0) pluralStringResource(R.plurals.social_count_new, missed, missed) else null
+    BadgedBox(badge = { CountBadge(missed, Modifier.clearAndSetSemantics {}) }) {
+        FloatingActionButton(
+            onClick = onClick,
+            shape = CircleShape,
+            containerColor = FS.colors.fill,
+            contentColor = FS.colors.onAccent,
+            modifier = Modifier.testTag("social-call-button").semantics {
+                contentDescription = label
+                spoken?.let { stateDescription = it }
+            },
+        ) { Icon(Icons.Filled.Call, contentDescription = null) }
     }
 }
 
@@ -304,7 +396,7 @@ private class PageEditState(private val center: VoiciCenter) {
 
 /** The page drawn as voi.ci draws it, in its theme, minus voi.ci's footer; photo, name and bio edit behind a pencil. */
 @Composable
-private fun PageProfile(center: VoiciCenter, page: VoiciPageUi, editor: PageEditState, nav: NavController) {
+private fun PageProfile(center: VoiciCenter, page: VoiciPageUi, editor: PageEditState, nav: NavController, onBoxBottom: (Float) -> Unit) {
     val working = page.working ?: return
     val t = VoiciPageTheme.of(working.profile.theme, appIsDark())
     val scope = rememberCoroutineScope()
@@ -322,16 +414,16 @@ private fun PageProfile(center: VoiciCenter, page: VoiciPageUi, editor: PageEdit
     }
     val pending = if (page.canPublish) stringResource(R.string.voici_not_published_yet) else stringResource(R.string.voici_waiting_for_admin)
     CompositionLocalProvider(LocalContentColor provides t.ink) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(t.canvas)
-                .border(1.dp, t.rule, RoundedCornerShape(16.dp))
-                .testTag("social-profile"),
-        ) {
+        Column(Modifier.fillMaxWidth().testTag("social-profile"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { onBoxBottom(it.boundsInRoot().bottom) }
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(t.canvas)
+                    .border(1.dp, t.rule, RoundedCornerShape(16.dp))
+                    .testTag("social-profile-box")
+                    .padding(horizontal = 20.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(FS.space.s3),
             ) {
@@ -343,9 +435,7 @@ private fun PageProfile(center: VoiciCenter, page: VoiciPageUi, editor: PageEdit
                     val photoLabel = stringResource(if (working.profile.avatar == null) R.string.voici_add_photo else R.string.voici_change_photo)
                     Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp)) {
                         IconButton(onClick = { photoMenu = true }, modifier = Modifier.testTag("page-edit-photo").semantics { contentDescription = photoLabel }) {
-                            Box(Modifier.size(32.dp).clip(CircleShape).background(t.surface).border(1.dp, t.ruleStrong, CircleShape), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Outlined.Edit, contentDescription = null, tint = t.ink, modifier = Modifier.size(16.dp))
-                            }
+                            PencilCircle(t.ink, t.surface, 32.dp)
                         }
                         DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
                             DropdownMenuItem(
@@ -376,11 +466,15 @@ private fun PageProfile(center: VoiciCenter, page: VoiciPageUi, editor: PageEdit
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                 ) {
-                    Icon(Icons.Outlined.Edit, contentDescription = null, tint = t.muted, modifier = Modifier.size(16.dp))
+                    PencilCircle(t.muted, null, 22.dp)
                     Text(stringResource(if (working.profile.links.isEmpty()) R.string.voici_add_link else R.string.voici_edit_links), color = t.muted, style = MaterialTheme.typography.labelLarge)
                 }
             }
-            PostsBlock(center, page, t, nav)
+            // The posts: their own box below the profile box.
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(t.canvas).border(1.dp, t.rule, RoundedCornerShape(16.dp))
+                    .testTag("social-posts"),
+            ) { PostsBlock(center, page, t, nav) }
         }
     }
     if (editingLinks) EditLinksSheet(working.profile.links, onDismiss = { links ->
@@ -392,8 +486,17 @@ private fun PageProfile(center: VoiciCenter, page: VoiciPageUi, editor: PageEdit
 @Composable
 private fun pencil(t: VoiciPageTheme, label: String, tag: String, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.testTag(tag).semantics { contentDescription = label }) {
-        Icon(Icons.Outlined.Edit, contentDescription = null, tint = t.muted, modifier = Modifier.size(18.dp))
+        PencilCircle(t.muted, null, 26.dp)
     }
+}
+
+/** The standard pencil inside a circle outline (docs/social-tabs.md), on [fill] when it sits over a photo. */
+@Composable
+private fun PencilCircle(tint: androidx.compose.ui.graphics.Color, fill: androidx.compose.ui.graphics.Color?, size: androidx.compose.ui.unit.Dp) {
+    Box(
+        Modifier.size(size).clip(CircleShape).then(if (fill != null) Modifier.background(fill) else Modifier).border(1.5.dp, tint, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { Icon(Icons.Outlined.Edit, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.55f)) }
 }
 
 @Composable
@@ -504,7 +607,6 @@ private fun LinkRow(l: VoiciProfileLink, t: VoiciPageTheme) {
 @Composable
 private fun PostsBlock(center: VoiciCenter, page: VoiciPageUi, t: VoiciPageTheme, nav: NavController) {
     val posts = page.working?.chunks?.flatten()?.sortedByDescending { it.createdAt }.orEmpty()
-    HorizontalDivider(thickness = 1.dp, color = t.rule)
     Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             stringResource(R.string.voici_posts).uppercase(),
@@ -846,23 +948,17 @@ fun PagePublishBar(page: VoiciPageUi, unpublished: Int, onPublish: () -> Unit) {
     }
 }
 
-// ── Messages ──────────────────────────────────────────────────────────────
+// ── Inbox / Requests ──────────────────────────────────────────────────────
 
 @Composable
-private fun SocialMessages(center: VoiciCenter, ui: com.flagshipserver.app.core.voici.VoiciMessagesUi, nav: NavController) {
+private fun SocialConversations(center: VoiciCenter, ui: com.flagshipserver.app.core.voici.VoiciMessagesUi, nav: NavController, requests: Boolean) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var showRequests by rememberSaveable { mutableStateOf(false) }
+    val showRequests = requests
     val replies by center.replyNotices.collectAsState()
     val outgoing by com.flagshipserver.app.calls.VoiciOutgoingCalls.current.collectAsState()
     outgoing?.let { VoiciOutgoingCallPanel(it) }
-    FSGroup {
-        FSRow(
-            title = stringResource(R.string.voici_calls_header),
-            icon = Icons.Outlined.Call,
-            onClick = { nav.navigate("calls") },
-            modifier = Modifier.testTag("messages-calls"),
-        )
+    if (!showRequests) FSGroup {
         FSRow(
             title = stringResource(R.string.voici_my_conversations),
             icon = Icons.Outlined.ChatBubbleOutline,
@@ -891,18 +987,6 @@ private fun SocialMessages(center: VoiciCenter, ui: com.flagshipserver.app.core.
             }
         }
         Text(stringResource(R.string.voici_reply_footer), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        SegmentedButton(
-            selected = !showRequests, onClick = { showRequests = false },
-            shape = SegmentedButtonDefaults.itemShape(0, 2), modifier = Modifier.testTag("messages-segment-messages"),
-        ) { Text(stringResource(R.string.voici_segment_conversations)) }
-        SegmentedButton(
-            selected = showRequests, onClick = { showRequests = true },
-            shape = SegmentedButtonDefaults.itemShape(1, 2), modifier = Modifier.testTag("messages-segment-requests"),
-        ) {
-            Text(if (ui.requests.isEmpty()) stringResource(R.string.voici_segment_requests_none) else stringResource(R.string.voici_segment_requests, ui.requests.size))
-        }
     }
     val list = if (showRequests) ui.requests else ui.accepted
     if (list.isEmpty()) {

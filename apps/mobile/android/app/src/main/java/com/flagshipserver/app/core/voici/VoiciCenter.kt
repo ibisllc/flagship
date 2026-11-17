@@ -1195,6 +1195,26 @@ class VoiciCenter(
     fun callHistory(): List<com.flagshipserver.app.calls.VoiciCallRecord> =
         com.flagshipserver.app.calls.VoiciCallHistory.merge(withLocal { _, _, l -> l.callHistory } ?: emptyList(), _messages.value.missedCalls)
 
+    /** The Social page's red counts (docs/social-tabs.md). Read again when [messages], [callHistoryVersion] or [seenVersion] move. */
+    fun socialCounts(): SocialCounts =
+        SocialCounts.of(_messages.value, callHistory(), withLocal { _, _, l -> l.callsSeenAt } ?: 0L)
+
+    private val _seenVersion = MutableStateFlow(0)
+    /** Bumps when a Social "seen" marker moves. */
+    val seenVersion: StateFlow<Int> = _seenVersion.asStateFlow()
+
+    /** The Calls page opened (or closed): every missed call so far counts as seen. */
+    suspend fun callsSeen() {
+        update { it.copy(callsSeenAt = now()) }
+        _seenVersion.value += 1
+    }
+
+    /** The Profile tab showed. */
+    suspend fun profileSeen() {
+        update { it.copy(profileSeenAt = now()) }
+        _seenVersion.value += 1
+    }
+
     private val _callHistoryVersion = MutableStateFlow(0)
     /** Bumps when a call is recorded, so the history screen reads [callHistory] again. */
     val callHistoryVersion: StateFlow<Int> = _callHistoryVersion.asStateFlow()

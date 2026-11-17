@@ -384,3 +384,19 @@ class VoiciOutgoingCall(
         scope.launch { runCatching { center.recordCall(rec) } }
     }
 }
+
+/**
+ * What the Calls page's "Who to call" field takes: a voi.ci username, `voi.ci/<username>`, `@<username>` or the page's
+ * https link. Phone numbers come later (docs/social-tabs.md). Null when it isn't one. Mirrors iOS VoiciCallTarget.
+ */
+object VoiciCallTargetInput {
+    private val USERNAME = Regex("^[a-z0-9][a-z0-9-]{0,62}$")
+
+    fun username(input: String, voiciHost: String = "voi.ci"): String? {
+        var s = input.trim().lowercase()
+        for (p in listOf("https://", "http://")) if (s.startsWith(p)) s = s.removePrefix(p)
+        for (p in listOf("www.$voiciHost/", "$voiciHost/", "voi.ci/", "@")) if (s.startsWith(p)) s = s.removePrefix(p)
+        s = s.substringBefore('?').substringBefore('#').trimEnd('/')
+        return s.takeIf { USERNAME.matches(it) }
+    }
+}

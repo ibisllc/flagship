@@ -260,16 +260,16 @@ private fun TabContent(selected: RootDestination, padding: PaddingValues) {
     }
 }
 
-/** A tab's icon; Social carries the unread count (docs/social-tab.md). */
+/** A tab's icon; Social carries the total of its four counts (docs/social-tabs.md). */
 @Composable
 private fun TabIcon(dest: RootDestination) {
     val center = com.flagshipserver.app.ui.screens.LocalVoiciCenter.current
-    val unread = if (dest == RootDestination.MESSAGES && center != null) center.messages.collectAsState().value.unreadCount else 0
+    val unread = if (dest == RootDestination.MESSAGES && center != null) com.flagshipserver.app.ui.screens.rememberSocialCounts(center).total else 0
     val glyph: @Composable () -> Unit = {
         Icon(iconFor(dest), contentDescription = labelFor(dest))
     }
     if (unread > 0) {
-        androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text(unread.toString()) } }) { glyph() }
+        androidx.compose.material3.BadgedBox(badge = { com.flagshipserver.app.ui.screens.CountBadge(unread) }) { glyph() }
     } else {
         glyph()
     }

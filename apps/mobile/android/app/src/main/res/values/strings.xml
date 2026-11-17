@@ -3240,8 +3240,6 @@
     <string name="voici_publish_reason">Publish your page</string>
     <string name="voici_your_page">Your page</string>
     <string name="voici_waiting_for_admin">Waiting for an admin device to publish</string>
-    <string name="voici_segment_messages">Messages</string>
-    <string name="voici_segment_requests">Requests (%1$d)</string>
     <string name="voici_segment_requests_none">Requests</string>
     <string name="voici_visitor_name">Visitor %1$s</string>
     <string name="voici_empty_requests">No message requests.</string>
@@ -3640,7 +3638,6 @@
     <string name="voici_rotate_short">Rotate</string>
     <string name="voici_publishing_page">Publishing your page…</string>
     <string name="voici_reply_footer">Your conversations with other pages are on voi.ci.</string>
-    <string name="voici_segment_conversations">Conversations</string>
     <string name="voici_empty_messages_options">No messages yet. Turn on Accept messages in Page options to get them.</string>
     <string name="push_service">Push service</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
@@ -4187,4 +4184,15 @@
     <string name="voici_calls_hours_footer">Outside these hours calls don\'t ring on any of your devices and become missed calls. Only your own devices know these hours. Time zone: %1$s.</string>
     <string name="voici_first_publish_defaults">Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.</string>
     <string name="voici_calls_from_signed_in_note">Callers sign in with Flagship. They stay anonymous to you.</string>
+    <string name="social_inbox">Inbox</string>
+    <string name="social_who_to_call">Who to call</string>
+    <string name="social_who_to_call_hint">Username or voi.ci link</string>
+    <string name="social_call_target_invalid">Enter a voi.ci username, like voi.ci/alex.</string>
+    <string name="social_call_target_no_page">There\'s no page at voi.ci/%1$s.</string>
+    <string name="social_call_target_no_calls">voi.ci/%1$s doesn\'t take calls.</string>
+    <plurals name="social_count_new">
+        <item quantity="one">%1$d new</item>
+        <item quantity="other">%1$d new</item>
+    </plurals>
+    <string name="social_first_post">Hello. I am using the Flagship app, from flagshipserver.com</string>
 </resources>

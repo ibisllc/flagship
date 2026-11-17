@@ -13374,14 +13374,6 @@
     "en": "Waiting for an admin device to publish",
     "ctx": "voi.ci / Messages: non-admin device"
   },
-  "voici_segment_messages": {
-    "en": "Messages",
-    "ctx": "voi.ci / Messages: segmented control"
-  },
-  "voici_segment_requests": {
-    "en": "Requests (%1$d)",
-    "ctx": "voi.ci / Messages: segmented control, count"
-  },
   "voici_segment_requests_none": {
     "en": "Requests",
     "ctx": "voi.ci / Messages: segmented control"
@@ -14999,10 +14991,6 @@
   "voici_reply_footer": {
     "en": "Your conversations with other pages are on voi.ci.",
     "ctx": "Social tab Messages: under the reply notices"
-  },
-  "voici_segment_conversations": {
-    "en": "Conversations",
-    "ctx": "Social tab Messages: segment"
   },
   "voici_empty_messages_options": {
     "en": "No messages yet. Turn on Accept messages in Page options to get them.",
@@ -17198,5 +17186,41 @@
   "voici_calls_from_signed_in_note": {
     "en": "Callers sign in with Flagship. They stay anonymous to you.",
     "ctx": "voi.ci calls: page call mode note"
+  },
+  "social_inbox": {
+    "en": "Inbox",
+    "ctx": "Social tab: the switch under the title, the received conversations"
+  },
+  "social_who_to_call": {
+    "en": "Who to call",
+    "ctx": "Social → Calls: the field naming who to call (a voi.ci page today, phone numbers later)"
+  },
+  "social_who_to_call_hint": {
+    "en": "Username or voi.ci link",
+    "ctx": "Social → Calls: placeholder of Who to call"
+  },
+  "social_call_target_invalid": {
+    "en": "Enter a voi.ci username, like voi.ci/alex.",
+    "ctx": "Social → Calls: what was typed isn't a voi.ci username"
+  },
+  "social_call_target_no_page": {
+    "en": "There's no page at voi.ci/%1$s.",
+    "ctx": "Social → Calls: no published page under that username; %1$s = username"
+  },
+  "social_call_target_no_calls": {
+    "en": "voi.ci/%1$s doesn't take calls.",
+    "ctx": "Social → Calls: the page has calls turned off; %1$s = username"
+  },
+  "social_count_new": {
+    "en": {
+      "one": "%1$d new",
+      "other": "%1$d new"
+    },
+    "ctx": "Social tab: spoken value of a red count (new messages, requests, missed calls)",
+    "plural": true
+  },
+  "social_first_post": {
+    "en": "Hello. I am using the Flagship app, from flagshipserver.com",
+    "ctx": "voi.ci page: the first post every new page starts with (plain text, the owner can edit or delete it)"
   }
 }
