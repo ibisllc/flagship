@@ -15537,5 +15537,161 @@
   "Scheduled backup finished": {
     "en": "Scheduled backup finished",
     "ctx": "webapp/lib/activityFeed.js (Activity: a box event title)"
+  },
+  "Pro": {
+    "en": "Pro",
+    "ctx": "webapp/views/plan.js:19"
+  },
+  "Unlock this device first.": {
+    "en": "Unlock this device first.",
+    "ctx": "webapp/views/plan.js:26"
+  },
+  "This device can't open the account's balance.": {
+    "en": "This device can't open the account's balance.",
+    "ctx": "webapp/views/plan.js:28"
+  },
+  "Another device changed the balance at the same time. Try again.": {
+    "en": "Another device changed the balance at the same time. Try again.",
+    "ctx": "webapp/views/plan.js:30"
+  },
+  "Test vouchers aren't available here.": {
+    "en": "Test vouchers aren't available here.",
+    "ctx": "webapp/views/plan.js:33"
+  },
+  "Too many tries. Try again in a few minutes.": {
+    "en": "Too many tries. Try again in a few minutes.",
+    "ctx": "webapp/views/plan.js:35"
+  },
+  "Free: 25 GB a month, then slowed.": {
+    "en": "Free: 25 GB a month, then slowed.",
+    "ctx": "webapp/views/plan.js:43"
+  },
+  "Renewing: paid until {0}": {
+    "en": "Renewing: paid until {0}",
+    "ctx": "webapp/views/plan.js:45"
+  },
+  "Paid until {1} ({0} day left)": {
+    "en": "Paid until {1} ({0} day left)",
+    "ctx": "webapp/views/plan.js:47"
+  },
+  "Paid until {1} ({0} days left)": {
+    "en": "Paid until {1} ({0} days left)",
+    "ctx": "webapp/views/plan.js:47"
+  },
+  "No prepaid balance": {
+    "en": "No prepaid balance",
+    "ctx": "webapp/views/plan.js:53"
+  },
+  "About {0} month of {1}": {
+    "en": "About {0} month of {1}",
+    "ctx": "webapp/views/plan.js:56"
+  },
+  "About {0} months of {1}": {
+    "en": "About {0} months of {1}",
+    "ctx": "webapp/views/plan.js:56"
+  },
+  "Less than a month of {0}": {
+    "en": "Less than a month of {0}",
+    "ctx": "webapp/views/plan.js:56"
+  },
+  "Off: slow down past the plan": {
+    "en": "Off: slow down past the plan",
+    "ctx": "webapp/views/plan.js:63"
+  },
+  "Up to {0} a month ({1} GB more)": {
+    "en": "Up to {0} a month ({1} GB more)",
+    "ctx": "webapp/views/plan.js:65"
+  },
+  "Plan": {
+    "en": "Plan",
+    "ctx": "webapp/views/plan.js:1"
+  },
+  "Prepaid balance": {
+    "en": "Prepaid balance",
+    "ctx": "webapp/views/plan.js:86"
+  },
+  "Your balance stays on your devices. Flagship sees when time is added to your plan, never what paid for it.": {
+    "en": "Your balance stays on your devices. Flagship sees when time is added to your plan, never what paid for it.",
+    "ctx": "webapp/views/plan.js:88"
+  },
+  "Only an admin device of this account can change the plan or spend the balance.": {
+    "en": "Only an admin device of this account can change the plan or spend the balance.",
+    "ctx": "webapp/views/plan.js:90"
+  },
+  "Choose a plan": {
+    "en": "Choose a plan",
+    "ctx": "webapp/views/plan.js:91"
+  },
+  "25 GB a month": {
+    "en": "25 GB a month",
+    "ctx": "webapp/views/plan.js:43"
+  },
+  "{0} a month, {1} GB": {
+    "en": "{0} a month, {1} GB",
+    "ctx": "webapp/views/plan.js:94"
+  },
+  "Pay automatically from the balance": {
+    "en": "Pay automatically from the balance",
+    "ctx": "webapp/views/plan.js:98"
+  },
+  "Start at a random time in the next {0} hours": {
+    "en": "Start at a random time in the next {0} hours",
+    "ctx": "webapp/views/plan.js:99"
+  },
+  "Starting at once shows that a purchase and an upgrade happened close together. A random start hides that.": {
+    "en": "Starting at once shows that a purchase and an upgrade happened close together. A random start hides that.",
+    "ctx": "webapp/views/plan.js:100"
+  },
+  "More data": {
+    "en": "More data",
+    "ctx": "webapp/views/plan.js:102"
+  },
+  "When the month's data runs low, buy more from the balance, up to:": {
+    "en": "When the month's data runs low, buy more from the balance, up to:",
+    "ctx": "webapp/views/plan.js:104"
+  },
+  "Add to your balance": {
+    "en": "Add to your balance",
+    "ctx": "webapp/views/plan.js:109"
+  },
+  "Not on sale yet. Buying opens in a later update.": {
+    "en": "Not on sale yet. Buying opens in a later update.",
+    "ctx": "webapp/views/plan.js:111"
+  },
+  "Card": {
+    "en": "Card",
+    "ctx": "webapp/views/plan.js:8"
+  },
+  "Coming soon": {
+    "en": "Coming soon",
+    "ctx": "webapp/views/plan.js:115"
+  },
+  "Monero": {
+    "en": "Monero",
+    "ctx": "webapp/views/plan.js:3"
+  },
+  "In the iPhone and Android apps": {
+    "en": "In the iPhone and Android apps",
+    "ctx": "webapp/views/plan.js:117"
+  },
+  "Add 30 test vouchers": {
+    "en": "Add 30 test vouchers",
+    "ctx": "webapp/views/plan.js:119"
+  },
+  "Test server only: free vouchers for trying the plans.": {
+    "en": "Test server only: free vouchers for trying the plans.",
+    "ctx": "webapp/views/plan.js:119"
+  },
+  "Start {0}?": {
+    "en": "Start {0}?",
+    "ctx": "webapp/views/plan.js:163"
+  },
+  "This spends from your prepaid balance.": {
+    "en": "This spends from your prepaid balance.",
+    "ctx": "webapp/views/plan.js:163"
+  },
+  "Added 30 test vouchers.": {
+    "en": "Added 30 test vouchers.",
+    "ctx": "webapp/views/plan.js:172"
   }
 }
