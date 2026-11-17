@@ -423,11 +423,15 @@ Owner decision 2026-11-15, built as designed above. Off by default; on the Socia
     H(callKeyPub). An owner end order may be signed by the call key that answered.
   The key signs only those three tags; every other verifier takes Ed25519 or a different key, so it is refused there.
 - **`.com`** (migration **0147**, in `KNOWN_MIGRATIONS`): `voici_call_keys` (one bound key per device) and
-  `voici_call_key_revocations` (a revoked key never binds again). Routes `POST /api/accounts/<u>/voici-call-key`
+  `voici_call_key_revocations` (a key that revoked itself, by its own P-256 signature, never binds again for any
+  account) plus, migration **0151**, `voici_call_key_account_revocations` (an owner-signed revocation refuses the key
+  for the signing account only: a binding proves no possession of the key, so one account's owner key must not end
+  another account's key, 05c review F1). Routes `POST /api/accounts/<u>/voici-call-key`
   (device headers of an active admin device; the binding must name that device, be fresh, and verify under the
   page's current ownerSignPub) and `POST /api/accounts/<u>/voici-call-key/revoke` (signature only). The device room
   route takes the call-key join instead of device headers: stored key, not revoked, binding still valid under the
-  current ownerSignPub, device still an admin device. The room then accepts from that peer only an answer and end
+  current ownerSignPub, device still an admin device, and used once per (call, call key) while it can still verify
+  (05c review F6: a copied join cannot be replayed). The room then accepts from that peer only an answer and end
   signed by that key (`winnerCallKeyPub`).
 - **The caller's browser** checks the binding under the page's ownerSignPub and the answer under the bound key (it
   can't see revocations; `.com` refuses a revoked key at join, before the device can answer).

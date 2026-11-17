@@ -53,7 +53,9 @@ async function world(o: { admin?: boolean; irkPubHex?: string } = {}) {
   }
   await s.voici.publishPage({ username: USER, pageId: K.pageId, seq: 1, issuedAt: NOW, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: K.ownerSignPub, indexJson: "{}", publishedAt: NOW }, 0);
   await s.voiciCalls.putCallKey({ ...C.binding.binding, signature: C.binding.signature, registeredAt: NOW });
-  const deps = { voici: s.voici, calls: s.voiciCalls, usernames: s.usernames, grants: s.deviceCapabilityGrants, now: () => NOW };
+  const used = new Map<string, number>();
+  const nonces = { claim: async (key: string, expiresAt: number, now: number) => ((used.get(key) ?? 0) > now ? false : (used.set(key, expiresAt), true)) };
+  const deps = { voici: s.voici, calls: s.voiciCalls, usernames: s.usernames, grants: s.deviceCapabilityGrants, nonces, now: () => NOW };
   return { s, deps };
 }
 
@@ -95,6 +97,43 @@ describe("call keys on .com", () => {
     }
   });
 
+  it("a join is used once per call and key: a copied join, or a second fresh one, is refused (05c F6)", async () => {
+    const w = await world();
+    const j = joinAt();
+    expect(await authorizeVoiciCallKeyDevice(w.deps, USER, callId, j)).not.toBeNull();
+    expect(await authorizeVoiciCallKeyDevice(w.deps, USER, callId, j)).toBeNull();
+    expect(await authorizeVoiciCallKeyDevice(w.deps, USER, callId, joinAt(NOW + 1_000))).toBeNull();
+    // A refused join does not use it up.
+    const w2 = await world();
+    expect(await authorizeVoiciCallKeyDevice(w2.deps, USER, callId, joinAt(NOW - 11 * 60_000))).toBeNull();
+    expect(await authorizeVoiciCallKeyDevice(w2.deps, USER, callId, joinAt())).not.toBeNull();
+  });
+
+  it("an owner-signed revocation speaks for its own account only; a self-signed one ends the key everywhere (05c F1)", async () => {
+    const w = await world();
+    const mallorySeed = new Uint8Array(32).fill(0x6d);
+    await w.s.voici.publishPage(
+      { username: "mallory", pageId: "6d".repeat(16), seq: 1, issuedAt: NOW, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: hex(ed.getPublicKey(mallorySeed)), indexJson: "{}", publishedAt: NOW },
+      0,
+    );
+    // Mallory binds alice's public call key to her own account (a binding proves no possession), then revokes it.
+    const proof = signVoiciCallKeyBinding({ username: "mallory", deviceId: "6d".repeat(16), callKeyPub: C.pub, createdAt: NOW }, mallorySeed);
+    expect(await w.s.voiciCalls.putCallKey({ ...proof.binding, signature: proof.signature, registeredAt: NOW })).toBe(true);
+    const revoke = { username: "mallory", deviceId: "6d".repeat(16), callKeyPub: C.pub, revokedAt: NOW };
+    expect((await handleVoiciCallKeyRevoke(w.deps, "mallory", { revoke, signature: signVoiciCallKeyRevokeOwner(revoke, mallorySeed) })).status).toBe(200);
+    expect(await w.s.voiciCalls.isCallKeyRevoked("mallory", C.pub)).toBe(true);
+    expect(await w.s.voiciCalls.isCallKeyRevoked(USER, C.pub)).toBe(false);
+    expect(await w.s.voiciCalls.putCallKey({ ...C.binding.binding, signature: C.binding.signature, registeredAt: NOW })).toBe(true);
+    expect(await authorizeVoiciCallKeyDevice(w.deps, USER, callId, joinAt())).not.toBeNull();
+    // Mallory cannot sign a revocation naming alice, and a P-256 signature by another key is not the key's own.
+    const forAlice = { username: USER, deviceId: C.deviceId, callKeyPub: C.pub, revokedAt: NOW };
+    expect((await handleVoiciCallKeyRevoke(w.deps, USER, { revoke: forAlice, signature: signVoiciCallKeyRevokeOwner(forAlice, mallorySeed) })).status).toBe(403);
+    // The key revoking itself (under any account name it signs) ends it for every account.
+    const self = { username: "mallory", deviceId: "6d".repeat(16), callKeyPub: C.pub, revokedAt: NOW };
+    expect((await handleVoiciCallKeyRevoke(w.deps, "mallory", { revoke: self, signature: signVoiciCallKeyRevokeSelf(self, hexToBytes(C.priv)) })).status).toBe(200);
+    expect(await w.s.voiciCalls.isCallKeyRevoked(USER, C.pub)).toBe(true);
+  });
+
   it("a fresh binding replaces the device's previous key", async () => {
     const w = await world();
     const priv = new Uint8Array(32).fill(0x73);
@@ -132,6 +171,14 @@ describe("the room with a call-key device", () => {
     const otherEnd = signVoiciCallEndOwnerWithCallKey({ callId, reason: "hangup", issuedAt: NOW }, hexToBytes(C.otherPriv));
     expect(room.message(peer, { t: "end", end: otherEnd }, NOW)).toEqual([]);
     expect(room.message(peer, { t: "end", end }, NOW).map((a) => a.kind)).toEqual(["send", "send", "release", "close-all"]);
+  });
+
+  it("an unsigned decline cannot end an answered call (05c F6)", () => {
+    const room = new VoiciCallRoomCore(VoiciCallRoomCore.start(init).state, ca);
+    room.message(peer, { t: "answer", answer: C.answer.signed }, NOW);
+    expect(room.message(peer, { t: "decline" }, NOW)).toEqual([]);
+    expect(room.message({ role: "device", deviceRef: K.deviceRef }, { t: "decline" }, NOW)).toEqual([]);
+    expect(room.state.phase).toBe("answered");
   });
 
   it("a device that joined with its account key can't present a call-key answer as its own", () => {

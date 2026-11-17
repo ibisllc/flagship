@@ -82,9 +82,13 @@ export interface VoiciCallStorage {
   /** Binds a call key for (username, deviceId), replacing that device's previous one; false when the key was revoked. */
   putCallKey(rec: VoiciCallKeyRecord): Promise<boolean>;
   getCallKey(username: string, deviceId: string): Promise<VoiciCallKeyRecord | null>;
-  /** Records the revocation and drops the binding when it still names this key. */
-  revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string; revokedAt: number; signature: string }): Promise<void>;
-  isCallKeyRevoked(callKeyPub: string): Promise<boolean>;
+  /**
+   * Records the revocation and drops the binding when it still names this key. `scope: "key"` (signed by the call key
+   * itself) refuses the key for every account; `scope: "account"` (signed by the page's owner key) only for `username`.
+   */
+  revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string; revokedAt: number; signature: string; scope: "key" | "account" }): Promise<void>;
+  /** True when the key revoked itself, or `username` revoked it for its own account. */
+  isCallKeyRevoked(username: string, callKeyPub: string): Promise<boolean>;
   /** Drops a device's call-key binding (its device grant was revoked: docs/voici-calls.md, 2026-11-15 second round). */
   deleteCallKeyForDevice(username: string, deviceId: string): Promise<void>;
   deleteCallsForAccount(username: string): Promise<void>;
@@ -241,7 +245,7 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
   }
 
   async putCallKey(rec: VoiciCallKeyRecord) {
-    if (await this.isCallKeyRevoked(rec.callKeyPub)) return false;
+    if (await this.isCallKeyRevoked(rec.username, rec.callKeyPub)) return false;
     await this.db
       .prepare(
         "INSERT INTO voici_call_keys (username, device_id, call_key_pub, created_at, signature, registered_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6) " +
@@ -260,9 +264,10 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
     return r ? { username: r.username, deviceId: r.device_id, callKeyPub: r.call_key_pub, createdAt: r.created_at, signature: r.signature, registeredAt: r.registered_at } : null;
   }
 
-  async revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string; revokedAt: number; signature: string }) {
+  async revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string; revokedAt: number; signature: string; scope: "key" | "account" }) {
+    const table = rec.scope === "key" ? "voici_call_key_revocations" : "voici_call_key_account_revocations";
     await this.db
-      .prepare("INSERT OR IGNORE INTO voici_call_key_revocations (call_key_pub, username, device_id, revoked_at, signature) VALUES (?1, ?2, ?3, ?4, ?5)")
+      .prepare(`INSERT OR IGNORE INTO ${table} (call_key_pub, username, device_id, revoked_at, signature) VALUES (?1, ?2, ?3, ?4, ?5)`)
       .bind(rec.callKeyPub, rec.username, rec.deviceId, rec.revokedAt, rec.signature)
       .run();
     await this.db.prepare("DELETE FROM voici_call_keys WHERE username = ?1 AND device_id = ?2 AND call_key_pub = ?3").bind(rec.username, rec.deviceId, rec.callKeyPub).run();
@@ -372,8 +377,14 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
     return !!r;
   }
 
-  async isCallKeyRevoked(callKeyPub: string) {
-    const r = await this.db.prepare("SELECT 1 AS x FROM voici_call_key_revocations WHERE call_key_pub = ?1").bind(callKeyPub).first<{ x: number }>();
+  async isCallKeyRevoked(username: string, callKeyPub: string) {
+    const r = await this.db
+      .prepare(
+        "SELECT 1 AS x FROM voici_call_key_revocations WHERE call_key_pub = ?2 " +
+          "UNION ALL SELECT 1 AS x FROM voici_call_key_account_revocations WHERE username = ?1 AND call_key_pub = ?2 LIMIT 1",
+      )
+      .bind(username, callKeyPub)
+      .first<{ x: number }>();
     return !!r;
   }
 }
@@ -462,15 +473,15 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     this.live.delete(username);
   }
   async putCallKey(rec: VoiciCallKeyRecord) {
-    if (this.revokedCallKeys.has(rec.callKeyPub)) return false;
+    if (await this.isCallKeyRevoked(rec.username, rec.callKeyPub)) return false;
     this.callKeys.set(`${rec.username}|${rec.deviceId}`, { ...rec });
     return true;
   }
   async getCallKey(username: string, deviceId: string) {
     return this.callKeys.get(`${username}|${deviceId}`) ?? null;
   }
-  async revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string }) {
-    this.revokedCallKeys.add(rec.callKeyPub);
+  async revokeCallKey(rec: { username: string; deviceId: string; callKeyPub: string; scope: "key" | "account" }) {
+    this.revokedCallKeys.add(rec.scope === "key" ? `*|${rec.callKeyPub}` : `${rec.username}|${rec.callKeyPub}`);
     const k = `${rec.username}|${rec.deviceId}`;
     if (this.callKeys.get(k)?.callKeyPub === rec.callKeyPub) this.callKeys.delete(k);
   }
@@ -541,7 +552,7 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     return (this.anonBlocks.get(`${pageId}|${conv}`) ?? 0) > now;
   }
 
-  async isCallKeyRevoked(callKeyPub: string) {
-    return this.revokedCallKeys.has(callKeyPub);
+  async isCallKeyRevoked(username: string, callKeyPub: string) {
+    return this.revokedCallKeys.has(`*|${callKeyPub}`) || this.revokedCallKeys.has(`${username}|${callKeyPub}`);
   }
 }
