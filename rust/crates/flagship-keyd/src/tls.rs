@@ -28,7 +28,8 @@ const MAX_KEYS: usize = 8;
 /// Direct names a box may serve (`MAX_DIRECT_NAMES` in tls.ts), and keys for them (one serving, one renewing).
 pub const MAX_DIRECT_NAMES: usize = 16;
 const MAX_DIRECT_KEYS: usize = 2 * MAX_DIRECT_NAMES;
-pub const DIRECT_APEX: &str = "fshp.app";
+// gym: the gym's own direct apex under its zone (never production's fshp.app).
+pub const DIRECT_APEX: &str = "fshp.gym.flagship.services";
 const DAY_MS: i64 = 24 * 3600 * 1000;
 
 pub type Clock = Box<dyn Fn() -> i64 + Send>;
