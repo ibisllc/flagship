@@ -9,6 +9,7 @@
  */
 
 import { appRunningCheck } from "./voiciNamesCron.js";
+import { ohttpPublicConfig } from "./ohttpRoutes.js";
 import {
   authorizeAdmin,
   handleSchemaStatus,
@@ -221,6 +222,9 @@ import {
   handleUsageStatus,
   handleUserAllowance,
   handlePlanAttestation,
+  handlePostProxyOrder,
+  handleGetProxyOrder,
+  handlePostProxyAlert,
   handleAdminTierGrant,
   handleRedeemVoucher,
   handleIssueVoucher,
@@ -364,6 +368,12 @@ import { tryIssuanceRoute } from "./certificateIssuance.js";
 import { directAccessDeps, fetchProber, publishPendingNow, type DirectNamesEnv } from "./directNames.js";
 
 export interface ControlPlaneEnv extends DirectNamesEnv {
+  /** The private relay (apps/com/src/ohttpRoutes.ts): gateway keys and the relays the apps are told about. */
+  OHTTP_GATEWAY_KEYS?: string;
+  OHTTP_RELAY_URL?: string;
+  OHTTP_RELAY_OPERATOR?: string;
+  OHTTP_RELAY_INTERIM?: string;
+  OHTTP_RELAYS?: string;
   /** CODE_LENGTH for newly minted voi.ci codes (docs/voici-namespace-spec.md D3): 6 by default, can only grow. */
   VOICI_CODE_LENGTH?: string;
   /**
@@ -821,6 +831,9 @@ const ROUTE_RE = {
   // auth-code serial. The box POSTs a named phase; the phone polls it.
   PROVISION_STATUS: /^\/api\/order\/([^/]+)\/status$/,
   SERVER_SEEN: /^\/api\/order\/([^/]+)\/server-seen$/,
+  // The outbound proxy's fallback lane (docs/outbound-proxy.md "Failure handling").
+  BOX_PROXY_ORDER: /^\/api\/server\/([a-z0-9.-]{1,253})\/proxy-order$/,
+  BOX_PROXY_ALERT: /^\/api\/server\/([a-z0-9.-]{1,253})\/proxy-alert$/,
   ORDER_HEALTH: /^\/api\/order\/([^/]+)\/health$/,
   DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
@@ -2909,6 +2922,7 @@ export async function tryControlPlane(
           secretMailbox: storage.secretMailbox,
           serverOrders: storage.serverOrders,
           demoUsers: storage.demoUsers,
+          boxProxyLane: storage.boxProxyLane,
         },
         decodeURIComponent(m[1]!),
       ),
@@ -2938,6 +2952,7 @@ export async function tryControlPlane(
           secretMailbox: live.secretMailbox,
           serverOrders: live.serverOrders,
           demoUsers: live.demoUsers,
+          boxProxyLane: live.boxProxyLane,
           ...(options.stream ?? {}),
         },
         decodeURIComponent(m[1]!),
@@ -3783,7 +3798,7 @@ export async function tryControlPlane(
     const testIssue = env.VOUCHER_TEST_ISSUE === "1";
     const rails = voucherRailsDeps(env, voucherKeys, paymentsConfig);
     if (method === "GET" && ROUTE_RE.PAYMENTS_CONFIG.test(path)) {
-      return finish(handlePaymentsConfig({ config: paymentsConfig, keys: voucherKeys, testIssue, rails: railsSummary(rails) }));
+      return finish(handlePaymentsConfig({ config: paymentsConfig, keys: voucherKeys, testIssue, rails: railsSummary(rails), ohttp: ohttpPublicConfig(env, env.CONTROL_APEX ?? "flagshipserver.com") }));
     }
     // The rails (§11): a proof of payment buys blind signatures; no credential, nothing about the caller kept.
     if (method === "POST" && ROUTE_RE.VOUCHERS_PAID_ISSUE.test(path)) {
@@ -3971,6 +3986,27 @@ export async function tryControlPlane(
         await readJson(request),
       ),
     );
+  }
+  if ((m = path.match(ROUTE_RE.BOX_PROXY_ORDER)) || (m = path.match(ROUTE_RE.BOX_PROXY_ALERT))) {
+    const laneFanout = buildOptionalV12PushFanout(env);
+    const laneDeps = {
+      lane: storage.boxProxyLane,
+      servers: storage.servers,
+      usernames: storage.usernames,
+      grants: storage.deviceCapabilityGrants,
+      pushTokens: storage.pushTokens,
+      ...(laneFanout ? { pushFanout: laneFanout } : {}),
+      apex: env.CONTROL_APEX ?? "flagshipserver.com",
+    };
+    const domain = decodeURIComponent(m[1]!);
+    const auth = request.headers.get("authorization");
+    if (ROUTE_RE.BOX_PROXY_ORDER.test(path)) {
+      if (method === "POST") return finish(await handlePostProxyOrder(laneDeps, domain, await readJson(request)));
+      if (method === "GET") return finish(await handleGetProxyOrder(laneDeps, domain, path, auth));
+    } else if (method === "POST") {
+      return finish(await handlePostProxyAlert(laneDeps, domain, path, auth, new Uint8Array(await request.arrayBuffer())));
+    }
+    return finishPlain({ status: 405, body: { error: "method not allowed" } });
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SEEN))) {
     return finish(await handlePostServerSeen({ storage: storage.provisionStatus }, decodeURIComponent(m[1]!), await readJson(request)));

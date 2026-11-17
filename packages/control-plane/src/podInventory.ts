@@ -22,6 +22,8 @@
  *     this server.
  */
 
+import type { BoxProxyAlert, BoxProxyLaneStorage } from "@flagship/storage";
+import { proxyAlertsByServer } from "./boxProxyLane.js";
 import {
   canonicalDaemonStatusReport,
   strictInForce,
@@ -61,6 +63,8 @@ import {
 } from "./types.js";
 
 export interface PodInventoryDeps {
+  /** The outbound proxy's fallback lane: `proxyAlert` per server (docs/outbound-proxy.md "Failure handling"). */
+  boxProxyLane?: BoxProxyLaneStorage;
   daemonStatus: DaemonStatusStorage;
   /** Latest box-signed health report per server (serverHealth.ts). */
   serverHealth?: ServerHealthStorage;
@@ -244,6 +248,9 @@ export interface OnlinePodEntry {
    * like `leadsServices`; absent once the backup is in.
    */
   awaitingBackup?: AwaitingBackupView;
+  /** The box says its outbound proxy fails (`failing`: it keeps trying; `fallback`: it went direct, as the owner
+   *  allowed). UNSIGNED; absent while the proxy works or none is set. */
+  proxyAlert?: { state: "failing" | "fallback"; code: string; since: number };
   /** Latest box-signed health report (memory, OOM kills, daemon restarts,
    *  tunnel, disk), or absent when the box never sent one. */
   health?: BoxHealthReport & { receivedAt: number };
@@ -314,13 +321,16 @@ export async function buildPodInventory(
     deps.demoUsers && !light
       ? deps.demoUsers.get(username).then((d) => d !== undefined, () => false)
       : Promise.resolve(false);
-  const [allServers, statuses, pendingReqs, outstanding, serverOrder, demo] = await Promise.all([
+  const proxyAlertsP: Promise<Map<string, BoxProxyAlert>> =
+    deps.boxProxyLane && !light ? proxyAlertsByServer(deps.boxProxyLane, username) : Promise.resolve(new Map());
+  const [allServers, statuses, pendingReqs, outstanding, serverOrder, demo, proxyAlerts] = await Promise.all([
     deps.servers.listForUser(username),
     deps.daemonStatus.listForUser(username),
     mailboxP,
     outstandingP,
     serverOrderP,
     demoP,
+    proxyAlertsP,
   ]);
   // A revoked server stays listed only while the owner can un-revoke it
   // (lost / stolen / decommissioned). A deleted one (released by its owner,
@@ -523,6 +533,10 @@ export async function buildPodInventory(
         ...(orderIssuedAt !== undefined ? { orderIssuedAt } : {}),
         ...(awaitingBackup ? { awaitingBackup } : {}),
         ...(updateRequired ? { updateRequired } : {}),
+        ...(() => {
+          const a = proxyAlerts.get(s.serverDomain.toLowerCase());
+          return a ? { proxyAlert: { state: a.state, code: a.code, since: a.since } } : {};
+        })(),
         // The Box Request Inbox digest for this pod (docs/box-request-inbox.md):
         // the typed list of approvals this box is currently asking its owner
         // for. The generic client inbox is the flatMap of this across pods.

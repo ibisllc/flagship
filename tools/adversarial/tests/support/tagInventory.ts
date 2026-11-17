@@ -133,6 +133,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/relay-account/v1": "hash accountHash: the hash of an account name in the public relay log (relay-mesh.md §1)",
   "flagship/route-claim/v1": "phoneRoute.test.ts in packages/protocol (another session's nonce, another generation, stale clock, other apex, other account, bad signature) and apps/web/tests/phoneRoute.test.ts (replay across relays, used nonce, non-admin keys)",
   "flagship/gpu-approval/v2": "vectors gpuApprovalVectors.test.ts (container, userspace, run time and share bound; a v1 signature refused), server-daemon gpuApprovals.test.ts, flagship-gpu tests/owner_approval.rs (a claim asking for other terms refused)",
+  "flagship/box-proxy-lane/v1": "vectors control-plane boxProxyLane.test.ts (a wrong key, a tampered body and a missing header are refused; the time window) and server-daemon outboundProxyFailure.test.ts",
   "flagship/box-health/v1": "vectors control-plane serverHealth.test.ts (tagged bytes stored as tagged; no untagged report after a tagged one or boxLevel 3) and server-daemon healthReporter.test.ts (signs the tagged bytes, B2 #2)",
   "flagship/gpu-approval-withdraw/v1": "vectors gpuApprovalVectors.test.ts, server-daemon gpuApprovals.test.ts, flagship-gpu tests/owner_approval.rs (gpud's own floor: a re-presented or older-generation approval refused, survives a restart, never lowered)",
   "flagship/offline-control/v1": "vectors rescue/offline-control.json + pq-vectors.json; AT-RSC-01/02 (rescue.test.ts); server-daemon rescue.test.ts end to end",

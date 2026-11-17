@@ -59,6 +59,10 @@ export function isOhttpTargetAllowed(method: string, authority: string, path: st
     // Buying (voucherRails.ts): a store or Stripe proof for blind signatures, so a purchase shows no address either.
     if (method === "POST" && p === "/api/vouchers/paid-issue") return true;
     if (method === "GET" && p === "/api/payments/config") return true;
+    if (method === "GET" && p === "/api/ohttp/config") return true;
+    // The outbound proxy's fallback lane (boxProxyLane.ts): a box whose proxy fails reports it and picks up the fix.
+    if ((method === "GET" || method === "POST") && /^\/api\/server\/[a-z0-9.-]{1,253}\/proxy-order$/.test(p)) return true;
+    if (method === "POST" && /^\/api\/server\/[a-z0-9.-]{1,253}\/proxy-alert$/.test(p)) return true;
     return false;
   }
   if (host === bootHost) {

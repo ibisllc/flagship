@@ -25,6 +25,41 @@ function relayInto(env: RouteEnv) {
 }
 
 describe("the Worker's OHTTP endpoints", () => {
+  it("serves the relay config (never a Cloudflare relay), with a key", async () => {
+    const env = makeEnv({
+      OHTTP_RELAY_URL: undefined,
+      OHTTP_RELAYS: JSON.stringify([
+        { url: "https://privacy-gateway.cloudflare.com/flagship", operator: "CF", interim: false },
+        { url: "https://flagship-ohttp-relay.fly.dev/", operator: "Flagship (interim)", interim: true },
+      ]),
+    });
+    const res = await route(new Request("https://flagshipserver.com/api/ohttp/config"), env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    const c = (await res.json()) as { keyConfigHex: string; relays: Array<{ url: string; interim: boolean }> };
+    expect(c.relays).toEqual([{ url: "https://flagship-ohttp-relay.fly.dev/", operator: "Flagship (interim)", interim: true }]);
+    expect(c.keyConfigHex).toMatch(/^01/);
+    const none = await route(new Request("https://flagshipserver.com/api/ohttp/config"), makeEnv({ OHTTP_GATEWAY_KEYS: undefined }));
+    expect(await none.json()).toEqual({ v: 1, keyConfigHex: null, relays: [] });
+  });
+
+  it("takes a voucher spend and the lane's poll through the gateway", async () => {
+    const env = makeEnv();
+    const relay = relayFromEnv(env)!;
+    const spend = await sendPrivately(
+      { url: "https://flagshipserver.com/api/vouchers/redeem", method: "POST", headers: [["content-type", "application/json"]], body: "{}" },
+      { relay, fetch: relayInto(env) },
+    );
+    expect(spend.path).toBe("ohttp");
+    expect(spend.status).not.toBe(403);
+    const poll = await sendPrivately(
+      { url: "https://flagshipserver.com/api/server/home.alice.flagship.services/proxy-order", method: "GET" },
+      { relay, fetch: relayInto(env) },
+    );
+    expect(poll.path).toBe("ohttp");
+    expect(poll.status).not.toBe(403);
+  });
+
   it("publishes the gateway key at /.well-known/ohttp-keys", async () => {
     const res = await route(new Request("https://flagshipserver.com/.well-known/ohttp-keys"), makeEnv());
     expect(res.status).toBe(200);
