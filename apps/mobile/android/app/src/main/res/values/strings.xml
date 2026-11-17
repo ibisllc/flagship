@@ -4261,11 +4261,17 @@
     <string name="payments_overage_note">When your plan\'s traffic runs low, this phone buys %1$s GB for %2$s, up to your limit. Past it, traffic is slowed, never cut.</string>
     <string name="payments_buy_title">Add to your balance</string>
     <string name="payments_pack_add">Add %1$s</string>
-    <string name="payments_buy_not_yet">Not on sale yet</string>
-    <string name="payments_rail_play" translatable="false">Google Play</string>
-    <string name="payments_rail_card">Card</string>
-    <string name="payments_rail_monero" translatable="false">Monero</string>
-    <string name="payments_buy_note">Buying arrives in a later update. Every payment buys the same anonymous credit, so nothing links what you buy to your account.</string>
+    <string name="payments_buy_note_play">Google Play takes the payment. Every purchase buys the same anonymous credit, so nothing links what you buy to your account.</string>
+    <string name="payments_shop_unavailable">Buying isn\'t available in this copy of the app.</string>
+    <string name="payments_shop_working">Adding to your balance…</string>
+    <string name="payments_shop_added">Added %1$s to your balance.</string>
+    <string name="payments_shop_pending">Google Play is still processing the payment. Your balance goes up once it\'s paid.</string>
+    <string name="payments_shop_retry">Your purchase is kept on this phone. It will be added to your balance on the next try.</string>
+    <string name="payments_shop_refunded">This purchase was refunded, so nothing was added to your balance.</string>
+    <string name="payments_shop_used">This purchase has already been added to a balance.</string>
+    <string name="payments_shop_invalid">Google Play couldn\'t confirm this purchase.</string>
+    <string name="payments_shop_play_failed">Google Play couldn\'t complete the purchase. Try again.</string>
+    <string name="payments_shop_cap">This phone can buy up to %1$s in 30 days. Choose a smaller amount, or try again in a few days.</string>
     <string name="payments_test_add">Add test credit</string>
     <string name="payments_read_only">Only an admin device of this account can change the plan or spend the balance.</string>
     <string name="payments_error_overage_needs_plan">Extra traffic needs Pro or Pro Max.</string>

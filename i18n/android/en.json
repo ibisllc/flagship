@@ -17495,26 +17495,48 @@
     "en": "Add %1$s",
     "ctx": "plan and payments (Settings)"
   },
-  "payments_buy_not_yet": {
-    "en": "Not on sale yet",
+  "payments_buy_note_play": {
+    "en": "Google Play takes the payment. Every purchase buys the same anonymous credit, so nothing links what you buy to your account.",
     "ctx": "plan and payments (Settings)"
   },
-  "payments_rail_play": {
-    "en": "Google Play",
-    "ctx": "plan and payments (Settings)",
-    "translatable": false
-  },
-  "payments_rail_card": {
-    "en": "Card",
+  "payments_shop_unavailable": {
+    "en": "Buying isn't available in this copy of the app.",
     "ctx": "plan and payments (Settings)"
   },
-  "payments_rail_monero": {
-    "en": "Monero",
-    "ctx": "plan and payments (Settings)",
-    "translatable": false
+  "payments_shop_working": {
+    "en": "Adding to your balance…",
+    "ctx": "plan and payments (Settings)"
   },
-  "payments_buy_note": {
-    "en": "Buying arrives in a later update. Every payment buys the same anonymous credit, so nothing links what you buy to your account.",
+  "payments_shop_added": {
+    "en": "Added %1$s to your balance.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_shop_pending": {
+    "en": "Google Play is still processing the payment. Your balance goes up once it's paid.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_shop_retry": {
+    "en": "Your purchase is kept on this phone. It will be added to your balance on the next try.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_shop_refunded": {
+    "en": "This purchase was refunded, so nothing was added to your balance.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_shop_used": {
+    "en": "This purchase has already been added to a balance.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_shop_invalid": {
+    "en": "Google Play couldn't confirm this purchase.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_shop_play_failed": {
+    "en": "Google Play couldn't complete the purchase. Try again.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_shop_cap": {
+    "en": "This phone can buy up to %1$s in 30 days. Choose a smaller amount, or try again in a few days.",
     "ctx": "plan and payments (Settings)"
   },
   "payments_test_add": {
