@@ -231,10 +231,18 @@ import {
   handlePaymentsConfig,
   handleVoucherIssue,
   handleVoucherRedeem,
+  handleVoucherExchange,
+  handleOrgPlanGet,
+  handleOrgPlanAttestation,
+  handleOrgWalletGet,
+  handleOrgWalletPut,
+  orgEgressBytesFor,
   handleVoucherWalletGet,
   handleVoucherWalletPut,
   handlePaidIssue,
   handleStripeVoucherCheckout,
+  handleStripeBatchCheckout,
+  handleBatchIssue,
   handleStripeVoucherWebhook,
   handleAppleNotification,
   isVoucherStripeEvent,
@@ -774,7 +782,7 @@ const ROUTE_RE = {
   SERVER_REGISTER: /^\/api\/server\/register$/,
   BOX_CLAIM_KEY: /^\/api\/box-claim\/key$/,
   ORGS: /^\/api\/orgs$/,
-  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|box-log-heads|keys|export|directory|directory\/slices|connectors|proposals|proposals\/decisions)$/,
+  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|box-log-heads|keys|export|directory|directory\/slices|connectors|proposals|proposals\/decisions|plan|plan-attestation|voucher-wallet)$/,
   ORG_INVITE: /^\/api\/orgs\/([0-9a-f]{32})\/invites\/([0-9a-f]{32})(\/accept)?$/,
   ORG_CEREMONY_APPROVE: /^\/api\/orgs\/([0-9a-f]{32})\/ceremonies\/([0-9a-f]{64})\/approvals$/,
   BOX_CLAIM_MAILBOX: /^\/api\/box-claim\/mailbox\/([0-9a-f]{64})\/(to-box|to-phone)$/,
@@ -1009,6 +1017,9 @@ const ROUTE_RE = {
   VOUCHER_WALLET: /^\/api\/accounts\/([^/]+)\/voucher-wallet$/,
   VOUCHERS_PAID_ISSUE: /^\/api\/vouchers\/paid-issue$/,
   VOUCHERS_STRIPE_CHECKOUT: /^\/api\/vouchers\/stripe\/checkout$/,
+  VOUCHERS_EXCHANGE: /^\/api\/vouchers\/exchange$/,
+  VOUCHERS_BATCH_CHECKOUT: /^\/api\/vouchers\/stripe\/batch-checkout$/,
+  VOUCHERS_BATCH_ISSUE: /^\/api\/vouchers\/batch-issue$/,
   VOUCHERS_APPLE_NOTIFICATIONS: /^\/api\/vouchers\/apple\/notifications$/,
   STRIPE_WEBHOOK: /^\/api\/stripe\/webhook$/,
   STRIPE_CHECKOUT: /^\/api\/stripe\/checkout$/,
@@ -1360,7 +1371,7 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.USAGE_REPORT.test(path)) {
     return finishPlain(
       await handleUsageReport(
-        { meter: new D1MeterStorage(env.DB), tiers: storage.tiers },
+        { meter: new D1MeterStorage(env.DB), tiers: storage.tiers, orgEgressBytes: orgEgressBytesFor(storage.orgs, paymentsConfigFromEnv(env.PAYMENTS_CONFIG)) },
         request.headers.get("x-usage-secret"),
         env.USAGE_REPORT_SECRET,
         await readJson(request),
@@ -1370,7 +1381,7 @@ export async function tryControlPlane(
   if (method === "GET" && ROUTE_RE.USAGE_STATUS.test(path)) {
     return finishPlain(
       await handleUsageStatus(
-        { meter: new D1MeterStorage(env.DB), tiers: storage.tiers },
+        { meter: new D1MeterStorage(env.DB), tiers: storage.tiers, orgEgressBytes: orgEgressBytesFor(storage.orgs, paymentsConfigFromEnv(env.PAYMENTS_CONFIG)) },
         request.headers.get("x-usage-secret"),
         env.USAGE_REPORT_SECRET,
         url.searchParams.get("username"),
@@ -1570,7 +1581,7 @@ export async function tryControlPlane(
   }
   // Enterprise orgs (docs/enterprise-accounts.md): every object verified against the org's chain.
   if (path.startsWith("/api/orgs")) {
-    const od = { orgs: storage.orgs, usernames: storage.usernames };
+    const od = { orgs: storage.orgs, usernames: storage.usernames, payments: paymentsConfigFromEnv(env.PAYMENTS_CONFIG) };
     const osd = { ...od, servers: storage.servers, authCodes: storage.authCodes, ...(env.SERVICES_APEX ? { apex: env.SERVICES_APEX } : {}) };
     if (method === "POST" && ROUTE_RE.ORGS.test(path)) return finish(await handleOrgCreate(od, await readJson(request)));
     if ((m = path.match(ROUTE_RE.ORG_CEREMONY_APPROVE)) && method === "POST") {
@@ -1582,6 +1593,14 @@ export async function tryControlPlane(
     }
     if ((m = path.match(ROUTE_RE.ORG_SUB))) {
       const [, orgId, sub] = m as unknown as [string, string, string];
+      // The Business plan (orgPlan.ts): its state, the CA-signed attestation for the org's boxes, the sealed wallet.
+      if (sub === "voucher-wallet") {
+        const wd = { ...od, wallets: new D1BlindVoucherStorage(env.DB) };
+        if (method === "GET") return finish(await handleOrgWalletGet(wd, orgId));
+        if (method === "PUT") return finish(await handleOrgWalletPut(wd, orgId, await request.text()));
+      }
+      if (method === "GET" && sub === "plan") return finish(await handleOrgPlanGet(od, orgId));
+      if (method === "GET" && sub === "plan-attestation") return finishRead(await handleOrgPlanAttestation({ ...od, ca }, orgId));
       if (method === "GET") {
         if (sub === "authority") return finish(await handleOrgAuthorityGet(od, orgId));
         if (sub === "seats") return finish(await handleOrgSeatsGet(od, orgId));
@@ -3791,6 +3810,9 @@ export async function tryControlPlane(
     ROUTE_RE.VOUCHER_WALLET.test(path) ||
     ROUTE_RE.VOUCHERS_PAID_ISSUE.test(path) ||
     ROUTE_RE.VOUCHERS_STRIPE_CHECKOUT.test(path) ||
+    ROUTE_RE.VOUCHERS_EXCHANGE.test(path) ||
+    ROUTE_RE.VOUCHERS_BATCH_CHECKOUT.test(path) ||
+    ROUTE_RE.VOUCHERS_BATCH_ISSUE.test(path) ||
     ROUTE_RE.VOUCHERS_APPLE_NOTIFICATIONS.test(path)
   ) {
     const voucherKeys = voucherSigningKeysFromEnv(env.VOUCHER_SIGNING_KEYS);
@@ -3806,6 +3828,17 @@ export async function tryControlPlane(
     }
     if (method === "POST" && ROUTE_RE.VOUCHERS_STRIPE_CHECKOUT.test(path)) {
       return finish(await handleStripeVoucherCheckout(rails, await readJson(request)));
+    }
+    // Business (docs/plans-and-backup-offer.md "As built"): a company's invoiced batch, issued in chunks.
+    if (method === "POST" && ROUTE_RE.VOUCHERS_BATCH_CHECKOUT.test(path)) {
+      return finish(await handleStripeBatchCheckout(rails, await readJson(request)));
+    }
+    if (method === "POST" && ROUTE_RE.VOUCHERS_BATCH_ISSUE.test(path)) {
+      return finish(await handleBatchIssue(rails, await readJson(request)));
+    }
+    // An org wallet's exchange after its key rotated: spends old vouchers, blind-signs as many fresh ones.
+    if (method === "POST" && ROUTE_RE.VOUCHERS_EXCHANGE.test(path)) {
+      return finish(await handleVoucherExchange({ keys: voucherKeys, config: paymentsConfig, store: new D1BlindVoucherStorage(env.DB) }, await readJson(request)));
     }
     if (method === "POST" && ROUTE_RE.VOUCHERS_APPLE_NOTIFICATIONS.test(path)) {
       return finishPlain(await handleAppleNotification(rails, await readJson(request)));
@@ -3831,6 +3864,7 @@ export async function tryControlPlane(
             tiers: storage.tiers,
             usernames: storage.usernames,
             meter: new D1MeterStorage(env.DB),
+            orgs: { orgs: storage.orgs, usernames: storage.usernames, payments: paymentsConfig },
           },
           await readJson(request),
         ),
