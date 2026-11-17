@@ -1404,3 +1404,9 @@ Fixes (branch `0.4/gym-r1-fixes`, fast-forwarded into release/0.4 at `24f836458`
   - A finishing agent is making the history linear (D1 0154 and 0155, shell v232), fixing Android GymPlanTest (an expectation left stale by rails), finding why iOS GymProxyTests fail on tapping Home's server row, and rerunning two vitest flakes.
 - My miss: the payments-rails merge left parity's signed-tags red (`flagship/voucher-order/v1` is web-only). Fixed with an allowlist entry.
 - Resume point (usage limit, 2026-11-17): the outbound-proxy finishing agent was stopped before reporting. Restart it from its brief (linear rebase, D1 0154/0155, shell v232, Android GymPlanTest, iOS GymProxyTests Home-row tap, two vitest flakes), then merge, then the payments and proxy live gym, then D11, R2-R4 and the E UI pass.
+- Merged 0.4/outbound-proxy (bf437137c, 25 commits, linear).
+  - Built: OHTTP clients on all apps with vectors; the relay list from `.com` (`OHTTP_RELAYS`, never Cloudflare); fail-safe spends; loud alerts when the owner's proxy fails, with the fix-it lane through `.com`; the real Pro gate; the interim relay in infra/ohttp-relay (not deployed). D1 0154 and 0155, shell v232.
+  - Gates: tsc and parity green, vitest 14434 pass, Swift 56/56 and 38 (1 skip), Android unit and the release compile pass, GymPlanTest 3/3, GymOutboundProxyTest 7/7, iOS GymProxyTests 7/7.
+  - Fixed along the way: the iOS create-flow proxy section hid its children's ids (since fdb6b81dc); the iOS test double was missing `redeem(route:)`.
+  - Owner decisions on the relay (2026-11-17, advice given): the interim relay on the owner's free Oracle VPS, labelled run by Flagship; Oblivious Network at $15/mo as the main relay if it is not on Cloudflare, allows CORS, and its logging and jurisdiction are OK; community relays in 0.5. Waiting on the owner.
+- Next: the payments and proxy live gym (VOUCHER_SIGNING_KEYS gym secret plus gym-refresh), then D11, R2-R4 and the E UI pass.
