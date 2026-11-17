@@ -42,14 +42,30 @@ class GymMessagesTest : GymBase() {
         assertEquals("nothing unpublished, no bar", 0, tagCount("page-publish-bar"))
         publishFirstPage()
         gymShot("social-profile-on")
-        // Every change is a draft until the one Publish bar, which shows only while something is unpublished.
+        assertEquals("the first publish turns messages on", 1, VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.acceptsMessages)
+        // Every change is a draft until the one Publish bar, which shows only while something is unpublished. Off and
+        // on again is no change, so the bar goes.
+        tap("page-options")
+        tap("page-accept-messages")
+        tap("page-options-done")
+        waitUntilExists("page-publish-bar")
+        tap("page-options")
+        tap("page-accept-messages")
+        tap("page-options-done")
+        eventually(10_000, "off and on again leaves nothing to publish") { tagCount("page-publish-bar") == 0 }
         tap("page-options")
         tap("page-accept-messages")
         tap("page-options-done")
         waitUntilExists("page-publish-bar")
         gymShot("social-publish-bar")
         tap("page-publish")
-        eventually(15_000, "accepting") { VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.acceptsMessages == 1 }
+        eventually(15_000, "not accepting") { VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.acceptsMessages == 0 }
+        eventually(15_000, "the bar goes once published") { tagCount("page-publish-bar") == 0 }
+        tap("page-options")
+        tap("page-accept-messages")
+        tap("page-options-done")
+        tap("page-publish")
+        eventually(15_000, "accepting again") { VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.acceptsMessages == 1 }
         eventually(15_000, "the bar goes once published") { tagCount("page-publish-bar") == 0 }
 
         runBlocking { GymVoici.client.visitorWrites(account(), visitor, "Hi! Your photos on https://example.com/gallery are lovely.") }

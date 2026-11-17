@@ -115,7 +115,7 @@ final class GymNoticeTests: XCTestCase {
         var app = launch("lock", now: lockFrom + 3_600_000, extra: ["-smoke-refuse-biometric"])
         XCTAssertTrue(any(app, "update-lock-title").waitForExistence(timeout: 40), "The lock should show.")
         app.buttons["update-lock-signout"].tap()
-        XCTAssertFalse(app.buttons["Cancel"].waitForExistence(timeout: 4), "A dismissed prompt must not open the question.")
+        XCTAssertFalse(signOutQuestion(app).waitForExistence(timeout: 4), "A dismissed prompt must not open the question.")
         gymShot(app, "update-lock-sign-out-refused")
         XCTAssertTrue(any(app, "update-lock-title").exists, "The lock stays.")
 
@@ -123,9 +123,17 @@ final class GymNoticeTests: XCTestCase {
         app = launch("lock", now: lockFrom + 3_600_000)
         XCTAssertTrue(any(app, "update-lock-title").waitForExistence(timeout: 40))
         app.buttons["update-lock-signout"].tap()
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 10), "The question opens at once.")
-        app.buttons["Cancel"].tap()
+        let question = signOutQuestion(app)
+        XCTAssertTrue(question.waitForExistence(timeout: 10), "The question opens at once.")
+        // Since iOS 26 the question is a popover with no Cancel button: a tap outside it cancels.
+        if app.buttons["Cancel"].exists { app.buttons["Cancel"].tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap() }
+        XCTAssertTrue(gone(question, timeout: 10), "Cancelling closes the question.")
         XCTAssertTrue(any(app, "update-lock-title").exists, "Cancel keeps the lock.")
+    }
+
+    /// The sign-out question's destructive button ("Sign out" with cloud recovery, else "Sign out anyway").
+    private func signOutQuestion(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == 'Sign out anyway' OR (label == 'Sign out' AND identifier != 'update-lock-signout')")).firstMatch
     }
 
     // 3. the lock lifts when the build is updated or the notice ends, and an older notice cannot bring it back
