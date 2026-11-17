@@ -4228,4 +4228,47 @@
     <string name="voici_call_route_speaker">Haut-parleur</string>
     <string name="voici_call_route_bluetooth">Bluetooth</string>
     <string name="voici_call_route_wired">Écouteurs</string>
+    <string name="payments_settings_subtitle">Votre forfait, solde prépayé et trafic supplémentaire</string>
+    <string name="payments_title">Forfait et paiements</string>
+    <string name="payments_plan_free">Gratuit</string>
+    <string name="payments_current_free">Vous êtes sur Gratuit. Vos serveurs continuent de tourner ; au-delà de l\'allocation gratuite, le trafic est ralenti.</string>
+    <string name="payments_in_grace">Votre forfait est arrivé à échéance. Il reste actif quelques jours, le temps que votre téléphone paie.</string>
+    <string name="payments_balance_title">Solde prépayé</string>
+    <string name="payments_balance_empty">Aucun solde prépayé pour l\'instant.</string>
+    <string name="payments_locked">Déverrouillez Flagship pour voir votre solde.</string>
+    <string name="payments_choose_title">Votre forfait</string>
+    <string name="payments_plan_free_note">Au-delà de l\'allocation gratuite, le trafic est ralenti, jamais coupé.</string>
+    <string name="payments_plan_price">%1$s par mois, %2$s Go de trafic inclus</string>
+    <string name="payments_delay_start">Démarrer à un moment aléatoire dans les %1$s prochaines heures</string>
+    <string name="payments_delay_note">Rend plus difficile de relier un achat à votre compte. Sans cela, un nouveau forfait démarre aussitôt.</string>
+    <string name="payments_autopay">Payer automatiquement</string>
+    <string name="payments_autopay_note">Ce téléphone dépense votre solde petit à petit, à l\'avance, pour que votre forfait n\'expire jamais.</string>
+    <string name="payments_confirm_reason">Démarrer votre forfait</string>
+    <string name="payments_overage_title">Trafic supplémentaire</string>
+    <string name="payments_overage_cap">Limite mensuelle</string>
+    <string name="payments_overage_cap_off">Désactivé : au-delà du trafic de votre forfait, il est ralenti</string>
+    <string name="payments_overage_cap_value">Jusqu\'à %1$s par mois (%2$s Go)</string>
+    <string name="payments_overage_less">Baisser la limite</string>
+    <string name="payments_overage_more">Augmenter la limite</string>
+    <string name="payments_overage_this_month">Dépensé en trafic supplémentaire ce mois-ci : %1$s</string>
+    <string name="payments_overage_note">Quand le trafic de votre forfait s\'épuise, ce téléphone achète %1$s Go pour %2$s, jusqu\'à votre limite. Au-delà, le trafic est ralenti, jamais coupé.</string>
+    <string name="payments_buy_title">Ajouter à votre solde</string>
+    <string name="payments_pack_add">Ajouter %1$s</string>
+    <string name="payments_buy_not_yet">Pas encore en vente</string>
+    <string name="payments_rail_card">Carte</string>
+    <string name="payments_buy_note">L\'achat arrivera dans une prochaine mise à jour. Chaque paiement achète le même crédit anonyme : rien ne relie vos achats à votre compte.</string>
+    <string name="payments_test_add">Ajouter du crédit de test</string>
+    <string name="payments_read_only">Seul un appareil administrateur de ce compte peut changer le forfait ou dépenser le solde.</string>
+    <string name="payments_error_overage_needs_plan">Le trafic supplémentaire nécessite Pro ou Pro Max.</string>
+    <string name="payments_error_not_available">Les paiements ne sont pas disponibles pour le moment.</string>
+    <string name="payments_error_unavailable">Impossible de joindre Flagship. Réessayez dans un instant.</string>
+    <string name="payments_error_generic">Cela n\'a pas fonctionné. Réessayez.</string>
+    <plurals name="payments_days_left">
+        <item quantity="one">%1$s jour restant, payé jusqu\'au %2$s</item>
+        <item quantity="other">%1$s jours restants, payé jusqu\'au %2$s</item>
+    </plurals>
+    <plurals name="payments_balance_months">
+        <item quantity="one">Environ %1$s mois de %2$s</item>
+        <item quantity="other">Environ %1$s mois de %2$s</item>
+    </plurals>
 </resources>

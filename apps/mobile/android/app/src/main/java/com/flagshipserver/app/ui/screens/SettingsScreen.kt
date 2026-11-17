@@ -238,6 +238,14 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = stringResource(R.string.tier_llm_credits_dispatcher_usage_custom),
                     onClick = { nav.navigate("tier-status") },
                 ),
+                // Plan and payments: the plan, the prepaid balance (round amounts) and extra traffic.
+                FSSettingsRowData(
+                    icon = Icons.Outlined.CreditCard,
+                    title = stringResource(R.string.payments_title),
+                    subtitle = stringResource(R.string.payments_settings_subtitle),
+                    onClick = { nav.navigate("plan") },
+                    testTag = "settings-open-plan",
+                ),
                 // Account security leads; the live account type (single vs
                 // multi-device + 2FA) rides the subtitle.
                 FSSettingsRowData(

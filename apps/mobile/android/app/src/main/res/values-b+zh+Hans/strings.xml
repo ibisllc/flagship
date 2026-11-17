@@ -4228,4 +4228,47 @@
     <string name="voici_call_route_speaker">扬声器</string>
     <string name="voici_call_route_bluetooth">蓝牙</string>
     <string name="voici_call_route_wired">耳机</string>
+    <string name="payments_settings_subtitle">你的方案、预付余额和额外流量</string>
+    <string name="payments_title">方案与付款</string>
+    <string name="payments_plan_free">免费</string>
+    <string name="payments_current_free">你正在使用免费方案。你的服务器会继续运行；超出免费额度的流量会被限速。</string>
+    <string name="payments_in_grace">你的方案已到期。在手机完成付款期间，它会继续运行几天。</string>
+    <string name="payments_balance_title">预付余额</string>
+    <string name="payments_balance_empty">还没有预付余额。</string>
+    <string name="payments_locked">解锁 Flagship 以查看你的余额。</string>
+    <string name="payments_choose_title">你的方案</string>
+    <string name="payments_plan_free_note">超出免费额度的流量会被限速，但不会被切断。</string>
+    <string name="payments_plan_price">每月 %1$s，含 %2$s GB 流量</string>
+    <string name="payments_delay_start">在接下来 %1$s 小时内的随机时间开始</string>
+    <string name="payments_delay_note">让购买更难与你的账户关联。关闭时，新方案会立即开始。</string>
+    <string name="payments_autopay">自动付款</string>
+    <string name="payments_autopay_note">这部手机会提前、少量地使用你的余额，让你的方案不会中断。</string>
+    <string name="payments_confirm_reason">开始你的方案</string>
+    <string name="payments_overage_title">额外流量</string>
+    <string name="payments_overage_cap">每月上限</string>
+    <string name="payments_overage_cap_off">关闭：超出方案流量后会被限速</string>
+    <string name="payments_overage_cap_value">每月最多 %1$s（%2$s GB）</string>
+    <string name="payments_overage_less">降低上限</string>
+    <string name="payments_overage_more">提高上限</string>
+    <string name="payments_overage_this_month">本月额外流量花费：%1$s</string>
+    <string name="payments_overage_note">当方案流量快用完时，这部手机会以 %2$s 购买 %1$s GB，直到你的上限。超出后流量会被限速，但不会被切断。</string>
+    <string name="payments_buy_title">充值余额</string>
+    <string name="payments_pack_add">充值 %1$s</string>
+    <string name="payments_buy_not_yet">尚未开售</string>
+    <string name="payments_rail_card">银行卡</string>
+    <string name="payments_buy_note">购买功能将在后续更新中推出。每笔付款购买的都是同样的匿名额度，因此你的购买不会与账户关联。</string>
+    <string name="payments_test_add">添加测试额度</string>
+    <string name="payments_read_only">只有此账户的管理员设备才能更改方案或使用余额。</string>
+    <string name="payments_error_overage_needs_plan">额外流量需要 Pro 或 Pro Max。</string>
+    <string name="payments_error_not_available">付款功能目前不可用。</string>
+    <string name="payments_error_unavailable">无法连接 Flagship。请稍后再试。</string>
+    <string name="payments_error_generic">操作未成功。请重试。</string>
+    <plurals name="payments_days_left">
+        <item quantity="one">还剩 %1$s 天，已付至 %2$s</item>
+        <item quantity="other">还剩 %1$s 天，已付至 %2$s</item>
+    </plurals>
+    <plurals name="payments_balance_months">
+        <item quantity="one">约 %1$s 个月的 %2$s</item>
+        <item quantity="other">约 %1$s 个月的 %2$s</item>
+    </plurals>
 </resources>

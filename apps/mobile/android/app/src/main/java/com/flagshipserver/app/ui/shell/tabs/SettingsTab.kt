@@ -168,6 +168,8 @@ fun SettingsTab() {
         composable("name-dibs") { com.flagshipserver.app.ui.screens.NameDibsScreen() }
         // P7 — dedicated tier-status / subscription screen (marketplace).
         composable("tier-status") { TierStatusScreen(nav) }
+        // Plan and payments (docs/payments-privacy-and-rails.md "As built").
+        composable("plan") { com.flagshipserver.app.ui.screens.PlanScreen(nav) }
         // Web-experience gating — the browser QR-logins this phone authorized.
         composable("secured-sessions") { SecuredSessionsScreen(nav) }
         // The authorize target "Scan a code or enter a link" hands off to (same route shape as the

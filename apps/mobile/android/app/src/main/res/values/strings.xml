@@ -4233,4 +4233,51 @@
     <string name="voici_call_route_speaker">Speaker</string>
     <string name="voici_call_route_bluetooth">Bluetooth</string>
     <string name="voici_call_route_wired">Headphones</string>
+    <string name="payments_settings_subtitle">Your plan, prepaid balance and extra traffic</string>
+    <string name="payments_title">Plan and payments</string>
+    <string name="payments_plan_free">Free</string>
+    <string name="payments_plan_pro" translatable="false">Pro</string>
+    <string name="payments_plan_pro_max" translatable="false">Pro Max</string>
+    <string name="payments_current_free">You\'re on Free. Your servers keep running; traffic past the free allowance is slowed.</string>
+    <string name="payments_in_grace">Your plan has ended. It keeps running for a few days while your phone pays.</string>
+    <string name="payments_balance_title">Prepaid balance</string>
+    <string name="payments_balance_empty">No prepaid balance yet.</string>
+    <string name="payments_locked">Unlock Flagship to see your balance.</string>
+    <string name="payments_choose_title">Your plan</string>
+    <string name="payments_plan_free_note">Traffic past the free allowance is slowed, never cut.</string>
+    <string name="payments_plan_price">%1$s a month, %2$s GB of traffic included</string>
+    <string name="payments_delay_start">Start at a random time in the next %1$s hours</string>
+    <string name="payments_delay_note">Makes it harder to link a purchase to your account. Without it, a new plan starts at once.</string>
+    <string name="payments_autopay">Pay automatically</string>
+    <string name="payments_autopay_note">This phone spends a little of your balance at a time, ahead of need, so your plan never lapses.</string>
+    <string name="payments_confirm_reason">Start your plan</string>
+    <string name="payments_overage_title">Extra traffic</string>
+    <string name="payments_overage_cap">Monthly limit</string>
+    <string name="payments_overage_cap_off">Off: past your plan\'s traffic, it is slowed</string>
+    <string name="payments_overage_cap_value">Up to %1$s a month (%2$s GB)</string>
+    <string name="payments_overage_less">Lower the limit</string>
+    <string name="payments_overage_more">Raise the limit</string>
+    <string name="payments_overage_this_month">Spent on extra traffic this month: %1$s</string>
+    <string name="payments_overage_note">When your plan\'s traffic runs low, this phone buys %1$s GB for %2$s, up to your limit. Past it, traffic is slowed, never cut.</string>
+    <string name="payments_buy_title">Add to your balance</string>
+    <string name="payments_pack_add">Add %1$s</string>
+    <string name="payments_buy_not_yet">Not on sale yet</string>
+    <string name="payments_rail_play" translatable="false">Google Play</string>
+    <string name="payments_rail_card">Card</string>
+    <string name="payments_rail_monero" translatable="false">Monero</string>
+    <string name="payments_buy_note">Buying arrives in a later update. Every payment buys the same anonymous credit, so nothing links what you buy to your account.</string>
+    <string name="payments_test_add">Add test credit</string>
+    <string name="payments_read_only">Only an admin device of this account can change the plan or spend the balance.</string>
+    <string name="payments_error_overage_needs_plan">Extra traffic needs Pro or Pro Max.</string>
+    <string name="payments_error_not_available">Payments aren\'t available right now.</string>
+    <string name="payments_error_unavailable">Couldn\'t reach Flagship. Try again in a moment.</string>
+    <string name="payments_error_generic">That didn\'t work. Try again.</string>
+    <plurals name="payments_days_left">
+        <item quantity="one">%1$s day left, paid until %2$s</item>
+        <item quantity="other">%1$s days left, paid until %2$s</item>
+    </plurals>
+    <plurals name="payments_balance_months">
+        <item quantity="one">About %1$s month of %2$s</item>
+        <item quantity="other">About %1$s months of %2$s</item>
+    </plurals>
 </resources>
