@@ -1016,3 +1016,8 @@ Next steps for whoever resumes:
   `send` to the peer. Restored with errno logging and a real-libwebrtc loopback test (`CallMediaLoopbackTests`); gym app
   reinstalled. Music-time failures were a 403 on the device room join; refusal logging added (phone + gym Worker
   `59db4a90`). Waiting on the owner's retest.
+
+### 2026-11-16 — Rule: the gym app carries all of release/0.4
+- Owner: "incorporate them in the Flagship gym app on my phone so I can see the improvements". Every gym device build
+  now starts by rebasing `gym-0.4` onto `origin/release/0.4` (keep gym-only commits; next free shell number on a
+  clash), then builds and installs; a gym Worker deploy then also carries the newest webapp and voi.ci.
