@@ -4205,5 +4205,8 @@
   "activity_social_section_hint": "通话、对话和你的页面",
   "activity_social_empty": "还没有通话或消息。",
   "activity_open_server": "打开服务器",
-  "scheduled_backup_finished": "计划备份已完成"
+  "scheduled_backup_finished": "计划备份已完成",
+  "activity_social_answered_length": "已接听 · %1$s",
+  "activity_social_video_call_length": "视频通话 · %1$s",
+  "voici_calls_history_line_length": "%1$s · %2$s · %3$s"
 }

@@ -3877,5 +3877,9 @@
   "Calls, conversations and your page": "通话、对话和你的页面",
   "No calls or messages yet.": "还没有通话或消息。",
   "Opens the server": "打开服务器",
-  "Scheduled backup finished": "计划备份已完成"
+  "Scheduled backup finished": "计划备份已完成",
+  "Answered · %@": "已接听 · %@",
+  "Video call · %@": "视频通话 · %@",
+  "Incoming call · %@ · %@": "来电 · %@ · %@",
+  "Outgoing call · %@ · %@": "去电 · %@ · %@"
 }

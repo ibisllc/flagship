@@ -4208,4 +4208,7 @@
     <string name="activity_social_empty">Aucun appel ni message pour l’instant.</string>
     <string name="activity_open_server">Ouvre le serveur</string>
     <string name="scheduled_backup_finished">Sauvegarde planifiée terminée</string>
+    <string name="activity_social_answered_length">Répondu · %1$s</string>
+    <string name="activity_social_video_call_length">Appel vidéo · %1$s</string>
+    <string name="voici_calls_history_line_length">%1$s · %2$s · %3$s</string>
 </resources>

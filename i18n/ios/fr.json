@@ -3879,5 +3879,9 @@
   "Calls, conversations and your page": "Appels, conversations et votre page",
   "No calls or messages yet.": "Aucun appel ni message pour l’instant.",
   "Opens the server": "Ouvre le serveur",
-  "Scheduled backup finished": "Sauvegarde planifiée terminée"
+  "Scheduled backup finished": "Sauvegarde planifiée terminée",
+  "Answered · %@": "Répondu · %@",
+  "Video call · %@": "Appel vidéo · %@",
+  "Incoming call · %@ · %@": "Appel entrant · %@ · %@",
+  "Outgoing call · %@ · %@": "Appel sortant · %@ · %@"
 }

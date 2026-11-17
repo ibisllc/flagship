@@ -4205,5 +4205,8 @@
   "activity_social_section_hint": "Llamadas, conversaciones y tu página",
   "activity_social_empty": "Aún no hay llamadas ni mensajes.",
   "activity_open_server": "Abre el servidor",
-  "scheduled_backup_finished": "Copia de seguridad programada terminada"
+  "scheduled_backup_finished": "Copia de seguridad programada terminada",
+  "activity_social_answered_length": "Respondida · %1$s",
+  "activity_social_video_call_length": "Videollamada · %1$s",
+  "voici_calls_history_line_length": "%1$s · %2$s · %3$s"
 }

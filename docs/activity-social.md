@@ -21,7 +21,7 @@ Activity becomes the one history of what happened; badges stay "what needs you" 
 
 ## Open
 - Retention for local social entries (proposal: 90 days, same as rate-limit logs; or until deleted).
-- Whether an answered call shows its length (local only).
+- ~~Whether an answered call shows its length (local only).~~ Decided (owner, 2026-11-16): yes; see "As built".
 
 ## As built (2026-11-16, `0.4/activity-social`)
 
@@ -43,7 +43,13 @@ Activity becomes the one history of what happened; badges stay "what needs you" 
   | `page.published` / `page.updated` | Your page went public / was updated | the published index (seq 1 / later), at its `issuedAt` | the page (Social, Profile) |
   | `post.published` | You posted on your page (first line under it) | each post of the published page, at `createdAt` | the page |
 
-  A video call says "Video call" under the title; a missed call is drawn as a warning. Names are the nickname, else the
+  A video call says "Video call" under the title; a missed call is drawn as a warning. **An answered call shows its
+  length** (owner, 2026-11-16), placed or received: "Answered · 4:32" under the title ("Video call · 4:32" for video),
+  h:mm:ss over an hour, from the record's `durationMs` (nothing shows when none was recorded). The Calls list adds the
+  same length to an answered row ("Incoming call · {date} · 4:32"). Formatted by the platform, so digits follow the
+  locale: iOS `DateComponentsFormatter` positional (`SocialActivity.callLength`), Android
+  `DateUtils.formatElapsedTime` (`SocialActivity.callLength`). The webapp shows no length: its call records (placed
+  calls only) keep none. Names are the nickname, else the
   visitor name; a page's username for calls to pages; "Anonymous caller" on the webapp for anonymous missed calls.
 - **Comments and reactions:** not built (docs/social-tab.md §3.3). The hook is a marked spot in each `Kind` list
   (`comment.new`, `reaction.new`), fed from the same data `SocialBadges.profile` will count.
@@ -76,7 +82,8 @@ Activity becomes the one history of what happened; badges stay "what needs you" 
   shared by every owner device, so those entries appear on all of them. **Answered, declined and placed calls are each
   device's own** (the call list was never synced). The only end-to-end encrypted owner-device sync for calls is the
   call-hours blob (`flagship/voici-call-settings/v1`), which holds settings, not history; putting call records there
-  would be a server-held (if sealed) log of calls, which this spec rules out. So each device shows its own calls. Open.
+  would be a server-held (if sealed) log of calls, which this spec rules out. So each device shows its own calls.
+  **Decided (owner, 2026-11-16): each device keeps its own.** Call history is not synced.
 - **Retention:** whatever the sources keep: the call list's 200 records per device, conversations until deleted, the
   current page. No separate cap.
 
@@ -87,13 +94,17 @@ Activity becomes the one history of what happened; badges stay "what needs you" 
 - Android: `:app:compileDebugKotlin` and the full `:app:testDebugUnitTest` (3082 tests, 0 failures).
 - Box: `packages/server-daemon/tests/serverArchive` (179 tests). Webapp: all of `apps/web/tests` (333 files).
   `npm run i18n` and `npm run parity` pass.
+- Call length (`0.4/call-length`, 2026-11-16): the `FlagshipApp` app built for the simulator (Xcode 27.1 RC);
+  `SocialActivityTests` 6/6 (two new: the entry's length and the locale's clock, Eastern Arabic digits included) on an
+  iPhone 17 Pro simulator; Android `SocialActivityTest` 5/5 and `SocialActivityCallLengthTest` 2/2 (Robolectric, for
+  `DateUtils`). `npm run i18n` and `npm run parity` pass.
 - Not run: the gym UI specs (`GymEveryMergeTests` / Activity, `GymActivityTest`, `gym-activity.spec.ts`); the new
   section sits second in the accordion and the filter adds a row above it, which a spec counting sections may notice.
 
 ### Open
-1. Calls on the owner's other devices: answered, declined and placed calls show only where they happened. Syncing them
-   needs an owner decision (it would be a sealed call log held by `.com`).
-2. Whether an answered call shows its length (the records keep `durationMs`; not shown).
+1. ~~Calls on the owner's other devices.~~ Decided (owner, 2026-11-16): each device keeps its own; answered, declined
+   and placed calls show only where they happened, and call history is never synced.
+2. ~~Whether an answered call shows its length.~~ Decided (owner, 2026-11-16): yes, built (`0.4/call-length`).
 3. Comments and reactions entries, when those exist.
 4. The page entry shows only the latest publish (the index carries no history); earlier "updated" entries are not kept.
 5. Native review of the new strings (machine drafts, `i18n/REVIEW.md`).

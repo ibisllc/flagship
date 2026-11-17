@@ -38,6 +38,7 @@ import com.flagshipserver.app.calls.VoiciCallTarget
 import com.flagshipserver.app.calls.VoiciOutgoingCall
 import com.flagshipserver.app.calls.VoiciOutgoingCalls
 import com.flagshipserver.app.calls.VoiciOutgoingState
+import com.flagshipserver.app.core.voici.SocialActivity
 import com.flagshipserver.app.core.voici.VoiciCopy
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDivider
@@ -253,7 +254,9 @@ private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, a
     val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(r.at))
     FSRow(
         title = VoiciCopy.callPeer(r, nicknames),
-        subtitle = stringResource(R.string.voici_calls_history_line, stringResource(VoiciCopy.callOutcome(r)), time),
+        subtitle = SocialActivity.callLength(r.durationMs).takeIf { r.outcome == "answered" }
+            ?.let { stringResource(R.string.voici_calls_history_line_length, stringResource(VoiciCopy.callOutcome(r)), time, it) }
+            ?: stringResource(R.string.voici_calls_history_line, stringResource(VoiciCopy.callOutcome(r)), time),
         icon = when {
             r.outcome == "missed" -> Icons.Outlined.CallMissed
             r.direction == "out" -> Icons.Outlined.CallMade

@@ -4139,5 +4139,8 @@
   "activity_social_section_hint": "f33ffc24e946",
   "activity_social_empty": "167c929c27b8",
   "activity_open_server": "71cc6af57083",
-  "scheduled_backup_finished": "073c8161ce7f"
+  "scheduled_backup_finished": "073c8161ce7f",
+  "activity_social_answered_length": "283233208abd",
+  "activity_social_video_call_length": "2078d758701c",
+  "voici_calls_history_line_length": "269fbdddf13b"
 }

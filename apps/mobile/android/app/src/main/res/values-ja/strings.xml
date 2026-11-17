@@ -4208,4 +4208,7 @@
     <string name="activity_social_empty">まだ通話やメッセージはありません。</string>
     <string name="activity_open_server">サーバーを開きます</string>
     <string name="scheduled_backup_finished">スケジュールされたバックアップが完了しました</string>
+    <string name="activity_social_answered_length">応答済み · %1$s</string>
+    <string name="activity_social_video_call_length">ビデオ通話 · %1$s</string>
+    <string name="voici_calls_history_line_length">%1$s・%2$s・%3$s</string>
 </resources>

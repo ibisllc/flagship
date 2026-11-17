@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core.voici
 
+import android.text.format.DateUtils
 import com.flagshipserver.app.R
 import com.flagshipserver.app.calls.VoiciCallRecord
 import com.flagshipserver.app.core.FSStrings
@@ -24,6 +25,8 @@ data class SocialActivityEntry(
     val video: Boolean = false,
     /** What a tap opens: [SocialTarget]. */
     val target: SocialTarget,
+    /** How long an answered call lasted, in milliseconds; null for every other entry. */
+    val durationMs: Long? = null,
 )
 
 sealed interface SocialTarget {
@@ -56,7 +59,8 @@ object SocialActivity {
             }
             val who = r.peerUsername ?: r.pseudonymPub?.let(name) ?: ""
             val target = if (r.conv != null && r.conv in convs) SocialTarget.Thread(r.conv) else SocialTarget.Calls
-            out += SocialActivityEntry(id = "call:${r.direction}|${r.callId.ifEmpty { r.id }}", kind = kind, at = r.at, name = who, video = r.video, target = target)
+            out += SocialActivityEntry(id = "call:${r.direction}|${r.callId.ifEmpty { r.id }}", kind = kind, at = r.at, name = who, video = r.video, target = target,
+                durationMs = r.durationMs.takeIf { r.outcome == "answered" && it > 0 })
         }
         for (c in conversations) {
             val ordered = c.ordered
@@ -97,10 +101,25 @@ object SocialActivity {
         else -> FSStrings.get(R.string.activity_social_post_published)
     }
 
-    fun detail(e: SocialActivityEntry): String? = when {
-        e.kind == "post.published" -> e.snippet
-        e.video -> FSStrings.get(R.string.activity_social_video_call)
-        else -> null
+    fun detail(e: SocialActivityEntry): String? {
+        if (e.kind == "post.published") return e.snippet
+        val length = e.durationMs?.let(::callLength)
+        return when {
+            length != null && e.video -> FSStrings.get(R.string.activity_social_video_call_length, length)
+            length != null -> FSStrings.get(R.string.activity_social_answered_length, length)
+            e.video -> FSStrings.get(R.string.activity_social_video_call)
+            else -> null
+        }
+    }
+
+    /** An answered call's length as the locale writes a clock ("4:32", "1:02:05" over an hour, digits localized);
+     *  null for no length. Also used by the Calls list. */
+    fun callLength(ms: Long): String? {
+        if (ms <= 0) return null
+        val seconds = ms / 1000
+        val s = DateUtils.formatElapsedTime(seconds)
+        // Under an hour it writes "04:32" and "00:05"; one leading zero of the minutes is dropped to read "4:32", as iOS.
+        return if (seconds < 600) s.drop(1) else s
     }
 
     /** Missed calls show as warnings. */

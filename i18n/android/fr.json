@@ -4205,5 +4205,8 @@
   "activity_social_section_hint": "Appels, conversations et votre page",
   "activity_social_empty": "Aucun appel ni message pour l’instant.",
   "activity_open_server": "Ouvre le serveur",
-  "scheduled_backup_finished": "Sauvegarde planifiée terminée"
+  "scheduled_backup_finished": "Sauvegarde planifiée terminée",
+  "activity_social_answered_length": "Répondu · %1$s",
+  "activity_social_video_call_length": "Appel vidéo · %1$s",
+  "voici_calls_history_line_length": "%1$s · %2$s · %3$s"
 }
