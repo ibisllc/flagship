@@ -1,0 +1,14 @@
+[ca]
+basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign,cRLSign
+[mid]
+basicConstraints=critical,CA:TRUE,pathlen:0
+keyUsage=critical,keyCertSign,cRLSign
+1.2.840.113635.100.6.2.1=ASN1:NULL
+[leaf]
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature
+1.2.840.113635.100.6.11.1=ASN1:NULL
+[plainleaf]
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature
