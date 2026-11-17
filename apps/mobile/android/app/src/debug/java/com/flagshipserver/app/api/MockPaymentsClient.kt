@@ -25,6 +25,8 @@ class MockPaymentsClient(
     startPaidUntil: Long = 0,
     val testIssue: Boolean = true,
     var remainingBytes: Long = 200L * 1024 * 1024 * 1024,
+    /** The Google rail is on (paid-issue takes Play purchase tokens). */
+    val googleRail: Boolean = true,
 ) : PaymentsClient {
     private val n: BigInteger
     private val e: BigInteger
@@ -50,6 +52,11 @@ class MockPaymentsClient(
     private var walletVersion = 0L
     private var walletBlob: JsonObject? = null
     val redeemCalls = mutableListOf<JsonObject>()
+    /** Play purchases by token: the blinded set they were signed for (idempotent re-issue), refunded and unpaid ones. */
+    private val paid = HashMap<String, List<String>>()
+    val refundedTokens = HashSet<String>()
+    val unpaidTokens = HashSet<String>()
+    val paidIssueCalls = mutableListOf<String>()
 
     private fun refuse(status: Int, code: String, extra: Map<String, JsonElement> = emptyMap()): Nothing =
         throw PaymentsHttpError(status, code, JsonObject(mapOf("error" to JsonPrimitive(code), "code" to JsonPrimitive(code)) + extra))
@@ -59,6 +66,8 @@ class MockPaymentsClient(
             "config" to cfg.toJson(),
             "keys" to JsonArray(listOf(JsonObject(mapOf("keyId" to JsonPrimitive(keyId), "nHex" to JsonPrimitive(nHex), "eHex" to JsonPrimitive(eHex), "issueUntil" to JsonPrimitive(0), "acceptUntil" to JsonPrimitive(0), "issuing" to JsonPrimitive(true))))),
             "testIssue" to JsonPrimitive(testIssue),
+            "rails" to JsonObject(mapOf("stripe" to JsonPrimitive(false), "apple" to JsonPrimitive(false), "google" to JsonPrimitive(googleRail))),
+            "products" to JsonArray(cfg.packs.map { JsonObject(mapOf("units" to JsonPrimitive(it), "productId" to JsonPrimitive("com.flagshipserver.app.vouchers.$it"))) }),
         ),
     )
 
@@ -135,5 +144,27 @@ class MockPaymentsClient(
             val m = BigInteger(1, WebEnvelopes.b64Decode(b) ?: refuse(400, "malformed"))
             WebEnvelopes.b64Encode(Vouchers.i2osp(m.modPow(d, n), (n.bitLength() + 7) / 8))
         }
+    }
+
+    private fun sign(blinded: List<String>): List<String> = blinded.map { b ->
+        val m = BigInteger(1, WebEnvelopes.b64Decode(b) ?: refuse(400, "malformed"))
+        WebEnvelopes.b64Encode(Vouchers.i2osp(m.modPow(d, n), (n.bitLength() + 7) / 8))
+    }
+
+    override suspend fun paidIssue(rail: String, proof: JsonObject, keyId: String, blinded: List<String>): PaidIssue {
+        if (rail != "google" || !googleRail) refuse(404, "rail-off")
+        val token = VoiciJs.str(proof["purchaseToken"]) ?: refuse(400, "malformed")
+        val productId = VoiciJs.str(proof["productId"]) ?: refuse(400, "malformed")
+        paidIssueCalls += token
+        if (keyId != this.keyId) refuse(409, "no-key")
+        if (blinded.isEmpty()) refuse(400, "malformed")
+        if (blinded.size > 200) refuse(400, "too-many")
+        val units = com.flagshipserver.app.core.payments.VoucherProduct.units(productId)?.takeIf { it in cfg.packs } ?: refuse(400, "payment-invalid")
+        if (token in unpaidTokens) refuse(402, "payment-unpaid")
+        if (token in refundedTokens) refuse(409, "payment-refunded")
+        if (blinded.size.toLong() != units) refuse(409, "wrong-count", mapOf("units" to JsonPrimitive(units)))
+        paid[token]?.let { if (it != blinded) refuse(409, "payment-used") }
+        paid[token] = blinded
+        return PaidIssue(keyId, sign(blinded), units)
     }
 }

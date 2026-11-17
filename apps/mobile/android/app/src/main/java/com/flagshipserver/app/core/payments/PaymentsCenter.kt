@@ -62,6 +62,9 @@ data class PaymentsUi(
     val keys: List<VoucherKey> = emptyList(),
     val issuingKey: VoucherKey? = null,
     val testIssue: Boolean = false,
+    /** The rails `.com` sells through, and the store product of each pack. */
+    val rails: PaymentRails = PaymentRails(),
+    val products: List<VoucherProduct> = emptyList(),
     /** The current plan at `.com` (null: Free) and when it is paid until. */
     val plan: String? = null,
     val paidUntil: Long = 0,
@@ -131,6 +134,8 @@ class PaymentsCenter(
                 keys = keys.map { k -> k.first },
                 issuingKey = keys.firstOrNull { k -> k.second }?.first,
                 testIssue = (cfgJson?.get("testIssue") as? JsonPrimitive)?.contentOrNull == "true",
+                rails = if (cfgJson == null) it.rails else PaymentRails.parse(cfgJson["rails"]),
+                products = if (cfgJson == null && it.products.isNotEmpty()) it.products else VoucherProduct.parse(cfgJson?.get("products"), cfg),
                 plan = if (plan != null) PaymentsConfig.planOfTier(plan.tier) else it.plan,
                 paidUntil = plan?.paidUntil ?: it.paidUntil,
                 wallet = wallet,
@@ -312,6 +317,19 @@ class PaymentsCenter(
         } finally {
             _state.update { it.copy(busy = false) }
         }
+    }
+
+    /** The served key [keyId] (issuing or only accepting), or null. */
+    fun key(keyId: String): VoucherKey? = _state.value.keys.firstOrNull { it.keyId == keyId }
+
+    /**
+     * Bought vouchers into the wallet through the normal save path (compare-and-set, a conflict merges). True only when
+     * `.com` holds the new version: the caller finishes the store purchase only then. Adding the same vouchers twice is
+     * harmless (the wallet is a set, and a spent one stays spent).
+     */
+    suspend fun addPaidVouchers(fresh: List<Voucher>): Boolean = mutex.withLock {
+        if (!_state.value.canSpend) return false
+        write { VoucherWallets.add(it, fresh) }
     }
 
     /** The gym's free test vouchers (only when `.com` says testIssue): 30 blinded, signed, unblinded, synced. */
