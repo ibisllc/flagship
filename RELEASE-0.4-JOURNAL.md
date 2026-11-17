@@ -1047,3 +1047,15 @@ Next steps for whoever resumes:
   the call fixes. Rule from now on: rebase gym-0.4 onto release/0.4 before every gym build.
 - Commits: gym-0.4 `4efdaf784`, `d4545a2cd`, `92f06068f`, `5e9977c5d`; media-fix `7e6902a16`, `35e82dac8`,
   `73ee3ba49`, `a98b101fa`.
+
+### 2026-11-16 — Calls: phone→browser audio garbled; diagnostics on both ends
+- Owner call: website→phone clean, phone→website garbled. Phone log (copied with devicectl, no sudo): session
+  PlayAndRecord/VoiceChat; 50 frames/s sealed (max 60 B in) and opened (88 B sealed) each way; TURN mix symmetric,
+  no drops (rate bucket 8,000 B/s each way, about 5.5 KB/s used). The frame format matches Swift ↔ JS byte for byte, and
+  the shared vectors cover both directions, epochs and max length, so the opener is not the suspect on paper.
+- Added (gym-0.4 `1332e45f6` + site `2acdc5b2c`; media-fix `a29adba4f`): the browser logs worker frame counts every
+  2 s (open ok / wrong size / failed / before keys, seal ok / refused, sizes) and inbound audio stats (packets, loss,
+  concealed samples, jitter buffer, level, codec, decoder). The phone logs its session rate, IO buffer and route at
+  activation, connect and route change, plus its send stats (mic level, codec, target bitrate).
+- gym-0.4 rebased onto release/0.4 first. Gym Worker `f1a090fd`, voi.ci build `aa34cca9692c6c73`. Gym app
+  reinstalled.
