@@ -102,7 +102,10 @@ struct OutboundProxyProNote: View {
                 .font(FS.font.caption())
                 .foregroundColor(c.textMuted)
             Link(OutboundProxyCopy.seePro, destination: OutboundProxyCopy.proUrl)
-                .font(FS.font.caption())
+                .font(FS.font.bodySm().weight(.semibold))
+                .foregroundColor(c.primary)
+                .frame(minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
         }
         .accessibilityIdentifier("proxy-pro")
     }
