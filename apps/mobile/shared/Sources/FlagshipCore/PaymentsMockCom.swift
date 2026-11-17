@@ -10,6 +10,14 @@ public final class MockPaymentsComClient: PaymentsComClient, @unchecked Sendable
     private let lock = NSLock()
     public var config = PaymentsConfig.defaults
     public var testIssueOn = true
+    public var rails = PaymentRails(stripe: false, apple: true, google: true)
+    /// Payments refunded at the store (by payment id: the Apple `transactionId`).
+    public var refunded: Set<String> = []
+    /// The next `paid-issue` calls refuse with these codes, one each (tests: `payment-unpaid`, `rail-unreachable`…).
+    public var paidIssueFailures: [String] = []
+    /// Every signed paid issue: the payment id and how many vouchers.
+    public private(set) var paidIssues: [(payment: String, count: Int)] = []
+    private var paidSets: [String: (set: String, sigs: [String])] = [:]
     public var wallets: [String: JSONValue] = [:]
     public private(set) var nullifiers: Set<String> = []
     public var plans: [String: AccountPlanState] = [:]
@@ -85,7 +93,7 @@ public final class MockPaymentsComClient: PaymentsComClient, @unchecked Sendable
     public func paymentsInfo() async throws -> PaymentsInfo {
         try failIfAsked()
         let keys = Self.key.map { [PublishedVoucherKey(key: $0, issueUntil: 0, acceptUntil: 0, issuing: true)] } ?? []
-        return locked { PaymentsInfo(config: config, keys: keys, testIssue: testIssueOn) }
+        return locked { PaymentsInfo(config: config, keys: keys, testIssue: testIssueOn, rails: rails) }
     }
 
     public func wallet(username: String) async throws -> JSONValue? {
@@ -113,6 +121,61 @@ public final class MockPaymentsComClient: PaymentsComClient, @unchecked Sendable
         guard !blinded.isEmpty else { throw PaymentsComError(status: 400, code: "malformed") }
         guard blinded.count <= min(30, Int(config.maxPerRequest)) else { throw PaymentsComError(status: 400, code: "too-many") }
         return try sign(blinded)
+    }
+
+    /// The payload of a compact JWS, read without checking its signature (the mock trusts StoreKit's local result;
+    /// the real `.com` checks the chain to Apple's root).
+    public static func jwsPayload(_ jws: String) -> JSONValue? {
+        let parts = jws.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        var b64 = parts[1].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        guard let data = Data(base64Encoded: b64) else { return nil }
+        return JSONValue.parse(utf8: Array(data))
+    }
+
+    /// An unsigned JWS carrying a transaction (gym purchases).
+    public static func fakeJws(transactionId: String, productId: String, quantity: Int = 1) -> String {
+        func b64u(_ s: String) -> String {
+            Data(s.utf8).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+        }
+        let body = (try? CanonicalJson.canonicalJson(["transactionId": .string(transactionId), "productId": .string(productId),
+                                                      "quantity": .number(Double(quantity)), "type": "Consumable"])) ?? "{}"
+        return "\(b64u("{\"alg\":\"none\"}")).\(b64u(body)).mock"
+    }
+
+    public func paidIssue(rail: String, proof: JSONValue, keyId: String, blinded: [String]) async throws -> PaidIssueResult {
+        try failIfAsked()
+        return try locked {
+            if !paidIssueFailures.isEmpty {
+                let code = paidIssueFailures.removeFirst()
+                throw PaymentsComError(status: code == "rail-unreachable" ? 502 : code == "payment-unpaid" ? 402 : 409, code: code)
+            }
+            guard rail == "apple" || rail == "google" || rail == "stripe" else { throw PaymentsComError(status: 400, code: "malformed") }
+            guard rail == "apple" ? rails.apple : rail == "google" ? rails.google : rails.stripe else { throw PaymentsComError(status: 404, code: "rail-off") }
+            guard !blinded.isEmpty else { throw PaymentsComError(status: 400, code: "malformed") }
+            guard blinded.count <= 200 else { throw PaymentsComError(status: 400, code: "too-many") }
+            guard keyId == Self.key?.keyId else { throw PaymentsComError(status: 409, code: "no-key") }
+            guard rail == "apple", let jws = proof["jws"]?.string, let t = Self.jwsPayload(jws),
+                  let payment = t["transactionId"]?.string ?? t["transactionId"]?.safeInt.map(String.init),
+                  let product = t["productId"]?.string else { throw PaymentsComError(status: 400, code: "payment-invalid") }
+            guard t["revocationDate"] == nil, !refunded.contains(payment) else { throw PaymentsComError(status: 409, code: "payment-refunded") }
+            guard let pack = config.packs.first(where: { VoucherProducts.productId(units: $0) == product }) else {
+                throw PaymentsComError(status: 400, code: "payment-invalid")
+            }
+            let units = pack * max(1, t["quantity"]?.safeInt ?? 1)
+            let set = CanonicalJson.sha256Hex(keyId + "|" + blinded.joined(separator: "|"))
+            if let prior = paidSets[payment] {
+                guard prior.set == set else { throw PaymentsComError(status: 409, code: "payment-used") }
+                return PaidIssueResult(k: keyId, sigs: prior.sigs, units: units)
+            }
+            guard blinded.count == Int(units) else { throw PaymentsComError(status: 409, code: "wrong-count", units: units) }
+            let sigs = try sign(blinded)
+            paidSets[payment] = (set, sigs)
+            paidIssues.append((payment, sigs.count))
+            return PaidIssueResult(k: keyId, sigs: sigs, units: units)
+        }
     }
 
     private func current(_ u: String, now: Int64) -> AccountPlanState {
