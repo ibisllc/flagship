@@ -6134,6 +6134,46 @@
       "blog/flagship-0-4.html"
     ]
   },
+  "sedd572e63a": {
+    "en": "Business, for teams",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "see9b89bd69": {
+    "en": "<1>Organizations with several admins.</1> Seats, admins scoped to some servers or apps, approvals that need several admins, freezing a seat, the organization's own rules, re-keying when someone leaves, an audit export you can check offline, and SCIM and LDAP directory connectors.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s5daa8e8b0b": {
+    "en": "<1>$6 a seat a month, at least 3 seats,</1> with 100 GB of public traffic per seat shared by the whole organization. A new organization gets 10 seats for 30 days, and paid time starts when the trial ends.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s220b89c994": {
+    "en": "<1>The organization's own wallet,</1> held by its admins and encrypted under a key only they share. If payment stops, nothing is lost: every seat, app and record stays, and only adding people, servers or connectors waits.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
+  "s2bd99083bd": {
+    "en": "<1>An invoice for the company, not its people.</1> A company can buy a batch of 100 vouchers or more on the web, with an invoice in its name and tax ID that names no organization, account or seat. The batch goes into the organization's wallet, or into voucher files staff spend on their own Pro.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
   "se30c6133be": {
     "en": "Direct access: skip the relay",
     "kind": "text",
