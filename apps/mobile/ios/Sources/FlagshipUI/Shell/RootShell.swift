@@ -462,7 +462,7 @@ private struct iPhoneShell: View {
                     // here too while locked, or VoiceOver reaches it behind the lock screen.
                     .accessibilityHidden(!app.isUnlocked)
                     .tabItem { Label(dest.title, systemImage: dest.systemImage) }
-                    .badge(dest == .messages ? MessagesStore.shared.unreadCount : 0)
+                    .badge(dest == .messages ? SocialBadges.shared.total : 0)
                     .tag(dest)
             }
         }
@@ -581,6 +581,7 @@ private struct SidebarRow: View {
                     .font(FS.font.scaled(15, weight: isSelected ? .semibold : .regular))
                     .foregroundColor(isSelected ? c.text : c.textMuted)
                 Spacer()
+                if dest == .messages { CountBadge(count: SocialBadges.shared.total) }
             }
             .padding(.horizontal, FS.space.s3)
             .padding(.vertical, FS.space.s2)

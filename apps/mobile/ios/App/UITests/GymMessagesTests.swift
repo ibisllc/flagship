@@ -13,12 +13,12 @@ final class GymMessagesTests: GymSweepCase {
         return app
     }
 
-    /// The Messages side of the Social tab (Conversations / Requests).
+    /// The Inbox side of the Social tab (docs/social-tabs.md: Profile / Inbox / Requests).
     private func showMessages(_ app: XCUIApplication) {
-        let tab = any(app, "social-tab-messages")
+        let tab = any(app, "social-tab-inbox")
         XCTAssertTrue(tab.waitForExistence(timeout: 15))
         tab.tap()
-        XCTAssertTrue(any(app, "messages-segment").waitForExistence(timeout: 10))
+        XCTAssertTrue(any(app, "social-tab-requests").waitForExistence(timeout: 10))
     }
 
     private func rows(_ app: XCUIApplication) -> XCUIElementQuery {
@@ -26,7 +26,7 @@ final class GymMessagesTests: GymSweepCase {
     }
 
     private func requestsSegment(_ app: XCUIApplication) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Requests'")).firstMatch
+        any(app, "social-tab-requests")
     }
 
     private func openFirstRequest(_ app: XCUIApplication) {
@@ -57,7 +57,7 @@ final class GymMessagesTests: GymSweepCase {
         showMessages(app)
         XCTAssertTrue(rows(app).firstMatch.waitForExistence(timeout: 20), "The answered conversation is under Conversations.")
         XCTAssertEqual(rows(app).count, 1)
-        XCTAssertTrue(requestsSegment(app).label.contains("1"), "One request waits: \(requestsSegment(app).label)")
+        XCTAssertTrue((requestsSegment(app).value as? String)?.contains("1") == true, "One request waits: \(String(describing: requestsSegment(app).value))")
         requestsSegment(app).tap()
         XCTAssertTrue(rows(app).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(rows(app).firstMatch.identifier.hasPrefix("messages-row-Visitor "), "A visitor shows by the generated name.")
@@ -428,9 +428,10 @@ final class GymMessagesTests: GymSweepCase {
         XCTAssertTrue(any(app, "messages-reply-notice").waitForExistence(timeout: 30))
         XCTAssertTrue(any(app, "voici-call-audio").waitForExistence(timeout: 10), "The reply notice offers Call.")
         XCTAssertTrue(any(app, "voici-call-video").exists, "The reply notice offers Video call.")
-        let calls = any(app, "messages-calls")
-        XCTAssertTrue(calls.waitForExistence(timeout: 10))
+        let calls = any(app, "social-call-button")
+        XCTAssertTrue(calls.waitForExistence(timeout: 10), "The round call button floats over the Social page.")
         calls.tap()
+        XCTAssertTrue(any(app, "voici-call-target").waitForExistence(timeout: 10), "Calls asks who to call.")
         let row = any(app, "voici-calls-row")
         XCTAssertTrue(row.waitForExistence(timeout: 15), "The call to river-otter is listed.")
         XCTAssertTrue(text(app, containing: "voi.ci/river-otter").exists)

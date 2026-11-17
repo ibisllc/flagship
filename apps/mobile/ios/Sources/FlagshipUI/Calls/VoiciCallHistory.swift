@@ -106,3 +106,19 @@ public final class VoiciCallHistory {
         username = nil
     }
 }
+
+/// What the Calls page's "Who to call" field takes: a voi.ci username, `voi.ci/<username>`, `@<username>` or the
+/// page's https link. Phone numbers come later (docs/social-tabs.md). Nil when it isn't one.
+public enum VoiciCallTarget {
+    nonisolated public static func username(from input: String, voiciHost: String = "voi.ci") -> String? {
+        var s = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for p in ["https://", "http://"] where s.hasPrefix(p) { s.removeFirst(p.count) }
+        for p in ["www.\(voiciHost)/", "\(voiciHost)/", "voi.ci/", "@"] where s.hasPrefix(p) { s.removeFirst(p.count) }
+        if let cut = s.firstIndex(where: { $0 == "?" || $0 == "#" }) { s = String(s[..<cut]) }
+        while s.hasSuffix("/") { s.removeLast() }
+        guard (1...63).contains(s.count), let first = s.unicodeScalars.first,
+              CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789").contains(first),
+              s.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains($0) }) else { return nil }
+        return s
+    }
+}

@@ -82,18 +82,25 @@ struct VoiciOutgoingCallScreen: View {
     }
 }
 
-/// The Calls list (Social tab): this device's calls and the page's missed calls, newest first. A page this account
-/// called (or can call) has Call and Video call; a visitor of this account's page can't be called back yet.
+/// The Calls page (Social tab's call button): "Who to call" with Call and Video call on top, then this device's calls
+/// and the page's missed calls, newest first. A page this account called (or can call) has Call and Video call; a
+/// visitor of this account's page can't be called back yet.
 struct VoiciCallsScreen: View {
     @Environment(\.voiciComClient) private var client
     private let store = MessagesStore.shared
     private let history = VoiciCallHistory.shared
     @State private var calling: VoiciOutgoingCall?
     @State private var note: String?
+    @State private var target = ""
+    @State private var targetProblem: String?
+    @State private var resolving = false
+    @State private var resolved: VoiciCallee?
+    @State private var resolvedVideo = false
 
     var body: some View {
         let entries = history.entries(missed: store.missedCalls)
         List {
+            whoToCall
             if let note { Text(verbatim: note).font(.footnote).foregroundStyle(.secondary) }
             if entries.isEmpty {
                 Text("No calls yet. Calls you make, answer or miss show here, on this device only.")
@@ -106,6 +113,87 @@ struct VoiciCallsScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("voici-calls-list")
         .fullScreenCover(item: $calling) { c in VoiciOutgoingCallScreen(call: c) { calling = nil } }
+        .confirmationDialog(Text(verbatim: String(localized: "Let voi.ci/\(resolved?.username ?? "") call you back?")),
+                            isPresented: Binding(get: { resolved != nil }, set: { if !$0 { resolved = nil } }), titleVisibility: .visible) {
+            Button("Call and allow call-back") { place(allowCallBack: true) }
+                .accessibilityIdentifier("voici-call-allow-back")
+            Button("Call without call-back") { place(allowCallBack: false) }
+                .accessibilityIdentifier("voici-call-no-back")
+            Button("Cancel", role: .cancel) { resolved = nil }
+        } message: {
+            Text(verbatim: String(localized: "voi.ci/\(resolved?.username ?? "") won't learn who you are. Flagship will know this conversation can ring your phone."))
+        }
+    }
+
+    // MARK: who to call
+
+    /// A voi.ci page (its username or link) today; phone numbers later, so the field is named for the person.
+    private var whoToCall: some View {
+        Section {
+            TextField(text: $target, prompt: Text("Username or voi.ci link")) { Text("Who to call") }
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .submitLabel(.go)
+                .onSubmit { Task { await call(video: false) } }
+                .onChange(of: target) { _, _ in targetProblem = nil }
+                .accessibilityIdentifier("voici-call-target")
+            HStack(spacing: 12) {
+                Button { Task { await call(video: false) } } label: {
+                    Label("Call", systemImage: "phone.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("voici-call-target-audio")
+                Button { Task { await call(video: true) } } label: {
+                    Label("Video call", systemImage: "video.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("voici-call-target-video")
+            }
+            .disabled(client == nil || resolving || target.trimmingCharacters(in: .whitespaces).isEmpty)
+            if resolving { ProgressView().frame(maxWidth: .infinity) }
+        } header: {
+            Text("Who to call")
+        } footer: {
+            if let targetProblem {
+                Text(verbatim: targetProblem).foregroundStyle(.red).accessibilityIdentifier("voici-call-target-problem")
+            }
+        }
+    }
+
+    /// Finds the page behind what was typed (checked under its account's key, as a call checks it), then asks the
+    /// call-back question and places the call through the same flow as a row's Call button.
+    private func call(video: Bool) async {
+        guard let client, !resolving else { return }
+        guard let username = VoiciCallTarget.username(from: target, voiciHost: Endpoints.voiciHost) else {
+            targetProblem = String(localized: "Enter a voi.ci username, like voi.ci/alex.")
+            return
+        }
+        resolving = true
+        defer { resolving = false }
+        do {
+            let keys = try await client.accountKeys(username: username)
+            guard let raw = try await client.page(username: username),
+                  case .ok(let idx) = VoiciPage.checkVoiciPageIndex(raw, username: username, sensitiveKind: keys.sensitive.kind, sensitivePub: keys.sensitive.pub) else {
+                targetProblem = String(localized: "There's no page at voi.ci/\(username).")
+                return
+            }
+            guard idx.takesCalls else {
+                targetProblem = String(localized: "voi.ci/\(username) doesn't take calls.")
+                return
+            }
+            targetProblem = nil
+            resolvedVideo = video
+            resolved = VoiciCallee(username: username, pageId: idx.pageId)
+        } catch {
+            targetProblem = String(localized: "There's no page at voi.ci/\(username).")
+        }
+    }
+
+    private func place(allowCallBack: Bool) {
+        guard let client, let callee = resolved else { return }
+        resolved = nil
+        calling = VoiciOutgoingCall.live(callee: callee, video: resolvedVideo, allowCallBack: allowCallBack, client: client)
     }
 
     private func row(_ r: VoiciCallRecord) -> some View {
