@@ -388,4 +388,12 @@ Cloudflare (owner).
   (shared differential cases and state files in `packages/keyd/tests/rustBackend.test.ts`).
 
 **Still open for step 3**: No CT watch for `fshp.app`; no renewal/lapse for vanity names (none exist); no abuse route to suspend a
-name (the storage call exists). Not run on a real box.
+name (the storage call exists).
+
+**Live (2026-11-17, live gym group `direct-access`, 16/16):** an UpCloud box with a public IPv6, the owner's order naming only
+its /64, the box's update reaching `.com`, a real Let's Encrypt certificate for the name, AAAA + pinned CAA (no A) at the
+zone's name servers, HTTPS from outside over IPv6 answered by the box, nothing served for the name through the relay, the
+outside probe, withdrawal on name off and on direct access off (the box stops listening). The gym's direct apex is
+`fshp.gym.flagship.services` (gym branch seam), never `fshp.app`. Found: a `??--` label (two-character slug) can never get a
+certificate (R-LDH), now refused; the box now also hands `.com` the owner's off order. **A withdrawn or not-yet-published name
+falls to any wildcard on the direct apex**: production's old proxied `*.fshp.app` must be deleted before launch (step 6).
