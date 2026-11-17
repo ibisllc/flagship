@@ -97,6 +97,42 @@ final class GymSweepSettingsTests: GymSweepCase {
         }
     }
 
+    /// Settings → Plan (payments step 3): test credit in the mock `.com`, then Pro, paid from the phone's balance.
+    func test_planScreenAddsTestCreditAndStartsPro() throws {
+        let app = launch(tab: "settings")
+        settings(app)
+        let entry = app.buttons["settings-open-plan"]
+        XCTAssertTrue(find(app, entry), "Settings should offer the plan screen.")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["Plan"].waitForExistence(timeout: 15), "Plan should open.")
+        func text(_ id: String) -> String {
+            let el = app.descendants(matching: .any)[id]
+            guard el.waitForExistence(timeout: 15) else { return "" }
+            return el.label + " " + value(el)
+        }
+        XCTAssertTrue(text("plan-current").contains("Free"), "Got: \(text("plan-current"))")
+        XCTAssertTrue(text("plan-balance").contains("$0"), "Got: \(text("plan-balance"))")
+        XCTAssertTrue(app.descendants(matching: .any)["plan-pack-30"].exists || reveal(app, app.descendants(matching: .any)["plan-pack-30"]),
+                      "The packs show, not on sale yet.")
+        let add = app.buttons["plan-add-test"]
+        XCTAssertTrue(find(app, add), "The gym's test credit is offered.")
+        add.tap()
+        let balance = app.descendants(matching: .any)["plan-balance"]
+        _ = revealUp(app, balance, tries: 12)
+        expectation(for: NSPredicate(format: "label CONTAINS '$30'"), evaluatedWith: balance)
+        waitForExpectations(timeout: 60)
+        shot(app, "plan-test-credit")
+        let pro = app.buttons["plan-choose-pro"]
+        XCTAssertTrue(find(app, pro), "Pro can be chosen.")
+        pro.tap()
+        let current = app.descendants(matching: .any)["plan-current"]
+        _ = revealUp(app, current, tries: 12)
+        expectation(for: NSPredicate(format: "label CONTAINS 'Pro'"), evaluatedWith: current)
+        waitForExpectations(timeout: 30)
+        XCTAssertTrue(text("plan-balance").contains("$29"), "One voucher paid the first days. Got: \(text("plan-balance"))")
+        shot(app, "plan-pro")
+    }
+
     /// About names the one product version every surface shares
     /// (release/version.json), then the App Store version and build.
     func test_aboutShowsTheProductVersionAndStoreBuild() throws {
