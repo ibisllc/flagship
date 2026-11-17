@@ -12,6 +12,7 @@ import FlagshipCore
 ///   -smoke-messages           a published page (accepting) with one post, a conversation the owner answered
 ///                             ("Visitor …" from visitor A) and a request (visitor B)
 ///   -smoke-messages-empty     no page yet
+///   -smoke-messages-quiet     with -smoke-messages: the page is public and takes messages, the inbox is empty
 ///   -smoke-messages-lane      with -smoke-messages: another device's post waiting in the drafts lane
 ///   -smoke-voici-page         another account (river-otter) with a page, for the sign-in approval
 ///   -smoke-voici-attest-limit the attestation is refused: first-contact-limit (retry in 5 hours)
@@ -96,7 +97,8 @@ extension GymSweepSeams {
         if let b, let e = try? b.message("Can I buy a print of the lake photo?", inboxPub: inboxPub, seq: 1, sentAt: now - 600_000) {
             items.append(VoiciInboxItem(envelope: e, storedAt: now - 600_000))
         }
-        m.mailbox[user] = items
+        // -smoke-messages-quiet: the same published page, nobody has written yet.
+        m.mailbox[user] = args.contains("-smoke-messages-quiet") ? [] : items
         if args.contains("-smoke-messages-lane"), let umk = GymSeams.accountRootSeed {
             let other = try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x61, count: 32))
             let pub = HexUtil.encode(other.publicKey.rawRepresentation)

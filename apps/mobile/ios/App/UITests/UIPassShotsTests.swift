@@ -112,6 +112,10 @@ final class UIPassShotsTests: GymSweepCase {
             }
         }
 
+        app = open("messages", ["-smoke-messages", "-smoke-messages-quiet"])
+        _ = any(app, "social-header").waitForExistence(timeout: 20)
+        if tapIf(app, any(app, "social-tab-inbox"), scroll: false) { snap("social-inbox-quiet", settle: 2) }
+
         app = open("messages", ["-smoke-messages-empty"])
         _ = any(app, "social-header").waitForExistence(timeout: 20)
         snap("social-new-page", settle: 2)
