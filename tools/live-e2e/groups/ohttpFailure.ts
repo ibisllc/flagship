@@ -88,6 +88,7 @@ export const ohttpFailure: Group = {
 
       await rec.check("relay down, plan lapsing within a day: the spend goes straight to `.com`, marked, and is credited; `.com` counts the fallback", async () => {
         const arr0 = await relayArrivals();
+        const w0 = (await Plan.loadWallet(cfg.config, dev.deps())).wallet.vouchers.length;
         const grace = cfg.config.graceHours * HOUR;
         const nearLapse = { plan: "pro", paidUntil: Date.now() - grace + 12 * HOUR };
         due();
@@ -100,7 +101,9 @@ export const ohttpFailure: Group = {
         const relay = Plan.relayStateOf(dev.deps());
         assert(relay.wentDirect === true && Plan.relayPrivacyLine(cfg.ohttp, relay).id === "waiting", `relay state ${JSON.stringify(relay)}`);
         const a = await planAttestation(dev);
-        assert(a.paidUntil >= paidUntil + did.planSpent * 3 * DAY - 60_000, `credited? ${paidUntil} → ${a.paidUntil}`);
+        assert(Math.abs(a.paidUntil - paidUntil - did.planSpent * 3 * DAY) < 60_000, `credited? ${paidUntil} → ${a.paidUntil} for ${did.planSpent}`);
+        const w1 = (await Plan.loadWallet(cfg.config, dev.deps())).wallet.vouchers.length;
+        assert(w0 - w1 === did.planSpent, `${w0 - w1} voucher(s) left the wallet, ${did.planSpent} credited`);
         paidUntil = a.paidUntil;
         const arr1 = await relayArrivals();
         assert(arr1.directFallback > arr0.directFallback, `direct-fallback arrivals ${arr0.directFallback} → ${arr1.directFallback}`);
