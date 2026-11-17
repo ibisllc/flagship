@@ -9,6 +9,8 @@ package com.flagshipserver.app.ui.screens
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -226,6 +228,7 @@ private fun Names(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NameRow(
     vm: DirectAccessViewModel,
@@ -272,7 +275,8 @@ private fun NameRow(
         } else {
             Muted(stringResource(R.string.da_not_turned_on), Modifier.testTag("sd-direct-name-state-$id"))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        // Each button as wide as its label; the row wraps on a narrow phone instead of squeezing the labels.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
             if (vm.canManage) {
                 if (row.isOn) {
                     FSGhostButton(
