@@ -30,7 +30,7 @@
  * custom voi.ci name upkeep, the voi.ci pages and mailbox collection and the stale ACME TXT sweep run every hour instead of every ten (their thresholds are hours or days; the
  * TXT sweep only removes records older than an hour). The issuance sweep (certificateIssuance.ts
  * runIssuanceSweep: abandoned orders, CA revocation of certificates whose holder lost its authority, a
- * window of issued certificates re-authorized per run) runs hourly with the suggestion group. The direct-name
+ * window of issued certificates re-authorized per run) and the eviction GC run hourly with the re-pair group. The direct-name
  * publisher (directNames.ts: a few fshp.app names reconciled, pending ones first, then any not checked for a day)
  * runs hourly with the re-pair group; an order or a box's address update also publishes its account's names at once.
  */
@@ -81,11 +81,14 @@ const TEN_MIN_MS = 10 * 60_000;
 
 const MINOR_GROUPS: CronJobId[][] = [
   // direct-names: DIRECT_NAMES_PER_RUN names of the fshp.app zone reconciled (one list and a few writes each).
-  ["repair-alerts", "quarantine-alerts", "dns-gc", "legacy-dns-sweep", "direct-names"],
-  // issuance-sweep: a few D1 reads per certificate it re-checks, and CA calls only for one it revokes (capped per run).
-  ["suggestions", "eviction-gc", "issuance-sweep"],
-  // voici-names reads each name's account servers and their heartbeats; voici-gc is one D1 batch and one R2 delete:
-  // pieces no index has listed for 30 days, mail past 180 days, old drafts and revocations (voiciRoutes.ts).
+  // eviction-gc is two D1 calls; issuance-sweep a few D1 reads per certificate it re-checks, and CA calls only for one
+  // it revokes (capped per run). Both moved here from the suggestions group, which the queue refill alone nearly fills.
+  ["repair-alerts", "quarantine-alerts", "dns-gc", "legacy-dns-sweep", "direct-names", "eviction-gc", "issuance-sweep"],
+  // The suggestion queue refill: SUGGESTION_ATTEMPTS_PER_TICK candidates, a few D1 calls and fetches each.
+  ["suggestions"],
+  // voici-names reads each name's account servers and their heartbeats; voici-gc is a few D1 batches and one R2 delete:
+  // pieces no index has listed for 30 days, mail past 180 days, old drafts and revocations, abuse counters, and the
+  // calls' expired rows (voiciRoutes.ts; the calls' seven deletes are one batch).
   ["voici-names", "voici-gc"],
 ];
 
