@@ -743,13 +743,21 @@ fn recipient_ok(r: &str) -> bool {
     r.strip_prefix("box:").is_some_and(is_domain)
 }
 
-/// The whole check: the 32-byte CGK to adopt and its version.
-///
-/// # Errors
-/// [`OrgCgkError`] with the same code the TypeScript backend gives.
-pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> R<Adopted> {
-    let records = verify_chain(args.get("chain"), pin, now)?;
-    let ring = obj(args.get("ring"), "ring")?;
+/// A key-ring version as keyd reads it: its canonical bytes and the fields keyd checks.
+struct RingView {
+    order: String,
+    org_id: String,
+    kind: String,
+    prev: String,
+    commitment: String,
+    recipients_hash: String,
+    version: u64,
+    oar: u64,
+    issued_at: u64,
+}
+
+fn ring_view(v: Option<&Value>) -> R<RingView> {
+    let ring = obj(v, "ring")?;
     if !keys_are(ring, RING_KEYS) {
         return fail("malformed", "ring keys");
     }
@@ -791,6 +799,35 @@ pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> 
         "{TAG_ORG_KEY_RING}|{org_id}|{kind}|{scope}|{version}|{prev}|{commitment}|{recipients_hash}|{}|{oar}|{issued_at}",
         retired.join(",")
     );
+    Ok(RingView {
+        order,
+        org_id: org_id.to_owned(),
+        kind: kind.to_owned(),
+        prev: prev.to_owned(),
+        commitment: commitment.to_owned(),
+        recipients_hash: recipients_hash.to_owned(),
+        version,
+        oar,
+        issued_at,
+    })
+}
+
+/// The whole check: the 32-byte CGK to adopt and its version.
+///
+/// # Errors
+/// [`OrgCgkError`] with the same code the TypeScript backend gives.
+pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> R<Adopted> {
+    let records = verify_chain(args.get("chain"), pin, now)?;
+    let rv = ring_view(args.get("ring"))?;
+    let (org_id, kind, prev, commitment, recipients_hash) = (
+        rv.org_id.as_str(),
+        rv.kind.as_str(),
+        rv.prev.as_str(),
+        rv.commitment.as_str(),
+        rv.recipients_hash.as_str(),
+    );
+    let (version, oar, issued_at) = (rv.version, rv.oar, rv.issued_at);
+    let order = rv.order.clone();
     if org_id != pin.org_id {
         return fail("wrong-org", "");
     }
@@ -807,13 +844,43 @@ pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> 
         return fail("future", "");
     }
     if let Some(held) = &pin.cgk_ring_sha256 {
-        if version != pin.cgk_version.saturating_add(1) {
+        // Once keyd holds a ring, the target must link back to it: through each version in between,
+        // which the daemon hands over as `between` (their links only; the target's approval covers them).
+        // Versions at or below the one keyd holds are passed over (the daemon may send the whole chain).
+        let given = match args.get("between") {
+            None => Vec::new(),
+            Some(v) => list(Some(v), "between")?,
+        };
+        if given.len() > 4096 {
+            return fail("malformed", "between");
+        }
+        let between: Vec<&Value> = given
+            .iter()
+            .filter(|x| safe_integer(x.get("version")).is_none_or(|v| v > pin.cgk_version))
+            .collect();
+        if between.len() as u64 != version.saturating_sub(pin.cgk_version.saturating_add(1)) {
             return fail(
                 "version-gap",
                 format!("v{version} after v{}", pin.cgk_version),
             );
         }
-        if prev != held {
+        let mut link = held.clone();
+        let mut at_version = pin.cgk_version;
+        for x in between {
+            let w = ring_view(Some(x))?;
+            if w.org_id != pin.org_id
+                || w.kind != "cgk"
+                || w.version != at_version.saturating_add(1)
+            {
+                return fail("version-gap", format!("v{} between", w.version));
+            }
+            if w.prev != link {
+                return fail("prev-hash", "");
+            }
+            link = sha_hex(w.order.as_bytes());
+            at_version = w.version;
+        }
+        if prev != link {
             return fail("prev-hash", "");
         }
     }

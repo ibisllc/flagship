@@ -24,8 +24,9 @@
  *    ends below it or forks from it, so a truncated chain cannot bring back a removed admin. The head
  *    moves forward on every adoption and on `org.head`, which the daemon calls at each org sync with
  *    the chain it pinned (keyd replays it; a head only ever moves forward);
- *  - once keyd holds a ring it took this way, the next one must be exactly one version up and link to
- *    it (`prevSha256`), so no jump can make every later rotation "stale".
+ *  - once keyd holds a ring it took this way, the one it takes next must link back to it by
+ *    `prevSha256`, through every version in between (`between`, links only), so no jump can make
+ *    every later rotation "stale" and a box that missed rotations still takes the newest.
  *
  * The Rust backend (`rust/crates/flagship-keyd/src/org_cgk.rs`) implements the same rule and both
  * read `packages/protocol/test-vectors/keyd-org-cgk/vectors.json`.
@@ -288,8 +289,31 @@ export function verifyOrgCgkAdoption(
   if (ring.version <= pin.cgkVersion) fail("stale", `v${ring.version} is not above v${pin.cgkVersion}`);
   if (ring.issuedAt > now + ORG_MAX_SKEW_MS) fail("future");
   if (pin.cgkRingSha256 !== undefined) {
-    if (ring.version !== pin.cgkVersion + 1) fail("version-gap", `v${ring.version} after v${pin.cgkVersion}`);
-    if (ring.prevSha256 !== pin.cgkRingSha256) fail("prev-hash");
+    // Once keyd holds a ring, the target must link back to it through each version in between, which the daemon
+    // hands over as `between` (their links only; the target's approval by a current admin covers them).
+    // Versions at or below the one keyd holds are passed over (the daemon may send the whole chain).
+    const given = args.between === undefined ? [] : args.between;
+    if (!Array.isArray(given) || given.length > 4096) fail("malformed", "between");
+    const between = (given as unknown[]).filter((x) => !isUint((x as { version?: unknown })?.version) || (x as { version: number }).version > pin.cgkVersion);
+    if (between.length !== ring.version - (pin.cgkVersion + 1)) fail("version-gap", `v${ring.version} after v${pin.cgkVersion}`);
+    let link = pin.cgkRingSha256;
+    let at = pin.cgkVersion;
+    for (const x of between) {
+      const o = obj(x, "ring");
+      if (Object.keys(o).sort().join(",") !== RING_KEYS) fail("malformed", "ring keys");
+      const w = o as unknown as OrgKeyRing;
+      let bytes: Uint8Array;
+      try {
+        bytes = canonicalOrgKeyRing(w);
+      } catch {
+        return fail("malformed", "ring");
+      }
+      if (w.orgId !== pin.orgId || w.kind !== "cgk" || w.version !== at + 1) fail("version-gap", `v${w.version} between`);
+      if (w.prevSha256 !== link) fail("prev-hash");
+      link = orgSha256Hex(bytes);
+      at = w.version;
+    }
+    if (ring.prevSha256 !== link) fail("prev-hash");
   }
   if (!Array.isArray(args.recipients)) fail("malformed", "recipients");
   const recipients = (args.recipients as unknown[]).map((x) => {

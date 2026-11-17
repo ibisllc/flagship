@@ -1115,7 +1115,10 @@ impl KeydService {
             }
             "cgk.orgAdopt" => {
                 // TS `cgk.orgAdopt`: a rotated org CGK, only on evidence keyd checks itself.
-                no_extra_args(a, &["chain", "ring", "recipients", "approvals", "key"])?;
+                no_extra_args(
+                    a,
+                    &["chain", "ring", "recipients", "approvals", "key", "between"],
+                )?;
                 let Some(pin) = self.org_pin.clone() else {
                     return Err(KeydError::forbidden("no org is pinned for this box"));
                 };

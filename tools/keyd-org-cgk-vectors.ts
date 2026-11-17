@@ -158,6 +158,20 @@ const cases: Case[] = [
     args: adopt(jump, [approve(A, canonicalOrgKeyRing(jump.ring), 1, RT + 60_000)]),
     expect: no("version-gap"),
   },
+  {
+    name: "a box that missed a rotation takes the newest, linked back through the versions in between",
+    chain: "base",
+    pin: { cgkRingSha256: orgKeyRingSha256(v1.ring) },
+    args: { ...adopt(jump, [approve(A, canonicalOrgKeyRing(jump.ring), 1, RT + 60_000)]), between: [v1.ring, v2.ring] },
+    expect: { ok: true as const, version: 3, keyHex: hex(cgk2) },
+  },
+  {
+    name: "versions in between that do not link back to the ring keyd holds",
+    chain: "base",
+    pin: { cgkRingSha256: "ab".repeat(32) },
+    args: { ...adopt(jump, [approve(A, canonicalOrgKeyRing(jump.ring), 1, RT + 60_000)]), between: [v2.ring] },
+    expect: no("prev-hash"),
+  },
   { name: "a next version that does not link to the ring keyd holds", chain: "base", pin: { cgkRingSha256: "ab".repeat(32) }, args: adopt(), expect: no("prev-hash") },
   // keyd is never handed the freezes: a frozen admin's approval still counts in its narrower rule.
   { name: "keyd does not see freezes", chain: "v1 while B was frozen by C", args: adopt(), expect: ok2 },

@@ -304,7 +304,7 @@ import { SAVED_DATA_FILE, SavedBackups } from "./serverArchive/saved.js";
 import { legacyOrigin } from "./appLineage.js";
 import { authorizeRestoreOrder } from "./serverArchive/merge/authorize.js";
 import { parseServiceId as parseServiceIdForMerge } from "@flagship/protocol";
-import { type OrgKeyRings } from "@flagship/protocol";
+import { orgNewestRingFor, type OrgKeyRings } from "@flagship/protocol";
 import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
 import { buildMigratePause, movingPage, type MigratePause } from "./serverArchive/migratePause.js";
 import { BackupPolicyStore } from "./backupPolicy/policy.js";
@@ -355,7 +355,7 @@ import {
   type RotationPq,
 } from "./adminRootRotationConsumer.js";
 import { currentOrgPin, startOrgAuthoritySync } from "./orgAuthorityPin.js";
-import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, openOrgCgkVersionsAfter, orgBoxKemSeed, orgBoxRotationDone, postOrgBoxLogHead, readOrgCgk, verifyOwnOrgRecipe, verifyServedRings } from "./orgBoxKeys.js";
+import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, cgkRingsBetween, orgBoxKemSeed, orgBoxRotationDone, postOrgBoxLogHead, readOrgCgk, verifyOwnOrgRecipe, verifyServedRings } from "./orgBoxKeys.js";
 import { ConnectorRuntime } from "./directory/connector.js";
 import { startDirectoryConnectors } from "./directory/wiring.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
@@ -1746,24 +1746,21 @@ async function main(): Promise<void> {
       if (cgkVersion > (orgCgk?.version ?? 0) && !keyd) restarts.request(`org CGK v${cgkVersion} opened; restarting so gossip and access sync use it`);
       if (keyd) advanceKeydOrgHead(pin);
       if (keyd && cgkVersion > keydOrgCgkTried) {
-        // keyd holds the CGK: hand it the chain and each version above the one it holds, oldest first, with the
-        // key; it checks them itself and takes only one version up at a time (05c review F4).
-        const from = keydOrgCgkTried;
+        // keyd holds the CGK: hand it the chain, the newest version, the key and the versions in between (their
+        // links back to the one keyd holds); it checks them itself (05c review F4).
         keydOrgCgkTried = cgkVersion;
-        let moved = 0;
-        for (const { bundle, key } of await openOrgCgkVersionsAfter(dataDir, rings, cfg.serverId, from).catch(() => [])) {
+        const ring = orgNewestRingFor(rings, "cgk", "*", `box:${cfg.serverId}`);
+        const keyHex = adopted?.keys["cgk|*"]?.keyHex;
+        if (ring && keyHex && ring.ring.version === cgkVersion) {
           try {
-            moved = keyd.adoptOrgCgk({ chain: pin.file.entries, ring: bundle.ring, recipients: bundle.recipients, approvals: bundle.approvals, key });
+            // Every version below the newest: keyd uses those above the one it holds.
+            const between = cgkRingsBetween(rings, 0, cgkVersion);
+            keyd.adoptOrgCgk({ chain: pin.file.entries, ring: ring.ring, recipients: ring.recipients, approvals: ring.approvals, key: hexToBytes(keyHex), between });
+            activityLog.note("org.cgk.rotated", `The org's server-to-server key moved to version ${cgkVersion}`, { ok: true });
+            restarts.request(`org CGK v${cgkVersion} adopted by flagship-keyd; restarting so gossip and access sync use it`);
           } catch (e) {
             activityLog.note("org.cgk.refused", `flagship-keyd kept the org's server-to-server key: ${(e as Error).message}`, { ok: false });
-            break;
-          } finally {
-            key.fill(0);
           }
-        }
-        if (moved > from) {
-          activityLog.note("org.cgk.rotated", `The org's server-to-server key moved to version ${moved}`, { ok: true });
-          restarts.request(`org CGK v${moved} adopted by flagship-keyd; restarting so gossip and access sync use it`);
         }
       }
       return rings;
