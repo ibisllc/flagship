@@ -7,6 +7,7 @@
 
 import { randomBytes } from "node:crypto";
 import { signBoxReadTokenRequest, type Bytes } from "@flagship/protocol";
+import { AccountGoneGate, accountGoneGate } from "./accountGone.js";
 
 /** A call to `.com` that has not answered by now is given up, so a hung connection never holds a poller. */
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -24,6 +25,8 @@ export interface BoxReadTokenDeps {
   now?: () => number;
   /** How long one call to `.com` may take (default 20 s). */
   timeoutMs?: number;
+  /** Holds calls while `.com` says the account is gone (default: the daemon's one gate). */
+  gate?: AccountGoneGate;
 }
 
 export class BoxReadToken {
@@ -32,18 +35,41 @@ export class BoxReadToken {
 
   constructor(private readonly deps: BoxReadTokenDeps) {}
 
-  /** GET `url` on `.com` with the box's read token, minting it as needed. */
+  private get gate(): AccountGoneGate {
+    return this.deps.gate ?? accountGoneGate;
+  }
+
+  /**
+   * GET `url` on `.com` with the box's read token, minting it as needed. While `.com` says the account is gone the
+   * call stays on the box and gets that 404 (accountGone.ts), instead of a mint and a read per poll.
+   */
   async fetch(url: string, init: RequestInit = {}): Promise<Response> {
     const fetchImpl = this.deps.fetchImpl ?? fetch;
+    const user = this.deps.username;
+    if (this.gate.held(user)) return AccountGoneGate.localAnswer();
     const attempt = async (token: string) => {
       const headers = new Headers(init.headers);
       headers.set("authorization", `Bearer ${token}`);
-      return await fetchImpl(url, { ...init, headers, signal: this.signal(init.signal) });
+      const res = await fetchImpl(url, { ...init, headers, signal: this.signal(init.signal) });
+      await this.gate.observe(user, res);
+      return res;
     };
-    const first = await attempt(await this.token());
+    const withToken = async (): Promise<string | null> => {
+      try {
+        return await this.token();
+      } catch (e) {
+        if (this.gate.held(user)) return null;
+        throw e;
+      }
+    };
+    const t1 = await withToken();
+    if (t1 === null) return AccountGoneGate.localAnswer();
+    const first = await attempt(t1);
     if (first.status !== 401) return first;
     this.cached = null;
-    return await attempt(await this.token());
+    const t2 = await withToken();
+    if (t2 === null) return AccountGoneGate.localAnswer();
+    return await attempt(t2);
   }
 
   private signal(caller?: AbortSignal | null): AbortSignal {
@@ -76,6 +102,7 @@ export class BoxReadToken {
       body: JSON.stringify({ box, signature }),
       signal: this.signal(),
     });
+    await this.gate.observe(username, r);
     if (!r.ok) throw new Error(`read token refused: status ${r.status}`);
     const body = (await r.json()) as { token?: unknown; expiresAt?: unknown };
     if (typeof body.token !== "string" || typeof body.expiresAt !== "number") {
