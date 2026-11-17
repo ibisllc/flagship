@@ -23,7 +23,8 @@ export interface PaymentsConfig {
   monthDays: number;
   plans: Record<PaidPlan, { unitsPerMonth: number; includedGb: number }>;
   overage: { blockUnits: number; blockGb: number; defaultCapUnits: number; maxCapUnits: number; buyBelowGb: number };
-  /** A lapsed plan keeps its tier this long, and a spend inside it continues from the old end (no gap, no free time). */
+  /** A lapsed plan keeps its tier this long, and a spend inside it continues from the old end (no gap, no free time).
+   *  Not overridable: the metering reads the default. */
   graceHours: number;
   /** `.com` refuses a plan spend that would put the plan more than this far ahead (two devices can't both overpay). */
   maxAheadDays: number;
@@ -89,7 +90,8 @@ export function mergePaymentsConfig(raw: unknown): PaymentsConfig {
       maxCapUnits: num(ov.maxCapUnits, d.overage.maxCapUnits, 10_000),
       buyBelowGb: num(ov.buyBelowGb, d.overage.buyBelowGb),
     },
-    graceHours: num(o.graceHours, d.graceHours, 24 * 14),
+    // Fixed: `.com`'s metering reads the default (control-plane meter.ts PLAN_GRACE_MS).
+    graceHours: d.graceHours,
     maxAheadDays: num(o.maxAheadDays, d.maxAheadDays, 400),
     trickle: { lowWaterDays: num(tr.lowWaterDays, d.trickle.lowWaterDays, 60), highWaterDays: num(tr.highWaterDays, d.trickle.highWaterDays, 120) },
     activationDelayMaxHours: num(o.activationDelayMaxHours, d.activationDelayMaxHours, 24 * 7),

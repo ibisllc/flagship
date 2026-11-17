@@ -74,7 +74,7 @@ describe("ordering a custom domain is a Pro feature", () => {
   });
 
   it("refuses a lapsed Pro subscription like Free", async () => {
-    const { s, irk } = await setup("hobby", NOW - DAY);
+    const { s, irk } = await setup("hobby", NOW - 4 * DAY);
     expect((await order(s, irk, "blog", "www.example.com")).status).toBe(402);
   });
 
@@ -117,7 +117,7 @@ describe("the verifier keeps routing in step with the tier", () => {
   });
 
   it("keeps a lapsed domain serving for the 30-day grace, then suspends it (route removed, order kept) and restores on renewal", async () => {
-    const { s } = await setup("hobby", NOW - DAY);
+    const { s } = await setup("hobby", NOW - 4 * DAY);
     await active(s, "blog", "www.example.com", 1);
 
     const first = await pass(s);
@@ -166,7 +166,7 @@ describe("the verifier keeps routing in step with the tier", () => {
   });
 
   it("a resubscription inside the grace forgets the lapse", async () => {
-    const { s } = await setup("hobby", NOW - DAY);
+    const { s } = await setup("hobby", NOW - 4 * DAY);
     await active(s, "blog", "www.example.com", 1);
     await pass(s);
     await s.tiers.put({ username: USER, tier: "hobby", currentPeriodEnd: NOW + 40 * DAY, updatedAt: NOW });
@@ -178,7 +178,7 @@ describe("the verifier keeps routing in step with the tier", () => {
 
 describe("the hub's lookup endpoints ignore unpaid accounts", () => {
   it("omits a lapsed account from the cold-start list and the point lookup", async () => {
-    const { s } = await setup("hobby", NOW - DAY);
+    const { s } = await setup("hobby", NOW - 4 * DAY);
     await active(s, "blog", "www.example.com", 1);
     const deps = { customDomainOrders: s.customDomainOrders, tiers: s.tiers, now: () => NOW };
     const list = await handleActiveRedirections(deps, "S", "S");

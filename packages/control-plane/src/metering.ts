@@ -66,10 +66,10 @@ export interface QuotaStatus {
   remainingBytes: number;
   overQuota: boolean;
   /** May the relay carry MORE public traffic at full speed for this account
-   *  right now? Free over-quota ⇒ false (the relay throttles it). Paid ⇒
-   *  always true (bills overage). */
+   *  right now? Over the allowance (a paid plan's includes its prepaid
+   *  top-ups) ⇒ false: the relay slows it, never bills it. */
   admit: boolean;
-  /** Overage owed this period (paid tiers only); 0 for free. */
+  /** Overage owed this period: 0 since overage is prepaid (kept for old readers). */
   overageUsd: number;
 }
 
@@ -258,7 +258,7 @@ export function allowanceViewFrom(username: string, s: QuotaStatus): AllowanceVi
     overQuota: s.overQuota,
     overageUsd: s.overageUsd,
     state,
-    hardCapped: s.tier === "free" && s.overQuota,
+    hardCapped: !s.admit,
   };
 }
 
@@ -272,7 +272,7 @@ export async function handleUserAllowance(
   username: string | null,
 ): Promise<UsageHttpResult> {
   const u = String(username ?? "").trim().toLowerCase();
-  if (!/^[a-z0-9]{3,30}$/.test(u)) return { status: 400, body: { error: "valid username required" } };
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])$/.test(u)) return { status: 400, body: { error: "valid username required" } };
   const s = await quotaStatus(deps, u);
   return { status: 200, body: { ok: true, ...allowanceViewFrom(u, s) } };
 }

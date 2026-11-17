@@ -103,7 +103,7 @@ describe("POST /api/accounts/<u>/server-order", () => {
       );
     };
     expect(((await beat(tiers, "a")).body as { tier?: string }).tier).toBe("hobby");
-    records.set(U, { username: U, tier: "hobby", currentPeriodEnd: NOW - 1, updatedAt: 1 });
+    records.set(U, { username: U, tier: "hobby", currentPeriodEnd: NOW - 4 * 86_400_000, updatedAt: 1 });
     expect(((await beat(tiers, "b")).body as { tier?: string }).tier).toBe("free");
     expect("tier" in ((await beat(undefined, "c")).body as object)).toBe(false);
   });

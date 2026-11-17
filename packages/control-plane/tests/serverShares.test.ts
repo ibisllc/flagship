@@ -345,7 +345,7 @@ describe("co-manager cap backstop (owner decision 2026-11-14)", () => {
     expect((await offerN(d, 11)).body).toMatchObject({ code: "co-manager-cap", cap: 10, plan: "hobby" });
     await storage.tiers.put({ username: "alice", tier: "maker", currentPeriodEnd: NOW + 1e9, updatedAt: NOW });
     expect((await offerN(d, 11)).status).toBe(200);
-    await storage.tiers.put({ username: "alice", tier: "maker", currentPeriodEnd: NOW - 1, updatedAt: NOW });
+    await storage.tiers.put({ username: "alice", tier: "maker", currentPeriodEnd: NOW - 4 * 86_400_000, updatedAt: NOW });
     // Over the Free cap after the lapse: the eleven stay, a twelfth waits.
     expect((await offerN(d, 12)).body).toMatchObject({ code: "co-manager-cap", count: 11, cap: 5, plan: "free" });
   });

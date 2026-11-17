@@ -51,6 +51,7 @@ import {
   type MeterDeps as CoreDeps,
   type MeterVerdict as CoreVerdict,
 } from "@ibisllc/billing-metering";
+import { DEFAULT_PAYMENTS_CONFIG } from "@flagship/protocol";
 import type { MeterStorage, TierName, TierStorage, TierSubscriptionRecord } from "@flagship/storage";
 import type { MeterPlan, OverAllowancePolicy } from "@ibisllc/billing-metering";
 
@@ -138,10 +139,14 @@ export async function effectiveTierOf(
   return tierFrom(await tiers.get(username.toLowerCase()), nowMsValue);
 }
 
+/** A paid plan keeps its tier this long past its end, so a phone that was off a day or two never lapses it
+ *  (voucher spends inside the grace continue from the old end: blindVouchers.ts). */
+export const PLAN_GRACE_MS = DEFAULT_PAYMENTS_CONFIG.graceHours * 3_600_000;
+
 function tierFrom(rec: TierSubscriptionRecord | undefined, nowMsValue: number): TierName {
   if (!rec || rec.tier === "free") return "free";
-  if (rec.currentPeriodEnd !== undefined && rec.currentPeriodEnd < nowMsValue) {
-    return "free"; // subscription lapsed
+  if (rec.currentPeriodEnd !== undefined && rec.currentPeriodEnd + PLAN_GRACE_MS < nowMsValue) {
+    return "free"; // lapsed, past the grace
   }
   return rec.tier;
 }
@@ -176,9 +181,10 @@ export async function egressTopUpBytes(deps: MeterDeps, account: string): Promis
   return (await coreCheck(core(deps), account.toLowerCase(), "egress-topup")).used;
 }
 
-/** An egress verdict over its allowance, judged again with the month's top-ups added (read only when over). */
-async function withTopUp(deps: MeterDeps, v: MeterVerdict, need: number): Promise<MeterVerdict> {
-  if (v.resource !== "egress" || !v.over || v.tier === "free") return v;
+/** An egress verdict judged again with the month's top-ups added. The hot paths (record, relay batches) read the
+ *  top-ups only once over the plan's own allowance; a check (the apps' allowance read) always does. */
+async function withTopUp(deps: MeterDeps, v: MeterVerdict, need: number, always = false): Promise<MeterVerdict> {
+  if (v.resource !== "egress" || (!v.over && !always) || v.tier === "free") return v;
   const topUp = await egressTopUpBytes(deps, v.account);
   if (topUp <= 0) return v;
   const allowance = v.allowance + topUp;
@@ -205,7 +211,7 @@ export async function meterCheck(
   resource: MeterResource,
   need = 0,
 ): Promise<MeterVerdict> {
-  return withTopUp(deps, withTier(await coreCheck(core(deps), account.toLowerCase(), resource, need)), need);
+  return withTopUp(deps, withTier(await coreCheck(core(deps), account.toLowerCase(), resource, need)), need, true);
 }
 
 /** Record a batch of usage reported by an edge (the relay) and judge every
