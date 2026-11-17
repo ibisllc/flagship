@@ -1081,3 +1081,14 @@ Next steps for whoever resumes:
 - Commits: gym-0.4 `5d600cbf9` (freeze), `ea20c4ca0` (screen); 0.4/media-fix `f0ef60179`, `b6e9ddf69`, `def0fb030`
   (doc). iOS tests: VoiciCallsViewModel, VoiciOutgoingCall, CallMediaLoopback (28) green on the simulator; i18n green
   except the gym-only `GymLiveAdoption.swift:104`.
+
+### 2026-11-17 — Call screen on all three clients; freeze fixed
+- Freeze when the caller turned the camera on: one engine lock held across WebRTC calls while WebRTC threads took it
+  for frame keys (deadlock). Keys got their own lock; no WebRTC call under the engine lock; hang-up ends locally after
+  3 s if CallKit's end doesn't come. (media-fix `f0ef60179`)
+- New call screen (iPhone/WhatsApp conventions, own design): iOS `b6e9ddf69`; Android `bc3e0c892` (audio route via
+  Telecom or AudioManager, proximity lock, full-screen outgoing call); voi.ci `ab43b0b2e` (full-screen stage, draggable
+  self tile, output picker where the browser allows); doc `ec181c1df`. All on `0.4/media-fix` (fast-forwarded from
+  `0.4/call-screen-ports`). Android unit tests 35 green, web 120 green; not run on a real Android phone.
+- gym-0.4 has all of it; gym Worker `fd0355ef` serves voi.ci `4f7e4fb9d6b50b1f`; iOS gym app with the freeze fix
+  and the iOS screen installed. Open: German "Ihre/Deine Kamera" mismatch on iOS; no "other side muted" signal.
