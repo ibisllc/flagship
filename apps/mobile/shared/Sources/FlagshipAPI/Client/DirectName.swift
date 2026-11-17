@@ -63,13 +63,19 @@ public enum DirectName {
         return isLabel(label) ? label : nil
     }
 
-    /// What a label is, or nil when it may not be held (reserved, punycode, two `--`, a bad half).
+    /// What a label is, or nil when it may not be held (reserved, punycode or any other `??--` label, two `--`, a bad half).
+    /// Let's Encrypt refuses a `??--` label (R-LDH) unless it is punycode.
     public static func kind(_ label: String) -> Kind? {
-        guard isLabel(label), !label.hasPrefix("xn--"), !reservedLabels.contains(label) else { return nil }
+        guard isLabel(label), !isReservedLdh(label), !reservedLabels.contains(label) else { return nil }
         let parts = label.components(separatedBy: "--")
         if parts.count == 1 { return .vanity }
         guard parts.count == 2, isSlug(parts[0]), isUser(parts[1]) else { return nil }
         return .derived(slug: parts[0], creator: parts[1])
+    }
+
+    private static func isReservedLdh(_ label: String) -> Bool {
+        let chars = Array(label)
+        return chars.count >= 4 && chars[2] == "-" && chars[3] == "-"
     }
 
     /// `<slug>--<creator>.<apex>`, or nil when the label can't be held.
