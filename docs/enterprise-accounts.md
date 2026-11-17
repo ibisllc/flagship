@@ -631,7 +631,10 @@ How the binding decisions were built, and what is still open. Not deployed, not 
 - **Box log heads.** Each Activity line is chained (`flagship/org-box-log/v1`) and an org box signs the head with
   its STK (`flagship/org-box-log-head/v1`, every 15 minutes when it moved, `POST …/box-log-heads`). The export
   carries the servers and their newest heads; `verifyOrgAuditExport` and the CLI check each under the key its
-  server registered with (AT-ENV-46).
+  server registered with (AT-ENV-46). It also carries every head and registration the log names
+  (`boxLogHeadHistory`, `registrations`): the verifier fails when a logged one is missing, when a server's served
+  head is not the last one logged, or (with `--previous`, an export verified before) when the log does not extend
+  the earlier one or a head went back (05c review F5).
 
 Open on this branch: the box's LUKS re-key for a disk-key rotation (needs a real box drill); the org's pseudonyms on
 the admin's screens (labels are sealed under the link key; the org directory key is not built), so waiting people

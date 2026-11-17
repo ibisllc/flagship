@@ -27,6 +27,10 @@ import {
   verifyOrgInstallBlob,
   canonicalOrgInstallBlob,
   type OrgKeyKind,
+  ORG_LOG_GENESIS,
+  canonicalOrgBoxLogHead,
+  orgLogEntryHash,
+  signOrgAuditExport,
 } from "../src/index.js";
 
 const dir = resolve(import.meta.dirname, "../test-vectors");
@@ -203,5 +207,78 @@ describe("review-cloud: an audit export cannot silently drop a box log head the 
       flagged = codeOf(e);
     }
     expect(flagged).not.toBe(false);
+  });
+});
+
+describe("an audit export carries every logged box log head and registration (05c F5)", () => {
+  const now = V.audit.cases[0].now as number;
+  const k = A.keys["A founder"];
+  const signer = { seatId: k.seatId as string, adminKeyId: k.keyId as string, hybridSecret: Uint8Array.from(Buffer.from(k.edSeedHex + k.mldsaSeedHex, "hex")) };
+  /** The vector export with its log rebuilt from `kinds` and re-signed by the founder. */
+  const rebuilt = (mutate: (x: any) => Array<[string, string, number]>) => {
+    const x = refs(structuredClone(V.audit.export));
+    const rows = mutate(x);
+    let prev = ORG_LOG_GENESIS;
+    x.log = rows.map(([kind, ref, at], i) => {
+      const entryHash = orgLogEntryHash(x.orgId, i + 1, prev, kind, ref, at);
+      const e = { seq: i + 1, prevHash: prev, entryHash, kind, refSha256: ref, at };
+      prev = entryHash;
+      return e;
+    });
+    const { statement: _s, approval: _a, ...objects } = x;
+    const state = verifyOrgAuthorityChain(x.entries, { genesisHash: V.genesisHash, now: x.statement.issuedAt });
+    return signOrgAuditExport(objects, state, signer, x.statement.issuedAt, { deterministic: true });
+  };
+  const rowsOf = (x: any): Array<[string, string, number]> => x.log.map((e: any) => [e.kind, e.refSha256, e.at]);
+  const verdict = (x: any) => {
+    try {
+      verifyOrgAuditExport(x, { genesisHash: V.genesisHash, now });
+      return "ok";
+    } catch (e) {
+      return codeOf(e);
+    }
+  };
+
+  it("an older head the log names verifies when the export carries it in the history; not without it", () => {
+    let older: any;
+    const x = rebuilt((x) => {
+      const h = x.boxLogHeads[0].head;
+      older = { ...h, seq: 1, headHash: "11".repeat(32), issuedAt: h.issuedAt - 60_000 };
+      const rows = rowsOf(x);
+      rows.splice(rows.length - 1, 0, ["box-log-head", orgSha256Hex(canonicalOrgBoxLogHead(older)), rows[rows.length - 1]![2] - 1]);
+      return rows;
+    });
+    expect(verdict(x)).toBe("order-mismatch");
+    expect(verdict({ ...x, boxLogHeadHistory: [older] })).toBe("ok");
+  });
+
+  it("serving an older head than the last one logged fails, even with the newer in the history", () => {
+    let newer: any;
+    const x = rebuilt((x) => {
+      const h = x.boxLogHeads[0].head;
+      newer = { ...h, seq: 9, headHash: "22".repeat(32), issuedAt: h.issuedAt + 60_000 };
+      return [...rowsOf(x), ["box-log-head", orgSha256Hex(canonicalOrgBoxLogHead(newer)), x.log[x.log.length - 1].at + 1]];
+    });
+    expect(verdict({ ...x, boxLogHeadHistory: [newer] })).toBe("order-mismatch");
+  });
+
+  it("a logged registration the export lacks fails; a re-registered server's earlier key travels in registrations", () => {
+    const oldStk = "77".repeat(32);
+    const x = rebuilt((x) => {
+      const rows = rowsOf(x);
+      const reg = rows.findIndex(([kind]) => kind === "server-registered");
+      rows.splice(reg, 0, ["server-registered", orgSha256Hex(new TextEncoder().encode(`${x.servers[0].serverDomain}|${oldStk}`)), rows[reg]![2] - 1]);
+      return rows;
+    });
+    expect(verdict(x)).toBe("order-mismatch");
+    expect(verdict({ ...x, registrations: [{ serverDomain: x.servers[0].serverDomain, identityPubKeyHex: oldStk }] })).toBe("ok");
+  });
+
+  it("with `previous`, the log must extend the one verified before", () => {
+    const x = refs(structuredClone(V.audit.export));
+    const ok = { genesisHash: V.genesisHash, now };
+    expect(() => verifyOrgAuditExport(x, { ...ok, previous: { logSeq: 3, logHeadHash: x.log[2].entryHash } })).not.toThrow();
+    expect(() => verifyOrgAuditExport(x, { ...ok, previous: { logSeq: 3, logHeadHash: "00".repeat(32) } })).toThrow();
+    expect(() => verifyOrgAuditExport(x, { ...ok, previous: { logSeq: 99, logHeadHash: x.log[2].entryHash } })).toThrow();
   });
 });
