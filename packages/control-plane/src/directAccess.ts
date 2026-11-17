@@ -397,7 +397,11 @@ export interface PublishDeps extends DirectAccessDeps {
  * publisher writes), create the missing ones, record the outcome. A name whose account is gone is withdrawn and its
  * row dropped, which releases it.
  */
-export async function reconcileDirectName(deps: PublishDeps, row: DirectNameRecord): Promise<{ state: "published" | "empty" | "pending"; reason: string | null }> {
+export async function reconcileDirectName(
+  deps: PublishDeps,
+  row: DirectNameRecord,
+  attempt = 0,
+): Promise<{ state: "published" | "empty" | "pending"; reason: string | null }> {
   const now = nowOf(deps);
   const fqdn = `${row.name}.${apexOf(deps)}`;
   const st = await directNameState(deps, row, deps.caaAccountUri);
@@ -421,8 +425,14 @@ export async function reconcileDirectName(deps: PublishDeps, row: DirectNameReco
   const publishedJson = JSON.stringify(want.records.map((r) => ({ type: r.type, content: r.content })));
   if (want.reason === "account-gone") {
     await deps.directAccess.delete(row.name);
-  } else {
-    await deps.directAccess.setPublished(row.name, row.updatedAt, { publishedJson, state, reason: want.reason, error: null, now });
+  } else if (!(await deps.directAccess.setPublished(row.name, row.updatedAt, { publishedJson, state, reason: want.reason, error: null, now }))) {
+    // The row changed while this pass wrote the zone (an order's own reconcile overlapping another, or the cron), so
+    // these writes may have landed after a newer pass finished: go again from the row as it is now.
+    const fresh = await deps.directAccess.getName(row.name);
+    if (!fresh) return { state, reason: want.reason };
+    if (attempt < 2) return reconcileDirectName(deps, fresh, attempt + 1);
+    await deps.directAccess.markPending([row.name], nowOf(deps));
+    return { state: "pending", reason: want.reason };
   }
   return { state, reason: want.reason };
 }
