@@ -239,3 +239,12 @@ final class BuilderPairingTests: XCTestCase {
         XCTAssertTrue(e.qrPayload.hasPrefix("https://flagshipserver.com/builder?c=\(expectedHuman)&k="))
     }
 }
+
+final class PairingRetryTests: XCTestCase {
+    func test_waitsLongerAfterEachFailedSessionAndStartsOverOnceAccepted() {
+        var r = PairingRetry()
+        XCTAssertEqual((0..<7).map { _ in r.nextDelay() }, [5, 10, 20, 40, 60, 60, 60])
+        r.reset()
+        XCTAssertEqual(r.nextDelay(), 5)
+    }
+}

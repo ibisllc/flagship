@@ -30,6 +30,8 @@ final class BuilderSessionClient: NSObject {
     var onStudioConfirmKey: ((Data) -> Void)?
     var onRecipeReceiptQueued: (() -> Void)?
     var onLog: ((String) -> Void)?
+    /// The relay accepted this session (its `accepted` frame): the pairing retry count starts again.
+    var onRelayAccepted: (() -> Void)?
 
     var qrPayload: String { engine.qrPayload }
     var humanCodeDisplay: String { engine.humanCodeDisplay }
@@ -89,6 +91,7 @@ final class BuilderSessionClient: NSObject {
             close()
             return
         }
+        if obj["kind"] as? String == "accepted" { onRelayAccepted?() }
         for action in engine.onRelayFrame(obj) { apply(action) }
     }
 
