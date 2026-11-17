@@ -175,9 +175,17 @@ fun VoiciCallStage(state: CallStageState, actions: CallStageActions, tag: String
         Modifier
             .fillMaxSize()
             .background(CallBackground)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, enabled = videoMode && !state.over) {
-                controlsHidden = !controlsHidden
-            }
+            // Only a video call's stage taps to hide the controls. A disabled clickable would still merge every
+            // label under it into one disabled node (TalkBack read the whole stage as one; tests found no status).
+            .then(
+                if (videoMode && !state.over) {
+                    Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                        controlsHidden = !controlsHidden
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .testTag(tag),
     ) {
         val stageW = maxWidth
