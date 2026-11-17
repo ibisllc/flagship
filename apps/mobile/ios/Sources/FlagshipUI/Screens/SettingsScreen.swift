@@ -107,6 +107,8 @@ public struct SettingsScreen: View {
     var onOpenAiKeys: () -> Void = {}
     /// P7 — open the dedicated tier-status / subscription screen.
     var onOpenSubscription: () -> Void = {}
+    /// Open Settings → Plan (the plan, the voucher balance, auto-pay and the overage limit).
+    var onOpenPlan: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
     /// Open "Back up your account key" — the `.flagshipkey` export.
     var onOpenKeyfileBackup: () -> Void = {}
@@ -226,6 +228,7 @@ public struct SettingsScreen: View {
         onSignOut: @escaping () -> Void = {},
         onOpenAiKeys: @escaping () -> Void = {},
         onOpenSubscription: @escaping () -> Void = {},
+        onOpenPlan: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenOfflineControl: @escaping () -> Void = {},
@@ -286,6 +289,7 @@ public struct SettingsScreen: View {
         self.onSignOut = onSignOut
         self.onOpenAiKeys = onOpenAiKeys
         self.onOpenSubscription = onOpenSubscription
+        self.onOpenPlan = onOpenPlan
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenOfflineControl = onOpenOfflineControl
@@ -538,6 +542,13 @@ public struct SettingsScreen: View {
     /// SUBSCRIPTION group (marketplace) — tier / usage / credits / domains.
     private func subscription(c: FSColors) -> some View {
         FSSettingsListSection(String(localized: "Subscription"), rows: [
+            FSSettingsRow(
+                icon: "dollarsign.circle.fill",
+                title: String(localized: "Plan"),
+                subtitle: String(localized: "Pro, Pro Max and your balance"),
+                accessibilityId: "settings-open-plan",
+                action: onOpenPlan
+            ),
             FSSettingsRow(
                 icon: "creditcard.fill",
                 title: String(localized: "Tier & usage"),

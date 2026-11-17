@@ -16606,5 +16606,165 @@
   "Audio": {
     "en": "Audio",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls"
+  },
+  "Pro": {
+    "en": "Pro",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:152",
+    "translatable": false
+  },
+  "Pro Max": {
+    "en": "Pro Max",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:153",
+    "translatable": false
+  },
+  "Test vouchers aren't available here.": {
+    "en": "Test vouchers aren't available here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:179"
+  },
+  "That's more than one request can carry. Try again with less.": {
+    "en": "That's more than one request can carry. Try again with less.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:180"
+  },
+  "Extra traffic needs Pro or Pro Max.": {
+    "en": "Extra traffic needs Pro or Pro Max.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:181"
+  },
+  "This device can't change the plan. Unlock Flagship on an admin device.": {
+    "en": "This device can't change the plan. Unlock Flagship on an admin device.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:182"
+  },
+  "Plan": {
+    "en": "Plan",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:43"
+  },
+  "Unlock Flagship to see and change your plan.": {
+    "en": "Unlock Flagship to see and change your plan.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:34"
+  },
+  "Only an admin device of this account can change the plan or spend the balance.": {
+    "en": "Only an admin device of this account can change the plan or spend the balance.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:34"
+  },
+  "Months of %@ your balance pays for: %lld": {
+    "en": "Months of %@ your balance pays for: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:72"
+  },
+  "Starts by %@.": {
+    "en": "Starts by %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:77"
+  },
+  "Your balance is empty, so your plan isn't renewed. Your servers keep working on Free.": {
+    "en": "Your balance is empty, so your plan isn't renewed. Your servers keep working on Free.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:82"
+  },
+  "Paid until": {
+    "en": "Paid until",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:63"
+  },
+  "Days left": {
+    "en": "Days left",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:65"
+  },
+  "Balance": {
+    "en": "Balance",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:68"
+  },
+  "Your phone pays a little at a time, a few days ahead of need. A payment can't be linked to the purchase that paid for it.": {
+    "en": "Your phone pays a little at a time, a few days ahead of need. A payment can't be linked to the purchase that paid for it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:87"
+  },
+  "25 GB of traffic a month, then slowed": {
+    "en": "25 GB of traffic a month, then slowed",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:93"
+  },
+  "%lld GB of traffic a month": {
+    "en": "%lld GB of traffic a month",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:95"
+  },
+  "Start at a random time in the next %lld hours": {
+    "en": "Start at a random time in the next %lld hours",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:99"
+  },
+  "Choose a plan": {
+    "en": "Choose a plan",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:103"
+  },
+  "Starting at a random time makes it harder to tell that a purchase and an upgrade belong together.": {
+    "en": "Starting at a random time makes it harder to tell that a purchase and an upgrade belong together.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:105"
+  },
+  "Start paying for your plan": {
+    "en": "Start paying for your plan",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:132"
+  },
+  "%@ a month": {
+    "en": "%@ a month",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:120"
+  },
+  "Pay automatically": {
+    "en": "Pay automatically",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:143"
+  },
+  "Off: nothing is spent and your plan ends when its paid time runs out.": {
+    "en": "Off: nothing is spent and your plan ends when its paid time runs out.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:147"
+  },
+  "Spent on extra traffic this month: %@": {
+    "en": "Spent on extra traffic this month: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:168"
+  },
+  "Monthly limit: %@": {
+    "en": "Monthly limit: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:161"
+  },
+  "Up to %lld GB more traffic": {
+    "en": "Up to %lld GB more traffic",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:162"
+  },
+  "Extra traffic": {
+    "en": "Extra traffic",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:172"
+  },
+  "Past your plan's traffic, your phone buys %lld GB for %@ at a time, up to this limit. Past it your servers are slowed, never cut off.": {
+    "en": "Past your plan's traffic, your phone buys %lld GB for %@ at a time, up to this limit. Past it your servers are slowed, never cut off.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:174"
+  },
+  "Add $30 of test credit": {
+    "en": "Add $30 of test credit",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:199"
+  },
+  "Not on sale yet": {
+    "en": "Not on sale yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:184"
+  },
+  "App Store": {
+    "en": "App Store",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212",
+    "translatable": false
+  },
+  "Card": {
+    "en": "Card",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212"
+  },
+  "Monero": {
+    "en": "Monero",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:212",
+    "translatable": false
+  },
+  "Coming soon": {
+    "en": "Coming soon",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:193"
+  },
+  "Add to your balance": {
+    "en": "Add to your balance",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:206"
+  },
+  "Buying isn't available yet. Nothing here charges you.": {
+    "en": "Buying isn't available yet. Nothing here charges you.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:208"
+  },
+  "Pro, Pro Max and your balance": {
+    "en": "Pro, Pro Max and your balance",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:548"
   }
 }

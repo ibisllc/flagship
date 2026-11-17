@@ -188,6 +188,7 @@ public struct SettingsTab: View {
                     },
                     onOpenAiKeys: { path.append(.aiKeys) },
                     onOpenSubscription: { path.append(.tierStatus) },
+                    onOpenPlan: { path.append(.plan) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenOfflineControl: { path.append(.offlineControl) },
@@ -456,6 +457,10 @@ public struct SettingsTab: View {
                 client: client,
                 serverNames: Dictionary(app.pods.map { ($0.fqdn.lowercased(), AppPlacementCopy.serverName($0)) },
                                         uniquingKeysWith: { a, _ in a })))
+        case .plan:
+            PlanScreen(gate: { reason in
+                do { try await BiometricGate().evaluate(reason: reason); return true } catch { return false }
+            })
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .accountSecurity:
