@@ -50,6 +50,24 @@ export const WEB_MESSAGES: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-messages-first-publish-warning-follows-accepts",
+    "The Social tab's Profile: Accept messages turned off in Page options before the first publish; the one-time public warning then names only what really starts on (calls, not messages), and the published index carries acceptsMessages 0 and acceptsCalls 1.",
+    "gym messages the first publish's warning follows Accept messages",
+    {
+      steps: [
+        { kind: "launch", describe: "Social tab, Profile, with no page published." },
+        { kind: "tap", describe: "Page options → turn Accept messages off → Done.", handle: "#page-accepts" },
+        { kind: "tap", describe: "Publish → I agree → Make it public.", handle: "#pe-publish" },
+      ],
+      assertions: [
+        { describe: "Counted", handle: "[data-testid=pe-bar-text]", expect: "text", text: "1 change not published" },
+        { describe: "Published", handle: "[data-testid=messages-page-status]", expect: "text", text: "Public" },
+      ],
+      screenshots: [shot("page-first-publish-warning-calls-only", "The public warning naming calls only.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
     "web-messages-page-public-switch",
     "The Social tab's Public switch in the title row: turning it on the first time shows the one-time public warning, then publishes; a name change on a public page is a draft published from the bar; turning it off asks to confirm and removes the page with a signed flagship/voici-page-remove/v1 (voi.ci answers no page); turning it on again republishes at the next seq without the warning; Page options' Copy link writes only the link.",
     "gym messages the Public switch removes the page and turns it back on",
