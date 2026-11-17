@@ -186,6 +186,8 @@ object Variant : AppVariant {
                 ?: context.resources.configuration.locales.get(0).toLanguageTag(),
             now,
         )
+        val payments = com.flagshipserver.app.api.MockPaymentsClient()
+        val orgWorld = GymSeams.orgPlan?.let { com.flagshipserver.app.core.payments.MockOrgPlan.world(it, payments) }
         return GymLaunch(
             tab,
             GymMocks(
@@ -205,8 +207,10 @@ object Variant : AppVariant {
                 voici = GymVoici.client,
                 voiciCaKeys = { listOf(GymVoici.client.caPub) },
                 voiciSignInPipe = { GymVoici.pipe() },
-                payments = com.flagshipserver.app.api.MockPaymentsClient(),
+                payments = payments,
                 billing = com.flagshipserver.app.core.payments.MockPlayBilling(),
+                orgs = orgWorld?.first,
+                orgPlans = orgWorld?.second,
             ),
         )
     }
