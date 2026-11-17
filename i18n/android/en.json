@@ -14996,6 +14996,10 @@
     "en": "No messages yet. Turn on Accept messages in Page options to get them.",
     "ctx": "Social tab Messages: empty list"
   },
+  "voici_empty_messages_on": {
+    "en": "No messages yet. People who sign in on your page can write to you here.",
+    "ctx": "Social tab Messages: empty list while the published page accepts messages"
+  },
   "push_service": {
     "en": "Push service",
     "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: which service delivers this phone's pushes)"
