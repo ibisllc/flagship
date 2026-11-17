@@ -42,6 +42,7 @@ public struct PlanScreen: View {
                 }
             }
             buySection
+            OrgPlanLinksSection()
             if let error {
                 Section { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan-error") }
             }

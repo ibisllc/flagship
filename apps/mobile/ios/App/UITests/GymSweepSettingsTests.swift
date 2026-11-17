@@ -143,6 +143,89 @@ final class GymSweepSettingsTests: GymSweepCase {
         shot(app, "plan-pro")
     }
 
+    /// Settings → Organizations → an org's Plan (Business, docs/plans-and-backup-offer.md §3): trial, paid and lapsed
+    /// status lines from the mock `.com`, a $10 pack bought from the stand-in App Store into the org's balance (not the
+    /// account's), and the seat stepper that never goes below the org's four people.
+    private func openOrgPlan(_ state: String, member: Bool = false) -> XCUIApplication {
+        let app = launch(tab: "settings", ["-smoke-org-plan", state] + (member ? ["-smoke-org-member"] : []))
+        settings(app)
+        let entry = app.buttons["settings-open-organizations"]
+        XCTAssertTrue(find(app, entry), "Settings should offer Organizations.")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["Plan"].waitForExistence(timeout: 15), "The org's Plan should open.")
+        return app
+    }
+
+    private func label(_ app: XCUIApplication, _ id: String) -> String {
+        let el = app.descendants(matching: .any)[id]
+        guard el.waitForExistence(timeout: 15) else { return "" }
+        return el.label + " " + value(el)
+    }
+
+    func test_orgPlanTrialBuysIntoTheOrgAndStepsSeats() throws {
+        let app = openOrgPlan("trial")
+        XCTAssertTrue(label(app, "org-plan-status").contains("trial"), "Got: \(label(app, "org-plan-status"))")
+        XCTAssertTrue(label(app, "org-plan-status").contains("12 days left"), "Got: \(label(app, "org-plan-status"))")
+        XCTAssertTrue(app.descendants(matching: .any)["org-plan-trial-note"].exists, "Paid time starts when the trial ends.")
+        XCTAssertTrue(label(app, "org-plan-seats-in-use").contains("4 of 10"), "Got: \(label(app, "org-plan-seats-in-use"))")
+        XCTAssertTrue(label(app, "org-plan-price").contains("$6 a seat a month: $24 a month"), "Got: \(label(app, "org-plan-price"))")
+        XCTAssertTrue(label(app, "org-plan-balance").contains("$0"), "Got: \(label(app, "org-plan-balance"))")
+        shot(app, "org-plan-trial")
+        let pack = app.buttons["org-plan-pack-10"]
+        XCTAssertTrue(find(app, pack), "The App Store packs are on sale for the org.")
+        pack.tap()
+        let added = app.descendants(matching: .any)["org-plan-shop-added"]
+        XCTAssertTrue(added.waitForExistence(timeout: 30), "The purchase lands in the org's balance.")
+        XCTAssertTrue(added.label.contains("organization"), "Got: \(added.label)")
+        let balance = app.descendants(matching: .any)["org-plan-balance"]
+        _ = revealUp(app, balance, tries: 12)
+        expectation(for: NSPredicate(format: "label CONTAINS '$10'"), evaluatedWith: balance)
+        waitForExpectations(timeout: 30)
+        XCTAssertTrue(app.descendants(matching: .any)["org-plan-batch-note"].exists, "One line about invoiced batches, no link.")
+        XCTAssertFalse(app.buttons["Import a voucher file"].exists, "iOS never imports vouchers.")
+        shot(app, "org-plan-bought")
+        let stepper = app.steppers["org-plan-seats"]
+        XCTAssertTrue(find(app, stepper), "Admins step the seats the wallet pays for.")
+        XCTAssertTrue(stepper.label.contains("4"), "Starts at the four people. Got: \(stepper.label)")
+        stepper.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(stepper.label.contains("4"), "Never below the live seats. Got: \(stepper.label)")
+        stepper.buttons.element(boundBy: 1).tap()
+        expectation(for: NSPredicate(format: "label CONTAINS '5'"), evaluatedWith: stepper)
+        waitForExpectations(timeout: 15)
+        XCTAssertTrue(label(app, "org-plan-price").contains("$30 a month"), "Got: \(label(app, "org-plan-price"))")
+        shot(app, "org-plan-seats")
+    }
+
+    func test_orgPlanPaidShowsThePaidEnd() throws {
+        let app = openOrgPlan("paid")
+        XCTAssertTrue(label(app, "org-plan-status").contains("paid through"), "Got: \(label(app, "org-plan-status"))")
+        XCTAssertFalse(app.descendants(matching: .any)["org-plan-lapsed"].exists)
+        shot(app, "org-plan-paid")
+    }
+
+    func test_orgPlanLapsedSaysWhatStillWorks() throws {
+        let app = openOrgPlan("lapsed")
+        XCTAssertTrue(label(app, "org-plan-status").contains("lapsed"), "Got: \(label(app, "org-plan-status"))")
+        XCTAssertTrue(label(app, "org-plan-lapsed").contains("You can still use every app"), "Got: \(label(app, "org-plan-lapsed"))")
+        let add = app.buttons["org-plan-add-test"]
+        XCTAssertTrue(find(app, add), "The gym's test credit is offered.")
+        add.tap()
+        let status = app.descendants(matching: .any)["org-plan-status"]
+        _ = revealUp(app, status, tries: 12)
+        expectation(for: NSPredicate(format: "label CONTAINS 'paid through'"), evaluatedWith: status)
+        waitForExpectations(timeout: 30)
+        shot(app, "org-plan-lapsed-then-paid")
+    }
+
+    func test_orgPlanMemberSeesStatusButNoBalance() throws {
+        let app = openOrgPlan("paid", member: true)
+        XCTAssertTrue(label(app, "org-plan-status").contains("paid through"))
+        XCTAssertTrue(app.descendants(matching: .any)["org-plan-read-only"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.descendants(matching: .any)["org-plan-balance"].exists, "Only org admins see the balance.")
+        XCTAssertFalse(app.steppers["org-plan-seats"].exists)
+        shot(app, "org-plan-member")
+    }
+
     /// About names the one product version every surface shares
     /// (release/version.json), then the App Store version and build.
     func test_aboutShowsTheProductVersionAndStoreBuild() throws {

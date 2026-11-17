@@ -64,6 +64,10 @@ public struct OrgDetailScreen: View {
                 Section { Text(m).font(FS.font.bodySm()).foregroundColor(c.danger) }
             case .loaded:
                 if let f = vm.myFreeze(seat) { frozenSection(f, c: c) }
+                Section {
+                    NavigationLink("Plan") { OrgPlanScreen(model: OrgPlanModel(seat: seat)) }
+                        .accessibilityIdentifier("org-open-plan")
+                }
                 joinsSection(c: c)
                 rotationsSection(c: c)
                 approvalsSection(c: c)
@@ -277,6 +281,7 @@ enum OrgCopy {
         switch k.kind {
         case .cgk: return String(localized: "Server-to-server key")
         case .directoryKey: return String(localized: "Directory key")
+        case .wallet: return String(localized: "Voucher wallet key")
         case .archiveKeys: return String(localized: "Backup keys of \(k.scope)")
         case .diskKey: return String(localized: "Disk key of \(k.scope)")
         }
