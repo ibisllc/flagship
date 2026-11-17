@@ -1277,6 +1277,10 @@ section:not(.hidden) {
 }
 .row-2 > * { flex: 1; }
 /* A direct name's buttons: each as wide as its label, wrapping to a new line instead of breaking words. */
+/* Calls: the name and its line keep the width they need; the buttons move under them when the row is narrow. */
+.calls-row { flex-wrap: wrap; row-gap: var(--space-2); }
+.calls-row > .fs-row-body { flex: 1 1 14rem; }
+.calls-row > .row-actions { display: flex; gap: var(--space-2); }
 .dn-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .dn-actions > * { flex: 0 0 auto; }
 /* Deny and one Allow per duration the owner may grant (browser grant requests): wrap on a phone. */
