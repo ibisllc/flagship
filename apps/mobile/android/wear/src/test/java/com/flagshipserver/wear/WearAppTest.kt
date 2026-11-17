@@ -106,4 +106,14 @@ class WearAppTest {
         }
         compose.onNodeWithText("Open Flagship on your phone to see your servers here.").assertExists()
     }
+
+    @Test
+    fun signedInWithNoServersSaysWhereToAddOne() {
+        val none = WatchContext(status = PodStatusSnapshot(username = "harry", pods = emptyList()), updatedAt = 1)
+        WatchStore.write(ApplicationProvider.getApplicationContext(), none.encode())
+        compose.setContent {
+            androidx.wear.compose.material.MaterialTheme { WearApp(sync = {}) }
+        }
+        compose.onNodeWithText("No servers yet. Add one in Flagship on your phone.").assertExists()
+    }
 }
