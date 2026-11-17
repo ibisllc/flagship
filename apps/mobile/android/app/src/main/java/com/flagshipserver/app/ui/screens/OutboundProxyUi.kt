@@ -182,38 +182,79 @@ internal fun OutboundProxyCreateBlock(draft: BoxProxyDraft, onDraft: (BoxProxyDr
     }
 }
 
-/** The server page's section. Hidden when the box doesn't report a proxy summary (older daemons). */
+/** The server page's loud line when the proxy isn't working: red while it keeps the server offline, the warning
+ *  colour while the server connects directly. From the box when it answers, else from `/pods`. */
+@Composable
+internal fun OutboundProxyAlertBanner(alert: com.flagshipserver.app.core.ProxyAlert?, offline: Boolean) {
+    val line = com.flagshipserver.app.core.OutboundProxyCopy.line(alert) ?: return
+    val failing = alert?.state == "failing"
+    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("sd-proxy-alert")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+            Text(
+                line,
+                color = if (failing) FS.colors.danger else FS.colors.warning,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                modifier = Modifier.testTag(if (failing) "sd-proxy-alert-failing" else "sd-proxy-alert-fallback"),
+            )
+            if (failing && offline) {
+                Text(
+                    stringResource(R.string.proxy_alert_offline),
+                    color = FS.colors.danger,
+                    style = TextStyle(fontSize = 13.sp),
+                    modifier = Modifier.testTag("sd-proxy-alert-offline"),
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(FS.space.s4))
+}
+
+/**
+ * The server page's section. Hidden when the box doesn't report a proxy summary (older daemons), unless `.com`
+ * says the proxy fails: then [summary] is null and the owner can still turn it off or change it through the lane.
+ * [boxUnreachable]: the proxy fails and the box can't be reached, so orders go to `.com`'s lane at once.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun OutboundProxyCard(
     serverDomain: String,
-    summary: OutboundProxySummary,
+    summary: OutboundProxySummary?,
     client: ScreensClient?,
     onSaved: () -> Unit,
+    boxUnreachable: Boolean = false,
 ) {
     val app = LocalAppState.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
-    val canChange = client != null && !app.isDemoAccountNow()
+    val comClient = com.flagshipserver.app.core.LocalFlagshipServerClient.current
+    val lane: suspend (String, com.flagshipserver.app.core.BoxProxyWire) -> Unit = { d, w -> comClient.postProxyOrder(d, w) }
+    val canChange = (client != null || boxUnreachable) && !app.isDemoAccountNow()
     // The box says `available = false` once .com has told it the account is on
     // Free: no new proxy, but one already set can still be turned off.
-    val pro = summary.available != false
+    val pro = summary?.available != false
     var editing by remember(serverDomain) { mutableStateOf(false) }
     var working by remember(serverDomain) { mutableStateOf(false) }
     var error by remember(serverDomain) { mutableStateOf<String?>(null) }
+    var notice by remember(serverDomain) { mutableStateOf<String?>(null) }
     var draft by remember(serverDomain, summary) { mutableStateOf(BoxProxyDraft.from(summary)) }
 
     fun send(d: BoxProxyDraft) {
-        val c = client ?: return
+        val c = client
+        if (c == null && !boxUnreachable) return
         if (working) return
         working = true
         error = null
         scope.launch {
-            when (val r = OutboundProxyOrder(c).save(serverDomain, d, summary)) {
+            when (val r = OutboundProxyOrder(c, lane).save(serverDomain, d, summary, boxUnreachable)) {
                 is OutboundProxyOrder.Outcome.Saved -> {
                     toasts.success(r.message)
                     editing = false
                     onSaved()
+                }
+                is OutboundProxyOrder.Outcome.Queued -> {
+                    toasts.success(r.message)
+                    notice = r.message
+                    editing = false
                 }
                 is OutboundProxyOrder.Outcome.Failed -> error = r.message
             }
@@ -229,21 +270,24 @@ internal fun OutboundProxyCard(
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                summary.label,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp),
-                modifier = Modifier.testTag("sd-proxy-label"),
-            )
-            summary.statusLine?.let {
+            summary?.let {
+                Text(
+                    it.label,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 14.sp),
+                    modifier = Modifier.testTag("sd-proxy-label"),
+                )
+            }
+            summary?.statusLine?.let {
                 Text(
                     it,
-                    color = if (summary.status.state == "ok") FS.colors.textMuted else FS.colors.warning,
+                    color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                     modifier = Modifier.testTag("sd-proxy-status"),
                 )
             }
-            if (!editing) error?.let { Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp)) }
+            notice?.let { Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp), modifier = Modifier.testTag("sd-proxy-lane-sent")) }
+            if (!editing) error?.let { Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp), modifier = Modifier.testTag("sd-proxy-error")) }
             if (!pro) OutboundProxyProNote()
             if (canChange) {
                 if (pro) {
@@ -259,7 +303,7 @@ internal fun OutboundProxyCard(
                         modifier = Modifier.testTag("sd-proxy-change"),
                     )
                 }
-                if (summary.proxy != null) {
+                if (summary?.proxy != null || summary == null) {
                     FSSecondaryButton(
                         label = if (working && !editing) stringResource(R.string.saving) else stringResource(R.string.turn_off),
                         onClick = { send(BoxProxyDraft()) },
@@ -292,7 +336,7 @@ internal fun OutboundProxyCard(
                 OutboundProxyFields(
                     draft = draft,
                     onDraft = { draft = it },
-                    passwordPlaceholder = if (summary.hasCredentials) stringResource(R.string.unchanged_2) else "",
+                    passwordPlaceholder = if (summary?.hasCredentials == true) stringResource(R.string.unchanged_2) else "",
                 )
                 error?.let { Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp)) }
                 FSPrimaryButton(

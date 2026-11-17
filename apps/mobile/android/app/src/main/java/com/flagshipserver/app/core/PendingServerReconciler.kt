@@ -165,6 +165,14 @@ class PendingServerReconciler(
         }
         app.setPodsAwaitingBackup(waiting)
         app.setPodsUpdateRequired(updatesRequired(directory.pods))
+        // Per listed server, like awaitingBackup: a server `.com` no longer lists keeps nothing stale either way.
+        val alerts = app.podsProxyAlert.value.toMutableMap()
+        for (entry in directory.pods) {
+            val key = entry.serverDomain.lowercase()
+            val a = entry.proxyAlert.takeIf { entry.revokedAt == null }
+            if (a != null) alerts[key] = a else alerts.remove(key)
+        }
+        app.setPodsProxyAlert(alerts)
 
         // The non-pending pods are the live ones now (including the ones we
         // just flipped online).

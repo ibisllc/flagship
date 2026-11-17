@@ -103,11 +103,9 @@ class OutboundProxyOrderTest {
         assertEquals("Off", OutboundProxySummary().label)
         val s = OutboundProxySummary(proxy = OutboundProxySetting("socks5", "2001:db8::7", 9050, auth = true))
         assertEquals("SOCKS5 · [2001:db8::7]:9050 · needs a password", s.label)
-        assertEquals(
-            "Not working: Can't reach the proxy.",
-            s.copy(status = OutboundProxyStatus("failing", 1, "Can't reach the proxy.")).statusLine,
-        )
-        assertEquals("Using a direct connection: the proxy isn't answering", s.copy(status = OutboundProxyStatus("fallback")).statusLine)
+        assertEquals("Working", s.copy(status = OutboundProxyStatus("ok")).statusLine)
+        // A failing proxy is the page's alert, in the app's words for the box's code, never the box's English.
+        assertNull(s.copy(status = OutboundProxyStatus("failing", 1, "connect ECONNREFUSED", "refused")).statusLine)
         assertNull(OutboundProxySummary().statusLine)
     }
 

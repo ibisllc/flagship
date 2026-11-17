@@ -656,6 +656,33 @@ data class UpdateRequiredWire(
     val certificateExpiresAt: Long? = null,
 )
 
+/** `/pods` `proxyAlert`: the server's outbound proxy isn't working (docs/outbound-proxy.md "Failure handling").
+ *  [state] `failing` (the server is offline until the proxy works or the owner changes it) or `fallback` (it
+ *  connects directly meanwhile); [code] `unreachable` | `auth` | `refused` | `protocol`. Reported by the box to
+ *  `.com`, so it shows even while the box can't be reached. */
+@Serializable
+data class ProxyAlertWire(
+    val state: String,
+    val code: String? = null,
+    val since: Long = 0,
+)
+
+/** Decodes `proxyAlert` leniently: a garbled value (or an unknown state) reads as null. */
+object LenientProxyAlertSerializer : kotlinx.serialization.KSerializer<ProxyAlertWire?> {
+    override val descriptor = ProxyAlertWire.serializer().nullable.descriptor
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): ProxyAlertWire? {
+        val input = decoder as? kotlinx.serialization.json.JsonDecoder
+            ?: return runCatching { ProxyAlertWire.serializer().deserialize(decoder) }.getOrNull()
+        val element = input.decodeJsonElement()
+        if (element !is kotlinx.serialization.json.JsonObject) return null
+        return runCatching { input.json.decodeFromJsonElement(ProxyAlertWire.serializer(), element) }.getOrNull()
+            ?.takeIf { it.state == "failing" || it.state == "fallback" }
+    }
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: ProxyAlertWire?) {
+        if (value == null) encoder.encodeNull() else ProxyAlertWire.serializer().serialize(encoder, value)
+    }
+}
+
 /** Decodes `updateRequired` leniently: a garbled value reads as null instead
  *  of failing the whole pods-list decode (as iOS's `try?`). */
 object LenientUpdateRequiredSerializer : kotlinx.serialization.KSerializer<UpdateRequiredWire?> {
@@ -750,6 +777,9 @@ data class PodDirectoryEntry(
      *  needs none (and for demo accounts, which Flagship updates itself). */
     @Serializable(with = LenientUpdateRequiredSerializer::class)
     val updateRequired: UpdateRequiredWire? = null,
+    /** The server's outbound proxy isn't working; null when it works, none is set, or an older `.com`. */
+    @Serializable(with = LenientProxyAlertSerializer::class)
+    val proxyAlert: ProxyAlertWire? = null,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

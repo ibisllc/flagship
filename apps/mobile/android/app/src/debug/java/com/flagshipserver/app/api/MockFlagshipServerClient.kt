@@ -42,7 +42,16 @@ class MockFlagshipServerClient(
 ) : FlagshipServerClient {
     /** The plan [accountTier] answers (null = unknown). */
     var accountTierAnswer: String? = null
-    override suspend fun accountTier(username: String): String? = accountTierAnswer
+    override suspend fun accountTier(username: String): String? =
+        com.flagshipserver.app.core.GymSeams.listsPlan?.let { if (it == "pro") "hobby" else "free" } ?: accountTierAnswer
+
+    /** Orders left on the proxy lane, in order; [proxyLaneStatus] other than 200 refuses them as `.com` would. */
+    val proxyLaneOrders = java.util.concurrent.CopyOnWriteArrayList<Pair<String, com.flagshipserver.app.core.BoxProxyWire>>()
+    var proxyLaneStatus: Int = 200
+    override suspend fun postProxyOrder(serverDomain: String, order: com.flagshipserver.app.core.BoxProxyWire) {
+        if (proxyLaneStatus != 200) throw com.flagshipserver.app.core.HttpException(proxyLaneStatus, """{"error":"refused"}""")
+        proxyLaneOrders += serverDomain to order
+    }
 
     /** Box keys registered through [registerBoxClaimKey], by AuthCode serial (first one wins, as `.com`). */
     val boxClaimKeys = java.util.concurrent.ConcurrentHashMap<String, BoxClaimKeyRequest>()

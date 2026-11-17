@@ -46,7 +46,7 @@ sealed interface ActivityItem {
         override val at: Long = entry.ts,
         override val title: String = BoxEventLabels.title(entry) ?: "",
         override val subtitle: String? = entry.detail,
-        override val warning: Boolean = !entry.ok,
+        override val warning: Boolean = !entry.ok || BoxEventLabels.isWarning(entry.kind),
     ) : ActivityItem
 
     data class RecoverySnapshot(
