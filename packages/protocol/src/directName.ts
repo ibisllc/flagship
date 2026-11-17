@@ -93,10 +93,12 @@ export function directLabelOf(name: string, apex = DIRECT_APEX): string | null {
 
 /**
  * What a label is: `derived` for `<slug>--<creator>` (docs/service-addressing-double-dash.md), `vanity` for a
- * plain label (no `--`), null when it is neither (two `--`, a bad half, a reserved word, punycode).
+ * plain label (no `--`), null when it is neither (two `--`, a bad half, a reserved word, punycode or any other `??--`
+ * label: a two-character slug).
  */
 export function directNameKind(label: string): { kind: "derived"; slug: string; creator: string } | { kind: "vanity" } | null {
-  if (!LABEL.test(label) || label.startsWith("xn--") || RESERVED_DIRECT_LABELS.has(label)) return null;
+  // `??--` (R-LDH, RFC 5891 §4.2.3.1): Let's Encrypt refuses such a label unless it is valid punycode, which we refuse anyway.
+  if (!LABEL.test(label) || label.slice(2, 4) === "--" || RESERVED_DIRECT_LABELS.has(label)) return null;
   const parts = label.split("--");
   if (parts.length === 1) return { kind: "vanity" };
   if (parts.length !== 2) return null;

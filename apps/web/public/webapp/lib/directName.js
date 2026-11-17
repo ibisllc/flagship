@@ -36,7 +36,8 @@ export function directLabelOf(name, apex = DIRECT_APEX) {
 
 /** `{kind: "derived", slug, creator}`, `{kind: "vanity"}`, or null for a label nobody may hold. */
 export function directNameKind(label) {
-  if (typeof label !== "string" || !LABEL.test(label) || label.startsWith("xn--") || RESERVED_DIRECT_LABELS.has(label)) return null;
+  // `??--` (R-LDH): Let's Encrypt refuses it unless it is punycode, which is refused too.
+  if (typeof label !== "string" || !LABEL.test(label) || label.slice(2, 4) === "--" || RESERVED_DIRECT_LABELS.has(label)) return null;
   const parts = label.split("--");
   if (parts.length === 1) return { kind: "vanity" };
   if (parts.length !== 2) return null;

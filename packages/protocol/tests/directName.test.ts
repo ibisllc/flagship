@@ -46,6 +46,15 @@ describe("direct-name orders", () => {
   const seed = unhex(V.keys.adminRootSeedHex);
   const key = { privateKey: seed, publicKey: adminPub };
 
+  it("refuses a name Let's Encrypt would refuse: a label with -- in positions 3-4 (a two-character slug)", () => {
+    expect(directNameKind("go--plucky-avocet")).toBeNull();
+    expect(directNameKind("g--plucky-avocet")).toEqual({ kind: "derived", slug: "g", creator: "plucky-avocet" });
+    expect(directNameKind("got--plucky-avocet")).toEqual({ kind: "derived", slug: "got", creator: "plucky-avocet" });
+    const twoChar: DirectNameOrder = { ...V.follow.fields, name: "go--plucky-avocet.fshp.app" };
+    expect(directNameOrderProblem(twoChar)).toBe("bad-name");
+    expect(() => signDirectNameOrder(twoChar, key)).toThrow(/bad-name/);
+  });
+
   it("signs only a well-formed order", () => {
     const bad: DirectNameOrder = { ...V.follow.fields, addresses: ["10.0.0.1"] };
     expect(() => signDirectNameOrder(bad, key)).toThrow(/private-address/);
