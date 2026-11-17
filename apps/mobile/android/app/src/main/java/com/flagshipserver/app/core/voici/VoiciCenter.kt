@@ -133,6 +133,9 @@ data class VoiciMessagesUi(
     fun name(c: StoredVoiciConversation, generated: (String) -> String): String = state.nicknames[c.pseudonymPub]?.name ?: generated(c.pseudonymPub)
 }
 
+/** The first post's text (docs/social-tabs.md), in this device's language. */
+fun firstPostText(): String = com.flagshipserver.app.core.FSStrings.get(com.flagshipserver.app.R.string.social_first_post)
+
 class VoiciCenter(
     val client: VoiciClient,
     private val keyring: VoiciKeyring,
@@ -493,11 +496,16 @@ class VoiciCenter(
         _page.value = _page.value.copy(publishing = true, error = null)
         try {
             val (seed, kind) = keyring.sensitiveSeed(reason ?: "")
+            // A brand-new page goes up with its first post (docs/social-tabs.md); never one that was published or
+            // removed before, which a conflict below may reveal.
+            var welcome = true
             repeat(3) {
                 val local = withLocal { _, _, l -> l } ?: return fail("not-found")
                 val idx = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex)
                 val base = publishedState(u, local)
-                val ops = only ?: ops(local)
+                welcome = welcome && isFirstPublish(idx, local)
+                val ops0 = only ?: ops(local)
+                val ops = if (welcome) listOf(firstPostOp(ops0)) + ops0 else ops0
                 val working = VoiciPage.mergeVoiciPage(base, ops)
                 val pageId = idx?.body?.pageId ?: local.pageId ?: VoiciOwner.randomHex(16)
                 if (local.pageId == null) update { it.copy(pageId = pageId) }
@@ -540,6 +548,7 @@ class VoiciCenter(
                             // A device that never saw the page (removed before) continues it under its pageId.
                             val stored = VoiciJs.str(e.body["pageId"])
                             if (idx == null && stored != null && WebEnvelopes.isLowerHex(stored, 16)) {
+                                welcome = false
                                 update { it.copy(pageId = stored) }
                                 return@repeat
                             }
@@ -582,6 +591,18 @@ class VoiciCenter(
         } catch (e: Exception) {
             return fail("network")
         }
+    }
+
+    /**
+     * Every page starts with one ordinary post, in this device's language, that the owner can edit or delete. Plain
+     * text: no link and no card. Dated just before the page's other new posts so it stays the first.
+     */
+    private fun firstPostOp(ops: List<VoiciDraftOp>): VoiciDraftOp {
+        val earliest = ops.mapNotNull { if (it.op == "post-add") it.post?.createdAt else null }.minOrNull()
+        val at = minOf(now(), (earliest ?: (now() + 1)) - 1)
+        val deviceId = keyring.device()?.deviceId ?: "device"
+        val post = VoiciPost(VoiciOwner.randomHex(16), at, null, firstPostText(), emptyList())
+        return VoiciDraftOp(VoiciOwner.randomHex(16), "post-add", at, deviceId.take(64), post = post)
     }
 
     /**

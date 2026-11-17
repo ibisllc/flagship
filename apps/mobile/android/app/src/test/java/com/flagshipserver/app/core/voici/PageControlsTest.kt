@@ -84,7 +84,7 @@ class PageControlsTest {
         assertTrue(c.page.value.isPublic)
         assertEquals(1L, stored()!!.body.seq)
         assertEquals("Bright Maple", c.page.value.published!!.profile.displayName)
-        assertTrue("the post draft was not published", c.page.value.published!!.chunks.flatten().isEmpty())
+        assertEquals("the post draft was not published; the first post was", listOf(firstPostText()), c.page.value.published!!.chunks.flatten().map { it.text })
         assertEquals("only the post waits", 1, c.page.value.pendingCount)
 
         assertNull(c.setQuickProfile("Maple", null, "test"))
@@ -94,8 +94,27 @@ class PageControlsTest {
 
         assertTrue(c.publish("test"))
         assertEquals(3L, stored()!!.body.seq)
-        assertEquals(listOf("Not yet."), c.page.value.published!!.chunks.flatten().map { it.text })
+        assertEquals(setOf(firstPostText(), "Not yet."), c.page.value.published!!.chunks.flatten().map { it.text }.toSet())
         assertEquals(0, c.page.value.pendingCount)
+    }
+
+    @Test fun aNewPageGoesUpWithItsFirstPostOnce() = runBlocking {
+        val c = center()
+        ready(c)
+        assertTrue(c.goPublic("test"))
+        val first = c.page.value.published!!.chunks.flatten()
+        assertEquals(listOf(firstPostText()), first.map { it.text })
+        assertTrue("plain text: no link, no card", first.single().links.isEmpty())
+        assertEquals("part of the page, not a draft", 0, c.page.value.pendingCount)
+
+        c.edit("post-add", post = VoiciPost(VoiciOwner.randomHex(16), System.currentTimeMillis(), null, "Second.", emptyList()))
+        assertTrue(c.publish("test"))
+        assertEquals(1, c.page.value.published!!.chunks.flatten().count { it.text == firstPostText() })
+
+        // An ordinary post: the owner can delete it.
+        c.edit("post-delete", postId = first.single().id)
+        assertTrue(c.publish("test"))
+        assertTrue(c.page.value.published!!.chunks.flatten().none { it.text == firstPostText() })
     }
 
     @Test fun editsAreDraftsUntilPublishAndSettingBackDropsTheDraft() = runBlocking {
