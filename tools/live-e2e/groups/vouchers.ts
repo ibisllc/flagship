@@ -7,7 +7,7 @@
 // they must answer "off" cleanly.
 import { randomBytes } from "node:crypto";
 import { signBoxProxy, type BoxProxy } from "@flagship/protocol";
-import { pair } from "../lib/fleet.js";
+import { createRealAccount, pair } from "../lib/fleet.js";
 import { CONTROL, assert, http, postJson, short } from "../lib/harness.js";
 import {
   OHTTP_RELAY_URL,
@@ -205,7 +205,9 @@ export const vouchers: Group = {
 
     await rec.check("overage: a Free account is refused overage-needs-plan without spending; R buys blocks within its cap (two, then none)", async () => {
       const five = await rawTestVouchers(5);
-      const free = await redeemDirect(A.username, "overage", five);
+      // A Free account of its own: the run's demo account A exists only when another group needs its box.
+      const freeUser = A?.username ?? (await createRealAccount()).username;
+      const free = await redeemDirect(freeUser, "overage", five);
       assert(free.status === 409 && free.json?.code === "overage-needs-plan", `free overage ${free.status}: ${short(free.text)}`);
       const al0 = await Plan.loadAllowance(d1.deps());
       assert(al0 && typeof al0.remainingBytes === "number", `allowance ${short(al0)}`);
