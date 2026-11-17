@@ -270,7 +270,7 @@ class VoiciAppTest {
         assertTrue(b.publish("test"))
         val (idx, state) = published(mock)
         assertEquals(3L, idx.body.seq)
-        assertEquals(listOf("First", "From B"), state.chunks.flatten().map { it.text })
+        assertEquals(listOf(firstPostText(), "First", "From B"), state.chunks.flatten().map { it.text })
         assertEquals("Alice A", state.profile.displayName)
         assertEquals(3, mock.publishCount)
     }
@@ -308,13 +308,13 @@ class VoiciAppTest {
         assertEquals("the other device's change waits for Publish here", 1L, published(mock).first.body.seq)
         assertEquals(1, a.page.value.pendingCount)
         assertTrue(a.publish("test"))
-        assertEquals(listOf("From the tablet"), published(mock).second.chunks.flatten().map { it.text })
+        assertEquals(listOf(firstPostText(), "From the tablet"), published(mock).second.chunks.flatten().map { it.text })
         assertEquals(1, mock.consumed.size)
         assertTrue(mock.drafts["alice"]!!.isEmpty())
 
         m.refresh()
         assertEquals(0, m.page.value.pendingCount)
-        assertEquals(listOf("From the tablet"), m.page.value.working!!.chunks.flatten().map { it.text })
+        assertEquals(listOf(firstPostText(), "From the tablet"), m.page.value.working!!.chunks.flatten().map { it.text })
 
         // A draft whose grant names another key is refused by the admin side.
         val forged = VoiciOwner.draftEnvelope(
