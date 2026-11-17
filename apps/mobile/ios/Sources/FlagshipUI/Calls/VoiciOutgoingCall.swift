@@ -29,7 +29,11 @@ final class LiveVoiciCallRoomSocket: VoiciCallRoomSocket {
     func open(url: URL, headers: [String: String], onText: @escaping @MainActor (String) -> Void, onClose: @escaping @MainActor () -> Void) {
         var req = URLRequest(url: url, timeoutInterval: 20)
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
-        let t = VoiciCallNetwork.session.webSocketTask(with: req)
+        // Behind the update lock, like every other request (UpdateLockGateTests).
+        guard let t = try? VoiciCallNetwork.session.gatedWebSocketTask(with: req) else {
+            onClose()
+            return
+        }
         task = t
         t.resume()
         receive(t, onText, onClose)
