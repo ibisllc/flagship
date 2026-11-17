@@ -978,6 +978,10 @@ select {
   text-align: left;
   font-feature-settings: "tnum";
 }
+/* Below 700px the tab bar (64px) is fixed at the bottom: the toast sits above it, never over its labels. */
+@media (max-width: 699px) {
+  .toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+}
 .toast.err {
   color: var(--ink);
   border-left-color: var(--err);
