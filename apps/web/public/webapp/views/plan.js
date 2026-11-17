@@ -23,8 +23,9 @@ import {
   relayStateOf,
   saveSettings,
   spendTick,
+  updateWallet,
 } from "../lib/plan.js";
-import { isPaidPlan, monthsOfPlan } from "../lib/vouchers.js";
+import { addVouchers, isPaidPlan, monthsOfPlan } from "../lib/vouchers.js";
 
 registerView("view-plan");
 
@@ -153,6 +154,7 @@ export function planViewHtml(m) {
       <div class="row"><span class="label">${escapeHtml(tr("Monero"))}</span><span class="pill">${escapeHtml(tr("Coming soon"))}</span></div>
       <div class="row"><span class="label">${escapeHtml(tr("In the iPhone and Android apps"))}</span><span class="pill">${escapeHtml(rails.apple || rails.google ? tr("Available") : tr("Coming soon"))}</span></div>
     </div>
+    ${admin ? `<div class="card mt-3" data-testid="plan-import"><button class="secondary" id="plan-import-files">${escapeHtml(tr("Import voucher files"))}</button><p class="caption">${escapeHtml(tr("A voucher file from your employer or a friend adds its vouchers to your balance."))}</p></div>` : ""}
     ${testIssue && admin ? `<div class="card mt-3" data-testid="plan-test"><button class="secondary" id="plan-add-test">${escapeHtml(tr("Add 30 test vouchers"))}</button><p class="caption">${escapeHtml(tr("Test server only: free vouchers for trying the plans."))}</p></div>` : ""}
   `;
 }
@@ -184,6 +186,7 @@ function paint() {
   $("plan-delay-start")?.addEventListener("change", (e) => change({ delayStart: e.target.checked }));
   $("plan-overage-cap")?.addEventListener("change", (e) => change({ overageCapUnits: Number(e.target.value) }));
   $("plan-add-test")?.addEventListener("click", () => addTest());
+  $("plan-import-files")?.addEventListener("click", () => importFiles());
   root.querySelectorAll("[data-buy]").forEach((el) => el.addEventListener("click", () => buy(Number(el.dataset.buy))));
 }
 
@@ -238,6 +241,33 @@ async function choosePlan(value) {
     if (!ok.ok) return paint();
   }
   await change({ plan }, { interactive: !!plan && !model.wallet.settings.delayStart });
+}
+
+/** Voucher files (the Business staff perk, docs/plans-and-backup-offer.md §6) into this account's wallet. */
+async function importFiles() {
+  const files = await new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.multiple = true;
+    input.addEventListener("change", async () => {
+      const out = [];
+      for (const f of input.files ?? []) out.push({ name: f.name, text: await f.text() });
+      resolve(out);
+    });
+    input.click();
+  });
+  if (files.length === 0) return;
+  const { readVoucherFiles } = await import("../lib/orgPlan.js");
+  const { vouchers, bad } = readVoucherFiles(files);
+  if (bad.length > 0 || vouchers.length === 0) {
+    toast(tr("That isn't a Flagship voucher file."), "err");
+    return;
+  }
+  await run(async () => {
+    model.cur = await updateWallet(model.config, (w) => addVouchers(w, vouchers), { current: model.cur });
+    toast(tr("Added {0} to your balance.", usd(vouchers.length * model.config.unitUsd)), "ok");
+  });
 }
 
 async function addTest() {

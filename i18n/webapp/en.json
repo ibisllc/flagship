@@ -15825,5 +15825,185 @@
   "Sent. The server picks up the change within a few minutes, even while its proxy is down.": {
     "en": "Sent. The server picks up the change within a few minutes, even while its proxy is down.",
     "ctx": "webapp/views/home.js"
+  },
+  "Business, trial: {0} day left": {
+    "en": "Business, trial: {0} day left",
+    "ctx": "webapp/views/orgPlan.js:30"
+  },
+  "Business, trial: {0} days left": {
+    "en": "Business, trial: {0} days left",
+    "ctx": "webapp/views/orgPlan.js:30"
+  },
+  "Business: paid through {0}": {
+    "en": "Business: paid through {0}",
+    "ctx": "webapp/views/orgPlan.js:32"
+  },
+  "Business has lapsed": {
+    "en": "Business has lapsed",
+    "ctx": "webapp/views/orgPlan.js:33"
+  },
+  "You can still use every app, remove people and export the org. Adding people, servers or connectors needs a paid plan.": {
+    "en": "You can still use every app, remove people and export the org. Adding people, servers or connectors needs a paid plan.",
+    "ctx": "webapp/views/orgPlan.js:36"
+  },
+  "This org's plan has lapsed. Pay for seats on the Plan to add people.": {
+    "en": "This org's plan has lapsed. Pay for seats on the Plan to add people.",
+    "ctx": "webapp/views/orgPlan.js:42"
+  },
+  "Pay for at least as many seats as there are people in the org.": {
+    "en": "Pay for at least as many seats as there are people in the org.",
+    "ctx": "webapp/views/orgPlan.js:44"
+  },
+  "That isn't a Flagship voucher file.": {
+    "en": "That isn't a Flagship voucher file.",
+    "ctx": "webapp/views/orgPlan.js:46"
+  },
+  "A batch is {0} to {1} vouchers.": {
+    "en": "A batch is {0} to {1} vouchers.",
+    "ctx": "webapp/views/orgPlan.js:48"
+  },
+  "That isn't a Flagship batch key file.": {
+    "en": "That isn't a Flagship batch key file.",
+    "ctx": "webapp/views/orgPlan.js:50"
+  },
+  "This browser can't open the org's wallet yet. Ask another admin to rotate the org's keys.": {
+    "en": "This browser can't open the org's wallet yet. Ask another admin to rotate the org's keys.",
+    "ctx": "webapp/views/orgPlan.js:55"
+  },
+  "The plan couldn't be loaded. Try again later.": {
+    "en": "The plan couldn't be loaded. Try again later.",
+    "ctx": "webapp/views/orgPlan.js:86"
+  },
+  "Paid time starts when the trial ends.": {
+    "en": "Paid time starts when the trial ends.",
+    "ctx": "webapp/views/orgPlan.js:110"
+  },
+  "{0} of {1} seats in use": {
+    "en": "{0} of {1} seats in use",
+    "ctx": "webapp/views/orgPlan.js:111"
+  },
+  "{0} a seat a month, at least {1} seats": {
+    "en": "{0} a seat a month, at least {1} seats",
+    "ctx": "webapp/views/orgPlan.js:112"
+  },
+  "Seats to pay for": {
+    "en": "Seats to pay for",
+    "ctx": "webapp/views/orgPlan.js:116"
+  },
+  "{1} a month for {0} seat": {
+    "en": "{1} a month for {0} seat",
+    "ctx": "webapp/views/orgPlan.js:117"
+  },
+  "{1} a month for {0} seats": {
+    "en": "{1} a month for {0} seats",
+    "ctx": "webapp/views/orgPlan.js:117"
+  },
+  "{0} voucher in the org's wallet": {
+    "en": "{0} voucher in the org's wallet",
+    "ctx": "webapp/views/orgPlan.js:118"
+  },
+  "{0} vouchers in the org's wallet": {
+    "en": "{0} vouchers in the org's wallet",
+    "ctx": "webapp/views/orgPlan.js:118"
+  },
+  "about {0} month": {
+    "en": "about {0} month",
+    "ctx": "webapp/views/orgPlan.js:118"
+  },
+  "about {0} months": {
+    "en": "about {0} months",
+    "ctx": "webapp/views/orgPlan.js:118"
+  },
+  "Pay automatically from the org's wallet": {
+    "en": "Pay automatically from the org's wallet",
+    "ctx": "webapp/views/orgPlan.js:119"
+  },
+  "Import voucher files": {
+    "en": "Import voucher files",
+    "ctx": "webapp/views/orgPlan.js:120"
+  },
+  "Invoiced batch for the company": {
+    "en": "Invoiced batch for the company",
+    "ctx": "webapp/views/orgPlan.js:121"
+  },
+  "The invoice names your company and the number of vouchers, never this org or anyone in it.": {
+    "en": "The invoice names your company and the number of vouchers, never this org or anyone in it.",
+    "ctx": "webapp/views/orgPlan.js:122"
+  },
+  "Buy a batch": {
+    "en": "Buy a batch",
+    "ctx": "webapp/views/orgPlan.js:123"
+  },
+  "Finish a batch from its key file": {
+    "en": "Finish a batch from its key file",
+    "ctx": "webapp/views/orgPlan.js:124"
+  },
+  "Batch of {0} voucher": {
+    "en": "Batch of {0} voucher",
+    "ctx": "webapp/views/orgPlan.js:125"
+  },
+  "Batch of {0} vouchers": {
+    "en": "Batch of {0} vouchers",
+    "ctx": "webapp/views/orgPlan.js:125"
+  },
+  "Add to the org's wallet": {
+    "en": "Add to the org's wallet",
+    "ctx": "webapp/views/orgPlan.js:125"
+  },
+  "Save as voucher files for staff": {
+    "en": "Save as voucher files for staff",
+    "ctx": "webapp/views/orgPlan.js:125"
+  },
+  "Unlock to see the org's wallet.": {
+    "en": "Unlock to see the org's wallet.",
+    "ctx": "webapp/views/orgPlan.js:128"
+  },
+  "The org's admins hold its wallet.": {
+    "en": "The org's admins hold its wallet.",
+    "ctx": "webapp/views/orgPlan.js:129"
+  },
+  "Added {0} voucher.": {
+    "en": "Added {0} voucher.",
+    "ctx": "webapp/views/orgPlan.js:160"
+  },
+  "Added {0} vouchers.": {
+    "en": "Added {0} vouchers.",
+    "ctx": "webapp/views/orgPlan.js:160"
+  },
+  "Keep the batch key file: it finishes the batch on any computer, and anyone holding it can claim the vouchers.": {
+    "en": "Keep the batch key file: it finishes the batch on any computer, and anyone holding it can claim the vouchers.",
+    "ctx": "webapp/views/orgPlan.js:167"
+  },
+  "Batch added.": {
+    "en": "Batch added.",
+    "ctx": "webapp/views/orgPlan.js:176"
+  },
+  "That batch isn't paid yet. A bank transfer can take a few days.": {
+    "en": "That batch isn't paid yet. A bank transfer can take a few days.",
+    "ctx": "webapp/views/orgPlan.js:183"
+  },
+  "Voucher files for staff": {
+    "en": "Voucher files for staff",
+    "ctx": "webapp/views/orgPlan.js:205"
+  },
+  "How many vouchers in each file? (Pro is {0} a month.)": {
+    "en": "How many vouchers in each file? (Pro is {0} a month.)",
+    "ctx": "webapp/views/orgPlan.js:206"
+  },
+  "Save the files": {
+    "en": "Save the files",
+    "ctx": "webapp/views/orgPlan.js:208"
+  },
+  "Saved {0} voucher file. Each one is like cash: hand it over privately.": {
+    "en": "Saved {0} voucher file. Each one is like cash: hand it over privately.",
+    "ctx": "webapp/views/orgPlan.js:215"
+  },
+  "Saved {0} voucher files. Each one is like cash: hand them over privately.": {
+    "en": "Saved {0} voucher files. Each one is like cash: hand them over privately.",
+    "ctx": "webapp/views/orgPlan.js:215"
+  },
+  "A voucher file from your employer or a friend adds its vouchers to your balance.": {
+    "en": "A voucher file from your employer or a friend adds its vouchers to your balance.",
+    "ctx": "webapp/views/plan.js:157"
   }
 }

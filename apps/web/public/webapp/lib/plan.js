@@ -257,7 +257,9 @@ export async function updateWallet(cfg, change, deps = {}) {
 // ── spending ───────────────────────────────────────────────────────────────
 
 /**
- * POST /api/vouchers/redeem through the private relay (`deps.ohttp`, docs/outbound-proxy.md "Failure handling"):
+ * POST /api/vouchers/redeem through the private relay. With `deps.orgSpend = {org, seats}` it pays an org's Business
+ * seats (or its overage) instead of an account's plan (lib/orgPlan.js).
+ * Through the private relay (`deps.ohttp`, docs/outbound-proxy.md "Failure handling"):
  * `{ok, credited, spent, paidUntil?, topUpBytes?}` or a PlanError with `.body.spent`. When every relay fails, the
  * spend goes directly (marked) only if `ohttpSpendMayGoDirect(deps.spendKind, deps.lapseInMs)` allows; otherwise a
  * PlanError `relay-waiting` (nothing was sent, so nothing is spent).
@@ -273,7 +275,13 @@ export async function redeemVouchers(username, forWhat, vouchers, deps = {}) {
         url: `${c.apex}/api/vouchers/redeem`,
         method: "POST",
         headers: [["content-type", "application/json"]],
-        body: new TextEncoder().encode(JSON.stringify({ v: 1, username, for: forWhat, vouchers })),
+        body: new TextEncoder().encode(
+          JSON.stringify(
+            deps.orgSpend
+              ? { v: 1, org: deps.orgSpend.org, for: forWhat, ...(forWhat === "business" ? { seats: deps.orgSpend.seats } : {}), vouchers }
+              : { v: 1, username, for: forWhat, vouchers },
+          ),
+        ),
       },
       { config: deps.ohttp ?? null, mayGoDirect: (reason) => reason === "unconfigured" || ohttpSpendMayGoDirect(kind, lapseInMs), fetch: c.fetch },
     );

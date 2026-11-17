@@ -33,6 +33,16 @@ export const DEFAULT_PAYMENTS_CONFIG = {
   activationDelayMaxHours: 24,
   packs: [10, 30, 120],
   maxPerRequest: 30,
+  business: {
+    unitsPerSeatMonth: 6,
+    minSeats: 3,
+    maxSeats: 10_000,
+    egressGbPerSeat: 100,
+    trialSeats: 10,
+    trialDays: 30,
+    batchMinUnits: 100,
+    batchMaxUnits: 5000,
+  },
 };
 
 const DAY_MS = 86_400_000;
@@ -49,6 +59,8 @@ export function mergePaymentsConfig(raw) {
   };
   const ov = isObj(raw.overage) ? raw.overage : {};
   const tr = isObj(raw.trickle) ? raw.trickle : {};
+  const bz = isObj(raw.business) ? raw.business : {};
+  const db = d.business;
   const packs = Array.isArray(raw.packs) && raw.packs.length > 0 && raw.packs.length <= 6 && raw.packs.every((p) => pos(p, 0, 1000) > 0) ? raw.packs : d.packs;
   const out = {
     v: 1,
@@ -68,7 +80,18 @@ export function mergePaymentsConfig(raw) {
     activationDelayMaxHours: pos(raw.activationDelayMaxHours, d.activationDelayMaxHours, 24 * 7),
     packs: [...packs].sort((a, b) => a - b),
     maxPerRequest: pos(raw.maxPerRequest, d.maxPerRequest, 200),
+    business: {
+      unitsPerSeatMonth: pos(bz.unitsPerSeatMonth, db.unitsPerSeatMonth, 1000),
+      minSeats: pos(bz.minSeats, db.minSeats, 1000),
+      maxSeats: pos(bz.maxSeats, db.maxSeats, 1_000_000),
+      egressGbPerSeat: pos(bz.egressGbPerSeat, db.egressGbPerSeat),
+      trialSeats: pos(bz.trialSeats, db.trialSeats, 10_000),
+      trialDays: pos(bz.trialDays, db.trialDays, 365),
+      batchMinUnits: pos(bz.batchMinUnits, db.batchMinUnits, 100_000),
+      batchMaxUnits: pos(bz.batchMaxUnits, db.batchMaxUnits, 100_000),
+    },
   };
+  if (out.business.maxSeats < out.business.minSeats || out.business.batchMaxUnits < out.business.batchMinUnits) out.business = db;
   if (out.trickle.highWaterDays <= out.trickle.lowWaterDays || out.maxAheadDays <= out.trickle.highWaterDays) out.trickle = d.trickle;
   if (out.maxAheadDays <= out.trickle.highWaterDays) out.maxAheadDays = d.maxAheadDays;
   return out;
