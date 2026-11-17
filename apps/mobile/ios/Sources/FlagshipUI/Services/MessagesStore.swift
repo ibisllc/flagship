@@ -851,17 +851,22 @@ public final class MessagesStore {
         isPublishing = true
         publishError = nil
         defer { isPublishing = false }
+        // A brand-new page goes up with its first post (docs/social-tabs.md). Decided once, before any conflict
+        // shows the page already existed; never for a page that was published (or removed) before.
+        var welcome = isFirstPublish
         for _ in 0..<3 {
             do {
-                try await publishOnce(client, signer, only: only)
+                try await publishOnce(client, signer, only: only, extra: welcome ? [welcomePostOp(ops: only ?? ownOps + laneOps)] : [])
                 return
             } catch let e as VoiciComError where e.code == "seq-conflict" {
                 // Another admin device published (or removed the page) first: take what `.com` holds, merge again,
                 // re-sign the next seq. Bounded: three tries in all.
                 await takeConflict(client, e)
+                welcome = welcome && isFirstPublish
                 if isRemoved && !mayRepublish { return }
             } catch let e as VoiciComError where e.code == "wrong-page" && index == nil && e.storedPageId.map({ CanonicalJson.isLowerHex($0, bytes: 16) }) == true {
                 // A device that never saw the page (it was removed before) continues it under its own pageId.
+                welcome = false
                 local.pageId = e.storedPageId!
                 save()
             } catch {
@@ -891,10 +896,22 @@ public final class MessagesStore {
     /// The seq the next signed record takes: one above anything this device saw (a publish or a removal).
     private var nextSeq: Int64 { max(index?.seq ?? 0, local.highestSeq) + 1 }
 
-    private func publishOnce(_ client: any VoiciComClient, _ signer: Curve25519.Signing.PrivateKey, only: [VoiciDraftOp]?) async throws {
+    /// The first post's text (docs/social-tabs.md), in this device's language.
+    nonisolated static var welcomePostText: String { String(localized: "Hello. I am using the Flagship app, from flagshipserver.com") }
+
+    /// Every page starts with one ordinary post, in this device's language, that the owner can edit or delete. Plain
+    /// text: no link and no card. Dated just before the page's other new posts so it stays the first.
+    func welcomePostOp(ops: [VoiciDraftOp]) -> VoiciDraftOp {
+        let earliest = ops.compactMap { $0.op == "post-add" ? $0.post?.createdAt : nil }.min()
+        let at = min(now(), (earliest ?? now() + 1) - 1)
+        let post = VoiciPost(id: newId(), createdAt: at, editedAt: nil, text: Self.welcomePostText, links: [])
+        return VoiciDraftOp(opId: newId(), op: "post-add", at: at, deviceId: deviceId, post: post)
+    }
+
+    private func publishOnce(_ client: any VoiciComClient, _ signer: Curve25519.Signing.PrivateKey, only: [VoiciDraftOp]?, extra: [VoiciDraftOp] = []) async throws {
         let epoch = local.pendingEpoch ?? index?.inboxEpoch ?? 1
         guard let k = keys(epoch: epoch) else { throw VoiciComError(status: 0, code: "locked") }
-        let ops = only ?? (ownOps + laneOps.filter { op in !ownOps.contains { $0.opId == op.opId } })
+        let ops = extra + (only ?? (ownOps + laneOps.filter { op in !ownOps.contains { $0.opId == op.opId } }))
         let merged = VoiciPage.mergeVoiciPage(base, ops: ops)
         var images: [String: [UInt8]] = [:]
         for sha in VoiciOwner.imageHashes(merged) { images[sha] = VoiciImageStore.load(sha) }
