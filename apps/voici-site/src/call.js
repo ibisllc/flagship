@@ -309,7 +309,9 @@ export function showIncomingRing(ctx, session, ring) {
       stageAvatar(ctx),
       h(doc, "h2", { class: "call-name", id: "call-stage-name" }, page.profile.displayName),
       h(doc, "p", { class: "call-status", role: "status" }, t("{0} is calling you back.", page.profile.displayName)),
+      h(doc, "p", { class: "call-e2e" }, icon(doc, "lock"), h(doc, "span", {}, t("End-to-end encrypted · quantum-safe"))),
     ),
+    h(doc, "div", { class: "call-spacer" }),
     h(doc, "div", { class: "call-bottom" }, h(doc, "div", { class: "call-row call-row-ring" }, decline.el, answer.el)),
   );
   answer.el.focus();
