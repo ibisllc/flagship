@@ -69,6 +69,8 @@ export interface SendPrivatelyOptions {
   fallbackDirect?: boolean;
   timeoutMs?: number;
   fetch?: FetchLike;
+  /** With `relay: null`: the reason the direct request carries (default `unconfigured`). */
+  directReason?: string;
 }
 
 const te = new TextEncoder();
@@ -102,7 +104,7 @@ export async function sendPrivately(req: PrivateRequest, opts: SendPrivatelyOpti
     return { status: res.status, headers: out, body: new Uint8Array(await res.arrayBuffer()), path: "direct", fallbackReason: reason };
   };
 
-  if (!opts.relay) return direct("unconfigured");
+  if (!opts.relay) return direct(opts.directReason ?? "unconfigured");
   const u = new URL(req.url);
   const { encapsulated, context } = encapsulateOhttpRequest(
     opts.relay.keyConfig,
@@ -131,4 +133,57 @@ export async function sendPrivately(req: PrivateRequest, opts: SendPrivatelyOpti
   } catch {
     return direct("relay-bad-response");
   }
+}
+
+/** Every relay failed and the caller didn't allow a direct request. */
+export class RelayUnavailableError extends Error {
+  constructor(readonly reason: string) {
+    super(`private relay unavailable (${reason})`);
+    this.name = "RelayUnavailableError";
+  }
+}
+
+export interface SendThroughRelaysOptions {
+  /** The gateway's key configuration; null means no relay is set up (`unconfigured`). */
+  keyConfig: OhttpKeyConfig | null;
+  /** Relay URLs in order; each is tried once. */
+  relays: readonly string[];
+  /** Asked once every relay failed (or none is set up): may the request go directly, marked? */
+  mayGoDirect: (reason: string) => boolean;
+  timeoutMs?: number;
+  fetch?: FetchLike;
+}
+
+/**
+ * Send `req` through the first relay that answers with an OHTTP response (the
+ * inner answer is final, whatever its status), else directly with
+ * `x-flagship-relay-fallback: <reason>` when `mayGoDirect` allows, else throw
+ * `RelayUnavailableError`. Docs: outbound-proxy.md "Failure handling".
+ */
+export async function sendThroughRelays(req: PrivateRequest, opts: SendThroughRelaysOptions): Promise<PrivateResponse & { relay?: string }> {
+  let reason = "unconfigured";
+  if (opts.keyConfig) {
+    for (const relayUrl of opts.relays) {
+      try {
+        const r = await sendPrivately(req, {
+          relay: { relayUrl, keyConfig: opts.keyConfig },
+          fallbackDirect: false,
+          ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+          ...(opts.fetch ? { fetch: opts.fetch } : {}),
+        });
+        return { ...r, relay: relayUrl };
+      } catch (e) {
+        const m = /\(([^)]+)\)/.exec((e as Error).message);
+        reason = m?.[1] ?? "relay-unreachable";
+      }
+    }
+    if (opts.relays.length === 0) reason = "unconfigured";
+  }
+  if (!opts.mayGoDirect(reason)) throw new RelayUnavailableError(reason);
+  return sendPrivately(req, {
+    relay: null,
+    directReason: reason,
+    ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+    ...(opts.fetch ? { fetch: opts.fetch } : {}),
+  });
 }
