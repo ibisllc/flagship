@@ -975,7 +975,7 @@ async function routeImpl(
     const subject = bindingSubject(rlEndpoint, url.pathname);
     const rl = await checkRateLimit(env, {
       endpoint: rlEndpoint,
-      ip: clientKey(request, rlEndpoint, url.pathname, irkPub),
+      ip: clientKey(request, rlEndpoint, url.pathname, irkPub, parsed),
       ...(irkPub ? { irkPub } : {}),
       ...(usernameHash ? { usernameHash } : {}),
       ...(subject ? { subject } : {}),

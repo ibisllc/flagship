@@ -258,6 +258,8 @@ export type RateLimitEndpoint =
   // Blind vouchers: spending (RSA verifies + a D1 batch; direct callers only,
   // the OHTTP gateway dispatches inside), the sealed wallet, the gym's free issue.
   | "vouchers-redeem"
+  // The outbound proxy's lane (boxProxyLane.ts): an app leaves an order, a box reports or polls (STK-signed).
+  | "box-proxy-lane"
   | "voucher-wallet"
   | "vouchers-test-issue"
   // The voucher rails (voucherRails.ts): a paid issue checks a proof with Apple's chain, Stripe or Google and signs up
@@ -581,6 +583,8 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 300, windowSec: 3600 },
   ],
   "voucher-wallet": [{ axis: "ip", limit: 120, windowSec: 3600 }],
+  // A box polls every ~2 min while its proxy fails; relayed calls are keyed by the server they name.
+  "box-proxy-lane": [{ axis: "ip", limit: 60, windowSec: 600 }],
   "vouchers-test-issue": [{ axis: "ip", limit: 10, windowSec: 3600 }],
   "vouchers-paid-issue": [
     { axis: "ip", limit: 30, windowSec: 60 },
@@ -989,6 +993,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
     return "voucher-redeem";
   }
   if (m === "POST" && pathname === "/api/vouchers/redeem") return "vouchers-redeem";
+  if (/^\/api\/server\/[^/]+\/proxy-(?:order|alert)$/.test(pathname)) return "box-proxy-lane";
   if (m === "POST" && pathname === "/api/vouchers/test-issue") return "vouchers-test-issue";
   if (m === "POST" && pathname === "/api/vouchers/paid-issue") return "vouchers-paid-issue";
   if (m === "POST" && pathname === "/api/vouchers/stripe/checkout") return "vouchers-stripe-checkout";
@@ -1155,10 +1160,22 @@ export function clientKey(
   endpoint: RateLimitEndpoint,
   pathname: string,
   irkPub: string | undefined,
+  body?: unknown,
 ): string | null {
   if (!relayedRequests.has(request)) return clientIp(request);
   const serial = endpoint === "provision-status" ? /^\/api\/order\/([^/]+)\/status$/.exec(pathname)?.[1] : undefined;
   if (serial) return `relay:order:${serial}`;
+  // Every phone's spend arrives from the relay: one shared bucket would refuse real payments at scale, so a
+  // relayed spend is keyed by the account it pays for. A made-up name gets its own bucket, so each such request
+  // still costs at most one request's RSA checks (maxPerRequest vouchers).
+  if (endpoint === "vouchers-redeem") {
+    const u = (body as { username?: unknown } | undefined)?.username;
+    if (typeof u === "string" && /^[a-z0-9-]{1,64}$/i.test(u)) return `relay:redeem:${u.toLowerCase()}`;
+  }
+  if (endpoint === "box-proxy-lane") {
+    const d = /^\/api\/server\/([^/]+)\//.exec(pathname)?.[1];
+    if (d) return `relay:lane:${d.toLowerCase()}`;
+  }
   if (irkPub) return `relay:irk:${irkPub}`;
   return "relay";
 }
