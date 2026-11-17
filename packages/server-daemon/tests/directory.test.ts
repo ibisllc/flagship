@@ -260,6 +260,8 @@ describe("the connector runtime", () => {
     const posted: any[] = [];
     let proposals: any[] = [];
     let invites: any[] = [];
+    let planLive = false;
+    const notes: string[] = [];
     const fetchImpl = (async (url: string, init?: RequestInit) => {
       const path = new URL(url).pathname.replace(`/api/orgs/${A.orgId}`, "");
       const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
@@ -283,9 +285,17 @@ describe("the connector runtime", () => {
       boxKemSeed: async () => boxSeed,
       fetchImpl,
       now: () => NOW + 2 * 86_400_000,
+      newPeopleAllowed: () => planLive,
+      note: (kind) => notes.push(kind),
     });
     expect((await rt.refresh()).map((c) => c.bundle.connector.connectorId)).toEqual([connector.connectorId]);
     expect(rt.connector(connector.connectorId)!.setup.scimTokenSha256).toBe(TOKEN_SHA);
+    // While the org's Business plan has lapsed a new person waits; once it is paid they are proposed.
+    const waiting: DirectoryUser = { externalId: "ext-ana", userName: "ana@acme.example", displayName: "Ana Pérez", active: true, groups: ["Finance"] };
+    expect(await rt.sync(connector.connectorId, [waiting])).toEqual([]);
+    expect(posted).toEqual([]);
+    expect(notes).toContain("org.directory.waiting");
+    planLive = true;
 
     const ana: DirectoryUser = { externalId: "ext-ana", userName: "ana@acme.example", displayName: "Ana Pérez", active: true, groups: ["Finance"] };
     const first = await rt.sync(connector.connectorId, [ana]);

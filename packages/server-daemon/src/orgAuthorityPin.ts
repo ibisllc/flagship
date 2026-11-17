@@ -139,8 +139,31 @@ function union<T>(a: readonly T[], b: readonly T[]): T[] {
  * the served set plus what the box held, and the seat book decides which win. The chain itself
  * must keep every pinned version byte for byte.
  */
-export function mergeOrgServed(prev: OrgPinned | null, served: OrgServed, expected: { orgId: string; genesisHash: string }, now: number): OrgSyncResult {
+export function mergeOrgServed(
+  prev: OrgPinned | null,
+  served: OrgServed,
+  expected: { orgId: string; genesisHash: string },
+  now: number,
+  admitNewSeat?: (grantIssuedAt: number, liveSeats: number) => boolean,
+): OrgSyncResult {
   const old = prev?.file;
+  if (admitNewSeat && prev) {
+    // The Business plan's backstop (orgPlanCheck.ts): a seat new to this box waits while the org's plan can't take it;
+    // `.com` serves its grant again on the next sync, so it joins once the plan allows.
+    let live = liveSeats(prev.book, now).size;
+    const known = new Set(prev.book.seats.keys());
+    const grants: OrgSeatGrantBundle[] = [];
+    for (const g of served.grants) {
+      const seat = g.grant.seatId;
+      if (known.has(seat) || prev.book.revoked.has(seat)) grants.push(g);
+      else if (admitNewSeat(g.grant.issuedAt, live)) {
+        grants.push(g);
+        known.add(seat);
+        live++;
+      }
+    }
+    served = { ...served, grants };
+  }
   if (old) {
     if (served.entries.length < old.entries.length) throw new OrgPinError("rollback", "the served chain is shorter than the pinned one");
     for (let i = 0; i < old.entries.length; i++) {
@@ -242,13 +265,15 @@ export interface OrgSyncDeps {
   fetchServed: () => Promise<OrgServed>;
   hooks: OrgOffboardingHooks;
   now: () => number;
+  /** The org plan's seat backstop (OrgPlanCheck.admitsNewSeat). */
+  admitNewSeat?: (grantIssuedAt: number, liveSeats: number) => boolean;
 }
 
 /** One sync: fetch, verify, merge, offboard, persist. Returns the pin the box uses for decisions. */
 export async function syncOrgAuthority(deps: OrgSyncDeps, prev: OrgPinned | null): Promise<OrgPinned> {
   const now = deps.now();
   const expected = { orgId: deps.orgId, genesisHash: deps.genesisHash };
-  const result = mergeOrgServed(prev, await deps.fetchServed(), expected, now);
+  const result = mergeOrgServed(prev, await deps.fetchServed(), expected, now, deps.admitNewSeat);
   await runOrgOffboarding(prev, result, deps.hooks, deps.serverDomain, now);
   await deps.store.write(result.pinned.file);
   return result.pinned;
@@ -318,6 +343,7 @@ export async function startOrgAuthoritySync(opts: {
   fetchImpl?: typeof fetch;
   now?: () => number;
   onLog?: (m: string) => void;
+  admitNewSeat?: (grantIssuedAt: number, liveSeats: number) => boolean;
 }): Promise<{ pollOnce: () => Promise<void>; stop: () => void }> {
   const now = opts.now ?? (() => Date.now());
   const f = opts.fetchImpl ?? fetch;
@@ -347,6 +373,7 @@ export async function startOrgAuthoritySync(opts: {
           store,
           hooks: opts.hooks,
           now,
+          ...(opts.admitNewSeat ? { admitNewSeat: opts.admitNewSeat } : {}),
           fetchServed: async () => {
             const [a, s] = await Promise.all([getJson("authority"), getJson("seats")]);
             return {

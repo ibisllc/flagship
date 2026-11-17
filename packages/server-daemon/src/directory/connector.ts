@@ -56,6 +56,8 @@ export interface ConnectorDeps {
   log?: (line: string) => void;
   /** An Activity line (connector id prefixes and dates only, never a name). */
   note?: (kind: string, text: string, ok: boolean) => void;
+  /** False while the org's Business plan has lapsed (orgPlanCheck.ts): new people wait, nothing else does. */
+  newPeopleAllowed?: () => boolean;
 }
 
 export interface ActiveConnector {
@@ -214,7 +216,14 @@ export class ConnectorRuntime {
     state = next;
     const admins = intents.length > 0 ? await this.adminKems() : [];
     const posted: ProposalIntent[] = [];
+    const lapsed = this.deps.newPeopleAllowed ? !this.deps.newPeopleAllowed() : false;
+    let waiting = 0;
     for (const i of intents) {
+      if (lapsed && i.kind === "invite") {
+        state.proposed = state.proposed.filter((d) => d !== i.digest);
+        waiting++;
+        continue;
+      }
       if (admins.length === 0) {
         state.proposed = state.proposed.filter((d) => d !== i.digest);
         continue;
@@ -227,6 +236,7 @@ export class ConnectorRuntime {
         this.deps.log?.(`[directory] proposal not posted: HTTP ${r.status}`);
       }
     }
+    if (waiting > 0) this.deps.note?.("org.directory.waiting", `${waiting} new people wait until the org's plan is paid`, false);
     await this.saveState(connectorId, state);
     return posted;
   }

@@ -355,6 +355,7 @@ import {
   type RotationPq,
 } from "./adminRootRotationConsumer.js";
 import { currentOrgPin, startOrgAuthoritySync } from "./orgAuthorityPin.js";
+import { OrgPlanCheck, currentOrgPlan, setCurrentOrgPlan } from "./orgPlanCheck.js";
 import { adoptOrgKeys, announceOrgBoxKem, fetchOrgRings, cgkRingsBetween, orgBoxKemSeed, orgBoxRotationDone, postOrgBoxLogHead, readOrgCgk, verifyOwnOrgRecipe, verifyServedRings } from "./orgBoxKeys.js";
 import { ConnectorRuntime } from "./directory/connector.js";
 import { startDirectoryConnectors } from "./directory/wiring.js";
@@ -1766,7 +1767,28 @@ async function main(): Promise<void> {
       return rings;
     };
     const notedPending = new Set<string>();
+    // The org's Business plan, CA-signed (orgPlanCheck.ts): the box's backstop for new seats and new directory people.
+    const orgPlan = new OrgPlanCheck({
+      path: join(dataDir, "org-plan-attestation.json"),
+      orgId: cfg.orgId,
+      chain: () => {
+        try {
+          return caTrustChainFromFolder({ gitRepoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship" });
+        } catch {
+          return null;
+        }
+      },
+      fetchAttestation: async () => {
+        const r = await fetch(`${(env.controlPlaneBaseUrl ?? "").replace(/\/+$/, "")}/api/orgs/${cfg.orgId}/plan-attestation`, { signal: AbortSignal.timeout(20_000) });
+        return r.ok ? await r.json() : null;
+      },
+      log: (m) => console.warn(m),
+    });
+    await orgPlan.load();
+    orgPlan.start();
+    setCurrentOrgPlan(orgPlan);
     const orgSync = await startOrgAuthoritySync({
+      admitNewSeat: (issuedAt, live) => orgPlan.admitsNewSeat(issuedAt, live),
       orgId: cfg.orgId,
       genesisHash: cfg.orgGenesisHash,
       serverDomain: cfg.serverId,
@@ -2616,6 +2638,7 @@ async function main(): Promise<void> {
           boxKemSeed: () => orgBoxKemSeed(dataDir),
           log: (m) => console.warn(m),
           note: (kind, text, ok) => activityLog.note(kind, text, { ok }),
+          newPeopleAllowed: () => currentOrgPlan()?.allowsNewPeople() ?? true,
         }),
         dataDir,
         note: (kind, text, ok) => activityLog.note(kind, text, { ok }),
