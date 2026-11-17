@@ -19,6 +19,7 @@
  * Who may receive what (least privilege; `.com`, boxes and phones all check it):
  *   cgk            scope "*"     org admins and the org's boxes
  *   directory-key  scope "*"     org admins only
+ *   wallet         scope "*"     org admins only (the org's voucher wallet, orgWallet.ts)
  *   archive-keys   scope server  org admins, server admins of it, that box
  *   disk-key       scope server  org admins, seats with unlock at boot on it, server admins of it, that box
  * A ring for scope "*" is approved by one org admin; a server-scoped one by an org admin or a server
@@ -60,8 +61,8 @@ export const TAG_ORG_KEY_COMMIT = "flagship/org-key-commit/v1";
 export const TAG_ORG_KEY_SEAL = "flagship/org-key-seal/v1";
 export const TAG_ORG_SEAT_KEM_SEED = "flagship/org-seat-kem-seed/v1";
 
-export type OrgKeyKind = "cgk" | "directory-key" | "archive-keys" | "disk-key";
-export const ORG_KEY_KINDS: readonly OrgKeyKind[] = ["cgk", "directory-key", "archive-keys", "disk-key"];
+export type OrgKeyKind = "cgk" | "directory-key" | "archive-keys" | "disk-key" | "wallet";
+export const ORG_KEY_KINDS: readonly OrgKeyKind[] = ["cgk", "directory-key", "archive-keys", "disk-key", "wallet"];
 export const ORG_KEY_MAX_RECIPIENTS = 256;
 export const ORG_KEY_MAX_SEALED_HEX = 2 * 4096;
 export const ORG_KEY_GENESIS_PREV = "0".repeat(64);
@@ -257,7 +258,7 @@ export interface OrgKeyRingBundle {
   approvals: OrgApproval[];
 }
 
-const orgWide = (k: OrgKeyKind) => k === "cgk" || k === "directory-key";
+const orgWide = (k: OrgKeyKind) => k === "cgk" || k === "directory-key" || k === "wallet";
 
 export function canonicalOrgKeyRing(r: OrgKeyRing): Bytes {
   match("orgId", HEX16, r.orgId);
@@ -374,7 +375,7 @@ export function orgKeyRecipientAllowed(ctx: Pick<OrgKeyRingContext, "state" | "b
     const d = recipient.slice(4);
     if (!ctx.servers.has(d)) return false;
     if (kind === "cgk") return true;
-    if (kind === "directory-key") return false;
+    if (kind === "directory-key" || kind === "wallet") return false;
     return d === scope;
   }
   const seatId = recipient.slice(5);

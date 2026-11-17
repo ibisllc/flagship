@@ -36,6 +36,25 @@ export interface PaymentsConfig {
   packs: number[];
   /** Max vouchers in one issue or redeem request. */
   maxPerRequest: number;
+  /** The Business plan for orgs (docs/plans-and-backup-offer.md §3; provisional, owner 2026-11-17). */
+  business: BusinessConfig;
+}
+
+/**
+ * Business: an org pays per seat, from its own wallet, in the same vouchers. A new org gets `trialSeats` for
+ * `trialDays`, then needs at least `minSeats` paid seats or it lapses (it never loses data or existing seats).
+ * Companies buy an invoiced batch of at least `batchMinUnits` vouchers on the web.
+ */
+export interface BusinessConfig {
+  unitsPerSeatMonth: number;
+  minSeats: number;
+  maxSeats: number;
+  /** Public egress per paid seat, pooled across the org (prepaid `overage` blocks on top). */
+  egressGbPerSeat: number;
+  trialSeats: number;
+  trialDays: number;
+  batchMinUnits: number;
+  batchMaxUnits: number;
 }
 
 export const DEFAULT_PAYMENTS_CONFIG: PaymentsConfig = {
@@ -50,6 +69,16 @@ export const DEFAULT_PAYMENTS_CONFIG: PaymentsConfig = {
   activationDelayMaxHours: 24,
   packs: [10, 30, 120],
   maxPerRequest: 30,
+  business: {
+    unitsPerSeatMonth: 6,
+    minSeats: 3,
+    maxSeats: 10_000,
+    egressGbPerSeat: 100,
+    trialSeats: 10,
+    trialDays: 30,
+    batchMinUnits: 100,
+    batchMaxUnits: 5000,
+  },
 };
 
 const DAY_MS = 86_400_000;
@@ -77,6 +106,8 @@ export function mergePaymentsConfig(raw: unknown): PaymentsConfig {
   };
   const ov = isObj(o.overage) ? o.overage : {};
   const tr = isObj(o.trickle) ? o.trickle : {};
+  const bz = isObj(o.business) ? o.business : {};
+  const db = d.business;
   const packs = Array.isArray(o.packs) && o.packs.length > 0 && o.packs.length <= 6 && o.packs.every((p) => isPosInt(p, 1000)) ? (o.packs as number[]) : d.packs;
   const out: PaymentsConfig = {
     v: 1,
@@ -97,7 +128,18 @@ export function mergePaymentsConfig(raw: unknown): PaymentsConfig {
     activationDelayMaxHours: num(o.activationDelayMaxHours, d.activationDelayMaxHours, 24 * 7),
     packs: [...packs].sort((a, b) => a - b),
     maxPerRequest: num(o.maxPerRequest, d.maxPerRequest, 200),
+    business: {
+      unitsPerSeatMonth: num(bz.unitsPerSeatMonth, db.unitsPerSeatMonth, 1000),
+      minSeats: num(bz.minSeats, db.minSeats, 1000),
+      maxSeats: num(bz.maxSeats, db.maxSeats, 1_000_000),
+      egressGbPerSeat: num(bz.egressGbPerSeat, db.egressGbPerSeat),
+      trialSeats: num(bz.trialSeats, db.trialSeats, 10_000),
+      trialDays: num(bz.trialDays, db.trialDays, 365),
+      batchMinUnits: num(bz.batchMinUnits, db.batchMinUnits, 100_000),
+      batchMaxUnits: num(bz.batchMaxUnits, db.batchMaxUnits, 100_000),
+    },
   };
+  if (out.business.maxSeats < out.business.minSeats || out.business.batchMaxUnits < out.business.batchMinUnits) out.business = db;
   if (out.trickle.highWaterDays <= out.trickle.lowWaterDays || out.maxAheadDays <= out.trickle.highWaterDays) out.trickle = d.trickle;
   if (out.maxAheadDays <= out.trickle.highWaterDays) out.maxAheadDays = d.maxAheadDays;
   return out;
@@ -106,6 +148,21 @@ export function mergePaymentsConfig(raw: unknown): PaymentsConfig {
 /** How long one voucher keeps `plan` running: a month's days over its units (Pro 3 days, Pro Max 36 hours). */
 export function planUnitMs(cfg: PaymentsConfig, plan: PaidPlan): number {
   return Math.floor((cfg.monthDays * DAY_MS) / cfg.plans[plan].unitsPerMonth);
+}
+
+/** How long one voucher keeps an org of `seats` paid seats on Business (3 seats: 40 hours). */
+export function orgSeatUnitMs(cfg: PaymentsConfig, seats: number): number {
+  return Math.floor((cfg.monthDays * DAY_MS) / (seats * cfg.business.unitsPerSeatMonth));
+}
+
+/** Vouchers a month of Business costs for `seats` seats (seats × 6). */
+export function orgMonthlyUnits(cfg: PaymentsConfig, seats: number): number {
+  return seats * cfg.business.unitsPerSeatMonth;
+}
+
+/** A seat count an org may pay for: a whole number from `minSeats` to `maxSeats`. */
+export function isOrgSeatCount(cfg: PaymentsConfig, seats: unknown): seats is number {
+  return typeof seats === "number" && Number.isSafeInteger(seats) && seats >= cfg.business.minSeats && seats <= cfg.business.maxSeats;
 }
 
 export function isPaidPlan(v: unknown): v is PaidPlan {
