@@ -180,6 +180,21 @@ export interface OrgAuditObjects {
   servers?: OrgAuditServer[];
   /** Each server's newest signed log head. */
   boxLogHeads?: OrgBoxLogHeadBundle[];
+  /**
+   * Every box log head the org log names (unsigned: the admin-approved log holds each one's hash), so the
+   * verifier can tell which server and sequence each `box-log-head` entry was, and that the signed head served
+   * for a server is the last one the log names for it (05c review F5).
+   */
+  boxLogHeadHistory?: OrgBoxLogHead[];
+  /** Every registration the org log names (`server-registered`), a re-registered server's earlier keys included. */
+  registrations?: Array<{ serverDomain: string; identityPubKeyHex: string }>;
+}
+
+/** What an auditor knew from an export it verified before: a later export must extend it, never go back. */
+export interface OrgAuditPrevious {
+  logSeq: number;
+  logHeadHash: string;
+  boxLogHeads?: ReadonlyArray<Pick<OrgBoxLogHead, "serverDomain" | "seq" | "headHash">>;
 }
 
 export interface OrgAuditExport extends OrgAuditObjects {
@@ -223,10 +238,63 @@ export interface OrgAuditVerdict {
 }
 
 /**
+ * Every server registration and box log head the signed log names must be in the export, and each server's served
+ * head must be the last one the log names for it (05c review F5): `.com` cannot drop a server, its head, or serve an
+ * older head. With `previous`, the export must also extend what the auditor verified before.
+ */
+function checkLoggedObjectsPresent(x: OrgAuditExport, servers: Map<string, string>, heads: OrgBoxLogHead[], previous?: OrgAuditPrevious): void {
+  const headByRef = new Map<string, OrgBoxLogHead>();
+  for (const h of x.boxLogHeadHistory ?? []) {
+    if (h?.orgId !== x.orgId) fail("wrong-org", "box log head");
+    headByRef.set(orgSha256Hex(canonicalOrgBoxLogHead(h)), h);
+  }
+  for (const h of heads) headByRef.set(orgSha256Hex(canonicalOrgBoxLogHead(h)), h);
+  const regByRef = new Map<string, { serverDomain: string; identityPubKeyHex: string }>();
+  for (const r of x.registrations ?? []) {
+    if (typeof r?.serverDomain !== "string" || !DOMAIN.test(r.serverDomain) || typeof r.identityPubKeyHex !== "string" || !HEX32.test(r.identityPubKeyHex)) fail("malformed", "registration");
+    regByRef.set(orgServerRegisteredRef(r.serverDomain, r.identityPubKeyHex), r);
+  }
+  for (const [serverDomain, identityPubKeyHex] of servers) regByRef.set(orgServerRegisteredRef(serverDomain, identityPubKeyHex), { serverDomain, identityPubKeyHex });
+
+  const lastHead = new Map<string, OrgBoxLogHead>();
+  const lastReg = new Map<string, string>();
+  for (const e of x.log) {
+    if (e.kind === "box-log-head") {
+      const h = headByRef.get(e.refSha256);
+      if (!h) fail("order-mismatch", `log seq ${e.seq} names a box log head the export lacks`);
+      const before = lastHead.get(h!.serverDomain);
+      if (before && h!.seq < before.seq) fail("order-mismatch", `the log of ${h!.serverDomain} went back from ${before.seq} to ${h!.seq}`);
+      if (before && h!.seq === before.seq && h!.headHash !== before.headHash) fail("order-mismatch", `two logs of ${h!.serverDomain} at ${h!.seq}`);
+      lastHead.set(h!.serverDomain, h!);
+    } else if (e.kind === "server-registered") {
+      const r = regByRef.get(e.refSha256);
+      if (!r) fail("order-mismatch", `log seq ${e.seq} names a server registration the export lacks`);
+      // A server registered again is a new box with a new Activity chain: its heads start over.
+      if (lastReg.has(r!.serverDomain) && lastReg.get(r!.serverDomain) !== r!.identityPubKeyHex) lastHead.delete(r!.serverDomain);
+      lastReg.set(r!.serverDomain, r!.identityPubKeyHex);
+    }
+  }
+  for (const [d, stk] of lastReg) if (servers.get(d) !== stk) fail("order-mismatch", `server ${d} is registered in the log but missing or changed in the export`);
+  for (const [d, h] of lastHead) {
+    const served = heads.find((s) => s.serverDomain === d);
+    if (!served || orgSha256Hex(canonicalOrgBoxLogHead(served)) !== orgSha256Hex(canonicalOrgBoxLogHead(h))) fail("order-mismatch", `the newest box log head of ${d} the log names (entry ${h.seq}) is not the one served`);
+  }
+  if (previous) {
+    const at = x.log[previous.logSeq - 1];
+    if (previous.logSeq > x.log.length || (previous.logSeq > 0 && at?.entryHash !== previous.logHeadHash)) fail("order-mismatch", "the log does not extend the one verified before");
+    for (const k of previous.boxLogHeads ?? []) {
+      const now = heads.find((s) => s.serverDomain === k.serverDomain);
+      if (!now) fail("order-mismatch", `server ${k.serverDomain} had a box log head before and has none now`);
+      if (now!.seq < k.seq || (now!.seq === k.seq && now!.headHash !== k.headHash)) fail("order-mismatch", `the box log head of ${k.serverDomain} is older than, or differs from, the one verified before`);
+    }
+  }
+}
+
+/**
  * Verifies an export offline from the org's genesis hash. Throws `OrgAuthorityError` on anything
  * that does not hold; `unlogged` lists objects the log does not account for (an auditor flags them).
  */
-export function verifyOrgAuditExport(x: OrgAuditExport, opts: { genesisHash: string; now: number }): OrgAuditVerdict {
+export function verifyOrgAuditExport(x: OrgAuditExport, opts: { genesisHash: string; now: number; previous?: OrgAuditPrevious }): OrgAuditVerdict {
   if (x.genesisHash !== opts.genesisHash) fail("wrong-org", "genesis");
   const state = verifyOrgAuthorityChain(x.entries, { genesisHash: opts.genesisHash, now: opts.now, freezes: x.freezes, overturns: x.overturns, vetoes: x.vetoes });
   if (state.orgId !== x.orgId || x.statement.orgId !== x.orgId) fail("wrong-org");
@@ -276,6 +344,7 @@ export function verifyOrgAuditExport(x: OrgAuditExport, opts: { genesisHash: str
     need("box-log-head", orgSha256Hex(canonicalOrgBoxLogHead(b.head)));
     heads.push(b.head);
   }
+  checkLoggedObjectsPresent(x, servers, heads, opts.previous);
   // Key rings verify as of the record each names; recipients' KEM keys are not part of an export.
   const rings = buildOrgKeyRings({ state, book, kems: newestOrgKems([]), servers: new Set(), now: opts.now }, x.keyRings);
   if (rings.refused.length > 0) fail("bad-signature", `key ring ${rings.refused[0]!.kind} v${rings.refused[0]!.version}`);

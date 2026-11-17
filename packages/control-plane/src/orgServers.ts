@@ -21,6 +21,7 @@ import {
   type OrgApproval,
   type OrgAuditObjects,
   type OrgBoxKemBundle,
+  type OrgBoxLogHead,
   type OrgBoxLogHeadBundle,
   type OrgKemKey,
   type OrgKeyRingBundle,
@@ -197,6 +198,7 @@ export async function handleOrgServerRegister(deps: OrgServerDeps, orgId: string
     const srv: StoredServer = { serverDomain: r.serverDomain, serial: r.serial, identityPubKeyHex: r.serverIdentityPubKeyHex, registeredAt: now };
     await deps.orgs.putObject(orgId, { kind: "server", key: r.serverDomain, bodyJson: JSON.stringify(srv), issuedAt: now, storedAt: now }, true);
     await deps.servers.put({ serverDomain: r.serverDomain, username: v.org.name, identityPubKeyHex: r.serverIdentityPubKeyHex, registeredAt: now });
+    await deps.orgs.putObject(orgId, { kind: "server-registration", key: `${r.serverDomain}|${r.serverIdentityPubKeyHex}`, bodyJson: JSON.stringify({ serverDomain: r.serverDomain, identityPubKeyHex: r.serverIdentityPubKeyHex }), issuedAt: now, storedAt: now }, true);
     await deps.orgs.appendLog(orgId, "server-registered", orgSha256Hex(new TextEncoder().encode(`${r.serverDomain}|${r.serverIdentityPubKeyHex}`)), now);
     return ok({ ok: true, serverDomain: r.serverDomain, registeredAt: now, orgId, genesisHash: c.code.genesisHash });
   } catch (e) {
@@ -276,6 +278,8 @@ export async function handleOrgBoxLogHead(deps: OrgServerDeps, orgId: string, bo
       if (b.head.seq === p.seq) return ok({ serverDomain: b.head.serverDomain, seq: b.head.seq, unchanged: true });
     }
     await deps.orgs.putObject(orgId, { kind: "box-log-head", key: b.head.serverDomain, bodyJson: JSON.stringify(b), issuedAt: b.head.issuedAt, storedAt: now }, true);
+    // Every logged head stays, so the audit export can show the served head is the last one logged (05c review F5).
+    await deps.orgs.putObject(orgId, { kind: "box-log-head-seen", key: `${b.head.serverDomain}|${String(b.head.seq).padStart(16, "0")}|${b.head.headHash}`, bodyJson: JSON.stringify(b.head), issuedAt: b.head.issuedAt, storedAt: now }, true);
     await deps.orgs.appendLog(orgId, "box-log-head", orgSha256Hex(canonicalOrgBoxLogHead(b.head)), now);
     return ok({ serverDomain: b.head.serverDomain, seq: b.head.seq });
   } catch (e) {
@@ -335,12 +339,14 @@ export async function handleOrgExport(deps: OrgServerDeps, orgId: string): Promi
   try {
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
-    const [rings, codes, log, servers, heads] = await Promise.all([
+    const [rings, codes, log, servers, heads, seen, registrations] = await Promise.all([
       listParsed<OrgKeyRingBundle>(deps, orgId, "key-ring"),
       deps.orgs.listObjects(orgId, "server-code"),
       deps.orgs.listLog(orgId, 0),
       orgServers(deps, orgId),
       listParsed<OrgBoxLogHeadBundle>(deps, orgId, "box-log-head"),
+      listParsed<OrgBoxLogHead>(deps, orgId, "box-log-head-seen"),
+      listParsed<{ serverDomain: string; identityPubKeyHex: string }>(deps, orgId, "server-registration"),
     ]);
     const objects: OrgAuditObjects = {
       orgId,
@@ -359,6 +365,8 @@ export async function handleOrgExport(deps: OrgServerDeps, orgId: string): Promi
       log: log.map((e) => ({ seq: e.seq, prevHash: e.prevHash, entryHash: e.entryHash, kind: e.kind, refSha256: e.refSha256, at: e.at })),
       servers: servers.map((s) => ({ serverDomain: s.serverDomain, serial: s.serial, identityPubKeyHex: s.identityPubKeyHex })),
       boxLogHeads: heads,
+      boxLogHeadHistory: seen,
+      registrations,
     };
     return ok({ ...objects, currentVersion: v.state.current.version, currentHash: v.state.currentHash });
   } catch (e) {

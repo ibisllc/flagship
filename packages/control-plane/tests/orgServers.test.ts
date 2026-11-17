@@ -171,6 +171,10 @@ describe(".com org servers", () => {
     expect(exp.servers).toEqual([{ serverDomain: SERVER, serial: expect.any(String), identityPubKeyHex: stkPub }]);
     expect(exp.boxLogHeads.map((b) => b.head.seq)).toEqual([9]);
     expect(exp.log.filter((e) => e.kind === "box-log-head")).toHaveLength(2);
+    // Every logged head and registration travels too, so an auditor can see none was dropped (05c F5).
+    const all = exp as unknown as { boxLogHeadHistory: Array<{ seq: number }>; registrations: Array<{ serverDomain: string; identityPubKeyHex: string }> };
+    expect(all.boxLogHeadHistory.map((h) => h.seq)).toEqual([5, 9]);
+    expect(all.registrations).toEqual([{ serverDomain: SERVER, identityPubKeyHex: stkPub }]);
   });
 
   it("refuses a new server once the org's plan has lapsed", async () => {

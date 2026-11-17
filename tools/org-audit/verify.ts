@@ -5,25 +5,27 @@
  * record); the auditor needs only that file and the org's genesis hash, which they got from the org
  * out of band (it is also on every org server's recipe). Nothing here talks to a network.
  *
- *   npx tsx tools/org-audit/verify.ts <export.json> --genesis <64-hex> [--now <unix ms>] [--json]
+ *   npx tsx tools/org-audit/verify.ts <export.json> --genesis <64-hex> [--previous <older export.json>] [--now <unix ms>] [--json]
  *
  * Exit 0: the authority chain, the log chain up to the signed head, every seat object, key-ring
  * version and server code, each server's own signed log head (under the key it registered with),
- * and the admin's signature all verify. Objects the log never named are listed (exit 0, but flag
- * them); so are servers that sent no head. Exit 1: something does not verify; the reason is printed.
+ * and the admin's signature all verify, and every server and box log head the log names is there, each
+ * server's served head the last one logged. With --previous (an export this auditor verified before),
+ * the log must extend that one and no box log head may go back. Objects the log never named are listed
+ * (exit 0, but flag them); so are servers that sent no head. Exit 1: something does not verify.
  */
 import { readFileSync } from "node:fs";
 import { OrgAuthorityError, verifyOrgAuditExport, type OrgAuditExport } from "../../packages/protocol/src/index.js";
 
 function usage(msg?: string): never {
   if (msg) console.error(msg);
-  console.error("usage: npx tsx tools/org-audit/verify.ts <export.json> --genesis <64-hex> [--now <unix ms>] [--json]");
+  console.error("usage: npx tsx tools/org-audit/verify.ts <export.json> --genesis <64-hex> [--previous <older export.json>] [--now <unix ms>] [--json]");
   process.exit(2);
 }
 
 export function runOrgAuditVerify(argv: string[], out: (s: string) => void = console.log): number {
   const args = [...argv];
-  const file = args.find((a, i) => !a.startsWith("--") && !["--genesis", "--now"].includes(args[i - 1] ?? ""));
+  const file = args.find((a, i) => !a.startsWith("--") && !["--genesis", "--now", "--previous"].includes(args[i - 1] ?? ""));
   const opt = (name: string) => {
     const i = args.indexOf(name);
     return i >= 0 ? args[i + 1] : undefined;
@@ -40,8 +42,18 @@ export function runOrgAuditVerify(argv: string[], out: (s: string) => void = con
     out(`FAIL: cannot read ${file}: ${(e as Error).message}`);
     return 1;
   }
+  let previous: { logSeq: number; logHeadHash: string; boxLogHeads: Array<{ serverDomain: string; seq: number; headHash: string }> } | undefined;
+  if (opt("--previous")) {
+    try {
+      const p = JSON.parse(readFileSync(opt("--previous")!, "utf8")) as OrgAuditExport;
+      previous = { logSeq: p.statement.logSeq, logHeadHash: p.statement.logHeadHash, boxLogHeads: (p.boxLogHeads ?? []).map((b) => b.head) };
+    } catch (e) {
+      out(`FAIL: cannot read the previous export: ${(e as Error).message}`);
+      return 1;
+    }
+  }
   try {
-    const v = verifyOrgAuditExport(x, { genesisHash: genesisHash!, now });
+    const v = verifyOrgAuditExport(x, { genesisHash: genesisHash!, now, ...(previous ? { previous } : {}) });
     const seats = [...v.book.seats.keys()].filter((s) => !v.book.revoked.has(s));
     const summary = {
       ok: true,

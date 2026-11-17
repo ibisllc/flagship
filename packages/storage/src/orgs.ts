@@ -41,6 +41,10 @@ export type OrgObjectKind =
   | "box-kem"
   /** A box's own signed Activity log head, keyed by server domain (newest wins). */
   | "box-log-head"
+  /** Every box log head the org log names, keyed `<domain>|<seq zero-padded>|<head hash>` (the audit export carries all). */
+  | "box-log-head-seen"
+  /** Every server registration the org log names, keyed `<domain>|<STK hex>` (a re-registered server keeps its earlier ones). */
+  | "server-registration"
   /** A sealed directory entry (docs/org-directory.md §2), keyed by its opaque entry id (newest wins). */
   | "directory"
   /** A directory connector's authority record, keyed by connector id (newest wins). */

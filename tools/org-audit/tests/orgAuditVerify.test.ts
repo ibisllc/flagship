@@ -22,7 +22,7 @@ describe("org audit verify CLI", () => {
     expect(lines.join("\n")).toContain("home.acme.flagship.services: its log up to entry 2 is");
   });
 
-  it("fails a box log head the box did not sign, and warns about a server that sent none", () => {
+  it("fails a box log head the box did not sign, and one the log names but the export dropped (05c F5)", () => {
     const x = structuredClone(V.audit.export);
     x.boxLogHeads[0].head.headHash = "00".repeat(32);
     const out: string[] = [];
@@ -31,8 +31,18 @@ describe("org audit verify CLI", () => {
     const none = structuredClone(V.audit.export);
     none.boxLogHeads = [];
     const lines: string[] = [];
-    expect(runOrgAuditVerify([file(none), "--genesis", V.genesisHash, "--now", String(V.audit.cases[0].now)], (s) => lines.push(s))).toBe(0);
-    expect(lines.join("\n")).toContain("WARN 1 server(s) sent no signed log head");
+    expect(runOrgAuditVerify([file(none), "--genesis", V.genesisHash, "--now", String(V.audit.cases[0].now)], (s) => lines.push(s))).toBe(1);
+    expect(lines[0]).toMatch(/^FAIL: order-mismatch/);
+  });
+
+  it("with --previous, refuses a box log head older than the one verified before", () => {
+    const later = structuredClone(V.audit.export);
+    const prev = structuredClone(V.audit.export);
+    prev.boxLogHeads[0].head.seq += 5;
+    const out: string[] = [];
+    expect(runOrgAuditVerify([file(later), "--previous", file(prev), "--genesis", V.genesisHash, "--now", String(V.audit.cases[0].now)], (s) => out.push(s))).toBe(1);
+    expect(out[0]).toMatch(/older than/);
+    expect(runOrgAuditVerify([file(later), "--previous", file(V.audit.export), "--genesis", V.genesisHash, "--now", String(V.audit.cases[0].now)], () => undefined)).toBe(0);
   });
 
   it("fails a tampered log and another genesis", () => {
