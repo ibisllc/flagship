@@ -5,9 +5,6 @@
 
 package com.flagshipserver.app.gym
 
-import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -78,7 +75,8 @@ class GymOutboundProxyTest : GymBase() {
     @Test
     fun homeShowsTheBadgeFromPods() {
         launch(tab = "home", adminRoot = true, proxy = "failing-auth")
-        waitUntilExists("pod-card-proxy-alert", 20_000)
+        // The pill sits inside the row's merged click target.
+        composeRule.waitUntil(20_000) { tagCount("pod-card-proxy-alert", unmerged = true) > 0 }
         assertTrue(textCount("Outbound proxy not working") >= 1)
         gymShot("home-badge")
     }
@@ -103,7 +101,7 @@ class GymOutboundProxyTest : GymBase() {
         tap("sd-proxy-change", 20_000)
         tap("proxy-kind-socks5")
         for ((tag, text) in listOf("proxy-host" to "proxy2.example.net", "proxy-username" to "alice", "proxy-password" to "secret")) {
-            composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(tag))).performScrollTo().replaceText(text)
+            type(tag, text)
         }
         hideKeyboard()
         tap("sd-proxy-save")
