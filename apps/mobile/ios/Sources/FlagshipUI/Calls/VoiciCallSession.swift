@@ -283,7 +283,7 @@ final class VoiciCallSession {
     }
 }
 
-let voiciCallLog = Logger(subsystem: "com.flagshipserver.app", category: "calls")
+let voiciCallLog = CallLog()
 
 private func wipe(_ b: inout [UInt8]) {
     for i in b.indices { b[i] = 0 }
