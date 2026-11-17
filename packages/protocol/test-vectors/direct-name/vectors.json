@@ -118,6 +118,18 @@
       "problem": "bad-name"
     },
     {
+      "name": "dashes in positions 3-4 (R-LDH)",
+      "fields": {
+        "name": "go--plucky-avocet.fshp.app",
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "enabled": true,
+        "addresses": [],
+        "caa": "pin",
+        "issuedAt": 1790000000000
+      },
+      "problem": "bad-name"
+    },
+    {
       "name": "private address",
       "fields": {
         "name": "game--plucky-avocet.fshp.app",
@@ -210,6 +222,18 @@
     },
     {
       "label": "game--x",
+      "kind": null
+    },
+    {
+      "label": "go--plucky-avocet",
+      "kind": null
+    },
+    {
+      "label": "g--plucky-avocet",
+      "kind": "derived"
+    },
+    {
+      "label": "ab--",
       "kind": null
     }
   ]
