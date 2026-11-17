@@ -149,7 +149,7 @@ fun OrgListScreen(onOpen: (OrgSeatRecord) -> Unit) {
 
 /** One organization: people waiting to join and approvals waiting. */
 @Composable
-fun OrgDetailScreen(seat: OrgSeatRecord) {
+fun OrgDetailScreen(seat: OrgSeatRecord, onOpenPlan: (() -> Unit)? = null) {
     val rt = LocalOrgs.current ?: return
     val vm = remember(seat.id) { OrgViewModel(rt.client, rt.keys, rt.umk) }
     val phase by vm.phase.collectAsState()
@@ -166,6 +166,7 @@ fun OrgDetailScreen(seat: OrgSeatRecord) {
     var freezeTarget by remember { mutableStateOf<String?>(null) }
     fun label(id: String) = names.let { vm.name(seat, id) }
     OrgPage(seat.orgName) {
+        if (onOpenPlan != null) OrgPlanEntry(seat, onOpenPlan)
         when (val p = phase) {
             OrgViewModel.Phase.Idle, OrgViewModel.Phase.Loading -> CircularProgressIndicator()
             is OrgViewModel.Phase.Failed -> Body(p.message, danger = true)
