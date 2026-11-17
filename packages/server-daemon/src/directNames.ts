@@ -73,14 +73,18 @@ export class DirectNames {
     return this.o.comBaseUrl.replace(/\/$/, "");
   }
 
-  /** Send the current address update when it differs from the last one `.com` took. */
-  async pushAddress(): Promise<"sent" | "unchanged" | "off" | "failed"> {
+  /**
+   * Send the current address update when it differs from the last one `.com` took. With direct access off, hand
+   * `.com` the owner's off order once instead: names that follow this box are withdrawn there even when the app's
+   * own post to `.com` failed (the box stops listening at once, so records left pointing at it answer nothing).
+   */
+  async pushAddress(): Promise<"sent" | "unchanged" | "off" | "withdrawn" | "failed"> {
     await this.o.controller.start();
     const u = this.o.controller.addressUpdate(this.o.signAsBox);
     const order = this.o.controller.signedOrder();
     if (!u || !order) {
       this.lastPushed = null;
-      return "off";
+      return order ? "off" : this.pushOff();
     }
     const key = `${u.update.issuedAt}|${u.signatureHex}`;
     if (key === this.lastPushed) return "unchanged";
@@ -100,6 +104,32 @@ export class DirectNames {
       return "sent";
     } catch (e) {
       this.log(`could not send the address update: ${(e as Error).message}`);
+      return "failed";
+    }
+  }
+
+  private lastOff: string | null = null;
+
+  private async pushOff(): Promise<"off" | "withdrawn" | "failed"> {
+    const off = this.o.controller.offOrder();
+    if (!off || off.signatureHex === this.lastOff) return "off";
+    try {
+      const res = await (this.o.fetchImpl ?? fetch)(`${this.base()}/api/accounts/${encodeURIComponent(this.o.username)}/direct-access`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(off),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const body = (await res.json().catch(() => ({}))) as { code?: string };
+      // 409 replayed: `.com` already holds this order or a newer one (the app's own post arrived first).
+      if (!res.ok && !(res.status === 409 && body.code === "replayed")) {
+        this.log(`.com did not take the off order (${res.status} ${body.code ?? ""})`);
+        return "failed";
+      }
+      this.lastOff = off.signatureHex;
+      return "withdrawn";
+    } catch (e) {
+      this.log(`could not send the off order: ${(e as Error).message}`);
       return "failed";
     }
   }
