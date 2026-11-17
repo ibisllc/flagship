@@ -879,3 +879,20 @@ high:
   opacity 0 so the layout comes back the moment frames do.
 - **Phones:** iOS and Android already return to the audio layout when the room says the other camera is off, and
   their remote video fills the screen; the iPhone app is portrait-only, Android fills in either orientation.
+
+## As built: the Android AAR's JNI bridges (2026-11-17, worktree `0.4/webrtc-android`)
+
+- **Why the first pin broke Android calls.** In M157, `generate_jni()` puts each `org/webrtc/*Jni` class in its own
+  `<name>_java` library, which upstream's `dist_jar("libwebrtc")` (direct deps only) never packs, and by default those
+  classes call hashed natives on `J.N`, a class only an APK's final JNI step writes. `libwebrtc-157-43884507084` had
+  neither: `PeerConnectionFactory.initialize` threw NoClassDefFoundError. iOS was unaffected.
+- **The build now** (`tools/libwebrtc/apply-overlay.py`, `build-android.sh`): jni_zero's per-file natives
+  (`use_hashed_jni_names=false jni_zero_per_file_natives=true`, a GN arg the overlay adds to `jni_zero.gni`), so each
+  `FooJni` declares its own natives, exported as `Java_org_webrtc_FooJni_*`; every non-test bridge library,
+  `dav1d_java`, rtc_base's and jni_zero's bridges in the jar; `libaom_av1_encoder_jni` linked into the library.
+- **The guard** (`tools/libwebrtc/check-aar.py`, in the CI build): every class a jar class names under `org/webrtc/`,
+  `org/jni_zero/` or `J/` is in the jar, and every native method has its symbol in each ABI's `.so`. A refused AAR is
+  kept as the run's `refused-webrtc-android` artifact. App tests: `WebRtcBridgesTest` (JVM, the bridges load) and
+  `WebRtcLibraryTest` (instrumented, only with libwebrtc bundled: initialize, a peer connection, FlagshipFrameCrypto).
+- **Pin:** `libwebrtc-157-44099203173`. Only `libwebrtc.aar` is new (run 44099203173); the iOS WebRTC zip is the
+  previous release's bytes and both TURN zips came out identical, so iOS changes its download URL only.
