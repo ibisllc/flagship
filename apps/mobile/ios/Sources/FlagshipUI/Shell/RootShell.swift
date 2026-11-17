@@ -457,6 +457,8 @@ private struct iPhoneShell: View {
         TabView(selection: $selected) {
             ForEach(RootDestination.allCases) { dest in
                 destinationContent(dest)
+                    // Switches and other controls take the teal, as on iPad; only the tab bar is ink.
+                    .tint(FSColors.scheme(scheme).accent)
                     // The TabView hosts each tab in its own UIKit controller, which the
                     // shell's accessibilityHidden doesn't reach: hide every tab's content
                     // here too while locked, or VoiceOver reaches it behind the lock screen.

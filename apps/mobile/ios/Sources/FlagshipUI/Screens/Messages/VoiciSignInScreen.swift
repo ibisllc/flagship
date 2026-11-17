@@ -147,7 +147,7 @@ struct VoiciSignInScreen: View {
                     Label("You're signed in. Go back to voi.ci to write your message.", systemImage: "checkmark.circle.fill")
                         .multilineTextAlignment(.center)
                         .accessibilityIdentifier("voici-signin-done")
-                    Button("Done", action: onDone).buttonStyle(.borderedProminent)
+                    Button("Done", action: onDone).buttonStyle(.borderedProminent).foregroundStyle(FSColors.light.onPrimary)
                 case .ready, .approving:
                     readyView(code: vm.code)
                 }
@@ -199,6 +199,7 @@ struct VoiciSignInScreen: View {
                 Text(vm.phase == .approving ? String(localized: "Approving…") : String(localized: "Approve")).frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .foregroundStyle(FSColors.light.onPrimary)
             .controlSize(.large)
             .disabled(vm.phase == .approving)
             .accessibilityIdentifier("voici-signin-approve")
