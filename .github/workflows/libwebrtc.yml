@@ -71,6 +71,14 @@ jobs:
         run: sudo "$RUNNER_TEMP/webrtc/src/build/install-build-deps.sh" --android --no-prompt --no-chromeos-fonts
       - name: Build libwebrtc.aar
         run: tools/libwebrtc/build-android.sh "$RUNNER_TEMP/webrtc" "$RUNNER_TEMP/out"
+      - name: Keep a refused AAR for diagnosis (never pinned)
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: refused-webrtc-android
+          path: ${{ runner.temp }}/out/libwebrtc.aar
+          if-no-files-found: ignore
+          retention-days: 7
       - run: du -sh "$RUNNER_TEMP/out/libwebrtc.aar"
       - uses: actions/upload-artifact@v6
         with:
