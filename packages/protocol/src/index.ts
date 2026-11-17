@@ -132,6 +132,7 @@ export * from "./planAttestation.js";
 export * from "./paymentsConfig.js";
 export * from "./voucher.js";
 export * from "./voucherWallet.js";
+export * from "./voucherRails.js";
 export * from "./coManagerCap.js";
 export * from "./boxClaim.js";
 export * from "./boxRelease.js";
