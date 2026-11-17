@@ -137,7 +137,7 @@ final class PageControlsTests: XCTestCase {
         XCTAssertTrue(s.isPublic)
         XCTAssertEqual(s.index?.seq, 2)
         XCTAssertEqual(s.published?.profile.displayName, user)
-        XCTAssertEqual(s.published?.chunks.flatMap { $0 }.map(\.text), ["An example post."])
+        XCTAssertEqual(Set(s.published?.chunks.flatMap { $0 }.map(\.text) ?? []), [MessagesStore.welcomePostText, "An example post."])
         XCTAssertEqual(s.pendingCount, 0)
         XCTAssertTrue(s.conversations.isEmpty)
         XCTAssertEqual(mock.publishes, published, "Reading the example page signs and publishes nothing.")
@@ -176,7 +176,7 @@ final class PageControlsTests: XCTestCase {
         XCTAssertTrue(s.isPublic)
         XCTAssertEqual(publishedIndex()?.seq, 1)
         XCTAssertEqual(s.published?.profile.displayName, "Bright Maple")
-        XCTAssertEqual(s.published?.chunks.flatMap { $0 }.count, 0, "The post draft was not published.")
+        XCTAssertEqual(s.published?.chunks.flatMap { $0 }.map(\.text), [MessagesStore.welcomePostText], "The post draft was not published; the first post was.")
         XCTAssertEqual(s.pendingCount, 1, "Only the post waits; the name draft is in the page.")
 
         // While public the quick name edit publishes at once, and only that.
@@ -189,8 +189,30 @@ final class PageControlsTests: XCTestCase {
         // The editor's Publish takes the rest.
         await s.publishNow()
         XCTAssertEqual(publishedIndex()?.seq, 3)
-        XCTAssertEqual(s.published?.chunks.flatMap { $0 }.map(\.text), ["Not yet."])
+        XCTAssertEqual(Set(s.published?.chunks.flatMap { $0 }.map(\.text) ?? []), [MessagesStore.welcomePostText, "Not yet."])
         XCTAssertEqual(s.pendingCount, 0)
+    }
+
+    func test_firstPublishAddsTheFirstPostOnceAsAnOrdinaryPost() async throws {
+        let s = await store()
+        await s.goPublic()
+        let posts = s.published?.chunks.flatMap { $0 } ?? []
+        XCTAssertEqual(posts.map(\.text), [MessagesStore.welcomePostText])
+        XCTAssertEqual(posts.first?.links, [], "Plain text: no link, no card.")
+        XCTAssertEqual(s.pendingCount, 0, "It is part of the page, not a draft.")
+
+        // Later publishes, and a page taken down and put back, never add it again.
+        await s.addPost(text: "Second.", links: [], images: [:])
+        await s.publishNow()
+        await s.removePage()
+        await s.goPublic()
+        XCTAssertEqual((s.published?.chunks.flatMap { $0 } ?? []).filter { $0.text == MessagesStore.welcomePostText }.count, 1)
+
+        // The owner can delete it like any post.
+        let id = try XCTUnwrap(posts.first?.id)
+        await s.deletePost(id)
+        await s.publishNow()
+        XCTAssertFalse((s.published?.chunks.flatMap { $0 } ?? []).contains { $0.text == MessagesStore.welcomePostText })
     }
 
     func test_editsAreDraftsUntilPublish() async throws {
