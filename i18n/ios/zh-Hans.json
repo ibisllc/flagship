@@ -3990,5 +3990,6 @@
   "Only an organization admin can change the organization's balance.": "只有组织管理员可以更改组织余额。",
   "This org's plan has lapsed. Pay for seats on the Plan to add people.": "此组织的套餐已失效。请在套餐中为席位付款以添加成员。",
   "Open this organization's plan": "打开此组织的套餐",
-  "Voucher wallet key": "代金券钱包密钥"
+  "Voucher wallet key": "代金券钱包密钥",
+  "No messages yet. People who sign in on your page can write to you here.": "还没有消息。在你的页面上登录的人可以在这里给你发消息。"
 }

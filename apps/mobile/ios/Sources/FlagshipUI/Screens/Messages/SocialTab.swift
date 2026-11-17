@@ -376,6 +376,9 @@ public struct SocialTab: View {
 
     private func emptyText(requests: Bool) -> String {
         if requests { return String(localized: "No requests. New conversations wait here until you reply or accept them.") }
+        if store.isPublic && store.index?.acceptsMessages == 1 {
+            return String(localized: "No messages yet. People who sign in on your page can write to you here.")
+        }
         return String(localized: "No messages yet. Turn on Accept messages in Page options to get them.")
     }
 

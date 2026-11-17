@@ -3990,5 +3990,6 @@
   "Only an organization admin can change the organization's balance.": "組織の残高を変更できるのは組織の管理者だけです。",
   "This org's plan has lapsed. Pay for seats on the Plan to add people.": "この組織のプランは失効しました。メンバーを追加するには、プランでシートを支払ってください。",
   "Open this organization's plan": "この組織のプランを開く",
-  "Voucher wallet key": "バウチャーウォレットの鍵"
+  "Voucher wallet key": "バウチャーウォレットの鍵",
+  "No messages yet. People who sign in on your page can write to you here.": "まだメッセージはありません。あなたのページでサインインした人は、ここからメッセージを送れます。"
 }
