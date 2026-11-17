@@ -104,10 +104,10 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 
 # ---------------------------------------------------------------- the plan
 
-STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog runtime kickoff secrets gym backup r2buckets feeddomain meshseed migrations services dnsbroker dns com
+STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog runtime shellsig kickoff secrets gym backup r2buckets feeddomain meshseed migrations services dnsbroker dns com
           relaykey relayadmit meshcerts meshon meshrelay meshwatch cpu publish redeployA status
           canary notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android upgradenotice hof final)
-LAST_A=32   # the last step of phase A (status)
+LAST_A=33   # the last step of phase A (status)
 
 step_id()    { echo "${STEP_IDS[$(($1 - 1))]}"; }
 step_count() { echo "${#STEP_IDS[@]}"; }
@@ -120,7 +120,7 @@ TITLE=""; WHAT=""; RUNBOOK=""; CMDS=""; GATE=""; ROLLBACK=""; REQUIRED=0; OUTWAR
 meta_version() {
   TITLE="Bump the product version (one version on every surface), and open name dibs on release day"
   RUNBOOK="0b. Bump the product version"
-  WHAT="Asks for the new product version (0.3 for this release) and the store numbers, which must climb, writes release/version.json, regenerates every surface's copy with check-versions --write, commits and pushes to main, then re-pins. A run that keeps the version skips it."
+  WHAT="Asks for the new product version (0.4 for this release; release/0.4 already carries the bump) and the store numbers, which must climb, writes release/version.json, regenerates every surface's copy with check-versions --write, commits and pushes to main, then re-pins. A run that keeps the version skips it."
   read -r -d '' CMDS <<'EOF' || true
 cat release/version.json                  (product, label, iosVersion, iosBuild, androidVersionCode, studio)
 (edit release/version.json with your answers)
@@ -210,6 +210,20 @@ git push origin HEAD:main            (then the pin moves to this commit; .com se
 EOF
   GATE="verify prints 'verified: node <lock version> sequence <N>'; the commit is on origin/main and pinned. After the .com deploy: curl -fsS https://flagshipserver.com/api/runtime/manifest answers 200 with that sequence."
   ROLLBACK="Before the .com deploy: revert the commit. After: a signed manifest cannot be taken back; sign a newer sequence (boxes refuse a lower one). Committing null again makes .com answer 204; boxes keep the last one they accepted, and updates fall back to the artifact's signed lock."
+}
+meta_shellsig() {
+  TITLE="Sign the webapp shell (YubiKey), so the webapp can prove it is the release (0.4)"
+  RUNBOOK="3e. Sign the webapp shell"
+  WHAT="The webapp checks /shell-signature.json against the ca-track authority (docs/webapp-key-custody.md, 'Signing a release shell'). Builds the webapp assets exactly as the deploy does, previews the shell version, file count and manifest digest, then on your yes signs flagship/webapp-shell/v1 with the ca-track YubiKey and the release key's PQ half, writes release/webapp-shell/<version>.json, commits and pushes to main and re-pins. The .com deploy copies it to /shell-signature.json only when it signs exactly that build, so any later shell change needs this step again. Skipped when the shell is already signed. Once a signed shell is live, SHELL_SIGNATURE_REQUIRED = true in lib/shellTrust.js is its own shell change: bump the shell, run this step again, redeploy (the 0.4 deploy sheet)."
+  read -r -d '' CMDS <<'EOF2' || true
+grep 'const SHELL_VERSION' apps/web/public/webapp/service-worker.js        (the version to sign)
+npx tsx scripts/webapp-shell.ts sign                                     (preview: no signature, no write)
+npx tsx scripts/webapp-shell.ts sign --sign --key-file ~/.flagship-release/pq-release-key.age     (YubiKey PIN + touch, twice)
+git add -- release/webapp-shell/<version>.json && git commit -m "Sign webapp shell <version>"
+git push origin HEAD:main            (then the pin moves to this commit; the .com deploy publishes it)
+EOF2
+  GATE="release/webapp-shell/<version>.json is on origin/main and pinned. After the .com deploy: https://webapp.flagshipserver.com/shell-signature.json answers 200 naming that version."
+  ROLLBACK="Before the deploy: revert the commit. After: the old shell keeps working; a signature cannot be taken back, so a bad shell gets a newer version, signed again."
 }
 meta_canary() {
   TITLE="Canary cohorts: widen the box release on update receipts, stop it on bad news"
@@ -381,7 +395,7 @@ EOF
 meta_migrations() {
   TITLE="Pending D1 migrations (check, apply, stamp the ledger)"
   RUNBOOK="4. Pending D1 migrations"
-  WHAT="Compares packages/storage/migrations with the prod schema_version ledger (read-only) and applies each pending file after its own confirm, in file order. For 0.3 that includes 0120 (serving authority), 0122 (relay mesh: relay_log, relays, directories, mesh-key epochs and the triggers that append to the log) and 0126 (relay log grant ids): all before the .com deploy and before any relay is admitted."
+  WHAT="Compares packages/storage/migrations with the prod schema_version ledger (read-only) and applies each pending file after its own confirm, in file order. For 0.4 that is 0090, 0091, 0093, 0094 (the folded marketplace and name-change tables), 0133, 0134, 0136-0138, 0141, 0146-0155 (and 0132 if the ledger lacks it). For 0.3 it included 0120 (serving authority), 0122 (relay mesh: relay_log, relays, directories, mesh-key epochs and the triggers that append to the log) and 0126 (relay log grant ids): all before the .com deploy and before any relay is admitted."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && wrangler d1 execute flagship-state --remote --json --command "SELECT version FROM schema_version")
 for each pending file, in order:
@@ -561,7 +575,7 @@ EOF
 meta_services() {
   TITLE="Deploy .services (Fly relay): the 0.3 TS hub, mesh off, as the transition relay"
   RUNBOOK="8. Deploy \`.services\` (Fly): needed, one image"
-  WHAT="Deploys the 0.3 relay image from fly.toml (the TS hub, mesh off, two machines rolling with DrainNotice: no gap) BEFORE .com: production still runs the 0.2 relay, which has no serving authority, and a mesh relay cannot start before .com publishes the feed and admits it. The Rust mesh relay replaces this one after .com (step 'Deploy the Rust relay as iad1'). A re-run after that step is a mesh-off rollback and asks first."
+  WHAT="From 0.4 on, production already runs the Rust mesh relay: skip this step (the step refuses unless you type mesh-off-rollback) and update the relay with the step 'Deploy the Rust relay as iad1'. For 0.3 it deployed the 0.3 relay image from fly.toml (the TS hub, mesh off, two machines rolling with DrainNotice: no gap) BEFORE .com: production still runs the 0.2 relay, which has no serving authority, and a mesh relay cannot start before .com publishes the feed and admits it. The Rust mesh relay replaces this one after .com (step 'Deploy the Rust relay as iad1'). A re-run after that step is a mesh-off rollback and asks first."
   read -r -d '' CMDS <<'EOF' || true
 flyctl releases -a flagship-services | head -5
 flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services          (fly.toml: the 0.3 TS hub, mesh off, two machines)
@@ -1571,6 +1585,24 @@ run_runtime() {
   land_commits || return $?
 }
 
+shell_version_of() { sed -n 's/^const SHELL_VERSION = "\(v[0-9]*\)";.*/\1/p' "$1/apps/web/public/webapp/service-worker.js" | head -1; }
+run_shellsig() {
+  ensure_wt
+  local v; v=$(shell_version_of "$WT")
+  [ -n "$v" ] || fail "no SHELL_VERSION in apps/web/public/webapp/service-worker.js"
+  if [ -f "$WT/release/webapp-shell/$v.json" ]; then ok "webapp shell $v is already signed (release/webapp-shell/$v.json)"; return 0; fi
+  say "  Preview (no signature, no write):"
+  XA "$WT" npx tsx scripts/webapp-shell.ts sign
+  confirm "Sign webapp shell $v now? (YubiKey PIN + touch for the Ed25519 signature, then again to open the PQ key)" || return 10
+  local pq=()
+  if pq_pinned; then pq=(--key-file "$PQ_KEY_FILE"); else pq=(--no-pq); fi
+  with_maintainers XA "$WT" npx tsx scripts/webapp-shell.ts sign --sign ${pq[@]+"${pq[@]}"}
+  [ -f "$WT/release/webapp-shell/$v.json" ] || fail "release/webapp-shell/$v.json was not written"
+  commit_paths "Sign webapp shell $v" "release/webapp-shell/$v.json"
+  st_w set webappShellSigned "$v"
+  land_commits || return $?
+}
+
 canary_percent() { # canary_percent <list file> <commit> -> the release's rollout percent, or nothing
   node -e 'const j=require(process.argv[1]);const r=j.releases.find(r=>r.commit===process.argv[2]);console.log(r?r.rolloutPercent:"")' "$1" "$2"
 }
@@ -1700,7 +1732,7 @@ run_kickoff() {
   say "  amd64 takes about an hour, arm64 (TCG) up to three. Step 14 collects them."
 }
 
-KNOWN_SECRETS=(SERVING_REVOCATION_SEED ISSUANCE_ACME_ACCOUNT_KEY RELAY_MESH_KEY_SEED ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY VOICI_DEVICE_SECRET APPLE_TEAM_ID APPLE_DEVICECHECK_KEY_ID APPLE_DEVICECHECK_KEY PLAY_INTEGRITY_SA_JSON CLOUDFLARE_PURGE_TOKEN)
+KNOWN_SECRETS=(VOUCHER_SIGNING_KEYS OHTTP_GATEWAY_KEYS CLOUDFLARE_DIRECT_DNS_API_TOKEN CLOUDFLARE_DIRECT_ZONE_ID WEBPUSH_VAPID_PRIVATE_KEY_PEM WEBPUSH_VAPID_PUBLIC_KEY_B64URL WEBPUSH_CONTACT VOICI_CALL_POW_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET APPLE_IAP_ENVIRONMENTS GOOGLE_PLAY_SERVICE_ACCOUNT_JSON APNS_KEY_ID APNS_TEAM_ID APNS_PRIVATE_KEY_PEM SERVING_REVOCATION_SEED ISSUANCE_ACME_ACCOUNT_KEY RELAY_MESH_KEY_SEED ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY VOICI_DEVICE_SECRET APPLE_TEAM_ID APPLE_DEVICECHECK_KEY_ID APPLE_DEVICECHECK_KEY PLAY_INTEGRITY_SA_JSON CLOUDFLARE_PURGE_TOKEN)
 # Former secrets now set in wrangler.toml [vars] (owner, 2026-11-02: nothing confidential in them).
 SECRETS_NOW_VARS=(FLAGSHIP_INFERENCE_ENDPOINT)
 run_secrets() {
@@ -1963,7 +1995,13 @@ run_services() {
   require_gym_gate || return $?
   require_done migrations || return 10
   ensure_wt
-  if [ -n "$(st_get meshRelayDeployedAt)" ]; then
+  local live_mesh=""
+  if curl -fsS -m 20 "$FEED_URL/directory.json?release=$(date +%s)" 2>/dev/null | directory_lists "$MESH_RELAY_ID"; then live_mesh=1; fi
+  if [ -n "$live_mesh" ] && [ -z "$(st_get meshRelayDeployedAt)" ]; then
+    warn "production already runs the relay mesh ($MESH_RELAY_ID is in the live directory, since 0.3): a relay update is the step 'Deploy the Rust relay as iad1' (--only $(step_index meshrelay)), not this one."
+    warn "this step deploys the mesh-off TS hub (fly.toml), i.e. the full mesh-off rollback."
+    [ "$(ask_word "Type  mesh-off-rollback  to go on, or Enter to stop")" = mesh-off-rollback ] || return 10
+  elif [ -n "$(st_get meshRelayDeployedAt)" ]; then
     warn "the Rust mesh relay (iad1) was deployed at $(st_get meshRelayDeployedAt): this step now REPLACES it with the mesh-off TS hub (fly.toml), i.e. the full mesh-off rollback."
     [ "$(ask_word "Type  mesh-off-rollback  to go on, or Enter to stop")" = mesh-off-rollback ] || return 10
   fi

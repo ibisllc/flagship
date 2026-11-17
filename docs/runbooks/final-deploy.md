@@ -554,6 +554,22 @@ and stops being checked at updates. A release that changes `release/runtime-lock
 deployed before boxes are ordered onto it. Rollback: before the `.com` deploy, revert the commit; after, sign a
 newer sequence (a lower one is refused by every box that saw the higher).
 
+## 3e. Sign the webapp shell
+
+New in 0.4 (`docs/webapp-key-custody.md`, "Signing a release shell"). The webapp checks `/shell-signature.json`
+against the ca-track authority. After the release's webapp is final on `main`:
+
+```sh
+npx tsx scripts/webapp-shell.ts sign                                   # preview: version, file count, digest
+npx tsx scripts/webapp-shell.ts sign --sign --key-file ~/.flagship-release/pq-release-key.age   # YubiKey PIN + touch
+git add -- release/webapp-shell/<version>.json && git commit -m "Sign webapp shell <version>"
+```
+
+The `.com` deploy copies the file to `/shell-signature.json` only when it signs exactly the build it deploys, so any
+later shell change needs a new signature. Once a signed shell is live, `SHELL_SIGNATURE_REQUIRED = true` in
+`apps/web/public/webapp/lib/shellTrust.js` is a shell change of its own: bump the shell, sign again, deploy.
+`release.sh` runs this as the step "Sign the webapp shell".
+
 ## 4. Pending D1 migrations
 
 D1 migrations are applied by hand, before the Worker deploy, because the Worker
