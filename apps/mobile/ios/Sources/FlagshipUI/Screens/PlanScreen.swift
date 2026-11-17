@@ -8,6 +8,7 @@ import FlagshipCore
 ///
 /// App Store 3.1.1: no code field, QR scan or file import for vouchers here, ever.
 public struct PlanScreen: View {
+    @Environment(\.colorScheme) private var scheme
     @State private var center: PaymentsCenter
     @State private var delayStart = false
     @State private var error: String?
@@ -20,15 +21,16 @@ public struct PlanScreen: View {
     }
 
     private var cfg: PaymentsConfig { center.config }
+    private var rowBg: Color { FSColors.scheme(scheme).surface }
     private var now: Int64 { center.now() }
 
     public var body: some View {
         List {
-            statusSection
+            statusSection.listRowBackground(rowBg)
             if center.isAdmin && center.hasKey {
-                chooseSection
-                autoPaySection
-                overageSection
+                chooseSection.listRowBackground(rowBg)
+                autoPaySection.listRowBackground(rowBg)
+                overageSection.listRowBackground(rowBg)
             } else {
                 Section {
                     Group {
@@ -40,13 +42,16 @@ public struct PlanScreen: View {
                     }
                     .accessibilityIdentifier("plan-read-only")
                 }
+                .listRowBackground(rowBg)
             }
-            buySection
-            OrgPlanLinksSection()
+            buySection.listRowBackground(rowBg)
+            OrgPlanLinksSection().listRowBackground(rowBg)
             if let error {
                 Section { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan-error") }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(FSColors.scheme(scheme).bg.ignoresSafeArea())
         .navigationTitle("Plan")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await center.refreshAndTick() }
@@ -119,6 +124,7 @@ public struct PlanScreen: View {
     private func planRow(_ plan: PaidPlan?, price: String, detail: String) -> some View {
         let selected = center.chosenPlan == plan
         return Button {
+            guard !selected else { return }
             Task { await choose(plan) }
         } label: {
             HStack {
@@ -128,10 +134,10 @@ public struct PlanScreen: View {
                 }
                 Spacer()
                 Text(plan == nil ? price : String(localized: "\(price) a month")).foregroundStyle(.secondary)
-                if selected { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+                if selected { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(FSColors.scheme(scheme).primaryFill) }
             }
         }
-        .disabled(center.isWorking || selected)
+        .disabled(center.isWorking)
         .accessibilityIdentifier("plan-choose-\(plan?.rawValue ?? "free")")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
