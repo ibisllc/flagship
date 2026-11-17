@@ -3863,5 +3863,21 @@
   "Who to call": "A quién llamar",
   "voi.ci/%@ doesn't take calls.": "voi.ci/%@ no acepta llamadas.",
   "There's no page at voi.ci/%@.": "No hay ninguna página en voi.ci/%@.",
-  "Enter a voi.ci username, like voi.ci/alex.": "Escribe un nombre de usuario de voi.ci, como voi.ci/alex."
+  "Enter a voi.ci username, like voi.ci/alex.": "Escribe un nombre de usuario de voi.ci, como voi.ci/alex.",
+  "Missed call from %@": "Llamada perdida de %@",
+  "Declined a call from %@": "Rechazaste una llamada de %@",
+  "Call with %@": "Llamada con %@",
+  "You called %@": "Llamaste a %@",
+  "New conversation with %@": "Nueva conversación con %@",
+  "Message request from %@": "Solicitud de mensaje de %@",
+  "Your page went public": "Tu página ahora es pública",
+  "Your page was updated": "Tu página se actualizó",
+  "You posted on your page": "Publicaste en tu página",
+  "Servers": "Servidores",
+  "Show": "Mostrar",
+  "Calls and messages": "Llamadas y mensajes",
+  "Calls, conversations and your page": "Llamadas, conversaciones y tu página",
+  "No calls or messages yet.": "Aún no hay llamadas ni mensajes.",
+  "Opens the server": "Abre el servidor",
+  "Scheduled backup finished": "Copia de seguridad programada terminada"
 }

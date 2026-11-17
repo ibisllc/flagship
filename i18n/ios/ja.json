@@ -3861,5 +3861,21 @@
   "Who to call": "通話の相手",
   "voi.ci/%@ doesn't take calls.": "voi.ci/%@ は通話を受け付けていません。",
   "There's no page at voi.ci/%@.": "voi.ci/%@ にページはありません。",
-  "Enter a voi.ci username, like voi.ci/alex.": "voi.ci のユーザー名を入力してください（例: voi.ci/alex）。"
+  "Enter a voi.ci username, like voi.ci/alex.": "voi.ci のユーザー名を入力してください（例: voi.ci/alex）。",
+  "Missed call from %@": "%@ からの不在着信",
+  "Declined a call from %@": "%@ からの着信を拒否しました",
+  "Call with %@": "%@ との通話",
+  "You called %@": "%@ に発信しました",
+  "New conversation with %@": "%@ との新しい会話",
+  "Message request from %@": "%@ からのメッセージリクエスト",
+  "Your page went public": "ページを公開しました",
+  "Your page was updated": "ページを更新しました",
+  "You posted on your page": "ページに投稿しました",
+  "Servers": "サーバー",
+  "Show": "表示",
+  "Calls and messages": "通話とメッセージ",
+  "Calls, conversations and your page": "通話、会話、あなたのページ",
+  "No calls or messages yet.": "まだ通話やメッセージはありません。",
+  "Opens the server": "サーバーを開きます",
+  "Scheduled backup finished": "スケジュールされたバックアップが完了しました"
 }

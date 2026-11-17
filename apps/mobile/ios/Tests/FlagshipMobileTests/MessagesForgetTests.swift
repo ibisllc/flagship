@@ -89,6 +89,11 @@ final class MessagesForgetTests: XCTestCase {
         XCTAssertTrue(b.conversations.contains { $0.conv == c.conv })
         XCTAssertTrue(b.state.accepted.contains(c.conv))
         XCTAssertEqual(b.state.nicknames[c.pseudonymPub]?.name, "Bob")
+        // Activity (docs/activity-social.md): the conversation shows on both devices, and the page went public.
+        for s in [a, b] {
+            XCTAssertTrue(s.socialActivity.contains { $0.id == "conv:\(c.conv)" && $0.kind == .conversationNew && $0.name == "Bob" })
+        }
+        XCTAssertTrue(a.socialActivity.contains { $0.kind == .pagePublished })
 
         let refused = await a.delete(c)
         XCTAssertNil(refused)
@@ -105,6 +110,8 @@ final class MessagesForgetTests: XCTestCase {
             XCTAssertNil(s.state.readUpTo[c.conv])
             XCTAssertNil(s.state.nicknames[c.pseudonymPub])
         }
+        // Deleting forgets: its Activity entry is gone on both devices too.
+        for s in [a, b] { XCTAssertFalse(s.socialActivity.contains { $0.id == "conv:\(c.conv)" }) }
         // Stays gone after another round.
         await b.refresh()
         XCTAssertFalse(b.conversations.contains { $0.conv == c.conv })

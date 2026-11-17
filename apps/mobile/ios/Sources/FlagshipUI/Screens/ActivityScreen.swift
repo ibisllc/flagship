@@ -2,8 +2,13 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// Activity-tab landing: accordion sections (approvals, post-recovery,
-/// account events, this server's log), one open at a time.
+/// What Activity shows (docs/activity-social.md): everything, only the servers' sections, or only calls and social.
+public enum ActivityFilter: String, CaseIterable, Hashable, Sendable {
+    case all, servers, social
+}
+
+/// Activity-tab landing: a filter (All / Servers / Social), then accordion sections (approvals, calls and messages,
+/// post-recovery, account events, this server's log), one open at a time.
 public struct ActivityScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -24,8 +29,14 @@ public struct ActivityScreen: View {
     var onRefresh: () async -> Void = {}
     var onLoadMoreAudit: () async -> Void = {}
     var onLoadMoreBox: () async -> Void = {}
+    /// Calls, conversations and the page, newest first (MessagesStore.socialActivity).
+    var social: [SocialActivityEntry] = []
+    var onOpenSocial: (SocialActivityEntry) -> Void = { _ in }
+    /// Opens the server whose log is shown; nil leaves the log's rows untappable.
+    var onOpenServer: (() -> Void)?
 
-    private enum Open: Hashable { case approvals, recovery, account, server }
+    private enum Open: Hashable { case approvals, social, recovery, account, server }
+    @State private var filter: ActivityFilter = .all
     /// One section open at a time, so every title stays on screen.
     @State private var open: Open? = nil
     @State private var loadingMore = false
@@ -46,7 +57,10 @@ public struct ActivityScreen: View {
         onOpenAuditLog: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
         onLoadMoreAudit: @escaping () async -> Void = {},
-        onLoadMoreBox: @escaping () async -> Void = {}
+        onLoadMoreBox: @escaping () async -> Void = {},
+        social: [SocialActivityEntry] = [],
+        onOpenSocial: @escaping (SocialActivityEntry) -> Void = { _ in },
+        onOpenServer: (() -> Void)? = nil
     ) {
         self.state = state
         self.pods = pods
@@ -61,6 +75,9 @@ public struct ActivityScreen: View {
         self.onRefresh = onRefresh
         self.onLoadMoreAudit = onLoadMoreAudit
         self.onLoadMoreBox = onLoadMoreBox
+        self.social = social
+        self.onOpenSocial = onOpenSocial
+        self.onOpenServer = onOpenServer
     }
 
     @ViewBuilder private var podSwitcherIfMulti: some View {
@@ -94,8 +111,26 @@ public struct ActivityScreen: View {
     /// thus this feed) can't load, so gating the approvals entry behind
     /// `.loaded` hid it precisely when needed.
     private var sectionInfos: [SectionInfo] {
-        var out = [SectionInfo(id: .approvals, icon: "lock.open", title: String(localized: "Server approvals"),
-                               hint: String(localized: "Servers waiting for you to start them"), count: approvals?.pendingCount)]
+        switch filter {
+        case .social: return [socialInfo]
+        case .servers: return [approvalsInfo] + serverInfos
+        case .all: return [approvalsInfo, socialInfo] + serverInfos
+        }
+    }
+
+    private var approvalsInfo: SectionInfo {
+        SectionInfo(id: .approvals, icon: "lock.open", title: String(localized: "Server approvals"),
+                    hint: String(localized: "Servers waiting for you to start them"), count: approvals?.pendingCount)
+    }
+
+    private var socialInfo: SectionInfo {
+        SectionInfo(id: .social, icon: "bubble.left.and.bubble.right", title: String(localized: "Calls and messages"),
+                    hint: String(localized: "Calls, conversations and your page"), count: social.count)
+    }
+
+    /// The sections that need the server feed.
+    private var serverInfos: [SectionInfo] {
+        var out: [SectionInfo] = []
         guard !noServer, case .loaded(let feed) = state else { return out }
         if let snap = feed.postRecovery, snap.lastReissue != nil || snap.state.lastSeen != nil {
             out.append(SectionInfo(id: .recovery, icon: "arrow.triangle.2.circlepath", title: String(localized: "Post-recovery"), hint: postRecoveryHeadline(snap)))
@@ -113,6 +148,11 @@ public struct ActivityScreen: View {
         switch which {
         case .approvals:
             if let approvals { SecretRequestsPanel(model: approvals, bounded: bounded) }
+        case .social:
+            eventList(
+                empty: String(localized: "No calls or messages yet."),
+                rows: social.map { e in AnyView(socialRow(e, c: c)) },
+                more: false, onMore: {}, bounded: bounded, c: c)
         case .recovery:
             if case .loaded(let feed) = state, let snap = feed.postRecovery { postRecoveryCard(snap, c: c) }
         case .account:
@@ -135,7 +175,8 @@ public struct ActivityScreen: View {
 
     /// Regular width: the sections on the left, the selected one's log on the right.
     private var selectedSection: Open {
-        if let open { return open }
+        if filter == .social { return .social }
+        if let open, sectionInfos.contains(where: { $0.id == open }) { return open }
         if noServer { return .approvals }
         if case .loaded = state { return .account }
         return .approvals
@@ -149,7 +190,12 @@ public struct ActivityScreen: View {
         .background(c.bg.ignoresSafeArea())
         // A boot-approval push or link: the section opens with the request in it.
         .onChange(of: openApprovals, initial: true) { _, n in
-            if n > 0 { open = .approvals }
+            guard n > 0 else { return }
+            if filter == .social { filter = .all }
+            open = .approvals
+        }
+        .onChange(of: filter) { _, f in
+            if f == .servers, open == .social { open = nil }
         }
         .navigationTitle("Activity")
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
@@ -167,21 +213,11 @@ public struct ActivityScreen: View {
     private func compactBody(c: FSColors) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                if noServer { NoServerYetCard() }
-                ForEach(sectionInfos.prefix(1)) { info in
-                    accordion(info, c: c) { sectionContent(info.id, bounded: true, c: c) }
-                }
-                if !noServer {
-                    switch state {
-                    case .idle, .loading:
-                        skeletons
-                    case .failed(let msg):
-                        ErrorCard(message: msg, retry: onRefresh)
-                    case .loaded:
-                        ForEach(sectionInfos.dropFirst()) { info in
-                            accordion(info, c: c) { sectionContent(info.id, bounded: true, c: c) }
-                        }
-                    }
+                filterPicker
+                if filter == .social {
+                    socialPanel(c: c)
+                } else {
+                    serverSections(c: c)
                 }
                 Spacer().frame(height: FS.space.s12)
             }
@@ -192,13 +228,57 @@ public struct ActivityScreen: View {
         .refreshable { await onRefresh() }
     }
 
+    /// All / Servers / Social.
+    private var filterPicker: some View {
+        Picker(String(localized: "Show"), selection: $filter) {
+            Text("All").tag(ActivityFilter.all)
+            Text("Servers").tag(ActivityFilter.servers)
+            Text("Social").tag(ActivityFilter.social)
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("activity-filter")
+    }
+
+    /// The Social filter: the calls and social entries as one open list.
+    private func socialPanel(c: FSColors) -> some View {
+        sectionContent(.social, bounded: false, c: c)
+            .padding(FS.space.s4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(c.surface)
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
+            .accessibilityIdentifier("activity-social-list")
+    }
+
+    @ViewBuilder
+    private func serverSections(c: FSColors) -> some View {
+        if noServer { NoServerYetCard() }
+        accordion(approvalsInfo, c: c) { sectionContent(.approvals, bounded: true, c: c) }
+        if filter == .all {
+            accordion(socialInfo, c: c) { sectionContent(.social, bounded: true, c: c) }
+        }
+        if !noServer {
+            switch state {
+            case .idle, .loading:
+                skeletons
+            case .failed(let msg):
+                ErrorCard(message: msg, retry: onRefresh)
+            case .loaded:
+                ForEach(serverInfos) { info in
+                    accordion(info, c: c) { sectionContent(info.id, bounded: true, c: c) }
+                }
+            }
+        }
+    }
+
     private func splitBody(c: FSColors) -> some View {
         HStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    if noServer { NoServerYetCard() }
+                    filterPicker
+                    if noServer, filter != .social { NoServerYetCard() }
                     ForEach(sectionInfos) { info in sectionRow(info, c: c) }
-                    if !noServer {
+                    if !noServer, filter != .social {
                         if case .failed(let msg) = state { ErrorCard(message: msg, retry: onRefresh) }
                         if case .idle = state { skeletons } else if case .loading = state { skeletons }
                     }
@@ -341,14 +421,39 @@ public struct ActivityScreen: View {
         }
     }
 
+    @ViewBuilder
     private func boxRow(entry: BoxActivityEntry, c: FSColors) -> some View {
-        eventRow(
+        let row = eventRow(
             symbol: BoxEventLabels.symbol(entry),
             tint: entry.ok ? c.primary : c.warning,
             title: BoxEventLabels.title(entry) ?? "",
             titleColor: entry.ok ? c.text : c.warning,
             detail: entry.detail,
             when: relative(ms: entry.ts), c: c)
+        if let onOpenServer {
+            Button(action: onOpenServer) { row.contentShape(Rectangle()) }
+                .buttonStyle(FSRowPressStyle())
+                .accessibilityHint(Text("Opens the server"))
+        } else {
+            row
+        }
+    }
+
+    /// A call, conversation or page entry; a tap opens it.
+    private func socialRow(_ e: SocialActivityEntry, c: FSColors) -> some View {
+        let alert = SocialActivity.isAlert(e)
+        return Button { onOpenSocial(e) } label: {
+            eventRow(
+                symbol: SocialActivity.symbol(e),
+                tint: alert ? c.danger : c.accent,
+                title: SocialActivity.title(e),
+                titleColor: c.text,
+                detail: SocialActivity.detail(e),
+                when: relative(ms: e.at), c: c)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(FSRowPressStyle())
+        .accessibilityIdentifier("activity-social-\(e.kind.rawValue)")
     }
 
     /// "Server · home2": the server this log belongs to (the one picked in the

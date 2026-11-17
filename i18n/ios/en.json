@@ -16482,5 +16482,69 @@
   "Enter a voi.ci username, like voi.ci/alex.": {
     "en": "Enter a voi.ci username, like voi.ci/alex.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:169"
+  },
+  "Missed call from %@": {
+    "en": "Missed call from %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "Declined a call from %@": {
+    "en": "Declined a call from %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "Call with %@": {
+    "en": "Call with %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "You called %@": {
+    "en": "You called %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "New conversation with %@": {
+    "en": "New conversation with %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "Message request from %@": {
+    "en": "Message request from %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "Your page went public": {
+    "en": "Your page went public",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "Your page was updated": {
+    "en": "Your page was updated",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "You posted on your page": {
+    "en": "You posted on your page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: a call or social entry)"
+  },
+  "Servers": {
+    "en": "Servers",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "Show": {
+    "en": "Show",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "Calls and messages": {
+    "en": "Calls and messages",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "Calls, conversations and your page": {
+    "en": "Calls, conversations and your page",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "No calls or messages yet.": {
+    "en": "No calls or messages yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "Opens the server": {
+    "en": "Opens the server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift (Activity: the All / Servers / Social filter and the Calls and messages section)"
+  },
+  "Scheduled backup finished": {
+    "en": "Scheduled backup finished",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift (Activity: a box event title)"
   }
 }

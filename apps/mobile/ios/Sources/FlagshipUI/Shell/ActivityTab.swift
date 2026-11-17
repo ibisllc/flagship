@@ -39,6 +39,11 @@ public struct ActivityTab: View {
                                 username: app.currentUser ?? ""
                             )
                         )
+                    case .conversation(let conv): ThreadScreen(conv: conv)
+                    case .calls:
+                        VoiciCallsScreen()
+                            .onAppear { SocialBadges.shared.callsSeen() }
+                            .onDisappear { SocialBadges.shared.callsSeen() }
                     }
                 }
         }
@@ -46,6 +51,15 @@ public struct ActivityTab: View {
             consume(link)
         }
         .task(id: linker.pending) { consume(linker.pending) }
+    }
+
+    /// A call or social entry: its conversation or the Calls page here, the page on the Social tab.
+    private func openSocial(_ e: SocialActivityEntry) {
+        switch e.target {
+        case .thread(let conv): path.append(.conversation(conv: conv))
+        case .calls: path.append(.calls)
+        case .page: linker.enqueue(.pageEditor)
+        }
     }
 
     /// Pop or push onto our path stack when a DeepLink lands on this
@@ -89,9 +103,13 @@ public struct ActivityTab: View {
                     onRefresh: {
                         await vm.load()
                         await approvals?.reload()
+                        await MessagesStore.shared.refresh()
                     },
                     onLoadMoreAudit: { await vm.loadMoreAudit() },
-                    onLoadMoreBox: { await vm.loadMoreBoxEvents() }
+                    onLoadMoreBox: { await vm.loadMoreBoxEvents() },
+                    social: MessagesStore.shared.socialActivity,
+                    onOpenSocial: openSocial,
+                    onOpenServer: (serverFilter ?? app.currentPodId).map { podId in { linker.enqueue(.serverDetail(podId: podId)) } }
                 )
             } else {
                 ProgressView()
