@@ -3839,8 +3839,6 @@
   "More data": "Más datos",
   "When the month's data runs low, buy more from the balance, up to:": "Cuando queden pocos datos en el mes, comprar más con el saldo, hasta:",
   "Add to your balance": "Añadir a tu saldo",
-  "Not on sale yet. Buying opens in a later update.": "Aún no está a la venta. La compra llegará en una próxima actualización.",
-  "Card": "Tarjeta",
   "Coming soon": "Próximamente",
   "Monero": "Monero",
   "In the iPhone and Android apps": "En las apps para iPhone y Android",
@@ -3848,5 +3846,16 @@
   "Test server only: free vouchers for trying the plans.": "Solo en el servidor de pruebas: vales gratis para probar los planes.",
   "Start {0}?": "¿Empezar {0}?",
   "This spends from your prepaid balance.": "Esto gasta de tu saldo prepago.",
-  "Added 30 test vouchers.": "Se añadieron 30 vales de prueba."
+  "Added 30 test vouchers.": "Se añadieron 30 vales de prueba.",
+  "Card payments aren't available right now.": "Los pagos con tarjeta no están disponibles ahora mismo.",
+  "The payment hasn't gone through yet. Your vouchers will appear once it does.": "El pago aún no se ha completado. Tus vales aparecerán cuando se complete.",
+  "That payment was refunded or disputed, so it added nothing.": "Ese pago se reembolsó o se disputó, así que no añadió nada.",
+  "That payment couldn't be added to this balance.": "Ese pago no se pudo añadir a este saldo.",
+  "The payment service didn't answer. Your purchase is kept; try again in a moment.": "El servicio de pago no respondió. Tu compra se conserva; inténtalo de nuevo en un momento.",
+  "Pay by card with Stripe. Stripe sees your card; Flagship sees that vouchers were bought, never which account they go to.": "Paga con tarjeta a través de Stripe. Stripe ve tu tarjeta; Flagship ve que se compraron vales, nunca a qué cuenta van.",
+  "Buy {0}": "Comprar {0}",
+  "Vouchers don't expire and aren't refunded.": "Los vales no caducan y no se reembolsan.",
+  "Waiting for a payment to go through.": "Esperando a que se complete un pago.",
+  "Added {0} to your balance.": "Se añadieron {0} a tu saldo.",
+  "Payment cancelled. Nothing was charged.": "Pago cancelado. No se cobró nada."
 }

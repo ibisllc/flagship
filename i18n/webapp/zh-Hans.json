@@ -3839,8 +3839,6 @@
   "More data": "更多流量",
   "When the month's data runs low, buy more from the balance, up to:": "当月流量不足时，从余额购买更多，最多：",
   "Add to your balance": "充值余额",
-  "Not on sale yet. Buying opens in a later update.": "尚未开售。购买将在后续更新中开放。",
-  "Card": "银行卡",
   "Coming soon": "即将推出",
   "Monero": "Monero",
   "In the iPhone and Android apps": "在 iPhone 和 Android 应用中",
@@ -3848,5 +3846,16 @@
   "Test server only: free vouchers for trying the plans.": "仅限测试服务器：用于试用套餐的免费代金券。",
   "Start {0}?": "开始 {0}？",
   "This spends from your prepaid balance.": "这将从你的预付余额中扣除。",
-  "Added 30 test vouchers.": "已添加 30 张测试代金券。"
+  "Added 30 test vouchers.": "已添加 30 张测试代金券。",
+  "Card payments aren't available right now.": "目前无法使用银行卡付款。",
+  "The payment hasn't gone through yet. Your vouchers will appear once it does.": "付款尚未完成。完成后你的代金券就会出现。",
+  "That payment was refunded or disputed, so it added nothing.": "该付款已退款或被提出争议，因此没有增加任何余额。",
+  "That payment couldn't be added to this balance.": "无法将该付款加入此余额。",
+  "The payment service didn't answer. Your purchase is kept; try again in a moment.": "支付服务没有响应。你的购买已保留，请稍后重试。",
+  "Pay by card with Stripe. Stripe sees your card; Flagship sees that vouchers were bought, never which account they go to.": "通过 Stripe 用银行卡付款。Stripe 能看到你的卡；Flagship 只能看到有代金券被购买，永远不知道它们用于哪个账户。",
+  "Buy {0}": "购买 {0}",
+  "Vouchers don't expire and aren't refunded.": "代金券不会过期，也不予退款。",
+  "Waiting for a payment to go through.": "正在等待付款完成。",
+  "Added {0} to your balance.": "已向你的余额添加 {0}。",
+  "Payment cancelled. Nothing was charged.": "付款已取消。未产生任何费用。"
 }

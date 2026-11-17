@@ -3839,8 +3839,6 @@
   "More data": "Plus de données",
   "When the month's data runs low, buy more from the balance, up to:": "Quand les données du mois s'épuisent, en acheter avec le solde, jusqu'à :",
   "Add to your balance": "Ajouter à votre solde",
-  "Not on sale yet. Buying opens in a later update.": "Pas encore en vente. L'achat arrivera dans une prochaine mise à jour.",
-  "Card": "Carte",
   "Coming soon": "Bientôt",
   "Monero": "Monero",
   "In the iPhone and Android apps": "Dans les apps iPhone et Android",
@@ -3848,5 +3846,16 @@
   "Test server only: free vouchers for trying the plans.": "Serveur de test uniquement : des bons gratuits pour essayer les forfaits.",
   "Start {0}?": "Commencer {0} ?",
   "This spends from your prepaid balance.": "Cela utilise votre solde prépayé.",
-  "Added 30 test vouchers.": "30 bons de test ajoutés."
+  "Added 30 test vouchers.": "30 bons de test ajoutés.",
+  "Card payments aren't available right now.": "Les paiements par carte ne sont pas disponibles pour le moment.",
+  "The payment hasn't gone through yet. Your vouchers will appear once it does.": "Le paiement n'est pas encore passé. Vos bons apparaîtront dès qu'il le sera.",
+  "That payment was refunded or disputed, so it added nothing.": "Ce paiement a été remboursé ou contesté, il n'a donc rien ajouté.",
+  "That payment couldn't be added to this balance.": "Ce paiement n'a pas pu être ajouté à ce solde.",
+  "The payment service didn't answer. Your purchase is kept; try again in a moment.": "Le service de paiement n'a pas répondu. Votre achat est conservé ; réessayez dans un instant.",
+  "Pay by card with Stripe. Stripe sees your card; Flagship sees that vouchers were bought, never which account they go to.": "Payez par carte avec Stripe. Stripe voit votre carte ; Flagship voit que des bons ont été achetés, jamais à quel compte ils vont.",
+  "Buy {0}": "Acheter {0}",
+  "Vouchers don't expire and aren't refunded.": "Les bons n'expirent pas et ne sont pas remboursés.",
+  "Waiting for a payment to go through.": "En attente de la validation d'un paiement.",
+  "Added {0} to your balance.": "{0} ajoutés à votre solde.",
+  "Payment cancelled. Nothing was charged.": "Paiement annulé. Rien n'a été débité."
 }

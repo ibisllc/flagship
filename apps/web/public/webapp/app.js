@@ -123,6 +123,7 @@ import { enterNameDibs } from "./views/name-dibs.js";
 import { fetchDibsWindow } from "./lib/nameDibs.js";
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initPlanView, enterPlan } from "./views/plan.js";
+import { takeShopReturn } from "./lib/plan.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initDeveloperView, enterDeveloper } from "./views/developer.js";
 import { initVibeCodeView, enterVibeCode, openVibeCodeSessionById } from "./views/vibe-code.js";
@@ -557,6 +558,8 @@ async function boot() {
   // "This account was removed" (docs/account-gone.md): when .com says this
   // browser's own account no longer exists, a full-screen state takes over.
   try { initAccountGoneUi(); } catch { /* best-effort */ }
+  // Back from a Stripe purchase (?shop=stripe|cancel, lib/plan.js): note it for after the unlock, tidy the address bar.
+  try { takeShopReturn(); } catch { /* best-effort */ }
   // P12 — auto-migrate legacy single-profile localStorage into the new
   // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
   try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }

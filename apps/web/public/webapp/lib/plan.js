@@ -11,6 +11,8 @@
 //   redeemVouchers      POST /api/vouchers/redeem                (no credential, no cookie: nothing names the caller)
 //   spendTick           the trickle and the overage rule, once
 //   addTestVouchers     POST /api/vouchers/test-issue            (only when the server says testIssue: the gym)
+//   buyWithStripe       POST /api/vouchers/stripe/checkout       (the order: a pack, the key, a commitment; no account)
+//   finishShopOrders    POST /api/vouchers/paid-issue            (back from Stripe: signatures for the paid session)
 
 import {
   addVouchers,
@@ -34,6 +36,7 @@ import {
   takeVouchers,
   trickleStep,
   voucherNullifier,
+  voucherOrderCommit,
 } from "./vouchers.js";
 import { accountReadFetch } from "./accountRead.js";
 import { canSignAdminOrders } from "./addServerGate.js";
@@ -116,9 +119,10 @@ export async function loadPaymentsConfig(deps = {}) {
     if (!r.ok) throw await readError(r);
     const body = await r.json();
     const keys = Array.isArray(body?.keys) ? body.keys.filter((k) => rsaFromVoucherKey(k) !== null) : [];
-    return { config: mergePaymentsConfig(body?.config), keys, testIssue: body?.testIssue === true };
+    const rails = { stripe: body?.rails?.stripe === true, apple: body?.rails?.apple === true, google: body?.rails?.google === true };
+    return { config: mergePaymentsConfig(body?.config), keys, testIssue: body?.testIssue === true, rails };
   } catch {
-    return { config: mergePaymentsConfig(null), keys: [], testIssue: false };
+    return { config: mergePaymentsConfig(null), keys: [], testIssue: false, rails: { stripe: false, apple: false, google: false } };
   }
 }
 
@@ -352,4 +356,136 @@ export async function addTestVouchers(count = 30, deps = {}) {
   if (!Array.isArray(body?.sigs) || body.sigs.length !== reqs.length) throw new PlanError("failed");
   const vouchers = reqs.map((q, i) => finalizeVoucher(key, q.pending, body.sigs[i]));
   return updateWallet(pc.config, (w) => addVouchers(w, vouchers), deps);
+}
+
+// ── the web shop (docs/payments-privacy-and-rails.md §11) ─────────────────
+
+const SHOP_KEY = "flagship.shop.pending";
+/** A Checkout Session lives 24 hours; an order still unpaid a day later is dropped. */
+const SHOP_ORDER_MAX_AGE_MS = 25 * 3_600_000;
+
+/** The orders this browser started and hasn't been paid out for: [{sessionId, username, k, units, blinded, pending, at}]. */
+export function pendingShopOrders(store = browserStore) {
+  try {
+    const v = JSON.parse(store.get(SHOP_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((o) => o && typeof o.sessionId === "string" && Array.isArray(o.pending) && Array.isArray(o.blinded)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingShopOrders(orders, store) {
+  store.set(SHOP_KEY, JSON.stringify(orders));
+}
+
+/**
+ * Starts a card purchase of `units` vouchers: makes the blinded requests, asks `.com` for a Stripe Checkout Session
+ * that commits to them (and names nobody), keeps the order in this browser, and returns Stripe's page to open.
+ */
+export async function buyWithStripe(units, deps = {}) {
+  const c = ctx(deps);
+  const pc = deps.paymentsConfig ?? (await loadPaymentsConfig(deps));
+  if (!pc.rails?.stripe) throw new PlanError("rail-off");
+  if (!pc.config.packs.includes(units)) throw new PlanError("malformed");
+  const key = pc.keys.find((k) => k.issuing !== false);
+  if (!key) throw new PlanError("no-key");
+  const reqs = Array.from({ length: units }, () => newVoucherRequest(key));
+  const blinded = reqs.map((q) => q.blinded);
+  const r = await c.fetch(`${c.apex}/api/vouchers/stripe/checkout`, {
+    method: "POST",
+    credentials: "omit",
+    cache: "no-store",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ v: 1, units, k: key.keyId, commit: voucherOrderCommit(key.keyId, blinded) }),
+  });
+  if (!r.ok) throw await readError(r);
+  const body = await r.json();
+  if (typeof body?.url !== "string" || !body.url.startsWith("https://") || typeof body?.sessionId !== "string") throw new PlanError("failed");
+  const orders = pendingShopOrders(c.store).filter((o) => o.sessionId !== body.sessionId);
+  orders.push({ sessionId: body.sessionId, username: usernameOf(c), k: key.keyId, units, blinded, pending: reqs.map((q) => q.pending), at: c.now() });
+  savePendingShopOrders(orders, c.store);
+  return { url: body.url, sessionId: body.sessionId };
+}
+
+/**
+ * Asks for the signatures of every paid order this browser holds for the signed-in account, adds the vouchers to
+ * the wallet, and forgets the order once the wallet is saved. An unpaid order waits (a day at most); one `.com`
+ * refuses for good is dropped. Returns {added, refused: [codes]}.
+ */
+export async function finishShopOrders(deps = {}) {
+  const c = ctx(deps);
+  const u = usernameOf(c);
+  const out = { added: 0, refused: [] };
+  const all = pendingShopOrders(c.store);
+  const mine = all.filter((o) => o.username === u);
+  if (mine.length === 0) return out;
+  const pc = deps.paymentsConfig ?? (await loadPaymentsConfig(deps));
+  let cur = deps.current ?? null;
+  for (const o of mine) {
+    const key = pc.keys.find((k) => k.keyId === o.k);
+    const drop = () => savePendingShopOrders(pendingShopOrders(c.store).filter((x) => x.sessionId !== o.sessionId), c.store);
+    if (!key) {
+      if (pc.keys.length > 0) {
+        drop();
+        out.refused.push("no-key");
+      }
+      continue;
+    }
+    let r;
+    try {
+      r = await c.fetch(`${c.apex}/api/vouchers/paid-issue`, {
+        method: "POST",
+        credentials: "omit",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ v: 1, rail: "stripe", proof: { sessionId: o.sessionId }, k: o.k, blinded: o.blinded }),
+      });
+    } catch {
+      continue;
+    }
+    if (!r.ok) {
+      const err = await readError(r);
+      const waits = err.code === "payment-unpaid" || err.code === "rail-unreachable" || err.code === "rate-limited" || r.status >= 500;
+      if (waits && c.now() - o.at < SHOP_ORDER_MAX_AGE_MS) continue;
+      drop();
+      out.refused.push(err.code);
+      continue;
+    }
+    const body = await r.json();
+    if (!Array.isArray(body?.sigs) || body.sigs.length !== o.pending.length) continue;
+    const vouchers = o.pending.map((p, i) => finalizeVoucher(key, p, body.sigs[i]));
+    cur = await updateWallet(pc.config, (w) => addVouchers(w, vouchers), { ...deps, ...(cur ? { current: cur } : {}) });
+    drop();
+    out.added += vouchers.length;
+  }
+  return { ...out, wallet: cur };
+}
+
+const SHOP_RETURN_KEY = "flagship.shop.return";
+
+/** Back from Stripe (`?shop=stripe|cancel`): note it for after the unlock and take it off the address bar. */
+export function takeShopReturn(loc = globalThis.location, hist = globalThis.history, session = globalThis.sessionStorage) {
+  try {
+    const u = new URL(loc.href);
+    const shop = u.searchParams.get("shop");
+    if (shop !== "stripe" && shop !== "cancel") return null;
+    u.searchParams.delete("shop");
+    u.searchParams.delete("session_id");
+    hist?.replaceState({}, "", u.pathname + (u.search === "?" ? "" : u.search) + u.hash);
+    session?.setItem(SHOP_RETURN_KEY, shop);
+    return shop;
+  } catch {
+    return null;
+  }
+}
+
+/** The return noted by takeShopReturn, once. */
+export function consumeShopReturn(session = globalThis.sessionStorage) {
+  try {
+    const v = session?.getItem(SHOP_RETURN_KEY) ?? null;
+    session?.removeItem(SHOP_RETURN_KEY);
+    return v;
+  } catch {
+    return null;
+  }
 }

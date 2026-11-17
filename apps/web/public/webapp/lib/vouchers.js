@@ -231,6 +231,10 @@ export function voucherMessage(nonce) {
 export const voucherPrepared = (v) => concat(hexToBytes(v.p), voucherMessage(hexToBytes(v.n)));
 export const voucherNullifier = (v) => hex(sha256(te.encode(`${TAG_VOUCHER_NULLIFIER}|${v.k}|${v.n}`)));
 
+/** What a Stripe order commits to before payment (protocol voucherRails.ts): the key and the blinded requests, in order. */
+export const TAG_VOUCHER_ORDER = "flagship/voucher-order/v1";
+export const voucherOrderCommit = (keyId, blinded) => hex(sha256(te.encode(`${TAG_VOUCHER_ORDER}|${keyId}|${blinded.join("|")}`)));
+
 export function parseVoucher(v) {
   if (!isObj(v)) return null;
   const keys = Object.keys(v);

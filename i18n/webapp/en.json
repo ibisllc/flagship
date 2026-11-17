@@ -15654,14 +15654,6 @@
     "en": "Add to your balance",
     "ctx": "webapp/views/plan.js:109"
   },
-  "Not on sale yet. Buying opens in a later update.": {
-    "en": "Not on sale yet. Buying opens in a later update.",
-    "ctx": "webapp/views/plan.js:111"
-  },
-  "Card": {
-    "en": "Card",
-    "ctx": "webapp/views/plan.js:8"
-  },
   "Coming soon": {
     "en": "Coming soon",
     "ctx": "webapp/views/plan.js:115"
@@ -15693,5 +15685,49 @@
   "Added 30 test vouchers.": {
     "en": "Added 30 test vouchers.",
     "ctx": "webapp/views/plan.js:172"
+  },
+  "Card payments aren't available right now.": {
+    "en": "Card payments aren't available right now.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "The payment hasn't gone through yet. Your vouchers will appear once it does.": {
+    "en": "The payment hasn't gone through yet. Your vouchers will appear once it does.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "That payment was refunded or disputed, so it added nothing.": {
+    "en": "That payment was refunded or disputed, so it added nothing.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "That payment couldn't be added to this balance.": {
+    "en": "That payment couldn't be added to this balance.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "The payment service didn't answer. Your purchase is kept; try again in a moment.": {
+    "en": "The payment service didn't answer. Your purchase is kept; try again in a moment.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "Pay by card with Stripe. Stripe sees your card; Flagship sees that vouchers were bought, never which account they go to.": {
+    "en": "Pay by card with Stripe. Stripe sees your card; Flagship sees that vouchers were bought, never which account they go to.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "Buy {0}": {
+    "en": "Buy {0}",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "Vouchers don't expire and aren't refunded.": {
+    "en": "Vouchers don't expire and aren't refunded.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "Waiting for a payment to go through.": {
+    "en": "Waiting for a payment to go through.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "Added {0} to your balance.": {
+    "en": "Added {0} to your balance.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
+  },
+  "Payment cancelled. Nothing was charged.": {
+    "en": "Payment cancelled. Nothing was charged.",
+    "ctx": "webapp/views/plan.js (the web shop, docs/payments-privacy-and-rails.md §11)"
   }
 }

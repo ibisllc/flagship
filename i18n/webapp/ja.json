@@ -3839,8 +3839,6 @@
   "More data": "追加データ",
   "When the month's data runs low, buy more from the balance, up to:": "月のデータが残り少なくなったら、残高から追加購入する上限：",
   "Add to your balance": "残高を追加",
-  "Not on sale yet. Buying opens in a later update.": "まだ販売していません。購入は今後のアップデートで始まります。",
-  "Card": "カード",
   "Coming soon": "近日公開",
   "Monero": "Monero",
   "In the iPhone and Android apps": "iPhone と Android のアプリで",
@@ -3848,5 +3846,16 @@
   "Test server only: free vouchers for trying the plans.": "テストサーバーのみ：プランを試すための無料バウチャーです。",
   "Start {0}?": "{0} を開始しますか？",
   "This spends from your prepaid balance.": "前払い残高から支払われます。",
-  "Added 30 test vouchers.": "テスト用バウチャーを 30 枚追加しました。"
+  "Added 30 test vouchers.": "テスト用バウチャーを 30 枚追加しました。",
+  "Card payments aren't available right now.": "現在、カード払いはご利用いただけません。",
+  "The payment hasn't gone through yet. Your vouchers will appear once it does.": "支払いはまだ完了していません。完了するとバウチャーが表示されます。",
+  "That payment was refunded or disputed, so it added nothing.": "この支払いは返金または異議申し立てされたため、何も追加されませんでした。",
+  "That payment couldn't be added to this balance.": "この支払いをこの残高に追加できませんでした。",
+  "The payment service didn't answer. Your purchase is kept; try again in a moment.": "決済サービスから応答がありませんでした。購入は保持されています。しばらくしてからもう一度お試しください。",
+  "Pay by card with Stripe. Stripe sees your card; Flagship sees that vouchers were bought, never which account they go to.": "Stripe でカード払い。Stripe にはカードがわかりますが、Flagship にわかるのはバウチャーが購入されたことだけで、どのアカウントに使われるかはわかりません。",
+  "Buy {0}": "{0} を購入",
+  "Vouchers don't expire and aren't refunded.": "バウチャーに有効期限はなく、返金もされません。",
+  "Waiting for a payment to go through.": "支払いの完了を待っています。",
+  "Added {0} to your balance.": "残高に {0} を追加しました。",
+  "Payment cancelled. Nothing was charged.": "支払いはキャンセルされました。請求は発生していません。"
 }
