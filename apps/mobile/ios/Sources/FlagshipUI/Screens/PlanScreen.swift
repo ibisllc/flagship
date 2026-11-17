@@ -89,6 +89,9 @@ public struct PlanScreen: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
+            Text(PlanDisplay.privacyLine(center.spendPrivacy))
+                .font(.footnote).foregroundStyle(.secondary)
+                .accessibilityIdentifier("plan-privacy")
         } footer: {
             Text("Your phone pays a little at a time, a few days ahead of need. A payment can't be linked to the purchase that paid for it.")
         }

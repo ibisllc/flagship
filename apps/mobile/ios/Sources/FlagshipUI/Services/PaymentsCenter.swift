@@ -24,6 +24,8 @@ public final class PaymentsCenter {
     public private(set) var canSpend = false
     public private(set) var isAdmin = false
     public private(set) var hasKey = false
+    /// The privacy line under the plan (relay, interim relay, none, or waiting on a failing relay).
+    public private(set) var spendPrivacy: SpendPrivacy = .noRelay
     /// The engine's clock (tests move it).
     public var now: () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
 
@@ -93,6 +95,7 @@ public final class PaymentsCenter {
         canSpend = engine?.canSpend ?? false
         isAdmin = engine?.context.isAdmin ?? false
         hasKey = engine?.context.umk() != nil
+        spendPrivacy = engine?.spendPrivacy ?? .noRelay
     }
 
     private func fresh() -> VoucherWalletEngine? {
@@ -201,6 +204,22 @@ public enum PlanDisplay {
     /// GB the cap buys.
     public static func capGb(_ units: Int64, _ cfg: PaymentsConfig) -> Int64 {
         cfg.overage.blockUnits > 0 ? (units / cfg.overage.blockUnits) * cfg.overage.blockGb : 0
+    }
+
+    /// The privacy line under the plan. Neutral words: a failing relay never breaks a payment.
+    public static func privacyLine(_ p: SpendPrivacy) -> String {
+        switch p {
+        case .relayWaiting:
+            return String(localized: "The private relay isn't answering. Payments wait and try again; your plan stays active meanwhile.")
+        case .wentDirect:
+            return String(localized: "The private relay wasn't answering, so the last payment went straight to Flagship.")
+        case .thirdPartyRelay(let op):
+            return String(localized: "Payments go through \(op)'s private relay, so Flagship doesn't see your network address when you pay.")
+        case .interimRelay:
+            return String(localized: "Payments go through a private relay that Flagship runs for now. It keeps your address out of the payment logs, but it isn't an independent operator yet.")
+        case .noRelay:
+            return String(localized: "Flagship can see your network address when you pay. It keeps none of it.")
+        }
     }
 
     /// The sentence for what a store purchase did (`VoucherShop.outcome`), nil when there is nothing to say.
