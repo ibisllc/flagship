@@ -935,3 +935,10 @@ Next steps for whoever resumes:
 - Clean-cache build fixes: `122a0ade3` gym-0.4 / `4d123dd35` media-fix. The ContentView body was split in three after
   a type-checker timeout, and the gym adoption closure captures `self.privacy`. Swift unit tests not run (no `.build`,
   not enough disk); the gym app is installed.
+
+### 2026-11-16 — Queued: Activity shows calls and social (owner: "yes queue it for 0.4")
+- Design `docs/activity-social.md`: calls, conversations, requests, page updates, comments/reactions in Activity next to
+  the server entries; social/call entries built on the phone only (no `.com` log), E2E-synced like call hours; deleting
+  a conversation removes its entries; filter All / Servers / Social. Starts after `0.4/social-tabs` merges.
+- `0.4/social-tabs` (agent running): Profile / Inbox / Requests tabs, floating call button + Calls page with a target
+  field, badges totalled on the Social tab, circled pencils, collapsing profile header, default first post.
