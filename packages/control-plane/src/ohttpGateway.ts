@@ -43,7 +43,8 @@ export function ohttpGatewayKeysFromEnv(raw: string | undefined | null): OhttpGa
 
 /**
  * The inner requests a box may make through the relay: the setup POSTs and
- * the boot-unlock calls, plus the relay probe. Anything else is refused.
+ * the boot-unlock calls, plus the relay probe; and voucher spends from any
+ * client. Anything else is refused.
  */
 export function isOhttpTargetAllowed(method: string, authority: string, path: string, apex: string, bootHost: string): boolean {
   const p = path.split("?")[0]!;
@@ -53,6 +54,9 @@ export function isOhttpTargetAllowed(method: string, authority: string, path: st
     if (method === "POST" && /^\/api\/server\/[a-z0-9.-]{1,253}\/sealed-luks-key$/.test(p)) return true;
     if (method === "POST" && /^\/api\/order\/[A-Za-z0-9]{1,64}\/status$/.test(p)) return true;
     if (method === "GET" && p === OHTTP_PROBE_PATH) return true;
+    // Vouchers (blindVouchers.ts): spending and the public payment numbers, so a phone's spend shows no address.
+    if (method === "POST" && p === "/api/vouchers/redeem") return true;
+    if (method === "GET" && p === "/api/payments/config") return true;
     return false;
   }
   if (host === bootHost) {

@@ -255,6 +255,11 @@ export type RateLimitEndpoint =
   // fence (each attempt does two D1 reads + a possible write). Per-IP only —
   // there's no signature/IRK at the edge, just the code in the body.
   | "voucher-redeem"
+  // Blind vouchers: spending (RSA verifies + a D1 batch; direct callers only,
+  // the OHTTP gateway dispatches inside), the sealed wallet, the gym's free issue.
+  | "vouchers-redeem"
+  | "voucher-wallet"
+  | "vouchers-test-issue"
   // Monetization — public per-user allowance read (the #6 dashboard + #7
   // alert data source). Unauthenticated account metadata (same class as the
   // `/pods` directory) keyed by username in the path; per-IP only, generous
@@ -566,6 +571,12 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "ip", limit: 100, windowSec: 3600 },
   ],
+  "vouchers-redeem": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 300, windowSec: 3600 },
+  ],
+  "voucher-wallet": [{ axis: "ip", limit: 120, windowSec: 3600 }],
+  "vouchers-test-issue": [{ axis: "ip", limit: 10, windowSec: 3600 }],
   // Public allowance read — generous for a polling dashboard, fences a scrape.
   "user-allowance": [{ axis: "ip", limit: 60, windowSec: 60 }],
   // Stripe Checkout creation — each call hits the Stripe API; tight per-IP.
@@ -962,6 +973,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/voucher/redeem") {
     return "voucher-redeem";
   }
+  if (m === "POST" && pathname === "/api/vouchers/redeem") return "vouchers-redeem";
+  if (m === "POST" && pathname === "/api/vouchers/test-issue") return "vouchers-test-issue";
+  if (/^\/api\/accounts\/[^/]+\/voucher-wallet$/.test(pathname)) return "voucher-wallet";
   if (m === "GET" && /^\/api\/users\/[^/]+\/(?:allowance|plan-attestation)$/.test(pathname)) {
     return "user-allowance";
   }

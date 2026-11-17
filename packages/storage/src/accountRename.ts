@@ -57,6 +57,7 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
   // The owner's call hours (one ciphertext under a key from the account's UMK, not the name) and a caller account's
   // ring-back channel (whose phones a call-back rings) belong to the account.
   ["voici_call_settings", "username"],
+  ["voucher_wallets", "username"],
   ["voici_ring_backs", "username"],
   ["vouchers", "redeemed_by"],
   ["watch_delegates", "username"],

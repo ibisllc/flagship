@@ -15,7 +15,7 @@ import type { TierName, TierStorage, TierSubscriptionRecord } from "@flagship/st
 /** Tiers an operator may grant. "free" is allowed (refund / downgrade). */
 export const GRANTABLE_TIERS: readonly TierName[] = ["free", "hobby", "maker"];
 
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+const USERNAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Sanity ceiling so a fat-fingered duration can't grant a century. */
 export const MAX_GRANT_DAYS = 366 * 5;
@@ -36,6 +36,9 @@ export interface TierGrantArgs {
    *  end here so renewals track Stripe rather than stacking fixed windows the
    *  way prepaid vouchers/cash do. Ignored for "free". */
   absolutePeriodEnd?: number;
+  /** Voucher spends inside the grace period fill the gap from the old end, so the new end may still be past
+   *  (blindVouchers.ts). Only with `absolutePeriodEnd`. */
+  allowPastEnd?: boolean;
   /** Persisted alongside the record so the Stripe webhook can correlate a later
    *  event (renewal / cancellation) back to the account. Cleared on "free". */
   stripeCustomerId?: string;
@@ -64,7 +67,7 @@ function nowMs(deps: TierGrantDeps): number {
 export async function grantTier(deps: TierGrantDeps, args: TierGrantArgs): Promise<TierGrantResult> {
   const username = String(args.username ?? "").trim().toLowerCase();
   if (!USERNAME_RE.test(username)) {
-    throw new Error("invalid username (3–30 lowercase letters/digits)");
+    throw new Error("invalid username (3–64 lowercase letters, digits and inner dashes)");
   }
   if (!GRANTABLE_TIERS.includes(args.tier)) {
     throw new Error(`invalid tier: ${String(args.tier)}`);
@@ -75,7 +78,7 @@ export async function grantTier(deps: TierGrantDeps, args: TierGrantArgs): Promi
   if (args.tier !== "free") {
     if (args.absolutePeriodEnd !== undefined) {
       const end = Math.floor(Number(args.absolutePeriodEnd));
-      if (!Number.isFinite(end) || end <= now || end > now + MAX_GRANT_DAYS * DAY_MS) {
+      if (!Number.isFinite(end) || end <= 0 || (!args.allowPastEnd && end <= now) || end > now + MAX_GRANT_DAYS * DAY_MS) {
         throw new Error(`absolutePeriodEnd must be a future epoch-ms within ${MAX_GRANT_DAYS} days`);
       }
       currentPeriodEnd = end;
