@@ -188,6 +188,10 @@ VOICI_WEB_ORIGIN = "https://gym.voi.ci"
 VOICI_ENABLED = "on"
 # voi.ci calls (docs/voici-calls.md): on in the gym; production turns it on at launch.
 VOICI_CALLS = "on"
+# Vouchers (docs/payments-privacy-and-rails.md "As built"): the gym hands out free test vouchers (30 at a time) so the
+# apps' Plan screens can be driven end to end. Production never sets this. Needs the VOUCHER_SIGNING_KEYS secret
+# (node scripts/voucher-key.mjs new <file>).
+VOUCHER_TEST_ISSUE = "1"
 # Messages abuse side (voiciAbuse.ts, deviceIntegrity.ts): takedown purges go to the gym's files host; gym iOS builds
 # are development-signed, so App Attest checks the development aaguid.
 VOICI_FILES_HOST = "files.gym.voi.ci"
