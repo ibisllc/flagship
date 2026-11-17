@@ -36,6 +36,7 @@ public enum CallMediaFactory {
         rtc.audioSessionDidActivate(s)
         rtc.isAudioEnabled = true
         voiciCallLog.notice("audio session: active \(s.category.rawValue, privacy: .public)/\(s.mode.rawValue, privacy: .public), webrtc enabled \(rtc.isAudioEnabled, privacy: .public), manual \(rtc.useManualAudio, privacy: .public)")
+        WebRTCCallMediaEngine.logAudioSession("at activation")
     }
 
     public static func audioSessionDidDeactivate(_ s: AVAudioSession) {

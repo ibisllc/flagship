@@ -170,6 +170,7 @@ export function startVoiciCall(o) {
   let request = null;
   let callerKey = null;
   let limitTimer = null;
+  let statsTimer = null;
   const pendingIce = [];
   const track = o.stream.getAudioTracks()[0];
   const videoAble = !!o.videoAble;
@@ -195,6 +196,7 @@ export function startVoiciCall(o) {
   });
   const cleanup = () => {
     clearTimeout(limitTimer);
+    clearInterval(statsTimer);
     try {
       ws?.close(1000);
     } catch {
@@ -235,6 +237,51 @@ export function startVoiciCall(o) {
       /* no console */
     }
   };
+  // Diagnostics (sizes and counters only): the worker's frame counts and the audio receive stats, every 2 s.
+  const onWorkerStats = (e) => {
+    const m = e?.data;
+    if (m?.kind !== "frame-stats") return;
+    const f = (c) => `seal ok ${c.sealOk} refused ${c.sealRefused} (in max ${c.sealMax} B); open ok ${c.openOk} size ${c.openSize} fail ${c.openFail} nokey ${c.openNoKey} (in max ${c.openMax} B, out max ${c.outMax} B)`;
+    diag("frames audio:", f(m.audio));
+    if (m.video.sealOk + m.video.openOk + m.video.openFail + m.video.openSize > 0) diag("frames video:", f(m.video));
+  };
+  try {
+    o.worker.addEventListener?.("message", onWorkerStats);
+  } catch {
+    /* no events */
+  }
+  let lastIn = null;
+  const pollStats = async () => {
+    let report;
+    try {
+      report = await pc.getStats();
+    } catch {
+      return;
+    }
+    const all = new Map();
+    report.forEach((r) => all.set(r.id, r));
+    for (const r of all.values()) {
+      if (r.type === "inbound-rtp" && r.kind === "audio") {
+        const codec = r.codecId ? all.get(r.codecId) : null;
+        const d = (k) => (lastIn && typeof r[k] === "number" && typeof lastIn[k] === "number" ? r[k] - lastIn[k] : r[k]);
+        diag(
+          "audio in:",
+          `packets +${d("packetsReceived")} lost +${d("packetsLost")} discarded +${d("packetsDiscarded") ?? "?"}`,
+          `concealed +${d("concealedSamples")} of +${d("totalSamplesReceived")} samples`,
+          `jitter ${r.jitter ?? "?"} s, buffer delay +${typeof d("jitterBufferDelay") === "number" ? d("jitterBufferDelay").toFixed(3) : "?"} s / +${d("jitterBufferEmittedCount") ?? "?"}`,
+          `level ${typeof r.audioLevel === "number" ? r.audioLevel.toFixed(3) : "?"}`,
+          `codec ${codec ? `${codec.mimeType} ${codec.clockRate} Hz ${codec.channels ?? "?"} ch ${codec.sdpFmtpLine ?? ""}` : "?"}`,
+          `decoder ${r.decoderImplementation ?? "?"}`,
+        );
+        lastIn = { ...r };
+      }
+      if (r.type === "outbound-rtp" && r.kind === "audio") diag("audio out:", `packets ${r.packetsSent ?? "?"} bytes ${r.bytesSent ?? "?"}`);
+    }
+  };
+  const startStats = () => {
+    if (!statsTimer) statsTimer = setInterval(pollStats, 2000);
+  };
+
   pc.onicecandidate = (e) => {
     // A candidate here is a relay candidate: their phone's TURN allocated it.
     diag("local candidate", e.candidate ? `${e.candidate.type ?? "?"}/${e.candidate.protocol ?? "?"}` : "end");
@@ -249,7 +296,10 @@ export function startVoiciCall(o) {
   };
   pc.onconnectionstatechange = () => {
     diag("connection", pc.connectionState);
-    if (pc.connectionState === "connected") set("connected");
+    if (pc.connectionState === "connected") {
+      startStats();
+      set("connected");
+    }
     if (pc.connectionState === "failed") set("failed", { code: "unreachable" });
   };
 
