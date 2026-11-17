@@ -290,4 +290,11 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/box-claim-receipt/v1": "bespoke AT-ENV-31 (flip, splice, relabel, another box key, every field); transcript-mismatch and changed-field cases in boxClaimVectors.test.ts",
   "flagship/box-setup-code-key/v1": "hash: the setup code's key fed to the claim HKDF salt",
   "flagship/box-claim-mailbox/v1": "hash: the blind remote-claim mailbox id derived from the setup code",
+  // ---- blind-signed vouchers and their rails (docs/payments-privacy-and-rails.md §5.11, §11; test-vectors/vouchers)
+  "flagship/voucher/v1": "RFC 9474 blind RSA message prefix; voucherVectors.test.ts and blindVouchers.test.ts (a forged, altered or another key's voucher refused bad-voucher; a second spend refused voucher-spent)",
+  "flagship/voucher-key/v1": "hash: the voucher key id from its modulus and exponent (rsaFromVoucherKey refuses an id that doesn't match its numbers)",
+  "flagship/voucher-nullifier/v1": "hash: the spent-voucher nullifier .com records (double spend refused in blindVouchers.test.ts)",
+  "flagship/voucher-wallet/v1": "kdf + aad: the account's sealed wallet (HKDF info from the UMK; AES-GCM aad with the version); another version or key refused in voucherVectors.test.ts",
+  "flagship/voucher-order/v1": "hash: a Stripe order's commitment to its blinded requests (another set for the session refused payment-invalid in voucherRails.test.ts)",
+  "flagship/voucher-payment/v1": "hash: the used-payment row's key (a second set for a payment refused payment-used in voucherRails.test.ts)",
 };
