@@ -925,14 +925,23 @@ export function parseVoiciCallKeyRevoke(v: unknown): VoiciCallKeyRevoke | null {
 
 /** A revocation signed by the page's ownerSignPub (Ed25519) or by the revoked call key itself (P-256). */
 export function verifyVoiciCallKeyRevoke(r: VoiciCallKeyRevoke, signature: string, ctx: { ownerSignPub: string; username: string }): boolean {
-  if (r.username !== ctx.username) return false;
+  return voiciCallKeyRevokeSigner(r, signature, ctx) !== null;
+}
+
+/**
+ * Who signed a revocation: "key" (the call key itself, which may revoke itself everywhere) or "owner" (the page's
+ * owner key, which speaks only for its own account: 05c review F1). Null when neither verifies.
+ */
+export function voiciCallKeyRevokeSigner(r: VoiciCallKeyRevoke, signature: string, ctx: { ownerSignPub: string; username: string }): "key" | "owner" | null {
+  if (r.username !== ctx.username) return null;
   let bytes: Bytes;
   try {
     bytes = canonicalVoiciCallKeyRevoke(r);
   } catch {
-    return false;
+    return null;
   }
-  return ed25519VerifyHex(signature, bytes, ctx.ownerSignPub) || p256VerifyP1363(signature, bytes, r.callKeyPub);
+  if (p256VerifyP1363(signature, bytes, r.callKeyPub)) return "key";
+  return ed25519VerifyHex(signature, bytes, ctx.ownerSignPub) ? "owner" : null;
 }
 
 export interface VoiciCallJoin {

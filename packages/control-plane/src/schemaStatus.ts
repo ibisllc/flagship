@@ -161,6 +161,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0149",
   // voi.ci call hours: the owner's sealed call settings, synced between the owner's devices (ciphertext only).
   "0150",
+  // voi.ci call keys: an owner-signed revocation applies to the signing account only (05c review F1).
+  "0151",
 ];
 
 export interface SchemaStatusDeps {

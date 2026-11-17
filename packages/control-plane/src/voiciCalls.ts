@@ -30,7 +30,7 @@ import {
   parseVoiciCallKeyRevoke,
   verifyVoiciCallJoin,
   verifyVoiciCallKeyBinding,
-  verifyVoiciCallKeyRevoke,
+  voiciCallKeyRevokeSigner,
   isVoiciCallKeyPub,
   parseVoiciCallAllow,
   parseVoiciCallRequest,
@@ -56,7 +56,7 @@ import {
 } from "@flagship/protocol";
 import type { DeviceCapabilityGrantStorage, PushTokenStorage, UsernameStorage, VoiciCallStorage, VoiciPageRecord, VoiciStorage } from "@flagship/storage";
 import { requireAccountRead, ACCOUNT_KEY_HOLDERS_ONLY, ACCOUNT_READ_HEADERS, type AccountReadTokenDeps } from "./accountReadToken.js";
-import { authorizeActiveDevice, type AccountDirectoryDeps, type DirectoryAuthorization } from "./accountDirectory.js";
+import { authorizeActiveDevice, type AccountDirectoryDeps, type DirectoryAuthorization, type DirectoryNonceStore } from "./accountDirectory.js";
 import { hexToBytes } from "./hex.js";
 import { adminDeviceIds, type InviteNoticeForward } from "./inviteNotice.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
@@ -608,9 +608,11 @@ export async function handleVoiciCallKeyRevoke(
   const r = parseVoiciCallKeyRevoke(b.revoke);
   if (!r || typeof b.signature !== "string") return voiciRefusal(400, "malformed");
   const page = await deps.voici.getPage(u);
-  // A page that is gone still lets the key revoke itself.
-  if (!verifyVoiciCallKeyRevoke(r, b.signature, { ownerSignPub: page?.ownerSignPub ?? "", username: u })) return voiciRefusal(403, "bad-signature");
-  await deps.calls.revokeCallKey({ ...r, signature: b.signature });
+  // A page that is gone still lets the key revoke itself. The owner key speaks only for its own account: its
+  // revocation refuses the key for this username, never for another account that bound it (05c review F1).
+  const signer = voiciCallKeyRevokeSigner(r, b.signature, { ownerSignPub: page?.ownerSignPub ?? "", username: u });
+  if (!signer) return voiciRefusal(403, "bad-signature");
+  await deps.calls.revokeCallKey({ ...r, signature: b.signature, scope: signer === "key" ? "key" : "account" });
   return ok({ ok: true });
 }
 
@@ -628,7 +630,15 @@ export interface VoiciCallKeyJoinAuth {
  * device. Answers the deviceRef (H(callKeyPub)) and the key the answer must be signed by.
  */
 export async function authorizeVoiciCallKeyDevice(
-  deps: { voici: VoiciStorage; calls: VoiciCallStorage; usernames: Pick<UsernameStorage, "get">; grants: Pick<DeviceCapabilityGrantStorage, "listForUser">; now?: () => number },
+  deps: {
+    voici: VoiciStorage;
+    calls: VoiciCallStorage;
+    usernames: Pick<UsernameStorage, "get">;
+    grants: Pick<DeviceCapabilityGrantStorage, "listForUser">;
+    /** One join per (call, call key) while a join can still verify, so a copied join cannot be replayed (05c review F6). */
+    nonces: Pick<DirectoryNonceStore, "claim">;
+    now?: () => number;
+  },
   username: string,
   callId: string,
   join: VoiciCallKeyJoinAuth | undefined,
@@ -643,13 +653,14 @@ export async function authorizeVoiciCallKeyDevice(
   const rec = await deps.calls.getCallKey(u, join.deviceId);
   if (!rec) return no("no-bound-key-for-device");
   if (rec.callKeyPub !== join.callKeyPub) return no("key-differs-from-bound");
-  if (await deps.calls.isCallKeyRevoked(rec.callKeyPub)) return no("key-revoked");
+  if (await deps.calls.isCallKeyRevoked(u, rec.callKeyPub)) return no("key-revoked");
   const page = await deps.voici.getPage(u);
   if (!page) return no("no-page");
   if (!verifyVoiciCallKeyBinding({ username: rec.username, deviceId: rec.deviceId, callKeyPub: rec.callKeyPub, createdAt: rec.createdAt }, rec.signature, { ownerSignPub: page.ownerSignPub, username: u })) return no("binding-not-under-page-key");
   const user = await deps.usernames.get(u);
   if (!user?.adminRootPubHex) return no("no-admin-root");
   if (!(await adminDeviceIds(deps.grants, u, user.adminRootPubHex, now)).has(join.deviceId)) return no("not-admin-device");
+  if (!(await deps.nonces.claim(`voici-call-join|${callId}|${join.callKeyPub}`, Math.max(now, join.issuedAt) + VOICI_CALL_SKEW_MS + 60_000, now))) return no("join-already-used");
   return { deviceRef: voiciCallDeviceRef(join.callKeyPub), callKeyPub: join.callKeyPub };
 }
 
