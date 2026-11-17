@@ -267,6 +267,11 @@ export type RateLimitEndpoint =
   | "vouchers-paid-issue"
   | "vouchers-stripe-checkout"
   | "vouchers-apple-notifications"
+  // Business (docs/plans-and-backup-offer.md "As built"): an org wallet's voucher exchange after a key rotation, an
+  // invoiced batch's Stripe Checkout, and its issue in chunks of 100 signatures (a 5,000 batch is 50 calls).
+  | "vouchers-exchange"
+  | "vouchers-batch-checkout"
+  | "vouchers-batch-issue"
   // Monetization — public per-user allowance read (the #6 dashboard + #7
   // alert data source). Unauthenticated account metadata (same class as the
   // `/pods` directory) keyed by username in the path; per-IP only, generous
@@ -593,6 +598,18 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "vouchers-stripe-checkout": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "ip", limit: 60, windowSec: 3600 },
+  ],
+  "vouchers-exchange": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 400, windowSec: 3600 },
+  ],
+  "vouchers-batch-checkout": [
+    { axis: "ip", limit: 5, windowSec: 60 },
+    { axis: "ip", limit: 30, windowSec: 3600 },
+  ],
+  "vouchers-batch-issue": [
+    { axis: "ip", limit: 120, windowSec: 60 },
+    { axis: "ip", limit: 600, windowSec: 3600 },
   ],
   // Apple's notification servers: generous, Apple retries on a refusal.
   "vouchers-apple-notifications": [{ axis: "ip", limit: 600, windowSec: 60 }],
@@ -997,6 +1014,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/vouchers/test-issue") return "vouchers-test-issue";
   if (m === "POST" && pathname === "/api/vouchers/paid-issue") return "vouchers-paid-issue";
   if (m === "POST" && pathname === "/api/vouchers/stripe/checkout") return "vouchers-stripe-checkout";
+  if (m === "POST" && pathname === "/api/vouchers/exchange") return "vouchers-exchange";
+  if (m === "POST" && pathname === "/api/vouchers/stripe/batch-checkout") return "vouchers-batch-checkout";
+  if (m === "POST" && pathname === "/api/vouchers/batch-issue") return "vouchers-batch-issue";
   if (m === "POST" && pathname === "/api/vouchers/apple/notifications") return "vouchers-apple-notifications";
   if (/^\/api\/accounts\/[^/]+\/voucher-wallet$/.test(pathname)) return "voucher-wallet";
   if (m === "GET" && /^\/api\/users\/[^/]+\/(?:allowance|plan-attestation)$/.test(pathname)) {
