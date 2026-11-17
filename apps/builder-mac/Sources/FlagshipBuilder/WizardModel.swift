@@ -97,6 +97,10 @@ final class WizardModel: ObservableObject {
 
     private var sessionClient: BuilderSessionClient? = nil
     private var homeResetTask: Task<Void, Never>? = nil
+    /// A session that ended before the relay accepted it waits before the next one (PairingRetry, journal F15).
+    private var pairRetry = PairingRetry()
+    private var pairRetryTask: Task<Void, Never>? = nil
+    private var sessionAccepted = false
 
     // MARK: - Destinations (Burn to USB / Host here)
 
@@ -158,6 +162,7 @@ final class WizardModel: ObservableObject {
         guard online != isOnline else { return }
         isOnline = online
         if online {
+            pairRetry.reset()
             // Only auto-(re)start pairing from the locked/pairing cover — never
             // disturb a delivered recipe, the recipe-file path, or a live burn.
             if (builderStage == .locked || builderStage == .pairing) && pairRefusal == nil {
@@ -166,6 +171,8 @@ final class WizardModel: ObservableObject {
         } else {
             // Offline — stop the connect/relock churn. The cover renders the
             // "waiting for internet connection" placeholder off `isOnline`.
+            pairRetryTask?.cancel()
+            pairRetryTask = nil
             sessionClient?.close()
             sessionClient = nil
         }
@@ -177,6 +184,9 @@ final class WizardModel: ObservableObject {
     /// connect to the relay, and wait for a phone. Called on launch and after
     /// a session drops (so the cover always shows a live, joinable code).
     func beginPairing() {
+        pairRetryTask?.cancel()
+        pairRetryTask = nil
+        sessionAccepted = false
         sessionClient?.close()
         sessionClient = nil
         pairMatchCode = nil
@@ -207,6 +217,12 @@ final class WizardModel: ObservableObject {
             }
         }
         client.onLog = { [weak self] msg in Task { @MainActor in self?.appendLog(stream: .stderr, text: msg) } }
+        client.onRelayAccepted = { [weak self] in
+            Task { @MainActor in
+                self?.sessionAccepted = true
+                self?.pairRetry.reset()
+            }
+        }
         client.connect()
     }
 
@@ -251,7 +267,8 @@ final class WizardModel: ObservableObject {
                 sessionClient = nil
                 builderStage = .recipeReady
             case .relock:
-                wipeAndRelock(reason)
+                // Never accepted by the relay (no network yet, its rate limit, a restart): wait before the next.
+                wipeAndRelock(reason, afterFailure: !sessionAccepted)
             }
         }
     }
@@ -327,7 +344,7 @@ final class WizardModel: ObservableObject {
     /// Start over, or by a session that ended BEFORE a
     /// recipe was delivered (a delivered recipe is kept instead — see
     /// `applyEngineStage(.ended)`).
-    func wipeAndRelock(_ reason: String?) {
+    func wipeAndRelock(_ reason: String?, afterFailure: Bool = false) {
         // Don't yank a burn that's mid-write out from under the user.
         guard !isRunning else { return }
         homeResetTask?.cancel()
@@ -353,7 +370,28 @@ final class WizardModel: ObservableObject {
             try? FileManager.default.removeItem(at: staging)
             pastedRecipeStaging = nil
         }
-        beginPairing()
+        if afterFailure { schedulePairingRetry() } else { beginPairing() }
+    }
+
+    /// The relay never accepted the last session: no QR (it could not work), the existing "lost the connection"
+    /// line, and the next session after PairingRetry's delay. Online again, Start over or a refusal's Try again
+    /// start one at once.
+    private func schedulePairingRetry() {
+        sessionClient?.close()
+        sessionClient = nil
+        pairMatchCode = nil
+        pairQrPayload = nil
+        pairCodeDisplay = nil
+        builderStage = .locked
+        pairStatus = String(localized: "Lost the connection to the relay.")
+        let delay = pairRetry.nextDelay()
+        pairRetryTask?.cancel()
+        pairRetryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            self.pairRetryTask = nil
+            if self.builderStage == .locked && self.pairRefusal == nil && self.isOnline { self.beginPairing() }
+        }
     }
 
     /// "Try again" on a refusal: one fresh session, on the owner's word.
