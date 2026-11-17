@@ -46,11 +46,15 @@ export interface UpCloudCreateServerArgs {
   username: string;
   sshKeyId?: number;
   fallbackServerTypes?: readonly string[];
+  /** Also attach a public IPv6 interface (the gym's direct-access check). */
+  ipv6?: boolean;
 }
 
 export interface UpCloudServerResult {
   serverId: string;
   ipv4: string | null;
+  /** The public IPv6 address, when one was asked for and UpCloud has assigned it. */
+  ipv6?: string | null;
 }
 
 export interface UpCloudLabeledServer {
@@ -232,6 +236,7 @@ export function createUpCloudClient(opts: UpCloudClientOptions): UpCloudClient {
               interface: [
                 { type: "public", ip_addresses: { ip_address: [{ family: "IPv4" }] } },
                 { type: "utility", ip_addresses: { ip_address: [{ family: "IPv4" }] } },
+                ...(args.ipv6 ? [{ type: "public", ip_addresses: { ip_address: [{ family: "IPv6" }] } }] : []),
               ],
             },
           },
@@ -243,7 +248,7 @@ export function createUpCloudClient(opts: UpCloudClientOptions): UpCloudClient {
       if (typeof server?.uuid !== "string") {
         throw new UpCloudClientError("UpCloud POST /server response missing server.uuid", status, text.slice(0, 240));
       }
-      return { serverId: server.uuid, ipv4: publicIpv4(server) };
+      return { serverId: server.uuid, ipv4: publicIpv4(server), ...(args.ipv6 ? { ipv6: publicAddress(server, "IPv6") } : {}) };
     },
 
     async getServerStatus(serverId) {
@@ -320,14 +325,18 @@ function mapState(raw: unknown): string {
 }
 
 function publicIpv4(server: UpCloudServerBody): string | null {
+  return publicAddress(server, "IPv4");
+}
+
+function publicAddress(server: UpCloudServerBody, family: "IPv4" | "IPv6"): string | null {
   const flat = server.ip_addresses?.ip_address ?? [];
   for (const ip of flat) {
-    if (ip.access === "public" && ip.family === "IPv4" && typeof ip.address === "string") return ip.address;
+    if (ip.access === "public" && ip.family === family && typeof ip.address === "string") return ip.address;
   }
   for (const iface of server.networking?.interfaces?.interface ?? []) {
     if (iface.type !== "public") continue;
     for (const ip of iface.ip_addresses?.ip_address ?? []) {
-      if (ip.family === "IPv4" && typeof ip.address === "string") return ip.address;
+      if (ip.family === family && typeof ip.address === "string") return ip.address;
     }
   }
   return null;
