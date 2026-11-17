@@ -4187,4 +4187,14 @@
     <string name="voici_call_step_path">直接の経路を開いています…</string>
     <string name="voici_call_step_audio">音声を開始しています…</string>
     <string name="voici_call_slow">通常より時間がかかっています</string>
+    <string name="voici_call_audio">オーディオ</string>
+    <string name="voici_call_flip">切り替え</string>
+    <string name="voici_call_end">終了</string>
+    <string name="voici_call_your_camera">自分のカメラ</string>
+    <string name="voici_call_their_camera">相手のカメラ</string>
+    <string name="voici_call_e2e">エンドツーエンド暗号化 · 量子耐性</string>
+    <string name="voici_call_route_phone">受話口</string>
+    <string name="voici_call_route_speaker">スピーカー</string>
+    <string name="voici_call_route_bluetooth">Bluetooth</string>
+    <string name="voici_call_route_wired">ヘッドホン</string>
 </resources>

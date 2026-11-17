@@ -4184,5 +4184,15 @@
   "voici_call_step_secure": "正在保护线路（抗量子）…",
   "voici_call_step_path": "正在打开直接通道…",
   "voici_call_step_audio": "正在启动音频…",
-  "voici_call_slow": "这比平时用的时间长"
+  "voici_call_slow": "这比平时用的时间长",
+  "voici_call_audio": "音频",
+  "voici_call_flip": "翻转",
+  "voici_call_end": "挂断",
+  "voici_call_your_camera": "你的摄像头",
+  "voici_call_their_camera": "对方的摄像头",
+  "voici_call_e2e": "端到端加密 · 抗量子",
+  "voici_call_route_phone": "听筒",
+  "voici_call_route_speaker": "扬声器",
+  "voici_call_route_bluetooth": "蓝牙",
+  "voici_call_route_wired": "耳机"
 }

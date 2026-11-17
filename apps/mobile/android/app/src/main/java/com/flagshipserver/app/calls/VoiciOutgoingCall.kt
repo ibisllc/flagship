@@ -173,6 +173,12 @@ class VoiciOutgoingCall(
     @Volatile private var over = false
     /** The other side's camera: "on", "off" or "paused". */
     val remoteCamera = MutableStateFlow("off")
+    /** The call screen's switches: our microphone, our camera, and which camera. */
+    val muted = MutableStateFlow(false)
+    val cameraOn = MutableStateFlow(false)
+    val cameraFront = MutableStateFlow(true)
+    /** The call's media engine, for the call screen's video pictures. */
+    val media: CallMediaEngine get() = engine
 
     private fun randHex(n: Int) = VoiciJs.hex(ByteArray(n).also(rng::nextBytes))
 
@@ -343,12 +349,23 @@ class VoiciOutgoingCall(
         hangUpWith(if (s is VoiciOutgoingState.Connected || s is VoiciOutgoingState.Connecting) "hangup" else "cancel")
     }
 
-    fun setMuted(muted: Boolean) = engine.setMuted(muted)
+    fun setMuted(muted: Boolean) {
+        engine.setMuted(muted)
+        this.muted.value = muted
+    }
 
     fun setCamera(on: Boolean): Boolean {
         if (!video || engine.setCamera(on).not()) return false
         send(JsonObject(mapOf("t" to JsonPrimitive("camera"), "state" to JsonPrimitive(if (on) "on" else "off"))))
+        if (on && !cameraOn.value) cameraFront.value = true
+        cameraOn.value = on
         return true
+    }
+
+    /** Front or back camera while ours runs. */
+    fun flipCamera() {
+        if (!cameraOn.value || !engine.flipCamera()) return
+        cameraFront.value = !cameraFront.value
     }
 
     @Synchronized private fun end(reason: String) {
@@ -361,6 +378,7 @@ class VoiciOutgoingCall(
         delegatePriv = null
         callerSeed?.fill(0)
         callerSeed = null
+        cameraOn.value = false
         _state.value = VoiciOutgoingState.Ended(reason)
         record(VoiciCallHistory.outgoingOutcome(reason, at != null), if (at != null) now() - at else 0)
     }

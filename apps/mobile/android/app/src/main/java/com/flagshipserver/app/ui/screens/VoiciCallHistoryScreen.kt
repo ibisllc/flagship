@@ -6,10 +6,10 @@
 package com.flagshipserver.app.ui.screens
 
 import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.CallReceived
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,15 +31,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.flagshipserver.app.R
+import com.flagshipserver.app.calls.CallAudioRouter
+import com.flagshipserver.app.calls.CallStageActions
+import com.flagshipserver.app.calls.CallStageState
 import com.flagshipserver.app.calls.VoiciCallRecord
+import com.flagshipserver.app.calls.VoiciCallStage
 import com.flagshipserver.app.calls.VoiciCallTarget
 import com.flagshipserver.app.calls.VoiciOutgoingCall
 import com.flagshipserver.app.calls.VoiciOutgoingCalls
 import com.flagshipserver.app.calls.VoiciOutgoingState
 import com.flagshipserver.app.core.voici.VoiciCopy
-import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDivider
 import com.flagshipserver.app.ui.components.FSEmptyState
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -46,7 +53,6 @@ import com.flagshipserver.app.ui.components.FSGroup
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSRow
 import com.flagshipserver.app.ui.components.FSScreen
-import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -90,35 +96,67 @@ fun VoiciCallButtons(target: VoiciCallTarget, tagPrefix: String = "call") {
     }
 }
 
-/** The call this app is placing: its status, and Mute / Camera / Hang up while it runs, Close when it is over. */
+/**
+ * The call this app is placing, full screen over the app (the same stage as a call answered here, docs/voici-calls.md
+ * "Call screen"): status then timer, audio route, Mute, Camera, Flip and End while it runs, Close when it is over.
+ * Back leaves the call running; only End ends it.
+ */
 @Composable
 fun VoiciOutgoingCallPanel(call: VoiciOutgoingCall) {
+    val context = LocalContext.current
     val state by call.state.collectAsState()
+    val muted by call.muted.collectAsState()
+    val cameraOn by call.cameraOn.collectAsState()
+    val cameraFront by call.cameraFront.collectAsState()
+    val remoteCamera by call.remoteCamera.collectAsState()
+    var cameraRefused by remember(call) { mutableStateOf(false) }
     val name = stringResource(R.string.voici_calls_peer_page, call.target.username)
-    var muted by remember(call) { mutableStateOf(false) }
-    var cameraOn by remember(call) { mutableStateOf(false) }
     val over = state is VoiciOutgoingState.Ended || state is VoiciOutgoingState.Failed || state is VoiciOutgoingState.Browser
-    FSCard(modifier = Modifier.testTag("outgoing-call")) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(name, style = MaterialTheme.typography.titleMedium)
-            Text(VoiciCopy.outgoingStatus(state, name), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("outgoing-call-status"))
-            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                if (over) {
-                    FSSecondaryButton(stringResource(R.string.voici_call_close), { VoiciOutgoingCalls.dismiss() }, modifier = Modifier.testTag("outgoing-call-close"))
-                } else {
-                    FSGhostButton(stringResource(if (muted) R.string.voici_call_unmute else R.string.voici_call_mute), {
-                        muted = !muted
-                        call.setMuted(muted)
-                    }, modifier = Modifier.testTag("outgoing-call-mute"))
-                    if (call.video) {
-                        FSGhostButton(stringResource(if (cameraOn) R.string.voici_call_camera_off else R.string.voici_call_camera), {
-                            if (call.setCamera(!cameraOn)) cameraOn = !cameraOn
-                        }, modifier = Modifier.testTag("outgoing-call-camera"))
+    val live = state is VoiciOutgoingState.Ringing || state is VoiciOutgoingState.Connecting || state is VoiciOutgoingState.Connected
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok && call.setCamera(true)) cameraRefused = false else cameraRefused = true
+    }
+    // The call's sound goes through AudioManager while it rings and runs (it has no Telecom connection).
+    DisposableEffect(call, live) {
+        if (live) CallAudioRouter.startOwnCall(context)
+        onDispose { if (live) CallAudioRouter.stopOwnCall(context) }
+    }
+    Dialog(
+        onDismissRequest = { if (over) VoiciOutgoingCalls.dismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnClickOutside = false),
+    ) {
+        VoiciCallStage(
+            CallStageState(
+                name = name,
+                status = VoiciCopy.outgoingStatus(state, name),
+                connectedAt = (state as? VoiciOutgoingState.Connected)?.since,
+                muted = muted,
+                cameraOn = cameraOn,
+                cameraFront = cameraFront,
+                remoteCameraOn = state is VoiciOutgoingState.Connected && remoteCamera == "on",
+                remoteCameraPaused = state is VoiciOutgoingState.Connected && remoteCamera == "paused",
+                offersVideo = call.video && (state is VoiciOutgoingState.Connecting || state is VoiciOutgoingState.Connected),
+                over = over,
+                media = call.media,
+                notice = if (cameraRefused) stringResource(R.string.voici_call_camera_denied) else null,
+            ),
+            CallStageActions(
+                toggleMute = { call.setMuted(!muted) },
+                toggleCamera = {
+                    cameraRefused = false
+                    when {
+                        cameraOn -> call.setCamera(false)
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED -> if (!call.setCamera(true)) cameraRefused = true
+                        else -> camera.launch(Manifest.permission.CAMERA)
                     }
-                    FSPrimaryButton(stringResource(R.string.voici_call_hang_up), { call.hangUp() }, modifier = Modifier.testTag("outgoing-call-hang-up"))
-                }
-            }
-        }
+                },
+                flipCamera = { call.flipCamera() },
+                hangUp = { call.hangUp() },
+                close = { VoiciOutgoingCalls.dismiss() },
+                dismissNotice = { cameraRefused = false },
+            ),
+            tag = "outgoing-call",
+        )
     }
 }
 

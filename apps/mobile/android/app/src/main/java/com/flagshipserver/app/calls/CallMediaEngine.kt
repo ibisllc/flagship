@@ -36,6 +36,14 @@ class CallFrameCrypto(callId: String, audio: Pair<ByteArray, ByteArray>, video: 
     val hasVideo: Boolean get() = videoOut != null
 }
 
+/** One video picture the call screen shows: the other side's camera (filling the screen) or ours (the corner tile). */
+interface CallVideoView {
+    val view: android.view.View
+    /** Our front camera shows mirrored, as in a mirror; the back camera and theirs never. */
+    fun setMirror(mirror: Boolean) {}
+    fun release()
+}
+
 class CallMediaUnavailable : Exception("call media unavailable")
 
 /** The callee's phone as this app's only ICE server when it places a call: TURN over TLS on its bare name. */
@@ -54,6 +62,13 @@ interface CallMediaEngine {
     /** Turns this phone's camera on or off; false when it can't (no video section, no camera). */
     fun setCamera(on: Boolean): Boolean
     fun stop()
+
+    /** Front or back camera while ours runs; false when it can't (no camera running, one camera only). */
+    fun flipCamera(): Boolean = false
+    /** Whether the other side's video can be drawn (the call negotiated video and the track exists). */
+    val hasRemoteVideo: Boolean get() = false
+    /** A renderer for the other side's camera ([local] false) or ours (true, only while it runs); null without video. */
+    fun videoView(context: android.content.Context, local: Boolean): CallVideoView? = null
 
     // ── Calling from the app (docs/voici-calls.md "Calling from the app"): this phone is the caller. The defaults say
     // "no media engine", so the app hands the call to a voi.ci tab; an engine that can place calls overrides them.

@@ -4184,5 +4184,15 @@
   "voici_call_step_secure": "Leitung wird gesichert (quantensicher)…",
   "voici_call_step_path": "Direkter Weg wird geöffnet…",
   "voici_call_step_audio": "Audio wird gestartet…",
-  "voici_call_slow": "Das dauert länger als üblich"
+  "voici_call_slow": "Das dauert länger als üblich",
+  "voici_call_audio": "Audio",
+  "voici_call_flip": "Wechseln",
+  "voici_call_end": "Auflegen",
+  "voici_call_your_camera": "Deine Kamera",
+  "voici_call_their_camera": "Kamera der anderen Person",
+  "voici_call_e2e": "Ende-zu-Ende-verschlüsselt · quantensicher",
+  "voici_call_route_phone": "Telefon",
+  "voici_call_route_speaker": "Lautsprecher",
+  "voici_call_route_bluetooth": "Bluetooth",
+  "voici_call_route_wired": "Kopfhörer"
 }

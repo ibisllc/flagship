@@ -4184,5 +4184,15 @@
   "voici_call_step_secure": "Protegendo a linha (segura contra computação quântica)…",
   "voici_call_step_path": "Abrindo um caminho direto…",
   "voici_call_step_audio": "Iniciando o áudio…",
-  "voici_call_slow": "Está demorando mais que o normal"
+  "voici_call_slow": "Está demorando mais que o normal",
+  "voici_call_audio": "Áudio",
+  "voici_call_flip": "Virar",
+  "voici_call_end": "Desligar",
+  "voici_call_your_camera": "Sua câmera",
+  "voici_call_their_camera": "Câmera da outra pessoa",
+  "voici_call_e2e": "Criptografia de ponta a ponta · resistente a computação quântica",
+  "voici_call_route_phone": "Telefone",
+  "voici_call_route_speaker": "Alto-falante",
+  "voici_call_route_bluetooth": "Bluetooth",
+  "voici_call_route_wired": "Fones de ouvido"
 }
