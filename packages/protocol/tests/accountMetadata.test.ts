@@ -76,6 +76,15 @@ describe("directory authorization", () => {
     expect(verifyAccountDirectoryRequest({ ...request, requestId: deviceId }, signature, device.publicKey)).toBe(false);
   });
 
+  it("signs the voi.ci call routes an account device uses, and nothing outside the account and call APIs", () => {
+    const base = { accountId, deviceId, signerPubHex: hex(device.publicKey), requestId: "ffeeddccbbaa99887766554433221100", issuedAt: 1_900_000_000_000 };
+    const join = { ...base, method: "GET", path: "/api/voici/calls/0123456789abcdef0123456789abcdef/device" };
+    expect(verifyAccountDirectoryRequest(join, signAccountDirectoryRequest(join, device), device.publicKey)).toBe(true);
+    const order = { ...base, method: "POST", path: "/api/voici/calls" };
+    expect(verifyAccountDirectoryRequest(order, signAccountDirectoryRequest(order, device), device.publicKey)).toBe(true);
+    expect(() => signAccountDirectoryRequest({ ...base, method: "GET", path: "/api/users/x/pods" }, device)).toThrow();
+  });
+
   it("pins targeted profile-key grants to their purpose and recipient", () => {
     const grant = {
       accountId,
