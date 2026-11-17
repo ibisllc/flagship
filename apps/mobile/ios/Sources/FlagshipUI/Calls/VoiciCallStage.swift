@@ -41,6 +41,8 @@ struct VoiciCallStage: View {
     var actions: VoiciCallStageActions
     @State private var controlsHidden = false
     @State private var corner: Corner = .topTrailing
+    /// Where our tile sits while only our camera runs: low, beside the controls, so it never covers the name.
+    @State private var selfCorner: Corner = .bottomTrailing
     @State private var drag: CGSize = .zero
 
     enum Corner { case topLeading, topTrailing, bottomLeading, bottomTrailing }
@@ -200,12 +202,14 @@ struct VoiciCallStage: View {
     }
 
     @ViewBuilder private func localPreview(in size: CGSize) -> some View {
-        let w: CGFloat = showsRemoteVideo ? 104 : 140
+        let w: CGFloat = 104
         let h = w * 16 / 9
         let pad: CGFloat = 16
-        let x = (corner == .topLeading || corner == .bottomLeading) ? pad + w / 2 : size.width - pad - w / 2
-        let topY = showsRemoteVideo ? 96 + h / 2 : pad + 40 + h / 2
-        let y = (corner == .topLeading || corner == .topTrailing) ? topY : size.height - 220 - h / 2
+        let at = showsRemoteVideo ? corner : selfCorner
+        let x = (at == .topLeading || at == .bottomLeading) ? pad + w / 2 : size.width - pad - w / 2
+        let topY = 96 + h / 2
+        // Clear of the controls (a row of round buttons over End, about 240 pt with their labels).
+        let y = (at == .topLeading || at == .topTrailing) ? topY : size.height - 256 - h / 2
         localVideo
             .frame(width: w, height: h)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -219,7 +223,8 @@ struct VoiciCallStage: View {
                     let left = end.x < size.width / 2
                     let top = end.y < size.height / 2
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        corner = top ? (left ? .topLeading : .topTrailing) : (left ? .bottomLeading : .bottomTrailing)
+                        let picked: Corner = top ? (left ? .topLeading : .topTrailing) : (left ? .bottomLeading : .bottomTrailing)
+                        if showsRemoteVideo { corner = picked } else { selfCorner = picked }
                         drag = .zero
                     }
                 })
