@@ -1543,6 +1543,7 @@ public final class MessagesStore {
                 shared.forgetInMemory()
                 // The voucher wallet's sealed copy on this device goes too (the synced one stays for the other devices).
                 PaymentsCenter.shared.forget()
+                OrgPlanTrickle.forget()
             }
         }
     }

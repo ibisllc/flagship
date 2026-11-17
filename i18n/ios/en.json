@@ -16899,5 +16899,125 @@
     "en": "One of your servers can't use its outbound proxy. Open Flagship to see why.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Unlock Flagship to see this organization's balance.": {
+    "en": "Unlock Flagship to see this organization's balance.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:34"
+  },
+  "Only an organization admin can see the balance or pay for seats.": {
+    "en": "Only an organization admin can see the balance or pay for seats.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:36"
+  },
+  "Companies can buy an invoiced batch on the web.": {
+    "en": "Companies can buy an invoiced batch on the web.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:43"
+  },
+  "Paid time starts when the trial ends.": {
+    "en": "Paid time starts when the trial ends.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:74"
+  },
+  "You can still use every app, remove people and export the org. Adding people, servers or connectors needs a paid plan.": {
+    "en": "You can still use every app, remove people and export the org. Adding people, servers or connectors needs a paid plan.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:79"
+  },
+  "Seats in use": {
+    "en": "Seats in use",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:92"
+  },
+  "Seats paid for: %lld": {
+    "en": "Seats paid for: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:99"
+  },
+  "Seats": {
+    "en": "Seats",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:92"
+  },
+  "Organization balance": {
+    "en": "Organization balance",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:127"
+  },
+  "An admin's phone pays a little at a time, a few days ahead of need. Off: nothing is spent and the plan lapses when its paid time runs out.": {
+    "en": "An admin's phone pays a little at a time, a few days ahead of need. Off: nothing is spent and the plan lapses when its paid time runs out.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:129"
+  },
+  "Buy vouchers for this org": {
+    "en": "Buy vouchers for this org",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:173"
+  },
+  "Paid through the App Store. The vouchers go into this organization's balance, not yours.": {
+    "en": "Paid through the App Store. The vouchers go into this organization's balance, not yours.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:178"
+  },
+  "Buy for an organization": {
+    "en": "Buy for an organization",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:196"
+  },
+  "Vouchers bought on an organization's Plan go into its balance and pay for its seats.": {
+    "en": "Vouchers bought on an organization's Plan go into its balance and pay for its seats.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:198"
+  },
+  "Business, trial: last day": {
+    "en": "Business, trial: last day",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:215"
+  },
+  "Business, trial: %lld days left": {
+    "en": "Business, trial: %lld days left",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:215"
+  },
+  "Business: paid through %@": {
+    "en": "Business: paid through %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:216"
+  },
+  "Business has lapsed": {
+    "en": "Business has lapsed",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:217"
+  },
+  "%@ a seat a month: %@ a month": {
+    "en": "%@ a seat a month: %@ a month",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:223"
+  },
+  "About %@ months at this seat count": {
+    "en": "About %@ months at this seat count",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:234"
+  },
+  "Added %@ to this organization's balance.": {
+    "en": "Added %@ to this organization's balance.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:238"
+  },
+  "You can't pay for fewer seats than the people the organization already has.": {
+    "en": "You can't pay for fewer seats than the people the organization already has.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:243"
+  },
+  "That seat count isn't allowed. Choose another.": {
+    "en": "That seat count isn't allowed. Choose another.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:244"
+  },
+  "Flagship doesn't know this organization.": {
+    "en": "Flagship doesn't know this organization.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:245"
+  },
+  "Unlock Flagship to change this organization's plan.": {
+    "en": "Unlock Flagship to change this organization's plan.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:247"
+  },
+  "This phone can't open the organization's balance. Another admin can, and it is shared again once they open the Plan.": {
+    "en": "This phone can't open the organization's balance. Another admin can, and it is shared again once they open the Plan.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:248"
+  },
+  "Only an organization admin can change the organization's balance.": {
+    "en": "Only an organization admin can change the organization's balance.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:250"
+  },
+  "This org's plan has lapsed. Pay for seats on the Plan to add people.": {
+    "en": "This org's plan has lapsed. Pay for seats on the Plan to add people.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgPlanScreen.swift:256"
+  },
+  "Open this organization's plan": {
+    "en": "Open this organization's plan",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgPlanModel.swift:146"
+  },
+  "Voucher wallet key": {
+    "en": "Voucher wallet key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift:284"
   }
 }

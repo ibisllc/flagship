@@ -244,15 +244,23 @@ public final class VoucherShop {
 
     public func clearOutcome() { outcome = nil }
 
-    /// Buy a pack and add its vouchers to the wallet. Admin devices only.
+    /// Buy a pack and add its vouchers to the wallet. Admin devices only. With `orgId` the vouchers go into that org's
+    /// wallet instead (this phone must be an org admin holding the org's wallet key).
     @discardableResult
-    public func buy(units: Int64) async -> Bool {
+    public func buy(units: Int64, orgId: String? = nil) async -> Bool {
         outcome = nil
         guard phase == .idle else { return false }
-        guard let e = engine(), e.canSpend else { return done("no-device-key", units) }
+        let info: PaymentsInfo?
+        if let orgId {
+            guard let o = OrgVoucherSinks.engine(orgId), o.canSpend else { return done("no-device-key", units) }
+            info = o.info
+        } else {
+            guard let e = engine(), e.canSpend else { return done("no-device-key", units) }
+            info = e.info
+        }
         guard let product = products.first(where: { $0.units == units })?.product else { return done("rail-off", units) }
         guard !wouldPassCap(units) else { return done("device-cap", units) }
-        guard e.info?.issuingKey != nil else { return done("no-key", units) }
+        guard info?.issuingKey != nil else { return done("no-key", units) }
         phase = .buying(units)
         let result: ShopPurchaseOutcome
         do {
@@ -271,9 +279,23 @@ public final class VoucherShop {
             return done("purchase-pending", units)
         case .purchased(let t):
             log(units * Int64(max(1, t.quantity)))
+            if let orgId { setOrgDestination(t.id, orgId) }
             phase = .idle
             return await deliver(t)
         }
+    }
+
+    // MARK: org destinations
+
+    @ObservationIgnored public var destinations: UserDefaults = .standard
+
+    private static func destinationKey(_ tx: String) -> String { "flagship.shop.orgDestination.\(tx.filter { $0.isASCII && ($0.isLetter || $0.isNumber) })" }
+
+    /// The org a purchase was bought for (nil: the account's own wallet). Kept until the purchase is finished.
+    public func orgDestination(_ transactionId: String) -> String? { destinations.string(forKey: Self.destinationKey(transactionId)) }
+
+    private func setOrgDestination(_ transactionId: String, _ orgId: String?) {
+        destinations.set(orgId, forKey: Self.destinationKey(transactionId))
     }
 
     /// Deliver every unfinished purchase of ours (app start, Plan opened).
@@ -296,9 +318,18 @@ public final class VoucherShop {
     /// with the vouchers in the saved wallet.
     @discardableResult
     public func deliver(_ t: ShopTransaction) async -> Bool {
-        guard let e = engine(), e.canSpend, !inFlight.contains(t.id) else { return false }
-        if e.info == nil { await e.refresh() }
-        guard let info = e.info, let pack = info.units(productId: t.productId) else { return false }
+        let dest = orgDestination(t.id)
+        let org = dest.flatMap { OrgVoucherSinks.engine($0) }
+        let e = engine()
+        guard !inFlight.contains(t.id) else { return false }
+        if dest != nil {
+            // Bought for an org: it waits until this phone has that org's wallet open.
+            guard let org, org.canSpend else { return false }
+        } else {
+            guard let e, e.canSpend else { return false }
+            if e.info == nil { await e.refresh() }
+        }
+        guard let info = dest != nil ? org?.info : e?.info, let pack = info.units(productId: t.productId) else { return false }
         let units = pack * Int64(max(1, t.quantity))
         inFlight.insert(t.id)
         defer { inFlight.remove(t.id) }
@@ -306,6 +337,7 @@ public final class VoucherShop {
         if t.revoked {
             await t.finish()
             vault.setPending(t.id, nil)
+            setOrgDestination(t.id, nil)
             return done("payment-refunded", units)
         }
         phase = .delivering
@@ -326,11 +358,17 @@ public final class VoucherShop {
         guard let keyId = requests.first?.pending.k, let key = info.key(keyId) else { return done("no-key", units) }
         let signed: PaidIssueResult
         do {
-            signed = try await e.client.paidIssue(rail: "apple", proof: ["jws": .string(t.jws)], keyId: keyId, blinded: requests.map(\.blinded))
+            let proof: JSONValue = ["jws": .string(t.jws)]
+            if let org {
+                signed = try await org.client.paidIssue(rail: "apple", proof: proof, keyId: keyId, blinded: requests.map(\.blinded))
+            } else {
+                signed = try await e!.client.paidIssue(rail: "apple", proof: proof, keyId: keyId, blinded: requests.map(\.blinded))
+            }
         } catch let err as PaymentsComError {
             if err.code == "payment-refunded" {
                 await t.finish()
                 vault.setPending(t.id, nil)
+                setOrgDestination(t.id, nil)
             }
             return done(err.code, units)
         } catch {
@@ -343,9 +381,14 @@ public final class VoucherShop {
         } catch {
             return done("malformed", units)
         }
-        guard await e.addBought(vouchers) else { return done(e.lastError ?? "network", units) }
+        if let org {
+            guard await org.addBought(vouchers) else { return done(org.lastError ?? "network", units) }
+        } else {
+            guard await e!.addBought(vouchers) else { return done(e!.lastError ?? "network", units) }
+        }
         await t.finish()
         vault.setPending(t.id, nil)
+        setOrgDestination(t.id, nil)
         return done("added", units)
     }
 }

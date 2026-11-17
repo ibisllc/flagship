@@ -162,6 +162,8 @@ public final class OrgViewModel {
     private func failed(_ e: Error) {
         if let o = e as? OrgAuthorityError, o.code == "locked" {
             message = String(localized: "Unlock Flagship to sign this.")
+        } else if let c = e as? OrgClientError, c.code == "org-plan-lapsed" {
+            message = OrgPlanDisplay.lapsedRefusal
         } else if let c = e as? OrgClientError, c.code == "org-freeze-refused" {
             message = String(localized: "You can freeze one admin for up to 72 hours, once a week.")
         } else {

@@ -162470,6 +162470,1236 @@
           }
         }
       }
+    },
+    "Unlock Flagship to see this organization's balance.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desbloquea Flagship para ver el saldo de esta organización."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déverrouillez Flagship pour voir le solde de cette organisation."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperre Flagship, um das Guthaben dieser Organisation zu sehen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desbloqueie o Flagship para ver o saldo desta organização."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この組織の残高を見るには Flagship のロックを解除してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁 Flagship 以查看此组织的余额。"
+          }
+        }
+      }
+    },
+    "Only an organization admin can see the balance or pay for seats.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un administrador de la organización puede ver el saldo o pagar plazas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un administrateur de l’organisation peut voir le solde ou payer des places."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Administrator der Organisation kann das Guthaben sehen oder Plätze bezahlen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só um administrador da organização pode ver o saldo ou pagar vagas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "残高の確認やシートの支払いができるのは組織の管理者だけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有组织管理员可以查看余额或为席位付款。"
+          }
+        }
+      }
+    },
+    "Companies can buy an invoiced batch on the web.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las empresas pueden comprar un lote con factura en la web."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les entreprises peuvent acheter un lot sur facture sur le web."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unternehmen können ein Paket auf Rechnung im Web kaufen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empresas podem comprar um lote com fatura na web."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "企業は請求書払いのまとめ買いをウェブで購入できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "企业可以在网页上按发票批量购买。"
+          }
+        }
+      }
+    },
+    "Paid time starts when the trial ends.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El tiempo pagado empieza cuando termina la prueba."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le temps payé commence à la fin de l’essai."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die bezahlte Zeit beginnt, wenn die Testphase endet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O tempo pago começa quando o teste termina."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支払った期間は試用期間の終了後に始まります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "付费时间在试用期结束后开始。"
+          }
+        }
+      }
+    },
+    "You can still use every app, remove people and export the org. Adding people, servers or connectors needs a paid plan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puedes seguir usando todas las apps, quitar personas y exportar la organización. Para añadir personas, servidores o conectores hace falta un plan de pago."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous pouvez toujours utiliser chaque app, retirer des personnes et exporter l’organisation. Ajouter des personnes, des serveurs ou des connecteurs nécessite une offre payante."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst weiterhin jede App nutzen, Personen entfernen und die Organisation exportieren. Für neue Personen, Server oder Connectoren brauchst du einen bezahlten Tarif."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você ainda pode usar todos os apps, remover pessoas e exportar a organização. Adicionar pessoas, servidores ou conectores exige um plano pago."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのアプリの利用、メンバーの削除、組織のエクスポートは引き続きできます。メンバー、サーバー、コネクタの追加には有料プランが必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你仍可以使用每个应用、移除成员并导出组织。添加成员、服务器或连接器需要付费套餐。"
+          }
+        }
+      }
+    },
+    "Seats in use": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plazas en uso"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Places utilisées"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belegte Plätze"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vagas em uso"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用中のシート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用席位"
+          }
+        }
+      }
+    },
+    "Seats paid for: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plazas pagadas: %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Places payées : %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bezahlte Plätze: %lld"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vagas pagas: %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支払うシート数: %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "付费席位：%lld"
+          }
+        }
+      }
+    },
+    "Seats": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plazas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Places"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plätze"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vagas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "シート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "席位"
+          }
+        }
+      }
+    },
+    "Organization balance": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saldo de la organización"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solde de l’organisation"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guthaben der Organisation"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saldo da organização"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "組織の残高"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "组织余额"
+          }
+        }
+      }
+    },
+    "An admin's phone pays a little at a time, a few days ahead of need. Off: nothing is spent and the plan lapses when its paid time runs out.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El teléfono de un administrador paga poco a poco, unos días antes de que haga falta. Desactivado: no se gasta nada y el plan vence cuando se acaba el tiempo pagado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le téléphone d’un administrateur paie peu à peu, quelques jours avant le besoin. Désactivé : rien n’est dépensé et l’offre expire à la fin du temps payé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Telefon eines Administrators zahlt nach und nach, ein paar Tage im Voraus. Aus: Es wird nichts ausgegeben, und der Tarif läuft ab, wenn die bezahlte Zeit endet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O telefone de um administrador paga aos poucos, alguns dias antes de precisar. Desligado: nada é gasto e o plano vence quando o tempo pago acabar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理者の電話が必要になる数日前から少しずつ支払います。オフにすると何も支払われず、支払い済み期間が終わるとプランは失効します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理员的手机会提前几天分批付款。关闭后不会扣费，付费时间用完后套餐即失效。"
+          }
+        }
+      }
+    },
+    "Buy vouchers for this org": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprar cupones para esta organización"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acheter des bons pour cette organisation"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gutscheine für diese Organisation kaufen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprar vales para esta organização"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この組織のバウチャーを購入"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为此组织购买代金券"
+          }
+        }
+      }
+    },
+    "Paid through the App Store. The vouchers go into this organization's balance, not yours.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pagado a través del App Store. Los cupones van al saldo de esta organización, no al tuyo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payé via l’App Store. Les bons vont dans le solde de cette organisation, pas dans le vôtre."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bezahlt über den App Store. Die Gutscheine gehen in das Guthaben dieser Organisation, nicht in deins."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pago pela App Store. Os vales vão para o saldo desta organização, não para o seu."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App Store で支払います。バウチャーはあなたではなく、この組織の残高に入ります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 App Store 付款。代金券会进入此组织的余额，而不是你的余额。"
+          }
+        }
+      }
+    },
+    "Buy for an organization": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprar para una organización"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acheter pour une organisation"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für eine Organisation kaufen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprar para uma organização"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "組織のために購入"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为组织购买"
+          }
+        }
+      }
+    },
+    "Vouchers bought on an organization's Plan go into its balance and pay for its seats.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los cupones comprados en el plan de una organización van a su saldo y pagan sus plazas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les bons achetés depuis l’offre d’une organisation vont dans son solde et paient ses places."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gutscheine, die im Tarif einer Organisation gekauft werden, gehen in ihr Guthaben und bezahlen ihre Plätze."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vales comprados no plano de uma organização vão para o saldo dela e pagam as vagas dela."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "組織のプランで購入したバウチャーはその組織の残高に入り、シートの支払いに使われます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在组织套餐中购买的代金券会进入该组织的余额，用于支付其席位。"
+          }
+        }
+      }
+    },
+    "Business, trial: last day": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business, prueba: último día"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business, essai : dernier jour"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business, Testphase: letzter Tag"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business, teste: último dia"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business、試用期間: 最終日"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business，试用：最后一天"
+          }
+        }
+      }
+    },
+    "Business, trial: %lld days left": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business, prueba: quedan %lld días"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business, essai : %lld jours restants"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business, Testphase: noch %lld Tage"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business, teste: faltam %lld dias"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business、試用期間: 残り %lld 日"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business，试用：剩余 %lld 天"
+          }
+        }
+      }
+    },
+    "Business: paid through %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business: pagado hasta el %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business : payé jusqu’au %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business: bezahlt bis %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business: pago até %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business: %@ まで支払い済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business：已付至 %@"
+          }
+        }
+      }
+    },
+    "Business has lapsed": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business ha vencido"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business a expiré"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business ist abgelaufen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Business venceu"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business は失効しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business 已失效"
+          }
+        }
+      }
+    },
+    "%@ a seat a month: %@ a month": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ por plaza al mes: %@ al mes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ par place et par mois : %@ par mois"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ pro Platz und Monat: %@ im Monat"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ por vaga por mês: %@ por mês"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1シートあたり月 %@: 月 %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个席位每月 %@：每月 %@"
+          }
+        }
+      }
+    },
+    "About %@ months at this seat count": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unos %@ meses con este número de plazas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Environ %@ mois avec ce nombre de places"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Etwa %@ Monate bei dieser Platzzahl"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca de %@ meses com este número de vagas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このシート数で約 %@ か月分"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按此席位数约可用 %@ 个月"
+          }
+        }
+      }
+    },
+    "Added %@ to this organization's balance.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se añadieron %@ al saldo de esta organización."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ajoutés au solde de cette organisation."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ zum Guthaben dieser Organisation hinzugefügt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ adicionados ao saldo desta organização."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この組織の残高に %@ を追加しました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已向此组织的余额充值 %@。"
+          }
+        }
+      }
+    },
+    "You can't pay for fewer seats than the people the organization already has.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No puedes pagar menos plazas que las personas que ya tiene la organización."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous ne pouvez pas payer moins de places que de personnes déjà dans l’organisation."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst nicht weniger Plätze bezahlen, als die Organisation schon Personen hat."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você não pode pagar menos vagas do que as pessoas que a organização já tem."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "組織にいる人数より少ないシート数は支払えません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "付费席位数不能少于组织现有的人数。"
+          }
+        }
+      }
+    },
+    "That seat count isn't allowed. Choose another.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ese número de plazas no está permitido. Elige otro."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce nombre de places n’est pas autorisé. Choisissez-en un autre."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Platzzahl ist nicht erlaubt. Wähle eine andere."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esse número de vagas não é permitido. Escolha outro."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "そのシート数は選べません。別の数を選んでください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不允许该席位数。请另选一个。"
+          }
+        }
+      }
+    },
+    "Flagship doesn't know this organization.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship no conoce esta organización."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship ne connaît pas cette organisation."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship kennt diese Organisation nicht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship não conhece esta organização."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship はこの組織を認識していません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 不认识此组织。"
+          }
+        }
+      }
+    },
+    "Unlock Flagship to change this organization's plan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desbloquea Flagship para cambiar el plan de esta organización."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déverrouillez Flagship pour modifier l’offre de cette organisation."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperre Flagship, um den Tarif dieser Organisation zu ändern."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desbloqueie o Flagship para alterar o plano desta organização."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この組織のプランを変更するには Flagship のロックを解除してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁 Flagship 以更改此组织的套餐。"
+          }
+        }
+      }
+    },
+    "This phone can't open the organization's balance. Another admin can, and it is shared again once they open the Plan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este teléfono no puede abrir el saldo de la organización. Otro administrador sí puede, y se vuelve a compartir cuando abra el plan."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce téléphone ne peut pas ouvrir le solde de l’organisation. Un autre administrateur le peut, et il est de nouveau partagé dès qu’il ouvre l’offre."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Telefon kann das Guthaben der Organisation nicht öffnen. Ein anderer Administrator kann es, und es wird wieder geteilt, sobald er den Tarif öffnet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este telefone não consegue abrir o saldo da organização. Outro administrador consegue, e ele é compartilhado de novo quando ele abrir o plano."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この電話では組織の残高を開けません。ほかの管理者は開けるので、その人がプランを開くと再び共有されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此手机无法打开组织余额。其他管理员可以打开，他们打开套餐后会再次共享。"
+          }
+        }
+      }
+    },
+    "Only an organization admin can change the organization's balance.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un administrador de la organización puede cambiar su saldo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un administrateur de l’organisation peut modifier son solde."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Administrator der Organisation kann ihr Guthaben ändern."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só um administrador da organização pode alterar o saldo dela."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "組織の残高を変更できるのは組織の管理者だけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有组织管理员可以更改组织余额。"
+          }
+        }
+      }
+    },
+    "This org's plan has lapsed. Pay for seats on the Plan to add people.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El plan de esta organización ha vencido. Paga plazas en el plan para añadir personas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’offre de cette organisation a expiré. Payez des places dans l’offre pour ajouter des personnes."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Tarif dieser Organisation ist abgelaufen. Bezahle Plätze im Tarif, um Personen hinzuzufügen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O plano desta organização venceu. Pague vagas no plano para adicionar pessoas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この組織のプランは失効しました。メンバーを追加するには、プランでシートを支払ってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此组织的套餐已失效。请在套餐中为席位付款以添加成员。"
+          }
+        }
+      }
+    },
+    "Open this organization's plan": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir el plan de esta organización"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir l’offre de cette organisation"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den Tarif dieser Organisation öffnen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir o plano desta organização"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この組織のプランを開く"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开此组织的套餐"
+          }
+        }
+      }
+    },
+    "Voucher wallet key": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave del monedero de cupones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clé du portefeuille de bons"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schlüssel der Gutscheinbörse"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chave da carteira de vales"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バウチャーウォレットの鍵"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代金券钱包密钥"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

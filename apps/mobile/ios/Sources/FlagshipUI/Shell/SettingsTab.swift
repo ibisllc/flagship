@@ -468,7 +468,11 @@ public struct SettingsTab: View {
         case .quantumSafety:
             QuantumSafetyScreen(viewModel: QuantumSafetyViewModel(app: app, clients: podClients))
         case .organizations:
+            #if DEBUG
+            if let gym = OrgPlanModel.gymFixture() { OrgPlanScreen(model: gym) } else { OrgListScreen(vm: OrgViewModel()) }
+            #else
             OrgListScreen(vm: OrgViewModel())
+            #endif
         case .keyfileBackup:
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")

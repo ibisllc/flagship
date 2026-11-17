@@ -961,6 +961,7 @@ struct FlagshipApp: App {
                                                     deviceId: appState.activeProfile?.deviceId)
                     if appState.isUnlocked {
                         await PaymentsCenter.shared.refreshAndTick()
+                        await OrgPlanTrickle.runAll()
                         await MessagesStore.shared.refresh()
                         VoiciCallCenter.shared.accountChanged()
                         VoiciCallCenter.shared.unlocked()
@@ -980,7 +981,7 @@ struct FlagshipApp: App {
                         Task { await ServingRenewal.appOpened() }
                         PhoneRouteController.appForeground()
                         Task { await MessagesStore.shared.checkReplies() }
-                        if appState.isUnlocked { Task { await PaymentsCenter.shared.refreshAndTick() } }
+                        if appState.isUnlocked { Task { await PaymentsCenter.shared.refreshAndTick(); await OrgPlanTrickle.runAll() } }
                         VoiciCallCenter.shared.appForegrounded()
                     }
                     // The relay forwarder is a listener on this phone's loopback: close it (and the

@@ -76,5 +76,10 @@ open class OrgSeatKeys: @unchecked Sendable {
         return try? PqHybrid.hybridSign(secretKey: s, purpose: purpose, payload: payload)
     }
 
+    /// The seat admin key can sign now without a prompt (the session is unlocked and the key is on this phone).
+    open func canSign(_ seat: Seat) -> Bool {
+        seat.memberOnly != true && Keystore.sessionAuthContext != nil && Keystore.pqRecordRead(slot(seat.orgId, seat.seatId)) != nil
+    }
+
     open func forget(_ seat: Seat) { Keystore.pqRecordDelete(slot(seat.orgId, seat.seatId)) }
 }
