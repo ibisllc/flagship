@@ -131,7 +131,10 @@ final class VoiciCallSession {
         media.onConnected = { [weak self] in Task { @MainActor in self?.onEvent(.connected) } }
         media.setOnPathOpen { [weak self] in Task { @MainActor in self?.onEvent(.pathOpen) } }
         media.onFailed = { [weak self] in Task { @MainActor in self?.end("failed", why: "media-failed") } }
-        let t = VoiciCallNetwork.session.webSocketTask(with: req)
+        // Behind the update lock, like every other request (UpdateLockGateTests).
+        guard let t = try? VoiciCallNetwork.session.gatedWebSocketTask(with: req) else {
+            return end("failed", why: "update-required")
+        }
         task = t
         t.resume()
         receive()
