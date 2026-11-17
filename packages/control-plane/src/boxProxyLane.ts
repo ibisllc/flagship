@@ -155,7 +155,7 @@ async function wakeOwner(deps: BoxProxyLaneDeps, username: string): Promise<void
     await deps.pushFanout({
       username,
       targets: tokens.map((t) => ({ tokenId: t.tokenId, platform: t.platform, providerToken: t.providerToken })),
-      payload: { category: PROXY_ALERT_PUSH_CATEGORY, title: a.title, body: a.body, deepLink: appRouteLink("home", {}, deps.apex) },
+      payload: { category: PROXY_ALERT_PUSH_CATEGORY, title: a.title, body: a.body, deepLink: appRouteLink("account/activity", {}, deps.apex) },
     });
   } catch {
     /* a push failure never fails the report */
