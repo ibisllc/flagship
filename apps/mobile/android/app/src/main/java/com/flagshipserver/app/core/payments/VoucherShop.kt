@@ -10,7 +10,8 @@
 //
 // At start and on Plan, unconsumed purchases are resumed the same way. A pending payment waits; a refunded one is
 // consumed with nothing added. Each phone buys at most CAP_UNITS vouchers in CAP_DAYS days (the log keeps units and
-// the UTC day only). Only an admin device buys, like every other spend control.
+// the UTC day only). Only an admin device buys, like every other spend control; a purchase for an org's wallet
+// (docs/plans-and-backup-offer.md §6) is made by an admin of that org and lands in the org wallet instead.
 
 package com.flagshipserver.app.core.payments
 
@@ -53,6 +54,7 @@ class VoucherShop(
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val mutex = Mutex()
+    private var buyingFor: String? = null
     private val _state = MutableStateFlow(ShopUi())
     val state: StateFlow<ShopUi> = _state.asStateFlow()
 
@@ -82,7 +84,7 @@ class VoucherShop(
             _state.update { it.copy(available = false, products = emptyList()) }
             return@withLock
         }
-        if (s.rails.google && s.canSpend) {
+        if (s.rails.google && (s.canSpend || orgSink != null)) {
             val byId = s.products.associateBy { it.productId }
             val found = runCatching { b.products(byId.keys.toList()) }.getOrDefault(emptyList())
             val products = found.mapNotNull { p -> byId[p.productId]?.let { ShopProduct(it.units, it.productId, p.price) } }.sortedBy { it.units }
@@ -98,7 +100,7 @@ class VoucherShop(
 
     private suspend fun resumeLocked() {
         val b = billing ?: return
-        if (!center.state.value.canSpend) return
+        if (!center.state.value.canSpend && store.pending().none { it.org.isNotEmpty() }) return
         val owned = runCatching { b.owned() }.getOrNull() ?: return
         val ours = owned.filter { p -> p.products.any { VoucherProduct.units(it) != null } }
         if (ours.isEmpty() && store.pending().isEmpty()) return
@@ -117,16 +119,17 @@ class VoucherShop(
         }
     }
 
-    /** Buy [product] through Play's sheet. */
-    suspend fun buy(product: ShopProduct) = mutex.withLock {
+    /** Buy [product] through Play's sheet, for the account's wallet or, with [org], that org's wallet. */
+    suspend fun buy(product: ShopProduct, org: String? = null) = mutex.withLock {
         val b = billing ?: return@withLock
-        if (!center.state.value.canSpend || _state.value.working) return@withLock
+        if ((org == null && !center.state.value.canSpend) || (org != null && orgSink == null) || _state.value.working) return@withLock
         if (boughtRecently() + product.units > CAP_UNITS) {
             notice(ShopNotice(ShopNotice.Kind.CAP))
             return@withLock
         }
         working(true)
         _state.update { it.copy(notice = null) }
+        buyingFor = org
         try {
             when (val out = b.buy(product.productId)) {
                 is BuyOutcome.Bought -> out.purchases.forEach { handle(it) }
@@ -139,6 +142,7 @@ class VoucherShop(
                 is BuyOutcome.Failed -> notice(ShopNotice(ShopNotice.Kind.PLAY_FAILED))
             }
         } finally {
+            buyingFor = null
             working(false)
         }
     }
@@ -155,11 +159,12 @@ class VoucherShop(
             StoreState.OTHER -> return
             StoreState.PURCHASED -> Unit
         }
-        if (!center.state.value.canSpend) return
-        val entry = store.pending().firstOrNull { it.token == p.token } ?: run {
+        val kept = store.pending().firstOrNull { it.token == p.token }
+        if (!center.state.value.canSpend && (kept?.org ?: buyingFor).isNullOrEmpty()) return
+        val entry = kept ?: run {
             val key = center.state.value.issuingKey ?: return notice(ShopNotice(ShopNotice.Kind.REFUSED, code = "no-key"))
             val units = VoucherProduct.units(productId)!! * p.quantity.coerceAtLeast(1)
-            val fresh = PendingPurchase(p.token, productId, units, key.keyId, newRequests(key, units))
+            val fresh = PendingPurchase(p.token, productId, units, key.keyId, newRequests(key, units), org = buyingFor ?: "")
             // Kept before `.com` is asked: a crash after the signing still finds the same set.
             store.put(fresh)
             logPurchase(units)
@@ -201,7 +206,8 @@ class VoucherShop(
                 require(key != null && got.k == entry.k && got.sigs.size == entry.requests.size)
                 entry.requests.mapIndexed { i, r -> Vouchers.finalize(key!!, r.pending, got.sigs[i]) }
             }.getOrNull() ?: return notice(ShopNotice(ShopNotice.Kind.REFUSED, code = "malformed"))
-            if (!center.addPaidVouchers(fresh)) return notice(ShopNotice(ShopNotice.Kind.RETRY))
+            val added = if (entry.org.isEmpty()) center.addPaidVouchers(fresh) else orgSink?.invoke(entry.org, fresh) == true
+            if (!added) return notice(ShopNotice(ShopNotice.Kind.RETRY))
             entry = entry.copy(saved = true)
             store.put(entry)
         }
@@ -234,5 +240,7 @@ class VoucherShop(
         const val CAP_DAYS = 30L
         private const val MAX_UNITS = 1000L
         @Volatile var shared: VoucherShop? = null
+        /** Delivers bought vouchers into an org's wallet (OrgPlanCenters); true once `.com` holds them. */
+        @Volatile var orgSink: (suspend (orgId: String, vouchers: List<Voucher>) -> Boolean)? = null
     }
 }

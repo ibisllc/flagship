@@ -57,6 +57,9 @@ class MockPaymentsClient(
     val refundedTokens = HashSet<String>()
     val unpaidTokens = HashSet<String>()
     val paidIssueCalls = mutableListOf<String>()
+    /** Orgs on the Business plan (MockOrgPlan): `redeem` with `org` credits their seats. */
+    val orgs = HashMap<String, com.flagshipserver.app.core.payments.MockOrgPlanBackend>()
+    val exchangeCalls = mutableListOf<Int>()
 
     private fun refuse(status: Int, code: String, extra: Map<String, JsonElement> = emptyMap()): Nothing =
         throw PaymentsHttpError(status, code, JsonObject(mapOf("error" to JsonPrimitive(code), "code" to JsonPrimitive(code)) + extra))
@@ -111,6 +114,14 @@ class MockPaymentsClient(
             if (!Vouchers.verify(key, v)) refuse(400, "bad-voucher", mapOf("nullifier" to JsonPrimitive(v.nullifier)))
             v
         }
+        VoiciJs.str(body["org"])?.let { orgId ->
+            val org = orgs[orgId] ?: refuse(404, "org-not-found")
+            val fresh = vs.filter { it.nullifier !in spent }
+            val already = vs.filter { it.nullifier in spent }.map { it.nullifier }
+            val answer = org.redeem(body, fresh.size, already)
+            spent += fresh.map { it.nullifier }
+            return answer
+        }
         val active = plan != null && paidUntil + cfg.graceHours * 3_600_000L >= t
         if (what == "overage") {
             if (!active) refuse(409, "overage-needs-plan")
@@ -144,6 +155,22 @@ class MockPaymentsClient(
             val m = BigInteger(1, WebEnvelopes.b64Decode(b) ?: refuse(400, "malformed"))
             WebEnvelopes.b64Encode(Vouchers.i2osp(m.modPow(d, n), (n.bitLength() + 7) / 8))
         }
+    }
+
+    override suspend fun exchange(keyId: String, vouchers: List<JsonObject>, blinded: List<String>): Pair<String, List<String>> {
+        if (keyId != this.keyId) refuse(409, "no-key")
+        if (vouchers.size != blinded.size || vouchers.isEmpty()) refuse(400, "malformed")
+        val key = com.flagshipserver.app.core.payments.VoucherKey(keyId, nHex, eHex)
+        val vs = vouchers.map { el ->
+            val v = Vouchers.parse(el) ?: refuse(400, "malformed")
+            if (!Vouchers.verify(key, v)) refuse(400, "bad-voucher", mapOf("nullifier" to JsonPrimitive(v.nullifier)))
+            v
+        }
+        val already = vs.map { it.nullifier }.filter { it in spent }
+        if (already.isNotEmpty()) refuse(409, "voucher-spent", mapOf("spent" to JsonArray(already.map(::JsonPrimitive))))
+        spent += vs.map { it.nullifier }
+        exchangeCalls += vs.size
+        return keyId to sign(blinded)
     }
 
     private fun sign(blinded: List<String>): List<String> = blinded.map { b ->

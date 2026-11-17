@@ -19,7 +19,10 @@ import kotlinx.serialization.json.JsonPrimitive
 /** One request of a purchase: what the device keeps ([pending]) and what it sends ([blinded]). */
 data class ShopRequest(val pending: PendingVoucher, val blinded: String)
 
-/** A store purchase in flight, keyed by its purchase token. [saved]: the wallet at `.com` holds its vouchers. */
+/**
+ * A store purchase in flight, keyed by its purchase token. [saved]: the wallet at `.com` holds its vouchers. [org]: the
+ * org whose wallet receives them ("" for the account's own wallet).
+ */
 data class PendingPurchase(
     val token: String,
     val productId: String,
@@ -27,6 +30,7 @@ data class PendingPurchase(
     val k: String,
     val requests: List<ShopRequest>,
     val saved: Boolean = false,
+    val org: String = "",
 ) {
     fun toJson() = JsonObject(
         linkedMapOf(
@@ -45,6 +49,7 @@ data class PendingPurchase(
                 },
             ),
             "saved" to JsonPrimitive(saved),
+            "org" to JsonPrimitive(org),
         ),
     )
 
@@ -65,6 +70,7 @@ data class PendingPurchase(
                 VoiciJs.str(o["k"]) ?: return null,
                 reqs,
                 (o["saved"] as? JsonPrimitive)?.content == "true",
+                VoiciJs.str(o["org"])?.takeIf { Regex("^[0-9a-f]{32}$").matches(it) } ?: "",
             )
         }
     }

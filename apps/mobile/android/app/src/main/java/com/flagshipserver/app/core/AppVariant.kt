@@ -156,6 +156,10 @@ class GymMocks(
     val payments: com.flagshipserver.app.api.PaymentsClient? = null,
     /** Google Play Billing: a scripted store (the gym buys packs without Play). */
     val billing: com.flagshipserver.app.core.payments.PlayBilling? = null,
+    /** Organizations: a scripted seat store and `.com` (the org Plan scenarios). */
+    val orgs: com.flagshipserver.app.viewmodels.OrgRuntime? = null,
+    /** Each org seat's plan and wallet against the mock `.com`. */
+    val orgPlans: ((com.flagshipserver.app.keystore.OrgSeatRecord) -> com.flagshipserver.app.core.payments.OrgPaymentsCenter)? = null,
 )
 
 /** The mock box's access-control fixture (fixed device keys and names). */

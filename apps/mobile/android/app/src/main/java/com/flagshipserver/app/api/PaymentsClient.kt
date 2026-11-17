@@ -8,6 +8,7 @@
 //                                            sent through the OHTTP relays `.com` lists in the config's `ohttp`
 //   POST /api/vouchers/test-issue            none (the gym only)  → {k, sigs}
 //   POST /api/vouchers/paid-issue            NONE (a payment buys signatures, never an account link) → {k, sigs, units}
+//   POST /api/vouchers/exchange              NONE (spends vouchers, blind-signs as many fresh ones) → {k, sigs}
 //   GET  /api/users/<u>/plan-attestation     read token           → {tier, paidUntil, ...}
 //   GET  /api/users/<u>/allowance            read token           → {tier, usedBytes, quotaBytes, remainingBytes, ...}
 
@@ -75,6 +76,13 @@ interface PaymentsClient {
      * `no-key`, `rail-unreachable`, `malformed` or `too-many`.
      */
     suspend fun paidIssue(rail: String, proof: JsonObject, keyId: String, blinded: List<String>): PaidIssue
+
+    /**
+     * Spends [vouchers] and blind-signs as many fresh requests under [keyId] (all or nothing): an org wallet after its
+     * key rotated, so an admin who left can't spend what they could read. Refusals: `voucher-spent`, `no-key`, `bad-voucher`.
+     */
+    suspend fun exchange(keyId: String, vouchers: List<JsonObject>, blinded: List<String>): Pair<String, List<String>> =
+        throw PaymentsHttpError(404, "unavailable", JsonObject(emptyMap()))
 }
 
 class LivePaymentsClient(
@@ -167,6 +175,21 @@ class LivePaymentsClient(
         val body = JsonObject(mapOf("k" to JsonPrimitive(keyId), "blinded" to JsonArray(blinded.map(::JsonPrimitive))))
         val r = transport.execute("POST", "${base()}/api/vouchers/test-issue", body.toString().toByteArray(), "application/json; charset=utf-8", emptyMap(), setOf(200))
         (parse(r.body)?.get("sigs") as? JsonArray).orEmpty().map { (it as JsonPrimitive).content }
+    }
+
+    override suspend fun exchange(keyId: String, vouchers: List<JsonObject>, blinded: List<String>): Pair<String, List<String>> = call {
+        // Like redeem: no authorization, no device headers. It names no org and no account.
+        val body = JsonObject(
+            linkedMapOf(
+                "v" to JsonPrimitive(1),
+                "k" to JsonPrimitive(keyId),
+                "vouchers" to JsonArray(vouchers),
+                "blinded" to JsonArray(blinded.map(::JsonPrimitive)),
+            ),
+        )
+        val r = transport.execute("POST", "${base()}/api/vouchers/exchange", body.toString().toByteArray(), "application/json; charset=utf-8", emptyMap(), setOf(200))
+        val o = parse(r.body) ?: JsonObject(emptyMap())
+        ((o["k"] as? JsonPrimitive)?.contentOrNull ?: keyId) to (o["sigs"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
     }
 
     override suspend fun paidIssue(rail: String, proof: JsonObject, keyId: String, blinded: List<String>): PaidIssue = call {
