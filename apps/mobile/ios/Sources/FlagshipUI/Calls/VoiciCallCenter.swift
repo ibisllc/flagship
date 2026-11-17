@@ -32,6 +32,8 @@ public final class VoiciCallCenter: NSObject {
     public private(set) var offersVideo = false
     public private(set) var muted = false
     public private(set) var cameraOn = false
+    /// Whether our running camera is the front one (the preview is mirrored).
+    public private(set) var cameraFront = true
     /// The caller's camera: "on", "off" or "paused".
     public private(set) var remoteCamera = "off"
     /// No CallKit here (the China mainland storefront): calls ring only on the open app's screen.
@@ -70,6 +72,8 @@ public final class VoiciCallCenter: NSObject {
     @ObservationIgnored private let callController = CXCallController()
     @ObservationIgnored private var session: VoiciCallSession?
     @ObservationIgnored private var media: CallMediaEngine?
+    /// The call's media engine, for the call screen's video views.
+    public var mediaEngine: CallMediaEngine? { media }
     @ObservationIgnored private var push: VoiciCallPush?
     @ObservationIgnored private var callUUID: UUID?
     @ObservationIgnored private var pausedByBackground = false
@@ -276,7 +280,19 @@ public final class VoiciCallCenter: NSObject {
 
     public func declineOrHangUp() {
         if let id = callUUID, provider != nil {
-            callController.request(CXTransaction(action: CXEndCallAction(call: id))) { _ in }
+            callController.request(CXTransaction(action: CXEndCallAction(call: id))) { [weak self] err in
+                guard err != nil else { return }
+                Task { @MainActor in self?.endNow() }
+            }
+            // Hang-up always works: if CallKit's end hasn't run in 3 s, end here; if the session still hasn't, drop it.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard let self, self.callUUID == id else { return }
+                voiciCallLog.notice("hang-up: CallKit end didn't run, ending locally")
+                self.endNow()
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if self.callUUID == id { self.finish("hangup") }
+            }
         } else {
             endNow()
         }
@@ -295,6 +311,12 @@ public final class VoiciCallCenter: NSObject {
         muted = m
     }
 
+    /// Front or back camera while ours runs.
+    public func flipCamera() {
+        guard cameraOn else { return }
+        if media?.flipCamera() == true { cameraFront.toggle() }
+    }
+
     /// The Camera tap. Asks for the camera now (never earlier); false when it can't start.
     public func setCamera(_ on: Bool) async -> Bool {
         guard offersVideo, phase == .connecting || phase == .connected else { return false }
@@ -304,6 +326,7 @@ public final class VoiciCallCenter: NSObject {
         }
         guard media?.setCamera(on) == true else { return false }
         pausedByBackground = false
+        if on && !cameraOn { cameraFront = true }
         cameraOn = on
         session?.sendCamera(on ? "on" : "off")
         updateCallKit()

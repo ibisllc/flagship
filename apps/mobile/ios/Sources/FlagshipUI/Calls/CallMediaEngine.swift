@@ -72,6 +72,8 @@ public protocol CallMediaEngine: AnyObject {
     func setMuted(_ muted: Bool)
     /// Turns this phone's camera on or off; false when it can't.
     func setCamera(_ on: Bool) -> Bool
+    /// Front or back camera while ours runs; false when it can't.
+    func flipCamera() -> Bool
     func stop()
 
     // Calling from the app (docs/voici-calls.md "Calling from the app"): this app places the call. An engine without
@@ -89,6 +91,7 @@ public protocol CallMediaEngine: AnyObject {
 }
 
 public extension CallMediaEngine {
+    func flipCamera() -> Bool { false }
     func setOnPathOpen(_ f: @escaping () -> Void) {}
     func offer(video: Bool) async throws -> String { throw CallMediaUnavailable() }
     func applyAnswer(sdp: String, iceServer: CallerIceServer) async throws { throw CallMediaUnavailable() }
