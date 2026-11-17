@@ -224,6 +224,13 @@ import {
   handleAdminTierGrant,
   handleRedeemVoucher,
   handleIssueVoucher,
+  handlePaymentsConfig,
+  handleVoucherIssue,
+  handleVoucherRedeem,
+  handleVoucherWalletGet,
+  handleVoucherWalletPut,
+  paymentsConfigFromEnv,
+  voucherSigningKeysFromEnv,
   handleStripeWebhook,
   handleCreateCheckout,
   handleCreateAppCheckout,
@@ -318,7 +325,7 @@ import {
   handleOrgSeatsGet,
   handleOrgVeto,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, D1MeterStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, D1AppSalesStorage, RequestD1, type D1Database } from "@flagship/storage";
+import { D1BlindVoucherStorage, D1Storage, D1DemoUsersStorage, D1MeterStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, D1AppSalesStorage, RequestD1, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -428,6 +435,12 @@ export interface ControlPlaneEnv extends DirectNamesEnv {
   MARKETPLACE_CUT_BPS?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
+  /** Secret: the voucher signing keys, a JSON array of `{jwk, issueUntil?, acceptUntil?}` (scripts/voucher-key.mjs). */
+  VOUCHER_SIGNING_KEYS?: string;
+  /** JSON overrides of the payment numbers (protocol paymentsConfig.ts); absent = the defaults. */
+  PAYMENTS_CONFIG?: string;
+  /** "1" only in the gym: anyone may get up to 30 free test vouchers at POST /api/vouchers/test-issue. */
+  VOUCHER_TEST_ISSUE?: string;
 
   /**
    * The blessed Debian base-ISO manifest the desktop builder should hold,
@@ -944,6 +957,11 @@ const ROUTE_RE = {
   ADMIN_TIER_GRANT: /^\/api\/admin\/tier-grant$/,
   ADMIN_VOUCHER_ISSUE: /^\/api\/admin\/voucher\/issue$/,
   VOUCHER_REDEEM: /^\/api\/voucher\/redeem$/,
+  PAYMENTS_CONFIG: /^\/api\/payments\/config$/,
+  VOUCHERS_REDEEM: /^\/api\/vouchers\/redeem$/,
+  VOUCHERS_ISSUE_ADMIN: /^\/api\/admin\/vouchers\/issue$/,
+  VOUCHERS_TEST_ISSUE: /^\/api\/vouchers\/test-issue$/,
+  VOUCHER_WALLET: /^\/api\/accounts\/([^/]+)\/voucher-wallet$/,
   STRIPE_WEBHOOK: /^\/api\/stripe\/webhook$/,
   STRIPE_CHECKOUT: /^\/api\/stripe\/checkout$/,
   STRIPE_APP_CHECKOUT: /^\/api\/stripe\/app-checkout$/,
@@ -1688,7 +1706,7 @@ export async function tryControlPlane(
           pushTokens: storage.pushTokens,
           serverOrders: storage.serverOrders,
           voici: { voiciLinks: storage.voiciLinks, voiciNames: storage.voiciNames },
-          voiciPages: { deleteAccount: (u: string) => deleteVoiciAccount(env, storage, u) },
+          voiciPages: { deleteAccount: (u: string) => deleteAccountPagesAndWallet(env, storage, u) },
           // §5 box-side delivery: deposit the content-wipe order for each owned
           // server so an online box consumes it on its heartbeat and wipes.
           secretMailbox: storage.secretMailbox,
@@ -1735,7 +1753,7 @@ export async function tryControlPlane(
           serverOrders: storage.serverOrders,
           // The name is claimable again later: the account's voi.ci links, page, mailbox and state go first.
           voici: { voiciLinks: storage.voiciLinks, voiciNames: storage.voiciNames },
-          voiciPages: { deleteAccount: (u: string) => deleteVoiciAccount(env, storage, u) },
+          voiciPages: { deleteAccount: (u: string) => deleteAccountPagesAndWallet(env, storage, u) },
           ...(reclaimDns ? { dns: reclaimDns } : {}),
         },
         decodeURIComponent(m[1]!),
@@ -3698,6 +3716,66 @@ export async function tryControlPlane(
     );
   }
 
+  // ── Blind-signed $1 vouchers (docs/payments-privacy-and-rails.md "As built") ──
+  if (
+    ROUTE_RE.PAYMENTS_CONFIG.test(path) ||
+    ROUTE_RE.VOUCHERS_REDEEM.test(path) ||
+    ROUTE_RE.VOUCHERS_ISSUE_ADMIN.test(path) ||
+    ROUTE_RE.VOUCHERS_TEST_ISSUE.test(path) ||
+    ROUTE_RE.VOUCHER_WALLET.test(path)
+  ) {
+    const voucherKeys = voucherSigningKeysFromEnv(env.VOUCHER_SIGNING_KEYS);
+    const paymentsConfig = paymentsConfigFromEnv(env.PAYMENTS_CONFIG);
+    const testIssue = env.VOUCHER_TEST_ISSUE === "1";
+    if (method === "GET" && ROUTE_RE.PAYMENTS_CONFIG.test(path)) {
+      return finish(handlePaymentsConfig({ config: paymentsConfig, keys: voucherKeys, testIssue }));
+    }
+    // Issuing: the admin secret (comps, tests) until the rails land; the gym's free test issue (30 at a time).
+    if (method === "POST" && ROUTE_RE.VOUCHERS_ISSUE_ADMIN.test(path)) {
+      const auth = authorizeAdmin({ expected: env.FLAGSHIP_ADMIN_SECRET, provided: request.headers.get("x-admin-secret") });
+      if (auth) return finishPlain(auth);
+      return finish(handleVoucherIssue({ keys: voucherKeys, config: paymentsConfig }, await readJson(request)));
+    }
+    if (method === "POST" && ROUTE_RE.VOUCHERS_TEST_ISSUE.test(path)) {
+      if (!testIssue) return finishPlain({ status: 404, body: { error: "issue-off", code: "issue-off" } });
+      return finish(handleVoucherIssue({ keys: voucherKeys, config: paymentsConfig }, await readJson(request), 30));
+    }
+    // Spending: no credential and nothing about the caller kept; also reachable through the OHTTP relay.
+    if (method === "POST" && ROUTE_RE.VOUCHERS_REDEEM.test(path)) {
+      return finish(
+        await handleVoucherRedeem(
+          {
+            keys: voucherKeys,
+            config: paymentsConfig,
+            store: new D1BlindVoucherStorage(env.DB),
+            tiers: storage.tiers,
+            usernames: storage.usernames,
+            meter: new D1MeterStorage(env.DB),
+          },
+          await readJson(request),
+        ),
+      );
+    }
+    const wm = path.match(ROUTE_RE.VOUCHER_WALLET);
+    if (wm) {
+      const username = decodeURIComponent(wm[1]!).toLowerCase();
+      const store = new D1BlindVoucherStorage(env.DB);
+      if (method === "GET") {
+        return finish(await handleVoucherWalletGet({ store, readTokens: accountReadTokenDeps(storage, env) }, username, request.headers.get("authorization")));
+      }
+      if (method === "PUT") {
+        return finish(
+          await handleVoucherWalletPut(
+            { store, directory: { identities: storage.deviceIdentities, nonces: new D1NonceStore(env.DB) } },
+            username,
+            directoryAuthorization(request, username, path),
+            await request.text(),
+          ),
+        );
+      }
+    }
+  }
+
   // ── Stripe (#11) — the convenient card lane ───────────────────
   // POST /api/stripe/webhook (Stripe → us). Needs the EXACT signed bytes, so
   // read request.text() (NOT readJson) and pass the Stripe-Signature header.
@@ -4432,7 +4510,7 @@ export async function tryControlPlane(
         provisioning: storage.demoAccountProvisioning,
         demos: storage.demoUsers,
         destroyServer: (serverId) => demoServers.destroyServer(serverId),
-        voiciPages: { deleteAccount: (u: string) => deleteVoiciAccount(env, storage, u) },
+        voiciPages: { deleteAccount: (u: string) => deleteAccountPagesAndWallet(env, storage, u) },
         ...(demoDns ? {
           cleanupDns: async (username: string) => {
             const domain = `home.${username}.${servicesApex}`;
@@ -4688,6 +4766,12 @@ function voiciNamesDeps(storage: D1Storage, env: ControlPlaneEnv) {
     },
     appRunning: appRunningCheck(storage, Date.now()),
   };
+}
+
+/** Account deletion: the voi.ci page and calls, and the sealed voucher wallet (its vouchers are on the phones). */
+async function deleteAccountPagesAndWallet(env: ControlPlaneEnv, storage: D1Storage, username: string): Promise<void> {
+  await deleteVoiciAccount(env, storage, username);
+  await new D1BlindVoucherStorage(env.DB).deleteWallet(username.toLowerCase());
 }
 
 function accountReadTokenDeps(storage: D1Storage, env: ControlPlaneEnv) {

@@ -8,8 +8,12 @@
 // migration 0069).
 //
 //   resource     unit    period  over the allowance
-//   "egress"     bytes   month   free: throttle (the .services relay slows the
-//                                account to 256 kbit/s); paid: allow, billed
+//   "egress"     bytes   month   throttle past the allowance (the .services relay
+//                                slows the account to 256 kbit/s); a paid plan's
+//                                allowance grows by its prepaid top-ups
+//   "egress-topup" bytes month   record only: prepaid overage blocks bought with
+//                                vouchers this month (blindVouchers.ts), added to
+//                                the egress allowance when judging
 //   "ai-tokens"  tokens  month   stop (no new AI-promo credential until reset)
 //   "ai-promo-week" / "ai-promo-starter" / "ai-promo-global" /
 //   "ai-promo-input" / "ai-promo-output": the free AI promotion's weekly
@@ -64,6 +68,7 @@ const GB = 1024 * 1024 * 1024;
 
 export type MeterResource =
   | "egress"
+  | "egress-topup"
   | "ai-tokens"
   | "ai-promo-week"
   | "ai-promo-starter"
@@ -86,10 +91,13 @@ export const METER_RESOURCES: Readonly<MeterCatalog<MeterResource, TierName>> = 
     period: "month",
     plans: {
       free: { allowance: 25 * GB, over: "throttle" },
-      hobby: { allowance: 250 * GB, over: "allow" },
-      maker: { allowance: 500 * GB, over: "allow" },
+      // Prepaid overage only (docs/payments-privacy-and-rails.md §5.5): past the
+      // allowance and its top-ups a paid account is slowed like Free, never billed.
+      hobby: { allowance: 250 * GB, over: "throttle" },
+      maker: { allowance: 500 * GB, over: "throttle" },
     },
   },
+  "egress-topup": { unit: "bytes", period: "month", plans: sameForEveryTier(Number.MAX_SAFE_INTEGER, "allow") },
   // True tokens (input + output) served by the in-house model, as reported by
   // its metering shim. Placeholder allowances pending the owner's numbers.
   "ai-tokens": {
@@ -163,6 +171,21 @@ function withTier(v: CoreVerdict<MeterResource, TierName>): MeterVerdict {
   return { ...v, tier: v.plan };
 }
 
+/** Egress bytes the account bought as prepaid top-ups this month. */
+export async function egressTopUpBytes(deps: MeterDeps, account: string): Promise<number> {
+  return (await coreCheck(core(deps), account.toLowerCase(), "egress-topup")).used;
+}
+
+/** An egress verdict over its allowance, judged again with the month's top-ups added (read only when over). */
+async function withTopUp(deps: MeterDeps, v: MeterVerdict, need: number): Promise<MeterVerdict> {
+  if (v.resource !== "egress" || !v.over || v.tier === "free") return v;
+  const topUp = await egressTopUpBytes(deps, v.account);
+  if (topUp <= 0) return v;
+  const allowance = v.allowance + topUp;
+  const over = v.used + need > allowance;
+  return { ...v, allowance, remaining: Math.max(0, allowance - v.used), over, action: over ? v.policy : "allow" };
+}
+
 /** Add `amount` to the account's counter for the current period, then judge
  *  the new total plus `need`. */
 export async function meterRecord(
@@ -172,7 +195,7 @@ export async function meterRecord(
   amount: number,
   need = 0,
 ): Promise<MeterVerdict> {
-  return withTier(await coreRecord(core(deps), account.toLowerCase(), resource, amount, need));
+  return withTopUp(deps, withTier(await coreRecord(core(deps), account.toLowerCase(), resource, amount, need)), need);
 }
 
 /** Judge the account's current usage plus `need` more, without recording. */
@@ -182,7 +205,7 @@ export async function meterCheck(
   resource: MeterResource,
   need = 0,
 ): Promise<MeterVerdict> {
-  return withTier(await coreCheck(core(deps), account.toLowerCase(), resource, need));
+  return withTopUp(deps, withTier(await coreCheck(core(deps), account.toLowerCase(), resource, need)), need);
 }
 
 /** Record a batch of usage reported by an edge (the relay) and judge every
@@ -197,5 +220,5 @@ export async function meterReportBatch(
     ...(report.batchId !== undefined ? { batchId: report.batchId } : {}),
     items: report.items.map((it) => ({ ...it, account: it.account.toLowerCase() })),
   });
-  return { duplicate: r.duplicate, verdicts: r.verdicts.map(withTier) };
+  return { duplicate: r.duplicate, verdicts: await Promise.all(r.verdicts.map((v) => withTopUp(deps, withTier(v), 0))) };
 }
