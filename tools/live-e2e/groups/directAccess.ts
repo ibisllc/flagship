@@ -14,6 +14,8 @@ import { join } from "node:path";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
   canonicalIp,
+  formatIp,
+  parseIp,
   signDirectAccessOrder,
   signDirectNameOrder,
   type DirectAccessOrder,
@@ -89,19 +91,13 @@ export const directAccess: Group = {
     // UpCloud spells addresses with leading zeros (…:0fd5); orders, the box and DNS use RFC 5952 text.
     const v6 = canonicalIp(b.ipv6!) ?? b.ipv6!;
     const session = { "x-flagship-session": await pair(A, b) };
+    // The order names the /64 only, never the exact address: the box must find its own address on its interface and
+    // report it in its signed update, and the name follows that report.
+    const parsed = parseIp(v6)!;
+    const net = Uint8Array.from(parsed.bytes);
+    net.fill(0, 8);
+    const prefix64 = `${formatIp({ family: 6, bytes: net })}/64`;
 
-    const sees = await rec.check("the box sees the IPv6 address on its own interface (direct-access view endpoints)", async () => {
-      let v: any = null;
-      for (let i = 0; i < 18; i++) {
-        const r = await http(`https://${b.fqdn}/api/screens/direct-access`, { headers: session });
-        assert(r.status === 200, `view ${r.status}: ${short(r.text)}`);
-        v = r.json;
-        if ((v.endpoints ?? []).some((e: { address: string }) => e.address === v6)) return short(v.endpoints);
-        await sleep(10_000);
-      }
-      throw new Error(`the box lists ${short(v?.endpoints)}, not ${v6}`);
-    });
-    if (!sees) return;
 
     const installed = await rec.check(`the app ${SLUG} runs on the box, open to visitors`, async () => {
       await installWhoami(A, b, SLUG, { enabled: true, public_routes: ["/*"] });
@@ -112,8 +108,8 @@ export const directAccess: Group = {
     const accessOrder = (enabled: boolean): DirectAccessOrder => ({
       serverDomain: b.fqdn,
       enabled,
-      addresses: enabled ? [v6] : [],
-      prefixes: [],
+      addresses: [],
+      prefixes: enabled ? [prefix64] : [],
       port: 443,
       issuedAt: Date.now(),
     });
@@ -138,6 +134,13 @@ export const directAccess: Group = {
       return `box ${toBox.status}, .com ${toCom.status}`;
     });
     if (!on) return;
+
+    await rec.check("the box finds the IPv6 on its own interface inside the ordered /64 (direct-access view endpoints)", async () => {
+      const r = await http(`https://${b.fqdn}/api/screens/direct-access`, { headers: session });
+      assert(r.status === 200, `view ${r.status}: ${short(r.text)}`);
+      assert((r.json?.endpoints ?? []).some((e: { address: string }) => e.address === v6), `the box lists ${short(r.json?.endpoints)}, not ${v6} (order ${prefix64})`);
+      return `${prefix64} → ${short(r.json.endpoints)}`;
+    });
 
     const reported = await rec.check("the box's signed address update reaches .com (boxAddresses lists the IPv6)", async () => {
       let s: any = null;
