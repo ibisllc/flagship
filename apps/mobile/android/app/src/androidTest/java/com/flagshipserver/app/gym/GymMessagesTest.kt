@@ -15,10 +15,17 @@ import androidx.compose.ui.test.performTextReplacement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 class GymMessagesTest : GymBase() {
     private val visitor = ByteArray(32) { 0x4C }
+
+    /** The Social side is kept for the whole process (a deep link or a tab tap sets it): each test starts on Profile,
+     *  as a fresh launch of the app does. */
+    @Before fun startOnProfile() {
+        com.flagshipserver.app.ui.screens.SocialSection.current.value = com.flagshipserver.app.ui.screens.SocialSection.PROFILE
+    }
 
     private fun account(): String = GymVoici.client.accounts.keys.first { it != GymVoici.OTHER }
 
