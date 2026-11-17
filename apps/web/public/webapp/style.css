@@ -612,8 +612,19 @@ button:where(:not(:has(> :not(.icon, svg, .glyph)))),
 button:where(:hover), .btn:where(:hover) { background: var(--teal-bright); border-color: var(--teal-bright); }
 button:where(:active), .btn:where(:active) { transform: translateY(1px); }
 button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; box-shadow: 0 0 0 2px var(--focus-inner); }
-button:disabled, .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-button:where(:disabled:hover), .btn:where(:disabled:hover) { background: var(--teal); border-color: var(--teal); }
+/* A disabled filled button is a neutral slab with muted ink: a faded teal with grey text failed contrast.
+   Outlined, ghost and icon variants keep their own look, dimmed. */
+button:where(:disabled), .btn:where(:disabled),
+button:where(:disabled:hover), .btn:where(:disabled:hover) {
+  background: var(--surface-sunken);
+  border-color: var(--rule-strong);
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+:is(button, .btn):disabled:is(.secondary, .pill, .ghost, .danger, .danger-outline, .linklike, .card, .icon-button,
+  .serving-line, .ph-copy, .ph-edit, .ph-avatar, .fs-switch, .social-more, .vp-pencil, .vp-text-btn, .vp-icon-btn,
+  .sa-remove, .social-call-fab),
+.fs-segmented > button:disabled { opacity: 0.4; }
 /* Recovery-gated session buttons: greyed but still TAPPABLE (a tap shows a
    toast explaining recovery is required) — so not `:disabled`, which would
    swallow the click. */
@@ -642,6 +653,12 @@ button.accent, .btn.accent {
 }
 button.primary:hover, .btn.primary:hover,
 button.accent:hover, .btn.accent:hover { background: var(--teal-bright); border-color: var(--teal-bright); }
+button.primary:disabled, .btn.primary:disabled,
+button.accent:disabled, .btn.accent:disabled {
+  background: var(--surface-sunken);
+  border-color: var(--rule-strong);
+  color: var(--ink-muted);
+}
 
 button.secondary, .btn.secondary,
 button.pill, button.ghost {
