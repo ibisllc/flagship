@@ -165,6 +165,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0151",
   // Blind-signed vouchers: spent nullifiers (no account) and the sealed wallet synced between the owner's devices.
   "0152",
+  // Payment rails: a hash of each payment that bought vouchers (no account), so a retry gets the same signatures.
+  "0153",
 ];
 
 export interface SchemaStatusDeps {
