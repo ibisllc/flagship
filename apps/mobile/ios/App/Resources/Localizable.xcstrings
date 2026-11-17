@@ -163700,6 +163700,47 @@
           }
         }
       }
+    },
+    "No messages yet. People who sign in on your page can write to you here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no hay mensajes. Quienes inicien sesión en tu página pueden escribirte aquí."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore de messages. Les personnes qui se connectent sur votre page peuvent vous écrire ici."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Nachrichten. Wer sich auf deiner Seite anmeldet, kann dir hier schreiben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não há mensagens. Quem entrar na sua página pode escrever para você aqui."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まだメッセージはありません。あなたのページでサインインした人は、ここからメッセージを送れます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有消息。在你的页面上登录的人可以在这里给你发消息。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

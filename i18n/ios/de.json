@@ -3992,5 +3992,6 @@
   "Only an organization admin can change the organization's balance.": "Nur ein Administrator der Organisation kann ihr Guthaben ändern.",
   "This org's plan has lapsed. Pay for seats on the Plan to add people.": "Der Tarif dieser Organisation ist abgelaufen. Bezahle Plätze im Tarif, um Personen hinzuzufügen.",
   "Open this organization's plan": "Den Tarif dieser Organisation öffnen",
-  "Voucher wallet key": "Schlüssel der Gutscheinbörse"
+  "Voucher wallet key": "Schlüssel der Gutscheinbörse",
+  "No messages yet. People who sign in on your page can write to you here.": "Noch keine Nachrichten. Wer sich auf deiner Seite anmeldet, kann dir hier schreiben."
 }

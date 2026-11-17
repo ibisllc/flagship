@@ -17019,5 +17019,9 @@
   "Voucher wallet key": {
     "en": "Voucher wallet key",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift:284"
+  },
+  "No messages yet. People who sign in on your page can write to you here.": {
+    "en": "No messages yet. People who sign in on your page can write to you here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:381"
   }
 }
