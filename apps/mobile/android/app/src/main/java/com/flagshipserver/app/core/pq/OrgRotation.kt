@@ -11,7 +11,8 @@ import kotlinx.serialization.json.put
 /**
  * Planning a key rotation on a phone (packages/protocol/src/orgKeyRing.ts: verifyOrgSeatKem,
  * verifyOrgBoxKem, orgKeyRecipientAllowed, buildOrgKeyRings, orgPendingRotations,
- * planOrgKeyRecipients, rotateOrgKey). Everything `.com` serves is checked here under the chain
+ * planOrgKeyRecipients, rotateOrgKey). `wallet` (the org's voucher wallet) is org-wide like the
+ * directory key: org admins only, never a box. Everything `.com` serves is checked here under the chain
  * and seat book this phone verified, so a new key is sealed only to recipients the phone itself
  * accepts and the "who left" list never rests on `.com`'s word.
  */
@@ -36,7 +37,7 @@ class OrgRotationPlan(val ctx: OrgKeyContext, val chains: Map<String, List<OrgKe
 
 object OrgRotation {
     private fun need(ok: Boolean, code: String, detail: String = "") { if (!ok) throw OrgAuthorityException(code, detail) }
-    private fun orgWide(k: OrgKeyKind) = k == OrgKeyKind.CGK || k == OrgKeyKind.DIRECTORY_KEY
+    private fun orgWide(k: OrgKeyKind) = k == OrgKeyKind.CGK || k == OrgKeyKind.DIRECTORY_KEY || k == OrgKeyKind.WALLET
     fun chainId(kind: OrgKeyKind, scope: String) = "${kind.wire}|$scope"
 
     // ── KEM statements ──────────────────────────────────────────────────
@@ -83,7 +84,7 @@ object OrgRotation {
             if (d !in ctx.servers) return false
             return when (kind) {
                 OrgKeyKind.CGK -> true
-                OrgKeyKind.DIRECTORY_KEY -> false
+                OrgKeyKind.DIRECTORY_KEY, OrgKeyKind.WALLET -> false
                 else -> d == scope
             }
         }
