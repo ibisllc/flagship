@@ -27,8 +27,8 @@ export interface OutboundProxySummary {
   } | null;
   hasCredentials: boolean;
   status: OutboundStatus;
-  /** False once `.com` has said the account is on Free: the proxy is part of
-   *  Pro, so the box takes no new proxy (turning one off always works). */
+  /** False once the box holds a CA-signed plan attestation saying Free: the
+   *  proxy is part of Pro, so the box takes no new proxy (turning one off always works). */
   available: boolean;
 }
 
@@ -40,8 +40,8 @@ export interface OutboundProxyHttpDeps {
   probeTarget: () => { host: string; port: number };
   /** Switch the box to the saved setting (connector, tunnel, bridge). */
   activate: (stored: StoredOutboundProxy) => void | Promise<void>;
-  /** The account's plan as `.com` last said in the heartbeat reply; null until it has. */
-  accountTier?: () => string | null;
+  /** The account's plan as the box can prove it (accessScope.ts PlanCheck); absent = unknown. */
+  plan?: PlanGate;
   now?: () => number;
   /** How long to wait after answering before switching, so the answer leaves on the old path. */
   switchDelayMs?: number;
@@ -50,16 +50,23 @@ export interface OutboundProxyHttpDeps {
 const J = { "content-type": "application/json" };
 const jres = (status: number, body: unknown): HttpResponse => ({ status, headers: J, body: JSON.stringify(body) });
 
-/** A proxy is part of Pro. Until `.com` has answered, the box doesn't refuse:
- *  a new box must reach `.com` through its proxy before it can learn its plan. */
-export function proxyAvailable(accountTier: (() => string | null) | undefined): boolean {
-  return accountTier?.() !== "free";
+/** What the proxy needs from the box's plan check (accessScope.ts `PlanCheck`). */
+export interface PlanGate {
+  state(): "pro" | "free" | "unknown";
+  /** Fetch a fresh attestation (the owner may have just bought Pro). */
+  refresh(): Promise<"pro" | "free" | "unknown">;
+}
+
+/** A proxy is part of Pro. Only a verified "free" refuses: until the box holds a CA-signed
+ *  attestation it doesn't, because a new box must reach `.com` through its proxy to learn its plan. */
+export function proxyAvailable(plan: PlanGate | undefined): boolean {
+  return plan?.state() !== "free";
 }
 
 export function outboundProxySummary(
   store: OutboundProxyStore,
   net: OutboundNet,
-  accountTier?: () => string | null,
+  plan?: PlanGate,
 ): OutboundProxySummary {
   const held = store.current();
   const p = held?.signed.proxy;
@@ -70,7 +77,7 @@ export function outboundProxySummary(
         : null,
     hasCredentials: Boolean(p?.auth && held?.credentials),
     status: net.status(),
-    available: proxyAvailable(accountTier),
+    available: proxyAvailable(plan),
   };
 }
 
@@ -78,7 +85,7 @@ export function buildOutboundProxyHttp(deps: OutboundProxyHttpDeps) {
   const now = deps.now ?? Date.now;
   return async (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }): Promise<HttpResponse | null> => {
     if (path !== OUTBOUND_PROXY_PATH) return null;
-    if (method === "GET") return jres(200, outboundProxySummary(deps.store, deps.net, deps.accountTier));
+    if (method === "GET") return jres(200, outboundProxySummary(deps.store, deps.net, deps.plan));
     if (method !== "POST") return jres(405, { error: "method not allowed" });
     if (ctx.companion) {
       return jres(403, { code: "companion-write-not-allowed", message: "Open your owner app to approve this" });
@@ -96,8 +103,12 @@ export function buildOutboundProxyHttp(deps: OutboundProxyHttpDeps) {
     if (Math.abs(now() - p.issuedAt) > BOX_PROXY_MAX_SKEW_MS) {
       return jres(403, { error: "This change is too old. Try again." });
     }
-    if (p.kind !== "none" && !proxyAvailable(deps.accountTier)) {
-      return jres(403, { code: "pro-required", error: "An outbound proxy is part of Pro. You can still turn this one off." });
+    if (p.kind !== "none" && !proxyAvailable(deps.plan)) {
+      // The attestation may be hours old and the owner may have just bought Pro: ask once more.
+      const fresh = await deps.plan!.refresh().catch(() => "unknown" as const);
+      if (fresh === "free") {
+        return jres(403, { code: "pro-required", error: "An outbound proxy is part of Pro. You can still turn this one off." });
+      }
     }
     const held = deps.store.current();
     if (held && p.issuedAt <= held.signed.proxy.issuedAt) {
@@ -134,7 +145,7 @@ export function buildOutboundProxyHttp(deps: OutboundProxyHttpDeps) {
     setTimeout(() => {
       void Promise.resolve(deps.activate(next)).catch(() => {});
     }, deps.switchDelayMs ?? 500).unref?.();
-    const summary = outboundProxySummary(deps.store, deps.net, deps.accountTier);
+    const summary = outboundProxySummary(deps.store, deps.net, deps.plan);
     return jres(200, { ok: true, outboundProxy: { ...summary, status: { state: setting ? "ok" : "direct", since: now() } } });
   };
 }
