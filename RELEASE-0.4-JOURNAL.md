@@ -1411,3 +1411,54 @@ Fixes (branch `0.4/gym-r1-fixes`, fast-forwarded into release/0.4 at `24f836458`
   - Owner decisions on the relay (2026-11-17, advice given): the interim relay on the owner's free Oracle VPS, labelled run by Flagship; Oblivious Network at $15/mo as the main relay if it is not on Cloudflare, allows CORS, and its logging and jurisdiction are OK; community relays in 0.5. Waiting on the owner.
 - Next: the payments and proxy live gym (VOUCHER_SIGNING_KEYS gym secret plus gym-refresh), then D11, R2-R4 and the E UI pass.
 - Oblivious relay https://relay.oblivious.network/flagship (trial) checked from the Mac: on Fly, not Cloudflare; CORS allows any origin. Added to the webapp CSP. The 0.4 deploy sets OHTTP_RELAYS (docs/outbound-proxy.md, "The relay in use"). Play listing (Wear tile/complication, plus es-419) submitted 2026-11-17: 'Changes in review'.
+
+### 2026-11-17 — R2 gym: payments and the outbound proxy live (every group green, arch-v2)
+- gym-0.4 rebased onto release/0.4 (backup `backup/gym-0.4-pre-rebase-202611171904`; two merged R1 harness commits
+  dropped). Gym artifact `f30f6bf77a33` (seq 202611171905), update target `34a951de625e`; gym D1 0152-0155 applied
+  and stamped; gym Worker deployed the gym way (`e45191fa`, then `16679da4` with the fix below). Relays not redeployed
+  (no relay code changed since R1). Issuer: Let's Encrypt.
+- Gym-only secrets (keys in `~/.config/flagship/gym-voucher-key.json` and `gym-ohttp-gateway-key`, mode 600, never
+  committed): `VOUCHER_SIGNING_KEYS` (key id `560e05b902587fd8`), `OHTTP_GATEWAY_KEYS` (key id 1). The interim relay
+  ran as Fly app `flagship-ohttp-relay-gym` (`infra/ohttp-relay/fly.gym.toml`, autostart off) with `OHTTP_RELAYS` /
+  `OHTTP_RELAY_URL` pointing at it; the app was destroyed after the run and those two secrets deleted again.
+- Rails: Stripe and Google report off and answer `rail-off`; the Stripe webhook answers 503 "stripe not configured".
+  **Apple reports on in the gym**: `wrangler.gym.toml` sets `APPLE_IAP_ENVIRONMENTS = "Sandbox"` and the Apple rail
+  needs no secret, so `.com` offers it; a bogus JWS is refused 400 `payment-invalid` cleanly. Owner: leave it (works
+  once the App Store products exist) or drop the var until then.
+- New live groups (branch `0.4/gym-r2-fixes`, mirrored on gym-0.4), driving the webapp's own `lib/plan.js` as admin
+  devices of a real account:
+
+| group | result |
+|---|---|
+| core | 30/0 |
+| vouchers | 9/1 → **10/0** (the D1 fix below, then a harness fix: no account A when run alone) |
+| outbound-proxy | 8/0 |
+| ohttp-failure | 7/0 (rerun 7/0 after the fix, now asserting every voucher that leaves the wallet is credited) |
+| update | 9/0 |
+
+  vouchers: payments config, rails, Free box refuses a proxy (pro-required), 30 test vouchers into a padded sealed
+  wallet, two-device sync with a 409 merge, a spend through the OHTTP relay (nothing direct; `.com` counts the ohttp
+  arrival), the plan reaching R1's Pro gate, double spend and forged voucher refused, two devices ticking at once
+  (credited exactly once), overage (Free refused without spending; blocks bought 5/5/0 within the cap, +300 GB).
+  outbound-proxy: SOCKS5 with a password on a throwaway VM, box traffic through it (`CONNECT
+  flagship-services-gym.fly.dev:8443`), wrong password refused 422; proxy killed with fallback → `fallback` on the box
+  and `/pods`; proxy killed without fallback → box offline, `failing` on `/pods` through the lane; the owner's "turn
+  off" left at `.com` reached the box in 129 s (a password or a stranger's signature refused at the lane); Activity
+  has fallback/failing/changed. ohttp-failure: relay machine stopped → trickle waits (retry 5 min, next tick doesn't
+  try), near lapse goes direct with the marker (`.com` direct-fallback counted), relay back → through it again. The
+  near lapse is the plan as it would read 12 h before lapsing (one voucher is 3 days; `.com` credits from the real
+  plan).
+- **Product bug fixed** (`417c59cc1`): a redeem of several vouchers credited only the first and reported the rest
+  `voucher-spent` while consuming them all (inside a D1 batch `meta.changes` isn't the statement's own count). An
+  overage block was refused and its five vouchers lost; any catch-up spend of two or more lost all but one. The
+  nullifier insert now uses `ON CONFLICT DO NOTHING RETURNING`; storage test runs the D1 store behind a batch that
+  reports running totals (fails on the old code). Verified live (3 fresh vouchers → credited 3).
+- Seen, not changed: `POST /api/vouchers/test-issue` used 252 ms CPU for 30 blind signatures (gym only; Workers Paid).
+- Cost: UpCloud credits 332.07 (R1's end) → 227.92 (≈ €1.04, includes the demo server's own time since R1): two
+  8-core artifact builds, three fleets of up to 3 boxes, one 1xCPU SOCKS VM. Fly: gym relays ~1 h, the OHTTP relay
+  ~1 h (shared-cpu-1x 256 MB). Let's Encrypt: one certificate per gym box. Time about 19:00-20:10 UTC.
+- Leftovers: none. UpCloud lists only `playstore-test-0725`; gym servers 0, gym DNS records 0 (zone at its base 40);
+  gym relays stopped (autostart off); `flagship-ohttp-relay-gym` destroyed; gym lock released.
+- Not covered live: the box lane while the relay is also down (goes direct, marked: unit-tested only), Stripe, Apple
+  and Google purchases (no test keys), the phones' OHTTP clients (only the webapp's code ran).
+- Resume point: merge `0.4/gym-r2-fixes` (owner), then D11, R2-R4 and the E UI pass.
