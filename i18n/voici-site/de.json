@@ -151,6 +151,9 @@
   "Their camera": "Kamera der anderen Person",
   "Your camera": "Deine Kamera",
   "Flip": "Wechseln",
+  "Full screen": "Vollbild",
+  "Exit full screen": "Vollbild beenden",
+  "Picture in picture": "Bild-im-Bild",
   "End": "Auflegen",
   "Audio": "Audio",
   "Audio output {0}": "Audioausgang {0}"

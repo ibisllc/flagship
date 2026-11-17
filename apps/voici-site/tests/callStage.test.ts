@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 // messages.js reads the built qrEncoder.js; the call screen needs only its openMessages.
 vi.mock("../src/messages.js", () => ({ openMessages: () => {} }));
-import { callElapsed, cornerAfterKey, nearestCorner, showIncomingRing } from "../src/call.js";
+import { callElapsed, callLayout, cornerAfterKey, nearestCorner, REMOTE_STALL_MS, remoteVideoLive, showIncomingRing } from "../src/call.js";
 
 type Node = El | Txt;
 class Txt {
@@ -217,6 +217,63 @@ describe("the call screen", () => {
     expect(mute.classList.contains("is-on")).toBe(true);
     expect(stage.all().find((x) => x.tagName === "video" && x.classList.contains("call-self"))?.getAttribute("aria-label")).toBe("Your camera");
     expect(stage.all().find((x) => x.tagName === "video" && x.classList.contains("call-remote"))?.getAttribute("aria-label")).toBe("Their camera");
+  });
+
+  it("their video is live only while announced, flowing and fresh; the layout follows", () => {
+    const now = 10_000;
+    expect(remoteVideoLive({ room: "on", trackLive: true, lastFrameAt: now - 100, now })).toBe(true);
+    expect(remoteVideoLive({ room: "on", trackLive: true, lastFrameAt: now - REMOTE_STALL_MS - 1, now })).toBe(false);
+    expect(remoteVideoLive({ room: "on", trackLive: false, lastFrameAt: now, now })).toBe(false);
+    expect(remoteVideoLive({ room: "off", trackLive: true, lastFrameAt: now, now })).toBe(false);
+    expect(remoteVideoLive({ room: "paused", trackLive: true, lastFrameAt: now, now })).toBe(false);
+    expect(callLayout(false, false)).toBe("audio");
+    expect(callLayout(false, true)).toBe("self");
+    expect(callLayout(true, false)).toBe("video");
+    expect(callLayout(true, true)).toBe("video");
+  });
+
+  it("goes audio → video when their camera comes on, and back to audio when it stops or stalls", async () => {
+    let clock = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      const ticks: (() => void)[] = [];
+      const c = ctx({ setInterval: (f: () => void) => (ticks.push(f), ticks.length) });
+      c.win.navigator.mediaDevices.getUserMedia = async () => ({ getTracks: () => [] });
+      c.win.Worker = class {
+        terminate() {}
+        postMessage() {}
+      };
+      const track = { muted: false, readyState: "live", l: {} as Record<string, () => void>, addEventListener(t: string, f: () => void) { this.l[t] = f; } };
+      let opts: any;
+      const call = { remoteStream: { getVideoTracks: () => [track] }, hangUp() {}, setMuted() {} };
+      c.lib.voiciCallVideoAble = async () => true;
+      c.lib.startVoiciCall = (o: any) => ((opts = o), call);
+      showIncomingRing(c, { pageId: "p1", pseudonymPub: "x" }, { ringId: "r", hint: "h" });
+      buttons(stageOf(c.doc)!)[1]!.click();
+      for (let i = 0; i < 5 && !opts; i++) await new Promise((r) => setTimeout(r, 0));
+      const stage = stageOf(c.doc)!;
+      const has = (k: string) => stage.classList.contains(k);
+      opts.onState("connected", {});
+      expect(has("is-video")).toBe(false);
+      opts.onCamera("on");
+      expect(has("has-remote") && has("is-video")).toBe(true);
+      // No frame for longer than the stall limit: back to the audio layout, no black rectangle.
+      clock += REMOTE_STALL_MS + 600;
+      for (const f of ticks) f();
+      expect(has("has-remote") || has("is-video")).toBe(false);
+      // Frames again (the track unmutes): video again.
+      track.l.unmute!();
+      expect(has("is-video")).toBe(true);
+      track.l.mute!();
+      expect(has("is-video")).toBe(false);
+      track.l.unmute!();
+      opts.onCamera("off");
+      expect(has("has-remote") || has("is-video")).toBe(false);
+      const remote = stage.all().find((x) => x.tagName === "video" && x.classList.contains("call-remote"))!;
+      expect(remote.hidden).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("times m:ss, then h:mm:ss after an hour", () => {

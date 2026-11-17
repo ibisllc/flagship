@@ -28,6 +28,9 @@ const PATHS = {
   videoOff: ["M3.5 7h11v10h-11z", "m14.5 10.5 6-3.5v10l-6-3.5", "M3.5 3.5l17 17"],
   flip: ["M4 8h3l1.5-2h7L17 8h3v11H4z", "M9 13.5a3 3 0 0 1 5.2-2", "M15 13.5a3 3 0 0 1-5.2 2", "M14.5 9.8v1.9h-1.9", "M9.5 17.2v-1.9h1.9"],
   speaker: ["M4.5 9.5h3l4-3.5v12l-4-3.5h-3z", "M15 9a4 4 0 0 1 0 6", "M17.5 6.5a7.5 7.5 0 0 1 0 11"],
+  expand: ["M4 9V4h5", "M20 9V4h-5", "M4 15v5h5", "M20 15v5h-5"],
+  contract: ["M9 4v5H4", "M15 4v5h5", "M9 20v-5H4", "M15 20v-5h5"],
+  pip: ["M3.5 5.5h17v13h-17z", "M12 12h6.5v5H12z"],
 };
 
 export function icon(doc, name, cls = "icon") {

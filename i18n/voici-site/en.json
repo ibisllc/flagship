@@ -251,6 +251,18 @@
     "en": "Flip",
     "ctx": "voici-site/call.js:343"
   },
+  "Full screen": {
+    "en": "Full screen",
+    "ctx": "voici-site/call.js:369"
+  },
+  "Exit full screen": {
+    "en": "Exit full screen",
+    "ctx": "voici-site/call.js:387"
+  },
+  "Picture in picture": {
+    "en": "Picture in picture",
+    "ctx": "voici-site/call.js:375"
+  },
   "End": {
     "en": "End",
     "ctx": "voici-site/call.js:344"
