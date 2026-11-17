@@ -1,8 +1,10 @@
 # Payments: rails, privacy and the recommended mix
 
-Status: **design, for owner review** (2026-11-13). Release 0.4, item F2
-"Subscriptions". No code yet beyond what the feature branches already hold
-(section 2).
+Status: **design 2026-11-13; payments steps 1-3 built 2026-11-17** on
+`0.4/payments` (voucher core, phone-held wallet with trickle spending, Plan
+screens). Release 0.4, item F2 "Subscriptions". Section 5.11 replaces the
+server-held stash of 5.3 and 5.4 with the owner's decision of 2026-11-17;
+section 11 says what is built.
 
 The owner's decision (2026-11-13): "Everything launches now. We need to weigh
 the privacy and convenience of mixing Apple/google/stripe and
@@ -473,6 +475,12 @@ check as "plan unknown", never "lapsed". The outbound proxy keeps reading
   out of theirs. Monero is the answer for those who need that.
 - Pro Max spends 20 a month: the amount reveals the plan, which `.com`
   already knows.
+- The wallet write after a purchase (5.11): `.com` sees an account's sealed
+  wallet change version soon after a voucher signing. Padding hides the
+  amount, not the moment. The apps write the wallet after every spend and
+  setting too, so writes are common, but a purchase followed within a minute
+  by a write is still a hint. A fix for a later step: hold new vouchers on the
+  buying device and sync them with the next routine write at a random time.
 
 ### 5.10 Owner rules
 
@@ -489,6 +497,70 @@ check as "plan unknown", never "lapsed". The outbound proxy keeps reading
   the monthly bill).
 - **No hard-coded English.** All new text in `i18n/<surface>/*.json`,
   including store product names and push text.
+
+### 5.11 The phones hold the wallet and spend in a trickle (owner, 2026-11-17)
+
+Owner decision: "Vouchers need no server to spend: the phones (and box) hold
+and spend them." The owner also prefers "a trickle of spending" and $10
+prices. This replaces "the server pays its own bill" (5.4) and the server-held
+claim secret (5.3): a box no longer has to be up, or even exist, for an
+account to pay.
+
+- **Who holds them.** The account's admin devices. The wallet is one sealed
+  blob per account at `.com` (`flagship/voucher-wallet/v1`), synced the way
+  the call hours are (`voiciCallSettings.ts`, D1 0150): AES-256-GCM under
+  HKDF(UMK seed, "flagship/voucher-wallet/v1"), compare-and-set on a version,
+  a conflict merges (vouchers and spent nullifiers are unions, spent wins;
+  settings by the newer `updatedAt`). `.com` stores ciphertext only. The
+  plaintext is padded to 4 KiB × 2^i so its size says little about the
+  balance. The aad carries the version but not the name, so an account
+  rename (which moves the row) keeps the wallet readable.
+- **Admin only, honestly.** The wallet key comes from the UMK, which every
+  device of the account holds, so "only admin devices spend" is a rule the
+  apps keep (spend controls show only where the admin root is held), not one
+  the cryptography enforces. A key from the admin root would enforce it, but
+  iOS never holds the admin root open, so no automatic spend could run.
+  Owner question 12.
+- **The trickle.** Instead of 10 or 20 vouchers once a month, a device spends
+  one voucher at a time at a random moment while the plan is less than
+  `highWaterDays` (10) ahead; below `lowWaterDays` (3) it catches up at once.
+  One voucher is a fixed slice of a month: 3 days of Pro, 36 hours of Pro Max
+  (`planUnitMs`). Each spend is one $1 voucher at a random time, the same
+  shape for every account and every plan, so a spend reveals nothing but the
+  account it pays for. `trickleStep` is a pure function with shared vectors.
+- **Grace.** A plan keeps its tier 72 hours past its end (`PLAN_GRACE_MS`),
+  and a spend inside the grace continues from the old end (it pays for the
+  gap, it is not free time). A phone that was off for a day never lapses the
+  plan. Past the grace a spend starts from now.
+- **Two devices.** Both may tick. `.com` refuses (without spending) a plan
+  spend that would put the plan more than `maxAheadDays` (35) ahead, and a
+  voucher both devices sent is spent once (the second gets `voucher-spent`
+  and drops it).
+- **Switching plans.** The time left converts at the ratio of the two plans'
+  unit lengths (6 days of Pro become 3 days of Pro Max), so nothing is lost.
+- **First activation.** At once by default (`.com` can see a purchase and a
+  first spend close together; the apps say so). "Start at a random time in
+  the next 24 hours" sets `startAt` and nothing is spent before it.
+- **Overage** is a prepaid block: 5 vouchers buy 100 GB for the month,
+  bought automatically when less than 10 GB is left, up to the owner's
+  monthly cap (default $10). Past the allowance and the blocks a paid account
+  is slowed like Free, never billed. Free accounts never buy blocks.
+- **Biometric.** Automatic spends (the trickle, overage within the cap) need
+  no prompt, but run only while the app session is unlocked; background
+  work defers rather than prompts. Choosing a paid plan, which spends at
+  once, asks Face ID / biometric once.
+- **Spending privacy.** `POST /api/vouchers/redeem` carries no credential,
+  cookie or device header and the OHTTP gateway accepts it, so once the
+  phones speak OHTTP the spend shows no address either (owner question 13).
+  `.com` keeps per spent voucher its nullifier, key id and UTC day; never the
+  account, never an address, never a time finer than the day.
+- **The box.** It reads the plan from `flagship/plan-attestation/v1` exactly
+  as before. It holds no vouchers in this step. A box-held copy (so a box can
+  keep paying when every phone is gone) would need the wallet key on the box,
+  which today only UMK holders derive; left for later (owner question 14).
+- **The apps never take outside vouchers.** No code field, QR scan or file
+  import (Apple 3.1.1). Vouchers reach the wallet only from a rail the app
+  itself runs (later steps) or, in the gym, the free test issue.
 
 ## 6. The UX in each app
 
@@ -634,7 +706,15 @@ steps 3 to 5.
 10. **Who may spend the stash** besides auto-pay: admin devices only?
 11. **Prices in stores:** Apple and Google price points ($9.99 versus $10)
     and whether store prices carry the 15% (same voucher, higher price in
-    the app) or we absorb it.
+    the app) or we absorb it. Provisional (2026-11-17): $10 / $20
+    everywhere, fee absorbed.
+12. **Wallet key** (5.11): UMK-derived (every device of the account could
+    open it; the apps keep spending to admin devices) or a key only admin
+    devices hold (enforced, but no automatic spend on iOS)?
+13. **OHTTP in the apps** for the spend (Swift HPKE, Kotlin, the webapp needs
+    a relay with CORS): needed before launch, or after?
+14. **A box-held copy of the wallet**, so a server can keep paying with no
+    phone left?
 
 ## 10. To check with current official sources before building
 
