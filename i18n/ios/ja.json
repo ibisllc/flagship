@@ -3854,6 +3854,7 @@
   "Delete this conversation": "この会話を削除",
   "The conversation wasn't deleted.": "会話は削除されていません。",
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。",
+  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": "Flagship でサインインした人からの通話はオンになっています。ページのオプションでオフにできます。",
   "Hello. I am using the Flagship app, from flagshipserver.com": "こんにちは。flagshipserver.com の Flagship アプリを使っています",
   "Inbox": "受信箱",
   "%lld new": "新着 %lld 件",

@@ -83,7 +83,7 @@ export function fieldChanged(m = editorModel()) {
 
 /** How many changes the bar counts: the drafts, plus the open field when it is changed and no profile draft waits. */
 export function unpublishedCount(m = editorModel()) {
-  return m.ops.length + (fieldChanged(m) && !m.profilePending ? 1 : 0);
+  return m.pendingCount + (fieldChanged(m) && !m.profilePending ? 1 : 0);
 }
 
 /** The bar's line: how many changes wait (admin devices), or that they wait for an admin device. */

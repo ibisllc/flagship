@@ -258,6 +258,45 @@ final class PageControlsTests: XCTestCase {
         XCTAssertEqual(idx.acceptsCalls, 1, "Calls still start on.")
     }
 
+    func test_thePublicSwitchCarriesAcceptMessagesAsTheOwnerLeftIt() async throws {
+        let s = await store()
+        await s.setAcceptsMessages(false)
+        XCTAssertEqual(s.pendingCount, 1)
+        await s.goPublic()
+        XCTAssertNil(s.publishError)
+        let idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(idx.acceptsMessages, 0, "The page never takes messages the owner turned off.")
+        XCTAssertEqual(idx.acceptsCalls, 1, "Calls still start on.")
+        XCTAssertFalse(s.acceptsMessages)
+        XCTAssertEqual(s.pendingCount, 0, "Nothing is left to publish.")
+    }
+
+    func test_turningAcceptMessagesOffAndOnAgainIsNoChange() async throws {
+        let s = await store()
+        await s.setAcceptsMessages(false)
+        await s.setAcceptsMessages(true)
+        XCTAssertEqual(s.pendingCount, 0, "Before the first publish.")
+        await s.goPublic()
+        await s.setAcceptsMessages(false)
+        XCTAssertEqual(s.pendingCount, 1)
+        await s.setAcceptsMessages(true)
+        XCTAssertEqual(s.pendingCount, 0, "On a public page.")
+    }
+
+    func test_thePublicWarningSaysWhatTheFirstPublishTurnsOn() async throws {
+        let s = await store()
+        let d = freshDefaults()
+        let flow = PagePublicFlow(store: s, warning: PagePublicWarning(defaults: d))
+        await s.setAcceptsMessages(false)
+        flow.publishAll()
+        XCTAssertTrue(flow.firstPublish)
+        XCTAssertFalse(flow.firstPublishMessages, "Messages were turned off: the warning names only calls.")
+        flow.cancel()
+        await s.setAcceptsMessages(true)
+        flow.publishAll()
+        XCTAssertTrue(flow.firstPublishMessages)
+    }
+
     func test_aRepublishKeepsTheOwnersChoices() async throws {
         let s = await store()
         await s.goPublic()

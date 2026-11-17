@@ -15438,6 +15438,10 @@
     "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
     "ctx": "webapp/lib/voiciCopy.js:27"
   },
+  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": {
+    "en": "Calls from people signed in with Flagship are on. You can turn them off in Page options.",
+    "ctx": "webapp/lib/voiciCopy.js:30"
+  },
   "Inbox": {
     "en": "Inbox",
     "ctx": "webapp/index.html"

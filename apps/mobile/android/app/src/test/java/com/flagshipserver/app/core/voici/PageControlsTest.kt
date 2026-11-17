@@ -130,6 +130,21 @@ class PageControlsTest {
         assertEquals(0, c.page.value.pendingCount)
     }
 
+    @Test fun theSwitchCarriesAcceptMessagesAsTheOwnerLeftIt() = runBlocking {
+        val c = center()
+        ready(c)
+        c.edit("accept-messages", accepts = 0)
+        c.edit("accept-messages", accepts = 1)
+        assertEquals("off and on again before the first publish is no change", 0, c.page.value.pendingCount)
+        c.edit("accept-messages", accepts = 0)
+        assertEquals(1, c.page.value.pendingCount)
+        assertTrue(c.goPublic("test"))
+        assertEquals("the page never takes messages the owner turned off", 0, stored()!!.body.acceptsMessages)
+        assertEquals("calls still start on", 1, stored()!!.body.acceptsCalls)
+        assertEquals("nothing is left to publish", 0, c.page.value.pendingCount)
+        assertFalse(c.page.value.pendingAccepts)
+    }
+
     @Test fun removeSignsTheNextSeqAndRepublishingContinuesTheLadder() = runBlocking {
         val c = center()
         ready(c)

@@ -3854,6 +3854,7 @@
   "Delete this conversation": "删除此对话",
   "The conversation wasn't deleted.": "对话未被删除。",
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "来自用 Flagship 登录的人的消息和通话已开启。你可以在页面选项中关闭它们。",
+  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": "来自用 Flagship 登录的人的通话已开启。你可以在页面选项中关闭它们。",
   "Hello. I am using the Flagship app, from flagshipserver.com": "你好。我正在使用来自 flagshipserver.com 的 Flagship 应用",
   "Inbox": "收件箱",
   "%lld new": "%lld 条新动态",

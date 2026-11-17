@@ -16446,6 +16446,10 @@
     "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:112"
   },
+  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": {
+    "en": "Calls from people signed in with Flagship are on. You can turn them off in Page options.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:127"
+  },
   "Hello. I am using the Flagship app, from flagshipserver.com": {
     "en": "Hello. I am using the Flagship app, from flagshipserver.com",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:900"

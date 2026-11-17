@@ -4178,6 +4178,7 @@
     <string name="voici_calls_hours_switch">Seulement à certaines heures</string>
     <string name="voici_calls_hours_footer">En dehors de ces heures, les appels ne sonnent sur aucun de vos appareils et deviennent des appels manqués. Seuls vos propres appareils connaissent ces heures. Fuseau horaire : %1$s.</string>
     <string name="voici_first_publish_defaults">Les messages et les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page.</string>
+    <string name="voici_first_publish_defaults_calls">Les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page.</string>
     <string name="voici_calls_from_signed_in_note">Les appelants se connectent avec Flagship. Ils restent anonymes pour vous.</string>
     <string name="social_inbox">Réception</string>
     <string name="social_who_to_call">Qui appeler</string>

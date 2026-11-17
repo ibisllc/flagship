@@ -3856,6 +3856,7 @@
   "Delete this conversation": "Eliminar esta conversación",
   "The conversation wasn't deleted.": "La conversación no se ha eliminado.",
   "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": "Los mensajes y las llamadas de personas que iniciaron sesión con Flagship están activados. Puedes desactivarlos en Opciones de la página.",
+  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": "Las llamadas de personas que iniciaron sesión con Flagship están activadas. Puedes desactivarlas en Opciones de la página.",
   "Hello. I am using the Flagship app, from flagshipserver.com": "Hola. Estoy usando la app Flagship, de flagshipserver.com",
   "Inbox": "Recibidos",
   "%lld new": "%lld nuevos",

@@ -305,6 +305,13 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     // A page never published shows Accept messages on: the first publish turns it on, so it is no change.
     await expect(page.locator("#page-accepts")).toHaveAttribute("aria-checked", "true");
     await expect(page.locator("[data-testid=accepts-pending]")).toHaveCount(0);
+    // Off waits as a change; on again is no change at all (nothing to count, nothing left in the lane).
+    await page.click("#page-accepts");
+    await expect(page.locator("#page-accepts")).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("[data-testid=accepts-pending]")).toHaveText("Not published yet");
+    await page.click("#page-accepts");
+    await expect(page.locator("#page-accepts")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("[data-testid=accepts-pending]")).toHaveCount(0);
     await page.click("[data-sheet-done]");
     await page.click("#page-new-post-open");
     await page.fill("#post-text", "Hello from the web.");
@@ -358,6 +365,28 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     const profile = JSON.parse(com.pieces.get(com.index.pieces.find((p: any) => p.role === "profile").sha256)!.toString("utf8"));
     expect(profile).toMatchObject({ displayName: "Smoke Test", bio: "Builds things.", links: [{ url: "https://github.com/smoketest", label: "Code", site: "github" }] });
     await shot(page, testInfo, "page-editor-published");
+  });
+
+  test("gym messages the first publish's warning follows Accept messages", async ({ page }) => {
+    const { m, com } = await messagesWorld(page);
+    m.get(path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
+    await openSocial(page, "profile");
+    await page.click("#page-options");
+    await page.click("#page-accepts");
+    await expect(page.locator("#page-accepts")).toHaveAttribute("aria-checked", "false");
+    await page.click("[data-sheet-done]");
+    await expect(page.locator("[data-testid=pe-bar-text]")).toHaveText("1 change not published");
+    await page.click("#pe-publish");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator(".modal-title")).toHaveText("Make your page public?");
+    // Messages were turned off: the warning names only what really starts on.
+    await expect(page.locator(".modal-message")).toHaveText(
+      "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them. Calls from people signed in with Flagship are on. You can turn them off in Page options.",
+    );
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Public");
+    expect(com.index.acceptsMessages).toBe(0);
+    expect(com.index.acceptsCalls).toBe(1);
   });
 
   test("gym messages a device without the admin root sends a draft and shows it grayed", async ({ page }, testInfo) => {

@@ -17183,6 +17183,10 @@
     "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
     "ctx": "voi.ci / Messages: public warning before the page's first publish, what starts on"
   },
+  "voici_first_publish_defaults_calls": {
+    "en": "Calls from people signed in with Flagship are on. You can turn them off in Page options.",
+    "ctx": "voi.ci / Messages: public warning before the page's first publish when Accept messages was turned off, what starts on"
+  },
   "voici_calls_from_signed_in_note": {
     "en": "Callers sign in with Flagship. They stay anonymous to you.",
     "ctx": "voi.ci calls: page call mode note"

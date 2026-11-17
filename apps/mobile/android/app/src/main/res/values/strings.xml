@@ -4183,6 +4183,7 @@
     <string name="voici_calls_hours_switch">Only at certain hours</string>
     <string name="voici_calls_hours_footer">Outside these hours calls don\'t ring on any of your devices and become missed calls. Only your own devices know these hours. Time zone: %1$s.</string>
     <string name="voici_first_publish_defaults">Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.</string>
+    <string name="voici_first_publish_defaults_calls">Calls from people signed in with Flagship are on. You can turn them off in Page options.</string>
     <string name="voici_calls_from_signed_in_note">Callers sign in with Flagship. They stay anonymous to you.</string>
     <string name="social_inbox">Inbox</string>
     <string name="social_who_to_call">Who to call</string>
