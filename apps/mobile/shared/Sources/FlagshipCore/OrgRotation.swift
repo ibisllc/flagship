@@ -47,7 +47,7 @@ public struct OrgRotationPlan {
 
 public enum OrgRotation {
     static func need(_ ok: Bool, _ code: String, _ detail: String = "") throws { if !ok { throw OrgAuthorityError(code, detail) } }
-    static func orgWide(_ k: OrgKeyKind) -> Bool { k == .cgk || k == .directoryKey }
+    static func orgWide(_ k: OrgKeyKind) -> Bool { k == .cgk || k == .directoryKey || k == .wallet }
     public static func chainId(_ kind: OrgKeyKind, _ scope: String) -> String { "\(kind.rawValue)|\(scope)" }
     static let zero64 = String(repeating: "0", count: 64)
 
@@ -91,7 +91,7 @@ public enum OrgRotation {
         if recipient.hasPrefix("box:") {
             let d = String(recipient.dropFirst(4))
             guard ctx.servers.contains(d) else { return false }
-            switch kind { case .cgk: return true; case .directoryKey: return false; default: return d == scope }
+            switch kind { case .cgk: return true; case .directoryKey, .wallet: return false; default: return d == scope }
         }
         let seatId = String(recipient.dropFirst(5))
         if ctx.state.current.admins.contains(where: { $0.seatId == seatId && $0.kind == .admin }) { return true }
