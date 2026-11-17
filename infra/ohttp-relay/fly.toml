@@ -1,0 +1,28 @@
+# Flagship's INTERIM OHTTP relay (infra/ohttp-relay/README.md). Not deployed by
+# any script: the owner decides (`flyctl launch --copy-config --no-deploy` then
+# `flyctl deploy`). Never put this behind Cloudflare: .com's gateway is there.
+app = "flagship-ohttp-relay"
+primary_region = "ord"
+
+[env]
+  GATEWAY_URL = "https://flagshipserver.com/api/ohttp/gateway"
+  ALLOWED_ORIGINS = "https://webapp.flagshipserver.com,https://remote.flagshipserver.com"
+  PER_IP_PER_MINUTE = "60"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "5s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "3s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
