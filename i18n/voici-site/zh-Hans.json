@@ -151,6 +151,9 @@
   "Their camera": "对方的摄像头",
   "Your camera": "你的摄像头",
   "Flip": "翻转",
+  "Full screen": "全屏",
+  "Exit full screen": "退出全屏",
+  "Picture in picture": "画中画",
   "End": "挂断",
   "Audio": "音频",
   "Audio output {0}": "音频输出 {0}"

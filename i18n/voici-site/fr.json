@@ -151,6 +151,9 @@
   "Their camera": "Sa caméra",
   "Your camera": "Votre caméra",
   "Flip": "Retourner",
+  "Full screen": "Plein écran",
+  "Exit full screen": "Quitter le plein écran",
+  "Picture in picture": "Image dans l’image",
   "End": "Raccrocher",
   "Audio": "Audio",
   "Audio output {0}": "Sortie audio {0}"
