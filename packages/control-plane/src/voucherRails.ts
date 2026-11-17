@@ -53,6 +53,8 @@ export interface StripeRail {
   /** Live keys (`sk_live_` / `rk_live_`) accept only live sessions; test keys only test ones. */
   livemode: boolean;
   successUrl: string;
+  /** Where an invoiced batch's Checkout returns (the web shop's batch page). */
+  batchSuccessUrl?: string;
   cancelUrl: string;
   taxBehavior: "inclusive" | "exclusive";
   taxCode: string;
@@ -96,6 +98,7 @@ export function stripeRailFromEnv(env: {
   STRIPE_SECRET_KEY?: string;
   STRIPE_VOUCHER_SUCCESS_URL?: string;
   STRIPE_VOUCHER_CANCEL_URL?: string;
+  STRIPE_BATCH_SUCCESS_URL?: string;
   STRIPE_TAX_BEHAVIOR?: string;
   STRIPE_TAX_CODE?: string;
   CONTROL_APEX?: string;
@@ -107,6 +110,7 @@ export function stripeRailFromEnv(env: {
     secretKey: key,
     livemode: /^(sk|rk)_live_/.test(key),
     successUrl: env.STRIPE_VOUCHER_SUCCESS_URL || `https://webapp.${apex}/?shop=stripe&session_id={CHECKOUT_SESSION_ID}`,
+    batchSuccessUrl: env.STRIPE_BATCH_SUCCESS_URL || `https://webapp.${apex}/?shop=batch&session_id={CHECKOUT_SESSION_ID}`,
     cancelUrl: env.STRIPE_VOUCHER_CANCEL_URL || `https://webapp.${apex}/?shop=cancel`,
     taxBehavior: env.STRIPE_TAX_BEHAVIOR === "exclusive" ? "exclusive" : "inclusive",
     taxCode: env.STRIPE_TAX_CODE && /^txcd_\d{8}$/.test(env.STRIPE_TAX_CODE) ? env.STRIPE_TAX_CODE : "txcd_10000000",
@@ -333,6 +337,145 @@ export async function handleStripeVoucherCheckout(deps: VoucherRailsDeps, body: 
   return ok({ url: json.url, sessionId: json.id }, { ...NO_STORE });
 }
 
+// ── Invoiced batches (docs/plans-and-backup-offer.md §6 and "As built") ──
+
+/** Most signatures one batch-issue call returns (the browser asks again from `from + sigs.length`). */
+export const BATCH_ISSUE_CHUNK = 100;
+
+/**
+ * `POST /api/vouchers/stripe/batch-checkout` (public): `{v: 1, units, k, commit}` → `{url, sessionId}`. A company's
+ * invoiced voucher batch: at least `business.batchMinUnits`, at most `business.batchMaxUnits`. Stripe collects the
+ * company's name, address and tax id and issues an invoice that reads "Flagship vouchers" × units. The session and
+ * the invoice name no org, account or seat; the metadata carries the count, the key and the commitment to the
+ * blinded requests (voucherBatch.ts), exactly as a pack does.
+ */
+export async function handleStripeBatchCheckout(deps: VoucherRailsDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  const rail = deps.stripe;
+  if (!rail) return refuse(404, "rail-off");
+  if (!isObj(body) || body.v !== 1 || typeof body.k !== "string" || typeof body.commit !== "string" || !isLowerHex(body.commit, 32)) {
+    return refuse(400, "malformed");
+  }
+  const b = deps.config.business;
+  const units = typeof body.units === "number" && Number.isSafeInteger(body.units) && body.units >= b.batchMinUnits && body.units <= b.batchMaxUnits ? body.units : null;
+  if (units === null) return refuse(400, "malformed", { min: b.batchMinUnits, max: b.batchMaxUnits });
+  const key = deps.keys.find((x) => x.pub.keyId === body.k && (x.issueUntil === 0 || now < x.issueUntil));
+  if (!key) return refuse(409, "no-key");
+
+  const form = new URLSearchParams();
+  form.set("mode", "payment");
+  form.set("line_items[0][price_data][currency]", "usd");
+  form.set("line_items[0][price_data][unit_amount]", String(deps.config.unitUsd * 100));
+  form.set("line_items[0][price_data][tax_behavior]", rail.taxBehavior);
+  // A keep-term in every language; the invoice adds the quantity. Never an org, account or seat.
+  form.set("line_items[0][price_data][product_data][name]", "Flagship vouchers");
+  form.set("line_items[0][price_data][product_data][tax_code]", rail.taxCode);
+  form.set("line_items[0][quantity]", String(units));
+  form.set("automatic_tax[enabled]", "true");
+  form.set("billing_address_collection", "required");
+  form.set("tax_id_collection[enabled]", "true");
+  form.set("customer_creation", "always");
+  form.set("invoice_creation[enabled]", "true");
+  form.set("invoice_creation[invoice_data][description]", "Flagship vouchers");
+  form.set("invoice_creation[invoice_data][metadata][flagship_kind]", "voucher-batch");
+  form.set("submit_type", "pay");
+  form.set("locale", "auto");
+  form.set("metadata[flagship_kind]", "voucher-batch");
+  form.set("metadata[flagship_units]", String(units));
+  form.set("metadata[flagship_key]", key.pub.keyId);
+  form.set("metadata[flagship_commit]", body.commit);
+  form.set("payment_intent_data[metadata][flagship_kind]", "voucher-batch");
+  form.set("success_url", rail.batchSuccessUrl ?? rail.successUrl);
+  form.set("cancel_url", rail.cancelUrl);
+
+  const f = rail.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
+  let resp: Response;
+  try {
+    resp = await f("https://api.stripe.com/v1/checkout/sessions", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${rail.secretKey}`,
+        "content-type": "application/x-www-form-urlencoded",
+        "idempotency-key": `flagship-voucher-batch-${body.commit}`,
+      },
+      body: form.toString(),
+    });
+  } catch {
+    return refuse(502, "rail-unreachable");
+  }
+  const json: any = await resp.json().catch(() => null);
+  if (!resp.ok || typeof json?.url !== "string" || typeof json?.id !== "string") return refuse(502, "rail-unreachable");
+  return ok({ url: json.url, sessionId: json.id }, { ...NO_STORE });
+}
+
+/**
+ * `POST /api/vouchers/batch-issue` (public, no credential): `{v: 1, session, k, blinded, from}` → `{k, from, sigs,
+ * units, done}`. `blinded` is the whole batch, in order (it must match the session's commitment); the answer signs
+ * up to BATCH_ISSUE_CHUNK of them from `from`, so a large batch never blocks one request. Every call re-checks the
+ * paid session; a retry or a call from another computer gets the same signatures (blind signing is deterministic),
+ * and a session's payment can never be claimed for another set.
+ */
+export async function handleBatchIssue(deps: VoucherRailsDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  const rail = deps.stripe;
+  if (!rail) return refuse(404, "rail-off");
+  if (!isObj(body) || body.v !== 1 || typeof body.k !== "string" || typeof body.session !== "string" || !Array.isArray(body.blinded)) return refuse(400, "malformed");
+  const from = body.from;
+  if (typeof from !== "number" || !Number.isSafeInteger(from) || from < 0 || from >= body.blinded.length) return refuse(400, "malformed");
+  if (body.blinded.length > deps.config.business.batchMaxUnits) return refuse(400, "too-many", { max: deps.config.business.batchMaxUnits });
+  if (!body.blinded.every((b): b is string => typeof b === "string" && b.length > 0 && b.length <= 2048 && /^[A-Za-z0-9+/]+={0,2}$/.test(b))) return refuse(400, "malformed");
+  const blinded = body.blinded as string[];
+  if (new Set(blinded).size !== blinded.length) return refuse(400, "malformed");
+  const id = body.session;
+  if (!/^cs_(live|test)_[A-Za-z0-9]{8,200}$/.test(id)) return refuse(400, "malformed");
+  const key = deps.keys.find((x) => x.pub.keyId === body.k && (x.issueUntil === 0 || now < x.issueUntil));
+  if (!key) return refuse(409, "no-key");
+
+  let r: { status: number; json: any };
+  try {
+    r = await stripeGet(rail, `checkout/sessions/${encodeURIComponent(id)}`);
+  } catch {
+    return refuse(502, "rail-unreachable");
+  }
+  if (r.status === 404) return refuse(400, "payment-invalid");
+  if (r.status !== 200 || !isObj(r.json)) return refuse(502, "rail-unreachable");
+  const s = r.json;
+  const md = isObj(s.metadata) ? s.metadata : {};
+  const units = typeof md.flagship_units === "string" && /^[1-9][0-9]{0,5}$/.test(md.flagship_units) ? Number(md.flagship_units) : NaN;
+  const b = deps.config.business;
+  if (
+    md.flagship_kind !== "voucher-batch" ||
+    !(units >= b.batchMinUnits && units <= b.batchMaxUnits) ||
+    md.flagship_key !== body.k ||
+    s.livemode !== rail.livemode ||
+    s.mode !== "payment" ||
+    String(s.currency).toLowerCase() !== "usd" ||
+    s.amount_subtotal !== units * deps.config.unitUsd * 100
+  ) {
+    return refuse(400, "payment-invalid");
+  }
+  if (blinded.length !== units) return refuse(409, "wrong-count", { units });
+  if (md.flagship_commit !== voucherOrderCommit(body.k, blinded)) return refuse(400, "payment-invalid");
+  if (s.status !== "complete" || s.payment_status !== "paid") return refuse(402, "payment-unpaid");
+
+  const paymentHash = voucherPaymentHash("stripe", id);
+  const blindedHash = voucherBlindedSetHash(body.k, blinded);
+  const row = await deps.payments.claim({ paymentHash, rail: "stripe", units, keyId: body.k, blindedHash, day: utcDay(now), state: "signed" });
+  if (row.state === "refunded") return refuse(409, "payment-refunded");
+  if (row.blindedHash !== blindedHash || row.keyId !== body.k) return refuse(409, "payment-used");
+
+  const end = Math.min(blinded.length, from + BATCH_ISSUE_CHUNK);
+  const sigs: string[] = [];
+  for (let i = from; i < end; i++) {
+    try {
+      sigs.push(signBlindedVoucher(key.sk, blinded[i]!));
+    } catch {
+      return refuse(400, "malformed");
+    }
+  }
+  return ok({ k: key.pub.keyId, from, sigs, units, done: end === blinded.length }, { ...NO_STORE });
+}
+
 /** Stripe events the voucher rail answers itself; every other event goes to the older handler (stripe.ts). */
 export const STRIPE_VOUCHER_EVENTS = new Set(["charge.refunded", "charge.dispute.created"]);
 
@@ -340,7 +483,8 @@ export const STRIPE_VOUCHER_EVENTS = new Set(["charge.refunded", "charge.dispute
 export function isVoucherStripeEvent(event: any): boolean {
   if (!event || typeof event.type !== "string") return false;
   if (STRIPE_VOUCHER_EVENTS.has(event.type)) return true;
-  return event.type.startsWith("checkout.session.") && event?.data?.object?.metadata?.flagship_kind === "vouchers";
+  const kind = event?.data?.object?.metadata?.flagship_kind;
+  return event.type.startsWith("checkout.session.") && (kind === "vouchers" || kind === "voucher-batch");
 }
 
 /**
@@ -378,7 +522,8 @@ export async function handleStripeVoucherWebhook(
   }
   if (r.status !== 200) return { status: 502, body: { error: "stripe unreachable" } };
   const session = r.json?.data?.[0];
-  if (session?.metadata?.flagship_kind !== "vouchers" || typeof session?.id !== "string") return { status: 200, body: { ok: true, action: "ignored" } };
+  const sessionKind = session?.metadata?.flagship_kind;
+  if ((sessionKind !== "vouchers" && sessionKind !== "voucher-batch") || typeof session?.id !== "string") return { status: 200, body: { ok: true, action: "ignored" } };
   await deps.payments.markRefunded(voucherPaymentHash("stripe", session.id), "stripe", utcDay(now));
   return { status: 200, body: { ok: true, action: "refunded" } };
 }
