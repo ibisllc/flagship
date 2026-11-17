@@ -3863,5 +3863,11 @@
   "Securing the line (quantum-safe)…": "Protegiendo la línea (a prueba de computación cuántica)…",
   "Opening a direct path…": "Abriendo una ruta directa…",
   "Starting audio…": "Iniciando el audio…",
-  "Opening your line…": "Abriendo tu línea…"
+  "Opening your line…": "Abriendo tu línea…",
+  "Their camera": "Su cámara",
+  "Your camera": "Tu cámara",
+  "End-to-end encrypted · quantum-safe": "Cifrado de extremo a extremo · resistente a la computación cuántica",
+  "End": "Colgar",
+  "Flip": "Girar",
+  "Audio": "Audio"
 }

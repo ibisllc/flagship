@@ -51,33 +51,19 @@ struct VoiciOutgoingCallScreen: View {
     var onDone: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            Image(systemName: call.video ? "video.fill" : "phone.fill").font(.system(size: 44)).foregroundStyle(.secondary)
-            Text(verbatim: "voi.ci/\(call.callee.username)").font(.title2.weight(.semibold))
-            Text(verbatim: call.statusLine)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("voici-outgoing-status")
-            if call.remoteCamera == "paused" { Text("Camera paused").font(.footnote).foregroundStyle(.secondary) }
-            Spacer()
-            if call.isOver {
-                Button("Done", action: onDone).buttonStyle(.borderedProminent).accessibilityIdentifier("voici-outgoing-done")
-            } else {
-                HStack(spacing: 20) {
-                    Button(call.muted ? String(localized: "Unmute") : String(localized: "Mute")) { call.setMuted(!call.muted) }
-                        .buttonStyle(.bordered)
-                    if call.video {
-                        Button(call.cameraOn ? String(localized: "Camera off") : String(localized: "Camera")) { _ = call.setCamera(!call.cameraOn) }
-                            .buttonStyle(.bordered)
-                    }
-                    Button(role: .destructive) { call.hangUp() } label: { Label("Hang up", systemImage: "phone.down.fill") }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("voici-outgoing-hangup")
-                }
-            }
-        }
-        .padding(24)
+        VoiciCallStage(
+            state: VoiciCallStageState(
+                name: "voi.ci/\(call.callee.username)", status: call.statusLine,
+                connectedSince: call.phase == .connected ? call.connectedSince : nil,
+                muted: call.muted, cameraOn: call.cameraOn, cameraFront: call.cameraFront,
+                remoteCameraOn: call.remoteCamera == "on", remoteCameraPaused: call.remoteCamera == "paused",
+                offersVideo: call.video, over: call.isOver, media: call.media),
+            actions: VoiciCallStageActions(
+                toggleMute: { call.setMuted(!call.muted) },
+                toggleCamera: { _ = call.setCamera(!call.cameraOn) },
+                flipCamera: { call.flipCamera() },
+                hangUp: { call.hangUp() },
+                close: onDone))
         .task { await call.start() }
     }
 }

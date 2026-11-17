@@ -3861,5 +3861,11 @@
   "Securing the line (quantum-safe)…": "回線を保護しています（量子耐性）…",
   "Opening a direct path…": "直接の経路を開いています…",
   "Starting audio…": "音声を開始しています…",
-  "Opening your line…": "回線を開いています…"
+  "Opening your line…": "回線を開いています…",
+  "Their camera": "相手のカメラ",
+  "Your camera": "自分のカメラ",
+  "End-to-end encrypted · quantum-safe": "エンドツーエンド暗号化 · 量子耐性",
+  "End": "終了",
+  "Flip": "切り替え",
+  "Audio": "オーディオ"
 }
