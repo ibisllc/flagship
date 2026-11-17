@@ -2,7 +2,7 @@ import Foundation
 import os
 
 /// The calls log (same subsystem and category as FlagshipUI's `voiciCallLog`): states and codes only.
-let callPathLog = Logger(subsystem: "com.flagshipserver.app", category: "calls")
+let callPathLog = CallLog()
 
 /// One call's TURN connection behind the endpoint: bytes in from the caller's TLS stream, bytes back out.
 public protocol CallTurnConnection: AnyObject {
