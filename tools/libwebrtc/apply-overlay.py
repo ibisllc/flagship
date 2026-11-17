@@ -29,6 +29,10 @@ EDITS = [
      ['"api/org/webrtc/FlagshipFrameCrypto.java",'], 2),
     ("sdk/android/BUILD.gn", '"src/jni/pc/rtp_sender.cc",',
      ['"src/jni/pc/flagship_frame_crypto.cc",'], 1),
+    # The jar carries LibaomAv1Encoder (libaom_av1_encoder_java); upstream never linked its native half into the
+    # library, so its one native method had no symbol (check-aar.py).
+    ("sdk/android/BUILD.gn", '":dav1d_av1_jni",',
+     ['":libaom_av1_encoder_jni",'], 1),
 ]
 
 for path, anchor, add, minimum in EDITS:
@@ -105,13 +109,16 @@ assert(!jni_zero_per_file_natives ||
         if start < 0 or at < 0:
             sys.exit("apply-overlay: sdk/android/BUILD.gn: dist_jar libwebrtc anchor moved")
         deps = ["      # flagship: JNI bridges\n"] + [f'      ":{n}_java",\n' for n in names] + [
+            # Upstream packs Dav1dDecoderJni's user only through swcodecs_java, which the jar holds as a direct
+            # dep alone.
+            '      ":dav1d_java",\n',
             '      "../../rtc_base:base_java_jni_java",\n',
             '      "//third_party/jni_zero:generate_jni_java",\n',
         ]
         at += len(anchor_dep)
         text = text[:at] + "".join(deps) + text[at:]
         gn.write_text(text)
-        print(f"apply-overlay: sdk/android/BUILD.gn: {len(names) + 2} JNI bridge libraries in libwebrtc.jar")
+        print(f"apply-overlay: sdk/android/BUILD.gn: {len(deps) - 1} libraries added to libwebrtc.jar")
 
 # Chromium compiles Java with `--release 25` (class files 69), which the app's Android Gradle Plugin cannot dex. The
 # app targets Java 17, so the AAR's classes do too. Two upstream lines; a pin that moved them fails here.
