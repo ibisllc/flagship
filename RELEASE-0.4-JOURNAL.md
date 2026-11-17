@@ -1310,3 +1310,4 @@ Accept messages" even while messages are on.
 - Checks: `tsc -b`, `npm run i18n`, parity green; vitest flagship-web + voici-site 55, apps/com voici 41. Not run:
   a real phone call, the iOS app (its bytes are unchanged).
 - Commits: 4e70edb1e 8b4eae61c ac5150525 b6ed3a7c4 4d28a675d 4119039ad 8b17ec9c5 14bcafc84 
+- Open (small): iOS has the same wrong empty-Inbox text as Android (`SocialTab.swift` `emptyText`). Fold it into the E UI pass.
