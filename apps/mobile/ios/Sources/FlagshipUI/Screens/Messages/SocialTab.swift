@@ -132,7 +132,7 @@ public struct SocialTab: View {
                     conversationList(requests: true)
                 }
             }
-            .background(Color(.systemGroupedBackground))
+            .background(FSColors.scheme(scheme).bg.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .bottom, spacing: 0) { publishBar }
             .overlay(alignment: .bottomTrailing) { callButton }
@@ -311,64 +311,68 @@ public struct SocialTab: View {
 
     private func conversationList(requests: Bool) -> some View {
         List {
-            if !store.replyNotices.isEmpty && !requests {
-                SwiftUI.Section {
-                    ForEach(store.replyNotices) { n in
-                        HStack {
-                            Button {
-                                store.openedReply(n)
-                                openURL(n.url)
-                            } label: {
-                                Label {
-                                    Text(verbatim: String(localized: "You have a reply on voi.ci/\(n.username)"))
-                                        .foregroundStyle(.primary)
-                                } icon: {
-                                    Image(systemName: "arrowshape.turn.up.left.fill")
+            Group {
+                if !store.replyNotices.isEmpty && !requests {
+                    SwiftUI.Section {
+                        ForEach(store.replyNotices) { n in
+                            HStack {
+                                Button {
+                                    store.openedReply(n)
+                                    openURL(n.url)
+                                } label: {
+                                    Label {
+                                        Text(verbatim: String(localized: "You have a reply on voi.ci/\(n.username)"))
+                                            .foregroundStyle(.primary)
+                                    } icon: {
+                                        Image(systemName: "arrowshape.turn.up.left.fill")
+                                    }
                                 }
+                                .buttonStyle(.borderless)
+                                .accessibilityIdentifier("messages-reply-notice")
+                                Spacer()
+                                VoiciCallButtons(callee: VoiciCallee(username: n.username, pageId: n.pageId)) { calling = $0 }
                             }
-                            .buttonStyle(.borderless)
-                            .accessibilityIdentifier("messages-reply-notice")
-                            Spacer()
-                            VoiciCallButtons(callee: VoiciCallee(username: n.username, pageId: n.pageId)) { calling = $0 }
+                        }
+                    } footer: {
+                        Text("Your conversations with other pages are on voi.ci.")
+                    }
+                }
+                if !requests && !store.callablePages.isEmpty {
+                    SwiftUI.Section {
+                        ForEach(store.callablePages, id: \.pageId) { page in
+                            NavigationLink(value: MessagesRoute.visitor(username: page.username, pageId: page.pageId, title: page.title)) {
+                                Label { Text(verbatim: page.title) } icon: { Image(systemName: "bubble.left.and.text.bubble.right") }
+                            }
+                            .accessibilityIdentifier("messages-visitor-\(page.username)")
+                        }
+                    } header: {
+                        Text("Your conversations on other pages")
+                    }
+                }
+                let rows = requests ? store.requests : store.accepted
+                if rows.isEmpty {
+                    SwiftUI.Section {
+                        Text(emptyText(requests: requests))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("messages-empty")
+                    }
+                } else {
+                    SwiftUI.Section {
+                        ForEach(rows) { c in
+                            NavigationLink(value: MessagesRoute.thread(conv: c.conv)) { ConversationRow(c: c, store: store) }
+                                .accessibilityIdentifier("messages-row-\(store.name(c))")
                         }
                     }
-                } footer: {
-                    Text("Your conversations with other pages are on voi.ci.")
+                }
+                if let err = store.lastError {
+                    SwiftUI.Section { Text(verbatim: err).font(.footnote).foregroundStyle(.secondary) }
                 }
             }
-            if !requests && !store.callablePages.isEmpty {
-                SwiftUI.Section {
-                    ForEach(store.callablePages, id: \.pageId) { page in
-                        NavigationLink(value: MessagesRoute.visitor(username: page.username, pageId: page.pageId, title: page.title)) {
-                            Label { Text(verbatim: page.title) } icon: { Image(systemName: "bubble.left.and.text.bubble.right") }
-                        }
-                        .accessibilityIdentifier("messages-visitor-\(page.username)")
-                    }
-                } header: {
-                    Text("Your conversations on other pages")
-                }
-            }
-            let rows = requests ? store.requests : store.accepted
-            if rows.isEmpty {
-                SwiftUI.Section {
-                    Text(emptyText(requests: requests))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("messages-empty")
-                }
-            } else {
-                SwiftUI.Section {
-                    ForEach(rows) { c in
-                        NavigationLink(value: MessagesRoute.thread(conv: c.conv)) { ConversationRow(c: c, store: store) }
-                            .accessibilityIdentifier("messages-row-\(store.name(c))")
-                    }
-                }
-            }
-            if let err = store.lastError {
-                SwiftUI.Section { Text(verbatim: err).font(.footnote).foregroundStyle(.secondary) }
-            }
+            .listRowBackground(FSColors.scheme(scheme).surface)
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .contentMargins(.top, 0, for: .scrollContent)
         .contentMargins(.bottom, 80, for: .scrollContent)
         .refreshable { await store.refresh() }
