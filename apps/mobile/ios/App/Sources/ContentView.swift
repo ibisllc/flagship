@@ -44,7 +44,46 @@ struct ContentView: View {
     /// While "This account was removed" is up, the pollers below stand down.
     @Environment(AccountGoneCenter.self) private var accountGone: AccountGoneCenter?
 
+    // Three shorter chains: as one, the type checker timed out on a clean build.
     var body: some View {
+        synced
+        .onChange(of: app.pods) { _, _ in
+            PodStatusPublisher(app: app).publish()
+            syncPendingWatchers()
+            operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
+            // A `/pods`-reconciled server flips to .online here (not via the
+            // pairing flow), so this is the moment its base URL must be set.
+            syncPodSession()
+        }
+        .onChange(of: app.currentPodId) { _, _ in
+            // Switching the selected server repoints the screens client.
+            syncPodSession()
+        }
+        .onChange(of: app.boxRequestInbox) { _, _ in
+            // A box started or stopped waiting for its unlock: the watch
+            // lists it without the Approvals screen having been opened.
+            WatchSecurityAlertsPublisher.shared.updateFromApp(app)
+        }
+        .onChange(of: app.leaderPodId) { _, _ in
+            PodStatusPublisher(app: app).publish()
+            // The leader is the default server (docs/app-placement.md §1).
+            syncPodSession()
+        }
+        .task {
+            PodStatusPublisher(app: app).publish()
+            syncPendingWatchers()
+            syncAiChatPoller()
+            syncLiveSync()
+            syncAccessAlerts()
+            operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
+            // Cold-launch restore: point the screens client at the
+            // already-selected online server before the first load.
+            syncPodSession()
+            await runTrustCheck()
+        }
+    }
+
+    private var sheeted: some View {
         ZStack {
             if app.isPaired {
                 RootShell(initialDestination: smokeInitialDestination ?? .home)
@@ -112,6 +151,10 @@ struct ContentView: View {
                 .environment(toasts)
                 .environment(trust)
         }
+    }
+
+    private var synced: some View {
+        sheeted
         .onChange(of: app.isPaired) { _, paired in
             if paired { Task { await registerPush() } }
             // Signing out ends the authenticated session — drop the cached UMK.
@@ -154,40 +197,6 @@ struct ContentView: View {
             // own isActive gate also folds in paired+unlocked.
             syncLiveSync()
             syncAccessAlerts()
-        }
-        .onChange(of: app.pods) { _, _ in
-            PodStatusPublisher(app: app).publish()
-            syncPendingWatchers()
-            operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
-            // A `/pods`-reconciled server flips to .online here (not via the
-            // pairing flow), so this is the moment its base URL must be set.
-            syncPodSession()
-        }
-        .onChange(of: app.currentPodId) { _, _ in
-            // Switching the selected server repoints the screens client.
-            syncPodSession()
-        }
-        .onChange(of: app.boxRequestInbox) { _, _ in
-            // A box started or stopped waiting for its unlock: the watch
-            // lists it without the Approvals screen having been opened.
-            WatchSecurityAlertsPublisher.shared.updateFromApp(app)
-        }
-        .onChange(of: app.leaderPodId) { _, _ in
-            PodStatusPublisher(app: app).publish()
-            // The leader is the default server (docs/app-placement.md §1).
-            syncPodSession()
-        }
-        .task {
-            PodStatusPublisher(app: app).publish()
-            syncPendingWatchers()
-            syncAiChatPoller()
-            syncLiveSync()
-            syncAccessAlerts()
-            operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
-            // Cold-launch restore: point the screens client at the
-            // already-selected online server before the first load.
-            syncPodSession()
-            await runTrustCheck()
         }
     }
 
