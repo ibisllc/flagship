@@ -12,6 +12,7 @@ import { inlineConfirm } from "../lib/modal.js";
 import { tr, dateLocale } from "../lib/i18n.js";
 import * as os from "../lib/orgSeat.js";
 import * as dc from "../lib/orgDirectoryConsole.js";
+import { renderOrgPlan } from "./orgPlan.js";
 
 registerView("view-orgs", { tab: "settings" });
 
@@ -68,6 +69,7 @@ async function renderSeat(seat, host) {
     ${joins.length ? `<p class="fs-detail-label">${escapeHtml(tr("Waiting to join"))}</p>` + joins.map((j) => `<div class="stack-sm"><p class="note">${escapeHtml(tr("Code {0}", os.joinCode(j)))}${j.custody === "browser" ? " · " + escapeHtml(CUSTODY_BROWSER_LABEL) : ""}</p><button data-org-admit="${escapeHtml(j.seatId)}">${escapeHtml(tr("The codes match: let them in"))}</button></div>`).join("") : ""}
     ${isAdminSeat ? `<button class="secondary" data-org-rotate>${escapeHtml(tr("Rotate keys"))}</button>` : ""}
     ${people.length ? `<p class="fs-detail-label">${escapeHtml(tr("People"))}</p><ul>${people.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : ""}
+    <div data-org-plan></div>
     <div data-org-directory></div>
     <button class="secondary" data-org-forget>${escapeHtml(tr("Remove from this browser"))}</button>`;
 
@@ -94,6 +96,8 @@ async function renderSeat(seat, host) {
   host.querySelector("[data-org-rotate]")?.addEventListener("click", () =>
     act(() => os.rotatePending(seat, snap, { umk: getSession().umk }), (n) => (n ? tr("Rotated {0} keys.", n) : tr("Nothing to rotate."))),
   );
+  const planHost = host.querySelector("[data-org-plan]");
+  if (planHost && granted) renderOrgPlan(seat, snap, planHost, { isOrgAdmin, refresh: () => renderSeat(seat, host) }).catch(() => {});
   const dirHost = host.querySelector("[data-org-directory]");
   if (dirHost && umk) {
     if (isOrgAdmin) renderConsole(seat, snap, dirHost, () => renderSeat(seat, host)).catch(() => {});

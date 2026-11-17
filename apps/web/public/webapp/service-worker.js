@@ -542,7 +542,10 @@
 //       is down; the outbound proxy says loudly why it fails, Home shows it from /pods, and Turn off reaches a box the
 //       proxy keeps offline through .com's lane (docs/outbound-proxy.md "Failure handling").
 //  v233: the product version reads 0.4 Beta (lib/buildInfo.js).
-const SHELL_VERSION = "v233";
+//  v234: Business for orgs: the org's Plan in Settings → Organizations (seats, price, trial, the org wallet sealed
+//       under the org key ring's `wallet` key, the org trickle, an invoiced batch, voucher files in and out) and voucher
+//       files into the personal Plan (lib/orgPlan.js, views/orgPlan.js; docs/plans-and-backup-offer.md "As built").
+const SHELL_VERSION = "v234";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -618,6 +621,8 @@ const OPTIONAL_SHELL = [
   "/lib/orgSeat.js",
   "/lib/orgDirectoryConsole.js",
   "/views/orgs.js",
+  "/lib/orgPlan.js",
+  "/views/orgPlan.js",
   "/vendor/flagship-org/org.js",
   "/lib/pqSign.js",
   "/lib/mldsaWasm.js",
