@@ -7,6 +7,7 @@ import { appCopy } from "./appCopy.js";
 import { archive } from "./archive.js";
 import { backups } from "./backups.js";
 import { core } from "./core.js";
+import { directAccess } from "./directAccess.js";
 import { enforcement } from "./enforcement.js";
 import { freePlan } from "./freePlan.js";
 import { gating } from "./gating.js";
@@ -54,6 +55,7 @@ export const GROUPS: Group[] = [
   backups,
   oneList,
   namedLinks,
+  directAccess,
   update,
   lifecycle,
   ...RELEASE_03_GROUPS,
