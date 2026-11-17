@@ -972,3 +972,13 @@ Next steps for whoever resumes:
 - Diagnostics on the phone (`e738cb1fe` gym-0.4, `de4ca8a16` 0.4/media-fix): every 2 s "turn mix:" counts of STUN
   requests/successes/errors (with codes), DTLS, RTP, RTCP each way and dropped datagrams; the checks' USERNAME and
   both descriptions' ICE ufrags. Built; install failed because the iPhone is out of storage (300 MB needed, 206 MB free).
+
+### 2026-11-16 — Networking: overlay agreed for 0.5; direct access stays the 0.4 item
+- Owner: "write it up, start it in the next release"; in 0.4, people with public addresses hook their services to
+  `fshp.app` names that point straight at them. That is direct access (built and merged; needs a live run on a real
+  box with a public IPv6). Overlay plan in `docs/networking-vision.md` "The overlay": key-derived ULA addresses,
+  trusted-direct / strangers-relayed, PQ transport, one relay mesh, stages app-layer → desktop/box interface →
+  optional phone VPN.
+- ice-fix agent: local harness (turn-lite + headless Chrome) passes in every mode, so the fault is on the phone's
+  WebRTC side; new `turn mix:` / `ice ufrags:` diagnostics built (gym-0.4 `e738cb1fe`, media-fix `de4ca8a16`), not
+  installed: iPhone out of storage (needs ~150 MB).

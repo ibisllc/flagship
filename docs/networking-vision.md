@@ -64,3 +64,41 @@ networking, including Freenet, and any other technologies, as long as they can o
 - Freenet components: https://docs.freenet.org/components/overview.html
 - Freenet whitepaper: https://freenet.org/pdf/freenet-whitepaper.pdf
 - Freenet renamed to Hyphanet: https://www.hyphanet.org/freenet-renamed-to-hyphanet.html
+
+## The overlay (owner, 2026-11-16: agreed; starts in 0.5, not 0.4)
+
+Flagship becomes an IPv6 overlay network with the public relay as a core part, not a fallback. Shaped by an outside
+proposal (Tailscale-like overlay) and adjusted for Flagship:
+
+1. **Addresses from keys, not from a registry.** One fixed Flagship ULA /48 (RFC 4193, inside fd00::/8); a server's
+   (and a device's) overlay address is derived from its public key, as in Yggdrasil and cjdns. An address proves its
+   owner; nobody allocates them; `.com` only helps peers find each other's current endpoints (discovery, never
+   ownership). No ARIN space or ASN needed for the overlay; an ASN stays a later option for anycast relays.
+2. **Privacy decides the path.** A direct (peer-to-peer, hole-punched or native IPv6) connection shows each side the
+   other's IP address. Direct is the default only between parties that already trust each other: the account's own
+   devices and servers, co-managers, invited members. Strangers (anonymous callers, voi.ci visitors, anyone not
+   approved) are relayed by default; direct for them is an explicit owner opt-in with the warning that they see the
+   network address. Calls follow the same rule.
+3. **Security stays where it is.** TLS still ends on the box (or the phone); the overlay transport adds no trust. If
+   a WireGuard-style transport is used, it gets a quantum-safe key exchange (Rosenpass-style PSK or our X-Wing
+   `pq-session`); nothing drops below what calls and server access already guarantee.
+4. **One relay mesh.** The overlay's relays are the relay mesh (AGENTS.md "Make Fly redundant"): the same machines
+   serve the public HTTPS/SNI gateway for people without the app (most voi.ci visitors and callers) and relay overlay
+   traffic between peers that can't connect directly.
+5. **Stages.**
+   1. App-layer overlay (0.5): the apps' own traffic (app browser, calls, server access) reaches overlay addresses
+      over QUIC/UDP with hole punching, relay fallback. No VPN permission.
+   2. Desktop and boxes: a real network interface on the Studios and servers, so any program there can use overlay
+      addresses.
+   3. Phones: an optional VPN mode (iOS NEPacketTunnelProvider, Android VpnService) for people who want every app on
+      the phone to reach Flagship addresses. Costs: iOS runs only one VPN at a time (conflicts with work VPNs), tight
+      extension memory, Apple's VPN entitlement (fine for IBIS LLC).
+6. **Public addresses stay opt-in.** A server's ISP IPv6 in public DNS reveals the home's address; it is published
+   only through the direct-access consent (the `fshp.app` names, below).
+
+### What 0.4 already ships toward this
+- **Direct access with `fshp.app` names** (`docs/direct-access-and-domains.md`, all steps built and merged): an owner
+  whose server has a public address opts in (address, reachability probe, privacy warning, biometric confirm), and
+  each service gets its own `fshp.app` name that points straight at the box, with its own certificate, never through
+  the relay. Not yet run on a real box: that live run is the 0.4 item.
+- LAN-direct, the quantum-safe session (`pq-session`), and `.com` as the discovery point.
