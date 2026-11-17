@@ -98,6 +98,14 @@ struct FlagshipApp: App {
         var pqLive = true
         #if DEBUG
         pqLive = !GymLaunch.usesMocks
+        // The mock gym buys from a stand-in App Store whose purchases the mock `.com` signs.
+        // The mock `.com` starts empty on every launch, so the phone's copy of the wallet does too.
+        if GymLaunch.usesMocks {
+            PaymentsCenter.shared.setShop(store: MockVoucherStore(), vault: MemoryShopVault())
+            for k in UserDefaults.standard.dictionaryRepresentation().keys where k.hasPrefix("flagship.payments.") {
+                UserDefaults.standard.removeObject(forKey: k)
+            }
+        }
         #endif
         if pqLive { PqIdentityBindingService.configure(client: LivePqKeyBindingClient(readTokens: readTokens)) }
         // Every LIVE /pods response feeds the cert-pin registry (verify the
