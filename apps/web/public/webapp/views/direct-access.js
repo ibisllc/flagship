@@ -306,7 +306,7 @@ function formHtml(st) {
   const on = directIsOn(st);
   const dis = st.busy ? " disabled" : "";
   return `
-      <p class="warn-text small mt-2" id="sd-direct-access-warning">${escapeHtml(DIRECT_WARNING)}</p>
+      <p class="callout-warn mt-2" id="sd-direct-access-warning">${escapeHtml(DIRECT_WARNING)}</p>
       <label class="caption mt-2" for="sd-direct-access-addresses-field">${escapeHtml(tr("Public addresses (an IPv4 forwarded on your router, or a fixed IPv6), one per line"))}</label>
       <textarea id="sd-direct-access-addresses-field" class="full-width mono" rows="3" spellcheck="false" autocomplete="off" placeholder="81.2.69.142">${escapeHtml(st.form.addresses)}</textarea>
       <label class="caption mt-2" for="sd-direct-access-prefixes-field">${escapeHtml(tr("Address ranges this server may report its own address in (optional)"))}</label>
