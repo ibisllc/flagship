@@ -4187,5 +4187,23 @@
     "one": "新着 %1$d 件",
     "other": "新着 %1$d 件"
   },
-  "social_first_post": "こんにちは。flagshipserver.com の Flagship アプリを使っています"
+  "social_first_post": "こんにちは。flagshipserver.com の Flagship アプリを使っています",
+  "activity_social_call_missed": "%1$s からの不在着信",
+  "activity_social_call_declined": "%1$s からの着信を拒否しました",
+  "activity_social_call_answered": "%1$s との通話",
+  "activity_social_call_placed": "%1$s に発信しました",
+  "activity_social_conversation_new": "%1$s との新しい会話",
+  "activity_social_conversation_request": "%1$s からのメッセージリクエスト",
+  "activity_social_page_published": "ページを公開しました",
+  "activity_social_page_updated": "ページを更新しました",
+  "activity_social_post_published": "ページに投稿しました",
+  "activity_social_video_call": "ビデオ通話",
+  "activity_filter_all": "すべて",
+  "activity_filter_servers": "サーバー",
+  "activity_filter_social": "ソーシャル",
+  "activity_social_section": "通話とメッセージ",
+  "activity_social_section_hint": "通話、会話、あなたのページ",
+  "activity_social_empty": "まだ通話やメッセージはありません。",
+  "activity_open_server": "サーバーを開きます",
+  "scheduled_backup_finished": "スケジュールされたバックアップが完了しました"
 }

@@ -4187,5 +4187,23 @@
     "one": "%1$d nouveau",
     "other": "%1$d nouveaux"
   },
-  "social_first_post": "Bonjour. J’utilise l’app Flagship, de flagshipserver.com"
+  "social_first_post": "Bonjour. J’utilise l’app Flagship, de flagshipserver.com",
+  "activity_social_call_missed": "Appel manqué de %1$s",
+  "activity_social_call_declined": "Appel de %1$s refusé",
+  "activity_social_call_answered": "Appel avec %1$s",
+  "activity_social_call_placed": "Vous avez appelé %1$s",
+  "activity_social_conversation_new": "Nouvelle conversation avec %1$s",
+  "activity_social_conversation_request": "Demande de message de %1$s",
+  "activity_social_page_published": "Votre page est devenue publique",
+  "activity_social_page_updated": "Votre page a été mise à jour",
+  "activity_social_post_published": "Vous avez publié sur votre page",
+  "activity_social_video_call": "Appel vidéo",
+  "activity_filter_all": "Tout",
+  "activity_filter_servers": "Serveurs",
+  "activity_filter_social": "Social",
+  "activity_social_section": "Appels et messages",
+  "activity_social_section_hint": "Appels, conversations et votre page",
+  "activity_social_empty": "Aucun appel ni message pour l’instant.",
+  "activity_open_server": "Ouvre le serveur",
+  "scheduled_backup_finished": "Sauvegarde planifiée terminée"
 }
