@@ -523,15 +523,17 @@ export async function authorizeVoiciCallDevice(
   username: string,
   callId: string,
   auth: DirectoryAuthorization | undefined,
+  onRefuse?: (code: string) => void,
 ): Promise<{ deviceRef: string } | null> {
+  const no = (code: string) => (onRefuse?.(code), null);
   const u = username.toLowerCase();
-  if (!CALL_ID.test(callId)) return null;
+  if (!CALL_ID.test(callId)) return no("call-id");
   const caller = await authorizeActiveDevice(deps.directory, auth, { accountId: u, method: "GET", path: `/api/voici/calls/${callId}/device` });
-  if (!caller) return null;
+  if (!caller) return no("device-signature");
   const user = await deps.usernames.get(u);
-  if (!user?.adminRootPubHex) return null;
+  if (!user?.adminRootPubHex) return no("no-admin-root");
   const admins = await adminDeviceIds(deps.grants, u, user.adminRootPubHex, (deps.now ?? Date.now)());
-  if (!admins.has(caller.deviceId)) return null;
+  if (!admins.has(caller.deviceId)) return no("not-admin-device");
   return { deviceRef: voiciCallDeviceRef(caller.signerPubHex.toLowerCase()) };
 }
 
