@@ -13,10 +13,29 @@ public enum CallMediaFactory {
 
     public static func make() -> CallMediaEngine { WebRTCCallMediaEngine() }
 
+    /// Voice chat for the call before CallKit activates the session: CallKit activates whatever category is set, and
+    /// WebRTC's voice-processing unit captures and plays nothing in the default (playback-only) category.
+    public static func prepareAudioSession() {
+        let rtc = RTCAudioSession.sharedInstance()
+        rtc.lockForConfiguration()
+        defer { rtc.unlockForConfiguration() }
+        let cfg = RTCAudioSessionConfiguration.webRTC()
+        cfg.category = AVAudioSession.Category.playAndRecord.rawValue
+        cfg.mode = AVAudioSession.Mode.voiceChat.rawValue
+        cfg.categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
+        do {
+            try rtc.setConfiguration(cfg)
+        } catch {
+            voiciCallLog.notice("audio session: configure failed \((error as NSError).code, privacy: .public)")
+        }
+    }
+
     public static func audioSessionDidActivate(_ s: AVAudioSession) {
         let rtc = RTCAudioSession.sharedInstance()
+        if s.category != .playAndRecord { prepareAudioSession() }
         rtc.audioSessionDidActivate(s)
         rtc.isAudioEnabled = true
+        voiciCallLog.notice("audio session: active \(s.category.rawValue, privacy: .public)/\(s.mode.rawValue, privacy: .public), webrtc enabled \(rtc.isAudioEnabled, privacy: .public), manual \(rtc.useManualAudio, privacy: .public)")
     }
 
     public static func audioSessionDidDeactivate(_ s: AVAudioSession) {
@@ -40,6 +59,7 @@ public enum CallMediaFactory {
     public static let bundled = false
 
     public static func make() -> CallMediaEngine { StubCallMediaEngine() }
+    public static func prepareAudioSession() {}
     public static func audioSessionDidActivate(_ s: AVAudioSession) {}
     public static func audioSessionDidDeactivate(_ s: AVAudioSession) {}
     public static func turnSelfTest() -> Bool { false }
