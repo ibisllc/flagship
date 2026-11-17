@@ -854,3 +854,24 @@ threads, while the main thread held that lock calling libwebrtc setters (mute, c
 the app froze once the caller's video frames flowed. The keys now have their own lock and no libwebrtc call is made
 under the engine lock; hang-up ends locally if CallKit's end hasn't run in 3 s. Android was not affected (its keys are
 a `@Volatile` field read without the engine lock).
+
+### Computer screens and landscape (owner, 2026-11-17: "widescreen when the video starts ... back to the call only UX")
+
+voi.ci (`apps/voici-site/src/call.js`, `style.css`), on viewports at least 768 px wide or in landscape up to 600 px
+high:
+- **Three layouts** (`callLayout`): *audio* (photo or initial, name, timer, buttons), *self* (our camera only: our tile
+  over the audio layout), *video* (their video live). Only their video makes the stage a video stage; our camera alone
+  never hides the controls or darkens the screen.
+- **Video:** their picture fills the window letterboxed (`object-fit: contain`, so a 16:9 camera keeps its shape and
+  uses the whole width); name and timer in a small card top-left; the controls in a floating bar at the bottom centre
+  that hides after 4 s without mouse movement (a move, a key or focus shows it); our tile is 16:9 (240 px), draggable
+  to a corner or moved with the arrow keys; **Full screen** (Fullscreen API on the stage, Esc leaves) and **Picture in
+  picture** (their video), each only where the browser offers it. Phones in portrait keep the phone layout and never
+  show those two buttons.
+- **When is their video "live"** (`remoteVideoLive`): the room says their camera is on, the remote track is neither
+  muted nor ended, and a frame arrived in the last 1.2 s (`requestVideoFrameCallback`; Firefox: the video's
+  `currentTime` moving, checked every 0.5 s). Anything else returns to the audio layout (or *self*) with a fade, leaves
+  full screen and picture in picture, and never shows a black rectangle: the element keeps decoding underneath at
+  opacity 0 so the layout comes back the moment frames do.
+- **Phones:** iOS and Android already return to the audio layout when the room says the other camera is off, and
+  their remote video fills the screen; the iPhone app is portrait-only, Android fills in either orientation.

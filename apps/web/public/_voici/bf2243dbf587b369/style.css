@@ -1294,6 +1294,17 @@ body.has-call {
   object-fit: cover;
   background: #000;
 }
+/* Their video stays decoding while not live (the frame watch needs it) but is never shown as a black rectangle. */
+.call-remote {
+  transition: opacity 250ms ease;
+}
+.call-stage:not(.has-remote) .call-remote {
+  opacity: 0;
+  pointer-events: none;
+}
+.call-round[data-wide] {
+  display: none;
+}
 .call-shade {
   position: absolute;
   inset: 0;
@@ -1614,6 +1625,89 @@ body.has-call {
 .call-menu-item[aria-checked="true"]::after {
   content: " ✓";
 }
+/* ── computer-sized screens and landscape: their video wide and letterboxed, the controls a floating bar ── */
+@media (min-width: 768px), (orientation: landscape) and (max-height: 600px) {
+  .call-stage.is-video .call-remote {
+    object-fit: contain;
+  }
+  .call-stage.is-video .call-ui {
+    max-width: none;
+    align-items: flex-start;
+  }
+  .call-stage.is-video .call-head {
+    align-items: flex-start;
+    padding: 6px 14px;
+    border-radius: 12px;
+    background: rgba(16, 18, 26, 0.55);
+    text-align: left;
+  }
+  .call-stage.is-video .call-bottom {
+    position: absolute;
+    left: 50%;
+    bottom: max(24px, env(safe-area-inset-bottom, 0px) + 16px);
+    transform: translateX(-50%);
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    width: auto;
+    max-width: calc(100% - 32px);
+    box-sizing: border-box;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: rgba(16, 18, 26, 0.72);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+  .call-stage.is-video .call-row {
+    width: auto;
+    gap: 4px;
+  }
+  .call-stage.is-video .call-round {
+    flex: none;
+    width: 88px;
+  }
+  .call-stage.is-video .call-round-disc {
+    width: 52px;
+    height: 52px;
+  }
+  .call-stage.is-video .call-end-row .call-round {
+    min-width: 0;
+  }
+  .call-stage.is-video .call-round[data-wide]:not([hidden]) {
+    display: inline-flex;
+  }
+  /* Our tile is 16:9 here, like the cameras of computers. */
+  .call-self,
+  .call-stage.has-remote .call-self {
+    width: 240px;
+    aspect-ratio: 16 / 9;
+  }
+  .call-self.at-tl,
+  .call-self.at-tr,
+  .call-stage.has-remote .call-self.at-tl,
+  .call-stage.has-remote .call-self.at-tr {
+    top: max(24px, env(safe-area-inset-top, 0px) + 16px);
+  }
+  .call-stage.has-remote .call-self.at-tl {
+    top: max(112px, env(safe-area-inset-top, 0px) + 104px);
+  }
+  .call-self.at-bl,
+  .call-self.at-br,
+  .call-stage.has-remote .call-self.at-bl,
+  .call-stage.has-remote .call-self.at-br {
+    top: calc(100% - 128px - 240px * 9 / 16);
+  }
+  .call-self.at-tr,
+  .call-self.at-br,
+  .call-stage.has-remote .call-self.at-tr,
+  .call-stage.has-remote .call-self.at-br {
+    left: calc(100% - 24px - 240px);
+  }
+  .call-self.at-tl,
+  .call-self.at-bl {
+    left: 24px;
+  }
+}
 @media (max-height: 560px) {
   .call-avatar {
     display: none;
@@ -1626,6 +1720,7 @@ body.has-call {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .call-remote,
   .call-self,
   .call-ui,
   .call-shade {

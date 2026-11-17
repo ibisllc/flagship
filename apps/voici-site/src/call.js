@@ -83,6 +83,25 @@ export function cornerAfterKey(corner, key) {
   return corner;
 }
 
+/** Their video counts as live this long after its last frame (or after it was announced, before the first one). */
+export const REMOTE_STALL_MS = 1200;
+
+/**
+ * Whether their video is live: the room says their camera is on, the track is neither muted nor ended, and a frame
+ * came within REMOTE_STALL_MS. Anything else shows the audio layout, never a black rectangle.
+ */
+export function remoteVideoLive({ room, trackLive, lastFrameAt, now }) {
+  return room === "on" && trackLive && now - lastFrameAt <= REMOTE_STALL_MS;
+}
+
+/**
+ * The stage's layout: "video" while their video is live (wide on a computer or in landscape), "self" when only our
+ * camera is on (our tile over the audio layout), else "audio".
+ */
+export function callLayout(theirs, ours) {
+  return theirs ? "video" : ours ? "self" : "audio";
+}
+
 /** One round control with its label under it (kind: "plain", "on", "end" or "answer"). */
 function roundButton(doc, iconName, label, kind = "plain", on = {}) {
   const text = h(doc, "span", { class: "call-round-label" }, label);
@@ -344,8 +363,31 @@ async function startCall(ctx, session, opts = {}) {
   const end = roundButton(doc, "callEnd", t("End"), "end", { click: () => (call ? call.hangUp() : st.close()) });
   camera.el.hidden = true;
   flip.el.hidden = true;
+  // Full screen and picture in picture: on a computer-sized screen, while their video shows, where the browser can.
+  const canFull = typeof stageEl.requestFullscreen === "function" && doc.fullscreenEnabled !== false;
+  const canPip = doc.pictureInPictureEnabled === true && typeof remoteVideo.requestPictureInPicture === "function";
+  const full = roundButton(doc, "expand", t("Full screen"), "plain", {
+    click: () => {
+      if (doc.fullscreenElement) doc.exitFullscreen?.()?.catch?.(() => {});
+      else stageEl.requestFullscreen?.()?.catch?.(() => {});
+    },
+  });
+  const pip = roundButton(doc, "pip", t("Picture in picture"), "plain", {
+    click: () => {
+      if (doc.pictureInPictureElement) doc.exitPictureInPicture?.()?.catch?.(() => {});
+      else remoteVideo.requestPictureInPicture?.()?.catch?.(() => {});
+    },
+  });
+  for (const b of [full, pip]) {
+    b.el.setAttribute("data-wide", "");
+    b.el.hidden = true;
+  }
+  stageEl.addEventListener("fullscreenchange", () => {
+    const on = doc.fullscreenElement === stageEl;
+    full.set(on ? "contract" : "expand", on ? t("Exit full screen") : t("Full screen"), on ? "on" : "plain");
+  });
   const route = audioRouteButton(ctx, audio);
-  const row = h(doc, "div", { class: "call-row" }, route?.el ?? null, mute.el, camera.el, flip.el);
+  const row = h(doc, "div", { class: "call-row" }, route?.el ?? null, mute.el, camera.el, flip.el, full.el, pip.el);
   const bottom = h(doc, "div", { class: "call-bottom" }, row, h(doc, "div", { class: "call-end-row" }, end.el));
   const why = h(doc, "details", { class: "call-why" }, h(doc, "summary", {}, t("Quantum-safe call")), h(doc, "p", {}, t("The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.")));
   replace(st.ui, head, h(doc, "div", { class: "call-spacer" }), why, bottom);
@@ -357,11 +399,73 @@ async function startCall(ctx, session, opts = {}) {
   // ── the video layout: their picture fills, ours is a corner tile; a tap hides the controls ──
   let corner = "tr";
   let hideTimer = null;
-  const videoMode = () => !remoteVideo.hidden || cameraOn;
+  // Their video is "live" (has-remote) only while remoteVideoLive says so; the element keeps decoding underneath
+  // (transparent, not display:none) so the frame watch can see it come back.
+  const videoMode = () => stageEl.classList.contains("has-remote");
   const layout = () => {
-    stageEl.classList.toggle("is-video", videoMode());
-    stageEl.classList.toggle("has-remote", !remoteVideo.hidden);
-    if (!videoMode()) showControls();
+    const mode = callLayout(videoMode(), cameraOn);
+    stageEl.classList.toggle("is-video", mode === "video");
+    stageEl.classList.toggle("has-self", cameraOn);
+    full.el.hidden = mode !== "video" || !canFull;
+    pip.el.hidden = mode !== "video" || !canPip;
+    if (mode !== "video") {
+      showControls();
+      if (doc.fullscreenElement === stageEl) doc.exitFullscreen?.()?.catch?.(() => {});
+      if (doc.pictureInPictureElement === remoteVideo) doc.exitPictureInPicture?.()?.catch?.(() => {});
+    } else hideLater();
+  };
+  let roomCamera = "off";
+  let trackLive = true;
+  let lastFrame = 0;
+  let lastTime = -1;
+  let watch = null;
+  let watched = null;
+  const refreshRemote = () => {
+    const live = remoteVideoLive({ room: roomCamera, trackLive, lastFrameAt: lastFrame, now: Date.now() });
+    if (live === videoMode()) return;
+    stageEl.classList.toggle("has-remote", live);
+    layout();
+  };
+  const onFrame = () => {
+    lastFrame = Date.now();
+    refreshRemote();
+    if (roomCamera === "on") remoteVideo.requestVideoFrameCallback(onFrame);
+  };
+  const watchTrack = () => {
+    const track = call?.remoteStream?.getVideoTracks?.()[0] ?? null;
+    if (!track || track === watched) return;
+    watched = track;
+    trackLive = !track.muted && track.readyState !== "ended";
+    track.addEventListener?.("mute", () => {
+      trackLive = false;
+      refreshRemote();
+    });
+    track.addEventListener?.("unmute", () => {
+      trackLive = true;
+      lastFrame = Date.now();
+      refreshRemote();
+    });
+    track.addEventListener?.("ended", () => {
+      trackLive = false;
+      refreshRemote();
+    });
+  };
+  const startWatch = () => {
+    if (watch !== null) return;
+    if (typeof remoteVideo.requestVideoFrameCallback === "function") remoteVideo.requestVideoFrameCallback(onFrame);
+    // Every half second: the stall check, and the frame check where requestVideoFrameCallback is missing (Firefox).
+    watch = win.setInterval(() => {
+      const time = remoteVideo.currentTime;
+      if (typeof remoteVideo.requestVideoFrameCallback !== "function" && typeof time === "number" && time !== lastTime) {
+        lastTime = time;
+        lastFrame = Date.now();
+      }
+      refreshRemote();
+    }, 500);
+  };
+  const stopWatch = () => {
+    win.clearInterval(watch);
+    watch = null;
   };
   const showControls = () => {
     stageEl.classList.remove("controls-hidden");
@@ -452,10 +556,17 @@ async function startCall(ctx, session, opts = {}) {
     showSelf();
   };
   const onCamera = (s) => {
-    remoteVideo.hidden = s !== "on";
-    if (s === "on") remoteVideo.srcObject = call?.remoteStream ?? null;
+    roomCamera = s;
     paused.hidden = s !== "paused";
-    layout();
+    remoteVideo.hidden = s !== "on";
+    if (s === "on") {
+      remoteVideo.srcObject = call?.remoteStream ?? null;
+      // A grace period until the first frame: shown at once if the track already flows, hidden again if nothing comes.
+      lastFrame = Date.now();
+      watchTrack();
+      startWatch();
+    } else stopWatch();
+    refreshRemote();
   };
 
   let started = 0;
@@ -463,8 +574,14 @@ async function startCall(ctx, session, opts = {}) {
   const finish = (line) => {
     win.clearInterval(tick);
     win.clearTimeout(hideTimer);
+    stopWatch();
+    roomCamera = "off";
+    if (doc.fullscreenElement === stageEl) doc.exitFullscreen?.()?.catch?.(() => {});
+    if (doc.pictureInPictureElement) doc.exitPictureInPicture?.()?.catch?.(() => {});
+    full.el.hidden = true;
+    pip.el.hidden = true;
     stageEl.classList.add("is-over");
-    stageEl.classList.remove("controls-hidden", "is-video", "has-remote");
+    stageEl.classList.remove("controls-hidden", "is-video", "has-remote", "has-self");
     remoteVideo.hidden = true;
     selfView.hidden = true;
     selfView.srcObject = null;
