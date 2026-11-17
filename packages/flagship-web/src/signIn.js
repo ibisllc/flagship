@@ -36,6 +36,12 @@ export const SIGN_IN_PATH = "/voici-sign-in";
 export const SIGN_IN_REQUEST_KIND = "flagship/voici-sign-in-request/v1";
 export const SIGN_IN_DEADLINE_MS = 10 * 60_000;
 const SESSION_PREFIX = "voici-session:";
+// `.com` issued the answer's attestation and the phone signed its delegation moments ago, by clocks that may run
+// ahead of this browser's: a record issued no more than the protocol's send skew (VOICI_SEND_SKEW_MS) ahead of this
+// browser's clock is judged at its own issuedAt, as the apps do. That only shortens what remains of its life.
+const CLOCK_SKEW_MS = 10 * 60_000;
+const judgeAt = (now, issuedAt) =>
+  Number.isSafeInteger(issuedAt) && issuedAt > now && issuedAt - now <= CLOCK_SKEW_MS ? issuedAt : now;
 const PAGE_ID = /^[0-9a-f]{32}$/;
 const USERNAME = /^[a-z0-9](?:-?[a-z0-9]){0,31}$/;
 const B64U = /^[A-Za-z0-9_-]+$/;
@@ -188,7 +194,9 @@ export function startVoiciSignIn(o) {
             return finish(false, codeError("malformed"));
           }
           const caKeys = o.caKeys ?? (typeof answer?.attestation?.signedBy === "string" ? [answer.attestation.signedBy] : []);
-          const r = checkVoiciSignInAnswer(answer, { request, caKeys, now: now() });
+          const t = now();
+          const at = Math.max(judgeAt(t, answer?.attestation?.issuedAt), judgeAt(t, answer?.delegation?.issuedAt));
+          const r = checkVoiciSignInAnswer(answer, { request, caKeys, now: at });
           if (!r.ok) return finish(false, codeError(r.code));
           const session = {
             v: 1,
@@ -266,7 +274,7 @@ export async function loadVoiciSession(store, pageId, o = {}) {
       origin: o.origin ?? s.origin,
       audience: pageId,
       principalPub: s.pseudonymPub,
-      now,
+      now: judgeAt(now, s.delegation?.issuedAt),
     }).ok;
   if (!ok) {
     await signOut(store, pageId);

@@ -244,7 +244,7 @@ describe("flagship-web", () => {
   });
 
   it("signs in over the pipe: the app's sealed answer becomes a stored session; bad answers are refused", async () => {
-    const run = async (mutate: (a: Record<string, unknown>, req: { delegatePub: string; nonce: string }) => void = () => {}, expire = false) => {
+    const run = async (mutate: (a: Record<string, unknown>, req: { delegatePub: string; nonce: string }) => void = () => {}, expire = false, at = t0) => {
       const sockets: FakeWs[] = [];
       class FakeWs {
         url: string;
@@ -279,7 +279,7 @@ describe("flagship-web", () => {
         store,
         caKeys: [M.keys.caPub],
         WebSocketImpl: FakeWs,
-        now: () => t0,
+        now: () => at,
         onLink: (l: string) => links.push(l),
         onCode: (c: string) => codes.push(c),
       });
@@ -350,6 +350,14 @@ describe("flagship-web", () => {
     await expect((await run((a) => ((a.delegation as Record<string, unknown>).nonce = "00".repeat(16)))).done).rejects.toMatchObject({ code: "bad-delegation" });
     await expect((await run((a) => (a.threadSeed = "11".repeat(32)))).done).rejects.toMatchObject({ code: "bad-thread" });
     await expect((await run((a) => (a.pageId = "aa".repeat(16)))).done).rejects.toMatchObject({ code: "malformed" });
+
+    // A browser whose clock is behind `.com`'s and the phone's: a just-issued answer is judged at its own issuedAt
+    // within the send skew (and the stored session loads at that clock too), not beyond it.
+    const issued: number = M.attestation.signed.issuedAt;
+    const behind = await run(() => {}, false, issued - 5 * 60_000);
+    await expect(behind.done).resolves.toMatchObject({ pageId: D.pageId });
+    expect(await W.loadVoiciSession(behind.store, D.pageId, { now: issued - 5 * 60_000 })).not.toBeNull();
+    await expect((await run(() => {}, false, issued - 11 * 60_000)).done).rejects.toMatchObject({ code: "bad-attestation" });
   });
 
   it("parses only well-formed sign-in links", () => {
