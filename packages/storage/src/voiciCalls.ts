@@ -215,18 +215,18 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
     return (r.results ?? []).map(missedFromRow);
   }
 
+  /** One D1 batch (one subrequest): the cron that runs it shares a 50-subrequest, 10 ms budget (cronPlan.ts). */
   async collectCalls(o: { missedBefore: number; countsBeforeDay: string; now: number; limit: number }) {
-    const a = await this.db
-      .prepare("DELETE FROM voici_missed_calls WHERE id IN (SELECT id FROM voici_missed_calls WHERE stored_at < ?1 LIMIT ?2)")
-      .bind(o.missedBefore, o.limit)
-      .run();
-    const b = await this.db.prepare("DELETE FROM voici_call_counts WHERE day < ?1").bind(o.countsBeforeDay).run();
-    const c = await this.db.prepare("DELETE FROM voici_live_calls WHERE expires_at < ?1").bind(o.now).run();
-    let more = 0;
-    for (const t of ["voici_ring_backs", "voici_rings", "voici_pow_spent", "voici_anon_blocks"]) {
-      more += (await this.db.prepare(`DELETE FROM ${t} WHERE expires_at < ?1`).bind(o.now).run()).meta.changes ?? 0;
-    }
-    return (a.meta.changes ?? 0) + (b.meta.changes ?? 0) + (c.meta.changes ?? 0) + more;
+    const results = await this.db.batch([
+      this.db
+        .prepare("DELETE FROM voici_missed_calls WHERE id IN (SELECT id FROM voici_missed_calls WHERE stored_at < ?1 LIMIT ?2)")
+        .bind(o.missedBefore, o.limit),
+      this.db.prepare("DELETE FROM voici_call_counts WHERE day < ?1").bind(o.countsBeforeDay),
+      ...["voici_live_calls", "voici_ring_backs", "voici_rings", "voici_pow_spent", "voici_anon_blocks"].map((t) =>
+        this.db.prepare(`DELETE FROM ${t} WHERE expires_at < ?1`).bind(o.now),
+      ),
+    ]);
+    return results.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
   }
 
   async deleteCallsForPage(pageId: string) {
