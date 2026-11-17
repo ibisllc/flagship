@@ -216,18 +216,29 @@ export function startVoiciCall(o) {
     if (ws?.readyState === 1) ws.send(JSON.stringify(m));
   };
 
+  // Every receiver gets its opening transform before any media can arrive. Attaching it only in `ontrack` left the
+  // audio receiver without one in Chrome: the phone's sealed frames went straight to the Opus decoder (garble).
+  const opened = new WeakSet();
+  const attachReceive = (receiver, kind) => {
+    if (!receiver || opened.has(receiver)) return;
+    opened.add(receiver);
+    attachTransform(deps, o.worker, receiver, "receive", kind);
+  };
+  const receiverOf = (s) => pc.getTransceivers?.().find((t) => t.sender === s)?.receiver;
   const sender = pc.addTrack(track, o.stream);
   if (!attachTransform(deps, o.worker, sender, "send")) {
     queueMicrotask(() => set("failed", { code: "unsupported" }));
     return { hangUp() {}, setMuted() {}, async setCamera() { return false; }, remoteStream };
   }
+  attachReceive(receiverOf(sender), "audio");
   if (videoAble) {
     // Negotiated now, sending nothing until the camera is turned on: no new offer when it is (voici-calls-v2.md §1.4).
     video = pc.addTransceiver("video", { direction: "sendrecv" });
     attachTransform(deps, o.worker, video.sender, "send", "video");
+    attachReceive(video.receiver, "video");
   }
   pc.ontrack = (e) => {
-    attachTransform(deps, o.worker, e.receiver, "receive", e.track.kind === "video" ? "video" : "audio");
+    attachReceive(e.receiver, e.track.kind === "video" ? "video" : "audio");
     remoteStream.addTrack(e.track);
   };
   const diag = (...a) => {

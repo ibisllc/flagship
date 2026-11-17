@@ -276,3 +276,58 @@ describe("the connecting steps (the status line while a call connects)", () => {
     expect(VOICI_CALL_STEPS).toEqual(["secure", "reach", "path", "audio"]);
   });
 });
+
+describe("startVoiciCall attaches every transform before media can arrive", () => {
+  it("the audio and video receivers open frames from the start, not only in ontrack", async () => {
+    const { startVoiciCall } = await import("../src/call.js");
+    class Rx {}
+    class Tx {}
+    const transceivers: { sender: Tx; receiver: Rx }[] = [];
+    class FakePc {
+      ontrack: unknown = null;
+      addTrack() {
+        const t = { sender: new Tx(), receiver: new Rx() };
+        transceivers.push(t);
+        return t.sender;
+      }
+      addTransceiver() {
+        const t = { sender: new Tx(), receiver: new Rx() };
+        transceivers.push(t);
+        return t;
+      }
+      getTransceivers() {
+        return transceivers;
+      }
+      createOffer() {
+        return new Promise(() => {});
+      }
+      close() {}
+    }
+    class FakeTransform {
+      constructor(
+        public worker: unknown,
+        public options: { side: string; track: string },
+      ) {}
+    }
+    const worker = { postMessage() {}, addEventListener() {} };
+    (globalThis as any).MediaStream ??= class {
+      addTrack() {}
+    };
+    const call = startVoiciCall({
+      username: "alex",
+      index: { pageId: "p" },
+      cfg: { apiBase: "https://x", services: "s" },
+      session: {},
+      worker,
+      videoAble: true,
+      stream: { getAudioTracks: () => [{}], getTracks: () => [] },
+      deps: { fetch: () => new Promise(() => {}), WebSocket: class {}, RTCPeerConnection: FakePc, RTCRtpScriptTransform: FakeTransform, timers: { setTimeout: () => 0, clearTimeout() {} } },
+    } as any);
+    expect(call).toBeTruthy();
+    const opts = transceivers.map((t) => (t.receiver as any).transform?.options);
+    expect(opts).toEqual([
+      { side: "receive", track: "audio" },
+      { side: "receive", track: "video" },
+    ]);
+  });
+});
