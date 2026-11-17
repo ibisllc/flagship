@@ -421,15 +421,20 @@ private fun VideoPicture(media: CallMediaEngine?, local: Boolean, mirror: Boolea
 private fun LocalTile(state: CallStageState, stageW: Float, stageH: Float, compact: Boolean) {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
-    var corner by remember { mutableStateOf(CallStageModel.Corner.TopEnd) }
-    val w = if (compact) 104f else 140f
+    // Low on the right while only our camera runs (clear of the name and status), top right over their video;
+    // each layout keeps the corner it was last dragged to (as iOS and voi.ci).
+    var selfCorner by remember { mutableStateOf(CallStageModel.Corner.BottomEnd) }
+    var videoCorner by remember { mutableStateOf(CallStageModel.Corner.TopEnd) }
+    val corner = if (compact) videoCorner else selfCorner
+    fun moveTo(c: CallStageModel.Corner) { if (compact) videoCorner = c else selfCorner = c }
+    val w = 104f
     val h = w * 16f / 9f
     val pad = 16f
     fun origin(c: CallStageModel.Corner): Pair<Float, Float> {
         val left = c == CallStageModel.Corner.TopStart || c == CallStageModel.Corner.BottomStart
         val top = c == CallStageModel.Corner.TopStart || c == CallStageModel.Corner.TopEnd
         val x = if (left) pad else stageW - pad - w
-        val y = if (top) (if (compact) 96f else pad + 40f) else stageH - 220f - h
+        val y = if (top) (if (compact) 96f else pad + 40f) else stageH - 252f - h
         return x to y.coerceAtLeast(pad)
     }
     val x = remember { Animatable(origin(corner).first) }
@@ -450,8 +455,8 @@ private fun LocalTile(state: CallStageState, stageW: Float, stageH: Float, compa
             .border(1.dp, CallInk.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
             .pointerInput(stageW, stageH, compact) {
                 detectDragGestures(
-                    onDragEnd = { corner = CallStageModel.nearestCorner(x.value + w / 2, y.value + h / 2, stageW, stageH) },
-                    onDragCancel = { corner = CallStageModel.nearestCorner(x.value + w / 2, y.value + h / 2, stageW, stageH) },
+                    onDragEnd = { moveTo(CallStageModel.nearestCorner(x.value + w / 2, y.value + h / 2, stageW, stageH)) },
+                    onDragCancel = { moveTo(CallStageModel.nearestCorner(x.value + w / 2, y.value + h / 2, stageW, stageH)) },
                 ) { change, drag ->
                     change.consume()
                     scope.launch {
