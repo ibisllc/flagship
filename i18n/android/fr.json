@@ -3632,6 +3632,7 @@
   "voici_publishing_page": "Publication de votre page…",
   "voici_reply_footer": "Vos conversations avec d’autres pages sont sur voi.ci.",
   "voici_empty_messages_options": "Pas encore de messages. Activez Accepter les messages dans Options de la page pour en recevoir.",
+  "voici_empty_messages_on": "Pas encore de messages. Les personnes qui se connectent sur votre page peuvent vous écrire ici.",
   "push_service": "Service de notifications push",
   "push_service_unifiedpush": "UnifiedPush",
   "push_service_unifiedpush_through": "UnifiedPush, via %1$s",

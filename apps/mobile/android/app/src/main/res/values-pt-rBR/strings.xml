@@ -3634,6 +3634,7 @@
     <string name="voici_publishing_page">Publicando sua página…</string>
     <string name="voici_reply_footer">Suas conversas com outras páginas ficam no voi.ci.</string>
     <string name="voici_empty_messages_options">Ainda não há mensagens. Ative Aceitar mensagens em Opções da página para recebê-las.</string>
+    <string name="voici_empty_messages_on">Ainda não há mensagens. Quem entrar na sua página pode escrever para você aqui.</string>
     <string name="push_service">Serviço de notificações push</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
     <string name="push_service_unifiedpush_through">UnifiedPush, por meio de %1$s</string>

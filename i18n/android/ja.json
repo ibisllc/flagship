@@ -3632,6 +3632,7 @@
   "voici_publishing_page": "ページを公開しています…",
   "voici_reply_footer": "ほかのページとの会話は voi.ci にあります。",
   "voici_empty_messages_options": "まだメッセージはありません。「ページのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。",
+  "voici_empty_messages_on": "まだメッセージはありません。あなたのページでサインインした人は、ここからメッセージを送れます。",
   "push_service": "プッシュサービス",
   "push_service_unifiedpush": "UnifiedPush",
   "push_service_unifiedpush_through": "UnifiedPush（%1$s 経由）",

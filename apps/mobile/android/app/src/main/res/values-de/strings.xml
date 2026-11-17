@@ -3634,6 +3634,7 @@
     <string name="voici_publishing_page">Deine Seite wird veröffentlicht …</string>
     <string name="voici_reply_footer">Deine Unterhaltungen mit anderen Seiten findest du auf voi.ci.</string>
     <string name="voici_empty_messages_options">Noch keine Nachrichten. Aktiviere „Nachrichten annehmen“ unter Seitenoptionen, um welche zu bekommen.</string>
+    <string name="voici_empty_messages_on">Noch keine Nachrichten. Wer sich auf deiner Seite anmeldet, kann dir hier schreiben.</string>
     <string name="push_service">Push-Dienst</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
     <string name="push_service_unifiedpush_through">UnifiedPush, über %1$s</string>

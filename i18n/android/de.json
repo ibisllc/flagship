@@ -3632,6 +3632,7 @@
   "voici_publishing_page": "Deine Seite wird veröffentlicht …",
   "voici_reply_footer": "Deine Unterhaltungen mit anderen Seiten findest du auf voi.ci.",
   "voici_empty_messages_options": "Noch keine Nachrichten. Aktiviere „Nachrichten annehmen“ unter Seitenoptionen, um welche zu bekommen.",
+  "voici_empty_messages_on": "Noch keine Nachrichten. Wer sich auf deiner Seite anmeldet, kann dir hier schreiben.",
   "push_service": "Push-Dienst",
   "push_service_unifiedpush": "UnifiedPush",
   "push_service_unifiedpush_through": "UnifiedPush, über %1$s",

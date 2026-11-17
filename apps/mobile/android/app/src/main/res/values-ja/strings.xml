@@ -3634,6 +3634,7 @@
     <string name="voici_publishing_page">ページを公開しています…</string>
     <string name="voici_reply_footer">ほかのページとの会話は voi.ci にあります。</string>
     <string name="voici_empty_messages_options">まだメッセージはありません。「ページのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。</string>
+    <string name="voici_empty_messages_on">まだメッセージはありません。あなたのページでサインインした人は、ここからメッセージを送れます。</string>
     <string name="push_service">プッシュサービス</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
     <string name="push_service_unifiedpush_through">UnifiedPush（%1$s 経由）</string>
