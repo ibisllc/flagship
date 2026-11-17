@@ -162,8 +162,14 @@ async function takeAccessOrder(deps: DirectAccessDeps, username: string, signed:
     issuedAt: order.issuedAt,
     updatedAt: now,
   });
-  if (put.ok) await markServerNames(deps, order.serverDomain, now);
-  return { ok: true, stored: put.ok };
+  if (put.ok) {
+    await markServerNames(deps, order.serverDomain, now);
+    return { ok: true, stored: true };
+  }
+  // The same order again is no replay: the box hands .com the owner's off order too, so the app's own post of that
+  // order often arrives second.
+  const held = await deps.directAccess.getOrder(order.serverDomain);
+  return { ok: true, stored: !!held && held.username === username && held.orderSha256 === directAccessOrderSha256(order) };
 }
 
 async function markServerNames(deps: DirectAccessDeps, serverDomain: string, now: number): Promise<void> {

@@ -133,7 +133,19 @@ describe("direct-access orders on .com", () => {
     expect((await handlePostDirectAccessOrder(h.deps, U, { order: accessOrder() })).status).toBe(400);
     const theirs = signedAccess(accessOrder({ serverDomain: "x.someone.flagship.services", issuedAt: NOW + 3 }), h.admin);
     expect(((await handlePostDirectAccessOrder(h.deps, U, theirs)).body as { code: string }).code).toBe("not-your-server");
-    expect((await handlePostDirectAccessOrder(h.deps, U, signedAccess(accessOrder(), h.admin))).status).toBe(409);
+    expect((await handlePostDirectAccessOrder(h.deps, U, signedAccess(accessOrder({ issuedAt: NOW - 1 }), h.admin))).status).toBe(409);
+    const sameTime = await handlePostDirectAccessOrder(h.deps, U, signedAccess(accessOrder({ addresses: ["81.2.69.144"] }), h.admin));
+    expect((sameTime.body as { code: string }).code).toBe("replayed");
+  });
+
+  it("the same order again is taken (the box may have handed .com the owner's off order first)", async () => {
+    const h = await harness();
+    expect((await handlePostDirectAccessOrder(h.deps, U, signedAccess(accessOrder(), h.admin))).status).toBe(200);
+    const off = signedAccess(accessOrder({ enabled: false, addresses: [], prefixes: [], issuedAt: NOW + 10 }), h.admin);
+    expect((await handlePostDirectAccessOrder(h.deps, U, off)).status).toBe(200);
+    const again = await handlePostDirectAccessOrder(h.deps, U, off);
+    expect(again.status).toBe(200);
+    expect((await h.storage.directAccess.getOrder(BOX))?.enabled).toBe(false);
   });
 
   it("an account without an admin root signs with its IRK, as the box allows", async () => {
