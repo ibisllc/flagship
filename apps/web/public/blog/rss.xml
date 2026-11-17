@@ -6,6 +6,14 @@
     <description>Field notes from a personal-cloud project that takes self-hosting seriously.</description>
     <language>en-us</language>
     <atom:link href="https://flagshipserver.com/blog/rss.xml" rel="self" type="application/rss+xml" />
+    <!-- TODO-RM: set <pubDate> to the release day (RFC 822) and delete this comment (0.4 deploy sheet) -->
+    <item>
+      <title>What's new in Flagship 0.4</title>
+      <link>https://flagshipserver.com/blog/flagship-0-4</link>
+      <guid isPermaLink="true">https://flagshipserver.com/blog/flagship-0-4</guid>
+      <pubDate>Tue, 17 Nov 2026 00:00:00 +0000</pubDate>
+      <description>People can call you from your voi.ci page, apps get direct addresses that skip our relay, and plans are paid with vouchers that never name your account. Free stays free.</description>
+    </item>
     <item>
       <title>What's new in Flagship 0.3</title>
       <link>https://flagshipserver.com/blog/flagship-0-3</link>
