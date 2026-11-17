@@ -86,6 +86,8 @@ public final class VoiciCallCenter: NSObject {
     @ObservationIgnored private var ringing: (id: UUID, hint: VoiciRingHint?)?
     @ObservationIgnored private var incomingPeer: VoiciCallRecord.Peer?
     @ObservationIgnored private var connectedAt: Int64?
+    /// When the call connected, for the call screen's timer (set with the phase change that redraws it).
+    var connectedSince: Date? { connectedAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) } }
 
     static let noRingKey = "flagship.voici.calls.noRing"
 

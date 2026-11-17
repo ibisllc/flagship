@@ -15,67 +15,90 @@ public struct VoiciCallScreen: View {
         if let call = center.ringBack {
             VoiciOutgoingCallScreen(call: call) { center.ringBackDone() }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.regularMaterial)
         } else if visible {
-            VStack(spacing: 16) {
-                Spacer()
-                Text(center.callerName).font(.largeTitle.weight(.semibold)).multilineTextAlignment(.center)
-                Text(status).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                if center.phase == .connecting, center.connectSlow {
-                    Text("This is taking longer than usual").font(.callout).foregroundStyle(.secondary)
+            Group {
+                switch center.phase {
+                case .ringing, .needsUnlock: ringing
+                default: inCall
                 }
-                if center.phase == .connected, center.remoteCamera == "on" {
-                    Text("\(center.callerName) turned on their camera").font(.callout)
-                } else if center.phase == .connected, center.remoteCamera == "paused" {
-                    Text("Camera paused").font(.callout)
-                }
-                if cameraRefused {
-                    Text("Flagship needs the camera to show your video. You can keep talking without it.").font(.callout).multilineTextAlignment(.center)
-                }
-                Spacer()
-                controls
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.regularMaterial)
             .transition(.opacity)
         }
+    }
+
+    /// The ringing screen where there's no CallKit (the China mainland storefront): the same stage, Decline and Answer.
+    private var ringing: some View {
+        ZStack {
+            LinearGradient(colors: [Color(red: 0.11, green: 0.13, blue: 0.19), Color(red: 0.03, green: 0.04, blue: 0.07)],
+                           startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            VStack(spacing: 12) {
+                Text(verbatim: center.callerName).font(.largeTitle.weight(.semibold)).foregroundStyle(.white).multilineTextAlignment(.center)
+                Text(verbatim: status).font(.title3).foregroundStyle(.white.opacity(0.75))
+                Spacer()
+                HStack {
+                    CallRoundButton(symbol: "phone.down.fill", title: String(localized: "Decline"), style: .end) { center.declineOrHangUp() }
+                        .frame(maxWidth: .infinity)
+                    if center.phase == .ringing {
+                        CallRoundButton(symbol: "phone.fill", title: String(localized: "Answer"), style: .answer) { center.answerInApp() }
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.bottom, 32)
+            }
+            .padding(.top, 80)
+            .padding(.horizontal, 24)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var inCall: some View {
+        VStack(spacing: 0) {
+            VoiciCallStage(
+                state: VoiciCallStageState(
+                    name: center.callerName, status: inCallStatus,
+                    connectedSince: center.phase == .connected ? center.connectedSince : nil,
+                    muted: center.muted, cameraOn: center.cameraOn, cameraFront: center.cameraFront,
+                    remoteCameraOn: center.remoteCamera == "on", remoteCameraPaused: center.remoteCamera == "paused",
+                    offersVideo: center.offersVideo, over: isOver, media: center.mediaEngine),
+                actions: VoiciCallStageActions(
+                    toggleMute: { center.setMuted(!center.muted) },
+                    toggleCamera: {
+                        Task {
+                            let want = !center.cameraOn
+                            let ok = await center.setCamera(want)
+                            cameraRefused = want && !ok
+                        }
+                    },
+                    flipCamera: { center.flipCamera() },
+                    hangUp: { center.declineOrHangUp() },
+                    close: { cameraRefused = false; center.dismissEnded() }))
+        }
+        .overlay(alignment: .top) {
+            if cameraRefused {
+                Text("Flagship needs the camera to show your video. You can keep talking without it.")
+                    .font(.callout).foregroundStyle(.white).multilineTextAlignment(.center)
+                    .padding(12).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
+                    .onTapGesture { cameraRefused = false }
+            }
+        }
+    }
+
+    private var isOver: Bool {
+        if case .ended = center.phase { return true }
+        return false
+    }
+
+    private var inCallStatus: String {
+        if center.phase == .connecting, center.connectSlow { return status + "\n" + String(localized: "This is taking longer than usual") }
+        return status
     }
 
     private var visible: Bool { VoiciCallScreenModel.visible(center.phase, noRingMode: center.noRingMode) }
 
     private var status: String { VoiciCallScreenModel.status(center.phase, step: center.connectStep) }
 
-    @ViewBuilder private var controls: some View {
-        switch center.phase {
-        case .ringing:
-            HStack(spacing: 24) {
-                Button(role: .destructive) { center.declineOrHangUp() } label: { Text("Decline") }.buttonStyle(.borderedProminent).tint(.red)
-                Button { center.answerInApp() } label: { Text("Answer") }.buttonStyle(.borderedProminent).tint(.green)
-            }
-        case .needsUnlock:
-            Button(role: .destructive) { center.declineOrHangUp() } label: { Text("Decline") }.buttonStyle(.bordered)
-        case .connecting, .connected:
-            HStack(spacing: 16) {
-                Button { center.setMuted(!center.muted) } label: { Text(center.muted ? String(localized: "Unmute") : String(localized: "Mute")) }.buttonStyle(.bordered)
-                if center.offersVideo {
-                    Button {
-                        Task {
-                            let want = !center.cameraOn
-                            let ok = await center.setCamera(want)
-                            cameraRefused = want && !ok
-                        }
-                    } label: { Text(center.cameraOn ? String(localized: "Camera off") : String(localized: "Camera")) }.buttonStyle(.bordered)
-                }
-                Button(role: .destructive) { center.declineOrHangUp() } label: { Text("Hang up") }.buttonStyle(.borderedProminent).tint(.red)
-            }
-        case .ended:
-            Button { cameraRefused = false; center.dismissEnded() } label: { Text("Close") }.buttonStyle(.borderedProminent)
-        case .idle:
-            EmptyView()
-        }
-    }
 }
+
 /// What the call screen shows for each phase (pure, so the view-model tests can pin it).
 enum VoiciCallScreenModel {
     static func visible(_ phase: VoiciCallCenter.Phase, noRingMode: Bool) -> Bool {

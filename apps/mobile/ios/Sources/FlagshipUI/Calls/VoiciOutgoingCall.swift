@@ -105,6 +105,7 @@ final class VoiciOutgoingCall: Identifiable {
     private(set) var phase: Phase = .preparing
     private(set) var muted = false
     private(set) var cameraOn = false
+    private(set) var cameraFront = true
     /// The other side's camera: "on", "off" or "paused".
     private(set) var remoteCamera = "off"
     private(set) var callId = ""
@@ -116,6 +117,8 @@ final class VoiciOutgoingCall: Identifiable {
     @ObservationIgnored private var callerSeed: [UInt8] = []
     @ObservationIgnored private var ownerSignPub = ""
     @ObservationIgnored private var connectedAt: Int64?
+    /// When the call connected, for the call screen's timer (set with the phase change that redraws it).
+    var connectedSince: Date? { connectedAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) } }
     @ObservationIgnored private var startedAt: Int64 = 0
     @ObservationIgnored private var over = false
 
@@ -255,9 +258,19 @@ final class VoiciOutgoingCall: Identifiable {
         muted = m
     }
 
+    /// Front or back camera while ours runs.
+    func flipCamera() {
+        guard cameraOn, deps.media.flipCamera() else { return }
+        cameraFront.toggle()
+    }
+
+    /// The call's media engine, for the call screen's video views.
+    var media: CallMediaEngine { deps.media }
+
     /// The Camera tap; false when it can't (the call has no video, or no camera).
     func setCamera(_ on: Bool) -> Bool {
         guard video, phase == .connecting || phase == .connected, deps.media.setCamera(on) else { return false }
+        if on && !cameraOn { cameraFront = true }
         cameraOn = on
         send(["t": "camera", "state": .string(on ? "on" : "off")])
         return true

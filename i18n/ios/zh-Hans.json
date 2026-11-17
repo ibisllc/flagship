@@ -3885,5 +3885,11 @@
   "Securing the line (quantum-safe)…": "正在保护线路（抗量子）…",
   "Opening a direct path…": "正在打开直接通道…",
   "Starting audio…": "正在启动音频…",
-  "Opening your line…": "正在打开你的线路…"
+  "Opening your line…": "正在打开你的线路…",
+  "Their camera": "对方的摄像头",
+  "Your camera": "你的摄像头",
+  "End-to-end encrypted · quantum-safe": "端到端加密 · 抗量子",
+  "End": "挂断",
+  "Flip": "翻转",
+  "Audio": "音频"
 }
