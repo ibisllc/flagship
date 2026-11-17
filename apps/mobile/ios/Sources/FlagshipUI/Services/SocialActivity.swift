@@ -37,6 +37,8 @@ public struct SocialActivityEntry: Identifiable, Equatable, Sendable {
     public var snippet: String?
     public var video: Bool
     public var target: Target
+    /// How long an answered call lasted, in milliseconds; nil for every other entry.
+    public var durationMs: Int64? = nil
 }
 
 public enum SocialActivity {
@@ -70,7 +72,8 @@ public enum SocialActivity {
                 who = name(pseudonymPub)
                 target = convs.contains(conv) ? .thread(conv: conv) : .calls
             }
-            out.append(SocialActivityEntry(id: "call:\(r.id)", kind: kind, at: r.at, name: who, snippet: nil, video: r.video, target: target))
+            out.append(SocialActivityEntry(id: "call:\(r.id)", kind: kind, at: r.at, name: who, snippet: nil, video: r.video, target: target,
+                                           durationMs: r.outcome == .answered && r.durationMs > 0 ? r.durationMs : nil))
         }
         for c in conversations {
             guard let first = c.messages.first(where: { !$0.fromOwner }) ?? c.messages.first else { continue }
@@ -112,8 +115,30 @@ public enum SocialActivity {
 
     public static func detail(_ e: SocialActivityEntry) -> String? {
         if e.kind == .postPublished { return e.snippet }
+        if let ms = e.durationMs, let length = callLength(ms) {
+            return e.video ? String(localized: "Video call · \(length)") : String(localized: "Answered · \(length)")
+        }
         if e.video { return String(localized: "Video call") }
         return nil
+    }
+
+    /// An answered call's length as the locale writes a clock ("4:32", "1:02:05" over an hour, digits localized);
+    /// nil for no length. Also used by the Calls list.
+    public static func callLength(_ ms: Int64, calendar: Calendar = .autoupdatingCurrent) -> String? {
+        guard ms > 0 else { return nil }
+        let seconds = TimeInterval(ms / 1000)
+        let f = DateComponentsFormatter()
+        f.unitsStyle = .positional
+        f.calendar = calendar
+        if seconds >= 3600 {
+            f.allowedUnits = [.hour, .minute, .second]
+            return f.string(from: seconds)
+        }
+        // Padded gives "04:32" and "00:05"; one leading zero of the minutes is dropped to read "4:32" and "0:05".
+        f.allowedUnits = [.minute, .second]
+        f.zeroFormattingBehavior = .pad
+        guard let s = f.string(from: seconds) else { return nil }
+        return seconds < 600 ? String(s.dropFirst()) : s
     }
 
     public static func symbol(_ e: SocialActivityEntry) -> String {

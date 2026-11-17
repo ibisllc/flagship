@@ -5,6 +5,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** Calls and social entries on Activity (docs/activity-social.md). Mirrors iOS SocialActivityTests and the webapp's webappSocialActivity.test.ts. */
 class SocialActivityTest {
@@ -72,5 +75,35 @@ class SocialActivityTest {
     @Test fun aLongPostIsShortened() {
         assertEquals(80, SocialActivity.snippet("x".repeat(200))!!.length)
         assertNull(SocialActivity.snippet("  \n"))
+    }
+}
+
+/** An answered call's length (owner, 2026-11-16): DateUtils.formatElapsedTime needs the framework, so Robolectric. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33], qualifiers = "en-rUS")
+class SocialActivityCallLengthTest {
+    @Test fun answeredCallsShowTheirLength() {
+        val calls = listOf(
+            VoiciCallRecord(id = "in|1", callId = "1", direction = "in", outcome = "answered", conv = "c", pseudonymPub = "p", at = 10, durationMs = 272_400),
+            VoiciCallRecord(id = "out|2", callId = "2", direction = "out", outcome = "answered", peerUsername = "bob", peerPageId = "x", media = "audio,video", at = 20, durationMs = 3_725_000),
+            VoiciCallRecord(id = "in|3", callId = "3", direction = "in", outcome = "missed", conv = "c", pseudonymPub = "p", at = 30, durationMs = 9_000),
+            VoiciCallRecord(id = "in|4", callId = "4", direction = "in", outcome = "answered", conv = "c", pseudonymPub = "p", at = 40),
+        )
+        val by = SocialActivity.build(calls, emptyList(), { false }, { it }, 0, null).associateBy { it.id }
+        assertEquals(272_400L, by["call:in|1"]?.durationMs)
+        assertEquals("Answered · 4:32", SocialActivity.detail(by["call:in|1"]!!))
+        assertEquals("Video call · 1:02:05", SocialActivity.detail(by["call:out|2"]!!))
+        // Only an answered call has a length; one with none recorded shows no detail.
+        assertNull(by["call:in|3"]?.durationMs)
+        assertNull(SocialActivity.detail(by["call:in|4"]!!))
+    }
+
+    @Test fun callLengthIsTheLocalesClock() {
+        assertEquals("0:05", SocialActivity.callLength(5_000))
+        assertEquals("1:05", SocialActivity.callLength(65_000))
+        assertEquals("4:32", SocialActivity.callLength(272_999))
+        assertEquals("12:34", SocialActivity.callLength(754_000))
+        assertEquals("1:02:05", SocialActivity.callLength(3_725_000))
+        assertNull(SocialActivity.callLength(0))
     }
 }

@@ -4205,5 +4205,8 @@
   "activity_social_section_hint": "通話、会話、あなたのページ",
   "activity_social_empty": "まだ通話やメッセージはありません。",
   "activity_open_server": "サーバーを開きます",
-  "scheduled_backup_finished": "スケジュールされたバックアップが完了しました"
+  "scheduled_backup_finished": "スケジュールされたバックアップが完了しました",
+  "activity_social_answered_length": "応答済み · %1$s",
+  "activity_social_video_call_length": "ビデオ通話 · %1$s",
+  "voici_calls_history_line_length": "%1$s・%2$s・%3$s"
 }

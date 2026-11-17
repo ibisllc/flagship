@@ -16546,5 +16546,21 @@
   "Scheduled backup finished": {
     "en": "Scheduled backup finished",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift (Activity: a box event title)"
+  },
+  "Answered · %@": {
+    "en": "Answered · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: an answered call's detail line; %@ is the call's length, e.g. 4:32, docs/activity-social.md)"
+  },
+  "Video call · %@": {
+    "en": "Video call · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/SocialActivity.swift (Activity: an answered call's detail line; %@ is the call's length, e.g. 4:32, docs/activity-social.md)"
+  },
+  "Incoming call · %@ · %@": {
+    "en": "Incoming call · %@ · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (Calls list row; first %@ is the date and time, second the call's length, e.g. 4:32)"
+  },
+  "Outgoing call · %@ · %@": {
+    "en": "Outgoing call · %@ · %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (Calls list row; first %@ is the date and time, second the call's length, e.g. 4:32)"
   }
 }

@@ -4208,4 +4208,7 @@
     <string name="activity_social_empty">还没有通话或消息。</string>
     <string name="activity_open_server">打开服务器</string>
     <string name="scheduled_backup_finished">计划备份已完成</string>
+    <string name="activity_social_answered_length">已接听 · %1$s</string>
+    <string name="activity_social_video_call_length">视频通话 · %1$s</string>
+    <string name="voici_calls_history_line_length">%1$s · %2$s · %3$s</string>
 </resources>

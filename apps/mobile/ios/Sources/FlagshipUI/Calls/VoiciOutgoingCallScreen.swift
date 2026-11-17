@@ -238,11 +238,17 @@ struct VoiciCallsScreen: View {
         switch (r.direction, r.outcome) {
         case (.incoming, .missed): return String(localized: "Missed call · \(when)")
         case (.incoming, .declined): return String(localized: "Declined · \(when)")
+        case (.incoming, .answered):
+            if let length = SocialActivity.callLength(r.durationMs) { return String(localized: "Incoming call · \(when) · \(length)") }
+            return String(localized: "Incoming call · \(when)")
         case (.incoming, _): return String(localized: "Incoming call · \(when)")
         case (.outgoing, .browser): return String(localized: "Opened in your browser · \(when)")
         case (.outgoing, .noAnswer): return String(localized: "No answer · \(when)")
         case (.outgoing, .declined): return String(localized: "Couldn't take your call · \(when)")
         case (.outgoing, .failed): return String(localized: "Didn't connect · \(when)")
+        case (.outgoing, .answered):
+            if let length = SocialActivity.callLength(r.durationMs) { return String(localized: "Outgoing call · \(when) · \(length)") }
+            return String(localized: "Outgoing call · \(when)")
         case (.outgoing, _): return String(localized: "Outgoing call · \(when)")
         }
     }

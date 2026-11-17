@@ -17300,5 +17300,17 @@
   "scheduled_backup_finished": {
     "en": "Scheduled backup finished",
     "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_social_answered_length": {
+    "en": "Answered · %1$s",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md); an answered call's detail line, %1$s is its length (4:32)"
+  },
+  "activity_social_video_call_length": {
+    "en": "Video call · %1$s",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md); an answered video call's detail line, %1$s is its length (4:32)"
+  },
+  "voici_calls_history_line_length": {
+    "en": "%1$s · %2$s · %3$s",
+    "ctx": "voi.ci calls: call history row subtitle of an answered call; %1$s is the outcome (Incoming call, Outgoing call), %2$s the date and time, %3$s the call's length (4:32)"
   }
 }

@@ -4208,4 +4208,7 @@
     <string name="activity_social_empty">Noch keine Anrufe oder Nachrichten.</string>
     <string name="activity_open_server">Öffnet den Server</string>
     <string name="scheduled_backup_finished">Geplantes Backup abgeschlossen</string>
+    <string name="activity_social_answered_length">Angenommen · %1$s</string>
+    <string name="activity_social_video_call_length">Videoanruf · %1$s</string>
+    <string name="voici_calls_history_line_length">%1$s · %2$s · %3$s</string>
 </resources>

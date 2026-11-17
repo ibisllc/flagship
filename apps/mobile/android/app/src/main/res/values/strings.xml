@@ -4213,4 +4213,7 @@
     <string name="activity_social_empty">No calls or messages yet.</string>
     <string name="activity_open_server">Opens the server</string>
     <string name="scheduled_backup_finished">Scheduled backup finished</string>
+    <string name="activity_social_answered_length">Answered · %1$s</string>
+    <string name="activity_social_video_call_length">Video call · %1$s</string>
+    <string name="voici_calls_history_line_length">%1$s · %2$s · %3$s</string>
 </resources>

@@ -3873,5 +3873,9 @@
   "Calls, conversations and your page": "f33ffc24e946",
   "No calls or messages yet.": "167c929c27b8",
   "Opens the server": "71cc6af57083",
-  "Scheduled backup finished": "073c8161ce7f"
+  "Scheduled backup finished": "073c8161ce7f",
+  "Answered · %@": "02c1802ba846",
+  "Video call · %@": "99affff402b9",
+  "Incoming call · %@ · %@": "2aaf960ad727",
+  "Outgoing call · %@ · %@": "3c4e72c46520"
 }

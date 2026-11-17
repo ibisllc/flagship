@@ -4205,5 +4205,8 @@
   "activity_social_section_hint": "Anrufe, Unterhaltungen und deine Seite",
   "activity_social_empty": "Noch keine Anrufe oder Nachrichten.",
   "activity_open_server": "Öffnet den Server",
-  "scheduled_backup_finished": "Geplantes Backup abgeschlossen"
+  "scheduled_backup_finished": "Geplantes Backup abgeschlossen",
+  "activity_social_answered_length": "Angenommen · %1$s",
+  "activity_social_video_call_length": "Videoanruf · %1$s",
+  "voici_calls_history_line_length": "%1$s · %2$s · %3$s"
 }

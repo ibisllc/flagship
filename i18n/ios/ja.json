@@ -3877,5 +3877,9 @@
   "Calls, conversations and your page": "通話、会話、あなたのページ",
   "No calls or messages yet.": "まだ通話やメッセージはありません。",
   "Opens the server": "サーバーを開きます",
-  "Scheduled backup finished": "スケジュールされたバックアップが完了しました"
+  "Scheduled backup finished": "スケジュールされたバックアップが完了しました",
+  "Answered · %@": "応答済み · %@",
+  "Video call · %@": "ビデオ通話 · %@",
+  "Incoming call · %@ · %@": "着信 · %@ · %@",
+  "Outgoing call · %@ · %@": "発信 · %@ · %@"
 }
