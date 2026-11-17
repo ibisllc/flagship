@@ -2255,6 +2255,7 @@ section h2.fs-hero-title::before { content: none; }
 .fs-row-icon svg { width: 18px; height: 18px; stroke-width: 1.75; }
 .fs-row:hover .fs-row-icon { color: var(--accent-graphic); }
 .fs-row-icon--danger, .fs-row:hover .fs-row-icon--danger { color: var(--err); }
+.fs-row-icon--warn, .fs-row:hover .fs-row-icon--warn { color: var(--warn); }
 .fs-row-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .fs-row-title { font-size: 15px; font-weight: 400; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fs-row-subtitle { font-size: var(--caption-size); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

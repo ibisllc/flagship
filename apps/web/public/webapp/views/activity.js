@@ -113,8 +113,9 @@ async function renderSocialSection() {
         .map(
           (e, i) => `
       <button type="button" class="fs-row" data-social-entry="${i}" data-testid="activity-social-${escapeHtml(e.kind)}">
+        <span class="fs-row-icon icon${e.kind === "call.missed" ? " fs-row-icon--warn" : ""}" aria-hidden="true">${socialEntryIcon(e)}</span>
         <span class="fs-row-body">
-          <span class="fs-row-title"><span aria-hidden="true">${escapeHtml(socialEntryIcon(e))}</span> ${escapeHtml(socialEntryTitle(e))}</span>
+          <span class="fs-row-title">${escapeHtml(socialEntryTitle(e))}</span>
           ${socialEntryDetail(e) ? `<span class="fs-row-subtitle">${escapeHtml(socialEntryDetail(e))}</span>` : ""}
           <span class="fs-row-subtitle">${escapeHtml(fmtDate(e.at))}</span>
         </span>

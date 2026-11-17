@@ -13,6 +13,7 @@
 // target: {kind: "thread", conv} | {kind: "calls"} | {kind: "page"}.
 
 import { tr } from "./i18n.js";
+import { globeIcon, inboxIcon, messageCircleIcon, pencilIcon, phoneIcon, phoneMissedIcon } from "./icons.js";
 
 /** A post's first line, shortened to 80 characters. */
 export function postSnippet(text) {
@@ -98,17 +99,18 @@ export function socialEntryDetail(e) {
 }
 
 const ICONS = {
-  "call.missed": "📵",
-  "call.declined": "📵",
-  "call.answered": "📞",
-  "call.placed": "📞",
-  "conversation.new": "💬",
-  "conversation.request": "📥",
-  "page.published": "🌐",
-  "page.updated": "🌐",
-  "post.published": "📝",
+  "call.missed": phoneMissedIcon,
+  "call.declined": phoneMissedIcon,
+  "call.answered": phoneIcon,
+  "call.placed": phoneIcon,
+  "conversation.new": messageCircleIcon,
+  "conversation.request": inboxIcon,
+  "page.published": globeIcon,
+  "page.updated": globeIcon,
+  "post.published": pencilIcon,
 };
 
+/** The entry's line icon (an SVG string from lib/icons.js, trusted markup). */
 export function socialEntryIcon(e) {
-  return ICONS[e.kind] ?? "•";
+  return ICONS[e.kind] ?? messageCircleIcon;
 }
