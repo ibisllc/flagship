@@ -29,6 +29,11 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
     private var loggedClient = false
     private var loggedToPeer = false
     private var loggedFromPeer = false
+    /// What crosses the relay socket, by direction and kind (STUN method/class/error, DTLS, RTP, RTCP), for the
+    /// device log: every 2 s and at close. "c>p" is the caller to this phone's peer connection, "p>c" the way back.
+    private var mix: [String: Int] = [:]
+    private var mixAt = TurnResponder.nowMs()
+    private var usernames: Set<String> = []
 
     /// The relay socket and a native responder for one armed call; nil when either can't be made.
     static func open(_ c: CallTurnGate.Credential, rateBytesPerS: Int) -> TurnResponder? {
@@ -114,6 +119,7 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
             voiciCallLog.notice("turn responder: first client message 0x\(String(format: "%04x", method), privacy: .public), \(r.client.count, privacy: .public) bytes back")
         }
         if firstToPeer, let p = r.peers.first { voiciCallLog.notice("turn responder: first datagram to peer loopback:\(p.0, privacy: .public)") }
+        for (port, d) in r.peers { note("c>p:\(port)", d) }
         return r.client.isEmpty ? [] : [r.client]
     }
 
@@ -135,8 +141,14 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
             let o = buf.withUnsafeBufferPointer { Self.take(flagship_turn_peer_datagram(h, port, $0.baseAddress, n, now)) }
             return (o, toClient)
         }
-        if let out, let r = Self.decode(out), !r.client.isEmpty { sink?(r.client) }
-        else if firstFromPeer { voiciCallLog.notice("turn responder: first peer datagram not forwarded (no permission or channel?)") }
+        let datagram = Data(buf[0..<n])
+        if let out, let r = Self.decode(out), !r.client.isEmpty {
+            note("p>c:\(port)", datagram)
+            sink?(r.client)
+        } else {
+            note("p>c:\(port) dropped", datagram)
+            if firstFromPeer { voiciCallLog.notice("turn responder: first peer datagram not forwarded (no permission or channel?)") }
+        }
     }
 
     private func send(_ d: Data, port: UInt16) {
@@ -166,6 +178,7 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
             return true
         }
         if wasOpen {
+            flushMix(force: true)
             voiciCallLog.notice("turn responder: closed")
             source.cancel()
         }
@@ -174,6 +187,54 @@ final class TurnResponder: CallTurnConnection, @unchecked Sendable {
     deinit { if handle != nil { close() } }
 
     private static func nowMs() -> UInt64 { UInt64(Date().timeIntervalSince1970 * 1000) }
+
+    /// A datagram's kind: STUN (method, class, error code), DTLS, RTP or RTCP. Contents never leave the phone.
+    static func kind(_ d: Data) -> (String, String?) {
+        let b = [UInt8](d.prefix(512))
+        guard let f = b.first else { return ("empty", nil) }
+        if f & 0xC0 == 0, b.count >= 20, b[4] == 0x21, b[5] == 0x12, b[6] == 0xA4, b[7] == 0x42 {
+            let t = UInt16(b[0]) << 8 | UInt16(b[1])
+            let method = (t & 0x000F) | ((t & 0x00E0) >> 1) | ((t & 0x3E00) >> 2)
+            let cls = ((t >> 4) & 1) | ((t >> 7) & 2)
+            var name = ["req", "ind", "ok", "err"][Int(cls)]
+            var user: String?
+            var i = 20
+            while i + 4 <= b.count {
+                let at = UInt16(b[i]) << 8 | UInt16(b[i + 1]), l = Int(UInt16(b[i + 2]) << 8 | UInt16(b[i + 3]))
+                guard i + 4 + l <= b.count else { break }
+                if at == 0x0009, l >= 4 { name += "\(Int(b[i + 6]) * 100 + Int(b[i + 7]))" }
+                if at == 0x0006 { user = String(decoding: b[(i + 4)..<(i + 4 + l)], as: UTF8.self) }
+                i += 4 + ((l + 3) & ~3)
+            }
+            return ("stun\(String(format: "%03x", method)) \(name)", user)
+        }
+        if (20...63).contains(f) { return ("dtls\(f)", nil) }
+        if (128...191).contains(f), b.count >= 2 { return ((200...206).contains(b[1]) ? "rtcp" : "rtp", nil) }
+        return ("other", nil)
+    }
+
+    private func note(_ dir: String, _ d: Data) {
+        let (k, user) = Self.kind(d)
+        let newUser: String? = lock.withLock {
+            mix["\(dir) \(k)", default: 0] += 1
+            guard let user, usernames.insert("\(dir) \(user)").inserted, usernames.count <= 8 else { return nil }
+            return user
+        }
+        // ICE ufrags only (USERNAME of a connectivity check), so the log shows whether both sides agree on them.
+        if let newUser { voiciCallLog.notice("turn mix: \(dir, privacy: .public) check username \(newUser, privacy: .public)") }
+        flushMix(force: false)
+    }
+
+    private func flushMix(force: Bool) {
+        let line: String? = lock.withLock {
+            let now = Self.nowMs()
+            guard force || now >= mixAt + 2000, !mix.isEmpty else { return nil }
+            mixAt = now
+            defer { mix = [:] }
+            return mix.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+        }
+        if let line { voiciCallLog.notice("turn mix: \(line, privacy: .public)") }
+    }
 
     private static func take(_ b: FlagshipTurnBuf) -> Data {
         defer { flagship_turn_buf_free(b) }
