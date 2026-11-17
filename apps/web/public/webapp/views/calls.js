@@ -158,7 +158,7 @@ export function renderCalls() {
   card.setAttribute("data-testid", "calls-history");
   for (const r of rows) {
     const row = document.createElement("div");
-    row.className = "row";
+    row.className = "row calls-row";
     row.setAttribute("data-call-row", r.id);
     const body = document.createElement("span");
     body.className = "fs-row-body";
@@ -166,7 +166,7 @@ export function renderCalls() {
     title.className = "fs-row-title";
     title.textContent = r.peer.kind === "page" ? `voi.ci/${r.peer.username}` : r.peer.anonymous ? tr("Anonymous caller") : visitorName(r.peer.pseudonymPub);
     const sub = document.createElement("span");
-    sub.className = "fs-row-sub";
+    sub.className = "fs-row-subtitle";
     sub.textContent = tr("{0} · {1}", outcomeLine(r), formatWhen(r.at));
     body.append(title, sub);
     row.appendChild(body);
