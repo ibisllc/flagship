@@ -26,7 +26,8 @@ import { createDebianVm, destroyVm, run, scp, ssh, type Vm } from "./lib/upcloud
 import { relayName, tunnelName } from "./lib/meshDns.js";
 import { RELAY_C_STATE, gymMeshDns } from "./gym-mesh-dns.js";
 
-export const RELAY_ID = "gym-c";
+// A retired relay id is never admitted again, so a gym-c brought back after a retire runs under a new id.
+export const RELAY_ID = process.env.GYM_RELAY_C_ID || "gym-c";
 const CONF = join(homedir(), ".config/flagship");
 const APEX = process.env.GYM_LIVE_SERVICES_APEX || "gym.flagship.services";
 const CONTROL = process.env.GYM_LIVE_CONTROL_APEX || "gym.flagshipserver.com";
@@ -192,7 +193,15 @@ id relay >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/
 mkdir -p /opt/flagship-relay && rm -rf /opt/flagship-relay/.maintainers && cp -r /opt/relay-src/.maintainers /opt/flagship-relay/
 install -m 640 -o root -g relay /root/gym-c/relay.env /etc/flagship-relay.env
 install -m 644 /root/gym-c/flagship-relay.service /etc/systemd/system/flagship-relay.service
-[ -x /usr/local/bin/caddy ] || { curl -fsSL -o /usr/local/bin/caddy.new '${CADDY_URL}' && chmod 755 /usr/local/bin/caddy.new && mv /usr/local/bin/caddy.new /usr/local/bin/caddy; }
+# caddyserver.com's download builder refuses the caddy-l4 plugin at times (400 "unable to fulfill download request"):
+# build it here with xcaddy then. Inside \`||\` set -e is off, so the last line checks Caddy really is there.
+[ -x /usr/local/bin/caddy ] || curl -fsSL -o /usr/local/bin/caddy.new '${CADDY_URL}' || {
+  curl -fsSL -o /root/go.tgz https://go.dev/dl/go1.26.3.linux-amd64.tar.gz && rm -rf /usr/local/go && tar -C /usr/local -xzf /root/go.tgz
+  HOME=/root PATH=/usr/local/go/bin:/root/go/bin:$PATH go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+  HOME=/root PATH=/usr/local/go/bin:/root/go/bin:$PATH xcaddy build --with github.com/caddy-dns/cloudflare --with github.com/mholt/caddy-l4 --output /usr/local/bin/caddy.new
+}
+[ -x /usr/local/bin/caddy ] || { chmod 755 /usr/local/bin/caddy.new && mv /usr/local/bin/caddy.new /usr/local/bin/caddy; }
+/usr/local/bin/caddy version
 id caddy >/dev/null 2>&1 || useradd --system --home /var/lib/caddy --create-home --shell /usr/sbin/nologin caddy
 mkdir -p /etc/caddy
 install -m 644 /root/gym-c/Caddyfile /etc/caddy/Caddyfile
