@@ -2,9 +2,11 @@
 
 Status: phase 1 (the proxy) and phase 2 (OHTTP for the calls before the
 daemon) built on `feat/outbound-proxy` (2026-10-14/15), except the initramfs
-OHTTP client, which is design only. Not on `main`, not deployed, no box
-release endorsed. A **Pro** feature (owner, 2026-10-15): it launches with
-payments, see "Pro only" below.
+OHTTP client, which is design only. Brought into release 0.4 on
+`0.4/outbound-proxy` (2026-11-17): Pro-gated by the CA-signed plan
+attestation, the failure handling below, and OHTTP voucher spends in all
+three apps; see "As built (0.4)" at the end. Not deployed, no box release
+endorsed. A **Pro** feature (owner, 2026-10-15).
 
 ## Goal
 
@@ -45,6 +47,11 @@ would hide everything including DNS and the OS's own traffic in one move, but
 it moves the box's whole network stack (and LAN-direct, Docker, the egress
 fence's firewall rules) under a tunnel interface, needs kernel config at
 install time and its own failure handling; it is a separate project.
+**Checked again for 0.4 (2026-11-17): still not small.** It would need a
+WireGuard config order and key custody, routing that keeps LAN-direct, the
+data stores and the egress fence's nftables rules working beside a `wg0`
+default route, a lane that still reaches `.com` when the tunnel is down, and a
+recipe/initramfs story; so it stays a later project.
 
 ## The order
 
@@ -360,11 +367,20 @@ Pieces:
 - **Relay** (owner): a well-known third-party OHTTP relay, **not Cloudflare**
   (`.com` is on Cloudflare, so a Cloudflare relay would put both halves with
   one company). Planned: Oblivious Network, $15/month tier (~2.6M requests).
-  Swappable: boxes know only `relayUrl` + the gateway key configuration
-  (`DEFAULT_OHTTP_RELAY` in `ohttpClient.ts`, null until provisioned; env
-  `FLAGSHIP_OHTTP_RELAY_URL` / `FLAGSHIP_OHTTP_KEY_CONFIG` override it); the
-  Worker knows `OHTTP_RELAY_URL` for its probe. An optional second relay
-  later.
+  Until a contract exists, the interim relay below. **Provider-neutral and
+  swappable without a release:** `.com` serves the list at `GET
+  /api/ohttp/config` (and as `ohttp` inside `GET /api/payments/config`):
+  `{v: 1, keyConfigHex, relays: [{url, operator, interim}]}`, up to four,
+  tried in order. Worker env: `OHTTP_RELAYS` (JSON array) or the single
+  `OHTTP_RELAY_URL` with `OHTTP_RELAY_OPERATOR` (default "Flagship
+  (interim)") and `OHTTP_RELAY_INTERIM` ("0" for a third party). Every client
+  drops a relay that isn't https or sits on a forbidden host
+  (`isForbiddenRelayHost`: the control apex and Cloudflare's own names;
+  a relay whose DNS record is orange-clouded can't be seen from here, so keep
+  it DNS-only). Boxes read the same list (the daemon caches it in
+  `<dataDir>/ohttp-config.json`); before the daemon exists, setup uses the
+  release's `DEFAULT_OHTTP_RELAY` or `FLAGSHIP_OHTTP_RELAY_URL` /
+  `FLAGSHIP_OHTTP_KEY_CONFIG`. The daily probe tries every listed relay.
 - **Fallback:** if the relay fails (timeout, unreachable, 402/403/5xx, a
   non-OHTTP or undecryptable answer), the client sends the same request
   directly with `x-flagship-relay-fallback: <reason>`. A lapsed plan costs
@@ -374,10 +390,12 @@ Pieces:
   marked `unconfigured`. A per-box strict mode (no fallback) is a later
   option; `sendPrivately` already takes `fallbackDirect: false`.
 - **Which path each request took** (`relay_arrivals`, migration
-  `0099_relay_health.sql`): `.com` counts arrivals per UTC day as `ohttp`
-  (through the gateway) or `direct-fallback` (a direct request carrying the
-  marker). No box, account or address is stored. `main` took 0098, so the
-  branch holds 0099; `main` must skip 0099 while the branch is open.
+  `0154_relay_health.sql`; it was 0099 on `feat/outbound-proxy`, renumbered in
+  0.4 because the ledger had long passed 0099): `.com` counts arrivals per UTC
+  day as `ohttp` (through the gateway) or `direct-fallback` (a direct request
+  carrying the marker). No box, account or address is stored. A direct
+  request marked `unconfigured` is not sent by the apps (no relay set up is
+  not a relay failure).
 - **/status/**: `/api/_status/probe` returns `privateRelay: {state, message,
   arrivals, lastProbe}`. The page shows **"Private relay down: servers are
   reaching Flagship directly"** when any direct fallback arrived today or
@@ -424,18 +442,23 @@ why it doesn't launch now. Per AGENTS.md, Pro features branch off
 - **How Pro is enforced.** The plan is the account's effective tier
   (`effectiveTierOf`: `free`, `hobby` = Pro, `maker` = Pro Max; a lapsed
   subscription counts as Free).
-  - **The box:** `.com` returns `tier` in the daemon-status reply. Once the
-    box has heard `free` it refuses a new or changed proxy order
-    (`403 pro-required`, "An outbound proxy is part of Pro. You can still
-    turn this one off.") and reports `available: false` in the proxy
-    summary. Turning a proxy off always works. A proxy already set stays on
-    when a plan lapses: dropping it would expose the box's address without
-    the owner asking. Until `.com` has answered, the box refuses nothing,
-    because a new box needs its proxy to reach `.com` at all.
+  - **The box (0.4):** the CA-signed `flagship/plan-attestation/v1` the box
+    already fetches and verifies for separate access lists (`PlanCheck`,
+    `accessScope.ts`; voucher spends are what extend it). Only a verified
+    `free` refuses a new or changed proxy (`403 pro-required`, "An outbound
+    proxy is part of Pro. You can still turn this one off."), and the box
+    first fetches a fresh attestation once, so a plan bought a minute ago
+    counts. The summary reports `available: false` while it holds `free`.
+    Turning a proxy off always works. A proxy already set stays on when a
+    plan lapses: dropping it would expose the box's address without the owner
+    asking. With no attestation (or an expired one) the box refuses nothing,
+    because a new box needs its proxy to reach `.com` at all. The unsigned
+    `tier` in the daemon-status reply is no longer read for this.
   - **The create flow (all three apps):** the order is signed into the
     recipe on the phone and never passes `.com`, so nothing server-side can
     stop it. The apps read the plan from `GET /api/users/:u/allowance` (account
-    read token) and show "An outbound proxy is part of Pro." with a link to
+    read token; in 0.4 the plan attestation, the same record the Plan
+    screen reads) and show "An outbound proxy is part of Pro." with a link to
     the Pro page instead of the fields. An unknown plan (the read failed)
     shows the fields; the box's own check then applies to later changes.
   - **The server page (all three apps):** reads `available` from the box.
@@ -445,9 +468,8 @@ why it doesn't launch now. Per AGENTS.md, Pro features branch off
     carries a proxy, which the create flow allows only on Pro.
 - **At launch of paid features:** OHTTP for every box during setup, free
   for everyone (see "Launch item" above), is not built.
-- **Webapp shell version:** this branch uses **v120** (`feat/marketplace`
-  v117, `feat/custom-domains` v118, `feat/custom-names` v119, `main` v116 at
-  rebase time). Take the next free number whenever a parent passes it.
+- **Webapp shell version:** **v232** on `0.4/outbound-proxy` (release/0.4 is
+  v231). Take the next free number if another 0.4 branch merges first.
 
 ## Failure UX: the proxy stops working
 
@@ -473,8 +495,9 @@ What the owner sees and does:
   same network**: LAN-direct listens on the box's LAN addresses and never uses
   the proxy, so the owner's phone on that Wi-Fi opens the server page and
   changes or turns off the proxy (signed order over the LAN session).
-- From anywhere else, nothing can reach a box that can reach nothing; that is
-  the cost of "never go direct". The create flow and the edit sheet say so in
+- From anywhere else, nothing could reach a box that can reach nothing; that
+  was the cost of "never go direct". Since 0.4 the lane (see "Failure
+  handling") lets the owner fix or clear the proxy from anywhere. The create flow and the edit sheet say so in
   one line under the fallback switch: "If this is off and the proxy stops
   working, the server goes offline until the proxy is back or you change it
   from the same network."
@@ -582,3 +605,141 @@ Still open: provisioning the relay (Oblivious Network account,
 `OHTTP_RELAY_URL`, generating `OHTTP_GATEWAY_KEYS` and setting
 `DEFAULT_OHTTP_RELAY` in a release); whether to add the second relay; when to
 switch every box's setup to OHTTP.
+
+## Failure handling (owner rule, 2026-11-17)
+
+> If infrastructure we provide fails, everything must keep working. If a
+> setting the owner chose fails, alert loudly.
+
+### Our relay or gateway fails
+
+Nothing breaks; the cost is privacy for the calls that must still go out,
+never availability.
+
+| Who | Relay or gateway down | Built in |
+|---|---|---|
+| Voucher spends, automatic trickle | wait and retry: 5 min, doubling, at most 6 h (`relayRetryAfterMs`). The plan is paid 3 to 10 days ahead and keeps its tier 72 h past its end, so an outage of days costs nothing. Once the plan would lapse within a day (end + grace − now < 24 h, `ohttpSpendMayGoDirect`), the spend goes direct, marked, rather than let it lapse. | all three apps (`lib/plan.js`, `VoucherWalletEngine.swift`, `PaymentsCenter.kt`) |
+| Voucher spends, the plan the owner just chose (interactive) | direct, marked, at once: the owner is waiting | same |
+| Overage blocks | wait; a missed block slows the account like Free, nothing breaks | same |
+| No relay configured | direct, without the marker (not a failure) | same |
+| The box's proxy lane (below) | direct to `.com`, marked | `outboundProxy/lane.ts` |
+| Box setup calls before the daemon | direct, marked (unchanged: `sendPrivately`) | `install-helper.ts ohttp-post` |
+| Boot unlock | never uses the relay today (the initramfs client is design only), so it can't depend on it; when it ships it keeps the same direct fallback | — |
+
+Every rule is a pure function with shared vectors
+(`packages/protocol/test-vectors/ohttp/spend-route.json`: the route, the
+backoff, the lapse time, forbidden hosts, config parsing), passed by TS, the
+webapp, Swift and Kotlin. The apps say it in neutral words on the Plan
+screen ("The private relay isn't answering. Payments wait and try again; your
+plan stays active meanwhile." / "The private relay wasn't answering, so the
+last payment went straight to Flagship."), never as an error. Relay health
+stays where it was: `relay_arrivals` counts marked direct arrivals, the daily
+probe (now of every listed relay) pages through a GitHub issue, and /status/
+says "Private relay down" when either fires. The relay list is a fallback
+list: clients try each relay in order before any direct send.
+
+### The owner's proxy fails
+
+Unreachable, password refused, a SOCKS/CONNECT protocol error, or a proxy
+that refuses the hub (`refused` for the tunnel hub counts; a refusal for some
+other host is that destination's problem and changes nothing):
+
+- **Loud.** The box's status carries a `code` (`unreachable | auth | refused
+  | protocol`) beside the English `lastError`; the apps show their own
+  sentence for the code. Each change into `failing` or `fallback` (and back)
+  is an Activity entry (`server.proxy.failing`, `server.proxy.fallback`,
+  `server.proxy.ok`) and a box-signed report to `.com` (`POST
+  /api/server/<domain>/proxy-alert`), which keeps it in `box_proxy_lane`
+  (migration **0155**), shows it as `proxyAlert` on `/pods` (Home's red line,
+  even while the box itself can't be reached) and wakes the owner's devices
+  once per change with a content-free push (category `outbound-proxy`).
+- **`fallbackDirect` on:** the box goes direct, keeps its tunnel and every
+  core function, and stays alerted (`fallback`) until the proxy works again.
+- **`fallbackDirect` off:** the box keeps retrying the proxy and stays
+  alerted. It must never be stuck where the owner can't fix it, so:
+  - **LAN-direct** still answers on the box's LAN addresses (unchanged).
+  - **The lane:** while `failing`, the box polls `GET
+    /api/server/<domain>/proxy-order` every ~2 minutes, through the private
+    relay over a direct connection (the relay sees the box's address, `.com`
+    sees the relay's), or straight to `.com`, marked, if every relay fails
+    too. Each lane call is signed with the box's STK over method, path, time
+    and body (`flagship/box-proxy-lane/v1`, `boxProxyLane.ts`); the OHTTP
+    gateway accepts exactly these lane paths. The apps leave the owner's
+    signed `flagship/box-proxy/v1` order there (`POST` to the same path,
+    checked by `.com` under the sensitive-order authority and again by the
+    box) whenever the box itself can't be reached. **No credentials ever
+    travel through `.com`:** turning the proxy off, a proxy without a
+    password, or the same proxy with the stored password (a changed fallback
+    switch) work through the lane; a new password needs the box reachable
+    (same network) and the apps say so. The box tests a lane order against
+    the hub before switching, like an edit.
+  - What the lane reveals: `.com` learns that this box's proxy is failing
+    and, while the relay is down, the box's address on its lane calls (the
+    owner's "never go direct" yields to "never stranded" for these small,
+    signed calls only; every other connection still waits for the proxy).
+- **Recovery** clears the alert: the next successful connection through the
+  proxy, a new setting, or turning it off reports `ok`.
+
+### Tests for each failure mode
+
+- Relay down, gateway down (relay answers 502), recovery when each returns:
+  `packages/protocol/tests/ohttpVectors.test.ts`, `apps/web/tests/webappOhttp.test.ts`,
+  `apps/web/tests/webappPlan.test.ts` (trickle waits, plan near lapse goes
+  direct, interactive goes direct, back through the relay),
+  `packages/server-daemon/tests/outboundProxyFailure.test.ts` (the lane's
+  report and poll through a relay that is up, down, or whose gateway is down).
+- Proxy down, proxy password refused, hub refused, fallback, recovery:
+  `outboundProxyFailure.test.ts` against local SOCKS5 proxies; the lane
+  delivering "turn off" to a box the proxy keeps offline, and refusing a lane
+  order that needs a new password or isn't the owner's.
+- `.com`: `packages/control-plane/tests/boxProxyLane.test.ts`,
+  `apps/com/test/ohttpRoutes.test.ts`; storage `boxProxyLaneStorage.test.ts`.
+- The interim relay: `infra/ohttp-relay/tests/relay.test.ts`.
+- The phones: the Swift and Kotlin vector tests and the mock-gym scenarios
+  listed in their commits.
+
+## Interim relay
+
+`infra/ohttp-relay/` (`relay.mjs`, no dependencies; `Dockerfile`, `fly.toml`
+for a Fly app `flagship-ohttp-relay`). **Interim, operated by Flagship.** It
+keeps addresses out of `.com`'s logs only because it runs on a different host
+and provider than the gateway (Fly, not Cloudflare); it is **not** a
+non-collusion guarantee, because one operator runs both halves. The apps say
+so ("Payments go through a private relay that Flagship runs for now …").
+
+- Forwards `POST` `message/ohttp-req` bodies (64 KiB cap) to one fixed
+  `GATEWAY_URL` with only `content-type`: no client headers, no
+  `X-Forwarded-For`, no cookies; returns the gateway's
+  `message/ohttp-res` or 502/504. It can read neither request nor answer.
+- CORS only for `ALLOWED_ORIGINS` (the webapp and remote origins).
+- A per-address limit (`PER_IP_PER_MINUTE`, default 60) kept only in memory
+  for a minute; nothing is logged but the start line.
+- Not deployed by anything here. To run it: `flyctl launch --copy-config
+  --no-deploy` in `infra/ohttp-relay`, `flyctl deploy`, then on `.com`:
+  `OHTTP_RELAY_URL=https://flagship-ohttp-relay.fly.dev/` (operator and
+  interim default to "Flagship (interim)") and the `OHTTP_GATEWAY_KEYS`
+  secret. Never put its hostname behind Cloudflare's proxy.
+
+## As built (0.4, 2026-11-17, branch `0.4/outbound-proxy`)
+
+- **Port:** the whole `feat/outbound-proxy` feature was already on
+  release/0.4 (the marketplace fold). New here: the Pro gate on the plan
+  attestation; the relay config; the failure handling and the lane above;
+  migrations renumbered (0154 relay health, 0155 the lane).
+- **OHTTP clients:** TS (`ohttpClient.ts` `sendThroughRelays`,
+  `ohttpPrivacy.ts`), the webapp (`lib/ohttp.js`, noble primitives), Swift
+  (CryptoKit primitives, `FlagshipCore`) and Kotlin (BouncyCastle), each
+  against `test-vectors/ohttp/vectors.json` (RFC 9458 Appendix A plus Flagship
+  cases with fixed ephemeral keys and response nonces, and negatives) and
+  `spend-route.json`. Voucher redeem and the wallet's trickle spends use them
+  on all three apps; the Plan screen shows who runs the relay.
+- **Webapp:** shell v232.
+- **Not built:** OHTTP for every box's setup (only proxy recipes), the
+  initramfs OHTTP client, a recipe that carries `.com`'s relay list into
+  setup (setup uses the release's default relay), per-box strict mode,
+  WireGuard (above).
+- **Owner:** sign with a third-party relay (Oblivious Network planned; check
+  browser CORS for the webapp origin) and set `OHTTP_RELAYS`, or run the
+  interim relay; generate `OHTTP_GATEWAY_KEYS` (`<keyId>:<64 hex>`) and set it
+  as a Worker secret; apply D1 0154 and 0155 before the `.com` deploy; an
+  endorsed box release for the box side; store builds for the phones.

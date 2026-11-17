@@ -1,4 +1,4 @@
-# Flagship's INTERIM OHTTP relay (infra/ohttp-relay/README.md). Not deployed by
+# Flagship's INTERIM OHTTP relay (docs/outbound-proxy.md "Interim relay"). Not deployed by
 # any script: the owner decides (`flyctl launch --copy-config --no-deploy` then
 # `flyctl deploy`). Never put this behind Cloudflare: .com's gateway is there.
 app = "flagship-ohttp-relay"

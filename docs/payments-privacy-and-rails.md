@@ -713,10 +713,37 @@ steps 3 to 5.
 12. **Wallet key** (5.11): UMK-derived (every device of the account could
     open it; the apps keep spending to admin devices) or a key only admin
     devices hold (enforced, but no automatic spend on iOS)?
-13. **OHTTP in the apps** for the spend (Swift HPKE, Kotlin, the webapp needs
-    a relay with CORS): needed before launch, or after?
+13. ~~**OHTTP in the apps** for the spend~~: built for 0.4 (owner, 2026-11-17),
+    see "As built: OHTTP spends" below. Open: which third-party relay.
 14. **A box-held copy of the wallet**, so a server can keep paying with no
     phone left?
+
+### As built: OHTTP spends (0.4, 2026-11-17, branch `0.4/outbound-proxy`)
+
+- `POST /api/vouchers/redeem` goes through the private relay on the webapp
+  (`lib/ohttp.js`, `lib/plan.js`), iOS (`FlagshipCore`, `PaymentsCom.swift`,
+  `VoucherWalletEngine.swift`) and Android (`core/ohttp/`,
+  `PaymentsClient.kt`, `PaymentsCenter.kt`), one client per platform against
+  the shared vectors `packages/protocol/test-vectors/ohttp/`. The relay list
+  and the gateway key come from `.com` (`ohttp` in `GET /api/payments/config`,
+  also `GET /api/ohttp/config`), so the provider changes without an app
+  release. A relay on Cloudflare (or under the control apex) is dropped by
+  every client and by `.com` itself.
+- **Failure rule** (owner, 2026-11-17: our infrastructure failing must never
+  break anything): the trickle waits and retries (5 min doubling to 6 h)
+  while the relay is down and goes direct, marked, once the plan would lapse
+  within a day; the plan the owner just chose goes direct at once; overage
+  blocks wait. `docs/outbound-proxy.md` "Failure handling" has the table.
+- **Wording** (all three apps, the same sentences): who runs the relay, or
+  that the interim relay is Flagship's own and "isn't an independent operator
+  yet", or that there is no relay and `.com` sees the address and keeps none
+  of it; and, neutrally, that payments wait or that the last one went direct.
+- **Relay operator:** until the owner signs with a third party, the interim
+  relay in `infra/ohttp-relay/` (not on Cloudflare; not a non-collusion
+  guarantee). The webapp needs a relay that answers CORS for its origin; the
+  interim relay does.
+- Not yet: issuing and claiming vouchers over OHTTP (the rails' steps 4 to 7
+  add those routes; the gateway's allow list will need them).
 
 ## 10. To check with current official sources before building
 
