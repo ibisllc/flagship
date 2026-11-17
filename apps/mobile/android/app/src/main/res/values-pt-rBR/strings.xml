@@ -4228,4 +4228,47 @@
     <string name="voici_call_route_speaker">Alto-falante</string>
     <string name="voici_call_route_bluetooth">Bluetooth</string>
     <string name="voici_call_route_wired">Fones de ouvido</string>
+    <string name="payments_settings_subtitle">Seu plano, saldo pré-pago e tráfego extra</string>
+    <string name="payments_title">Plano e pagamentos</string>
+    <string name="payments_plan_free">Grátis</string>
+    <string name="payments_current_free">Você está no Grátis. Seus servidores continuam funcionando; o tráfego além da franquia gratuita fica mais lento.</string>
+    <string name="payments_in_grace">Seu plano terminou. Ele continua ativo por alguns dias enquanto seu celular paga.</string>
+    <string name="payments_balance_title">Saldo pré-pago</string>
+    <string name="payments_balance_empty">Ainda não há saldo pré-pago.</string>
+    <string name="payments_locked">Desbloqueie o Flagship para ver seu saldo.</string>
+    <string name="payments_choose_title">Seu plano</string>
+    <string name="payments_plan_free_note">O tráfego além da franquia gratuita fica mais lento, nunca é cortado.</string>
+    <string name="payments_plan_price">%1$s por mês, %2$s GB de tráfego incluídos</string>
+    <string name="payments_delay_start">Começar em um momento aleatório nas próximas %1$s horas</string>
+    <string name="payments_delay_note">Dificulta vincular uma compra à sua conta. Sem isso, um plano novo começa na hora.</string>
+    <string name="payments_autopay">Pagar automaticamente</string>
+    <string name="payments_autopay_note">Este celular gasta seu saldo aos poucos e com antecedência, para que seu plano nunca expire.</string>
+    <string name="payments_confirm_reason">Iniciar seu plano</string>
+    <string name="payments_overage_title">Tráfego extra</string>
+    <string name="payments_overage_cap">Limite mensal</string>
+    <string name="payments_overage_cap_off">Desligado: além do tráfego do seu plano, fica mais lento</string>
+    <string name="payments_overage_cap_value">Até %1$s por mês (%2$s GB)</string>
+    <string name="payments_overage_less">Diminuir o limite</string>
+    <string name="payments_overage_more">Aumentar o limite</string>
+    <string name="payments_overage_this_month">Gasto com tráfego extra neste mês: %1$s</string>
+    <string name="payments_overage_note">Quando o tráfego do seu plano está acabando, este celular compra %1$s GB por %2$s, até o seu limite. Depois disso, o tráfego fica mais lento, nunca é cortado.</string>
+    <string name="payments_buy_title">Adicionar ao seu saldo</string>
+    <string name="payments_pack_add">Adicionar %1$s</string>
+    <string name="payments_buy_not_yet">Ainda não está à venda</string>
+    <string name="payments_rail_card">Cartão</string>
+    <string name="payments_buy_note">A compra chega em uma atualização futura. Todo pagamento compra o mesmo crédito anônimo, então nada liga o que você compra à sua conta.</string>
+    <string name="payments_test_add">Adicionar crédito de teste</string>
+    <string name="payments_read_only">Somente um dispositivo administrador desta conta pode mudar o plano ou gastar o saldo.</string>
+    <string name="payments_error_overage_needs_plan">Tráfego extra exige Pro ou Pro Max.</string>
+    <string name="payments_error_not_available">Pagamentos não estão disponíveis no momento.</string>
+    <string name="payments_error_unavailable">Não foi possível acessar o Flagship. Tente de novo em instantes.</string>
+    <string name="payments_error_generic">Não funcionou. Tente de novo.</string>
+    <plurals name="payments_days_left">
+        <item quantity="one">Falta %1$s dia, pago até %2$s</item>
+        <item quantity="other">Faltam %1$s dias, pago até %2$s</item>
+    </plurals>
+    <plurals name="payments_balance_months">
+        <item quantity="one">Cerca de %1$s mês de %2$s</item>
+        <item quantity="other">Cerca de %1$s meses de %2$s</item>
+    </plurals>
 </resources>

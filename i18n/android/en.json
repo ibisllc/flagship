@@ -17380,5 +17380,181 @@
   "voici_call_route_wired": {
     "en": "Headphones",
     "ctx": "voi.ci calls: where the call's sound goes"
+  },
+  "payments_settings_subtitle": {
+    "en": "Your plan, prepaid balance and extra traffic",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_title": {
+    "en": "Plan and payments",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_plan_free": {
+    "en": "Free",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_plan_pro": {
+    "en": "Pro",
+    "ctx": "plan and payments (Settings)",
+    "translatable": false
+  },
+  "payments_plan_pro_max": {
+    "en": "Pro Max",
+    "ctx": "plan and payments (Settings)",
+    "translatable": false
+  },
+  "payments_current_free": {
+    "en": "You're on Free. Your servers keep running; traffic past the free allowance is slowed.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_in_grace": {
+    "en": "Your plan has ended. It keeps running for a few days while your phone pays.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_balance_title": {
+    "en": "Prepaid balance",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_balance_empty": {
+    "en": "No prepaid balance yet.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_locked": {
+    "en": "Unlock Flagship to see your balance.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_choose_title": {
+    "en": "Your plan",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_plan_free_note": {
+    "en": "Traffic past the free allowance is slowed, never cut.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_plan_price": {
+    "en": "%1$s a month, %2$s GB of traffic included",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_delay_start": {
+    "en": "Start at a random time in the next %1$s hours",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_delay_note": {
+    "en": "Makes it harder to link a purchase to your account. Without it, a new plan starts at once.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_autopay": {
+    "en": "Pay automatically",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_autopay_note": {
+    "en": "This phone spends a little of your balance at a time, ahead of need, so your plan never lapses.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_confirm_reason": {
+    "en": "Start your plan",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_overage_title": {
+    "en": "Extra traffic",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_overage_cap": {
+    "en": "Monthly limit",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_overage_cap_off": {
+    "en": "Off: past your plan's traffic, it is slowed",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_overage_cap_value": {
+    "en": "Up to %1$s a month (%2$s GB)",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_overage_less": {
+    "en": "Lower the limit",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_overage_more": {
+    "en": "Raise the limit",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_overage_this_month": {
+    "en": "Spent on extra traffic this month: %1$s",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_overage_note": {
+    "en": "When your plan's traffic runs low, this phone buys %1$s GB for %2$s, up to your limit. Past it, traffic is slowed, never cut.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_buy_title": {
+    "en": "Add to your balance",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_pack_add": {
+    "en": "Add %1$s",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_buy_not_yet": {
+    "en": "Not on sale yet",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_rail_play": {
+    "en": "Google Play",
+    "ctx": "plan and payments (Settings)",
+    "translatable": false
+  },
+  "payments_rail_card": {
+    "en": "Card",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_rail_monero": {
+    "en": "Monero",
+    "ctx": "plan and payments (Settings)",
+    "translatable": false
+  },
+  "payments_buy_note": {
+    "en": "Buying arrives in a later update. Every payment buys the same anonymous credit, so nothing links what you buy to your account.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_test_add": {
+    "en": "Add test credit",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_read_only": {
+    "en": "Only an admin device of this account can change the plan or spend the balance.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_error_overage_needs_plan": {
+    "en": "Extra traffic needs Pro or Pro Max.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_error_not_available": {
+    "en": "Payments aren't available right now.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_error_unavailable": {
+    "en": "Couldn't reach Flagship. Try again in a moment.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_error_generic": {
+    "en": "That didn't work. Try again.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_days_left": {
+    "en": {
+      "one": "%1$s day left, paid until %2$s",
+      "other": "%1$s days left, paid until %2$s"
+    },
+    "ctx": "plan and payments (Settings)",
+    "plural": true
+  },
+  "payments_balance_months": {
+    "en": {
+      "one": "About %1$s month of %2$s",
+      "other": "About %1$s months of %2$s"
+    },
+    "ctx": "plan and payments (Settings)",
+    "plural": true
   }
 }

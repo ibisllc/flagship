@@ -4228,4 +4228,47 @@
     <string name="voici_call_route_speaker">スピーカー</string>
     <string name="voici_call_route_bluetooth">Bluetooth</string>
     <string name="voici_call_route_wired">ヘッドホン</string>
+    <string name="payments_settings_subtitle">プラン、前払い残高、追加の通信量</string>
+    <string name="payments_title">プランと支払い</string>
+    <string name="payments_plan_free">無料</string>
+    <string name="payments_current_free">無料プランです。サーバーは動き続けますが、無料枠を超えた通信は低速になります。</string>
+    <string name="payments_in_grace">プランの期限が切れました。スマートフォンが支払う間、数日間は引き続き使えます。</string>
+    <string name="payments_balance_title">前払い残高</string>
+    <string name="payments_balance_empty">前払い残高はまだありません。</string>
+    <string name="payments_locked">残高を見るには Flagship のロックを解除してください。</string>
+    <string name="payments_choose_title">プラン</string>
+    <string name="payments_plan_free_note">無料枠を超えた通信は低速になりますが、止まることはありません。</string>
+    <string name="payments_plan_price">月額 %1$s、通信量 %2$s GB 込み</string>
+    <string name="payments_delay_start">今後 %1$s 時間以内のランダムな時刻に開始</string>
+    <string name="payments_delay_note">購入とアカウントを結びつけにくくします。オフの場合、新しいプランはすぐに始まります。</string>
+    <string name="payments_autopay">自動で支払う</string>
+    <string name="payments_autopay_note">このスマートフォンが残高を少しずつ前もって使うので、プランが途切れることはありません。</string>
+    <string name="payments_confirm_reason">プランを開始</string>
+    <string name="payments_overage_title">追加の通信量</string>
+    <string name="payments_overage_cap">毎月の上限</string>
+    <string name="payments_overage_cap_off">オフ: プランの通信量を超えると低速になります</string>
+    <string name="payments_overage_cap_value">月 %1$s まで（%2$s GB）</string>
+    <string name="payments_overage_less">上限を下げる</string>
+    <string name="payments_overage_more">上限を上げる</string>
+    <string name="payments_overage_this_month">今月の追加通信量への支出: %1$s</string>
+    <string name="payments_overage_note">プランの通信量が残り少なくなると、このスマートフォンが上限まで %1$s GB を %2$s で購入します。上限を超えると低速になりますが、止まることはありません。</string>
+    <string name="payments_buy_title">残高を追加</string>
+    <string name="payments_pack_add">%1$s を追加</string>
+    <string name="payments_buy_not_yet">まだ販売していません</string>
+    <string name="payments_rail_card">カード</string>
+    <string name="payments_buy_note">購入は今後のアップデートで追加されます。どの支払いも同じ匿名のクレジットを購入するため、購入とアカウントが結びつくことはありません。</string>
+    <string name="payments_test_add">テスト用クレジットを追加</string>
+    <string name="payments_read_only">プランの変更や残高の使用ができるのは、このアカウントの管理者デバイスだけです。</string>
+    <string name="payments_error_overage_needs_plan">追加の通信量には Pro または Pro Max が必要です。</string>
+    <string name="payments_error_not_available">現在、支払いは利用できません。</string>
+    <string name="payments_error_unavailable">Flagship に接続できませんでした。しばらくしてからもう一度お試しください。</string>
+    <string name="payments_error_generic">うまくいきませんでした。もう一度お試しください。</string>
+    <plurals name="payments_days_left">
+        <item quantity="one">残り %1$s 日（%2$s まで支払い済み）</item>
+        <item quantity="other">残り %1$s 日（%2$s まで支払い済み）</item>
+    </plurals>
+    <plurals name="payments_balance_months">
+        <item quantity="one">%2$s 約 %1$s か月分</item>
+        <item quantity="other">%2$s 約 %1$s か月分</item>
+    </plurals>
 </resources>
