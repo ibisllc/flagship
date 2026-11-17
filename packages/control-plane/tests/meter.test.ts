@@ -3,7 +3,7 @@
 // validation) is tested in billing/packages/metering/tests.
 import { describe, expect, it } from "vitest";
 import { InMemoryMeterStorage, InMemoryTierStorage, type TierName } from "@flagship/storage";
-import { METER_RESOURCES, meterCheck, meterRecord, type MeterDeps, type MeterResourceSpec } from "../src/meter.js";
+import { METER_RESOURCES, PLAN_GRACE_MS, meterCheck, meterRecord, type MeterDeps, type MeterResourceSpec } from "../src/meter.js";
 
 const GB = 1024 * 1024 * 1024;
 const NOW = Date.UTC(2026, 9, 13, 15, 30); // 2026-10-13
@@ -15,12 +15,12 @@ async function deps(tier?: TierName, currentPeriodEnd?: number): Promise<MeterDe
 }
 
 describe("meter — Flagship's tier table", () => {
-  it("egress: free 25 GB then throttle; paid tiers keep going and are billed", () => {
+  it("egress: every tier is slowed past its allowance (overage is prepaid, never billed)", () => {
     const e = METER_RESOURCES.egress;
     expect(e.period).toBe("month");
     expect(e.plans.free).toEqual({ allowance: 25 * GB, over: "throttle" });
-    expect(e.plans.hobby).toEqual({ allowance: 250 * GB, over: "allow" });
-    expect(e.plans.maker).toEqual({ allowance: 500 * GB, over: "allow" });
+    expect(e.plans.hobby).toEqual({ allowance: 250 * GB, over: "throttle" });
+    expect(e.plans.maker).toEqual({ allowance: 500 * GB, over: "throttle" });
   });
 
   it("ai-tokens: monthly, and every tier stops issuing when over", () => {
@@ -51,14 +51,29 @@ describe("meter — record and check", () => {
     expect((await meterRecord(d, "alice", "egress", 25 * GB)).action).toBe("allow");
   });
 
-  it("paid egress over the allowance is billed, never throttled", async () => {
+  it("paid egress over the allowance is slowed, until a prepaid top-up covers it", async () => {
     const d = await deps("hobby");
     const v = await meterRecord(d, "alice", "egress", 300 * GB);
-    expect(v).toMatchObject({ tier: "hobby", over: true, policy: "allow", action: "allow" });
+    expect(v).toMatchObject({ tier: "hobby", over: true, policy: "throttle", action: "throttle" });
+    await meterRecord(d, "alice", "egress-topup", 100 * GB);
+    expect(await meterRecord(d, "alice", "egress", 0)).toMatchObject({ allowance: 350 * GB, over: false, action: "allow" });
+    expect(await meterCheck(d, "alice", "egress")).toMatchObject({ allowance: 350 * GB, remaining: 50 * GB });
+    expect((await meterRecord(d, "alice", "egress", 60 * GB)).action).toBe("throttle");
   });
 
-  it("a lapsed paid subscription meters as free", async () => {
+  it("a free account's top-up counter changes nothing", async () => {
+    const d = await deps();
+    await meterRecord(d, "alice", "egress-topup", 100 * GB);
+    expect((await meterRecord(d, "alice", "egress", 30 * GB)).action).toBe("throttle");
+  });
+
+  it("a lapsed paid plan keeps its tier through the grace", async () => {
     const d = await deps("maker", NOW - 1);
+    expect((await meterRecord(d, "alice", "egress", 30 * GB)).tier).toBe("maker");
+  });
+
+  it("a lapsed paid subscription meters as free past the grace", async () => {
+    const d = await deps("maker", NOW - PLAN_GRACE_MS - 1);
     expect((await meterRecord(d, "alice", "egress", 30 * GB)).action).toBe("throttle");
   });
 

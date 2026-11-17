@@ -45,7 +45,7 @@ describe("handlePlanAttestation", () => {
     const deps = { ca, tiers: s.tiers, usernames: s.usernames, now: () => now };
     const pro = (await handlePlanAttestation(deps, "alice")).body as PlanAttestation;
     expect(pro).toMatchObject({ tier: "hobby", paidUntil: now + 30 * DAY });
-    now += 31 * DAY;
+    now += 34 * DAY; // past the end and the 72-hour grace
     const lapsed = (await handlePlanAttestation(deps, "alice")).body as PlanAttestation;
     expect(lapsed).toMatchObject({ tier: "free", paidUntil: 0 });
     expect(verifyCaSignedPlanAttestation(lapsed, chain, now, PIN).ok).toBe(true);

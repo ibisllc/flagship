@@ -16,6 +16,7 @@ import {
   type MeteringDeps,
   type UsageReportResult,
 } from "../src/metering.js";
+import { meterRecord } from "../src/meter.js";
 
 const GB = 1024 * 1024 * 1024;
 const NOW = Date.UTC(2026, 5, 14); // 2026-06-14 → period "2026-06"
@@ -93,18 +94,19 @@ describe("metering — free tier over quota is throttled", () => {
   });
 });
 
-describe("metering — paid tier bills overage, never throttles", () => {
-  it("hobby over 250 GB ⇒ admit=true + overageUsd at $0.05/GB", async () => {
+describe("metering — paid overage is prepaid, then slowed", () => {
+  it("hobby over 250 GB with no top-up ⇒ slowed, nothing owed", async () => {
     const d = deps(tier("hobby"));
     const s = await recordEgress(d, "alice", 260 * GB);
     expect(s.tier).toBe("hobby");
     expect(s.overQuota).toBe(true);
-    expect(s.admit).toBe(true); // paid is never throttled
-    expect(s.overageUsd).toBeCloseTo(10 * OVERAGE_USD_PER_GB, 6); // 10 GB over × $0.05
+    expect(s.admit).toBe(false);
+    expect(s.overageUsd).toBe(0);
+    expect(OVERAGE_USD_PER_GB).toBeGreaterThan(0);
   });
 
-  it("a LAPSED paid sub falls back to free (throttled over 25 GB)", async () => {
-    const d = deps(tier("hobby", NOW - 24 * 3600 * 1000)); // ended yesterday
+  it("a LAPSED paid sub falls back to free past the grace (throttled over 25 GB)", async () => {
+    const d = deps(tier("hobby", NOW - 4 * 24 * 3600 * 1000)); // ended four days ago
     const s = await recordEgress(d, "alice", 26 * GB);
     expect(s.tier).toBe("free");
     expect(s.admit).toBe(false);
@@ -209,15 +211,16 @@ describe("metering — idempotent batches and budget leases", () => {
     }
   });
 
-  it("paid, over its allowance: still allowed, billed, with a maxGrant lease", async () => {
-    const r = await handleUsageReport(deps(tier("hobby")), SECRET, SECRET, {
+  it("paid, over its allowance: slowed until a prepaid top-up, then a lease from the top-up", async () => {
+    const d = deps(tier("hobby"));
+    const r = await handleUsageReport(d, SECRET, SECRET, {
       batchId: ID,
       items: [{ username: "alice", bytes: 300 * GB }],
     });
-    expect(results(r.body)[0]!).toMatchObject({
-      admit: true,
-      lease: { action: "allow", grantBytes: EGRESS_LEASE_POLICY.maxGrant, policy: "allow" },
-    });
+    expect(results(r.body)[0]!).toMatchObject({ admit: false, lease: { action: "throttle", policy: "throttle" } });
+    await meterRecord(d, "alice", "egress-topup", 100 * GB);
+    const r2 = await handleUsageReport(d, SECRET, SECRET, { items: [{ username: "alice", bytes: 1 }] });
+    expect(results(r2.body)[0]!).toMatchObject({ admit: true, lease: { action: "allow", grantBytes: EGRESS_LEASE_POLICY.maxGrant } });
   });
 
   it("a lease never outlives the month", async () => {
@@ -238,7 +241,7 @@ describe("metering — idempotent batches and budget leases", () => {
   it("judges a batch's tiers in one bulk lookup, lapsed subs as free", async () => {
     const tiers = new InMemoryTierStorage();
     await tiers.put({ username: "paid", tier: "hobby", updatedAt: 1 });
-    await tiers.put({ username: "lapsed", tier: "hobby", currentPeriodEnd: NOW - 1, updatedAt: 1 });
+    await tiers.put({ username: "lapsed", tier: "hobby", currentPeriodEnd: NOW - 4 * 24 * 3600 * 1000, updatedAt: 1 });
     let single = 0;
     const get = tiers.get.bind(tiers);
     tiers.get = async (u) => {
@@ -283,13 +286,16 @@ describe("allowance view (#6/#7 dashboard + alert)", () => {
     expect(over.hardCapped).toBe(true); // free + over = slowed, not billed
   });
 
-  it("a paid tier over quota is 'over' but NOT hard-capped (bills overage)", async () => {
+  it("a paid tier over quota is slowed until a top-up; the view counts the top-up", async () => {
     const d = deps(tier("hobby", NOW + 30 * 24 * 3600 * 1000));
     await recordEgress(d, "alice", 300 * GB); // over hobby 250 GB
     const v = allowanceViewFrom("alice", await quotaStatus(d, "alice"));
     expect(v.state).toBe("over");
-    expect(v.hardCapped).toBe(false);
-    expect(v.overageUsd).toBeGreaterThan(0);
+    expect(v.hardCapped).toBe(true);
+    expect(v.overageUsd).toBe(0);
+    await meterRecord(d, "alice", "egress-topup", 100 * GB);
+    const w = allowanceViewFrom("alice", await quotaStatus(d, "alice"));
+    expect(w).toMatchObject({ quotaBytes: 350 * GB, remainingBytes: 50 * GB, hardCapped: false, overQuota: false });
   });
 
   it("handleUserAllowance: 400 on a bad username, 200 with the dashboard body", async () => {
