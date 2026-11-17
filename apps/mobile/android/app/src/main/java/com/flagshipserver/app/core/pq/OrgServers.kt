@@ -15,7 +15,7 @@ data class OrgServerCode(
 )
 
 enum class OrgKeyKind(val wire: String) {
-    CGK("cgk"), DIRECTORY_KEY("directory-key"), ARCHIVE_KEYS("archive-keys"), DISK_KEY("disk-key");
+    CGK("cgk"), DIRECTORY_KEY("directory-key"), ARCHIVE_KEYS("archive-keys"), DISK_KEY("disk-key"), WALLET("wallet");
     companion object { fun of(s: String) = values().firstOrNull { it.wire == s } ?: throw OrgAuthorityException("malformed", "kind") }
 }
 
@@ -123,7 +123,7 @@ object OrgServers {
 
     // ── the key ring ─────────────────────────────────────────────────────
 
-    private fun orgWide(k: OrgKeyKind) = k == OrgKeyKind.CGK || k == OrgKeyKind.DIRECTORY_KEY
+    private fun orgWide(k: OrgKeyKind) = k == OrgKeyKind.CGK || k == OrgKeyKind.DIRECTORY_KEY || k == OrgKeyKind.WALLET
 
     fun canonicalKeyRing(r: OrgKeyRing): ByteArray {
         need(hex(r.orgId, 32), "malformed", "orgId")

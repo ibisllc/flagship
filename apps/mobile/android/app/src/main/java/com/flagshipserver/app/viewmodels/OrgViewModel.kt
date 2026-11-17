@@ -359,6 +359,7 @@ class OrgViewModel(
         _message.value = when {
             e is OrgAuthorityException && e.code == "locked" -> FSStrings.get(R.string.org_unlock_to_sign)
             e is OrgClientException && e.code == "org-seat-limit" -> FSStrings.get(R.string.org_no_seats)
+            e is OrgClientException && e.code == "org-plan-lapsed" -> FSStrings.get(R.string.org_plan_lapsed_refusal)
             else -> FSStrings.get(R.string.org_try_again)
         }
     }
@@ -865,6 +866,7 @@ class OrgViewModel(
             com.flagshipserver.app.core.pq.OrgKeyKind.DIRECTORY_KEY -> FSStrings.get(R.string.org_key_directory)
             com.flagshipserver.app.core.pq.OrgKeyKind.ARCHIVE_KEYS -> FSStrings.get(R.string.org_key_archive, scope)
             com.flagshipserver.app.core.pq.OrgKeyKind.DISK_KEY -> FSStrings.get(R.string.org_key_disk, scope)
+            com.flagshipserver.app.core.pq.OrgKeyKind.WALLET -> FSStrings.get(R.string.org_key_wallet)
         }
 
         const val DAY = 24 * 3_600_000L

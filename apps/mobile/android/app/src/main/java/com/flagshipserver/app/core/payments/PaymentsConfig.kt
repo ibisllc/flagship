@@ -14,6 +14,18 @@ data class PlanNumbers(val unitsPerMonth: Long, val includedGb: Long)
 
 data class OverageNumbers(val blockUnits: Long, val blockGb: Long, val defaultCapUnits: Long, val maxCapUnits: Long, val buyBelowGb: Long)
 
+/** The Business plan for orgs (packages/protocol/src/paymentsConfig.ts `business`): per seat, from the org's wallet. */
+data class BusinessNumbers(
+    val unitsPerSeatMonth: Long = 6,
+    val minSeats: Long = 3,
+    val maxSeats: Long = 10_000,
+    val egressGbPerSeat: Long = 100,
+    val trialSeats: Long = 10,
+    val trialDays: Long = 30,
+    val batchMinUnits: Long = 100,
+    val batchMaxUnits: Long = 5000,
+)
+
 data class PaymentsConfig(
     val unitUsd: Long = 1,
     val monthDays: Long = 30,
@@ -26,11 +38,20 @@ data class PaymentsConfig(
     val activationDelayMaxHours: Long = 24,
     val packs: List<Long> = listOf(10, 30, 120),
     val maxPerRequest: Long = 30,
+    val business: BusinessNumbers = BusinessNumbers(),
 ) {
     fun plan(p: String): PlanNumbers = plans[p] ?: plans.getValue(PRO)
 
     /** How long one voucher keeps [p] running (Pro 3 days, Pro Max 36 hours). */
     fun unitMs(p: String): Long = floor((monthDays * DAY_MS).toDouble() / plan(p).unitsPerMonth.toDouble()).toLong()
+
+    /** How long one voucher keeps an org of [seats] paid seats on Business (3 seats: 40 hours). */
+    fun orgSeatUnitMs(seats: Long): Long = (monthDays * DAY_MS) / (seats * business.unitsPerSeatMonth)
+
+    /** Vouchers a month of Business costs for [seats] seats. */
+    fun orgMonthlyUnits(seats: Long): Long = seats * business.unitsPerSeatMonth
+
+    fun isOrgSeatCount(seats: Long): Boolean = seats in business.minSeats..business.maxSeats
 
     fun toJson(): JsonObject {
         fun n(v: Long) = JsonPrimitive(v)
@@ -53,6 +74,13 @@ data class PaymentsConfig(
                 "activationDelayMaxHours" to n(activationDelayMaxHours),
                 "packs" to JsonArray(packs.map(::n)),
                 "maxPerRequest" to n(maxPerRequest),
+                "business" to JsonObject(
+                    mapOf(
+                        "unitsPerSeatMonth" to n(business.unitsPerSeatMonth), "minSeats" to n(business.minSeats), "maxSeats" to n(business.maxSeats),
+                        "egressGbPerSeat" to n(business.egressGbPerSeat), "trialSeats" to n(business.trialSeats), "trialDays" to n(business.trialDays),
+                        "batchMinUnits" to n(business.batchMinUnits), "batchMaxUnits" to n(business.batchMaxUnits),
+                    ),
+                ),
             ),
         )
     }
@@ -81,6 +109,8 @@ data class PaymentsConfig(
             }
             val ov = VoiciJs.obj(o["overage"])
             val tr = VoiciJs.obj(o["trickle"])
+            val bz = VoiciJs.obj(o["business"])
+            val db = d.business
             val packsArr = VoiciJs.arr(o["packs"])
             val packs = packsArr?.takeIf { a -> a.size in 1..6 && a.all { VoiciJs.safeInt(it)?.let { n -> n in 1..1000 } == true } }
                 ?.map { VoiciJs.safeInt(it)!! } ?: d.packs
@@ -102,7 +132,18 @@ data class PaymentsConfig(
                 activationDelayMaxHours = num(o["activationDelayMaxHours"], d.activationDelayMaxHours, 24 * 7),
                 packs = packs.sorted(),
                 maxPerRequest = num(o["maxPerRequest"], d.maxPerRequest, 200),
+                business = BusinessNumbers(
+                    unitsPerSeatMonth = num(bz?.get("unitsPerSeatMonth"), db.unitsPerSeatMonth, 1000),
+                    minSeats = num(bz?.get("minSeats"), db.minSeats, 1000),
+                    maxSeats = num(bz?.get("maxSeats"), db.maxSeats, 1_000_000),
+                    egressGbPerSeat = num(bz?.get("egressGbPerSeat"), db.egressGbPerSeat),
+                    trialSeats = num(bz?.get("trialSeats"), db.trialSeats, 10_000),
+                    trialDays = num(bz?.get("trialDays"), db.trialDays, 365),
+                    batchMinUnits = num(bz?.get("batchMinUnits"), db.batchMinUnits, 100_000),
+                    batchMaxUnits = num(bz?.get("batchMaxUnits"), db.batchMaxUnits, 100_000),
+                ),
             )
+            if (out.business.maxSeats < out.business.minSeats || out.business.batchMaxUnits < out.business.batchMinUnits) out = out.copy(business = db)
             if (out.highWaterDays <= out.lowWaterDays || out.maxAheadDays <= out.highWaterDays) out = out.copy(lowWaterDays = d.lowWaterDays, highWaterDays = d.highWaterDays)
             if (out.maxAheadDays <= out.highWaterDays) out = out.copy(maxAheadDays = d.maxAheadDays)
             return out
