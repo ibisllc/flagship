@@ -1534,3 +1534,5 @@ Three agents started:
 - Stripe and Apple payment set-up: no browser reaches this session; it stays with the owner's browser Claude (`0.4-browser-tasks.md` §B, §D).
 - Both the UI pass and Business took shell v234; renumber whichever merges second.
 - Resume point: wait for the four agents; merge the UI pass and Business (renumbering the shell), then voici-front. Phone-apps is docs only; its copy waits for the owner. Then the owner's browser tasks, then the deploy.
+
+- Merged `0.4/phone-apps` (docs only). Proposal: a spike in 0.5, then forms/polls in 0.6 and shops/booking in 0.7, about 118 engineer-days. Rules are data, interpreted in the app (Apple 2.5.2); 8 owner decisions are in the doc.
