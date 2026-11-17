@@ -53,7 +53,8 @@ object DirectName {
 
     /** What a label is, or null when it may not be held (reserved, punycode, two `--`, a bad half). */
     fun kind(label: String): Kind? {
-        if (!LABEL.matches(label) || label.startsWith("xn--") || label in RESERVED_LABELS) return null
+        // `??--` (R-LDH): Let's Encrypt refuses it unless it is punycode, which is refused too.
+        if (!LABEL.matches(label) || (label.length >= 4 && label.substring(2, 4) == "--") || label in RESERVED_LABELS) return null
         val parts = label.split("--")
         if (parts.size == 1) return Kind.Vanity
         if (parts.size != 2 || !SLUG.matches(parts[0]) || !USER.matches(parts[1])) return null

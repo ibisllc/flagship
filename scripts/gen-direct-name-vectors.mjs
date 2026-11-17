@@ -35,6 +35,7 @@ const refused = [
   refuse("reserved word", { name: "www.fshp.app" }),
   refuse("punycode", { name: "xn--80ak6aa92e.fshp.app" }),
   refuse("two double dashes", { name: "a--b--c.fshp.app" }),
+  refuse("dashes in positions 3-4 (R-LDH)", { name: "go--plucky-avocet.fshp.app" }),
   refuse("private address", { addresses: ["192.168.1.20"] }),
   refuse("non-canonical address", { addresses: ["2A02:8010:6400:1::10"] }),
   refuse("off with addresses", { enabled: false, addresses: ["81.2.69.142"] }),
@@ -43,7 +44,7 @@ const refused = [
 ];
 for (const r of refused) if (!r.problem) throw new Error(`expected a problem for ${r.name}`);
 
-const kinds = ["game--plucky-avocet", "johngame", "a--b--c", "www", "xn--80ak6aa92e", "game--x"].map((label) => {
+const kinds = ["game--plucky-avocet", "johngame", "a--b--c", "www", "xn--80ak6aa92e", "game--x", "go--plucky-avocet", "g--plucky-avocet", "ab--"].map((label) => {
   const k = P.directNameKind(label);
   return { label, kind: k ? k.kind : null };
 });
