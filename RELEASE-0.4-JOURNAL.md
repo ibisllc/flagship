@@ -1469,3 +1469,24 @@ Three agents started:
 - 0.4/ci: F11 (Android emulator smoke API 34, iOS CI green), F6 (DNS token off `.com`), F15 (rate-limit client loops).
 - 0.4/release-prep: R2 (version bump), R3 (release notes in 7 languages, store texts), R4 (docs/runbooks/0.4-deploy-sheet.md), F13 (feature-branch rebases, AGENTS.md), and docs/runbooks/0.4-browser-tasks.md, the brief for the owner's browser Claude (App Store Connect, Play, Stripe, Oblivious, Cloudflare; secrets never pasted into chat).
 - 0.4/ui-pass: E. Screenshots of every screen before and after, the critique, one commit per change, and a before/after page for the owner to approve per change. Includes the iOS empty Inbox text.
+
+### 2026-11-17 — R2-R4 and F13 prepared on `0.4/release-prep` (pushed, not merged)
+- R2: `release/version.json` 0.4 Beta, iOS 1.3 (9), Android 12 (Wear 1000012), Studio 0.4.0; `check-versions --write`,
+  parity green. Webapp `buildInfo.js` changed: bump the shell at merge (not done here, to avoid clashing with the UI pass).
+- R3: `docs/release-notes/0.4.md` (source, with release-day conditions: calls need `VOICI_CALLS` on after the store
+  builds, rails need their secrets, direct names need the zone secrets and the `*.fshp.app` clean-up); blog post
+  `blog/flagship-0-4.html` + index, feed (`TODO-RM` pubDate) and landing link, 7 languages; `store/listings/*.json`
+  rewritten for 0.4 (the "nothing to buy" line replaced: each store's text names only its own in-app purchase).
+  Store art: rendered, 43 images need no capture; 245 native captures missing (iOS/Android/Wear, 7 languages).
+- R4: `docs/runbooks/0.4-deploy-sheet.md`; `release.sh` 48 steps (new step 11 signs the webapp shell; the old
+  transition-relay step now refuses to replace the live mesh; 0.4 secrets in the secrets check), test green;
+  `docs/runbooks/0.4-browser-tasks.md` for the owner's browser session; 0.4 review notes.
+- Found: `main` has two commits `release/0.4` lacks as ancestors (`881f7757e` terms, already here as `86739fc31`;
+  `eb43ae84c` gym relays off, cherry-picked on the prep branch), so the final fast-forward needs a rebase or an
+  `-s ours` merge first (deploy sheet §1, owner). `apps/web/public/pro.html` still describes the hand-operated
+  0.2 Pro ("send money, tell us your username"): contradicts 0.4's vouchers; rewrite before launch.
+- F13: nothing rebased. Folded into 0.4: marketplace, custom-names, custom-domains, outbound-proxy; superseded:
+  feat/browser-extension. Conflicting with release/0.4: other-os-installers 18 files, alpine 31, feat/retail 39;
+  `gym` superseded by `gym-0.4`. AGENTS.md status rewritten for 0.4.
+- Disk hit 0 bytes free during this work (another agent's 3.4 GB DerivedData in the shared scratchpad `dd-ios`);
+  it recovered on its own.
