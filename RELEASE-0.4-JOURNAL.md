@@ -1150,3 +1150,27 @@ Owner at the end: phone-to-phone call test, YubiKey steps (0.2 update notice, ru
   1 failure `RetailClaimFlowTest.alarmWhenTheCertificateDoesNotMatch` (15 s wall-clock wait under load; 11/11 alone
   three times).
 - Temporary worktree removed. Next: plan B (review-cloud F1-F9).
+
+### 2026-11-17 — Plan D: direct access run live on the gym (16/16 green)
+- New live gym group `direct-access` (branch `0.4/direct-access-live`, also on gym-0.4): a gym box with a public IPv6
+  (`/api/gym/provision` takes `ipv6: true`; gym boxes were IPv4-only), the admin-root order naming only the box's /64
+  (IRK order refused 403), the box finding its address and its signed update reaching `.com`, the owner's name order,
+  a **real Let's Encrypt** certificate (issuer YE2; the gym issues from LE production, not Pebble), AAAA + pinned CAA and
+  no A at the zone's name servers, HTTPS from outside over IPv6 (this Mac's own IPv6) answered 200 by the box with a
+  verified certificate naming only the direct name, the relay serving nothing for the name, `.com`'s probe (200), and
+  withdrawal on name off and on direct access off (box stops listening, connection refused). One LE certificate used.
+- Gym seam (gym-0.4 only, `fcfea27c2`): the gym's direct apex is `fshp.gym.flagship.services` (protocol, keyd TS +
+  Rust, `wrangler.gym.toml`); gym Worker secrets `CLOUDFLARE_DIRECT_DNS_API_TOKEN` (gym DNS token) and
+  `CLOUDFLARE_DIRECT_ZONE_ID` (flagship.services) set. Nothing is ever written into `fshp.app` from the gym.
+- First gym box artifact for 0.4: `fcfea27c2f5a` (sequence 202611170748); gym Worker `3efafac6`.
+- Bugs fixed (`0.4/direct-access-live`, to merge): `d1e89b6d0` a two-character slug gave a `??--` label that Let's
+  Encrypt always refuses (R-LDH): refused in TS, webapp, Swift, Kotlin + vectors; `e3c55db43` the box now hands `.com`
+  the owner's off order (before, if the app's own post failed, records kept pointing at a box no longer listening; not
+  yet in a gym artifact, so unit-tested only).
+- Found, owner: a withdrawn or not-yet-published direct name falls to any wildcard on the direct apex (in the gym, the
+  relay wildcard). Production's old proxied `*.fshp.app` (and `www`) must be deleted before launch (step 6). Also still
+  open: F17 LE rate-limit request; `fshp.app` direct DNS token + zone id secrets on prod `.com`.
+- Pre-existing, not from this work: `apps/com/test/cronBudget.test.ts` fails on release/0.4 (demo+voici-names+voici-gc
+  2.6× calibration vs 2.2 budget); the gym CPU report lists `POST /api/server/:x/health` over 10 ms (Workers Paid).
+- Cost: UpCloud, two 4xCPU-8GB boxes ~38 min + ~67 min, one 8xCPU-32GB artifact build VM (minutes); all deleted
+  (only the playstore-test-0725 demo remains). Gym relays off again.
