@@ -18,6 +18,7 @@ import type { VoiciStorage } from "./voici.js";
 import type { ServerBootKeyStorage } from "./serverBootKeys.js";
 import type { PqTrustStorage } from "./pqTrust.js";
 import type { RelayHealthStorage } from "./relayHealth.js";
+import type { BoxProxyLaneStorage } from "./boxProxyLane.js";
 
 /**
  * v1.2 security cascade — account-type discriminator. See
@@ -1968,6 +1969,8 @@ export interface Storage {
   voici: VoiciStorage;
   /** How proxy boxes' setup calls arrived: private relay or direct fallback (docs/outbound-proxy.md). */
   relayHealth: RelayHealthStorage;
+  /** The outbound proxy's fallback lane: orders left for unreachable boxes, proxy-failing reports (migration 0155). */
+  boxProxyLane: BoxProxyLaneStorage;
   /** Direct access orders, box address updates and the direct-name registry (migration 0133). */
   directAccess: DirectAccessStorage;
 }

@@ -7,6 +7,7 @@ import { InMemoryDirectAccessStorage } from "./directAccess.js";
 import { InMemoryNameRegistryStorage, type NameRecord } from "./names.js";
 import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
 import { InMemoryRelayHealthStorage } from "./relayHealth.js";
+import { InMemoryBoxProxyLaneStorage } from "./boxProxyLane.js";
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
@@ -2657,6 +2658,7 @@ export class InMemoryStorage implements Storage {
   pqTrust = new InMemoryPqTrustStorage();
   voici = new InMemoryVoiciStorage();
   relayHealth = new InMemoryRelayHealthStorage();
+  boxProxyLane = new InMemoryBoxProxyLaneStorage();
   directAccess = new InMemoryDirectAccessStorage();
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,

@@ -27,6 +27,7 @@ import {
 } from "./names.js";
 import { RENAMED_ACCOUNT_COLUMNS } from "./accountRename.js";
 import { D1RelayHealthStorage, type RelayHealthStorage } from "./relayHealth.js";
+import { D1BoxProxyLaneStorage, type BoxProxyLaneStorage } from "./boxProxyLane.js";
 import type {
   AccountType,
   AuditEventRecord,
@@ -5410,6 +5411,7 @@ export class D1Storage implements Storage {
   /** voi.ci calls (migration 0146). */
   voiciCalls: VoiciCallStorage;
   relayHealth: RelayHealthStorage;
+  boxProxyLane: BoxProxyLaneStorage;
   directAccess: DirectAccessStorage;
   /** Retail box claims (migration 0134). */
   boxClaims: BoxClaimStorage;
@@ -5482,6 +5484,7 @@ export class D1Storage implements Storage {
     this.voici = new D1VoiciStorage(db);
     this.voiciCalls = new D1VoiciCallStorage(db);
     this.relayHealth = new D1RelayHealthStorage(db);
+    this.boxProxyLane = new D1BoxProxyLaneStorage(db);
     this.directAccess = new D1DirectAccessStorage(db);
     this.boxClaims = new D1BoxClaimStorage(db);
     this.orgs = new D1OrgStorage(db);
