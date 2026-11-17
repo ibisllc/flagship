@@ -260,6 +260,11 @@ export type RateLimitEndpoint =
   | "vouchers-redeem"
   | "voucher-wallet"
   | "vouchers-test-issue"
+  // The voucher rails (voucherRails.ts): a paid issue checks a proof with Apple's chain, Stripe or Google and signs up
+  // to 200 blinded requests; a Stripe checkout calls Stripe. Per address only, counted, never stored.
+  | "vouchers-paid-issue"
+  | "vouchers-stripe-checkout"
+  | "vouchers-apple-notifications"
   // Monetization — public per-user allowance read (the #6 dashboard + #7
   // alert data source). Unauthenticated account metadata (same class as the
   // `/pods` directory) keyed by username in the path; per-IP only, generous
@@ -577,6 +582,16 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   ],
   "voucher-wallet": [{ axis: "ip", limit: 120, windowSec: 3600 }],
   "vouchers-test-issue": [{ axis: "ip", limit: 10, windowSec: 3600 }],
+  "vouchers-paid-issue": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 300, windowSec: 3600 },
+  ],
+  "vouchers-stripe-checkout": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 60, windowSec: 3600 },
+  ],
+  // Apple's notification servers: generous, Apple retries on a refusal.
+  "vouchers-apple-notifications": [{ axis: "ip", limit: 600, windowSec: 60 }],
   // Public allowance read — generous for a polling dashboard, fences a scrape.
   "user-allowance": [{ axis: "ip", limit: 60, windowSec: 60 }],
   // Stripe Checkout creation — each call hits the Stripe API; tight per-IP.
@@ -975,6 +990,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   if (m === "POST" && pathname === "/api/vouchers/redeem") return "vouchers-redeem";
   if (m === "POST" && pathname === "/api/vouchers/test-issue") return "vouchers-test-issue";
+  if (m === "POST" && pathname === "/api/vouchers/paid-issue") return "vouchers-paid-issue";
+  if (m === "POST" && pathname === "/api/vouchers/stripe/checkout") return "vouchers-stripe-checkout";
+  if (m === "POST" && pathname === "/api/vouchers/apple/notifications") return "vouchers-apple-notifications";
   if (/^\/api\/accounts\/[^/]+\/voucher-wallet$/.test(pathname)) return "voucher-wallet";
   if (m === "GET" && /^\/api\/users\/[^/]+\/(?:allowance|plan-attestation)$/.test(pathname)) {
     return "user-allowance";

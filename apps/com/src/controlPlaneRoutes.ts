@@ -229,6 +229,18 @@ import {
   handleVoucherRedeem,
   handleVoucherWalletGet,
   handleVoucherWalletPut,
+  handlePaidIssue,
+  handleStripeVoucherCheckout,
+  handleStripeVoucherWebhook,
+  handleAppleNotification,
+  isVoucherStripeEvent,
+  railsSummary,
+  stripeRailFromEnv,
+  appleRailFromEnv,
+  googleServiceAccountFromEnv,
+  googlePlayApi,
+  type VoucherRailsDeps,
+  type VoucherSigningKey,
   paymentsConfigFromEnv,
   voucherSigningKeysFromEnv,
   handleStripeWebhook,
@@ -325,7 +337,7 @@ import {
   handleOrgSeatsGet,
   handleOrgVeto,
 } from "@flagship/control-plane";
-import { D1BlindVoucherStorage, D1Storage, D1DemoUsersStorage, D1MeterStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, D1AppSalesStorage, RequestD1, type D1Database } from "@flagship/storage";
+import { D1BlindVoucherStorage, D1VoucherPaymentStorage, D1Storage, D1DemoUsersStorage, D1MeterStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, D1AppSalesStorage, RequestD1, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -441,6 +453,26 @@ export interface ControlPlaneEnv extends DirectNamesEnv {
   PAYMENTS_CONFIG?: string;
   /** "1" only in the gym: anyone may get up to 30 free test vouchers at POST /api/vouchers/test-issue. */
   VOUCHER_TEST_ISSUE?: string;
+  /**
+   * The voucher rails (docs/payments-privacy-and-rails.md §11, owner setup docs/runbooks/payments-setup.md). A rail
+   * is on when its settings are present. Stripe: STRIPE_SECRET_KEY (a restricted `rk_` key; `_test_` in the gym) and
+   * STRIPE_WEBHOOK_SECRET (below); optional STRIPE_VOUCHER_SUCCESS_URL / _CANCEL_URL (default the webapp),
+   * STRIPE_TAX_BEHAVIOR ("inclusive" default | "exclusive"), STRIPE_TAX_CODE (default txcd_10000000).
+   */
+  STRIPE_VOUCHER_SUCCESS_URL?: string;
+  STRIPE_VOUCHER_CANCEL_URL?: string;
+  STRIPE_TAX_BEHAVIOR?: string;
+  STRIPE_TAX_CODE?: string;
+  /** Apple: accepted transaction environments, "Production" (prod) or "Sandbox" (gym); unset = rail off. */
+  APPLE_IAP_ENVIRONMENTS?: string;
+  /** Apple: the app's bundle id (default com.flagshipserver.app). */
+  APPLE_BUNDLE_ID?: string;
+  /** Google: secret, the service account's JSON key (Play Console API access, "View financial data"); unset = rail off. */
+  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON?: string;
+  /** Google: the app's package name (default com.flagshipserver.app). */
+  GOOGLE_PLAY_PACKAGE_NAME?: string;
+  /** Google: "1" only in the gym: licence testers' purchases count. */
+  GOOGLE_PLAY_ALLOW_TEST?: string;
 
   /**
    * The blessed Debian base-ISO manifest the desktop builder should hold,
@@ -962,6 +994,9 @@ const ROUTE_RE = {
   VOUCHERS_ISSUE_ADMIN: /^\/api\/admin\/vouchers\/issue$/,
   VOUCHERS_TEST_ISSUE: /^\/api\/vouchers\/test-issue$/,
   VOUCHER_WALLET: /^\/api\/accounts\/([^/]+)\/voucher-wallet$/,
+  VOUCHERS_PAID_ISSUE: /^\/api\/vouchers\/paid-issue$/,
+  VOUCHERS_STRIPE_CHECKOUT: /^\/api\/vouchers\/stripe\/checkout$/,
+  VOUCHERS_APPLE_NOTIFICATIONS: /^\/api\/vouchers\/apple\/notifications$/,
   STRIPE_WEBHOOK: /^\/api\/stripe\/webhook$/,
   STRIPE_CHECKOUT: /^\/api\/stripe\/checkout$/,
   STRIPE_APP_CHECKOUT: /^\/api\/stripe\/app-checkout$/,
@@ -1178,6 +1213,22 @@ function bootJson(body: unknown, status: number): Response {
     status,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
+}
+
+/** The voucher rails from env: each is on only when its settings are present (docs/runbooks/payments-setup.md). */
+function voucherRailsDeps(env: ControlPlaneEnv, keys: VoucherSigningKey[], config: VoucherRailsDeps["config"]): VoucherRailsDeps {
+  const stripe = stripeRailFromEnv(env);
+  const apple = appleRailFromEnv(env);
+  const account = googleServiceAccountFromEnv(env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON);
+  const packageName = env.GOOGLE_PLAY_PACKAGE_NAME || "com.flagshipserver.app";
+  return {
+    keys,
+    config,
+    payments: new D1VoucherPaymentStorage(env.DB),
+    ...(stripe ? { stripe } : {}),
+    ...(apple ? { apple } : {}),
+    ...(account ? { google: { packageName, allowTest: env.GOOGLE_PLAY_ALLOW_TEST === "1", api: googlePlayApi({ account, packageName }) } } : {}),
+  };
 }
 
 /** Assemble the Stripe config from env (#11). Every field optional — the
@@ -3722,13 +3773,27 @@ export async function tryControlPlane(
     ROUTE_RE.VOUCHERS_REDEEM.test(path) ||
     ROUTE_RE.VOUCHERS_ISSUE_ADMIN.test(path) ||
     ROUTE_RE.VOUCHERS_TEST_ISSUE.test(path) ||
-    ROUTE_RE.VOUCHER_WALLET.test(path)
+    ROUTE_RE.VOUCHER_WALLET.test(path) ||
+    ROUTE_RE.VOUCHERS_PAID_ISSUE.test(path) ||
+    ROUTE_RE.VOUCHERS_STRIPE_CHECKOUT.test(path) ||
+    ROUTE_RE.VOUCHERS_APPLE_NOTIFICATIONS.test(path)
   ) {
     const voucherKeys = voucherSigningKeysFromEnv(env.VOUCHER_SIGNING_KEYS);
     const paymentsConfig = paymentsConfigFromEnv(env.PAYMENTS_CONFIG);
     const testIssue = env.VOUCHER_TEST_ISSUE === "1";
+    const rails = voucherRailsDeps(env, voucherKeys, paymentsConfig);
     if (method === "GET" && ROUTE_RE.PAYMENTS_CONFIG.test(path)) {
-      return finish(handlePaymentsConfig({ config: paymentsConfig, keys: voucherKeys, testIssue }));
+      return finish(handlePaymentsConfig({ config: paymentsConfig, keys: voucherKeys, testIssue, rails: railsSummary(rails) }));
+    }
+    // The rails (§11): a proof of payment buys blind signatures; no credential, nothing about the caller kept.
+    if (method === "POST" && ROUTE_RE.VOUCHERS_PAID_ISSUE.test(path)) {
+      return finish(await handlePaidIssue(rails, await readJson(request)));
+    }
+    if (method === "POST" && ROUTE_RE.VOUCHERS_STRIPE_CHECKOUT.test(path)) {
+      return finish(await handleStripeVoucherCheckout(rails, await readJson(request)));
+    }
+    if (method === "POST" && ROUTE_RE.VOUCHERS_APPLE_NOTIFICATIONS.test(path)) {
+      return finishPlain(await handleAppleNotification(rails, await readJson(request)));
     }
     // Issuing: the admin secret (comps, tests) until the rails land; the gym's free test issue (30 at a time).
     if (method === "POST" && ROUTE_RE.VOUCHERS_ISSUE_ADMIN.test(path)) {
@@ -3781,6 +3846,19 @@ export async function tryControlPlane(
   // read request.text() (NOT readJson) and pass the Stripe-Signature header.
   if (method === "POST" && ROUTE_RE.STRIPE_WEBHOOK.test(path)) {
     const rawBody = await request.text();
+    // The voucher rail's events (refunds, disputes, its own sessions) never reach the older tier/app handler.
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      /* the handler below answers 400 */
+    }
+    if (isVoucherStripeEvent(parsed)) {
+      const rails = voucherRailsDeps(env, voucherSigningKeysFromEnv(env.VOUCHER_SIGNING_KEYS), paymentsConfigFromEnv(env.PAYMENTS_CONFIG));
+      return finishPlain(
+        await handleStripeVoucherWebhook({ ...rails, ...(env.STRIPE_WEBHOOK_SECRET ? { webhookSecret: env.STRIPE_WEBHOOK_SECRET } : {}) }, { rawBody, signature: request.headers.get("stripe-signature") }),
+      );
+    }
     return finishPlain(
       await handleStripeWebhook(
         {
