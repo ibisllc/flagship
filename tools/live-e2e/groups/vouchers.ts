@@ -48,17 +48,19 @@ export const vouchers: Group = {
       const j = r.json;
       assert(Array.isArray(j.keys) && j.keys.length >= 1, `no voucher key: ${short(j.keys)}`);
       assert(j.testIssue === true, "testIssue is not on in the gym");
-      assert(j.rails && j.rails.stripe === false && j.rails.apple === false && j.rails.google === false, `rails: ${short(j.rails)}`);
+      // Stripe and Google need secrets the gym doesn't have. Apple needs none (`.com` checks the JWS against Apple's
+      // pinned root), so wrangler.gym.toml's APPLE_IAP_ENVIRONMENTS="Sandbox" alone turns it on: allowed either way.
+      assert(j.rails && j.rails.stripe === false && j.rails.google === false && typeof j.rails.apple === "boolean", `rails: ${short(j.rails)}`);
       const relays = j.ohttp?.relays ?? [];
       assert(typeof j.ohttp?.keyConfigHex === "string" && relays.length >= 1, `ohttp: ${short(j.ohttp)}`);
       assert(relays[0].url === OHTTP_RELAY_URL && relays[0].interim === true, `first relay ${short(relays[0])}`);
       cfg = await Plan.loadPaymentsConfig(d1.deps());
       assert(cfg.keys.length >= 1 && cfg.ohttp.relays.length >= 1, "the webapp's config read dropped the key or the relay");
-      return `key ${j.keys[0].keyId}; rails off; relay ${relays[0].operator}${relays[0].interim ? " (interim)" : ""}`;
+      return `key ${j.keys[0].keyId}; stripe off, google off, apple ${j.rails.apple ? "on (sandbox, no secret needed)" : "off"}; relay ${relays[0].operator}${relays[0].interim ? " (interim)" : ""}`;
     });
     if (!cfg) return;
 
-    await rec.check("the rails without keys answer rail-off (paid-issue x3, Stripe checkout, Apple notifications); the webhook refuses without a 500 crash", async () => {
+    await rec.check("rails without settings answer rail-off, a configured one refuses a bogus proof (paid-issue x3, Stripe checkout, Apple notifications); the webhook refuses cleanly", async () => {
       const key = cfg.keys[0];
       const req = Vouchers.newVoucherRequest(key);
       const out: string[] = [];
@@ -68,21 +70,26 @@ export const vouchers: Group = {
         ["google", { productId: "com.flagshipserver.app.vouchers.10", purchaseToken: "gym" }],
       ] as const) {
         const r = await postJson(`https://${CONTROL}/api/vouchers/paid-issue`, { v: 1, rail, proof, k: key.keyId, blinded: [req.blinded] });
-        assert(r.status === 404 && r.json?.code === "rail-off", `${rail}: ${r.status} ${short(r.text)}`);
-        out.push(`${rail} 404`);
+        if (cfg.rails[rail]) {
+          assert(r.status === 400 && r.json?.code === "payment-invalid", `${rail} (on) with a bogus proof: ${r.status} ${short(r.text)}`);
+          out.push(`${rail} on: bogus proof 400 payment-invalid`);
+        } else {
+          assert(r.status === 404 && r.json?.code === "rail-off", `${rail}: ${r.status} ${short(r.text)}`);
+          out.push(`${rail} 404 rail-off`);
+        }
       }
       const commit = Vouchers.voucherOrderCommit(key.keyId, [req.blinded]);
       const co = await postJson(`https://${CONTROL}/api/vouchers/stripe/checkout`, { v: 1, units: 10, k: key.keyId, commit });
       assert(co.status === 404 && co.json?.code === "rail-off", `checkout: ${co.status} ${short(co.text)}`);
       const ap = await postJson(`https://${CONTROL}/api/vouchers/apple/notifications`, { signedPayload: "x.y.z" });
-      assert(ap.status === 404 && /rail-off/.test(ap.text), `apple notifications: ${ap.status} ${short(ap.text)}`);
+      assert(cfg.rails.apple ? ap.status >= 400 && ap.status < 500 : ap.status === 404 && /rail-off/.test(ap.text), `apple notifications: ${ap.status} ${short(ap.text)}`);
       const wh = await http(`https://${CONTROL}/api/stripe/webhook`, {
         method: "POST",
         headers: { "content-type": "application/json", "stripe-signature": "t=1,v1=00" },
         body: JSON.stringify({ type: "charge.refunded", data: { object: { payment_intent: "pi_gym" } } }),
       });
       assert(wh.status === 503 || (wh.status >= 400 && wh.status < 500), `webhook: ${wh.status} ${short(wh.text)}`);
-      return `${out.join(", ")}; checkout 404; apple 404; webhook ${wh.status} (${short(wh.json?.error ?? wh.text, 40)})`;
+      return `${out.join(", ")}; checkout 404; apple notifications ${ap.status}; webhook ${wh.status} (${short(wh.json?.error ?? wh.text, 40)})`;
     });
 
     const session = await pair(acct, b);
