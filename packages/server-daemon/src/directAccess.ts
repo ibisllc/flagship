@@ -98,6 +98,9 @@ interface DirectAccessState {
   /** Newest `issuedAt` taken; an order not newer is a replay. */
   floorIssuedAt: number;
   current: SignedOrder | null;
+  /** The owner's off order, kept while it is the newest, so the box can hand it to `.com` (which then withdraws the
+   *  records of names that follow this box) even when the app's own post to `.com` never arrived. */
+  off?: SignedOrder | null;
 }
 
 export interface DirectAccessOptions {
@@ -150,6 +153,11 @@ export class DirectAccessController {
   order(): DirectAccessOrder | null {
     const o = this.state.current?.order;
     return o && o.enabled ? o : null;
+  }
+
+  /** The owner's newest order when it turned direct access off, with its signature (for `.com`), else null. */
+  offOrder(): SignedOrder | null {
+    return !this.state.current && this.state.off ? { ...this.state.off } : null;
   }
 
   /** The order in force with its signature, for a device to verify itself. */
@@ -223,7 +231,8 @@ export class DirectAccessController {
         const s = JSON.parse(read.text) as DirectAccessState;
         if (s && s.version === 1 && typeof s.floorIssuedAt === "number") {
           const current = s.current ? this.reverify(s.current) : null;
-          this.state = { version: 1, floorIssuedAt: s.floorIssuedAt, current };
+          const off = !current && s.off ? this.reverify(s.off) : null;
+          this.state = { version: 1, floorIssuedAt: s.floorIssuedAt, current, ...(off && !off.order.enabled ? { off } : {}) };
           if (s.current && !current) {
             await this.save();
             this.opts.activity?.("server.direct-access.off", "Direct access turned off: its order no longer verifies under this account's admin key. Turn it on again.");
@@ -322,12 +331,12 @@ export class DirectAccessController {
       return refuse(422, "stale", t(lang, "This device's clock is too far from the server's. Check the time and try again."));
     }
     const wasOn = this.order() !== null;
+    const signed: SignedOrder = { order, signatureHex, ...(b!.pqSignature !== undefined && b!.pqSignature !== null ? { pqSignature: b!.pqSignature } : {}) };
     this.state = {
       version: 1,
       floorIssuedAt: order.issuedAt,
-      current: order.enabled
-        ? { order, signatureHex, ...(b!.pqSignature !== undefined && b!.pqSignature !== null ? { pqSignature: b!.pqSignature } : {}) }
-        : null,
+      current: order.enabled ? signed : null,
+      ...(order.enabled ? {} : { off: signed }),
     };
     await this.save();
     this.lastUpdate = null;
