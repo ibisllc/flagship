@@ -953,3 +953,10 @@ Next steps for whoever resumes:
   `MaintainersConformanceTest` (no node_modules then). iOS compiled only; its unit tests, the gym UI specs on all three
   clients and a recompile for the last one-line reply-count change are NOT run (disk at 4.5 GB).
 - Next: Activity for calls and social (`docs/activity-social.md`).
+
+### 2026-11-16 — Disk cleanup; Activity agent started
+- Owner approved deleting merged worktrees: 39 removed (all merged into release/0.4, no tracked or untracked changes;
+  branches stay on origin). Kept: main checkout, release/0.4, gym-0.4, ice-fix, media-fix (unmerged), gymseam
+  (unmerged), the gym cache worktree. Disk 4.5 GB → 30 GB free.
+- `0.4/activity-social` agent started (spec `docs/activity-social.md`). `0.4/ice-fix` agent running (local harness
+  for the TURN/ICE failure). Owner: a locked phone rings fine, so the earlier "rang a second" was not the lock check.
