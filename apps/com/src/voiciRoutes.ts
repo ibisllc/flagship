@@ -13,6 +13,7 @@
  * `GET /api/username/<u>`, `GET /api/voici/pages/<u>`, `/api/voici/web/*` and `POST /api/voici/reports` (§4.4). The `/qr-pipe` upgrade is a
  * WebSocket and needs none.
  */
+import { voiciFrontDoorResponse } from "./voiciFrontDoor.js";
 import {
   buildVoiciPush,
   buildWebPushSender,
@@ -516,8 +517,12 @@ export async function serveVoiciHost(request: Request, url: URL, env: VoiciEnv):
   if (method !== "GET" && method !== "HEAD") {
     return new Response(null, { status: 405, headers: { allow: "GET, HEAD", "cache-control": "private, no-store" } });
   }
-  if (!env.DB) return new Response(null, { status: 503, headers: { "cache-control": "private, no-store" } });
   const on = voiciEnabled(env);
+  // The front door (docs/voici-front-door.md) before anything that touches storage: it loads even when D1 is down.
+  if (on && url.pathname === "/") {
+    return voiciFrontDoorResponse(request, url, { origin: voiciWebOrigin(env), apex: env.CONTROL_APEX ?? "flagshipserver.com" }, voiciSiteHeaders(env));
+  }
+  if (!env.DB) return new Response(null, { status: 503, headers: { "cache-control": "private, no-store" } });
   const head = method === "HEAD";
   const storage = new D1Storage(new RequestD1(env.DB));
   // Before the switch voi.ci is the shortener it was: only links and codes resolve, people are not there yet.

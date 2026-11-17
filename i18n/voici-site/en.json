@@ -141,167 +141,335 @@
   },
   "This call link was already used or has expired. Start the call again from your Flagship app.": {
     "en": "This call link was already used or has expired. Start the call again from your Flagship app.",
-    "ctx": "voici-site/call.js:161"
+    "ctx": "voici-site/call.js:180"
   },
   "This call link isn't valid. Start the call again from your Flagship app.": {
     "en": "This call link isn't valid. Start the call again from your Flagship app.",
-    "ctx": "voici-site/call.js:166"
+    "ctx": "voici-site/call.js:185"
   },
   "Getting the call from your Flagship app…": {
     "en": "Getting the call from your Flagship app…",
-    "ctx": "voici-site/call.js:177"
+    "ctx": "voici-site/call.js:196"
   },
   "Your Flagship app is ready to call {0}.": {
     "en": "Your Flagship app is ready to call {0}.",
-    "ctx": "voici-site/call.js:190"
+    "ctx": "voici-site/call.js:209"
   },
   "Call": {
     "en": "Call",
-    "ctx": "voici-site/call.js:191"
+    "ctx": "voici-site/call.js:210"
   },
   "Call anonymously": {
     "en": "Call anonymously",
-    "ctx": "voici-site/call.js:211"
+    "ctx": "voici-site/call.js:230"
   },
   "Call and allow call-back": {
     "en": "Call and allow call-back",
-    "ctx": "voici-site/call.js:212"
+    "ctx": "voici-site/call.js:231"
   },
   "Let {0} call you back?": {
     "en": "Let {0} call you back?",
-    "ctx": "voici-site/call.js:213"
+    "ctx": "voici-site/call.js:232"
   },
   "{0} takes calls only from people they can call back.": {
     "en": "{0} takes calls only from people they can call back.",
-    "ctx": "voici-site/call.js:216"
+    "ctx": "voici-site/call.js:235"
   },
   "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": {
     "en": "{0} won't learn who you are. Flagship will know this conversation can ring your phone.",
-    "ctx": "voici-site/call.js:217"
+    "ctx": "voici-site/call.js:236"
   },
   "Decline": {
     "en": "Decline",
-    "ctx": "voici-site/call.js:282"
+    "ctx": "voici-site/call.js:301"
   },
   "Answer": {
     "en": "Answer",
-    "ctx": "voici-site/call.js:283"
+    "ctx": "voici-site/call.js:302"
   },
   "{0} is calling you back.": {
     "en": "{0} is calling you back.",
-    "ctx": "voici-site/call.js:292"
+    "ctx": "voici-site/call.js:311"
   },
   "Securing the line (quantum-safe)…": {
     "en": "Securing the line (quantum-safe)…",
-    "ctx": "voici-site/call.js:303"
+    "ctx": "voici-site/call.js:322"
   },
   "Reaching their phone…": {
     "en": "Reaching their phone…",
-    "ctx": "voici-site/call.js:305"
+    "ctx": "voici-site/call.js:324"
   },
   "Opening a direct path…": {
     "en": "Opening a direct path…",
-    "ctx": "voici-site/call.js:307"
+    "ctx": "voici-site/call.js:326"
   },
   "Starting audio…": {
     "en": "Starting audio…",
-    "ctx": "voici-site/call.js:309"
+    "ctx": "voici-site/call.js:328"
   },
   "Connecting…": {
     "en": "Connecting…",
-    "ctx": "voici-site/call.js:311"
+    "ctx": "voici-site/call.js:330"
   },
   "Calling {0}…": {
     "en": "Calling {0}…",
-    "ctx": "voici-site/call.js:321"
+    "ctx": "voici-site/call.js:340"
   },
   "This is taking longer than usual": {
     "en": "This is taking longer than usual",
-    "ctx": "voici-site/call.js:322"
+    "ctx": "voici-site/call.js:341"
   },
   "End-to-end encrypted · quantum-safe": {
     "en": "End-to-end encrypted · quantum-safe",
-    "ctx": "voici-site/call.js:324"
+    "ctx": "voici-site/call.js:343"
   },
   "Camera paused": {
     "en": "Camera paused",
-    "ctx": "voici-site/call.js:325"
+    "ctx": "voici-site/call.js:344"
   },
   "Their camera": {
     "en": "Their camera",
-    "ctx": "voici-site/call.js:328"
+    "ctx": "voici-site/call.js:347"
   },
   "Your camera": {
     "en": "Your camera",
-    "ctx": "voici-site/call.js:329"
+    "ctx": "voici-site/call.js:348"
   },
   "Mute": {
     "en": "Mute",
-    "ctx": "voici-site/call.js:335"
+    "ctx": "voici-site/call.js:354"
   },
   "Unmute": {
     "en": "Unmute",
-    "ctx": "voici-site/call.js:339"
+    "ctx": "voici-site/call.js:358"
   },
   "Camera": {
     "en": "Camera",
-    "ctx": "voici-site/call.js:342"
+    "ctx": "voici-site/call.js:361"
   },
   "Flip": {
     "en": "Flip",
-    "ctx": "voici-site/call.js:343"
+    "ctx": "voici-site/call.js:362"
+  },
+  "End": {
+    "en": "End",
+    "ctx": "voici-site/call.js:363"
   },
   "Full screen": {
     "en": "Full screen",
     "ctx": "voici-site/call.js:369"
   },
-  "Exit full screen": {
-    "en": "Exit full screen",
-    "ctx": "voici-site/call.js:387"
-  },
   "Picture in picture": {
     "en": "Picture in picture",
     "ctx": "voici-site/call.js:375"
   },
-  "End": {
-    "en": "End",
-    "ctx": "voici-site/call.js:344"
+  "Exit full screen": {
+    "en": "Exit full screen",
+    "ctx": "voici-site/call.js:387"
   },
   "Quantum-safe call": {
     "en": "Quantum-safe call",
-    "ctx": "voici-site/call.js:350"
+    "ctx": "voici-site/call.js:392"
   },
   "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.": {
     "en": "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.",
-    "ctx": "voici-site/call.js:350"
+    "ctx": "voici-site/call.js:392"
   },
   "Camera off": {
     "en": "Camera off",
-    "ctx": "voici-site/call.js:431"
+    "ctx": "voici-site/call.js:535"
   },
   "Close": {
     "en": "Close",
-    "ctx": "voici-site/call.js:477"
+    "ctx": "voici-site/call.js:594"
   },
   "Call again": {
     "en": "Call again",
-    "ctx": "voici-site/call.js:478"
+    "ctx": "voici-site/call.js:595"
   },
   "Getting ready to call…": {
     "en": "Getting ready to call…",
-    "ctx": "voici-site/call.js:511"
+    "ctx": "voici-site/call.js:628"
   },
   "Ringing…": {
     "en": "Ringing…",
-    "ctx": "voici-site/call.js:512"
+    "ctx": "voici-site/call.js:629"
   },
   "Audio": {
     "en": "Audio",
-    "ctx": "voici-site/call.js:549"
+    "ctx": "voici-site/call.js:666"
   },
   "Audio output {0}": {
     "en": "Audio output {0}",
-    "ctx": "voici-site/call.js:566"
+    "ctx": "voici-site/call.js:683"
+  },
+  "iPhone and iPad": {
+    "en": "iPhone and iPad",
+    "ctx": "voici-site/front.js:38"
+  },
+  "Download Flagship on the App Store": {
+    "en": "Download Flagship on the App Store",
+    "ctx": "voici-site/front.js:38"
+  },
+  "Android phones": {
+    "en": "Android phones",
+    "ctx": "voici-site/front.js:39"
+  },
+  "Get Flagship on Google Play": {
+    "en": "Get Flagship on Google Play",
+    "ctx": "voici-site/front.js:39"
+  },
+  "Or use Flagship in your browser": {
+    "en": "Or use Flagship in your browser",
+    "ctx": "voici-site/front.js:41"
+  },
+  "Photographer in Abidjan. Weddings, portraits, street life.": {
+    "en": "Photographer in Abidjan. Weddings, portraits, street life.",
+    "ctx": "voici-site/front.js:55"
+  },
+  "Send me a message": {
+    "en": "Send me a message",
+    "ctx": "voici-site/front.js:58"
+  },
+  "Latest post": {
+    "en": "Latest post",
+    "ctx": "voici-site/front.js:62"
+  },
+  "New series out this week: the markets of Treichville at dawn. Write to me if you'd like a print.": {
+    "en": "New series out this week: the markets of Treichville at dawn. Write to me if you'd like a print.",
+    "ctx": "voici-site/front.js:63"
+  },
+  "voi.ci · A page of your own": {
+    "en": "voi.ci · A page of your own",
+    "ctx": "voici-site/front.js:86"
+  },
+  "Your own page, your posts. People can message you and call you, and nobody reads those messages but you. Made with the Flagship app.": {
+    "en": "Your own page, your posts. People can message you and call you, and nobody reads those messages but you. Made with the Flagship app.",
+    "ctx": "voici-site/front.js:87"
+  },
+  "Made with Flagship": {
+    "en": "Made with Flagship",
+    "ctx": "voici-site/front.js:118"
+  },
+  "Your page on voi.ci": {
+    "en": "Your page on voi.ci",
+    "ctx": "voici-site/front.js:123"
+  },
+  "A page of your own.": {
+    "en": "A page of your own.",
+    "ctx": "voici-site/front.js:124"
+  },
+  "Post what you have to say. People can write to you and call you from your page, and nobody reads those messages but you.": {
+    "en": "Post what you have to say. People can write to you and call you from your page, and nobody reads those messages but you.",
+    "ctx": "voici-site/front.js:125"
+  },
+  "Flagship is free. There's no account to create here: your page is made in the app.": {
+    "en": "Flagship is free. There's no account to create here: your page is made in the app.",
+    "ctx": "voici-site/front.js:127"
+  },
+  "What your page does": {
+    "en": "What your page does",
+    "ctx": "voici-site/front.js:132"
+  },
+  "Your posts, in order": {
+    "en": "Your posts, in order",
+    "ctx": "voici-site/front.js:134"
+  },
+  "Short posts and links. They appear on your page newest first, for anyone with the link. No algorithm decides who sees them.": {
+    "en": "Short posts and links. They appear on your page newest first, for anyone with the link. No algorithm decides who sees them.",
+    "ctx": "voici-site/front.js:134"
+  },
+  "Messages that stay private": {
+    "en": "Messages that stay private",
+    "ctx": "voici-site/front.js:135"
+  },
+  "People write to you from your page. Messages are encrypted end to end and arrive on your phone: we deliver them, we can't read them.": {
+    "en": "People write to you from your page. Messages are encrypted end to end and arrive on your phone: we deliver them, we can't read them.",
+    "ctx": "voici-site/front.js:135"
+  },
+  "Calls from your page": {
+    "en": "Calls from your page",
+    "ctx": "voici-site/front.js:136"
+  },
+  "People can call you from your page, voice or video, encrypted end to end. You choose when you pick up.": {
+    "en": "People can call you from your page, voice or video, encrypted end to end. You choose when you pick up.",
+    "ctx": "voici-site/front.js:136"
+  },
+  "Quiet by design": {
+    "en": "Quiet by design",
+    "ctx": "voici-site/front.js:137"
+  },
+  "No ads, no follower counts, no feed built to keep you scrolling. Your page says what you put on it, nothing more.": {
+    "en": "No ads, no follower counts, no feed built to keep you scrolling. Your page says what you put on it, nothing more.",
+    "ctx": "voici-site/front.js:137"
+  },
+  "Make your page in three steps": {
+    "en": "Make your page in three steps",
+    "ctx": "voici-site/front.js:141"
+  },
+  "Get the Flagship app": {
+    "en": "Get the Flagship app",
+    "ctx": "voici-site/front.js:143"
+  },
+  "Free on iPhone and Android, or in your browser. Your account takes a minute to make, and its name becomes your address.": {
+    "en": "Free on iPhone and Android, or in your browser. Your account takes a minute to make, and its name becomes your address.",
+    "ctx": "voici-site/front.js:143"
+  },
+  "Open the Social tab": {
+    "en": "Open the Social tab",
+    "ctx": "voici-site/front.js:144"
+  },
+  "Your page is waiting there. Add a photo, your name, a few words about yourself and your links.": {
+    "en": "Your page is waiting there. Add a photo, your name, a few words about yourself and your links.",
+    "ctx": "voici-site/front.js:144"
+  },
+  "Make it public": {
+    "en": "Make it public",
+    "ctx": "voici-site/front.js:145"
+  },
+  "Turn on Public and your page is live at voi.ci/yourname. Share the link wherever you like.": {
+    "en": "Turn on Public and your page is live at voi.ci/yourname. Share the link wherever you like.",
+    "ctx": "voici-site/front.js:145"
+  },
+  "Open Flagship": {
+    "en": "Open Flagship",
+    "ctx": "voici-site/front.js:148"
+  },
+  "Already have the app? This takes you straight to your page.": {
+    "en": "Already have the app? This takes you straight to your page.",
+    "ctx": "voici-site/front.js:149"
+  },
+  "What we can see": {
+    "en": "What we can see",
+    "ctx": "voici-site/front.js:153"
+  },
+  "Your page is public: anyone with the link can read it. Each visitor's browser checks it against your signature, so nobody can change it on the way.": {
+    "en": "Your page is public: anyone with the link can read it. Each visitor's browser checks it against your signature, so nobody can change it on the way.",
+    "ctx": "voici-site/front.js:155"
+  },
+  "Your messages and calls are not public. They are encrypted on the devices at each end, and nobody else can read them, not even us.": {
+    "en": "Your messages and calls are not public. They are encrypted on the devices at each end, and nobody else can read them, not even us.",
+    "ctx": "voici-site/front.js:156"
+  },
+  "If someone reports a message to us, we learn which account sent it. We see what it says only if the person reporting chooses to show us.": {
+    "en": "If someone reports a message to us, we learn which account sent it. We see what it says only if the person reporting chooses to show us.",
+    "ctx": "voici-site/front.js:157"
+  },
+  "Your page, your words.": {
+    "en": "Your page, your words.",
+    "ctx": "voici-site/front.js:161"
+  },
+  "Rules and reports": {
+    "en": "Rules and reports",
+    "ctx": "voici-site/front.js:166"
+  },
+  "Terms": {
+    "en": "Terms",
+    "ctx": "voici-site/front.js:167"
+  },
+  "Report abuse": {
+    "en": "Report abuse",
+    "ctx": "voici-site/front.js:168"
   },
   "Visitor {0}": {
     "en": "Visitor {0}",
@@ -386,10 +554,6 @@
   "Sign in with Flagship": {
     "en": "Sign in with Flagship",
     "ctx": "voici-site/messages.js:125"
-  },
-  "Open Flagship": {
-    "en": "Open Flagship",
-    "ctx": "voici-site/messages.js:128"
   },
   "Waiting for your app…": {
     "en": "Waiting for your app…",
@@ -515,10 +679,6 @@
     "en": "Links",
     "ctx": "voici-site/page.js:65"
   },
-  "Send me a message": {
-    "en": "Send me a message",
-    "ctx": "voici-site/page.js:92"
-  },
   "Private messages and quantum-safe calls, with your Flagship app.": {
     "en": "Private messages and quantum-safe calls, with your Flagship app.",
     "ctx": "voici-site/page.js:94"
@@ -547,25 +707,13 @@
     "en": "Report this page",
     "ctx": "voici-site/page.js:160"
   },
-  "Made with Flagship": {
-    "en": "Made with Flagship",
-    "ctx": "voici-site/page.js:161"
-  },
-  "Rules and reports": {
-    "en": "Rules and reports",
-    "ctx": "voici-site/page.js:165"
-  },
-  "Terms": {
-    "en": "Terms",
-    "ctx": "voici-site/page.js:166"
-  },
-  "Report abuse": {
-    "en": "Report abuse",
-    "ctx": "voici-site/page.js:167"
+  "Make your own page": {
+    "en": "Make your own page",
+    "ctx": "voici-site/page.js:162"
   },
   "Loading": {
     "en": "Loading",
-    "ctx": "voici-site/page.js:209"
+    "ctx": "voici-site/page.js:211"
   },
   "Spam": {
     "en": "Spam",

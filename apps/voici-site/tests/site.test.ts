@@ -104,7 +104,8 @@ describe("voi.ci source rules (§12)", () => {
   });
 
   it("has no third-party origin anywhere in the site", () => {
-    const allowed = /https:\/\/(voi\.ci|gym\.voi\.ci|files\.voi\.ci|files\.gym\.voi\.ci|\$\{)/;
+    // %APEX%: the front door's token the Worker fills with this environment's apex (front.js).
+    const allowed = /https:\/\/(voi\.ci|gym\.voi\.ci|files\.voi\.ci|files\.gym\.voi\.ci|\$\{|(webapp\.)?%APEX%\/)/;
     for (const [f, s] of own.map((x) => [x, read(srcDir, x)]) as [string, string][]) {
       for (const m of s.matchAll(/https:\/\/[^\s"'`)]+/g)) {
         if (f === "strings.js") continue;

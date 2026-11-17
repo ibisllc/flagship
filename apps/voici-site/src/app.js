@@ -42,7 +42,7 @@ function reloadAction() {
 }
 
 function stateFooter(cfg) {
-  return footer(doc, { apex: cfg?.apex ?? "flagshipserver.com", languagePicker: languagePicker() });
+  return footer(doc, { apex: cfg?.apex ?? "flagshipserver.com", host: cfg?.host ?? "voi.ci", languagePicker: languagePicker() });
 }
 
 function showState(cfg, s) {

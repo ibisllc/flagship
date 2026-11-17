@@ -158,6 +158,8 @@ export function footer(doc, o) {
     "footer",
     { class: "site-footer" },
     o.onReport ? h(doc, "button", { class: "btn-ghost", type: "button", on: { click: o.onReport } }, icon(doc, "flag", "icon icon-sm"), t("Report this page")) : null,
+    // voi.ci's front door (docs/voici-front-door.md): how a visitor makes a page of their own.
+    o.host ? h(doc, "a", { class: "make-own", href: `https://${o.host}/` }, t("Make your own page"), icon(doc, "arrowUpRight", "icon icon-sm")) : null,
     h(doc, "a", { class: "made-with", href: `https://${o.apex}/` }, flagshipMark(doc, "mark icon-sm"), t("Made with Flagship")),
     h(
       doc,

@@ -1,0 +1,26 @@
+{
+  "_about": "voi.ci's language choice (docs/voici-front-door.md, Language): the shared rule of language-negotiation.json first; then, for a visitor none of whose preferences ship and who never asked for English, French when a preference names a French-speaking country or a language commonly read alongside French. Checked against apps/voici-site/src/lang.js pickLanguage (the browser site) and apps/com/src/voiciFrontDoor.ts pickVoiciFrontLanguage (the front door the Worker serves). `accept` is an Accept-Language header; `expect` the language shown.",
+  "cases": [
+    { "accept": "fr-CI,fr;q=0.9", "expect": "fr" },
+    { "accept": "fr-CI,en;q=0.8", "expect": "fr" },
+    { "accept": "en-CI,fr;q=0.8", "expect": "en" },
+    { "accept": "dyu-CI", "expect": "fr" },
+    { "accept": "wo-SN,wo;q=0.9", "expect": "fr" },
+    { "accept": "bm", "expect": "fr" },
+    { "accept": "ln-CD", "expect": "fr" },
+    { "accept": "ar-MA,ar;q=0.9", "expect": "fr" },
+    { "accept": "ar-EG", "expect": "en" },
+    { "accept": "ht", "expect": "fr" },
+    { "accept": "mg-MG", "expect": "fr" },
+    { "accept": "wo-SN,en;q=0.5", "expect": "en" },
+    { "accept": "it-IT,dyu;q=0.5", "expect": "fr" },
+    { "accept": "nl-BE", "expect": "en" },
+    { "accept": "gsw-CH", "expect": "en" },
+    { "accept": "de-CH", "expect": "de" },
+    { "accept": "es-GQ", "expect": "es" },
+    { "accept": "pt-AO", "expect": "pt-BR" },
+    { "accept": "sw-KE", "expect": "en" },
+    { "accept": "*", "expect": "en" },
+    { "accept": "", "expect": "en" }
+  ]
+}

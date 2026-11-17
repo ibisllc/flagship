@@ -3,24 +3,14 @@
 // translations live in i18n/voici-site/<code>.json and are compiled into strings.js by the build. The owner's
 // content (name, bio, links, posts, replies) is never translated.
 
+import { pickLanguage } from "./lang.js";
 import { LOCALES, STRINGS } from "./strings.js";
 
 const KEY = "voici-lang";
 let current = "en";
 
 function pick(languages) {
-  const codes = LOCALES.map((l) => l.code);
-  for (const raw of languages ?? []) {
-    const l = String(raw);
-    if (codes.includes(l)) return l;
-    const lower = l.toLowerCase();
-    if (lower.startsWith("zh")) return lower.includes("hant") || lower.endsWith("-tw") || lower.endsWith("-hk") ? "en" : "zh-Hans";
-    if (lower.startsWith("pt")) return "pt-BR";
-    const base = lower.split("-")[0];
-    const hit = codes.find((c) => c.toLowerCase() === base);
-    if (hit) return hit;
-  }
-  return "en";
+  return pickLanguage(languages ?? [], LOCALES.map((l) => l.code));
 }
 
 export function initLocale(nav = globalThis.navigator, storage = globalThis.localStorage) {
