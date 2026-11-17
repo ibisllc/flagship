@@ -1525,3 +1525,12 @@ Three agents started:
   - E UI pass, ~/flagship-0.4-ui on 0.4/ui-pass: BEFORE captured (web 294, iOS complete, Android none); ~15 fixes committed (webapp, voi.ci, iOS). Still to do: the Android port, 4 webapp items, the voi.ci rebuild, AFTER captures (iOS phone-light and part of iPad done), the before/after page, the gyms, then rebase (shell v234) and push.
   - Business plan, ~/flagship-0.4-business on 0.4/business: build per its brief (plans doc defaults); state unknown.
   Then: merge both, the owner's browser tasks, the deploy.
+
+### 2026-11-17 night: resumed after the usage limit; four owner requests
+- Resumed the UI pass (now also keeps every capture in `~/flagship-art-review/2026-11-ui-pass/` for an art critique, store pages included) and the Business plan (finishing its own iOS/Android parts).
+- New agents:
+  - `0.4/voici-front`: voi.ci front door for newcomers, French-first (doc `docs/voici-front-door.md`).
+  - `0.4/phone-apps`: design only (`docs/phone-hosted-apps.md`, `docs/phone-apps-copy-proposal.md`), for apps that are dormant on .com, a mailbox while the phone is offline, and live while it is online.
+- Stripe and Apple payment set-up: no browser reaches this session; it stays with the owner's browser Claude (`0.4-browser-tasks.md` §B, §D).
+- Both the UI pass and Business took shell v234; renumber whichever merges second.
+- Resume point: wait for the four agents; merge the UI pass and Business (renumbering the shell), then voici-front. Phone-apps is docs only; its copy waits for the owner. Then the owner's browser tasks, then the deploy.
