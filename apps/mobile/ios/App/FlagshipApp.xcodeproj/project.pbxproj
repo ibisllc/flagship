@@ -39,6 +39,7 @@
 		6EF49FBF9C028E7E172B53C2 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1D124909BEC6A0E1871FFEEF /* Localizable.xcstrings */; };
 		74752A1E3E6F72248180476E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 158DE768BE8CA676C31DE548 /* PrivacyInfo.xcprivacy */; };
 		754683F595AEC195682B0653 /* PolishShotsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C539B67650DCAB446073B42D /* PolishShotsTests.swift */; };
+		0A4E1C2B3D5F6A7B8C9D0E1F /* UIPassShotsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B5F2D3C4E6A7B8C9D0E1F2A /* UIPassShotsTests.swift */; };
 		7ACDEC69F8BFED51EA2AC646 /* GymSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */; };
 		7BFECA1D36A2BB6408A4D8E2 /* PodStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */; };
 		7C3C7D9E13D5CE48B80289D7 /* GymSweepBuildTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB476FFF2CDD63046368414 /* GymSweepBuildTests.swift */; };
@@ -208,6 +209,7 @@
 		B1C2D3E4F5061728394A5B6C /* GymProxyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymProxyTests.swift; sourceTree = "<group>"; };
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C539B67650DCAB446073B42D /* PolishShotsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishShotsTests.swift; sourceTree = "<group>"; };
+		1B5F2D3C4E6A7B8C9D0E1F2A /* UIPassShotsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIPassShotsTests.swift; sourceTree = "<group>"; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
 		CF58F7F531BA9B5914B63CA1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		CFA43B23D68777AA3E79F2B2 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -410,6 +412,7 @@
 				43F4AD878708DBCD211ECF8F /* GymTotalTests.swift */,
 				8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */,
 				C539B67650DCAB446073B42D /* PolishShotsTests.swift */,
+				1B5F2D3C4E6A7B8C9D0E1F2A /* UIPassShotsTests.swift */,
 				7B7C9D1BBEAA69286E163AF3 /* StoreCaptureTests.swift */,
 			);
 			path = UITests;
@@ -691,6 +694,7 @@
 				A49AA68BBB3B27F04E02C2C9 /* GymTotalTests.swift in Sources */,
 				E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */,
 				754683F595AEC195682B0653 /* PolishShotsTests.swift in Sources */,
+				0A4E1C2B3D5F6A7B8C9D0E1F /* UIPassShotsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
