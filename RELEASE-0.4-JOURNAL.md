@@ -993,3 +993,18 @@ Next steps for whoever resumes:
   for Activity not run (section count may shift).
 - Owner questions: sync answered/placed calls to other devices (would put a sealed call log on `.com`)? Show call
   length?
+
+### 2026-11-16 — Calls: root cause of "stuck at Opening a direct path" found and fixed
+- Cause: `e640a8ab0` (the first diagnostics commit, gym-0.4 and media-fix only) replaced
+  `for (port, d) in r.peers { send(d, port: port) }` in iOS `TurnResponder.onClientBytes` with a log call, so the
+  caller's datagrams never reached the phone's peer connection. Evidence: phone4 log `turn mix` showed p>c only
+  binding requests (never a success) while c>p carried requests and successes; the earlier pre-diagnostics call did
+  connect. release/0.4 never had the bug (media-fix not merged); Android's responder is unchanged and sends.
+- Fix + proof: gym-0.4 `8bb74c591` (media-fix `f8fb37d04`) restores the send and logs a failed sendto once.
+  New `CallMediaLoopbackTests` connects two real iOS libwebrtc engines (simulator slice of the pinned xcframework)
+  through CallTurnGate + TurnResponder on loopback: passes in 0.3 s with the send, times out (20 s) without it.
+- Music-time ring that stopped after ~1 s (21:03:45, 21:04:04): the room WebSocket upgrade got HTTP 403 (device join
+  refused), not an audio problem. Which check refused is not known yet: the phone now logs `room join: call-key |
+  device-key` and `room-join-refused-<status>-<kind>` (gym `d17b67796`, media-fix `ae1892c86`), and `.com` logs the
+  refusing check for call-key joins (`4aed7e41b` / `15d90ac1b`; gym Worker `59db4a90`). The gym has one bound call
+  key for fleet-perch (device 2e191c3260…).
