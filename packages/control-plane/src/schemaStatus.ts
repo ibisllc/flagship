@@ -169,6 +169,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0154",
   // The outbound proxy's fallback lane: an order left for an unreachable box, and its proxy-failing report.
   "0155",
+  // Business plan for orgs: the trial's end and the seats the org's vouchers pay for.
+  "0156",
 ];
 
 export interface SchemaStatusDeps {

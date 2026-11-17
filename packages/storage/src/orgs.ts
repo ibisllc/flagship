@@ -16,6 +16,18 @@ export interface OrgRecord {
   /** null = not on a paid term (a trial or an invoice not yet tracked here). */
   paidUntil: number | null;
   createdAt: number;
+  /** The trial's end (migration 0156); null = the row predates 0156, `.com` derives it from `createdAt`. */
+  trialEndsAt?: number | null;
+  /** Seats the org's vouchers pay for (0 or null: none yet). */
+  paidSeats?: number | null;
+}
+
+export interface OrgPlanUpdate {
+  planTier: string;
+  seatLimit: number | null;
+  paidUntil: number | null;
+  paidSeats?: number;
+  trialEndsAt?: number;
 }
 
 /** `authority` keys by version (zero-padded), the others by their object's id or digest. */
@@ -76,7 +88,9 @@ export interface OrgStorage {
   createOrg(rec: OrgRecord): Promise<boolean>;
   getOrg(orgId: string): Promise<OrgRecord | null>;
   getOrgByName(name: string): Promise<OrgRecord | null>;
-  setPlan(orgId: string, plan: { planTier: string; seatLimit: number | null; paidUntil: number | null }): Promise<void>;
+  setPlan(orgId: string, plan: OrgPlanUpdate): Promise<void>;
+  /** setPlan only while the stored paid end is still `expectPaidUntil` (null = none): false when another spend won. */
+  setPlanIf(orgId: string, plan: OrgPlanUpdate, expectPaidUntil: number | null): Promise<boolean>;
   /** Inserts; when `replace` is false an existing key is left alone and false is returned. */
   putObject(orgId: string, obj: OrgObject, replace?: boolean): Promise<boolean>;
   getObject(orgId: string, kind: OrgObjectKind, key: string): Promise<OrgObject | null>;
@@ -114,9 +128,15 @@ export class InMemoryOrgStorage implements OrgStorage {
     const o = [...this.orgs.values()].find((x) => x.name === name);
     return o ? { ...o } : null;
   }
-  async setPlan(orgId: string, plan: { planTier: string; seatLimit: number | null; paidUntil: number | null }) {
+  async setPlan(orgId: string, plan: OrgPlanUpdate) {
     const o = this.orgs.get(orgId);
     if (o) this.orgs.set(orgId, { ...o, ...plan });
+  }
+  async setPlanIf(orgId: string, plan: OrgPlanUpdate, expectPaidUntil: number | null) {
+    const o = this.orgs.get(orgId);
+    if (!o || (o.paidUntil ?? null) !== expectPaidUntil) return false;
+    this.orgs.set(orgId, { ...o, ...plan });
+    return true;
   }
   private bucket(orgId: string, kind: OrgObjectKind) {
     const k = `${orgId}|${kind}`;
@@ -170,6 +190,8 @@ interface OrgRow {
   seat_limit: number | null;
   paid_until: number | null;
   created_at: number;
+  trial_ends_at?: number | null;
+  paid_seats?: number | null;
 }
 interface ObjRow {
   kind: string;
@@ -197,8 +219,11 @@ const orgOf = (r: OrgRow | null): OrgRecord | null =>
         seatLimit: r.seat_limit,
         paidUntil: r.paid_until,
         createdAt: r.created_at,
+        trialEndsAt: r.trial_ends_at ?? null,
+        paidSeats: r.paid_seats ?? null,
       }
     : null;
+const ORG_SELECT = `SELECT o.*, t.trial_ends_at AS trial_ends_at, t.paid_seats AS paid_seats FROM orgs o LEFT JOIN org_plan_terms t ON t.org_id = o.org_id`;
 const objOf = (r: ObjRow): OrgObject => ({ kind: r.kind as OrgObjectKind, key: r.object_key, bodyJson: r.body_json, issuedAt: r.issued_at, storedAt: r.stored_at });
 const logOf = (r: LogRow): OrgLogEntry => ({ seq: r.seq, prevHash: r.prev_hash, entryHash: r.entry_hash, kind: r.kind, refSha256: r.ref_sha256, at: r.at });
 
@@ -213,19 +238,48 @@ export class D1OrgStorage implements OrgStorage {
       )
       .bind(rec.orgId, rec.name, rec.genesisHash, rec.planTier, rec.seatLimit, rec.paidUntil, rec.createdAt)
       .run();
-    return (r.meta.changes ?? 0) > 0;
+    const created = (r.meta.changes ?? 0) > 0;
+    if (created && typeof rec.trialEndsAt === "number") {
+      await this.db
+        .prepare(`INSERT INTO org_plan_terms (org_id, trial_ends_at, paid_seats, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT DO NOTHING`)
+        .bind(rec.orgId, rec.trialEndsAt, rec.paidSeats ?? 0, rec.createdAt)
+        .run();
+    }
+    return created;
   }
   async getOrg(orgId: string) {
-    return orgOf(await this.db.prepare(`SELECT * FROM orgs WHERE org_id = ?1`).bind(orgId).first<OrgRow>());
+    return orgOf(await this.db.prepare(`${ORG_SELECT} WHERE o.org_id = ?1`).bind(orgId).first<OrgRow>());
   }
   async getOrgByName(name: string) {
-    return orgOf(await this.db.prepare(`SELECT * FROM orgs WHERE name = ?1`).bind(name).first<OrgRow>());
+    return orgOf(await this.db.prepare(`${ORG_SELECT} WHERE o.name = ?1`).bind(name).first<OrgRow>());
   }
-  async setPlan(orgId: string, plan: { planTier: string; seatLimit: number | null; paidUntil: number | null }) {
+  private termsStatement(orgId: string, plan: OrgPlanUpdate) {
+    if (plan.paidSeats === undefined && plan.trialEndsAt === undefined) return null;
+    return this.db
+      .prepare(
+        `INSERT INTO org_plan_terms (org_id, trial_ends_at, paid_seats, updated_at)
+         VALUES (?1, COALESCE(?2, (SELECT created_at FROM orgs WHERE org_id = ?1)), COALESCE(?3, 0), ?4)
+         ON CONFLICT(org_id) DO UPDATE SET trial_ends_at = COALESCE(?2, trial_ends_at), paid_seats = COALESCE(?3, paid_seats), updated_at = ?4`,
+      )
+      .bind(orgId, plan.trialEndsAt ?? null, plan.paidSeats ?? null, Date.now());
+  }
+  async setPlan(orgId: string, plan: OrgPlanUpdate) {
     await this.db
       .prepare(`UPDATE orgs SET plan_tier = ?2, seat_limit = ?3, paid_until = ?4 WHERE org_id = ?1`)
       .bind(orgId, plan.planTier, plan.seatLimit, plan.paidUntil)
       .run();
+    const t = this.termsStatement(orgId, plan);
+    if (t) await t.run();
+  }
+  async setPlanIf(orgId: string, plan: OrgPlanUpdate, expectPaidUntil: number | null) {
+    const r = await this.db
+      .prepare(`UPDATE orgs SET plan_tier = ?2, seat_limit = ?3, paid_until = ?4 WHERE org_id = ?1 AND IFNULL(paid_until, -1) = ?5`)
+      .bind(orgId, plan.planTier, plan.seatLimit, plan.paidUntil, expectPaidUntil ?? -1)
+      .run();
+    if ((r.meta.changes ?? 0) === 0) return false;
+    const t = this.termsStatement(orgId, plan);
+    if (t) await t.run();
+    return true;
   }
   async putObject(orgId: string, obj: OrgObject, replace = false) {
     const sql = replace
