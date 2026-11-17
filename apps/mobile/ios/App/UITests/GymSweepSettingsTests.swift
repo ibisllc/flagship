@@ -97,7 +97,8 @@ final class GymSweepSettingsTests: GymSweepCase {
         }
     }
 
-    /// Settings → Plan (payments step 3): test credit in the mock `.com`, then Pro, paid from the phone's balance.
+    /// Settings → Plan (payments steps 3 and 5): a $10 pack bought from the gym's stand-in App Store (signed by the
+    /// mock `.com`), test credit, then Pro, paid from the phone's balance.
     func test_planScreenAddsTestCreditAndStartsPro() throws {
         let app = launch(tab: "settings")
         settings(app)
@@ -112,14 +113,23 @@ final class GymSweepSettingsTests: GymSweepCase {
         }
         XCTAssertTrue(text("plan-current").contains("Free"), "Got: \(text("plan-current"))")
         XCTAssertTrue(text("plan-balance").contains("$0"), "Got: \(text("plan-balance"))")
-        XCTAssertTrue(app.descendants(matching: .any)["plan-pack-30"].exists || reveal(app, app.descendants(matching: .any)["plan-pack-30"]),
-                      "The packs show, not on sale yet.")
+        for gone in ["Card", "Monero", "Not on sale yet", "Coming soon"] {
+            XCTAssertFalse(app.staticTexts[gone].exists, "No other way to buy is named: \(gone)")
+        }
+        let pack = app.buttons["plan-pack-10"]
+        XCTAssertTrue(find(app, pack), "The App Store packs are on sale.")
+        XCTAssertTrue(pack.label.contains("$10"), "Got: \(pack.label)")
+        pack.tap()
+        let added = app.descendants(matching: .any)["plan-shop-added"]
+        XCTAssertTrue(added.waitForExistence(timeout: 30), "The purchase lands in the balance.")
+        XCTAssertTrue(added.label.contains("$10"), "Got: \(added.label)")
+        shot(app, "plan-bought-pack")
         let add = app.buttons["plan-add-test"]
         XCTAssertTrue(find(app, add), "The gym's test credit is offered.")
         add.tap()
         let balance = app.descendants(matching: .any)["plan-balance"]
         _ = revealUp(app, balance, tries: 12)
-        expectation(for: NSPredicate(format: "label CONTAINS '$30'"), evaluatedWith: balance)
+        expectation(for: NSPredicate(format: "label CONTAINS '$40'"), evaluatedWith: balance)
         waitForExpectations(timeout: 60)
         shot(app, "plan-test-credit")
         let pro = app.buttons["plan-choose-pro"]
@@ -129,7 +139,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         _ = revealUp(app, current, tries: 12)
         expectation(for: NSPredicate(format: "label CONTAINS 'Pro'"), evaluatedWith: current)
         waitForExpectations(timeout: 30)
-        XCTAssertTrue(text("plan-balance").contains("$29"), "One voucher paid the first days. Got: \(text("plan-balance"))")
+        XCTAssertTrue(text("plan-balance").contains("$39"), "One voucher paid the first days. Got: \(text("plan-balance"))")
         shot(app, "plan-pro")
     }
 

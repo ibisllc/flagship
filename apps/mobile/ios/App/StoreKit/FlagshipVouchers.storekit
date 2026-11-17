@@ -1,0 +1,68 @@
+{
+  "identifier" : "5F0C1D2E",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "10.0",
+      "familyShareable" : false,
+      "internalID" : "6755000010",
+      "localizations" : [
+        {
+          "description" : "$10 of Flagship credit.",
+          "displayName" : "$10 of credit",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.flagshipserver.app.vouchers.10",
+      "referenceName" : "Vouchers 10",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "30.0",
+      "familyShareable" : false,
+      "internalID" : "6755000030",
+      "localizations" : [
+        {
+          "description" : "$30 of Flagship credit.",
+          "displayName" : "$30 of credit",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.flagshipserver.app.vouchers.30",
+      "referenceName" : "Vouchers 30",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "120.0",
+      "familyShareable" : false,
+      "internalID" : "6755000120",
+      "localizations" : [
+        {
+          "description" : "$120 of Flagship credit.",
+          "displayName" : "$120 of credit",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.flagshipserver.app.vouchers.120",
+      "referenceName" : "Vouchers 120",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
