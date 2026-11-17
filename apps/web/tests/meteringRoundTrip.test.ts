@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { InMemoryMeterStorage, InMemoryTierStorage } from "@flagship/storage";
-import { handleUsageReport, type MeteringDeps } from "@flagship/control-plane";
+import { handleUsageReport, meterRecord, type MeteringDeps } from "@flagship/control-plane";
 import { UsageMeter } from "../src/tunnel/usageMeter.js";
 
 const GB = 1024 * 1024 * 1024;
@@ -57,9 +57,13 @@ describe("egress metering — relay and .com through the metering core", () => {
     expect(relay.throttleDelayMs("alice", RATE)).toBe(1000); // then 256 kbit/s
   });
 
-  it("a paid account over its allowance is never slowed", async () => {
-    const { relay } = await relayAgainstCom();
+  it("a paid account over its allowance is slowed until a prepaid top-up lifts it", async () => {
+    const { relay, com } = await relayAgainstCom();
     relay.add("bob", 300 * GB);
+    await relay.flush();
+    expect(relay.admits("bob")).toBe(false);
+    await meterRecord(com, "bob", "egress-topup", 100 * GB);
+    relay.add("bob", 1);
     await relay.flush();
     expect(relay.admits("bob")).toBe(true);
     expect(relay.throttleDelayMs("bob", RATE * 10)).toBe(0);
