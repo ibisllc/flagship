@@ -3461,7 +3461,7 @@ button.social-call-fab { position: fixed; right: 16px; bottom: calc(88px + env(s
 button.social-call-fab svg { width: 24px; height: 24px; }
 button.social-call-fab .social-fab-count { position: absolute; top: -4px; right: -4px; margin: 0; }
 #view-messages:has(.pe-bar) button.social-call-fab { bottom: calc(152px + env(safe-area-inset-bottom, 0px)); }
-#social-messages { padding-bottom: 72px; }
+#social-messages, #social-profile { padding-bottom: 72px; }
 @media (min-width: 700px) {
   button.social-call-fab { bottom: 24px; }
   #view-messages:has(.pe-bar) button.social-call-fab { bottom: 96px; }
@@ -3539,6 +3539,11 @@ button.vp-text-btn svg { width: 16px; height: 16px; }
 .vp-label { margin: 0; color: var(--vp-muted); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 400; }
 button.vp-fill-btn { width: auto; min-height: 44px; gap: 6px; border-radius: var(--radius-pill); background: var(--vp-fill); color: var(--vp-on-fill); border-color: transparent; font-weight: 600; }
 button.vp-fill-btn svg { width: 18px; height: 18px; }
+/* The call button floats bottom-right on a phone; keep New post beside the Posts label, out of its corner. */
+@media (max-width: 699px) {
+  .vp-posts-head { justify-content: flex-start; }
+  .vp-posts-head #page-new-post-open { margin-left: var(--space-3); }
+}
 .vp-empty { padding: 16px 18px; border-top: 1px solid var(--vp-rule); }
 .vp-post { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px 14px 18px; border-top: 1px solid var(--vp-rule); }
 .vp-post-head { display: flex; align-items: center; gap: 8px; }
