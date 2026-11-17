@@ -12,6 +12,8 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/tunnel-hello/v2",
     "flagship/daemon-status/v1",
     "flagship/box-health/v1",
+    // The outbound proxy's lane (server-daemon outboundProxy/lane.ts).
+    "flagship/box-proxy-lane/v1",
     "flagship/service-invite-list/v1",
     "flagship/service-invite-create-fetch/v1",
     "flagship/service-invite-co-manager/v1",

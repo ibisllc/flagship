@@ -16,6 +16,8 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/daemon-status/v1",
   // The health timer's report (server-daemon healthReporter.ts), hybrid on a strict installation.
   "flagship/box-health/v1",
+  // The outbound proxy's lane (server-daemon outboundProxy/lane.ts): a failing proxy's report and the order poll.
+  "flagship/box-proxy-lane/v1",
   "flagship/service-invite-list/v1",
   "flagship/service-invite-create-fetch/v1",
   "flagship/service-invite-co-manager/v1",
