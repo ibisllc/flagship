@@ -21,9 +21,11 @@ export class D1BlindVoucherStorage implements BlindVoucherStorage {
 
   async spend(items: ReadonlyArray<{ nullifier: string; keyId: string }>, day: string): Promise<boolean[]> {
     if (items.length === 0) return [];
-    const stmt = this.db.prepare("INSERT OR IGNORE INTO voucher_nullifiers (nullifier, key_id, spent_day) VALUES (?1, ?2, ?3)");
-    const res = await this.db.batch(items.map((i) => stmt.bind(i.nullifier, i.keyId, day)));
-    return res.map((r) => (r.meta?.changes ?? 0) === 1);
+    // Won = the row this statement inserted came back. Not `meta.changes`: inside a D1 batch it isn't the one
+    // statement's count (the live gym, 2026-11-17: of three fresh vouchers one was credited and two reported spent).
+    const sql = "INSERT INTO voucher_nullifiers (nullifier, key_id, spent_day) VALUES (?1, ?2, ?3) ON CONFLICT(nullifier) DO NOTHING RETURNING nullifier";
+    const res = await this.db.batch(items.map((i) => this.db.prepare(sql).bind(i.nullifier, i.keyId, day)));
+    return res.map((r, n) => (r.results ?? []).some((row) => (row as { nullifier?: unknown }).nullifier === items[n]!.nullifier));
   }
 
   async unspend(nullifiers: readonly string[]): Promise<void> {
