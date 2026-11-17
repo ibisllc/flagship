@@ -775,6 +775,21 @@
       "check": "signed-tags",
       "key": "android:flagship/voucher-order/v1",
       "reason": "The web shop's Stripe order commitment: only the webapp buys by card. iOS and Android sell through their own store (StoreKit, Play Billing) and never make a Stripe order."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:voici-front-language",
+      "reason": "voi.ci's own language rule: only the voi.ci site (apps/voici-site/tests/front.test.ts) and the Worker's front door (apps/com/test/voiciFrontDoor.test.ts) choose a language by it. The apps and the webapp never render voi.ci."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:voici-front-language",
+      "reason": "voi.ci's own language rule: only the voi.ci site (apps/voici-site/tests/front.test.ts) and the Worker's front door (apps/com/test/voiciFrontDoor.test.ts) choose a language by it. The apps and the webapp never render voi.ci."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:voici-front-language",
+      "reason": "voi.ci's own language rule: only the voi.ci site (apps/voici-site/tests/front.test.ts) and the Worker's front door (apps/com/test/voiciFrontDoor.test.ts) choose a language by it. The apps and the webapp never render voi.ci."
     }
   ]
 }
