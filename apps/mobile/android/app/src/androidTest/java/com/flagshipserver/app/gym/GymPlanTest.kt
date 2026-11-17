@@ -6,6 +6,9 @@
 
 package com.flagshipserver.app.gym
 
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -38,7 +41,9 @@ class GymPlanTest : GymBase() {
         gymShot("balance")
         tap("plan-choose-pro")
         eventually(20_000, "Pro shows its time left") { textOfTag("plan-time-left").contains("left") }
-        assertTrue(textOfTag("plan-current").contains("Pro"))
+        // The card has no text of its own: the plan name is a Text inside it.
+        val proInCard = hasText("Pro", substring = false) and hasAnyAncestor(hasTestTag("plan-current"))
+        assertTrue(composeRule.onAllNodes(proInCard, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         gymShot("pro")
     }
 
