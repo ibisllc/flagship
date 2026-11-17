@@ -229,6 +229,18 @@ public final class VoucherWalletEngine {
         }
     }
 
+    // MARK: bought vouchers
+
+    /// Vouchers a store rail just signed: added to the wallet and saved (compare-and-set, merged on a conflict).
+    /// True only once `.com` holds the sealed wallet with them, so the store purchase may be finished.
+    @discardableResult
+    public func addBought(_ vouchers: [Voucher]) async -> Bool {
+        guard canSpend, !vouchers.isEmpty else { return false }
+        if wallet == nil { await loadWallet() }
+        guard let w = wallet else { return false }
+        return await save(VoucherWalletSync.add(w, vouchers))
+    }
+
     // MARK: the gym's free test vouchers
 
     /// Only when `.com` offers them (the gym): `count` vouchers made here, signed blind, unblinded and kept.

@@ -75,13 +75,50 @@ public struct PublishedVoucherKey: Equatable, Sendable, Codable {
     public var issuing: Bool
 }
 
+/// Which rails sell vouchers on this `.com` (`rails` in `GET /api/payments/config`); absent means none.
+public struct PaymentRails: Equatable, Sendable {
+    public var stripe: Bool
+    public var apple: Bool
+    public var google: Bool
+    public init(stripe: Bool = false, apple: Bool = false, google: Bool = false) { self.stripe = stripe; self.apple = apple; self.google = google }
+    public static let off = PaymentRails()
+}
+
+/// One voucher pack as the stores sell it: `units` $1 vouchers under one product id.
+public struct VoucherProduct: Equatable, Sendable {
+    public var units: Int64
+    public var productId: String
+    public init(units: Int64, productId: String) { self.units = units; self.productId = productId }
+}
+
+/// Store product ids (`voucherPackProductId` / `voucherPackUnits` in the TS port): the same on both stores.
+public enum VoucherProducts {
+    public static let prefix = "com.flagshipserver.app.vouchers."
+
+    public static func productId(units: Int64) -> String { "\(prefix)\(units)" }
+
+    /// The pack size a product id sells, nil when it isn't one of ours.
+    public static func units(productId: String) -> Int64? {
+        guard productId.hasPrefix(prefix) else { return nil }
+        let rest = productId.dropFirst(prefix.count)
+        guard !rest.isEmpty, rest.count <= 6, rest.allSatisfy({ $0.isASCII && $0.isNumber }), rest.first != "0", let n = Int64(rest), n > 0 else { return nil }
+        return n
+    }
+}
+
 /// `GET /api/payments/config`: the numbers, the keys still accepted (each checked: its id must match its numbers),
 /// and whether this `.com` gives free test vouchers (the gym only).
 public struct PaymentsInfo: Equatable, Sendable {
     public var config: PaymentsConfig
     public var keys: [PublishedVoucherKey]
     public var testIssue: Bool
-    public init(config: PaymentsConfig, keys: [PublishedVoucherKey], testIssue: Bool) { self.config = config; self.keys = keys; self.testIssue = testIssue }
+    public var rails: PaymentRails
+    /// One per pack (served, else derived from `config.packs`).
+    public var products: [VoucherProduct]
+    public init(config: PaymentsConfig, keys: [PublishedVoucherKey], testIssue: Bool, rails: PaymentRails = .off, products: [VoucherProduct]? = nil) {
+        self.config = config; self.keys = keys; self.testIssue = testIssue; self.rails = rails
+        self.products = products ?? config.packs.map { VoucherProduct(units: $0, productId: VoucherProducts.productId(units: $0)) }
+    }
 
     public static func parse(_ v: JSONValue?) -> PaymentsInfo {
         let keys: [PublishedVoucherKey] = (v?["keys"]?.array ?? []).compactMap { k in
@@ -91,10 +128,21 @@ public struct PaymentsInfo: Equatable, Sendable {
             return PublishedVoucherKey(key: key, issueUntil: k["issueUntil"]?.time ?? 0, acceptUntil: k["acceptUntil"]?.time ?? 0,
                                        issuing: k["issuing"] == .bool(true))
         }
-        return PaymentsInfo(config: PaymentsConfig.parse(v?["config"]), keys: keys, testIssue: v?["testIssue"] == .bool(true))
+        let r = v?["rails"]
+        let rails = PaymentRails(stripe: r?["stripe"] == .bool(true), apple: r?["apple"] == .bool(true), google: r?["google"] == .bool(true))
+        let served: [VoucherProduct]? = v?["products"]?.array.map { list in
+            list.compactMap { p in
+                guard let units = p["units"]?.safeInt, units > 0, let id = p["productId"]?.string, VoucherProducts.units(productId: id) == units else { return nil }
+                return VoucherProduct(units: units, productId: id)
+            }
+        }
+        return PaymentsInfo(config: PaymentsConfig.parse(v?["config"]), keys: keys, testIssue: v?["testIssue"] == .bool(true), rails: rails,
+                            products: served?.isEmpty == false ? served : nil)
     }
 
     /// The key new vouchers are made under.
     public var issuingKey: VoucherPublicKey? { keys.first(where: { $0.issuing })?.key }
     public func key(_ id: String) -> VoucherPublicKey? { keys.first(where: { $0.key.keyId == id })?.key }
+    /// The pack size of one of our product ids (served list first).
+    public func units(productId: String) -> Int64? { products.first(where: { $0.productId == productId })?.units ?? VoucherProducts.units(productId: productId) }
 }
