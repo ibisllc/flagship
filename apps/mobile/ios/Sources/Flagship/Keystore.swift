@@ -336,6 +336,18 @@ public struct Keystore {
         try? keychainWrite(account: KCKey.accountReadTokens, data: data, sync: .deviceLocal)
     }
 
+    // MARK: - Store purchases (voucher requests in flight, the purchase log)
+
+    /// A device-local Keychain item for the in-app voucher shop (docs/payments-privacy-and-rails.md §11): it outlives
+    /// a reinstall, never syncs to iCloud, and holds no account name.
+    public static func shopItem(_ name: String) -> Data? { keychainRead(account: "com.flagship.shop.\(name)") }
+
+    public static func setShopItem(_ name: String, _ data: Data?) {
+        let slot = "com.flagship.shop.\(name)"
+        guard let data else { keychainDelete(account: slot); return }
+        try? keychainWrite(account: slot, data: data, sync: .deviceLocal)
+    }
+
     public static func accountDeviceSigningKey(
         umk: Data,
         accountId: String,
