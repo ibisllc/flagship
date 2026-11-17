@@ -47,6 +47,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     private var offerSdp: String?
     /// No CallKit call owns the audio session (an in-app call): this engine activated it and gives it back on stop.
     private var ownsAudio = false
+    let frameStats = CallFrameStats()
 
     /// The caller's camera, for a renderer (RTCMTLVideoView), once the offer made a video transceiver.
     public private(set) var remoteVideo: RTCVideoTrack?
@@ -64,6 +65,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         try attachTracks(pc, video: video)
         let answer = try await pc.answer(for: Self.noConstraints)
         try await pc.setLocalDescription(answer)
+        Self.capAudio(pc)
         let queued: [String] = lock.withLock { defer { pendingIce = [] }; return pendingIce }
         for c in queued { try? await pc.add(RTCIceCandidate(sdp: c, sdpMLineIndex: 0, sdpMid: "0")) }
         // One loopback host candidate: the signed answer carries it whole, so nothing trickles after it.
@@ -132,6 +134,17 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     }
 
     /// The offer made the transceivers: our tracks on them, and the frame layer on every sender and receiver.
+    /// Audio frames are sealed into a fixed 63-byte slot (voici-calls.md §3): 24 kbit/s CBR in 20 ms frames is 60
+    /// bytes. The signed SDP asks for it; the sender's own cap keeps a larger frame from ever being encoded and dropped.
+    private static func capAudio(_ pc: RTCPeerConnection) {
+        for t in pc.transceivers where t.mediaType == .audio {
+            let p = t.sender.parameters
+            guard !p.encodings.isEmpty else { continue }
+            for e in p.encodings { e.maxBitrateBps = NSNumber(value: 24_000) }
+            t.sender.parameters = p
+        }
+    }
+
     private func attachTracks(_ pc: RTCPeerConnection, video: Bool) throws {
         try lock.withLock {
             guard let frames else { throw CallMediaUnavailable() }
@@ -225,6 +238,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         guard pc.setConfiguration(config) else { throw CallMediaUnavailable() }
         activateAudioIfNeeded()
         try await pc.setLocalDescription(RTCSessionDescription(type: .offer, sdp: VoiciCalls.mungeSdp(raw)))
+        Self.capAudio(pc)
         try await pc.setRemoteDescription(RTCSessionDescription(type: .answer, sdp: sdp))
         let queued: [String] = lock.withLock { defer { pendingIce = [] }; return pendingIce }
         for c in queued { try? await pc.add(RTCIceCandidate(sdp: c, sdpMLineIndex: 0, sdpMid: "0")) }
@@ -316,6 +330,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
 
     public func stop() {
         CallTurnGate.shared.factory = nil
+        frameStats.end()
         let pc: RTCPeerConnection? = lock.withLock {
             stopped = true
             keys = nil
@@ -342,15 +357,73 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
 
 extension WebRTCCallMediaEngine: RTCFlagshipFrameCryptoDelegate {
     public func sealFrame(_ frame: Data, video: Bool) -> Data? {
-        guard let k = lock.withLock({ keys }) else { return nil }
+        guard let k = lock.withLock({ keys }) else {
+            frameStats.count(video ? "v-seal-nokey" : "a-seal-nokey", size: frame.count)
+            return nil
+        }
         let out = video ? k.sealVideo([UInt8](frame)) : k.sealAudio([UInt8](frame))
+        frameStats.count((video ? "v-seal-" : "a-seal-") + (out == nil ? "refused" : "ok"), size: frame.count)
         return out.map { Data($0) }
     }
 
     public func openFrame(_ frame: Data, video: Bool) -> Data? {
-        guard let k = lock.withLock({ keys }) else { return nil }
+        guard let k = lock.withLock({ keys }) else {
+            frameStats.count(video ? "v-open-nokey" : "a-open-nokey", size: frame.count)
+            return nil
+        }
         let out = video ? k.openVideo([UInt8](frame)) : k.openAudio([UInt8](frame))
+        frameStats.count((video ? "v-open-" : "a-open-") + (out == nil ? "failed" : "ok"), size: frame.count)
         return out.map { Data($0) }
+    }
+}
+
+/// Frame-layer counts for the device log (no content): every 2 s while frames flow, and once at the end, so a silent
+/// call shows whether the phone seals and opens audio at all (`a-seal-refused` with its largest size = frames over the
+/// 63-byte audio limit; `a-open-failed` = wrong keys or direction).
+final class CallFrameStats: @unchecked Sendable {
+    private let lock = NSLock()
+    private var counts: [String: (n: Int, max: Int)] = [:]
+    private var totals: [String: (n: Int, max: Int)] = [:]
+    private var timer: DispatchSourceTimer?
+
+    /// The whole call's count for one key (tests).
+    func total(_ key: String) -> (n: Int, max: Int) { lock.withLock { totals[key] ?? (0, 0) } }
+
+    func count(_ key: String, size: Int) {
+        let start: Bool = lock.withLock {
+            let c = counts[key] ?? (0, 0)
+            counts[key] = (c.n + 1, max(c.max, size))
+            let t = totals[key] ?? (0, 0)
+            totals[key] = (t.n + 1, max(t.max, size))
+            return timer == nil
+        }
+        if start { startTimer() }
+    }
+
+    private func startTimer() {
+        let t = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "flagship.call-frames"))
+        let installed: Bool = lock.withLock {
+            guard timer == nil else { return false }
+            timer = t
+            return true
+        }
+        guard installed else { return }
+        t.schedule(deadline: .now() + 2, repeating: 2)
+        t.setEventHandler { [weak self] in self?.flush("frames") }
+        t.resume()
+    }
+
+    func flush(_ label: String) {
+        let snap: [String: (n: Int, max: Int)] = lock.withLock { defer { counts = [:] }; return counts }
+        guard !snap.isEmpty else { return }
+        let line = snap.keys.sorted().map { "\($0)=\(snap[$0]!.n) (max \(snap[$0]!.max) B)" }.joined(separator: ", ")
+        voiciCallLog.notice("\(label, privacy: .public): \(line, privacy: .public)")
+    }
+
+    func end() {
+        let t: DispatchSourceTimer? = lock.withLock { defer { timer = nil }; return timer }
+        t?.cancel()
+        flush("frames at end")
     }
 }
 

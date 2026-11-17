@@ -569,6 +569,7 @@ extension VoiciCallCenter: CXProviderDelegate {
     }
 
     nonisolated public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+        CallMediaFactory.prepareAudioSession()
         Task { @MainActor in
             if let r = self.ringing, r.id == action.callUUID {
                 self.answerRing()
