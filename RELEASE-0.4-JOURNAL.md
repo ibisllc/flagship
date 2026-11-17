@@ -1316,3 +1316,8 @@ Accept messages" even while messages are on.
   - The iOS Plan screen is still being built by its sub-agent, which holds native-build.lock.
   - Merge after iOS lands and builds. That run also needs the `VOUCHER_SIGNING_KEYS` gym secret and a gym refresh.
   - The owner's questions are in §5.11 and §5.9 of docs/payments-privacy-and-rails.md and in the agent report: wallet key custody, OHTTP in the apps before launch, a box copy of the wallet, tax and law, store setup, overage slowed rather than billed, and when new vouchers sync.
+- Merged payments steps 1-3 into release/0.4: 18 commits, rebased clean.
+  - Checks: tsc, i18n, parity and the voi.ci check are green; vitest 3475 plus 6316 tests pass.
+  - iOS: the voucher tests 15/15, PaymentsCenterTests 4/4 and the Plan UI gym test pass.
+  - Shell v230, D1 0152.
+  - Still to do: an OHTTP client in the apps; the live gym (needs the `VOUCHER_SIGNING_KEYS` gym secret and a refresh); the owner's questions; then steps 4-7 (Stripe, IAP, Monero, paid apps).
