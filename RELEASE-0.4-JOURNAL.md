@@ -1174,3 +1174,15 @@ Owner at the end: phone-to-phone call test, YubiKey steps (0.2 update notice, ru
   2.6× calibration vs 2.2 budget); the gym CPU report lists `POST /api/server/:x/health` over 10 ms (Workers Paid).
 - Cost: UpCloud, two 4xCPU-8GB boxes ~38 min + ~67 min, one 8xCPU-32GB artifact build VM (minutes); all deleted
   (only the playstore-test-0725 demo remains). Gym relays off again.
+
+### 2026-11-17 — Direct access live run: 16/16 on the gym; merged `0.4/direct-access-live`
+- New live group `direct-access` on a gym box with a public IPv6 (UpCloud `ipv6: true`): admin-root order (IRK refused
+  403), the box finds its address in the /64, `.com` learns it, name order, LE certificate on the box (YE2), one AAAA
+  + CAA published, outside HTTPS over IPv6 from this Mac (200, SAN = the direct name), the relay has no cert for it,
+  `.com` probe, withdrawal (name off: no record; access off: box stops listening), teardown. Gym-only direct apex
+  `fshp.gym.flagship.services` (gym-0.4 `fcfea27c2`); gym artifact `fcfea27c2f5a`. Cost under €0.25; all VMs deleted.
+- Real fixes merged: names with `--` in positions 3-4 refused (LE never issues them; TS/webapp/Swift/Kotlin + vectors);
+  the box hands `.com` the owner's off order (records no longer outlive the listener). Checks: tsc, i18n, parity,
+  2488 protocol/control-plane/daemon/com tests, 8288 webapp+daemon tests.
+- Owner before launch: delete production's old proxied `*.fshp.app` / `www` records (direct-access doc step 6); set the
+  two direct-zone secrets on production `.com`; LE rate-limit request for `fshp.app` (F17).
