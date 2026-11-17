@@ -200,6 +200,28 @@ class OrgClient(private val http: OrgHttp) {
 
     suspend fun revoke(orgId: String, body: JsonObject) { call("POST", "/api/orgs/$orgId/revokes", body) }
 
+    /** The Business plan as `.com` serves it (public; docs/plans-and-backup-offer.md §3). */
+    suspend fun plan(orgId: String): com.flagshipserver.app.core.payments.OrgPlanServed? =
+        com.flagshipserver.app.core.payments.OrgPlanServed.parse(call("GET", "/api/orgs/$orgId/plan"))
+
+    /** The org's sealed voucher wallet, or null before the first write. */
+    suspend fun voucherWallet(orgId: String): JsonObject? {
+        val (status, json) = http.call("GET", "/api/orgs/$orgId/voucher-wallet", null)
+        if (status == 404) return null
+        if (status !in 200..299) throw OrgClientException(status, str(json, "code") ?: "")
+        return json
+    }
+
+    /** Stores the next version under one org admin's approval; a version conflict answers the stored blob to merge. */
+    suspend fun putVoucherWallet(orgId: String, blob: JsonObject, write: JsonObject, approval: OrgApproval): com.flagshipserver.app.core.payments.OrgWalletPut {
+        val (status, json) = http.call("PUT", "/api/orgs/$orgId/voucher-wallet", buildJsonObject {
+            put("blob", blob); put("write", write); put("approvals", buildJsonArray { add(OrgJson.approval(approval)) })
+        })
+        if (status in 200..299) return com.flagshipserver.app.core.payments.OrgWalletPut.Stored(num(json, "version") ?: 0)
+        if (status == 409 && str(json, "code") == "version-conflict") return com.flagshipserver.app.core.payments.OrgWalletPut.Conflict(json["wallet"] as? JsonObject)
+        throw OrgClientException(status, str(json, "code") ?: "")
+    }
+
     /** Stores one sealed entry, approved by this org admin over its write form. */
     suspend fun putDirectory(orgId: String, entry: com.flagshipserver.app.core.pq.OrgDirectorySealed, approval: OrgApproval) {
         call("POST", "/api/orgs/$orgId/directory", buildJsonObject { put("entry", OrgJson.sealed(entry)); put("approvals", buildJsonArray { add(OrgJson.approval(approval)) }) })

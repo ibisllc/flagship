@@ -399,6 +399,15 @@ class MainActivity : FragmentActivity() {
             },
             local = com.flagshipserver.app.core.payments.PrefsPaymentsLocalStore(applicationContext),
         )
+        // The Business plan for orgs (docs/plans-and-backup-offer.md §3): each org's wallet, opened by its org admins.
+        val orgsForPlan = mocks?.orgs ?: liveOrgs
+        com.flagshipserver.app.viewmodels.OrgPlanCenters.installLive(
+            orgsForPlan,
+            mocks?.payments ?: com.flagshipserver.app.api.LivePaymentsClient(OkHttpJsonTransport(okHttp)),
+            quietUmk = { paymentsKeys.umk() },
+            local = com.flagshipserver.app.core.payments.PrefsOrgPaymentsLocal(applicationContext),
+        )
+        mocks?.orgPlans?.let { com.flagshipserver.app.viewmodels.OrgPlanCenters.factory = it }
         // The Google Play voucher shop (§11): only where this copy may sell (release: installed by Play).
         // Without the encrypted store there is no shop: a paid-for request set must survive a crash.
         val shopStore: com.flagshipserver.app.core.payments.ShopStore? = if (mocks != null) com.flagshipserver.app.core.payments.MemoryShopStore()
@@ -979,7 +988,7 @@ class MainActivity : FragmentActivity() {
                     LocalSessionStore provides sessionStore,
                     com.flagshipserver.app.core.LocalPodClients provides podClients,
                     com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else mocks?.shares),
-                    com.flagshipserver.app.viewmodels.LocalOrgs provides liveOrgs,
+                    com.flagshipserver.app.viewmodels.LocalOrgs provides (mocks?.orgs ?: liveOrgs),
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,
@@ -1045,6 +1054,8 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.payments.PaymentsCenter.shared?.let { c ->
             lifecycleScope.launch {
                 runCatching { c.refresh(); c.tick() }
+                // Each org this phone administers pays the same way, from the org's own wallet.
+                runCatching { com.flagshipserver.app.viewmodels.OrgPlanCenters.tickAll() }
                 // Store purchases paid but not yet in the wallet (an app killed mid-purchase) finish here.
                 runCatching { com.flagshipserver.app.core.payments.VoucherShop.shared?.resume() }
             }
