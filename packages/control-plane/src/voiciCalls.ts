@@ -630,18 +630,24 @@ export async function authorizeVoiciCallKeyDevice(
   username: string,
   callId: string,
   join: VoiciCallKeyJoinAuth | undefined,
+  /** Told which check refused (a reason code, never a key), for the operator's log. */
+  refused?: (code: string) => void,
 ): Promise<{ deviceRef: string; callKeyPub: string } | null> {
   const u = username.toLowerCase();
   const now = (deps.now ?? Date.now)();
-  if (!join || !CALL_ID.test(callId) || !isVoiciCallKeyPub(join.callKeyPub)) return null;
-  if (!verifyVoiciCallJoin({ username: u, callId, deviceId: join.deviceId, callKeyPub: join.callKeyPub, issuedAt: join.issuedAt }, join.signature, now)) return null;
+  const no = (code: string) => (refused?.(code), null);
+  if (!join || !CALL_ID.test(callId) || !isVoiciCallKeyPub(join.callKeyPub)) return no("malformed");
+  if (!verifyVoiciCallJoin({ username: u, callId, deviceId: join.deviceId, callKeyPub: join.callKeyPub, issuedAt: join.issuedAt }, join.signature, now)) return no("join-signature-or-time");
   const rec = await deps.calls.getCallKey(u, join.deviceId);
-  if (!rec || rec.callKeyPub !== join.callKeyPub || (await deps.calls.isCallKeyRevoked(rec.callKeyPub))) return null;
+  if (!rec) return no("no-bound-key-for-device");
+  if (rec.callKeyPub !== join.callKeyPub) return no("key-differs-from-bound");
+  if (await deps.calls.isCallKeyRevoked(rec.callKeyPub)) return no("key-revoked");
   const page = await deps.voici.getPage(u);
-  if (!page || !verifyVoiciCallKeyBinding({ username: rec.username, deviceId: rec.deviceId, callKeyPub: rec.callKeyPub, createdAt: rec.createdAt }, rec.signature, { ownerSignPub: page.ownerSignPub, username: u })) return null;
+  if (!page) return no("no-page");
+  if (!verifyVoiciCallKeyBinding({ username: rec.username, deviceId: rec.deviceId, callKeyPub: rec.callKeyPub, createdAt: rec.createdAt }, rec.signature, { ownerSignPub: page.ownerSignPub, username: u })) return no("binding-not-under-page-key");
   const user = await deps.usernames.get(u);
-  if (!user?.adminRootPubHex) return null;
-  if (!(await adminDeviceIds(deps.grants, u, user.adminRootPubHex, now)).has(join.deviceId)) return null;
+  if (!user?.adminRootPubHex) return no("no-admin-root");
+  if (!(await adminDeviceIds(deps.grants, u, user.adminRootPubHex, now)).has(join.deviceId)) return no("not-admin-device");
   return { deviceRef: voiciCallDeviceRef(join.callKeyPub), callKeyPub: join.callKeyPub };
 }
 
