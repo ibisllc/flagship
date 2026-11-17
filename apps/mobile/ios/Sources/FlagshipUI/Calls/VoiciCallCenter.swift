@@ -301,6 +301,9 @@ public final class VoiciCallCenter: NSObject {
     }
 
     private func endNow() {
+        // No call: nothing to end. CallKit resets its provider when it starts (the simulator does at every launch),
+        // and an idle phone must not show "Call ended" over everything.
+        if phase == .idle, session == nil, callUUID == nil { return }
         guard let s = session else { return finish("hangup") }
         switch phase {
         case .ringing, .needsUnlock: s.decline()
