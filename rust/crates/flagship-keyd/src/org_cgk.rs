@@ -6,8 +6,11 @@
 //! version and the key it opened, and keyd replays the chain under a narrower rule than the box's
 //! full verifier (genesis with every admin's consent, then `direct` transitions only), checks one
 //! approval of the ring by an org admin of the record it names, that the version is above the one it
-//! holds and names this box, and that the key matches the ring's commitment. Both backends read
-//! `packages/protocol/test-vectors/keyd-org-cgk/vectors.json`.
+//! holds and names this box, and that the key matches the ring's commitment. The approval must
+//! stand under the newest record shown (each signer still an org admin there with the same keys; an
+//! approval under an older record made before the next one existed), the chain must reach the head
+//! keyd verified before unchanged, and the next version must link to the ring keyd holds (05c review
+//! F4). Both backends read `packages/protocol/test-vectors/keyd-org-cgk/vectors.json`.
 
 use crate::crypto::{from_hex, sha256};
 use crate::service::safe_integer;
@@ -37,6 +40,32 @@ pub struct OrgCgkPin {
     pub genesis_hash: String,
     pub server_domain: String,
     pub cgk_version: u64,
+    /// The newest authority record keyd verified: a later chain must reach it unchanged.
+    pub oar_version: Option<u64>,
+    pub oar_hash: Option<String>,
+    /// SHA-256 of the canonical ring keyd holds: the next version must name it as `prevSha256`.
+    pub cgk_ring_sha256: Option<String>,
+}
+
+/// What an adoption verified: the key and version, the chain head, and the adopted ring's hash.
+pub struct Adopted {
+    pub key: [u8; 32],
+    pub version: u64,
+    pub oar_version: u64,
+    pub oar_hash: String,
+    pub ring_sha256: String,
+}
+
+impl std::fmt::Debug for Adopted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Adopted")
+            .field("key", &"<redacted>")
+            .field("version", &self.version)
+            .field("oar_version", &self.oar_version)
+            .field("oar_hash", &self.oar_hash)
+            .field("ring_sha256", &self.ring_sha256)
+            .finish()
+    }
 }
 
 /// A refusal: the code both backends agree on, and a detail.
@@ -148,17 +177,49 @@ pub fn check_pin(v: &Value) -> R<OrgCgkPin> {
         return fail("malformed", "serverDomain");
     }
     let cgk_version = u(o, "cgkVersion")?;
+    let (oar_version, oar_hash) = match (o.get("oarVersion"), o.get("oarHash")) {
+        (None, None) => (None, None),
+        (Some(_), Some(_)) => {
+            let h = s(o, "oarHash")?;
+            if !is_lower_hex(h, 64) {
+                return fail("malformed", "oarHash");
+            }
+            (Some(u(o, "oarVersion")?), Some(h.to_owned()))
+        }
+        _ => return fail("malformed", "oarVersion and oarHash"),
+    };
+    let cgk_ring_sha256 = match o.get("cgkRingSha256") {
+        None => None,
+        Some(_) => {
+            let h = s(o, "cgkRingSha256")?;
+            if !is_lower_hex(h, 64) {
+                return fail("malformed", "cgkRingSha256");
+            }
+            Some(h.to_owned())
+        }
+    };
     Ok(OrgCgkPin {
         org_id: org_id.into(),
         genesis_hash: genesis_hash.into(),
         server_domain: server_domain.into(),
         cgk_version,
+        oar_version,
+        oar_hash,
+        cgk_ring_sha256,
     })
 }
 
 #[must_use]
 pub fn pin_json(p: &OrgCgkPin) -> String {
-    serde_json::json!({ "orgId": p.org_id, "genesisHash": p.genesis_hash, "serverDomain": p.server_domain, "cgkVersion": p.cgk_version }).to_string()
+    let mut v = serde_json::json!({ "orgId": p.org_id, "genesisHash": p.genesis_hash, "serverDomain": p.server_domain, "cgkVersion": p.cgk_version });
+    if let (Some(m), Some(ver), Some(h)) = (v.as_object_mut(), p.oar_version, &p.oar_hash) {
+        m.insert("oarVersion".into(), ver.into());
+        m.insert("oarHash".into(), h.clone().into());
+    }
+    if let (Some(m), Some(h)) = (v.as_object_mut(), &p.cgk_ring_sha256) {
+        m.insert("cgkRingSha256".into(), h.clone().into());
+    }
+    v.to_string()
 }
 
 // ── the record ──────────────────────────────────────────────────────────
@@ -646,6 +707,16 @@ fn verify_chain(chain: Option<&Value>, pin: &OrgCgkPin, now: u64) -> R<Vec<Recor
         }
         records.push(r);
     }
+    // The head keyd verified before must still be in this chain, unchanged (05c review F4).
+    if let (Some(ver), Some(h)) = (pin.oar_version, &pin.oar_hash) {
+        let held = usize::try_from(ver).ok().and_then(|i| records.get(i));
+        let Some(held) = held else {
+            return fail("stale-chain", format!("the chain ends below v{ver}"));
+        };
+        if held.hash() != *h {
+            return fail("stale-chain", format!("the chain forks at v{ver}"));
+        }
+    }
     Ok(records)
 }
 
@@ -663,7 +734,7 @@ fn recipient_ok(r: &str) -> bool {
 ///
 /// # Errors
 /// [`OrgCgkError`] with the same code the TypeScript backend gives.
-pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> R<([u8; 32], u64)> {
+pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> R<Adopted> {
     let records = verify_chain(args.get("chain"), pin, now)?;
     let ring = obj(args.get("ring"), "ring")?;
     if !keys_are(ring, RING_KEYS) {
@@ -721,6 +792,13 @@ pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> 
     }
     if issued_at > now.saturating_add(MAX_SKEW_MS) {
         return fail("future", "");
+    }
+    if pin
+        .cgk_ring_sha256
+        .as_ref()
+        .is_some_and(|held| version == pin.cgk_version.saturating_add(1) && prev != held)
+    {
+        return fail("prev-hash", "");
     }
     let recips = list(args.get("recipients"), "recipients")?;
     let mut lines = Vec::new();
@@ -784,6 +862,42 @@ pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> 
             return fail("not-an-admin", sgn.clone());
         }
     }
+    // Under the newest record shown: each signer still an org admin there with the same keys, and an
+    // approval under an older record made before the record after it (05c review F4).
+    let Some(head) = records.last() else {
+        return fail("malformed", "chain");
+    };
+    for sgn in &signers {
+        let then = at.admin(sgn);
+        let still = head.admin(sgn);
+        let same = match (then, still) {
+            (Some(t), Some(n)) => n.kind == "admin" && n.ed == t.ed && n.ml == t.ml,
+            _ => false,
+        };
+        if !same {
+            return fail(
+                "stale-oar",
+                format!("{sgn} is not an org admin of v{}", head.version),
+            );
+        }
+    }
+    if at.version != head.version {
+        let next = records
+            .iter()
+            .find(|r| r.version == at.version.saturating_add(1));
+        let Some(next) = next else {
+            return fail("stale-oar", "");
+        };
+        for x in &apps {
+            let t = obj(Some(x), "approval").and_then(|o| u(o, "issuedAt"))?;
+            if t >= next.issued_at {
+                return fail(
+                    "stale-oar",
+                    format!("approved under v{} after v{}", at.version, next.version),
+                );
+            }
+        }
+    }
     let key_hex = args.get("key").and_then(Value::as_str).unwrap_or("");
     if !is_lower_hex(key_hex, 64) {
         return fail("malformed", "key");
@@ -795,5 +909,11 @@ pub fn verify_adoption(args: &Map<String, Value>, pin: &OrgCgkPin, now: u64) -> 
     }
     let mut key = [0u8; 32];
     key.copy_from_slice(&from_hex(key_hex).unwrap_or_default());
-    Ok((key, version))
+    Ok(Adopted {
+        key,
+        version,
+        oar_version: head.version,
+        oar_hash: head.hash(),
+        ring_sha256: sha_hex(order.as_bytes()),
+    })
 }

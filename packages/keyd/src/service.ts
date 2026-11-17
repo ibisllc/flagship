@@ -615,7 +615,7 @@ export class KeydService {
       }
       case "org.pin": {
         // The org this box belongs to, set once with the boot ceremony's token (as a raw key is).
-        noExtraArgs(a, ["orgId", "genesisHash", "serverDomain", "cgkVersion", "ceremony"]);
+        noExtraArgs(a, ["orgId", "genesisHash", "serverDomain", "cgkVersion", "oarVersion", "oarHash", "ceremony"]);
         const token = hexArg(a, "ceremony", { exact: 32 });
         const c = this.#ceremony;
         if (!c || this.#now() > c.notAfter || !Buffer.from(c.token).equals(Buffer.from(token))) {
@@ -623,7 +623,13 @@ export class KeydService {
         }
         let pin: OrgCgkPin;
         try {
-          pin = checkOrgCgkPin({ orgId: a.orgId, genesisHash: a.genesisHash, serverDomain: a.serverDomain, cgkVersion: a.cgkVersion });
+          pin = checkOrgCgkPin({
+            orgId: a.orgId,
+            genesisHash: a.genesisHash,
+            serverDomain: a.serverDomain,
+            cgkVersion: a.cgkVersion,
+            ...(a.oarVersion !== undefined || a.oarHash !== undefined ? { oarVersion: a.oarVersion, oarHash: a.oarHash } : {}),
+          });
         } catch (e) {
           throw new KeydError("bad-request", (e as Error).message);
         }
@@ -639,7 +645,7 @@ export class KeydService {
         // A rotated org CGK, only on evidence keyd checks itself (orgCgk.ts): never the daemon's word.
         noExtraArgs(a, ["chain", "ring", "recipients", "approvals", "key"]);
         if (!this.#orgPin) throw new KeydError("forbidden", "no org is pinned for this box");
-        let adopted: { key: Uint8Array; version: number };
+        let adopted: ReturnType<typeof verifyOrgCgkAdoption>;
         try {
           adopted = verifyOrgCgkAdoption(a, this.#orgPin, this.#now());
         } catch (e) {
@@ -649,7 +655,8 @@ export class KeydService {
         this.#store?.save("cgk", adopted.key);
         this.#cgk?.fill(0);
         this.#cgk = adopted.key;
-        this.#saveOrgPin({ ...this.#orgPin, cgkVersion: adopted.version });
+        // The head and the ring keyd now holds: a later chain must reach this head, the next ring link to this one.
+        this.#saveOrgPin({ ...this.#orgPin, cgkVersion: adopted.version, oarVersion: adopted.oarVersion, oarHash: adopted.oarHash, cgkRingSha256: adopted.ringSha256 });
         return { result: { version: adopted.version } };
       }
       case "archive.pool.add":

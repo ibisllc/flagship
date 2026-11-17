@@ -1056,6 +1056,8 @@ impl KeydService {
                         "genesisHash",
                         "serverDomain",
                         "cgkVersion",
+                        "oarVersion",
+                        "oarHash",
                         "ceremony",
                     ],
                 )?;
@@ -1092,22 +1094,27 @@ impl KeydService {
                     return Err(KeydError::forbidden("no org is pinned for this box"));
                 };
                 let now = u64::try_from((self.clock)()).unwrap_or(0);
-                let (key, version) =
-                    crate::org_cgk::verify_adoption(a, &pin, now).map_err(|e| {
-                        if e.code == "malformed" {
-                            KeydError::bad_request(e.to_string())
-                        } else {
-                            KeydError::forbidden(e.to_string())
-                        }
-                    })?;
-                let key = key32(&Zeroizing::new(key.to_vec()));
+                let adopted = crate::org_cgk::verify_adoption(a, &pin, now).map_err(|e| {
+                    if e.code == "malformed" {
+                        KeydError::bad_request(e.to_string())
+                    } else {
+                        KeydError::forbidden(e.to_string())
+                    }
+                })?;
+                let version = adopted.version;
+                let key = key32(&Zeroizing::new(adopted.key.to_vec()));
                 if let Some(dir) = &self.store {
                     save_key_file(dir, "cgk", &key)
                         .map_err(|_| KeydError::failed("internal error"))?;
                 }
                 self.cgk = Some(key);
+                // The head and the ring keyd now holds: a later chain must reach this head, the
+                // next ring link to this one.
                 self.save_org_pin(crate::org_cgk::OrgCgkPin {
                     cgk_version: version,
+                    oar_version: Some(adopted.oar_version),
+                    oar_hash: Some(adopted.oar_hash.clone()),
+                    cgk_ring_sha256: Some(adopted.ring_sha256.clone()),
                     ..pin
                 })?;
                 done(obj! { "version" => version })

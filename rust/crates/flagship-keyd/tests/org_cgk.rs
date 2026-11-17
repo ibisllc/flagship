@@ -78,7 +78,8 @@ fn shared_vectors() {
         let name = case["name"].as_str().unwrap();
         let got = verify_adoption(&args_for(&v, &a, case), &pin_for(&v, case), now);
         if case["expect"]["ok"] == true {
-            let (key, version) = got.unwrap_or_else(|e| panic!("{name}: refused {e}"));
+            let adopted = got.unwrap_or_else(|e| panic!("{name}: refused {e}"));
+            let (key, version) = (adopted.key, adopted.version);
             assert_eq!(
                 version,
                 case["expect"]["version"].as_u64().unwrap(),
@@ -156,6 +157,19 @@ fn pin_then_adopt_through_the_service() {
     let saved: Value =
         serde_json::from_str(&std::fs::read_to_string(dir.join("org.json")).unwrap()).unwrap();
     assert_eq!(saved["cgkVersion"], 2);
+    // keyd keeps the head it verified and the ring it holds (05c F4): a chain cut below it is refused.
+    assert_eq!(saved["oarVersion"], 1);
+    assert_eq!(saved["oarHash"].as_str().map(str::len), Some(64));
+    assert_eq!(saved["cgkRingSha256"].as_str().map(str::len), Some(64));
+    let mut cut = adopt.clone();
+    let first = cut["chain"][0].clone();
+    cut["chain"] = json!([first]);
+    assert!(
+        call(&mut svc, "cgk.orgAdopt", cut)
+            .unwrap_err()
+            .message
+            .starts_with("stale-chain")
+    );
     assert_eq!(
         std::fs::read_to_string(dir.join("cgk.key")).unwrap().trim(),
         "62".repeat(32)

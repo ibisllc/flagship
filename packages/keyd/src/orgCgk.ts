@@ -16,7 +16,13 @@
  *    boot ceremony. keyd does not see freezes, so a frozen admin's approval still counts here;
  *  - the version is a `cgk` ring above the one keyd holds, names this box among its recipients,
  *    carries one approval by an org admin of the record it names, and the key matches its
- *    commitment.
+ *    commitment;
+ *  - the approval stands under the newest record keyd is shown (05c review F4): every signer is still
+ *    an org admin there with the same keys, and an approval under an older record was made before the
+ *    record after it existed;
+ *  - keyd keeps the chain head it last verified (`oarVersion`, `oarHash`) and refuses a chain that
+ *    ends below it or forks from it, so a truncated chain cannot bring back a removed admin; and the
+ *    hash of the ring it holds, so the next version must link to it (`prevSha256`).
  *
  * The Rust backend (`rust/crates/flagship-keyd/src/org_cgk.rs`) implements the same rule and both
  * read `packages/protocol/test-vectors/keyd-org-cgk/vectors.json`.
@@ -55,6 +61,11 @@ export interface OrgCgkPin {
   serverDomain: string;
   /** The org CGK version keyd holds; only a higher one is adopted. */
   cgkVersion: number;
+  /** The newest authority record keyd verified (version and hash): a later chain must reach it unchanged. */
+  oarVersion?: number;
+  oarHash?: string;
+  /** SHA-256 of the canonical ring keyd holds: the next version must name it as `prevSha256`. */
+  cgkRingSha256?: string;
 }
 
 export class OrgCgkError extends Error {
@@ -79,7 +90,18 @@ export function checkOrgCgkPin(v: unknown): OrgCgkPin {
   if (typeof o.genesisHash !== "string" || !HEX32.test(o.genesisHash)) fail("malformed", "genesisHash");
   if (typeof o.serverDomain !== "string" || !DOMAIN.test(o.serverDomain)) fail("malformed", "serverDomain");
   if (!isUint(o.cgkVersion)) fail("malformed", "cgkVersion");
-  return { orgId: o.orgId as string, genesisHash: o.genesisHash as string, serverDomain: o.serverDomain as string, cgkVersion: o.cgkVersion as number };
+  if ((o.oarVersion === undefined) !== (o.oarHash === undefined)) fail("malformed", "oarVersion and oarHash");
+  if (o.oarVersion !== undefined && !isUint(o.oarVersion)) fail("malformed", "oarVersion");
+  if (o.oarHash !== undefined && (typeof o.oarHash !== "string" || !HEX32.test(o.oarHash))) fail("malformed", "oarHash");
+  if (o.cgkRingSha256 !== undefined && (typeof o.cgkRingSha256 !== "string" || !HEX32.test(o.cgkRingSha256))) fail("malformed", "cgkRingSha256");
+  return {
+    orgId: o.orgId as string,
+    genesisHash: o.genesisHash as string,
+    serverDomain: o.serverDomain as string,
+    cgkVersion: o.cgkVersion as number,
+    ...(o.oarVersion !== undefined ? { oarVersion: o.oarVersion as number, oarHash: o.oarHash as string } : {}),
+    ...(o.cgkRingSha256 !== undefined ? { cgkRingSha256: o.cgkRingSha256 as string } : {}),
+  };
 }
 
 interface Key {
@@ -221,6 +243,12 @@ export function verifyOrgChainForKeyd(chain: unknown, pin: OrgCgkPin, now: numbe
     records.push(r);
     for (const [s, k] of mine) keys.set(`${r.version}:${s}`, k);
   }
+  // The head keyd verified before must still be in this chain, unchanged (05c review F4).
+  if (pin.oarVersion !== undefined) {
+    const held = records[pin.oarVersion];
+    if (!held) fail("stale-chain", `the chain ends below v${pin.oarVersion}`);
+    if (orgAuthorityHash(held!) !== pin.oarHash) fail("stale-chain", `the chain forks at v${pin.oarVersion}`);
+  }
   return records;
 }
 
@@ -230,7 +258,11 @@ const RING_KEYS = "issuedAt,keyCommitment,kind,oarVersion,orgId,prevSha256,recip
  * The whole check: returns the 32-byte CGK to adopt and its version, or throws `OrgCgkError`.
  * `args` is `{ chain, ring, recipients, approvals, key }` as the daemon sends it.
  */
-export function verifyOrgCgkAdoption(args: Record<string, unknown>, pin: OrgCgkPin, now: number): { key: Uint8Array; version: number } {
+export function verifyOrgCgkAdoption(
+  args: Record<string, unknown>,
+  pin: OrgCgkPin,
+  now: number,
+): { key: Uint8Array; version: number; oarVersion: number; oarHash: string; ringSha256: string } {
   const records = verifyOrgChainForKeyd(args.chain, pin, now);
   const ringObj = obj(args.ring, "ring");
   if (Object.keys(ringObj).sort().join(",") !== RING_KEYS) fail("malformed", "ring keys");
@@ -245,6 +277,7 @@ export function verifyOrgCgkAdoption(args: Record<string, unknown>, pin: OrgCgkP
   if (ring.kind !== "cgk") fail("not-cgk");
   if (ring.version <= pin.cgkVersion) fail("stale", `v${ring.version} is not above v${pin.cgkVersion}`);
   if (ring.issuedAt > now + ORG_MAX_SKEW_MS) fail("future");
+  if (pin.cgkRingSha256 !== undefined && ring.version === pin.cgkVersion + 1 && ring.prevSha256 !== pin.cgkRingSha256) fail("prev-hash");
   if (!Array.isArray(args.recipients)) fail("malformed", "recipients");
   const recipients = (args.recipients as unknown[]).map((x) => {
     const o = obj(x, "recipient");
@@ -265,6 +298,20 @@ export function verifyOrgCgkAdoption(args: Record<string, unknown>, pin: OrgCgkP
   const signers = approvals(args.approvals, ring.orgId, ring.oarVersion, order, now, keyOf);
   if (signers.length === 0) fail("threshold", "no approvals");
   for (const s of signers) if (at!.admins.find((a) => a.seatId === s)?.kind !== "admin") fail("not-an-admin", s);
+  // Under the newest record shown: each signer is still an org admin there with the same keys, and an approval
+  // under an older record was made before the record after it (05c review F4).
+  const head = records[records.length - 1]!;
+  for (const s of signers) {
+    const then = at!.admins.find((a) => a.seatId === s)!;
+    const nowAdmin = head.admins.find((a) => a.seatId === s);
+    if (nowAdmin?.kind !== "admin" || nowAdmin.binding.ed25519PubHex !== then.binding.ed25519PubHex || nowAdmin.binding.mldsaPubHex !== then.binding.mldsaPubHex) {
+      fail("stale-oar", `${s} is not an org admin of v${head.version}`);
+    }
+  }
+  if (at!.version !== head.version) {
+    const next = records[at!.version + 1]!;
+    for (const raw of args.approvals as unknown[]) if ((raw as { issuedAt: number }).issuedAt >= next.issuedAt) fail("stale-oar", `approved under v${at!.version} after v${next.version}`);
+  }
   if (typeof args.key !== "string" || !HEX32.test(args.key)) fail("malformed", "key");
   const key = Uint8Array.from(Buffer.from(args.key as string, "hex"));
   if (orgKeyCommitment(ring.orgId, "cgk", "*", ring.version, key) !== ring.keyCommitment) {
@@ -272,5 +319,5 @@ export function verifyOrgCgkAdoption(args: Record<string, unknown>, pin: OrgCgkP
     fail("commitment");
   }
   void TAG_ORG_KEY_RING;
-  return { key, version: ring.version };
+  return { key, version: ring.version, oarVersion: head.version, oarHash: orgAuthorityHash(head), ringSha256: orgSha256Hex(order) };
 }

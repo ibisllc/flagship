@@ -624,7 +624,12 @@ How the binding decisions were built, and what is still open. Not deployed, not 
   transitions only), needs a `cgk` ring above the version it holds that names this box, one org admin's approval
   as of the record it names, and the key's commitment. A chain moved by a founder's removal, a recovery or an
   overturn is refused (the box keeps its CGK until the next ceremony); keyd never sees freezes, so a frozen admin's
-  approval counts there. TS `packages/keyd/src/orgCgk.ts` and Rust `flagship-keyd/src/org_cgk.rs` replay the same
+  approval counts there. The approval must stand under the newest record shown: each signer still an org admin
+  there with the same keys, and an approval under an older record made before the next record existed. keyd keeps
+  the head it last verified (`oarVersion`, `oarHash`; the daemon hands its own at `org.pin`) and the hash of the
+  ring it holds, refuses a chain that ends below that head or forks from it (`stale-chain`), and needs the next
+  version's `prevSha256` to name the ring it holds (`prev-hash`), so a removed admin cannot rotate the CGK over a
+  truncated chain (05c review F4). TS `packages/keyd/src/orgCgk.ts` and Rust `flagship-keyd/src/org_cgk.rs` replay the same
   vectors (`test-vectors/keyd-org-cgk`). An org box never hands keyd a raw CGK any more.
 - **Install timeline.** Order status and install events accept an org server code's serial (pushes and Activity
   stay AuthCode-only); the appliance specializer reads the code's serial and the org registration route.
