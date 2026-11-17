@@ -1,4 +1,5 @@
 #if os(iOS)
+import AVFoundation
 import Darwin
 import Flagship
 import FlagshipCore
@@ -42,6 +43,32 @@ final class CallMediaLoopbackTests: XCTestCase {
         try await caller.applyAnswer(sdp: answer, iceServer: CallerIceServer(url: "turn:\(host):\(port)?transport=tcp", username: cred.user, credential: cred.secret))
 
         await fulfillment(of: [calleeUp, callerUp], timeout: 20)
+
+        // Audio as on an answered phone: CallKit hands over a voice-chat session (prepareAudioSession, then
+        // didActivate). Without it WebRTC's audio unit never runs and no audio frame is sealed or opened (the owner's
+        // silent call, 2026-11-16). The simulator's test host can't start the voice-processing unit
+        // (AUIOClient_StartIO -66637: no microphone), so the frame checks run on a device only.
+        #if targetEnvironment(simulator)
+        if true { return }
+        #endif
+        try Self.activateAudioLikeCallKit()
+        defer { CallMediaFactory.audioSessionDidDeactivate(AVAudioSession.sharedInstance()) }
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        for (name, e) in [("callee", callee), ("caller", caller)] {
+            let sealed = e.frameStats.total("a-seal-ok")
+            XCTAssertGreaterThan(sealed.n, 20, "\(name) sealed no audio")
+            XCTAssertLessThanOrEqual(sealed.max, 63, "\(name) encoded audio frames over the 63-byte limit")
+            XCTAssertEqual(e.frameStats.total("a-seal-refused").n, 0, "\(name) refused audio frames (max \(e.frameStats.total("a-seal-refused").max) B)")
+            XCTAssertGreaterThan(e.frameStats.total("a-open-ok").n, 20, "\(name) opened no audio")
+            XCTAssertEqual(e.frameStats.total("a-open-failed").n, 0, "\(name) failed to open audio")
+        }
+    }
+
+    static func activateAudioLikeCallKit() throws {
+        CallMediaFactory.prepareAudioSession()
+        let s = AVAudioSession.sharedInstance()
+        try s.setActive(true)
+        CallMediaFactory.audioSessionDidActivate(s)
     }
 
     /// This host's first non-loopback IPv4 (the simulator shares the Mac's interfaces).
