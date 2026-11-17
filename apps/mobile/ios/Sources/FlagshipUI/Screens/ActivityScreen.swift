@@ -425,9 +425,9 @@ public struct ActivityScreen: View {
     private func boxRow(entry: BoxActivityEntry, c: FSColors) -> some View {
         let row = eventRow(
             symbol: BoxEventLabels.symbol(entry),
-            tint: entry.ok ? c.primary : c.warning,
+            tint: BoxEventLabels.isWarning(entry) ? c.warning : c.primary,
             title: BoxEventLabels.title(entry) ?? "",
-            titleColor: entry.ok ? c.text : c.warning,
+            titleColor: BoxEventLabels.isWarning(entry) ? c.warning : c.text,
             detail: entry.detail,
             when: relative(ms: entry.ts), c: c)
         if let onOpenServer {

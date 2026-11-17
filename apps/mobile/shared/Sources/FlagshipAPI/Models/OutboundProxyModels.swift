@@ -89,12 +89,24 @@ public struct OutboundProxySummary: Codable, Equatable, Sendable {
         /// "direct", "ok", "failing" or "fallback".
         public let state: String
         public let since: Int64
+        /// The box's own English line; the apps show the sentence for `code` instead.
         public let lastError: String?
+        /// `unreachable`, `auth`, `refused` or `protocol` while failing; absent from older boxes.
+        public let code: String?
 
-        public init(state: String, since: Int64, lastError: String? = nil) {
+        public init(state: String, since: Int64, lastError: String? = nil, code: String? = nil) {
             self.state = state
             self.since = since
             self.lastError = lastError
+            self.code = code
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            state = try c.decode(String.self, forKey: .state)
+            since = (try? c.decodeIfPresent(Int64.self, forKey: .since)) ?? 0
+            lastError = (try? c.decodeIfPresent(String.self, forKey: .lastError)) ?? nil
+            code = (try? c.decodeIfPresent(String.self, forKey: .code)) ?? nil
         }
     }
 
@@ -121,5 +133,18 @@ public struct OutboundProxySetResponse: Codable, Equatable, Sendable {
     public init(ok: Bool?, outboundProxy: OutboundProxySummary?) {
         self.ok = ok
         self.outboundProxy = outboundProxy
+    }
+}
+
+/// The fallback lane (`POST /api/server/<domain>/proxy-order` on `.com`): the
+/// same signed order, never credentials, so the owner can fix or clear a proxy
+/// whose failure keeps the box offline. `.com` verifies the signature and the
+/// box picks it up on its next check.
+public struct OutboundProxyLaneRequest: Codable, Equatable, Sendable {
+    public let proxy: BoxProxyFields
+    public let signature: String
+    public init(proxy: BoxProxyFields, signature: String) {
+        self.proxy = proxy
+        self.signature = signature
     }
 }

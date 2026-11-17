@@ -782,6 +782,10 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// under 0.3): Home and its page tell the owner to update it. nil when it
     /// needs none (and for demo accounts, which Flagship updates itself).
     public let updateRequired: UpdateRequiredWire?
+    /// The box's outbound proxy isn't working (`failing`, the box may be
+    /// offline) or the box connects around it (`fallback`), from its
+    /// heartbeat or the lane: shown even when the box can't be reached.
+    public let proxyAlert: ProxyAlertWire?
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -799,7 +803,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         health: BoxHealth? = nil,
         orderIssuedAt: Int64? = nil,
         awaitingBackup: AwaitingBackupWire? = nil,
-        updateRequired: UpdateRequiredWire? = nil
+        updateRequired: UpdateRequiredWire? = nil,
+        proxyAlert: ProxyAlertWire? = nil
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
@@ -815,6 +820,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.orderIssuedAt = orderIssuedAt
         self.awaitingBackup = awaitingBackup
         self.updateRequired = updateRequired
+        self.proxyAlert = proxyAlert
     }
 
     public init(from decoder: Decoder) throws {
@@ -839,6 +845,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.orderIssuedAt = (try? c.decodeIfPresent(Int64.self, forKey: .orderIssuedAt)) ?? nil
         self.awaitingBackup = (try? c.decodeIfPresent(AwaitingBackupWire.self, forKey: .awaitingBackup)) ?? nil
         self.updateRequired = (try? c.decodeIfPresent(UpdateRequiredWire.self, forKey: .updateRequired)) ?? nil
+        self.proxyAlert = ((try? c.decodeIfPresent(ProxyAlertWire.self, forKey: .proxyAlert)) ?? nil).flatMap { $0.isKnown ? $0 : nil }
     }
 
     /// Encode mirrors the wire shape (the presence flag round-trips through a
@@ -863,6 +870,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(orderIssuedAt, forKey: .orderIssuedAt)
         try c.encodeIfPresent(awaitingBackup, forKey: .awaitingBackup)
         try c.encodeIfPresent(updateRequired, forKey: .updateRequired)
+        try c.encodeIfPresent(proxyAlert, forKey: .proxyAlert)
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -881,7 +889,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health, orderIssuedAt, awaitingBackup, updateRequired
+        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health, orderIssuedAt, awaitingBackup, updateRequired, proxyAlert
     }
 }
 
@@ -896,6 +904,27 @@ public struct UpdateRequiredWire: Codable, Equatable, Sendable {
         self.reason = reason
         self.certificateExpiresAt = certificateExpiresAt
     }
+}
+
+/// `/pods` `proxyAlert`: the server's outbound proxy isn't working.
+public struct ProxyAlertWire: Codable, Equatable, Sendable {
+    /// `failing` | `fallback`
+    public let state: String
+    /// `unreachable` | `auth` | `refused` | `protocol` (anything else reads as unreachable).
+    public let code: String?
+    public let since: Int64?
+    public init(state: String, code: String? = nil, since: Int64? = nil) {
+        self.state = state
+        self.code = code
+        self.since = since
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decode(String.self, forKey: .state)
+        code = (try? c.decodeIfPresent(String.self, forKey: .code)) ?? nil
+        since = (try? c.decodeIfPresent(Int64.self, forKey: .since)) ?? nil
+    }
+    var isKnown: Bool { state == "failing" || state == "fallback" }
 }
 
 /// `/pods` `awaitingBackup`: the backup a server waits for, and whether it is restoring it.

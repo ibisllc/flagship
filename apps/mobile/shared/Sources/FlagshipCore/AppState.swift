@@ -168,6 +168,11 @@ public final class AppState {
     /// Home marks them and their page asks the owner to update them.
     public var podsUpdateRequired: [String: UpdateRequiredWire] = [:]
 
+    /// Servers whose outbound proxy isn't working, per lowercased fqdn, from
+    /// `/pods` `proxyAlert`. Home marks them; their page shows the red line
+    /// even when the box itself can't be reached.
+    public var podsProxyAlert: [String: ProxyAlertWire] = [:]
+
     /// The Box Request Inbox (docs/box-request-inbox.md): ONE typed object,
     /// keyed by lowercased fqdn → the list of approvals that box is currently
     /// asking its owner for. Mirrors the backend's `/pods` `pendingRequests`

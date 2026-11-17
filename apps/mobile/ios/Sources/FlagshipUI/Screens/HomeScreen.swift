@@ -91,6 +91,8 @@ public struct HomeScreen: View {
     /// Servers that run a release this `.com` no longer fully serves (a 0.2
     /// box under 0.3), lowercased fqdn → what `/pods` says; their row says so.
     var updateRequired: [String: UpdateRequiredWire] = [:]
+    /// Servers whose outbound proxy isn't working (`/pods` `proxyAlert`), lowercased fqdn.
+    var proxyAlerts: [String: ProxyAlertWire] = [:]
     /// Servers this phone stopped trusting (lowercase FQDNs), shown with a red badge.
     var untrustedServers: Set<String> = []
     /// Move a server to the top of the owner's order (docs/server-order.md).
@@ -875,6 +877,13 @@ public struct HomeScreen: View {
         return s
     }
 
+    /// Home with the servers whose outbound proxy isn't working marked in red (`/pods` `proxyAlert`).
+    public func proxyAlerts(_ alerts: [String: ProxyAlertWire]) -> HomeScreen {
+        var s = self
+        s.proxyAlerts = alerts
+        return s
+    }
+
     /// Home with the servers that need an update marked (`/pods` `updateRequired`).
     public func updatesRequired(_ outdated: [String: UpdateRequiredWire]) -> HomeScreen {
         var s = self
@@ -952,6 +961,10 @@ public struct HomeScreen: View {
                             if !pod.isRevoked, updateRequired[pod.fqdn.lowercased()] != nil {
                                 FSPill(String(localized: "Needs an update"), kind: .renewing)
                                     .accessibilityIdentifier("pod-card-update-required")
+                            }
+                            if !pod.isRevoked, proxyAlerts[pod.fqdn.lowercased()] != nil {
+                                FSPill(String(localized: "Outbound proxy not working"), kind: .offline)
+                                    .accessibilityIdentifier("pod-card-proxy-alert")
                             }
                         }
                         .padding(.top, 2)

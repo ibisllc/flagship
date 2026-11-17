@@ -332,9 +332,15 @@ public protocol FlagshipServerClient: Sendable {
     /// public, cacheable 5 min).
     func inferenceModels() async throws -> InferenceCatalogResponse
 
-    /// The account's plan ("free", "hobby" = Pro, "maker" = Pro Max) from
-    /// `GET /api/users/:u/allowance` (account read token); nil when unknown.
+    /// The account's effective plan ("free", "hobby" = Pro, "maker" = Pro Max)
+    /// from `GET /api/users/:u/plan-attestation` (account read token), the
+    /// same source the Plan screen and the box read; nil when unknown.
     func accountTier(username: String) async throws -> String?
+
+    /// The outbound proxy's fallback lane: the signed order (never credentials)
+    /// to `POST /api/server/<domain>/proxy-order`, for a box its proxy keeps
+    /// offline (docs/outbound-proxy.md). No auth header: `.com` checks the signature.
+    func sendProxyOrderLane(serverDomain: String, _ req: OutboundProxyLaneRequest) async throws
 
     /// Retail box claim (docs/retail-box-setup.md §4 step 8): registers the box key from the claim
     /// receipt under the recipe's AuthCode (`POST /api/box-claim/key`), before the Wi-Fi password leaves.
@@ -382,6 +388,9 @@ public struct BoxClaimMailboxMessage: Codable, Sendable, Equatable {
 
 public extension FlagshipServerClient {
     func accountTier(username: String) async throws -> String? { nil }
+    func sendProxyOrderLane(serverDomain: String, _ req: OutboundProxyLaneRequest) async throws {
+        throw ScreensClientError.notImplemented("proxy order lane")
+    }
 }
 
 public extension FlagshipServerClient {
@@ -2496,6 +2505,14 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// The plan `accountTier(username:)` answers (nil = unknown).
     public var accountTierAnswer: String?
     public func accountTier(username: String) async throws -> String? { accountTierAnswer }
+    /// Orders sent through the proxy lane, and an error to throw once.
+    public private(set) var proxyLaneCalls: [(serverDomain: String, req: OutboundProxyLaneRequest)] = []
+    public var proxyLaneError: Error?
+    public func sendProxyOrderLane(serverDomain: String, _ req: OutboundProxyLaneRequest) async throws {
+        proxyLaneCalls.append((serverDomain, req))
+        GymProbe.note("lane proxy \(req.proxy.kind) for \(serverDomain)")
+        if let e = proxyLaneError { proxyLaneError = nil; throw e }
+    }
     private var recoveryStore: [String: RecoveryEnvelope] = [:]
     /// Username-keyed mirror of the Worker's `webauthn_recovery` row,
     /// holding the Task #74 passphrase-gate hashes so the gated fetch can
@@ -4506,14 +4523,19 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func accountTier(username: String) async throws -> String? {
         let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/allowance"))
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/plan-attestation"))
         req.httpMethod = "GET"
         let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
             try await send($0)
         }
         guard (200..<300).contains(status) else { return nil }
-        struct Allowance: Decodable { let tier: String? }
-        return try? JSONDecoder().decode(Allowance.self, from: data).tier
+        struct Attestation: Decodable { let tier: String? }
+        return try? JSONDecoder().decode(Attestation.self, from: data).tier
+    }
+
+    public func sendProxyOrderLane(serverDomain: String, _ req: OutboundProxyLaneRequest) async throws {
+        let d = serverDomain.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        try await postJson("/api/server/\(d)/proxy-order", body: try JSONEncoder().encode(req))
     }
 
     public func getAppLinks(

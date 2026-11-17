@@ -45,10 +45,49 @@ public enum OutboundProxyCopy {
     public static func statusLine(_ s: OutboundProxySummary.Status) -> String? {
         switch s.state {
         case "ok": return String(localized: "Working")
-        case "failing": return String(localized: "Not working: \(s.lastError ?? "the proxy isn't answering")")
-        case "fallback": return String(localized: "Using a direct connection: the proxy isn't answering")
+        case "failing", "fallback": return alertLine(state: s.state, code: s.code)
         default: return nil
         }
+    }
+
+    /// Why the proxy fails, by the box's code (its English `lastError` is never shown).
+    public static func reason(code: String?) -> String {
+        switch code {
+        case "auth": return String(localized: "The proxy refused the username or password.")
+        case "refused": return String(localized: "The proxy refused the connection.")
+        case "protocol": return String(localized: "The proxy gave an answer the server doesn't understand.")
+        default: return String(localized: "Can't reach the proxy.")
+        }
+    }
+
+    /// The server page's loud line: red while failing, a warning while connecting around it. Nil otherwise.
+    public static func alertLine(state: String, code: String?) -> String? {
+        switch state {
+        case "failing": return String(localized: "The outbound proxy isn't working: \(reason(code: code))")
+        case "fallback": return String(localized: "The outbound proxy isn't working, so this server is connecting directly: \(reason(code: code))")
+        default: return nil
+        }
+    }
+
+    public static let offlineUntilFixed = String(localized: "This server is offline until its proxy works again or you change it.")
+    public static let laneSent = String(localized: "Sent. The server picks up the change within a few minutes, even while its proxy is down.")
+    public static let laneNoPassword = String(localized: "Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first.")
+}
+
+/// The fallback lane through `.com` (docs/outbound-proxy.md): used when the
+/// box can't be reached, for orders that carry no new password.
+public enum OutboundProxyLane {
+    /// Only an order without credentials: turning off, a proxy that needs no
+    /// password, or the same proxy keeping the password the box holds.
+    public static func allows(credentials: BoxProxyCredentials?) -> Bool { credentials == nil }
+
+    /// The box itself didn't answer (network error or timeout, or the relay
+    /// had no box to hand it to), as opposed to an HTTP answer from the box.
+    public static func boxUnreachable(_ error: Error) -> Bool {
+        if error is URLError { return true }
+        if case .http(let status, _)? = error as? ScreensClientError, [502, 504].contains(status),
+           ScreensClientError.boxReason(error) == nil { return true }
+        return false
     }
 }
 
@@ -105,15 +144,23 @@ public final class OutboundProxyController {
 
     private let serverDomain: String
     private let client: any ScreensClient
+    private let lane: (any FlagshipServerClient)?
     private let signer: OutboundProxySigner
     private let now: () -> Int64
+    /// The box can't be reached (its proxy keeps it offline): send through `.com` at once.
+    public var boxUnreachable = false
+    /// The last change went through `.com`'s lane, not to the box.
+    public private(set) var sentByLane = false
 
     public init(serverDomain: String, summary: OutboundProxySummary?, client: any ScreensClient,
+                lane: (any FlagshipServerClient)? = nil, boxUnreachable: Bool = false,
                 signer: OutboundProxySigner? = nil,
                 now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.serverDomain = serverDomain
         self.summary = summary
         self.client = client
+        self.lane = lane
+        self.boxUnreachable = boxUnreachable
         self.signer = signer ?? Self.defaultSigner
         self.now = now
     }
@@ -175,8 +222,13 @@ public final class OutboundProxyController {
         isSaving = true
         errorMessage = nil
         savedMessage = nil
+        sentByLane = false
         defer { isSaving = false }
-        let domain = (await client.boxDomain()) ?? serverDomain
+        if boxUnreachable && !OutboundProxyLane.allows(credentials: credentials) {
+            errorMessage = OutboundProxyCopy.laneNoPassword
+            return false
+        }
+        let domain = boxUnreachable ? serverDomain : ((await client.boxDomain()) ?? serverDomain)
         let order = BoxProxy.make(serverDomain: domain, kind: kind, host: host, port: port, auth: auth,
                                   fallbackDirect: fallbackDirect, now: now())
         let signature: String
@@ -188,11 +240,35 @@ public final class OutboundProxyController {
                 : String(localized: "Couldn't sign the change: \(error.localizedDescription)")
             return false
         }
+        if boxUnreachable { return await sendByLane(order.fields, signature: signature, domain: domain) }
         do {
             let r = try await client.outboundProxySet(
                 OutboundProxySetRequest(proxy: order.fields, signature: signature, credentials: credentials))
             if let s = r.outboundProxy { summary = s }
             savedMessage = kind == .none ? OutboundProxyCopy.savedOff : OutboundProxyCopy.savedOn
+            return true
+        } catch where OutboundProxyLane.boxUnreachable(error) && lane != nil {
+            guard OutboundProxyLane.allows(credentials: credentials) else {
+                errorMessage = OutboundProxyCopy.laneNoPassword
+                return false
+            }
+            return await sendByLane(order.fields, signature: signature, domain: domain)
+        } catch {
+            errorMessage = Self.message(for: error)
+            return false
+        }
+    }
+
+    /// The same signed order to `.com`, no credentials ever.
+    private func sendByLane(_ fields: BoxProxyFields, signature: String, domain: String) async -> Bool {
+        guard let lane else {
+            errorMessage = ScreensClientError.userFacing(URLError(.cannotConnectToHost))
+            return false
+        }
+        do {
+            try await lane.sendProxyOrderLane(serverDomain: domain, OutboundProxyLaneRequest(proxy: fields, signature: signature))
+            sentByLane = true
+            savedMessage = OutboundProxyCopy.laneSent
             return true
         } catch {
             errorMessage = Self.message(for: error)

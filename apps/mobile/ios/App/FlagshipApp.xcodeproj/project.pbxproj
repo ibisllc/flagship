@@ -75,6 +75,7 @@
 		677AFE2622E9BB7DFC119484 /* GymMessagesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 920E90123CC0BCEAAAC75B74 /* GymMessagesTests.swift */; };
 		FC64923B7DC383ED61C87497 /* WatchSecurityAlertsPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CA1F4CA62F0ED3857DFAF0 /* WatchSecurityAlertsPublisher.swift */; };
 		FC7A32B60913EC265EF082CE /* GymRelease03Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF01DE4E402E7E4B630F6551 /* GymRelease03Tests.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* GymProxyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5061728394A5B6C /* GymProxyTests.swift */; };
 		FF6B2586776383AA4776A217 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 62BE221458756CDD4E0B2EC4 /* FlagshipCore */; };
 /* End PBXBuildFile section */
 
@@ -204,6 +205,7 @@
 		AC644708931B6CC8A4F4273F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotTests.swift; sourceTree = "<group>"; };
 		BF01DE4E402E7E4B630F6551 /* GymRelease03Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymRelease03Tests.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5061728394A5B6C /* GymProxyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymProxyTests.swift; sourceTree = "<group>"; };
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C539B67650DCAB446073B42D /* PolishShotsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishShotsTests.swift; sourceTree = "<group>"; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
@@ -393,6 +395,7 @@
 				778293C02E165AE3AE539BD9 /* GymNoticeTests.swift */,
 				FD2441AEC552535EC74BF456 /* GymOctoberTests.swift */,
 				BF01DE4E402E7E4B630F6551 /* GymRelease03Tests.swift */,
+				B1C2D3E4F5061728394A5B6C /* GymProxyTests.swift */,
 				D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */,
 				37428FD47DEB4CA4A278965E /* GymSupport.swift */,
 				379C01B8325EF8D8C3174B8D /* GymSweepAppTests.swift */,
@@ -673,6 +676,7 @@
 				227B03E0DE023D0460D103D9 /* GymNoticeTests.swift in Sources */,
 				D187D390DC7D5142B6143266 /* GymOctoberTests.swift in Sources */,
 				FC7A32B60913EC265EF082CE /* GymRelease03Tests.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* GymProxyTests.swift in Sources */,
 				7ACDEC69F8BFED51EA2AC646 /* GymSmokeTests.swift in Sources */,
 				4345352FFED495B0CDBC46C1 /* GymSupport.swift in Sources */,
 				BAAD1B2FE97C41F0DDD52791 /* GymSweepAppTests.swift in Sources */,
