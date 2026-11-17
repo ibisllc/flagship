@@ -198,6 +198,8 @@ android {
             java.srcDir(if (webrtcBundled) "src/webrtc/java" else "src/nowebrtc/java")
             if (webrtcDir != null) jniLibs.srcDir(webrtcDir.resolve("jniLibs"))
         }
+        // Calls into libwebrtc itself (WebRtcLibraryTest), only where it is bundled.
+        if (webrtcBundled) getByName("androidTest") { java.srcDir("src/androidTestWebrtc/java") }
     }
 
     compileOptions {
