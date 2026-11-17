@@ -1067,3 +1067,17 @@ Next steps for whoever resumes:
 - Fix: every receiver gets its transform when its transceiver is made (`packages/flagship-web/src/call.js`), test
   fails on the old code. gym-0.4 `b83e48abb` (voi.ci build `bb28bcf2069c38fc`, gym Worker `c010bd97`); media-fix
   source + test cherry-picked (site rebuilt at merge). No phone build needed.
+
+### 2026-11-17 — Call freeze fixed; new iOS call screen
+- Owner: after muting, the website's camera turning on froze the phone app (no unmute, camera or hang-up). Log: video
+  frames opened at ~24/s until 06:33:28Z, then silence, no end. Cause: the iOS engine read the frame keys under its
+  main lock from WebRTC's worker/encoder threads while the main thread held that lock in libwebrtc setters (mute,
+  camera) that block on those threads. Fix: keys under their own lock, no libwebrtc call under the engine lock;
+  hang-up ends locally if CallKit's end hasn't run in 3 s. Android unaffected (`@Volatile` keys).
+- New iOS call screen (`VoiciCallStage.swift`): dark stage, large initial + name, status then timer, round Audio-route
+  / Mute / Camera / Flip buttons over a red End, full-screen remote video with a draggable corner self-view, tap to
+  hide controls, proximity in audio calls; strings in all 7 languages. Android and voi.ci port specified in
+  `docs/voici-calls.md` "Call screen" (not built).
+- Commits: gym-0.4 `5d600cbf9` (freeze), `ea20c4ca0` (screen); 0.4/media-fix `f0ef60179`, `b6e9ddf69`, `def0fb030`
+  (doc). iOS tests: VoiciCallsViewModel, VoiciOutgoingCall, CallMediaLoopback (28) green on the simulator; i18n green
+  except the gym-only `GymLiveAdoption.swift:104`.
