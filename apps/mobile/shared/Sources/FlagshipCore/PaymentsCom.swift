@@ -12,16 +12,27 @@ public struct PaymentsComError: Error, Equatable, Sendable {
     public var spent: [String] = []
     /// A `bad-voucher` 400: the nullifier of the voucher that didn't verify.
     public var nullifier: String?
+    /// A `wrong-count` 409 from `paid-issue`: the units the payment bought.
+    public var units: Int64?
 
-    public init(status: Int, code: String, stored: JSONValue? = nil, spent: [String] = [], nullifier: String? = nil) {
-        self.status = status; self.code = code; self.stored = stored; self.spent = spent; self.nullifier = nullifier
+    public init(status: Int, code: String, stored: JSONValue? = nil, spent: [String] = [], nullifier: String? = nil, units: Int64? = nil) {
+        self.status = status; self.code = code; self.stored = stored; self.spent = spent; self.nullifier = nullifier; self.units = units
     }
 
     static func from(status: Int, data: Data) -> PaymentsComError {
         let v = JSONValue.parse(utf8: Array(data))
         return PaymentsComError(status: status, code: v?["code"]?.string ?? (status == 0 ? "network" : "http-\(status)"), stored: v?["wallet"],
-                                spent: (v?["spent"]?.array ?? []).compactMap(\.string), nullifier: v?["nullifier"]?.string)
+                                spent: (v?["spent"]?.array ?? []).compactMap(\.string), nullifier: v?["nullifier"]?.string, units: v?["units"]?.safeInt)
     }
+}
+
+/// What `POST /api/vouchers/paid-issue` signed: the key, one blind signature per blinded request (same order), and the
+/// units the payment bought.
+public struct PaidIssueResult: Equatable, Sendable {
+    public var k: String
+    public var sigs: [String]
+    public var units: Int64
+    public init(k: String, sigs: [String], units: Int64) { self.k = k; self.sigs = sigs; self.units = units }
 }
 
 /// What a spend did: how many vouchers bought something, which were spent before, and the plan's new end (plans) or
@@ -67,6 +78,10 @@ public protocol PaymentsComClient: Sendable {
     func redeem(username: String, for what: String, vouchers: [Voucher]) async throws -> VoucherRedeemResult
     /// `POST /api/vouchers/test-issue` (the gym only): blind signatures for `blinded`.
     func testIssue(keyId: String, blinded: [String]) async throws -> [String]
+    /// `POST /api/vouchers/paid-issue`: blind signatures for a store payment (`rail` "apple" with `proof` {"jws"}).
+    /// No credential, cookie or device header: the payment is the only thing that authorizes it. Idempotent for the
+    /// same payment and the same blinded set.
+    func paidIssue(rail: String, proof: JSONValue, keyId: String, blinded: [String]) async throws -> PaidIssueResult
     func plan(username: String) async throws -> AccountPlanState
     func allowance(username: String) async throws -> AccountAllowance
 }
@@ -141,6 +156,15 @@ public final class LivePaymentsComClient: PaymentsComClient, @unchecked Sendable
     public func testIssue(keyId: String, blinded: [String]) async throws -> [String] {
         let v = try await call(try request("POST", "/api/vouchers/test-issue", ["k": .string(keyId), "blinded": .array(blinded.map { .string($0) })]))
         return (v?["sigs"]?.array ?? []).compactMap(\.string)
+    }
+
+    public func paidIssue(rail: String, proof: JSONValue, keyId: String, blinded: [String]) async throws -> PaidIssueResult {
+        var r = try request("POST", "/api/vouchers/paid-issue", ["v": 1, "rail": .string(rail), "proof": proof, "k": .string(keyId),
+                                                                    "blinded": .array(blinded.map { .string($0) })])
+        r.timeoutInterval = 45
+        r.httpShouldHandleCookies = false
+        let v = try await call(r)
+        return PaidIssueResult(k: v?["k"]?.string ?? "", sigs: (v?["sigs"]?.array ?? []).compactMap(\.string), units: v?["units"]?.safeInt ?? 0)
     }
 
     public func plan(username: String) async throws -> AccountPlanState {
