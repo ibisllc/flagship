@@ -859,7 +859,7 @@ export function outboundProxyHtml(body, { canEdit = canEditProxy() } = {}) {
           <span class="value" id="outbound-proxy-summary">${escapeHtml(proxySummaryText(summary))}</span>
         </div>
         ${status
-          ? `<p class="note small mt-1${summary.status?.state === "failing" || summary.status?.state === "fallback" ? " err-text" : ""}" id="outbound-proxy-status" data-proxy-state="${escapeHtml(summary.status?.state ?? "")}">${escapeHtml(status)}</p>`
+          ? `<p class="note small mt-1${summary.status?.state === "failing" ? " err-text" : summary.status?.state === "fallback" ? " warn-status" : ""}" id="outbound-proxy-status" data-proxy-state="${escapeHtml(summary.status?.state ?? "")}">${escapeHtml(status)}</p>`
           : ""}
         ${pro ? "" : proxyProHtml()}
         ${canEdit && (pro || on)
