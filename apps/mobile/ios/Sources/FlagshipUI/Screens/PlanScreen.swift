@@ -4,7 +4,7 @@ import FlagshipCore
 
 /// Settings → Plan (docs/payments-privacy-and-rails.md "As built"): the plan and its time left, the balance in round
 /// dollars, the plan choice, auto-pay with an optional random start, the monthly limit for extra traffic, and the
-/// ways to buy (none on sale yet). The phone holds the balance and pays a little at a time, ahead of need.
+/// packs on sale through the App Store (in-app purchase only: no other way to buy is named here). The phone holds the balance and pays a little at a time, ahead of need.
 ///
 /// App Store 3.1.1: no code field, QR scan or file import for vouchers here, ever.
 public struct PlanScreen: View {
@@ -182,24 +182,37 @@ public struct PlanScreen: View {
     }
 
     private var buySection: some View {
-        Section {
-            ForEach(cfg.packs, id: \.self) { units in
-                HStack {
-                    Text(PlanDisplay.dollars(units, cfg))
-                    Spacer()
-                    Text("Not on sale yet").foregroundStyle(.secondary)
+        let shop = center.shop
+        let packs = center.canSpend ? (shop?.products ?? []) : []
+        return Section {
+            ForEach(packs) { pack in
+                Button {
+                    Task { await center.buy(units: pack.units) }
+                } label: {
+                    HStack {
+                        Text(PlanDisplay.dollars(pack.units, cfg)).foregroundStyle(.primary)
+                        Spacer()
+                        if shop?.phase == VoucherShop.Phase.buying(pack.units) {
+                            ProgressView()
+                        } else {
+                            Text(pack.product.displayPrice).foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("plan-pack-\(units)")
+                .disabled(center.isWorking || shop?.phase != VoucherShop.Phase.idle)
+                .accessibilityIdentifier("plan-pack-\(pack.units)")
             }
-            ForEach(Self.rails, id: \.self) { rail in
+            if shop?.phase == VoucherShop.Phase.delivering {
                 HStack {
-                    Text(rail)
-                    Spacer()
-                    Text("Coming soon").foregroundStyle(.secondary)
+                    ProgressView()
+                    Text("Adding your purchase to your balance…").foregroundStyle(.secondary)
                 }
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("plan-shop-delivering")
+            }
+            if let o = shop?.outcome {
+                Text(PlanDisplay.shopOutcome(o.code, units: o.units, cfg))
+                    .foregroundStyle(o.code == "added" || o.code == "purchase-pending" ? Color.secondary : Color.red)
+                    .accessibilityIdentifier(o.code == "added" ? "plan-shop-added" : "plan-shop-error")
             }
             if center.info?.testIssue == true, center.canSpend {
                 Button("Add $30 of test credit") {
@@ -211,11 +224,13 @@ public struct PlanScreen: View {
         } header: {
             Text("Add to your balance")
         } footer: {
-            Text("Buying isn't available yet. Nothing here charges you.")
+            if packs.isEmpty {
+                Text("Buying isn't available here yet.")
+            } else {
+                Text("Paid through the App Store.")
+            }
         }
     }
-
-    static var rails: [String] { [String(localized: "App Store"), String(localized: "Card"), String(localized: "Monero")] }
 
     static func date(_ ms: Int64) -> String { Date(timeIntervalSince1970: TimeInterval(ms) / 1000).formatted(date: .abbreviated, time: .omitted) }
     static func dateTime(_ ms: Int64) -> String { Date(timeIntervalSince1970: TimeInterval(ms) / 1000).formatted(date: .abbreviated, time: .shortened) }
