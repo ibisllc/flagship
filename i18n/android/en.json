@@ -14775,15 +14775,6 @@
     "ctx": "api/ScreensModels.kt:536 (prose)",
     "args": 1
   },
-  "not_working": {
-    "en": "Not working: %1$s",
-    "ctx": "api/ScreensModels.kt:543 (prose)",
-    "args": 1
-  },
-  "using_a_direct_connection_the_proxy": {
-    "en": "Using a direct connection: the proxy isn't answering",
-    "ctx": "api/ScreensModels.kt:544 (prose)"
-  },
   "an_outbound_proxy_is_part_of": {
     "en": "An outbound proxy is part of Pro.",
     "ctx": "core/BoxProxy.kt:42 (prose)"

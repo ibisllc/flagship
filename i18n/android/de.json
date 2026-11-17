@@ -3577,8 +3577,6 @@
   "reserved": "Reserviert",
   "taken": "Vergeben",
   "needs_a_password": "%1$s · Passwort erforderlich",
-  "not_working": "Funktioniert nicht: %1$s",
-  "using_a_direct_connection_the_proxy": "Direktverbindung aktiv: Der Proxy antwortet nicht",
   "an_outbound_proxy_is_part_of": "Ein ausgehender Proxy gehört zu Pro.",
   "enter_the_proxys_address": "Gib die Adresse des Proxys ein.",
   "that_address_is_too_long": "Diese Adresse ist zu lang.",
