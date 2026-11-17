@@ -1218,7 +1218,7 @@ class VoiciCenter(
 
     /** The Social page's red counts (docs/social-tabs.md). Read again when [messages], [callHistoryVersion] or [seenVersion] move. */
     fun socialCounts(): SocialCounts =
-        SocialCounts.of(_messages.value, callHistory(), withLocal { _, _, l -> l.callsSeenAt } ?: 0L)
+        SocialCounts.of(_messages.value, callHistory(), withLocal { _, _, l -> l.callsSeenAt } ?: 0L, replyNotices.value.size)
 
     private val _seenVersion = MutableStateFlow(0)
     /** Bumps when a Social "seen" marker moves. */

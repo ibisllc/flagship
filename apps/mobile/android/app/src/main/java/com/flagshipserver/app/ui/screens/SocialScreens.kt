@@ -164,7 +164,8 @@ fun rememberSocialCounts(center: VoiciCenter): com.flagshipserver.app.core.voici
     val ui by center.messages.collectAsState()
     val calls by center.callHistoryVersion.collectAsState()
     val seen by center.seenVersion.collectAsState()
-    return remember(ui, calls, seen) { center.socialCounts() }
+    val replies by center.replyNotices.collectAsState()
+    return remember(ui, calls, seen, replies) { center.socialCounts() }
 }
 
 /** A red count circle (docs/social-tabs.md): nothing at 0, "99+" past 99. */

@@ -33,8 +33,9 @@ public final class SocialBadges {
         return 0
     }
 
-    /// Conversations with an unread message, requests left out (they have their own count).
-    public var inbox: Int { live ? store.accepted.filter(store.isUnread).count : 0 }
+    /// Conversations with an unread message (requests left out: they have their own count), and replies waiting on
+    /// pages this account wrote to.
+    public var inbox: Int { live ? store.accepted.filter(store.isUnread).count + store.replyNotices.count : 0 }
 
     /// Message requests waiting for a reply or an accept.
     public var requests: Int { live ? store.requests.count : 0 }
