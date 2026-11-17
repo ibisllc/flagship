@@ -1107,3 +1107,19 @@ Next steps for whoever resumes:
 - gym-0.4 rebuilt as release/0.4 + the 20 gym-only commits + `d1ff9165b` (calls duplicates dropped; backup
   `backup/gym-0.4-pre-rebase-202611170118`); gym Worker `2428b015`, voi.ci `bf2243dbf587b369`. No iOS change, so the
   phone app was not reinstalled.
+
+### 2026-11-17 — Owner: "go go" on the finishing plan; merge as you go
+Owner decisions: merge as we go (trust build + gym; owner tests by hand at the very end); UpCloud topped up, use what
+is needed without waste; **no "other side muted" signal** (a privacy leak; skipped); owner is away, reachable only
+by web chat, and does all manual steps at the end.
+Plan (in order; at most 2-3 agents at once, security and UI never on the same files):
+- A. Merge `0.4/call-desktop` and the cloud fixes (`webapp-boot`, `gym`, `compose-flake`, `vitest`, `keyd-clippy`).
+  Rename consequence (call keys rebind after an account rename) noted for the owner's end review.
+- B. Fix review-cloud F1-F9 (5 Medium, 4 Low) with the reviewer's failing tests, then an independent check.
+- C. iOS German "Ihre Kamera" → "Deine Kamera"; run the calls/Social/Activity gym UI tests on iOS, Android, webapp.
+- D. Direct access live run on an UpCloud IPv6 box (`fshp.app`); CI (Android emulator smoke, iOS CI; F6 DNS token);
+  full gym run R1; version bump, release notes, deploy sheet (R2-R4); housekeeping (feature-branch rebases, AGENTS.md).
+- E. UI pass: screenshots of every screen (iOS sim, Android emu, webapp, light/dark), design critique, changes on
+  `0.4/ui-pass`, before/after page (private Artifact) for the owner to approve per change.
+Owner at the end: phone-to-phone call test, YubiKey steps (0.2 update notice, runtime manifest re-sign before
+~2026-12-20), sign the webapp shell, manual testing.
