@@ -1518,7 +1518,7 @@ body.has-call {
 .call-self {
   position: absolute;
   z-index: 2;
-  width: 140px;
+  width: 104px;
   aspect-ratio: 9 / 16;
   object-fit: cover;
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -1548,11 +1548,11 @@ body.has-call {
 }
 .call-self.at-bl,
 .call-self.at-br {
-  top: calc(100% - 236px - 140px * 16 / 9);
+  top: calc(100% - 284px - 104px * 16 / 9);
 }
 .call-stage.has-remote .call-self.at-bl,
 .call-stage.has-remote .call-self.at-br {
-  top: calc(100% - 236px - 104px * 16 / 9);
+  top: calc(100% - 284px - 104px * 16 / 9);
 }
 .call-self.at-tl,
 .call-self.at-bl {
@@ -1560,7 +1560,7 @@ body.has-call {
 }
 .call-self.at-tr,
 .call-self.at-br {
-  left: calc(100% - 16px - 140px);
+  left: calc(100% - 16px - 104px);
 }
 .call-stage.has-remote .call-self.at-tr,
 .call-stage.has-remote .call-self.at-br {
