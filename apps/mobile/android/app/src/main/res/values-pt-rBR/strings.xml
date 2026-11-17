@@ -4190,4 +4190,22 @@
         <item quantity="other">%1$d novos</item>
     </plurals>
     <string name="social_first_post">Olá. Estou usando o app Flagship, do flagshipserver.com</string>
+    <string name="activity_social_call_missed">Chamada perdida de %1$s</string>
+    <string name="activity_social_call_declined">Você recusou uma chamada de %1$s</string>
+    <string name="activity_social_call_answered">Chamada com %1$s</string>
+    <string name="activity_social_call_placed">Você ligou para %1$s</string>
+    <string name="activity_social_conversation_new">Nova conversa com %1$s</string>
+    <string name="activity_social_conversation_request">Solicitação de mensagem de %1$s</string>
+    <string name="activity_social_page_published">Sua página ficou pública</string>
+    <string name="activity_social_page_updated">Sua página foi atualizada</string>
+    <string name="activity_social_post_published">Você publicou na sua página</string>
+    <string name="activity_social_video_call">Chamada de vídeo</string>
+    <string name="activity_filter_all">Tudo</string>
+    <string name="activity_filter_servers">Servidores</string>
+    <string name="activity_filter_social">Social</string>
+    <string name="activity_social_section">Chamadas e mensagens</string>
+    <string name="activity_social_section_hint">Chamadas, conversas e sua página</string>
+    <string name="activity_social_empty">Ainda não há chamadas nem mensagens.</string>
+    <string name="activity_open_server">Abre o servidor</string>
+    <string name="scheduled_backup_finished">Backup agendado concluído</string>
 </resources>

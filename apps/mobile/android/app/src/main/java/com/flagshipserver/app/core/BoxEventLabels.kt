@@ -21,6 +21,7 @@ object BoxEventLabels {
         "server.decommission.closed" to FSStrings.get(R.string.server_retired),
         "server.backup.started" to FSStrings.get(R.string.backup_started),
         "server.backup.created" to FSStrings.get(R.string.backup_ready),
+        "server.backup.scheduled" to FSStrings.get(R.string.scheduled_backup_finished),
         "server.backup.downloaded" to FSStrings.get(R.string.backup_downloaded),
         "server.backup.failed" to FSStrings.get(R.string.backup_failed),
         "server.restore.started" to FSStrings.get(R.string.import_started),

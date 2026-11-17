@@ -4187,5 +4187,23 @@
     "one": "%1$d novo",
     "other": "%1$d novos"
   },
-  "social_first_post": "Olá. Estou usando o app Flagship, do flagshipserver.com"
+  "social_first_post": "Olá. Estou usando o app Flagship, do flagshipserver.com",
+  "activity_social_call_missed": "Chamada perdida de %1$s",
+  "activity_social_call_declined": "Você recusou uma chamada de %1$s",
+  "activity_social_call_answered": "Chamada com %1$s",
+  "activity_social_call_placed": "Você ligou para %1$s",
+  "activity_social_conversation_new": "Nova conversa com %1$s",
+  "activity_social_conversation_request": "Solicitação de mensagem de %1$s",
+  "activity_social_page_published": "Sua página ficou pública",
+  "activity_social_page_updated": "Sua página foi atualizada",
+  "activity_social_post_published": "Você publicou na sua página",
+  "activity_social_video_call": "Chamada de vídeo",
+  "activity_filter_all": "Tudo",
+  "activity_filter_servers": "Servidores",
+  "activity_filter_social": "Social",
+  "activity_social_section": "Chamadas e mensagens",
+  "activity_social_section_hint": "Chamadas, conversas e sua página",
+  "activity_social_empty": "Ainda não há chamadas nem mensagens.",
+  "activity_open_server": "Abre o servidor",
+  "scheduled_backup_finished": "Backup agendado concluído"
 }

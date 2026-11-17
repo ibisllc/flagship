@@ -1220,6 +1220,24 @@ class VoiciCenter(
     fun socialCounts(): SocialCounts =
         SocialCounts.of(_messages.value, callHistory(), withLocal { _, _, l -> l.callsSeenAt } ?: 0L, replyNotices.value.size)
 
+    /**
+     * The calls and social entries on Activity (docs/activity-social.md), newest first: built from the call history, the
+     * conversations Inbox and Requests show and the page while it is public. Read again when [messages], [page] or
+     * [callHistoryVersion] move.
+     */
+    fun socialActivity(): List<SocialActivityEntry> {
+        val ui = _messages.value
+        val page = _page.value
+        return SocialActivity.build(
+            calls = callHistory(),
+            conversations = ui.visible,
+            isRequest = ui::isRequest,
+            name = { pub -> ui.state.nicknames[pub]?.name ?: VoiciCopy.visitorName(pub) },
+            publishedSeq = page.publishedSeq,
+            published = if (page.isPublic) page.published else null,
+        )
+    }
+
     private val _seenVersion = MutableStateFlow(0)
     /** Bumps when a Social "seen" marker moves. */
     val seenVersion: StateFlow<Int> = _seenVersion.asStateFlow()

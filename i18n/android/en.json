@@ -17222,5 +17222,83 @@
   "social_first_post": {
     "en": "Hello. I am using the Flagship app, from flagshipserver.com",
     "ctx": "voi.ci page: the first post every new page starts with (plain text, the owner can edit or delete it)"
+  },
+  "activity_social_call_missed": {
+    "en": "Missed call from %1$s",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)",
+    "args": 1
+  },
+  "activity_social_call_declined": {
+    "en": "Declined a call from %1$s",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)",
+    "args": 1
+  },
+  "activity_social_call_answered": {
+    "en": "Call with %1$s",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)",
+    "args": 1
+  },
+  "activity_social_call_placed": {
+    "en": "You called %1$s",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)",
+    "args": 1
+  },
+  "activity_social_conversation_new": {
+    "en": "New conversation with %1$s",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)",
+    "args": 1
+  },
+  "activity_social_conversation_request": {
+    "en": "Message request from %1$s",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)",
+    "args": 1
+  },
+  "activity_social_page_published": {
+    "en": "Your page went public",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_social_page_updated": {
+    "en": "Your page was updated",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_social_post_published": {
+    "en": "You posted on your page",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_social_video_call": {
+    "en": "Video call",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_filter_all": {
+    "en": "All",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_filter_servers": {
+    "en": "Servers",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_filter_social": {
+    "en": "Social",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_social_section": {
+    "en": "Calls and messages",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_social_section_hint": {
+    "en": "Calls, conversations and your page",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_social_empty": {
+    "en": "No calls or messages yet.",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "activity_open_server": {
+    "en": "Opens the server",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
+  },
+  "scheduled_backup_finished": {
+    "en": "Scheduled backup finished",
+    "ctx": "ui/screens/ActivityScreen.kt + core/voici/SocialActivity.kt (Activity: calls and social, docs/activity-social.md)"
   }
 }

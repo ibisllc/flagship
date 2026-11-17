@@ -1,5 +1,5 @@
-// Activity tab landing: accordion sections (server approvals, post-recovery,
-// your account, this server's log), one open at a time, each list scrolling
+// Activity tab landing: a filter (All / Servers / Social, docs/activity-social.md), then accordion sections (server
+// approvals, calls and messages, post-recovery, your account, this server's log), one open at a time, each list scrolling
 // inside a bounded height and paging in place. Every row's time is a date and
 // time to the minute. Mirrors FlagshipUI/Screens/ActivityScreen.swift.
 
@@ -22,6 +22,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import com.flagshipserver.app.ui.components.FSNote
 import androidx.compose.runtime.SideEffect
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -32,6 +35,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.flagshipserver.app.viewmodels.ActivityDates
+import com.flagshipserver.app.core.voici.SocialActivity
+import com.flagshipserver.app.core.voici.SocialActivityEntry
+import com.flagshipserver.app.core.voici.SocialTarget
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -128,6 +134,22 @@ fun ActivityScreen(
     val effectiveServerFilter = serverFilter?.takeIf { id -> pods.any { it.podId == id } }
     val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
+    // Calls, conversations and the page, built on this device (docs/activity-social.md).
+    val voici = LocalVoiciCenter.current
+    val social = if (voici != null) rememberSocialActivity(voici) else emptyList()
+    val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
+    var filter by rememberSaveable { mutableStateOf(ActivityFilter.All) }
+    val openSocial: (SocialActivityEntry) -> Unit = { e ->
+        when (val t = e.target) {
+            is SocialTarget.Thread -> nav.navigate("thread/${t.conv}")
+            SocialTarget.Calls -> nav.navigate("calls")
+            SocialTarget.Page -> deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.PageEditor)
+        }
+    }
+    // The box log's rows open the server it belongs to.
+    val logPodId = effectiveServerFilter ?: app.currentPodId.collectAsState().value
+    val openServer: (() -> Unit)? = logPodId?.let { id -> { deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.ServerDetail(id)) } }
+
     val wide = com.flagshipserver.app.ui.shell.LocalWindowWidthClass.current == com.flagshipserver.app.ui.shell.WindowWidthSizeClass.EXPANDED
     val pane = remember { ActivityPane() }
     var open by rememberSaveable { mutableStateOf<ActivitySection?>(null) }
@@ -136,6 +158,7 @@ fun ActivityScreen(
     // A push or link for an approval lands here with the section open and the list fresh.
     LaunchedEffect(openApprovalsSignal) {
         if (openApprovalsSignal > 0) {
+            if (filter == ActivityFilter.Social) filter = ActivityFilter.All
             open = ActivitySection.Approvals
             approvals.reload()
         }
@@ -150,10 +173,11 @@ fun ActivityScreen(
                 vm.load(); approvals.reload()
                 chatScope.launch { runCatching { chatCenter?.load() } }
                 chatScope.launch { runCatching { browserCenter?.load() } }
+                chatScope.launch { runCatching { voici?.refresh() } }
             }) { Text(stringResource(R.string.refresh)) }
         },
     ) {
-        val list: @Composable () -> Unit = {
+        val serverList: @Composable () -> Unit = {
         // Server filter — shown only when the user owns more than one pod
         // (matches the Services list rule). "All servers" shows the full feed;
         // a specific server names the server section after it (account-wide
@@ -194,6 +218,18 @@ fun ActivityScreen(
             count = approvalsCount,
             badge = true,
         ) { ApprovalsList(approvals) }
+
+        if (filter == ActivityFilter.All) {
+            Spacer(Modifier.height(FS.space.s3))
+            Accordion(
+                section = ActivitySection.Social,
+                title = stringResource(R.string.activity_social_section),
+                hint = stringResource(R.string.activity_social_section_hint),
+                isOpen = open == ActivitySection.Social,
+                onToggle = { toggle(ActivitySection.Social) },
+                count = social.size,
+            ) { SocialList(social, onOpen = openSocial, bounded = LocalActivityPane.current == null) }
+        }
 
         // App chat (N08): shown while a request waits or an app takes chats without asking.
         if (chatCenter != null && (chatListing.requests.isNotEmpty() || chatListing.always.isNotEmpty())) {
@@ -269,6 +305,7 @@ fun ActivityScreen(
                     onToggle = { toggle(ActivitySection.Server) },
                 ) {
                     EventList(
+                        onOpen = openServer,
                         rows = box,
                         empty = if (allServers) stringResource(R.string.nothing_has_happened_on_your_servers) else stringResource(R.string.nothing_has_happened_on_this_server),
                         more = s.value.moreBox,
@@ -286,6 +323,33 @@ fun ActivityScreen(
                 ServerCardSkeleton()
             }
         }
+        }
+        val list: @Composable () -> Unit = {
+            ActivityFilterRow(filter) { f ->
+                filter = f
+                if (f == ActivityFilter.Social) open = ActivitySection.Social
+                else if (f == ActivityFilter.Servers && open == ActivitySection.Social) open = null
+            }
+            Spacer(Modifier.height(FS.space.s3))
+            if (filter == ActivityFilter.Social) {
+                if (LocalActivityPane.current == null) {
+                    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("activity-social-list")) {
+                        SocialList(social, onOpen = openSocial, bounded = false)
+                    }
+                } else {
+                    // A wide window: the list goes in the detail pane.
+                    Accordion(
+                        section = ActivitySection.Social,
+                        title = stringResource(R.string.activity_social_section),
+                        hint = stringResource(R.string.activity_social_section_hint),
+                        isOpen = true,
+                        onToggle = {},
+                        count = social.size,
+                    ) { SocialList(social, onOpen = openSocial, bounded = false) }
+                }
+            } else {
+                serverList()
+            }
         }
         if (wide) {
             androidx.compose.runtime.CompositionLocalProvider(LocalActivityPane provides pane) {
@@ -311,7 +375,60 @@ fun ActivityScreen(
     }
 }
 
-internal enum class ActivitySection { Approvals, Chat, Browser, Recovery, Account, Server }
+internal enum class ActivitySection { Approvals, Social, Chat, Browser, Recovery, Account, Server }
+
+/** What Activity shows (docs/activity-social.md). */
+internal enum class ActivityFilter { All, Servers, Social }
+
+@Composable
+private fun ActivityFilterRow(filter: ActivityFilter, onPick: (ActivityFilter) -> Unit) {
+    val options = listOf(
+        ActivityFilter.All to R.string.activity_filter_all,
+        ActivityFilter.Servers to R.string.activity_filter_servers,
+        ActivityFilter.Social to R.string.activity_filter_social,
+    )
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("activity-filter")) {
+        options.forEachIndexed { i, (f, label) ->
+            SegmentedButton(
+                selected = filter == f,
+                onClick = { onPick(f) },
+                shape = SegmentedButtonDefaults.itemShape(i, options.size),
+                icon = {},
+                modifier = Modifier.testTag("activity-filter-${f.name.lowercase()}"),
+            ) { Text(stringResource(label), maxLines = 1) }
+        }
+    }
+}
+
+/** The calls and social entries; a tap opens the conversation, the Calls page or the page. */
+@Composable
+private fun SocialList(entries: List<SocialActivityEntry>, onOpen: (SocialActivityEntry) -> Unit, bounded: Boolean) {
+    if (entries.isEmpty()) {
+        Text(stringResource(R.string.activity_social_empty), color = FS.colors.textMuted, modifier = Modifier.testTag("activity-social-empty"))
+        return
+    }
+    val mod = if (bounded) Modifier.heightIn(max = ACTIVITY_LIST_MAX_HEIGHT).verticalScroll(rememberScrollState()) else Modifier
+    Column(mod.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+        entries.forEachIndexed { i, e ->
+            val alert = SocialActivity.isAlert(e)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(e) }
+                    .testTag("activity-social-${e.kind}"),
+            ) {
+                Text(
+                    SocialActivity.title(e),
+                    color = if (alert) FS.colors.danger else FS.colors.text,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                )
+                SocialActivity.detail(e)?.let { Text(it, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall) }
+                Text(ActivityDates.format(e.at), color = FS.colors.textMuted, style = MaterialTheme.typography.labelSmall)
+            }
+            if (i < entries.lastIndex) Divider(color = FS.colors.border)
+        }
+    }
+}
 
 /** The detail pane of Activity on an expanded window: the open section's content
  *  is drawn here instead of under its title. Null on a phone. */
@@ -369,6 +486,7 @@ private fun Accordion(
             ) {
                 val tileIcon = when (section) {
                     ActivitySection.Approvals -> Icons.Outlined.LockOpen
+                    ActivitySection.Social -> Icons.Outlined.Forum
                     ActivitySection.Chat -> Icons.Outlined.Forum
                     ActivitySection.Browser -> Icons.Outlined.Public
                     ActivitySection.Recovery -> Icons.Outlined.Restore
@@ -416,6 +534,8 @@ private fun Accordion(
 @Composable
 private fun EventList(
     rows: List<ActivityItem>,
+    /** Opens the row's server; null leaves the rows untappable. */
+    onOpen: (() -> Unit)? = null,
     empty: String,
     more: Boolean,
     onMore: () -> Unit,
@@ -437,7 +557,7 @@ private fun EventList(
         verticalArrangement = Arrangement.spacedBy(FS.space.s3),
     ) {
         rows.forEachIndexed { index, item ->
-            EventRow(item)
+            EventRow(item, onOpen)
             if (index < rows.lastIndex || more) Divider(color = FS.colors.border)
         }
         if (more) {
@@ -455,8 +575,8 @@ private fun EventList(
 internal val ACTIVITY_LIST_MAX_HEIGHT = 360.dp
 
 @Composable
-private fun EventRow(item: ActivityItem) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+private fun EventRow(item: ActivityItem, onOpen: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().then(if (onOpen != null) Modifier.clickable(onClickLabel = stringResource(R.string.activity_open_server), onClick = onOpen) else Modifier), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (item.warning) {

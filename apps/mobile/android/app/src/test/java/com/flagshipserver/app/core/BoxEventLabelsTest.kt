@@ -12,6 +12,7 @@ class BoxEventLabelsTest {
     @Test fun dropsGenericWritesAndNamesTheRest() {
         assertNull(BoxEventLabels.title(BoxActivityEntry(ts = 1, action = "post /api/screens/x")))
         assertEquals("Backup ready", BoxEventLabels.title(BoxActivityEntry(ts = 1, action = "server.backup.created", kind = "server.backup.created")))
+        assertEquals("Scheduled backup finished", BoxEventLabels.title(BoxActivityEntry(ts = 1, action = "server.backup.scheduled", kind = "server.backup.scheduled")))
         assertEquals("Server something new", BoxEventLabels.title(BoxActivityEntry(ts = 1, action = "x", kind = "server.something.new")))
     }
 

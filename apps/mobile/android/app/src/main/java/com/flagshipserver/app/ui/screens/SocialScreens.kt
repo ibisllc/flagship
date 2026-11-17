@@ -168,6 +168,15 @@ fun rememberSocialCounts(center: VoiciCenter): com.flagshipserver.app.core.voici
     return remember(ui, calls, seen, replies) { center.socialCounts() }
 }
 
+/** The calls and social entries for Activity (docs/activity-social.md), read again as the messages, the page or the calls move. */
+@Composable
+fun rememberSocialActivity(center: VoiciCenter): List<com.flagshipserver.app.core.voici.SocialActivityEntry> {
+    val ui by center.messages.collectAsState()
+    val page by center.page.collectAsState()
+    val calls by center.callHistoryVersion.collectAsState()
+    return remember(ui, page, calls) { center.socialActivity() }
+}
+
 /** A red count circle (docs/social-tabs.md): nothing at 0, "99+" past 99. */
 @Composable
 fun CountBadge(count: Int, modifier: Modifier = Modifier) {

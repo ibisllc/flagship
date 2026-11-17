@@ -1,4 +1,4 @@
-// Activity tab: phone-alert feed + the Server approvals section.
+// Activity tab: phone-alert feed, the Server approvals section, and calls and social (docs/activity-social.md).
 
 package com.flagshipserver.app.ui.shell.tabs
 
@@ -50,5 +50,11 @@ fun ActivityTab() {
         composable("post-recovery") { PostRecoveryScreen(nav) }
         // P5 — full-page audit-log viewer reached from the Activity feed.
         composable("audit-log") { AuditLogScreen(nav) }
+        // A call or social entry opens its conversation or the Calls page here (docs/activity-social.md); the routes
+        // match the Social tab's, so the Calls page's own "open thread" works here too.
+        composable("thread/{conv}", arguments = listOf(androidx.navigation.navArgument("conv") { type = androidx.navigation.NavType.StringType })) { e ->
+            com.flagshipserver.app.ui.screens.ThreadScreen(nav, e.arguments?.getString("conv").orEmpty())
+        }
+        composable("calls") { com.flagshipserver.app.ui.screens.VoiciCallHistoryScreen(nav) }
     }
 }
