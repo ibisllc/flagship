@@ -185,7 +185,7 @@ describe(".com org servers", () => {
 
   it("refuses a new server once the org's plan has lapsed", async () => {
     const d = await orgWithSeats();
-    await d.store.setPlan(ORG, { planTier: "enterprise", seatLimit: null, paidUntil: AT - DAY });
+    await d.store.setPlan(ORG, { planTier: "business", seatLimit: null, paidUntil: AT - 4 * DAY, paidSeats: 3, trialEndsAt: AT - 40 * DAY });
     d.set(AT + MIN);
     const c = serverCode();
     const r = await handleOrgServerCode(d, ORG, { code: c, approvals: [approve(B, canonicalOrgServerCode(c), AT)] });

@@ -124,6 +124,9 @@ export interface MeterDeps {
   tiers: TierStorage;
   now?: () => number;
   resources?: Partial<MeterCatalog<MeterResource, TierName>>;
+  /** An org's pooled Business egress allowance in bytes (seats × egressGbPerSeat), null when the name is not an org
+   *  on trial or paid (docs/plans-and-backup-offer.md "As built"). Asked only once an account is over Free's 25 GB. */
+  orgEgressBytes?: (account: string, nowMs: number) => Promise<number | null>;
 }
 
 /** The core's verdict, with the plan also under Flagship's name for it. */
@@ -184,10 +187,16 @@ export async function egressTopUpBytes(deps: MeterDeps, account: string): Promis
 /** An egress verdict judged again with the month's top-ups added. The hot paths (record, relay batches) read the
  *  top-ups only once over the plan's own allowance; a check (the apps' allowance read) always does. */
 async function withTopUp(deps: MeterDeps, v: MeterVerdict, need: number, always = false): Promise<MeterVerdict> {
-  if (v.resource !== "egress" || (!v.over && !always) || v.tier === "free") return v;
+  if (v.resource !== "egress" || (!v.over && !always)) return v;
+  let base = v.allowance;
+  if (v.tier === "free") {
+    const org = deps.orgEgressBytes ? await deps.orgEgressBytes(v.account, (deps.now ?? Date.now)()) : null;
+    if (org === null) return v;
+    base = org;
+  }
   const topUp = await egressTopUpBytes(deps, v.account);
-  if (topUp <= 0) return v;
-  const allowance = v.allowance + topUp;
+  if (topUp <= 0 && base === v.allowance) return v;
+  const allowance = base + topUp;
   const over = v.used + need > allowance;
   return { ...v, allowance, remaining: Math.max(0, allowance - v.used), over, action: over ? v.policy : "allow" };
 }

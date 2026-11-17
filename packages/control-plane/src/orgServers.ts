@@ -31,6 +31,8 @@ import {
 } from "@flagship/protocol";
 import type { AuthCodeStorage, ServerStorage } from "@flagship/storage";
 import { validateServerLabel } from "./labels.js";
+import { DEFAULT_PAYMENTS_CONFIG } from "@flagship/protocol";
+import { orgPlanGate } from "./orgPlan.js";
 import { loadOrg, type OrgDeps, type OrgView } from "./orgs.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -137,7 +139,7 @@ export async function handleOrgServerCode(deps: OrgServerDeps, orgId: string, bo
     const apex = deps.apex ?? "flagship.services";
     if (b.code.serverDomain !== `${label.label}.${v.org.name}.${apex}`) return malformed(`serverDomain must equal ${label.label}.${v.org.name}.${apex}`);
     if (Math.abs(now - b.code.issuedAt) > 5 * 60_000) return malformed("stale request");
-    if (v.org.paidUntil !== null && v.org.paidUntil < now) return refused("org-plan-lapsed", "the org's plan has lapsed: no new servers");
+    if (orgPlanGate(deps.payments ?? DEFAULT_PAYMENTS_CONFIG, v.org, now, "add-server")) return refused("org-plan-lapsed", "the org's plan has lapsed: no new servers");
     if (await deps.usernames.get(v.org.name)) return conflict("the org's name is held by a personal account");
     const existing = await deps.servers.get(b.code.serverDomain);
     if (existing && !existing.revokedAt) return conflict("server name taken");

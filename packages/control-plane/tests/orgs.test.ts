@@ -121,7 +121,7 @@ describe(".com org accounts", () => {
   it("refuses a seat beyond the plan's limit", async () => {
     const now = chain.entries[1].record.issuedAt + 3_600_000;
     const d = await created(now);
-    await d.store.setPlan(ORG, { planTier: "enterprise-trial", seatLimit: 0, paidUntil: null });
+    await d.store.setPlan(ORG, { planTier: "business", seatLimit: 0, paidUntil: null });
     const roles: OrgSeatRole[] = [{ role: "member" }];
     const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from("aa", "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY };
     const r = await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite), 1, now)], sealedLabelHex: "aa", offerHex: "01" });

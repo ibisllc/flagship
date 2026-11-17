@@ -56,6 +56,8 @@ export function isOhttpTargetAllowed(method: string, authority: string, path: st
     if (method === "GET" && p === OHTTP_PROBE_PATH) return true;
     // Vouchers (blindVouchers.ts): spending and the public payment numbers, so a phone's spend shows no address.
     if (method === "POST" && p === "/api/vouchers/redeem") return true;
+    // An org wallet's exchange after its key rotated (orgWallet.ts): a spend too.
+    if (method === "POST" && p === "/api/vouchers/exchange") return true;
     // Buying (voucherRails.ts): a store or Stripe proof for blind signatures, so a purchase shows no address either.
     if (method === "POST" && p === "/api/vouchers/paid-issue") return true;
     if (method === "GET" && p === "/api/payments/config") return true;

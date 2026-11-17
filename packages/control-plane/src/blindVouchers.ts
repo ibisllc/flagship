@@ -31,6 +31,8 @@ import type { BlindVoucherStorage, MeterStorage, TierStorage, UsernameStorage } 
 import { authorizeActiveDevice, type AccountDirectoryDeps, type DirectoryAuthorization } from "./accountDirectory.js";
 import { ACCOUNT_KEY_HOLDERS_ONLY, ACCOUNT_READ_HEADERS, requireAccountRead, type AccountReadTokenDeps } from "./accountReadToken.js";
 import { egressTopUpBytes, meterRecord } from "./meter.js";
+import { checkOrgSpend, creditOrgSeats } from "./orgPlan.js";
+import type { OrgDeps } from "./orgs.js";
 import { grantTier } from "./tierGrant.js";
 import { ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -62,7 +64,10 @@ export type VoucherRefusal =
   | "forbidden"
   | "too-large"
   | "version-conflict"
-  | "not-found";
+  | "not-found"
+  | "org-not-found"
+  | "org-seats"
+  | "org-seats-below-live";
 
 function refuse(status: number, code: VoucherRefusal, extra: Record<string, unknown> = {}): HandlerResponseWithHeaders {
   return { status, body: { error: code, code, ...extra }, headers: { "cache-control": "no-store" } };
@@ -162,6 +167,8 @@ export interface VoucherRedeemDeps {
   tiers: TierStorage;
   usernames: Pick<UsernameStorage, "get">;
   meter: MeterStorage;
+  /** Orgs: a spend may name an org (`org`) instead of an account; Business seats or an overage block for its egress. */
+  orgs?: OrgDeps;
   now?: () => number;
 }
 
@@ -201,6 +208,7 @@ export function planEndAfterSpend(
  * month's egress allowance.
  */
 export async function handleVoucherRedeem(deps: VoucherRedeemDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
+  if (isObj(body) && "org" in body) return handleOrgVoucherRedeem(deps, body);
   const now = (deps.now ?? Date.now)();
   const cfg = deps.config;
   if (!isObj(body) || body.v !== 1 || typeof body.username !== "string" || !Array.isArray(body.vouchers)) return refuse(400, "malformed");
@@ -257,6 +265,105 @@ export async function handleVoucherRedeem(deps: VoucherRedeemDeps, body: unknown
   const paidUntil = planEndAfterSpend(cfg, current, what, fresh.length, now);
   await grantTier({ tiers: deps.tiers, now: () => now }, { username, tier: PLAN_TIER[what], durationDays: 0, absolutePeriodEnd: paidUntil, allowPastEnd: true });
   return ok({ ok: true, for: what, credited: fresh.length, spent, plan: what, paidUntil }, { "cache-control": "no-store" });
+}
+
+/** Parse and verify every voucher of a spend (no store access): the vouchers, or a refusal. */
+function verifiedVouchers(deps: Pick<VoucherRedeemDeps, "keys" | "config">, raw: unknown[], now: number): Voucher[] | HandlerResponseWithHeaders {
+  if (raw.length === 0) return refuse(400, "malformed");
+  if (raw.length > deps.config.maxPerRequest) return refuse(400, "too-many", { max: deps.config.maxPerRequest });
+  const out: Voucher[] = [];
+  const seen = new Set<string>();
+  for (const r of raw) {
+    const v = parseVoucher(r);
+    if (!v) return refuse(400, "malformed");
+    const key = deps.keys.find((k) => k.pub.keyId === v.k && (k.acceptUntil === 0 || now < k.acceptUntil));
+    if (!key || !verifyVoucher(key.pub, v)) return refuse(400, "bad-voucher", { nullifier: voucherNullifier(v) });
+    const nf = voucherNullifier(v);
+    if (seen.has(nf)) return refuse(400, "malformed");
+    seen.add(nf);
+    out.push(v);
+  }
+  return out;
+}
+
+/**
+ * The org form of `POST /api/vouchers/redeem` (docs/plans-and-backup-offer.md "As built"):
+ * `{v: 1, org: <orgId>, for: "business", seats, vouchers}` buys Business time for `seats` paid seats (orgPlan.ts);
+ * `{v: 1, org, for: "overage", vouchers}` buys one egress block for the org's pooled allowance. Same privacy as the
+ * account form: no credential, nothing about the caller stored, reachable through the OHTTP relay.
+ */
+async function handleOrgVoucherRedeem(deps: VoucherRedeemDeps, body: Record<string, unknown>): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  const cfg = deps.config;
+  if (!deps.orgs) return refuse(404, "org-not-found");
+  if (body.v !== 1 || typeof body.org !== "string" || !Array.isArray(body.vouchers) || "username" in body) return refuse(400, "malformed");
+  const what = body.for;
+  if (what !== "business" && what !== "overage") return refuse(400, "malformed");
+  const vouchers = verifiedVouchers(deps, body.vouchers, now);
+  if (!Array.isArray(vouchers)) return vouchers;
+  const orgDeps: OrgDeps = { ...deps.orgs, payments: cfg, now: () => now };
+  const check = await checkOrgSpend(orgDeps, body.org, what, body.seats, now);
+  if (!check.ok) return refuse(check.status, check.code as VoucherRefusal, check.extra ?? {});
+  if (what === "overage" && vouchers.length !== cfg.overage.blockUnits) return refuse(400, "overage-block-size", { units: cfg.overage.blockUnits });
+
+  const items = vouchers.map((v) => ({ nullifier: voucherNullifier(v), keyId: v.k }));
+  const won = await deps.store.spend(items, utcDay(now));
+  const fresh = items.filter((_, i) => won[i]).map((i) => i.nullifier);
+  const spent = items.filter((_, i) => !won[i]).map((i) => i.nullifier);
+  if (what === "overage") {
+    if (spent.length > 0) {
+      await deps.store.unspend(fresh);
+      return refuse(409, "voucher-spent", { spent });
+    }
+    const account = check.org.name;
+    await meterRecord({ meter: deps.meter, tiers: deps.tiers, now: () => now }, account, "egress-topup", cfg.overage.blockGb * GB);
+    const topUpBytes = await egressTopUpBytes({ meter: deps.meter, tiers: deps.tiers, now: () => now }, account);
+    return ok({ ok: true, for: what, credited: fresh.length, spent, topUpBytes }, { "cache-control": "no-store" });
+  }
+  if (fresh.length === 0) return refuse(409, "voucher-spent", { spent });
+  const seats = body.seats as number;
+  const st = await creditOrgSeats(orgDeps, body.org, seats, fresh.length, now);
+  if (!st) {
+    await deps.store.unspend(fresh);
+    return refuse(409, "version-conflict");
+  }
+  return ok({ ok: true, for: what, credited: fresh.length, spent, seats, paidUntil: st.paidUntil, status: st.status }, { "cache-control": "no-store" });
+}
+
+/**
+ * `POST /api/vouchers/exchange` (public, OHTTP-shaped): `{v: 1, k, vouchers, blinded}` with as many blinded requests
+ * as vouchers → `{k, sigs}`. Spends the vouchers and blind-signs fresh ones, all or nothing. An org wallet uses it
+ * after its key rotates, so an admin who left can't spend vouchers they could read. Nothing is stored but the
+ * nullifiers, as for any spend.
+ */
+export async function handleVoucherExchange(deps: Pick<VoucherRedeemDeps, "keys" | "config" | "store" | "now">, body: unknown): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  if (!isObj(body) || body.v !== 1 || typeof body.k !== "string" || !Array.isArray(body.vouchers) || !Array.isArray(body.blinded)) return refuse(400, "malformed");
+  if (body.blinded.length !== body.vouchers.length) return refuse(400, "malformed");
+  if (!body.blinded.every((b): b is string => typeof b === "string" && b.length > 0 && b.length <= 2048 && /^[A-Za-z0-9+/]+={0,2}$/.test(b))) return refuse(400, "malformed");
+  if (new Set(body.blinded).size !== body.blinded.length) return refuse(400, "malformed");
+  const key = deps.keys.find((x) => x.pub.keyId === body.k && (x.issueUntil === 0 || now < x.issueUntil));
+  if (!key) return refuse(409, "no-key");
+  const vouchers = verifiedVouchers(deps, body.vouchers, now);
+  if (!Array.isArray(vouchers)) return vouchers;
+  const items = vouchers.map((v) => ({ nullifier: voucherNullifier(v), keyId: v.k }));
+  const won = await deps.store.spend(items, utcDay(now));
+  const fresh = items.filter((_, i) => won[i]).map((i) => i.nullifier);
+  const spent = items.filter((_, i) => !won[i]).map((i) => i.nullifier);
+  if (spent.length > 0) {
+    await deps.store.unspend(fresh);
+    return refuse(409, "voucher-spent", { spent });
+  }
+  const sigs: string[] = [];
+  for (const b of body.blinded as string[]) {
+    try {
+      sigs.push(signBlindedVoucher(key.sk, b));
+    } catch {
+      await deps.store.unspend(fresh);
+      return refuse(400, "malformed");
+    }
+  }
+  return ok({ k: key.pub.keyId, sigs }, { "cache-control": "no-store" });
 }
 
 // ── the sealed wallet ──────────────────────────────────────────────────────
