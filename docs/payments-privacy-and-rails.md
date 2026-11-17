@@ -763,7 +763,9 @@ country or a time finer than the day. The issue call carries no credential, cook
 200 { "k", "sigs": ["<base64>", …], "units" }
 ```
 
-- `blinded.length` must equal the units the payment bought (pack × quantity), at most 200 per call.
+- `blinded.length` must equal the units the payment bought (pack × quantity), at most 200 per call, so store
+  products are set up without multi-quantity (the apps buy one pack at a time). A refusal before signing
+  (`wrong-count`, `no-key`) leaves the payment unused: the device may send a fresh set.
 - Idempotent: the same payment with the same blinded set returns the same signatures (a device that lost the answer
   asks again); a different set for a used payment is refused `payment-used`.
 - Refusals (`code`): `malformed`, `too-many`, `rail-off` (404, rail not configured), `no-key` (409),
@@ -823,6 +825,6 @@ country or a time finer than the day. The issue call carries no credential, cook
 A store refund or a card dispute cannot reach vouchers already signed: `.com` cannot tell which vouchers a payment
 produced, by design. Accepted loss at these prices (owner rule: no refunds of our own; Apple and Google refund under
 their rules). What limits it: `.com` refuses to sign for a payment it already knows is refunded; the stores' own refund
-abuse controls; and each phone caps its own store purchases at 240 vouchers in 30 days (kept in the Keychain or the
-Android keystore-backed preferences, so a reinstall doesn't reset it). Refund counts per day are visible to the owner
+abuse controls; and each phone caps its own store purchases at 240 vouchers in 30 days (on iOS in the Keychain, which
+survives a reinstall; on Android in encrypted app preferences, which a reinstall clears). Refund counts per day are visible to the owner
 in the D1 rows' `state` (no per-buyer data exists to act on).
