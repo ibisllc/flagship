@@ -244,7 +244,7 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
     this.#hasCgk = true;
   }
   /** Pin this box's org in keyd (`org.json`), with the boot ceremony's token; keyd refuses another org later. */
-  pinOrg(pin: { orgId: string; genesisHash: string; serverDomain: string; cgkVersion: number }, ceremonyToken: string): void {
+  pinOrg(pin: { orgId: string; genesisHash: string; serverDomain: string; cgkVersion: number; oarVersion?: number; oarHash?: string }, ceremonyToken: string): void {
     this.#client.call("org.pin", { ...pin, ceremony: ceremonyToken });
   }
   /**

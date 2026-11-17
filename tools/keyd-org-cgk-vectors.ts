@@ -11,8 +11,8 @@
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { signOrgApproval, type OrgApproval } from "../packages/protocol/src/orgAuthority.js";
-import { buildOrgKeyRing, canonicalOrgKeyRing, orgKemKeyPair, type OrgKemKey } from "../packages/protocol/src/orgKeyRing.js";
+import { orgAuthorityHash, signOrgApproval, type OrgApproval } from "../packages/protocol/src/orgAuthority.js";
+import { buildOrgKeyRing, canonicalOrgKeyRing, orgKemKeyPair, orgKeyRingSha256, type OrgKemKey } from "../packages/protocol/src/orgKeyRing.js";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT = resolve(ROOT, "packages/protocol/test-vectors/keyd-org-cgk/vectors.json");
@@ -70,6 +70,11 @@ const v2 = buildOrgKeyRing({ orgId: ORG, kind: "cgk", scope: "*", prev: v1.ring,
 const RT = v2.ring.issuedAt;
 const v2a = approve(A, canonicalOrgKeyRing(v2.ring), 1, RT);
 const archive = buildOrgKeyRing({ orgId: ORG, kind: "archive-keys", scope: SERVER, prev: null, key: cgk2, recipients: recips, retired: [], oarVersion: 1, issuedAt: RT, randomness: rnd(0x30) });
+// Approved under v0 (superseded by v1): after v1 existed it does not count; before, it does (05c review F4).
+const underV0 = buildOrgKeyRing({ orgId: ORG, kind: "cgk", scope: "*", prev: v1.ring, key: cgk2, recipients: recips, retired: [], oarVersion: 0, issuedAt: RT, randomness: rnd(0x20) });
+const EARLY = T1 - 60_000;
+const underV0Early = buildOrgKeyRing({ orgId: ORG, kind: "cgk", scope: "*", prev: v1.ring, key: cgk2, recipients: recips, retired: [], oarVersion: 0, issuedAt: EARLY, randomness: rnd(0x20) });
+const HEAD = { oarVersion: 1, oarHash: orgAuthorityHash(base[1].record) };
 const far = buildOrgKeyRing({ orgId: ORG, kind: "cgk", scope: "*", prev: v1.ring, key: cgk2, recipients: recips, retired: [], oarVersion: 5, issuedAt: RT, randomness: rnd(0x20) });
 
 const pin = { orgId: ORG, genesisHash: GENESIS, serverDomain: SERVER, cgkVersion: 1 };
@@ -78,7 +83,7 @@ const flip = (a: OrgApproval): OrgApproval => ({ ...a, signature: a.signature.sl
 interface Case {
   name: string;
   chain: string;
-  pin?: Partial<typeof pin>;
+  pin?: Partial<typeof pin & { oarVersion: number; oarHash: string; cgkRingSha256: string }>;
   args: Record<string, unknown>;
   expect: { ok: true; version: number; keyHex: string } | { ok: false; code: string };
 }
@@ -91,6 +96,7 @@ const FULL = "genesis, recovery seat added, founder removes C after 7 days, the 
 const named = (n: string) => ({ from: n });
 const chains: Record<string, { from: string; take?: number }> = {
   base: { from: FULL, take: 2 },
+  "genesis only": { from: FULL, take: 1 },
   "with a founder's removal": { from: FULL, take: 3 },
   ...Object.fromEntries(
     [
@@ -137,6 +143,14 @@ const cases: Case[] = [
   { name: "a chain whose v1 points at another record", chain: "v1 pointing at another previous record", args: adopt(), expect: no("chain") },
   { name: "a chain that changed the bylaws with k_gov only", chain: "changing the bylaws with k_gov only", args: adopt(), expect: no("threshold") },
   { name: "a chain that changed the bylaws with the strictest ceremony", chain: "changing the bylaws with the strictest ceremony", args: adopt(), expect: ok2 },
+  // 05c review F4: the newest record shown, the head keyd verified before, and the ring it holds.
+  { name: "a ring approved under a record the chain has since superseded", chain: "base", args: adopt(underV0, [approve(A, canonicalOrgKeyRing(underV0.ring), 0, RT)]), expect: no("stale-oar") },
+  { name: "a ring approved under the previous record before the next existed", chain: "base", args: adopt(underV0Early, [approve(A, canonicalOrgKeyRing(underV0Early.ring), 0, EARLY)]), expect: ok2 },
+  { name: "a chain cut below the head keyd verified", chain: "genesis only", pin: HEAD, args: adopt(), expect: no("stale-chain") },
+  { name: "a chain that forks from the head keyd verified", chain: "base", pin: { ...HEAD, oarHash: "ab".repeat(32) }, args: adopt(), expect: no("stale-chain") },
+  { name: "a chain that reaches the head keyd verified", chain: "base", pin: HEAD, args: adopt(), expect: ok2 },
+  { name: "the next version links to the ring keyd holds", chain: "base", pin: { cgkRingSha256: orgKeyRingSha256(v1.ring) }, args: adopt(), expect: ok2 },
+  { name: "a next version that does not link to the ring keyd holds", chain: "base", pin: { cgkRingSha256: "ab".repeat(32) }, args: adopt(), expect: no("prev-hash") },
   // keyd is never handed the freezes: a frozen admin's approval still counts in its narrower rule.
   { name: "keyd does not see freezes", chain: "v1 while B was frozen by C", args: adopt(), expect: ok2 },
 ];

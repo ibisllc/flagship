@@ -1418,7 +1418,12 @@ async function main(): Promise<void> {
       // takes every version of the org CGK only on a key-ring version it verifies itself under this
       // genesis (cgk.orgAdopt, below), the first one included.
       try {
-        keyd.pinOrg({ orgId: cfg.orgId, genesisHash: cfg.orgGenesisHash, serverDomain: cfg.serverId, cgkVersion: 0 }, ceremony);
+        // The chain head this box already verified, when it has one: keyd then refuses a chain that ends below it.
+        const head = currentOrgPin();
+        keyd.pinOrg(
+          { orgId: cfg.orgId, genesisHash: cfg.orgGenesisHash, serverDomain: cfg.serverId, cgkVersion: 0, ...(head ? { oarVersion: head.state.current.version, oarHash: head.state.currentHash } : {}) },
+          ceremony,
+        );
       } catch (e) {
         console.warn(`[daemon] flagship-keyd did not pin the org (${(e as Error).message})`);
       }

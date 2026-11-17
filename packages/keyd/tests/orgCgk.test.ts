@@ -67,7 +67,13 @@ describe("the cgk.orgAdopt and org.pin operations", () => {
       const before = svc.handle({ id: 5, op: "cgk.seal", args: { pt: "00" } });
       expect(svc.handle({ id: 6, op: "cgk.orgAdopt", args: adopt }).result).toEqual({ version: 2 });
       expect(saved).toEqual(["cgk"]);
-      expect(JSON.parse(readFileSync(join(dir, "org.json"), "utf8")).cgkVersion).toBe(2);
+      const kept = JSON.parse(readFileSync(join(dir, "org.json"), "utf8"));
+      expect(kept.cgkVersion).toBe(2);
+      // keyd keeps the head it verified and the ring it holds (05c F4): a chain cut below that head is refused.
+      expect(kept.oarVersion).toBe(1);
+      expect(kept.oarHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(kept.cgkRingSha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(() => svc.handle({ id: 10, op: "cgk.orgAdopt", args: { ...adopt, chain: chain(ok.chain).slice(0, 1) } })).toThrow(/stale-chain/);
       // The new CGK no longer opens what the old one sealed.
       expect(() => svc.handle({ id: 7, op: "cgk.open", args: { blob: before.result.blob } })).toThrow();
       expect(() => svc.handle({ id: 8, op: "cgk.orgAdopt", args: adopt })).toThrow(/stale/);
