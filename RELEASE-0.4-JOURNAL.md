@@ -942,3 +942,14 @@ Next steps for whoever resumes:
   a conversation removes its entries; filter All / Servers / Social. Starts after `0.4/social-tabs` merges.
 - `0.4/social-tabs` (agent running): Profile / Inbox / Requests tabs, floating call button + Calls page with a target
   field, badges totalled on the Social tab, circled pencils, collapsing profile header, default first post.
+
+### 2026-11-16 — Merged `0.4/social-tabs` (shell v227)
+- Profile / Inbox / Requests tabs on iOS, Android and the webapp; floating call button opens Calls with a "Who to call"
+  field (page name, @name, voi.ci link; checked like a call); badges (Inbox unread + reply notices, Requests pending,
+  missed calls since a local seen marker; Profile stubbed at 0 until comments/reactions exist) totalled on the Social
+  tab; `pencil.circle`; collapsing profile header; first post "Hello. I am using the Flagship app, from
+  flagshipserver.com" on a page's first publish only. Design `docs/social-tabs.md`; parity row `social-tabs`.
+- Checked: webapp tests 3670 green (agent), i18n and parity green after the rebase. Android unit tests green except
+  `MaintainersConformanceTest` (no node_modules then). iOS compiled only; its unit tests, the gym UI specs on all three
+  clients and a recompile for the last one-line reply-count change are NOT run (disk at 4.5 GB).
+- Next: Activity for calls and social (`docs/activity-social.md`).
