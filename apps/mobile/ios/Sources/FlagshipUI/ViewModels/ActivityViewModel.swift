@@ -140,6 +140,7 @@ public enum BoxEventLabels {
         "server.decommission.closed": String(localized: "Server retired"),
         "server.backup.started": String(localized: "Backup started"),
         "server.backup.created": String(localized: "Backup ready"),
+        "server.backup.scheduled": String(localized: "Scheduled backup finished"),
         "server.backup.downloaded": String(localized: "Backup downloaded"),
         "server.backup.failed": String(localized: "Backup failed"),
         "server.restore.started": String(localized: "Import started"),

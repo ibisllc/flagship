@@ -3857,5 +3857,21 @@
   "Who to call": "6def0f265cb6",
   "voi.ci/%@ doesn't take calls.": "eb1de2f92db8",
   "There's no page at voi.ci/%@.": "851475ef45e4",
-  "Enter a voi.ci username, like voi.ci/alex.": "7c86aa809bed"
+  "Enter a voi.ci username, like voi.ci/alex.": "7c86aa809bed",
+  "Missed call from %@": "1436c3721a54",
+  "Declined a call from %@": "6545b6906895",
+  "Call with %@": "797396608eac",
+  "You called %@": "dcaa77168dfd",
+  "New conversation with %@": "a6b075d13e1f",
+  "Message request from %@": "b2a313b7481a",
+  "Your page went public": "6e1d39a7c822",
+  "Your page was updated": "cf5b681b493e",
+  "You posted on your page": "e9dcb9907047",
+  "Servers": "a721deb5fbf6",
+  "Show": "827e0c6ac993",
+  "Calls and messages": "17c7e1da8c3d",
+  "Calls, conversations and your page": "f33ffc24e946",
+  "No calls or messages yet.": "167c929c27b8",
+  "Opens the server": "71cc6af57083",
+  "Scheduled backup finished": "073c8161ce7f"
 }

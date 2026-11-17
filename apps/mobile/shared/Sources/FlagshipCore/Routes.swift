@@ -151,6 +151,10 @@ public enum ActivityRoute: Hashable, Sendable {
     /// P5 — the dedicated full-page audit-log viewer, reached from the
     /// Activity feed's "View full audit log" row.
     case auditLog
+    /// A conversation opened from its call or social entry (docs/activity-social.md).
+    case conversation(conv: String)
+    /// The Calls page, from a call entry with no conversation to open.
+    case calls
 }
 
 public enum SettingsRoute: Hashable, Sendable {

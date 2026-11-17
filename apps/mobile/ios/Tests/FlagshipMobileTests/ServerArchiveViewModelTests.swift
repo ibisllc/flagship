@@ -375,6 +375,7 @@ final class ServerArchiveViewModelTests: XCTestCase {
     func testBoxEventLabelsDropGenericWritesAndNameTheRest() {
         XCTAssertNil(BoxEventLabels.title(BoxActivityEntry(ts: 1, action: "post /api/screens/x")))
         XCTAssertEqual(BoxEventLabels.title(BoxActivityEntry(ts: 1, action: "server.backup.created", kind: "server.backup.created")), "Backup ready")
+        XCTAssertEqual(BoxEventLabels.title(BoxActivityEntry(ts: 1, action: "server.backup.scheduled", kind: "server.backup.scheduled")), "Scheduled backup finished")
         XCTAssertEqual(BoxEventLabels.title(BoxActivityEntry(ts: 1, action: "x", kind: "server.something.new")), "Server something new")
     }
 
