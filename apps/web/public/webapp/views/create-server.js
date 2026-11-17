@@ -52,7 +52,6 @@ import {
   recipeProxySiblings,
   wireProxyFields,
 } from "../lib/boxProxy.js";
-import { fetchAllowance } from "../lib/allowance.js";
 
 import { tr } from "../lib/i18n.js";
 registerView("view-create-server");
@@ -1053,8 +1052,16 @@ function resetProxyFields() {
 
 async function refreshAccountTier() {
   const username = getSession().username;
-  const a = username ? await fetchAllowance(username) : null;
-  const tier = a?.tier ?? null;
+  // The plan as `.com` attests it (the same CA-signed record the box checks); null (show the fields) when unread.
+  let tier = null;
+  if (username) {
+    try {
+      const { loadPlanState } = await import("../lib/plan.js");
+      tier = (await loadPlanState()).plan ? "pro" : "free";
+    } catch {
+      tier = null;
+    }
+  }
   if (tier === accountTier) return;
   accountTier = tier;
   resetProxyFields();

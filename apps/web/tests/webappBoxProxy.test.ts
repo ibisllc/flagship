@@ -154,14 +154,55 @@ describe("creating a server", () => {
   });
 });
 
+describe("when the box can't be reached: .com's lane", () => {
+  it("sends the signed order (never a password) to the lane when the box is unreachable", async () => {
+    const { sendBoxProxy, depositProxyOrder, LaneNeedsPasswordError } = await load("lib/boxProxy.js");
+    const sign = async (msg: Uint8Array) => msg.slice(0, 64);
+    const posted: Array<{ url: string; body: unknown }> = [];
+    const f = async (url: string, init: RequestInit) => {
+      posted.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response("{}", { status: 200 });
+    };
+    const unreachable = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+    const deps = { umk: UMK, sign, lane: (d: string, w: unknown) => depositProxyOrder("https://flagshipserver.com", d, w, f) };
+    const r = await sendBoxProxy({ serverDomain: DOMAIN, value: { kind: "none" }, current: null, fetchJson: unreachable }, deps);
+    expect(r).toEqual({ lane: true });
+    expect(posted[0]!.url).toBe(`https://flagshipserver.com/api/server/${DOMAIN}/proxy-order`);
+    expect(Object.keys(posted[0]!.body as object).sort()).toEqual(["proxy", "signature"]);
+    await expect(
+      sendBoxProxy(
+        { serverDomain: DOMAIN, value: { kind: "socks5", host: "p.example", port: 1080, credentials: { username: "a", password: "b" } }, current: null, fetchJson: unreachable },
+        deps,
+      ),
+    ).rejects.toBeInstanceOf(LaneNeedsPasswordError);
+    expect(posted).toHaveLength(1);
+    // An answer from the box itself (a 422 from its test) is never sent to the lane.
+    const refused = async () => {
+      throw Object.assign(new Error("The proxy refused the connection."), { status: 422 });
+    };
+    await expect(sendBoxProxy({ serverDomain: DOMAIN, value: { kind: "none" }, current: null, fetchJson: refused }, deps)).rejects.toThrow("refused");
+    expect(posted).toHaveLength(1);
+  });
+});
+
 describe("the server page", () => {
   it("shows the proxy and its status, and hides the section for older boxes", async () => {
     const { proxySummaryText, proxyStatusText } = await load("lib/boxProxy.js");
     const on = { proxy: { kind: "socks5", host: "2001:db8::7", port: 9050, auth: true }, hasCredentials: true, status: { state: "failing", lastError: "Can't reach the proxy." } };
     expect(proxySummaryText(on)).toBe("SOCKS5 · [2001:db8::7]:9050 · needs a password");
-    expect(proxyStatusText(on)).toBe("Not working: Can't reach the proxy.");
+    expect(proxyStatusText(on)).toBe("The outbound proxy isn't working: Can't reach the proxy.");
+    // The box's code decides the sentence (its English lastError is never shown).
+    expect(proxyStatusText({ ...on, status: { state: "failing", code: "auth", lastError: "x" } })).toBe(
+      "The outbound proxy isn't working: The proxy refused the username or password.",
+    );
+    expect(proxyStatusText({ ...on, status: { state: "failing", code: "refused" } })).toContain("The proxy refused the connection.");
+    expect(proxyStatusText({ ...on, status: { state: "failing", code: "protocol" } })).toContain("doesn't understand");
     expect(proxyStatusText({ ...on, status: { state: "ok" } })).toBe("Working");
-    expect(proxyStatusText({ ...on, status: { state: "fallback" } })).toBe("Using a direct connection: the proxy isn't answering");
+    expect(proxyStatusText({ ...on, status: { state: "fallback", code: "unreachable" } })).toBe(
+      "The outbound proxy isn't working, so this server is connecting directly: Can't reach the proxy.",
+    );
     expect(proxySummaryText({ proxy: null, status: { state: "direct" } })).toBe("Off");
     expect(proxyStatusText({ proxy: null, status: { state: "direct" } })).toBe("");
 

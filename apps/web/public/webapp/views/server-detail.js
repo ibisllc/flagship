@@ -161,6 +161,8 @@ import {
   readProxyForm,
   sendBoxProxy,
   wireProxyFields,
+  depositProxyOrder,
+  LaneNeedsPasswordError,
 } from "../lib/boxProxy.js";
 
 import { tr, trn, dateLocale } from "../lib/i18n.js";
@@ -857,7 +859,7 @@ export function outboundProxyHtml(body, { canEdit = canEditProxy() } = {}) {
           <span class="value" id="outbound-proxy-summary">${escapeHtml(proxySummaryText(summary))}</span>
         </div>
         ${status
-          ? `<p class="note small mt-1${summary.status?.state === "failing" ? " err-text" : ""}" id="outbound-proxy-status">${escapeHtml(status)}</p>`
+          ? `<p class="note small mt-1${summary.status?.state === "failing" || summary.status?.state === "fallback" ? " err-text" : ""}" id="outbound-proxy-status" data-proxy-state="${escapeHtml(summary.status?.state ?? "")}">${escapeHtml(status)}</p>`
           : ""}
         ${pro ? "" : proxyProHtml()}
         ${canEdit && (pro || on)
@@ -892,17 +894,24 @@ async function saveProxy(body, value) {
     return false;
   }
   try {
-    await sendBoxProxy(
+    const sent = await sendBoxProxy(
       {
         serverDomain: body.serverFqdn,
         value,
         current: body.outboundProxy,
         fetchJson: fetchOn(body.serverFqdn),
       },
-      { umk: session.umk, sign: sensitiveSigner() },
+      {
+        umk: session.umk,
+        sign: sensitiveSigner(),
+        // The box can't be reached: `.com`'s lane carries the signed order (never a password).
+        lane: (domain, wire) => depositProxyOrder(controlApex(), domain, wire),
+      },
     );
     toast(
-      value.kind === "none"
+      sent?.lane
+        ? tr("Sent. The server picks up the change within a few minutes, even while its proxy is down.")
+        : value.kind === "none"
         ? tr("Saved. The server now connects directly.")
         : tr("Saved. The server is reconnecting through the proxy."),
       "ok",
@@ -910,7 +919,7 @@ async function saveProxy(body, value) {
     void renderServerDetail();
     return true;
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : humanError(e), "err");
+    toast(e instanceof ScreensError || e instanceof LaneNeedsPasswordError ? e.message : humanError(e), "err");
     return false;
   }
 }

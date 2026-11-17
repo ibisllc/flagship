@@ -40,6 +40,7 @@ import {
   remove as profileRemove,
 } from "../lib/profilesStore.js";
 import { controlApex } from "../lib/apex.js";
+import { buildSignedBoxProxy, depositProxyOrder, proxyAlertText } from "../lib/boxProxy.js";
 import { isServerDecommissioned } from "../lib/serverReplacement.js";
 import {
   isListableRevocation,
@@ -536,6 +537,15 @@ export function applyDirectLeads(podStatusByDomain, invertedMap) {
   return out;
 }
 
+/** Sign "no proxy" for `fqdn` with the sensitive-order key and leave it in `.com`'s lane for the box. */
+async function turnOffProxyViaLane(fqdn) {
+  const session = getSession();
+  if (!(session?.umk instanceof Uint8Array)) throw new Error(tr("Unlock the webapp first"));
+  const { sensitiveSigner } = await import("../lib/adminRoot.js");
+  const wire = await buildSignedBoxProxy({ serverDomain: fqdn, value: { kind: "none" } }, { umk: session.umk, sign: sensitiveSigner() });
+  await depositProxyOrder(controlApex(), fqdn, wire);
+}
+
 export function renderServerCard(server, pod, opts = {}) {
   const c = classifyServer(server, pod, opts);
   const pillClass = c.kind === "online" ? "pill ok"
@@ -574,6 +584,15 @@ export function renderServerCard(server, pod, opts = {}) {
     ? `<div class="row mt-2"><button class="full-width js-approve-unlock">${tr("Approve unlock")}</button></div>`
     : "";
   // A `/pods` row naming a key other than the one this device pinned (docs/first-contact.md).
+  // The owner's outbound proxy fails (docs/outbound-proxy.md "Failure handling"): said loudly, with a way to turn
+  // it off that works even while the proxy keeps the server offline (`.com`'s lane).
+  const proxyAlert = pod?.proxyAlert && (pod.proxyAlert.state === "failing" || pod.proxyAlert.state === "fallback")
+    ? `<p class="err-text mt-2" data-proxy-alert="${escapeHtml(pod.proxyAlert.state)}">${escapeHtml(proxyAlertText(pod.proxyAlert))}</p>` +
+      (pod.proxyAlert.state === "failing"
+        ? `<p class="caption">${escapeHtml(tr("This server is offline until its proxy works again or you change it."))}</p>` +
+          `<div class="row mt-2"><button class="secondary full-width js-proxy-off-lane" data-fqdn="${escapeHtml(server.serverId)}">${tr("Turn off the proxy")}</button></div>`
+        : "")
+    : "";
   const keyChanged = pod && !podStk(pod) && pinnedStk(server.serverId)
     ? `<p class="err-text mt-2" data-first-contact-refusal="key-changed">${escapeHtml(tr("This server's key changed. If you did not rebuild it, do not approve anything for it."))}</p>`
     : "";
@@ -596,6 +615,7 @@ export function renderServerCard(server, pod, opts = {}) {
     ${deadDelete}
     ${awaitingBackup}
     ${approveUnlock}
+    ${proxyAlert}
     ${keyChanged}
   `;
 }
@@ -1499,6 +1519,21 @@ function wireHomeListControls(list) {
       const fqdn = btn.getAttribute("data-fqdn") || "";
       const entry = homeServerEntries.find((x) => x.fields.fqdn.toLowerCase() === fqdn.toLowerCase());
       void deleteRegisteredServer(fqdn, entry?.identityPubKey);
+    });
+  });
+  list.querySelectorAll(".js-proxy-off-lane").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const fqdn = btn.getAttribute("data-fqdn") || "";
+      btn.disabled = true;
+      try {
+        await turnOffProxyViaLane(fqdn);
+        toast(tr("Sent. The server picks up the change within a few minutes, even while its proxy is down."), "ok");
+      } catch (err) {
+        toast(humanError(err), "err");
+      } finally {
+        btn.disabled = false;
+      }
     });
   });
   list.querySelectorAll(".js-send-backup").forEach((btn) => {

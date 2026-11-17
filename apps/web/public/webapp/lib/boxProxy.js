@@ -199,20 +199,35 @@ const KIND_LABEL = { socks5: "SOCKS5", http: "HTTP" };
 /** "Off", or "SOCKS5 · host:port · needs a password". */
 export function proxySummaryText(summary) {
   const p = summary?.proxy;
-  if (!p) return "Off";
+  if (!p) return tr("Off");
   const host = p.host.includes(":") ? `[${p.host}]` : p.host;
-  return `${KIND_LABEL[p.kind] ?? p.kind} · ${host}:${p.port}${p.auth ? " · needs a password" : ""}`;
+  const where = `${KIND_LABEL[p.kind] ?? p.kind} · ${host}:${p.port}`;
+  return p.auth ? tr("{0} · needs a password", where) : where;
+}
+
+/** Why the proxy fails, from the box's code (never its English `lastError`). */
+export function proxyFailureText(code) {
+  if (code === "auth") return tr("The proxy refused the username or password.");
+  if (code === "refused") return tr("The proxy refused the connection.");
+  if (code === "protocol") return tr("The proxy gave an answer the server doesn't understand.");
+  return tr("Can't reach the proxy.");
+}
+
+/** The loud line for a failing proxy (`{state, code}` from the box or `/pods`), or "". */
+export function proxyAlertText(alert) {
+  if (alert?.state === "failing") return tr("The outbound proxy isn't working: {0}", proxyFailureText(alert.code));
+  if (alert?.state === "fallback") return tr("The outbound proxy isn't working, so this server is connecting directly: {0}", proxyFailureText(alert.code));
+  return "";
 }
 
 /** The status line, or "" when there's nothing to say. */
 export function proxyStatusText(summary) {
   const s = summary?.status;
   if (!summary?.proxy || !s) return "";
-  if (s.state === "ok") return "Working";
-  if (s.state === "failing") return tr("Not working: {0}", s.lastError ?? tr("Can't reach the proxy."));
-  if (s.state === "fallback") return tr("Using a direct connection: the proxy isn't answering");
-  return "";
+  if (s.state === "ok") return tr("Working");
+  return proxyAlertText(s);
 }
+
 
 /**
  * Sign and send a change to the box. `fetchJson` is the page's paired-session
@@ -225,7 +240,46 @@ export async function sendBoxProxy({ serverDomain, value, current, fetchJson }, 
   const keepAuth = !value.credentials && same && !!p.auth && !!current?.hasCredentials;
   const wire = await buildSignedBoxProxy({ serverDomain, value, keepAuth }, deps);
   const body = { ...wire, ...(value.credentials ? { credentials: value.credentials } : {}) };
-  return fetchJson(OUTBOUND_PROXY_PATH, { method: "POST", body: JSON.stringify(body) });
+  try {
+    return await fetchJson(OUTBOUND_PROXY_PATH, { method: "POST", body: JSON.stringify(body) });
+  } catch (e) {
+    // The box can't be reached (often because of this very proxy): leave the signed order in `.com`'s lane,
+    // which the box polls through the private relay while its proxy fails. Never with a password.
+    if (!deps?.lane || !isUnreachable(e)) throw e;
+    if (value.credentials) throw new LaneNeedsPasswordError();
+    await deps.lane(serverDomain, wire);
+    return { lane: true };
+  }
+}
+
+/** Flagship never carries proxy passwords, so this change has to reach the server itself. */
+export class LaneNeedsPasswordError extends Error {
+  constructor() {
+    super(tr("Flagship never carries proxy passwords. To use a new password, change it from the same network as the server, or turn the proxy off first."));
+    this.name = "LaneNeedsPasswordError";
+  }
+}
+
+/** A network failure or a gateway's "the box isn't connected", not an answer from the box. */
+function isUnreachable(e) {
+  if (e instanceof TypeError) return true;
+  const st = e?.status;
+  return st === 0 || st === 502 || st === 503 || st === 504 || e?.name === "AbortError" || e?.code === "unreachable";
+}
+
+/** `POST https://<apex>/api/server/<domain>/proxy-order` with the signed order only (`.com` verifies it). */
+export async function depositProxyOrder(apex, serverDomain, wire, f = (...a) => globalThis.fetch(...a)) {
+  const r = await f(`${apex}/api/server/${encodeURIComponent(serverDomain)}/proxy-order`, {
+    method: "POST",
+    credentials: "omit",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ proxy: wire.proxy, signature: wire.signature }),
+  });
+  if (!r.ok) {
+    const err = new Error(tr("Couldn't send the change. Try again."));
+    err.status = r.status;
+    throw err;
+  }
 }
 
 // ── The form (create-server and the server page share it) ──────────────

@@ -28,6 +28,7 @@ const KNOWN: Record<string, string> = {
   "views/create-server.js": "recipe signing in the browser: to move to the phone",
   "providers.js": "AI-provider key sealing",
   "lib/x25519.js": "X25519 helper used by pairing and sealing",
+  "lib/ohttp.js": "OHTTP: a fresh X25519 key per voucher spend, sealed to .com's public gateway key; no account or signing key",
   "lib/orgJoin.js": "opens an org seat invitation with the one-time AES-GCM key from the link fragment; holds no seat keys",
   "lib/serverBackupFormat.js": "backup file wrap",
   "lib/keyfile.js": "keyfile export/import: to move to the phone",
