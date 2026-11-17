@@ -13,9 +13,27 @@ shrink the attack surface around it: the broker has a tiny code surface
 (one endpoint, one file of policy), no D1, no R2, no assets, no
 business logic beyond "verify a signature, call CF".
 
-## Endpoint
+## Endpoints
 
-`POST /rpc` — JSON body, JSON response. Three kinds:
+### `POST /service`: the issuance service's challenge records (0.4, item F6)
+
+Since 0.3 `.com`'s certificate issuance service owns the ACME account and answers DNS-01 itself; this route is the
+only DNS write it needs, so `.com` holds no zone token (`src/service.ts`). The caller sends
+`authorization: Bearer <DNS_BROKER_SECRET>` (a secret both Workers hold) and one `op`:
+
+| `op` | Effect |
+|---|---|
+| `challenge.create` `{name, value, token}` | TXT at `_acme-challenge.<user>.<apex>`, `_acme-challenge.<box>.<user>.<apex>` or one label deeper (an old box certificate's app names, for the admin revoke); never the apex, a reserved label (`tunnel`, `gym`, `www`, ...) or deeper. The value must be a DNS-01 digest; with `ACME_ACCOUNT_THUMBPRINTS` set it must be the digest of `<token>.<thumbprint>` for one of those accounts. Idempotent; at most 4 records at a name. |
+| `challenge.delete` `{id}` | Deletes a record only if it is a TXT record at an `_acme-challenge.` name under the apex. |
+| `zone.list`, `zone.get` `{id}` | Read only: zone-health and the reap plan read the zone through these. The reap's deletes of old address records are refused (the root wildcard made them moot). |
+
+An hourly cron removes challenge records older than an hour (`.com`'s own cron did while it held the token). A
+`.com` compromise can still have certificates issued under the service's ACME account (it holds that key), but can no
+longer touch the root wildcard, the CAA pair, NS or any other record.
+
+### `POST /rpc` (the 0.2 box-signed RPCs; retired, see `policy.ts`)
+
+JSON body, JSON response. Three kinds:
 
 | `kind`                | Authority                                                                                       | Effect                                                  |
 |-----------------------|-------------------------------------------------------------------------------------------------|---------------------------------------------------------|
@@ -52,6 +70,11 @@ diagnostics. The denial reason is logged via `console.warn`.
 | Name                       | Scope                                                  |
 |----------------------------|--------------------------------------------------------|
 | `CLOUDFLARE_DNS_API_TOKEN` | API token with `Zone:DNS:Edit` on `flagship.services`. |
+| `DNS_BROKER_SECRET`        | Shared with `flagship-com` (`/service` callers). At least 32 characters (`openssl rand -hex 32`). |
+
+Var `ACME_ACCOUNT_THUMBPRINTS` (in `wrangler.toml`): the `thumbprint` that
+`GET https://flagshipserver.com/api/certificates/account` answers. Unset, any DNS-01 digest is accepted at an allowed
+name.
 
 ### Set on the MAIN Worker (not this Worker)
 
@@ -59,10 +82,13 @@ diagnostics. The denial reason is logged via `console.warn`.
 |------------------|------------------------------------------------------|
 | `DNS_BROKER_URL` | Public URL of this Worker (e.g. `https://flagship-dns-broker.workers.dev`). |
 
-The main Worker only needs `DNS_BROKER_URL`. The main Worker MUST NOT
-have `CLOUDFLARE_DNS_API_TOKEN` set anymore in the production
-deployment; if both are set the broker takes precedence and a
-predeploy-check can flag the duplicate.
+| `DNS_BROKER_SECRET` (secret) | The same value the broker holds. |
+
+With both set, `.com`'s issuance service and the reap route use the broker
+(`apps/com/src/brokerZone.ts`). The main Worker MUST NOT keep
+`CLOUDFLARE_DNS_API_TOKEN` once an order has issued through the broker
+(`wrangler secret delete CLOUDFLARE_DNS_API_TOKEN` in `apps/com`): while it is
+there, the old clean-up paths (revoke, delete, transfer, admin GC) still use it.
 
 ## Token rotation runbook
 
@@ -91,10 +117,14 @@ only those direct-CF call sites.
 
 ## Deploy
 
+Release step 20 (`scripts/release.sh`, `dnsbroker`) does this, and skips itself while `apps/com/wrangler.toml` sets no
+`DNS_BROKER_URL`:
+
 ```
 cd apps/dns-broker
 wrangler secret put CLOUDFLARE_DNS_API_TOKEN
-wrangler deploy
+openssl rand -hex 32 | tee /dev/tty | wrangler secret put DNS_BROKER_SECRET   # same value on flagship-com
+npm run deploy
 ```
 
 This Worker is deployed independently of `apps/com` and has its own

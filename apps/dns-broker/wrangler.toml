@@ -35,6 +35,12 @@ workers_dev = true
 #   SERVICES_PASSTHROUGH_IPV4  allowlisted A target
 #   SERVICES_PASSTHROUGH_IPV6  allowlisted AAAA target
 #   RPC_REPLAY_WINDOW_MS       max age (ms) for signed RPC envelopes; default 300000
+#
+# The issuance service's challenge records (POST /service, src/service.ts; 0.4 item F6):
+#   DNS_BROKER_SECRET          secret, the same value as on flagship-com; .com sends it as a bearer
+#   ACME_ACCOUNT_THUMBPRINTS   comma list: the service's ACME account thumbprint
+#                              (GET https://flagshipserver.com/api/certificates/account -> thumbprint);
+#                              set, a record must answer a challenge of that account only
 
 [vars]
 MAIN_WORKER_URL = "https://flagshipserver.com"
@@ -43,3 +49,8 @@ FLAGSHIP_APEX = "flagship.services"
 SERVICES_PASSTHROUGH_IPV4 = "149.248.216.86"
 SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::110:d2b6:0"
 RPC_REPLAY_WINDOW_MS = "300000"
+# ACME_ACCOUNT_THUMBPRINTS = "<thumbprint of .com's issuance account>"
+
+# Hourly: challenge TXT records older than an hour (.com's own cron did this while it held the token).
+[triggers]
+crons = ["23 * * * *"]
