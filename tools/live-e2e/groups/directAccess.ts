@@ -112,7 +112,13 @@ export const directAccess: Group = {
 
 
     const installed = await rec.check(`the app ${SLUG} runs on the box, open to visitors`, async () => {
-      await installWhoami(A, b, SLUG, { enabled: true, public_routes: ["/*"] });
+      try {
+        await installWhoami(A, b, SLUG, { enabled: true, public_routes: ["/*"] });
+      } catch (e) {
+        // A kept fleet's box already runs it.
+        if (!/already installed/.test(String(e))) throw e;
+        return `${u}--${SLUG} (already installed)`;
+      }
       return `${u}--${SLUG}`;
     });
     if (!installed) return;
