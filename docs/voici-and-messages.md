@@ -346,6 +346,8 @@ is 410 (the site shell saying "This link was removed."); a published page is the
 words, unpublished pages and held names of deleted accounts are one 404 (the site shell with "There's no page here.").
 The 404 and 410 shells carry `<meta name="voici-status">` so the site writes the sentence in the visitor's language.
 Before `VOICI_ENABLED` is on, only links and codes resolve and refusals have no body.
+`voi.ci/` itself is the front door (0.4, `docs/voici-front-door.md`): a static page per language, served before any
+storage is read; the 404/410 shells carry `noindex`, and every footer links to the front door ("Make your own page").
 
 ### 4.2 The site
 
