@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   canonicalOrgConnector,
+  canonicalOrgProposalDecision,
   canonicalOrgSeatInvite,
   hybridSigKeygen,
   openOrgProposal,
@@ -94,6 +95,27 @@ describe("SCIM 2.0 on an org box", () => {
     expect(Object.values(w.data().groups).map((g) => [g.displayName, g.members])).toEqual([["Engineering EU", []]]);
   });
 
+  it("PATCH applies all of its operations or none; PUT and PATCH keep userName unique (05c F7)", async () => {
+    const w = scimWorld();
+    const a = JSON.parse(String((await w.call("POST", "/scim/v2/Users", { schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"], userName: "a@acme.example" }))!.body));
+    await w.call("POST", "/scim/v2/Users", { schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"], userName: "b@acme.example" });
+    const patch = (ops: unknown[]) => w.call("PATCH", `/scim/v2/Users/${a.id}`, { schemas: ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], Operations: ops });
+    expect((await patch([{ op: "replace", path: "displayName", value: "Changed" }, { op: "replace", path: "nonsense", value: 1 }]))!.status).toBe(400);
+    expect((await patch([{ op: "replace", path: "active", value: "False" }]))!.status).toBe(200);
+    expect(w.data().users[a.id]!.displayName).toBeUndefined();
+    expect((await patch([{ op: "replace", path: "userName", value: "B@acme.example" }]))!.status).toBe(409);
+    expect((await w.call("PUT", `/scim/v2/Users/${a.id}`, { userName: "b@acme.example" }))!.status).toBe(409);
+    expect((await w.call("PUT", `/scim/v2/Users/${a.id}`, { userName: "a@acme.example", displayName: "Same name, own record" }))!.status).toBe(200);
+    expect(w.data().users[a.id]!.userName).toBe("a@acme.example");
+  });
+
+  it("the audit line names a known resource kind or other (05c F9)", async () => {
+    const w = scimWorld();
+    await w.call("GET", "/scim/v2/ana@acme.example");
+    await w.call("GET", "/scim/v2/Users");
+    expect(w.audit.map((l) => l.resource)).toEqual(["other", "Users"]);
+  });
+
   it("refuses a missing or wrong token, other filters, and too many requests", async () => {
     const w = scimWorld();
     expect((await w.call("GET", "/scim/v2/Users", undefined, "wrong-token-0123456789"))!.status).toBe(401);
@@ -136,6 +158,15 @@ describe("the directory engine", () => {
     expect(r1.intents[0]!.roles).toEqual(rolesFor(moved, mapping));
     expect(diffDirectory(r1.state, [{ ...moved, active: false }], mapping, "ldap", 3, ids()).intents.map((i) => i.kind)).toEqual(["offboard"]);
     expect(diffDirectory(r1.state, [], mapping, "ldap", 3, ids()).intents.map((i) => [i.kind, i.subject])).toEqual([["offboard", seat]]);
+  });
+
+  it("an externalId of __proto__ or constructor is an ordinary key (05c F8)", () => {
+    const odd = ["__proto__", "constructor", "prototype"].map((externalId) => ({ ...ana, externalId, userName: `${externalId}@acme.example` }));
+    const one = diffDirectory(emptyDirectoryState(), odd, mapping, "scim", 1, ids());
+    expect(one.intents.map((i) => [i.kind, i.externalId])).toEqual(odd.map((u) => ["invite", u.externalId]));
+    expect(({} as Record<string, unknown>).pendingId).toBeUndefined();
+    const saved = JSON.parse(JSON.stringify(one.state));
+    expect(diffDirectory(saved, odd, mapping, "scim", 2, ids()).intents).toEqual([]);
   });
 
   it("cleans what a directory sends before it becomes an entry (control characters, NFC, length)", () => {
@@ -265,9 +296,29 @@ describe("the connector runtime", () => {
     // The admin invited her (seat M of the vectors, already granted in the pinned seat book) and recorded it.
     const seatM = A.keys["M member"].seatId as string;
     const invite = { orgId: A.orgId, seatId: seatM, labelSha256: "aa".repeat(32), rolesHash: orgSeatRolesHash([{ role: "member" }]), oarVersion: 1, issuedAt: NOW, expiresAt: NOW + 86_400_000 };
+    const by = (order: Uint8Array) => [signOrgApproval({ orgId: A.orgId, oarVersion: 1, order, seatId: B.seatId, adminKeyId: B.keyId, issuedAt: NOW, notAfter: NOW + 86_400_000 }, B.secret)];
+    const inviteOrder = canonicalOrgSeatInvite(invite);
+    const statement = { orgId: A.orgId, proposalId: p.proposal.proposalId, decision: "done" as const, refSha256: orgSha256Hex(inviteOrder), issuedAt: NOW };
+    const decisionApprovals = by(canonicalOrgProposalDecision(statement));
+    const disabled = [{ ...ana, active: false }];
+
+    // Each half alone is not enough (05c review F3): an approved decision with an unapproved invite, an approved
+    // invite with an unapproved decision, or a decision whose approval names another proposal links nobody.
     invites = [{ invite }];
-    proposals = [{ bundle: p, decision: { statement: { decision: "done", refSha256: orgSha256Hex(canonicalOrgSeatInvite(invite)) } } }];
-    const gone = await rt.sync(connector.connectorId, [{ ...ana, active: false }]);
+    proposals = [{ bundle: p, decision: { statement, approvals: decisionApprovals } }];
+    expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
+    invites = [{ invite, approvals: by(inviteOrder) }];
+    proposals = [{ bundle: p, decision: { statement } }];
+    expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
+    const other = { ...statement, proposalId: "0f".repeat(16) };
+    proposals = [{ bundle: p, decision: { statement: other, approvals: by(canonicalOrgProposalDecision(other)) } }];
+    expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
+    // A proposal that is not this connector's own (its subject changed) links nobody either.
+    proposals = [{ bundle: { ...p, proposal: { ...p.proposal, subject: "ee".repeat(16) } }, decision: { statement, approvals: decisionApprovals } }];
+    expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
+
+    proposals = [{ bundle: p, decision: { statement, approvals: decisionApprovals } }];
+    const gone = await rt.sync(connector.connectorId, disabled);
     expect(gone.map((i) => [i.kind, i.subject])).toEqual([["offboard", seatM]]);
   });
 });

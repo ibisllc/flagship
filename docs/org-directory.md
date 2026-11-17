@@ -160,11 +160,15 @@ read by TS, Swift and Kotlin. The ring kind is the existing `directory-key` (sea
   and the mapping against its digest. A token rotation is a re-post with a later `issuedAt` and a new setup; the box
   warns in Activity when a token is over 365 days old.
 - `engine.ts` diffs each snapshot against the last and proposes invite / offboard / role-change / entry-update once
-  each; a pending person is linked to a seat only when the decided invite proposal's `refSha256` matches an invite whose
-  seat the box's pinned seat book holds.
+  each; a pending person is linked to a seat only when the proposal verifies under the connector's own key, an org admin
+  approved (under the box's pinned chain) the decision naming that proposal and an invite's digest, an org admin
+  approved that invite (`.com` serves the invites' approvals on `/seats`), and the box's pinned seat book holds the
+  invite's seat (05c review F3). Stores keyed by an IdP `externalId` or a SCIM id are null-prototype and `__proto__`,
+  `constructor`, `prototype` are never resource ids (F2, F8).
 - SCIM 2.0 (`scim.ts`) at `/scim/v2` on the box's own name: Users, Groups, ServiceProviderConfig, Schemas, ResourceTypes;
   filters `userName eq`, `externalId eq` (and `displayName eq` for Groups, which Entra sends); Entra's and Okta's PATCH
-  shapes; 600 requests a minute; counts per 15 minutes in Activity, never names. Tests replay recorded Entra and Okta
+  shapes (a PATCH applies all its operations or none; PUT and PATCH keep `userName` unique); 600 requests a minute; one
+  Activity line per request naming a known resource kind or `other`, never names. Tests replay recorded Entra and Okta
   request sequences (`tests/fixtures/scim/`).
 - LDAP pull (`ldap.ts`, `ldapts` 9.2.0: MIT, pure TypeScript, one dependency) over LDAPS only, AD and OpenLDAP defaults,
   every 15 minutes by default; tests run the real client against an in-process fake LDAP server. No CI job against an

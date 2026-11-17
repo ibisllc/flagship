@@ -365,9 +365,11 @@ export async function handleOrgSeatsGet(deps: OrgDeps, orgId: string): Promise<H
     list(deps, orgId, "freeze"),
     list(deps, orgId, "overturn"),
     list(deps, orgId, "accept"),
-    list<{ invite: OrgSeatInvite; roles: OrgSeatRole[]; sealedLabelHex: string }>(deps, orgId, "invite"),
+    list<{ invite: OrgSeatInvite; roles: OrgSeatRole[]; approvals?: unknown[]; sealedLabelHex: string }>(deps, orgId, "invite"),
   ]);
-  return ok({ grants, revokes, freezes, overturns, accepts, invites: invites.map((i) => ({ invite: i.invite, roles: i.roles, sealedLabelHex: i.sealedLabelHex })) });
+  // The approvals travel with each invite: a connector box links a directory person to a seat only on an invite
+  // it verified itself (05c review F3).
+  return ok({ grants, revokes, freezes, overturns, accepts, invites: invites.map((i) => ({ invite: i.invite, roles: i.roles, approvals: i.approvals ?? [], sealedLabelHex: i.sealedLabelHex })) });
 }
 
 export async function handleOrgSeatGrant(deps: OrgDeps, orgId: string, body: unknown): Promise<HandlerResponseWithHeaders> {

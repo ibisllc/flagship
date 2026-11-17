@@ -9,7 +9,7 @@ import { readStateFile, writeFileDurable } from "../durableFile.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { SCIM_TOKEN_WARN_AFTER_MS, type ConnectorRuntime } from "./connector.js";
 import { LdapDirectorySource, ldapConfigFrom } from "./ldap.js";
-import { createScimHandler, emptyScimData, scimSnapshot, type ScimData } from "./scim.js";
+import { createScimHandler, emptyScimData, scimDataFrom, scimSnapshot, type ScimData } from "./scim.js";
 import { collectSnapshot } from "./source.js";
 import { createHash } from "node:crypto";
 
@@ -34,7 +34,7 @@ export function startDirectoryConnectors(deps: DirectoryWiringDeps): { handler: 
     const r = await readStateFile(path(id));
     if (r.kind !== "ok") return emptyScimData();
     try {
-      return JSON.parse(r.text) as ScimData;
+      return scimDataFrom(JSON.parse(r.text));
     } catch {
       return emptyScimData();
     }
