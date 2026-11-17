@@ -71,6 +71,10 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         guard !lock.withLock({ stopped }), let sdp = pc.localDescription?.sdp else { throw CallMediaUnavailable() }
         let lines = sdp.components(separatedBy: "\n").filter { $0.hasPrefix("a=candidate:") }
         voiciCallLog.notice("answer sdp: \(lines.count, privacy: .public) candidates [\(lines.map(Self.describeCandidate).joined(separator: "; "), privacy: .public)]")
+        // ICE ufrags (not the passwords): the checks' USERNAME in the turn mix lines must be "<ours>:<theirs>" one way
+        // and "<theirs>:<ours>" the other, or every check is refused.
+        let ufrag = { (s: String) in s.components(separatedBy: "\n").filter { $0.hasPrefix("a=ice-ufrag:") }.map { $0.dropFirst(12).trimmingCharacters(in: .whitespacesAndNewlines) } }
+        voiciCallLog.notice("ice ufrags: ours \(ufrag(sdp).joined(separator: ","), privacy: .public), theirs \(ufrag(offerSdp).joined(separator: ","), privacy: .public)")
         return sdp
     }
 
