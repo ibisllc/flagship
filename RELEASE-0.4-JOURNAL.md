@@ -1311,3 +1311,8 @@ Accept messages" even while messages are on.
   a real phone call, the iOS app (its bytes are unchanged).
 - Commits: 4e70edb1e 8b4eae61c ac5150525 b6ed3a7c4 4d28a675d 4119039ad 8b17ec9c5 14bcafc84 
 - Open (small): iOS has the same wrong empty-Inbox text as Android (`SocialTab.swift` `emptyText`). Fold it into the E UI pass.
+- Payments steps 1-3: 0.4/payments at 93ac569f1, pushed, not merged.
+  - Built: the voucher core with vectors on every port; D1 0152; `.com` redeem, test issue (gym only) and the wallet sync; the webapp Plan page (shell v230); Android's Plan screen.
+  - The iOS Plan screen is still being built by its sub-agent, which holds native-build.lock.
+  - Merge after iOS lands and builds. That run also needs the `VOUCHER_SIGNING_KEYS` gym secret and a gym refresh.
+  - The owner's questions are in §5.11 and §5.9 of docs/payments-privacy-and-rails.md and in the agent report: wallet key custody, OHTTP in the apps before launch, a box copy of the wallet, tax and law, store setup, overage slowed rather than billed, and when new vouchers sync.
