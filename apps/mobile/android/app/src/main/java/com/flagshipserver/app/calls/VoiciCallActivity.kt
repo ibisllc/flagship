@@ -1,6 +1,6 @@
-// The voi.ci call screen (docs/voici-calls.md §8; voici-calls-v2.md §1.4): incoming (Answer / Decline), the call
-// (Mute, Camera, Hang up, "Quantum-safe call"), and the line that says why a call ended. Shown over the lock screen
-// by the full-screen notification. The microphone is asked for on Answer and the camera on the Camera tap, never
+// The voi.ci call screen (docs/voici-calls.md §8, "Call screen"; voici-calls-v2.md §1.4): the ringing screen
+// (Decline / Answer), the call (VoiciCallStage: audio route, Mute, Camera, Flip, End), and the line that says why a
+// call ended. Shown over the lock screen by the full-screen notification. The microphone is asked for on Answer and the camera on the Camera tap, never
 // before; leaving the screen pauses our camera, and the caller sees "Camera paused".
 
 package com.flagshipserver.app.calls
@@ -10,34 +10,19 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.flagshipserver.app.MainActivity
 import com.flagshipserver.app.R
-import com.flagshipserver.app.core.fsString
 import com.flagshipserver.app.ui.theme.FlagshipTheme
 
 class VoiciCallActivity : ComponentActivity() {
@@ -51,6 +36,7 @@ class VoiciCallActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setShowWhenLocked(true)
         setTurnScreenOn(true)
+        enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         handle(intent)
         setContent { FlagshipTheme { CallScreen() } }
     }
@@ -90,60 +76,55 @@ class VoiciCallActivity : ComponentActivity() {
     @Composable
     private fun CallScreen() {
         val ui by VoiciCallCenter.ui.collectAsState()
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Text(ui.name, style = MaterialTheme.typography.headlineMedium)
-                Spacer(Modifier.height(8.dp))
-                Text(statusLine(ui), style = MaterialTheme.typography.bodyLarge)
-                if (ui.phase == VoiciCallCenter.Phase.Connecting && ui.slow) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(stringResource(R.string.voici_call_slow), style = MaterialTheme.typography.bodyMedium)
-                }
-                remoteCameraLine(ui)?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(it, style = MaterialTheme.typography.bodyMedium)
-                }
-                if (cameraRefused) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.voici_call_camera_denied), style = MaterialTheme.typography.bodyMedium)
-                }
-                Spacer(Modifier.height(32.dp))
-                when (ui.phase) {
-                    VoiciCallCenter.Phase.Ringing -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Button(onClick = { VoiciCallCenter.decline() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(stringResource(R.string.voici_call_decline)) }
-                        Button(onClick = { answer() }) { Text(stringResource(R.string.voici_call_answer)) }
-                    }
-                    VoiciCallCenter.Phase.NeedsUnlock -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Button(onClick = { startActivity(Intent(this@VoiciCallActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }) {
-                            Text(stringResource(R.string.voici_call_open_app))
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        OutlinedButton(onClick = { VoiciCallCenter.decline(); finish() }) { Text(stringResource(R.string.voici_call_decline)) }
-                    }
-                    VoiciCallCenter.Phase.Connecting, VoiciCallCenter.Phase.Connected -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = { VoiciCallCenter.setMuted(!ui.muted) }) {
-                            Text(stringResource(if (ui.muted) R.string.voici_call_unmute else R.string.voici_call_mute))
-                        }
-                        if (ui.video) OutlinedButton(onClick = { toggleCamera(!ui.cameraOn) }) {
-                            Text(stringResource(if (ui.cameraOn) R.string.voici_call_camera_off else R.string.voici_call_camera))
-                        }
-                        Button(onClick = { VoiciCallCenter.hangUp() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(stringResource(R.string.voici_call_hang_up)) }
-                    }
-                    VoiciCallCenter.Phase.Ended, VoiciCallCenter.Phase.Idle -> Button(onClick = { finish() }) { Text(stringResource(R.string.voici_call_close)) }
-                }
+        when (ui.phase) {
+            VoiciCallCenter.Phase.Ringing -> VoiciRingingStage(ui.name, statusLine(ui), onDecline = { VoiciCallCenter.decline() }, onAnswer = { answer() }, onOpenApp = null)
+            VoiciCallCenter.Phase.NeedsUnlock -> VoiciRingingStage(
+                ui.name,
+                statusLine(ui),
+                onDecline = {
+                    VoiciCallCenter.decline()
+                    finish()
+                },
+                onAnswer = null,
+                onOpenApp = { startActivity(Intent(this@VoiciCallActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
+            )
+            else -> {
+                val over = ui.phase == VoiciCallCenter.Phase.Ended || ui.phase == VoiciCallCenter.Phase.Idle
+                val slow = ui.phase == VoiciCallCenter.Phase.Connecting && ui.slow
+                VoiciCallStage(
+                    CallStageState(
+                        name = ui.name,
+                        status = if (slow) statusLine(ui) + "\n" + stringResource(R.string.voici_call_slow) else statusLine(ui),
+                        connectedAt = if (ui.phase == VoiciCallCenter.Phase.Connected) ui.connectedAt else null,
+                        muted = ui.muted,
+                        cameraOn = ui.cameraOn,
+                        cameraFront = ui.cameraFront,
+                        remoteCameraOn = ui.phase == VoiciCallCenter.Phase.Connected && ui.remoteCamera == "on",
+                        remoteCameraPaused = VoiciCallScreenModel.remoteCamera(ui) == VoiciCallScreenModel.RemoteCamera.Paused,
+                        offersVideo = ui.video,
+                        over = over,
+                        media = VoiciCallCenter.mediaEngine,
+                        notice = if (cameraRefused) stringResource(R.string.voici_call_camera_denied) else null,
+                    ),
+                    CallStageActions(
+                        toggleMute = { VoiciCallCenter.setMuted(!ui.muted) },
+                        toggleCamera = { toggleCamera(!ui.cameraOn) },
+                        flipCamera = { VoiciCallCenter.flipCamera() },
+                        hangUp = { VoiciCallCenter.hangUp() },
+                        close = {
+                            cameraRefused = false
+                            finish()
+                        },
+                        dismissNotice = { cameraRefused = false },
+                    ),
+                    tag = "voici-call",
+                )
             }
         }
     }
 
     @Composable
     private fun statusLine(ui: VoiciCallCenter.Ui): String = stringResource(VoiciCallScreenModel.status(ui))
-
-    @Composable
-    private fun remoteCameraLine(ui: VoiciCallCenter.Ui): String? = when (VoiciCallScreenModel.remoteCamera(ui)) {
-        VoiciCallScreenModel.RemoteCamera.On -> fsString(R.string.voici_call_remote_camera_on, ui.name)
-        VoiciCallScreenModel.RemoteCamera.Paused -> stringResource(R.string.voici_call_camera_paused)
-        null -> null
-    }
 
     companion object {
         const val ACTION_ANSWER = "com.flagshipserver.app.calls.ANSWER"

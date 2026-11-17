@@ -4147,5 +4147,15 @@
   "voici_call_step_secure": "4a16cbba1b0b",
   "voici_call_step_path": "e2107a4a10dd",
   "voici_call_step_audio": "7147905891f5",
-  "voici_call_slow": "48c129867053"
+  "voici_call_slow": "48c129867053",
+  "voici_call_audio": "7454e4956fa2",
+  "voici_call_flip": "bcf5ee2e86d2",
+  "voici_call_end": "135874d18917",
+  "voici_call_your_camera": "433af09fdb08",
+  "voici_call_their_camera": "873188febe8d",
+  "voici_call_e2e": "f09d5b0856e4",
+  "voici_call_route_phone": "f56ae98ab9a4",
+  "voici_call_route_speaker": "c9fd41151223",
+  "voici_call_route_bluetooth": "59dc678850af",
+  "voici_call_route_wired": "9fb8af01f72c"
 }

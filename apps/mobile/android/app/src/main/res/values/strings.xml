@@ -4221,4 +4221,14 @@
     <string name="voici_call_step_path">Opening a direct path…</string>
     <string name="voici_call_step_audio">Starting audio…</string>
     <string name="voici_call_slow">This is taking longer than usual</string>
+    <string name="voici_call_audio">Audio</string>
+    <string name="voici_call_flip">Flip</string>
+    <string name="voici_call_end">End</string>
+    <string name="voici_call_your_camera">Your camera</string>
+    <string name="voici_call_their_camera">Their camera</string>
+    <string name="voici_call_e2e">End-to-end encrypted · quantum-safe</string>
+    <string name="voici_call_route_phone">Phone</string>
+    <string name="voici_call_route_speaker">Speaker</string>
+    <string name="voici_call_route_bluetooth">Bluetooth</string>
+    <string name="voici_call_route_wired">Headphones</string>
 </resources>

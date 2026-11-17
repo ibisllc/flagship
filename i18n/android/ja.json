@@ -4213,5 +4213,15 @@
   "voici_call_step_secure": "回線を保護しています（量子耐性）…",
   "voici_call_step_path": "直接の経路を開いています…",
   "voici_call_step_audio": "音声を開始しています…",
-  "voici_call_slow": "通常より時間がかかっています"
+  "voici_call_slow": "通常より時間がかかっています",
+  "voici_call_audio": "オーディオ",
+  "voici_call_flip": "切り替え",
+  "voici_call_end": "終了",
+  "voici_call_your_camera": "自分のカメラ",
+  "voici_call_their_camera": "相手のカメラ",
+  "voici_call_e2e": "エンドツーエンド暗号化 · 量子耐性",
+  "voici_call_route_phone": "受話口",
+  "voici_call_route_speaker": "スピーカー",
+  "voici_call_route_bluetooth": "Bluetooth",
+  "voici_call_route_wired": "ヘッドホン"
 }
