@@ -335,6 +335,11 @@ dependencies {
     // Play Integrity standard requests: the per-device cap on new Messages accounts (voi.ci §9.5)
     implementation("com.google.android.play:integrity:1.6.0")
 
+    // Google Play Billing: the voucher packs (docs/payments-privacy-and-rails.md §11). The plain Java artifact, not
+    // billing-ktx: from 8.1 the ktx one needs a Kotlin 2.2 stdlib this toolchain (Kotlin 2.0) can't read; the shop
+    // wraps the callbacks itself (core/payments/PlayBilling.kt). Play requires v8 or later from August 2026.
+    implementation("com.android.billingclient:billing:9.1.0")
+
     // kotlinx.coroutines-play-services for Task.await()
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 

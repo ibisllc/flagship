@@ -206,6 +206,7 @@ object Variant : AppVariant {
                 voiciCaKeys = { listOf(GymVoici.client.caPub) },
                 voiciSignInPipe = { GymVoici.pipe() },
                 payments = com.flagshipserver.app.api.MockPaymentsClient(),
+                billing = com.flagshipserver.app.core.payments.MockPlayBilling(),
             ),
         )
     }
@@ -242,6 +243,7 @@ object Variant : AppVariant {
     override fun noticeNowMs(): Long = System.currentTimeMillis() + GymSeams.noticeClockOffsetMs
     // A mock run has no `.com`: the poll finds no notice unless a scenario serves one.
     override fun noticeFetcher(): NoticeFetcher? = GymSeams.noticeFetcher ?: if (mockRun) NoticeFetcher { NoticeFetch.NoNotice } else null
+    override fun storeSales(context: android.content.Context): Boolean = true
 
     override fun defaultScreens(): ScreensClient = MockScreensClient()
     override fun defaultBuild(): BuildClient = MockBuildClient()

@@ -107,6 +107,10 @@ interface AppVariant {
     /** Gym: a stand-in for the notice fetch (null: the real, anonymous one). */
     fun noticeFetcher(): NoticeFetcher?
 
+    /** May this copy sell vouchers through Google Play? Release: only the Play-installed copy (a sideloaded one has
+     *  no Play Billing for this app). Debug: yes (Play answers BILLING_UNAVAILABLE where it can't). */
+    fun storeSales(context: android.content.Context): Boolean
+
     /** The phone-to-phone pairing relay. Null only for a variant with no
      *  transport at all: the pairing screens then say it isn't available. */
     fun devicePairingRelays(): DevicePairingRelays?
@@ -150,6 +154,8 @@ class GymMocks(
     val voiciSignInPipe: (() -> com.flagshipserver.app.core.voici.VoiciSignInPipe)? = null,
     /** Vouchers and the plan: the mock `.com` (docs/payments-privacy-and-rails.md). */
     val payments: com.flagshipserver.app.api.PaymentsClient? = null,
+    /** Google Play Billing: a scripted store (the gym buys packs without Play). */
+    val billing: com.flagshipserver.app.core.payments.PlayBilling? = null,
 )
 
 /** The mock box's access-control fixture (fixed device keys and names). */

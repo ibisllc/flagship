@@ -391,6 +391,21 @@ class MainActivity : FragmentActivity() {
             },
             local = com.flagshipserver.app.core.payments.PrefsPaymentsLocalStore(applicationContext),
         )
+        // The Google Play voucher shop (§11): only where this copy may sell (release: installed by Play).
+        // Without the encrypted store there is no shop: a paid-for request set must survive a crash.
+        val shopStore: com.flagshipserver.app.core.payments.ShopStore? = if (mocks != null) com.flagshipserver.app.core.payments.MemoryShopStore()
+        else runCatching { com.flagshipserver.app.core.payments.EncryptedShopStore(applicationContext) }.getOrNull()
+        com.flagshipserver.app.core.payments.VoucherShop.shared = com.flagshipserver.app.core.payments.PaymentsCenter.shared?.let { center ->
+            com.flagshipserver.app.core.payments.VoucherShop(
+                billing = mocks?.billing ?: if (mocks == null && shopStore != null && com.flagshipserver.app.core.Variant.storeSales(this)) {
+                    com.flagshipserver.app.core.payments.LivePlayBilling.shared(applicationContext)
+                } else null,
+                client = mocks?.payments ?: com.flagshipserver.app.api.LivePaymentsClient(OkHttpJsonTransport(okHttp)),
+                center = center,
+                store = shopStore ?: com.flagshipserver.app.core.payments.MemoryShopStore(),
+                scope = lifecycleScope,
+            )
+        }
         // The owner's call hours, as synced, stay on this device too: a locked phone still holds a call to them.
         voiciCenter.onCallHours = { h -> com.flagshipserver.app.calls.CallSettingsStore(applicationContext).setCallHours(h) }
         com.flagshipserver.app.calls.VoiciOutgoingCalls.integrity =
@@ -1018,7 +1033,14 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.SecurityNoticeCenter.shared?.onForeground()
         com.flagshipserver.app.core.AbuseNoticeCenter.shared?.let { c -> lifecycleScope.launch { runCatching { c.refresh() } } }
         // The voucher trickle: a foreground tick (never prompts; without the UMK it waits for the next unlock).
-        com.flagshipserver.app.core.payments.PaymentsCenter.shared?.let { c -> lifecycleScope.launch { runCatching { c.refresh(); c.tick() } } }
+        com.flagshipserver.app.core.payments.LivePlayBilling.front = java.lang.ref.WeakReference(this)
+        com.flagshipserver.app.core.payments.PaymentsCenter.shared?.let { c ->
+            lifecycleScope.launch {
+                runCatching { c.refresh(); c.tick() }
+                // Store purchases paid but not yet in the wallet (an app killed mid-purchase) finish here.
+                runCatching { com.flagshipserver.app.core.payments.VoucherShop.shared?.resume() }
+            }
+        }
         com.flagshipserver.app.keystore.ServingRenewal.appOpened()
         com.flagshipserver.app.phoneroute.PhoneRouteController.appForeground()
         // voi.ci reply notices are checked on foreground only (no push, no background polling).
