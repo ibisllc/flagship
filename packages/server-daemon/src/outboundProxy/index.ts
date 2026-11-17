@@ -21,7 +21,7 @@ export interface OutboundProxyRuntime {
   /** The box's plan check (Pro gate); until set, the plan is unknown and nothing is refused. */
   setPlan(plan: PlanGate): void;
   /** Start the failure alerts and the fallback lane once the box can sign (docs/outbound-proxy.md "Failure handling"). */
-  startLane(deps: Omit<ProxyLaneDeps, "net" | "store" | "authority" | "activate">): Promise<ProxyLane>;
+  startLane(deps: Omit<ProxyLaneDeps, "net" | "store" | "authority" | "activate" | "plan">): Promise<ProxyLane>;
   /** Called after every switch (the tunnel reconnects so the hub sees the new path). */
   onChange(fn: () => void): void;
   /** The screens handler; `probeTarget` is the hub. */
@@ -95,7 +95,7 @@ export async function setUpOutboundProxy(opts: {
     },
     startLane: async (d) => {
       if (!lane) {
-        lane = startProxyLane({ ...d, net, store, authority: opts.authority, activate });
+        lane = startProxyLane({ ...d, net, store, authority: opts.authority, activate, plan: planGate });
         await lane.start();
       }
       return lane;

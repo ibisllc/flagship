@@ -147,7 +147,7 @@ const gw = ohttpGatewayKey(3, new Uint8Array(32).fill(0x31));
 const keyHex = Buffer.from(encodeOhttpKeyConfig(gw)).toString("hex");
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
-async function world() {
+async function world(plan?: { state(): "pro" | "free" | "unknown"; refresh(): Promise<"pro" | "free" | "unknown"> }) {
   const storage = new InMemoryStorage();
   await storage.usernames.put({ username: U, irkPubHex: hex(irk.publicKey), claimedAt: 1 });
   await storage.servers.put({ serverDomain: D, username: U, identityPubKeyHex: hex(stkPub), registeredAt: 1 });
@@ -219,6 +219,7 @@ async function world() {
     directFetch: directFetch as never,
     pollEveryMs: 60_000_000,
     log: () => {},
+    ...(plan ? { plan } : {}),
   });
   await lane.start();
   const pods = async () =>
@@ -335,4 +336,15 @@ describe("the lane: reports and fixes while the proxy fails", () => {
     expect(await w.pods()).not.toContain("proxyAlert");
   });
 
+
+  it("on a verified Free plan the lane can turn the proxy off but not set a new one", async () => {
+    const w = await world({ state: () => "free", refresh: async () => "free" });
+    await failProxy(w);
+    const other = order({ host: "10.0.0.9", port: 1080, issuedAt: Date.now() });
+    await w.storage.boxProxyLane.putOrderIfNewer(D, U, { orderJson: JSON.stringify(other), signatureHex: signBoxProxy(other, irk), issuedAt: other.issuedAt });
+    expect(await w.lane.pollOnce()).toBe("refused");
+    const off = order({ kind: "none", host: "", port: 0, issuedAt: Date.now() + 1 });
+    await w.storage.boxProxyLane.putOrderIfNewer(D, U, { orderJson: JSON.stringify(off), signatureHex: signBoxProxy(off, irk), issuedAt: off.issuedAt });
+    expect(await w.lane.pollOnce()).toBe("applied");
+  });
 });

@@ -48,6 +48,8 @@ export interface ProxyLaneDeps {
   /** Where the last relay config from `.com` is kept. */
   ohttpConfigPath: string;
   probeTarget: () => { host: string; port: number };
+  /** The Pro gate (http.ts): a lane order that sets a proxy is refused on a verified Free plan. */
+  plan?: { state(): "pro" | "free" | "unknown"; refresh(): Promise<"pro" | "free" | "unknown"> };
   log?: (m: string) => void;
   now?: () => number;
   /** Test seams. */
@@ -166,6 +168,10 @@ export function startProxyLane(deps: ProxyLaneDeps): ProxyLane {
     if (!signed) return "refused";
     if (held && signed.proxy.issuedAt <= held.signed.proxy.issuedAt) return "none";
     const p = signed.proxy;
+    if (p.kind !== "none" && deps.plan?.state() === "free" && (await deps.plan.refresh().catch(() => "unknown")) === "free") {
+      deps.note("server.proxy.lane-refused", "An outbound proxy is part of Pro; the server can still turn this one off.", { ok: false });
+      return "refused";
+    }
     let credentials = undefined as StoredOutboundProxy["credentials"];
     if (p.kind !== "none" && p.auth) {
       const hp = held?.signed.proxy;

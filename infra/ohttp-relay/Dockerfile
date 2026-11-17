@@ -1,4 +1,4 @@
-# Flagship's interim OHTTP relay (infra/ohttp-relay/README.md). No dependencies.
+# Flagship's interim OHTTP relay (docs/outbound-proxy.md "Interim relay"). No dependencies.
 FROM node:22-alpine
 WORKDIR /app
 COPY relay.mjs ./
