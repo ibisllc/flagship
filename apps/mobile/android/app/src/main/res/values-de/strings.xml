@@ -3579,8 +3579,6 @@
     <string name="reserved">Reserviert</string>
     <string name="taken">Vergeben</string>
     <string name="needs_a_password">%1$s · Passwort erforderlich</string>
-    <string name="not_working">Funktioniert nicht: %1$s</string>
-    <string name="using_a_direct_connection_the_proxy">Direktverbindung aktiv: Der Proxy antwortet nicht</string>
     <string name="an_outbound_proxy_is_part_of">Ein ausgehender Proxy gehört zu Pro.</string>
     <string name="enter_the_proxys_address">Gib die Adresse des Proxys ein.</string>
     <string name="that_address_is_too_long">Diese Adresse ist zu lang.</string>

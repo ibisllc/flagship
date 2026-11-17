@@ -3577,8 +3577,6 @@
   "reserved": "予約済み",
   "taken": "使用済み",
   "needs_a_password": "%1$s · パスワードが必要",
-  "not_working": "動作していません：%1$s",
-  "using_a_direct_connection_the_proxy": "直接接続を使用中：プロキシが応答していません",
   "an_outbound_proxy_is_part_of": "送信プロキシは Pro に含まれます。",
   "enter_the_proxys_address": "プロキシのアドレスを入力してください。",
   "that_address_is_too_long": "アドレスが長すぎます。",

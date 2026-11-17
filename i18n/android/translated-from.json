@@ -3514,8 +3514,6 @@
   "reserved": "aa2eee54ec5a",
   "taken": "8c75f00d8c09",
   "needs_a_password": "a97c1b74abe3",
-  "not_working": "b170d5b7e30a",
-  "using_a_direct_connection_the_proxy": "91e0c666959a",
   "an_outbound_proxy_is_part_of": "67721b62d731",
   "enter_the_proxys_address": "7e44f97d811b",
   "that_address_is_too_long": "a36e8031a05c",

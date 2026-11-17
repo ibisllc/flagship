@@ -3577,8 +3577,6 @@
   "reserved": "Reservado",
   "taken": "Em uso",
   "needs_a_password": "%1$s · requer senha",
-  "not_working": "Não está funcionando: %1$s",
-  "using_a_direct_connection_the_proxy": "Usando conexão direta: o proxy não está respondendo",
   "an_outbound_proxy_is_part_of": "Um proxy de saída faz parte do Pro.",
   "enter_the_proxys_address": "Digite o endereço do proxy.",
   "that_address_is_too_long": "Esse endereço é longo demais.",
