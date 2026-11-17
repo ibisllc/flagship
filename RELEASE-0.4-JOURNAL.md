@@ -960,3 +960,15 @@ Next steps for whoever resumes:
   (unmerged), the gym cache worktree. Disk 4.5 GB → 30 GB free.
 - `0.4/activity-social` agent started (spec `docs/activity-social.md`). `0.4/ice-fix` agent running (local harness
   for the TURN/ICE failure). Owner: a locked phone rings fine, so the earlier "rang a second" was not the lock check.
+
+### 2026-11-16 — Calls: ICE through the phone's TURN responder (branch `0.4/ice-fix`)
+- After the tunnel fix every relayed stream reaches TLS 1.3 and TURN allocates, but ICE fails on both ends (phone
+  checking → failed at 15 s; Chrome checking → disconnected → failed). The TURN stream carried 76 KB in and 50 KB out.
+- Harness `tools/voici-calls-ice/` (`30eb7ecdf`): turn-lite over TCP with a real relay socket, Chrome as the caller
+  (set up like the voi.ci page) and as the phone stand-in, `--loopback` making the caller see 127.0.0.1 relay and
+  peer as on the phone. PASS for audio, audio + video, 8,000 and 320,000 B/s, with the phone's extra `::1` candidate.
+  So turn-lite and the browser are fine; the failing part is the phone's side (its libwebrtc on loopback, or
+  the content of the checks). Not found by reading libwebrtc.
+- Diagnostics on the phone (`e738cb1fe` gym-0.4, `de4ca8a16` 0.4/media-fix): every 2 s "turn mix:" counts of STUN
+  requests/successes/errors (with codes), DTLS, RTP, RTCP each way and dropped datagrams; the checks' USERNAME and
+  both descriptions' ICE ufrags. Built; install failed because the iPhone is out of storage (300 MB needed, 206 MB free).
