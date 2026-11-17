@@ -28,7 +28,28 @@ export interface DirectoryState {
   proposed: string[];
 }
 
-export const emptyDirectoryState = (): DirectoryState => ({ users: {}, links: {}, proposed: [] });
+export const emptyDirectoryState = (): DirectoryState => ({ users: Object.create(null) as Record<string, DirectoryUser>, links: Object.create(null) as Record<string, DirectoryLink>, proposed: [] });
+
+/**
+ * A directory's externalId is the IdP's text, so the stores keyed by it are null-prototype objects and are read
+ * only through `own` (05c review F8: an externalId of `__proto__` or `constructor` must be an ordinary key).
+ */
+const own = <T>(store: Record<string, T>, k: string): T | undefined => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : undefined);
+const nullStore = <T>(entries: Iterable<readonly [string, T]> = []): Record<string, T> => {
+  const out = Object.create(null) as Record<string, T>;
+  for (const [k, v] of entries) out[k] = v;
+  return out;
+};
+
+/** Saved state as null-prototype stores. */
+export function directoryStateFrom(raw: unknown): DirectoryState {
+  const r = raw && typeof raw === "object" ? (raw as Partial<DirectoryState>) : {};
+  return {
+    users: nullStore(Object.entries(r.users && typeof r.users === "object" ? r.users : {})),
+    links: nullStore(Object.entries(r.links && typeof r.links === "object" ? r.links : {})),
+    proposed: Array.isArray(r.proposed) ? r.proposed.filter((d): d is string => typeof d === "string") : [],
+  };
+}
 
 export interface ProposalIntent {
   kind: OrgProposalKind;
@@ -102,12 +123,12 @@ export function diffDirectory(
   now: number,
   newId: () => string = () => randomBytes(16).toString("hex"),
 ): { state: DirectoryState; intents: ProposalIntent[] } {
-  const links = { ...prev.links };
+  const links = nullStore(Object.entries(prev.links));
   const proposed = new Set(prev.proposed);
   const intents: ProposalIntent[] = [];
   const nextMap = new Map(next.map((u) => [u.externalId, u]));
   const add = (kind: OrgProposalKind, user: DirectoryUser, roles: OrgSeatRole[]) => {
-    const link = links[user.externalId]!;
+    const link = own(links, user.externalId)!;
     const subject = kind === "invite" ? link.pendingId : link.seatId!;
     const rolesHash = kind === "invite" || kind === "role-change" ? orgSeatRolesHash(roles) : "";
     const entry = entryFor(user, source, link, now);
@@ -118,9 +139,9 @@ export function diffDirectory(
   };
 
   for (const user of next) {
-    const before = prev.users[user.externalId];
+    const before = own(prev.users, user.externalId);
     const roles = rolesFor(user, mapping);
-    let link = links[user.externalId];
+    let link = own(links, user.externalId);
     if (!link?.seatId) {
       if (user.active && roles.length > 0) {
         if (!link) links[user.externalId] = link = { pendingId: newId() };
@@ -137,7 +158,7 @@ export function diffDirectory(
   }
   for (const [externalId, user] of Object.entries(prev.users)) {
     if (nextMap.has(externalId)) continue;
-    if (links[externalId]?.seatId) add("offboard", { ...user, active: false }, []);
+    if (own(links, externalId)?.seatId) add("offboard", { ...user, active: false }, []);
   }
-  return { state: { users: Object.fromEntries(nextMap), links, proposed: [...proposed].slice(-20_000) }, intents };
+  return { state: { users: nullStore(nextMap), links, proposed: [...proposed].slice(-20_000) }, intents };
 }

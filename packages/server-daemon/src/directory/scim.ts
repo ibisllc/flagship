@@ -54,7 +54,25 @@ export interface ScimData {
   groups: Record<string, ScimGroupRecord>;
 }
 
-export const emptyScimData = (): ScimData => ({ users: {}, groups: {} });
+export const emptyScimData = (): ScimData => ({ users: Object.create(null) as Record<string, ScimUserRecord>, groups: Object.create(null) as Record<string, ScimGroupRecord> });
+
+/** Ids that name an object's own machinery, never a resource (05c review F2). */
+const RESERVED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+export const isReservedKey = (k: string): boolean => RESERVED_KEYS.has(k);
+
+/** A record by id only when the store holds it itself: never a key inherited from Object.prototype. */
+export function ownEntry<T>(store: Record<string, T>, id: string): T | undefined {
+  return !RESERVED_KEYS.has(id) && Object.prototype.hasOwnProperty.call(store, id) ? store[id] : undefined;
+}
+
+/** Saved SCIM data as null-prototype stores, dropping any reserved id an older file may hold. */
+export function scimDataFrom(raw: unknown): ScimData {
+  const out = emptyScimData();
+  const r = raw && typeof raw === "object" ? (raw as Partial<ScimData>) : {};
+  for (const [k, v] of Object.entries(r.users ?? {})) if (!RESERVED_KEYS.has(k) && v && typeof v === "object") out.users[k] = v;
+  for (const [k, v] of Object.entries(r.groups ?? {})) if (!RESERVED_KEYS.has(k) && v && typeof v === "object") out.groups[k] = v;
+  return out;
+}
 
 export interface ScimDeps {
   /** The connector's SHA-256 token hash (hex); null when the connector is paused or not set up. */
@@ -157,7 +175,7 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
       id: g.id,
       displayName: g.displayName,
       ...(g.externalId ? { externalId: g.externalId } : {}),
-      ...(withMembers ? { members: g.members.filter((m) => data.users[m]).map((m) => ({ value: m, display: data.users[m]!.userName, $ref: `https://${host}${BASE}/Users/${m}` })) } : {}),
+      ...(withMembers ? { members: g.members.filter((m) => ownEntry(data.users, m)).map((m) => ({ value: m, display: ownEntry(data.users, m)!.userName, $ref: `https://${host}${BASE}/Users/${m}` })) } : {}),
       meta: { resourceType: "Group", created: new Date(g.created).toISOString(), lastModified: new Date(g.lastModified).toISOString(), location: `https://${host}${BASE}/Groups/${g.id}` },
     };
   }
@@ -219,7 +237,7 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
 
   function patchGroup(g: ScimGroupRecord, data: ScimData, op: string, path: string | undefined, value: unknown): string | null {
     const ids = (v: unknown): string[] =>
-      (Array.isArray(v) ? v : [v]).map((m) => (m && typeof m === "object" ? str((m as Record<string, unknown>).value, 64) : undefined)).filter((x): x is string => !!x && !!data.users[x]);
+      (Array.isArray(v) ? v : [v]).map((m) => (m && typeof m === "object" ? str((m as Record<string, unknown>).value, 64) : undefined)).filter((x): x is string => !!x && !!ownEntry(data.users, x));
     const filtered = path ? /^members\[value eq "([^"]+)"\]$/i.exec(path) : null;
     if (filtered) {
       if (op === "remove") g.members = g.members.filter((m) => m !== filtered[1]);
@@ -342,8 +360,9 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
         await save();
         return finish(json(201, userJson(u, data, host), { location: `https://${host}${BASE}/Users/${u.id}` }));
       }
-      const u = id ? data.users[id] : undefined;
+      const u = id ? ownEntry(data.users, id) : undefined;
       if (!u) return finish(scimError(404, "no such user"));
+      const nameTaken = (userName: string) => Object.values(data.users).some((o) => o.id !== u.id && o.userName.toLowerCase() === userName.toLowerCase());
       if (req.method === "GET") return finish(json(200, userJson(u, data, host)));
       if (req.method === "DELETE") {
         delete data.users[u.id];
@@ -354,21 +373,27 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
       if (req.method === "PUT") {
         const f = userFields(body);
         if (typeof f === "string") return finish(scimError(400, f, "invalidValue"));
+        if (nameTaken(f.userName!)) return finish(scimError(409, "userName exists", "uniqueness"));
         Object.assign(u, { externalId: undefined, displayName: undefined, givenName: undefined, familyName: undefined, emails: undefined }, f, { lastModified: t });
         await save();
         return finish(json(200, userJson(u, data, host)));
       }
       if (req.method === "PATCH") {
         if (!Array.isArray(body.Operations) || !(body.schemas as unknown[] | undefined)?.includes(SCIM_PATCH)) return finish(scimError(400, "a PatchOp is required", "invalidSyntax"));
+        // Every operation applies to a copy; the stored user changes only when all of them are valid (05c review F7).
+        const draft: ScimUserRecord = structuredClone(u);
         for (const o of body.Operations as Array<Record<string, unknown>>) {
+          if (!o || typeof o !== "object") return finish(scimError(400, "an operation must be an object", "invalidSyntax"));
           const op = String(o.op ?? "").toLowerCase();
           if (!["add", "replace", "remove"].includes(op)) return finish(scimError(400, "op must be add, replace or remove", "invalidSyntax"));
-          const e = patchUser(u, op, str(o.path, 256), o.value);
+          const e = patchUser(draft, op, str(o.path, 256), o.value);
           if (e) return finish(scimError(400, e, "invalidPath"));
         }
-        u.lastModified = t;
+        if (nameTaken(draft.userName)) return finish(scimError(409, "userName exists", "uniqueness"));
+        draft.lastModified = t;
+        data.users[u.id] = draft;
         await save();
-        return finish(json(200, userJson(u, data, host)));
+        return finish(json(200, userJson(draft, data, host)));
       }
     }
 
@@ -396,8 +421,9 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
         await save();
         return finish(json(201, groupJson(g, data, host), { location: `https://${host}${BASE}/Groups/${g.id}` }));
       }
-      const g = id ? data.groups[id] : undefined;
+      const g = id ? ownEntry(data.groups, id) : undefined;
       if (!g) return finish(scimError(404, "no such group"));
+      const groupNameTaken = (displayName: string) => Object.values(data.groups).some((o) => o.id !== g.id && o.displayName === displayName);
       if (req.method === "GET") return finish(json(200, groupJson(g, data, host, !/members/.test(q.get("excludedAttributes") ?? ""))));
       if (req.method === "DELETE") {
         delete data.groups[g.id];
@@ -405,7 +431,9 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
         return finish(json(204, null));
       }
       if (req.method === "PUT") {
-        g.displayName = str(body.displayName, 256) ?? g.displayName;
+        const displayName = str(body.displayName, 256) ?? g.displayName;
+        if (groupNameTaken(displayName)) return finish(scimError(409, "displayName exists", "uniqueness"));
+        g.displayName = displayName;
         g.externalId = str(body.externalId, 256);
         patchGroup(g, data, "replace", "members", body.members ?? []);
         g.lastModified = t;
@@ -414,13 +442,17 @@ export function createScimHandler(deps: ScimDeps): (req: HttpRequest) => Promise
       }
       if (req.method === "PATCH") {
         if (!Array.isArray(body.Operations)) return finish(scimError(400, "a PatchOp is required", "invalidSyntax"));
+        const draft: ScimGroupRecord = structuredClone(g);
         for (const o of body.Operations as Array<Record<string, unknown>>) {
+          if (!o || typeof o !== "object") return finish(scimError(400, "an operation must be an object", "invalidSyntax"));
           const op = String(o.op ?? "").toLowerCase();
           if (!["add", "replace", "remove"].includes(op)) return finish(scimError(400, "op must be add, replace or remove", "invalidSyntax"));
-          const e = patchGroup(g, data, op, str(o.path, 256), o.value);
+          const e = patchGroup(draft, data, op, str(o.path, 256), o.value);
           if (e) return finish(scimError(400, e, "invalidPath"));
         }
-        g.lastModified = t;
+        if (groupNameTaken(draft.displayName)) return finish(scimError(409, "displayName exists", "uniqueness"));
+        draft.lastModified = t;
+        data.groups[g.id] = draft;
         await save();
         return finish(json(204, null));
       }

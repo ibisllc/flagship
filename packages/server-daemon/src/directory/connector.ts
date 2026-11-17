@@ -14,13 +14,18 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
   buildOrgProposal,
+  canonicalOrgProposalDecision,
   canonicalOrgSeatInvite,
   canonicalOrgDirectoryEntryBody,
   hybridSigKeygen,
   orgKemKeyPair,
   openOrgConnectorSetup,
+  orgApprovalFromWire,
+  orgSeatRolesHash,
   orgSha256Hex,
   verifyOrgConnector,
+  verifyOrgProposal,
+  verifyOrgRecordedApprovals,
   verifyOrgSeatKem,
   type OrgConnectorBundle,
   type OrgConnectorStanding,
@@ -28,12 +33,14 @@ import {
   type OrgConnectorMapping,
   type OrgKemKey,
   type OrgProposalBundle,
+  type OrgProposalDecisionStatement,
+  type OrgSeatRole,
   type OrgSeatInvite,
   type OrgSeatKemBundle,
 } from "@flagship/protocol";
 import { readStateFile, writeFileDurable } from "../durableFile.js";
 import type { OrgPinned } from "../orgAuthorityPin.js";
-import { diffDirectory, emptyDirectoryState, type DirectoryState, type ProposalIntent } from "./engine.js";
+import { diffDirectory, directoryStateFrom, emptyDirectoryState, type DirectoryLink, type DirectoryState, type ProposalIntent } from "./engine.js";
 import type { DirectoryUser } from "./source.js";
 
 export interface ConnectorDeps {
@@ -185,7 +192,7 @@ export class ConnectorRuntime {
     const r = await readStateFile(this.statePath(connectorId));
     if (r.kind !== "ok") return emptyDirectoryState();
     try {
-      return JSON.parse(r.text) as DirectoryState;
+      return directoryStateFrom(JSON.parse(r.text));
     } catch {
       return emptyDirectoryState();
     }
@@ -240,31 +247,64 @@ export class ConnectorRuntime {
     });
   }
 
-  /** A pending person becomes linked to a seat once an admin carried out their invite proposal. */
+  /**
+   * A pending person becomes linked to a seat once an admin carried out their invite proposal. Every link rests on
+   * evidence the box checks itself under its pinned chain (05c review F3): the proposal is this connector's own
+   * (its signature), an org admin approved the decision naming that proposal and the invite's digest, an org admin
+   * approved the invite, and the invite's seat is in the pinned seat book. `.com` alone cannot link anyone.
+   */
   async linkSeats(connectorId: string, state: DirectoryState): Promise<DirectoryState> {
     const pending = Object.entries(state.links).filter(([, l]) => !l.seatId);
     if (pending.length === 0) return state;
+    const c = this.active.get(connectorId);
+    const pin = this.deps.pin();
+    if (!c || !pin) return state;
     const [{ proposals }, { invites }] = await Promise.all([
-      this.get<{ proposals: Array<{ bundle: OrgProposalBundle; decision: { statement: { decision: string; refSha256: string } } | null }> }>("/proposals"),
-      this.get<{ invites: Array<{ invite: OrgSeatInvite }> }>("/seats"),
+      this.get<{ proposals: Array<{ bundle: OrgProposalBundle; decision: { statement: OrgProposalDecisionStatement; approvals?: unknown[] } | null }> }>("/proposals"),
+      this.get<{ invites: Array<{ invite: OrgSeatInvite; approvals?: unknown[] }> }>("/seats"),
     ]);
-    const bySha = new Map<string, string>();
-    for (const i of invites ?? []) {
+    const now = this.now();
+    const approved = (order: Uint8Array, wire: unknown): boolean => {
       try {
-        bySha.set(orgSha256Hex(canonicalOrgSeatInvite(i.invite)), i.invite.seatId);
+        if (!Array.isArray(wire) || wire.length === 0) return false;
+        const approvals = wire.map(orgApprovalFromWire);
+        const v = approvals[0]!.oarVersion;
+        if (approvals.some((a) => a.oarVersion !== v)) return false;
+        // No scope: every signer must be an org admin of the record the approvals name.
+        verifyOrgRecordedApprovals(pin.state, pin.book, order, approvals, v, now);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const bySha = new Map<string, string>();
+    for (const i of Array.isArray(invites) ? invites : []) {
+      try {
+        if (i?.invite?.orgId !== this.deps.orgId) continue;
+        const order = canonicalOrgSeatInvite(i.invite);
+        if (!approved(order, i.approvals)) continue;
+        bySha.set(orgSha256Hex(order), i.invite.seatId);
       } catch {
         /* malformed */
       }
     }
-    const pin = this.deps.pin();
-    const links = { ...state.links };
-    for (const p of proposals ?? []) {
-      const d = p.decision?.statement;
-      if (p.bundle?.proposal?.connectorId !== connectorId || p.bundle.proposal.kind !== "invite" || d?.decision !== "done") continue;
+    const links: Record<string, DirectoryLink> = Object.assign(Object.create(null) as Record<string, DirectoryLink>, state.links);
+    for (const p of Array.isArray(proposals) ? proposals : []) {
+      const d = p?.decision?.statement;
+      const prop = p?.bundle?.proposal;
+      if (prop?.connectorId !== connectorId || prop.kind !== "invite" || d?.decision !== "done") continue;
+      if (d.orgId !== this.deps.orgId || d.proposalId !== prop.proposalId) continue;
+      try {
+        const roles = Array.isArray(p.bundle.roles) ? (p.bundle.roles as OrgSeatRole[]) : [];
+        verifyOrgProposal(c.bundle, p.bundle, { rolesHash: roles.length > 0 ? orgSeatRolesHash(roles) : "", now });
+        if (!approved(canonicalOrgProposalDecision(d), p.decision!.approvals)) continue;
+      } catch {
+        continue;
+      }
       const seatId = bySha.get(d.refSha256);
-      // Only a seat the pinned seat book holds counts (`.com` alone cannot link a person to a seat).
-      if (!seatId || !pin?.book.seats.has(seatId)) continue;
-      for (const [ext, l] of pending) if (l.pendingId === p.bundle.proposal.subject) links[ext] = { ...l, seatId };
+      // Only a seat the pinned seat book holds counts.
+      if (!seatId || !pin.book.seats.has(seatId)) continue;
+      for (const [ext, l] of pending) if (l.pendingId === prop.subject) links[ext] = { ...l, seatId };
     }
     return { ...state, links };
   }
