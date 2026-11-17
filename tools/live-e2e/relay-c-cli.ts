@@ -26,7 +26,8 @@ import { createDebianVm, destroyVm, run, scp, ssh, type Vm } from "./lib/upcloud
 import { relayName, tunnelName } from "./lib/meshDns.js";
 import { RELAY_C_STATE, gymMeshDns } from "./gym-mesh-dns.js";
 
-export const RELAY_ID = "gym-c";
+// A retired relay id is never admitted again, so a gym-c brought back after a retire runs under a new id.
+export const RELAY_ID = process.env.GYM_RELAY_C_ID || "gym-c";
 const CONF = join(homedir(), ".config/flagship");
 const APEX = process.env.GYM_LIVE_SERVICES_APEX || "gym.flagship.services";
 const CONTROL = process.env.GYM_LIVE_CONTROL_APEX || "gym.flagshipserver.com";

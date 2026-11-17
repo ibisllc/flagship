@@ -27,7 +27,7 @@ import { CloudflareZone, flyAcmeTarget, flyAddresses, formatPlan, planMeshDns, r
 export const GYM_RELAYS: Array<{ relayId: string; fly?: string }> = [
   { relayId: "gym-a", fly: "flagship-services-gym" },
   { relayId: "gym-b", fly: "flagship-services-gym-b" },
-  { relayId: "gym-c" },
+  { relayId: process.env.GYM_RELAY_C_ID || "gym-c" },
 ];
 
 const APEX = process.env.GYM_LIVE_SERVICES_APEX || "gym.flagship.services";
