@@ -961,7 +961,6 @@
   "s623469b2de": "Anrufe brauchen die App 0.4 auf dem Telefon, das du anrufst. Direkte Namen teilen sich das wöchentliche Zertifikatsbudget von Let's Encrypt für fshp.app, bis unsere Erhöhung genehmigt ist; ein neuer Name kann also ein paar Tage auf sein Zertifikat warten.",
   "s1081177031": "<1><2>→</2><3>Neu in 0.4: Anrufe über deine Seite, direkte Adressen, private Tarife</3></1>",
   "s8868ad9adf": "<1>Neu in 0.4</1>",
-  "s15358ff539": "Flagship ist kostenlos. Pro und Pro Max bringen mehr öffentlichen Datenverkehr und eigene Domains, bezahlt mit 1-$-Gutscheinen, die unser Server blind signiert. So erfährt er nie, für welches Konto ein Kauf bezahlt hat.",
   "s0b28a50f72": "Flagship ist kostenlos, und der Free-Tarif behält jede Funktion. Pro und Pro Max bringen mehr Spielraum für öffentlichen Datenverkehr und ein paar Extras. Du bezahlst mit 1-$-Gutscheinen, die unser Server blind signiert. So erfährt er nie, für welches Konto ein Kauf bezahlt hat.",
   "s479eedd3a5": "Was jeder Tarif enthält",
   "se2029d278b": "Was auf deiner eigenen Hardware läuft, wird nie gezählt: Server, Apps, Daten, Speicher und Geräte. Wir messen den öffentlichen Datenverkehr, den unser Relay zwischen deinen Servern und ihren Besuchern transportiert, denn der kostet uns Geld.",
@@ -1004,5 +1003,18 @@
   "s6cc6119a73": "Eine Namensänderung pro Konto alle 30 Tage.",
   "se113968350": "Warum überhaupt zahlen?",
   "s0d96cc73ac": "Du musst nicht, und die meisten werden es nie tun. Flagship läuft ohne Werbung, ohne Risikokapital und ohne den Verkauf deiner Daten; Relay, DNS und Zertifikate kosten echtes Geld. Ein Tarif, selbst einer, den du nie ausschöpfst, hält das Projekt unabhängig und das kostenlose Angebot für alle anderen kostenlos.",
-  "s33d6de4f03": "<1>Ein privates Relay für Ausgaben.</1> Ausgaben laufen über ein privates Relay, das ein unabhängiges Unternehmen betreibt, Oblivious Network. So sieht weder es noch Flagship zugleich, wer du bist und was du ausgibst. Nur wenn es ausfällt, kommt ein Ersatz-Relay von Flagship zum Einsatz."
+  "s33d6de4f03": "<1>Ein privates Relay für Ausgaben.</1> Ausgaben laufen über ein privates Relay, das ein unabhängiges Unternehmen betreibt, Oblivious Network. So sieht weder es noch Flagship zugleich, wer du bist und was du ausgibst. Nur wenn es ausfällt, kommt ein Ersatz-Relay von Flagship zum Einsatz.",
+  "s971c3d680d": "Flagship ist kostenlos. Pro und Pro Max bringen öffentlichen Datenverkehr und eigene Domains, und Business ist für Teams. Du bezahlst mit 1-$-Gutscheinen, die unser Server blind signiert, sodass er nie erfährt, für welches Konto ein Kauf bezahlt hat.",
+  "s93823e35fd": "<1>Business</1>",
+  "s7e6cc25fdc": "100&nbsp;GB pro Platz, geteilt von der ganzen Organisation",
+  "s42377701b6": "Stattdessen Plätze",
+  "s45ac735489": "6 $ pro Platz und Monat, mindestens 3 Plätze",
+  "s27c98bb8ed": "Business: für ein Team",
+  "scf669a59e3": "Free, Pro und Pro Max sind für eine Person oder eine Familie. Business ist für eine Organisation: mehrere Personen mit Admin-Rechten über ihre Server und Apps. Jede Person ist ein Platz.",
+  "s797139fb05": "<1>Alles, was eine Organisation braucht.</1> Plätze, Admins für bestimmte Server oder Apps, Freigaben durch mehrere Admins, das Einfrieren eines Platzes, Regeln für die Organisation, neue Schlüssel, wenn jemand geht, ein offline prüfbarer Audit-Export sowie SCIM- und LDAP-Verzeichniskonnektoren.",
+  "s1478ebf936": "<1>30 Tage Testphase.</1> Eine neue Organisation bekommt 30 Tage lang 10 Plätze. Die bezahlte Zeit beginnt, wenn die Testphase endet.",
+  "s392b4bf86d": "<1>Nichts geht verloren, wenn die Zahlung ausbleibt.</1> Eine abgelaufene Organisation behält jeden Platz, jede App und jeden Eintrag. Du kannst weiterhin Personen entfernen und alles exportieren. Personen, Server oder Konnektoren hinzuzufügen, wartet, bis wieder bezahlt ist.",
+  "s5e0e6d98fa": "<1>Ein eigenes Guthaben der Organisation.</1> Ihre Admins halten es, verschlüsselt mit einem Schlüssel, den nur sie teilen. Es bezahlt 6 $ pro Platz und Monat in Gutscheinen, nach und nach, wie ein persönlicher Tarif.",
+  "s4d6b862377": "<1>Eine Rechnung für das Unternehmen, nicht für seine Leute.</1> Ein Unternehmen kann im Web ein Paket von mindestens 100 Gutscheinen kaufen, mit einer Rechnung auf seinen Namen und seine Steuernummer. Die Rechnung nennt das Unternehmen und die Anzahl der Gutscheine, nie die Organisation, ein Konto oder einen Platz. Die Gutscheine werden wie alle anderen blind signiert. Sie gehen in das Guthaben der Organisation oder in Gutscheindateien, mit denen Mitarbeitende ihr eigenes Pro bezahlen.",
+  "s1dd52aa43a": "Enterprise ist Business mit einem Vertrag: Zahlungsziele, eine Einrichtung vor Ort oder Support. Mehr als 50 Plätze, oder du brauchst eines davon? Schreib uns."
 }

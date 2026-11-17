@@ -961,7 +961,6 @@
   "s623469b2de": "As chamadas precisam do app 0.4 no celular para o qual você liga. Os nomes diretos dividem a cota semanal de certificados do Let's Encrypt para fshp.app até nosso aumento ser aprovado, então um nome novo pode esperar alguns dias pelo certificado.",
   "s1081177031": "<1><2>→</2><3>Novidades da 0.4: chamadas pela sua página, endereços diretos, planos privados</3></1>",
   "s8868ad9adf": "<1>Novidades da 0.4</1>",
-  "s15358ff539": "O Flagship é gratuito. Pro e Pro Max adicionam tráfego público e domínios personalizados, pagos com vales de US$ 1 que nosso servidor assina às cegas, então ele nunca sabe qual conta uma compra pagou.",
   "s0b28a50f72": "O Flagship é gratuito, e o plano Free mantém todos os recursos. Pro e Pro Max dão mais espaço para o tráfego público e alguns extras. Você paga com vales de US$ 1 que nosso servidor assina às cegas, então ele nunca sabe qual conta uma compra pagou.",
   "s479eedd3a5": "O que cada plano inclui",
   "se2029d278b": "Nada do que roda no seu próprio hardware é contado: servidores, apps, dados, armazenamento e dispositivos. O que medimos é o tráfego público que nosso relay leva entre seus servidores e os visitantes deles, porque é isso que nos custa dinheiro.",
@@ -1004,5 +1003,18 @@
   "s6cc6119a73": "Uma mudança de nome por conta a cada 30 dias.",
   "se113968350": "Por que pagar?",
   "s0d96cc73ac": "Você não precisa, e a maioria das pessoas nunca vai pagar. O Flagship funciona sem anúncios, sem capital de risco e sem vender seus dados; o relay, o DNS e os certificados custam dinheiro de verdade. Um plano, mesmo um que você nunca use por completo, mantém o projeto independente e o plano gratuito gratuito para todos os outros.",
-  "s33d6de4f03": "<1>Um relay privado para os gastos.</1> Os gastos passam por um relay privado operado por uma empresa independente, a Oblivious Network, então nem ela nem o Flagship veem ao mesmo tempo quem você é e o que você gasta. Só se ele estiver fora do ar é usado um relay reserva operado pelo Flagship."
+  "s33d6de4f03": "<1>Um relay privado para os gastos.</1> Os gastos passam por um relay privado operado por uma empresa independente, a Oblivious Network, então nem ela nem o Flagship veem ao mesmo tempo quem você é e o que você gasta. Só se ele estiver fora do ar é usado um relay reserva operado pelo Flagship.",
+  "s971c3d680d": "O Flagship é gratuito. Pro e Pro Max adicionam tráfego público e domínios próprios, e o Business é para equipes. Você paga com vales de US$ 1 que nosso servidor assina às cegas, então ele nunca sabe qual conta uma compra pagou.",
+  "s93823e35fd": "<1>Business</1>",
+  "s7e6cc25fdc": "100&nbsp;GB por vaga, compartilhados por toda a organização",
+  "s42377701b6": "Vagas no lugar",
+  "s45ac735489": "US$ 6 por vaga por mês, no mínimo 3 vagas",
+  "s27c98bb8ed": "Business: para uma equipe",
+  "scf669a59e3": "Free, Pro e Pro Max são para uma pessoa ou uma família. O Business é para uma organização: várias pessoas com direitos de administrador sobre seus servidores e apps. Cada pessoa é uma vaga.",
+  "s797139fb05": "<1>Tudo o que uma organização precisa.</1> Vagas, administradores restritos a alguns servidores ou apps, aprovações de vários administradores, congelar uma vaga, regras para a organização, novas chaves quando alguém sai, uma exportação de auditoria que pode ser verificada offline, e conectores de diretório SCIM e LDAP.",
+  "s1478ebf936": "<1>Um teste de 30 dias.</1> Uma organização nova recebe 10 vagas por 30 dias. O tempo pago começa quando o teste termina.",
+  "s392b4bf86d": "<1>Nada se perde se o pagamento parar.</1> Uma organização vencida mantém cada vaga, app e registro. Você ainda pode remover pessoas e exportar tudo. Adicionar pessoas, servidores ou conectores espera até ela ser paga de novo.",
+  "s5e0e6d98fa": "<1>A carteira da própria organização.</1> Os administradores a guardam, criptografada com uma chave que só eles compartilham. Ela paga US$ 6 por vaga por mês em vales, aos poucos, como um plano pessoal.",
+  "s4d6b862377": "<1>Uma fatura para a empresa, não para as pessoas dela.</1> Uma empresa pode comprar na web um lote de pelo menos 100 vales, com fatura em seu nome e com seu número fiscal. A fatura mostra a empresa e o número de vales, nunca a organização, uma conta ou uma vaga. Os vales são assinados às cegas como quaisquer outros. Eles vão para a carteira da organização ou para arquivos de vales que a equipe usa no próprio Pro.",
+  "s1dd52aa43a": "Enterprise é o Business com um contrato: prazos de fatura, uma instalação no local ou suporte. Mais de 50 vagas, ou precisa de algo disso? Escreva para nós."
 }
