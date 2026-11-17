@@ -30,6 +30,7 @@ import {
   type BrokerEffect,
   type PolicyEnv,
 } from "./policy.js";
+import { cloudflareZoneApi, deleteStaleChallenges, handleServiceRequest } from "./service.js";
 
 const CF_API = "https://api.cloudflare.com/client/v4";
 
@@ -41,6 +42,10 @@ export interface Env {
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
   RPC_REPLAY_WINDOW_MS?: string;
+  /** Bearer secret of `.com`'s issuance service (service.ts). */
+  DNS_BROKER_SECRET?: string;
+  /** Comma list of the ACME account thumbprints whose challenges `/service` publishes (service.ts). */
+  ACME_ACCOUNT_THUMBPRINTS?: string;
 }
 
 // In-memory per-IP token bucket. CF Workers re-instantiate frequently
@@ -54,13 +59,16 @@ const RATE_LIMIT_REFILL_PER_SEC = 5;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method !== "POST" || new URL(request.url).pathname !== "/rpc") {
+    const path = new URL(request.url).pathname;
+    if (request.method !== "POST" || (path !== "/rpc" && path !== "/service")) {
       return generic(404);
     }
     if (!env.CLOUDFLARE_DNS_API_TOKEN || !env.CLOUDFLARE_SERVICES_ZONE_ID) {
       console.warn("[dns-broker] missing required secret");
       return generic(503);
     }
+    // The issuance service's challenge records (service.ts): its own secret, no per-IP bucket (Worker egress).
+    if (path === "/service") return handleServiceRequest(request, env, cloudflareZoneApi(env));
     const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
     if (!consume(ip)) {
       return generic(429);
@@ -117,6 +125,13 @@ export default {
       console.warn(`[dns-broker] cf call failed: ${String((e as Error).message ?? e)}`);
       return generic(502);
     }
+  },
+
+  // Hourly: challenge records an order left behind.
+  async scheduled(_event: unknown, env: Env): Promise<void> {
+    if (!env.CLOUDFLARE_DNS_API_TOKEN || !env.CLOUDFLARE_SERVICES_ZONE_ID) return;
+    const r = await deleteStaleChallenges(env, cloudflareZoneApi(env), Date.now());
+    if (r.deleted > 0) console.log(JSON.stringify({ event: "dns-broker-challenge-gc", ...r }));
   },
 };
 
