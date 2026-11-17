@@ -54,10 +54,44 @@ public final class VoucherWalletEngine {
     private var u: String { context.username.lowercased() }
     private var localKey: String { "flagship.payments.wallet.\(u)" }
     private var nextKey: String { "flagship.payments.nextSpendAt.\(u)" }
+    private var relayFailuresKey: String { "flagship.payments.relayFailures.\(u)" }
+    private var relayRetryKey: String { "flagship.payments.relayRetryAt.\(u)" }
+    private var relayReasonKey: String { "flagship.payments.relayReason.\(u)" }
+    private var lastDirectKey: String { "flagship.payments.lastDirect.\(u)" }
 
     var nextSpendAt: Int64 {
         get { Int64(defaults.double(forKey: nextKey)) }
         set { defaults.set(Double(newValue), forKey: nextKey) }
+    }
+
+    /// Spends skipped in a row because every relay failed and the spend couldn't go directly; reset by a relay success.
+    public internal(set) var relayFailures: Int {
+        get { defaults.integer(forKey: relayFailuresKey) }
+        set { defaults.set(newValue, forKey: relayFailuresKey) }
+    }
+    /// The tick doesn't try the relay again before this (`relayRetryAfterMs`).
+    public internal(set) var relayRetryAt: Int64 {
+        get { Int64(defaults.double(forKey: relayRetryKey)) }
+        set { defaults.set(Double(newValue), forKey: relayRetryKey) }
+    }
+    /// Why the relay failed last (for a direct spend while it rests).
+    var relayReason: String? {
+        get { defaults.string(forKey: relayReasonKey) }
+        set { defaults.set(newValue, forKey: relayReasonKey) }
+    }
+    /// The last spend went directly because the relay failed (not `unconfigured`); cleared by a relay success.
+    public internal(set) var lastDirectReason: String? {
+        get { defaults.string(forKey: lastDirectKey) }
+        set { defaults.set(newValue, forKey: lastDirectKey) }
+    }
+
+    /// The Plan screen's privacy line, in the order the screens agree on.
+    public var spendPrivacy: SpendPrivacy {
+        let relays = info?.ohttp.relays ?? []
+        if relayFailures > 0, !relays.isEmpty { return .relayWaiting }
+        if lastDirectReason != nil { return .wentDirect }
+        guard let first = relays.first else { return .noRelay }
+        return first.interim ? .interimRelay : .thirdPartyRelay(operator: first.operator)
     }
 
     // MARK: reading
@@ -106,8 +140,7 @@ public final class VoucherWalletEngine {
 
     /// Forget this device's copy (sign-out, wipe).
     public func forgetLocal() {
-        defaults.removeObject(forKey: localKey)
-        defaults.removeObject(forKey: nextKey)
+        for k in [localKey, nextKey, relayFailuresKey, relayRetryKey, relayReasonKey, lastDirectKey] { defaults.removeObject(forKey: k) }
         wallet = nil
     }
 
@@ -165,14 +198,15 @@ public final class VoucherWalletEngine {
             s.delayStart = delayStart
             s.startAt = plan != nil && delayStart ? t + delayMs : 0
         }
-        if ok { nextSpendAt = 0; await tick() }
+        if ok { nextSpendAt = 0; await tick(interactive: true) }
         return ok
     }
 
     // MARK: spending
 
     /// One round of automatic spending: the trickle for the chosen plan, then an overage block if one is due.
-    public func tick() async {
+    /// `interactive`: the owner just chose a plan and waits, so the plan spend may always go directly if the relay fails.
+    public func tick(interactive: Bool = false) async {
         guard canSpend, info != nil, let w = wallet, w.settings.autoPay else { return }
         let cfg = config
         let t = now()
@@ -183,7 +217,7 @@ public final class VoucherWalletEngine {
                 unitMs: cfg.unitMs(plan), lowWaterMs: cfg.trickle.lowWaterDays * 86_400_000, highWaterMs: cfg.trickle.highWaterDays * 86_400_000,
                 maxPerRequest: cfg.maxPerRequest), rand: random())
             nextSpendAt = step.nextSpendAt
-            if step.spend > 0 { await spend(plan.rawValue, Int(step.spend), retry: true) }
+            if step.spend > 0 { await spend(plan.rawValue, Int(step.spend), kind: interactive ? .interactive : .trickle, retry: true) }
         }
         if let a = allowance, planState.plan != nil, let w2 = wallet {
             let period = VoucherSpending.overagePeriod(t)
@@ -191,16 +225,40 @@ public final class VoucherWalletEngine {
             let due = VoucherSpending.overageStep(.init(
                 paid: true, remainingBytes: a.remainingBytes, buyBelowBytes: cfg.overage.buyBelowGb * 1_073_741_824,
                 capUnits: w2.settings.overageCapUnits, spentUnits: spentUnits, blockUnits: cfg.overage.blockUnits, balance: Int64(w2.balance)))
-            if due { await spend("overage", Int(cfg.overage.blockUnits), retry: true) }
+            if due { await spend("overage", Int(cfg.overage.blockUnits), kind: .overage, retry: true) }
         }
     }
 
-    private func spend(_ what: String, _ n: Int, retry: Bool) async {
+    /// The relays and the fallback rule for one spend (docs/outbound-proxy.md "Failure handling"): after a relay failure
+    /// the tick rests the relay until `relayRetryAt`; the owner's own choice tries it again at once.
+    /// Nil while the relay rests and this spend may not go directly: it waits, untried.
+    private func route(_ kind: PrivateSpendKind) -> SpendRoute? {
+        let lapse = OhttpPrivacy.planLapseInMs(paidUntil: planState.paidUntil, graceMs: config.graceHours * 3_600_000, now: now())
+        let resting = kind != .interactive && now() < relayRetryAt && relayFailures > 0
+        if resting, !OhttpPrivacy.spendMayGoDirect(kind, lapseInMs: lapse) { return nil }
+        return SpendRoute(config: info?.ohttp ?? .empty, skipRelaysReason: resting ? (relayReason ?? "relay-unreachable") : nil) { _ in
+            OhttpPrivacy.spendMayGoDirect(kind, lapseInMs: lapse)
+        }
+    }
+
+    private func noteRelay(_ path: PrivatePath?) {
+        switch path {
+        case .relay?:
+            relayFailures = 0; relayRetryAt = 0; relayReason = nil; lastDirectReason = nil
+        case .direct(let reason)?:
+            if reason != "unconfigured" { lastDirectReason = reason }
+        case nil:
+            break
+        }
+    }
+
+    private func spend(_ what: String, _ n: Int, kind: PrivateSpendKind, retry: Bool) async {
         guard var w = wallet else { return }
         let vs = VoucherWalletSync.take(w, n)
-        guard vs.count == n || (what != "overage" && !vs.isEmpty) else { return }
+        guard vs.count == n || (what != "overage" && !vs.isEmpty), let route = route(kind) else { return }
         do {
-            let r = try await client.redeem(username: u, for: what, vouchers: vs)
+            let r = try await client.redeem(username: u, for: what, vouchers: vs, route: route)
+            noteRelay(r.path)
             w = VoucherWalletSync.markSpent(w, vs.map(Vouchers.nullifier))
             if what == "overage" {
                 let period = VoucherSpending.overagePeriod(now())
@@ -212,11 +270,17 @@ public final class VoucherWalletEngine {
             }
             await save(w)
             if what == "overage" { allowance = try? await client.allowance(username: u) }
+        } catch let e as RelayUnavailableError {
+            // Not an error to the owner: the spend waits and tries again; the plan's grace covers the wait.
+            relayFailures += 1
+            relayReason = e.reason
+            relayRetryAt = now() + OhttpPrivacy.relayRetryAfterMs(relayFailures)
         } catch let e as PaymentsComError {
+            noteRelay(e.path)
             switch e.code {
             case "voucher-spent":
                 await save(VoucherWalletSync.markSpent(w, e.spent))
-                if retry { await spend(what, n, retry: false) }
+                if retry { await spend(what, n, kind: kind, retry: false) }
             case "bad-voucher":
                 if let nf = e.nullifier { await save(VoucherWalletSync.markSpent(w, [nf])) }
             case "plan-paid-ahead":
@@ -260,4 +324,15 @@ public final class VoucherWalletEngine {
         }
         return false
     }
+}
+
+/// The one privacy line under the plan (the same sentences on every app).
+public enum SpendPrivacy: Equatable, Sendable {
+    /// The relay is failing and spends wait.
+    case relayWaiting
+    /// The last spend went straight to Flagship because the relay failed.
+    case wentDirect
+    case thirdPartyRelay(operator: String)
+    case interimRelay
+    case noRelay
 }

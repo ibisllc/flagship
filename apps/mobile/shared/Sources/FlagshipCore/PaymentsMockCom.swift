@@ -26,6 +26,14 @@ public final class MockPaymentsComClient: PaymentsComClient, @unchecked Sendable
     public private(set) var redeems: [(username: String, what: String, count: Int)] = []
     /// Refuse every call with this code (the network is down: "network").
     public var failAll: String?
+    /// The relays `paymentsInfo` lists (default: one third-party relay under the vectors' gateway key).
+    public var ohttp = OhttpPublicConfig(
+        keyConfigHex: "07002036dedf3ad3da392abb9d76a42b926584935422de695e9b941ea4fa5193c7cd37000400010001",
+        relays: [OhttpRelayEntry(url: "https://relay.example.net/flagship", operator: "Example Relay Co", interim: false)])
+    /// The relay doesn't answer: spends fail over (or wait) with `relay-unreachable`.
+    public var relayDown = false
+    /// How each spend travelled.
+    public private(set) var paths: [PrivatePath] = []
     public var now: () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
 
     private static let signer: (priv: SecKey, key: VoucherPublicKey)? = {
@@ -93,7 +101,7 @@ public final class MockPaymentsComClient: PaymentsComClient, @unchecked Sendable
     public func paymentsInfo() async throws -> PaymentsInfo {
         try failIfAsked()
         let keys = Self.key.map { [PublishedVoucherKey(key: $0, issueUntil: 0, acceptUntil: 0, issuing: true)] } ?? []
-        return locked { PaymentsInfo(config: config, keys: keys, testIssue: testIssueOn, rails: rails) }
+        return locked { PaymentsInfo(config: config, keys: keys, testIssue: testIssueOn, rails: rails, ohttp: ohttp) }
     }
 
     public func wallet(username: String) async throws -> JSONValue? {
@@ -195,7 +203,27 @@ public final class MockPaymentsComClient: PaymentsComClient, @unchecked Sendable
         return base + n * unit
     }
 
-    public func redeem(username: String, for what: String, vouchers: [Voucher]) async throws -> VoucherRedeemResult {
+    public func redeem(username: String, for what: String, vouchers: [Voucher], route: SpendRoute) async throws -> VoucherRedeemResult {
+        let path: PrivatePath
+        if route.skipRelaysReason == nil, route.config.keyConfig != nil, let relay = route.config.relays.first, !relayDown {
+            path = .relay(url: relay.url)
+        } else {
+            let reason = route.skipRelaysReason ?? (route.config.keyConfig == nil || route.config.relays.isEmpty ? "unconfigured" : "relay-unreachable")
+            guard reason == "unconfigured" || route.mayGoDirect(reason) else { throw RelayUnavailableError(reason: reason) }
+            path = .direct(reason: reason)
+        }
+        locked { paths.append(path) }
+        do {
+            var r = try redeemNow(username: username, for: what, vouchers: vouchers)
+            r.path = path
+            return r
+        } catch var e as PaymentsComError {
+            e.path = path
+            throw e
+        }
+    }
+
+    private func redeemNow(username: String, for what: String, vouchers: [Voucher]) throws -> VoucherRedeemResult {
         try failIfAsked()
         let u = username.lowercased(), now = self.now()
         return try locked {
