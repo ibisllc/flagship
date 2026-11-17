@@ -1239,3 +1239,39 @@ protocol, keyd, server-daemon, apps/com, org-audit and adversarial: 12217 passed
 `cronBudget.test.ts` (pre-existing on this Mac). Rust: clippy `-D warnings` clean and `cargo test --workspace --locked` green (120 suites).
 `relay_core` `http_surface` failed once under load earlier and passed on rerun. Nothing is deployed. Migration 0151 joins the
 `.com` deploy list.
+
+### 2026-11-17 — Plan C: native and web gyms for Social, Activity and calls; cron budget; page editor (agent `0.4/ui-gyms`)
+Gyms (mock tier, on this Mac):
+- **iOS** (Xcode 27.1 RC, iPhone 17 Pro sim, per class with a timeout): GymMessagesTests 19 (1 skipped), GymEveryMergeTests
+  8, GymAccountGoneTests 10, GymNoticeTests 6, GymSweepOnboardingTests 12, OnboardingSmokeTests 5, the three Activity
+  tests of GymSweepHomeTests: all green after two fixes. **The "hang" was the Mac sleeping**: `pmset` shows Maintenance
+  Sleep from 05:01 to 05:42 while xcodebuild held only PreventUserIdleSystemSleep; tests sat 900+ s mid-step. Run gyms
+  under `caffeinate -dimsu` (PreventSystemSleep) on this Mac.
+  - App bug: Sign in with Flagship refused every fresh attestation as not yet valid (checked against a time read
+    before the request; `.com` or the mock answers a few ms later). iOS now judges it at its issuedAt within the send
+    skew, as Android did (`ea47accb9`→ rebased).
+  - Stale test: since iOS 26 a confirmation dialog on iPhone is a popover with no Cancel; GymNoticeTests finds the
+    question by its destructive button and cancels with a tap outside.
+- **Android** (`flagship_gym` AVD, API 35 arm64): GymActivityTest 6/6, GymMessagesTest 6/7 after test fixes (Social side
+  is process-wide, so each test now starts on Profile; Activity server rows merge into one button, times read
+  unmerged; the Accept messages scenario follows the first-publish defaults).
+  **Open, release-blocking for Android calls:** the pinned `libwebrtc-157-43884507084` AAR lacks 43 generated
+  `org/webrtc/*Jni` classes (PeerConnectionFactoryJni …), so `callingAnasPageFromTheAppHandsTheCallToTheBrowser` dies
+  with NoClassDefFoundError at `PeerConnectionFactory.initialize`; a real phone would too. Needs a libwebrtc CI rebuild
+  (jni_zero output into classes.jar) and a new pin; `tools/libwebrtc/build-android.sh` now refuses an AAR with a
+  missing bridge. iOS is unaffected.
+- **Webapp**: gym-activity, gym-messages, gym-features, gym-ux: 64/64 (one gym-ux AI-consent flake under load, 3/3 alone).
+Cron budget: real growth, not noise. 4349c9129 put the calls' cleanup into voici-gc as 7 separate D1 calls (voici-gc 3
+→ 10 calls, 2.38x alone); the suggestion group also carried issuance-sweep and eviction-gc. The calls' deletes are one
+batch now and those two jobs moved to the re-pair group (all groups still hourly): worst plan 2.05x (demo+suggestions,
+9 D1 + 4 fetches), voici group 1.8x, was 2.66x. The ratio is almost all D1 calls priced at 0.45 ms over a ~2.0-2.2 ms
+calibration, so the six-hourly plan (2.04x) and the suggestion tick have little headroom if calibration drops.
+Page editor (iOS, Android, webapp, shell **v229**): the first publish's warning names only calls when Accept messages is
+off ("Calls from people signed in with Flagship are on…", 7 languages); the Public switch on iOS and Android now carries
+Accept messages as shown (it used to publish the page with messages on); Accept messages counts as a change only while
+it differs from the page, so off and on again counts none (webapp also replaces its earlier draft).
+Checks after rebasing on `a827aa8d4`: `tsc -b`, `npm run i18n`, parity green; vitest apps/web, cronBudget, voici,
+storage 4357 passed; webapp gym messages+activity 12/12; iOS PageControlsTests 24; Android PageControlsTest/VoiciAppTest.
+Also seen: the voi.ci site checks the phone's answer attestation with the browser's clock (`checkVoiciSignInAnswer`);
+a browser behind `.com` by more than the round trip would refuse it the same way. Android's empty Inbox says "Turn on
+Accept messages" even while messages are on.
