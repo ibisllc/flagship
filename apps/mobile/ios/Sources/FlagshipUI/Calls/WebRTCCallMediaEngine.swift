@@ -48,6 +48,8 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     /// No CallKit call owns the audio session (an in-app call): this engine activated it and gives it back on stop.
     private var ownsAudio = false
     let frameStats = CallFrameStats()
+    private var statsTimer: DispatchSourceTimer?
+    private var routeObserver: NSObjectProtocol?
 
     /// The caller's camera, for a renderer (RTCMTLVideoView), once the offer made a video transceiver.
     public private(set) var remoteVideo: RTCVideoTrack?
@@ -328,7 +330,65 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
         videoSource = nil
     }
 
+    /// Every 2 s while connected: the audio session's format and route, and WebRTC's audio send/receive stats (sizes,
+    /// counts and levels only), so a garbled call shows whether the capture side or the receive side is at fault.
+    private func startAudioStatsLog(_ pc: RTCPeerConnection) {
+        let t = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "flagship.call-stats"))
+        let installed: Bool = lock.withLock {
+            guard statsTimer == nil, !stopped else { return false }
+            statsTimer = t
+            return true
+        }
+        guard installed else { return }
+        Self.logAudioSession("at connect")
+        t.schedule(deadline: .now() + 2, repeating: 2)
+        t.setEventHandler { [weak pc] in
+            pc?.statistics { report in
+                var parts: [String] = []
+                for (_, st) in report.statistics {
+                    let v = st.values
+                    let kind = v["kind"] as? String ?? v["mediaType"] as? String
+                    func n(_ k: String) -> String { (v[k] as? NSNumber).map { "\($0)" } ?? "?" }
+                    switch (st.type, kind) {
+                    case ("media-source", "audio"):
+                        parts.append("mic level \(n("audioLevel")) energy \(n("totalAudioEnergy")) dur \(n("totalSamplesDuration"))")
+                    case ("outbound-rtp", "audio"):
+                        var codec = "?"
+                        if let cid = v["codecId"] as? String, let c = report.statistics[cid]?.values {
+                            codec = "\(c["mimeType"] as? String ?? "?") \((c["clockRate"] as? NSNumber).map { "\($0)" } ?? "?") \((c["channels"] as? NSNumber).map { "\($0)" } ?? "?")ch \(c["sdpFmtpLine"] as? String ?? "")"
+                        }
+                        parts.append("out packets \(n("packetsSent")) bytes \(n("bytesSent")) target \(n("targetBitrate")) codec \(codec)")
+                    case ("inbound-rtp", "audio"):
+                        parts.append("in packets \(n("packetsReceived")) lost \(n("packetsLost")) concealed \(n("concealedSamples"))/\(n("totalSamplesReceived")) level \(n("audioLevel"))")
+                    default:
+                        break
+                    }
+                }
+                if !parts.isEmpty { voiciCallLog.notice("audio stats: \(parts.sorted().joined(separator: "; "), privacy: .public)") }
+            }
+        }
+        t.resume()
+        let obs = NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: nil) { note in
+            let why = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.intValue ?? -1
+            Self.logAudioSession("route change \(why)")
+        }
+        lock.withLock { routeObserver = obs }
+    }
+
+    static func logAudioSession(_ when: String) {
+        let s = AVAudioSession.sharedInstance()
+        let ins = s.currentRoute.inputs.map { $0.portType.rawValue }.joined(separator: ",")
+        let outs = s.currentRoute.outputs.map { $0.portType.rawValue }.joined(separator: ",")
+        voiciCallLog.notice("audio session \(when, privacy: .public): \(s.category.rawValue, privacy: .public)/\(s.mode.rawValue, privacy: .public) rate \(s.sampleRate, privacy: .public) (preferred \(s.preferredSampleRate, privacy: .public)) io \(s.ioBufferDuration, privacy: .public) in \(s.inputNumberOfChannels, privacy: .public)ch [\(ins, privacy: .public)] out \(s.outputNumberOfChannels, privacy: .public)ch [\(outs, privacy: .public)]")
+    }
+
     public func stop() {
+        let (st, obs): (DispatchSourceTimer?, NSObjectProtocol?) = lock.withLock {
+            defer { statsTimer = nil; routeObserver = nil }
+            return (statsTimer, routeObserver)
+        }
+        st?.cancel()
+        if let obs { NotificationCenter.default.removeObserver(obs) }
         CallTurnGate.shared.factory = nil
         frameStats.end()
         let pc: RTCPeerConnection? = lock.withLock {
@@ -440,7 +500,10 @@ extension WebRTCCallMediaEngine: RTCPeerConnectionDelegate {
         switch newState {
         case .connected:
             let first: Bool = lock.withLock { defer { connectedOnce = true }; return !connectedOnce }
-            if first { onConnected?() }
+            if first {
+                startAudioStatsLog(peerConnection)
+                onConnected?()
+            }
         case .failed:
             if !lock.withLock({ stopped }) { onFailed?() }
         default:
