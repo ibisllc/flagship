@@ -28,27 +28,8 @@ public struct VoiciCallScreen: View {
 
     /// The ringing screen where there's no CallKit (the China mainland storefront): the same stage, Decline and Answer.
     private var ringing: some View {
-        ZStack {
-            LinearGradient(colors: [Color(red: 0.11, green: 0.13, blue: 0.19), Color(red: 0.03, green: 0.04, blue: 0.07)],
-                           startPoint: .top, endPoint: .bottom).ignoresSafeArea()
-            VStack(spacing: 12) {
-                Text(verbatim: center.callerName).font(.largeTitle.weight(.semibold)).foregroundStyle(.white).multilineTextAlignment(.center)
-                Text(verbatim: status).font(.title3).foregroundStyle(.white.opacity(0.75))
-                Spacer()
-                HStack {
-                    CallRoundButton(symbol: "phone.down.fill", title: String(localized: "Decline"), style: .end) { center.declineOrHangUp() }
-                        .frame(maxWidth: .infinity)
-                    if center.phase == .ringing {
-                        CallRoundButton(symbol: "phone.fill", title: String(localized: "Answer"), style: .answer) { center.answerInApp() }
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .padding(.bottom, 32)
-            }
-            .padding(.top, 80)
-            .padding(.horizontal, 24)
-        }
-        .preferredColorScheme(.dark)
+        VoiciRingingStage(name: center.callerName, status: status, canAnswer: center.phase == .ringing,
+                          decline: { center.declineOrHangUp() }, answer: { center.answerInApp() })
     }
 
     private var inCall: some View {
@@ -97,6 +78,39 @@ public struct VoiciCallScreen: View {
 
     private var status: String { VoiciCallScreenModel.status(center.phase, step: center.connectStep) }
 
+}
+
+/// The ringing screen's look, apart from the call center so the gym can draw it.
+struct VoiciRingingStage: View {
+    var name: String
+    var status: String
+    var canAnswer: Bool
+    var decline: () -> Void
+    var answer: () -> Void
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(red: 0.11, green: 0.13, blue: 0.19), Color(red: 0.03, green: 0.04, blue: 0.07)],
+                           startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            VStack(spacing: 12) {
+                Text(verbatim: name).font(.largeTitle.weight(.semibold)).foregroundStyle(.white).multilineTextAlignment(.center)
+                Text(verbatim: status).font(.title3).foregroundStyle(.white.opacity(0.75))
+                Spacer()
+                HStack {
+                    CallRoundButton(symbol: "phone.down.fill", title: String(localized: "Decline"), style: .end, action: decline)
+                        .frame(maxWidth: .infinity)
+                    if canAnswer {
+                        CallRoundButton(symbol: "phone.fill", title: String(localized: "Answer"), style: .answer, action: answer)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.bottom, 32)
+            }
+            .padding(.top, 80)
+            .padding(.horizontal, 24)
+        }
+        .preferredColorScheme(.dark)
+    }
 }
 
 /// What the call screen shows for each phase (pure, so the view-model tests can pin it).

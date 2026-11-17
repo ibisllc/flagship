@@ -97,6 +97,7 @@ struct ContentView: View {
             Toaster()
             #if DEBUG
             if GymProbe.isOn { GymProbeView() }
+            if GymCallStagePreview.requested != nil { GymCallStagePreview().frame(maxWidth: .infinity, maxHeight: .infinity) }
             #endif
         }
         // One sheet for the whole queue: the next request replaces the answered
