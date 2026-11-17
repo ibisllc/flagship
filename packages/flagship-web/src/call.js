@@ -8,6 +8,8 @@
 //                               (a module Worker of callWorker.js), onState(state, detail), deps? (fetch, WebSocket,
 //                               RTCPeerConnection, RTCRtpScriptTransform, now)}
 //   call.hangUp(), call.setMuted(bool), call.remoteStream
+//   call.flipCamera(getUserMedia) -> Promise<bool>     front or back camera while ours runs; call.cameraFacing
+//                               ("user" or "environment") says which (the preview mirrors only "user")
 //   call.setCamera(on, getUserMedia) -> Promise<bool>   video as an upgrade of the audio call (voici-calls-v2.md §1.4):
 //                               only when o.videoAble (this browser has a camera) made the offer carry a video section;
 //                               the camera is asked for on the tap that calls it. onCamera(state) reports the other
@@ -97,6 +99,20 @@ export function voiciCallSteps({ onStep, onGiveUp, timers = globalThis }) {
   };
 }
 
+/** VOICI_CALL_VIDEO facing the person ("user") or away from them ("environment"). */
+export function voiciCallVideoFacing(facing) {
+  return { ...VOICI_CALL_VIDEO, video: { ...VOICI_CALL_VIDEO.video, facingMode: facing === "environment" ? "environment" : "user" } };
+}
+
+/** How many cameras this browser has (no permission asked): Flip shows only with two or more. */
+export async function voiciCallCameraCount(mediaDevices = globalThis.navigator?.mediaDevices) {
+  try {
+    return (await mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput").length;
+  } catch {
+    return 0;
+  }
+}
+
 /** Whether this browser has a camera at all (no permission asked): decides whether the request offers video. */
 export async function voiciCallVideoAble(mediaDevices = globalThis.navigator?.mediaDevices) {
   try {
@@ -176,6 +192,7 @@ export function startVoiciCall(o) {
   const videoAble = !!o.videoAble;
   let video = null;
   let camera = null;
+  let facing = "user";
 
   const set = (s, detail = {}) => {
     if (state === "ended" || state === "failed") return;
@@ -228,7 +245,7 @@ export function startVoiciCall(o) {
   const sender = pc.addTrack(track, o.stream);
   if (!attachTransform(deps, o.worker, sender, "send")) {
     queueMicrotask(() => set("failed", { code: "unsupported" }));
-    return { hangUp() {}, setMuted() {}, async setCamera() { return false; }, remoteStream };
+    return { hangUp() {}, setMuted() {}, async setCamera() { return false; }, async flipCamera() { return false; }, cameraFacing: "user", remoteStream };
   }
   attachReceive(receiverOf(sender), "audio");
   if (videoAble) {
@@ -409,6 +426,7 @@ export function startVoiciCall(o) {
         return true;
       }
       if (camera) return true;
+      facing = "user";
       let s;
       try {
         s = await getUserMedia(VOICI_CALL_VIDEO);
@@ -429,8 +447,36 @@ export function startVoiciCall(o) {
       send({ t: "camera", state: "on" });
       return true;
     },
+    /** The other camera while ours runs. A phone opens one camera at a time, so ours stops first; when the other
+     * can't start, the one we had comes back (and if that fails too, the camera is off). */
+    async flipCamera(getUserMedia) {
+      if (!video || !camera || (state !== "connecting" && state !== "connected")) return false;
+      const was = facing;
+      const next = was === "user" ? "environment" : "user";
+      camera.stop();
+      for (const f of [next, was]) {
+        let t = null;
+        try {
+          t = (await getUserMedia(voiciCallVideoFacing(f))).getVideoTracks()[0] ?? null;
+        } catch {
+          t = null;
+        }
+        if (!t) continue;
+        camera = t;
+        facing = f;
+        await video.sender.replaceTrack(t);
+        return f === next;
+      }
+      camera = null;
+      await video.sender.replaceTrack(null);
+      send({ t: "camera", state: "off" });
+      return false;
+    },
     get cameraTrack() {
       return camera;
+    },
+    get cameraFacing() {
+      return facing;
     },
   };
 }

@@ -113,7 +113,6 @@
   "Call ended": "通話終了",
   "Calling {0}…": "{0}に発信中…",
   "Mute": "ミュート",
-  "Hang up": "切る",
   "Quantum-safe call": "量子耐性のある通話",
   "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.": "通話は相手の電話に直接つながります。音声はすべて、将来の量子コンピュータでも破れない鍵で暗号化され、Flagship も聞くことはできません。",
   "Unmute": "ミュート解除",
@@ -125,7 +124,6 @@
   "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.": "ビデオを表示するには voi.ci にカメラへのアクセスが必要です。ブラウザで許可するか、カメラなしで通話を続けてください。",
   "Camera": "カメラ",
   "Camera off": "カメラをオフ",
-  "{0} turned on their camera.": "{0} さんがカメラをオンにしました。",
   "Camera paused": "カメラ一時停止中",
   "This call link was already used or has expired. Start the call again from your Flagship app.": "この通話リンクは使用済みか、期限が切れています。Flagship アプリから通話をやり直してください。",
   "This call link isn't valid. Start the call again from your Flagship app.": "この通話リンクは無効です。Flagship アプリから通話をやり直してください。",
@@ -139,7 +137,6 @@
   "{0} takes calls only from people they can call back.": "{0} は折り返し電話できる相手からの通話だけを受け付けています。",
   "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": "{0} にはあなたが誰かは伝わりません。この会話であなたの電話を鳴らせることは Flagship に伝わります。",
   "Answer": "応答",
-  "Not now": "今はしない",
   "{0} is calling you back.": "{0} から折り返しの着信です。",
   "Getting ready to call…": "通話を準備しています…",
   "Stop call-backs": "折り返しを停止",
@@ -148,5 +145,13 @@
   "Securing the line (quantum-safe)…": "回線を保護しています（量子耐性）…",
   "Opening a direct path…": "直接の経路を開いています…",
   "Starting audio…": "音声を開始しています…",
-  "This is taking longer than usual": "通常より時間がかかっています"
+  "This is taking longer than usual": "通常より時間がかかっています",
+  "Decline": "拒否",
+  "End-to-end encrypted · quantum-safe": "エンドツーエンド暗号化 · 量子耐性",
+  "Their camera": "相手のカメラ",
+  "Your camera": "自分のカメラ",
+  "Flip": "切り替え",
+  "End": "終了",
+  "Audio": "オーディオ",
+  "Audio output {0}": "オーディオ出力 {0}"
 }

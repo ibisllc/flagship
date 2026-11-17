@@ -113,7 +113,6 @@
   "Call ended": "Chamada encerrada",
   "Calling {0}…": "Ligando para {0}…",
   "Mute": "Silenciar",
-  "Hang up": "Desligar",
   "Quantum-safe call": "Chamada segura contra computação quântica",
   "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.": "A chamada vai direto para o telefone da pessoa. Cada som é cifrado com chaves que um futuro computador quântico não consegue quebrar, e a Flagship não consegue ouvir.",
   "Unmute": "Ativar som",
@@ -125,7 +124,6 @@
   "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.": "O voi.ci precisa da sua câmera para mostrar seu vídeo. Permita no navegador ou continue conversando sem ela.",
   "Camera": "Câmera",
   "Camera off": "Desligar câmera",
-  "{0} turned on their camera.": "{0} ligou a câmera.",
   "Camera paused": "Câmera pausada",
   "This call link was already used or has expired. Start the call again from your Flagship app.": "Este link de chamada já foi usado ou expirou. Comece a chamada de novo no seu app Flagship.",
   "This call link isn't valid. Start the call again from your Flagship app.": "Este link de chamada não é válido. Comece a chamada de novo no seu app Flagship.",
@@ -139,7 +137,6 @@
   "{0} takes calls only from people they can call back.": "{0} só aceita chamadas de pessoas para quem pode ligar de volta.",
   "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": "{0} não vai saber quem você é. O Flagship vai saber que esta conversa pode fazer seu telefone tocar.",
   "Answer": "Atender",
-  "Not now": "Agora não",
   "{0} is calling you back.": "{0} está ligando de volta para você.",
   "Getting ready to call…": "Preparando a chamada…",
   "Stop call-backs": "Parar retornos",
@@ -148,5 +145,13 @@
   "Securing the line (quantum-safe)…": "Protegendo a linha (segura contra computação quântica)…",
   "Opening a direct path…": "Abrindo um caminho direto…",
   "Starting audio…": "Iniciando o áudio…",
-  "This is taking longer than usual": "Está demorando mais que o normal"
+  "This is taking longer than usual": "Está demorando mais que o normal",
+  "Decline": "Recusar",
+  "End-to-end encrypted · quantum-safe": "Criptografia de ponta a ponta · resistente a computação quântica",
+  "Their camera": "Câmera da outra pessoa",
+  "Your camera": "Sua câmera",
+  "Flip": "Virar",
+  "End": "Desligar",
+  "Audio": "Áudio",
+  "Audio output {0}": "Saída de áudio {0}"
 }
