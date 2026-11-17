@@ -42,6 +42,7 @@ object Variant : AppVariant {
     override fun noticeLockEnabled(): Boolean = false
     override fun noticeNowMs(): Long = System.currentTimeMillis()
     override fun noticeFetcher(): NoticeFetcher? = null
+    override fun storeSales(context: android.content.Context): Boolean = com.flagshipserver.app.core.payments.PlayInstall.fromPlay(context)
 
     private fun missing(what: String): Nothing =
         error("No $what was provided; the app provides the live one.")
