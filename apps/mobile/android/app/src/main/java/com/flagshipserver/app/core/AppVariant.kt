@@ -148,6 +148,8 @@ class GymMocks(
     val voiciCaKeys: (suspend () -> List<String>)? = null,
     /** A scripted voi.ci sign-in pipe (the browser's side played in process). */
     val voiciSignInPipe: (() -> com.flagshipserver.app.core.voici.VoiciSignInPipe)? = null,
+    /** Vouchers and the plan: the mock `.com` (docs/payments-privacy-and-rails.md). */
+    val payments: com.flagshipserver.app.api.PaymentsClient? = null,
 )
 
 /** The mock box's access-control fixture (fixed device keys and names). */

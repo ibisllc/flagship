@@ -377,6 +377,20 @@ class MainActivity : FragmentActivity() {
             callKeyVault = if (mocks != null) com.flagshipserver.app.calls.MemoryCallKeyVault() else com.flagshipserver.app.calls.KeystoreCallKeyVault(this),
         )
         com.flagshipserver.app.core.voici.VoiciCenter.shared = voiciCenter
+        // Vouchers and the plan (docs/payments-privacy-and-rails.md): the wallet lives on the admin phones, sealed
+        // under the UMK and synced like the call hours; only an admin device spends.
+        val paymentsKeys = com.flagshipserver.app.core.voici.VoiciKeystoreKeyring(appState, { com.flagshipserver.app.core.Variant.forceAdminRoot }, mockRun = mocks != null)
+        com.flagshipserver.app.core.payments.PaymentsCenter.shared = com.flagshipserver.app.core.payments.PaymentsCenter(
+            client = mocks?.payments ?: com.flagshipserver.app.api.LivePaymentsClient(OkHttpJsonTransport(okHttp)),
+            keyring = object : com.flagshipserver.app.core.payments.PaymentsKeyring {
+                override fun username() = paymentsKeys.username()
+                override fun umk() = paymentsKeys.umk()
+                override fun device() = paymentsKeys.device()
+                override fun isAdmin() = com.flagshipserver.app.core.Variant.forceAdminRoot || com.flagshipserver.app.keystore.Keystore.hasAdminRoot()
+                override suspend fun confirm(reason: String) = paymentsKeys.confirm(reason)
+            },
+            local = com.flagshipserver.app.core.payments.PrefsPaymentsLocalStore(applicationContext),
+        )
         // The owner's call hours, as synced, stay on this device too: a locked phone still holds a call to them.
         voiciCenter.onCallHours = { h -> com.flagshipserver.app.calls.CallSettingsStore(applicationContext).setCallHours(h) }
         com.flagshipserver.app.calls.VoiciOutgoingCalls.integrity =
@@ -1003,6 +1017,8 @@ class MainActivity : FragmentActivity() {
         foreground.value = true
         com.flagshipserver.app.core.SecurityNoticeCenter.shared?.onForeground()
         com.flagshipserver.app.core.AbuseNoticeCenter.shared?.let { c -> lifecycleScope.launch { runCatching { c.refresh() } } }
+        // The voucher trickle: a foreground tick (never prompts; without the UMK it waits for the next unlock).
+        com.flagshipserver.app.core.payments.PaymentsCenter.shared?.let { c -> lifecycleScope.launch { runCatching { c.refresh(); c.tick() } } }
         com.flagshipserver.app.keystore.ServingRenewal.appOpened()
         com.flagshipserver.app.phoneroute.PhoneRouteController.appForeground()
         // voi.ci reply notices are checked on foreground only (no push, no background polling).

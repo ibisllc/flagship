@@ -205,6 +205,7 @@ object Variant : AppVariant {
                 voici = GymVoici.client,
                 voiciCaKeys = { listOf(GymVoici.client.caPub) },
                 voiciSignInPipe = { GymVoici.pipe() },
+                payments = com.flagshipserver.app.api.MockPaymentsClient(),
             ),
         )
     }
