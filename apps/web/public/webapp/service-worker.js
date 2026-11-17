@@ -541,7 +541,8 @@
 //  v232: voucher spends go through the private relay (OHTTP, lib/ohttp.js) and wait rather than lapse a plan when it
 //       is down; the outbound proxy says loudly why it fails, Home shows it from /pods, and Turn off reaches a box the
 //       proxy keeps offline through .com's lane (docs/outbound-proxy.md "Failure handling").
-const SHELL_VERSION = "v232";
+//  v233: the product version reads 0.4 Beta (lib/buildInfo.js).
+const SHELL_VERSION = "v233";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
