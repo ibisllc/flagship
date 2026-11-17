@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BuilderRelaySession, STUDIO_OUTDATED_REASON, studioOutdated, _internal } from "../src/builderRelay.js";
+import { BuilderRelaySession, refuseOutdatedStudio, STUDIO_OUTDATED_REASON, studioOutdated, _internal } from "../src/builderRelay.js";
 
 /**
  * Builder relay — tests for the phone↔desktop-builder live-session DO.
@@ -503,6 +503,17 @@ describe("builder relay — 0.2 Studios after the 0.3 Studios ship (journal F9)"
     const phone = await upgradeUrl(obj, "role=phone");
     await phone.waitFor((m) => m.kind === "accepted");
     await phone.expectNone((m) => m.kind === "peer-present");
+  });
+
+  it("the Worker answers a 0.2 Studio itself with the same line (no session object, no upgrade budget: F15)", async () => {
+    const resp = refuseOutdatedStudio() as Response & { webSocket?: FakeSocket };
+    expect(resp.status).toBe(101);
+    const refused = await (resp as any).webSocket.waitFor((m: { kind: string }) => m.kind === "error");
+    expect(refused.reason).toBe(STUDIO_OUTDATED_REASON);
+    const route = readFileSync(new URL("../src/route.ts", import.meta.url), "utf8");
+    const fwd = route.slice(route.indexOf("async function forwardBuilderPipeUpgrade"));
+    expect(fwd.indexOf("refuseOutdatedStudio()")).toBeGreaterThan(0);
+    expect(fwd.indexOf("refuseOutdatedStudio()")).toBeLessThan(fwd.indexOf("checkPipeUpgrade("));
   });
 
   it("a 0.3 Studio (studio=2) pairs as before", async () => {

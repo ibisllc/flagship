@@ -54,6 +54,7 @@ import { handleVoiciAbuseRoute, isVoiciAbusePath } from "./voiciAbuseRoutes.js";
 import { handleOutboundHosts, isOutboundHostsPath } from "./outboundHosts.js";
 import { handleReapRoute, REAP_PATH_PREFIX } from "./prodReap.js";
 import { brokerZoneOf } from "./brokerZone.js";
+import { refuseOutdatedStudio, studioOutdated } from "./builderRelay.js";
 import { handleVoiciApi, isVoiciApiPath, isVoiciHost, serveVoiciHost, voiciCorsHeaders, type VoiciEnv } from "./voiciRoutes.js";
 import { CloudflareDnsClient } from "@flagship/control-plane";
 import { createUpCloudClient } from "./upcloud.js";
@@ -1342,6 +1343,8 @@ async function forwardBuilderPipeUpgrade(
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(sid)) {
     return jsonResponse({ error: "sid must be 16-64 base64url chars" }, 400);
   }
+  // An outdated Studio is answered here, before the budget and the session object (builderRelay.ts).
+  if (studioOutdated(url, (env as { STUDIO_PIPE_MIN?: unknown }).STUDIO_PIPE_MIN)) return refuseOutdatedStudio();
   const rl = await checkPipeUpgrade(env, "builder-pipe-upgrade", clientIp(request));
   if (rl.limited) {
     await recordRateLimited(env.DB);
