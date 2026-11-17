@@ -22,7 +22,7 @@ import {
   type DirectNameOrder,
 } from "@flagship/protocol";
 import { accountReadHeaders } from "../readToken.js";
-import { addBox, pair, waitOnline, type Box } from "../lib/fleet.js";
+import { addBox, pair, sweep, waitOnline, type Box } from "../lib/fleet.js";
 import { CONTROL, assert, http, postJson, short, sleep } from "../lib/harness.js";
 import { createDebianVm, destroyVm, serverAddresses, ssh, type Vm } from "../lib/upcloudVm.js";
 import { installWhoami } from "./gating.js";
@@ -54,6 +54,17 @@ async function outsideClient(dir: string, log: (s: string) => void): Promise<Out
   return { where: `UpCloud VM ${vm.uuid} (IPv6 ${v6})`, sh: (cmd, t) => ssh(vm, cmd, t), close: () => destroyVm(vm, log) };
 }
 
+/**
+ * The records the zone holds exactly at `name`, read through the gym sweep's dry run (it lists every record under the
+ * gym apex by name). DNS answers alone can't tell: the gym's direct apex sits under the relay's wildcard, which
+ * answers for a name with no records of its own.
+ */
+async function zoneRecordsAt(name: string): Promise<string[]> {
+  const r = await sweep(false);
+  assert(r.status === 200 && Array.isArray(r.body?.dnsRecords), `sweep dry run ${r.status}: ${short(r.body)}`);
+  return (r.body.dnsRecords as Array<{ type: string; name: string }>).filter((x) => x.name.toLowerCase() === name).map((x) => x.type);
+}
+
 /** The zone's authoritative name servers answer without any resolver cache (the zone's negative TTL is long). */
 async function authoritative(name: string, type: "A" | "AAAA" | "CAA"): Promise<string[]> {
   const zone = name.split(".").slice(-2).join(".");
@@ -79,7 +90,8 @@ export const directAccess: Group = {
 
     let box: Box | undefined;
     const made = await rec.check("a gym box with a public IPv6 address comes online", async () => {
-      box = await addBox(A, "direct6", { provisionExtras: { ipv6: true } });
+      // A kept fleet (--keep, then --reuse) already holds the box.
+      box = A.boxes.find((x) => x.serverName === "direct6") ?? (await addBox(A, "direct6", { provisionExtras: { ipv6: true } }));
       adopt(A, box);
       if (!box.ipv6 && box.serverId) box.ipv6 = (await serverAddresses(box.serverId)).publicV6[0] ?? null;
       assert(box.ipv6, "UpCloud gave the box no public IPv6 address");
@@ -250,9 +262,11 @@ export const directAccess: Group = {
           await sleep(10_000);
         }
         assert(n?.state === "empty", `state ${short(n, 300)}`);
-        const left = [...(await authoritative(name, "AAAA")), ...(await authoritative(name, "CAA"))];
-        assert(left.length === 0, `the zone still holds ${short(left)}`);
-        return `state ${n.state} (${n.reason}); zone empty at the name`;
+        const left = await zoneRecordsAt(name);
+        assert(left.length === 0, `the zone still holds ${short(left)} at the name`);
+        const aaaa = await authoritative(name, "AAAA");
+        assert(!aaaa.includes(v6), `the name still answers the box's address`);
+        return `state ${n.state} (${n.reason}); no record at the name${aaaa.length ? ` (the gym relay wildcard answers ${aaaa.join(",")})` : ""}`;
       });
 
       if (nameOff) {
@@ -269,7 +283,8 @@ export const directAccess: Group = {
             await sleep(10_000);
           }
           assert(n?.state === "empty" && n.reason === "direct-access-off", `name ${short(n, 300)}`);
-          assert((await authoritative(name, "AAAA")).length === 0, "an AAAA came back");
+          const left = await zoneRecordsAt(name);
+          assert(left.length === 0, `the zone holds ${short(left)} at the name`);
           const tcp = await outside!.sh(`curl -6 -sS -k --max-time 10 -o /dev/null -w '%{http_code}' --resolve ${name}:443:[${v6}] https://${name}/`, 30_000);
           assert(tcp.code !== 0, `the box still answered on its IPv6: ${short(tcp.stdout)}`);
           return `name ${n.state} (${n.reason}); box: ${short(tcp.stderr.trim(), 100)}`;
