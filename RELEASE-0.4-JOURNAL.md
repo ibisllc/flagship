@@ -1021,3 +1021,29 @@ Next steps for whoever resumes:
 - Owner: "incorporate them in the Flagship gym app on my phone so I can see the improvements". Every gym device build
   now starts by rebasing `gym-0.4` onto `origin/release/0.4` (keep gym-only commits; next free shell number on a
   clash), then builds and installs; a gym Worker deploy then also carries the newest webapp and voi.ci.
+
+### 2026-11-16 — Calls: no-audio and unlocked-join fixes; gym-0.4 now tracks release/0.4
+- **Unlocked phones never joined a call (403 device-key):** `canonicalAccountDirectoryRequest` refused any path outside
+  `/api/accounts/`, so a device-signed `GET /api/voici/calls/<id>/device` (and the app's `POST /api/voici/calls?u=`)
+  never verified. Locked phones use the call key and were fine; this was every "rang a second" failure. The rule now
+  admits `/api/voici/calls…` too (each route still checks its own path); refusal log names the check
+  (`device-signature`, `not-admin-device`, …). Test `voiciCallDeviceJoin.test.ts` fails on the old code, passes now.
+  (The webapp's own `canonicalDirectoryRequest` keeps the `/api/accounts/` rule; it signs no call route.)
+- **Connected but silent:** the browser's RTP reached the phone (~50/s) but the phone sent ~1/s: nothing set the
+  session to playAndRecord/voiceChat before CallKit activated it (only in-app calls did). `CXAnswerCallAction` now
+  configures RTCAudioSession first; didActivate repairs a wrong category and logs it; the audio sender is capped at
+  24 kbit/s (63-byte sealed slot); frame counts (sealed/refused/opened/failed, max size) logged every 2 s.
+  Simulator: the loopback test still proves ICE/DTLS; it can't prove audio (the test host can't start the voice unit,
+  AUIOClient_StartIO -66637), so the frame asserts run on a device only. Needs the owner's call to confirm.
+- Debug (gym) builds also write the calls log to `Library/Caches/calls.log`; fetch with
+  `xcrun devicectl device copy from --device 00008120-001A18203EA0C01E --domain-type appDataContainer
+  --domain-identifier com.flagshipserver.app.gym --source Library/Caches/calls.log --destination <dir>` (no sudo).
+  The file appears after the first call-log line on the new build.
+- **gym-0.4 rebased onto release/0.4 `0e3a0ff70`** (coordinator, for the owner: the gym app shows every 0.4 change):
+  backup `backup/gym-0.4-pre-rebase-202611162145`; i18n sources 3-way merged, catalogs and the voi.ci site rebuilt;
+  shell v228 unchanged. Gates: i18n green except the known gym-only `GymLiveAdoption.swift:104`; parity green;
+  vitest key suites green except 4 gym-only (two `apps/com` cron/static guards, two webapp PQ-pin tests: the gym
+  empties the protocol pins). Gym Worker `8ad5aec0`; gym app installed with social tabs, Activity, call length and
+  the call fixes. Rule from now on: rebase gym-0.4 onto release/0.4 before every gym build.
+- Commits: gym-0.4 `4efdaf784`, `d4545a2cd`, `92f06068f`, `5e9977c5d`; media-fix `7e6902a16`, `35e82dac8`,
+  `73ee3ba49`, `a98b101fa`.
