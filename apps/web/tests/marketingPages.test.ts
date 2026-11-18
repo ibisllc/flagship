@@ -411,7 +411,18 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(priv).toContain("aren't responsible for how it behaves");
     expect(priv).toContain("We may change provider at any time");
     expect(priv).not.toMatch(/to be named|to be confirmed|free AI/i);
-    expect(priv).toContain("Last updated: 2026-11-16");
+    expect(priv).toContain("Last updated: 2026-11-18");
+  });
+
+  it("privacy §2.12 says what calls reveal and what is never seen (deploy sheet C10)", async () => {
+    const app = buildServer();
+    const priv = (await app.inject({ method: "GET", url: "/privacy.html" })).body;
+    expect(priv).toContain('<h3 id="calls">2.12 Calls on voi.ci</h3>');
+    expect(priv).toContain('<h3 id="marketplace">2.13 Marketplace listing data');
+    expect(priv).toContain("we can't listen to or watch a call, and we don't record calls");
+    expect(priv).toContain("the IP address the call came from");
+    expect(priv).toContain("The push service learns that a call rang that device, and when.");
+    expect(priv).toContain("Missed calls are deleted 180 days after the call");
   });
 
   it("the abuse page and privacy policy never suggest that a report lets Flagship read a message", async () => {

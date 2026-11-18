@@ -88,7 +88,7 @@
   <section class="page-hero">
     <h1>Privacy policy.</h1>
     <p class="lede">Flagship is built so we can't read your data. This page is the formal version of that promise: what we collect, what we don't, why, and how to ask for it back.</p>
-    <div class="meta">Last updated: 2026-11-16 · Effective: 2026-11-02</div>
+    <div class="meta">Last updated: 2026-11-18 · Effective: 2026-11-02</div>
   </section>
 
   <div class="summary-card">
@@ -114,6 +114,7 @@
         <ul>
           <li><span class="no">App data</span></li>
           <li><span class="no">Files, photos, the text of your messages</span></li>
+          <li><span class="no">The audio and video of calls</span></li>
           <li><span class="no">Stored LLM prompts or completions</span></li>
           <li><span class="no">Web traffic content</span></li>
           <li><span class="no">Browsing history</span></li>
@@ -192,6 +193,7 @@
         <li>The content of your TLS-encrypted traffic. <code>flagship.services</code> sees only encrypted bytes; the cert lives on your box.</li>
         <li>Files, photos, messages, or any application data stored on your Flagship server.</li>
         <li>The text of Messages sent through <code>voi.ci</code>. They are end-to-end encrypted (§2.11).</li>
+        <li>The audio and video of calls on <code>voi.ci</code>. They are end-to-end encrypted, and we don't record them (§2.12).</li>
         <li>LLM prompts, completions, or any data you send through the BYOK provider path. Flagship Inference passes prompts through without keeping them (§2.8).</li>
         <li>Browsing history from the pod-resident browser feature.</li>
         <li>Web analytics, ad pixels, session-replay, or browser fingerprints on any of our public pages.</li>
@@ -225,7 +227,22 @@
         <li><strong>No AI.</strong> Pages and messages never reach any AI model, ours or a provider's.</li>
       </ul>
 
-      <h3 id="marketplace">2.12 Marketplace listing data (only if you publish)</h3>
+      <h3 id="calls">2.12 Calls on voi.ci</h3>
+      <p>If your page takes calls, or you call someone's page (from <code>voi.ci</code> or from the Flagship app), this is what we handle. A call carries audio, and video while someone has their camera on.</p>
+      <ul>
+        <li><strong>Calls are end-to-end encrypted.</strong> The audio and video go between the caller's browser or app and the device that answers, through our relay. Every frame is sealed with keys the two ends agree on when the call starts, using post-quantum encryption. We never get those keys: we can't listen to or watch a call, and we don't record calls.</li>
+        <li><strong>What our servers see when a call is placed:</strong> which page was called, and so which account; when it rang, whether it was answered and when it ended; and the IP address the call came from. A caller signed in with Flagship is seen only under the name made for that page (§2.11): the same sign-in as Messages vouches for them without naming them. An anonymous caller is seen as a key their browser made for that page, with a proof of work their browser computed to slow down spam.</li>
+        <li><strong>What our relay sees during a call:</strong> the caller's IP address, the page's address on <code>flagship.services</code> (it contains the account name), the address of the device that answered, when the call ran and how much data passed. Audio travels in frames of one fixed size at a steady rate, so the traffic doesn't show when anyone speaks; video frames are padded to a few fixed sizes. The relay doesn't pass the caller's IP address on: the answering device sees only the relay, and the caller never learns that device's address. A network between the caller and us can see which <code>flagship.services</code> address they connected to.</li>
+        <li><strong>Ringing.</strong> To ring the page owner, we send a push to each of the account's admin devices, through Apple (iPhone, iPad) or Google (Android; a phone without Google uses the UnifiedPush service it chose). The push service learns that a call rang that device, and when. Who is calling is sealed to the owner's devices: the push service can't see it. A call-back rings the caller's devices the same way when they allowed it from the app; an open <code>voi.ci</code> tab rings without a push.</li>
+        <li><strong>Call-backs.</strong> If you choose "Call and allow call-back", we keep a note that this conversation can ring you (and, when you set it up in the app, which account's devices to ring), so the page owner can call you back without learning who you are. It is deleted when you stop call-backs, when the page owner blocks you, when either of you deletes the conversation or the account, or after 90 days. "Call anonymously" leaves no such note.</li>
+        <li><strong>Anonymous calls.</strong> A page open to anyone can be called without a Flagship account. The page owner sees the caller as a visitor with no name, never an IP address. Your browser keeps the key it made for that page, so a later call from the same browser continues the same conversation.</li>
+        <li><strong>Call hours</strong> stay with the page owner: their devices sync them encrypted, and we can't read them.</li>
+        <li><strong>Blocking and reporting.</strong> A page owner can block a caller: a signed-in caller's name for that page (calls and messages), or an anonymous caller's browser key. A blocked caller is told only that calls are off. A call itself can't be reported, because nothing of it is kept; you can report the caller's messages, or a page, as in §2.11.</li>
+        <li><strong>What we keep.</strong> For an answered call, nothing: what the call needed while it ran is deleted within 15 minutes of its end. A call nobody answered (no answer, declined, busy, or given up by the caller) is kept as a missed call, sealed to the page owner's devices: it holds the caller's name for that page and when the call rang. We see only that this conversation has a missed call, and when. A count of rings per page per day, with no caller, enforces a daily limit and is deleted after two days. Rate limits count calls per IP address, per caller name and per page; each count is deleted when its window ends, a day at most. Our report on rate limits keeps only hourly totals, with no address or name. Call history in the app stays on your device.</li>
+        <li><strong>No AI.</strong> Calls never reach any AI model, ours or a provider's.</li>
+      </ul>
+
+      <h3 id="marketplace">2.13 Marketplace listing data (only if you publish)</h3>
       <p>If you publish an app listing, we store the listing fields you submit: title, description, category, screenshots (in R2), the canonical pod URL, your username as author, and timestamps. Listings are public by definition.</p>
     </section>
 
@@ -239,8 +256,8 @@
           <tr><td>GitHub</td><td>The public repo of shared repo adaptations (no personal data)</td><td>US</td></tr>
           <tr><td>Fly.io</td><td>Stateless tunnel hub on <code>flagship.services</code></td><td>US/EU regions</td></tr>
           <tr><td>Stripe</td><td>Payments and subscriptions, only if we ever start selling something (§2.4)</td><td>US/EU</td></tr>
-          <tr><td>Apple (APNs, App Attest, DeviceCheck)</td><td>iOS push delivery; device checks for Messages (§2.11)</td><td>US</td></tr>
-          <tr><td>Google (FCM, Play Integrity)</td><td>Android push delivery; device checks for Messages (§2.11)</td><td>US</td></tr>
+          <tr><td>Apple (APNs, App Attest, DeviceCheck)</td><td>iOS push delivery, including ringing for calls (§2.12); device checks for Messages (§2.11)</td><td>US</td></tr>
+          <tr><td>Google (FCM, Play Integrity)</td><td>Android push delivery, including ringing for calls (§2.12); device checks for Messages (§2.11)</td><td>US</td></tr>
           <tr><td>Let's Encrypt (ISRG)</td><td>TLS certificate issuance</td><td>US</td></tr>
           <tr><td>A third-party hosted model provider chosen by us, which may change</td><td>Flagship Inference only: receives anonymized request text (no account, server or IP address) and returns the reply (§2.8)</td><td>Depends on the provider</td></tr>
           <tr><td>Anthropic</td><td>Checks shared repo adaptations, and summarizes retired ones, when that review is on (§2.6)</td><td>US</td></tr>
@@ -261,6 +278,7 @@
         <li><strong>Repo adaptations</strong>: published, and kept public; our own copy of the file is deleted once it is published, usually within a day. Taken out of the index when the repo's owner asks; git history keeps earlier versions. They carry no personal data.</li>
         <li><strong>voi.ci page</strong>: kept while it is published. When you change it, pieces no longer used are deleted within 30 days; when you delete your account, it is deleted at once.</li>
         <li><strong>Messages</strong>: sealed messages are deleted 180 days after they arrive, or when the page owner's account is deleted. Copies on your own devices stay until you delete them.</li>
+        <li><strong>Calls</strong>: an answered call leaves nothing once it has ended (within 15 minutes). Missed calls are deleted 180 days after the call, or when the conversation or the page owner's account is deleted. A call-back note is deleted after at most 90 days (§2.12). Daily ring counts: two days. Rate-limit counts: when their window ends; the hourly totals of rate-limit refusals, with no address or name: 90 days.</li>
         <li><strong>Unpublished page changes</strong> waiting for an admin device: 30 days.</li>
         <li><strong>Device check tokens</strong>: 30 days. The enrollment record (platform, date, keyed hash) is kept while the account uses Messages.</li>
         <li><strong>Abuse reports</strong>: kept while open, then one year after they are resolved. Bans and takedowns are kept while the account exists.</li>
