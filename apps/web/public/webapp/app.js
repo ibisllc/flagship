@@ -124,6 +124,7 @@ import { fetchDibsWindow } from "./lib/nameDibs.js";
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initPlanView, enterPlan } from "./views/plan.js";
 import { takeShopReturn } from "./lib/plan.js";
+import { stashVoucherLinkFromLocation } from "./lib/voucherLink.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initDeveloperView, enterDeveloper } from "./views/developer.js";
 import { initVibeCodeView, enterVibeCode, openVibeCodeSessionById } from "./views/vibe-code.js";
@@ -559,7 +560,10 @@ async function boot() {
   // browser's own account no longer exists, a full-screen state takes over.
   try { initAccountGoneUi(); } catch { /* best-effort */ }
   // Back from a Stripe purchase (?shop=stripe|cancel, lib/plan.js): note it for after the unlock, tidy the address bar.
-  try { takeShopReturn(); } catch { /* best-effort */ }
+  let shopBack = null;
+  try { shopBack = takeShopReturn(); } catch { /* best-effort */ }
+  // A "Load into Flagship" voucher link (/app/vouchers#v=…): kept for after the unlock, off the address bar.
+  try { stashVoucherLinkFromLocation(); } catch { /* best-effort */ }
   // P12 — auto-migrate legacy single-profile localStorage into the new
   // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
   try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }
@@ -832,6 +836,19 @@ async function boot() {
     try { await refreshServerTrust(); } catch { /* no verdict on error */ }
     try { await loadAndApplyExceptions(username); } catch { /* best-effort */ }
   })();
+
+  // The voucher shop with no account (?shop=buy, or back from Stripe for a signed-out order): no unlock, no
+  // account, nothing that names one (docs/anonymous-vouchers.md "Voucher links").
+  try {
+    const { wantsVoucherShop, enterVoucherShop } = await import("./views/voucher-shop.js");
+    if (wantsVoucherShop(location, history, shopBack)) {
+      setSubtitle(tr("vouchers"));
+      await enterVoucherShop(shopBack);
+      return;
+    }
+  } catch (e) {
+    console.error(e);
+  }
 
   // Service-access friend deep-link: a /invite#<secret> landing (served from
   // the BOX origin) routes straight into the redeem flow, BEFORE the normal

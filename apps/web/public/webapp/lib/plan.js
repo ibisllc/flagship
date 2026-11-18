@@ -13,10 +13,15 @@
 //   addTestVouchers     POST /api/vouchers/test-issue            (only when the server says testIssue: the gym)
 //   buyWithStripe       POST /api/vouchers/stripe/checkout       (the order: a pack, the key, a commitment; no account)
 //   finishShopOrders    POST /api/vouchers/paid-issue            (back from Stripe: signatures for the paid session)
+//   buyVouchersSignedOut / finishSignedOutOrders                  the same shop with no account in this browser at all:
+//                       the vouchers wait here until loaded into an app by a voucher link (lib/voucherLink.js)
+//   prepareVoucherLink / commitVoucherLink                        a voucher link into this account's wallet, checked
+//                       here alone (cached keys, no network); offline it waits in this browser's inbox
 
 import {
   addVouchers,
   cryptoRand,
+  DEFAULT_PAYMENTS_CONFIG,
   deriveVoucherWalletKey,
   emptyVoucherWallet,
   finalizeVoucher,
@@ -39,6 +44,7 @@ import {
   voucherOrderCommit,
 } from "./vouchers.js";
 import { accountReadFetch } from "./accountRead.js";
+import { parseVoucherLink, planVoucherLinkImport } from "./voucherLink.js";
 import { tr } from "./i18n.js";
 import {
   ohttpSpendMayGoDirect,
@@ -167,6 +173,19 @@ export function relayPrivacyLine(ohttp, relay, now = Date.now()) {
 
 // ── reads ──────────────────────────────────────────────────────────────────
 
+const KEYS_KEY = "flagship.payments.keys";
+
+/** The voucher keys this browser last read from `.com` (public): what a voucher link is checked against, offline. */
+export function knownVoucherKeys(deps = {}) {
+  const c = ctx(deps);
+  try {
+    const v = JSON.parse(c.store.get(KEYS_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((k) => rsaFromVoucherKey(k) !== null) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** {config, keys (checked against their ids), testIssue}. Falls back to the defaults when `.com` can't be reached. */
 export async function loadPaymentsConfig(deps = {}) {
   const c = ctx(deps);
@@ -175,6 +194,11 @@ export async function loadPaymentsConfig(deps = {}) {
     if (!r.ok) throw await readError(r);
     const body = await r.json();
     const keys = Array.isArray(body?.keys) ? body.keys.filter((k) => rsaFromVoucherKey(k) !== null) : [];
+    try {
+      if (keys.length > 0) c.store.set(KEYS_KEY, JSON.stringify(keys.map((k) => ({ keyId: k.keyId, nHex: k.nHex, eHex: k.eHex }))));
+    } catch {
+      /* the cache is a convenience: a voucher link then asks to open Plan once */
+    }
     const ohttp = parseOhttpPublicConfig(body?.ohttp, new URL(c.apex).hostname);
     const rails = { stripe: body?.rails?.stripe === true, apple: body?.rails?.apple === true, google: body?.rails?.google === true };
     return { config: mergePaymentsConfig(body?.config), keys, testIssue: body?.testIssue === true, rails, ohttp };
@@ -611,4 +635,190 @@ export function consumeShopReturn(session = globalThis.sessionStorage) {
   } catch {
     return null;
   }
+}
+
+// ── the shop with no account (docs/anonymous-vouchers.md "Voucher links") ──
+//
+// A person with only a phone buys on this page in the phone's browser, signed out. The order names nobody, as
+// above, and is kept apart from the signed-in orders: once paid, the unblinded vouchers wait in this browser until
+// they are loaded into an app through a voucher link (the fragment never reaches a server) or saved as a file.
+
+const ANON_KEY = "flagship.shop.signedOut";
+const READY_KEY = "flagship.shop.ready";
+
+function readList(store, key, ok) {
+  try {
+    const v = JSON.parse(store.get(key) ?? "[]");
+    return Array.isArray(v) ? v.filter(ok) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Signed-out orders not paid out yet: [{sessionId, k, units, blinded, pending, at}]. */
+export function signedOutShopOrders(store = browserStore) {
+  return readList(store, ANON_KEY, (o) => o && typeof o.sessionId === "string" && Array.isArray(o.pending) && Array.isArray(o.blinded));
+}
+
+/** Paid-out purchases waiting to be loaded: [{sessionId, vouchers, at}]. Bearer vouchers: whoever holds them spends them. */
+export function readyShopVouchers(store = browserStore) {
+  return readList(store, READY_KEY, (o) => o && typeof o.sessionId === "string" && Array.isArray(o.vouchers) && o.vouchers.length > 0);
+}
+
+/** Forget one paid-out purchase in this browser (after it was loaded or saved). */
+export function forgetReadyShopVouchers(sessionId, store = browserStore) {
+  store.set(READY_KEY, JSON.stringify(readyShopVouchers(store).filter((o) => o.sessionId !== sessionId)));
+}
+
+/** buyWithStripe with no account: the same order, kept as a signed-out one. Returns Stripe's page to open. */
+export async function buyVouchersSignedOut(units, deps = {}) {
+  const c = ctx(deps);
+  const pc = deps.paymentsConfig ?? (await loadPaymentsConfig(deps));
+  if (!pc.rails?.stripe) throw new PlanError("rail-off");
+  if (!pc.config.packs.includes(units)) throw new PlanError("malformed");
+  const key = pc.keys.find((k) => k.issuing !== false);
+  if (!key) throw new PlanError("no-key");
+  const reqs = Array.from({ length: units }, () => newVoucherRequest(key));
+  const blinded = reqs.map((q) => q.blinded);
+  const r = await c.fetch(`${c.apex}/api/vouchers/stripe/checkout`, {
+    method: "POST",
+    credentials: "omit",
+    cache: "no-store",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ v: 1, units, k: key.keyId, commit: voucherOrderCommit(key.keyId, blinded) }),
+  });
+  if (!r.ok) throw await readError(r);
+  const body = await r.json();
+  if (typeof body?.url !== "string" || !body.url.startsWith("https://") || typeof body?.sessionId !== "string") throw new PlanError("failed");
+  const orders = signedOutShopOrders(c.store).filter((o) => o.sessionId !== body.sessionId);
+  orders.push({ sessionId: body.sessionId, k: key.keyId, units, blinded, pending: reqs.map((q) => q.pending), at: c.now() });
+  c.store.set(ANON_KEY, JSON.stringify(orders));
+  return { url: body.url, sessionId: body.sessionId };
+}
+
+/**
+ * Asks for the signatures of the signed-out orders and keeps the unblinded vouchers as ready purchases. Returns
+ * {ready: number of vouchers made ready, waiting: orders still unpaid, refused: [codes]}.
+ */
+export async function finishSignedOutOrders(deps = {}) {
+  const c = ctx(deps);
+  const out = { ready: 0, waiting: 0, refused: [] };
+  const orders = signedOutShopOrders(c.store);
+  if (orders.length === 0) return out;
+  const pc = deps.paymentsConfig ?? (await loadPaymentsConfig(deps));
+  const drop = (id) => c.store.set(ANON_KEY, JSON.stringify(signedOutShopOrders(c.store).filter((x) => x.sessionId !== id)));
+  for (const o of orders) {
+    const key = pc.keys.find((k) => k.keyId === o.k);
+    if (!key) {
+      out.waiting++;
+      continue;
+    }
+    let r;
+    try {
+      r = await c.fetch(`${c.apex}/api/vouchers/paid-issue`, {
+        method: "POST",
+        credentials: "omit",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ v: 1, rail: "stripe", proof: { sessionId: o.sessionId }, k: o.k, blinded: o.blinded }),
+      });
+    } catch {
+      out.waiting++;
+      continue;
+    }
+    if (!r.ok) {
+      const err = await readError(r);
+      const waits = err.code === "payment-unpaid" || err.code === "rail-unreachable" || err.code === "rate-limited" || r.status >= 500;
+      if (waits && c.now() - o.at < SHOP_ORDER_MAX_AGE_MS) {
+        out.waiting++;
+        continue;
+      }
+      drop(o.sessionId);
+      out.refused.push(err.code);
+      continue;
+    }
+    const body = await r.json();
+    if (!Array.isArray(body?.sigs) || body.sigs.length !== o.pending.length) {
+      out.waiting++;
+      continue;
+    }
+    const vouchers = o.pending.map((p, i) => finalizeVoucher(key, p, body.sigs[i]));
+    const ready = readyShopVouchers(c.store).filter((x) => x.sessionId !== o.sessionId);
+    ready.push({ sessionId: o.sessionId, vouchers, at: c.now() });
+    c.store.set(READY_KEY, JSON.stringify(ready));
+    drop(o.sessionId);
+    out.ready += vouchers.length;
+  }
+  return out;
+}
+
+// ── a voucher link into this account's wallet ─────────────────────────────
+
+const inboxKey = (u) => `flagship.vouchers.inbox.${u}`;
+
+/** Vouchers a link added while `.com` couldn't be reached: they join the wallet at the next tick. */
+export function voucherInbox(deps = {}) {
+  const c = ctx(deps);
+  return readList(c.store, inboxKey(usernameOf(c)), (v) => v && typeof v.k === "string" && typeof v.n === "string");
+}
+
+const isNetworkError = (e) => !(e instanceof PlanError) || e.code === "failed" || (typeof e.status === "number" && e.status >= 500);
+
+/**
+ * Reads a voucher link and decides what it would add, on this device alone: the signatures against the keys this
+ * browser holds (knownVoucherKeys), the wallet's own vouchers and spends. Without `.com` the wallet can't be read,
+ * so duplicates are checked against this browser's inbox only (adding twice is harmless: the wallet keeps one copy).
+ * Returns {outcome, link?, plan?, current?, offline}; outcome is a parse code ("damaged", "newer", "not-a-link"),
+ * "locked", "not-admin", or the plan's outcome.
+ */
+export async function prepareVoucherLink(raw, deps = {}) {
+  const c = ctx(deps);
+  const link = parseVoucherLink(raw);
+  if (!link.ok) return { outcome: link.code, offline: false };
+  if (!(c.session?.umk instanceof Uint8Array) || !usernameOf(c)) return { outcome: "locked", offline: false };
+  if (!c.isAdmin()) return { outcome: "not-admin", offline: false };
+  const keys = knownVoucherKeys(deps);
+  const cfg = deps.config ?? DEFAULT_PAYMENTS_CONFIG;
+  let current = null;
+  let offline = false;
+  try {
+    current = deps.current ?? (await loadWallet(cfg, deps));
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    offline = true;
+  }
+  const wallet = current ? current.wallet : { ...emptyVoucherWallet(cfg.overage.defaultCapUnits), vouchers: voucherInbox(deps) };
+  const plan = planVoucherLinkImport(wallet, link.vouchers, keys);
+  return { outcome: plan.outcome, link, plan, current, offline };
+}
+
+/** Adds what prepareVoucherLink planned. Online it saves the wallet; offline (or if the save can't reach `.com`) the vouchers wait in the inbox. Returns {added, parked}. */
+export async function commitVoucherLink(prep, deps = {}) {
+  const c = ctx(deps);
+  const add = prep?.plan?.outcome === "add" ? prep.plan.add : [];
+  if (add.length === 0) return { added: 0, parked: false };
+  const park = () => {
+    const have = voucherInbox(deps);
+    c.store.set(inboxKey(usernameOf(c)), JSON.stringify([...have, ...add.filter((v) => !have.some((h) => h.k === v.k && h.n === v.n))]));
+    return { added: add.length, parked: true };
+  };
+  if (prep.offline || !prep.current) return park();
+  try {
+    const saved = await updateWallet(deps.config ?? DEFAULT_PAYMENTS_CONFIG, (w) => addVouchers(w, add), { ...deps, current: prep.current });
+    return { added: add.length, parked: false, wallet: saved };
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    return park();
+  }
+}
+
+/** The inbox into the wallet, once `.com` answers; quiet on failure (the next tick tries again). */
+export async function flushVoucherInbox(deps = {}) {
+  const c = ctx(deps);
+  const waiting = voucherInbox(deps);
+  if (waiting.length === 0) return { added: 0 };
+  const cfg = deps.config ?? DEFAULT_PAYMENTS_CONFIG;
+  const saved = await updateWallet(cfg, (w) => addVouchers(w, waiting), deps);
+  c.store.set(inboxKey(usernameOf(c)), "[]");
+  return { added: waiting.length, wallet: saved };
 }

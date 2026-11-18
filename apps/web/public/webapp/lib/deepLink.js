@@ -28,6 +28,19 @@ function clearTransferQuery() {
 }
 
 export async function dispatchInitialView() {
+  // A "Load into Flagship" voucher link kept from this load (app.js stashVoucherLinkFromLocation).
+  try {
+    const { takePendingVoucherLink } = await import("./voucherLink.js");
+    const voucherLink = takePendingVoucherLink();
+    if (voucherLink) {
+      const { enterVoucherLink } = await import("../views/voucher-link.js");
+      return enterVoucherLink(voucherLink);
+    }
+  } catch (e) {
+    console.error(e);
+    toast(humanError(e), "err");
+  }
+
   try {
     const { takePendingShareLink } = await import("./serverShares.js");
     const link = takePendingShareLink();

@@ -426,3 +426,139 @@ describe("webapp plan: spends through the private relay (docs/outbound-proxy.md 
     expect(P.relayPrivacyLine({ ...ohttp, relays: [{ ...ohttp.relays[0], interim: true }] }, { failures: 0, retryAt: 0, wentDirect: false }, t).id).toBe("interim");
   });
 });
+
+describe("webapp: the voucher shop with no account and the voucher link (docs/anonymous-vouchers.md \"Voucher links\")", () => {
+  const L = () => import("../public/webapp/lib/voucherLink.js");
+  const anon = (com: ReturnType<typeof fakeCom>) => deps(com, { session: null, profile: null, isAdmin: () => false });
+  const linksOf = async (vouchers: unknown[]) => (await L()).encodeVoucherLinks(vouchers, "flagshipserver.test");
+
+  async function boughtSignedOut(units = 30) {
+    const com = fakeCom(now);
+    const d = anon(com);
+    await P.buyVouchersSignedOut(units, d);
+    const res = await P.finishSignedOutOrders(d);
+    expect(res).toMatchObject({ ready: units, waiting: 0, refused: [] });
+    return { com, d, vouchers: P.readyShopVouchers(d.store)[0].vouchers };
+  }
+
+  it("sells a pack signed out: nothing names an account, the vouchers wait in this browser as one app link", async () => {
+    const com = fakeCom(now);
+    const d = anon(com);
+    com.stripe.paid = false;
+    await P.buyVouchersSignedOut(30, d);
+    expect(await P.finishSignedOutOrders(d)).toMatchObject({ ready: 0, waiting: 1 });
+    expect(P.pendingShopOrders(d.store)).toHaveLength(0);
+    com.stripe.paid = true;
+    expect(await P.finishSignedOutOrders(d)).toMatchObject({ ready: 30 });
+    expect(P.signedOutShopOrders(d.store)).toHaveLength(0);
+    const ready = P.readyShopVouchers(d.store);
+    expect(ready).toHaveLength(1);
+    for (const c of com.calls) {
+      expect(c.init?.credentials ?? "omit").toBe("omit");
+      expect(String(c.init?.body ?? "")).not.toContain(U);
+    }
+    const links = await linksOf(ready[0].vouchers);
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatch(/^https:\/\/flagshipserver\.test\/app\/vouchers#v=[A-Za-z0-9_-]+$/);
+    // The vouchers ride only after "#": the part a browser sends to a server is the bare path.
+    expect(new URL(links[0]).pathname + new URL(links[0]).search).toBe("/app/vouchers");
+    // 120 vouchers are four links, each complete on its own.
+    expect(await linksOf([...ready[0].vouchers, ...ready[0].vouchers, ...ready[0].vouchers, ...ready[0].vouchers].map((v, i) => ({ ...v, n: i.toString(16).padStart(64, "0") })))).toHaveLength(4);
+    P.forgetReadyShopVouchers(ready[0].sessionId, d.store);
+    expect(P.readyShopVouchers(d.store)).toHaveLength(0);
+  });
+
+  it("adds a link's vouchers to the wallet, checked here with no network call, and a second open adds nothing", async () => {
+    const { com, vouchers } = await boughtSignedOut();
+    const [link] = await linksOf(vouchers);
+    const d = deps(com);
+    await P.loadPaymentsConfig(d);
+    expect(P.knownVoucherKeys(d)).toHaveLength(1);
+    const current = await P.loadWallet(DEFAULT_PAYMENTS_CONFIG, d);
+    const before = com.calls.length;
+    const prep = await P.prepareVoucherLink(link, { ...d, current });
+    expect(com.calls.length).toBe(before);
+    expect(prep).toMatchObject({ outcome: "add", offline: false });
+    expect(prep.plan.add).toHaveLength(30);
+    const r = await P.commitVoucherLink(prep, d);
+    expect(r).toMatchObject({ added: 30, parked: false });
+    expect((await P.loadWallet(DEFAULT_PAYMENTS_CONFIG, d)).wallet.vouchers).toHaveLength(30);
+    const again = await P.prepareVoucherLink(link, d);
+    expect(again.outcome).toBe("already");
+    expect(await P.commitVoucherLink(again, d)).toEqual({ added: 0, parked: false });
+  });
+
+  it("failure handling: a truncated link, a forged voucher, an already-spent voucher", async () => {
+    const { com, vouchers } = await boughtSignedOut(10);
+    const d = deps(com);
+    await P.loadPaymentsConfig(d);
+    const [link] = await linksOf(vouchers);
+    expect((await P.prepareVoucherLink(link.slice(0, link.length - 50), d)).outcome).toBe("damaged");
+    const forged = vouchers.map((v: { s: string }) => ({ ...v, s: (v.s[0] === "A" ? "B" : "A") + v.s.slice(1) }));
+    expect((await P.prepareVoucherLink((await linksOf(forged))[0], d)).outcome).toBe("invalid");
+    // Spent from this wallet: its nullifiers are in the wallet's spent list.
+    await P.updateWallet(DEFAULT_PAYMENTS_CONFIG, (w: never) => W.markVouchersSpent(w, vouchers.map(W.voucherNullifier)), d);
+    expect((await P.prepareVoucherLink(link, d)).outcome).toBe("spent");
+  });
+
+  it("failure handling: offline, the vouchers wait in this browser and join the wallet at the next tick", async () => {
+    const { com, vouchers } = await boughtSignedOut(10);
+    const d = deps(com);
+    await P.loadPaymentsConfig(d);
+    const [link] = await linksOf(vouchers);
+    const offline = { ...d, readFetch: async () => Promise.reject(new TypeError("Failed to fetch")), fetch: async () => Promise.reject(new TypeError("Failed to fetch")) };
+    const prep = await P.prepareVoucherLink(link, offline);
+    expect(prep).toMatchObject({ outcome: "add", offline: true });
+    expect(await P.commitVoucherLink(prep, offline)).toMatchObject({ added: 10, parked: true });
+    expect(P.voucherInbox(d)).toHaveLength(10);
+    // Opened twice while offline: the inbox already holds them.
+    expect((await P.prepareVoucherLink(link, offline)).outcome).toBe("already");
+    await expect(P.flushVoucherInbox(offline)).rejects.toBeTruthy();
+    expect(P.voucherInbox(d)).toHaveLength(10);
+    expect(await P.flushVoucherInbox(d)).toMatchObject({ added: 10 });
+    expect(P.voucherInbox(d)).toHaveLength(0);
+    expect((await P.loadWallet(DEFAULT_PAYMENTS_CONFIG, d)).wallet.vouchers).toHaveLength(10);
+  });
+
+  it("refuses on a device that isn't an admin, while locked, and without the issuer's key", async () => {
+    const { com, vouchers } = await boughtSignedOut(10);
+    const [link] = await linksOf(vouchers);
+    expect((await P.prepareVoucherLink(link, deps(com, { isAdmin: () => false }))).outcome).toBe("not-admin");
+    expect((await P.prepareVoucherLink(link, deps(com, { session: { username: U } }))).outcome).toBe("locked");
+    expect((await P.prepareVoucherLink(link, deps(com))).outcome).toBe("unknown-key");
+  });
+
+  it("says one sentence for every outcome and asks before adding", async () => {
+    const LV = await import("../public/webapp/views/voucher-link.js");
+    for (const o of ["damaged", "not-a-link", "newer", "already", "spent", "invalid", "unknown-key", "full", "not-admin", "locked"]) {
+      expect(LV.voucherLinkOutcomeText(o)).toMatch(/\.$/);
+    }
+    expect(LV.voucherLinkOutcomeText("add")).toBeNull();
+    const html = LV.voucherLinkConfirmHtml({
+      link: { part: 2, parts: 4 },
+      plan: { add: new Array(30).fill({}), duplicate: 1, spent: 0, invalid: 2, unknownKey: 0 },
+      offline: true,
+    });
+    expect(html).toContain("Add 30 vouchers ($30) to this account's wallet?");
+    expect(html).toContain("This is link 2 of 4 from the same purchase.");
+    expect(html).toContain("Already in this wallet: 1");
+    expect(html).toContain("Not signed by Flagship, left out: 2");
+    expect(html).not.toContain("Already spent");
+    expect(html).toContain('data-testid="voucher-link-offline"');
+  });
+
+  it("the signed-out shop offers the app link, the file and a copy, and never a username", async () => {
+    const { vouchers } = await boughtSignedOut(30);
+    const S = await import("../public/webapp/views/voucher-shop.js");
+    const pc = { config: DEFAULT_PAYMENTS_CONFIG, rails: { stripe: true }, keys: [] };
+    const html = S.shopHtml(pc, [{ sessionId: "cs_test_x", vouchers }], 0, "flagshipserver.test");
+    expect(html).toContain('href="https://flagshipserver.test/app/vouchers#v=');
+    expect(html).toContain('data-testid="voucher-shop-download"');
+    expect(html).toContain('data-testid="voucher-shop-copy"');
+    expect(html).toContain("Your 30 vouchers ($30) are ready.");
+    expect(html).not.toContain(U);
+    const parts = S.readyPurchaseHtml({ sessionId: "cs_test_y", vouchers: [...vouchers, ...vouchers.map((v: { n: string }, i: number) => ({ ...v, n: i.toString(16).padStart(64, "f") }))] }, "flagshipserver.test");
+    expect(parts).toContain("Load into Flagship (part 1 of 2)");
+    expect(parts).toContain("Load into Flagship (part 2 of 2)");
+  });
+});

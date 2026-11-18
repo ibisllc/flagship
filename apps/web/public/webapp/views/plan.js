@@ -14,6 +14,7 @@ import {
   buyWithStripe,
   consumeShopReturn,
   finishShopOrders,
+  flushVoucherInbox,
   loadPaymentsConfig,
   loadPlanState,
   loadWallet,
@@ -298,6 +299,11 @@ export async function planTick() {
     /* tried again on the next tick */
   }
   if (back && !document.getElementById("view-plan")?.classList.contains("hidden")) back = null;
+  try {
+    await flushVoucherInbox();
+  } catch {
+    /* offline still: the inbox waits for the next tick */
+  }
   try {
     await spendTick();
   } catch {
