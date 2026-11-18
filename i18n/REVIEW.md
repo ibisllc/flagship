@@ -136,3 +136,12 @@ where you **build and control** apps, never where they **run**; the server runs 
 "centre de contrôle", de "Schaltzentrale", pt-BR "central de controle", ja "司令塔", zh-Hans "控制中心"), "approves every
 start" (the server's start-up, glossary "approve"), and that "the app" in step 03 and the FAQ is the Flagship mobile app
 (ja "モバイルアプリ", zh-Hans "手机应用"), not one of the user's apps.
+
+**Store texts, "true today" copy for 0.4 (`store/listings/<lang>.json`, 2026-11-17, drafted by an agent, needs native
+review).** From `docs/phone-apps-copy-proposal.md` (a): the build bullet in WHAT YOU CAN DO (App Store "from your
+iPhone", Play "from your phone", both ending "Your server runs them.") and the Play short description (80 characters
+at most; `node scripts/store-assets/listings.mjs counts`). Store review reads an implication as a claim (App Store 2.3,
+Play metadata policy): no language may suggest the phone runs the apps. "You need a server" stays. fr and de had to be
+shortened to fit 80: fr "Créez vos apps depuis le téléphone. Exécutez-les sur votre matériel. Vos clés." and de "Baue
+Apps vom Telefon aus. Betreibe sie auf eigener Hardware. Deine Schlüssel."; check "Vos clés." / "Deine Schlüssel." read
+as "you hold the keys", or find a better wording within 80.
