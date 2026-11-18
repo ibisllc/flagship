@@ -1546,3 +1546,4 @@ Three agents started:
 - Resume point: wait for the callspec agent (`0.4/callspec`), then the owner card approvals (revert any dropped cards), the owner browser tasks, the final rebase on main, and the deploy.
 - Merged `0.4/callspec`: the stall was the test, not the product (it ran without its fake-microphone config after the "no microphone" message landed). The spec now brings its own fake devices; voici-calls passes 3/3 and the voi.ci gym 72/72.
 - Owner approved every UI card except the iOS publish bar (card 11, third part): reverted (the pill stays). The iOS app builds.
+- Final rebase: release/0.4 now sits on top of main (eb43ae84c), 789 commits, linear; the tree is byte-identical to the tested tip. A fast-forward of main is possible when deploying.
