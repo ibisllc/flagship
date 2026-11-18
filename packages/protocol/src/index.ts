@@ -138,6 +138,7 @@ export * from "./voucherRails.js";
 export * from "./orgPlan.js";
 export * from "./orgWallet.js";
 export * from "./voucherBatch.js";
+export * from "./voucherLink.js";
 export * from "./coManagerCap.js";
 export * from "./boxClaim.js";
 export * from "./boxRelease.js";
