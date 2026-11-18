@@ -2,7 +2,8 @@
 import Foundation
 import FlagshipCore
 
-/// The mock gym's and the unit tests' stand-in for StoreKit: packs priced at their voucher count in dollars, purchases
+/// The mock gym's and the unit tests' stand-in for StoreKit: packs priced as App Store Connect prices them (Apple has no
+/// $120.00 price point, so the 120 pack is $119.99; the product id, not the price, gives the voucher count), purchases
 /// that succeed at once with an unsigned JWS (`MockPaymentsComClient.fakeJws`), and a record of what was finished.
 public final class MockVoucherStore: VoucherStoreSource, @unchecked Sendable {
     private let lock = NSLock()
@@ -23,8 +24,13 @@ public final class MockVoucherStore: VoucherStoreSource, @unchecked Sendable {
 
     public func products(_ ids: [String]) async throws -> [ShopProduct] {
         ids.compactMap { id in
-            VoucherProducts.units(productId: id).map { ShopProduct(id: id, displayPrice: Decimal($0).formatted(.currency(code: "USD"))) }
+            VoucherProducts.units(productId: id).map { ShopProduct(id: id, displayPrice: Self.appStorePrice(units: $0).formatted(.currency(code: "USD"))) }
         }
+    }
+
+    /// The US price App Store Connect holds for each pack.
+    static func appStorePrice(units: Int64) -> Decimal {
+        units == 120 ? Decimal(string: "119.99")! : Decimal(units)
     }
 
     /// A transaction of ours the store holds unfinished (a purchase made before a crash, or approved later).

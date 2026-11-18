@@ -98,6 +98,10 @@ final class VoucherShopTests: XCTestCase {
         let r = await rig()
         XCTAssertEqual(r.shop.products.map(\.units), [10, 30, 120])
         XCTAssertTrue(r.shop.products[1].product.displayPrice.contains("30"))
+        // The App Store sells the 120 pack at $119.99 (no $120.00 price point): the row shows the store's price and the
+        // product id still gives 120 vouchers.
+        XCTAssertEqual(r.shop.products[2].product.id, "com.flagshipserver.app.vouchers.120")
+        XCTAssertTrue(r.shop.products[2].product.displayPrice.contains("119.99"), r.shop.products[2].product.displayPrice)
         r.mock.rails = PaymentRails(apple: false)
         await r.center.refreshAndTick()
         XCTAssertTrue(r.shop.products.isEmpty, "Rail off: nothing on sale.")
