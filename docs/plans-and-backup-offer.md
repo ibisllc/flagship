@@ -464,8 +464,11 @@ batch key file is needed to finish on another computer. `POST /api/vouchers/stri
 Checkout Session in payment mode with `invoice_creation`, `tax_id_collection`, a required billing address and a
 customer: the invoice reads "Flagship vouchers" × units; the metadata carries the count, the key and the commitment,
 never an org, account or seat. `POST /api/vouchers/batch-issue` re-checks the paid session and the commitment and
-signs 100 at a time from `from` (a retry or another computer gets the same signatures; a bank transfer answers
-`payment-unpaid` until it lands; a refund or dispute stops further signing). The webapp then puts the batch into the
+signs 100 at a time from `from` (a retry or another computer gets the same signatures; a refund or dispute stops
+further signing). The batch Checkout takes **cards only** (`payment_method_types=card`, with Apple Pay and Google
+Pay): Stripe offers bank transfer in Checkout only for a session that names an existing Customer, and this one
+creates its own, so bank transfer is a manual `send_invoice` for now, with no automatic issue
+(`docs/runbooks/payments-setup.md` "Bank transfer for business batches", 2026-11-17). The webapp then puts the batch into the
 org wallet or saves voucher files (`flagship-vouchers` JSON) of a chosen size for staff, which the personal Plan
 imports.
 

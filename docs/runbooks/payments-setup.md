@@ -2,12 +2,14 @@
 
 Everything only the owner can do to switch on the voucher shops of release 0.4: card payments on the web through
 Stripe Checkout, in-app purchase on iPhone and iPad (StoreKit 2) and Google Play Billing on Android. The code is on
-branch `0.4/payments-rails`; how it works is `docs/payments-privacy-and-rails.md` §11. Do the **gym (test mode)
-first** (part A), then production (part B). Nothing here is done by an agent: no account, product, key or purchase
+branch `0.4/payments-rails`; how it works is `docs/payments-privacy-and-rails.md` §11. Do the **gym (Stripe
+sandbox) first** (part A), then production (part B). Nothing here is done by an agent: no account, product, key or purchase
 was created while building it.
 
-What is sold: packs of 10, 30 and 120 blind-signed $1 vouchers (`config.packs`), priced $10, $30 and $120 on every
-rail. The store fee is absorbed. No subscriptions yet (a later step). No refunds of our own: vouchers never expire.
+What is sold: packs of 10, 30 and 120 blind-signed $1 vouchers (`config.packs`), priced $10, $30 and $120 on Stripe
+and Play. The App Store has no $120.00 price point, so its 120 pack is **$119.99**; the product id, not the price,
+decides the voucher count, and the iOS app shows StoreKit's localized `displayPrice` for each pack. The store fee is
+absorbed. No subscriptions yet (a later step). No refunds of our own: vouchers never expire.
 
 Settings the code reads (all on the `.com` Worker; a rail is off until its settings exist):
 
@@ -35,11 +37,17 @@ Never set `STRIPE_PRICE_HOBBY` / `STRIPE_PRICE_MAKER`: they belong to the old us
    are taxed at sale (`docs/payments-privacy-and-rails.md` §7). Apple and Google handle tax on store sales.
 3. **D1 migration 0153** (`voucher_payments`) goes to the gym and to production before each Worker deploy (B1).
 
-## Part A: the gym in test mode
+Names as the consoles show them: the App Store app is **Flagship Hub** (App Store Connect app id `6768945985`); the
+Play developer account is **Houston Automation Lab** (IBIS LLC, D-U-N-S 137326825). Status of the first browser run:
+`docs/runbooks/0.4-browser-tasks.md` "Status".
 
-### A1. Stripe (test mode)
+## Part A: the gym in a Stripe sandbox
 
-Use the toggle **Test mode** at the top of the Stripe Dashboard for every step here.
+### A1. Stripe (sandbox)
+
+Stripe's old test mode is now a **Sandbox**: pick it from the account menu at the top left. A sandbox is a separate
+environment: its keys, webhooks, payment methods, tax settings and Radar rules are not shared with live, and some
+live-only settings (the invoice template) are hidden there. Everything here is redone in live ("Stripe live pass").
 
 1. **Restricted key.** Developers → API keys → **Create restricted key** → "Building your own integration".
    Name: `flagship-gym-vouchers`. Permissions: **Checkout Sessions: Write** (it includes read). Everything else:
@@ -47,22 +55,32 @@ Use the toggle **Test mode** at the top of the Stripe Dashboard for every step h
    If a test purchase fails with "The provided key does not have the required permissions" the message names the
    resource; give that one resource the access it names and nothing else (Stripe Tax on a Checkout Session needs
    no extra permission as far as we know; this is the fallback).
-2. **Webhook.** Developers → Webhooks → **Add endpoint**:
-   - Endpoint URL: `https://gym.flagshipserver.com/api/stripe/webhook`
-   - Description: `Flagship gym: voucher refunds and disputes`
+2. **Webhook.** Workbench → **Webhooks** → Create an **event destination** (done 2026-11-17 in the sandbox:
+   `flagship-gym-vouchers`, `we_1UczXNRpImRXwdCTjGrijaCw`):
    - Events: `charge.refunded`, `charge.dispute.created` (only these two)
-   - API version: the account's default
-   Add, then **Reveal** the signing secret (`whsec_…`).
-3. **Payment methods.** Settings → Payments → Payment methods: Cards on; Apple Pay and Google Pay on (Checkout
-   shows them where the buyer's browser supports them). Leave Link as you like (Link stores the buyer's details at
+   - Payload: **Snapshot**; API version: **`2025-03-31.basil`**. The code pins the same version on its own Stripe
+     calls (`voucherRails.ts` `STRIPE_API_VERSION`) and its tests read basil-shaped `charge` and `dispute` objects;
+     move both together if the version ever changes.
+   - Destination: Webhook endpoint, URL `https://gym.flagshipserver.com/api/stripe/webhook`, description
+     `Flagship gym: voucher refunds and disputes`
+   Create, then **Reveal** the signing secret (`whsec_…`).
+3. **Payment methods.** Settings → Payments → Payment methods: Cards on; Apple Pay on; **[OWNER CONFIRMS]** Google
+   Pay on (turning it on accepts Google's Google Pay API Terms of Service). Checkout shows them where the buyer's
+   browser supports them. Business batches take cards only (with the wallets), whatever is on here ("Bank transfer
+   for business batches" below). Leave Link as you like (Link stores the buyer's details at
    Stripe, not with us).
-4. **Stripe Tax.** Settings → Tax: turn on; Origin address: IBIS LLC's address; Default tax behavior:
-   **Inclusive** (the code sends `tax_behavior=inclusive` on each line anyway, so the $10 shown is the $10 paid);
-   Default product tax code: leave it, the code sends `txcd_10000000` (General - Electronically Supplied Services)
-   unless `STRIPE_TAX_CODE` says otherwise (ask the accountant whether a gift-card or voucher code fits better).
-   Registrations: add the ones the accountant names (test mode mirrors live).
+4. **Stripe Tax.** Settings → Tax: turn on; Origin address: IBIS LLC's address (head office Texas); **Include tax
+   in prices: Yes** (inclusive; the code sends `tax_behavior=inclusive` on each line anyway, so the $10 shown is the
+   $10 paid, tested in `voucherRails.test.ts`); preset product category: Electronically Supplied Services, the
+   code sends `txcd_10000000` unless `STRIPE_TAX_CODE` says otherwise (ask the accountant whether a gift-card or
+   voucher code fits better). Registrations: add the ones the accountant names, in the sandbox and again in live.
+   (Sandbox done 2026-11-17: inclusive, `txcd_10000000`, no registrations yet.)
 5. **Branding and receipts.** Settings → Branding: the Flagship icon and colour. Settings → Business → Public
-   details: statement descriptor `FLAGSHIP`, support email and URL `https://flagshipserver.com/support`.
+   details: support email and URL `https://flagshipserver.com/support`. **Leave the statement descriptor alone**:
+   it is account-wide and IBIS LLC sells other products on the same account. The code sets
+   `payment_intent_data.statement_descriptor_suffix = FLAGSHIP` on every voucher and batch Checkout Session
+   (`voucherRails.ts` `STRIPE_STATEMENT_SUFFIX`); Stripe joins it to the account's shortened descriptor prefix
+   (prefix, separator and suffix: 22 characters at most, at least one letter, none of `< > \ ' " *`).
    Settings → Customer emails: "Successful payments" on (Stripe emails the receipt; Checkout asks for an email in
    any case, and only Stripe keeps it).
 6. **Radar.** Radar → Rules: keep "Request 3D Secure if 3DS is required for card" and add
@@ -86,17 +104,18 @@ The App Store parts (A2.1 to A2.4) are the same records production uses; do them
    agreement is Active.
 2. **Small Business Program.** developer.apple.com/app-store/small-business-program → Enroll (15% instead of 30%
    under $1M a year).
-3. **The three products.** App Store Connect → Apps → Flagship → Monetization → **In-App Purchases** → +, type
+3. **The three products.** App Store Connect → Apps → Flagship Hub → Monetization → **In-App Purchases** → +, type
    **Consumable**, for each row:
 
    | Reference name | Product ID | Price |
    | --- | --- | --- |
    | Vouchers 10 | `com.flagshipserver.app.vouchers.10` | $10.00 (US) |
    | Vouchers 30 | `com.flagshipserver.app.vouchers.30` | $30.00 |
-   | Vouchers 120 | `com.flagshipserver.app.vouchers.120` | $120.00 |
+   | Vouchers 120 | `com.flagshipserver.app.vouchers.120` | $119.99 (Apple has no $120.00 price point) |
 
-   The product id fixes how many vouchers a purchase gives, whatever the price; if $10.00 isn't offered in the
-   price list take the nearest ($9.99) and say so to the developers. Availability: all countries and regions.
+   The product id fixes how many vouchers a purchase gives, whatever the price, and the app shows StoreKit's
+   localized price; if a listed price isn't in Apple's price list take the nearest and say so to the developers.
+   (Created 2026-11-17: Apple IDs 6836151300, 6836152101, 6836152683.) Availability: all countries and regions.
    Family Sharing: off (consumables can't use it). Localizations (Display Name, Description), in every language
    the app ships:
 
@@ -113,7 +132,8 @@ The App Store parts (A2.1 to A2.4) are the same records production uses; do them
    (Machine drafts like the apps' strings; a native speaker should read them with the other store text.)
    Review information: a screenshot of Settings → Plan with the packs showing (iPhone), and the note in A2.6.
    Tax category: the default (App Store software) unless the accountant says otherwise.
-4. **Server notifications.** App Information → **App Store Server Notifications**: Version 2;
+4. **Server notifications.** App Information → **App Store Server Notifications** (no version picker: new URLs are
+   Version 2);
    Production Server URL `https://flagshipserver.com/api/vouchers/apple/notifications`;
    Sandbox Server URL `https://gym.flagshipserver.com/api/vouchers/apple/notifications`. They tell `.com` about
    refunds (it then refuses to sign for that purchase if the phone hasn't been paid out yet).
@@ -122,7 +142,7 @@ The App Store parts (A2.1 to A2.4) are the same records production uses; do them
    transaction id and the day, never an account.)
 6. **Review notes** (App Review Information → Notes; add to `docs/runbooks/store-review-notes.md` when submitting):
    > Flagship sells prepaid credit for its hosting service as consumable in-app purchases (10, 30 or 120 vouchers,
-   > $1 each). Vouchers are spent automatically on the user's Flagship plan (Pro: 10 a month, Pro Max: 20) from
+   > each worth $1 of credit; App Store prices $10.00, $30.00 and $119.99). Vouchers are spent automatically on the user's Flagship plan (Pro: 10 a month, Pro Max: 20) from
    > Settings → Plan. They are bought only through in-app purchase inside the app; the app has no other way to buy,
    > enter a code, scan or import credit. Vouchers are privacy-preserving: our server signs them blind, so it never
    > learns which account a purchase paid for. To test: create an account (it takes a minute), open Settings →
@@ -156,15 +176,26 @@ out of 0.4 so one build passes review everywhere. Adding a US-only "Buy on the w
    compatible); multi-quantity purchases: off (the code accepts a quantity, but the app buys one at a time). Let
    Play convert the price for other countries. **Activate** each product. They are consumed by the app after delivery;
    Play has no separate "consumable" switch.
-4. **Service account for verification.**
-   1. Google Cloud console (console.cloud.google.com) → the project linked to Play Console (Play Console → Setup →
-      API access shows or creates it) → APIs & Services → enable **Google Play Android Developer API**.
+4. **Service account for verification.** Done 2026-11-17 (no secret here):
+   - Account **`flagship-play-verify@flagshipserver.iam.gserviceaccount.com`**, in Google Cloud project
+     **`flagshipserver`**, with **no project roles**; the Google Play Android Developer API is enabled in that
+     project.
+   - In Play Console (Users and permissions) it has app permissions on Flagship only: View app information (Play
+     forces it), **View financial data** and **Manage orders and subscriptions**. No account permissions.
+   - Its JSON key is `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` on both Workers (production and gym).
+   - Google can take **up to 24 hours** before the API accepts a new service account: a `401`/`403` from the Play
+     Developer API on the first day is that wait, not a broken key.
+
+   To rebuild it:
+   1. Play Console has **no "API access" page** any more (no project is linked from Play). Google Cloud console
+      (console.cloud.google.com) → any project of the owner's (`flagshipserver`) → APIs & Services → enable
+      **Google Play Android Developer API**.
    2. IAM & Admin → Service Accounts → Create: name `flagship-play-verify`, no project roles. Keys → Add key →
       JSON → download.
    3. Play Console → **Users and permissions** → Invite new users → the service account's email → App
       permissions → add Flagship with only: **View financial data, orders and cancellation survey responses** and
       **Manage orders and subscriptions** (the second lets `.com` acknowledge a purchase). No account permissions.
-      It can take up to a day before the API accepts the key.
+      It can take up to 24 hours before the API accepts the key.
    4. Put it on the gym Worker (and later production) from the file, then delete the downloaded file:
       ```sh
       cd apps/com
@@ -199,9 +230,7 @@ out of 0.4 so one build passes review everywhere. Adding a US-only "Buy on the w
    npx wrangler d1 execute flagship-state --remote --file=../../packages/storage/migrations/0153_voucher_payments.sql
    npx wrangler d1 execute flagship-state --remote --command "INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES ('0153', $(date +%s)000)"
    ```
-2. **Stripe live mode:** repeat A1.1 to A1.6 with Test mode off: key name `flagship-com-vouchers` (`rk_live_…`),
-   webhook endpoint `https://flagshipserver.com/api/stripe/webhook` with the same two events. Confirm
-   Settings → Payouts shows the bank account and a payout schedule.
+2. **Stripe live mode:** the "Stripe live pass" below, after Stripe's written yes.
 3. **Production secrets** (paste at each prompt):
    ```sh
    cd apps/com
@@ -222,6 +251,46 @@ out of 0.4 so one build passes review everywhere. Adding a US-only "Buy on the w
 7. **Terms, Privacy and the FAQ**: Terms §3/§4 (vouchers, no refunds, never expire), Privacy §2.4 (what Stripe,
    Apple and Google learn; what `.com` keeps), `docs/faq-money-section.html`: still to write before launch
    (`docs/payments-privacy-and-rails.md` §7).
+
+## Stripe live pass
+
+The sandbox is separate, so all of A1 is redone in live mode (the same list is in `0.4-browser-tasks.md`, "Stripe
+live pass"). Before it: on 2026-11-17 the live account showed "Update your business website URL to resume payouts";
+the owner fixes it under Settings → Business, or live payouts stay blocked.
+
+1. Live restricted key `flagship-com-vouchers` (Checkout Sessions: Write) → production `STRIPE_SECRET_KEY`.
+2. Live event destination `https://flagshipserver.com/api/stripe/webhook`, events `charge.refunded` and
+   `charge.dispute.created`, Snapshot, `2025-03-31.basil` → production `STRIPE_WEBHOOK_SECRET`.
+3. Live payment methods: Cards, Apple Pay, Google Pay (**[OWNER CONFIRMS]**: Google's terms).
+4. Stripe Tax: Include tax in prices Yes, Electronically Supplied Services, registrations from the accountant.
+5. The Radar rule (A1.6).
+6. Branding and the "Successful payments" emails (A1.5).
+7. Invoice template (live only): footer and "Show tax ID on invoices". The invoice number prefix is account-wide,
+   shared with IBIS's other products: changing it is the owner's call, not a setup step.
+8. Public details: support URL `https://flagshipserver.com/support` and the support email. The statement descriptor
+   stays as it is (the code adds the `FLAGSHIP` suffix).
+9. Settings → Payouts shows the bank account and a payout schedule.
+
+## Bank transfer for business batches
+
+Checked against Stripe's docs (docs.stripe.com/payments/bank-transfers/accept-a-payment, Checkout, 2026-11-17):
+Checkout does support bank transfer (`customer_balance`) in `mode=payment`, but "Bank transfers aren't available on
+Checkout Sessions that didn't include an existing Customer"; the batch session creates its customer
+(`customer_creation=always`, so the company's address and tax id come from Checkout and nothing names an org). Bank
+transfer is also a delayed method: the session completes unpaid, and the browser's signature request would answer
+"not paid yet" until the money arrives. So **the batch Checkout offers cards only** (`payment_method_types=card`;
+Apple Pay and Google Pay ride on card) and never shows bank transfer, whatever the Dashboard's payment methods say.
+
+A company that must pay by bank transfer (owner, by hand):
+1. Settings → Payments → Payment methods: Bank transfers on (**[OWNER CONFIRMS]**, live only).
+2. Invoices → Create invoice for the company's Customer: one line "Flagship vouchers" × the count at $1, tax
+   behaviour inclusive, tax code `txcd_10000000`; collection **Send invoice** (`send_invoice`) with bank transfer as
+   the payment method. Nothing on it names an org, an account or a seat.
+3. **Open gap:** nothing turns a paid invoice into vouchers yet. `/api/vouchers/batch-issue` reads only Checkout
+   Sessions, and `POST /api/admin/vouchers/issue` (admin secret) signs blinded requests, which only the org admin's
+   browser can make; the webapp has no step that hands them to the owner for a manual invoice. Until a send_invoice
+   flow is built (`.com` checks the paid invoice the way it checks a session), don't promise bank transfer to a
+   customer: the safe answer is the card Checkout.
 
 ## Refunds, in one place
 
