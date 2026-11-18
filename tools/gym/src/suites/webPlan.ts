@@ -1,6 +1,7 @@
 /**
  * webapp gym scenarios: Settings → Plan (apps/web/e2e/gym/gym-plan.spec.ts, docs/payments-privacy-and-rails.md
- * "As built"). Same rules as web.ts: each `harness` is the exact title of a test in that spec.
+ * "As built") and the signed-out voucher shop with its "Load into Flagship" link (apps/web/e2e/gym/gym-vouchers.spec.ts,
+ * docs/anonymous-vouchers.md "Voucher links"). Same rules as web.ts: each `harness` is the exact title of a test in that spec.
  */
 
 import type { Scenario } from "../scenario.js";
@@ -59,6 +60,48 @@ export const WEB_PLAN: readonly Scenario[] = [
       ],
       screenshots: [shot("plan-read-only", "Plan read-only on a device that isn't an admin.")],
       dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-vouchers-shop-signed-out",
+    "A browser with no account buys a pack on the voucher shop: Stripe Checkout opens, and on the return the vouchers are offered as a Load into Flagship app link (vouchers only in the fragment), a file and a copy; no request names an account, and with no app installed the link reaches the webapp, which keeps it for after the unlock and clears the address.",
+    "gym vouchers a browser with no account buys a pack and gets a Load into Flagship link, unlinked",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the webapp at ?shop=buy with no account." },
+        { kind: "tap", describe: "Buy the $10 pack.", handle: "[data-testid=voucher-shop-pack-10]" },
+        { kind: "assert", describe: "Back from Stripe, the vouchers are ready.", handle: "[data-testid=voucher-shop-ready]" },
+      ],
+      assertions: [
+        { describe: "Ready line", handle: "[data-testid=voucher-shop-ready]", expect: "text", text: "Your 10 vouchers ($10) are ready." },
+        { describe: "Load into Flagship link", handle: "[data-testid=voucher-shop-load]", expect: "present" },
+        { describe: "Voucher file download", handle: "[data-testid=voucher-shop-download]", expect: "present" },
+      ],
+      screenshots: [shot("shop-signed-out", "The voucher shop with no account."), shot("shop-ready", "The vouchers ready as a link, a file and a copy.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-total-vouchers-link-import",
+    "In a signed-in webapp a voucher link asks before adding, adds its vouchers to the sealed wallet without sending any voucher anywhere, opening it again adds nothing, and a truncated link is refused as damaged.",
+    "gym vouchers a voucher link adds once, the second open adds nothing, a truncated one is refused",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on an admin device and open Settings → Plan once." },
+        { kind: "tap", describe: "Open the voucher link and add.", handle: "[data-testid=voucher-link-add]" },
+        { kind: "assert", describe: "Open the same link again, then a truncated one.", handle: "[data-testid=voucher-link-outcome]" },
+      ],
+      assertions: [
+        { describe: "Balance after the link", handle: "#plan-balance-amount", expect: "text", text: "$3" },
+        {
+          describe: "Truncated link refused",
+          handle: "[data-testid=voucher-link-outcome]",
+          expect: "text",
+          text: "This voucher link is incomplete or damaged. Open the whole link again, or use the voucher file.",
+        },
+      ],
+      screenshots: [shot("link-confirm", "The voucher link asks before adding."), shot("link-damaged", "A truncated voucher link refused.")],
+      dimension: "D4",
     },
   ),
 ];

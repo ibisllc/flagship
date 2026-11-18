@@ -1608,3 +1608,4 @@ Open owner items:
 - Resume point: fix the 4 failing tests (a)-(d) listed above, then the deploy per docs/runbooks/0.4-deploy-sheet.md (owner OK at each outward step; run the full FlagshipApp build first).
 - Agent `0.4/stale-tests` (worktree ~/flagship-0.4-stale-tests) is fixing (a)-(d). On resume: check its branch, then rebase, gate and ff-merge.
 - stale-tests: (a) fixed: AT-ENV-10 classifies voucher-link (hash), voucher-batch (kdf), org-voucher-wallet (kdf+aad), org-voucher-wallet-write (org-approval vectors) and org-plan-attestation (CA vectors) in tagInventory.ts.
+- stale-tests: (b) fixed: the two gym-vouchers.spec.ts tests are registered as web scenarios (web-total-vouchers-shop-signed-out, web-total-vouchers-link-import) in tools/gym/src/suites/webPlan.ts with their screenshot points.
