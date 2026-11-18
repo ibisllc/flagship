@@ -983,6 +983,7 @@
   "s26dc6f9029": "通过 Apple 进行的 App 内购买。Apple 能看到你的 Apple 账户，以及你购买了 Flagship 代金券。",
   "sacd3ddbdb4": "通过 Google Play 进行的购买。Google 能看到你的 Google 账户，以及你购买了 Flagship 代金券。",
   "s9577c04fda": "在 <1>Webapp</1> 中通过 Stripe 用银行卡付款。Stripe、你的卡组织和你的银行能看到你的卡，以及你向 Flagship 付了款。",
+  "s0ead882255": "暂不支持银行卡付款。请在 iPhone 或 Android 应用中购买。",
   "s28c3361685": "商店知道什么，我们不知道什么",
   "sfe702a12ad": "收款的一方知道你购买了 Flagship 代金券。代金券让这件事不出现在我们的记录里，但不会从他们的记录里消失。他们谁都不会知道你的 Flagship 账户，而我们也永远不知道哪笔购买为哪个账户付了款。",
   "s72d510ee1b": "代金券：设计上就是匿名的",

@@ -115,7 +115,8 @@
         </div>
         <div class="pay-card">
           <h4>Web-App</h4>
-          <p>Eine Kartenzahlung über Stripe, in der <a href="https://webapp.flagshipserver.com/?shop=buy">Webapp</a>. Stripe, dein Kartennetzwerk und deine Bank sehen deine Karte und dass du Flagship bezahlt hast.</p>
+          <p id="pro-card-shop">Eine Kartenzahlung über Stripe, in der <a href="https://webapp.flagshipserver.com/?shop=buy">Webapp</a>. Stripe, dein Kartennetzwerk und deine Bank sehen deine Karte und dass du Flagship bezahlt hast.</p>
+          <div id="pro-card-messages" hidden=""><p data-pro-card="off">Kartenzahlungen sind noch nicht verfügbar. Kauf in der App für iPhone oder Android.</p></div>
         </div>
       </div>
       <div class="callout">
@@ -165,6 +166,19 @@
     </section>
 
   </div>
+    <script>
+      // While `.com` has no card rail, the webapp card says so instead of linking to a shop that can't sell. The
+      // sentence is in the page (#pro-card-messages) so scripts/i18n-web.mjs translates it.
+      (function () {
+        fetch("/api/payments/config").then(function (r) { return r.json(); }).then(function (c) {
+          if (c && c.rails && c.rails.stripe === true) return;
+          var el = document.getElementById("pro-card-shop");
+          var tpl = document.querySelector('#pro-card-messages [data-pro-card="off"]');
+          if (!el || !tpl) return;
+          el.replaceWith(tpl.cloneNode(true));
+        }).catch(function () {});
+      })();
+    </script>
 </main>
 
 <footer class="footer">

@@ -342,13 +342,13 @@ describe("webapp plan: the section", () => {
 
 describe("webapp plan: wiring", () => {
   const read = (p: string) => readFileSync(join(root, "apps/web/public/webapp", p), "utf8");
-  it("has a Settings row, a view, a precached module set and the v238 shell", () => {
+  it("has a Settings row, a view, a precached module set and the v239 shell", () => {
     expect(read("index.html")).toContain('id="settings-tab-plan"');
     expect(read("index.html")).toContain('id="view-plan"');
     expect(read("app.js")).toContain('wire("settings-tab-plan", enterPlan)');
     const sw = read("service-worker.js");
     for (const f of ["/lib/vouchers.js", "/lib/plan.js", "/views/plan.js"]) expect(sw).toContain(`"${f}"`);
-    expect(sw).toContain('SHELL_VERSION = "v238"');
+    expect(sw).toContain('SHELL_VERSION = "v239"');
   });
 });
 
@@ -545,6 +545,16 @@ describe("webapp: the voucher shop with no account and the voucher link (docs/an
     expect(html).toContain("Not signed by Flagship, left out: 2");
     expect(html).not.toContain("Already spent");
     expect(html).toContain('data-testid="voucher-link-offline"');
+  });
+
+  it("with no card rail (production has no Stripe key) the signed-out shop sells nothing and says why", async () => {
+    const S = await import("../public/webapp/views/voucher-shop.js");
+    for (const rails of [{ stripe: false, apple: true, google: true }, undefined]) {
+      const html = S.shopHtml({ config: DEFAULT_PAYMENTS_CONFIG, rails, keys: [] }, [], 0, "flagshipserver.test");
+      expect(html).toContain("Card payments aren't available right now.");
+      expect(html).not.toContain("data-buy=");
+      expect(html).not.toContain("Pay by card with Stripe");
+    }
   });
 
   it("the signed-out shop offers the app link, the file and a copy, and never a username", async () => {

@@ -551,7 +551,8 @@
 //  v237: Page options → "Show in search engines" (the page index's showInSearch; voi.ci pages are noindex without it),
 //        and every publish lists the page's share card (lib/voiciShareCard.js), the picture link previews show.
 //  v238: the owner's call-back ring goes to /api/voici/rings/<ringId> (no account name in the address; lib/voiciOwner.js).
-const SHELL_VERSION = "v238";
+//  v239: the Business batch says card payments aren't available while `.com` has no card rail (views/orgPlan.js).
+const SHELL_VERSION = "v239";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

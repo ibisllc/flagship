@@ -983,6 +983,7 @@
   "s26dc6f9029": "Ein In-App-Kauf über Apple. Apple sieht deinen Apple Account und dass du Flagship-Gutscheine gekauft hast.",
   "sacd3ddbdb4": "Ein Kauf über Google Play. Google sieht dein Google-Konto und dass du Flagship-Gutscheine gekauft hast.",
   "s9577c04fda": "Eine Kartenzahlung über Stripe, in der <1>Webapp</1>. Stripe, dein Kartennetzwerk und deine Bank sehen deine Karte und dass du Flagship bezahlt hast.",
+  "s0ead882255": "Kartenzahlungen sind noch nicht verfügbar. Kauf in der App für iPhone oder Android.",
   "s28c3361685": "Was die Shops wissen, und was wir nicht wissen",
   "sfe702a12ad": "Wer dein Geld annimmt, weiß, dass du Flagship-Gutscheine gekauft hast. Gutscheine halten das aus unseren Unterlagen heraus, nicht aus ihren. Keiner von ihnen erfährt je dein Flagship-Konto, und wir erfahren nie, welcher Kauf für welches Konto bezahlt hat.",
   "s72d510ee1b": "Gutscheine: anonym durch ihre Bauweise",

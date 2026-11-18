@@ -983,6 +983,7 @@
   "s26dc6f9029": "Una compra dentro de la app a través de Apple. Apple ve tu cuenta de Apple y que compraste vales de Flagship.",
   "sacd3ddbdb4": "Una compra a través de Google Play. Google ve tu cuenta de Google y que compraste vales de Flagship.",
   "s9577c04fda": "Un pago con tarjeta a través de Stripe, en la <1>webapp</1>. Stripe, la red de tu tarjeta y tu banco ven tu tarjeta y que pagaste a Flagship.",
+  "s0ead882255": "Los pagos con tarjeta aún no están disponibles. Compra en la app para iPhone o Android.",
   "s28c3361685": "Lo que saben las tiendas y lo que nosotros no sabemos",
   "sfe702a12ad": "Quien recibe tu dinero sabe que compraste vales de Flagship. Los vales lo mantienen fuera de nuestros registros, no de los suyos. Ninguno de ellos llega a saber tu cuenta de Flagship, y nosotros nunca sabemos qué compra pagó qué cuenta.",
   "s72d510ee1b": "Vales: anónimos por diseño",

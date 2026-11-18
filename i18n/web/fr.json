@@ -983,6 +983,7 @@
   "s26dc6f9029": "Un achat intégré via Apple. Apple voit votre compte Apple et que vous avez acheté des bons Flagship.",
   "sacd3ddbdb4": "Un achat via Google Play. Google voit votre compte Google et que vous avez acheté des bons Flagship.",
   "s9577c04fda": "Un paiement par carte via Stripe, dans la <1>webapp</1>. Stripe, votre réseau de carte et votre banque voient votre carte et que vous avez payé Flagship.",
+  "s0ead882255": "Les paiements par carte ne sont pas encore disponibles. Achetez dans l'app iPhone ou Android.",
   "s28c3361685": "Ce que savent les boutiques, et ce que nous ne savons pas",
   "sfe702a12ad": "Celui qui reçoit votre argent sait que vous avez acheté des bons Flagship. Les bons gardent cela hors de nos registres, pas des leurs. Aucun d'eux n'apprend jamais votre compte Flagship, et nous n'apprenons jamais quel achat a payé quel compte.",
   "s72d510ee1b": "Les bons : anonymes par conception",

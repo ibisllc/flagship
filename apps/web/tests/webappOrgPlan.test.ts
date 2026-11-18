@@ -215,6 +215,13 @@ describe("the org's Plan in the webapp", () => {
     expect(await w.wallets.isSpent(org.voucherNullifier(old[0]))).toBe(true);
   });
 
+  it("with no card rail the batch button is off and the sentence says why", () => {
+    const src = readFileSync(here("../public/webapp/views/orgPlan.js"), "utf8");
+    expect(src).toContain('<button data-org-batch-buy ${pc.rails?.stripe ? "" : "disabled"}>');
+    expect(src).toContain('${pc.rails?.stripe ? "" : `<p class="note" data-org-batch-rail-off>${escapeHtml(tr("Card payments aren\'t available right now."))}</p>`}');
+    expect(view.orgPlanErrorText({ code: "rail-off" })).toBe("Card payments aren't available right now.");
+  });
+
   it("says lapsed, trial and paid plainly", () => {
     expect(view.orgPlanStatusText({ status: "lapsed" })).toBe("Business has lapsed");
     expect(view.orgPlanStatusText({ status: "trial", trialEndsAt: NOW + 86_400_000 }, NOW)).toBe("Business, trial: 1 day left");

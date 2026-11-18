@@ -121,6 +121,7 @@ export async function renderOrgPlan(seat, snap, host, { isOrgAdmin, refresh }) {
       <label>${escapeHtml(tr("Invoiced batch for the company"))} <input type="number" data-org-batch-units min="${cfg.business.batchMinUnits}" max="${cfg.business.batchMaxUnits}" value="${Math.max(cfg.business.batchMinUnits, price.units * 12)}"></label>
       <p class="note">${escapeHtml(tr("The invoice names your company and the number of vouchers, never this org or anyone in it."))}</p>
       <button data-org-batch-buy ${pc.rails?.stripe ? "" : "disabled"}>${escapeHtml(tr("Buy a batch"))}</button>
+      ${pc.rails?.stripe ? "" : `<p class="note" data-org-batch-rail-off>${escapeHtml(tr("Card payments aren't available right now."))}</p>`}
       <button class="secondary" data-org-batch-key>${escapeHtml(tr("Finish a batch from its key file"))}</button>
       ${batches.length ? batches.map((b) => `<div class="stack-sm"><p class="note">${escapeHtml(trn(b.units, "Batch of {0} voucher", "Batch of {0} vouchers"))}</p><button data-org-batch-wallet="${escapeHtml(b.session)}">${escapeHtml(tr("Add to the org's wallet"))}</button><button class="secondary" data-org-batch-files="${escapeHtml(b.session)}">${escapeHtml(tr("Save as voucher files for staff"))}</button></div>`).join("") : ""}
     </div>`

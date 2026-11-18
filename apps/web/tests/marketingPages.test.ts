@@ -259,6 +259,43 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).not.toMatch(/hand-operated|tell us your username/i);
   });
 
+  it("/pro's webapp card says card payments aren't available while `.com` has no card rail", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/pro.html" });
+    expect(r.body).toContain('id="pro-card-shop"');
+    expect(r.body).toContain('<div id="pro-card-messages" hidden><p data-pro-card="off">Card payments aren\'t available yet. Buy in the iPhone or Android app.</p></div>');
+    const script = [...r.body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!).find((s) => s.includes("pro-card-messages"))!;
+    expect(script).toContain('fetch("/api/payments/config")');
+    const run = async (config: unknown) => {
+      const swapped: unknown[] = [];
+      const tpl = { cloneNode: () => "off-sentence" };
+      const doc = {
+        getElementById: (id: string) => (id === "pro-card-shop" ? { replaceWith: (n: unknown) => swapped.push(n) } : null),
+        querySelector: (sel: string) => (sel.includes('data-pro-card="off"') ? tpl : null),
+      };
+      let done!: () => void;
+      const settled = new Promise<void>((res) => (done = res));
+      const fetchStub = () => {
+        const p = Promise.resolve({ json: () => Promise.resolve(config) });
+        void p.then(() => setTimeout(done, 0));
+        return p;
+      };
+      new Function("document", "fetch", script)(doc, fetchStub);
+      await settled;
+      return swapped;
+    };
+    expect(await run({ rails: { stripe: false, apple: true, google: true } })).toEqual(["off-sentence"]);
+    expect(await run({})).toEqual(["off-sentence"]);
+    expect(await run({ rails: { stripe: true, apple: true, google: true } })).toEqual([]);
+    // Every language's page carries the sentence translated, not in English.
+    for (const dir of ["de", "es", "fr", "ja", "pt-br", "zh-hans"]) {
+      const page = await app.inject({ method: "GET", url: `/${dir}/pro.html` });
+      expect(page.statusCode).toBe(200);
+      expect(page.body).toMatch(/<div id="pro-card-messages" hidden(?:="")?><p data-pro-card="off">[^<]+<\/p><\/div>/);
+      expect(page.body).not.toContain("Card payments aren't available yet.");
+    }
+  });
+
   it("/dibs explains the .com-only claim, its price and both proof locations", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/dibs.html" });
