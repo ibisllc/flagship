@@ -9,6 +9,9 @@ import { describe, expect, it } from "vitest";
 import { checkVersions, parseVersion, parseStudioExperimental, surfaces, writeVersions, READERS, STUDIO_TAG_FILE } from "./check-versions.mjs";
 
 const ROOT = resolve(__dirname, "..");
+// The drift cases below start from what the real file says, so a release bump touches only the pin in the first test.
+const V = parseVersion(readFileSync(join(ROOT, "release/version.json"), "utf8")).v;
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const repoAt = (root: string) => ({
   read: (rel: string) => {
     try {
@@ -33,15 +36,21 @@ function copyOfTree(): string {
 }
 
 describe("release/version.json", () => {
-  it("is valid and carries the 0.3 Beta product version", () => {
+  it("is valid and carries the 0.4 Beta product version", () => {
     const { v, errors } = parseVersion(readFileSync(join(ROOT, "release/version.json"), "utf8"));
     expect(errors).toEqual([]);
-    expect(v.product).toBe("0.3");
+    expect(v.product).toBe("0.4");
     expect(v.label).toBe("Beta");
-    expect(v.iosVersion).toBe("1.2");
-    expect(v.iosBuild).toBe(8);
-    expect(v.androidVersionCode).toBe(11);
-    expect(v.studio).toBe("0.3.0");
+    expect(v.iosVersion).toBe("1.3");
+    expect(v.iosBuild).toBe(9);
+    expect(v.androidVersionCode).toBe(12);
+    expect(v.studio).toBe("0.4.0");
+  });
+
+  it("puts the Wear OS app one million above the phone's version code", () => {
+    const kts = readFileSync(join(ROOT, "apps/mobile/android/wear/build.gradle.kts"), "utf8");
+    expect(kts).toMatch(/versionCode = 1_000_000 \+ \(releaseVersion\["androidVersionCode"\] as Number\)\.toInt\(\)/);
+    expect(1_000_000 + V.androidVersionCode).toBe(1_000_012);
   });
 
   it("keeps the iOS version above the approved 1.0 (4) and Android above Play's 8", () => {
@@ -57,7 +66,7 @@ describe("release/version.json", () => {
 
   it("puts the label beside the number on the homepage", () => {
     const html = readFileSync(join(ROOT, "apps/web/public/index.html"), "utf8");
-    expect(html).toContain("<span>v0.3 Beta</span>");
+    expect(html).toContain(`<span>v${V.product} ${V.label}</span>`);
     expect(html).not.toMatch(/v0\.1 alpha/);
   });
 
@@ -89,13 +98,13 @@ describe("drift is caught", () => {
   };
 
   it("an old homepage badge", () => {
-    const { findings } = drift("apps/web/public/index.html", "<span>v0.3 Beta</span>", "<span>v0.1 alpha</span>");
+    const { findings } = drift("apps/web/public/index.html", `<span>v${V.product} ${V.label}</span>`, "<span>v0.1 alpha</span>");
     expect(findings.map((f: { key: string }) => f.key)).toEqual(["website:hero"]);
   });
 
   it("a stale iOS build number or store version", () => {
-    expect(drift("apps/mobile/ios/App/project.yml", 'CURRENT_PROJECT_VERSION: "8"', 'CURRENT_PROJECT_VERSION: "4"').findings[0].key).toBe("ios:project.yml:build");
-    expect(drift("apps/mobile/ios/App/FlagshipApp.xcodeproj/project.pbxproj", /MARKETING_VERSION = 1\.2;/g, "MARKETING_VERSION = 1.0;").findings.length).toBe(2);
+    expect(drift("apps/mobile/ios/App/project.yml", `CURRENT_PROJECT_VERSION: "${V.iosBuild}"`, 'CURRENT_PROJECT_VERSION: "4"').findings[0].key).toBe("ios:project.yml:build");
+    expect(drift("apps/mobile/ios/App/FlagshipApp.xcodeproj/project.pbxproj", new RegExp(`MARKETING_VERSION = ${escapeRe(V.iosVersion)};`, "g"), "MARKETING_VERSION = 1.0;").findings.length).toBe(2);
   });
 
   it("a hard-coded Android version code", () => {
@@ -104,7 +113,7 @@ describe("drift is caught", () => {
   });
 
   it("the Mac bundle still on 0.1.0", () => {
-    expect(drift("apps/builder-mac/Info.plist", "<string>0.3.0</string>", "<string>0.1.0</string>").findings[0].key).toBe("mac:plist");
+    expect(drift("apps/builder-mac/Info.plist", `<string>${V.studio}</string>`, "<string>0.1.0</string>").findings[0].key).toBe("mac:plist");
   });
 
   it("a Studio workflow that stopped reading the file", () => {
@@ -114,12 +123,17 @@ describe("drift is caught", () => {
 
   it("--write puts a drifted tree back", () => {
     const dir = copyOfTree();
-    writeFileSync(join(dir, "release/version.json"), JSON.stringify({ product: "0.4", label: "Beta", iosVersion: "1.2", iosBuild: 6, androidVersionCode: 10, studio: "0.4.0" }));
+    const dot = V.product.indexOf(".");
+    const next = `${V.product.slice(0, dot)}.${Number(V.product.slice(dot + 1)) + 1}`;
+    writeFileSync(
+      join(dir, "release/version.json"),
+      JSON.stringify({ product: next, label: "Beta", iosVersion: V.iosVersion, iosBuild: V.iosBuild + 1, androidVersionCode: V.androidVersionCode + 1, studio: `${next}.0` }),
+    );
     expect(checkVersions(repoAt(dir)).findings.length).toBeGreaterThan(0);
     const changed = writeVersions(dir);
     expect(changed).toContain("apps/web/public/index.html");
     expect(checkVersions(repoAt(dir)).findings).toEqual([]);
-    expect(readFileSync(join(dir, "apps/web/public/index.html"), "utf8")).toContain("<span>v0.4 Beta</span>");
+    expect(readFileSync(join(dir, "apps/web/public/index.html"), "utf8")).toContain(`<span>v${next} Beta</span>`);
   });
 
   it("a Studio window title that disagrees with the website's Experimental switch", () => {

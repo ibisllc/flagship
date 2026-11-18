@@ -1609,3 +1609,4 @@ Open owner items:
 - Agent `0.4/stale-tests` (worktree ~/flagship-0.4-stale-tests) is fixing (a)-(d). On resume: check its branch, then rebase, gate and ff-merge.
 - stale-tests: (a) fixed: AT-ENV-10 classifies voucher-link (hash), voucher-batch (kdf), org-voucher-wallet (kdf+aad), org-voucher-wallet-write (org-approval vectors) and org-plan-attestation (CA vectors) in tagInventory.ts.
 - stale-tests: (b) fixed: the two gym-vouchers.spec.ts tests are registered as web scenarios (web-total-vouchers-shop-signed-out, web-total-vouchers-link-import) in tools/gym/src/suites/webPlan.ts with their screenshot points.
+- stale-tests: (c) fixed: check-versions.test.ts pins the 0.4 versions once (iOS 1.3 (9), Android 12, Studio 0.4.0, plus a Wear = phone + 1,000,000 check) and every drift case now reads release/version.json, so the next bump touches only that pin.
