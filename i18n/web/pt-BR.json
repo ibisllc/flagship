@@ -1022,5 +1022,7 @@
   "s220b89c994": "<1>A carteira da própria organização,</1> guardada pelos administradores e criptografada com uma chave que só eles compartilham. Se o pagamento parar, nada se perde: cada vaga, app e registro fica, e só a adição de pessoas, servidores ou conectores espera.",
   "s2bd99083bd": "<1>Uma fatura para a empresa, não para as pessoas dela.</1> Uma empresa pode comprar na web um lote de 100 vales ou mais, com fatura em seu nome e com seu número fiscal, sem nomear nenhuma organização, conta ou vaga. O lote vai para a carteira da organização ou para arquivos de vales que a equipe usa no próprio Pro.",
   "s6f98f794bd": "Adicione vales no app Flagship",
-  "s963b6904c1": "Este link adiciona vales pré-pagos à sua conta Flagship. Baixe o app e abra o link de novo, ou adicione-os no app web."
+  "s963b6904c1": "Este link adiciona vales pré-pagos à sua conta Flagship. Baixe o app e abra o link de novo, ou adicione-os no app web.",
+  "s3656cdddcd": "O Flagship consegue ouvir minhas chamadas?",
+  "s272ff29bb8": "Não. As chamadas no voi.ci têm criptografia de ponta a ponta, pós-quântica, entre quem liga e o dispositivo que atende, e não as gravamos. Vemos qual página recebeu a chamada, quando, por quanto tempo e o endereço IP de quem ligou, nunca o que é dito ou mostrado. A Apple ou o Google ficam sabendo que uma chamada tocou no seu telefone, não quem ligou. A <1>política de privacidade</1> tem a lista completa."
 }

@@ -1022,5 +1022,7 @@
   "s220b89c994": "<1>Le portefeuille propre à l'organisation,</1> détenu par ses administrateurs et chiffré sous une clé qu'eux seuls partagent. Si le paiement s'arrête, rien n'est perdu : chaque siège, app et enregistrement reste, et seul l'ajout de personnes, de serveurs ou de connecteurs attend.",
   "s2bd99083bd": "<1>Une facture pour l'entreprise, pas pour ses employés.</1> Une entreprise peut acheter sur le web un lot de 100 bons ou plus, avec une facture à son nom et à son numéro de TVA qui ne nomme aucune organisation, aucun compte ni aucun siège. Le lot va dans le portefeuille de l'organisation, ou dans des fichiers de bons que le personnel utilise pour son propre Pro.",
   "s6f98f794bd": "Ajoutez des bons dans l'app Flagship",
-  "s963b6904c1": "Ce lien ajoute des bons prépayés à votre compte Flagship. Installez l'app, puis rouvrez le lien, ou ajoutez-les dans l'app web."
+  "s963b6904c1": "Ce lien ajoute des bons prépayés à votre compte Flagship. Installez l'app, puis rouvrez le lien, ou ajoutez-les dans l'app web.",
+  "s3656cdddcd": "Flagship peut-il écouter mes appels ?",
+  "s272ff29bb8": "Non. Les appels sur voi.ci sont chiffrés de bout en bout, avec un chiffrement post-quantique, entre l’appelant et l’appareil qui répond, et nous ne les enregistrons pas. Nous voyons quelle page a été appelée, quand, combien de temps, et l’adresse IP de l’appelant, jamais ce qui est dit ou montré. Apple ou Google apprennent qu’un appel a fait sonner votre téléphone, pas qui a appelé. La <1>politique de confidentialité</1> donne la liste complète."
 }

@@ -1940,6 +1940,22 @@
       "faq.html"
     ]
   },
+  "s3656cdddcd": {
+    "en": "Can Flagship listen to my calls?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s272ff29bb8": {
+    "en": "No. Calls on voi.ci are end-to-end encrypted, with post-quantum encryption, between the caller and the device that answers, and we don't record them. We see which page was called, when, for how long and the caller's IP address, never what is said or shown. Apple or Google learn that a call rang your phone, not who called. The <1>privacy policy</1> has the full list.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
   "sa7c81d6fc1": {
     "en": "How do I report or block someone?",
     "kind": "text",

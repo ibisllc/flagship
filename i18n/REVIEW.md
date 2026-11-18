@@ -145,3 +145,13 @@ Play metadata policy): no language may suggest the phone runs the apps. "You nee
 shortened to fit 80: fr "Créez vos apps depuis le téléphone. Exécutez-les sur votre matériel. Vos clés." and de "Baue
 Apps vom Telefon aus. Betreibe sie auf eigener Hardware. Deine Schlüssel."; check "Vos clés." / "Deine Schlüssel." read
 as "you hold the keys", or find a better wording within 80.
+
+**voi.ci calls in the privacy policy and the FAQ (`i18n/web`, 2026-11-18, drafted by an agent, needs native review).**
+The new privacy section "2.12 Calls on voi.ci" stays English-only, like the rest of `privacy.html` (legal text,
+`i18n/web/pages.json` `englishOnly`), so it has no translations. What is translated is its short version in the FAQ,
+under the Messages questions: "Can Flagship listen to my calls?" and its answer (2 segments of `faq.html`, linking to
+`/privacy#calls`). Words follow the Messages answer just above it: "end-to-end encrypted, with post-quantum encryption"
+as there; call es/pt-BR "llamada"/"chamada", fr "appel", de "Anruf", ja "通話", zh-Hans "通话". Review first: that "we
+don't record them" reads as "we keep no recording" (not "we can't"), "the device that answers" (es "el dispositivo que
+contesta", de "das Gerät, das annimmt"), and that "Apple or Google learn that a call rang your phone, not who called"
+keeps both halves.

@@ -1022,5 +1022,7 @@
   "s220b89c994": "<1>El monedero propio de la organización,</1> guardado por sus administradores y cifrado con una clave que solo ellos comparten. Si se deja de pagar, no se pierde nada: cada puesto, app y registro se queda, y solo espera añadir personas, servidores o conectores.",
   "s2bd99083bd": "<1>Una factura para la empresa, no para su gente.</1> Una empresa puede comprar en la web un lote de 100 vales o más, con una factura a su nombre y con su número fiscal que no nombra ninguna organización, cuenta ni puesto. El lote va al monedero de la organización o a archivos de vales que el personal usa para su propio Pro.",
   "s6f98f794bd": "Añade vales en la app de Flagship",
-  "s963b6904c1": "Este enlace añade vales prepago a tu cuenta de Flagship. Descarga la app y vuelve a abrir el enlace, o añádelos en la app web."
+  "s963b6904c1": "Este enlace añade vales prepago a tu cuenta de Flagship. Descarga la app y vuelve a abrir el enlace, o añádelos en la app web.",
+  "s3656cdddcd": "¿Puede Flagship escuchar mis llamadas?",
+  "s272ff29bb8": "No. Las llamadas en voi.ci tienen cifrado de extremo a extremo, con cifrado poscuántico, entre quien llama y el dispositivo que contesta, y no las grabamos. Vemos a qué página se llamó, cuándo, cuánto duró y la dirección IP de quien llama, nunca lo que se dice o se muestra. Apple o Google saben que una llamada hizo sonar tu teléfono, no quién llamó. La <1>política de privacidad</1> tiene la lista completa."
 }

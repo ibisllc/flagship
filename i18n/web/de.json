@@ -1022,5 +1022,7 @@
   "s220b89c994": "<1>Ein eigenes Guthaben der Organisation,</1> gehalten von ihren Admins und verschlüsselt mit einem Schlüssel, den nur sie teilen. Bleibt die Zahlung aus, geht nichts verloren: Jeder Platz, jede App und jeder Eintrag bleibt, nur das Hinzufügen von Personen, Servern oder Konnektoren wartet.",
   "s2bd99083bd": "<1>Eine Rechnung für das Unternehmen, nicht für seine Leute.</1> Ein Unternehmen kann im Web ein Paket von 100 Gutscheinen oder mehr kaufen, mit einer Rechnung auf seinen Namen und seine Steuernummer, die keine Organisation, kein Konto und keinen Platz nennt. Das Paket geht in das Guthaben der Organisation oder in Gutscheindateien, mit denen Mitarbeitende ihr eigenes Pro bezahlen.",
   "s6f98f794bd": "Gutscheine in der Flagship-App hinzufügen",
-  "s963b6904c1": "Dieser Link fügt deinem Flagship-Konto Prepaid-Gutscheine hinzu. Hol dir die App und öffne den Link dann erneut, oder füge sie in der Web-App hinzu."
+  "s963b6904c1": "Dieser Link fügt deinem Flagship-Konto Prepaid-Gutscheine hinzu. Hol dir die App und öffne den Link dann erneut, oder füge sie in der Web-App hinzu.",
+  "s3656cdddcd": "Kann Flagship meine Anrufe mithören?",
+  "s272ff29bb8": "Nein. Anrufe auf voi.ci sind Ende-zu-Ende-verschlüsselt, mit Post-Quanten-Verschlüsselung, zwischen dem Anrufer und dem Gerät, das annimmt, und wir zeichnen sie nicht auf. Wir sehen, welche Seite angerufen wurde, wann, wie lange und die IP-Adresse des Anrufers, aber nie, was gesagt oder gezeigt wird. Apple oder Google erfahren, dass ein Anruf dein Telefon klingeln ließ, aber nicht, wer angerufen hat. Die <1>Datenschutzerklärung</1> hat die vollständige Liste."
 }
