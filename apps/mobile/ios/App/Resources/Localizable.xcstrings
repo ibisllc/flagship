@@ -163782,6 +163782,744 @@
           }
         }
       }
+    },
+    "Vouchers": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vales"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bons"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gutscheine"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vales"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バウチャー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代金券"
+          }
+        }
+      }
+    },
+    "Add 1 voucher (%@) to this account's wallet?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Añadir 1 vale (%@) a la cartera de esta cuenta?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter 1 bon (%@) au portefeuille de ce compte ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Gutschein (%@) zur Geldbörse dieses Kontos hinzufügen?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar 1 vale (%@) à carteira desta conta?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 枚のバウチャー（%@）をこのアカウントのウォレットに追加しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将 1 张代金券（%@）添加到此账户的钱包？"
+          }
+        }
+      }
+    },
+    "Add %lld vouchers (%@) to this account's wallet?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Añadir %lld vales (%@) a la cartera de esta cuenta?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter %lld bons (%@) au portefeuille de ce compte ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Gutscheine (%@) zur Geldbörse dieses Kontos hinzufügen?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar %lld vales (%@) à carteira desta conta?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 枚のバウチャー（%@）をこのアカウントのウォレットに追加しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将 %lld 张代金券（%@）添加到此账户的钱包？"
+          }
+        }
+      }
+    },
+    "This is link %lld of %lld from the same purchase.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este es el enlace %lld de %lld de la misma compra."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ceci est le lien %lld sur %lld du même achat."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dies ist Link %lld von %lld aus demselben Kauf."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este é o link %lld de %lld da mesma compra."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同じ購入のリンク %lld / %lld です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这是同一次购买的第 %lld 个链接，共 %lld 个。"
+          }
+        }
+      }
+    },
+    "Already in this wallet: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya están en esta cartera: %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déjà dans ce portefeuille : %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schon in dieser Geldbörse: %lld"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Já estão nesta carteira: %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すでにこのウォレットにあるもの：%lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已在此钱包中：%lld"
+          }
+        }
+      }
+    },
+    "Already spent: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya gastados: %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déjà dépensés : %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereits ausgegeben: %lld"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Já gastos: %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用済み：%lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已花费：%lld"
+          }
+        }
+      }
+    },
+    "Not signed by Flagship, left out: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No firmados por Flagship, omitidos: %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non signés par Flagship, ignorés : %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht von Flagship signiert, ausgelassen: %lld"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não assinados pelo Flagship, deixados de fora: %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship の署名がないため除外：%lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未经 Flagship 签名，已略过：%lld"
+          }
+        }
+      }
+    },
+    "Signed with a key this device doesn't know yet, left out: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firmados con una clave que este dispositivo aún no conoce, omitidos: %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signés avec une clé que cet appareil ne connaît pas encore, ignorés : %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit einem Schlüssel signiert, den dieses Gerät noch nicht kennt, ausgelassen: %lld"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assinados com uma chave que este dispositivo ainda não conhece, deixados de fora: %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスがまだ知らない鍵で署名されているため除外：%lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用此设备尚不认识的密钥签名，已略过：%lld"
+          }
+        }
+      }
+    },
+    "Nothing is sent when you add them. They are spent later, a little at a time, like any other voucher.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se envía nada al añadirlos. Se gastan más adelante, poco a poco, como cualquier otro vale."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien n'est envoyé quand vous les ajoutez. Ils sont dépensés plus tard, petit à petit, comme tout autre bon."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim Hinzufügen wird nichts gesendet. Sie werden später nach und nach ausgegeben, wie jeder andere Gutschein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nada é enviado quando você os adiciona. Eles são gastos depois, aos poucos, como qualquer outro vale."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "追加しても何も送信されません。ほかのバウチャーと同じく、あとで少しずつ使われます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加时不会发送任何内容。它们会像其他代金券一样，稍后一点一点地花掉。"
+          }
+        }
+      }
+    },
+    "This voucher link is incomplete or damaged. Open the whole link again, or use the voucher file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este enlace de vales está incompleto o dañado. Vuelve a abrir el enlace completo o usa el archivo de vales."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce lien de bons est incomplet ou endommagé. Ouvrez à nouveau le lien en entier, ou utilisez le fichier de bons."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Gutschein-Link ist unvollständig oder beschädigt. Öffne den ganzen Link erneut oder verwende die Gutscheindatei."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este link de vales está incompleto ou danificado. Abra o link inteiro de novo ou use o arquivo de vales."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このバウチャーリンクは不完全か壊れています。リンク全体をもう一度開くか、バウチャーファイルを使ってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此代金券链接不完整或已损坏。请重新打开完整链接，或使用代金券文件。"
+          }
+        }
+      }
+    },
+    "This voucher link needs a newer version of Flagship. Update the app, then open the link again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este enlace de vales necesita una versión más reciente de Flagship. Actualiza la app y vuelve a abrir el enlace."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce lien de bons nécessite une version plus récente de Flagship. Mettez l'app à jour, puis ouvrez à nouveau le lien."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Gutschein-Link braucht eine neuere Version von Flagship. Aktualisiere die App und öffne den Link dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este link de vales precisa de uma versão mais nova do Flagship. Atualize o app e abra o link de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このバウチャーリンクには新しいバージョンの Flagship が必要です。アプリを更新してから、もう一度リンクを開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此代金券链接需要更新版本的 Flagship。请更新应用，然后重新打开链接。"
+          }
+        }
+      }
+    },
+    "These vouchers are already in this wallet. Nothing was added.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estos vales ya están en esta cartera. No se añadió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces bons sont déjà dans ce portefeuille. Rien n'a été ajouté."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Gutscheine sind schon in dieser Geldbörse. Es wurde nichts hinzugefügt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estes vales já estão nesta carteira. Nada foi adicionado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これらのバウチャーはすでにこのウォレットにあります。何も追加されませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这些代金券已在此钱包中。未添加任何内容。"
+          }
+        }
+      }
+    },
+    "These vouchers were already spent. Nothing was added.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estos vales ya se gastaron. No se añadió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces bons ont déjà été dépensés. Rien n'a été ajouté."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Gutscheine wurden bereits ausgegeben. Es wurde nichts hinzugefügt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estes vales já foram gastos. Nada foi adicionado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これらのバウチャーはすでに使用済みです。何も追加されませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这些代金券已经花掉了。未添加任何内容。"
+          }
+        }
+      }
+    },
+    "These vouchers aren't signed by Flagship. Nothing was added.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estos vales no están firmados por Flagship. No se añadió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces bons ne sont pas signés par Flagship. Rien n'a été ajouté."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Gutscheine sind nicht von Flagship signiert. Es wurde nichts hinzugefügt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estes vales não foram assinados pelo Flagship. Nada foi adicionado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これらのバウチャーには Flagship の署名がありません。何も追加されませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这些代金券没有 Flagship 的签名。未添加任何内容。"
+          }
+        }
+      }
+    },
+    "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo aún no conoce la clave con la que se firmaron estos vales. Abre Ajustes, Plan una vez con conexión y vuelve a abrir el enlace."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil ne connaît pas encore la clé qui a signé ces bons. Ouvrez Réglages, Forfait une fois en ligne, puis ouvrez à nouveau le lien."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät kennt den Schlüssel, mit dem diese Gutscheine signiert wurden, noch nicht. Öffne einmal mit Verbindung Einstellungen, Tarif, und öffne den Link dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo ainda não conhece a chave que assinou estes vales. Abra Ajustes, Plano uma vez com conexão e abra o link de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスは、これらのバウチャーに署名した鍵をまだ知りません。オンラインのときに一度「設定」の「プラン」を開いてから、もう一度リンクを開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备尚不认识为这些代金券签名的密钥。请在联网时打开一次“设置”中的“套餐”，然后重新打开链接。"
+          }
+        }
+      }
+    },
+    "This wallet can hold 500 vouchers. Spend some first, then open the link again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta cartera puede contener 500 vales. Gasta algunos primero y vuelve a abrir el enlace."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce portefeuille peut contenir 500 bons. Dépensez-en d'abord quelques-uns, puis ouvrez à nouveau le lien."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Geldbörse fasst 500 Gutscheine. Gib zuerst einige aus und öffne den Link dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta carteira comporta 500 vales. Gaste alguns primeiro e abra o link de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このウォレットに入るのは 500 枚までです。先にいくつか使ってから、もう一度リンクを開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此钱包最多可存放 500 张代金券。请先花掉一些，然后重新打开链接。"
+          }
+        }
+      }
+    },
+    "Only an admin device of this account can add vouchers. Open the link on one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo administrador de esta cuenta puede añadir vales. Abre el enlace en uno."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur de ce compte peut ajouter des bons. Ouvrez le lien sur l'un d'eux."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät dieses Kontos kann Gutscheine hinzufügen. Öffne den Link auf einem solchen Gerät."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só um dispositivo administrador desta conta pode adicionar vales. Abra o link em um deles."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バウチャーを追加できるのは、このアカウントの管理者デバイスだけです。管理者デバイスでリンクを開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有此账户的管理员设备才能添加代金券。请在管理员设备上打开链接。"
+          }
+        }
+      }
+    },
+    "Sign in to your account first, then open the link again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primero inicia sesión en tu cuenta y vuelve a abrir el enlace."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connectez-vous d'abord à votre compte, puis ouvrez à nouveau le lien."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Melde dich zuerst bei deinem Konto an und öffne den Link dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primeiro entre na sua conta e abra o link de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先にアカウントにサインインしてから、もう一度リンクを開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先登录你的账户，然后重新打开链接。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -17027,5 +17027,77 @@
   "No messages yet. People who sign in on your page can write to you here.": {
     "en": "No messages yet. People who sign in on your page can write to you here.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:381"
+  },
+  "Vouchers": {
+    "en": "Vouchers",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Add 1 voucher (%@) to this account's wallet?": {
+    "en": "Add 1 voucher (%@) to this account's wallet?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Add %lld vouchers (%@) to this account's wallet?": {
+    "en": "Add %lld vouchers (%@) to this account's wallet?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "This is link %lld of %lld from the same purchase.": {
+    "en": "This is link %lld of %lld from the same purchase.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Already in this wallet: %lld": {
+    "en": "Already in this wallet: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Already spent: %lld": {
+    "en": "Already spent: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Not signed by Flagship, left out: %lld": {
+    "en": "Not signed by Flagship, left out: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Signed with a key this device doesn't know yet, left out: %lld": {
+    "en": "Signed with a key this device doesn't know yet, left out: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Nothing is sent when you add them. They are spent later, a little at a time, like any other voucher.": {
+    "en": "Nothing is sent when you add them. They are spent later, a little at a time, like any other voucher.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "This voucher link is incomplete or damaged. Open the whole link again, or use the voucher file.": {
+    "en": "This voucher link is incomplete or damaged. Open the whole link again, or use the voucher file.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "This voucher link needs a newer version of Flagship. Update the app, then open the link again.": {
+    "en": "This voucher link needs a newer version of Flagship. Update the app, then open the link again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "These vouchers are already in this wallet. Nothing was added.": {
+    "en": "These vouchers are already in this wallet. Nothing was added.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "These vouchers were already spent. Nothing was added.": {
+    "en": "These vouchers were already spent. Nothing was added.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "These vouchers aren't signed by Flagship. Nothing was added.": {
+    "en": "These vouchers aren't signed by Flagship. Nothing was added.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.": {
+    "en": "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "This wallet can hold 500 vouchers. Spend some first, then open the link again.": {
+    "en": "This wallet can hold 500 vouchers. Spend some first, then open the link again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Only an admin device of this account can add vouchers. Open the link on one.": {
+    "en": "Only an admin device of this account can add vouchers. Open the link on one.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
+  },
+  "Sign in to your account first, then open the link again.": {
+    "en": "Sign in to your account first, then open the link again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VoucherLinkScreen.swift"
   }
 }

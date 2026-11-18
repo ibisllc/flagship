@@ -52,12 +52,19 @@ public struct RootShell: View {
     @State private var pendingVoiciSignIn: VoiciSignInTarget?
     /// An organization's seat invitation (docs/enterprise-accounts.md §7).
     @State private var pendingOrgJoin: OrgJoinTarget?
+    /// A "Load into Flagship" voucher link (docs/anonymous-vouchers.md "Voucher links").
+    @State private var pendingVoucherLink: VoucherLinkTarget?
     @Environment(\.voiciComClient) private var voiciCom
     @Environment(\.qrRelayClient) private var qrRelay
 
     private struct OrgJoinTarget: Identifiable, Equatable {
         let orgId: String, seatId: String, keyHex: String
         var id: String { "\(orgId):\(seatId)" }
+    }
+
+    private struct VoucherLinkTarget: Identifiable, Equatable {
+        let link: String
+        var id: String { link }
     }
 
     private struct VoiciSignInTarget: Identifiable, Equatable {
@@ -229,6 +236,21 @@ public struct RootShell: View {
                 OrgJoinScreen(vm: OrgJoinViewModel(orgId: t.orgId, seatId: t.seatId, keyHex: t.keyHex), onDone: { pendingOrgJoin = nil })
             }
         }
+        .fullScreenCover(item: $pendingVoucherLink) { t in
+            NavigationStack {
+                VoucherLinkScreen(link: t.link, center: PaymentsCenter.shared, onDone: {
+                    pendingVoucherLink = nil
+                    #if DEBUG
+                    if let next = GymSeams.nextVoucherLink() {
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 800_000_000)
+                            linker.enqueue(.voucherLink(link: next))
+                        }
+                    }
+                    #endif
+                })
+            }
+        }
         .fullScreenCover(item: $pendingVoiciSignIn) { target in
             NavigationStack {
                 if let link = VoiciSignInLink.parse(target.link), let voiciCom {
@@ -285,6 +307,7 @@ public struct RootShell: View {
                 pendingAccept = nil
                 pendingBackupApproval = nil
                 pendingVoiciSignIn = nil
+                pendingVoucherLink = nil
                 MessagesStore.shared.lock()
                 lockGeneration += 1
                 PresentationSweeper.dismissAll()
@@ -378,6 +401,14 @@ public struct RootShell: View {
             pendingOrgJoin = OrgJoinTarget(orgId: orgId, seatId: seatId, keyHex: keyHex)
             return
         }
+        if case let .voucherLink(raw) = link {
+            // Adding needs the account key (the wallet is sealed under it): wait for unlock. With no account on this
+            // phone at all there is nothing to wait for, so the screen says to sign in first.
+            if !app.isUnlocked, app.currentUser != nil { return }
+            _ = linker.consume()
+            pendingVoucherLink = VoucherLinkTarget(link: raw)
+            return
+        }
         if case let .voiciSignIn(raw) = link {
             // Signs with this account's keys (one Face ID): wait for unlock, like an invite.
             guard app.isUnlocked else { return }
@@ -429,7 +460,7 @@ public struct RootShell: View {
              .accountSecurity, .accountDevices: return .settings
         case .transferOffer, .shareServer, .builderPair, .sharedWithMe: return .home
         case .messages, .pageEditor: return .messages
-        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload, .voiciSignIn, .orgJoin: return selected
+        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload, .voiciSignIn, .orgJoin, .voucherLink: return selected
         }
     }
 }

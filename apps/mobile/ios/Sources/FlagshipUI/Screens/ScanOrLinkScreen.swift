@@ -95,7 +95,11 @@ public struct ScanOrLinkScreen: View {
     static func link(from raw: String) -> DeepLink? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if let link = DeepLink.parsePastedString(trimmed) { return link }
+        if let link = DeepLink.parsePastedString(trimmed) {
+            // Vouchers come in only as a link opened from elsewhere, never typed or scanned here (App Review 3.1.1).
+            if case .voucherLink = link { return nil }
+            return link
+        }
         if !trimmed.contains("://"), (try? PairingQr.parseJoinUrl(trimmed)) != nil {
             let query = trimmed.hasPrefix("?") ? String(trimmed.dropFirst()) : trimmed
             return DeepLink.parsePastedString("https://\(Endpoints.controlHost)/join?\(query)")

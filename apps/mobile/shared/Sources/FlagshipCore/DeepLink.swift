@@ -171,6 +171,11 @@ public enum DeepLink: Equatable, Sendable {
     case messages
     case pageEditor
 
+    /// Vouchers bought elsewhere (the web shop), `https://<apex>/app/vouchers#v=<payload>` (docs/anonymous-vouchers.md
+    /// "Voucher links"). The vouchers ride only in the fragment; the whole link goes to `VoucherLink.parse`, so a damaged
+    /// link still opens the screen that says so.
+    case voucherLink(link: String)
+
     /// The link the install Live Activity opens: `install-progress` naming
     /// the install it tracks (`installProgress(key:serverFqdn:)`).
     public static func installProgressURL(key: String, serverFqdn: String?) -> URL {
@@ -349,6 +354,8 @@ public enum DeepLink: Equatable, Sendable {
                 return .transferOffer(offerJSON: json)
             }
             return nil
+        case "vouchers":
+            return .voucherLink(link: url.absoluteString)
         case "backup-download":
             let f = fragmentParams(url)
             guard let s = f["s"]?.lowercased(), s.hasSuffix(".\(Endpoints.dataApex)"),
