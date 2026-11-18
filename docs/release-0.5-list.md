@@ -22,3 +22,13 @@ over once "let's start 0.5" is said.
 - Payments step 6 (the Monero view wallet, after the accountant's advice) and step 7 (paid marketplace apps, 10% cut).
 - WireGuard full tunnel for the outbound proxy.
 - OHTTP for every box's setup, and the OHTTP client in the initramfs.
+
+## Reassess at the start of 0.5
+
+- **Voucher-file import on iPhone** (owner, 2026-11-18). 0.4 ships it on Android only. iOS 1.3 takes only the "Load
+  into Flagship" link, because a visible file import risks App Review guideline 3.1.1 ("license keys") on the first
+  in-app purchase review. Once Apple has approved the in-app purchases, decide whether to add the file import to iOS,
+  citing 3.1.3(b) in the review notes. If Apple ever objects to the link, check whether it can be switched off
+  without a new build (not verified).
+- **Bank transfer for Business batches:** a paid `send_invoice` invoice doesn't produce vouchers yet
+  (`docs/runbooks/payments-setup.md`).
