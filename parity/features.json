@@ -5471,6 +5471,138 @@
       }
     },
     {
+      "id": "voici-show-in-search",
+      "title": "Page options: \"Show in search engines\" (owner decision 2026-11-17, docs/voici-and-messages.md §2.7): off by default and after a removal; turning it on publishes at once an index with showInSearch 1 (the last canonical field, shared vectors test-vectors/voici), turning it off drops the field; every publish carries the replaced index's value; only an admin device changes it; voi.ci serves an owner page noindex without it",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/VoiciPage.swift",
+              "public var showsInSearch: Bool"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift",
+              "public func setShowInSearch\\(_ on: Bool\\)"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift",
+              "showInSearch: search \\? 1 : nil"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift",
+              "accessibilityIdentifier\\(\"page-search\"\\)"
+            ]
+          ]
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciPage.kt",
+              "val showsInSearch: Boolean"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciCenter.kt",
+              "suspend fun setShowInSearch\\(on: Boolean"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciCenter.kt",
+              "showInSearch = if \\(searchOn\\) 1 else null"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SocialScreens.kt",
+              "testTag\\(\"page-search\"\\)"
+            ]
+          ]
+        },
+        "web": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/web/public/webapp/lib/voiciPage.js",
+              "export const voiciPageShowsInSearch"
+            ],
+            [
+              "apps/web/public/webapp/lib/voiciOwner.js",
+              "export function carriedSearch"
+            ],
+            [
+              "apps/web/public/webapp/views/page-editor.js",
+              "export async function setShowInSearch"
+            ],
+            [
+              "apps/web/public/webapp/views/page-editor.js",
+              "data-testid=\"page-search\""
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "voici-share-card",
+      "title": "The page's share card (owner decision 2026-11-17, docs/voici-and-messages.md §2.10): every publish lists one signed `share` piece, a 1200 x 630 JPEG of at most 256 KiB with no metadata (photo or initial, name, voi.ci/<u>, the theme's colours), drawn on the publishing device and drawn again only when the name, photo or theme changes; voi.ci serves it as the page's og:image",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Services/VoiciShareCard.swift",
+              "public enum VoiciShareCard"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Services/VoiciShareCard.swift",
+              "public static func needsRedraw"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift",
+              "VoiciShareCard\\.render\\(username"
+            ],
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/VoiciPage.swift",
+              "shareImageMaxBytes = 256 \\* 1024"
+            ]
+          ]
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciShareCard.kt",
+              "object VoiciShareCards"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciShareCard.kt",
+              "fun sameLook\\("
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/AndroidShareCardRenderer.kt",
+              "object AndroidShareCardRenderer : VoiciShareCardRenderer"
+            ]
+          ]
+        },
+        "web": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/web/public/webapp/lib/voiciShareCard.js",
+              "export async function renderShareCard"
+            ],
+            [
+              "apps/web/public/webapp/lib/voiciShareCard.js",
+              "export function shareCardStale"
+            ],
+            [
+              "apps/web/public/webapp/lib/voiciOwner.js",
+              "async function drawnShareCard"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "id": "voici-protocol",
       "title": "voi.ci pages + Messages protocol (H11 chunk A, docs/voici-and-messages.md): the signed page index and pieces, per-page pseudonym / thread / inbox keys from the UMK, the web delegation, the messages-key attestation, the hybrid-sealed message envelope, drafts, state blob, acks, blocks, reports and the phone endpoint's voi.ci policy (shared vectors test-vectors/voici and test-vectors/messages)",
       "ref": "ios",
