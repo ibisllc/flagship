@@ -1554,3 +1554,38 @@ Three agents started:
 - Owner: calls go on in 0.4 with China no-ring mode and the relay gaps accepted; the privacy calls section is being drafted (0.4/privacy-calls, for approval). voucher-link: webapp and iOS done, shell v236, Android finishing. voici-decisions: web done, native finishing; it will renumber its shell above v236.
 - Merged `0.4/voucher-link` (shell v236): a "Load into Flagship" link with vouchers only in the URL fragment, a signed-out web shop, and iOS/Android/webapp import. Gates green; vitest 7274 passed; iOS gym and Android emulator gym 2/2. Owner calls: build the prod voucher key into the apps (after the ceremony), a shared "couldn't add" sentence, the wallet always merges.
 - Merged `0.4/privacy-calls`: privacy §2.12 "Calls on voi.ci" (owner approved) plus the fixes: a removed or taken-down page deletes its call data; the device room URL carries no account name. Also an allowlisted parity detection miss (Android routes /app/vouchers by its path). Open: the ring and ring-back URLs still name the account.
+
+### RESUME POINT (2026-11-17 ~23:00, usage limit near): read this first on "resume 0.4"
+release/0.4 is rebased on top of main (linear), and every merged branch is in it. Shell v236.
+Two agents may be mid-work. Check each worktree with `git status` and `git log origin/release/0.4..HEAD`:
+1. `~/flagship-0.4-voici-decisions` (branch `0.4/voici-decisions`): the "Show in search engines" switch for voi.ci pages (`showInSearch` in the signed index; noindex by default) and the per-page share card (a signed `share` piece, 1200x630 JPEG ≤256 KiB). Web, protocol, .com and Android are committed (c01be929f).
+   - Left to do:
+     - commit the iOS diff (SocialTab, MessagesStore, VoiciShareCard(+Tests), PageControlsTests, GymMessagesTests, i18n/ios via `i18n-ios.mjs build`);
+     - build and test iOS;
+     - add parity rows for the switch and the card;
+     - rebase, collapse the shell bumps to ONE at v237 (buildInfo.js, service-worker.js incl. precache lib/voiciShareCard.js, release/compatibility.json, apps/web/tests pins);
+     - full vitest, push, ff-merge.
+   - The calls readiness checklist is §3a of docs/runbooks/0.4-deploy-sheet.md: calls go ON (owner decision) after the store builds are live.
+2. `~/flagship-0.4-ring-names` (branch `0.4/ring-names`): make `POST /api/voici/pages/<u>/ring` and `POST /api/voici/web/ring-back?u=<u>` name-free (an opaque id; accept the old form too) on .com, iOS, Android, webapp and voi.ci. Update privacy §2.12 to say every call address is name-free.
+   - HARD OWNER UX RULE: voi.ci/<username> must still lead to a direct-to-phone, quantum-secure call. Prove it with `apps/web` `npx playwright test e2e/voici-calls/` and the voi.ci gym (add a test if needed).
+   - If the webapp changes, use shell v238.
+Merge order: voici-decisions (v237), then ring-names (v238). Gates for each: npx tsc -b, npm run i18n, `npm run parity` (read EVERY line, not the tail), relevant vitest, native unit tests under the lock /private/tmp/claude-501/flagship-locks/native-build.lock (mkdir + an `owner` file; under caffeinate -dimsu).
+
+Then the deploy (docs/runbooks/0.4-deploy-sheet.md, scripts/release.sh; ask the owner before every outward step).
+
+Owner decisions made tonight (all applied unless noted):
+- UI pass: all cards approved except the iOS publish bar (reverted to the pill).
+- Phone copy set (a) applied; set (b) waits for phone apps (docs/phone-hosted-apps.md: spike 0.5, feature 0.6/0.7).
+- voi.ci: front door live in 0.4; "vous"; a per-page share image; pages noindex by default with a switch; calls ON in 0.4, with China no-ring mode and the relay gaps accepted; trademark search not now.
+- Business: defaults kept ($6/seat, min 3, 10-seat 30-day trial, 100 GB/seat pooled, batches ≥100).
+- Voucher "Load into Flagship" link on all three apps (merged). Privacy §2.12 calls section approved (merged), with the two privacy fixes.
+- Let's Encrypt fshp.app request: 1,000/week, account https://acme-v02.api.letsencrypt.org/acme/acct/3960486542.
+
+Open owner items:
+- The owner's browser Claude is running 0.4-browser-tasks.md A, B1-B5, C1-C4, D (incl. D10), E, F1. B6/C5 (review submissions) wait for the 0.4 builds.
+- Build the prod voucher key into the apps after the PQ/key ceremony (next update).
+- Add a shared "couldn't add vouchers" sentence on all apps (Android says "Sign in…" on non-offline errors).
+- "Build a service" → "Build an app" everywhere? (asked, no answer yet)
+- Android voucher-FILE import: keep or remove? (asked, no answer yet)
+- The native translation review, the 245 store captures, YubiKey signing, the DNS broker steps.
+- Art critique: ~/flagship-art-review/ (1,465 UI-pass shots plus the voi.ci front door). Before/after page: https://claude.ai/artifact/9zbXGKeRJMjhYpWJ2cP2Ar
