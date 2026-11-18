@@ -1,4 +1,5 @@
-#if DEBUG && os(iOS)
+#if DEBUG
+#if os(iOS)
 import SwiftUI
 
 /// Gym-only: the call screen drawn over the app with made-up state, for screenshots (no call, no media engine).
@@ -41,4 +42,5 @@ public struct GymCallStagePreview: View {
         }
     }
 }
+#endif
 #endif
