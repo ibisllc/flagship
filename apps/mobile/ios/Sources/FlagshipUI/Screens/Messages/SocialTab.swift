@@ -423,7 +423,7 @@ public struct SocialTab: View {
                         }
                         .padding(.horizontal, 18)
                         .frame(minWidth: 104, minHeight: 40)
-                        .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(c.primaryFill))
+                        .background(Capsule().fill(c.primaryFill))
                         .foregroundStyle(c.onPrimary)
                     }
                     .buttonStyle(.plain)
@@ -435,12 +435,9 @@ public struct SocialTab: View {
             .padding(.trailing, 6)
             .padding(.vertical, 6)
             .frame(minHeight: 52)
-            .foregroundStyle(c.text)
-            .background(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).fill(c.surface))
-            .overlay(alignment: .leading) { Rectangle().fill(c.accent).frame(width: 2) }
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
-            .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
+            .foregroundStyle(Color(.systemBackground))
+            .background(Capsule().fill(Color(.label)))
+            .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
             .accessibilityElement(children: .contain)
