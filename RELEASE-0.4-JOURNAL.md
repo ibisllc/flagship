@@ -1589,3 +1589,10 @@ Open owner items:
 - Android voucher-FILE import: keep or remove? (asked, no answer yet)
 - The native translation review, the 245 store captures, YubiKey signing, the DNS broker steps.
 - Art critique: ~/flagship-art-review/ (1,465 UI-pass shots plus the voi.ci front door). Before/after page: https://claude.ai/artifact/9zbXGKeRJMjhYpWJ2cP2Ar
+- Merged `0.4/voici-decisions` (shell v237): the voi.ci search switch (noindex by default), the per-page share card, the calls readiness checklist (§3a), the ring-watch fail-safe fix, and an iOS fix (ImageIO on iOS 26 adds EXIF/Photoshop APPn, now stripped). The iOS build and tests pass (30/30, 8/8, gym 2/2); the Android unit tests and gym 8/8 pass.
+- **TO FIX (failing on release/0.4, found by the full vitest; not caused by voici-decisions):**
+  (a) tools/adversarial/tests/envelopeForgery.test.ts AT-ENV-10: classify the tags voucher-link/v1, voucher-batch/v1, org-voucher-wallet/v1, org-voucher-wallet-write/v1 and org-plan-attestation/v1 in tagInventory.ts;
+  (b) tools/gym/tests/webRegistry.test.ts: register the 2 voucher gym specs as scenarios;
+  (c) scripts/check-versions.test.ts: 6 tests still expect 0.3 (version.json says 0.4);
+  (d) scripts/ios-release-clean.test.ts: GymCallStagePreview.swift:8 names GymSweepSeams/"-smoke-" in a Release-compiled file (wrap it in #if DEBUG).
+- Resume point: ring-names (agent running; worktree ~/flagship-0.4-ring-names, shell v238 if the webapp changes), then fix (a)-(d), then the deploy.
