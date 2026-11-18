@@ -4362,4 +4362,6 @@
     <string name="voucher_link_full">このウォレットに入るバウチャーは 500 枚までです。いくつか使ってから、もう一度リンクを開いてください。</string>
     <string name="voucher_link_not_admin">バウチャーを追加できるのは、このアカウントの管理者端末だけです。管理者端末でリンクを開いてください。</string>
     <string name="voucher_link_signed_out">まずアカウントにサインインしてから、もう一度リンクを開いてください。</string>
+    <string name="voici_search_engines">検索エンジンに表示</string>
+    <string name="voici_search_engines_note">オフのときは、検索エンジンにページを掲載しないよう求めます。リンクを知っている人は引き続き開けます。</string>
 </resources>

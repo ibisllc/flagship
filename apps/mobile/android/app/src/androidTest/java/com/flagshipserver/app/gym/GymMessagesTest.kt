@@ -134,6 +134,42 @@ class GymMessagesTest : GymBase() {
         eventually(10_000, "the signed allow reached .com") { GymVoici.client.callAllows.any { VoiciJs.str(it["op"]) == "allow" } }
     }
 
+    /** Owner decisions 2026-11-17: pages are hidden from search engines until the switch; every page has a share card. */
+    @Test fun showInSearchEnginesIsAPublishAndThePageHasAShareCard() {
+        launch(tab = "messages", adminRoot = true)
+        waitUntilExists("social-title", 20_000)
+        publishFirstPage()
+        val first = VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))!!.body
+        assertEquals(null, first.showInSearch)
+        // The share card: one "share" piece, a 1200×630 JPEG under the cap with no metadata, drawn by this device.
+        val share = first.pieces.single { it.role == "share" }
+        val bytes = runBlocking { GymVoici.client.piece(account(), first.pageId, share.sha256) }!!
+        assertTrue(bytes.size <= VoiciPage.VOICI_SHARE_IMAGE_MAX_BYTES)
+        assertTrue(VoiciPage.isVoiciJpeg(bytes))
+        assertTrue(!VoiciPage.voiciJpegHasMetadata(bytes))
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        assertEquals(VoiciPage.VOICI_SHARE_IMAGE_WIDTH, bounds.outWidth)
+        assertEquals(VoiciPage.VOICI_SHARE_IMAGE_HEIGHT, bounds.outHeight)
+
+        tap("page-options")
+        waitUntilExists("page-search")
+        waitUntilExists("page-search-note")
+        tap("page-search")
+        eventually(15_000, "showInSearch 1 at .com") {
+            VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.showInSearch == 1
+        }
+        gymShot("page-search-on")
+        tap("page-search")
+        eventually(15_000, "showInSearch dropped at .com") {
+            val idx = GymVoici.client.storedIndex(account())
+            idx != null && !idx.containsKey("showInSearch") && VoiciPage.parseVoiciPageIndex(idx)!!.body.seq > first.seq + 1
+        }
+        // Nothing about the look changed: the card is carried, not drawn again.
+        assertEquals(share, VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))!!.body.pieces.single { it.role == "share" })
+        tap("page-options-done")
+    }
+
     @Test fun theNameIsEditedThroughItsPencilAndPublishedFromTheBar() {
         launch(tab = "messages", adminRoot = true)
         waitUntilExists("social-title", 20_000)

@@ -17892,5 +17892,13 @@
   "voucher_link_signed_out": {
     "en": "Sign in to your account first, then open the link again.",
     "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voici_search_engines": {
+    "en": "Show in search engines",
+    "ctx": "voi.ci page options: search engines switch and its note"
+  },
+  "voici_search_engines_note": {
+    "en": "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.",
+    "ctx": "voi.ci page options: search engines switch and its note"
   }
 }

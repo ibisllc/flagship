@@ -108,6 +108,8 @@ data class VoiciPageUi(
     val callHours: VoiciCallHours? = null,
     /** "Answer calls while Flagship is locked" is on here: this device holds a bound call key. */
     val answersWhileLocked: Boolean = false,
+    /** "Show in search engines" is on in the published index (showInSearch 1; owner decision 2026-11-17). */
+    val showInSearch: Boolean = false,
 )
 
 data class VoiciMessagesUi(
@@ -149,6 +151,8 @@ class VoiciCenter(
     private val http: okhttp3.OkHttpClient? = null,
     /** This device's call-only keys (answering while locked); null where calls never ring. */
     private val callKeyVault: com.flagshipserver.app.calls.VoiciCallKeyVault? = null,
+    /** Draws the page's share card (docs/voici-and-messages.md §2.10); null publishes pages without one. */
+    private val shareCard: VoiciShareCardRenderer? = null,
 ) {
     private val mutex = Mutex()
     private val _page = MutableStateFlow(VoiciPageUi())
@@ -285,6 +289,7 @@ class VoiciCenter(
             callsFrom = com.flagshipserver.app.calls.VoiciCallSettings.read(idx?.body?.acceptsCalls, idx?.body?.callsFrom).second,
             callHours = callHoursSetting(local)?.hours,
             answersWhileLocked = callKeyVault?.load(u) != null,
+            showInSearch = idx != null && !local.removed && idx.body.showsInSearch,
         )
         val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
         _messages.value = _messages.value.copy(conversations = local.conversations, state = state)
@@ -489,7 +494,13 @@ class VoiciCenter(
      * other draft stays a draft; null publishes every pending change. [mayRepublish]: only the Public switch (after its
      * warning) brings back a page another device took down; any other publish that learns of it from a 409 stops.
      */
-    suspend fun publish(reason: String?, only: List<VoiciDraftOp>? = null, mayRepublish: Boolean = false, calls: Pair<Boolean, String>? = null): Boolean {
+    suspend fun publish(
+        reason: String?,
+        only: List<VoiciDraftOp>? = null,
+        mayRepublish: Boolean = false,
+        calls: Pair<Boolean, String>? = null,
+        search: Boolean? = null,
+    ): Boolean {
         val u = user() ?: return false
         val umk = keyring.umk() ?: return false
         val acc = account ?: refreshAccount() ?: return fail("not-found")
@@ -515,7 +526,12 @@ class VoiciCenter(
                 val keys = VoiciOwnerKeys.derive(umk, pageId, local.inboxEpoch)
                 // After a removal `.com` dropped the pieces: send them all again.
                 val have = if (local.removed) emptyList() else idx?.body?.pieces.orEmpty()
-                val plan = VoiciOwner.planPieces(working, { vault.image(umk, u, it) }, have)
+                // The share card (§2.10): carried while the name, photo and theme are unchanged, else drawn again.
+                val share = VoiciShareCards.plan(
+                    working, u, VoiciShareCards.listed(have), if (have.isEmpty()) null else base.profile, shareCard,
+                    { vault.image(umk, u, it) }, { vault.putImage(umk, u, it) },
+                )
+                val plan = VoiciOwner.planPieces(working, { vault.image(umk, u, it) }, have) + listOfNotNull(share)
                 val listed = have.map { it.sha256 }.toSet()
                 for (p in plan) {
                     if (p.sha256 in listed || p.bytes == null) continue
@@ -530,9 +546,13 @@ class VoiciCenter(
                 else com.flagshipserver.app.calls.VoiciCallSettings.read(if (local.removed) null else idx?.body?.acceptsCalls, idx?.body?.callsFrom)
                 val (callsOn, callsFrom) = calls ?: current
                 val fields = com.flagshipserver.app.calls.VoiciCallSettings.indexFields(callsOn, callsFrom)
+                // Like calls, every publish keeps "Show in search engines" from the index it replaces; a first publish
+                // and a page brought back after a removal are hidden (owner decision 2026-11-17).
+                val searchOn = search ?: (!local.removed && idx?.body?.showsInSearch == true)
                 val body = VoiciPageIndexBody(
                     u, pageId, seq, now(), working.acceptsMessages, keys.epoch, keys.inboxPub, keys.signPub,
                     plan.map { it.ref }, kind, acceptsCalls = fields.first, callsFrom = fields.second,
+                    showInSearch = if (searchOn) 1 else null,
                 )
                 val signed = VoiciPage.signVoiciPageIndex(body, seed)
                 try {
@@ -773,6 +793,17 @@ class VoiciCenter(
         if (!p.isPublic || !p.canPublish || from !in com.flagshipserver.app.calls.VoiciCallSettings.FROM_VALUES) return false
         if (on == p.callsOn && (!on || from == p.callsFrom)) return true
         return publish(reason, only = emptyList(), calls = on to from)
+    }
+
+    /**
+     * Page options → Show in search engines (owner decision 2026-11-17): a publish of its own by an admin device that
+     * signs or drops showInSearch; drafts stay drafts. False when it couldn't be published (`page.error` says why).
+     */
+    suspend fun setShowInSearch(on: Boolean, reason: String): Boolean {
+        val p = _page.value
+        if (!p.isPublic || !p.canPublish) return false
+        if (on == p.showInSearch) return true
+        return publish(reason, only = emptyList(), search = on)
     }
 
     // ── the owner's call hours: synced between the owner's devices, never in the page (owner decision 2026-11-16) ──

@@ -4360,5 +4360,7 @@
   "voucher_link_unknown_key": "Este dispositivo aún no conoce la clave con la que se firmaron estos vales. Abre Ajustes, Plan una vez con conexión y vuelve a abrir el enlace.",
   "voucher_link_full": "Esta cartera puede guardar 500 vales. Gasta algunos primero y vuelve a abrir el enlace.",
   "voucher_link_not_admin": "Solo un dispositivo administrador de esta cuenta puede añadir vales. Abre el enlace en uno.",
-  "voucher_link_signed_out": "Primero inicia sesión en tu cuenta y vuelve a abrir el enlace."
+  "voucher_link_signed_out": "Primero inicia sesión en tu cuenta y vuelve a abrir el enlace.",
+  "voici_search_engines": "Mostrar en los buscadores",
+  "voici_search_engines_note": "Si está desactivado, se pide a los buscadores que no muestren tu página. Cualquiera con el enlace puede abrirla igualmente."
 }

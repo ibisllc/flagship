@@ -4360,5 +4360,7 @@
   "voucher_link_unknown_key": "Este dispositivo ainda não conhece a chave com que estes vouchers foram assinados. Abra Ajustes, Plano uma vez com internet e depois abra o link de novo.",
   "voucher_link_full": "Esta carteira comporta 500 vouchers. Gaste alguns primeiro e abra o link de novo.",
   "voucher_link_not_admin": "Só um dispositivo administrador desta conta pode adicionar vouchers. Abra o link em um deles.",
-  "voucher_link_signed_out": "Entre na sua conta primeiro e abra o link de novo."
+  "voucher_link_signed_out": "Entre na sua conta primeiro e abra o link de novo.",
+  "voici_search_engines": "Mostrar nos mecanismos de busca",
+  "voici_search_engines_note": "Quando isto está desativado, os mecanismos de busca são instruídos a não listar sua página. Qualquer pessoa com o link ainda pode abri-la."
 }

@@ -383,6 +383,7 @@ class MainActivity : FragmentActivity() {
             caKeysSource = mocks?.voiciCaKeys ?: { TrustChecker(OkHttpJsonTransport(okHttp)).verifiedCaKeys() },
             http = if (mocks != null) null else okHttp,
             callKeyVault = if (mocks != null) com.flagshipserver.app.calls.MemoryCallKeyVault() else com.flagshipserver.app.calls.KeystoreCallKeyVault(this),
+            shareCard = com.flagshipserver.app.core.voici.AndroidShareCardRenderer,
         )
         com.flagshipserver.app.core.voici.VoiciCenter.shared = voiciCenter
         // Vouchers and the plan (docs/payments-privacy-and-rails.md): the wallet lives on the admin phones, sealed

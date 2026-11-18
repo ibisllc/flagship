@@ -4363,4 +4363,6 @@
     <string name="voucher_link_full">Ce portefeuille peut contenir 500 bons. Dépensez-en d\'abord, puis rouvrez le lien.</string>
     <string name="voucher_link_not_admin">Seul un appareil administrateur de ce compte peut ajouter des bons. Ouvrez le lien sur l\'un d\'eux.</string>
     <string name="voucher_link_signed_out">Connectez-vous d\'abord à votre compte, puis rouvrez le lien.</string>
+    <string name="voici_search_engines">Afficher dans les moteurs de recherche</string>
+    <string name="voici_search_engines_note">Quand ce réglage est désactivé, les moteurs de recherche sont priés de ne pas référencer votre page. Toute personne qui a le lien peut toujours l\'ouvrir.</string>
 </resources>

@@ -4360,5 +4360,7 @@
   "voucher_link_unknown_key": "Dieses Gerät kennt den Schlüssel, mit dem diese Gutscheine signiert wurden, noch nicht. Öffne einmal online Einstellungen, Tarif und dann den Link erneut.",
   "voucher_link_full": "Diese Brieftasche fasst 500 Gutscheine. Gib zuerst einige aus und öffne den Link dann erneut.",
   "voucher_link_not_admin": "Nur ein Admin-Gerät dieses Kontos kann Gutscheine hinzufügen. Öffne den Link auf einem davon.",
-  "voucher_link_signed_out": "Melde dich zuerst bei deinem Konto an und öffne den Link dann erneut."
+  "voucher_link_signed_out": "Melde dich zuerst bei deinem Konto an und öffne den Link dann erneut.",
+  "voici_search_engines": "In Suchmaschinen anzeigen",
+  "voici_search_engines_note": "Wenn das aus ist, werden Suchmaschinen gebeten, deine Seite nicht aufzunehmen. Wer den Link hat, kann sie trotzdem öffnen."
 }

@@ -58,6 +58,12 @@ class VoiciAppTest {
 
     private fun admin(seed: Byte = 3) = FakeKeyring("alice", umk, root, true, ByteArray(32) { seed })
 
+    /** A minimal JPEG with no metadata (SOI, APP0, a scan, EOI); [n] makes each one distinct. */
+    private fun fakeJpeg(n: Int) = byteArrayOf(
+        0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0xe0.toByte(), 0, 4, 0, n.toByte(),
+        0xff.toByte(), 0xda.toByte(), 0, 2, 1, 2, 3, 0xff.toByte(), 0xd9.toByte(),
+    )
+
     private fun post(text: String, at: Long = System.currentTimeMillis()) = VoiciPost(VoiciOwner.randomHex(16), at, null, text, emptyList())
 
     private fun published(mock: MockVoiciClient, user: String = "alice"): Pair<VoiciPageIndex, VoiciPageState> {
@@ -188,6 +194,88 @@ class VoiciAppTest {
             assertEquals(0, it.acceptsMessages)
             assertNull(it.acceptsCalls)
         }
+    }
+
+    /** Owner decision 2026-11-17: hidden from search engines by default; the switch is a publish; every publish keeps it. */
+    @Test fun showInSearchIsOffAtFirstAndEveryPublishKeepsIt() = runBlocking {
+        val mock = mock()
+        val a = center(mock, admin())
+        a.refresh()
+        a.acceptRules()
+        assertTrue(a.publish("test"))
+        assertNull(published(mock).first.body.showInSearch)
+        assertFalse(a.page.value.showInSearch)
+        assertTrue(a.setShowInSearch(true, "test"))
+        assertEquals(1, published(mock).first.body.showInSearch)
+        assertTrue(a.page.value.showInSearch)
+        // An edit and a calls change keep it.
+        a.edit("post-add", post = post("Later"))
+        assertTrue(a.publish("test"))
+        assertEquals(1, published(mock).first.body.showInSearch)
+        assertTrue(a.setCalls(false, "signed-in", "test"))
+        assertEquals(1, published(mock).first.body.showInSearch)
+        // Another admin device keeps the page's choice too.
+        val b = center(mock, admin(4))
+        b.edit("post-add", post = post("From B"))
+        assertTrue(b.publish("test"))
+        assertEquals(1, published(mock).first.body.showInSearch)
+        a.refresh()
+        assertTrue(a.setShowInSearch(false, "test"))
+        assertNull(published(mock).first.body.showInSearch)
+    }
+
+    @Test fun showInSearchNeedsAPublicPageAndAnAdminDevice() = runBlocking {
+        val mock = mock()
+        val a = center(mock, admin())
+        a.refresh()
+        assertFalse(a.setShowInSearch(true, "test"))
+        assertEquals(0, mock.publishCount)
+        // A device without the admin root can't change it either.
+        a.acceptRules()
+        assertTrue(a.publish("test"))
+        val other = center(mock, FakeKeyring("alice", umk, root, false, ByteArray(32) { 6 }))
+        other.refresh()
+        assertFalse(other.setShowInSearch(true, "test"))
+        assertNull(published(mock).first.body.showInSearch)
+    }
+
+    /** docs/voici-and-messages.md §2.10: the share card is drawn on the first publish, carried while the look holds. */
+    @Test fun theShareCardIsDrawnThenCarriedThenRedrawn() = runBlocking {
+        val mock = mock()
+        val drawn = ArrayList<String>()
+        val renderer = VoiciShareCardRenderer { profile, username, _ ->
+            drawn += "${profile.displayName}|${profile.theme}|$username"
+            fakeJpeg(drawn.size)
+        }
+        val a = VoiciCenter(mock, admin(), VoiciVault(MemoryVoiciVaultStore()), { listOf(mock.caPub) }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), shareCard = renderer)
+        a.refresh()
+        a.acceptRules()
+        assertTrue(a.publish("test"))
+        val first = published(mock).first.body.pieces.single { it.role == "share" }
+        assertEquals(1, drawn.size)
+        assertTrue(mock.pieces.containsKey("${published(mock).first.body.pageId}/${first.sha256}"))
+        // A post does not change the card: carried, not drawn.
+        a.edit("post-add", post = post("Hello"))
+        assertTrue(a.publish("test"))
+        assertEquals(first, published(mock).first.body.pieces.single { it.role == "share" })
+        assertEquals(1, drawn.size)
+        // A new name draws a new card.
+        a.edit("profile", profile = published(mock).second.profile.copy(displayName = "Alice B"))
+        assertTrue(a.publish("test"))
+        val second = published(mock).first.body.pieces.single { it.role == "share" }
+        assertEquals(2, drawn.size)
+        assertTrue(drawn.last().startsWith("Alice B|"))
+        assertTrue(second.sha256 != first.sha256)
+    }
+
+    @Test fun aCardThatFailsToDrawLeavesThePagePublishable() = runBlocking {
+        val mock = mock()
+        val bad = VoiciShareCardRenderer { _, _, _ -> byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0xe1.toByte(), 0, 2, 0xff.toByte(), 0xd9.toByte()) }
+        val a = VoiciCenter(mock, admin(), VoiciVault(MemoryVoiciVaultStore()), { listOf(mock.caPub) }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), shareCard = bad)
+        a.refresh()
+        a.acceptRules()
+        assertTrue(a.publish("test"))
+        assertTrue(published(mock).first.body.pieces.none { it.role == "share" })
     }
 
     /** docs/voici-calls.md, owner decisions 2026-11-15: the call key is bound, answers and ends while locked, and is revoked. */

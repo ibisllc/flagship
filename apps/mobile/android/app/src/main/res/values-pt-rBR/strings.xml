@@ -4363,4 +4363,6 @@
     <string name="voucher_link_full">Esta carteira comporta 500 vouchers. Gaste alguns primeiro e abra o link de novo.</string>
     <string name="voucher_link_not_admin">Só um dispositivo administrador desta conta pode adicionar vouchers. Abra o link em um deles.</string>
     <string name="voucher_link_signed_out">Entre na sua conta primeiro e abra o link de novo.</string>
+    <string name="voici_search_engines">Mostrar nos mecanismos de busca</string>
+    <string name="voici_search_engines_note">Quando isto está desativado, os mecanismos de busca são instruídos a não listar sua página. Qualquer pessoa com o link ainda pode abri-la.</string>
 </resources>

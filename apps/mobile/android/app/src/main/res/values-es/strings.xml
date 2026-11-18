@@ -4363,4 +4363,6 @@
     <string name="voucher_link_full">Esta cartera puede guardar 500 vales. Gasta algunos primero y vuelve a abrir el enlace.</string>
     <string name="voucher_link_not_admin">Solo un dispositivo administrador de esta cuenta puede añadir vales. Abre el enlace en uno.</string>
     <string name="voucher_link_signed_out">Primero inicia sesión en tu cuenta y vuelve a abrir el enlace.</string>
+    <string name="voici_search_engines">Mostrar en los buscadores</string>
+    <string name="voici_search_engines_note">Si está desactivado, se pide a los buscadores que no muestren tu página. Cualquiera con el enlace puede abrirla igualmente.</string>
 </resources>

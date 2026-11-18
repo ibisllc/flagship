@@ -872,6 +872,30 @@ private fun PageOptionsSheet(
                 )
             }
             Text(stringResource(R.string.voici_accept_messages_body), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = FS.space.s4))
+            if (page.isPublic) {
+                // Owner decision 2026-11-17: hidden from search engines unless this is on (a publish of its own).
+                FSGroup {
+                    FSRow(
+                        title = stringResource(R.string.voici_search_engines),
+                        subtitle = if (page.canPublish) null else stringResource(R.string.voici_calls_admin_only),
+                        trailing = {
+                            Switch(
+                                checked = page.showInSearch,
+                                enabled = page.canPublish && !page.publishing,
+                                onCheckedChange = { on ->
+                                    scope.launch {
+                                        if (!center.setShowInSearch(on, FSStrings.get(R.string.voici_publish_reason))) {
+                                            center.page.value.error?.let { onError(VoiciCopy.publishError(it)) }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.testTag("page-search"),
+                            )
+                        },
+                    )
+                }
+                Text(stringResource(R.string.voici_search_engines_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = FS.space.s4).testTag("page-search-note"))
+            }
             VoiciCallsSettings(center, page, onError)
             val canRotate = page.canPublish && page.publishedSeq > 0
             FSGroup {

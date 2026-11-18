@@ -4370,4 +4370,6 @@
     <string name="voucher_link_full">This wallet can hold 500 vouchers. Spend some first, then open the link again.</string>
     <string name="voucher_link_not_admin">Only an admin device of this account can add vouchers. Open the link on one.</string>
     <string name="voucher_link_signed_out">Sign in to your account first, then open the link again.</string>
+    <string name="voici_search_engines">Show in search engines</string>
+    <string name="voici_search_engines_note">When this is off, search engines are asked not to list your page. Anyone with the link can still open it.</string>
 </resources>

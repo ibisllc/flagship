@@ -4363,4 +4363,6 @@
     <string name="voucher_link_full">Diese Brieftasche fasst 500 Gutscheine. Gib zuerst einige aus und öffne den Link dann erneut.</string>
     <string name="voucher_link_not_admin">Nur ein Admin-Gerät dieses Kontos kann Gutscheine hinzufügen. Öffne den Link auf einem davon.</string>
     <string name="voucher_link_signed_out">Melde dich zuerst bei deinem Konto an und öffne den Link dann erneut.</string>
+    <string name="voici_search_engines">In Suchmaschinen anzeigen</string>
+    <string name="voici_search_engines_note">Wenn das aus ist, werden Suchmaschinen gebeten, deine Seite nicht aufzunehmen. Wer den Link hat, kann sie trotzdem öffnen.</string>
 </resources>

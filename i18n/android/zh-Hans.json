@@ -4359,5 +4359,7 @@
   "voucher_link_unknown_key": "此设备尚不认识签署这些代金券的密钥。请在联网时打开一次“设置”中的“套餐”，然后重新打开链接。",
   "voucher_link_full": "此钱包最多可存放 500 张代金券。请先花费一些，然后重新打开链接。",
   "voucher_link_not_admin": "只有此账户的管理员设备可以添加代金券。请在管理员设备上打开链接。",
-  "voucher_link_signed_out": "请先登录你的账户，然后重新打开链接。"
+  "voucher_link_signed_out": "请先登录你的账户，然后重新打开链接。",
+  "voici_search_engines": "在搜索引擎中显示",
+  "voici_search_engines_note": "关闭时，会要求搜索引擎不要收录你的页面。有链接的人仍然可以打开它。"
 }
