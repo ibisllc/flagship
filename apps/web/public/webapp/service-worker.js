@@ -546,7 +546,9 @@
 //       under the org key ring's `wallet` key, the org trickle, an invoiced batch, voucher files in and out) and voucher
 //       files into the personal Plan (lib/orgPlan.js, views/orgPlan.js; docs/plans-and-backup-offer.md "As built").
 //  v235: the UI pass (empty Inbox, direct names, Calls rows, Activity icons, disabled buttons, toast, title spacing).
-const SHELL_VERSION = "v235";
+//  v236: the voucher shop with no account (?shop=buy) and "Load into Flagship" voucher links (/app/vouchers#v=…):
+//        lib/voucherLink.js, views/voucher-shop.js, views/voucher-link.js.
+const SHELL_VERSION = "v236";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
