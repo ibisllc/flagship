@@ -14,6 +14,7 @@ const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
   json: "application/json; charset=utf-8",
   svg: "image/svg+xml",
+  jpg: "image/jpeg",
   woff2: "font/woff2",
 };
 
@@ -31,13 +32,49 @@ export function voiciErrorResponse(status: 404 | 410, siteHeaders: [string, stri
   return withHeaders(body, status, siteHeaders, { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store", "x-robots-tag": "noindex" });
 }
 
+/** What a link preview of an owner page shows (docs/voici-and-messages.md §2.10). */
+export interface VoiciShellPreview {
+  /** `https://voi.ci/<username>` */
+  url: string;
+  /** `voi.ci/<username>` */
+  title: string;
+  /** The share card on files.voi.ci, or null for a page without one. */
+  image: string | null;
+}
+
+const attr = (v: string) => v.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * The Open Graph and Twitter tags of an owner page, after its title. Link previews ignore robots, so a page hidden from
+ * search engines keeps its preview (the owner's switch is for search engines only).
+ */
+export function withPreview(shell: string, p: VoiciShellPreview): string {
+  const tags =
+    '<meta property="og:type" content="profile">\n' +
+    '<meta property="og:site_name" content="voi.ci">\n' +
+    `<meta property="og:title" content="${attr(p.title)}">\n` +
+    `<meta property="og:url" content="${attr(p.url)}">\n` +
+    (p.image
+      ? `<meta property="og:image" content="${attr(p.image)}">\n` +
+        '<meta property="og:image:type" content="image/jpeg">\n' +
+        '<meta property="og:image:width" content="1200">\n' +
+        '<meta property="og:image:height" content="630">\n' +
+        '<meta name="twitter:card" content="summary_large_image">\n' +
+        `<meta name="twitter:image" content="${attr(p.image)}">\n`
+      : '<meta name="twitter:card" content="summary">\n') +
+    `<meta name="twitter:title" content="${attr(p.title)}">\n`;
+  const at = shell.indexOf("</title>\n");
+  return at < 0 ? shell : shell.slice(0, at + 9) + tags + shell.slice(at + 9);
+}
+
 /**
  * The page shell (the same bytes for every page); 410 for a page taken down. `noindex` (an owner page whose index
  * does not say showInSearch 1, and a page taken down): the shell with `<meta name="robots" content="noindex">` and the
  * `X-Robots-Tag: noindex` header, so search engines leave it out whether or not they run the page's script.
  */
-export function voiciShellResponse(request: Request, siteHeaders: [string, string][], status = 200, noindex = false): Response {
-  return withHeaders(request.method.toUpperCase() === "HEAD" ? null : noindex ? VOICI_SITE_SHELL_NOINDEX : VOICI_SITE_SHELL, status, siteHeaders, {
+export function voiciShellResponse(request: Request, siteHeaders: [string, string][], status = 200, noindex = false, preview?: VoiciShellPreview): Response {
+  const shell = noindex ? VOICI_SITE_SHELL_NOINDEX : VOICI_SITE_SHELL;
+  return withHeaders(request.method.toUpperCase() === "HEAD" ? null : preview ? withPreview(shell, preview) : shell, status, siteHeaders, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": status === 200 ? "public, max-age=60" : "no-store",
     ...(noindex ? { "x-robots-tag": "noindex" } : {}),

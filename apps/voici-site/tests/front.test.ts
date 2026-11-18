@@ -99,3 +99,40 @@ describe("the front door page", () => {
     expect(shell404).toContain('<meta name="robots" content="noindex">');
   });
 });
+
+/** JPEG segment markers before the scan, and the frame's width and height. */
+function jpegInfo(b: Buffer) {
+  const markers: number[] = [];
+  let size: [number, number] | null = null;
+  let i = 2;
+  while (i + 4 <= b.length && b[i] === 0xff && b[i + 1] !== 0xda) {
+    const m = b[i + 1]!;
+    markers.push(m);
+    if (m >= 0xc0 && m <= 0xc2) size = [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  return { markers, size };
+}
+
+describe("the front door's share card (docs/voici-and-messages.md §2.10)", () => {
+  it("is a 1200×630 JPEG under 256 KiB with no metadata segment", () => {
+    const b = readFileSync(join(repo, "apps/voici-site/src/share-card.jpg"));
+    expect([b[0], b[1], b[2]]).toEqual([0xff, 0xd8, 0xff]);
+    expect(b.length).toBeLessThan(256 * 1024);
+    const info = jpegInfo(b);
+    expect(info.size).toEqual([1200, 630]);
+    expect(info.markers.filter((m) => m >= 0xe1 && m <= 0xef)).toEqual([]);
+  });
+
+  it("every language's front door names it as og:image and twitter:image with a large card", () => {
+    const site = buildSite();
+    expect(site.files.has("share-card.jpg")).toBe(true);
+    for (const html of Object.values(site.front) as string[]) {
+      const img = `%ORIGIN%/-/${site.dir}/share-card.jpg`;
+      expect(html).toContain(`<meta property="og:image" content="${img}">`);
+      expect(html).toContain(`<meta name="twitter:image" content="${img}">`);
+      expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+      expect(html).toContain('<meta property="og:image:width" content="1200">');
+    }
+  });
+});

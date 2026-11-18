@@ -117,7 +117,7 @@ export type VoiciResolution =
   | { kind: "gone" }
   /** The page shell: the username has a published page. `searchable`: its index says showInSearch 1 (owner decision
    *  2026-11-17); otherwise voi.ci asks search engines not to list it. */
-  | { kind: "page"; username: string; searchable: boolean }
+  | { kind: "page"; username: string; searchable: boolean; preview: VoiciSharePreview | null }
   /** 410 page shell: the page was taken down. */
   | { kind: "page-gone"; username: string }
   /** `/-/<rest>`: the site's own routes and files (D11). */
@@ -218,7 +218,30 @@ export async function resolveVoiciPath(deps: VoiciResolveDeps, pathname: string,
   const page = await deps.pages.getPage(row.owner ?? row.name);
   // A page its owner removed is the same 404 as one never published.
   if (!page || page.removedAt != null) return { kind: "not-found" };
-  return page.takenDownAt === null ? { kind: "page", username: row.name, searchable: voiciIndexShowsInSearch(page.indexJson) } : { kind: "page-gone", username: row.name };
+  if (page.takenDownAt !== null) return { kind: "page-gone", username: row.name };
+  const share = voiciIndexShareCard(page.indexJson);
+  return {
+    kind: "page",
+    username: row.name,
+    searchable: voiciIndexShowsInSearch(page.indexJson),
+    preview: share ? { pageId: page.pageId, sha256: share } : null,
+  };
+}
+
+/** A page's share card for link previews (docs/voici-and-messages.md §2.10): where it lives on files.voi.ci. */
+export interface VoiciSharePreview {
+  pageId: string;
+  sha256: string;
+}
+
+/**
+ * The share card's hash in a stored index (the "share" piece), or null. The stored JSON is `.com`'s own serialisation of
+ * a checked index, pieces as {role, sha256, size}, so a pattern finds it without parsing the whole index.
+ */
+export function voiciIndexShareCard(indexJson: string | null | undefined): string | null {
+  if (typeof indexJson !== "string") return null;
+  const m = /"role":"share","sha256":"([0-9a-f]{64})"/.exec(indexJson);
+  return m ? m[1]! : null;
 }
 
 /**

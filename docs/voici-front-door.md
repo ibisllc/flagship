@@ -79,7 +79,8 @@ It is a plain same-tab link to the front door, not to the stores: a visitor firs
 ## 6. Search and indexing
 
 - The front door is indexable: `<meta name="robots" content="index, follow">`, a title and description per language,
-  Open Graph tags (no `og:image` yet: §9), `rel=canonical` to `https://voi.ci/?lang=<served language>`, and
+  Open Graph tags with a fixed share card (`og:image`, `twitter:card = summary_large_image`: `src/share-card.jpg`, drawn
+  by `dev/share-card.mjs`, no words so one card serves every language), `rel=canonical` to `https://voi.ci/?lang=<served language>`, and
   `hreflang` alternates for every shipped language plus `x-default` → `https://voi.ci/`.
 - voi.ci's 404 and 410 shells (unknown, reserved, unpublished, a removed link) now carry
   `<meta name="robots" content="noindex">`.
@@ -136,8 +137,8 @@ The front door is the one voi.ci answer that needs nothing but the Worker's own 
   named service in ads is a marketing and legal choice for the owner; nothing in the product says it.
 - ~~**Owner pages and search engines**~~: decided 2026-11-17, `noindex` by default with the owner switch "Show in
   search engines" (§6).
-- **Social card**: an `og:image` (a static 1200×630 card per language) for links shared on messaging apps, which
-  matter a lot in the target markets.
+- ~~**Social card**~~: done 2026-11-17 (owner decision): one wordless card for the front door, and every owner page
+  has its own card, drawn by the publishing app (`docs/voici-and-messages.md` §2.10).
 - **Tutoiement.** French uses "vous" everywhere on voi.ci. A younger, more informal "tu" voice is possible for
   marketing, but it would need to change on the pages too.
 - **Native review** of the French copy (and the five others) before any campaign (`i18n/REVIEW.md`).
@@ -146,6 +147,7 @@ The front door is the one voi.ci answer that needs nothing but the Worker's own 
 ## 10. Files
 
 - `apps/voici-site/src/front.js`: the page, rendered at build time (not served as a module).
+- `apps/voici-site/src/share-card.jpg`, `apps/voici-site/dev/share-card.mjs`: the front door's share card.
 - `apps/voici-site/src/lang.js`: the language rule, used by the site and the build.
 - `apps/voici-site/build.mjs`: renders the front door per language into the Worker module; noindex on 404/410 shells.
 - `apps/com/src/voiciFrontDoor.ts`, `apps/com/src/voiciRoutes.ts`: language pick and serving at `/`.

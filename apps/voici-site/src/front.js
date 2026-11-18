@@ -108,6 +108,13 @@ export function renderFrontDoor(o) {
     `<meta property="og:description" content="${esc(description)}">\n` +
     `<meta property="og:url" content="${self}">\n` +
     `<meta property="og:locale" content="${esc(lang.replace("-", "_"))}">\n` +
+    // The fixed share card (dev/share-card.mjs; docs/voici-and-messages.md §2.10): no words, one card for every language.
+    `<meta property="og:image" content="%ORIGIN%${base}/share-card.jpg">\n` +
+    '<meta property="og:image:type" content="image/jpeg">\n' +
+    '<meta property="og:image:width" content="1200">\n' +
+    '<meta property="og:image:height" content="630">\n' +
+    '<meta name="twitter:card" content="summary_large_image">\n' +
+    `<meta name="twitter:image" content="%ORIGIN%${base}/share-card.jpg">\n` +
     `<link rel="icon" href="${base}/favicon.svg" type="image/svg+xml">\n` +
     `<link rel="preload" href="${base}/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>\n` +
     `<link rel="stylesheet" href="${base}/style.css" integrity="${o.styleSri}">\n` +

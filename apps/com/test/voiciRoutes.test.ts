@@ -13,6 +13,9 @@ import { route, type RouteEnv } from "../src/route.js";
 import { isVoiciApiPath } from "../src/voiciRoutes.js";
 import { endpointFor } from "../src/rateLimit.js";
 import { VOICI_SITE_SHELL, VOICI_SITE_SHELL_NOINDEX } from "../src/voiciSiteBuild.generated.js";
+import { withPreview } from "../src/voiciSite.js";
+
+const alicePreview = { url: "https://voi.ci/alice", title: "voi.ci/alice", image: null };
 
 const SHELL = "<!doctype html><title>voi.ci</title>";
 
@@ -115,7 +118,7 @@ describe("voi.ci routes", () => {
       await publishPage(w, Date.now());
       const shell = await w.call("https://voi.ci/alice");
       // Hidden from search engines by default (the index has no showInSearch).
-      expect([shell.status, await shell.text(), shell.headers.get("x-robots-tag")]).toEqual([200, VOICI_SITE_SHELL_NOINDEX, "noindex"]);
+      expect([shell.status, await shell.text(), shell.headers.get("x-robots-tag")]).toEqual([200, withPreview(VOICI_SITE_SHELL_NOINDEX, alicePreview), "noindex"]);
       expect(shell.headers.get("content-security-policy")).toContain("img-src 'self' blob:;");
       expect(shell.headers.get("x-frame-options")).toBe("DENY");
       const at = await w.call("https://voi.ci/@alice");
@@ -124,7 +127,7 @@ describe("voi.ci routes", () => {
       // The owner turns on "Show in search engines": the next signed index says showInSearch 1.
       await publishPage(w, Date.now(), { seq: 2, search: true });
       const listed = await w.call("https://voi.ci/alice");
-      expect([listed.status, await listed.text(), listed.headers.get("x-robots-tag")]).toEqual([200, VOICI_SITE_SHELL, null]);
+      expect([listed.status, await listed.text(), listed.headers.get("x-robots-tag")]).toEqual([200, withPreview(VOICI_SITE_SHELL, alicePreview), null]);
       await publishPage(w, Date.now(), { seq: 3 });
       expect((await w.call("https://voi.ci/alice")).headers.get("x-robots-tag")).toBe("noindex");
       await w.seed.voici.setTakedown(USER, Date.now(), "spam");

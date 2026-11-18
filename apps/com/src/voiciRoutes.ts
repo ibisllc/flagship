@@ -54,7 +54,7 @@ import { D1Storage, RequestD1, type D1Database, type NameRegistryStorage } from 
 import { workerCaTrustChain } from "./caTrustChainLoader.js";
 import { buildOptionalPushForwarder, type ControlPlaneEnv } from "./controlPlaneRoutes.js";
 import { checkRateLimit, clientIp, type RateLimitEndpoint, type RateLimitEnv, type WaitUntilLike } from "./rateLimit.js";
-import { voiciErrorResponse, voiciShellResponse, voiciSiteFile } from "./voiciSite.js";
+import { voiciErrorResponse, voiciShellResponse, voiciSiteFile, type VoiciShellPreview } from "./voiciSite.js";
 import { deriveUrlFragment } from "@flagship/protocol";
 import { deleteVoiciAbuseAccount, isAccountBanned, isPseudonymBanned, pruneVoiciAbuse } from "./voiciAbuse.js";
 import { handleVoiciCallApi, isVoiciCallPath, voiciCallsEnabled, type VoiciCallEnv } from "./voiciCallRoutes.js";
@@ -482,8 +482,8 @@ export function voiciSiteHeaders(env: VoiciEnv): [string, string][] {
 // C: the shell comes from the generated build module and /_/ serves only this build's listed files (voiciSite.ts):
 // an ASSETS fetch of `/_voici/index.html` is a 307 under the default html_handling, and a missing file would be the
 // assets layer's single-page fallback.
-async function serveSiteAsset(request: Request, env: VoiciEnv, assetPath: string, status = 200, noindex = false): Promise<Response> {
-  if (assetPath === VOICI_SITE_SHELL) return voiciShellResponse(request, voiciSiteHeaders(env), status, noindex);
+async function serveSiteAsset(request: Request, env: VoiciEnv, assetPath: string, status = 200, noindex = false, preview?: VoiciShellPreview): Promise<Response> {
+  if (assetPath === VOICI_SITE_SHELL) return voiciShellResponse(request, voiciSiteHeaders(env), status, noindex, preview);
   return voiciSiteFile(request, env.ASSETS, assetPath.slice(VOICI_SITE_ASSET_PREFIX.length + 1), voiciSiteHeaders(env));
 }
 
@@ -558,7 +558,11 @@ export async function serveVoiciHost(request: Request, url: URL, env: VoiciEnv):
     case "page":
       // Owner pages are hidden from search engines unless the owner turned on "Show in search engines" (its signed
       // index says showInSearch 1). The front door at `/` stays indexable.
-      return serveSiteAsset(request, env, VOICI_SITE_SHELL, 200, !answer.searchable);
+      return serveSiteAsset(request, env, VOICI_SITE_SHELL, 200, !answer.searchable, {
+        url: `${voiciWebOrigin(env)}/${answer.username}`,
+        title: `${webHost(env)}/${answer.username}`,
+        image: answer.preview ? `${voiciFilesOrigin(env)}/${voiciPieceKey(answer.preview.pageId, answer.preview.sha256)}` : null,
+      });
     case "page-gone":
       return serveSiteAsset(request, env, VOICI_SITE_SHELL, 410, true);
     case "home":

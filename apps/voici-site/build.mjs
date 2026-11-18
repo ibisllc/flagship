@@ -25,7 +25,7 @@ export const REPO = join(here, "..", "..");
 export const OUT = join(REPO, "apps", "web", "public", "_voici");
 export const WORKER_MODULE = join(REPO, "apps", "com", "src", "voiciSiteBuild.generated.ts");
 
-const SITE_FILES = ["app.js", "call.js", "config.js", "dom.js", "i18n.js", "icons.js", "lang.js", "messages.js", "page.js", "report.js", "sheet.js", "strings.js", "style.css", "sw.js"];
+const SITE_FILES = ["app.js", "call.js", "config.js", "dom.js", "i18n.js", "icons.js", "lang.js", "messages.js", "page.js", "report.js", "share-card.jpg", "sheet.js", "strings.js", "style.css", "sw.js"];
 const EXTRA = [
   ["qrEncoder.js", "apps/web/public/qrEncoder.js"],
   ["favicon.svg", "apps/web/public/favicon.svg"],

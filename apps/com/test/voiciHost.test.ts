@@ -11,6 +11,9 @@ import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1
 import { adminPub, fakeBucket, irkPub, PAGE_ID, USER } from "../../../packages/control-plane/tests/support/voiciFixture.js";
 import { route, type RouteEnv } from "../src/route.js";
 import { VOICI_SITE_DIR, VOICI_SITE_SHELL, VOICI_SITE_SHELL_404, VOICI_SITE_SHELL_410, VOICI_SITE_SHELL_NOINDEX } from "../src/voiciSiteBuild.generated.js";
+import { withPreview } from "../src/voiciSite.js";
+
+const preview = (image: string | null = null) => ({ url: "https://voi.ci/alice", title: "voi.ci/alice", image });
 
 async function world(enabled = true) {
   const sqlite = createSqliteD1();
@@ -75,7 +78,7 @@ describe("the voi.ci host (one namespace)", () => {
       expect([before.status, await before.text()]).toEqual([404, VOICI_SITE_SHELL_404]);
       await publish(w);
       const after = await w.call("/alice");
-      expect([after.status, await after.text()]).toEqual([200, VOICI_SITE_SHELL_NOINDEX]);
+      expect([after.status, await after.text()]).toEqual([200, withPreview(VOICI_SITE_SHELL_NOINDEX, preview())]);
     } finally {
       w.close();
     }
@@ -89,7 +92,7 @@ describe("the voi.ci host (one namespace)", () => {
       expect(hidden.status).toBe(200);
       expect(hidden.headers.get("x-robots-tag")).toBe("noindex");
       const hiddenHtml = await hidden.text();
-      expect(hiddenHtml).toBe(VOICI_SITE_SHELL_NOINDEX);
+      expect(hiddenHtml).toBe(withPreview(VOICI_SITE_SHELL_NOINDEX, preview()));
       expect(hiddenHtml).toContain('<meta name="robots" content="noindex">');
       expect(VOICI_SITE_SHELL).not.toContain("robots");
 
@@ -97,7 +100,24 @@ describe("the voi.ci host (one namespace)", () => {
       const shown = await w.call("/alice");
       expect(shown.status).toBe(200);
       expect(shown.headers.get("x-robots-tag")).toBeNull();
-      expect(await shown.text()).toBe(VOICI_SITE_SHELL);
+      expect(await shown.text()).toBe(withPreview(VOICI_SITE_SHELL, preview()));
+
+      // The share card (§2.10): og:image and a large Twitter card, kept on a noindex page (previews ignore robots).
+      const SHA = "ab".repeat(32);
+      const withCard = (extra: Record<string, unknown>) =>
+        JSON.stringify({ kind: "VoiciPage", version: 1, username: USER, pieces: [{ role: "profile", sha256: "cd".repeat(32), size: 9 }, { role: "share", sha256: SHA, size: 9 }], ...extra });
+      for (const [json, robots] of [[withCard({}), "noindex"], [withCard({ showInSearch: 1 }), null]] as const) {
+        await w.sqlite.prepare("UPDATE voici_pages SET index_json = ?1").bind(json).run();
+        const r = await w.call("/alice");
+        expect(r.headers.get("x-robots-tag")).toBe(robots);
+        const html = await r.text();
+        const img = `https://files.voi.ci/v1/p/${PAGE_ID}/${SHA}`;
+        expect(html).toContain(`<meta property="og:image" content="${img}">`);
+        expect(html).toContain(`<meta name="twitter:image" content="${img}">`);
+        expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+        expect(html).toContain('<meta property="og:title" content="voi.ci/alice">');
+        expect(html).toContain('<meta property="og:url" content="https://voi.ci/alice">');
+      }
 
       // Fail safe: anything but the number 1 (or an unreadable index) is hidden.
       for (const bad of [JSON.stringify({ showInSearch: true }), JSON.stringify({ showInSearch: "1" }), '{"showInSearch":1', ""]) {
@@ -109,6 +129,7 @@ describe("the voi.ci host (one namespace)", () => {
       const gone = await w.call("/alice");
       expect([gone.status, gone.headers.get("x-robots-tag")]).toEqual([410, "noindex"]);
       expect(await gone.text()).toBe(VOICI_SITE_SHELL_NOINDEX);
+      expect(VOICI_SITE_SHELL_NOINDEX).not.toContain("og:image");
 
       const unknown = await w.call("/nobody-here");
       expect([unknown.status, unknown.headers.get("x-robots-tag")]).toEqual([404, "noindex"]);
