@@ -49,7 +49,7 @@ test("a handed-off voi.ci call is requested, rung, answered and checked", async 
   await expect(tab.getByText("The call couldn't connect.", { exact: false })).toHaveCount(0);
   expect(errors).toEqual([]);
 
-  await tab.getByRole("button", { name: "Hang up" }).click();
+  await tab.getByRole("button", { name: "End", exact: true }).click();
   await expect(tab.getByText("Call ended")).toBeVisible();
   await visitorCtx.close();
   await phoneCtx.close();
