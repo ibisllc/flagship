@@ -7,6 +7,7 @@
 //
 // Pages and messages never reach a model (§10.4): nothing here is shared with any AI code.
 
+import { carriedShareCard, renderShareCard, shareCardStale } from "./voiciShareCard.js";
 import { isAdminRootKey } from "./keyCustody.js";
 import {
   b64Encode,
@@ -270,7 +271,7 @@ export function carriedSearch(published, search) {
   return on ? { showInSearch: 1 } : {};
 }
 
-export async function buildVoiciIndex({ username, published, merged, images, signer, umk, now, rotate = false, calls, search }) {
+export async function buildVoiciIndex({ username, published, merged, images, signer, umk, now, rotate = false, calls, search, shareCard }) {
   const pageId = published?.index.pageId ?? randHex(16);
   const prevEpoch = published?.index.inboxEpoch ?? 1;
   const inboxEpoch = rotate && published ? prevEpoch + 1 : prevEpoch;
@@ -301,6 +302,9 @@ export async function buildVoiciIndex({ username, published, merged, images, sig
     for (const p of posts) for (const l of p.links) if (l.card?.image) cards.add(l.card.image);
   });
   for (const sha of [...cards].sort()) addImage(voiciCardRole(sha), sha);
+  // The share card (§2.10): a freshly drawn one, else the listed one when the name, photo and theme are unchanged.
+  const share = shareCard ?? carriedShareCard(published, merged);
+  if (share) add("share", share.bytes, share.sha256, share.size, "image/jpeg");
   const body = {
     username,
     pageId,
@@ -350,6 +354,22 @@ async function uploadPiece(username, pageId, piece, signer, c) {
 }
 
 /**
+ * A new share card when the page needs one (§2.10), or null to carry the listed one. Never blocks a publish: when the
+ * card can't be drawn (no canvas, a decode failure) the page goes up without a new one. `deps.renderShareCard` is a
+ * seam for tests.
+ */
+async function drawnShareCard(published, merged, username, images, deps) {
+  if (!shareCardStale(published, merged)) return null;
+  try {
+    const render = deps.renderShareCard ?? renderShareCard;
+    const bytes = await render({ profile: merged.profile, username, avatar: merged.profile.avatar ? images.get(merged.profile.avatar) : null });
+    return bytes ? { sha256: sha256Hex(bytes), size: bytes.length, bytes } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A brand-new page's first post (docs/social-tabs.md): an ordinary post-add, plain text with no link, dated just
  * before the page's other new posts so it stays the first.
  */
@@ -381,7 +401,8 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
     const allImages = new Map([...(published?.pieces ?? new Map()), ...images]);
     // A first publish turns calls on (signed-in callers); any other carries the index it replaces.
     const callsNow = calls ?? (published ? undefined : { acceptsCalls: VOICI_FIRST_PUBLISH.acceptsCalls, callsFrom: VOICI_FIRST_PUBLISH.callsFrom });
-    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls: callsNow, search });
+    const shareCard = await drawnShareCard(published, merged, username, allImages, deps);
+    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls: callsNow, search, shareCard });
     for (const u of uploads) await uploadPiece(username, index.pageId, u, signer, c);
     const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(username)}/publish`, {
       method: "POST",

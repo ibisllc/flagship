@@ -548,7 +548,9 @@
 //  v235: the UI pass (empty Inbox, direct names, Calls rows, Activity icons, disabled buttons, toast, title spacing).
 //  v236: the voucher shop with no account (?shop=buy) and "Load into Flagship" voucher links (/app/vouchers#v=…):
 //        lib/voucherLink.js, views/voucher-shop.js, views/voucher-link.js.
-const SHELL_VERSION = "v236";
+//  v237: Page options → "Show in search engines" (the page index's showInSearch; voi.ci pages are noindex without it),
+//        and every publish lists the page's share card (lib/voiciShareCard.js), the picture link previews show.
+const SHELL_VERSION = "v237";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -752,6 +754,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciPagePublic.js",
   "/lib/voiciPageControl.js",
   "/lib/voiciImage.js",
+  "/lib/voiciShareCard.js",
   "/lib/voiciSignIn.js",
   "/lib/voiciReplies.js",
   "/lib/voiciCallHandoff.js",

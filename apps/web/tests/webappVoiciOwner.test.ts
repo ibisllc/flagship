@@ -162,6 +162,28 @@ describe("publishing keeps the calls setting (docs/voici-calls.md §6)", () => {
   });
 });
 
+describe("the share card in a publish (docs/voici-and-messages.md §2.10)", () => {
+  const card = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0, 0, 0xff, 0xda, 1, 2, 3, 0xff, 0xd9]);
+  it("draws it on the first publish, carries it on an edit, redraws on a name change; a failed drawing never blocks", async () => {
+    const com = fakeCom();
+    let drawn = 0;
+    const renderShareCard = async () => (drawn++, card);
+    const first = await publishVoiciPage({ ops: [] }, deps(com, { published: null, renderShareCard }));
+    const share = first.index.pieces.find((p: any) => p.role === "share");
+    expect(share).toEqual({ role: "share", sha256: P.sha256Hex(card), size: card.length });
+    expect(com.pieces.get(share.sha256)).toEqual(card);
+    const edit = await publishVoiciPage({ ops: [makeDraftOp("post-add", { post: post("0e".repeat(16), "hi") }, { now: NOW - 1 })] }, deps(com, { published: first, renderShareCard }));
+    expect(drawn).toBe(1);
+    expect(edit.index.pieces.find((p: any) => p.role === "share")).toEqual(share);
+    const renamed = await publishVoiciPage(
+      { ops: [makeDraftOp("profile", { profile: { ...edit.profile, displayName: "Alicia" } }, { now: NOW + 5 })] },
+      deps(com, { published: edit, renderShareCard: async () => { throw new Error("no canvas"); } }),
+    );
+    expect(renamed.profile.displayName).toBe("Alicia");
+    expect(renamed.index.pieces.some((p: any) => p.role === "share")).toBe(false);
+  });
+});
+
 describe("Show in search engines (owner decision 2026-11-17)", () => {
   it("a first publish is hidden; the switch signs showInSearch 1; later edits keep it; off drops the field", async () => {
     const com = fakeCom();
