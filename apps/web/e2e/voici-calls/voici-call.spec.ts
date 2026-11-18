@@ -10,6 +10,13 @@ import { expect, test } from "@playwright/test";
 import * as P from "@flagship/protocol";
 import { startCallWorld, type CallWorld } from "./callWorld.js";
 
+// The tab refuses to call without a microphone ("No microphone found on this device"), so the spec brings its own
+// fake devices and doesn't depend on being run through playwright.voici-calls.config.ts.
+test.use({
+  launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] },
+  permissions: ["microphone", "camera"],
+});
+
 let world: CallWorld;
 test.beforeAll(async () => {
   world = await startCallWorld();
