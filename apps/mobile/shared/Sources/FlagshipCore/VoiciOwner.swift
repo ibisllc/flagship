@@ -47,6 +47,7 @@ public enum VoiciOwner {
     public struct Piece: Equatable, Sendable {
         public var ref: VoiciPieceRef
         public var bytes: [UInt8]
+        public init(ref: VoiciPieceRef, bytes: [UInt8]) { self.ref = ref; self.bytes = bytes }
     }
 
     /// The pieces a page state publishes as: the profile, each chunk, the avatar and every card image the posts name.

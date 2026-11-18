@@ -58,9 +58,27 @@ public enum VoiciImageEncoder {
         CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: quality,
                                                  kCGImagePropertyOrientation: 1] as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { return nil }
-        let bytes = [UInt8](out as Data)
-        // Belt and braces: ImageIO writes no APP1/APP2 for a bare bitmap; refuse one that did.
+        // ImageIO (iOS 26, macOS 26) adds an EXIF APP1 (colour space, size) and an empty Photoshop APP13 even for a
+        // bare bitmap: drop every APPn but JFIF (APP0) and Adobe (APP14), then refuse anything that still carries one.
+        let bytes = stripAppSegments([UInt8](out as Data))
         return VoiciPage.voiciJpegHasMetadata(bytes) ? nil : bytes
+    }
+
+    /// The JPEG without its APP1-APP13 and APP15 segments (everything before the scan is walked; the rest is copied).
+    static func stripAppSegments(_ b: [UInt8]) -> [UInt8] {
+        guard VoiciPage.isVoiciJpeg(b) else { return b }
+        var out: [UInt8] = [0xff, 0xd8]
+        var i = 2
+        while i + 4 <= b.count, b[i] == 0xff {
+            let m = b[i + 1]
+            if m == 0xda || m == 0xd9 { break }
+            let end = i + 2 + (Int(b[i + 2]) << 8 | Int(b[i + 3]))
+            guard end <= b.count else { return b }
+            if !((0xe1...0xef).contains(m) && m != 0xee) { out += b[i..<end] }
+            i = end
+        }
+        out += b[i...]
+        return out
     }
 }
 
