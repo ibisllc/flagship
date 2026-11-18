@@ -95,9 +95,15 @@ data class VoiciPageIndexBody(
     val acceptsCalls: Int? = null,
     /** "accepted", "signed-in", "anyone" or "callback" on a v2 index. */
     val callsFrom: String? = null,
+    /**
+     * Search engines (owner decision 2026-11-17): 1 while the owner shows the page in search engines, null = hidden
+     * (voi.ci sends noindex). Either version; the last canonical field when present.
+     */
+    val showInSearch: Int? = null,
 ) {
     val isV2: Boolean get() = acceptsCalls != null || callsFrom != null
     val takesCalls: Boolean get() = acceptsCalls == 1
+    val showsInSearch: Boolean get() = showInSearch == 1
 }
 
 data class VoiciPageIndex(val body: VoiciPageIndexBody, val signature: String) {
@@ -122,6 +128,7 @@ data class VoiciPageIndex(val body: VoiciPageIndexBody, val signature: String) {
                 put("acceptsCalls", JsonPrimitive(body.acceptsCalls))
                 put("callsFrom", JsonPrimitive(body.callsFrom))
             }
+            body.showInSearch?.let { put("showInSearch", JsonPrimitive(it)) }
         },
     )
 }
@@ -317,12 +324,13 @@ object VoiciPage {
         piecesProblem(b.pieces)?.let { bad(it) }
         if (b.signerKind != "admin-root" && b.signerKind != "irk") bad("signerKind")
         if (!hex(b.signerPub, 32)) bad("signerPub")
+        if (b.showInSearch != null && b.showInSearch != 1) bad("showInSearch")
         return VoiciJs.utf8(
             (listOf(
                 if (b.isV2) TAG_VOICI_PAGE_V2 else TAG_VOICI_PAGE, b.username, b.pageId, b.seq.toString(), b.issuedAt.toString(), b.acceptsMessages.toString(),
             ) + (if (b.isV2) listOf(b.acceptsCalls.toString(), b.callsFrom!!) else emptyList()) + listOf(
                 b.inboxEpoch.toString(), b.inboxPub, b.ownerSignPub, b.pieces.joinToString(",") { it.key }, b.signerKind, b.signerPub,
-            )).joinToString("|"),
+            ) + (if (b.showInSearch == 1) listOf("1") else emptyList())).joinToString("|"),
         )
     }
 
@@ -344,8 +352,11 @@ object VoiciPage {
         }
         val o = VoiciJs.obj(v) ?: return null
         val v2 = VoiciJs.isNumEq(o["version"], 2)
-        val shapeOk = (VoiciJs.isNumEq(o["version"], 1) && VoiciJs.exactKeys(o, INDEX_KEYS)) || (v2 && VoiciJs.exactKeys(o, INDEX_KEYS + listOf("acceptsCalls", "callsFrom")))
+        val search = if (o.containsKey("showInSearch")) listOf("showInSearch") else emptyList()
+        val shapeOk = (VoiciJs.isNumEq(o["version"], 1) && VoiciJs.exactKeys(o, INDEX_KEYS + search)) ||
+            (v2 && VoiciJs.exactKeys(o, INDEX_KEYS + listOf("acceptsCalls", "callsFrom") + search))
         if (!shapeOk || VoiciJs.str(o["kind"]) != "VoiciPage" || !hex(o["signature"], 64)) return null
+        if (search.isNotEmpty() && !VoiciJs.isNumEq(o["showInSearch"], 1)) return null
         val calls = if (v2) (VoiciJs.safeInt(o["acceptsCalls"]) ?: return null).toInt() else null
         val callsFrom = if (v2) (VoiciJs.str(o["callsFrom"]) ?: return null) else null
         val accepts = VoiciJs.num(o["acceptsMessages"])
@@ -372,6 +383,7 @@ object VoiciPage {
             signerPub = VoiciJs.str(o["signerPub"]) ?: return null,
             acceptsCalls = calls,
             callsFrom = callsFrom,
+            showInSearch = if (search.isNotEmpty()) 1 else null,
         )
         return try {
             canonicalVoiciPageIndex(body)

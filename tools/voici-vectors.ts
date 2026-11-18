@@ -293,6 +293,15 @@ const tamper = (mut: (b: Record<string, unknown>) => void) => {
   return b;
 };
 const readerCtx = { username: USER, sensitiveKind: "admin-root" as const, sensitivePub: adminRootPub };
+// Search engines (owner decision 2026-11-17): `showInSearch: 1` on either version; absent = hidden.
+const searchIndex = reSign((b) => (b.showInSearch = 1));
+const searchIndexV2 = reSign((b) => {
+  b.acceptsCalls = 1;
+  b.callsFrom = "signed-in";
+  b.showInSearch = 1;
+});
+want("search shown", P.voiciPageShowsInSearch(searchIndex), true);
+want("search hidden", P.voiciPageShowsInSearch(index), false);
 const indexChecks = (
   [
     ["valid", index, readerCtx, "ok"],
@@ -317,6 +326,17 @@ const indexChecks = (
     ["seq 0", tamper((b) => (b.seq = 0)), readerCtx, "malformed"],
     ["extra key", tamper((b) => (b.html = "<b>")), readerCtx, "malformed"],
     ["username with a separator", tamper((b) => (b.username = "al|ce")), readerCtx, "malformed"],
+    ["shown in search engines", searchIndex, readerCtx, "ok"],
+    ["v2 with calls, shown in search engines", searchIndexV2, readerCtx, "ok"],
+    ["showInSearch stripped", (() => {
+      const b = clone(searchIndex) as unknown as Record<string, unknown>;
+      delete b.showInSearch;
+      return b;
+    })(), readerCtx, "bad-signature"],
+    ["showInSearch added", tamper((b) => (b.showInSearch = 1)), readerCtx, "bad-signature"],
+    ["showInSearch 0", tamper((b) => (b.showInSearch = 0)), readerCtx, "malformed"],
+    ["showInSearch true not 1", tamper((b) => (b.showInSearch = true)), readerCtx, "malformed"],
+    ["showInSearch null", tamper((b) => (b.showInSearch = null)), readerCtx, "malformed"],
   ] as [string, unknown, Parameters<typeof P.checkVoiciPageIndex>[1], string][]
 ).map(([name, idx, ctx, expected]) => ({ name, index: idx, ctx, expected: want(`index ${name}`, code(P.checkVoiciPageIndex(idx, ctx)), expected) }));
 
@@ -399,6 +419,13 @@ const voici = {
     canonical: new TextDecoder().decode(P.canonicalVoiciPageIndex(index)),
     signed: index,
     pieceRefsOk: true,
+    // The same body with showInSearch 1 (v1), and with calls on too (v2): canonical bytes and the signed envelopes.
+    search: {
+      canonical: new TextDecoder().decode(P.canonicalVoiciPageIndex(searchIndex)),
+      signed: searchIndex,
+      canonicalV2: new TextDecoder().decode(P.canonicalVoiciPageIndex(searchIndexV2)),
+      signedV2: searchIndexV2,
+    },
     checks: indexChecks,
     publishChecks,
   },

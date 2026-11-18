@@ -48,6 +48,18 @@ describe("voici vectors (test-vectors/voici)", () => {
     expect(P.parseVoiciPageIndex("x".repeat(P.VOICI_INDEX_MAX_BYTES + 1))).toBeNull();
   });
 
+  it("the index: showInSearch (absent = hidden from search engines)", () => {
+    const s = V.index.search;
+    expect(new TextDecoder().decode(P.canonicalVoiciPageIndex(s.signed))).toBe(s.canonical);
+    expect(new TextDecoder().decode(P.canonicalVoiciPageIndex(s.signedV2))).toBe(s.canonicalV2);
+    expect(s.canonical).toBe(`${V.index.canonical}|1`);
+    expect(P.parseVoiciPageIndex(JSON.stringify(s.signed))).toEqual(s.signed);
+    expect(P.voiciPageShowsInSearch(s.signed)).toBe(true);
+    expect(P.voiciPageShowsInSearch(s.signedV2)).toBe(true);
+    expect(P.voiciPageShowsInSearch(V.index.signed)).toBe(false);
+    expect(P.signVoiciPageIndex({ ...V.index.body, showInSearch: 1 }, h(V.keys.adminRootSeed))).toEqual(s.signed);
+  });
+
   it("piece upload, chunking and the merge", () => {
     const u = V.pieceUpload;
     expect(new TextDecoder().decode(P.canonicalVoiciPieceUpload(u.cases[0].upload))).toBe(u.canonical);

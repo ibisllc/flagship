@@ -104,6 +104,9 @@ public struct VoiciPageIndex: Equatable, Sendable {
     public var acceptsCalls: Int64?
     /// "accepted", "signed-in", "anyone" or "callback" on a v2 index.
     public var callsFrom: String?
+    /// Search engines (owner decision 2026-11-17): 1 while the owner shows the page in search engines, nil = hidden
+    /// (voi.ci sends noindex). Either version; the last canonical field when present.
+    public var showInSearch: Int64?
     public var inboxEpoch: Int64
     public var inboxPub: String
     public var ownerSignPub: String
@@ -116,9 +119,9 @@ public struct VoiciPageIndex: Equatable, Sendable {
 
     public init(username: String, pageId: String, seq: Int64, issuedAt: Int64, acceptsMessages: Int64, inboxEpoch: Int64,
                 inboxPub: String, ownerSignPub: String, pieces: [VoiciPieceRef], signerKind: String, signerPub: String = "", signature: String = "",
-                acceptsCalls: Int64? = nil, callsFrom: String? = nil) {
+                acceptsCalls: Int64? = nil, callsFrom: String? = nil, showInSearch: Int64? = nil) {
         self.username = username; self.pageId = pageId; self.seq = seq; self.issuedAt = issuedAt; self.acceptsMessages = acceptsMessages
-        self.acceptsCalls = acceptsCalls; self.callsFrom = callsFrom
+        self.acceptsCalls = acceptsCalls; self.callsFrom = callsFrom; self.showInSearch = showInSearch
         self.inboxEpoch = inboxEpoch; self.inboxPub = inboxPub; self.ownerSignPub = ownerSignPub; self.pieces = pieces
         self.signerKind = signerKind; self.signerPub = signerPub; self.signature = signature
     }
@@ -126,6 +129,8 @@ public struct VoiciPageIndex: Equatable, Sendable {
     var isV2: Bool { acceptsCalls != nil || callsFrom != nil }
     /// Calls on: a v2 index with acceptsCalls 1.
     public var takesCalls: Bool { acceptsCalls == 1 }
+    /// Search engines may list the page: only an index that says showInSearch 1.
+    public var showsInSearch: Bool { showInSearch == 1 }
 
     /// The signed envelope.
     public var json: JSONValue {
@@ -138,6 +143,7 @@ public struct VoiciPageIndex: Equatable, Sendable {
             o["acceptsCalls"] = acceptsCalls.map { .int($0) } ?? .null
             o["callsFrom"] = callsFrom.map { .string($0) } ?? .null
         }
+        if let showInSearch { o["showInSearch"] = .int(showInSearch) }
         return .object(o)
     }
 }
@@ -334,10 +340,11 @@ public enum VoiciPage {
         if let pp = piecesProblem(b.pieces) { throw bad(pp) }
         guard b.signerKind == "admin-root" || b.signerKind == "irk" else { throw bad("signerKind") }
         guard CanonicalJson.isLowerHex(b.signerPub, bytes: 32) else { throw bad("signerPub") }
+        if let s = b.showInSearch, s != 1 { throw bad("showInSearch") }
         let calls = b.isV2 ? [String(b.acceptsCalls!), b.callsFrom!] : []
         return CanonicalJson.join([b.isV2 ? tagVoiciPageV2 : tagVoiciPage, b.username, b.pageId, String(b.seq), String(b.issuedAt), String(b.acceptsMessages)]
                                   + calls + [String(b.inboxEpoch), b.inboxPub, b.ownerSignPub, b.pieces.map(\.key).joined(separator: ","),
-                                   b.signerKind, b.signerPub])
+                                   b.signerKind, b.signerPub] + (b.showInSearch == 1 ? ["1"] : []))
     }
 
     /// Sorts the pieces, sets signerPub from the seed, signs (randomized Ed25519: verify, never compare bytes).
@@ -361,7 +368,8 @@ public enum VoiciPage {
         }
         guard let r = v.object, r["kind"]?.string == "VoiciPage" else { return nil }
         let v2 = r["version"]?.safeInt == 2
-        guard (r["version"]?.isOne == true && exactKeys(r, indexKeys)) || (v2 && exactKeys(r, indexKeys.union(["acceptsCalls", "callsFrom"]))),
+        let search: Set<String> = r["showInSearch"] != nil ? ["showInSearch"] : []
+        guard (r["version"]?.isOne == true && exactKeys(r, indexKeys.union(search))) || (v2 && exactKeys(r, indexKeys.union(["acceptsCalls", "callsFrom"]).union(search))),
               CanonicalJson.isLowerHex(r["signature"], bytes: 64),
               let username = r["username"]?.string, let pageId = r["pageId"]?.string, let seq = r["seq"]?.safeInt,
               let issuedAt = r["issuedAt"]?.safeInt, let accepts = r["acceptsMessages"]?.safeInt, let epoch = r["inboxEpoch"]?.safeInt,
@@ -380,6 +388,10 @@ public enum VoiciPage {
         if v2 {
             guard let c = r["acceptsCalls"]?.safeInt, let from = r["callsFrom"]?.string else { return nil }
             out.acceptsCalls = c; out.callsFrom = from
+        }
+        if r["showInSearch"] != nil {
+            guard r["showInSearch"]?.isOne == true else { return nil }
+            out.showInSearch = 1
         }
         return (try? canonicalVoiciPageIndex(out)) != nil ? out : nil
     }

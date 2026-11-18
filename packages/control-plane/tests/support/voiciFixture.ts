@@ -75,6 +75,8 @@ export function buildPage(o: {
   signer?: "admin-root" | "irk";
   pageId?: string;
   username?: string;
+  /** "Show in search engines" on (the index says showInSearch 1). */
+  search?: boolean;
 }): BuiltPage {
   const pieces = new Map<string, Uint8Array>();
   const refs: VoiciPieceRef[] = [];
@@ -101,6 +103,7 @@ export function buildPage(o: {
       ownerSignPub: hex(ownerSign.publicKey),
       pieces: refs,
       signerKind: o.signer ?? "admin-root",
+      ...(o.search ? { showInSearch: 1 as const } : {}),
     },
     o.signer === "irk" ? irkSeed : adminSeed,
   );

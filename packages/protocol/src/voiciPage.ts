@@ -18,6 +18,12 @@
  * with `version: 2, acceptsCalls, callsFrom` in the envelope. A v1 index means calls are off. Writers sign v2 only
  * while calls are on, so pages without calls stay readable by v1 readers.
  *
+ * Search engines (owner decision 2026-11-17, docs/voici-and-messages.md §2.7): either version may carry
+ * `showInSearch: 1`, appended as the last field of the canonical bytes (`…|<signerKind>|<signerPub>|1`). Absent means
+ * the page is hidden from search engines (voi.ci sends `noindex`); 1 is the only value written or accepted, so a hidden
+ * page has one encoding and an index without the field reads exactly as before. Writers add it only while the owner's
+ * "Show in search engines" switch is on.
+ *
  * Pieces are canonical JSON (webEnvelope.ts `canonicalJson`) or JPEG:
  *   profile  {v:1, displayName, bio, avatar:<sha256>|null, theme, links:[{url, label, site:<id>|null}]}  ≤ 16 KiB
  *   chunk    {v:1, chunk:<n>, posts:[{id, createdAt, editedAt|null, text, links:[{url, card|null}]}]}    ≤ 256 KiB
@@ -29,7 +35,7 @@
  * VoiciPageIndex, VoiciSignerKind, isVoiciJpeg, voiciJpegHasMetadata, parseVoiciProfile,
  * parseVoiciProfilePiece, parseVoiciPost, parseVoiciChunkPiece, voiciCardRole, canonicalVoiciPageIndex,
  * signVoiciPageIndex, parseVoiciPageIndex, VoiciPageRefusal, checkVoiciPageIndex, checkVoiciPublish,
- * voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload, verifyVoiciPieceUpload, VoiciPageState,
+ * voiciPageShowsInSearch, voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload, verifyVoiciPieceUpload, VoiciPageState,
  * chunkVoiciPosts, mergeVoiciPage.
  */
 import { hex } from "./canonicalBase.js";
@@ -235,6 +241,8 @@ export interface VoiciPageIndexBody {
   pieces: VoiciPieceRef[];
   signerKind: VoiciSignerKind;
   signerPub: string;
+  /** Present (always 1) only while the owner shows the page in search engines; absent = hidden (noindex). */
+  showInSearch?: 1;
 }
 
 export interface VoiciPageIndex extends VoiciPageIndexBody {
@@ -244,6 +252,11 @@ export interface VoiciPageIndex extends VoiciPageIndexBody {
 }
 
 const isV2 = (b: VoiciPageIndexBody) => b.acceptsCalls !== undefined || b.callsFrom !== undefined;
+
+/** Whether search engines may list the page: only an index that says `showInSearch: 1`. */
+export function voiciPageShowsInSearch(b: Pick<VoiciPageIndexBody, "showInSearch"> | null | undefined): boolean {
+  return b?.showInSearch === 1;
+}
 
 /** Calls on (a v2 index with acceptsCalls 1); a v1 index never takes calls. */
 export function voiciPageAcceptsCalls(b: VoiciPageIndexBody): boolean {
@@ -287,6 +300,7 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
   if (pp) throw bad(pp);
   if (b.signerKind !== "admin-root" && b.signerKind !== "irk") throw bad("signerKind");
   if (!isLowerHex(b.signerPub, 32)) throw bad("signerPub");
+  if (b.showInSearch !== undefined && b.showInSearch !== 1) throw bad("showInSearch");
   return enc(
     [
       v2 ? TAG_VOICI_PAGE_V2 : TAG_VOICI_PAGE,
@@ -302,6 +316,7 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
       b.pieces.map((p) => `${p.role}:${p.sha256}:${p.size}`).join(","),
       b.signerKind,
       b.signerPub,
+      ...(b.showInSearch === 1 ? ["1"] : []),
     ].join("|"),
   );
 }
@@ -336,7 +351,9 @@ export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
     }
   }
   if (!isObj(v) || v.kind !== "VoiciPage" || !isLowerHex(v.signature, 64)) return null;
-  if (!(v.version === 1 && exactKeys(v, INDEX_KEYS)) && !(v.version === 2 && exactKeys(v, INDEX_KEYS_V2))) return null;
+  const search = "showInSearch" in v ? ["showInSearch"] : [];
+  if (!(v.version === 1 && exactKeys(v, [...INDEX_KEYS, ...search])) && !(v.version === 2 && exactKeys(v, [...INDEX_KEYS_V2, ...search]))) return null;
+  if ("showInSearch" in v && v.showInSearch !== 1) return null;
   const r = v as unknown as VoiciPageIndex;
   try {
     canonicalVoiciPageIndex(r);
@@ -358,6 +375,7 @@ export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
     pieces: r.pieces.map((p) => ({ role: p.role, sha256: p.sha256, size: p.size })),
     signerKind: r.signerKind,
     signerPub: r.signerPub,
+    ...(r.showInSearch === 1 ? { showInSearch: 1 as const } : {}),
     signature: r.signature,
   };
 }

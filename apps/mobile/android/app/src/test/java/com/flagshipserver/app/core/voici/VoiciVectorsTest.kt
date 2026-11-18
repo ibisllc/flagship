@@ -127,7 +127,7 @@ class VoiciVectorsTest {
             assertEquals(c.s("name"), c.s("expected"), r.code)
             n++
         }
-        assertEquals(22, n)
+        assertEquals(29, n)
         for (c in ix.a("publishChecks").map { it.jsonObject }) {
             val ctx = c.o("ctx")
             val r = VoiciPage.checkVoiciPublish(c["index"], ctx.s("username"), ctx.s("sensitiveKind"), ctx.s("sensitivePub"), ctx.l("storedSeq"), ctx.sOrNull("storedPageId"), ctx.l("now"))
@@ -135,6 +135,22 @@ class VoiciVectorsTest {
         }
         assertEquals(ix["signed"], VoiciPage.parseVoiciPageIndex(ix["signed"].toString())!!.toJson())
         assertNull(VoiciPage.parseVoiciPageIndex("x".repeat(VoiciPage.VOICI_INDEX_MAX_BYTES + 1)))
+    }
+
+    /** Search engines: showInSearch 1 is the last canonical field (v1 and v2); absent = hidden. */
+    @Test fun theIndexShowInSearch() {
+        val ix = V.o("index")
+        val x = ix.o("search")
+        for ((signedKey, canonicalKey) in listOf("signed" to "canonical", "signedV2" to "canonicalV2")) {
+            val signed = VoiciPage.parseVoiciPageIndex(x[signedKey])!!
+            assertTrue(signed.body.showsInSearch)
+            assertEquals(x[signedKey], signed.toJson())
+            assertEquals(x.s(canonicalKey), String(VoiciPage.canonicalVoiciPageIndex(signed.body), Charsets.UTF_8))
+        }
+        assertEquals(ix.s("canonical") + "|1", x.s("canonical"))
+        val mine = VoiciPage.signVoiciPageIndex(bodyOf(ix.o("body")).copy(showInSearch = 1), h(V.o("keys").s("adminRootSeed")))
+        assertEquals(x["signed"], mine.toJson())
+        assertFalse(VoiciPage.parseVoiciPageIndex(ix["signed"])!!.body.showsInSearch)
     }
 
     @Test fun pieceUploadAndMerge() {

@@ -168,7 +168,7 @@ final class VoiciVectorTests: XCTestCase {
             XCTAssertEqual(r.code, S.s(c["expected"]), S.s(c["name"]))
             n += 1
         }
-        XCTAssertEqual(n, 22)
+        XCTAssertEqual(n, 29)
         for c in S.a(x["publishChecks"]) {
             let ctx = c["ctx"]!
             let r = VoiciPage.checkVoiciPublish(c["index"]!, username: S.s(ctx["username"]), sensitiveKind: S.s(ctx["sensitiveKind"]),
@@ -179,6 +179,27 @@ final class VoiciVectorTests: XCTestCase {
         let viaText = try XCTUnwrap(VoiciPage.parseVoiciPageIndex(.string(S.cj(signedJson))))
         XCTAssertEqual(S.cj(viaText.json), S.cj(signedJson))
         XCTAssertNil(VoiciPage.parseVoiciPageIndex(.string(String(repeating: "x", count: VoiciPage.indexMaxBytes + 1))))
+    }
+
+    /// Search engines: showInSearch 1 is the last canonical field (v1 and v2); absent = hidden.
+    func testIndexShowInSearch() throws {
+        let v = try vectors()
+        let x = try XCTUnwrap(v["index"]?["search"])
+        for (signedKey, canonicalKey) in [("signed", "canonical"), ("signedV2", "canonicalV2")] {
+            let signedJson = x[signedKey]!
+            let signed = try XCTUnwrap(VoiciPage.parseVoiciPageIndex(signedJson))
+            XCTAssertTrue(signed.showsInSearch)
+            XCTAssertEqual(S.cj(signed.json), S.cj(signedJson))
+            XCTAssertEqual(S.text(try VoiciPage.canonicalVoiciPageIndex(signed)), S.s(x[canonicalKey]))
+        }
+        XCTAssertEqual(S.s(x["canonical"]), S.s(v["index"]?["canonical"]) + "|1")
+        let keys = v["keys"]!
+        var b = body(v["index"]!["body"]!)
+        b.showInSearch = 1
+        let mine = try VoiciPage.signVoiciPageIndex(b, signerSeed: S.h(keys["adminRootSeed"]))
+        XCTAssertEqual(S.text(try VoiciPage.canonicalVoiciPageIndex(mine)), S.s(x["canonical"]))
+        XCTAssertEqual(VoiciPage.checkVoiciPageIndex(mine.json, username: "alice", sensitiveKind: "admin-root", sensitivePub: S.s(keys["adminRootPub"])).code, "ok")
+        XCTAssertFalse(try XCTUnwrap(VoiciPage.parseVoiciPageIndex(v["index"]!["signed"]!)).showsInSearch)
     }
 
     func testPieceUploadChunkingMerge() throws {
