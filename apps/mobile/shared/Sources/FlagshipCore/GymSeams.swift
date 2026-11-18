@@ -8,6 +8,10 @@ import Foundation
 /// (iOS) / SmokeMode (Android twin), and a smoke launch is test-only by
 /// construction.
 public enum GymSeams {
+    /// Voucher links the gym opens one after another as each voucher screen closes (`-smoke-voucher-link`).
+    public nonisolated(unsafe) static var voucherLinkQueue: [String] = []
+    public static func nextVoucherLink() -> String? { voucherLinkQueue.isEmpty ? nil : voucherLinkQueue.removeFirst() }
+
     /// Treat THIS device as holding the admin master root (Slice D). A demo
     /// session never mints one (`Keystore.hasAdminRoot` is false without a real
     /// account-open ceremony), so the admin-gated surfaces — the Account-security

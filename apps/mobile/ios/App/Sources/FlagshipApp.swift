@@ -948,6 +948,9 @@ struct FlagshipApp: App {
                     }
                 }
                 .task { startNotices() }
+                #if DEBUG
+                .task { await openGymVoucherLinks() }
+                #endif
                 // voi.ci calls (docs/voici-calls.md §8): the app's own call screen above everything.
                 .overlay { VoiciCallScreen() }
                 // Messages (docs/voici-and-messages.md): the store follows the account, so the admin phone takes
@@ -1006,6 +1009,21 @@ struct FlagshipApp: App {
                 }
         }
     }
+
+    #if DEBUG
+    /// Gym-only (`-smoke-voucher-link`): three vouchers signed by the mock `.com`, offered as a "Load into Flagship"
+    /// link once payments know the key; closing the screen opens the same link again, then a truncated copy of it
+    /// (GymVoucherLinkTests).
+    @MainActor
+    private func openGymVoucherLinks() async {
+        guard ProcessInfo.processInfo.arguments.contains("-smoke-voucher-link"), GymLaunch.usesMocks,
+              let vs = try? mockPayments.makeVouchers(3),
+              let link = try? VoucherLink.encodeLinks(vs, apex: Endpoints.controlHost).first else { return }
+        for _ in 0..<100 where PaymentsCenter.shared.info == nil { try? await Task.sleep(nanoseconds: 100_000_000) }
+        GymSeams.voucherLinkQueue = [link, String(link.dropLast(40))]
+        linker.enqueue(.voucherLink(link: link))
+    }
+    #endif
 
     /// Poll for a notice shortly after launch (the mock gym polls its own feed).
     @MainActor
