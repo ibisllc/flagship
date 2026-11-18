@@ -274,13 +274,19 @@ export function watchRings(ctx, session) {
   const seen = new Set();
   const tick = async () => {
     if (watching !== session.pageId) return;
-    if (ctx.doc.visibilityState !== "hidden") {
-      const r = await ctx.lib.fetchThread(session, { apiBase: ctx.cfg.apiBase });
-      const ring = r.ok ? ctx.lib.ringOf(r) : null;
-      if (ring && !seen.has(ring.ringId)) {
-        seen.add(ring.ringId);
-        showIncomingRing(ctx, session, ring);
+    // Fail safe (calls never break messages or the page): a failed fetch or a bad ring is skipped, and the watch
+    // keeps going.
+    try {
+      if (ctx.doc.visibilityState !== "hidden") {
+        const r = await ctx.lib.fetchThread(session, { apiBase: ctx.cfg.apiBase });
+        const ring = r.ok ? ctx.lib.ringOf(r) : null;
+        if (ring && !seen.has(ring.ringId)) {
+          seen.add(ring.ringId);
+          showIncomingRing(ctx, session, ring);
+        }
       }
+    } catch {
+      /* the next tick tries again */
     }
     ctx.win.setTimeout(tick, 10_000);
   };
