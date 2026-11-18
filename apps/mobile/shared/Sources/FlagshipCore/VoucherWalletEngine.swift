@@ -58,6 +58,9 @@ public final class VoucherWalletEngine {
     private var relayRetryKey: String { "flagship.payments.relayRetryAt.\(u)" }
     private var relayReasonKey: String { "flagship.payments.relayReason.\(u)" }
     private var lastDirectKey: String { "flagship.payments.lastDirect.\(u)" }
+    private var unsyncedKey: String { "flagship.payments.unsynced.\(u)" }
+    /// The voucher keys `.com` served last (public data), so a voucher link is checked with no network call.
+    static let knownKeysKey = "flagship.payments.voucherKeys"
 
     var nextSpendAt: Int64 {
         get { Int64(defaults.double(forKey: nextKey)) }
@@ -101,7 +104,9 @@ public final class VoucherWalletEngine {
         guard !u.isEmpty else { return }
         lastError = nil
         do {
-            info = try await client.paymentsInfo()
+            let fresh = try await client.paymentsInfo()
+            info = fresh
+            rememberKeys(fresh.keys.map(\.key))
             planState = try await client.plan(username: u)
             allowance = try? await client.allowance(username: u)
         } catch let e as PaymentsComError {
@@ -110,6 +115,8 @@ public final class VoucherWalletEngine {
             lastError = "network"
         }
         await loadWallet()
+        // Vouchers a link added while offline were kept only here: send them now.
+        if defaults.bool(forKey: unsyncedKey), let w = wallet, canSpend, await save(w) { defaults.removeObject(forKey: unsyncedKey) }
     }
 
     private func loadWallet() async {
@@ -140,7 +147,7 @@ public final class VoucherWalletEngine {
 
     /// Forget this device's copy (sign-out, wipe).
     public func forgetLocal() {
-        for k in [localKey, nextKey, relayFailuresKey, relayRetryKey, relayReasonKey, lastDirectKey] { defaults.removeObject(forKey: k) }
+        for k in [localKey, nextKey, relayFailuresKey, relayRetryKey, relayReasonKey, lastDirectKey, unsyncedKey] { defaults.removeObject(forKey: k) }
         wallet = nil
     }
 
@@ -303,6 +310,47 @@ public final class VoucherWalletEngine {
         if wallet == nil { await loadWallet() }
         guard let w = wallet else { return false }
         return await save(VoucherWalletSync.add(w, vouchers))
+    }
+
+    // MARK: vouchers from a link (docs/anonymous-vouchers.md "Voucher links")
+
+    /// The keys a voucher link is checked against: the ones served now and every one remembered from earlier answers.
+    public var knownVoucherKeys: [VoucherPublicKey] {
+        var out = info?.keys.map(\.key) ?? []
+        if let text = defaults.string(forKey: Self.knownKeysKey), let data = text.data(using: .utf8),
+           let saved = try? JSONDecoder().decode([VoucherPublicKey].self, from: data) {
+            for k in saved where Vouchers.isUsableKey(k) && !out.contains(where: { $0.keyId == k.keyId }) { out.append(k) }
+        }
+        return out
+    }
+
+    func rememberKeys(_ keys: [VoucherPublicKey]) {
+        var all = keys.filter(Vouchers.isUsableKey)
+        for k in knownVoucherKeys where !all.contains(where: { $0.keyId == k.keyId }) { all.append(k) }
+        if let data = try? JSONEncoder().encode(Array(all.prefix(16))) { defaults.set(String(decoding: data, as: UTF8.self), forKey: Self.knownKeysKey) }
+    }
+
+    /// What a voucher link would add, from this device alone (the wallet copy kept here, the keys remembered here).
+    /// Nil when this device can't hold the wallet (not an admin device, or the account key isn't at hand).
+    public func planLinkImport(_ vouchers: [Voucher]) -> VoucherLink.ImportPlan? {
+        guard canSpend, let umk = context.umk() else { return nil }
+        let w = wallet ?? localCopy(key: VoucherWalletSync.deriveKey(umk: umk)) ?? .empty(overageCapUnits: config.overage.defaultCapUnits)
+        return VoucherLink.planImport(wallet: w, vouchers: vouchers, keys: knownVoucherKeys)
+    }
+
+    /// Adds a link's planned vouchers. The sealed copy on this device is written first, so this works offline; the
+    /// synced copy follows now if `.com` answers, else at the next refresh. A spend still goes later, through the trickle.
+    @discardableResult
+    public func addFromLink(_ plan: VoucherLink.ImportPlan) async -> Bool {
+        guard canSpend, plan.outcome == .add, !plan.add.isEmpty, let umk = context.umk() else { return false }
+        let key = VoucherWalletSync.deriveKey(umk: umk)
+        let base = wallet ?? localCopy(key: key) ?? .empty(overageCapUnits: config.overage.defaultCapUnits)
+        let next = VoucherWalletSync.add(base, plan.add)
+        wallet = next
+        storeLocal(next, key: key)
+        defaults.set(true, forKey: unsyncedKey)
+        if await save(next) { defaults.removeObject(forKey: unsyncedKey) }
+        return true
     }
 
     // MARK: the gym's free test vouchers

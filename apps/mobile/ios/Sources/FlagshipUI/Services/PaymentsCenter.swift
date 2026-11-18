@@ -157,6 +157,23 @@ public final class PaymentsCenter {
     @discardableResult
     public func addTestVouchers() async -> Bool { await run { await $0.addTestVouchers(30) } }
 
+    // MARK: vouchers from a link (docs/anonymous-vouchers.md "Voucher links")
+
+    /// What an opened voucher link would do, decided on this device with no network call: the wallet copy and the
+    /// voucher keys kept here. Nothing is added until `addVoucherLink`.
+    /// True once an account is configured (the app does it right after an unlock).
+    public var isConfigured: Bool { engine != nil }
+
+    public func reviewVoucherLink(_ link: String) -> VoucherLink.Decision {
+        let e = fresh()
+        return VoucherLink.decide(link: link, signedIn: e != nil) { e?.planLinkImport($0) }
+    }
+
+    /// Adds what `reviewVoucherLink` planned. Works offline: the sealed copy on this phone is written first and synced
+    /// when `.com` answers. The vouchers are spent later by the trickle, like any other.
+    @discardableResult
+    public func addVoucherLink(_ plan: VoucherLink.ImportPlan) async -> Bool { await run { await $0.addFromLink(plan) } }
+
     /// Sign-out / wipe: nothing of the wallet stays on this device.
     public func forget() {
         engine?.forgetLocal()
