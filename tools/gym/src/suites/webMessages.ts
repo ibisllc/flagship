@@ -50,6 +50,40 @@ export const WEB_MESSAGES: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-messages-search-engines-switch",
+    "Page options on an admin device: no Show in search engines row before the page is public; once public it is off (the first index has no showInSearch and lists one share card, a 1200×630 JPEG with no metadata); turning it on publishes seq 2 with showInSearch 1 and the same share card, turning it off publishes seq 3 without the field. A device without the admin root sees the switch disabled with Only an admin device can change this.",
+    "gym messages Show in search engines publishes showInSearch and keeps the share card",
+    {
+      steps: [
+        { kind: "launch", describe: "Social tab, Profile, with no page published; make it public." },
+        { kind: "tap", describe: "Page options → Show in search engines (on, then off).", handle: "[data-testid=page-search]" },
+      ],
+      assertions: [
+        { describe: "The switch", handle: "[data-testid=page-search]", expect: "enabled" },
+        { describe: "The note", handle: "[data-testid=page-search-note]", expect: "text", text: "When this is off, search engines are asked not to list your page. Anyone with the link can still open it." },
+      ],
+      screenshots: [shot("page-options-search-on", "Page options with Show in search engines on.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-messages-search-engines-admin-only",
+    "Page options on a device without the admin root, for a page another device published with showInSearch 1: Show in search engines reads on and is disabled, with Only an admin device can change this under it.",
+    "gym messages a device without the admin root sees the search switch disabled",
+    {
+      steps: [
+        { kind: "launch", describe: "Social tab on a member device; the page is public and shown in search engines." },
+        { kind: "tap", describe: "Page options.", handle: "#page-options" },
+      ],
+      assertions: [
+        { describe: "Disabled", handle: "[data-testid=page-search]", expect: "disabled" },
+        { describe: "Why", handle: "[data-testid=page-search-admin-only]", expect: "text", text: "Only an admin device can change this" },
+      ],
+      screenshots: [shot("page-options-search-member", "Page options on a member device: the search switch disabled.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
     "web-messages-first-publish-warning-follows-accepts",
     "The Social tab's Profile: Accept messages turned off in Page options before the first publish; the one-time public warning then names only what really starts on (calls, not messages), and the published index carries acceptsMessages 0 and acceptsCalls 1.",
     "gym messages the first publish's warning follows Accept messages",

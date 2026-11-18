@@ -362,9 +362,82 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
       return [P.isVoiciJpeg(b), P.voiciJpegHasMetadata(b)];
     }, jpeg.toString("hex"));
     expect(checks).toEqual([true, false]);
+    // The share card (docs/voici-and-messages.md §2.10): one "share" piece, a 1200×630 JPEG within 256 KiB, no metadata.
+    const shares = com.index.pieces.filter((p: any) => p.role === "share");
+    expect(shares).toHaveLength(1);
+    const card = com.pieces.get(shares[0].sha256)!;
+    expect(card.length).toBeLessThanOrEqual(256 * 1024);
+    const cardChecks = await page.evaluate(async (hex) => {
+      const P = await import("/lib/voiciProtocol.js");
+      const b = P.hexToBytes(hex);
+      const bmp = await createImageBitmap(new Blob([b], { type: "image/jpeg" }));
+      return [P.isVoiciJpeg(b), P.voiciJpegHasMetadata(b), bmp.width, bmp.height];
+    }, card.toString("hex"));
+    expect(cardChecks).toEqual([true, false, 1200, 630]);
+    // Hidden from search engines until the owner says otherwise.
+    expect("showInSearch" in com.index).toBe(false);
     const profile = JSON.parse(com.pieces.get(com.index.pieces.find((p: any) => p.role === "profile").sha256)!.toString("utf8"));
     expect(profile).toMatchObject({ displayName: "Smoke Test", bio: "Builds things.", links: [{ url: "https://github.com/smoketest", label: "Code", site: "github" }] });
     await shot(page, testInfo, "page-editor-published");
+  });
+
+  test("gym messages Show in search engines publishes showInSearch and keeps the share card", async ({ page }, testInfo) => {
+    const { m, com } = await messagesWorld(page);
+    m.get(path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
+    await openSocial(page, "profile");
+    // Not public yet: no switch.
+    await page.click("#page-options");
+    await expect(page.locator("[data-testid=page-search]")).toHaveCount(0);
+    await page.click("[data-sheet-done]");
+    await page.click("#page-public-switch");
+    await page.click("[data-modal-ok]");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Public");
+    expect(com.index.seq).toBe(1);
+    const card = com.index.pieces.find((p: any) => p.role === "share");
+    expect(card).toBeTruthy();
+
+    await page.click("#page-options");
+    await expect(page.locator("[data-testid=page-search]")).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("[data-testid=page-search-note]")).toHaveText(
+      "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.",
+    );
+    const mark = await toastMark(page);
+    await page.click("[data-testid=page-search]");
+    await sawToast(page, "Saved.", 15_000, mark);
+    await expect.poll(() => com.index.seq).toBe(2);
+    expect(com.index.showInSearch).toBe(1);
+    // Nothing on the card changed, so the same card is listed again.
+    expect(com.index.pieces.find((p: any) => p.role === "share")).toEqual(card);
+    await expect(page.locator("[data-testid=page-search]")).toHaveAttribute("aria-checked", "true");
+    await shot(page, testInfo, "page-options-search-on");
+    const ok = await page.evaluate(async (idx) => {
+      const P = await import("/lib/voiciProtocol.js");
+      return P.voiciPageShowsInSearch(P.parseVoiciPageIndex(idx));
+    }, com.index);
+    expect(ok).toBe(true);
+
+    await page.click("[data-testid=page-search]");
+    await expect.poll(() => com.index.seq).toBe(3);
+    expect("showInSearch" in com.index).toBe(false);
+    await expect(page.locator("[data-testid=page-search]")).toHaveAttribute("aria-checked", "false");
+  });
+
+  test("gym messages a device without the admin root sees the search switch disabled", async ({ page }, testInfo) => {
+    const { m, com } = await messagesWorld(page, "non-admin");
+    m.first("GET", path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
+    com.index = null;
+    await openSocial(page, "profile");
+    await page.evaluate(async () => {
+      const W = await import("/lib/voiciWorld.js");
+      // A published page another (admin) device made public, shown in search engines.
+      W.world.page = { index: { pageId: "ab".repeat(16), seq: 4, showInSearch: 1, pieces: [] }, profile: { displayName: "Smoke", theme: "classic", links: [], bio: "", avatar: null }, acceptsMessages: 1, chunks: [], pieces: new Map() };
+    });
+    await page.click("#page-options");
+    await expect(page.locator("[data-testid=page-search]")).toBeDisabled();
+    await expect(page.locator("[data-testid=page-search]")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("[data-testid=page-search-admin-only]")).toHaveText("Only an admin device can change this");
+    await shot(page, testInfo, "page-options-search-member");
   });
 
   test("gym messages the first publish's warning follows Accept messages", async ({ page }) => {
