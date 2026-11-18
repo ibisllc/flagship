@@ -166,3 +166,68 @@ final class StoreCaptureTests: XCTestCase {
         try shot(app, "06")
     }
 }
+
+/// App Store in-app purchase review screenshots (docs/runbooks/0.4-browser-tasks.md B3): Settings → Plan with the
+/// three voucher packs on sale, one image per product with its row outlined, light mode, written as
+/// `vouchers-<units>.png` (1320×2868 on an iPhone 6.9" simulator, opaque). Opt-in: skipped unless `IAP_OUT` is set
+/// (`TEST_RUNNER_IAP_OUT=/abs/dir xcodebuild test ... -only-testing:FlagshipAppUITests/IapReviewCaptureTests`).
+/// `-smoke-iap-review` turns off the gym's test credit, so only what a buyer sees is on screen.
+final class IapReviewCaptureTests: XCTestCase {
+    func test_planPacks() throws {
+        continueAfterFailure = false
+        guard let dir = ProcessInfo.processInfo.environment["IAP_OUT"], !dir.isEmpty else {
+            throw XCTSkip("Set TEST_RUNNER_IAP_OUT to capture the in-app purchase review screenshots.")
+        }
+        let out = URL(fileURLWithPath: dir, isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        XCUIDevice.shared.appearance = .light
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-smoke-mode", "-smoke-tab", "settings",
+                               "-smoke-admin-root", "-smoke-recovery-enrolled", "-smoke-username", "bright-maple",
+                               "-smoke-theme", "light", "-smoke-iap-review"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 30))
+        let entry = app.buttons["settings-open-plan"]
+        for _ in 0..<10 where !(entry.exists && entry.isHittable) { app.swipeUp(velocity: .slow) }
+        XCTAssertTrue(entry.waitForExistence(timeout: 10), "Settings should offer the plan screen.")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["Plan"].waitForExistence(timeout: 15))
+        let packs = [10, 30, 120].map { app.buttons["plan-pack-\($0)"] }
+        XCTAssertTrue(app.descendants(matching: .any)["plan-balance"].waitForExistence(timeout: 20), "Plan should load.")
+        let last = packs[2]
+        let tabBar = app.tabBars.firstMatch
+        for _ in 0..<16 {
+            let bottom = tabBar.exists ? tabBar.frame.minY : app.windows.firstMatch.frame.maxY
+            if last.exists && last.isHittable && last.frame.maxY < bottom - 120 { break }
+            app.swipeUp(velocity: .slow)
+        }
+        if !packs.allSatisfy({ $0.exists }) {
+            let a = XCTAttachment(string: app.debugDescription)
+            a.name = "Plan without packs"
+            a.lifetime = .keepAlways
+            add(a)
+        }
+        XCTAssertTrue(packs.allSatisfy { $0.exists }, "The App Store packs are on sale.")
+        XCTAssertFalse(app.buttons["plan-add-test"].exists, "No gym test credit in a review screenshot.")
+        sleep(2)
+        let shot = XCUIScreen.main.screenshot().image
+        for (units, pack) in zip([10, 30, 120], packs) {
+            XCTAssertTrue(pack.label.contains("$\(units)"), "Got: \(pack.label)")
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = shot.scale
+            format.opaque = true
+            let r = pack.frame.insetBy(dx: 6, dy: 2)
+            let png = UIGraphicsImageRenderer(size: shot.size, format: format).pngData { _ in
+                shot.draw(at: .zero)
+                let path = UIBezierPath(roundedRect: r, cornerRadius: 12)
+                path.lineWidth = 4
+                UIColor.systemRed.setStroke()
+                path.stroke()
+            }
+            try png.write(to: out.appendingPathComponent("vouchers-\(units).png"))
+        }
+        let plain = UIGraphicsImageRenderer(size: shot.size, format: { let f = UIGraphicsImageRendererFormat(); f.scale = shot.scale; f.opaque = true; return f }())
+            .pngData { _ in shot.draw(at: .zero) }
+        try plain.write(to: out.appendingPathComponent("plan-packs.png"))
+    }
+}

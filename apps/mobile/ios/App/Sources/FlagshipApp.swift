@@ -831,7 +831,11 @@ struct FlagshipApp: App {
     }
     private var activePayments: any PaymentsComClient {
         #if DEBUG
-        if GymLaunch.usesMocks { return mockPayments }
+        if GymLaunch.usesMocks {
+            // App Store review screenshots (IapReviewCaptureTests): only what a buyer sees, no gym test credit.
+            if ProcessInfo.processInfo.arguments.contains("-smoke-iap-review") { mockPayments.testIssueOn = false }
+            return mockPayments
+        }
         #endif
         return livePayments
     }
