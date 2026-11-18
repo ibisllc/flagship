@@ -1547,3 +1547,5 @@ Three agents started:
 - Merged `0.4/callspec`: the stall was the test, not the product (it ran without its fake-microphone config after the "no microphone" message landed). The spec now brings its own fake devices; voici-calls passes 3/3 and the voi.ci gym 72/72.
 - Owner approved every UI card except the iOS publish bar (card 11, third part): reverted (the pill stays). The iOS app builds.
 - Final rebase: release/0.4 now sits on top of main (eb43ae84c), 789 commits, linear; the tree is byte-identical to the tested tip. A fast-forward of main is possible when deploying.
+- Owner decisions (2026-11-17 night): apply phone copy set (a) [agent 0.4/phone-copy]; voi.ci pages noindex by default with a switch, and calls ON in 0.4 [agent 0.4/voici-decisions]; "Load into Flagship" voucher link (vouchers only in the URL fragment, no username) on all three apps in 0.4, B6/C review notes to be rewritten [agent 0.4/voucher-link]. The browser agent is running the owner's brief (A, B1-B5, C1-C4, D, E, F1); B6/C5 wait for the builds.
+- Resume point: merge the three agents, then deploy prep.
