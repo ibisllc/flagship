@@ -800,6 +800,11 @@
       "check": "signed-tags",
       "key": "android:flagship/voucher-batch/v1",
       "reason": "A company's invoiced voucher batch is bought and finished on the web only (docs/plans-and-backup-offer.md \"As built\"; App Store 3.1.1 and Play's payments policy keep the web shop out of the phone apps); the phones never derive batch requests."
+    },
+    {
+      "check": "deep-links",
+      "key": "android-lacks-host:vouchers",
+      "reason": "Android routes https://<control host>/app/vouchers by its path in DeepLink.parse (VoucherLink.PATH) before the app-route table the checker reads, so the vouchers stay in the fragment and never go through appRouteTwin. Covered by VoucherLinkDeepLinkTest and GymVoucherLinkTest."
     }
   ]
 }
