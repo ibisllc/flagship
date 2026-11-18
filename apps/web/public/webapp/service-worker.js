@@ -545,7 +545,8 @@
 //  v234: Business for orgs: the org's Plan in Settings → Organizations (seats, price, trial, the org wallet sealed
 //       under the org key ring's `wallet` key, the org trickle, an invoiced batch, voucher files in and out) and voucher
 //       files into the personal Plan (lib/orgPlan.js, views/orgPlan.js; docs/plans-and-backup-offer.md "As built").
-const SHELL_VERSION = "v234";
+//  v235: the UI pass (empty Inbox, direct names, Calls rows, Activity icons, disabled buttons, toast, title spacing).
+const SHELL_VERSION = "v235";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
