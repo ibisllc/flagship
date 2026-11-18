@@ -1596,3 +1596,4 @@ Open owner items:
   (c) scripts/check-versions.test.ts: 6 tests still expect 0.3 (version.json says 0.4);
   (d) scripts/ios-release-clean.test.ts: GymCallStagePreview.swift:8 names GymSweepSeams/"-smoke-" in a Release-compiled file (wrap it in #if DEBUG).
 - Resume point: ring-names (agent running; worktree ~/flagship-0.4-ring-names, shell v238 if the webapp changes), then fix (a)-(d), then the deploy.
+- Browser tasks done by the owner's browser Claude; results are kept at docs/runbooks/results/0.4-browser-tasks-results-2026-11-17.md (no secrets). Agent `0.4/browser-followups` (worktree ~/flagship-0.4-browser-followups) is acting on its "What the code / repo needs to act on" list and fixing the runbook drift. Do NOT do the "Left for the owner" items. Play C2 (products) is blocked until a 0.4 bundle with BILLING (versionCode 12) is on a testing track: a deploy step.
