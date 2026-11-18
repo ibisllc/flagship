@@ -4,10 +4,11 @@
  *   handleVoiciCallChallenge  GET  /api/voici/pages/<u>/call-challenge: a proof-of-work challenge for an anonymous call
  *                             (pages in "anyone" mode only)
  *   checkAnonymousCall        the anonymous branch of POST /api/voici/calls (handleVoiciCallRequest calls it)
- *   handleVoiciRingBack       POST /api/voici/web/ring-back[?u=<caller's account>]: the caller attaches or stops the
- *                             conversation's ring-back channel; from the caller's app (device headers) it names the
- *                             account whose devices the ring push reaches
- *   handleVoiciRing           POST /api/voici/pages/<u>/ring: the owner rings a caller back: a content-free push to
+ *   handleVoiciRingBack       POST /api/voici/web/ring-back: the caller attaches or stops the conversation's ring-back
+ *                             channel; from the caller's app, the device headers' account (found by the route from the
+ *                             signing device, never the URL) is the one whose devices the ring push reaches
+ *   handleVoiciRing           POST /api/voici/rings/<ringId> (older apps: /pages/<u>/ring; the route finds the account
+ *                             from the page the ring names): the owner rings a caller back: a content-free push to
  *                             the caller's devices (today's push path), and the caller's open tab or app sees the ring
  *                             in its thread fetch
  *

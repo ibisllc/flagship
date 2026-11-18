@@ -163,3 +163,121 @@ describe("privacy §2.12: a removed page's call data goes with it", () => {
     }
   });
 });
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const CM: any = JSON.parse(readFileSync(join(import.meta.dirname, "../../../packages/protocol/test-vectors/voici-call-modes/vectors.json"), "utf8"));
+
+/** Device headers for a POST, as the phones sign them: the device's own account is in the signed bytes, not the URL. */
+function postHeaders(device: Keypair, path: string, account = "alice", requestId = "0f".repeat(16)): Record<string, string> {
+  const request = { accountId: account, deviceId: DEVICE_ID, signerPubHex: hex(device.publicKey), method: "POST", path, requestId, issuedAt: CM.now };
+  return {
+    "content-type": "application/json",
+    "x-flagship-device-id": DEVICE_ID,
+    "x-flagship-device-pub": request.signerPubHex,
+    "x-flagship-request-id": requestId,
+    "x-flagship-issued-at": String(CM.now),
+    "x-flagship-signature": signAccountDirectoryRequest(request, device),
+  };
+}
+
+describe("privacy §2.12: the call-back addresses name no account", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(CM.now);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const ringBody = () => JSON.stringify({ ring: CM.ring.order, signature: CM.ring.signature });
+  const RING_ID: string = CM.ring.order.ringId;
+  const CM_CONV: string = CM.ring.order.conv;
+  async function callbackWorld() {
+    const w = await world();
+    await w.seed.voici.publishPage(
+      { username: "alice", pageId: K.pageId, seq: 9, issuedAt: CM.now, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: K.ownerSignPub, indexJson: JSON.stringify({ ...V.pageV2.signed, callsFrom: "callback" }), publishedAt: CM.now },
+      8,
+    );
+    return w;
+  }
+
+  it("the owner's ring goes to /api/voici/rings/<ringId>: `.com` finds the page from the signed ring", async () => {
+    const w = await callbackWorld();
+    try {
+      await w.seed.voiciCalls.putRingBack({ pageId: K.pageId, conv: CM_CONV, username: null, issuedAt: CM.now, expiresAt: CM.now + 86_400_000 });
+      const r = await w.call(`https://flagshipserver.com/api/voici/rings/${RING_ID}`, { method: "POST", headers: { "content-type": "application/json" }, body: ringBody() });
+      expect(r.status).toBe(200);
+      expect(((await r.json()) as { ringId: string }).ringId).toBe(RING_ID);
+      expect((await w.seed.voiciCalls.getRing(K.pageId, CM_CONV, CM.now))?.ringId).toBe(RING_ID);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("refuses a ring whose address names another ring, and a ring for no page", async () => {
+    const w = await callbackWorld();
+    try {
+      await w.seed.voiciCalls.putRingBack({ pageId: K.pageId, conv: CM_CONV, username: null, issuedAt: CM.now, expiresAt: CM.now + 86_400_000 });
+      const other = await w.call(`https://flagshipserver.com/api/voici/rings/${"ee".repeat(16)}`, { method: "POST", headers: { "content-type": "application/json" }, body: ringBody() });
+      expect(other.status).toBe(400);
+      const noPage = await w.call(`https://flagshipserver.com/api/voici/rings/${RING_ID}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ring: { ...CM.ring.order, pageId: "00".repeat(16) }, signature: CM.ring.signature }),
+      });
+      expect(noPage.status).toBe(404);
+      expect(await w.seed.voiciCalls.getRing(K.pageId, CM_CONV, CM.now)).toBeNull();
+    } finally {
+      w.close();
+    }
+  });
+
+  it("an older app's /pages/<u>/ring still works", async () => {
+    const w = await callbackWorld();
+    try {
+      await w.seed.voiciCalls.putRingBack({ pageId: K.pageId, conv: CM_CONV, username: null, issuedAt: CM.now, expiresAt: CM.now + 86_400_000 });
+      const r = await w.call("https://flagshipserver.com/api/voici/pages/alice/ring", { method: "POST", headers: { "content-type": "application/json" }, body: ringBody() });
+      expect(r.status).toBe(200);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("the caller app's ring-back order names no account: `.com` takes it from the signing device", async () => {
+    const w = await callbackWorld();
+    try {
+      const path = "/api/voici/web/ring-back";
+      const r = await w.call(`https://flagshipserver.com${path}`, { method: "POST", headers: postHeaders(w.device, path), body: JSON.stringify(CM.ringBack.app) });
+      expect(r.status).toBe(200);
+      expect((await w.seed.voiciCalls.getRingBack(K.pageId, CM_CONV, CM.now))?.username).toBe("alice");
+    } finally {
+      w.close();
+    }
+  });
+
+  it("refuses device headers that don't verify for the device's account, and a device with no account", async () => {
+    const w = await callbackWorld();
+    try {
+      const path = "/api/voici/web/ring-back";
+      const forged = await w.call(`https://flagshipserver.com${path}`, { method: "POST", headers: postHeaders(w.device, path, "bob"), body: JSON.stringify(CM.ringBack.app) });
+      expect(forged.status).toBe(403);
+      const stranger = await w.call(`https://flagshipserver.com${path}`, { method: "POST", headers: postHeaders(key(), path), body: JSON.stringify(CM.ringBack.app) });
+      expect(stranger.status).toBe(403);
+      expect(await w.seed.voiciCalls.getRingBack(K.pageId, CM_CONV, CM.now)).toBeNull();
+    } finally {
+      w.close();
+    }
+  });
+
+  it("an older app's ?u= still works, and a browser's order still names no account", async () => {
+    const w = await callbackWorld();
+    try {
+      const path = "/api/voici/web/ring-back";
+      const legacy = await w.call(`https://flagshipserver.com${path}?u=alice`, { method: "POST", headers: postHeaders(w.device, path), body: JSON.stringify(CM.ringBack.app) });
+      expect(legacy.status).toBe(200);
+      expect((await w.seed.voiciCalls.getRingBack(K.pageId, CM_CONV, CM.now))?.username).toBe("alice");
+      const browser = await w.call(`https://flagshipserver.com${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(CM.ringBack.stop) });
+      expect(browser.status).toBe(200);
+    } finally {
+      w.close();
+    }
+  });
+});

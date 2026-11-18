@@ -122,9 +122,9 @@ interface VoiciClient {
     suspend fun revokeCallKey(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
     /** `POST /api/voici/calls` {request}: this app calls a page as its visitor ("Calling from the app"). */
     suspend fun placeCall(request: JsonObject): VoiciCallPlaced = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
-    /** `POST /api/voici/pages/<u>/ring` {ring, signature}: ring a caller back through the conversation's channel. */
+    /** `POST /api/voici/rings/<ringId>` {ring, signature}: ring a caller back through the conversation's channel. */
     suspend fun ring(username: String, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
-    /** `POST /api/voici/web/ring-back?u=<u>` (device headers): this account's pseudonym attaches or stops a channel. */
+    /** `POST /api/voici/web/ring-back` (device headers): this account's pseudonym attaches or stops a channel. */
     suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject): Unit = throw VoiciHttpError(0, "unsupported", JsonObject(emptyMap()))
     /** `GET /api/accounts/<u>/voici-call-settings` (read token): the owner's sealed call hours, or null. */
     suspend fun callSettings(username: String): JsonObject? = null
@@ -279,8 +279,9 @@ class LiveVoiciClient(
     }
 
     override suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject) {
-        val path = "/api/voici/web/ring-back"
-        postJson("${base()}$path?u=${enc(username)}", body, deviceHeaders(username, device, "POST", path))
+        // No ?u=: `.com` finds the account from the signing device (privacy policy §2.12).
+        val path = VoiciCallPaths.RING_BACK
+        postJson(base() + path, body, deviceHeaders(username, device, "POST", path))
     }
 
     override suspend fun callSettings(username: String): JsonObject? = call {
@@ -306,7 +307,8 @@ class LiveVoiciClient(
     }
 
     override suspend fun ring(username: String, body: JsonObject) {
-        postJson("${base()}/api/voici/pages/${enc(username)}/ring", body)
+        val path = VoiciCallPaths.ring(body) ?: throw VoiciHttpError(0, "malformed", JsonObject(emptyMap()))
+        postJson(base() + path, body)
     }
 
     override suspend fun send(envelope: JsonObject, direct: Boolean) {
@@ -410,5 +412,21 @@ class LiveVoiciClient(
         }
 
         private val CURSOR = Regex("^[A-Za-z0-9_-]{0,64}$")
+    }
+}
+
+/**
+ * The call-back request addresses (privacy policy §2.12): neither names an account. The owner's ring names only its
+ * ring id (`.com` takes the account from the page the signed ring names); the caller's ring-back order carries the
+ * page and conversation in its body, and `.com` takes the account from the device that signed the headers.
+ */
+object VoiciCallPaths {
+    const val RING_BACK = "/api/voici/web/ring-back"
+    private val RING_ID = Regex("^[0-9a-f]{32}$")
+
+    /** `/api/voici/rings/<ringId>` for a `{ring, signature}` body, or null when the ring id is malformed. */
+    fun ring(body: JsonObject): String? {
+        val ringId = ((body["ring"] as? JsonObject)?.get("ringId") as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+        return if (RING_ID.matches(ringId)) "/api/voici/rings/$ringId" else null
     }
 }

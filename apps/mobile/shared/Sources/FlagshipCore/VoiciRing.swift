@@ -59,7 +59,7 @@ public enum VoiciRings {
         return CanonicalJson.join([tagRing, pageId, conv, ringId, CanonicalJson.sha256Hex(CanonicalJson.b64Decode(hint) ?? []), media, String(issuedAt)])
     }
 
-    /// The owner's ring `{ring, signature}` for `POST /api/voici/pages/<u>/ring`.
+    /// The owner's ring `{ring, signature}` for `POST /api/voici/rings/<ringId>`.
     public static func signedRing(pageId: String, conv: String, ringId: String, hint: String, media: String, issuedAt: Int64,
                                   ownerSignSeed: [UInt8]) throws -> (ring: JSONValue, signature: String) {
         let sig = try CanonicalJson.ed25519SignHex(try canonicalRing(pageId: pageId, conv: conv, ringId: ringId, hint: hint, media: media, issuedAt: issuedAt),
@@ -87,7 +87,7 @@ public enum VoiciRings {
     }
 
     /// The visitor's app attaches (or stops) the conversation's ring-back channel, signed by its pseudonym P:
-    /// `{order, signer:"pseudonym", from, sig}` for `POST /api/voici/web/ring-back?u=<account>` with device headers.
+    /// `{order, signer:"pseudonym", from, sig}` for `POST /api/voici/web/ring-back` with device headers.
     public static func signedRingBack(pageId: String, conv: String, op: String, issuedAt: Int64, pseudonymSeed: [UInt8]) throws -> JSONValue {
         let from = CanonicalJson.hex(try CanonicalJson.ed25519PublicKey(seed: pseudonymSeed))
         let sig = try CanonicalJson.ed25519SignHex(try canonicalRingBack(pageId: pageId, conv: conv, op: op, issuedAt: issuedAt), seed: pseudonymSeed)

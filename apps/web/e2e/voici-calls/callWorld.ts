@@ -38,7 +38,7 @@ export interface CallWorld {
   /** The app's side of a handoff: signs a session for alice's page and delivers it once the tab listens. */
   handoffUrl(): Promise<string>;
   /** What the phone saw and did, for assertions. */
-  log: { request?: P.VoiciCallRequest; answer?: P.VoiciCallAnswer; requestRefusal?: string; roomSentToCaller: string[] };
+  log: { request?: P.VoiciCallRequest; answer?: P.VoiciCallAnswer; requestRefusal?: string; roomSentToCaller: string[]; apiAddresses: string[] };
   close(): Promise<void>;
 }
 
@@ -106,12 +106,82 @@ ws.onmessage = async (e) => {
 };
 </script>`;
 
-export async function startCallWorld(o: { callsFrom?: "signed-in" | "anyone" | "callback" } = {}): Promise<CallWorld> {
+/**
+ * The phone with the frame layer (docs/voici-calls.md §3), for the test that carries media: it answers with its own
+ * WebRTC, waits for its candidates so they ride in the signed answer, takes the caller's candidates from the room, and
+ * puts encoded streams on its sender (sealing p2c) and receiver (opening c2p) through a worker that uses the voi.ci
+ * site's own frame code. The keys come from this process, derived from the X-Wing secret of the answer it signs, as
+ * the phone's call engine derives them. #f shows the worker's counts.
+ */
+const PHONE_FRAMES_PAGE = (dir: string) => `<!doctype html><meta charset="utf-8"><title>phone</title><body><p id="s">idle</p><p id="f">{}</p><script type="module">
+const s = document.getElementById("s");
+const f = document.getElementById("f");
+const worker = new Worker("/__phone-worker.js?d=${dir}", { type: "module" });
+worker.onmessage = (e) => { if (e.data?.kind === "stats") f.textContent = JSON.stringify(e.data.counts); };
+const ws = new WebSocket("ws://" + location.host + "/__phone-ws");
+let pc = null;
+// The stand-in phone uses Chrome's createEncodedStreams: its RTCRtpScriptTransform, set after the remote offer as an
+// answerer must, never delivered the receiver's frames to the worker here.
+const attach = (target, side) => {
+  const { readable, writable } = target.createEncodedStreams();
+  worker.postMessage({ kind: "streams", side, readable, writable }, [readable, writable]);
+};
+ws.onmessage = async (e) => {
+  const m = JSON.parse(e.data);
+  if (m.t === "offer") {
+    s.textContent = "ringing";
+    pc = new RTCPeerConnection({ bundlePolicy: "max-bundle", rtcpMuxPolicy: "require", encodedInsertableStreams: true });
+    pc.onconnectionstatechange = () => { if (pc.connectionState === "connected") s.textContent = "connected"; };
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+    await pc.setRemoteDescription({ type: "offer", sdp: m.sdp });
+    for (const t of pc.getTransceivers()) {
+      if (t.receiver.track.kind !== "audio") { t.direction = "inactive"; continue; }
+      await t.sender.replaceTrack(mic.getAudioTracks()[0]);
+      t.direction = "sendrecv";
+      attach(t.sender, "send");
+      attach(t.receiver, "recv");
+    }
+    await pc.setLocalDescription(await pc.createAnswer());
+    if (pc.iceGatheringState !== "complete") await new Promise((r) => { pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === "complete") r(); }; });
+    ws.send(JSON.stringify({ t: "answer-sdp", sdp: pc.localDescription.sdp }));
+    s.textContent = "answered";
+  }
+  if (m.t === "keys") worker.postMessage({ kind: "keys", callId: m.callId, c2p: m.c2p, p2c: m.p2c });
+  if (m.t === "ice" && pc && typeof m.candidate === "string") pc.addIceCandidate({ candidate: m.candidate, sdpMid: "0" }).catch(() => {});
+  if (m.t === "won") s.textContent = s.textContent === "connected" ? "connected" : "won";
+};
+</script>`;
+
+/** The phone's frame worker: seals what it sends under p2c, opens what it receives under c2p, counts both. */
+const PHONE_WORKER = (dir: string) => `import { VoiciCallFrameReceiver, VoiciCallFrameSender, VOICI_CALL_SEALED_FRAME, hexToBytes } from "/-/${dir}/flagship-web/callProtocol.js";
+let sender = null, receiver = null;
+const counts = { sealOk: 0, openOk: 0, openFail: 0, openSize: 0, openNoKey: 0, inSizes: [] };
+setInterval(() => self.postMessage({ kind: "stats", counts }), 500);
+const t = (side) => new TransformStream({ transform(frame, c) {
+  const data = new Uint8Array(frame.data);
+  if (side === "send") { if (!sender) return; const out = sender.seal(data); counts.sealOk++; frame.data = out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength); return c.enqueue(frame); }
+  if (!counts.inSizes.includes(data.length) && counts.inSizes.length < 8) counts.inSizes.push(data.length);
+  if (!receiver) { counts.openNoKey++; return; }
+  if (data.length !== VOICI_CALL_SEALED_FRAME) { counts.openSize++; return; }
+  const opened = receiver.open(data);
+  if (!opened) { counts.openFail++; return; }
+  counts.openOk++;
+  frame.data = opened.buffer.slice(opened.byteOffset, opened.byteOffset + opened.byteLength);
+  c.enqueue(frame);
+} });
+const pipe = (r, w, side) => r.pipeThrough(t(side)).pipeTo(w).catch(() => {});
+self.onmessage = (e) => {
+  const m = e.data;
+  if (m.kind === "keys") { sender = new VoiciCallFrameSender(hexToBytes(m.p2c), m.callId, "p2c"); receiver = new VoiciCallFrameReceiver(hexToBytes(m.c2p), m.callId, "c2p"); }
+  if (m.kind === "streams") pipe(m.readable, m.writable, m.side);
+};`;
+
+export async function startCallWorld(o: { callsFrom?: "signed-in" | "anyone" | "callback"; frames?: boolean } = {}): Promise<CallWorld> {
   const powSecret = randomBytes(32);
   const build = buildSite();
   const voici = new InMemoryVoiciStorage();
   const calls = new InMemoryVoiciCallStorage();
-  const log: CallWorld["log"] = { roomSentToCaller: [] };
+  const log: CallWorld["log"] = { roomSentToCaller: [], apiAddresses: [] };
   let port = 0;
   const rooms = new Map<string, { core: VoiciCallRoomCore; caller: WebSocket | null; tokenHash: string }>();
   let phone: WebSocket | null = null;
@@ -122,6 +192,7 @@ export async function startCallWorld(o: { callsFrom?: "signed-in" | "anyone" | "
     const origin = `http://127.0.0.1:${port}`;
     const url = new URL(req.url ?? "/", origin);
     const p = url.pathname;
+    if (p.startsWith("/api/")) log.apiAddresses.push(`${req.method} ${req.url}`);
     const devConfig = { origin: ORIGIN, host: "voi.ci", apex: `127.0.0.1:${port}`, services: "flagship.services", files: `${origin}/files`, apiBase: origin, secure: false };
     const csp = `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; worker-src 'self'; connect-src 'self' ws://127.0.0.1:${port}; frame-ancestors 'none'; base-uri 'none'`;
     const headers = { "content-security-policy": csp, "cache-control": "no-store", "permissions-policy": "microphone=(self), camera=(self)" };
@@ -190,8 +261,12 @@ export async function startCallWorld(o: { callsFrom?: "signed-in" | "anyone" | "
       return json(out.status, out.body);
     }
     if (p === "/__phone") {
-      res.writeHead(200, { "content-type": "text/html", "content-security-policy": `default-src 'none'; script-src 'unsafe-inline'; connect-src ws://127.0.0.1:${port}` });
-      return res.end(PHONE_PAGE);
+      res.writeHead(200, { "content-type": "text/html", "content-security-policy": `default-src 'none'; script-src 'self' 'unsafe-inline'; worker-src 'self'; connect-src 'self' ws://127.0.0.1:${port}` });
+      return res.end(o.frames ? PHONE_FRAMES_PAGE(build.dir) : PHONE_PAGE);
+    }
+    if (p === "/__phone-worker.js") {
+      res.writeHead(200, { "content-type": "text/javascript", "cache-control": "no-store" });
+      return res.end(PHONE_WORKER(build.dir));
     }
     if (p === "/" || p === "/favicon.ico") return json(404, { error: "not found" });
     const meta = JSON.stringify(devConfig).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
@@ -215,6 +290,7 @@ export async function startCallWorld(o: { callsFrom?: "signed-in" | "anyone" | "
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://x");
+    if (url.pathname.startsWith("/api/")) log.apiAddresses.push(`WS ${url.pathname}`);
     wss.handleUpgrade(req, socket, head, (ws) => {
       let m: RegExpExecArray | null;
       if (url.pathname === "/__phone-ws") {
@@ -234,6 +310,13 @@ export async function startCallWorld(o: { callsFrom?: "signed-in" | "anyone" | "
           log.answer = answer;
           perform(callId, room.core.joined({ role: "device", deviceRef }));
           perform(callId, room.core.message({ role: "device", deviceRef }, { t: "answer", answer }, Date.now()));
+          if (o.frames) {
+            // The phone's frame keys from the X-Wing secret this answer carries, bound to both signed messages.
+            const anon = (req2 as unknown as { kind: string }).kind === "voici-call-request-anon";
+            const rb = anon ? P.canonicalVoiciCallRequestAnon(req2 as unknown as P.VoiciCallRequestAnon) : P.canonicalVoiciCallRequest(req2);
+            const k = P.deriveVoiciCallFrameKeys(encap.sharedSecret, rb, P.canonicalVoiciCallAnswer(answer));
+            phone?.send(JSON.stringify({ t: "keys", callId, c2p: H(k.c2p), p2c: H(k.p2c) }));
+          }
         });
         return;
       }

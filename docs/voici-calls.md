@@ -684,9 +684,9 @@ Built and tested in TS, `.com`, flagship-web, voi.ci and the webapp; the native 
   second with the reason, and takes a signed-in call only once the conversation's channel is attached
   (`ring-back-required`). "Stop call-backs" in the voi.ci thread.
 - **Ring-back** (`flagship/voici-ring-back/v1` by the caller; `flagship/voici-ring/v1` by the owner with a hint sealed to
-  the caller's thread key, `flagship/voici-ring-hint/v1`): `POST /api/voici/web/ring-back` (with `?u=` and device headers
-  from the caller's app, so the ring push reaches that account's devices; a browser's order names no account) and
-  `POST /api/voici/pages/<u>/ring` (owner key). The ring goes as a content-free push on today's path (category
+  the caller's thread key, `flagship/voici-ring-hint/v1`): `POST /api/voici/web/ring-back` (with device headers from
+  the caller's app, so the ring push reaches the signing device's account; a browser's order names no account) and
+  `POST /api/voici/rings/<ringId>` (owner key; see "Call data and URLs"). The ring goes as a content-free push on today's path (category
   `voici-ring`: VoIP where registered, else the ordinary push) and shows in the caller's thread fetch (`ring`), so an
   open voi.ci tab rings and offers Answer, which dials out. Migration **0149**. The channel goes on Stop call-backs,
   an owner's block, page removal, the caller's account deletion, a conversation delete, or after 90 days.
@@ -909,8 +909,16 @@ high:
   `apps/com/test/voiciCallPrivacy.test.ts`.
 - **A removed page takes its call data with it:** the owner's removal (`removeVoiciPageObjects`) and an admin takedown
   (`takedownStep`) delete the page's missed calls, call-back channels and pending rings (`deletePageCallData`,
-  `PAGE_CALL_DATA_TABLES`). Call allows and anonymous blocks stay for a republish. Not in the URL rule: the owner's
-  `POST /api/voici/pages/<u>/ring` and the caller app's `POST /api/voici/web/ring-back?u=<u>` still name an account.
+  `PAGE_CALL_DATA_TABLES`). Call allows and anonymous blocks stay for a republish.
+- **The call-back addresses name no account either (2026-11-18):** the owner's ring is `POST /api/voici/rings/<ringId>`
+  (`.com` takes the account from the page the signed ring names; the path's id must equal `ring.ringId`), and the
+  caller app's order is `POST /api/voici/web/ring-back` with device headers and no query (`.com` takes the account
+  from the signing device's active grant, `getByDevicePub`, then checks the headers under that account). Signed bytes
+  are unchanged. Older apps' `POST /api/voici/pages/<u>/ring` and `?u=<u>` still work during the transition. The
+  `account-directory-request/v1` path rule on `.com` now admits `/api/voici/web/ring-back` (before, every app's
+  device-signed ring-back failed its signature check). Clients: webapp `postRing` (shell v238), iOS
+  `LiveVoiciComClient.ring/ringBack` (`VoiciCallPathsTests`), Android `VoiciCallPaths` (`VoiciCallPathsTest`); `.com`
+  test `apps/com/test/voiciCallPrivacy.test.ts`. Only the public page address `voi.ci/<username>` names a page.
 
 ## Owner decision 2026-11-17: calls ON in production for 0.4
 

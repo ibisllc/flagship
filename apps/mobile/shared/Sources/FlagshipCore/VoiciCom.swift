@@ -127,11 +127,12 @@ public protocol VoiciComClient: Sendable {
     /// This app placing a call to a page it knows (`POST /api/voici/calls {request}`, docs/voici-calls.md "Calling from
     /// the app"): the room WebSocket and its one-time token.
     func placeCall(request: JSONValue) async throws -> VoiciPlacedCall
-    /// The page owner rings a caller back in a conversation with a ring-back channel (`POST /api/voici/pages/<u>/ring`,
-    /// `{ring, signature}`); `no-ring-back` when the caller didn't allow call-back there.
+    /// The page owner rings a caller back in a conversation with a ring-back channel (`POST /api/voici/rings/<ringId>`,
+    /// `{ring, signature}`; the address names no account: `.com` takes it from the page the ring names);
+    /// `no-ring-back` when the caller didn't allow call-back there.
     func ring(username: String, ring: JSONValue, signature: String) async throws
-    /// This account, as a caller, attaches or stops a conversation's ring-back channel (`POST /api/voici/web/ring-back
-    /// ?u=<account>`, device headers so the ring reaches this account's devices).
+    /// This account, as a caller, attaches or stops a conversation's ring-back channel (`POST /api/voici/web/ring-back`,
+    /// device headers so the ring reaches this account's devices; `.com` takes the account from the signing device).
     func ringBack(order: JSONValue, account: String, device: VoiciDeviceSigner) async throws
     /// Delete = forget: either side's signed delete (`POST /api/voici/web/conv-delete`); `.com` drops the conversation's
     /// mailbox, ring-back channel, ring and missed calls at once.
@@ -435,7 +436,11 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
     }
 
     public func ring(username: String, ring: JSONValue, signature: String) async throws {
-        try await call(try json("POST", VoiciComPaths.page(username) + "/ring", ["ring": ring, "signature": .string(signature)]))
+        // The address names only the ring (privacy policy §2.12); an older `.com` path named the account.
+        guard let ringId = ring["ringId"]?.string, CanonicalJson.isLowerHex(ringId, bytes: 16) else {
+            throw VoiciComError(status: 0, code: "malformed")
+        }
+        try await call(try json("POST", "/api/voici/rings/\(ringId)", ["ring": ring, "signature": .string(signature)]))
     }
 
     public func deleteConversation(_ signed: JSONValue) async throws {
@@ -459,9 +464,8 @@ public final class LiveVoiciComClient: VoiciComClient, @unchecked Sendable {
     public func ringBack(order: JSONValue, account: String, device: VoiciDeviceSigner) async throws {
         let path = "/api/voici/web/ring-back"
         guard let a = await device("POST", path) else { throw VoiciComError(status: 0, code: "no-device-key") }
-        var r = try json("POST", path, order, headers: Self.deviceHeaders(a))
-        r.url = url(path, query: [URLQueryItem(name: "u", value: account.lowercased())])
-        try await call(r)
+        // No ?u=: `.com` finds the account from the signing device (privacy policy §2.12).
+        try await call(try json("POST", path, order, headers: Self.deviceHeaders(a)))
     }
 }
 

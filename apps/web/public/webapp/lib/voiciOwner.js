@@ -994,7 +994,8 @@ export async function postRing(page, cv, media = "audio", deps = {}) {
   const ringId = randHex(16);
   const hint = voiciRingHintB64(sealVoiciRingHint(hexToBytes(cv.threadPub), { pageId: page.index.pageId, username: usernameOf(c), conv: cv.conv, ringId, media, issuedAt }));
   const ring = { pageId: page.index.pageId, conv: cv.conv, ringId, hint, media, issuedAt };
-  const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(usernameOf(c))}/ring`, {
+  // The address names only the ring; `.com` finds the account from the page the signed ring names (privacy §2.12).
+  const r = await c.fetch(`${c.apex}/api/voici/rings/${ringId}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ ring, signature: signVoiciRing(ring, keys.sign.seed) }),

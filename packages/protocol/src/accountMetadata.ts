@@ -378,9 +378,10 @@ function canonicalAccountDirectoryRequest(request: AccountDirectoryRequest): Byt
   validateNoSepCtrl("method", request.method);
   validateNoSepCtrl("path", request.path);
   if (!/^[A-Z]+$/.test(request.method)) throw new Error("method must be uppercase ASCII");
-  // Account routes, and the voi.ci call routes an account device signs (the in-app call order and the room join).
-  // Each route still compares the signed path with its own, so the prefix only bounds what can be signed.
-  if (!request.path.startsWith("/api/accounts/") && !request.path.startsWith("/api/voici/calls")) {
+  // Account routes, and the voi.ci call routes an account device signs (the in-app call order, the room join, and
+  // the caller app's ring-back order, which names no account in its address). Each route still compares the signed
+  // path with its own, so the prefix only bounds what can be signed.
+  if (!request.path.startsWith("/api/accounts/") && !request.path.startsWith("/api/voici/calls") && request.path !== "/api/voici/web/ring-back") {
     throw new Error("path must be an account or call API path");
   }
   if (!HEX_32.test(request.requestId)) throw new Error("requestId must be 16-byte lowercase hex");

@@ -9,6 +9,13 @@
  *                                                  device's join signed by its bound call key: x-flagship-call-key-*).
  *                                                  The URL names only the call: the account is the live call's own
  *                                                  (privacy policy §2.12), and a `u` an older app still sends is ignored.
+ *   POST /api/voici/rings/<ringId>                 the owner rings a caller back {ring, signature}: the account is
+ *                                                  the page's (ring.pageId), never one the URL names (§2.12)
+ *   POST /api/voici/web/ring-back                  the caller attaches or stops a conversation's ring-back channel;
+ *                                                  from the caller's app the account is the one its signing device
+ *                                                  belongs to (device headers), never one the URL names
+ *   POST /api/voici/pages/<u>/ring                 older apps' form of /rings/<ringId> (same body, same checks)
+ *   POST /api/voici/web/ring-back?u=<u>            older apps' form of the app's ring-back (same headers)
  *   POST /api/voici/pages/<u>/call-allow           the owner's call-allow order
  *   GET  /api/voici/pages/<u>/calls?since=         sealed missed calls (read token)
  *   POST /api/accounts/<u>/voici-call-key          an admin device binds its call-only key (device headers)
@@ -67,13 +74,14 @@ export interface VoiciCallEnv extends RateLimitEnv {
 const CALL_PATH = /^\/api\/voici\/calls\/([0-9a-f]{32})\/(caller|device)$/;
 const PAGE_CALLS = /^\/api\/voici\/pages\/([^/]+)\/(call-allow|calls|call-challenge|ring|anon-block)$/;
 const RING_BACK = "/api/voici/web/ring-back";
+const RING = /^\/api\/voici\/rings\/([0-9a-f]{32})$/;
 const VOIP_TOKEN = /^\/api\/accounts\/([^/]+)\/voici-voip-token$/;
 const CALL_KEY = /^\/api\/accounts\/([^/]+)\/voici-call-key(\/revoke)?$/;
 
 export const voiciCallsEnabled = (env: VoiciCallEnv) => env.VOICI_ENABLED === "on" && env.VOICI_CALLS === "on" && !!env.VOICI_CALL_ROOM && !!env.DB;
 
 export function isVoiciCallPath(pathname: string): boolean {
-  return pathname === "/api/voici/calls" || pathname === RING_BACK || CALL_PATH.test(pathname) || PAGE_CALLS.test(pathname) || VOIP_TOKEN.test(pathname) || CALL_KEY.test(pathname);
+  return pathname === "/api/voici/calls" || pathname === RING_BACK || RING.test(pathname) || CALL_PATH.test(pathname) || PAGE_CALLS.test(pathname) || VOIP_TOKEN.test(pathname) || CALL_KEY.test(pathname);
 }
 
 function toResponse(r: HandlerResponseWithHeaders): Response {
@@ -146,12 +154,15 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
     } catch {
       body = undefined;
     }
-    // From the caller's app, device headers name the account whose devices the ring push reaches (?u=<username>);
-    // a browser's order names none. Said to the caller in the pop-up: Flagship knows this conversation can ring them.
-    const u = (url.searchParams.get("u") ?? "").toLowerCase();
+    // From the caller's app, device headers name the account whose devices the ring push reaches; a browser's order
+    // names none. Said to the caller in the pop-up: Flagship knows this conversation can ring them. The account is the
+    // one the signing device belongs to (its active grant); an older app also sends it as ?u=<username>.
     let account: string | null = null;
-    if (u) {
-      const dev = await authorizeActiveDevice(directory, deviceAuth(request, u, path), { accountId: u, method: "POST", path });
+    const legacyU = (url.searchParams.get("u") ?? "").toLowerCase();
+    const devicePub = (request.headers.get("x-flagship-device-pub") ?? "").toLowerCase();
+    const u = legacyU || (/^[0-9a-f]{64}$/.test(devicePub) ? ((await storage.deviceCapabilityGrants.getByDevicePub(devicePub))?.username.toLowerCase() ?? "") : "");
+    if (legacyU || request.headers.has("x-flagship-device-id")) {
+      const dev = u ? await authorizeActiveDevice(directory, deviceAuth(request, u, path), { accountId: u, method: "POST", path }) : null;
       if (!dev) return toResponse(voiciRefusal(403, "forbidden"));
       account = u;
     }
@@ -239,16 +250,26 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
     return toResponse(await handleVoiciAnonBlock({ voici: storage.voici, calls: storage.voiciCalls }, username, body));
   }
 
-  if ((m = path.match(PAGE_CALLS)) && m[2] === "ring" && method === "POST") {
-    const username = decodeURIComponent(m[1]!).toLowerCase();
-    const w = await wait(env, "voici-ring", request, username, ctx);
-    if (w !== null) return toResponse(voiciRefusal(429, "rate-limited", { retryAfterSec: w }));
+  // The owner's ring: /rings/<ringId> names only the ring, and `.com` takes the account from the page the signed ring
+  // names; /pages/<u>/ring is the older apps' form.
+  const ringPath = method === "POST" ? path.match(RING) : null;
+  const legacyRing = method === "POST" && (m = path.match(PAGE_CALLS)) && m[2] === "ring" ? decodeURIComponent(m[1]!).toLowerCase() : null;
+  if (ringPath || legacyRing !== null) {
     let body: unknown;
     try {
       body = await request.json();
     } catch {
       body = undefined;
     }
+    const b = body && typeof body === "object" ? (body as { ring?: { pageId?: unknown; ringId?: unknown } }) : {};
+    let username = legacyRing ?? "";
+    if (ringPath) {
+      if (b.ring?.ringId !== ringPath[1] || typeof b.ring?.pageId !== "string") return toResponse(voiciRefusal(400, "malformed"));
+      username = (await storage.voici.getPageById(b.ring.pageId))?.username.toLowerCase() ?? "";
+      if (!username) return toResponse(voiciRefusal(404, "not-found"));
+    }
+    const w = await wait(env, "voici-ring", request, username, ctx);
+    if (w !== null) return toResponse(voiciRefusal(429, "rate-limited", { retryAfterSec: w }));
     const forward = buildOptionalPushForwarder(env as unknown as ControlPlaneEnv) ?? undefined;
     const voip = voipSender(env);
     const pushRing = buildVoiciRingPusher({ pushTokens: storage.pushTokens, calls: storage.voiciCalls, ...(forward ? { forward } : {}), ...(voip ? { voip } : {}), apex });

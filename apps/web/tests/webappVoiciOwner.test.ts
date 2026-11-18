@@ -551,3 +551,23 @@ describe("the page photo", () => {
     await expect(reencodeAvatar(new Blob([]), { decode: async () => ({ width: 10, height: 10, source: {} }), encode: async () => broken })).rejects.toMatchObject({ code: "unreadable" });
   });
 });
+
+describe("the owner's call-back ring (privacy §2.12)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const CM: any = JSON.parse(readFileSync(join(import.meta.dirname, "../../../packages/protocol/test-vectors/voici-call-modes/vectors.json"), "utf8"));
+  it("posts to /api/voici/rings/<ringId>: the address names the ring, never the account", async () => {
+    const { postRing } = await import("../public/webapp/lib/voiciOwner.js");
+    const seen: { url: string; body: any }[] = [];
+    const fetch = async (url: string, init: any) => {
+      seen.push({ url, body: JSON.parse(init.body) });
+      return new Response(JSON.stringify({ ok: true, ringId: "x", pushed: 1 }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const page = { index: { pageId: CM.ring.order.pageId, inboxEpoch: 1 } };
+    await postRing(page, { conv: CM.ring.order.conv, threadPub: CM.ring.threadPub }, "audio", { fetch, now: () => NOW, session, profile, apex: "https://flagshipserver.com" });
+    expect(seen).toHaveLength(1);
+    const ringId = seen[0]!.body.ring.ringId;
+    expect(ringId).toMatch(/^[0-9a-f]{32}$/);
+    expect(seen[0]!.url).toBe(`https://flagshipserver.com/api/voici/rings/${ringId}`);
+    expect(seen[0]!.url).not.toContain(U);
+  });
+});
