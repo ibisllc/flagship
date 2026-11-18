@@ -1549,3 +1549,4 @@ Three agents started:
 - Final rebase: release/0.4 now sits on top of main (eb43ae84c), 789 commits, linear; the tree is byte-identical to the tested tip. A fast-forward of main is possible when deploying.
 - Owner decisions (2026-11-17 night): apply phone copy set (a) [agent 0.4/phone-copy]; voi.ci pages noindex by default with a switch, and calls ON in 0.4 [agent 0.4/voici-decisions]; "Load into Flagship" voucher link (vouchers only in the URL fragment, no username) on all three apps in 0.4, B6/C review notes to be rewritten [agent 0.4/voucher-link]. The browser agent is running the owner's brief (A, B1-B5, C1-C4, D, E, F1); B6/C5 wait for the builds.
 - Resume point: merge the three agents, then deploy prep.
+- Owner: Business defaults kept; voi.ci keeps "vous"; a per-page share image (added to 0.4/voici-decisions); trademark search not now. `0.4/phone-copy` is done (4 commits, gates green); the og:description follow-up is running.
