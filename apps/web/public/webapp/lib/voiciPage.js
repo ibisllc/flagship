@@ -24,6 +24,10 @@ export const VOICI_CHUNK_MAX_BYTES = 256 * 1024;
 export const VOICI_CHUNK_MAX_POSTS = 20;
 export const VOICI_AVATAR_MAX_BYTES = 150 * 1024;
 export const VOICI_CARD_IMAGE_MAX_BYTES = 40 * 1024;
+// The share card (docs/voici-and-messages.md §2.10): role "share", a 1200×630 JPEG with no metadata (og:image).
+export const VOICI_SHARE_IMAGE_MAX_BYTES = 256 * 1024;
+export const VOICI_SHARE_IMAGE_WIDTH = 1200;
+export const VOICI_SHARE_IMAGE_HEIGHT = 630;
 export const VOICI_INDEX_MAX_BYTES = 300 * 1024;
 export const VOICI_INDEX_MAX_PIECES = 2000;
 export const VOICI_PROFILE_MAX_LINKS = 12;
@@ -137,7 +141,7 @@ export function voiciCardRole(sha256) {
 
 // ── the index ─────────────────────────────────────────────────────────────
 
-const ROLE = /^(profile|avatar|chunk-(0|[1-9][0-9]{0,5})|card-[0-9a-f]{16})$/;
+const ROLE = /^(profile|avatar|share|chunk-(0|[1-9][0-9]{0,5})|card-[0-9a-f]{16})$/;
 const pieceKey = (p) => `${p.role}:${p.sha256}:${p.size}`;
 
 function piecesProblem(pieces) {
@@ -151,7 +155,7 @@ function piecesProblem(pieces) {
     roles.add(p.role);
     if (p.role.startsWith("card-") && p.role !== voiciCardRole(p.sha256)) return "card role";
     if (p.role.startsWith("chunk-")) chunks++;
-    const cap = p.role === "profile" ? VOICI_PROFILE_MAX_BYTES : p.role === "avatar" ? VOICI_AVATAR_MAX_BYTES : p.role.startsWith("card-") ? VOICI_CARD_IMAGE_MAX_BYTES : VOICI_CHUNK_MAX_BYTES;
+    const cap = p.role === "profile" ? VOICI_PROFILE_MAX_BYTES : p.role === "avatar" ? VOICI_AVATAR_MAX_BYTES : p.role === "share" ? VOICI_SHARE_IMAGE_MAX_BYTES : p.role.startsWith("card-") ? VOICI_CARD_IMAGE_MAX_BYTES : VOICI_CHUNK_MAX_BYTES;
     if (p.size > cap) return "piece size";
   }
   if (!roles.has("profile")) return "no profile";

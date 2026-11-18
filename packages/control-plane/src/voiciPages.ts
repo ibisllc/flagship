@@ -159,7 +159,7 @@ type PieceCheck = { ok: true; refs: string[]; parsed: boolean } | { ok: false; c
 
 async function checkPiece(deps: VoiciPagesDeps, pageId: string, role: string, ref: { sha256: string; size: number }, row: VoiciPieceRecord | undefined): Promise<PieceCheck> {
   if (!row || row.size !== ref.size) return { ok: false, code: "missing-piece" };
-  const image = role === "avatar" || role.startsWith("card-");
+  const image = role === "avatar" || role === "share" || role.startsWith("card-");
   if (image) return row.jpeg ? { ok: true, refs: [], parsed: false } : { ok: false, code: "bad-piece" };
   if (row.role === role && row.imageRefs) return { ok: true, refs: row.imageRefs, parsed: false };
   const obj = await deps.bucket.get(voiciPieceKey(pageId, ref.sha256));
@@ -348,7 +348,7 @@ export async function voiciListedPiece(deps: Pick<VoiciPagesDeps, "voici" | "buc
   if (!ref) return null;
   const obj = await deps.bucket.get(voiciPieceKey(page.pageId, sha256));
   if (!obj) return null;
-  const isImage = ref.role === "avatar" || ref.role.startsWith("card-");
+  const isImage = ref.role === "avatar" || ref.role === "share" || ref.role.startsWith("card-");
   return { bytes: new Uint8Array(await obj.arrayBuffer()), contentType: isImage ? "image/jpeg" : "application/json" };
 }
 

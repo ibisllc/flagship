@@ -245,6 +245,35 @@ index object and the page's pieces and purges `files.voi.ci` by URL (Cloudflare 
   newer one; a first-time visitor can be shown an old but genuine page for at most the cache lifetime.
 - `issuedAt` must be within 10 minutes of `.com`'s clock at upload.
 
+### 2.10 The share card (owner decision 2026-11-17)
+
+Every page carries a **share card**: the picture link previews show (messaging apps, social sites) through
+`og:image` / `twitter:image` with `twitter:card = summary_large_image`. The publishing app draws it and lists it as one
+more signed piece, exactly like the photo, so `.com` has no image pipeline and the card is checked against the owner's
+signature like everything else on the page.
+
+- **Piece:** role `share` (at most one), `image/jpeg`, at most 256 KiB (`VOICI_SHARE_IMAGE_MAX_BYTES`), **1200×630**,
+  no metadata (no APP1/APP2 segment: `voiciJpegHasMetadata` is false). No content names it; `voiciPieceRefsOk` ignores
+  it. Optional in the protocol (an index without it is valid: a page published before this, the demo page); every
+  0.4 app adds it. A reader older than this role refuses an index that has it.
+- **When:** drawn on a publish when the page has no card yet, or when the display name, photo or theme differs from
+  the page it replaces; otherwise the listed card is carried as it is (same hash, no upload).
+- **Layout** (all three apps draw the same card; no words, so nothing to translate): background the theme's light
+  canvas (classic `#f7f6f2`, sea `#f3f6f7`, ink `#0a0a09`), text the theme's ink (`#14140f`, `#0e1a1f`, `#ece7d6`) and
+  muted ink (`#555149`, `#4c5f67`, `#a39d8f`), accent `#14b8a6` (ink: `#2dd4bf`), hairline `#e5e3dc` (ink: `#26241d`).
+  The photo as a circle of diameter 240 centred at (220, 290), centre-cropped; without a photo an accent disc with the
+  display name's first character, upper-cased, 112 px bold in the canvas colour. The display name at x 400, baseline
+  290, bold 72 px, one line, cut with "…" to 700 px. `voi.ci/<username>` at x 400, baseline 360, monospace 40 px, muted.
+  A hairline from (100, 520) to (1100, 520), 2 px. The wordmark: an accent dot (radius 9) centred at (110, 568) and
+  `voi.ci` at x 128, baseline 582, bold 40 px, ink.
+- **Encoding:** JPEG quality 0.9, stepping down by 0.1 (to 0.4) until it fits 256 KiB; re-encoded from pixels, so no
+  EXIF or colour profile.
+- **Serving:** voi.ci's page shell carries `og:title` (`voi.ci/<username>`), `og:url`, `og:image` (the piece's
+  `files.voi.ci` URL, `v1/p/<pageId>/<sha256>`) with its width and height, and `twitter:card = summary_large_image`,
+  `twitter:image`. `.com` takes the card's hash from the index it already loaded to resolve the name. The search switch
+  (§2.7) applies to robots only: a noindex page still has its preview. The front door has a fixed card
+  (`apps/voici-site/src/share-card.jpg`).
+
 ## 3. Publishing API (`.com`)
 
 All under `https://flagshipserver.com` (gym: the gym apex). JSON errors `{error, code, ...}`; codes only, the apps

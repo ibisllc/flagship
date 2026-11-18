@@ -185,6 +185,10 @@ public enum VoiciPage {
     public static let chunkMaxPosts = 20
     public static let avatarMaxBytes = 150 * 1024
     public static let cardImageMaxBytes = 40 * 1024
+    /// The share card (docs/voici-and-messages.md §2.10): role "share", a 1200×630 JPEG with no metadata (og:image).
+    public static let shareImageMaxBytes = 256 * 1024
+    public static let shareImageWidth = 1200
+    public static let shareImageHeight = 630
     public static let indexMaxBytes = 300 * 1024
     public static let indexMaxPieces = 2000
     public static let profileMaxLinks = 12
@@ -294,9 +298,9 @@ public enum VoiciPage {
 
     // MARK: the index
 
-    /// `^(profile|avatar|chunk-(0|[1-9][0-9]{0,5})|card-[0-9a-f]{16})$`
+    /// `^(profile|avatar|share|chunk-(0|[1-9][0-9]{0,5})|card-[0-9a-f]{16})$`
     static func isRole(_ r: String) -> Bool {
-        if r == "profile" || r == "avatar" { return true }
+        if r == "profile" || r == "avatar" || r == "share" { return true }
         if r.hasPrefix("chunk-") {
             let d = Array(r.utf8.dropFirst(6))
             guard (1...6).contains(d.count), d.allSatisfy({ (0x30...0x39).contains($0) }) else { return false }
@@ -316,7 +320,7 @@ public enum VoiciPage {
             roles.insert(p.role)
             if p.role.hasPrefix("card-") && p.role != voiciCardRole(p.sha256) { return "card role" }
             if p.role.hasPrefix("chunk-") { chunks += 1 }
-            let cap = p.role == "profile" ? profileMaxBytes : p.role == "avatar" ? avatarMaxBytes : p.role.hasPrefix("card-") ? cardImageMaxBytes : chunkMaxBytes
+            let cap = p.role == "profile" ? profileMaxBytes : p.role == "avatar" ? avatarMaxBytes : p.role == "share" ? shareImageMaxBytes : p.role.hasPrefix("card-") ? cardImageMaxBytes : chunkMaxBytes
             if p.size > Int64(cap) { return "piece size" }
         }
         if !roles.contains("profile") { return "no profile" }

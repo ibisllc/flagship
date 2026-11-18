@@ -163,6 +163,10 @@ object VoiciPage {
     const val VOICI_CHUNK_MAX_POSTS = 20
     const val VOICI_AVATAR_MAX_BYTES = 150 * 1024
     const val VOICI_CARD_IMAGE_MAX_BYTES = 40 * 1024
+    /** The share card (docs/voici-and-messages.md §2.10): role "share", a 1200×630 JPEG with no metadata (og:image). */
+    const val VOICI_SHARE_IMAGE_MAX_BYTES = 256 * 1024
+    const val VOICI_SHARE_IMAGE_WIDTH = 1200
+    const val VOICI_SHARE_IMAGE_HEIGHT = 630
     const val VOICI_INDEX_MAX_BYTES = 300 * 1024
     const val VOICI_INDEX_MAX_PIECES = 2000
     const val VOICI_PROFILE_MAX_LINKS = 12
@@ -172,7 +176,7 @@ object VoiciPage {
 
     private val PAGE_ID = Regex("^[0-9a-f]{32}$")
     private val USERNAME = Regex("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
-    private val ROLE = Regex("^(profile|avatar|chunk-(0|[1-9][0-9]{0,5})|card-[0-9a-f]{16})$")
+    private val ROLE = Regex("^(profile|avatar|share|chunk-(0|[1-9][0-9]{0,5})|card-[0-9a-f]{16})$")
     private val INDEX_KEYS = listOf("kind", "version", "username", "pageId", "seq", "issuedAt", "acceptsMessages", "inboxEpoch", "inboxPub", "ownerSignPub", "pieces", "signerKind", "signerPub", "signature")
     private fun isTime(n: Long) = n in 0..VoiciJs.MAX_SAFE
     private fun hex(s: String?, n: Int) = WebEnvelopes.isLowerHex(s, n)
@@ -300,6 +304,7 @@ object VoiciPage {
             val cap = when {
                 p.role == "profile" -> VOICI_PROFILE_MAX_BYTES
                 p.role == "avatar" -> VOICI_AVATAR_MAX_BYTES
+                p.role == "share" -> VOICI_SHARE_IMAGE_MAX_BYTES
                 p.role.startsWith("card-") -> VOICI_CARD_IMAGE_MAX_BYTES
                 else -> VOICI_CHUNK_MAX_BYTES
             }

@@ -168,7 +168,7 @@ final class VoiciVectorTests: XCTestCase {
             XCTAssertEqual(r.code, S.s(c["expected"]), S.s(c["name"]))
             n += 1
         }
-        XCTAssertEqual(n, 29)
+        XCTAssertEqual(n, 34)
         for c in S.a(x["publishChecks"]) {
             let ctx = c["ctx"]!
             let r = VoiciPage.checkVoiciPublish(c["index"]!, username: S.s(ctx["username"]), sensitiveKind: S.s(ctx["sensitiveKind"]),

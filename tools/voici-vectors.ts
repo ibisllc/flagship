@@ -301,6 +301,10 @@ const searchIndexV2 = reSign((b) => {
   b.showInSearch = 1;
 });
 want("search shown", P.voiciPageShowsInSearch(searchIndex), true);
+// The share card (owner decision 2026-11-17): an optional "share" JPEG piece, at most 256 KiB, named by no content.
+const SHARE_SHA = P.sha256Hex(enc.encode("share card"));
+const withShare = (size: number, role = "share") => (b: Record<string, unknown>) => (b.pieces = [...(b.pieces as P.VoiciPieceRef[]), { role, sha256: SHARE_SHA, size }]);
+const shareIndex = reSign(withShare(90_000));
 want("search hidden", P.voiciPageShowsInSearch(index), false);
 const indexChecks = (
   [
@@ -337,6 +341,11 @@ const indexChecks = (
     ["showInSearch 0", tamper((b) => (b.showInSearch = 0)), readerCtx, "malformed"],
     ["showInSearch true not 1", tamper((b) => (b.showInSearch = true)), readerCtx, "malformed"],
     ["showInSearch null", tamper((b) => (b.showInSearch = null)), readerCtx, "malformed"],
+    ["with a share card", shareIndex, readerCtx, "ok"],
+    ["share card at 256 KiB", reSign(withShare(256 * 1024)), readerCtx, "ok"],
+    ["share card over 256 KiB", tamper(withShare(256 * 1024 + 1)), readerCtx, "malformed"],
+    ["two share cards", tamper((b) => (b.pieces = [...(shareIndex.pieces as P.VoiciPieceRef[]), { role: "share", sha256: "ab".repeat(32), size: 10 }])), readerCtx, "malformed"],
+    ["share-0 is no role", tamper(withShare(10, "share-0")), readerCtx, "malformed"],
   ] as [string, unknown, Parameters<typeof P.checkVoiciPageIndex>[1], string][]
 ).map(([name, idx, ctx, expected]) => ({ name, index: idx, ctx, expected: want(`index ${name}`, code(P.checkVoiciPageIndex(idx, ctx)), expected) }));
 
@@ -393,6 +402,9 @@ const voici = {
     chunkMaxPosts: P.VOICI_CHUNK_MAX_POSTS,
     avatarMaxBytes: P.VOICI_AVATAR_MAX_BYTES,
     cardImageMaxBytes: P.VOICI_CARD_IMAGE_MAX_BYTES,
+    shareImageMaxBytes: P.VOICI_SHARE_IMAGE_MAX_BYTES,
+    shareImageWidth: P.VOICI_SHARE_IMAGE_WIDTH,
+    shareImageHeight: P.VOICI_SHARE_IMAGE_HEIGHT,
     indexMaxBytes: P.VOICI_INDEX_MAX_BYTES,
     indexMaxPieces: P.VOICI_INDEX_MAX_PIECES,
     indexSkewMs: P.VOICI_INDEX_SKEW_MS,

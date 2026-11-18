@@ -127,7 +127,7 @@ class VoiciVectorsTest {
             assertEquals(c.s("name"), c.s("expected"), r.code)
             n++
         }
-        assertEquals(29, n)
+        assertEquals(34, n)
         for (c in ix.a("publishChecks").map { it.jsonObject }) {
             val ctx = c.o("ctx")
             val r = VoiciPage.checkVoiciPublish(c["index"], ctx.s("username"), ctx.s("sensitiveKind"), ctx.s("sensitivePub"), ctx.l("storedSeq"), ctx.sOrNull("storedPageId"), ctx.l("now"))
