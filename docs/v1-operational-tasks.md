@@ -146,6 +146,9 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
   APNS_KEY_ID=FHZWTBFQCM, APNS_TEAM_ID=8G8RHBU9BN,
   APNS_BUNDLE_ID=com.flagshipserver.app, APNS_PRIVATE_KEY_PEM=<AuthKey_FHZWTBFQCM.p8>.
   _owner (interactive login)._
+  **Superseded 2026-11-17:** both Workers now hold the team-scoped "Flagship push" key (all topics, Sandbox &
+  Production); the May 2026 "Flagship APN" key is single-topic and Production only, and VoIP pushes to
+  `com.flagshipserver.app.voip` need the team-scoped one (`docs/runbooks/0.4-deploy-sheet.md` "APNs key").
 - **TF2** — Tick "Associated Domains" capability on App ID com.flagshipserver.app
   (checkbox only; entitlement already correct). _owner._ Blocks TF3.
 - **TF3** — Xcode Archive → Distribute → App Store Connect. _owner._

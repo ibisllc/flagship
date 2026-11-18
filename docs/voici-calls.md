@@ -287,9 +287,12 @@ so a give-up, a lost signed end or a killed app never leaves the account "on ano
 
 ### Owner actions
 
-1. Apple: enable the Voice over IP background mode and the PushKit capability for the iOS app ID; the existing APNs
-   auth key (`APNS_KEY_ID`/`APNS_TEAM_ID`/`APNS_PRIVATE_KEY_PEM`) sends VoIP pushes to the `.voip` topic with no new
-   certificate. iPad builds need the same (D2).
+1. Apple: enable the Voice over IP background mode and the PushKit capability for the iOS app ID; the APNs auth key
+   (`APNS_KEY_ID`/`APNS_TEAM_ID`/`APNS_PRIVATE_KEY_PEM`) sends VoIP pushes to the `.voip` topic with no new
+   certificate, **if it is team-scoped**. The key in use is **"Flagship push"** (Team Scoped (All Topics), Sandbox &
+   Production, on both Workers since 2026-11-17). The older single-topic, Production-only "Flagship APN" key is what
+   Apple refused with `TopicDisallowed` on `com.flagshipserver.app.voip` in the gym: never use it again
+   (`docs/runbooks/0.4-deploy-sheet.md` "APNs key"). iPad builds need the same (D2).
 2. Google Play: the `USE_FULL_SCREEN_INTENT` declaration and the `phoneCall` + `microphone` foreground-service
    declarations when the Android call layer lands.
 3. D1 migration 0146, then a `.com` deploy (the `v6` Durable Object migration adds `VoiciCallRoom`); set

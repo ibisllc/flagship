@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apnsAlertFor, apnsLocalizedAlertFor, buildPushForwarder, secretRequestDisplayData } from "../src/pushBridge.js";
+import { apnsAlertFor, apnsLocalizedAlertFor, buildPushForwarder, buildVoipPushSender, secretRequestDisplayData } from "../src/pushBridge.js";
 
 interface Captured {
   url: string;
@@ -448,4 +448,38 @@ describe("buildPushForwarder — Web Push (RFC 8030 + VAPID)", () => {
     expect(r.ok).toBe(false);
     expect(r.failed).toBe(1);
   });
+});
+
+// One team-scoped APNs key ("Flagship push": all topics, Sandbox & Production) signs every push. The JWT names only the
+// key and the team, never a topic or an environment, so the app topic and `<bundle>.voip` take the same token, and
+// APNS_HOST alone picks production or the sandbox. A key restricted to one topic is what Apple refused with
+// TopicDisallowed on `.voip` in the gym (docs/runbooks/0.4-deploy-sheet.md, APNs).
+describe("APNs with a team-scoped key", () => {
+  const jwtParts = (auth: string) => {
+    const [h, p] = auth.replace(/^bearer /, "").split(".");
+    return { header: JSON.parse(Buffer.from(h!, "base64url").toString()), payload: JSON.parse(Buffer.from(p!, "base64url").toString()) };
+  };
+  const apns = { keyId: "TEAMKEY123", teamId: "TEAM123456", privateKeyPem: APNS_TEST_KEY, bundleId: "com.flagshipserver.app" };
+
+  for (const host of [undefined, "api.sandbox.push.apple.com"]) {
+    it(`sends alerts to the app topic and calls to .voip with one JWT shape (${host ?? "production"})`, async () => {
+      const { f, calls } = fakeFetch([{ status: 200, body: "" }, { status: 200, body: "" }]);
+      const cfg = { ...apns, ...(host ? { host } : {}) };
+      const forward = buildPushForwarder({ apns: cfg, fetchImpl: f, now: () => 1_700_000_000_000 });
+      await forward({ targets: [{ tokenId: "t", platform: "apns", providerToken: "ALERT0001" }], category: "cert-alert", sealedPayloadHex: "00" });
+      const voip = buildVoipPushSender({ apns: cfg, fetchImpl: f, now: () => 1_700_000_000_000 });
+      expect(await voip(["VOIP0001"], { id: "c1" }, 1_700_000_060)).toBe(1);
+      const base = `https://${host ?? "api.push.apple.com"}/3/device/`;
+      expect(calls.map((c) => c.url)).toEqual([`${base}ALERT0001`, `${base}VOIP0001`]);
+      expect(calls[0]!.headers["apns-topic"]).toBe("com.flagshipserver.app");
+      expect(calls[0]!.headers["apns-push-type"]).toBe("alert");
+      expect(calls[1]!.headers["apns-topic"]).toBe("com.flagshipserver.app.voip");
+      expect(calls[1]!.headers["apns-push-type"]).toBe("voip");
+      for (const c of calls) {
+        const { header, payload } = jwtParts(c.headers["authorization"]!);
+        expect(header).toEqual({ alg: "ES256", kid: "TEAMKEY123" });
+        expect(payload).toEqual({ iss: "TEAM123456", iat: 1_700_000_000 });
+      }
+    });
+  }
 });
