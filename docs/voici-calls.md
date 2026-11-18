@@ -908,3 +908,11 @@ high:
   (`takedownStep`) delete the page's missed calls, call-back channels and pending rings (`deletePageCallData`,
   `PAGE_CALL_DATA_TABLES`). Call allows and anonymous blocks stay for a republish. Not in the URL rule: the owner's
   `POST /api/voici/pages/<u>/ring` and the caller app's `POST /api/voici/web/ring-back?u=<u>` still name an account.
+
+## Owner decision 2026-11-17: calls ON in production for 0.4
+
+Calls ship on with 0.4. Production's `VOICI_CALLS` stays `"off"` through the first 0.4 `.com` deploy and flips at the
+deploy sheet's step "Calls on" (`docs/runbooks/0.4-deploy-sheet.md` §3a), once iOS 1.3 and Android 12 are live and
+its readiness checklist (C1-C13: migrations, the call room, the APNs VoIP key, FCM, the pinned WebRTC and TURN
+libraries in the store builds, the relay, the privacy policy's calls lines, D4, rate limits, the relay gaps of §5)
+holds. The off switch is the same flag. Calls stay fail-safe: a calls failure never breaks messages or pages.

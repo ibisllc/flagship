@@ -131,16 +131,15 @@ The front door is the one voi.ci answer that needs nothing but the Worker's own 
 - **Trademark.** "Voici" is also a well-known French celebrity magazine (Prisma Media). Check the mark in France and
   the EU (and OAPI, which covers Côte d'Ivoire and most of francophone West and Central Africa) before marketing the
   brand there.
-- **Calls in the copy.** The front door promises calls, but production has `VOICI_CALLS = "off"`. Either turn calls on
-  before marketing, or drop the calls block and the "call you" wording until then.
+- ~~**Calls in the copy.**~~ Decided 2026-11-17: calls ship on in 0.4. The flag flips at the deploy sheet's "Calls on"
+  step (`docs/runbooks/0.4-deploy-sheet.md` §3a), after the store builds are live; market after that.
 - **"Twitter clone".** The page positions voi.ci as a calm alternative without naming anyone. Calling it a clone of a
   named service in ads is a marketing and legal choice for the owner; nothing in the product says it.
 - ~~**Owner pages and search engines**~~: decided 2026-11-17, `noindex` by default with the owner switch "Show in
   search engines" (§6).
 - ~~**Social card**~~: done 2026-11-17 (owner decision): one wordless card for the front door, and every owner page
   has its own card, drawn by the publishing app (`docs/voici-and-messages.md` §2.10).
-- **Tutoiement.** French uses "vous" everywhere on voi.ci. A younger, more informal "tu" voice is possible for
-  marketing, but it would need to change on the pages too.
+- ~~**Tutoiement.**~~ Decided 2026-11-17: keep "vous" on every voi.ci page; no "tu" voice.
 - **Native review** of the French copy (and the five others) before any campaign (`i18n/REVIEW.md`).
 - **Static fallback**: serve `/` from the `flagship-webapp` static Worker (§8) if voi.ci becomes a real entry point.
 
