@@ -3963,5 +3963,7 @@
   "Until you load them or save the file, the vouchers are only in this browser. Anyone with the link or the file can spend them.": "読み込むかファイルを保存するまで、バウチャーはこのブラウザーにしかありません。リンクやファイルを持っている人なら誰でも使えます。",
   "You're offline. They wait in this browser and join the wallet when it's back online.": "オフラインです。このブラウザーで待機し、オンラインに戻るとウォレットに加わります。",
   "Your {0} voucher ({1}) is ready.": "{0} 枚のバウチャー（{1}）の準備ができました。",
-  "Your {0} vouchers ({1}) are ready.": "{0} 枚のバウチャー（{1}）の準備ができました。"
+  "Your {0} vouchers ({1}) are ready.": "{0} 枚のバウチャー（{1}）の準備ができました。",
+  "Show in search engines": "検索エンジンに表示",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "オフのときは、検索エンジンにページを掲載しないよう求めます。リンクを知っている人は引き続き開けます。"
 }

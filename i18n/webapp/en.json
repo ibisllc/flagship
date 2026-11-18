@@ -16153,5 +16153,13 @@
   "Your {0} vouchers ({1}) are ready.": {
     "en": "Your {0} vouchers ({1}) are ready.",
     "ctx": "webapp/views/voucher-shop.js"
+  },
+  "Show in search engines": {
+    "en": "Show in search engines",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": {
+    "en": "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.",
+    "ctx": "webapp/views/page-editor.js"
   }
 }

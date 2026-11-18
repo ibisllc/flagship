@@ -261,7 +261,16 @@ export function carriedCalls(published, calls) {
   return { acceptsCalls: 1, callsFrom: from };
 }
 
-export async function buildVoiciIndex({ username, published, merged, images, signer, umk, now, rotate = false, calls }) {
+/**
+ * "Show in search engines" (owner decision 2026-11-17, docs/voici-and-messages.md §2.7): an explicit change
+ * (`search`, a boolean), else the value of the index it replaces. Absent = hidden; a first publish is hidden.
+ */
+export function carriedSearch(published, search) {
+  const on = typeof search === "boolean" ? search : published?.index?.showInSearch === 1;
+  return on ? { showInSearch: 1 } : {};
+}
+
+export async function buildVoiciIndex({ username, published, merged, images, signer, umk, now, rotate = false, calls, search }) {
   const pageId = published?.index.pageId ?? randHex(16);
   const prevEpoch = published?.index.inboxEpoch ?? 1;
   const inboxEpoch = rotate && published ? prevEpoch + 1 : prevEpoch;
@@ -307,6 +316,8 @@ export async function buildVoiciIndex({ username, published, merged, images, sig
     pieces: sortPieces(pieces),
     signerKind: signer.kind,
     signerPub: signer.pub,
+    // Like calls, every publish keeps the search setting of the index it replaces.
+    ...carriedSearch(published, search),
   };
   const signature = await signer.sign(canonicalVoiciPageIndex(body));
   return { index: { kind: "VoiciPage", version: body.acceptsCalls !== undefined ? 2 : 1, ...body, signature }, uploads };
@@ -353,7 +364,7 @@ export function firstPostOp(text, ops = [], { deviceId, now = Date.now() } = {})
  * reads the newer page, merges again and retries, at most 3 times (§5.3). Returns the new published model.
  * `firstPost`: the text a page that was never published (nor removed) starts with; never added to a page that exists.
  */
-export async function publishVoiciPage({ ops = [], images = new Map(), rotate = false, calls, firstPost }, deps = {}) {
+export async function publishVoiciPage({ ops = [], images = new Map(), rotate = false, calls, search, firstPost }, deps = {}) {
   const c = ctx(deps);
   const username = usernameOf(c);
   const umk = umkOf(c);
@@ -370,7 +381,7 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
     const allImages = new Map([...(published?.pieces ?? new Map()), ...images]);
     // A first publish turns calls on (signed-in callers); any other carries the index it replaces.
     const callsNow = calls ?? (published ? undefined : { acceptsCalls: VOICI_FIRST_PUBLISH.acceptsCalls, callsFrom: VOICI_FIRST_PUBLISH.callsFrom });
-    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls: callsNow });
+    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls: callsNow, search });
     for (const u of uploads) await uploadPiece(username, index.pageId, u, signer, c);
     const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(username)}/publish`, {
       method: "POST",

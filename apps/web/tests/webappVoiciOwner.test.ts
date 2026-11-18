@@ -7,6 +7,7 @@ import { p256 } from "@noble/curves/nist.js";
 import * as P from "../public/webapp/lib/voiciProtocol.js";
 import {
   buildVoiciIndex,
+  carriedSearch,
   canonicalDraftsConsume,
   consumeDraftOps,
   defaultVoiciProfile,
@@ -158,6 +159,44 @@ describe("publishing keeps the calls setting (docs/voici-calls.md §6)", () => {
     expect(next.index.callsFrom).toBe("signed-in");
     expect(P.parseVoiciPageIndex(next.index)).not.toBeNull();
     expect(P.checkVoiciPageIndex(next.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB }).ok).toBe(true);
+  });
+});
+
+describe("Show in search engines (owner decision 2026-11-17)", () => {
+  it("a first publish is hidden; the switch signs showInSearch 1; later edits keep it; off drops the field", async () => {
+    const com = fakeCom();
+    const first = await publishVoiciPage({ ops: [] }, deps(com, { published: null }));
+    expect(first.index.showInSearch).toBeUndefined();
+    const shown = await publishVoiciPage({ ops: [], search: true }, deps(com, { published: first }));
+    expect(shown.index.showInSearch).toBe(1);
+    expect(shown.index.seq).toBe(2);
+    expect(P.checkVoiciPageIndex(com.state.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB }).ok).toBe(true);
+    expect(P.voiciPageShowsInSearch(com.state.index)).toBe(true);
+    // An edit and a calls change keep it (like the calls fields).
+    const edit = await publishVoiciPage({ ops: [makeDraftOp("post-add", { post: post("0d".repeat(16), "hi") }, { now: NOW - 1 })] }, deps(com, { published: shown }));
+    expect(edit.index.showInSearch).toBe(1);
+    const calls = await publishVoiciPage({ ops: [], calls: { acceptsCalls: false, callsFrom: "signed-in" } }, deps(com, { published: edit }));
+    expect(calls.index.showInSearch).toBe(1);
+    expect(calls.index.version).toBe(1);
+    const hidden = await publishVoiciPage({ ops: [], search: false }, deps(com, { published: calls }));
+    expect("showInSearch" in hidden.index).toBe(false);
+    expect(P.checkVoiciPageIndex(com.state.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB }).ok).toBe(true);
+  });
+
+  it("carriedSearch: an explicit choice, else the replaced index's value; absent is hidden", () => {
+    expect(carriedSearch(null, undefined)).toEqual({});
+    expect(carriedSearch({ index: { showInSearch: 1 } }, undefined)).toEqual({ showInSearch: 1 });
+    expect(carriedSearch({ index: { showInSearch: 1 } }, false)).toEqual({});
+    expect(carriedSearch({ index: {} }, true)).toEqual({ showInSearch: 1 });
+    expect(carriedSearch({ index: { showInSearch: true } }, undefined)).toEqual({});
+  });
+
+  it("Page options has the switch (admin devices, published pages) with its note, through tr()", () => {
+    const src = readFileSync(new URL("../public/webapp/views/page-editor.js", import.meta.url), "utf8");
+    expect(src).toContain('tr("Show in search engines")');
+    expect(src).toContain('tr("When this is off, search engines are asked not to list your page. Anyone with the link can still open it.")');
+    expect(src).toContain('data-testid="page-search"');
+    expect(src).toMatch(/publishVoiciPage\(\{ ops: \[\], search: on \}/);
   });
 });
 

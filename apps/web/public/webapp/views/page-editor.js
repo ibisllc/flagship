@@ -602,6 +602,18 @@ export function openPageOptions() {
             </div>
           </div>
           <p class="note">${escapeHtml(VOICI_ACCEPT_NOTE())}</p>
+          ${
+            on
+              ? `<div class="fs-group mt-3">
+            <div class="fs-row">
+              <span class="fs-row-body"><span class="fs-row-title" id="page-search-label">${escapeHtml(tr("Show in search engines"))}</span>
+              ${admin ? "" : `<span class="fs-row-subtitle" data-testid="page-search-admin-only">${escapeHtml(tr("Only an admin device can change this"))}</span>`}</span>
+              <button type="button" role="switch" class="fs-switch" id="page-search" data-testid="page-search" aria-labelledby="page-search-label" aria-checked="${world.page?.index?.showInSearch === 1}"${admin ? "" : " disabled"}><span class="fs-switch-thumb" aria-hidden="true"></span></button>
+            </div>
+          </div>
+          <p class="note" data-testid="page-search-note">${escapeHtml(tr("When this is off, search engines are asked not to list your page. Anyone with the link can still open it."))}</p>`
+              : ""
+          }
           <div class="fs-group mt-3">
             <button type="button" class="fs-row" id="page-signed-in-sites"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(tr("Websites you're signed in to"))}</span></span></button>
             ${admin && on ? `<button type="button" class="fs-row" id="page-calls" data-testid="page-calls"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(tr("Calls"))}</span></span></button>` : ""}
@@ -625,6 +637,17 @@ export function openPageOptions() {
           await addPageOp(makeDraftOp("accept-messages", { accepts: want ? 1 : 0 }, { deviceId: deviceId() }));
           redraw();
         });
+        body.querySelector("#page-search")?.addEventListener("click", async (ev) => {
+          const btn = ev.currentTarget;
+          if (!admin || btn.disabled) return;
+          const want = btn.getAttribute("aria-checked") !== "true";
+          btn.disabled = true;
+          try {
+            await setShowInSearch(want);
+          } finally {
+            redraw();
+          }
+        });
         body.querySelector("#page-signed-in-sites").addEventListener("click", () => {
           close();
           void import("./messages.js").then((mod) => mod.enterSignedInSites());
@@ -643,6 +666,23 @@ export function openPageOptions() {
       redraw();
     },
   });
+}
+
+/**
+ * "Show in search engines" (owner decision 2026-11-17): a publish of its own by an admin device, like the calls
+ * setting; every later publish keeps it. Off = voi.ci asks search engines not to list the page.
+ */
+export async function setShowInSearch(on, deps = {}) {
+  if (!world.page || (world.page.index?.showInSearch === 1) === on) return true;
+  try {
+    world.page = await publishVoiciPage({ ops: [], search: on }, { published: world.page, ...deps });
+    emitWorld();
+    toast(tr("Saved."));
+    return true;
+  } catch (e) {
+    toast(voiciErrorText(e), "err");
+    return false;
+  }
 }
 
 // ── calls: who can call and the hours (docs/voici-calls.md; admin devices publish them in the page index) ──

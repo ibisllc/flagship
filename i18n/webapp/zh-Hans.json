@@ -3963,5 +3963,7 @@
   "Until you load them or save the file, the vouchers are only in this browser. Anyone with the link or the file can spend them.": "在你载入它们或保存文件之前，这些代金券只存在于此浏览器中。任何拿到链接或文件的人都能花掉它们。",
   "You're offline. They wait in this browser and join the wallet when it's back online.": "你当前处于离线状态。它们会先保存在此浏览器中，恢复联网后加入钱包。",
   "Your {0} voucher ({1}) is ready.": "你的 {0} 张代金券（{1}）已就绪。",
-  "Your {0} vouchers ({1}) are ready.": "你的 {0} 张代金券（{1}）已就绪。"
+  "Your {0} vouchers ({1}) are ready.": "你的 {0} 张代金券（{1}）已就绪。",
+  "Show in search engines": "在搜索引擎中显示",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "关闭时，会要求搜索引擎不要收录你的页面。有链接的人仍然可以打开它。"
 }

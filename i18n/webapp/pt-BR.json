@@ -3963,5 +3963,7 @@
   "Until you load them or save the file, the vouchers are only in this browser. Anyone with the link or the file can spend them.": "Até você carregá-los ou salvar o arquivo, os vales ficam só neste navegador. Qualquer pessoa com o link ou o arquivo pode gastá-los.",
   "You're offline. They wait in this browser and join the wallet when it's back online.": "Você está off-line. Eles esperam neste navegador e entram na carteira quando ele voltar a ficar on-line.",
   "Your {0} voucher ({1}) is ready.": "Seu {0} vale ({1}) está pronto.",
-  "Your {0} vouchers ({1}) are ready.": "Seus {0} vales ({1}) estão prontos."
+  "Your {0} vouchers ({1}) are ready.": "Seus {0} vales ({1}) estão prontos.",
+  "Show in search engines": "Mostrar nos mecanismos de busca",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "Quando isto está desativado, os mecanismos de busca são instruídos a não listar sua página. Qualquer pessoa com o link ainda pode abri-la."
 }
