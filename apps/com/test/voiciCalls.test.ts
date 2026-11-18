@@ -111,7 +111,7 @@ describe("voi.ci call routes", () => {
   it("a device room socket needs the device headers of an admin device", async () => {
     const w = await world();
     try {
-      const r = await w.call(`https://flagshipserver.com/api/voici/calls/${V.request.signed.callId}/device?u=alice`, { headers: { upgrade: "websocket" } });
+      const r = await w.call(`https://flagshipserver.com/api/voici/calls/${V.request.signed.callId}/device`, { headers: { upgrade: "websocket" } });
       expect(r.status).toBe(403);
       const c = await w.call(`https://flagshipserver.com/api/voici/calls/${V.request.signed.callId}/caller?t=00`, { headers: { upgrade: "websocket", origin: "https://evil.example" } });
       expect(c.status).toBe(403);

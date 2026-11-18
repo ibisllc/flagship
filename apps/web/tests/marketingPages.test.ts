@@ -422,7 +422,8 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(priv).toContain("we can't listen to or watch a call, and we don't record calls");
     expect(priv).toContain("the IP address the call came from");
     expect(priv).toContain("The push service learns that a call rang that device, and when.");
-    expect(priv).toContain("Missed calls are deleted 180 days after the call");
+    expect(priv).toContain("Missed calls are deleted 180 days after the call, or when the page is unpublished or taken down");
+    expect(priv).toContain("carry only a random call id, never an account name");
     const faq = (await app.inject({ method: "GET", url: "/faq.html" })).body;
     expect(faq).toContain('<a href="/privacy#calls">privacy policy</a>');
   });

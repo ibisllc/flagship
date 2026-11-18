@@ -32,7 +32,7 @@ import {
   type VoiciPageReport,
   voiciNameKey,
 } from "@flagship/protocol";
-import type { D1Database } from "@flagship/storage";
+import { PAGE_CALL_DATA_TABLES, type D1Database } from "@flagship/storage";
 import type { DeviceIntegrity, IntegrityPlatform } from "./deviceIntegrity.js";
 
 export type WaitUntil = (p: Promise<unknown>) => void;
@@ -413,8 +413,9 @@ async function takedownStep(db: D1Database, env: VoiciAbuseEnv, fetchFn: typeof 
       deleted += keys.length;
     }
     if (listed.truncated) return { done: false, deleted, purged };
-    // The page is gone, so are its visitors' reply alerts (migration 0125).
-    await db.prepare("DELETE FROM voici_alerts WHERE page_id = ?1").bind(pageId).run();
+    // The page is gone, so are its visitors' reply alerts (migration 0125), its missed calls and call-back channels
+    // (privacy policy §2.12).
+    await db.batch(["voici_alerts", ...PAGE_CALL_DATA_TABLES].map((t) => db.prepare(`DELETE FROM ${t} WHERE page_id = ?1`).bind(pageId)));
   }
   await db.prepare("UPDATE voici_takedowns SET purge_pending = 0 WHERE username = ?1").bind(username).run();
   return { done: true, deleted, purged };

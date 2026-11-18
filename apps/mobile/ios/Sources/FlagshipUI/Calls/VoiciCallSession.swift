@@ -117,9 +117,14 @@ final class VoiciCallSession {
 
     private var joinKind = "device-key"
 
+    /// The device's room socket. It names only the call: `.com` finds the account from the live call (privacy §2.12).
+    nonisolated static func roomURL(room: String, callId: String) -> URL? {
+        URL(string: "wss://\(room)/api/voici/calls/\(callId)/device")
+    }
+
     func connect() {
         let path = "/api/voici/calls/\(push.callId)/device"
-        guard let url = URL(string: "wss://\(push.room)\(path)?u=\(keys.username)"), let headers = keys.roomHeaders(callId: push.callId, path: path) else {
+        guard let url = Self.roomURL(room: push.room, callId: push.callId), let headers = keys.roomHeaders(callId: push.callId, path: path) else {
             return end("failed", why: "no-room-auth")
         }
         var req = URLRequest(url: url, timeoutInterval: 20)

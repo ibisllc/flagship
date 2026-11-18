@@ -265,7 +265,7 @@ demux, settings and the thread entries), the relays' call work (§5), the CI lan
   is gathered before the call is answered, and the signed offer is exactly the one applied.
 - **`.com`** (`packages/control-plane/src/voiciCalls.ts`, `apps/com/src/voiciCallRoutes.ts`, `voiciCallRoom.ts`,
   migration **0146**): routes `POST /api/voici/calls` (CORS voi.ci) → `{callId, room, token, ringMs}`;
-  `GET /api/voici/calls/<id>/caller?t=` (Origin voi.ci) and `/device?u=<u>` (device headers of an admin device,
+  `GET /api/voici/calls/<id>/caller?t=` (Origin voi.ci) and `/device` (no account in the URL since 2026-11-18: `.com` takes the live call's account; device headers of an admin device,
   signed over `GET /api/voici/calls/<id>/device`); `POST /api/voici/pages/<u>/call-allow`;
   `GET /api/voici/pages/<u>/calls?since=` (read token: `{items:[{id, callId, conv, sealed, storedAt}], cursor, more}`);
   `POST /api/accounts/<u>/voici-voip-token` `{token}` / `{token:null}`. "Accepted" = the owner replied, sent an
@@ -896,3 +896,15 @@ high:
   `WebRtcLibraryTest` (instrumented, only with libwebrtc bundled: initialize, a peer connection, FlagshipFrameCrypto).
 - **Pin:** `libwebrtc-157-44099203173`. Only `libwebrtc.aar` is new (run 44099203173); the iOS WebRTC zip is the
   previous release's bytes and both TURN zips came out identical, so iOS changes its download URL only.
+
+## Call data and URLs (privacy policy §2.12, owner 2026-11-18)
+
+- **The device room URL names only the call:** `GET /api/voici/calls/<callId>/device`. `.com` takes the account from
+  the live call (`voici_live_calls`, `liveCallAccount`), ignores a `u` an older app still sends, and a device that
+  signed its headers for another account fails its signature. iOS `VoiciCallSession.roomURL`, Android
+  `VoiciCallSession.roomUrl` (tests `VoiciCallRoomURLTests`, `VoiciCallRoomUrlTest`); `.com` test
+  `apps/com/test/voiciCallPrivacy.test.ts`.
+- **A removed page takes its call data with it:** the owner's removal (`removeVoiciPageObjects`) and an admin takedown
+  (`takedownStep`) delete the page's missed calls, call-back channels and pending rings (`deletePageCallData`,
+  `PAGE_CALL_DATA_TABLES`). Call allows and anonymous blocks stay for a republish. Not in the URL rule: the owner's
+  `POST /api/voici/pages/<u>/ring` and the caller app's `POST /api/voici/web/ring-back?u=<u>` still name an account.

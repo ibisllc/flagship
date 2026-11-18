@@ -91,6 +91,11 @@ class VoiciCallSession(
     private val listener: Listener,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
+    companion object {
+        /** The device's room socket. It names only the call: `.com` finds the account from the live call (privacy §2.12). */
+        fun roomUrl(room: String, callId: String) = "wss://$room/api/voici/calls/$callId/device"
+    }
+
     interface Listener {
         /** The room's request passed every check: the call may be answered. */
         fun onRequest(request: VoiciCallRequest)
@@ -118,7 +123,7 @@ class VoiciCallSession(
         val path = "/api/voici/calls/${push.callId}/device"
         val requestId = randHex(16)
         val at = now()
-        val b = Request.Builder().url("wss://${push.room}$path?u=${keys.username}")
+        val b = Request.Builder().url(roomUrl(push.room, push.callId))
         val k = keys.callKey
         val d = keys.device
         if (k != null) {

@@ -68,6 +68,8 @@ export interface VoiciCallStorage {
   claimLiveCall(username: string, callId: string, now: number, expiresAt: number): Promise<boolean>;
   extendLiveCall(username: string, callId: string, expiresAt: number): Promise<void>;
   releaseLiveCall(username: string, callId: string): Promise<void>;
+  /** The account whose call this is, while it rings or runs: the device room URL names only the call id. */
+  liveCallAccount(callId: string, now: number): Promise<string | null>;
   putVoipToken(rec: VoiciVoipToken): Promise<void>;
   deleteVoipToken(username: string, deviceId: string): Promise<void>;
   listVoipTokens(username: string): Promise<VoiciVoipToken[]>;
@@ -79,6 +81,9 @@ export interface VoiciCallStorage {
   /** Retention (180 days, as the mailbox) and the counters older than two days. */
   collectCalls(o: { missedBefore: number; countsBeforeDay: string; now: number; limit: number }): Promise<number>;
   deleteCallsForPage(pageId: string): Promise<void>;
+  /** An unpublished or taken-down page: its missed calls, call-back channels and pending rings go; the owner's call
+   *  allows and anonymous blocks stay for a republish (privacy policy §2.12). */
+  deletePageCallData(pageId: string): Promise<void>;
   /** Binds a call key for (username, deviceId), replacing that device's previous one; false when the key was revoked. */
   putCallKey(rec: VoiciCallKeyRecord): Promise<boolean>;
   getCallKey(username: string, deviceId: string): Promise<VoiciCallKeyRecord | null>;
@@ -121,6 +126,9 @@ export interface VoiciCallStorage {
 type MissedRow = { id: number; page_id: string; conv: string; call_id: string; sealed: string; stored_at: number };
 const missedFromRow = (r: MissedRow): VoiciMissedCallRecord => ({ id: r.id, pageId: r.page_id, conv: r.conv, callId: r.call_id, sealed: r.sealed, storedAt: r.stored_at });
 
+/** What an unpublished or taken-down page's calls leave behind (deletePageCallData). */
+export const PAGE_CALL_DATA_TABLES = ["voici_missed_calls", "voici_ring_backs", "voici_rings"] as const;
+
 export class D1VoiciCallStorage implements VoiciCallStorage {
   constructor(private readonly db: D1Database) {}
 
@@ -148,6 +156,11 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
 
   async extendLiveCall(username: string, callId: string, expiresAt: number) {
     await this.db.prepare("UPDATE voici_live_calls SET expires_at = ?3 WHERE username = ?1 AND call_id = ?2").bind(username, callId, expiresAt).run();
+  }
+
+  async liveCallAccount(callId: string, now: number) {
+    const r = await this.db.prepare("SELECT username FROM voici_live_calls WHERE call_id = ?1 AND expires_at > ?2").bind(callId, now).first<{ username: string }>();
+    return r?.username ?? null;
   }
 
   async releaseLiveCall(username: string, callId: string) {
@@ -234,6 +247,10 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
     await this.db.prepare("DELETE FROM voici_call_allows WHERE page_id = ?1").bind(pageId).run();
     await this.db.prepare("DELETE FROM voici_call_counts WHERE page_id = ?1").bind(pageId).run();
     for (const t of ["voici_ring_backs", "voici_rings", "voici_anon_blocks"]) await this.db.prepare(`DELETE FROM ${t} WHERE page_id = ?1`).bind(pageId).run();
+  }
+
+  async deletePageCallData(pageId: string) {
+    await this.db.batch(PAGE_CALL_DATA_TABLES.map((t) => this.db.prepare(`DELETE FROM ${t} WHERE page_id = ?1`).bind(pageId)));
   }
 
   async deleteCallsForAccount(username: string) {
@@ -421,6 +438,10 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     const cur = this.live.get(username);
     if (cur?.callId === callId) cur.expiresAt = expiresAt;
   }
+  async liveCallAccount(callId: string, now: number) {
+    for (const [u, c] of this.live) if (c.callId === callId && c.expiresAt > now) return u;
+    return null;
+  }
   async releaseLiveCall(username: string, callId: string) {
     if (this.live.get(username)?.callId === callId) this.live.delete(username);
   }
@@ -464,6 +485,10 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     for (const k of [...this.allows.keys()]) if (k.startsWith(`${pageId}|`)) this.allows.delete(k);
     for (const k of [...this.counts.keys()]) if (k.startsWith(`${pageId}|`)) this.counts.delete(k);
     for (const m of [this.ringBacks, this.rings, this.anonBlocks]) for (const k of [...m.keys()]) if (k.startsWith(`${pageId}|`)) m.delete(k);
+  }
+  async deletePageCallData(pageId: string) {
+    this.missed = this.missed.filter((m) => m.pageId !== pageId);
+    for (const m of [this.ringBacks, this.rings]) for (const k of [...m.keys()]) if (k.startsWith(`${pageId}|`)) m.delete(k);
   }
   async deleteCallsForAccount(username: string) {
     for (const k of [...this.voip.keys()]) if (k.startsWith(`${username}|`)) this.voip.delete(k);

@@ -5,8 +5,10 @@
  *
  *   POST /api/voici/calls                          the caller's signed request (CORS: the voi.ci origin)
  *   GET  /api/voici/calls/<callId>/caller?t=       the caller's room WebSocket (Origin: the voi.ci origin)
- *   GET  /api/voici/calls/<callId>/device?u=<u>    a ringing admin device's room WebSocket (device headers, or a locked
- *                                                  device's join signed by its bound call key: x-flagship-call-key-*)
+ *   GET  /api/voici/calls/<callId>/device          a ringing admin device's room WebSocket (device headers, or a locked
+ *                                                  device's join signed by its bound call key: x-flagship-call-key-*).
+ *                                                  The URL names only the call: the account is the live call's own
+ *                                                  (privacy policy §2.12), and a `u` an older app still sends is ignored.
  *   POST /api/voici/pages/<u>/call-allow           the owner's call-allow order
  *   GET  /api/voici/pages/<u>/calls?since=         sealed missed calls (read token)
  *   POST /api/accounts/<u>/voici-call-key          an admin device binds its call-only key (device headers)
@@ -199,8 +201,10 @@ export async function handleVoiciCallApi(request: Request, env: VoiciCallEnv, ca
       const t = url.searchParams.get("t") ?? "";
       return room(callId).fetch(new Request(`https://room/caller?t=${encodeURIComponent(t)}`, request));
     }
-    const u = (url.searchParams.get("u") ?? "").toLowerCase();
-    if (!u) return toResponse(voiciRefusal(400, "malformed"));
+    // The account is the one this call rings, never one the URL names; a device of another account fails its
+    // signature (the signed bytes name the device's own account).
+    const u = await storage.voiciCalls.liveCallAccount(callId, Date.now());
+    if (!u) return toResponse(voiciRefusal(403, "forbidden"));
     const join = callKeyJoin(request);
     const dev = join
       ? await authorizeVoiciCallKeyDevice({ voici: storage.voici, calls: storage.voiciCalls, usernames: storage.usernames, grants: storage.deviceCapabilityGrants, nonces }, u, callId, join, (code) =>

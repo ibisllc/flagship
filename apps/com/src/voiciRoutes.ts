@@ -595,7 +595,12 @@ export async function removeVoiciPageObjects(
   const pieces = await storage.voici.listPagePieces(pageId);
   const keys = [voiciIndexKey(username), ...pieces.map((p) => voiciPieceKey(pageId, p.sha256))];
   if (env.VOICI) for (let i = 0; i < keys.length; i += 1000) await env.VOICI.delete(keys.slice(i, i + 1000));
-  await Promise.all([storage.voici.unreferenceAllPieces(pageId, 0), opts.keepAlerts ? null : storage.voici.deleteAlertsForPage(pageId)]);
+  await Promise.all([
+    storage.voici.unreferenceAllPieces(pageId, 0),
+    opts.keepAlerts ? null : storage.voici.deleteAlertsForPage(pageId),
+    // A page that is gone takes no calls: its missed calls and call-back channels go with it (privacy policy §2.12).
+    env.DB ? new D1Storage(env.DB).voiciCalls.deletePageCallData(pageId) : null,
+  ]);
   await purgeFiles(env, keys);
 }
 
