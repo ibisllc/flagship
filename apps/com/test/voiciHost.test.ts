@@ -10,7 +10,7 @@ import { D1Storage } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
 import { adminPub, fakeBucket, irkPub, PAGE_ID, USER } from "../../../packages/control-plane/tests/support/voiciFixture.js";
 import { route, type RouteEnv } from "../src/route.js";
-import { VOICI_SITE_DIR, VOICI_SITE_SHELL, VOICI_SITE_SHELL_404, VOICI_SITE_SHELL_410 } from "../src/voiciSiteBuild.generated.js";
+import { VOICI_SITE_DIR, VOICI_SITE_SHELL, VOICI_SITE_SHELL_404, VOICI_SITE_SHELL_410, VOICI_SITE_SHELL_NOINDEX } from "../src/voiciSiteBuild.generated.js";
 
 async function world(enabled = true) {
   const sqlite = createSqliteD1();
@@ -35,10 +35,10 @@ async function world(enabled = true) {
 }
 
 /** A published page as `.com` stores it (publishing through the API is covered by voiciRoutes.test.ts). */
-async function publish(w: Awaited<ReturnType<typeof world>>) {
+async function publish(w: Awaited<ReturnType<typeof world>>, indexJson = "{}") {
   const now = Date.now();
   await w.seed.voici.publishPage(
-    { username: USER, pageId: PAGE_ID, seq: 1, issuedAt: now, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: adminPub, indexJson: "{}", publishedAt: now },
+    { username: USER, pageId: PAGE_ID, seq: 1, issuedAt: now, acceptsMessages: 1, inboxEpoch: 1, ownerSignPub: adminPub, indexJson, publishedAt: now },
     0,
   );
 }
@@ -75,7 +75,48 @@ describe("the voi.ci host (one namespace)", () => {
       expect([before.status, await before.text()]).toEqual([404, VOICI_SITE_SHELL_404]);
       await publish(w);
       const after = await w.call("/alice");
-      expect([after.status, await after.text()]).toEqual([200, VOICI_SITE_SHELL]);
+      expect([after.status, await after.text()]).toEqual([200, VOICI_SITE_SHELL_NOINDEX]);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("search engines: an owner page is noindex unless its index says showInSearch 1; the front door stays indexable", async () => {
+    const w = await world();
+    try {
+      await publish(w, JSON.stringify({ kind: "VoiciPage", version: 1, username: USER }));
+      const hidden = await w.call("/alice");
+      expect(hidden.status).toBe(200);
+      expect(hidden.headers.get("x-robots-tag")).toBe("noindex");
+      const hiddenHtml = await hidden.text();
+      expect(hiddenHtml).toBe(VOICI_SITE_SHELL_NOINDEX);
+      expect(hiddenHtml).toContain('<meta name="robots" content="noindex">');
+      expect(VOICI_SITE_SHELL).not.toContain("robots");
+
+      await w.sqlite.prepare("UPDATE voici_pages SET index_json = ?1").bind(JSON.stringify({ kind: "VoiciPage", version: 1, username: USER, showInSearch: 1 })).run();
+      const shown = await w.call("/alice");
+      expect(shown.status).toBe(200);
+      expect(shown.headers.get("x-robots-tag")).toBeNull();
+      expect(await shown.text()).toBe(VOICI_SITE_SHELL);
+
+      // Fail safe: anything but the number 1 (or an unreadable index) is hidden.
+      for (const bad of [JSON.stringify({ showInSearch: true }), JSON.stringify({ showInSearch: "1" }), '{"showInSearch":1', ""]) {
+        await w.sqlite.prepare("UPDATE voici_pages SET index_json = ?1").bind(bad).run();
+        expect((await w.call("/alice")).headers.get("x-robots-tag"), bad).toBe("noindex");
+      }
+
+      await w.seed.voici.setTakedown(USER, Date.now(), "spam");
+      const gone = await w.call("/alice");
+      expect([gone.status, gone.headers.get("x-robots-tag")]).toEqual([410, "noindex"]);
+      expect(await gone.text()).toBe(VOICI_SITE_SHELL_NOINDEX);
+
+      const unknown = await w.call("/nobody-here");
+      expect([unknown.status, unknown.headers.get("x-robots-tag")]).toEqual([404, "noindex"]);
+
+      const front = await w.call("/");
+      expect(front.status).toBe(200);
+      expect(front.headers.get("x-robots-tag")).toBeNull();
+      expect(await front.text()).toContain('<meta name="robots" content="index, follow">');
     } finally {
       w.close();
     }

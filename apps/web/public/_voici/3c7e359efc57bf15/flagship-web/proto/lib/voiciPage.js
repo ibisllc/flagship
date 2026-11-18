@@ -10,7 +10,7 @@
 // Exported API: TAG_VOICI_PAGE, TAG_VOICI_PIECE_UPLOAD, VOICI_* caps, VOICI_THEMES, isVoiciJpeg,
 // voiciJpegHasMetadata, parseVoiciProfile, parseVoiciProfilePiece, parseVoiciPost, parseVoiciChunkPiece,
 // voiciCardRole, canonicalVoiciPageIndex, signVoiciPageIndex, parseVoiciPageIndex, checkVoiciPageIndex,
-// checkVoiciPublish, voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload, verifyVoiciPieceUpload,
+// checkVoiciPublish, voiciPageShowsInSearch, voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload, verifyVoiciPieceUpload,
 // chunkVoiciPosts, mergeVoiciPage.
 
 import { canonicalJson, ed25519PublicKey, ed25519SignHex, ed25519VerifyHex, hex, isLowerHex } from "./voiciCore.js";
@@ -166,6 +166,9 @@ const CALLS_FROM = ["accepted", "signed-in", "anyone", "callback"];
 // Version 2 (docs/voici-calls.md §6): acceptsCalls and callsFrom after acceptsMessages; a v1 index takes no calls.
 const isV2 = (b) => b.acceptsCalls !== undefined || b.callsFrom !== undefined;
 export const voiciPageAcceptsCalls = (b) => b.acceptsCalls === 1;
+// Search engines (owner decision 2026-11-17): `showInSearch: 1` on either version, the last canonical field; absent =
+// hidden (voi.ci sends noindex). 1 is the only value written or read.
+export const voiciPageShowsInSearch = (b) => b?.showInSearch === 1;
 
 export function canonicalVoiciPageIndex(b) {
   const bad = (f) => new Error(`${TAG_VOICI_PAGE}: bad ${f}`);
@@ -181,6 +184,7 @@ export function canonicalVoiciPageIndex(b) {
   if (pp) throw bad(pp);
   if (b.signerKind !== "admin-root" && b.signerKind !== "irk") throw bad("signerKind");
   if (!isLowerHex(b.signerPub, 32)) throw bad("signerPub");
+  if (b.showInSearch !== undefined && b.showInSearch !== 1) throw bad("showInSearch");
   return enc(
     [
       v2 ? TAG_VOICI_PAGE_V2 : TAG_VOICI_PAGE,
@@ -196,6 +200,7 @@ export function canonicalVoiciPageIndex(b) {
       b.pieces.map(pieceKey).join(","),
       b.signerKind,
       b.signerPub,
+      ...(b.showInSearch === 1 ? ["1"] : []),
     ].join("|"),
   );
 }
@@ -227,7 +232,9 @@ export function parseVoiciPageIndex(input) {
     }
   }
   if (!isObj(v) || v.kind !== "VoiciPage" || !isLowerHex(v.signature, 64)) return null;
-  if (!(v.version === 1 && exactKeys(v, INDEX_KEYS)) && !(v.version === 2 && exactKeys(v, INDEX_KEYS_V2))) return null;
+  const search = "showInSearch" in v ? ["showInSearch"] : [];
+  if (!(v.version === 1 && exactKeys(v, [...INDEX_KEYS, ...search])) && !(v.version === 2 && exactKeys(v, [...INDEX_KEYS_V2, ...search]))) return null;
+  if ("showInSearch" in v && v.showInSearch !== 1) return null;
   try {
     canonicalVoiciPageIndex(v);
   } catch {
@@ -248,6 +255,7 @@ export function parseVoiciPageIndex(input) {
     pieces: v.pieces.map((p) => ({ role: p.role, sha256: p.sha256, size: p.size })),
     signerKind: v.signerKind,
     signerPub: v.signerPub,
+    ...(v.showInSearch === 1 ? { showInSearch: 1 } : {}),
     signature: v.signature,
   };
 }

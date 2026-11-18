@@ -12,7 +12,7 @@ import { sha256Hex, signVoiciAlertsP256, signVoiciPageRemove } from "@flagship/p
 import { route, type RouteEnv } from "../src/route.js";
 import { isVoiciApiPath } from "../src/voiciRoutes.js";
 import { endpointFor } from "../src/rateLimit.js";
-import { VOICI_SITE_SHELL } from "../src/voiciSiteBuild.generated.js";
+import { VOICI_SITE_SHELL, VOICI_SITE_SHELL_NOINDEX } from "../src/voiciSiteBuild.generated.js";
 
 const SHELL = "<!doctype html><title>voi.ci</title>";
 
@@ -38,8 +38,8 @@ async function world(enabled = true) {
   return { sqlite, seed, bucket, env, call, close: () => sqlite.close() };
 }
 
-async function publishPage(w: Awaited<ReturnType<typeof world>>, now: number) {
-  const page = buildPage({ seq: 1, issuedAt: now });
+async function publishPage(w: Awaited<ReturnType<typeof world>>, now: number, o: { seq?: number; search?: boolean } = {}) {
+  const page = buildPage({ seq: o.seq ?? 1, issuedAt: now, ...(o.search ? { search: true } : {}) });
   for (const bytes of page.pieces.values()) {
     const h = uploadHeaders(bytes, now);
     const r = await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/pieces`, {
@@ -114,12 +114,19 @@ describe("voi.ci routes", () => {
     try {
       await publishPage(w, Date.now());
       const shell = await w.call("https://voi.ci/alice");
-      expect([shell.status, await shell.text()]).toEqual([200, VOICI_SITE_SHELL]);
+      // Hidden from search engines by default (the index has no showInSearch).
+      expect([shell.status, await shell.text(), shell.headers.get("x-robots-tag")]).toEqual([200, VOICI_SITE_SHELL_NOINDEX, "noindex"]);
       expect(shell.headers.get("content-security-policy")).toContain("img-src 'self' blob:;");
       expect(shell.headers.get("x-frame-options")).toBe("DENY");
       const at = await w.call("https://voi.ci/@alice");
       expect([at.status, at.headers.get("location")]).toEqual([301, "https://voi.ci/alice"]);
       expect((await w.call("https://voi.ci/nobody-here")).status).toBe(404);
+      // The owner turns on "Show in search engines": the next signed index says showInSearch 1.
+      await publishPage(w, Date.now(), { seq: 2, search: true });
+      const listed = await w.call("https://voi.ci/alice");
+      expect([listed.status, await listed.text(), listed.headers.get("x-robots-tag")]).toEqual([200, VOICI_SITE_SHELL, null]);
+      await publishPage(w, Date.now(), { seq: 3 });
+      expect((await w.call("https://voi.ci/alice")).headers.get("x-robots-tag")).toBe("noindex");
       await w.seed.voici.setTakedown(USER, Date.now(), "spam");
       expect((await w.call("https://voi.ci/alice")).status).toBe(410);
     } finally {

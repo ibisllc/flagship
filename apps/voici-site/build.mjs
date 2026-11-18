@@ -77,8 +77,9 @@ export function buildSite() {
   // sw.js is the reply-alert service worker, a classic script the site registers (served as /-/sw.js), not a module.
   const modules = paths.filter((p) => p.endsWith(".js") && p !== "app.js" && p !== SERVICE_WORKER);
   // `status`: the shell `.com` sends as its 404 or 410 on voi.ci (docs/voici-namespace-spec.md, Resolution), so the
-  // page shows the right sentence in the visitor's language; the page shell has none.
-  const shellFor = (status) =>
+  // page shows the right sentence in the visitor's language; the page shell has none. `noindex`: the page shell of an
+  // owner who did not turn on "Show in search engines" (docs/voici-and-messages.md §4.4), and of a page taken down.
+  const shellFor = (status, noindex = false) =>
     "<!doctype html>\n" +
     '<html lang="en" data-theme="classic">\n' +
     "<head>\n" +
@@ -87,7 +88,8 @@ export function buildSite() {
     '<meta name="referrer" content="no-referrer">\n' +
     '<meta name="color-scheme" content="light dark">\n' +
     `<meta name="voici-build" content="${build}">\n` +
-    (status ? `<meta name="voici-status" content="${status}">\n<meta name="robots" content="noindex">\n` : "") +
+    (status ? `<meta name="voici-status" content="${status}">\n` : "") +
+    (status || noindex ? '<meta name="robots" content="noindex">\n' : "") +
     "<title>voi.ci</title>\n" +
     `<link rel="icon" href="${base}/favicon.svg" type="image/svg+xml">\n` +
     `<link rel="preload" href="${base}/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>\n` +
@@ -113,6 +115,8 @@ export function buildSite() {
     `export const VOICI_SITE_DIR = ${JSON.stringify(dir)};\n` +
     `export const VOICI_SITE_FILES: ReadonlySet<string> = new Set(${JSON.stringify(listed, null, 2)});\n` +
     `export const VOICI_SITE_SHELL = ${JSON.stringify(shell)};\n` +
+    "// The page shell for a page hidden from search engines (the default: its index has no showInSearch 1).\n" +
+    `export const VOICI_SITE_SHELL_NOINDEX = ${JSON.stringify(shellFor(null, true))};\n` +
     "// The same shell as voi.ci's 404 (unknown, reserved, unpublished, a held name) and 410 (a removed link or code).\n" +
     `export const VOICI_SITE_SHELL_404 = ${JSON.stringify(shellFor("404"))};\n` +
     `export const VOICI_SITE_SHELL_410 = ${JSON.stringify(shellFor("410"))};\n` +

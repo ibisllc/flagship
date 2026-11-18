@@ -212,6 +212,16 @@ first 16 hex of that piece's own hash; per-role size caps apply in the index (pr
 listed image pieces. Caps: 2,000 pieces, 300 KiB index. **No cap on the number of posts or the total page size** (owner):
 only per-piece caps and per-day upload brakes (§9.4).
 
+**Search engines (owner decision 2026-11-17).** An owner's page is hidden from search engines unless the owner turns
+on **Show in search engines** (Page options, admin devices, while the page is public). The setting is one optional
+field of the index, on either version: `showInSearch: 1` in the envelope, appended as the last canonical field
+(`…|<signerKind>|<signerPub>|1`). Absent means hidden; 1 is the only value written or accepted (`0`, `true`, `null` are
+`malformed`), so a hidden page has exactly one encoding and every index signed before this reads as it did. Stripping or
+adding the field breaks the signature. Writers add it only while the switch is on, and every publish carries the value
+of the index it replaces (as the calls fields), so an edit never changes it. A reader older than this field refuses an
+index that has it (exact keys), which only matters once an owner turns the switch on. Vectors: the `index.search`
+section and seven `index.checks` cases of `test-vectors/voici/vectors.json` (TS, webapp, Swift, Kotlin).
+
 ### 2.8 Storage and caching
 
 R2 bucket `flagship-voici` (gym `flagship-voici-gym`), binding `VOICI`, custom domain `files.voi.ci`
@@ -409,6 +419,12 @@ No inline script or style (the shell is static; a source-grep test fails on any)
 
 C: `img-src 'self' blob:` instead of `img-src 'self' https://files.voi.ci`: the page shows only image bytes it already
 checked against the signed index, so it shows them from `blob:` URLs it minted, never straight from files.voi.ci.
+
+**Robots (owner decision 2026-11-17).** An owner page's shell carries `<meta name="robots" content="noindex">` and the
+header `X-Robots-Tag: noindex` unless the stored index says `showInSearch: 1` (§2.7); `.com` reads it from the index it
+keeps in D1 when it resolves the name, and anything it can't read is hidden. A page taken down (410) and voi.ci's 404 and 410
+shells also send both. The front door at `/` stays indexable (`docs/voici-front-door.md` §6). Images
+are shown from `blob:` URLs, so crawlers that run the page never see a `files.voi.ci` URL to list.
 
 ## 5. Publishing from the apps
 

@@ -102,7 +102,7 @@ describe("voi.ci namespace acceptance tests (docs/voici-namespace-spec.md)", () 
     expect(await w.resolve("/@50cent")).toEqual({ kind: "redirect", location: "https://voi.ci/50cent" });
     expect(await w.resolve("/50cent")).toEqual({ kind: "not-found" });
     await w.publish("50cent");
-    expect(await w.resolve("/50cent")).toEqual({ kind: "page", username: "50cent" });
+    expect(await w.resolve("/50cent")).toEqual({ kind: "page", username: "50cent", searchable: false });
   });
 
   it("T8: 10,000 minted codes all start with a digit, have no hyphen and are CODE_LENGTH long", async () => {

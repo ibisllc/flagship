@@ -83,9 +83,10 @@ It is a plain same-tab link to the front door, not to the stores: a visitor firs
   `hreflang` alternates for every shipped language plus `x-default` → `https://voi.ci/`.
 - voi.ci's 404 and 410 shells (unknown, reserved, unpublished, a removed link) now carry
   `<meta name="robots" content="noindex">`.
-- Owner pages are unchanged (no robots meta; they are rendered by script after a signature check, so crawlers that do
-  not run scripts see only the shell). Whether a page should be `noindex` by default, with an owner opt-in, is an open
-  decision (§9).
+- Owner pages are `noindex` by default (owner decision 2026-11-17): the shell carries
+  `<meta name="robots" content="noindex">` and the response `X-Robots-Tag: noindex`, unless the owner turned on
+  **Show in search engines** in Page options (the signed index says `showInSearch: 1`, `docs/voici-and-messages.md`
+  §2.7, §4.4). A page taken down is `noindex` too.
 - No `robots.txt` or sitemap: `/robots.txt` is a 404 (paths with a dot are never names), which crawlers read as
   "allowed".
 
@@ -133,7 +134,8 @@ The front door is the one voi.ci answer that needs nothing but the Worker's own 
   before marketing, or drop the calls block and the "call you" wording until then.
 - **"Twitter clone".** The page positions voi.ci as a calm alternative without naming anyone. Calling it a clone of a
   named service in ads is a marketing and legal choice for the owner; nothing in the product says it.
-- **Owner pages and search engines**: index by default, or `noindex` by default with an owner switch.
+- ~~**Owner pages and search engines**~~: decided 2026-11-17, `noindex` by default with the owner switch "Show in
+  search engines" (§6).
 - **Social card**: an `og:image` (a static 1200×630 card per language) for links shared on messaging apps, which
   matter a lot in the target markets.
 - **Tutoiement.** French uses "vous" everywhere on voi.ci. A younger, more informal "tu" voice is possible for

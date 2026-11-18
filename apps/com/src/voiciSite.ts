@@ -4,7 +4,7 @@
 // when <dir> is this build and the path is in its manifest. Anything else under /-/ is a 404, never the assets
 // layer's single-page fallback. voi.ci's own 404 and 410 are the same shell with a `voici-status` meta, so the site
 // writes the sentence in the visitor's language.
-import { VOICI_SITE_DIR, VOICI_SITE_FILES, VOICI_SITE_SHELL, VOICI_SITE_SHELL_404, VOICI_SITE_SHELL_410 } from "./voiciSiteBuild.generated.js";
+import { VOICI_SITE_DIR, VOICI_SITE_FILES, VOICI_SITE_SHELL, VOICI_SITE_SHELL_404, VOICI_SITE_SHELL_410, VOICI_SITE_SHELL_NOINDEX } from "./voiciSiteBuild.generated.js";
 
 /** Where apps/voici-site/build.mjs writes the files inside the Worker's assets (apps/web/public/_voici). */
 export const VOICI_SITE_ASSET_DIR = "/_voici";
@@ -25,17 +25,22 @@ function withHeaders(body: BodyInit | null, status: number, siteHeaders: [string
 
 const notFound = (siteHeaders: [string, string][]) => voiciErrorResponse(404, siteHeaders, false);
 
-/** voi.ci's 404 and 410: the site shell that says which, or no body at all when the site is off. */
+/** voi.ci's 404 and 410: the site shell that says which (noindex), or no body at all when the site is off. */
 export function voiciErrorResponse(status: 404 | 410, siteHeaders: [string, string][], head: boolean): Response {
   const body = head ? null : status === 410 ? VOICI_SITE_SHELL_410 : VOICI_SITE_SHELL_404;
-  return withHeaders(body, status, siteHeaders, { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" });
+  return withHeaders(body, status, siteHeaders, { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store", "x-robots-tag": "noindex" });
 }
 
-/** The page shell (the same bytes for every page); 410 for a page taken down. */
-export function voiciShellResponse(request: Request, siteHeaders: [string, string][], status = 200): Response {
-  return withHeaders(request.method.toUpperCase() === "HEAD" ? null : VOICI_SITE_SHELL, status, siteHeaders, {
+/**
+ * The page shell (the same bytes for every page); 410 for a page taken down. `noindex` (an owner page whose index
+ * does not say showInSearch 1, and a page taken down): the shell with `<meta name="robots" content="noindex">` and the
+ * `X-Robots-Tag: noindex` header, so search engines leave it out whether or not they run the page's script.
+ */
+export function voiciShellResponse(request: Request, siteHeaders: [string, string][], status = 200, noindex = false): Response {
+  return withHeaders(request.method.toUpperCase() === "HEAD" ? null : noindex ? VOICI_SITE_SHELL_NOINDEX : VOICI_SITE_SHELL, status, siteHeaders, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": status === 200 ? "public, max-age=60" : "no-store",
+    ...(noindex ? { "x-robots-tag": "noindex" } : {}),
   });
 }
 

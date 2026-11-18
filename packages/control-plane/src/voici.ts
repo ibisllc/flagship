@@ -115,8 +115,9 @@ export type VoiciResolution =
   | { kind: "link"; target: string }
   /** 410: a retired link or code, or an expired one-off ("this link was removed"). */
   | { kind: "gone" }
-  /** The page shell: the username has a published page. */
-  | { kind: "page"; username: string }
+  /** The page shell: the username has a published page. `searchable`: its index says showInSearch 1 (owner decision
+   *  2026-11-17); otherwise voi.ci asks search engines not to list it. */
+  | { kind: "page"; username: string; searchable: boolean }
   /** 410 page shell: the page was taken down. */
   | { kind: "page-gone"; username: string }
   /** `/-/<rest>`: the site's own routes and files (D11). */
@@ -217,5 +218,20 @@ export async function resolveVoiciPath(deps: VoiciResolveDeps, pathname: string,
   const page = await deps.pages.getPage(row.owner ?? row.name);
   // A page its owner removed is the same 404 as one never published.
   if (!page || page.removedAt != null) return { kind: "not-found" };
-  return page.takenDownAt === null ? { kind: "page", username: row.name } : { kind: "page-gone", username: row.name };
+  return page.takenDownAt === null ? { kind: "page", username: row.name, searchable: voiciIndexShowsInSearch(page.indexJson) } : { kind: "page-gone", username: row.name };
+}
+
+/**
+ * Whether a stored page index lets search engines list the page (`showInSearch: 1`, docs/voici-and-messages.md §2.7).
+ * Hidden unless it plainly says so: an index without the field, or one that can't be read, is noindex. The stored JSON
+ * is `.com`'s own serialisation of a checked index, so most pages are answered by the substring test without a parse.
+ */
+export function voiciIndexShowsInSearch(indexJson: string | null | undefined): boolean {
+  if (typeof indexJson !== "string" || !indexJson.includes('"showInSearch"')) return false;
+  try {
+    const v = JSON.parse(indexJson) as { showInSearch?: unknown } | null;
+    return v !== null && typeof v === "object" && v.showInSearch === 1;
+  } catch {
+    return false;
+  }
 }

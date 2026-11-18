@@ -70,7 +70,7 @@ describe("voi.ci page removal", () => {
     const before = await resolveVoiciPath(resolver(w.storage), `/${USER}`);
     await w.remove(w.removal(2));
     const after = await resolveVoiciPath(resolver(w.storage), `/${USER}`);
-    expect(before).toEqual({ kind: "page", username: USER });
+    expect(before).toEqual({ kind: "page", username: USER, searchable: false });
     expect(after).toEqual({ kind: "not-found" });
   });
 
