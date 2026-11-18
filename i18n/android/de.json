@@ -4341,5 +4341,24 @@
   "org_plan_error_not_admin": "Nur Admins der Organisation können ihr Guthaben ändern.",
   "org_plan_error_generic": "Etwas ist schiefgelaufen. Versuche es noch einmal.",
   "org_plan_open_reason": "Guthaben der Organisation öffnen",
-  "org_key_wallet": "Schlüssel des Guthabens der Organisation"
+  "org_key_wallet": "Schlüssel des Guthabens der Organisation",
+  "voucher_link_question": {
+    "one": "%1$d Gutschein (%2$s) zur Brieftasche dieses Kontos hinzufügen?",
+    "other": "%1$d Gutscheine (%2$s) zur Brieftasche dieses Kontos hinzufügen?"
+  },
+  "voucher_link_part": "Dies ist Link %1$d von %2$d aus demselben Kauf.",
+  "voucher_link_skip_duplicate": "Schon in dieser Brieftasche: %1$d",
+  "voucher_link_skip_spent": "Bereits ausgegeben: %1$d",
+  "voucher_link_skip_invalid": "Nicht von Flagship signiert, ausgelassen: %1$d",
+  "voucher_link_skip_unknown_key": "Mit einem Schlüssel signiert, den dieses Gerät noch nicht kennt, ausgelassen: %1$d",
+  "voucher_link_privacy": "Beim Hinzufügen wird nichts gesendet. Sie werden später nach und nach ausgegeben, wie jeder andere Gutschein.",
+  "voucher_link_damaged": "Dieser Gutscheinlink ist unvollständig oder beschädigt. Öffne den ganzen Link erneut oder nutze die Gutscheindatei.",
+  "voucher_link_newer": "Dieser Gutscheinlink braucht eine neuere Version von Flagship. Aktualisiere die App und öffne den Link dann erneut.",
+  "voucher_link_already": "Diese Gutscheine sind schon in dieser Brieftasche. Es wurde nichts hinzugefügt.",
+  "voucher_link_spent": "Diese Gutscheine wurden bereits ausgegeben. Es wurde nichts hinzugefügt.",
+  "voucher_link_invalid": "Diese Gutscheine sind nicht von Flagship signiert. Es wurde nichts hinzugefügt.",
+  "voucher_link_unknown_key": "Dieses Gerät kennt den Schlüssel, mit dem diese Gutscheine signiert wurden, noch nicht. Öffne einmal online Einstellungen, Tarif und dann den Link erneut.",
+  "voucher_link_full": "Diese Brieftasche fasst 500 Gutscheine. Gib zuerst einige aus und öffne den Link dann erneut.",
+  "voucher_link_not_admin": "Nur ein Admin-Gerät dieses Kontos kann Gutscheine hinzufügen. Öffne den Link auf einem davon.",
+  "voucher_link_signed_out": "Melde dich zuerst bei deinem Konto an und öffne den Link dann erneut."
 }

@@ -98,8 +98,15 @@ fun RootShell(
 
     var backupApproval by remember { mutableStateOf<com.flagshipserver.app.core.DeepLink.ApproveBackupDownload?>(null) }
     var voiciSignIn by remember { mutableStateOf<String?>(null) }
+    var voucherLink by remember { mutableStateOf<String?>(null) }
     androidx.compose.runtime.LaunchedEffect(pending) {
         val link = pending ?: return@LaunchedEffect
+        if (link is com.flagshipserver.app.core.DeepLink.VoucherLink) {
+            // Vouchers bought elsewhere: checked and added on this phone alone (no network call to add them).
+            deepLinker.consume()
+            voucherLink = link.rawLink
+            return@LaunchedEffect
+        }
         if (link is com.flagshipserver.app.core.DeepLink.VoiciSignIn) {
             // A voi.ci tab asking this account to sign it in: approve over this phone's own keys.
             deepLinker.consume()
@@ -153,6 +160,7 @@ fun RootShell(
             is com.flagshipserver.app.core.DeepLink.VoiciSignIn -> selected
             is com.flagshipserver.app.core.DeepLink.Messages -> RootDestination.MESSAGES
             com.flagshipserver.app.core.DeepLink.PageEditor -> RootDestination.MESSAGES
+            is com.flagshipserver.app.core.DeepLink.VoucherLink -> selected
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so
@@ -170,6 +178,10 @@ fun RootShell(
 
     voiciSignIn?.let { raw ->
         com.flagshipserver.app.ui.screens.VoiciSignInDialog(rawLink = raw, onDismiss = { voiciSignIn = null })
+    }
+
+    voucherLink?.let { raw ->
+        com.flagshipserver.app.ui.screens.VoucherLinkDialog(rawLink = raw, onDismiss = { voucherLink = null })
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalWindowWidthClass provides widthSizeClass) {

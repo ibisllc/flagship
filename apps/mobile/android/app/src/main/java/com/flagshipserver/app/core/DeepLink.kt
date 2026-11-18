@@ -170,6 +170,13 @@ sealed interface DeepLink {
     /** The page editor (a `page-drafts` push on an admin device). */
     data object PageEditor : DeepLink
 
+    /** Vouchers bought elsewhere, handed over as `https://<control host>/app/vouchers#v=<payload>` (docs/anonymous-vouchers.md
+     *  "Voucher links"). The vouchers are bearer secrets riding only in the fragment: keep them out of logs. This app only
+     *  receives such a link; it never links or points to the web shop (Play's payments policy). */
+    data class VoucherLink(val rawLink: String) : DeepLink {
+        override fun toString(): String = "VoucherLink"
+    }
+
     companion object {
         /// Parse a `flagship://...` URI, its `https://<control host>/app/...`
         /// twin, a control-host App Link (/join, /remote, …) OR a box
@@ -177,6 +184,11 @@ sealed interface DeepLink {
         /// DeepLink.parse and the webapp router.
         /// Returns null when the host/scheme is not one we route.
         fun parse(uri: Uri): DeepLink? {
+            if ((uri.scheme == "https" || uri.scheme == "http") && Endpoints.isControlHost(uri.host) &&
+                uri.path?.trimEnd('/') == com.flagshipserver.app.core.payments.VoucherLink.PATH
+            ) {
+                return VoucherLink(uri.toString())
+            }
             appRouteTwin(uri)?.let { return parse(it) }
             // Universal link: a service-access invite served from a BOX —
             // `https://<server>.<user>.flagship.services/invite#<secret>`.

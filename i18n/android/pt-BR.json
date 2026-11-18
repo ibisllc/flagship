@@ -4341,5 +4341,24 @@
   "org_plan_error_not_admin": "Só um administrador da organização pode alterar o saldo.",
   "org_plan_error_generic": "Algo deu errado. Tente novamente.",
   "org_plan_open_reason": "Abrir o saldo da organização",
-  "org_key_wallet": "Chave do saldo da organização"
+  "org_key_wallet": "Chave do saldo da organização",
+  "voucher_link_question": {
+    "one": "Adicionar %1$d voucher (%2$s) à carteira desta conta?",
+    "other": "Adicionar %1$d vouchers (%2$s) à carteira desta conta?"
+  },
+  "voucher_link_part": "Este é o link %1$d de %2$d da mesma compra.",
+  "voucher_link_skip_duplicate": "Já nesta carteira: %1$d",
+  "voucher_link_skip_spent": "Já gastos: %1$d",
+  "voucher_link_skip_invalid": "Sem assinatura do Flagship, deixados de fora: %1$d",
+  "voucher_link_skip_unknown_key": "Assinados com uma chave que este dispositivo ainda não conhece, deixados de fora: %1$d",
+  "voucher_link_privacy": "Nada é enviado quando você os adiciona. Eles são gastos depois, aos poucos, como qualquer outro voucher.",
+  "voucher_link_damaged": "Este link de vouchers está incompleto ou danificado. Abra o link inteiro de novo ou use o arquivo de vouchers.",
+  "voucher_link_newer": "Este link de vouchers precisa de uma versão mais recente do Flagship. Atualize o app e abra o link de novo.",
+  "voucher_link_already": "Estes vouchers já estão nesta carteira. Nada foi adicionado.",
+  "voucher_link_spent": "Estes vouchers já foram gastos. Nada foi adicionado.",
+  "voucher_link_invalid": "Estes vouchers não têm a assinatura do Flagship. Nada foi adicionado.",
+  "voucher_link_unknown_key": "Este dispositivo ainda não conhece a chave com que estes vouchers foram assinados. Abra Ajustes, Plano uma vez com internet e depois abra o link de novo.",
+  "voucher_link_full": "Esta carteira comporta 500 vouchers. Gaste alguns primeiro e abra o link de novo.",
+  "voucher_link_not_admin": "Só um dispositivo administrador desta conta pode adicionar vouchers. Abra o link em um deles.",
+  "voucher_link_signed_out": "Entre na sua conta primeiro e abra o link de novo."
 }

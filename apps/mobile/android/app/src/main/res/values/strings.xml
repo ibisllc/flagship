@@ -4351,4 +4351,23 @@
     <string name="org_plan_error_generic">Something went wrong. Try again.</string>
     <string name="org_plan_open_reason">Open the org\'s balance</string>
     <string name="org_key_wallet">The org\'s balance key</string>
+    <plurals name="voucher_link_question">
+        <item quantity="one">Add %1$d voucher (%2$s) to this account\'s wallet?</item>
+        <item quantity="other">Add %1$d vouchers (%2$s) to this account\'s wallet?</item>
+    </plurals>
+    <string name="voucher_link_part">This is link %1$d of %2$d from the same purchase.</string>
+    <string name="voucher_link_skip_duplicate">Already in this wallet: %1$d</string>
+    <string name="voucher_link_skip_spent">Already spent: %1$d</string>
+    <string name="voucher_link_skip_invalid">Not signed by Flagship, left out: %1$d</string>
+    <string name="voucher_link_skip_unknown_key">Signed with a key this device doesn\'t know yet, left out: %1$d</string>
+    <string name="voucher_link_privacy">Nothing is sent when you add them. They are spent later, a little at a time, like any other voucher.</string>
+    <string name="voucher_link_damaged">This voucher link is incomplete or damaged. Open the whole link again, or use the voucher file.</string>
+    <string name="voucher_link_newer">This voucher link needs a newer version of Flagship. Update the app, then open the link again.</string>
+    <string name="voucher_link_already">These vouchers are already in this wallet. Nothing was added.</string>
+    <string name="voucher_link_spent">These vouchers were already spent. Nothing was added.</string>
+    <string name="voucher_link_invalid">These vouchers aren\'t signed by Flagship. Nothing was added.</string>
+    <string name="voucher_link_unknown_key">This device doesn\'t know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.</string>
+    <string name="voucher_link_full">This wallet can hold 500 vouchers. Spend some first, then open the link again.</string>
+    <string name="voucher_link_not_admin">Only an admin device of this account can add vouchers. Open the link on one.</string>
+    <string name="voucher_link_signed_out">Sign in to your account first, then open the link again.</string>
 </resources>

@@ -4344,4 +4344,22 @@
     <string name="org_plan_error_generic">問題が発生しました。もう一度お試しください。</string>
     <string name="org_plan_open_reason">組織の残高を開く</string>
     <string name="org_key_wallet">組織の残高の鍵</string>
+    <plurals name="voucher_link_question">
+        <item quantity="other">%1$d 枚のバウチャー（%2$s）をこのアカウントのウォレットに追加しますか？</item>
+    </plurals>
+    <string name="voucher_link_part">同じ購入のリンク %2$d 件中 %1$d 件目です。</string>
+    <string name="voucher_link_skip_duplicate">このウォレットにすでにあるもの: %1$d</string>
+    <string name="voucher_link_skip_spent">使用済み: %1$d</string>
+    <string name="voucher_link_skip_invalid">Flagship の署名がないため除外: %1$d</string>
+    <string name="voucher_link_skip_unknown_key">この端末がまだ知らない鍵で署名されているため除外: %1$d</string>
+    <string name="voucher_link_privacy">追加しても何も送信されません。ほかのバウチャーと同じく、あとで少しずつ使われます。</string>
+    <string name="voucher_link_damaged">このバウチャーリンクは不完全か壊れています。リンク全体をもう一度開くか、バウチャーファイルを使ってください。</string>
+    <string name="voucher_link_newer">このバウチャーリンクには新しいバージョンの Flagship が必要です。アプリを更新してから、もう一度リンクを開いてください。</string>
+    <string name="voucher_link_already">これらのバウチャーはすでにこのウォレットにあります。何も追加されませんでした。</string>
+    <string name="voucher_link_spent">これらのバウチャーはすでに使用済みです。何も追加されませんでした。</string>
+    <string name="voucher_link_invalid">これらのバウチャーには Flagship の署名がありません。何も追加されませんでした。</string>
+    <string name="voucher_link_unknown_key">この端末は、これらのバウチャーに署名した鍵をまだ知りません。オンラインのときに一度「設定」の「プラン」を開いてから、もう一度リンクを開いてください。</string>
+    <string name="voucher_link_full">このウォレットに入るバウチャーは 500 枚までです。いくつか使ってから、もう一度リンクを開いてください。</string>
+    <string name="voucher_link_not_admin">バウチャーを追加できるのは、このアカウントの管理者端末だけです。管理者端末でリンクを開いてください。</string>
+    <string name="voucher_link_signed_out">まずアカウントにサインインしてから、もう一度リンクを開いてください。</string>
 </resources>

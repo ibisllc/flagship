@@ -43,6 +43,20 @@ class MockPaymentsClient(
         nHex = VoiciJs.hex(Vouchers.i2osp(n, (n.bitLength() + 7) / 8))
         eHex = e.toString(16).let { if (it.length % 2 == 1) "0$it" else it }
         keyId = Vouchers.keyId(nHex, eHex)
+        last = this
+    }
+
+    /** Vouchers signed by this mock `.com` as if bought on the web shop (the gym's voucher-link scenario). */
+    fun issueForGym(count: Int): List<com.flagshipserver.app.core.payments.Voucher> {
+        val key = com.flagshipserver.app.core.payments.VoucherKey(keyId, nHex, eHex)
+        val reqs = (0 until count).map { Vouchers.request(key) }
+        val sigs = sign(reqs.map { it.second })
+        return reqs.mapIndexed { i, r -> Vouchers.finalize(key, r.first, sigs[i]) }
+    }
+
+    companion object {
+        /** The mock the running gym app uses (a link must be signed by its key). */
+        @Volatile var last: MockPaymentsClient? = null
     }
 
     var plan: String? = startPlan

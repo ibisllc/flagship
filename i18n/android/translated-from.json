@@ -4263,5 +4263,21 @@
   "org_plan_error_not_admin": "103da2dded15",
   "org_plan_error_generic": "10485d1f5d62",
   "org_plan_open_reason": "2d2bb61fbb3e",
-  "org_key_wallet": "2e4ee6191390"
+  "org_key_wallet": "2e4ee6191390",
+  "voucher_link_question": "9bf9e76d4d5c",
+  "voucher_link_part": "c3e50ce6017d",
+  "voucher_link_skip_duplicate": "cb8dfcfadbda",
+  "voucher_link_skip_spent": "abf0d00158de",
+  "voucher_link_skip_invalid": "d349c23ffeda",
+  "voucher_link_skip_unknown_key": "0f9cf3188ccb",
+  "voucher_link_privacy": "5b66807f5a58",
+  "voucher_link_damaged": "d41018f0edd6",
+  "voucher_link_newer": "b7fdef401dca",
+  "voucher_link_already": "d96826f06b45",
+  "voucher_link_spent": "00941c9ea64f",
+  "voucher_link_invalid": "fc8b4e9ea84f",
+  "voucher_link_unknown_key": "9ef77cfb500d",
+  "voucher_link_full": "e57f67f29aec",
+  "voucher_link_not_admin": "b3eef21326fd",
+  "voucher_link_signed_out": "3f764bfc0c11"
 }

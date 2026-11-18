@@ -4344,4 +4344,23 @@
     <string name="org_plan_error_generic">Un problème est survenu. Réessayez.</string>
     <string name="org_plan_open_reason">Ouvrir le solde de l’organisation</string>
     <string name="org_key_wallet">Clé du solde de l’organisation</string>
+    <plurals name="voucher_link_question">
+        <item quantity="one">Ajouter %1$d bon (%2$s) au portefeuille de ce compte ?</item>
+        <item quantity="other">Ajouter %1$d bons (%2$s) au portefeuille de ce compte ?</item>
+    </plurals>
+    <string name="voucher_link_part">Ceci est le lien %1$d sur %2$d du même achat.</string>
+    <string name="voucher_link_skip_duplicate">Déjà dans ce portefeuille : %1$d</string>
+    <string name="voucher_link_skip_spent">Déjà dépensés : %1$d</string>
+    <string name="voucher_link_skip_invalid">Non signés par Flagship, écartés : %1$d</string>
+    <string name="voucher_link_skip_unknown_key">Signés avec une clé que cet appareil ne connaît pas encore, écartés : %1$d</string>
+    <string name="voucher_link_privacy">Rien n\'est envoyé quand vous les ajoutez. Ils sont dépensés plus tard, petit à petit, comme tout autre bon.</string>
+    <string name="voucher_link_damaged">Ce lien de bons est incomplet ou endommagé. Ouvrez à nouveau le lien complet, ou utilisez le fichier de bons.</string>
+    <string name="voucher_link_newer">Ce lien de bons nécessite une version plus récente de Flagship. Mettez l\'app à jour, puis rouvrez le lien.</string>
+    <string name="voucher_link_already">Ces bons sont déjà dans ce portefeuille. Rien n\'a été ajouté.</string>
+    <string name="voucher_link_spent">Ces bons ont déjà été dépensés. Rien n\'a été ajouté.</string>
+    <string name="voucher_link_invalid">Ces bons ne sont pas signés par Flagship. Rien n\'a été ajouté.</string>
+    <string name="voucher_link_unknown_key">Cet appareil ne connaît pas encore la clé qui a signé ces bons. Ouvrez Réglages, Forfait une fois en ligne, puis rouvrez le lien.</string>
+    <string name="voucher_link_full">Ce portefeuille peut contenir 500 bons. Dépensez-en d\'abord, puis rouvrez le lien.</string>
+    <string name="voucher_link_not_admin">Seul un appareil administrateur de ce compte peut ajouter des bons. Ouvrez le lien sur l\'un d\'eux.</string>
+    <string name="voucher_link_signed_out">Connectez-vous d\'abord à votre compte, puis rouvrez le lien.</string>
 </resources>

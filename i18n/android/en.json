@@ -17824,5 +17824,73 @@
   "org_key_wallet": {
     "en": "The org's balance key",
     "ctx": "Organizations: the org's Business plan (docs/plans-and-backup-offer.md)"
+  },
+  "voucher_link_question": {
+    "en": {
+      "one": "Add %1$d voucher (%2$s) to this account's wallet?",
+      "other": "Add %1$d vouchers (%2$s) to this account's wallet?"
+    },
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")",
+    "plural": true
+  },
+  "voucher_link_part": {
+    "en": "This is link %1$d of %2$d from the same purchase.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_skip_duplicate": {
+    "en": "Already in this wallet: %1$d",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_skip_spent": {
+    "en": "Already spent: %1$d",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_skip_invalid": {
+    "en": "Not signed by Flagship, left out: %1$d",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_skip_unknown_key": {
+    "en": "Signed with a key this device doesn't know yet, left out: %1$d",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_privacy": {
+    "en": "Nothing is sent when you add them. They are spent later, a little at a time, like any other voucher.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_damaged": {
+    "en": "This voucher link is incomplete or damaged. Open the whole link again, or use the voucher file.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_newer": {
+    "en": "This voucher link needs a newer version of Flagship. Update the app, then open the link again.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_already": {
+    "en": "These vouchers are already in this wallet. Nothing was added.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_spent": {
+    "en": "These vouchers were already spent. Nothing was added.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_invalid": {
+    "en": "These vouchers aren't signed by Flagship. Nothing was added.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_unknown_key": {
+    "en": "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_full": {
+    "en": "This wallet can hold 500 vouchers. Spend some first, then open the link again.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_not_admin": {
+    "en": "Only an admin device of this account can add vouchers. Open the link on one.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
+  },
+  "voucher_link_signed_out": {
+    "en": "Sign in to your account first, then open the link again.",
+    "ctx": "voucher link (docs/anonymous-vouchers.md \"Voucher links\")"
   }
 }

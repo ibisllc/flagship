@@ -58,6 +58,27 @@ interface PaymentsLocalStore {
     var nextSpendAt: Long
     fun relay(username: String): RelayState
     fun setRelay(username: String, state: RelayState)
+    /** The voucher keys of the last payments config read (public data): a voucher link is checked against them offline. */
+    fun voucherKeys(): List<VoucherKey> = emptyList()
+    fun setVoucherKeys(keys: List<VoucherKey>) {}
+    /** This device's sealed copy of the wallet (`{version, nonce, ct}` JSON), so a change made offline survives a restart. */
+    fun sealedWallet(username: String): String? = null
+    fun setSealedWallet(username: String, text: String?) {}
+}
+
+internal object VoucherKeysJson {
+    fun encode(keys: List<VoucherKey>): String = JsonArray(keys.map { k ->
+        JsonObject(linkedMapOf("keyId" to JsonPrimitive(k.keyId), "nHex" to JsonPrimitive(k.nHex), "eHex" to JsonPrimitive(k.eHex)))
+    }).toString()
+
+    fun decode(text: String?): List<VoucherKey> {
+        if (text == null) return emptyList()
+        return (VoiciJs.parseJson(text) as? JsonArray).orEmpty().mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            VoucherKey(VoiciJs.str(o["keyId"]) ?: return@mapNotNull null, VoiciJs.str(o["nHex"]) ?: return@mapNotNull null, VoiciJs.str(o["eHex"]) ?: return@mapNotNull null)
+                .takeIf { Vouchers.rsa(it) != null }
+        }
+    }
 }
 
 class PrefsPaymentsLocalStore(context: android.content.Context) : PaymentsLocalStore {
@@ -79,6 +100,13 @@ class PrefsPaymentsLocalStore(context: android.content.Context) : PaymentsLocalS
             .putBoolean("relayLastDirect.$username", state.lastSpendDirect)
             .apply()
     }
+
+    override fun voucherKeys() = VoucherKeysJson.decode(prefs.getString("voucherKeys", null))
+    override fun setVoucherKeys(keys: List<VoucherKey>) { prefs.edit().putString("voucherKeys", VoucherKeysJson.encode(keys)).apply() }
+    override fun sealedWallet(username: String): String? = prefs.getString("wallet.$username", null)
+    override fun setSealedWallet(username: String, text: String?) {
+        prefs.edit().apply { if (text == null) remove("wallet.$username") else putString("wallet.$username", text) }.apply()
+    }
 }
 
 class MemoryPaymentsLocalStore : PaymentsLocalStore {
@@ -86,6 +114,19 @@ class MemoryPaymentsLocalStore : PaymentsLocalStore {
     private val relays = HashMap<String, RelayState>()
     override fun relay(username: String) = relays[username] ?: RelayState()
     override fun setRelay(username: String, state: RelayState) { relays[username] = state }
+    private var keys: List<VoucherKey> = emptyList()
+    private val wallets = HashMap<String, String>()
+    override fun voucherKeys() = keys
+    override fun setVoucherKeys(keys: List<VoucherKey>) { this.keys = keys }
+    override fun sealedWallet(username: String) = wallets[username]
+    override fun setSealedWallet(username: String, text: String?) { if (text == null) wallets.remove(username) else wallets[username] = text }
+}
+
+/** What opening a voucher link would do: ask before adding [plan]'s vouchers, or one refusal code. */
+sealed interface VoucherLinkPreview {
+    data class Ask(val plan: VoucherLinkPlan, val part: Int, val parts: Int) : VoucherLinkPreview
+    /** damaged, newer, already, spent, invalid, unknown-key, full, not-admin, signed-out */
+    data class Refused(val code: String) : VoucherLinkPreview
 }
 
 /** The privacy line under the plan, in the order the Plan screen picks it. */
@@ -160,6 +201,8 @@ class PaymentsCenter(
     val state: StateFlow<PaymentsUi> = _state.asStateFlow()
 
     private fun user() = keyring.username()?.lowercase()?.takeIf { it.isNotEmpty() }
+    /** Whose wallet `_state` holds (an account switch must not merge one account's vouchers into another's). */
+    private var walletUser: String? = null
 
     /** Read the config, the plan, the month's bytes and the wallet. */
     suspend fun refresh() = mutex.withLock { refreshLocked() }
@@ -179,18 +222,27 @@ class PaymentsCenter(
         val umk = keyring.umk()
         var wallet: VoucherWallet? = null
         var version = 0L
+        if (keys.isNotEmpty()) local.setVoucherKeys(keys.map { it.first })
         val fetched = if (umk != null) runCatching { client.wallet(u) } else null
+        // This device's copy: in memory, else the sealed one it kept (a change made offline before a restart).
+        val (mine, mineVersion) = if (_state.value.wallet != null && walletUser == u) _state.value.wallet to _state.value.version
+        else (umk?.let { localCopy(u, it) } ?: (null to 0L))
+        var unsynced = false
         if (umk != null && fetched != null && fetched.isFailure) {
             // Offline: keep what this device has.
-            wallet = _state.value.wallet
-            version = _state.value.version
+            wallet = mine
+            version = mineVersion
         } else if (umk != null && fetched != null) {
             val blob = fetched.getOrNull()
             version = VoucherWallets.version(blob)
             // A stored wallet this device can't open is never replaced by an empty one (it would lose the vouchers).
-            wallet = if (blob == null) VoucherWallets.empty(cfg.overage.defaultCapUnits) else VoucherWallets.open(VoucherWallets.deriveKey(umk), blob)
-            val mine = _state.value.wallet
-            if (wallet != null && mine != null && _state.value.version >= version) wallet = VoucherWallets.merge(mine, wallet)
+            val remote = if (blob == null) VoucherWallets.empty(cfg.overage.defaultCapUnits) else VoucherWallets.open(VoucherWallets.deriveKey(umk), blob)
+            wallet = remote
+            // Merging is safe whatever the versions: vouchers are a set and a spent one stays spent.
+            if (remote != null && mine != null) {
+                wallet = VoucherWallets.merge(mine, remote)
+                unsynced = wallet != VoucherWallets.normalize(remote)
+            }
         }
         _state.update {
             it.copy(
@@ -213,6 +265,25 @@ class PaymentsCenter(
                 relay = local.relay(u),
             )
         }
+        walletUser = u
+        persist()
+        // Vouchers added here while offline (a voucher link) go up with the next write: make it now.
+        if (unsynced && _state.value.canSpend) write { it }
+    }
+
+    private fun localCopy(u: String, umk: ByteArray): Pair<VoucherWallet, Long>? {
+        val blob = VoiciJs.parseJson(local.sealedWallet(u) ?: return null) ?: return null
+        val w = VoucherWallets.open(VoucherWallets.deriveKey(umk), blob) ?: return null
+        return w to VoucherWallets.version(blob)
+    }
+
+    /** Keep this device's sealed copy of the wallet (only when the UMK is at hand). */
+    private fun persist() {
+        val u = user() ?: return
+        val umk = keyring.umk() ?: return
+        val w = _state.value.wallet ?: return
+        val sealed = runCatching { VoucherWallets.seal(VoucherWallets.deriveKey(umk), maxOf(1, _state.value.version), w) }.getOrNull() ?: return
+        local.setSealedWallet(u, sealed.toString())
     }
 
     /** Change the wallet and write it as the next version; on a conflict merge with the stored copy and try again. */
@@ -228,6 +299,7 @@ class PaymentsCenter(
             try {
                 client.putWallet(u, device, VoucherWallets.seal(key, version + 1, next))
                 _state.update { it.copy(wallet = next, version = version + 1) }
+                persist()
                 return true
             } catch (e: PaymentsHttpError) {
                 if (e.code != "version-conflict") return false
@@ -235,8 +307,9 @@ class PaymentsCenter(
                 VoucherWallets.open(key, stored)?.let { remote -> base = VoucherWallets.merge(base, remote) }
                 version = VoucherWallets.version(stored)
             } catch (_: Exception) {
-                // Offline: keep the change here; the next write carries it.
+                // Offline: keep the change here (and on disk); the next refresh or write carries it.
                 _state.update { it.copy(wallet = next) }
+                persist()
                 return false
             }
         }
@@ -434,6 +507,42 @@ class PaymentsCenter(
     suspend fun addPaidVouchers(fresh: List<Voucher>): Boolean = mutex.withLock {
         if (!_state.value.canSpend) return false
         write { VoucherWallets.add(it, fresh) }
+    }
+
+    /**
+     * A voucher link opened on this phone (docs/anonymous-vouchers.md "Voucher links"): parsed and checked here alone,
+     * against the voucher keys this phone holds, with no network call. Only an admin device with the account key adds.
+     */
+    fun previewLink(raw: String): VoucherLinkPreview {
+        val u = user() ?: return VoucherLinkPreview.Refused("signed-out")
+        val parsed = VoucherLink.parse(raw)
+        if (parsed is VoucherLinkParse.Failed) return VoucherLinkPreview.Refused(if (parsed.code == "not-a-link") "damaged" else parsed.code)
+        parsed as VoucherLinkParse.Ok
+        if (!keyring.isAdmin()) return VoucherLinkPreview.Refused("not-admin")
+        val umk = keyring.umk() ?: return VoucherLinkPreview.Refused("signed-out")
+        val s = _state.value
+        val wallet = (if (walletUser == u) s.wallet else null) ?: localCopy(u, umk)?.first ?: VoucherWallets.empty(s.config.overage.defaultCapUnits)
+        val keys = (s.keys + local.voucherKeys()).distinctBy { it.keyId }
+        val plan = VoucherLink.plan(wallet, parsed.vouchers, keys)
+        return if (plan.outcome == "add") VoucherLinkPreview.Ask(plan, parsed.part, parsed.parts) else VoucherLinkPreview.Refused(plan.outcome)
+    }
+
+    /**
+     * Adds a previewed link's vouchers: kept on this phone at once (sealed), synced through `.com` now or, offline, with
+     * the next refresh. True once they are in this phone's wallet. Adding the same link again adds nothing.
+     */
+    suspend fun addFromLink(plan: VoucherLinkPlan): Boolean = mutex.withLock {
+        val u = user() ?: return false
+        val umk = keyring.umk() ?: return false
+        if (!keyring.isAdmin() || keyring.device() == null || plan.add.isEmpty()) return false
+        if (_state.value.wallet == null || walletUser != u) {
+            val (w, v) = localCopy(u, umk) ?: (VoucherWallets.empty(_state.value.config.overage.defaultCapUnits) to 0L)
+            _state.update { it.copy(wallet = w, version = v, isAdmin = true, canOpen = true) }
+            walletUser = u
+        }
+        write { VoucherWallets.add(it, plan.add) }
+        val have = _state.value.wallet?.vouchers.orEmpty().mapTo(HashSet()) { it.nullifier }
+        plan.add.all { it.nullifier in have }
     }
 
     /** The gym's free test vouchers (only when `.com` says testIssue): 30 blinded, signed, unblinded, synced. */

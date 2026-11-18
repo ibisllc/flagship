@@ -4344,4 +4344,22 @@
     <string name="org_plan_error_generic">出了点问题，请重试。</string>
     <string name="org_plan_open_reason">打开组织余额</string>
     <string name="org_key_wallet">组织余额密钥</string>
+    <plurals name="voucher_link_question">
+        <item quantity="other">将 %1$d 张代金券（%2$s）添加到此账户的钱包？</item>
+    </plurals>
+    <string name="voucher_link_part">这是同一次购买的第 %1$d 个链接，共 %2$d 个。</string>
+    <string name="voucher_link_skip_duplicate">已在此钱包中：%1$d</string>
+    <string name="voucher_link_skip_spent">已花费：%1$d</string>
+    <string name="voucher_link_skip_invalid">没有 Flagship 签名，已排除：%1$d</string>
+    <string name="voucher_link_skip_unknown_key">使用此设备尚不认识的密钥签名，已排除：%1$d</string>
+    <string name="voucher_link_privacy">添加时不会发送任何内容。它们之后会像其他代金券一样逐步花费。</string>
+    <string name="voucher_link_damaged">此代金券链接不完整或已损坏。请重新打开完整链接，或使用代金券文件。</string>
+    <string name="voucher_link_newer">此代金券链接需要更新版本的 Flagship。请更新应用，然后重新打开链接。</string>
+    <string name="voucher_link_already">这些代金券已在此钱包中。未添加任何内容。</string>
+    <string name="voucher_link_spent">这些代金券已被花费。未添加任何内容。</string>
+    <string name="voucher_link_invalid">这些代金券没有 Flagship 的签名。未添加任何内容。</string>
+    <string name="voucher_link_unknown_key">此设备尚不认识签署这些代金券的密钥。请在联网时打开一次“设置”中的“套餐”，然后重新打开链接。</string>
+    <string name="voucher_link_full">此钱包最多可存放 500 张代金券。请先花费一些，然后重新打开链接。</string>
+    <string name="voucher_link_not_admin">只有此账户的管理员设备可以添加代金券。请在管理员设备上打开链接。</string>
+    <string name="voucher_link_signed_out">请先登录你的账户，然后重新打开链接。</string>
 </resources>

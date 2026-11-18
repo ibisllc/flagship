@@ -4344,4 +4344,23 @@
     <string name="org_plan_error_generic">Algo salió mal. Inténtalo de nuevo.</string>
     <string name="org_plan_open_reason">Abrir el saldo de la organización</string>
     <string name="org_key_wallet">Clave del saldo de la organización</string>
+    <plurals name="voucher_link_question">
+        <item quantity="one">¿Añadir %1$d vale (%2$s) a la cartera de esta cuenta?</item>
+        <item quantity="other">¿Añadir %1$d vales (%2$s) a la cartera de esta cuenta?</item>
+    </plurals>
+    <string name="voucher_link_part">Este es el enlace %1$d de %2$d de la misma compra.</string>
+    <string name="voucher_link_skip_duplicate">Ya en esta cartera: %1$d</string>
+    <string name="voucher_link_skip_spent">Ya gastados: %1$d</string>
+    <string name="voucher_link_skip_invalid">Sin la firma de Flagship, omitidos: %1$d</string>
+    <string name="voucher_link_skip_unknown_key">Firmados con una clave que este dispositivo aún no conoce, omitidos: %1$d</string>
+    <string name="voucher_link_privacy">Al añadirlos no se envía nada. Se gastan más tarde, poco a poco, como cualquier otro vale.</string>
+    <string name="voucher_link_damaged">Este enlace de vales está incompleto o dañado. Vuelve a abrir el enlace completo o usa el archivo de vales.</string>
+    <string name="voucher_link_newer">Este enlace de vales necesita una versión más reciente de Flagship. Actualiza la app y vuelve a abrir el enlace.</string>
+    <string name="voucher_link_already">Estos vales ya están en esta cartera. No se añadió nada.</string>
+    <string name="voucher_link_spent">Estos vales ya se gastaron. No se añadió nada.</string>
+    <string name="voucher_link_invalid">Estos vales no tienen la firma de Flagship. No se añadió nada.</string>
+    <string name="voucher_link_unknown_key">Este dispositivo aún no conoce la clave con la que se firmaron estos vales. Abre Ajustes, Plan una vez con conexión y vuelve a abrir el enlace.</string>
+    <string name="voucher_link_full">Esta cartera puede guardar 500 vales. Gasta algunos primero y vuelve a abrir el enlace.</string>
+    <string name="voucher_link_not_admin">Solo un dispositivo administrador de esta cuenta puede añadir vales. Abre el enlace en uno.</string>
+    <string name="voucher_link_signed_out">Primero inicia sesión en tu cuenta y vuelve a abrir el enlace.</string>
 </resources>
