@@ -298,4 +298,10 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/voucher-wallet/v1": "kdf + aad: the account's sealed wallet (HKDF info from the UMK; AES-GCM aad with the version); another version or key refused in voucherVectors.test.ts",
   "flagship/voucher-order/v1": "hash: a Stripe order's commitment to its blinded requests (another set for the session refused payment-invalid in voucherRails.test.ts)",
   "flagship/voucher-payment/v1": "hash: the used-payment row's key (a second set for a payment refused payment-used in voucherRails.test.ts)",
+  "flagship/voucher-link/v1": "hash: the voucher link's 4-byte checksum domain (no key; a damaged link refused in voucherLinkVectors.test.ts). Each voucher in a link is checked by its own blind RSA signature (planVoucherLinkImport: forged and another key's vouchers refused, voucherLinkVectors.test.ts imports)",
+  "flagship/voucher-batch/v1": "kdf: HKDF info deriving each blinded request of an invoiced batch from the buyer's batch seed (no signature; another set for the session refused in voucherBatch.test.ts; vectors test-vectors/org-plan batch)",
+  // ---- the org plan and org voucher wallet (docs/plans-and-backup-offer.md "As built"; test-vectors/org-plan)
+  "flagship/org-voucher-wallet/v1": "kdf + aad: the org's sealed voucher wallet (HKDF info from the ring's wallet key; AES-GCM aad with org, key version and version); another org, version or key version refused in orgPlanVectors.test.ts",
+  "flagship/org-voucher-wallet-write/v1": "vectors: test-vectors/org-plan write (orgPlanVectors.test.ts); the order one org admin's org-approval signs (handleOrgWalletPut via authorizeOrgOrder): a non-admin, no approval or a write that doesn't describe the blob refused in orgPlan.test.ts",
+  "flagship/org-plan-attestation/v1": "vectors orgPlanVectors.test.ts + test-vectors/org-plan attestation (CA-signed like plan-attestation; fails closed without a CA chain); box orgPlanCheck.test.ts refuses another org's or another key's",
 };
