@@ -4012,5 +4012,7 @@
   "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.": "Cet appareil ne connaît pas encore la clé qui a signé ces bons. Ouvrez Réglages, Forfait une fois en ligne, puis ouvrez à nouveau le lien.",
   "This wallet can hold 500 vouchers. Spend some first, then open the link again.": "Ce portefeuille peut contenir 500 bons. Dépensez-en d'abord quelques-uns, puis ouvrez à nouveau le lien.",
   "Only an admin device of this account can add vouchers. Open the link on one.": "Seul un appareil administrateur de ce compte peut ajouter des bons. Ouvrez le lien sur l'un d'eux.",
-  "Sign in to your account first, then open the link again.": "Connectez-vous d'abord à votre compte, puis ouvrez à nouveau le lien."
+  "Sign in to your account first, then open the link again.": "Connectez-vous d'abord à votre compte, puis ouvrez à nouveau le lien.",
+  "Show in search engines": "Afficher dans les moteurs de recherche",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "Quand ce réglage est désactivé, les moteurs de recherche sont priés de ne pas référencer votre page. Toute personne qui a le lien peut toujours l'ouvrir."
 }

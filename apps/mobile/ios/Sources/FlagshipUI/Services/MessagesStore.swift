@@ -68,6 +68,8 @@ public final class MessagesStore {
     public private(set) var answersWhileLocked = false
     /// A calls change being published (`setCalls`); nil: every publish carries the index's own calls setting.
     @ObservationIgnored private var pendingCalls: (on: Bool, from: String)?
+    /// "Show in search engines" while its own publish is signed (nil: carry the published index's value).
+    @ObservationIgnored private var pendingSearch: Bool?
 
     // MARK: kept on the device
 
@@ -135,6 +137,9 @@ public final class MessagesStore {
     public var callsFrom: String { callsOn ? VoiciCallSettings.read(acceptsCalls: index?.acceptsCalls, callsFrom: index?.callsFrom).from : CallSettingsStore.lastFrom() }
     /// Visitors see the page on voi.ci now.
     public var isPublic: Bool { index != nil && !isRemoved }
+    /// "Show in search engines" (owner decision 2026-11-17): the published index says showInSearch 1. Off, voi.ci asks
+    /// search engines not to list the page.
+    public var showsInSearch: Bool { isPublic && index?.showsInSearch == true }
     public var hasAccount: Bool {
         #if DEBUG
         if sampleAccountsHavePages { return !username.isEmpty }
@@ -743,6 +748,19 @@ public final class MessagesStore {
         return publishError == nil
     }
 
+    /// Page options → "Show in search engines": published at once in the index by an admin device, like the calls
+    /// setting (docs/voici-and-messages.md §2.7). Drafts stay drafts. False when it couldn't be published.
+    @discardableResult
+    public func setShowInSearch(_ on: Bool) async -> Bool {
+        guard isAdmin, isPublic else { return false }
+        guard on != showsInSearch else { return true }
+        guard let s = await sensitiveSigner(reason: String(localized: "Publish your page")) else { return false }
+        pendingSearch = on
+        defer { pendingSearch = nil }
+        await publish(signer: s, only: [])
+        return publishError == nil
+    }
+
     /// The owner's call hours (docs/voici-calls.md, owner decision 2026-11-16 option c): a setting synced between the
     /// owner's own devices, sealed under a key from the UMK, never in the page. Nil: calls ring any time.
     public private(set) var callSettings: VoiciCallSettingsValue? = CallSettingsStore.ownerHours()
@@ -926,7 +944,16 @@ public final class MessagesStore {
         let merged = VoiciPage.mergeVoiciPage(base, ops: ops)
         var images: [String: [UInt8]] = [:]
         for sha in VoiciOwner.imageHashes(merged) { images[sha] = VoiciImageStore.load(sha) }
-        guard let pieces = try VoiciOwner.pieces(merged, images: images) else { throw VoiciComError(status: 0, code: "missing-image") }
+        guard var pieces = try VoiciOwner.pieces(merged, images: images) else { throw VoiciComError(status: 0, code: "missing-image") }
+        // The share card (§2.10): carried while the name, photo and theme are unchanged, else drawn again. A card that
+        // can't be drawn leaves the page without one (the piece is optional).
+        let listedShare = isRemoved ? nil : index?.pieces.first { $0.role == "share" }
+        if let l = listedShare, !VoiciShareCard.needsRedraw(published: isRemoved ? nil : published, listedShare: l, merged: merged) {
+            pieces.append(VoiciOwner.Piece(ref: l, bytes: VoiciImageStore.load(l.sha256) ?? []))
+        } else if let card = VoiciShareCard.render(username: username, profile: merged.profile, avatar: merged.profile.avatar.flatMap { images[$0] }) {
+            VoiciImageStore.save(card)
+            pieces.append(VoiciOwner.Piece(ref: VoiciPieceRef(role: "share", sha256: CanonicalJson.sha256Hex(card), size: Int64(card.count)), bytes: card))
+        }
         let seed = Array(signer.rawRepresentation)
         let signerPub = HexUtil.encode(signer.publicKey.rawRepresentation)
         // After a removal `.com` may have dropped the pieces: send them all again.
@@ -941,10 +968,12 @@ public final class MessagesStore {
             : VoiciCallSettings.read(acceptsCalls: isRemoved ? nil : index?.acceptsCalls, callsFrom: index?.callsFrom)
         let calls = pendingCalls ?? current
         let fields = VoiciCallSettings.indexFields(on: calls.on, from: calls.from)
+        // Search engines: hidden on a first publish and after a removal; otherwise the replaced index's value.
+        let search = pendingSearch ?? (!isFirstPublish && !isRemoved && index?.showsInSearch == true)
         let body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),
                                   acceptsMessages: merged.acceptsMessages, inboxEpoch: epoch, inboxPub: k.inboxPub, ownerSignPub: k.signPub,
                                   pieces: pieces.map(\.ref), signerKind: Keystore.hasAdminRoot ? "admin-root" : "irk",
-                                  acceptsCalls: fields.acceptsCalls, callsFrom: fields.callsFrom)
+                                  acceptsCalls: fields.acceptsCalls, callsFrom: fields.callsFrom, showInSearch: search ? 1 : nil)
         let idx = try VoiciPage.signVoiciPageIndex(body, signerSeed: seed)
         try await client.publish(username: username, index: idx.json)
         if only == nil {

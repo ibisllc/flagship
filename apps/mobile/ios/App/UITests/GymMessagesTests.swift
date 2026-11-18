@@ -240,6 +240,36 @@ final class GymMessagesTests: GymSweepCase {
         wait(any(app, "page-pending-count"), "label == '1 change not published'", timeout: 10)
     }
 
+    /// Owner decisions 2026-11-17: "Show in search engines" is off by default and publishes showInSearch 1 when turned
+    /// on (absent again when turned off); every publish lists one share card (docs/voici-and-messages.md §2.7, §2.10).
+    func test_showInSearchEnginesPublishesTheFlagAndThePageHasAShareCard() throws {
+        let app = openMessages(["-smoke-messages"])
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
+        any(app, "page-options").tap()
+        let toggle = app.switches["page-search"].firstMatch
+        XCTAssertTrue(reveal(app, toggle), "The switch is in Page options while the page is public.")
+        XCTAssertEqual(toggle.value as? String, "0", "Hidden from search engines by default.")
+        let probe = any(app, "gym-page-index")
+        XCTAssertTrue(reveal(app, probe))
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        wait(probe, "label BEGINSWITH 'search=1 '", timeout: 20)
+        XCTAssertEqual(toggle.value as? String, "1")
+        wait(probe, "label ENDSWITH ' share=1'", timeout: 5)
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        wait(probe, "label == 'search=0 share=1'", timeout: 20)
+        XCTAssertEqual(toggle.value as? String, "0")
+        any(app, "page-options-done").tap()
+    }
+
+    func test_aNonAdminDeviceSeesTheSearchSwitchDisabled() throws {
+        let app = openMessages(["-smoke-messages"], admin: false)
+        any(app, "page-options").tap()
+        let toggle = app.switches["page-search"].firstMatch
+        XCTAssertTrue(reveal(app, toggle))
+        XCTAssertFalse(toggle.isEnabled, "Only an admin device changes it.")
+        any(app, "page-options-done").tap()
+    }
+
     /// The recovery cards come before the page card on Home: dismiss them (bounded).
     private func clearHigherCards(_ app: XCUIApplication) {
         let card = any(app, "page-welcome-card")

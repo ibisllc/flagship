@@ -4010,5 +4010,7 @@
   "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.": "このデバイスは、これらのバウチャーに署名した鍵をまだ知りません。オンラインのときに一度「設定」の「プラン」を開いてから、もう一度リンクを開いてください。",
   "This wallet can hold 500 vouchers. Spend some first, then open the link again.": "このウォレットに入るのは 500 枚までです。先にいくつか使ってから、もう一度リンクを開いてください。",
   "Only an admin device of this account can add vouchers. Open the link on one.": "バウチャーを追加できるのは、このアカウントの管理者デバイスだけです。管理者デバイスでリンクを開いてください。",
-  "Sign in to your account first, then open the link again.": "先にアカウントにサインインしてから、もう一度リンクを開いてください。"
+  "Sign in to your account first, then open the link again.": "先にアカウントにサインインしてから、もう一度リンクを開いてください。",
+  "Show in search engines": "検索エンジンに表示",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "オフのときは、検索エンジンにページを掲載しないよう求めます。リンクを知っている人は引き続き開けます。"
 }

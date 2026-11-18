@@ -4010,5 +4010,7 @@
   "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.": "此设备尚不认识为这些代金券签名的密钥。请在联网时打开一次“设置”中的“套餐”，然后重新打开链接。",
   "This wallet can hold 500 vouchers. Spend some first, then open the link again.": "此钱包最多可存放 500 张代金券。请先花掉一些，然后重新打开链接。",
   "Only an admin device of this account can add vouchers. Open the link on one.": "只有此账户的管理员设备才能添加代金券。请在管理员设备上打开链接。",
-  "Sign in to your account first, then open the link again.": "请先登录你的账户，然后重新打开链接。"
+  "Sign in to your account first, then open the link again.": "请先登录你的账户，然后重新打开链接。",
+  "Show in search engines": "在搜索引擎中显示",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "关闭时，会要求搜索引擎不要收录你的页面。有链接的人仍然可以打开它。"
 }

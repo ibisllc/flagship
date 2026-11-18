@@ -164520,6 +164520,88 @@
           }
         }
       }
+    },
+    "Show in search engines": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar en los buscadores"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher dans les moteurs de recherche"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Suchmaschinen anzeigen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar nos mecanismos de busca"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索エンジンに表示"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在搜索引擎中显示"
+          }
+        }
+      }
+    },
+    "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si está desactivado, se pide a los buscadores que no muestren tu página. Cualquiera con el enlace puede abrirla igualmente."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand ce réglage est désactivé, les moteurs de recherche sont priés de ne pas référencer votre page. Toute personne qui a le lien peut toujours l'ouvrir."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn das aus ist, werden Suchmaschinen gebeten, deine Seite nicht aufzunehmen. Wer den Link hat, kann sie trotzdem öffnen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quando isto está desativado, os mecanismos de busca são instruídos a não listar sua página. Qualquer pessoa com o link ainda pode abri-la."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフのときは、検索エンジンにページを掲載しないよう求めます。リンクを知っている人は引き続き開けます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭时，会要求搜索引擎不要收录你的页面。有链接的人仍然可以打开它。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

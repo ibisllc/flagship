@@ -326,6 +326,74 @@ final class PageControlsTests: XCTestCase {
         XCTAssertEqual(idx.acceptsMessages, 0)
     }
 
+    // MARK: search engines and the share card (owner decisions 2026-11-17)
+
+    func test_searchIsHiddenOnAFirstPublishAndTheSwitchPublishesItThenEveryPublishKeepsIt() async throws {
+        let s = await store()
+        await s.goPublic()
+        var idx = try XCTUnwrap(publishedIndex())
+        XCTAssertNil(idx.showInSearch, "A first publish is hidden from search engines.")
+        XCTAssertFalse(s.showsInSearch)
+        let on = await s.setShowInSearch(true)
+        XCTAssertTrue(on)
+        idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(idx.showInSearch, 1)
+        XCTAssertEqual(idx.seq, 2, "The switch is a publish of its own.")
+        XCTAssertTrue(s.showsInSearch)
+        await s.addPost(text: "Kept listed.", links: [], images: [:])
+        await s.publishNow()
+        XCTAssertEqual(publishedIndex()?.showInSearch, 1, "An edit keeps it.")
+        _ = await s.setCalls(on: false, from: VoiciCallSettings.fromSignedIn)
+        XCTAssertEqual(publishedIndex()?.showInSearch, 1, "A calls change keeps it.")
+        XCTAssertNil(publishedIndex()?.acceptsCalls)
+        let off = await s.setShowInSearch(false)
+        XCTAssertTrue(off)
+        XCTAssertNil(publishedIndex()?.showInSearch, "Off drops the field.")
+        XCTAssertFalse(s.showsInSearch)
+
+        // Another device adopts the page and keeps the owner's choice.
+        _ = await s.setShowInSearch(true)
+        let other = await store()
+        _ = await other.setQuickProfile(displayName: "Maple Two", avatar: nil)
+        XCTAssertEqual(publishedIndex()?.showInSearch, 1)
+    }
+
+    func test_aRepublishAfterARemovalIsHidden() async throws {
+        let s = await store()
+        await s.goPublic()
+        _ = await s.setShowInSearch(true)
+        await s.removePage()
+        XCTAssertTrue(s.isRemoved)
+        await s.goPublic()
+        XCTAssertTrue(s.isPublic)
+        XCTAssertNil(publishedIndex()?.showInSearch)
+    }
+
+    private func sharePieces(_ idx: VoiciPageIndex) -> [VoiciPieceRef] { idx.pieces.filter { $0.role == "share" } }
+
+    func test_everyPublishListsOneShareCardRedrawnOnlyWhenTheNameChanges() async throws {
+        let s = await store()
+        _ = await s.setQuickProfile(displayName: "Bright Maple", avatar: nil)
+        await s.goPublic()
+        var idx = try XCTUnwrap(publishedIndex())
+        let first = try XCTUnwrap(sharePieces(idx).first)
+        XCTAssertEqual(sharePieces(idx).count, 1)
+        let bytes = try XCTUnwrap(mock.pieces[idx.pageId]?[first.sha256], "The card was uploaded.")
+        XCTAssertTrue(VoiciPage.isVoiciJpeg(bytes))
+        XCTAssertFalse(VoiciPage.voiciJpegHasMetadata(bytes))
+        XCTAssertLessThanOrEqual(bytes.count, VoiciPage.shareImageMaxBytes)
+
+        await s.addPost(text: "Same card.", links: [], images: [:])
+        await s.publishNow()
+        idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(sharePieces(idx).map(\.sha256), [first.sha256], "Name, photo and theme unchanged: the card is carried.")
+
+        _ = await s.setQuickProfile(displayName: "Quiet Oak", avatar: nil)
+        idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(sharePieces(idx).count, 1)
+        XCTAssertNotEqual(sharePieces(idx).first?.sha256, first.sha256, "A new name draws a new card.")
+    }
+
     func test_removeSignsTheNextSeqAndRepublishingContinuesTheLadder() async throws {
         let s = await store()
         _ = await s.setQuickProfile(displayName: "Bright Maple", avatar: nil)

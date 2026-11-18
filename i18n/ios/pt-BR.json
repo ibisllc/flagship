@@ -4012,5 +4012,7 @@
   "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.": "Este dispositivo ainda não conhece a chave que assinou estes vales. Abra Ajustes, Plano uma vez com conexão e abra o link de novo.",
   "This wallet can hold 500 vouchers. Spend some first, then open the link again.": "Esta carteira comporta 500 vales. Gaste alguns primeiro e abra o link de novo.",
   "Only an admin device of this account can add vouchers. Open the link on one.": "Só um dispositivo administrador desta conta pode adicionar vales. Abra o link em um deles.",
-  "Sign in to your account first, then open the link again.": "Primeiro entre na sua conta e abra o link de novo."
+  "Sign in to your account first, then open the link again.": "Primeiro entre na sua conta e abra o link de novo.",
+  "Show in search engines": "Mostrar nos mecanismos de busca",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "Quando isto está desativado, os mecanismos de busca são instruídos a não listar sua página. Qualquer pessoa com o link ainda pode abri-la."
 }

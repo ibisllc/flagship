@@ -4012,5 +4012,7 @@
   "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.": "Dieses Gerät kennt den Schlüssel, mit dem diese Gutscheine signiert wurden, noch nicht. Öffne einmal mit Verbindung Einstellungen, Tarif, und öffne den Link dann erneut.",
   "This wallet can hold 500 vouchers. Spend some first, then open the link again.": "Diese Geldbörse fasst 500 Gutscheine. Gib zuerst einige aus und öffne den Link dann erneut.",
   "Only an admin device of this account can add vouchers. Open the link on one.": "Nur ein Admin-Gerät dieses Kontos kann Gutscheine hinzufügen. Öffne den Link auf einem solchen Gerät.",
-  "Sign in to your account first, then open the link again.": "Melde dich zuerst bei deinem Konto an und öffne den Link dann erneut."
+  "Sign in to your account first, then open the link again.": "Melde dich zuerst bei deinem Konto an und öffne den Link dann erneut.",
+  "Show in search engines": "In Suchmaschinen anzeigen",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "Wenn das aus ist, werden Suchmaschinen gebeten, deine Seite nicht aufzunehmen. Wer den Link hat, kann sie trotzdem öffnen."
 }

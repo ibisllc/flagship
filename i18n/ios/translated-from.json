@@ -4006,5 +4006,7 @@
   "This device doesn't know the key these vouchers were signed with yet. Open Settings, Plan once while online, then open the link again.": "9ef77cfb500d",
   "This wallet can hold 500 vouchers. Spend some first, then open the link again.": "e57f67f29aec",
   "Only an admin device of this account can add vouchers. Open the link on one.": "b3eef21326fd",
-  "Sign in to your account first, then open the link again.": "3f764bfc0c11"
+  "Sign in to your account first, then open the link again.": "3f764bfc0c11",
+  "Show in search engines": "a284d14fe309",
+  "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "18b39988fdb9"
 }

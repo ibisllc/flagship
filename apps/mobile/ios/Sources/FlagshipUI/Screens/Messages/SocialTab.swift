@@ -493,6 +493,27 @@ struct PageOptionsSheet: View {
                 } footer: {
                     Text("People with a Flagship account can write to you. They appear as visitors, not by name.")
                 }
+                if store.isPublic {
+                    Section {
+                        Toggle("Show in search engines", isOn: Binding(get: { store.showsInSearch },
+                                                                        set: { on in Task { await store.setShowInSearch(on) } }))
+                            .disabled(!store.isAdmin || store.isPublishing)
+                            .accessibilityIdentifier("page-search")
+                    } footer: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            if !store.isAdmin { Text("Only an admin device can change this") }
+                            Text("When this is off, search engines are asked not to list your page. Anyone with the link can still open it.")
+                            #if DEBUG
+                            if ProcessInfo.processInfo.arguments.contains("-smoke-mode") {
+                                // Gym only: what the published index says, for GymMessagesTests (not a user string).
+                                Text(verbatim: "search=\(store.index?.showInSearch ?? 0) share=\(store.index?.pieces.filter { $0.role == "share" }.count ?? 0)")
+                                    .font(.caption2)
+                                    .accessibilityIdentifier("gym-page-index")
+                            }
+                            #endif
+                        }
+                    }
+                }
                 #if os(iOS)
                 VoiciCallsSettingsSection()
                 #endif
