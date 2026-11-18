@@ -278,8 +278,10 @@ check.
   Play Billing. Fine: they are consumable products.
 - Typing a code, scanning a QR code or importing a stash file in the iOS app
   to unlock something: this is the 3.1.1 "own mechanism" Apple names. **Do
-  not.** Outside-bought vouchers reach the box through the web or Studio,
-  never through the iOS app (as `anonymous-vouchers.md` already said).
+  not.** The one exception (owner decision for 0.4): the "Load into Flagship"
+  voucher link the web shop shows after a card purchase, which the app opens
+  and adds under 3.1.3(b), since the same packs are sold as IAP; the app never
+  links or steers to the web shop (`anonymous-vouchers.md` "Voucher links").
 - Showing and spending a balance the box already holds, from the app: 3.1.3(b)
   allows using consumables acquired elsewhere if the same items are sold as
   IAP in the app. Since our vouchers are sold as IAP, spending the box's
@@ -560,9 +562,11 @@ account to pay.
   as before. It holds no vouchers in this step. A box-held copy (so a box can
   keep paying when every phone is gone) would need the wallet key on the box,
   which today only UMK holders derive; left for later (owner question 14).
-- **The apps never take outside vouchers.** No code field, QR scan or file
-  import (Apple 3.1.1). Vouchers reach the wallet only from a rail the app
-  itself runs (later steps) or, in the gym, the free test issue.
+- **The apps take outside vouchers only through a voucher link.** No code
+  field, QR scan or file import on iOS (Apple 3.1.1); a "Load into Flagship"
+  link from the web shop is the one way in (3.1.3(b), `anonymous-vouchers.md`
+  "Voucher links"), besides the store rail the app runs and, in the gym, the
+  free test issue.
 
 ## 6. The UX in each app
 
@@ -577,7 +581,8 @@ account to pay.
   Keychain and retries. "Manage subscription" opens Apple's sheet.
 - Spends (name change, dibs, an app, a top-up) say "Uses 10 from your
   server's balance" and ask Face ID once.
-- Never: a code field, a QR scan or a file import for vouchers.
+- Never: a code field, a QR scan or a file import for vouchers. An incoming
+  "Load into Flagship" voucher link is the one way in for web-bought vouchers.
 
 **Android.** The same with Play Billing; "Buy on the web" in the US only if
 the external content links rules allow it at launch (check), otherwise not.
