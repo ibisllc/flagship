@@ -48,7 +48,7 @@ class HomeScreenComposeTest {
         }
         composeRule.onNodeWithText("Add / Restore a server").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Harry's cloud > Pixel").assertIsDisplayed()
-        composeRule.onNodeWithText("Build a service").assertDoesNotExist()
+        composeRule.onNodeWithText("Build an app").assertDoesNotExist()
         composeRule.onNodeWithText("Your servers").assertDoesNotExist()
     }
 

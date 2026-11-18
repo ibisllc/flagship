@@ -1140,7 +1140,8 @@
     <string name="show_my_servers">Meine Server anzeigen</string>
     <string name="your_account_is_ready">Dein Konto ist bereit</string>
     <string name="add_your_first_server_to_start">Füge deinen ersten Server hinzu, um deine eigenen Dienste zu betreiben.</string>
-    <string name="describe_it_in_plain_english_your">Beschreibe es in einfacher Sprache. Dein Server baut und betreibt es.</string>
+    <string name="build_an_app">Eine App bauen</string>
+    <string name="describe_it_in_plain_english_your">Beschreib sie gleich hier. Dein Server baut und betreibt sie.</string>
     <string name="this_device_cannot_build_new_services">Dieses Gerät kann keine neuen Dienste bauen. Verwende ein Hauptgerät.</string>
     <string name="recent_activity">Letzte Aktivität</string>
     <string name="no_recent_activity">Keine letzte Aktivität.</string>
@@ -1989,7 +1990,7 @@
     <string name="active_renews_by">Aktiv – wird bis %1$s erneuert</string>
     <string name="your_stuff_on">Deine Sachen,\nauf\u0020</string>
     <string name="your_hardware">deiner Hardware.</string>
-    <string name="a_personal_cloud_you_actually_own">Eine persönliche Cloud, die dir wirklich gehört. Dein Telefon hält die Schlüssel; dein Server betreibt die Dienste.</string>
+    <string name="a_personal_cloud_you_actually_own">Eine persönliche Cloud, die dir wirklich gehört. Du baust und genehmigst alles von deinem Telefon aus; dein Server betreibt deine Apps.</string>
     <string name="create_your_account">Dein Konto erstellen</string>
     <string name="connect_to_an_existing_account_sign">Verbinde dich mit einem bestehenden Konto. Melde dich mit deinem Kontonamen an oder tritt mit einem Kopplungscode bei.</string>
     <string name="your_phone_and_your_server_connected">Dein Telefon und dein Server, verbunden.</string>

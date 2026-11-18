@@ -1140,7 +1140,8 @@
     <string name="show_my_servers">Mostrar mis servidores</string>
     <string name="your_account_is_ready">Tu cuenta está lista</string>
     <string name="add_your_first_server_to_start">Añade tu primer servidor para empezar a ejecutar tus propios servicios.</string>
-    <string name="describe_it_in_plain_english_your">Descríbelo con palabras sencillas. Tu servidor lo crea y lo ejecuta.</string>
+    <string name="build_an_app">Crear una app</string>
+    <string name="describe_it_in_plain_english_your">Descríbela aquí mismo. Tu servidor la crea y la ejecuta.</string>
     <string name="this_device_cannot_build_new_services">Este dispositivo no puede crear servicios nuevos. Usa un dispositivo principal.</string>
     <string name="recent_activity">Actividad reciente</string>
     <string name="no_recent_activity">Sin actividad reciente.</string>
@@ -1989,7 +1990,7 @@
     <string name="active_renews_by">Activo: se renueva antes del %1$s</string>
     <string name="your_stuff_on">Tus cosas,\nen\u0020</string>
     <string name="your_hardware">tu hardware.</string>
-    <string name="a_personal_cloud_you_actually_own">Una nube personal que de verdad es tuya. Tu teléfono guarda las claves; tu servidor ejecuta los servicios.</string>
+    <string name="a_personal_cloud_you_actually_own">Una nube personal que de verdad es tuya. Creas y apruebas todo desde tu teléfono; tu servidor ejecuta tus apps.</string>
     <string name="create_your_account">Crea tu cuenta</string>
     <string name="connect_to_an_existing_account_sign">Conéctate a una cuenta existente. Inicia sesión con el nombre de tu cuenta o únete con un código de vinculación.</string>
     <string name="your_phone_and_your_server_connected">Tu teléfono y tu servidor, conectados.</string>

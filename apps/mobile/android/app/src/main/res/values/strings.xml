@@ -1143,7 +1143,8 @@
     <string name="show_my_servers">Show my servers</string>
     <string name="your_account_is_ready">Your account is ready</string>
     <string name="add_your_first_server_to_start">Add your first server to start running your own services.</string>
-    <string name="describe_it_in_plain_english_your">Describe it in plain English. Your server builds and runs it.</string>
+    <string name="build_an_app">Build an app</string>
+    <string name="describe_it_in_plain_english_your">Describe it right here. Your server builds and runs it.</string>
     <string name="this_device_cannot_build_new_services">This device cannot build new services. Use a primary device.</string>
     <string name="recent_activity">Recent activity</string>
     <string name="no_recent_activity">No recent activity.</string>
@@ -1992,7 +1993,7 @@
     <string name="active_renews_by">Active — renews by %1$s</string>
     <string name="your_stuff_on">Your stuff,\non\u0020</string>
     <string name="your_hardware">your hardware.</string>
-    <string name="a_personal_cloud_you_actually_own">A personal cloud you actually own. Your phone holds the keys; your server runs the services.</string>
+    <string name="a_personal_cloud_you_actually_own">A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.</string>
     <string name="create_your_account">Create your account</string>
     <string name="connect_to_an_existing_account_sign">Connect to an existing account. Sign in with your account name, or join with a pairing code.</string>
     <string name="your_phone_and_your_server_connected">Your phone and your server, connected.</string>

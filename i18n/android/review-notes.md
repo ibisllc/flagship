@@ -15,3 +15,13 @@ Added with voi.ci pages and Messages (release 0.3, H11; `voici_*` keys). Machine
 - `voici_warning`: the linkability warning (owner rule O1). It must say plainly that the page shares the username with the person's apps and servers, so they can be connected; not softened into "may".
 - `voici_rules_body`: the page and message rules shown before a first publish and a first sign-in (store UGC requirement). Check the list of forbidden content reads as rules, not legal boilerplate.
 - `voici_report_body` and `voici_signin_privacy`: that a report lets Flagship see which account sent the message. "Visitor" (`voici_visitor_name`: Besucher / Visitante / Visiteur / 訪問者 / Visitante / 访客) is the generated name; keep it neutral.
+
+Added with the 0.4 "true today" copy (`docs/phone-apps-copy-proposal.md` (a), 2026-11-17). Machine drafts, same wording as
+iOS's:
+
+- `a_personal_cloud_you_actually_own`: "You build and approve everything from your phone; your server runs your apps."
+  The phone is where you build and approve, the server is where apps run; no language may read as "apps run on your
+  phone" (store review reads the onboarding too).
+- `build_an_app` (Home's quick action; the build screen and the Services tab keep `build_a_service`, the app/service
+  glossary decision is open) and `describe_it_in_plain_english_your`, now "Describe it right here. Your server builds
+  and runs it." (the key name is the old English). es/fr/de use the feminine "la"/"sie" for the user's app, pt-BR "o".

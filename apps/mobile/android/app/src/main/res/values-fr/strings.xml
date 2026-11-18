@@ -1140,7 +1140,8 @@
     <string name="show_my_servers">Afficher mes serveurs</string>
     <string name="your_account_is_ready">Votre compte est prêt</string>
     <string name="add_your_first_server_to_start">Ajoutez votre premier serveur pour commencer à exécuter vos propres services.</string>
-    <string name="describe_it_in_plain_english_your">Décrivez-le en langage courant. Votre serveur le crée et l’exécute.</string>
+    <string name="build_an_app">Créer une app</string>
+    <string name="describe_it_in_plain_english_your">Décrivez-la ici même. Votre serveur la crée et l’exécute.</string>
     <string name="this_device_cannot_build_new_services">Cet appareil ne peut pas créer de nouveaux services. Utilisez un appareil principal.</string>
     <string name="recent_activity">Activité récente</string>
     <string name="no_recent_activity">Aucune activité récente.</string>
@@ -1989,7 +1990,7 @@
     <string name="active_renews_by">Actif — se renouvelle d’ici le %1$s</string>
     <string name="your_stuff_on">Vos affaires,\nsur\u0020</string>
     <string name="your_hardware">votre matériel.</string>
-    <string name="a_personal_cloud_you_actually_own">Un cloud personnel qui vous appartient vraiment. Votre téléphone détient les clés ; votre serveur exécute les services.</string>
+    <string name="a_personal_cloud_you_actually_own">Un cloud personnel qui vous appartient vraiment. Vous créez et approuvez tout depuis votre téléphone ; votre serveur exécute vos apps.</string>
     <string name="create_your_account">Créer votre compte</string>
     <string name="connect_to_an_existing_account_sign">Connectez-vous à un compte existant. Connectez-vous avec le nom de votre compte, ou rejoignez avec un code d’association.</string>
     <string name="your_phone_and_your_server_connected">Votre téléphone et votre serveur, connectés.</string>

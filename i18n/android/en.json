@@ -4746,8 +4746,12 @@
     "en": "Add your first server to start running your own services.",
     "ctx": "ui/screens/HomeScreen.kt:581 (prose)"
   },
+  "build_an_app": {
+    "en": "Build an app",
+    "ctx": "ui/screens/HomeScreen.kt:682 (title=)"
+  },
   "describe_it_in_plain_english_your": {
-    "en": "Describe it in plain English. Your server builds and runs it.",
+    "en": "Describe it right here. Your server builds and runs it.",
     "ctx": "ui/screens/HomeScreen.kt:602 (prose)"
   },
   "this_device_cannot_build_new_services": {
@@ -8279,7 +8283,7 @@
     "ctx": "ui/screens/WelcomeScreen.kt:81 (fragment)"
   },
   "a_personal_cloud_you_actually_own": {
-    "en": "A personal cloud you actually own. Your phone holds the keys; your server runs the services.",
+    "en": "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.",
     "ctx": "ui/screens/WelcomeScreen.kt:88 (text=)"
   },
   "create_your_account": {

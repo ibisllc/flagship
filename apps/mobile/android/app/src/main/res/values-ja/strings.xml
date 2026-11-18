@@ -1140,7 +1140,8 @@
     <string name="show_my_servers">サーバーを表示</string>
     <string name="your_account_is_ready">アカウントの準備ができました</string>
     <string name="add_your_first_server_to_start">最初のサーバーを追加して、ご自身のサービスの運用を始めましょう。</string>
-    <string name="describe_it_in_plain_english_your">普通の言葉で説明してください。サーバーが作成して実行します。</string>
+    <string name="build_an_app">アプリを作る</string>
+    <string name="describe_it_in_plain_english_your">ここで説明するだけ。サーバーが作成して実行します。</string>
     <string name="this_device_cannot_build_new_services">このデバイスでは新しいサービスを作成できません。プライマリデバイスを使ってください。</string>
     <string name="recent_activity">最近のアクティビティ</string>
     <string name="no_recent_activity">最近のアクティビティはありません。</string>
@@ -1989,7 +1990,7 @@
     <string name="active_renews_by">有効 — %1$s までに更新</string>
     <string name="your_stuff_on">あなたのデータを、\n</string>
     <string name="your_hardware">あなたのハードウェアで。</string>
-    <string name="a_personal_cloud_you_actually_own">本当に自分のものと言えるパーソナルクラウド。鍵はスマートフォンが持ち、サービスはサーバーが動かします。</string>
+    <string name="a_personal_cloud_you_actually_own">本当に自分のものと言えるパーソナルクラウド。作成も承認もすべてスマートフォンから。アプリはサーバーが動かします。</string>
     <string name="create_your_account">アカウントを作成</string>
     <string name="connect_to_an_existing_account_sign">既存のアカウントに接続します。アカウント名でサインインするか、ペアリングコードで参加します。</string>
     <string name="your_phone_and_your_server_connected">スマートフォンとサーバーがつながりました。</string>

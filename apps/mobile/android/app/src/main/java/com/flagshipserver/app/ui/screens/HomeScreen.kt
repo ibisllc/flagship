@@ -679,7 +679,7 @@ private fun BuildServiceAction(enabled: Boolean, onClick: () -> Unit) {
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
     ) {
         FSRow(
-            title = stringResource(R.string.build_a_service),
+            title = stringResource(R.string.build_an_app),
             subtitle = if (enabled) stringResource(R.string.describe_it_in_plain_english_your)
             else stringResource(R.string.this_device_cannot_build_new_services),
             icon = if (enabled) Icons.Outlined.AutoAwesome else Icons.Outlined.Lock,
