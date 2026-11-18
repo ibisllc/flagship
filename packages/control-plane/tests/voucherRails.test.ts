@@ -362,6 +362,113 @@ describe("Stripe", () => {
     expect(isVoucherStripeEvent({ type: "checkout.session.completed", data: { object: { metadata: { kind: "app" } } } })).toBe(false);
   });
 
+  it("prices include tax (a $10 pack charges $10), with one tax code, a statement suffix and a pinned API version", async () => {
+    const env = stripeRailFromEnv({ STRIPE_SECRET_KEY: "rk_test_123" })!;
+    expect(env.taxBehavior).toBe("inclusive");
+    expect(env.taxCode).toBe("txcd_10000000");
+    expect(stripeRailFromEnv({ STRIPE_SECRET_KEY: "rk_test_123", STRIPE_TAX_CODE: "nope" })!.taxCode).toBe("txcd_10000000");
+    const d = stripeDeps();
+    const commit = voucherOrderCommit(key.keyId, reqs.map((q) => q.blinded));
+    await handleStripeVoucherCheckout(d, { v: 1, units: 10, k: key.keyId, commit });
+    const form = new URLSearchParams(String(calls[0]!.init!.body));
+    expect(form.get("line_items[0][price_data][unit_amount]")).toBe("100");
+    expect(form.get("line_items[0][quantity]")).toBe("10");
+    expect(form.get("line_items[0][price_data][tax_behavior]")).toBe("inclusive");
+    expect(form.get("line_items[0][price_data][product_data][tax_code]")).toBe("txcd_10000000");
+    expect(form.get("automatic_tax[enabled]")).toBe("true");
+    expect(form.get("payment_intent_data[statement_descriptor_suffix]")).toBe("FLAGSHIP");
+    // Cards, wallets and the Dashboard's other instant methods stay on for packs; only batches are cards only.
+    expect(form.get("payment_method_types[0]")).toBeNull();
+    expect((calls[0]!.init!.headers as Record<string, string>)["stripe-version"]).toBe("2025-03-31.basil");
+    // A paid inclusive-tax session: the tax sits inside the $30 (total_details), so subtotal = total = units × $1.
+    session.total_details = { amount_discount: 0, amount_shipping: 0, amount_tax: 248 };
+    session.automatic_tax = { enabled: true, liability: null, provider: "stripe", status: "complete" };
+    const r = await issue(d, "stripe", { sessionId: "cs_test_abcdefgh123" }, reqs.map((q) => q.blinded));
+    expect(r.status).toBe(200);
+    expect((calls.at(-1)!.init!.headers as Record<string, string>)["stripe-version"]).toBe("2025-03-31.basil");
+  });
+
+  it("reads 2025-03-31.basil snapshot events: a full refund, a partial refund and a dispute", async () => {
+    const d = { ...stripeDeps(), webhookSecret: SECRET };
+    const sign = (body: string) => {
+      const t = Math.floor(NOW / 1000);
+      return `t=${t},v1=${createHmac("sha256", SECRET).update(`${t}.${body}`).digest("hex")}`;
+    };
+    const charge = (over: Record<string, unknown>) => ({
+      id: "ch_3QxYzAbCdEfGh1230",
+      object: "charge",
+      amount: 3000,
+      amount_captured: 3000,
+      amount_refunded: 0,
+      balance_transaction: "txn_3QxYzAbCdEfGh1230",
+      billing_details: { address: { city: null, country: "US", line1: null, line2: null, postal_code: "78701", state: null }, email: null, name: null, phone: null, tax_id: null },
+      captured: true,
+      created: Math.floor(NOW / 1000) - 3600,
+      currency: "usd",
+      customer: null,
+      disputed: false,
+      livemode: false,
+      metadata: { flagship_kind: "vouchers" },
+      outcome: { network_status: "approved_by_network", reason: null, risk_level: "normal", seller_message: "Payment complete.", type: "authorized" },
+      paid: true,
+      payment_intent: "pi_3QxYzAbCdEfGh1230",
+      payment_method: "pm_1QxYzAbCdEfGh1230",
+      payment_method_details: { card: { brand: "visa", last4: "4242" }, type: "card" },
+      refunded: false,
+      refunds: { object: "list", data: [], has_more: false, total_count: 0, url: "/v1/charges/ch_3QxYzAbCdEfGh1230/refunds" },
+      statement_descriptor_suffix: "FLAGSHIP",
+      status: "succeeded",
+      ...over,
+    });
+    const event = (type: string, object: object, previous?: object) =>
+      JSON.stringify({
+        id: "evt_3QxYzAbCdEfGh1230",
+        object: "event",
+        api_version: "2025-03-31.basil",
+        created: Math.floor(NOW / 1000),
+        data: { object, ...(previous ? { previous_attributes: previous } : {}) },
+        livemode: false,
+        pending_webhooks: 1,
+        request: { id: null, idempotency_key: null },
+        type,
+      });
+
+    const partial = event("charge.refunded", charge({ amount_refunded: 1000 }), { amount_refunded: 0 });
+    expect((await handleStripeVoucherWebhook(d, { rawBody: partial, signature: sign(partial) })).body).toMatchObject({ action: "refunded" });
+    expect(calls.at(-1)!.url).toBe("https://api.stripe.com/v1/checkout/sessions?payment_intent=pi_3QxYzAbCdEfGh1230&limit=1");
+    expect((calls.at(-1)!.init!.headers as Record<string, string>)["stripe-version"]).toBe("2025-03-31.basil");
+    expect(d.payments.rows.get(voucherPaymentHash("stripe", "cs_test_abcdefgh123"))?.state).toBe("refunded");
+
+    const full = event("charge.refunded", charge({ amount_refunded: 3000, refunded: true }), { amount_refunded: 0, refunded: false });
+    expect((await handleStripeVoucherWebhook(d, { rawBody: full, signature: sign(full) })).body).toMatchObject({ action: "refunded" });
+
+    const dispute = event("charge.dispute.created", {
+      id: "du_1QxYzAbCdEfGh1230",
+      object: "dispute",
+      amount: 3000,
+      balance_transactions: [],
+      charge: "ch_3QxYzAbCdEfGh1230",
+      created: Math.floor(NOW / 1000),
+      currency: "usd",
+      enhanced_eligibility_types: [],
+      evidence_details: { due_by: Math.floor(NOW / 1000) + 7 * 86400, has_evidence: false, past_due: false, submission_count: 0 },
+      is_charge_refundable: true,
+      livemode: false,
+      metadata: {},
+      payment_intent: "pi_3QxYzAbCdEfGh1230",
+      payment_method_details: { card: { brand: "visa", case_type: "chargeback", network_reason_code: "10.4" }, type: "card" },
+      reason: "fraudulent",
+      status: "needs_response",
+    });
+    expect((await handleStripeVoucherWebhook(d, { rawBody: dispute, signature: sign(dispute) })).body).toMatchObject({ action: "refunded" });
+
+    // A charge outside Checkout (no PaymentIntent) and an untouched charge are ignored.
+    const noPi = event("charge.refunded", charge({ payment_intent: null, refunded: true, amount_refunded: 3000 }));
+    expect((await handleStripeVoucherWebhook(d, { rawBody: noPi, signature: sign(noPi) })).body).toMatchObject({ action: "ignored" });
+    const none = event("charge.refunded", charge({}));
+    expect((await handleStripeVoucherWebhook(d, { rawBody: none, signature: sign(none) })).body).toMatchObject({ action: "ignored" });
+  });
+
   it("reads live or test from the key and refuses anything else", () => {
     expect(stripeRailFromEnv({})).toBeUndefined();
     expect(stripeRailFromEnv({ STRIPE_SECRET_KEY: "pk_live_x" })).toBeUndefined();

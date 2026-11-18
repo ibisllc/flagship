@@ -29,6 +29,20 @@ import { ok, type HandlerResponseWithHeaders } from "./types.js";
 export const PAID_ISSUE_MAX = 200;
 const NO_STORE = { "cache-control": "no-store" } as const;
 
+/**
+ * Every voucher-rail call to Stripe pins the API version the webhook destinations use (snapshot payload,
+ * docs/runbooks/payments-setup.md), so the sessions we read and the events we receive have one shape whatever the
+ * account's default version is.
+ */
+export const STRIPE_API_VERSION = "2025-03-31.basil";
+
+/**
+ * Added to the IBIS LLC account's statement descriptor prefix on card statements (payment_intent_data). The
+ * account-wide descriptor is shared with other products and stays as it is. Stripe: the prefix, a separator and the
+ * suffix make at most 22 characters, with at least one letter and none of < > \ ' " *.
+ */
+export const STRIPE_STATEMENT_SUFFIX = "FLAGSHIP";
+
 export type RailRefusal =
   | "malformed"
   | "too-many"
@@ -133,7 +147,9 @@ const bad = (res: HandlerResponseWithHeaders): Proof => ({ ok: false, res });
 
 async function stripeGet(rail: StripeRail, path: string): Promise<{ status: number; json: any }> {
   const f = rail.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
-  const r = await f(`https://api.stripe.com/v1/${path}`, { headers: { authorization: `Bearer ${rail.secretKey}` } });
+  const r = await f(`https://api.stripe.com/v1/${path}`, {
+    headers: { authorization: `Bearer ${rail.secretKey}`, "stripe-version": STRIPE_API_VERSION },
+  });
   return { status: r.status, json: await r.json().catch(() => null) };
 }
 
@@ -313,6 +329,7 @@ export async function handleStripeVoucherCheckout(deps: VoucherRailsDeps, body: 
   form.set("metadata[flagship_key]", key.pub.keyId);
   form.set("metadata[flagship_commit]", body.commit);
   form.set("payment_intent_data[metadata][flagship_kind]", "vouchers");
+  form.set("payment_intent_data[statement_descriptor_suffix]", STRIPE_STATEMENT_SUFFIX);
   form.set("success_url", rail.successUrl);
   form.set("cancel_url", rail.cancelUrl);
 
@@ -324,6 +341,7 @@ export async function handleStripeVoucherCheckout(deps: VoucherRailsDeps, body: 
       headers: {
         authorization: `Bearer ${rail.secretKey}`,
         "content-type": "application/x-www-form-urlencoded",
+        "stripe-version": STRIPE_API_VERSION,
         // One session per order even if the buy button is pressed twice.
         "idempotency-key": `flagship-vouchers-${body.commit}`,
       },
@@ -385,6 +403,12 @@ export async function handleStripeBatchCheckout(deps: VoucherRailsDeps, body: un
   form.set("metadata[flagship_key]", key.pub.keyId);
   form.set("metadata[flagship_commit]", body.commit);
   form.set("payment_intent_data[metadata][flagship_kind]", "voucher-batch");
+  form.set("payment_intent_data[statement_descriptor_suffix]", STRIPE_STATEMENT_SUFFIX);
+  // Cards only (Apple Pay and Google Pay ride on card). Checkout offers bank transfer (customer_balance) only when
+  // the session names an existing Customer, and this one creates its own; a delayed payment would also leave the
+  // session unpaid when the browser asks for its signatures. A company that must pay by bank transfer gets a
+  // send_invoice invoice from the Dashboard (docs/runbooks/payments-setup.md, "Bank transfer").
+  form.set("payment_method_types[0]", "card");
   form.set("success_url", rail.batchSuccessUrl ?? rail.successUrl);
   form.set("cancel_url", rail.cancelUrl);
 
@@ -396,6 +420,7 @@ export async function handleStripeBatchCheckout(deps: VoucherRailsDeps, body: un
       headers: {
         authorization: `Bearer ${rail.secretKey}`,
         "content-type": "application/x-www-form-urlencoded",
+        "stripe-version": STRIPE_API_VERSION,
         "idempotency-key": `flagship-voucher-batch-${body.commit}`,
       },
       body: form.toString(),

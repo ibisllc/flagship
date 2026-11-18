@@ -82,6 +82,13 @@ describe("invoiced batch checkout", () => {
     expect(form.get("tax_id_collection[enabled]")).toBe("true");
     expect(form.get("billing_address_collection")).toBe("required");
     expect(form.get("customer_creation")).toBe("always");
+    // Cards only: Checkout offers bank transfer only with an existing Customer (runbook: send_invoice by hand).
+    expect(form.get("payment_method_types[0]")).toBe("card");
+    expect([...form.keys()].some((k) => k.includes("customer_balance"))).toBe(false);
+    expect(form.get("payment_intent_data[statement_descriptor_suffix]")).toBe("FLAGSHIP");
+    expect(form.get("line_items[0][price_data][tax_behavior]")).toBe("inclusive");
+    expect(form.get("line_items[0][price_data][product_data][tax_code]")).toBe("txcd_10000000");
+    expect((calls[0]!.init!.headers as Record<string, string>)["stripe-version"]).toBe("2025-03-31.basil");
     expect(form.get("line_items[0][quantity]")).toBe(String(UNITS));
     expect(form.get("line_items[0][price_data][product_data][name]")).toBe("Flagship vouchers");
     expect(form.get("metadata[flagship_kind]")).toBe("voucher-batch");
