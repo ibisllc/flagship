@@ -1551,3 +1551,4 @@ Three agents started:
 - Resume point: merge the three agents, then deploy prep.
 - Owner: Business defaults kept; voi.ci keeps "vous"; a per-page share image (added to 0.4/voici-decisions); trademark search not now. `0.4/phone-copy` is done (4 commits, gates green); the og:description follow-up is running.
 - Merged `0.4/phone-copy` (5 commits: homepage, store texts, iOS, Android, og:description). Gates green. iOS strings not compiled (literals only; the catalog check is ok).
+- Owner: calls go on in 0.4 with China no-ring mode and the relay gaps accepted; the privacy calls section is being drafted (0.4/privacy-calls, for approval). voucher-link: webapp and iOS done, shell v236, Android finishing. voici-decisions: web done, native finishing; it will renumber its shell above v236.
