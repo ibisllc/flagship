@@ -7368,6 +7368,22 @@
       "open/index.html"
     ]
   },
+  "s6f98f794bd": {
+    "en": "Add vouchers in the Flagship app",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s963b6904c1": {
+    "en": "This link adds prepaid vouchers to your Flagship account. Get the app, then open the link again, or add them in the web app.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
   "s5e3791de5b": {
     "en": "Someone accepted your invite",
     "kind": "text",

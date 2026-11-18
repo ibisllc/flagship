@@ -1020,5 +1020,7 @@
   "see9b89bd69": "<1>Organizações com vários administradores.</1> Vagas, administradores restritos a alguns servidores ou apps, aprovações de vários administradores, congelar uma vaga, as regras próprias da organização, novas chaves quando alguém sai, uma exportação de auditoria que pode ser verificada offline, e conectores de diretório SCIM e LDAP.",
   "s5daa8e8b0b": "<1>US$ 6 por vaga por mês, no mínimo 3 vagas,</1> com 100 GB de tráfego público por vaga, compartilhados por toda a organização. Uma organização nova recebe 10 vagas por 30 dias, e o tempo pago começa quando o teste termina.",
   "s220b89c994": "<1>A carteira da própria organização,</1> guardada pelos administradores e criptografada com uma chave que só eles compartilham. Se o pagamento parar, nada se perde: cada vaga, app e registro fica, e só a adição de pessoas, servidores ou conectores espera.",
-  "s2bd99083bd": "<1>Uma fatura para a empresa, não para as pessoas dela.</1> Uma empresa pode comprar na web um lote de 100 vales ou mais, com fatura em seu nome e com seu número fiscal, sem nomear nenhuma organização, conta ou vaga. O lote vai para a carteira da organização ou para arquivos de vales que a equipe usa no próprio Pro."
+  "s2bd99083bd": "<1>Uma fatura para a empresa, não para as pessoas dela.</1> Uma empresa pode comprar na web um lote de 100 vales ou mais, com fatura em seu nome e com seu número fiscal, sem nomear nenhuma organização, conta ou vaga. O lote vai para a carteira da organização ou para arquivos de vales que a equipe usa no próprio Pro.",
+  "s6f98f794bd": "Adicione vales no app Flagship",
+  "s963b6904c1": "Este link adiciona vales pré-pagos à sua conta Flagship. Baixe o app e abra o link de novo, ou adicione-os no app web."
 }
