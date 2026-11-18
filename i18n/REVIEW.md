@@ -126,3 +126,13 @@ shops still know, the 72-hour grace line ("nothing lapses, and nothing is free")
 and the 100 GB / $5 block line, that "Settings, Plan" matches each app's menu names, and the relay line (Oblivious Network
 is the independent main relay; "neither it nor Flagship sees both who you are and what you spend"; Flagship's relay is
 only the backup).
+
+**Homepage "true today" copy for 0.4 (`i18n/web`, 2026-11-17, drafted by an agent, needs native review).** Five
+segments of `index.html` from `docs/phone-apps-copy-proposal.md` (a): the meta description, the hero lede, How it works
+step 03 (title and text) and the FAQ answer "Do I need to be a developer?". The rule they follow: "from your phone" is
+where you **build and control** apps, never where they **run**; the server runs them. Check that no language reads as
+"the app runs on your phone" (es/fr/de/pt-BR "desde tu teléfono" / "depuis votre téléphone" / "von deinem Telefon aus"
+/ "pelo celular"; ja "スマートフォンから", zh-Hans "在手机上构建"). Also check "control centre" (es "centro de control", fr
+"centre de contrôle", de "Schaltzentrale", pt-BR "central de controle", ja "司令塔", zh-Hans "控制中心"), "approves every
+start" (the server's start-up, glossary "approve"), and that "the app" in step 03 and the FAQ is the Flagship mobile app
+(ja "モバイルアプリ", zh-Hans "手机应用"), not one of the user's apps.

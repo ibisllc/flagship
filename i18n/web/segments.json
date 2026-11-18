@@ -7,8 +7,8 @@
       "index.html"
     ]
   },
-  "s5b69e08cd4": {
-    "en": "Plug in at home, pair with your mobile device, build and share apps privately. TLS terminates on your hardware. Not even we can eavesdrop.",
+  "sb1711c1928": {
+    "en": "Build apps from your phone and run them on hardware you own. Your phone holds the keys; TLS terminates on your hardware. Not even we can eavesdrop.",
     "kind": "attr",
     "ctx": "meta[content]",
     "pages": [
@@ -198,8 +198,8 @@
       "index.html"
     ]
   },
-  "sc16cc4a041": {
-    "en": "Plug a small box in at home. Pair it with the mobile app on your device. Build and share services privately at <1>yours.flagship.services</1>, with a certificate signed by a key only your hardware holds. Not even we can eavesdrop.",
+  "s6089980cf5": {
+    "en": "Plug a small box in at home. Your phone is the control centre: it holds the keys, approves every start, and is where you build and share apps, at <1>yours.flagship.services</1>, with a certificate signed by a key only your hardware holds. Not even we can eavesdrop.",
     "kind": "text",
     "ctx": "p",
     "verbatim": [
@@ -358,16 +358,16 @@
       "index.html"
     ]
   },
-  "s91755f2f40": {
-    "en": "Vibe-code a service.",
+  "s65cc9af370": {
+    "en": "Build an app from your phone.",
     "kind": "text",
     "ctx": "h3",
     "pages": [
       "index.html"
     ]
   },
-  "sf69ef34c3a": {
-    "en": "Describe what you want. An AI writes the code and its manifest, with your own key, Flagship Inference, or a model running on your own server. Your server builds it and runs it in its own sandbox.",
+  "s299a707919": {
+    "en": "Describe what you want in the app. An AI writes the code and its manifest, with your own key, Flagship Inference, or a model running on your own server. Your server builds it and runs it in its own sandbox.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -726,8 +726,8 @@
       "index.html"
     ]
   },
-  "sb81419e122": {
-    "en": "No. The mobile app walks you through every step. Vibe-coding means typing what you want; the LLM writes it, the daemon ships it.",
+  "sae3e040778": {
+    "en": "No. You build apps from your phone by saying what you want; an AI writes it and your server runs it. The app walks you through every step.",
     "kind": "text",
     "ctx": "p",
     "pages": [
