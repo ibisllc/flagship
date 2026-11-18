@@ -1538,3 +1538,5 @@ Three agents started:
 - Merged `0.4/phone-apps` (docs only). Proposal: a spike in 0.5, then forms/polls in 0.6 and shops/booking in 0.7, about 118 engineer-days. Rules are data, interpreted in the app (Apple 2.5.2); 8 owner decisions are in the doc.
 
 - Merged `0.4/voici-front`: the voi.ci root now serves a static front door (French first, App Store and Play links, works when storage is down), and every page has a "Make your own page" footer. Gates green. Owner decisions are in `docs/voici-front-door.md` (trademark, calls are off in prod, noindex, share image, vous/tu, native review).
+
+- Merged `0.4/business` (20 commits; D1 0156; shell v234). Gates are green, iOS unit tests and the iOS gym pass, and Android unit tests pass. The Android gym is NOT run (local AVDs broken for every class, so it is not this branch); run it in CI or a cloud session. Owner calls: Android voucher-file import vs the doc §4.3 and Play billing policy; a finance buyer with no account; Stripe invoicing answer. The UI pass must renumber the shell to v235 at merge.
