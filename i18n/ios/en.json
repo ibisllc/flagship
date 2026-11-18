@@ -4313,9 +4313,13 @@
     "en": "Restricted device · %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:517"
   },
-  "Describe it in plain English. Your server builds and runs it.": {
-    "en": "Describe it in plain English. Your server builds and runs it.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:545"
+  "Build an app": {
+    "en": "Build an app",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:552"
+  },
+  "Describe it right here. Your server builds and runs it.": {
+    "en": "Describe it right here. Your server builds and runs it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:553"
   },
   "This device cannot build new services. Use a primary device.": {
     "en": "This device cannot build new services. Use a primary device.",
@@ -11370,8 +11374,8 @@
     "en": "Your stuff,\non your hardware.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift:28"
   },
-  "A personal cloud you actually own. Your phone holds the keys, your server runs the services.": {
-    "en": "A personal cloud you actually own. Your phone holds the keys, your server runs the services.",
+  "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": {
+    "en": "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift:32"
   },
   "Authorize wipe": {

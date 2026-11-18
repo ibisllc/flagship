@@ -29,7 +29,7 @@ public struct WelcomeScreen: View {
                                 .font(FS.font.h1())
                                 .accessibilityAddTraits(.isHeader)
                             FSColorReader { c in
-                                Text("A personal cloud you actually own. Your phone holds the keys, your server runs the services.")
+                                Text("A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.")
                                     .font(.system(.body))
                                     .foregroundColor(c.textMuted)
                             }

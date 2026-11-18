@@ -43393,43 +43393,84 @@
         }
       }
     },
-    "Describe it in plain English. Your server builds and runs it.": {
+    "Build an app": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Descríbelo con palabras sencillas. Tu servidor lo crea y lo ejecuta."
+            "value": "Crear una app"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Décrivez-le en langage courant. Votre serveur le crée et l’exécute."
+            "value": "Créer une app"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beschreibe es in einfacher Sprache. Dein Server baut und betreibt es."
+            "value": "Eine App bauen"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Descreva em linguagem simples. Seu servidor o cria e o executa."
+            "value": "Criar um app"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "普通の言葉で説明してください。サーバーが作成して実行します。"
+            "value": "アプリを作る"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "用日常语言描述它。你的服务器会构建并运行它。"
+            "value": "构建应用"
+          }
+        }
+      }
+    },
+    "Describe it right here. Your server builds and runs it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descríbela aquí mismo. Tu servidor la crea y la ejecuta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décrivez-la ici même. Votre serveur la crée et l’exécute."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beschreib sie gleich hier. Dein Server baut und betreibt sie."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descreva aqui mesmo. Seu servidor o cria e o executa."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ここで説明するだけ。サーバーが作成して実行します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就在这里描述它。你的服务器会构建并运行它。"
           }
         }
       }
@@ -114132,43 +114173,43 @@
         }
       }
     },
-    "A personal cloud you actually own. Your phone holds the keys, your server runs the services.": {
+    "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Una nube personal que de verdad es tuya. Tu teléfono guarda las claves, tu servidor ejecuta los servicios."
+            "value": "Una nube personal que de verdad es tuya. Creas y apruebas todo desde tu teléfono; tu servidor ejecuta tus apps."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un cloud personnel qui vous appartient vraiment. Votre téléphone détient les clés, votre serveur exécute les services."
+            "value": "Un cloud personnel qui vous appartient vraiment. Vous créez et approuvez tout depuis votre téléphone ; votre serveur exécute vos apps."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eine persönliche Cloud, die dir wirklich gehört. Dein Telefon hält die Schlüssel, dein Server betreibt die Dienste."
+            "value": "Eine persönliche Cloud, die dir wirklich gehört. Du baust und genehmigst alles von deinem Telefon aus; dein Server betreibt deine Apps."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uma nuvem pessoal que realmente é sua. Seu celular guarda as chaves, seu servidor executa os serviços."
+            "value": "Uma nuvem pessoal que realmente é sua. Você cria e aprova tudo pelo celular; seu servidor executa seus apps."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "本当に自分のものと言えるパーソナルクラウド。鍵はスマートフォンが持ち、サービスはサーバーが動かします。"
+            "value": "本当に自分のものと言えるパーソナルクラウド。作成も承認もすべてスマートフォンから。アプリはサーバーが動かします。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "一个真正归你所有的个人云。你的手机掌管密钥，你的服务器运行服务。"
+            "value": "一个真正归你所有的个人云。你在手机上构建并批准一切，你的服务器运行你的应用。"
           }
         }
       }

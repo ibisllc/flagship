@@ -549,8 +549,8 @@ public struct HomeScreen: View {
             : [GridItem(.flexible())]
         return LazyVGrid(columns: columns, spacing: FS.space.s3) {
             actionRow(
-                title: String(localized: "Build a service"),
-                subtitle: String(localized: "Describe it in plain English. Your server builds and runs it."),
+                title: String(localized: "Build an app"),
+                subtitle: String(localized: "Describe it right here. Your server builds and runs it."),
                 systemImage: "sparkles",
                 accent: c.primary,
                 action: onVibeCode,

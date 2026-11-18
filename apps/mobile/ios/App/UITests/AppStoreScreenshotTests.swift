@@ -140,7 +140,7 @@ final class AppStoreScreenshotTests: XCTestCase {
         shot(app, "14-showcase-settings")
 
         go(app, "Home")
-        let build = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Build a service")).firstMatch
+        let build = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Build an app")).firstMatch
         if build.waitForExistence(timeout: 5) {
             build.tap()
             sleep(3)
