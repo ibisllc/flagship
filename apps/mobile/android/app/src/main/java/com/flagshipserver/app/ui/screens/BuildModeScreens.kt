@@ -262,11 +262,15 @@ fun BuildSourceChooserScreen(nav: NavController) {
                 onClick = { nav.navigate("build/mcp") },
                 testTag = "build-src-mcp",
             )
-            SourceTile(
-                title = stringResource(R.string.get_from_the_marketplace),
-                body = stringResource(R.string.install_something_your_neighbours_already),
-                onClick = { nav.navigate("marketplace") },
-            )
+            // Off in 0.4 (release/version.json "marketplace"); 0.5 turns it on.
+            if (com.flagshipserver.app.BuildConfig.MARKETPLACE) {
+                SourceTile(
+                    title = stringResource(R.string.get_from_the_marketplace),
+                    body = stringResource(R.string.install_something_your_neighbours_already),
+                    onClick = { nav.navigate("marketplace") },
+                    testTag = "build-src-market",
+                )
+            }
         }
     }
     if (showHelp) BuildHelpDialog { showHelp = false }

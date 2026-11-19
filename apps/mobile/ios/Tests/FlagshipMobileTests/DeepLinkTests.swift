@@ -40,9 +40,13 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(DeepLink.parse(url), .appDetail(serviceId: "plants"))
     }
 
-    func test_marketplace_host_routes() {
+    /// The marketplace is off in 0.4 (release/version.json "marketplace"):
+    /// its links do nothing until the switch turns it on.
+    func test_marketplace_host_routes_only_while_on() {
         let url = URL(string: "flagship://marketplace")!
-        XCTAssertEqual(DeepLink.parse(url), .marketplace)
+        XCTAssertEqual(DeepLink.parse(url), ProductFeatures.marketplace ? .marketplace : nil)
+        let https = DeepLink.appRouteURL("marketplace")
+        XCTAssertEqual(DeepLink.parse(https), ProductFeatures.marketplace ? .marketplace : nil)
     }
 
     func test_createServer_host_routes() {

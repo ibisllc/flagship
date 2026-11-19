@@ -107,7 +107,7 @@ public struct ServicesTab: View {
             }
             _ = linker.consume()
         case .marketplace:
-            if !path.contains(.marketplace) {
+            if ProductFeatures.marketplace, !path.contains(.marketplace) {
                 path.append(.marketplace)
             }
             _ = linker.consume()
@@ -148,7 +148,7 @@ public struct ServicesTab: View {
                     VStack(alignment: .leading, spacing: FS.space.s4) {
                         subheader(c: c, vm: vm)
                         emptyOrList(vm: vm, c: c)
-                        marketplaceCard(c: c)
+                        if ProductFeatures.marketplace { marketplaceCard(c: c) }
                         Spacer().frame(height: FS.space.s12)
                     }
                     .padding(.horizontal, FS.space.s6)

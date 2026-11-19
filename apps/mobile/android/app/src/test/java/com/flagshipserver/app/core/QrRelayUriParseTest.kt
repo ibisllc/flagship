@@ -72,7 +72,8 @@ class DeepLinkParseTest {
     }
 
     @Test fun parsesBareMarketplaceAndCreateServer() {
-        assertEquals(DeepLink.Marketplace, DeepLink.parse(Uri.parse("flagship://marketplace")))
+        // Off in 0.4 (release/version.json "marketplace"): the link does nothing.
+        assertEquals(DeepLink.Marketplace.takeIf { com.flagshipserver.app.BuildConfig.MARKETPLACE }, DeepLink.parse(Uri.parse("flagship://marketplace")))
         assertEquals(DeepLink.CreateServer, DeepLink.parse(Uri.parse("flagship://create-server")))
     }
 

@@ -111,6 +111,40 @@ internal fun NoServerYetState(modifier: Modifier = Modifier) {
     )
 }
 
+/** A server with no apps yet: Build a service, and Browse marketplace only while the
+ *  marketplace is on (release/version.json "marketplace"; off in 0.4, 0.5 turns it on). */
+@Composable
+internal fun NoServicesYetState(
+    onBuild: () -> Unit,
+    onBrowseMarketplace: () -> Unit,
+    marketplace: Boolean = com.flagshipserver.app.BuildConfig.MARKETPLACE,
+) {
+    FSEmptyState(
+        title = stringResource(R.string.build_your_first_service),
+        message = stringResource(R.string.describe_what_you_want_in_plain),
+        icon = Icons.Outlined.AutoAwesome,
+        iconTint = FS.colors.accent,
+        action = {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                FSPrimaryButton(
+                    label = stringResource(R.string.build_a_service),
+                    onClick = onBuild,
+                    block = true,
+                    modifier = Modifier.testTag("services-build-cta"),
+                )
+                if (marketplace) {
+                    FSGhostButton(
+                        label = stringResource(R.string.browse_marketplace),
+                        onClick = onBrowseMarketplace,
+                        block = true,
+                        modifier = Modifier.testTag("services-browse-marketplace"),
+                    )
+                }
+            }
+        },
+    )
+}
+
 /** Presentation-only creator filter (mirrors iOS AppsOwnerFilter). */
 private enum class OwnerFilter(val label: String) { ALL(FSStrings.get(R.string.all)), YOURS(FSStrings.get(R.string.yours)), SHARED(FSStrings.get(R.string.shared)) }
 
@@ -211,26 +245,9 @@ fun ServicesListScreen(nav: NavController) {
                 onRetry = { refreshScope.launch { vm.refresh() } },
             )
         } else if (allApps.isEmpty() && state !is LoadingState.Loading) {
-            FSEmptyState(
-                title = stringResource(R.string.build_your_first_service),
-                message = stringResource(R.string.describe_what_you_want_in_plain),
-                icon = Icons.Outlined.AutoAwesome,
-                iconTint = FS.colors.accent,
-                action = {
-                  Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    FSPrimaryButton(
-                        label = stringResource(R.string.build_a_service),
-                        onClick = { nav.navigate("build/source") },
-                        block = true,
-                        modifier = Modifier.testTag("services-build-cta"),
-                    )
-                    FSGhostButton(
-                        label = stringResource(R.string.browse_marketplace),
-                        onClick = { nav.navigate("marketplace") },
-                        block = true,
-                    )
-                  }
-                },
+            NoServicesYetState(
+                onBuild = { nav.navigate("build/source") },
+                onBrowseMarketplace = { nav.navigate("marketplace") },
             )
         } else {
             // V8 — the server filter sits above search when the user owns more

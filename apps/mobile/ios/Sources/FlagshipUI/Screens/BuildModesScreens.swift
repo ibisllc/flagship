@@ -111,13 +111,15 @@ public struct BuildSourceChooserScreen: View {
                     )
                     .accessibilityIdentifier("build-src-mcp")
 
-                    BuildSourceTile(
-                        icon: "bag",
-                        title: String(localized: "Get from the marketplace"),
-                        subtitle: String(localized: "Install something already built and reviewed."),
-                        action: onMarketplace
-                    )
-                    .accessibilityIdentifier("build-src-market")
+                    if ProductFeatures.marketplace {
+                        BuildSourceTile(
+                            icon: "bag",
+                            title: String(localized: "Get from the marketplace"),
+                            subtitle: String(localized: "Install something already built and reviewed."),
+                            action: onMarketplace
+                        )
+                        .accessibilityIdentifier("build-src-market")
+                    }
 
                     Spacer().frame(height: FS.space.s8)
                 }

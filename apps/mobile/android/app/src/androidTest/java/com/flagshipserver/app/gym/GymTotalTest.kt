@@ -26,6 +26,7 @@ class GymTotalTest : GymBase() {
     fun buildChooserRenders() {
         launch(tab = "apps")
         composeRule.onNodeWithTag("services-build-cta").assertIsDisplayed()
+        if (!com.flagshipserver.app.BuildConfig.MARKETPLACE) composeRule.onNodeWithTag("services-browse-marketplace").assertDoesNotExist()
         gymShot("services-ready")
         composeRule.onNodeWithTag("services-build-cta").performClick()
         composeRule.waitForIdle()
@@ -33,6 +34,8 @@ class GymTotalTest : GymBase() {
         composeRule.onNodeWithTag("build-src-scratch").assertIsDisplayed()
         composeRule.onNodeWithTag("build-src-git").assertIsDisplayed()
         composeRule.onNodeWithTag("build-src-mcp").assertIsDisplayed()
+        // Off in 0.4 (release/version.json "marketplace"): no marketplace tile or empty-state button.
+        if (!com.flagshipserver.app.BuildConfig.MARKETPLACE) composeRule.onNodeWithTag("build-src-market").assertDoesNotExist()
         gymShot("build-chooser")
     }
 

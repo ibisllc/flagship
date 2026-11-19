@@ -543,8 +543,9 @@ public struct HomeScreen: View {
         let canInstall = scopes == nil || scopes!.contains(.installService)
         // Two actions: side by side in two equal columns on a regular-width
         // screen, stacked on a phone. An adaptive 280pt grid left a gap on
-        // wide screens (three columns, two cards).
-        let columns = sizeClass == .regular
+        // wide screens (three columns, two cards). With the marketplace off
+        // (0.4) there is one action, so one column everywhere.
+        let columns = sizeClass == .regular && ProductFeatures.marketplace
             ? [GridItem(.flexible(), spacing: FS.space.s3), GridItem(.flexible(), spacing: FS.space.s3)]
             : [GridItem(.flexible())]
         return LazyVGrid(columns: columns, spacing: FS.space.s3) {
@@ -559,17 +560,19 @@ public struct HomeScreen: View {
                 accessibilityId: "quick-action-vibe-code",
                 c: c
             )
-            actionRow(
-                title: String(localized: "Browse the marketplace"),
-                subtitle: String(localized: "Deploy services your neighbours have published."),
-                systemImage: "square.grid.2x2",
-                accent: c.success,
-                action: onBrowseMarketplace,
-                enabled: canInstall,
-                disabledReason: String(localized: "This device cannot install services. Use a primary device."),
-                accessibilityId: "quick-action-install-service",
-                c: c
-            )
+            if ProductFeatures.marketplace {
+                actionRow(
+                    title: String(localized: "Browse the marketplace"),
+                    subtitle: String(localized: "Deploy services your neighbours have published."),
+                    systemImage: "square.grid.2x2",
+                    accent: c.success,
+                    action: onBrowseMarketplace,
+                    enabled: canInstall,
+                    disabledReason: String(localized: "This device cannot install services. Use a primary device."),
+                    accessibilityId: "quick-action-install-service",
+                    c: c
+                )
+            }
         }
     }
 

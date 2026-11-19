@@ -279,7 +279,8 @@ sealed interface DeepLink {
                 "secret-requests", "secret-request", "unlock-approve", "unlock-approvals" -> SecretRequests
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
-                "marketplace" -> Marketplace
+                // Off in 0.4 (release/version.json "marketplace"): the link does nothing.
+                "marketplace" -> Marketplace.takeIf { com.flagshipserver.app.BuildConfig.MARKETPLACE }
                 "create-server" -> CreateServer
                 "share" -> ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 "backup-download" -> {

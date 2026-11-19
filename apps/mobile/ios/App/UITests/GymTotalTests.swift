@@ -138,8 +138,9 @@ final class GymTotalTests: XCTestCase {
     // ─── D2 — build-a-service modes (screens render) ─────────────────────────
 
     /// The Services tab's "Build another service" affordance opens the build
-    /// chooser; all three on-`main` source tiles render (scratch / git / mcp).
-    /// (Marketplace ships on feat/marketplace — absent on main by design.)
+    /// chooser; the three source tiles render (scratch / git / mcp). The
+    /// marketplace tile is absent while release/version.json says
+    /// "marketplace": false (0.4); flip this assertion when 0.5 turns it on.
     func test_buildChooserRenders() throws {
         let app = launch(tab: "apps")
         // The Services tab (with mock apps) shows a "Build another service"
@@ -154,7 +155,20 @@ final class GymTotalTests: XCTestCase {
         )
         XCTAssertTrue(app.buttons["build-src-git"].exists, "The build chooser should render the git tile.")
         XCTAssertTrue(app.buttons["build-src-mcp"].exists, "The build chooser should render the mcp tile.")
+        XCTAssertFalse(app.buttons["build-src-market"].exists, "The marketplace is off in 0.4: no marketplace tile.")
+        XCTAssertFalse(app.staticTexts["Marketplace"].exists, "The marketplace is off in 0.4: no Services card for it.")
         gymShot(app, "build-chooser")
+    }
+
+    /// Home's quick actions: "Build an app" only while the marketplace is off
+    /// (0.4); "Browse the marketplace" comes back when 0.5 turns it on.
+    func test_homeHasNoMarketplaceActionWhileOff() throws {
+        let app = launch(tab: "home")
+        XCTAssertTrue(
+            app.buttons["quick-action-vibe-code"].waitForExistence(timeout: 15),
+            "Home should offer Build an app."
+        )
+        XCTAssertFalse(app.buttons["quick-action-install-service"].exists, "The marketplace is off in 0.4: no Home action for it.")
     }
 
     /// chooser → git → the fitness-verdict screen (Git import) renders its

@@ -322,7 +322,8 @@ public enum DeepLink: Equatable, Sendable {
         case "app":
             if let id = params["serviceId"] { return .appDetail(serviceId: id) }
         case "marketplace":
-            return .marketplace
+            // Off in 0.4 (release/version.json "marketplace"): the link does nothing.
+            return ProductFeatures.marketplace ? .marketplace : nil
         case "create-server":
             return .createServer
         case "invite":

@@ -156,7 +156,7 @@ fun ServicesTab() {
             }
             DeepLink.Marketplace -> {
                 deepLinker.consume()
-                nav.navigate("marketplace")
+                if (com.flagshipserver.app.BuildConfig.MARKETPLACE) nav.navigate("marketplace")
             }
             else -> { /* not for this tab */ }
         }

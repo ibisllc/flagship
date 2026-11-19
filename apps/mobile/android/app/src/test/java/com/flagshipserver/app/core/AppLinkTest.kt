@@ -49,9 +49,10 @@ class AppLinkTest {
         assertEquals(DeepLink.SecretRequests, AppLink.resolve(uri))
     }
 
-    @Test fun appLinkForm_marketplace() {
+    // The marketplace is off in 0.4 (release/version.json "marketplace"): its links do nothing.
+    @Test fun appLinkForm_marketplace_onlyWhileOn() {
         val uri = Uri.parse("https://flagshipserver.com/app/marketplace")
-        assertEquals(DeepLink.Marketplace, AppLink.resolve(uri))
+        assertEquals(DeepLink.Marketplace.takeIf { com.flagshipserver.app.BuildConfig.MARKETPLACE }, AppLink.resolve(uri))
     }
 
     @Test fun appLinkForm_appDetail() {
@@ -118,8 +119,8 @@ class AppLinkTest {
         // intent (e.g. via an `android:scheme="http"` in some future
         // intent-filter), the path still translates. Today the only
         // declared scheme is https, but the check is cheap.
-        val uri = Uri.parse("http://flagshipserver.com/app/marketplace")
-        assertEquals(DeepLink.Marketplace, AppLink.resolve(uri))
+        val uri = Uri.parse("http://flagshipserver.com/app/create-server")
+        assertEquals(DeepLink.CreateServer, AppLink.resolve(uri))
     }
 
     // ── /app/<route>[/<more>] keeps the whole path ───────────────────
