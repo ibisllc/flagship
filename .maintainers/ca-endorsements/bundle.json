@@ -70,5 +70,23 @@
         "sig": "e3f6f00b3cc9a1746512e82eead1f0355e6a5c5182c0e61f6b22ceae1c3dc43ff209e0d4e47da8f49d2c038b1f57184d697da6110ef2d00dc9214add444ff60c"
       }
     ]
+  },
+  {
+    "kind": "CaEndorsement",
+    "version": 1,
+    "endorsementId": "03a8a7c7-89e0-49fb-aa01-79770dd5763b",
+    "track": "ca",
+    "caPubkey": "230ad9ed20e56d79e836690e351cb5538fb4aca9e509d9adc9755da81cd235cc",
+    "scope": "flagship/directory-attestation",
+    "notBefore": "2026-11-19T12:53:09.455Z",
+    "notAfter": "2027-02-17T12:53:09.455Z",
+    "issuedAt": "2026-11-19T12:53:09.455Z",
+    "signedBy": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+    "signatures": [
+      {
+        "pubkey": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+        "sig": "f222658f4b5a6d504fa55c333f9db794d95257b94099c3d4bc31ad27959bdbb93737882ee5d0aedcc8dc85ab3c31e5f77ce3af18d923dfa75d2b8723a1c22905"
+      }
+    ]
   }
 ]
