@@ -28,7 +28,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).toContain(".colophon");
   });
 
-  for (const path of ["/how-it-works.html", "/marketplace/"]) {
+  for (const path of ["/how-it-works.html"]) {
     it(`${path} loads the design tokens + components stylesheets`, async () => {
       const app = buildServer();
       const r = await app.inject({ method: "GET", url: path });
@@ -38,7 +38,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     });
   }
 
-  for (const path of ["/", "/marketplace/"]) {
+  for (const path of ["/"]) {
     it(`${path} carries the Flagship brand in the chrome`, async () => {
       const app = buildServer();
       const r = await app.inject({ method: "GET", url: path });
@@ -379,12 +379,29 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).not.toMatch(/<h1[^>]*>\s*Pricing/);
   });
 
-  it("marketplace page renders sidebar categories + listing grid", async () => {
-    const app = buildServer();
-    const r = await app.inject({ method: "GET", url: "/marketplace/" });
-    expect(r.body).toContain("Categories");
-    expect(r.body).toContain("Productivity");
-    expect(r.body).toContain('class="card listing"');
+  // The marketplace is off in 0.4 (owner, 2026-11-19): no /marketplace/ page, no link to it in any
+  // language, and no homepage section of made-up listings with scan grades. 0.5 brings the page back.
+  it("has no marketplace page and no link to one", async () => {
+    const { existsSync, readFileSync, readdirSync, statSync } = await import("node:fs");
+    const { join, resolve } = await import("node:path");
+    const pub = resolve(__dirname, "..", "public");
+    expect(existsSync(join(pub, "marketplace"))).toBe(false);
+    const htmls: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir)) {
+        if (e === "webapp" || e === "recovery") continue;
+        const f = join(dir, e);
+        if (statSync(f).isDirectory()) walk(f);
+        else if (e.endsWith(".html")) htmls.push(f);
+      }
+    };
+    walk(pub);
+    expect(htmls.length).toBeGreaterThan(50);
+    for (const f of htmls) expect(readFileSync(f, "utf8"), f).not.toMatch(/href="(\/[a-z-]+)?\/marketplace/);
+    const home = readFileSync(join(pub, "index.html"), "utf8");
+    expect(home).not.toContain("Real services from real users");
+    expect(home).not.toContain('class="grade');
+    expect(home).not.toContain('href="#apps"');
   });
 
   it("the report form lives in the #report section of /security", async () => {

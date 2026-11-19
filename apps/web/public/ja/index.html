@@ -630,65 +630,6 @@
     .diagram .d-conn  { stroke: var(--rule-strong); }
     .diagram .d-arrow { fill: var(--rule-strong); }
 
-    /* ── §3 Apps ───────────────────────────────────────────────── */
-    .apps-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1px;
-      background: var(--rule);
-      border: 1px solid var(--rule);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    @media (max-width: 880px) {
-      .apps-grid { grid-template-columns: 1fr; }
-      .apps-grid .app-card.mobile-hidden { display: none; }
-    }
-    .app-card {
-      background: var(--canvas);
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      transition: background 200ms ease;
-    }
-    .app-card:hover { background: var(--canvas-2); }
-    .app-card .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .app-card h4 {
-      font-family: var(--type-sans);
-      font-size: 15px;
-      font-weight: 500;
-      letter-spacing: -0.005em;
-      margin: 0;
-      color: var(--ink);
-    }
-    .app-card .by {
-      font-family: var(--type-mono);
-      color: var(--muted);
-      font-size: 10.5px;
-      letter-spacing: 0.04em;
-    }
-    .app-card p { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; }
-    .app-card .grade {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 26px; height: 20px;
-      padding: 0 6px;
-      border-radius: 3px;
-      font-family: var(--type-mono);
-      font-weight: 600;
-      font-size: 10.5px;
-      letter-spacing: 0.08em;
-    }
-    .grade-A { background: var(--ok-soft); color: var(--ok); }
-    .grade-B { background: var(--warn-soft); color: var(--warn); }
-
     /* ── FAQ ───────────────────────────────────────────────────── */
     .faq-grid { display: grid; max-width: 960px; }
     details.q { border-top: 1px solid var(--rule); padding: 12px 0; }
@@ -843,7 +784,7 @@
       </svg>
       <span>Flagship</span>
     </a>
-    <nav class="nav-links" aria-label="メイン"><a href="#how">しくみ</a><a href="#trust">信頼</a><a href="#apps">サービス</a><a href="#faq">よくある質問</a><a href="/ja/security" target="_blank" rel="noopener">セキュリティ<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></a><a href="/ja/docs" target="_blank" rel="noopener">ドキュメント<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></a></nav>
+    <nav class="nav-links" aria-label="メイン"><a href="#how">しくみ</a><a href="#trust">信頼</a><a href="#faq">よくある質問</a><a href="/ja/security" target="_blank" rel="noopener">セキュリティ<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></a><a href="/ja/docs" target="_blank" rel="noopener">ドキュメント<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></a></nav>
     <div class="nav-cta">
       <button type="button" id="themeToggle" class="theme-btn" data-theme-toggle="" aria-label="テーマを切り替える">
         <svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
@@ -863,7 +804,7 @@
       </button>
     </div>
   </div>
-  <nav id="navMenu" class="nav-menu" aria-label="モバイル"><a href="#how">しくみ</a><a href="#trust">信頼</a><a href="#apps">サービス</a><a href="#faq">よくある質問</a><a href="/ja/security" target="_blank" rel="noopener">セキュリティ<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></a><a href="/ja/docs" target="_blank" rel="noopener">ドキュメント<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></a></nav>
+  <nav id="navMenu" class="nav-menu" aria-label="モバイル"><a href="#how">しくみ</a><a href="#trust">信頼</a><a href="#faq">よくある質問</a><a href="/ja/security" target="_blank" rel="noopener">セキュリティ<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></a><a href="/ja/docs" target="_blank" rel="noopener">ドキュメント<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></a></nav>
 </header>
 
 <main id="main">
@@ -981,58 +922,11 @@
     </div>
   </section>
 
-  <!-- ── §3 Services ────────────────────────────────────────── -->
-  <section class="band" id="apps" aria-labelledby="apps-h2">
-    <div class="container">
-      <header>
-        <span class="sec-num">§3</span>
-        <div><span class="eyebrow">サービス</span><h2 id="apps-h2">先週、みんなが実際に作ったもの。</h2>
-          <p>実際のユーザーによる実際のサービス。それぞれ作成者のハードウェアで動いており、自分のサーバーにインストールすればデータは相手ではなくあなたの手元に残ります。</p>
-        </div>
-      </header>
-
-      <div class="apps-grid">
-        <article class="app-card">
-          <div class="head">
-            <div><h4>plant-water</h4><span class="by">@bright-maple · 14 件のインストール</span></div><span class="grade grade-A">A</span></div>
-          <p>観葉植物の水やりを記録します。5 日以上水が切れるとプッシュ通知が届きます。</p>
-        </article>
-        <article class="app-card">
-          <div class="head">
-            <div><h4>study-club</h4><span class="by">@sarah · 6 件のインストール</span></div><span class="grade grade-A">A</span></div>
-          <p>毎週の読書会のための非公開掲示板。6 人、お互いを信頼する関係。</p>
-        </article>
-        <article class="app-card">
-          <div class="head">
-            <div><h4>family-photos</h4><span class="by">@martin · 3 件のインストール</span></div><span class="grade grade-A">A</span></div>
-          <p>セルフホストのアルバム。モバイルアプリが自宅の Wi-Fi でアップロードします。顔のグループ分けは端末内に留まります。</p>
-        </article>
-        <article class="app-card mobile-hidden">
-          <div class="head">
-            <div><h4>shopper</h4><span class="by">@alice · 28 件のインストール</span></div><span class="grade grade-B">B</span></div>
-          <p>Amazon のほしい物リストを監視し、本当の値下がりを知らせます。Cookie はポッドのブラウザー内に保存されます。</p>
-        </article>
-        <article class="app-card mobile-hidden">
-          <div class="head">
-            <div><h4>fitness-log</h4><span class="by">@nora · 11 件のインストール</span></div><span class="grade grade-A">A</span></div>
-          <p>友人グループ向けの小さな自己ベスト記録アプリ。署名付きの招待トークンで共有します。</p>
-        </article>
-        <article class="app-card mobile-hidden">
-          <div class="head">
-            <div><h4>recipe-jar</h4><span class="by">@max · 41 件のインストール</span></div><span class="grade grade-A">A</span></div>
-          <p>どのレシピサイトからもワンタップで保存。1 年分の保存内容を全文検索できます。</p>
-        </article>
-      </div>
-
-      <div style="margin-top:18px;"><a href="/ja/marketplace" class="arrow-link muted"> <span class="arrow" aria-hidden="true">→</span> <span>マーケットプレイスをすべて見る</span> </a></div>
-    </div>
-  </section>
-
-  <!-- ── §4 FAQ ─────────────────────────────────────────────── -->
+  <!-- ── §3 FAQ ─────────────────────────────────────────────── -->
   <section class="band" id="faq" aria-labelledby="faq-h2">
     <div class="container">
       <header>
-        <span class="sec-num">§4</span>
+        <span class="sec-num">§3</span>
         <div><span class="eyebrow">質問</span><h2 id="faq-h2">率直な質問に、率直にお答えします。</h2>
           <p>信頼を預ける前に本当に大事な質問です。マーケティング用語も決まり文句もありません。</p>
         </div>
@@ -1101,7 +995,6 @@
             <ul>
               <li><a href="/ja/docs#how-it-works">しくみ</a></li>
               <li><a href="/ja/studio">Flagship Studio</a></li>
-              <li><a href="/ja/marketplace">サービス</a></li>
               <li><a href="https://webapp.flagshipserver.com/">Web アプリ</a></li>
               <li><a href="/ja/blog/flagship-0-4">0.4 の新機能</a></li>
             </ul>

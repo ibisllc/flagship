@@ -7,7 +7,15 @@
  * envelope.
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
+
+// The marketplace is off in 0.4 (release/version.json "marketplace": false): the webapp shows no way in,
+// so this flow runs only once 0.5 turns it on.
+const MARKETPLACE = JSON.parse(readFileSync(resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../../release/version.json"), "utf8")).marketplace === true;
+test.skip(!MARKETPLACE, "the marketplace is off in this release (release/version.json)");
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 

@@ -66,8 +66,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "sd8e067f833": {
@@ -84,25 +83,6 @@
     "ctx": "nav",
     "pages": [
       "index.html"
-    ]
-  },
-  "sb251fd64bd": {
-    "en": "<1>Services</1>",
-    "kind": "text",
-    "ctx": "nav",
-    "pages": [
-      "index.html",
-      "faq.html",
-      "help.html",
-      "security.html",
-      "docs/index.html",
-      "open-source.html",
-      "blog/index.html",
-      "dibs.html",
-      "disambiguate.html",
-      "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
     ]
   },
   "s19a72ce7ce": {
@@ -154,8 +134,7 @@
       "disambiguate.html",
       "studio/index.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s3980fa6732": {
@@ -274,8 +253,7 @@
       "security/hall-of-fame.html",
       "disambiguate.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "se24f793bf9": {
@@ -457,196 +435,6 @@
     "en": "Trust waterfall: mobile app → flagshipserver.com → flagship.services → your own server",
     "kind": "attr",
     "ctx": "aside[aria-label]",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s4c6242c07b": {
-    "en": "Things people actually built last week.",
-    "kind": "text",
-    "ctx": "h2",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s5fdb562ac4": {
-    "en": "Real services from real users. Each runs on the creator's hardware; install on your own and the data stays with you, not them.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s2f5f2fb7a8": {
-    "en": "<1>A</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "sc10a226144": {
-    "en": "<1>@bright-maple · 14 installs</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s68ed775288": {
-    "en": "plant-water",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "index.html",
-      "marketplace/index.html"
-    ]
-  },
-  "s32a96fb72b": {
-    "en": "Tracks watered houseplants. Push notification after 5+ thirsty days.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s5ac51d2775": {
-    "en": "<1>@sarah · 6 installs</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s5f6abe2999": {
-    "en": "study-club",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "index.html",
-      "marketplace/index.html"
-    ]
-  },
-  "s1e6218df1d": {
-    "en": "Private discussion board for a weekly book club. Six humans, mutual trust.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s6910c49457": {
-    "en": "<1>@martin · 3 installs</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s5b8e9fed90": {
-    "en": "family-photos",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "index.html",
-      "marketplace/index.html"
-    ]
-  },
-  "s31c5cc095c": {
-    "en": "Self-hosted album. Mobile app uploads on home Wi-Fi. Face clusters stay local.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s00f9f0655d": {
-    "en": "<1>B</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s1a20bceb14": {
-    "en": "<1>@alice · 28 installs</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "sb94817ed41": {
-    "en": "shopper",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "index.html",
-      "marketplace/index.html"
-    ]
-  },
-  "sfb2d4e802b": {
-    "en": "Watches Amazon wishlist, alerts on real price drops. Cookies in the pod browser.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "sdd48cf4290": {
-    "en": "<1>@nora · 11 installs</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "sde38eda644": {
-    "en": "fitness-log",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "index.html",
-      "marketplace/index.html"
-    ]
-  },
-  "s1ba265ac9e": {
-    "en": "Tiny PR tracker for a friend group. Sharing via signed invite tokens.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "sfa25be413c": {
-    "en": "<1>@max · 41 installs</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "scc5419efbc": {
-    "en": "recipe-jar",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "index.html",
-      "marketplace/index.html"
-    ]
-  },
-  "s976be63f2a": {
-    "en": "One-tap save from any recipe site. Full-text search over a year of saves.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "index.html"
-    ]
-  },
-  "s711661b391": {
-    "en": "<1> <2>→</2> <3>Browse the full marketplace</3> </1>",
-    "kind": "text",
-    "ctx": "div",
     "pages": [
       "index.html"
     ]
@@ -842,8 +630,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "sb893166c94": {
@@ -866,8 +653,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s311aed55dd": {
@@ -890,8 +676,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s8868ad9adf": {
@@ -922,8 +707,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s0ea994bede": {
@@ -946,8 +730,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "sa3c3c380ee": {
@@ -970,8 +753,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s8104119722": {
@@ -994,8 +776,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s5452a6ca48": {
@@ -1016,8 +797,7 @@
       "dibs.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s26e5d747c2": {
@@ -1040,8 +820,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s4725b42d57": {
@@ -1064,8 +843,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s326d2af3a8": {
@@ -1088,8 +866,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s2a8b102c74": {
@@ -1131,8 +908,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s661cf4f411": {
@@ -1156,8 +932,7 @@
       "security/hall-of-fame.html",
       "disambiguate.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s82cd1953ed": {
@@ -1180,8 +955,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s52d369c9d8": {
@@ -1204,8 +978,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "sfbb821f74f": {
@@ -1226,8 +999,7 @@
       "dibs.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "sef298c20e8": {
@@ -1265,8 +1037,7 @@
       "security/iso-seed.html",
       "security/hall-of-fame.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "sd034a70edb": {
@@ -3941,8 +3712,7 @@
       "security/iso-seed.html",
       "open/index.html",
       "status/index.html",
-      "pro.html",
-      "marketplace/index.html"
+      "pro.html"
     ]
   },
   "s1d34362df3": {
@@ -4058,8 +3828,8 @@
       "docs/index.html"
     ]
   },
-  "s577ae0fcf4": {
-    "en": "<1>3.</1> Vibe-code your first app from the phone. Or <2>install someone else's</2>. Done.",
+  "s3d7e9cf0c0": {
+    "en": "<1>3.</1> Vibe-code your first app from the phone. Done.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -8501,454 +8271,6 @@
     "ctx": "p",
     "pages": [
       "pro.html"
-    ]
-  },
-  "sf94e6968d5": {
-    "en": "Services · Flagship Marketplace",
-    "kind": "text",
-    "ctx": "title",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sbc4d6431c2": {
-    "en": "Browse services people have built on Flagship. Install on your own server in two taps.",
-    "kind": "attr",
-    "ctx": "meta[content]",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s3b4ed4869c": {
-    "en": "<1>List your service</1>",
-    "kind": "text",
-    "ctx": "nav",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s488abd2896": {
-    "en": "Services people have built.",
-    "kind": "text",
-    "ctx": "h1",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s031be00af9": {
-    "en": "Every listing is hosted on the creator's own server. We just keep the description, a screenshot or two, and the canonical URL. Install on your own pod in two taps.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sace99daab1": {
-    "en": "<1> <2>Search services</2> <3/> <4/> </1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s6e9f168749": {
-    "en": "Search",
-    "kind": "attr",
-    "ctx": "input[aria-label]",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "se7bf157e9b": {
-    "en": "Search services, e.g. journal, photos…",
-    "kind": "attr",
-    "ctx": "input[placeholder]",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sfc40ef8d9d": {
-    "en": "<1>Popular ↓</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sd672bb9c5b": {
-    "en": "<1>List your service →</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s98613695cb": {
-    "en": "Categories",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sa7c42298a0": {
-    "en": "<1>All <2>128</2></1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s2b18b4cf14": {
-    "en": "<1>Productivity <2>42</2></1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sd161e6a141": {
-    "en": "<1>Communication <2>23</2></1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sfc75aafba5": {
-    "en": "<1>Games <2>18</2></1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s682c9249f3": {
-    "en": "<1>Lifestyle <2>31</2></1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s0ba81f046d": {
-    "en": "<1>Developer <2>14</2></1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s63cf13d6e0": {
-    "en": "Filter",
-    "kind": "text",
-    "ctx": "h4",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sa9a134ce35": {
-    "en": "<1><2/> Verified scan only</1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s8e380e7909": {
-    "en": "<1><2/> Free</1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sd14a50d731": {
-    "en": "<1><2/> Open source</1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s017310715b": {
-    "en": "<1><2/> Active in last 30 days</1>",
-    "kind": "text",
-    "ctx": "li",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s97f95b2a54": {
-    "en": "<1>Featured</1> <2><3>family-photos</3> by @martin · self-hosted album with smart search</2> <4>Open →</4>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sd6e491db72": {
-    "en": "screenshot",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s3d0dd244fa": {
-    "en": "@bright-maple · v0.4.2",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s75fefa1652": {
-    "en": "Tracks which houseplants got watered. Push when one's been thirsty 5+ days.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s7eb23416ba": {
-    "en": "<1>A</1> <2>432 installs</2>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sb7a6ad622c": {
-    "en": "@sarah · v1.1.0",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s7365646cd4": {
-    "en": "A private discussion board for our weekly book club. No moderation needed.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sca29085ce1": {
-    "en": "<1>A</1> <2>218 installs</2>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s041b45882e": {
-    "en": "@martin · v2.3.1",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "se039c84806": {
-    "en": "Self-hosted album. Phone uploads automatically when on home Wi-Fi.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sfbbf8db708": {
-    "en": "<1>A</1> <2>1,204 installs</2>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s8bf20b92b7": {
-    "en": "@alice · v0.9.0",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sb21079da32": {
-    "en": "Logs into Amazon, watches a wishlist, alerts on real price drops.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "se114910534": {
-    "en": "<1>B</1> <2>87 installs</2>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s184020bae8": {
-    "en": "@nora · v1.0.0",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sf46eaa1bc4": {
-    "en": "A tiny PR tracker for friend groups. We see each other's lifts.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s9d8e4c8730": {
-    "en": "<1>A</1> <2>54 installs</2>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s365d48eb25": {
-    "en": "@max · v0.6.1",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s8dd147bae6": {
-    "en": "One-tap save from any recipe site, full search, no ads, ever.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s5d3d2b0dfc": {
-    "en": "<1>A</1> <2>301 installs</2>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sab7d391518": {
-    "en": "feed-reader",
-    "kind": "text",
-    "ctx": "h3",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s055cc06fd1": {
-    "en": "@dev · v0.3.0",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s62b014e734": {
-    "en": "RSS / Atom reader with dedup across feeds. No tracking.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "se14492f0cb": {
-    "en": "<1>No scan yet</1>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sc73e0d5a1b": {
-    "en": "dream-journal",
-    "kind": "text",
-    "ctx": "h3",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sce805975cf": {
-    "en": "@luna · v0.2.0",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s28fbd6ed52": {
-    "en": "Voice-note dreams in the morning. AI tags them by recurring symbols.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sdc172bec57": {
-    "en": "<1>A</1> <2>73 installs</2>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "se68fc7c41a": {
-    "en": "budget",
-    "kind": "text",
-    "ctx": "h3",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sc00e389119": {
-    "en": "@sam · v1.4.2",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "sddfe3a0a84": {
-    "en": "Envelope budgeting. Imports bank CSVs locally — never leaves your box.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s7bbbe05ae3": {
-    "en": "<1>A</1> <2>189 installs</2>",
-    "kind": "text",
-    "ctx": "div",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s8b670f6fa3": {
-    "en": "Built something cool?",
-    "kind": "text",
-    "ctx": "h3",
-    "pages": [
-      "marketplace/index.html"
-    ]
-  },
-  "s519e84ca5c": {
-    "en": "List it for free. Pay only if you want a security badge or featured placement.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "marketplace/index.html"
     ]
   }
 }

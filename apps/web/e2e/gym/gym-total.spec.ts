@@ -188,12 +188,16 @@ test.describe("gym webapp total", () => {
     // Services tab → the build-a-service affordance opens the chooser.
     await page.click('[data-tab-target="apps"]');
     await expect(page.locator("#view-services-list")).toBeVisible();
+    // The marketplace is off in 0.4 (release/version.json): no Marketplace or Developer button.
+    await expect(page.locator("#services-list-open-marketplace")).toBeHidden();
+    await expect(page.locator("#services-list-open-developer")).toBeHidden();
     await page.click("#services-list-open-vibe-code");
     await expect(page.locator("#view-build-source")).toBeVisible({ timeout: 10_000 });
-    // The three on-main source tiles (marketplace ships on feat/marketplace).
+    // The three source tiles; the marketplace tile stays hidden while the switch is off.
     await expect(page.locator("#build-src-scratch")).toBeVisible();
     await expect(page.locator("#build-src-git")).toBeVisible();
     await expect(page.locator("#build-src-mcp")).toBeVisible();
+    await expect(page.locator("#build-src-market")).toBeHidden();
     await shot(page, testInfo, "build-chooser");
   });
 
