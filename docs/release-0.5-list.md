@@ -32,3 +32,6 @@ over once "let's start 0.5" is said.
   without a new build (not verified).
 - **Bank transfer for Business batches:** a paid `send_invoice` invoice doesn't produce vouchers yet
   (`docs/runbooks/payments-setup.md`).
+- **Adapter review: not tied to one provider** (owner, 2026-11-19). `apps/com/src/adapterReview.ts` calls only
+  Anthropic's API (`ADAPTER_REVIEW_ANTHROPIC_KEY`). Move it to the OpenAI-compatible upstream Flagship Inference
+  already uses (DeepInfra, OpenRouter fallback), with a provider-neutral secret name. Update release.sh's secret list.
