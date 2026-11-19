@@ -36,3 +36,10 @@ over once "let's start 0.5" is said.
   calls only Anthropic's API (`ADAPTER_REVIEW_ANTHROPIC_KEY`). Route it through Flagship Inference (the shim and its
   OpenAI-compatible upstreams: DeepInfra, OpenRouter fallback, any vendor later) to save cost, with no
   provider-specific secret. The same goes for any other server-side AI review. Update release.sh's secret list.
+- **Community adapters, turned on together** (2026-11-19). Three pieces must arrive together, or none does anything:
+  - the review model, through Flagship Inference as above;
+  - `ADAPTER_ATTESTATION_SIGNING_KEY` (`openssl rand -hex 32`, offline copy on the FlagshipKeys volume), with its
+    public half added to `release/adapter-vetting-keys.json` in an endorsed box release;
+  - `ADAPTER_COMPLAINT_SALT` (`openssl rand -hex 32`).
+  Until then `release/adapter-vetting-keys.json` is empty, so boxes keep community adapter lookup off. 0.4 shipped
+  them unset on purpose.
