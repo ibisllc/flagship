@@ -369,6 +369,10 @@ VOICI_FILES_ZONE_ID = "40579a73601f73c2a3cfeaac6d00366c"
 # is out of date..." (builderRelay.ts). Turn on in the commit that publishes the 0.3 Studio downloads (release.sh
 # step studiowl), never before: until then a 0.2 Studio is the only one people can download.
 STUDIO_PIPE_MIN = "2"
+# The OHTTP relays clients use for private payment and setup calls (docs/outbound-proxy.md "The relay in use").
+# Never Cloudflare: the relay must not be the same operator as the gateway. A relay added here also goes into
+# OHTTP_RELAY_ORIGINS in src/securityHeaders.ts.
+OHTTP_RELAYS = '[{"url":"https://relay.oblivious.network/flagship","operator":"Oblivious Network","interim":false}]'
 # voi.ci links go to the canonical address (<label>.<user>.flagship.services) once "1".
 # Turn on only after the gym group named-links proves it reaches a running instance.
 # VOICI_CANONICAL = "1"
