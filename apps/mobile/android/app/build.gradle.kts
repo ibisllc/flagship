@@ -117,6 +117,8 @@ android {
         versionCode = (releaseVersion["androidVersionCode"] as Number).toInt()
         versionName = releaseVersion["product"] as String
         buildConfigField("String", "PRODUCT_LABEL", "\"${releaseVersion["label"]}\"")
+        // Off in 0.4 (owner, 2026-11-19): every marketplace entry point hides while false.
+        buildConfigField("boolean", "MARKETPLACE", releaseVersion["marketplace"].toString())
         // Play Integrity (docs/voici-and-messages.md §9.5): the Google Cloud project linked in Play Console. 0 until
         // the owner sets it up; the app then asks for Messages on the unattested (slower) tier.
         buildConfigField("long", "PLAY_INTEGRITY_PROJECT", (project.findProperty("flagship.playIntegrityProject") ?: "0").toString() + "L")

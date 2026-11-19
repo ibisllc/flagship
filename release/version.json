@@ -4,5 +4,6 @@
   "iosVersion": "1.3",
   "iosBuild": 9,
   "androidVersionCode": 12,
-  "studio": "0.4.0"
+  "studio": "0.4.0",
+  "marketplace": false
 }

@@ -45,6 +45,13 @@ describe("release/version.json", () => {
     expect(v.iosBuild).toBe(9);
     expect(v.androidVersionCode).toBe(12);
     expect(v.studio).toBe("0.4.0");
+    expect(v.marketplace).toBe(false);
+  });
+
+  it("carries the marketplace switch to the webapp, iOS and Android", () => {
+    expect(readFileSync(join(ROOT, "apps/web/public/webapp/lib/buildInfo.js"), "utf8")).toContain(`export const MARKETPLACE_ENABLED = ${V.marketplace};`);
+    expect(readFileSync(join(ROOT, "apps/mobile/shared/Sources/FlagshipCore/ProductFeatures.swift"), "utf8")).toContain(`public static let marketplace = ${V.marketplace}`);
+    expect(readFileSync(join(ROOT, "apps/mobile/android/app/build.gradle.kts"), "utf8")).toContain('buildConfigField("boolean", "MARKETPLACE", releaseVersion["marketplace"].toString())');
   });
 
   it("puts the Wear OS app one million above the phone's version code", () => {
@@ -127,7 +134,7 @@ describe("drift is caught", () => {
     const next = `${V.product.slice(0, dot)}.${Number(V.product.slice(dot + 1)) + 1}`;
     writeFileSync(
       join(dir, "release/version.json"),
-      JSON.stringify({ product: next, label: "Beta", iosVersion: V.iosVersion, iosBuild: V.iosBuild + 1, androidVersionCode: V.androidVersionCode + 1, studio: `${next}.0` }),
+      JSON.stringify({ product: next, label: "Beta", iosVersion: V.iosVersion, iosBuild: V.iosBuild + 1, androidVersionCode: V.androidVersionCode + 1, studio: `${next}.0`, marketplace: V.marketplace }),
     );
     expect(checkVersions(repoAt(dir)).findings.length).toBeGreaterThan(0);
     const changed = writeVersions(dir);
@@ -155,13 +162,35 @@ describe("drift is caught", () => {
     expect(readFileSync(join(dir, "apps/builder-windows/src/StudioVersion.cs"), "utf8")).toContain("public const bool Experimental = false;");
   });
 
+  it("a webapp or iOS marketplace switch that disagrees with the file", () => {
+    expect(drift("apps/web/public/webapp/lib/buildInfo.js", `MARKETPLACE_ENABLED = ${V.marketplace};`, `MARKETPLACE_ENABLED = ${!V.marketplace};`).findings.map((f: { key: string }) => f.key)).toEqual(["webapp:marketplace"]);
+    expect(drift("apps/mobile/shared/Sources/FlagshipCore/ProductFeatures.swift", `marketplace = ${V.marketplace}`, `marketplace = ${!V.marketplace}`).findings.map((f: { key: string }) => f.key)).toEqual(["ios:marketplace"]);
+  });
+
+  it("an Android build that stopped reading the marketplace switch", () => {
+    const { findings } = drift("apps/mobile/android/app/build.gradle.kts", /buildConfigField\("boolean", "MARKETPLACE", [^\n]*/, 'buildConfigField("boolean", "MARKETPLACE", "true")');
+    expect(findings.some((f: { key: string; message: string }) => f.key === "android:app" && /marketplace/.test(f.message))).toBe(true);
+  });
+
+  it("--write flips the marketplace switch on every generated surface", () => {
+    const dir = copyOfTree();
+    writeFileSync(join(dir, "release/version.json"), JSON.stringify({ ...V, marketplace: !V.marketplace }));
+    expect(checkVersions(repoAt(dir)).findings.map((f: { key: string }) => f.key).sort()).toEqual(["ios:marketplace", "webapp:marketplace"]);
+    expect(writeVersions(dir).sort()).toEqual(["apps/mobile/shared/Sources/FlagshipCore/ProductFeatures.swift", "apps/web/public/webapp/lib/buildInfo.js"]);
+    expect(checkVersions(repoAt(dir)).findings).toEqual([]);
+  });
+
+  it("a marketplace switch that is not a boolean", () => {
+    expect(parseVersion(JSON.stringify({ ...V, marketplace: "off" })).errors.join(" ")).toMatch(/marketplace must be true or false/);
+  });
+
   it("a missing Experimental switch", () => {
     expect(parseStudioExperimental("const STORES = {};")).toBeNull();
     expect(parseStudioExperimental("const STUDIO_EXPERIMENTAL = { mac: false, windows: true, linux: false };")).toEqual({ mac: false, windows: true, linux: false });
   });
 
   it("a studio version that disagrees with the product version", () => {
-    const { errors } = parseVersion(JSON.stringify({ product: "0.2", label: "Beta", iosVersion: "1.1", iosBuild: 5, androidVersionCode: 9, studio: "0.3.0" }));
+    const { errors } = parseVersion(JSON.stringify({ product: "0.2", label: "Beta", iosVersion: "1.1", iosBuild: 5, androidVersionCode: 9, studio: "0.3.0", marketplace: false }));
     expect(errors.join(" ")).toMatch(/must start with the product version/);
   });
 });

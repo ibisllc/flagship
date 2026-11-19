@@ -18,6 +18,9 @@ export const PROTOCOL_LEVEL = 1;
 // protocol or wire version and nothing compares it.
 export const PRODUCT_VERSION = "0.4";
 export const PRODUCT_LABEL = "Beta";
+// Whether this release shows the marketplace (release/version.json "marketplace"; off in 0.4,
+// 0.5 turns it on). While false no screen links to it and its routes are ignored.
+export const MARKETPLACE_ENABLED = false;
 
 export function aboutVersionLine() {
   return tr("Flagship {0} {1} (web build {2})", PRODUCT_VERSION, PRODUCT_LABEL, WEB_BUILD);

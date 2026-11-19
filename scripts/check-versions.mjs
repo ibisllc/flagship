@@ -7,6 +7,8 @@
 //   iosVersion/iosBuild   the App Store pair (must climb past the approved 1.0 (4))
 //   androidVersionCode    the Play code (only ever climbs; wear = this + 1,000,000)
 //   studio             the desktop Studios' release version ("0.2.0")
+//   marketplace        whether this release shows the marketplace (owner, 2026-11-19: off in 0.4,
+//                      0.5 turns it on); the webapp, iOS and Android hide every entry point while false
 //
 // Not covered, on purpose: protocol and wire versions (CLIENT_PROTOCOL_LEVEL,
 // envelope tags) and the webapp shell number (SHELL_VERSION); they are separate.
@@ -49,6 +51,7 @@ export function parseVersion(text) {
   if (!Number.isInteger(v.androidVersionCode) || v.androidVersionCode < 1) errors.push("androidVersionCode must be a positive integer");
   if (!/^\d+\.\d+\.\d+$/.test(v.studio ?? "")) errors.push(`studio must look like "0.2.0" (got ${JSON.stringify(v.studio)})`);
   else if (v.studio.split(".").slice(0, 2).join(".") !== v.product) errors.push(`studio ${v.studio} must start with the product version ${v.product}`);
+  if (typeof v.marketplace !== "boolean") errors.push(`marketplace must be true or false (got ${JSON.stringify(v.marketplace)})`);
   return { v, errors };
 }
 
@@ -68,6 +71,7 @@ export function surfaces(v, experimental = null) {
   add("website:hero", "apps/web/public/index.html", `(<span>v)([^<]*)(</span>\\s*<span class="sep">·</span>\\s*<span>since )`, `${display(v)}`, `homepage hero badge reads "v${display(v)}"`);
   add("webapp:product", "apps/web/public/webapp/lib/buildInfo.js", `(export const PRODUCT_VERSION = ")([^"]*)(")`, v.product, "webapp product version");
   add("webapp:label", "apps/web/public/webapp/lib/buildInfo.js", `(export const PRODUCT_LABEL = ")([^"]*)(")`, v.label, "webapp product label");
+  add("webapp:marketplace", "apps/web/public/webapp/lib/buildInfo.js", `(export const MARKETPLACE_ENABLED = )(true|false)(;)`, String(v.marketplace), "webapp marketplace switch");
 
   add("ios:project.yml:version", "apps/mobile/ios/App/project.yml", `(MARKETING_VERSION: ")([^"]*)(")`, v.iosVersion, "iOS store version");
   add("ios:project.yml:build", "apps/mobile/ios/App/project.yml", `(CURRENT_PROJECT_VERSION: ")([^"]*)(")`, String(v.iosBuild), "iOS store build");
@@ -75,6 +79,7 @@ export function surfaces(v, experimental = null) {
   add("ios:pbxproj:build", "apps/mobile/ios/App/FlagshipApp.xcodeproj/project.pbxproj", `(CURRENT_PROJECT_VERSION = )([^;]*)(;)`, String(v.iosBuild), "iOS store build (project)", { flags: "gm" });
   add("ios:about:product", "apps/mobile/ios/Sources/FlagshipUI/Shell/ProductVersion.swift", `(static let product = ")([^"]*)(")`, v.product, "iOS About product version");
   add("ios:about:label", "apps/mobile/ios/Sources/FlagshipUI/Shell/ProductVersion.swift", `(static let label = (?:String\\(localized: )?")([^"]*)(")`, v.label, "iOS About label");
+  add("ios:marketplace", "apps/mobile/shared/Sources/FlagshipCore/ProductFeatures.swift", `(public static let marketplace = )(true|false)()$`, String(v.marketplace), "iOS marketplace switch");
 
   add("mac:plist", "apps/builder-mac/Info.plist", `(<key>CFBundleShortVersionString</key>\\s*<string>)([^<]*)(</string>)`, v.studio, "Mac Studio bundle version");
   add("mac:label", "apps/builder-mac/Sources/FlagshipBuilderCore/StudioVersion.swift", `(static let label = ")([^"]*)(")`, v.label, "Mac Studio About label");
@@ -89,7 +94,7 @@ export function surfaces(v, experimental = null) {
 
 /** Surfaces that must read release/version.json themselves instead of holding a copy. */
 export const READERS = [
-  ["android:app", "apps/mobile/android/app/build.gradle.kts", ["release/version.json", `releaseVersion["androidVersionCode"]`, `releaseVersion["product"]`, `releaseVersion["label"]`]],
+  ["android:app", "apps/mobile/android/app/build.gradle.kts", ["release/version.json", `releaseVersion["androidVersionCode"]`, `releaseVersion["product"]`, `releaseVersion["label"]`, `buildConfigField("boolean", "MARKETPLACE", releaseVersion["marketplace"].toString())`]],
   ["android:wear", "apps/mobile/android/wear/build.gradle.kts", ["release/version.json", `1_000_000 + (releaseVersion["androidVersionCode"]`, `releaseVersion["product"]`]],
   ["mac:makefile", "apps/builder-mac/Makefile", ["release/version.json", "CFBundleShortVersionString"]],
   ["studio-release.yml", ".github/workflows/studio-release.yml", ["release/version.json"]],
@@ -147,7 +152,7 @@ export function checkVersions(repo) {
     const src = repo.read(path);
     if (src != null && rx.test(src)) findings.push({ key: id, message: `${path}: ${why}` });
   }
-  return { id: "versions", title: "One product version on every surface (release/version.json)", findings, data: { product: v.product, label: v.label } };
+  return { id: "versions", title: "One product version on every surface (release/version.json)", findings, data: { product: v.product, label: v.label, marketplace: v.marketplace } };
 }
 
 /** Rewrite the generated surfaces from the file; returns the paths it changed. */
@@ -182,7 +187,7 @@ function main() {
   const repo = { read: (rel) => (existsSync(join(root, rel)) ? readFileSync(join(root, rel), "utf8") : null) };
   const r = checkVersions(repo);
   if (r.findings.length === 0) {
-    console.log(`ok   versions: every surface reads ${r.data.product} ${r.data.label}`);
+    console.log(`ok   versions: every surface reads ${r.data.product} ${r.data.label}, marketplace ${r.data.marketplace ? "on" : "off"}`);
     return;
   }
   for (const f of r.findings) console.log(`RED  ${f.key}: ${f.message}`);
