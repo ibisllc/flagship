@@ -298,6 +298,9 @@ export interface RouteEnv extends OhttpEnv {
    * the pre-launch gate armed (only the /wip_ preview cookie sees the site).
    */
   SITE_PUBLIC?: string;
+  /** The marketplace switch: "on" opens its public routes, anything else answers them 404
+   *  `marketplace-off` (0.4 ships "off"). See ControlPlaneEnv.MARKETPLACE. */
+  MARKETPLACE?: string;
   /** "1": voi.ci sends every link (random code or custom name) to the service's
    *  canonical address, `https://<label>.<user>.flagship.services`. Off until the
    *  gym proves that address always reaches a running instance (docs/named-links.md);

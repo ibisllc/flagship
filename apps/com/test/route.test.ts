@@ -624,6 +624,68 @@ describe(".com control-plane routes (Worker + D1)", () => {
     expect(body.pubKey).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  // ── The marketplace switch (owner, 2026-11-19: off in 0.4, 0.5 turns it on) ──
+  describe("MARKETPLACE switch", () => {
+    const emptyD1 = () => {
+      const stmt = {
+        bind: () => stmt,
+        first: async () => null,
+        all: async () => ({ results: [], success: true, meta: {} }),
+        run: async () => ({ success: true, meta: { changes: 0 } }),
+        raw: async () => [],
+      };
+      return { prepare: () => stmt, batch: async () => [] } as unknown as import("@flagship/storage").D1Database;
+    };
+    const json = { "content-type": "application/json" };
+    const requests = (): Array<[string, Request]> => [
+      ["search", new Request("https://flagshipserver.com/api/marketplace/search?q=notes")],
+      ["get", new Request("https://flagshipserver.com/api/marketplace/alice/notes")],
+      ["list (box publish)", new Request("https://flagshipserver.com/api/marketplace/list", { method: "POST", body: "{}", headers: json })],
+      ["install", new Request("https://flagshipserver.com/api/marketplace/alice/notes/install", { method: "POST", body: "{}", headers: json })],
+      ["remove", new Request("https://flagshipserver.com/api/marketplace/alice/notes", { method: "DELETE", body: "{}", headers: json })],
+      ["price", new Request("https://flagshipserver.com/api/marketplace/alice/notes/price", { method: "POST", body: "{}", headers: json })],
+      ["scan", new Request("https://flagshipserver.com/api/marketplace/alice/notes/scan", { method: "POST", body: "{}", headers: json })],
+      ["developer sales", new Request("https://flagshipserver.com/api/developer/sales/alice")],
+      ["paid app checkout", new Request("https://flagshipserver.com/api/stripe/app-checkout", { method: "POST", body: "{}", headers: json })],
+    ];
+
+    for (const value of [undefined, "off", "OFF", "1"]) {
+      it(`MARKETPLACE=${String(value)}: every public marketplace route answers 404 marketplace-off`, async () => {
+        for (const [what, req] of requests()) {
+          const r = await route(req, makeEnv({ DB: emptyD1(), ...(value === undefined ? {} : { MARKETPLACE: value }) }));
+          expect(r.status, what).toBe(404);
+          expect(JSON.parse(await r.text()), what).toEqual({ error: "not found", code: "marketplace-off" });
+        }
+        expect(calls).toHaveLength(0);
+      });
+    }
+
+    it("MARKETPLACE=on: the routes answer as before (search 200, the rest their own refusals)", async () => {
+      const env = makeEnv({ DB: emptyD1(), MARKETPLACE: "on" });
+      const search = await route(requests()[0]![1], env);
+      expect(search.status).toBe(200);
+      expect(JSON.parse(await search.text()).listings).toEqual([]);
+      for (const [what, req] of requests().slice(1)) {
+        const r = await route(req, env);
+        const body = JSON.parse(await r.text());
+        expect(body.code, what).not.toBe("marketplace-off");
+      }
+    });
+
+    it("leaves the rest of the API alone while off", async () => {
+      const r = await route(new Request("https://flagshipserver.com/api/ca/cert"), makeEnv({ DB: emptyD1(), MARKETPLACE: "off" }));
+      expect(r.status).toBe(200);
+    });
+
+    it("production and the gym ship it off", async () => {
+      const { readFileSync } = await import("node:fs");
+      const { resolve } = await import("node:path");
+      for (const f of ["wrangler.toml", "wrangler.gym.toml"]) {
+        expect(readFileSync(resolve(__dirname, "..", f), "utf8"), f).toMatch(/^MARKETPLACE = "off"$/m);
+      }
+    });
+  });
+
   // ── OPS-2 / OPS-3 admin visibility endpoints ──────────────────
   // A D1 stub whose prepared statements answer both the bound and
   // unbound call shapes (schemaVersion.list() uses prepare().all()

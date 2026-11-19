@@ -456,6 +456,10 @@ export interface ControlPlaneEnv extends DirectNamesEnv {
   /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
+  /** "on" opens the public marketplace and developer-sales routes; anything else (0.4 ships "off")
+   *  answers them 404 `marketplace-off`, so no box can publish and no client can browse or install.
+   *  The apps carry their own build-time switch (release/version.json "marketplace"). */
+  MARKETPLACE?: string;
   /** Hex-encoded Ed25519 pubkey of the marketplace scanner (Flagship-operated). */
   MARKETPLACE_SCANNER_PUBKEY_HEX?: string;
   /** Comma list of scan grades that BLOCK install (require an explicit
@@ -1277,6 +1281,18 @@ export interface ControlPlaneOptions {
   waitUntil?: (p: Promise<unknown>) => void;
 }
 
+/** The marketplace switch (owner, 2026-11-19: off in 0.4, 0.5 turns it on). */
+export function marketplaceOn(env: Pick<ControlPlaneEnv, "MARKETPLACE">): boolean {
+  return env.MARKETPLACE === "on";
+}
+
+/** The routes the marketplace switch closes: browse, list, get, remove, install, scan, creator
+ *  price, the developer sales console and a paid app's checkout. Admin and internal routes stay. */
+export function isMarketplaceRoute(method: string, path: string): boolean {
+  if (path.startsWith("/api/marketplace/") || path.startsWith("/api/developer/sales/")) return true;
+  return method === "POST" && ROUTE_RE.STRIPE_APP_CHECKOUT.test(path);
+}
+
 export async function tryControlPlane(
   request: Request,
   env: ControlPlaneEnv,
@@ -1311,6 +1327,10 @@ export async function tryControlPlane(
   };
 
   let m: RegExpMatchArray | null;
+
+  if (!marketplaceOn(env) && isMarketplaceRoute(method, path)) {
+    return finishPlain({ status: 404, body: { error: "not found", code: "marketplace-off" } });
+  }
 
   if (path.startsWith("/api/users/") || path.startsWith("/api/accounts/")) {
     for (const route of ACCOUNT_GONE_ROUTES) {

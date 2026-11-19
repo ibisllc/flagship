@@ -188,6 +188,8 @@ VOICI_WEB_ORIGIN = "https://gym.voi.ci"
 VOICI_ENABLED = "on"
 # voi.ci calls (docs/voici-calls.md): on in the gym; production turns it on at launch.
 VOICI_CALLS = "on"
+# The marketplace: off, as in production (0.4). No gym group or gym spec uses it; 0.5 turns both on.
+MARKETPLACE = "off"
 # Vouchers (docs/payments-privacy-and-rails.md "As built"): the gym hands out free test vouchers (30 at a time) so the
 # apps' Plan screens can be driven end to end. Production never sets this. Needs the VOUCHER_SIGNING_KEYS secret
 # (node scripts/voucher-key.mjs new <file>).

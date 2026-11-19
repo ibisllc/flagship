@@ -363,6 +363,10 @@ VOICI_ENABLED = "on"
 # "Calls on" of docs/runbooks/0.4-deploy-sheet.md, after iOS 1.3 and Android 12 are live in the stores and every item
 # of its readiness checklist holds. Flipping it here earlier would turn calls on at the first 0.4 `.com` deploy.
 VOICI_CALLS = "off"
+# The marketplace (owner, 2026-11-19): hidden in 0.4, opened in 0.5 (docs/release-0.5-list.md). Anything but "on"
+# answers every public /api/marketplace/* and /api/developer/sales/* route 404 `marketplace-off`, so no box can
+# publish and no old client can browse or install. The apps carry their own switch (release/version.json).
+MARKETPLACE = "off"
 # The voi.ci zone, for takedown cache purges with the CLOUDFLARE_PURGE_TOKEN secret (voiciAbuse.ts).
 VOICI_FILES_ZONE_ID = "40579a73601f73c2a3cfeaac6d00366c"
 # 0.2 Studios send no `&studio=` level on the pairing relay: "2" refuses them with "This version of Flagship Studio
