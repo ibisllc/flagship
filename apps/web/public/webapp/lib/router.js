@@ -11,6 +11,9 @@
 
 import { dismissOverlays, isLockView } from "./lockSweep.js";
 import { SPLIT_QUERY, matches, onLayoutChange, splitParentOf } from "./layout.js";
+import { MARKETPLACE_ENABLED } from "./buildInfo.js";
+
+const MARKETPLACE_VIEWS = new Set(["marketplace", "developer", "view-marketplace", "view-developer"]);
 
 const VIEWS = new Set();
 const VIEW_TABS = new Map(); // view-id → tab id ("home" | "apps" | "activity" | "settings")
@@ -153,6 +156,8 @@ export function parseViewQuery() {
  */
 function resolveViewAlias(alias) {
   const a = String(alias).toLowerCase();
+  // Off in 0.4 (release/version.json "marketplace"): its links open Home.
+  if (!MARKETPLACE_ENABLED && MARKETPLACE_VIEWS.has(a)) return "view-home";
   if (a.startsWith("view-")) return a;
   const aliases = {
     home: "view-home",

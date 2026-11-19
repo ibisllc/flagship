@@ -522,14 +522,16 @@
       <section id="view-services-list" class="hidden" data-tab="apps">
         <div id="services-list-content"></div>
         <div class="card mt-3">
-          <p class="note">
+          <!-- The marketplace is off in 0.4 (release/version.json "marketplace"): data-marketplace
+               elements stay hidden unless lib/buildInfo.js MARKETPLACE_ENABLED is true (app.js). -->
+          <p class="note hidden" data-marketplace>
             Browse the marketplace, vibe-code a new service, or share-install one
             from a creator.
           </p>
           <div class="row-2">
-            <button class="secondary" id="services-list-open-marketplace" data-split-view="view-marketplace">Marketplace</button>
+            <button class="secondary hidden" id="services-list-open-marketplace" data-marketplace data-split-view="view-marketplace">Marketplace</button>
             <button class="secondary" id="services-list-open-vibe-code">Vibe-code</button>
-            <button class="secondary" id="services-list-open-developer" data-split-view="view-developer">Developer</button>
+            <button class="secondary hidden" id="services-list-open-developer" data-marketplace data-split-view="view-developer">Developer</button>
           </div>
         </div>
         <div class="row-2">
@@ -825,7 +827,7 @@
             <strong>Connect your IDE (Cursor / Cline)</strong>
             <span class="note">Build from your editor with your own AI. Your box exposes a secure tool surface — no AI key on the box.</span>
           </button>
-          <button class="card build-tile full-width mt-2" id="build-src-market">
+          <button class="card build-tile full-width mt-2 hidden" id="build-src-market" data-marketplace>
             <strong>Get from the marketplace</strong>
             <span class="note">Install something a neighbour already built.</span>
           </button>

@@ -10,6 +10,7 @@
 // when there's no recognised alias.
 
 import { parseViewQuery, clearViewQuery } from "./router.js";
+import { MARKETPLACE_ENABLED } from "./buildInfo.js";
 import { humanError } from "./humanError.js";
 import { toast } from "./toast.js";
 import { transferLinkFromLocation } from "./serverTransfer.js";
@@ -160,7 +161,7 @@ export async function dispatchInitialView() {
       const { enterRecovery } = await import("../views/recovery.js");
       return enterRecovery();
     }
-    if (q.view === "view-marketplace") {
+    if (q.view === "view-marketplace" && MARKETPLACE_ENABLED) {
       const { enterMarketplace } = await import("../views/marketplace.js");
       return enterMarketplace();
     }

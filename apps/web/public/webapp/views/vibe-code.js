@@ -95,6 +95,7 @@ import { LOCAL_AI_PATH, localUsable } from "../lib/localAi.js";
 import { LOCAL_AI_CREDENTIAL } from "../lib/localAiOrders.js";
 
 import { tr } from "../lib/i18n.js";
+import { MARKETPLACE_ENABLED } from "../lib/buildInfo.js";
 registerView("view-vibe-code");
 
 const POLL_INTERVAL_MS = 800;
@@ -1002,7 +1003,7 @@ export function deployedMarkup(url, open, publish = null) {
 }
 
 function publishMarkup(publish) {
-  if (!publish) return "";
+  if (!publish || !MARKETPLACE_ENABLED) return "";
   if (publish.slug) {
     return `<div class="faint-sm mt-2">${tr("published as <code>{0}</code> on the marketplace", escapeHtml(publish.slug))}</div>`;
   }

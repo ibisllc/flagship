@@ -10,7 +10,7 @@
 // `lib/state.js`'s closure — never on `window`, never logged.
 
 import "./lib/frameGuard.js";
-import { aboutVersionLine } from "./lib/buildInfo.js";
+import { aboutVersionLine, MARKETPLACE_ENABLED } from "./lib/buildInfo.js";
 import {
   bootstrapNewIdentity,
   hasWrappedUmk,
@@ -399,8 +399,10 @@ function wireActivityEntries() {
 function wireServicesTabEntries() {
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
-  wire("services-list-open-marketplace", enterMarketplace);
   wire("services-list-open-vibe-code", enterBuildSource);
+  if (!MARKETPLACE_ENABLED) return;
+  for (const el of document.querySelectorAll("[data-marketplace]")) el.classList.remove("hidden");
+  wire("services-list-open-marketplace", enterMarketplace);
   wire("services-list-open-developer", enterDeveloper);
 }
 

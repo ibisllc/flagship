@@ -552,7 +552,8 @@
 //        and every publish lists the page's share card (lib/voiciShareCard.js), the picture link previews show.
 //  v238: the owner's call-back ring goes to /api/voici/rings/<ringId> (no account name in the address; lib/voiciOwner.js).
 //  v239: the Business batch says card payments aren't available while `.com` has no card rail (views/orgPlan.js).
-const SHELL_VERSION = "v239";
+//  v240: the marketplace is hidden while release/version.json says "marketplace": false (0.4).
+const SHELL_VERSION = "v240";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

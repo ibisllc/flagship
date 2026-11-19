@@ -46,6 +46,7 @@ import {
 } from "../lib/profilesStore.js";
 
 import { tr } from "../lib/i18n.js";
+import { MARKETPLACE_ENABLED } from "../lib/buildInfo.js";
 registerView("view-wizard");
 
 // `wizardState` is marked device-wide-or-pre-profile in profilesStore.js —
@@ -438,7 +439,7 @@ async function renderStepBody(state, step) {
         <p class="note">${tr("You're all set. Explore your server, or finish here — you can add services any time.")}</p>
         <div class="btn-row-sm">
           <button id="wizard-skip-demo" class="pill primary">${tr("Finish")}</button>
-          <button id="wizard-go-demo" class="pill">${tr("Browse marketplace")}</button>
+          ${MARKETPLACE_ENABLED ? `<button id="wizard-go-demo" class="pill">${tr("Browse marketplace")}</button>` : ""}
         </div>
       `;
     default:

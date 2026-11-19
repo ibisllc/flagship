@@ -19,6 +19,7 @@ import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
 import { loadAccountPods, sessionServers, startCreation } from "../lib/appPlacement.js";
 import { enterMarketplace } from "./marketplace.js";
+import { MARKETPLACE_ENABLED } from "../lib/buildInfo.js";
 
 import { tr } from "../lib/i18n.js";
 registerView("view-build-source");
@@ -49,7 +50,8 @@ export function initBuildSourceView() {
   );
   $("build-src-git").addEventListener("click", () => enterBuildGit());
   $("build-src-mcp").addEventListener("click", () => enterBuildMcp());
-  $("build-src-market").addEventListener("click", () => enterMarketplace());
+  // Off in 0.4: the tile stays hidden (app.js shows [data-marketplace] only when on).
+  if (MARKETPLACE_ENABLED) $("build-src-market").addEventListener("click", () => enterMarketplace());
   $("build-source-journal-link").addEventListener("click", (e) => {
     e.preventDefault();
     enterBuildJournal();
