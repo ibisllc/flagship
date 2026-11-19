@@ -68,9 +68,11 @@ export const vouchers: Group = {
       const req = Vouchers.newVoucherRequest(key);
       const out: string[] = [];
       for (const [rail, proof] of [
-        ["stripe", { sessionId: "cs_test_gym" }],
+        // Well-formed but unknown, so a configured rail really asks Stripe / Google and refuses payment-invalid
+        // (a short id stops at the shape check with "malformed" and proves nothing about the rail).
+        ["stripe", { sessionId: "cs_test_gymBogusSession000000000000" }],
         ["apple", { jws: "x.y.z" }],
-        ["google", { productId: "com.flagshipserver.app.vouchers.10", purchaseToken: "gym" }],
+        ["google", { productId: "com.flagshipserver.app.vouchers.10", purchaseToken: "gym-bogus-purchase-token-000000" }],
       ] as const) {
         const r = await postJson(`https://${CONTROL}/api/vouchers/paid-issue`, { v: 1, rail, proof, k: key.keyId, blinded: [req.blinded] });
         if (cfg.rails[rail]) {
