@@ -361,7 +361,19 @@ else
   fi
 fi
 run flyctl scale count 1 -a "$FLY_APP" --yes
-run bash "$REPO/scripts/gym-relays.sh" on
+# A deploy with --strategy=immediate can still be replacing a machine when it returns ("machine getting replaced,
+# refusing to start"): retry the start for up to two minutes before giving up.
+if [ "$DRY" = "1" ]; then
+  run bash "$REPO/scripts/gym-relays.sh" on
+else
+  relays_up=0
+  for attempt in 1 2 3 4 5 6 7 8; do
+    if bash "$REPO/scripts/gym-relays.sh" on; then relays_up=1; break; fi
+    say "the gym relays did not start yet (attempt $attempt of 8); retrying in 15 s"
+    sleep 15
+  done
+  [ "$relays_up" = 1 ] || die "could not start the gym relays after the deploy"
+fi
 
 # ── 5b. test CA ───────────────────────────────────────────────────────────
 # docs/gym-test-acme.md: when the gym Worker issues from the gym's Pebble (ISSUANCE_ACME_DIRECTORY in $CFG), restart
