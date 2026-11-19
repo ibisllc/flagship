@@ -42,21 +42,24 @@ export const vouchers: Group = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let cfg: any = null;
 
-    await rec.check("payments config: the gym's voucher key and test issue, every rail off, the gym's interim relay first", async () => {
+    await rec.check("payments config: the gym's voucher key and test issue, the rails it has settings for, the gym's interim relay first", async () => {
       const r = await http(`https://${CONTROL}/api/payments/config`);
       assert(r.status === 200 && r.json, `config ${r.status}: ${short(r.text)}`);
       const j = r.json;
       assert(Array.isArray(j.keys) && j.keys.length >= 1, `no voucher key: ${short(j.keys)}`);
       assert(j.testIssue === true, "testIssue is not on in the gym");
-      // Stripe and Google need secrets the gym doesn't have. Apple needs none (`.com` checks the JWS against Apple's
-      // pinned root), so wrangler.gym.toml's APPLE_IAP_ENVIRONMENTS="Sandbox" alone turns it on: allowed either way.
-      assert(j.rails && j.rails.stripe === false && j.rails.google === false && typeof j.rails.apple === "boolean", `rails: ${short(j.rails)}`);
+      // A rail is on only with its settings: Stripe and Google with the gym's test secrets (STRIPE_SECRET_KEY,
+      // GOOGLE_PLAY_SERVICE_ACCOUNT_JSON, present since the 0.4 release run's secret parity), Apple with
+      // wrangler.gym.toml's APPLE_IAP_ENVIRONMENTS="Sandbox" alone (`.com` checks the JWS against Apple's pinned root).
+      // Either way is allowed; the next check holds each rail to what this one reports.
+      assert(j.rails && (["stripe", "apple", "google"] as const).every((r) => typeof j.rails[r] === "boolean"), `rails: ${short(j.rails)}`);
       const relays = j.ohttp?.relays ?? [];
       assert(typeof j.ohttp?.keyConfigHex === "string" && relays.length >= 1, `ohttp: ${short(j.ohttp)}`);
       assert(relays[0].url === OHTTP_RELAY_URL && relays[0].interim === true, `first relay ${short(relays[0])}`);
       cfg = await Plan.loadPaymentsConfig(d1.deps());
       assert(cfg.keys.length >= 1 && cfg.ohttp.relays.length >= 1, "the webapp's config read dropped the key or the relay");
-      return `key ${j.keys[0].keyId}; stripe off, google off, apple ${j.rails.apple ? "on (sandbox, no secret needed)" : "off"}; relay ${relays[0].operator}${relays[0].interim ? " (interim)" : ""}`;
+      const onOff = (r: "stripe" | "apple" | "google") => `${r} ${j.rails[r] ? "on" : "off"}`;
+      return `key ${j.keys[0].keyId}; ${onOff("stripe")}, ${onOff("google")}, ${onOff("apple")}; relay ${relays[0].operator}${relays[0].interim ? " (interim)" : ""}`;
     });
     if (!cfg) return;
 
@@ -80,7 +83,12 @@ export const vouchers: Group = {
       }
       const commit = Vouchers.voucherOrderCommit(key.keyId, [req.blinded]);
       const co = await postJson(`https://${CONTROL}/api/vouchers/stripe/checkout`, { v: 1, units: 10, k: key.keyId, commit });
-      assert(co.status === 404 && co.json?.code === "rail-off", `checkout: ${co.status} ${short(co.text)}`);
+      // With the gym's test key, Stripe opens a hosted Checkout page nobody pays; without it the rail answers rail-off.
+      if (cfg.rails.stripe) {
+        assert(co.status === 200 && /^https:\/\/checkout\.stripe\.com\//.test(String(co.json?.url)) && /^cs_test_/.test(String(co.json?.sessionId)), `checkout (on, must be a test-mode session): ${co.status} ${short(co.text)}`);
+      } else {
+        assert(co.status === 404 && co.json?.code === "rail-off", `checkout: ${co.status} ${short(co.text)}`);
+      }
       const ap = await postJson(`https://${CONTROL}/api/vouchers/apple/notifications`, { signedPayload: "x.y.z" });
       assert(cfg.rails.apple ? ap.status >= 400 && ap.status < 500 : ap.status === 404 && /rail-off/.test(ap.text), `apple notifications: ${ap.status} ${short(ap.text)}`);
       const wh = await http(`https://${CONTROL}/api/stripe/webhook`, {
@@ -89,7 +97,7 @@ export const vouchers: Group = {
         body: JSON.stringify({ type: "charge.refunded", data: { object: { payment_intent: "pi_gym" } } }),
       });
       assert(wh.status === 503 || (wh.status >= 400 && wh.status < 500), `webhook: ${wh.status} ${short(wh.text)}`);
-      return `${out.join(", ")}; checkout 404; apple notifications ${ap.status}; webhook ${wh.status} (${short(wh.json?.error ?? wh.text, 40)})`;
+      return `${out.join(", ")}; checkout ${co.status}${cfg.rails.stripe ? " (test-mode session)" : ""}; apple notifications ${ap.status}; webhook ${wh.status} (${short(wh.json?.error ?? wh.text, 40)})`;
     });
 
     const session = await pair(acct, b);
