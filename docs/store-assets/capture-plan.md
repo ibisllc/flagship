@@ -59,7 +59,7 @@ Fix the clock to the same moment the webapp captures use (2026-10-21 09:00 UTC) 
 
 | id | Screen and state | iOS (`StoreCaptureTests`, iPhone and iPad) | Android (`StoreCaptureTest`, phone and both tablets) |
 |---|---|---|---|
-| 01 | Home: both servers Online, `home` with the Leader badge, app counts, no recovery nudge, no banner | `-smoke-tab home`; wait for `pod-card*` ×2 | `smokeTab=home`; wait for both server cards |
+| 01 | Home: both servers Online, `home` with the Leader badge, app counts, no recovery nudge, no banner, no "Browse the marketplace" card (0.4 hides the marketplace; re-capture the iOS Home shots in all seven languages from a build with `ProductFeatures.marketplace` false: the 2026-11 captures show the card) | `-smoke-tab home`; wait for `pod-card*` ×2; `quick-action-install-service` must not exist | `smokeTab=home`; wait for both server cards |
 | 02 | The start-up approval for `cabin` with the biometric sheet up (iOS: the Face ID system sheet cannot be captured in the simulator, so stop at the approval sheet with its Approve button; Android: the BiometricPrompt over the approval) | `-smoke-awaiting-unlock`; tap Approve on the cabin card, capture when the approval sheet is up | `smokePods` with cabin waiting; open the approval; capture with the prompt (`smokeRealBiometrics` off) |
 | 03 | Services / apps list, "All servers", five apps | `-smoke-tab apps` | `smokeTab=apps` |
 | 04 | Chess Club → Access control: Members only selected, Members (3) with ranks visible | `-smoke-tab apps -smoke-access-fixture` adapted to the store world; open Chess Club → Access control | open Chess Club → Access control |

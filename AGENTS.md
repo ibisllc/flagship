@@ -1659,7 +1659,11 @@ published (not CI) appliance, the Android fixes landed after `eb08dcdc4`.
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
 **0.4 state (2026-11-17, F13):** `feat/marketplace`, `feat/custom-names`, `feat/custom-domains` and
-`feat/outbound-proxy` are folded into `release/0.4` and retire when it lands; `feat/browser-extension` (a design doc)
+`feat/outbound-proxy` are folded into `release/0.4` and retire when it lands. **The marketplace is in the code but
+switched off until 0.5** (owner, 2026-11-19): `"marketplace": false` in `release/version.json` (carried by
+`check-versions.mjs --write` to the webapp, iOS and Android, which hide every entry point) and `MARKETPLACE = "off"` on
+`.com` (its public routes answer 404 `marketplace-off`); the website has no marketplace page. Turning it on is in
+`docs/release-0.5-list.md`; `feat/browser-extension` (a design doc)
 is superseded by the Firefox extension built on `release/0.4`; `gym-0.4` (= `release/0.4` + the gym seams) replaces
 `gym` once 0.4 is on `main`. Not rebased, each conflicts with `release/0.4`: `feat/other-os-installers` (18 files, the
 preseed engine and its vectors), `alpine` (31), `feat/retail` (39; mostly superseded by the 0.4 retail build). Rebase

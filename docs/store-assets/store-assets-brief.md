@@ -75,8 +75,8 @@ Why these and not the draft's:
 * **Build with AI is not a slide in 0.2.** Free AI credits are a limited-time promotion with a weekly allowance; a
   price or "free" claim in a screenshot outlives the promotion and Apple and Google both reject outdated pricing in
   art. It can come back as slide 4 when it is a standing feature, with "your own AI key" as the honest caption.
-* **No marketplace, payments, custom domains or name change**: they are not in `main` (AGENTS.md "Unlaunched
-  features"), so they cannot be shown.
+* **No marketplace**: it is in the code but switched off in 0.4 (release/version.json `"marketplace": false`), so no
+  screen may show it. Payments, custom domains and name change follow the 0.4 release notes.
 * **"Encrypted at rest, keys on device"** is real but abstract; slide 2 *shows* it (the server waits for the phone),
   and slide 5 says what it means for backups.
 * **Messages** (0.3, H11) comes after the trust story (6), not first: it shows the 0.3 range without crowding the

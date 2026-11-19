@@ -14,6 +14,14 @@ over once "let's start 0.5" is said.
 4. **Community OHTTP relays** (owner, 2026-11-17): volunteers run relays, and a request picks one at random. Registered
    and health-checked, with Sybil limits. The rule from `docs/outbound-proxy.md` "Failure handling" still applies: if
    our infrastructure fails, the system keeps working.
+5. **Turn the marketplace on** (owner, 2026-11-19: hidden in 0.4). It is in the code but switched off
+   (`docs/runbooks/results/marketplace-findings-2026-11-19.md`). Before the switch: the listing security scanner
+   (`scan_grade` ships NULL today; `MARKETPLACE_SCANNER_PUBKEY_HEX`), moderation and reporting (a report/flag on a
+   listing, a takedown path, App Review guideline 1.2 for user-generated content), and paid apps (in-app purchase on
+   iOS, guideline 3.1.1; Payments step 7 below). Then flip `"marketplace": true` in `release/version.json`, run
+   `node scripts/check-versions.mjs --write`, set `MARKETPLACE = "on"` in both wrangler files, bring back the website's
+   `/marketplace/` page and links from git history (removed in the `0.4/marketplace-off` website commit), flip the
+   tests that expect its absence (they read the switch or say "0.4"), and ship new store builds.
 
 ## Carried over from 0.4
 
