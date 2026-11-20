@@ -509,9 +509,9 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
   });
 });
 
-describe("Studio platforms that have not passed a hardware run say so", () => {
+describe("Studio platforms: the Experimental tag stays behind one switch, every platform off (owner, 2026-11-20)", () => {
   const pub = join(__dirname, "../public");
-  it("the Windows and Linux downloads on /studio carry an Experimental tag driven by one switch per platform", () => {
+  it("the Windows and Linux downloads on /studio keep the tag markup under one switch per platform, all off", () => {
     const studio = readFileSync(join(pub, "studio/index.html"), "utf8");
     expect(studio).toContain('Download for Windows <em class="tag" data-studio-experimental="windows">Experimental</em>');
     expect(studio).toContain('Download for Linux <em class="tag" data-studio-experimental="linux">Experimental</em>');
@@ -524,7 +524,7 @@ describe("Studio platforms that have not passed a hardware run say so", () => {
     const sw = /const STUDIO_EXPERIMENTAL = \{([^}]*)\}/.exec(stores)?.[1] ?? "";
     expect(sw).toMatch(/\bmac: false,/);
     expect(sw).toMatch(/\bwindows: false,/);
-    expect(sw).toMatch(/\blinux: true,/);
+    expect(sw).toMatch(/\blinux: false,/);
     // The localised pages keep the marker on the translated tag.
     for (const lang of ["es", "fr", "de", "pt-br", "ja", "zh-hans"]) {
       const page = readFileSync(join(pub, lang, "studio/index.html"), "utf8");

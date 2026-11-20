@@ -10,7 +10,7 @@ VERSION = "0.0.0-dev"
 LABEL = "Beta"
 # STUDIO_EXPERIMENTAL.linux in apps/web/public/app-stores.js, the website's switch for the
 # "Experimental" tag (scripts/check-versions.mjs --write keeps it in step).
-EXPERIMENTAL = True
+EXPERIMENTAL = False
 
 
 def display_version(version=None):
