@@ -23,6 +23,30 @@ over once "let's start 0.5" is said.
    `/marketplace/` page and links from git history (removed in the `0.4/marketplace-off` website commit), flip the
    tests that expect its absence (they read the switch or say "0.4"), and ship new store builds.
 
+6. **voi.ci posts: a capped server copy, older posts from the phone** (owner, 2026-11-20). `.com` keeps only the
+   newest chunks of a page (a cap to choose, e.g. the newest 10 chunks = 200 posts). Chunks stay numbered 0..N, so a
+   visitor's browser sees which ones `.com` doesn't hold and asks the owner's phone for them: a signed request over the
+   same phone route calls use (`voi.ci/<user>` → the phone's bare name), answered with the chunk exactly as signed in
+   the index, so the browser checks it against the index as today. `.com` caches a fetched chunk by its SHA-256 (the
+   index pins it, so the cache can never serve a wrong one). Offline phone: "Older posts are on <name>'s phone, which
+   is offline right now." Needs a new index version (`chunk-<n>` stops being contiguous on `.com`, or the index lists
+   which chunks `.com` holds), phone code on all three apps, and the cap enforced by `.com` at publish with a
+   localized refusal. Not in 0.4: it needs a phone update, and 0.4's store builds are being made.
+7. **voi.ci comments and reposts** (owner, 2026-11-20). Roots already in 0.4: every post has a stable 32-hex id and a
+   permalink (`voi.ci/<user>#p-<id>`). 0.5 design to write:
+   - **Comments**: a post's comment stream is keyed by (owner, post id). Followers of a post subscribe to it (a
+     subscription is held per visitor key, like Messages' threads, never by account name); a new comment is
+     signed by its author, sent to the post owner's phone, which accepts or holds it under the page's message rules
+     and fans it out to subscribers (push or the next visit). Best effort: a subscriber who isn't online in time
+     misses an update and catches up from the stream on the next visit. Comments show oldest first.
+   - **Reposts**: a plain repost puts the original (owner, post id, its chunk hash) on the reposter's page and points
+     to the original's comments: one shared stream. A **quote post** is a new post with its own text, so it gets its
+     own comment stream; it embeds the original as a card (signed reference, rendered from the original's page) and
+     the original can show "quoted by" as a count, not a merged thread. Deleting the original turns the card into
+     "This post was removed".
+   - Moderation: reports and blocks from Messages apply; App Review 1.2 (user-generated content) needs report, block
+     and a takedown path before comments ship.
+
 ## Carried over from 0.4
 
 - F14, the parked after-launch work: a second relay by DNS round-robin, Rust production qualification (G10), removing
