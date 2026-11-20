@@ -9,7 +9,7 @@ import { h } from "./dom.js";
 import { initLocale, locale, t } from "./i18n.js";
 import { openMessages } from "./messages.js";
 import { openCall, openHandoffCall, watchRings } from "./call.js";
-import { footer, renderPage, renderState } from "./page.js";
+import { footer, postForHash, postAnchors, renderPage, renderState } from "./page.js";
 import { openReport } from "./report.js";
 
 const doc = document;
@@ -20,6 +20,35 @@ const P = lib.protocol;
 let rerender = () => {};
 let storePromise = null;
 const store = () => (storePromise ??= lib.openIndexedDbStore());
+
+let toastTimer = 0;
+/** A short line at the bottom of the screen, read out politely. */
+function toast(text) {
+  doc.querySelector(".toast")?.remove();
+  const el = h(doc, "div", { class: "toast", role: "status" }, text);
+  doc.body.appendChild(el);
+  win.clearTimeout(toastTimer);
+  toastTimer = win.setTimeout(() => el.remove(), 2200);
+}
+
+/** A post's link: the system share sheet where there is one, else the clipboard. */
+async function sharePostLink(url) {
+  const nav = win.navigator;
+  if (typeof nav.share === "function") {
+    try {
+      await nav.share({ url });
+      return;
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+    }
+  }
+  try {
+    await nav.clipboard.writeText(url);
+    toast(t("Link copied"));
+  } catch {
+    toast(t("Couldn't copy the link."));
+  }
+}
 
 function reloadAction() {
   return { label: t("Reload"), run: () => win.location.reload() };
@@ -102,10 +131,28 @@ async function showPage(cfg, username, handoff = null) {
         if (!(await loadChunk())) return failure(cfg, "bad-piece", username);
         rerender();
       },
+      onPostLink: (anchor) => sharePostLink(`https://${cfg.host}/${username}#${anchor}`),
       win,
     });
   };
   rerender();
+  // voi.ci/<user>#p-<id>: load older chunks until the post is here (or none are left), then bring it into view.
+  const goToHash = async () => {
+    if (!/^#p-/.test(win.location.hash)) return;
+    let post = postForHash(win.location.hash, posts);
+    while (!post && next >= 0) {
+      if (!(await loadChunk())) return failure(cfg, "bad-piece", username);
+      rerender();
+      post = postForHash(win.location.hash, posts);
+    }
+    const el = post ? doc.getElementById(postAnchors(posts).get(post.id)) : null;
+    if (!el) return;
+    el.scrollIntoView({ block: "start" });
+    el.classList.add("is-target");
+    win.setTimeout(() => el.classList.remove("is-target"), 1800);
+  };
+  goToHash().catch(() => {});
+  win.addEventListener("hashchange", () => void goToHash().catch(() => {}));
   if (handoff) withStore((c) => openHandoffCall(c, handoff));
   // This browser allowed the owner to ring it back: the open tab rings when they do.
   withStore(async (c) => {

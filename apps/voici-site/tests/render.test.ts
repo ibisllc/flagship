@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import * as lib from "../../../packages/flagship-web/src/proto/lib/voiciProtocol.js";
 import { h, safeHref } from "../src/dom.js";
-import { renderPage } from "../src/page.js";
+import { postAnchors, postForHash, renderPage } from "../src/page.js";
 import { initLocale, locale } from "../src/i18n.js";
 
 type Node = FakeEl | FakeText;
@@ -296,5 +296,43 @@ describe("the visitor's language", () => {
       g.localStorage = old;
       initLocale(nav(["en-US"]));
     }
+  });
+});
+
+describe("the owner page's order and post links (owner review, 2026-11-20)", () => {
+  it("puts Message and Call (and their line) before the links", () => {
+    const root = page({ index: { acceptsMessages: 1, acceptsCalls: 1 }, onCall: () => {} });
+    const body = byClass(root, "page-body")[0]!;
+    const kids = body.children.filter((c): c is FakeEl => c instanceof FakeEl).map((k) => cls(k) || k.tagName);
+    expect(kids).toEqual(["card-head", "message-cta", "links", "posts"]);
+  });
+
+  it("anchors each post at p-<12 hex>, the full id when two share them, and finds it from either form", () => {
+    const mk = (id: string, createdAt: number) => ({ id, createdAt, editedAt: null, text: "x", links: [] });
+    const a = "0123456789ab" + "0".repeat(20);
+    const b = "0123456789ab" + "1".repeat(20);
+    const c = "fedcba987654" + "2".repeat(20);
+    const anchors = postAnchors([mk(a, 1), mk(b, 2), mk(c, 3)]);
+    expect([...anchors.values()]).toEqual([`p-${a}`, `p-${b}`, "p-fedcba987654"]);
+    const posts = [mk(a, 1), mk(b, 2), mk(c, 3)];
+    expect(postForHash("#p-fedcba987654", posts)?.id).toBe(c);
+    expect(postForHash(`#p-${c}`, posts)?.id).toBe(c);
+    expect(postForHash(`#p-${b}`, posts)?.id).toBe(b);
+    expect(postForHash("#p-0123456789ab", posts)).toBeNull();
+    expect(postForHash("#p-999999999999", posts)).toBeNull();
+    expect(postForHash("#call=xyz", posts)).toBeNull();
+  });
+
+  it("gives each published post an id and a 'Link to this post' button that hands back its anchor", () => {
+    const got: string[] = [];
+    const root = page({ onPostLink: (a: string) => got.push(a) });
+    const articles = [...root.walk()].filter((e) => e.tagName === "article");
+    expect(articles.map((e) => e.getAttribute("id"))).toEqual(["p-bbbbbbbbbbbb", "p-aaaaaaaaaaaa"]);
+    const buttons = byClass(root, "post-link");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.getAttribute("aria-label")).toBe("Link to this post");
+    (buttons[0]!.listeners.click![0] as () => void)();
+    expect(got).toEqual(["p-aaaaaaaaaaaa"]);
+    expect(byClass(page(), "post-link")).toHaveLength(0);
   });
 });

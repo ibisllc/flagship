@@ -1,75 +1,83 @@
 {
+  "Link copied": {
+    "en": "Link copied",
+    "ctx": "voici-site/app.js:47"
+  },
+  "Couldn't copy the link.": {
+    "en": "Couldn't copy the link.",
+    "ctx": "voici-site/app.js:49"
+  },
   "Reload": {
     "en": "Reload",
-    "ctx": "voici-site/app.js:25"
+    "ctx": "voici-site/app.js:54"
   },
   "There's no page here.": {
     "en": "There's no page here.",
-    "ctx": "voici-site/app.js:38"
+    "ctx": "voici-site/app.js:67"
   },
   "voi.ci/{0} hasn't published a page.": {
     "en": "voi.ci/{0} hasn't published a page.",
-    "ctx": "voici-site/app.js:38"
+    "ctx": "voici-site/app.js:67"
   },
   "This page is out of date.": {
     "en": "This page is out of date.",
-    "ctx": "voici-site/app.js:39"
+    "ctx": "voici-site/app.js:68"
   },
   "You've seen a newer version of it. Reload to get it.": {
     "en": "You've seen a newer version of it. Reload to get it.",
-    "ctx": "voici-site/app.js:39"
+    "ctx": "voici-site/app.js:68"
   },
   "Couldn't load this page.": {
     "en": "Couldn't load this page.",
-    "ctx": "voici-site/app.js:40"
+    "ctx": "voici-site/app.js:69"
   },
   "Check your connection and try again.": {
     "en": "Check your connection and try again.",
-    "ctx": "voici-site/app.js:40"
+    "ctx": "voici-site/app.js:69"
   },
   "This page couldn't be checked.": {
     "en": "This page couldn't be checked.",
-    "ctx": "voici-site/app.js:47"
+    "ctx": "voici-site/app.js:76"
   },
   "What arrived doesn't match what its owner signed, so nothing of it is shown.": {
     "en": "What arrived doesn't match what its owner signed, so nothing of it is shown.",
-    "ctx": "voici-site/app.js:47"
+    "ctx": "voici-site/app.js:76"
   },
   "About voi.ci": {
     "en": "About voi.ci",
-    "ctx": "voici-site/app.js:121"
+    "ctx": "voici-site/app.js:168"
   },
   "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.": {
     "en": "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.",
-    "ctx": "voici-site/app.js:126"
+    "ctx": "voici-site/app.js:173"
   },
   "This build": {
     "en": "This build",
-    "ctx": "voici-site/app.js:131"
+    "ctx": "voici-site/app.js:178"
   },
   "Manifest": {
     "en": "Manifest",
-    "ctx": "voici-site/app.js:133"
+    "ctx": "voici-site/app.js:180"
   },
   "Report abuse": {
     "en": "Report abuse",
-    "ctx": "voici-site/app.js:134"
+    "ctx": "voici-site/app.js:181"
   },
   "This copy of the site isn't running on voi.ci.": {
     "en": "This copy of the site isn't running on voi.ci.",
-    "ctx": "voici-site/app.js:150"
+    "ctx": "voici-site/app.js:197"
   },
   "Check the address and try again.": {
     "en": "Check the address and try again.",
-    "ctx": "voici-site/app.js:155"
+    "ctx": "voici-site/app.js:202"
   },
   "This link was removed.": {
     "en": "This link was removed.",
-    "ctx": "voici-site/app.js:159"
+    "ctx": "voici-site/app.js:206"
   },
   "It doesn't lead anywhere any more. Ask whoever shared it for a new one.": {
     "en": "It doesn't lead anywhere any more. Ask whoever shared it for a new one.",
-    "ctx": "voici-site/app.js:159"
+    "ctx": "voici-site/app.js:206"
   },
   "They aren't taking calls right now.": {
     "en": "They aren't taking calls right now.",
@@ -685,31 +693,35 @@
   },
   "Edited": {
     "en": "Edited",
-    "ctx": "voici-site/page.js:190"
+    "ctx": "voici-site/page.js:205"
   },
   "Not published yet": {
     "en": "Not published yet",
-    "ctx": "voici-site/page.js:191"
+    "ctx": "voici-site/page.js:206"
+  },
+  "Link to this post": {
+    "en": "Link to this post",
+    "ctx": "voici-site/page.js:208"
   },
   "Posts": {
     "en": "Posts",
-    "ctx": "voici-site/page.js:210"
+    "ctx": "voici-site/page.js:229"
   },
   "Show older posts": {
     "en": "Show older posts",
-    "ctx": "voici-site/page.js:214"
+    "ctx": "voici-site/page.js:233"
   },
   "Make your page": {
     "en": "Make your page",
-    "ctx": "voici-site/page.js:227"
+    "ctx": "voici-site/page.js:246"
   },
   "Report this page": {
     "en": "Report this page",
-    "ctx": "voici-site/page.js:232"
+    "ctx": "voici-site/page.js:251"
   },
   "Loading": {
     "en": "Loading",
-    "ctx": "voici-site/page.js:286"
+    "ctx": "voici-site/page.js:305"
   },
   "Spam": {
     "en": "Spam",

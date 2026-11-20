@@ -57,6 +57,17 @@ const SAMPLES = {
     ],
     posts: [{ text: "New mix up tonight. Two hours of dub and rain.", links: [] }],
   },
+  // Two chunks of posts: a #p- link to her first post makes the page load the older chunk to find it.
+  dora: {
+    theme: "classic",
+    pageId: "3c4d5e6f708192a3b4c5d6e7f8019203",
+    accepts: 1,
+    calls: 1,
+    displayName: "Dora Mensah",
+    bio: "Baker in Accra. One loaf a day, written down.",
+    links: [{ url: "https://dora.example/bread", label: "The bread log", site: null }],
+    posts: Array.from({ length: 26 }, (_, i) => ({ text: i === 0 ? "Day 1. First loaf from the new oven. Flat, but it's a start." : `Day ${i + 1}. Loaf number ${i + 1}.`, links: [] })),
+  },
   cora: {
     theme: "sea",
     pageId: "2b3c4d5e6f708192a3b4c5d6e7f80192",

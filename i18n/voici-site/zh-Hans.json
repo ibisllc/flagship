@@ -192,5 +192,8 @@
   "Your messages and calls are not public. They are encrypted on the devices at each end, and nobody else can read them, not even us.": "你的消息和通话不公开。它们在两端的设备上加密，除了通话双方，没人能读，我们也不能。",
   "If someone reports a message to us, we learn which account sent it. We see what it says only if the person reporting chooses to show us.": "如果有人向我们举报一条消息，我们会知道是哪个账户发送的。只有举报人选择给我们看，我们才能看到内容。",
   "Your page, your words.": "你的页面，你的话。",
-  "Make your page": "创建你的页面"
+  "Make your page": "创建你的页面",
+  "Link to this post": "此帖子的链接",
+  "Link copied": "链接已复制",
+  "Couldn't copy the link.": "无法复制链接。"
 }

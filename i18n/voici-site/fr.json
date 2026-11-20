@@ -192,5 +192,8 @@
   "Your messages and calls are not public. They are encrypted on the devices at each end, and nobody else can read them, not even us.": "Vos messages et vos appels, eux, ne sont pas publics. Ils sont chiffrés sur les appareils, à chaque bout, et personne d’autre ne peut les lire, pas même nous.",
   "If someone reports a message to us, we learn which account sent it. We see what it says only if the person reporting chooses to show us.": "Si quelqu’un nous signale un message, nous apprenons quel compte l’a envoyé. Nous ne voyons ce qu’il dit que si la personne qui le signale choisit de nous le montrer.",
   "Your page, your words.": "Votre page, vos mots.",
-  "Make your page": "Créez votre page"
+  "Make your page": "Créez votre page",
+  "Link to this post": "Lien vers cette publication",
+  "Link copied": "Lien copié",
+  "Couldn't copy the link.": "Impossible de copier le lien."
 }

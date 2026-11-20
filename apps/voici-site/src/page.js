@@ -1,4 +1,4 @@
-// The page renderer (docs/voici-and-messages.md §2.1): contact card, links, Message and Call, posts, footer, and the
+// The page renderer (docs/voici-and-messages.md §2.1): contact card, Message and Call, links, posts, footer, and the
 // compact bar pinned at the top once the header scrolls away.
 // Only ever given content that verify.js already checked against the signed index; it still treats every string as
 // text and every URL as one more thing to check. The apps' editor preview reuses this module (§11.2): pass
@@ -176,12 +176,27 @@ function card(doc, link, cardImageUrl, lib) {
   );
 }
 
-export function postEl(doc, post, o) {
+/** Each post's anchor: "p-" + the first 12 hex of its id, or the whole id when two posts here share those 12. */
+export function postAnchors(posts) {
+  const count = new Map();
+  for (const p of posts) count.set(p.id.slice(0, 12), (count.get(p.id.slice(0, 12)) ?? 0) + 1);
+  return new Map(posts.map((p) => [p.id, `p-${count.get(p.id.slice(0, 12)) > 1 ? p.id : p.id.slice(0, 12)}`]));
+}
+
+/** The post a "#p-…" fragment names among `posts` (short or full form), or null. */
+export function postForHash(hash, posts) {
+  const m = /^#p-([0-9a-f]{12}|[0-9a-f]{32})$/.exec(hash ?? "");
+  if (!m) return null;
+  const anchors = postAnchors(posts);
+  return posts.find((p) => p.id === m[1] || anchors.get(p.id) === `p-${m[1]}`) ?? null;
+}
+
+export function postEl(doc, post, o, anchor = null) {
   const pending = o.pendingIds?.has(post.id) ?? false;
   return h(
     doc,
     "article",
-    { class: pending ? "post is-pending" : "post", "data-post": post.id },
+    { class: pending ? "post is-pending" : "post", "data-post": post.id, id: anchor },
     h(
       doc,
       "p",
@@ -189,6 +204,9 @@ export function postEl(doc, post, o) {
       h(doc, "time", { datetime: new Date(post.createdAt).toISOString() }, formatDate(post.createdAt)),
       post.editedAt ? h(doc, "span", { class: "post-edited" }, t("Edited")) : null,
       pending ? h(doc, "span", { class: "tag tag-pending" }, t("Not published yet")) : null,
+      anchor && o.onPostLink && !pending
+        ? h(doc, "button", { class: "post-link", type: "button", "aria-label": t("Link to this post"), title: t("Link to this post"), on: { click: () => o.onPostLink(anchor) } }, icon(doc, "link", "icon icon-sm"))
+        : null,
     ),
     h(doc, "p", { class: "post-text" }, linkedText(doc, post.text, o.lib.findVoiciLinks)),
     post.links.length ? h(doc, "div", { class: "post-links" }, post.links.map((l) => card(doc, l, o.cardImageUrl, o.lib))) : null,
@@ -204,12 +222,13 @@ export function newestFirst(posts) {
 }
 
 export function postList(doc, posts, o) {
+  const anchors = postAnchors(posts);
   return h(
     doc,
     "section",
     { class: "posts", "aria-label": t("Posts") },
     h(doc, "h2", { class: "eyebrow" }, t("Posts")),
-    h(doc, "div", { class: "post-stream" }, newestFirst(posts).map((p) => postEl(doc, p, o))),
+    h(doc, "div", { class: "post-stream" }, newestFirst(posts).map((p) => postEl(doc, p, o, anchors.get(p.id)))),
     o.hasOlder
       ? h(doc, "button", { class: "btn btn-secondary btn-wide older", type: "button", on: { click: o.onOlder } }, t("Show older posts"))
       : null,
@@ -238,7 +257,7 @@ export function footer(doc, o) {
 /**
  * The whole page into `root`. m = {username, host, apex, index, profile, avatarUrl, posts, hasOlder,
  * cardImageUrl(sha) → blob URL|null, pendingIds?, lib (the protocol module), onMessage, onCall, onReport, onOlder,
- * win? (for the compact bar's IntersectionObserver; defaults to doc.defaultView)}.
+ * onPostLink?(anchor), win? (for the compact bar's IntersectionObserver; defaults to doc.defaultView)}.
  */
 export function renderPage(doc, root, m) {
   const onMessage = m.index.acceptsMessages === 1 && m.onMessage ? m.onMessage : null;
@@ -262,8 +281,8 @@ export function renderPage(doc, root, m) {
           "div",
           { class: "page-body" },
           head,
-          linkList(doc, m.profile.links, m.lib),
           cta,
+          linkList(doc, m.profile.links, m.lib),
           m.posts.length ? postList(doc, m.posts, m) : null,
         ),
         footer(doc, m),

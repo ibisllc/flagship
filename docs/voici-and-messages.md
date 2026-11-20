@@ -112,19 +112,24 @@ the inbox key through the directory-key grant mechanism (AGENTS open work item 5
 
 ### 2.1 What a visitor sees (top to bottom)
 
-1. Avatar (circle, 128 px CSS), display name, bio.
-2. Links, in the owner's order, each a full-width button: a known-site icon (§2.4) or a generic link icon, the label,
-   the host in small type.
-3. **Message** and **Call**, side by side on one row (wrapping only when too narrow), each only while the index says
+1. Avatar (circle, 128 px CSS), display name, `voi.ci/<username>`, bio.
+2. **Message** and **Call**, side by side on one row (wrapping only when too narrow), each only while the index says
    `acceptsMessages = 1` / `acceptsCalls = 1`; under them "Quantum-safe encrypted communication."
+3. Links, in the owner's order (at most 12, §2.4), each a full-width button: a known-site icon (§2.4) or a generic
+   link icon, the label, the host in small type.
 4. Posts, newest first (sorted by `createdAt` at render, ties in index order): date, text, up to 3 link cards. "Show
-   older posts" loads the next chunk.
+   older posts" loads the next chunk. Each post has an anchor, `id="p-<first 12 hex of its id>"` (the full id when
+   two loaded posts share those 12), and a small "Link to this post" button that shares
+   `https://voi.ci/<username>#p-<…>` (the system share sheet where there is one, else the clipboard and "Link
+   copied"). Opening such a link loads older chunks until the post is found, scrolls to it below the compact bar and
+   highlights it briefly; a post that isn't there leaves the page at the top.
 5. Footer, after the content in normal flow (at the bottom of the viewport on a short page): "Make your page" (the
-   one callout, to the front door), then "Report this page" (the report sheet, which also links to the abuse page)
-   and "Terms" in one style. No language picker: the language is the browser's (first shipped one, else English),
-   never remembered and never the owner's.
+   one callout, in the link colour, to the front door), then "Report this page" (the report sheet, which also links
+   to the abuse page) and "Terms", both small uppercase mono. No language picker: the language is the browser's
+   (first shipped one, else English), never remembered and never the owner's.
 6. Once the visitor scrolls past the header (photo, name, bio, the two buttons and their line), a compact bar is
-   pinned at the top: photo, name, and Message and Call as icon buttons (an IntersectionObserver, no scroll handler).
+   pinned at the top: photo, name, and Message and Call as icon buttons (an IntersectionObserver on the buttons' block,
+   no scroll handler).
 
 ### 2.2 Template
 

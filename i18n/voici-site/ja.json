@@ -192,5 +192,8 @@
   "Your messages and calls are not public. They are encrypted on the devices at each end, and nobody else can read them, not even us.": "メッセージと通話は公開されません。両端の端末で暗号化され、私たちを含め、ほかの誰も読めません。",
   "If someone reports a message to us, we learn which account sent it. We see what it says only if the person reporting chooses to show us.": "メッセージが私たちに報告されると、どのアカウントが送ったかがわかります。内容がわかるのは、報告した人が見せることを選んだ場合だけです。",
   "Your page, your words.": "あなたのページに、あなたの言葉を。",
-  "Make your page": "ページを作る"
+  "Make your page": "ページを作る",
+  "Link to this post": "この投稿へのリンク",
+  "Link copied": "リンクをコピーしました",
+  "Couldn't copy the link.": "リンクをコピーできませんでした。"
 }

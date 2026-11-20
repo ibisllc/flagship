@@ -2,6 +2,8 @@
 export const LOCALES = [{"code":"en","native":"English","dir":"ltr"},{"code":"es","native":"Español","dir":"ltr"},{"code":"fr","native":"Français","dir":"ltr"},{"code":"de","native":"Deutsch","dir":"ltr"},{"code":"pt-BR","native":"Português (Brasil)","dir":"ltr"},{"code":"ja","native":"日本語","dir":"ltr"},{"code":"zh-Hans","native":"简体中文","dir":"ltr"}];
 export const STRINGS = {
  "es": {
+  "Link copied": "Enlace copiado",
+  "Couldn't copy the link.": "No se pudo copiar el enlace.",
   "Reload": "Recargar",
   "There's no page here.": "Aquí no hay ninguna página.",
   "voi.ci/{0} hasn't published a page.": "voi.ci/{0} no ha publicado ninguna página.",
@@ -175,6 +177,7 @@ export const STRINGS = {
   "Quantum-safe encrypted communication.": "Comunicación cifrada a prueba de computación cuántica.",
   "Edited": "Editado",
   "Not published yet": "Aún no publicado",
+  "Link to this post": "Enlace a esta publicación",
   "Posts": "Publicaciones",
   "Show older posts": "Ver publicaciones anteriores",
   "Make your page": "Crea tu página",
@@ -198,6 +201,8 @@ export const STRINGS = {
   "Thanks. Flagship will look at this page.": "Gracias. Flagship revisará esta página."
  },
  "fr": {
+  "Link copied": "Lien copié",
+  "Couldn't copy the link.": "Impossible de copier le lien.",
   "Reload": "Recharger",
   "There's no page here.": "Il n’y a pas de page ici.",
   "voi.ci/{0} hasn't published a page.": "voi.ci/{0} n’a pas publié de page.",
@@ -371,6 +376,7 @@ export const STRINGS = {
   "Quantum-safe encrypted communication.": "Communication chiffrée résistante aux ordinateurs quantiques.",
   "Edited": "Modifié",
   "Not published yet": "Pas encore publié",
+  "Link to this post": "Lien vers cette publication",
   "Posts": "Publications",
   "Show older posts": "Voir les publications plus anciennes",
   "Make your page": "Créez votre page",
@@ -394,6 +400,8 @@ export const STRINGS = {
   "Thanks. Flagship will look at this page.": "Merci. Flagship va examiner cette page."
  },
  "de": {
+  "Link copied": "Link kopiert",
+  "Couldn't copy the link.": "Der Link konnte nicht kopiert werden.",
   "Reload": "Neu laden",
   "There's no page here.": "Hier gibt es keine Seite.",
   "voi.ci/{0} hasn't published a page.": "voi.ci/{0} hat keine Seite veröffentlicht.",
@@ -567,6 +575,7 @@ export const STRINGS = {
   "Quantum-safe encrypted communication.": "Quantensicher verschlüsselte Kommunikation.",
   "Edited": "Bearbeitet",
   "Not published yet": "Noch nicht veröffentlicht",
+  "Link to this post": "Link zu diesem Beitrag",
   "Posts": "Beiträge",
   "Show older posts": "Ältere Beiträge zeigen",
   "Make your page": "Mach deine Seite",
@@ -590,6 +599,8 @@ export const STRINGS = {
   "Thanks. Flagship will look at this page.": "Danke. Flagship sieht sich diese Seite an."
  },
  "pt-BR": {
+  "Link copied": "Link copiado",
+  "Couldn't copy the link.": "Não foi possível copiar o link.",
   "Reload": "Recarregar",
   "There's no page here.": "Não há nenhuma página aqui.",
   "voi.ci/{0} hasn't published a page.": "voi.ci/{0} não publicou nenhuma página.",
@@ -763,6 +774,7 @@ export const STRINGS = {
   "Quantum-safe encrypted communication.": "Comunicação criptografada segura contra computação quântica.",
   "Edited": "Editado",
   "Not published yet": "Ainda não publicado",
+  "Link to this post": "Link para esta publicação",
   "Posts": "Publicações",
   "Show older posts": "Ver publicações anteriores",
   "Make your page": "Crie sua página",
@@ -786,6 +798,8 @@ export const STRINGS = {
   "Thanks. Flagship will look at this page.": "Obrigado. O Flagship vai analisar esta página."
  },
  "ja": {
+  "Link copied": "リンクをコピーしました",
+  "Couldn't copy the link.": "リンクをコピーできませんでした。",
   "Reload": "再読み込み",
   "There's no page here.": "ここにはページがありません。",
   "voi.ci/{0} hasn't published a page.": "voi.ci/{0} はページを公開していません。",
@@ -959,6 +973,7 @@ export const STRINGS = {
   "Quantum-safe encrypted communication.": "量子耐性のある暗号化通信。",
   "Edited": "編集済み",
   "Not published yet": "未公開",
+  "Link to this post": "この投稿へのリンク",
   "Posts": "投稿",
   "Show older posts": "以前の投稿を表示",
   "Make your page": "ページを作る",
@@ -982,6 +997,8 @@ export const STRINGS = {
   "Thanks. Flagship will look at this page.": "ありがとうございます。Flagship がこのページを確認します。"
  },
  "zh-Hans": {
+  "Link copied": "链接已复制",
+  "Couldn't copy the link.": "无法复制链接。",
   "Reload": "重新加载",
   "There's no page here.": "这里没有页面。",
   "voi.ci/{0} hasn't published a page.": "voi.ci/{0} 尚未发布页面。",
@@ -1155,6 +1172,7 @@ export const STRINGS = {
   "Quantum-safe encrypted communication.": "抗量子加密通信。",
   "Edited": "已编辑",
   "Not published yet": "尚未发布",
+  "Link to this post": "此帖子的链接",
   "Posts": "动态",
   "Show older posts": "显示更早的动态",
   "Make your page": "创建你的页面",

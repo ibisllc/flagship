@@ -28,7 +28,7 @@ two "You appear …" lines, and the report reasons (legal meaning of "Illegal co
 The footer's "Terms" and "Report abuse" links (to the control apex's /terms and /abuse#voici) were added later
 (chunk G); check "Terms" reads as the legal terms of service in each language. The owner page rework (2026-11-19) added two machine
 drafts: "Quantum-safe encrypted communication." (the line under Message and Call; reuses each language's existing
-"quantum-safe" wording) and "Make your page" (the footer callout, was "Make your own page").
+"quantum-safe" wording) and "Make your page" (the footer callout, was "Make your own page"). The post permalinks (2026-11-20) added "Link to this post" (the icon button's accessible name), "Link copied" and "Couldn't copy the link." (machine drafts).
 
 **Messages and voi.ci pages in the iPhone app (`i18n/ios`, 2026-11-02, drafted by an agent, needs native review).**
 129 strings in es, fr, de, pt-BR, ja and zh-Hans: the Messages tab, the page editor, the thread, the sign-in approval
