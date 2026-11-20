@@ -117,12 +117,21 @@ export async function routeServiceWorkerToWebappHost(context: BrowserContext): P
   const base = process.env.WEBAPP_BASE_URL ?? "http://localhost:8787";
   if (!/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(base)) return;
   const origin = new URL(base).origin;
+  // A real deploy stamps /shell-manifest.json and /shell-signature.json (scripts/static-assets.ts
+  // build-webapp); wrangler dev serves apps/web/public raw, whose single-page fallback answers
+  // them with index.html, which the service worker rightly refuses as a manifest. Answer 404, as
+  // a deploy without a manifest would, so the worker installs.
   await context.route(
     (url) => url.origin === origin,
-    (route, request) =>
-      route.continue({
+    (route, request) => {
+      const path = new URL(request.url()).pathname;
+      if (path === "/shell-manifest.json" || path === "/shell-signature.json") {
+        return route.fulfill({ status: 404, contentType: "text/plain", body: "not found" });
+      }
+      return route.continue({
         headers: { ...request.headers(), "x-flagship-effective-host": "webapp.flagshipserver.com" },
-      }),
+      });
+    },
   );
 }
 
