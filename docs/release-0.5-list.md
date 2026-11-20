@@ -108,4 +108,6 @@ over once "let's start 0.5" is said.
     (step 37's gym sweep got 403): strip quotes or source the file.
   - no Experimental label on anything (owner, 2026-11-20, regardless of testing): remove step 39's Windows-acceptance
     gate for the tag and consider deleting the STUDIO_EXPERIMENTAL switch and its tag markup entirely.
+  - step 43 (feat/UX translations, store art, VOICI_CANONICAL): split into the i18n gate (already per merge), a
+    native-review status that does not force a yes/stop, and the store-art check next to the store builds.
   Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
