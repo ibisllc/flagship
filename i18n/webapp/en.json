@@ -13314,10 +13314,6 @@
     "en": "Remove your page from voi.ci?",
     "ctx": "webapp/lib/voiciCopy.js:24"
   },
-  "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.": {
-    "en": "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.",
-    "ctx": "webapp/lib/voiciCopy.js:26"
-  },
   "This device can't sign your page. Use an admin device of your account.": {
     "en": "This device can't sign your page. Use an admin device of your account.",
     "ctx": "webapp/lib/voiciCopy.js:45"
@@ -13962,14 +13958,6 @@
     "en": "Saved. The server is reconnecting through the proxy.",
     "ctx": "webapp/views/server-detail.js:910"
   },
-  "No messages yet. Turn on Accept messages in Page options to get them.": {
-    "en": "No messages yet. Turn on Accept messages in Page options to get them.",
-    "ctx": "webapp/views/messages.js:39"
-  },
-  "Page options": {
-    "en": "Page options",
-    "ctx": "webapp/views/messages.js:83"
-  },
   "Your conversations with other pages are on voi.ci.": {
     "en": "Your conversations with other pages are on voi.ci.",
     "ctx": "webapp/views/messages.js:177"
@@ -14033,10 +14021,6 @@
   "New messages are sealed to a new key. This device keeps reading the old ones.": {
     "en": "New messages are sealed to a new key. This device keeps reading the old ones.",
     "ctx": "webapp/views/page-editor.js:606"
-  },
-  "Remove page": {
-    "en": "Remove page",
-    "ctx": "webapp/views/page-editor.js:607"
   },
   "Rotate your inbox key?": {
     "en": "Rotate your inbox key?",
@@ -15374,10 +15358,6 @@
     "en": "People whose conversation you accepted",
     "ctx": "webapp/views/page-editor.js"
   },
-  "Anyone signed in with Flagship": {
-    "en": "Anyone signed in with Flagship",
-    "ctx": "webapp/views/page-editor.js"
-  },
   "Anyone on the internet": {
     "en": "Anyone on the internet",
     "ctx": "webapp/views/page-editor.js"
@@ -15392,10 +15372,6 @@
   },
   "Who can call": {
     "en": "Who can call",
-    "ctx": "webapp/views/page-editor.js"
-  },
-  "Only at certain hours": {
-    "en": "Only at certain hours",
     "ctx": "webapp/views/page-editor.js"
   },
   "Days": {
@@ -15433,14 +15409,6 @@
   "It goes from all your devices and from Flagship.": {
     "en": "It goes from all your devices and from Flagship.",
     "ctx": "webapp/lib/voiciWorld.js"
-  },
-  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": {
-    "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
-    "ctx": "webapp/lib/voiciCopy.js:27"
-  },
-  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": {
-    "en": "Calls from people signed in with Flagship are on. You can turn them off in Page options.",
-    "ctx": "webapp/lib/voiciCopy.js:30"
   },
   "Inbox": {
     "en": "Inbox",
@@ -16161,5 +16129,49 @@
   "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": {
     "en": "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.",
     "ctx": "webapp/views/page-editor.js"
+  },
+  "Get your own voi.ci page": {
+    "en": "Get your own voi.ci page",
+    "ctx": "webapp/lib/voiciIntro.js"
+  },
+  "Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.": {
+    "en": "Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.",
+    "ctx": "webapp/lib/voiciIntro.js"
+  },
+  "Set it up": {
+    "en": "Set it up",
+    "ctx": "webapp/lib/voiciIntro.js"
+  },
+  "Social options": {
+    "en": "Social options",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Turn off social features": {
+    "en": "Turn off social features",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "Turn off social features?": {
+    "en": "Turn off social features?",
+    "ctx": "webapp/lib/voiciCopy.js"
+  },
+  "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.": {
+    "en": "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.",
+    "ctx": "webapp/lib/voiciCopy.js"
+  },
+  "Set business hours": {
+    "en": "Set business hours",
+    "ctx": "webapp/views/page-editor.js"
+  },
+  "No messages yet. Turn on Accept messages in Social options to get them.": {
+    "en": "No messages yet. Turn on Accept messages in Social options to get them.",
+    "ctx": "webapp/views/messages.js"
+  },
+  "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": {
+    "en": "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
+    "ctx": "webapp/lib/voiciCopy.js"
+  },
+  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": {
+    "en": "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
+    "ctx": "webapp/lib/voiciCopy.js"
   }
 }

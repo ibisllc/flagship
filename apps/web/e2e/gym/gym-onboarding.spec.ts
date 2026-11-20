@@ -214,6 +214,61 @@ test.describe("gym webapp onboarding", () => {
     await shot(page, testInfo, "account-opened-secure-step");
   });
 
+  test("gym onboarding a new account sees the voi.ci intro once on Home, with `.com`'s promo; Set it up opens the Profile", async ({ page }, testInfo) => {
+    const m = await mock(page);
+    suggestions(m);
+    accountsEndpoint(m);
+    let promoAsked = 0;
+    m.get("/api/voici/promo", () => (promoAsked++, { json: { promo: { text: "Set it up this week for a free month.", until: null } } }));
+    await openNewAccount(page);
+    await expect(await wizardTitle(page)).toHaveText("Secure your account", { timeout: 30_000 });
+    // Not before the creation steps are done: the wizard ends on Home, which shows it.
+    await expect(page.locator("[data-testid=voici-intro]")).toHaveCount(0);
+    await page.evaluate(async () => {
+      const store = await import("/lib/profilesStore.js");
+      store.set("wizardState", JSON.stringify({ stepIdx: 99, completed: [] }));
+      await (await import("/views/wizard.js")).enterWizard();
+    });
+    const intro = page.locator("[data-testid=voici-intro]");
+    await expect(intro).toBeVisible({ timeout: 15_000 });
+    await expect(intro.locator(".modal-title")).toHaveText("Get your own voi.ci page");
+    await expect(intro.locator(".modal-message")).toHaveText(
+      `Set up voi.ci/${SECOND} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.`,
+    );
+    await expect(intro.locator("[data-testid=voici-intro-promo]")).toHaveText("Set it up this week for a free month.");
+    expect(promoAsked).toBe(1);
+    await shot(page, testInfo, "voici-intro-promo");
+    await intro.locator("[data-testid=voici-intro-setup]").click();
+    await expect(intro).toHaveCount(0);
+    await expect(page.locator("#view-messages")).toBeVisible({ timeout: 15_000 });
+    // Never again for this account on this browser.
+    await page.evaluate(async () => (await import("/views/home.js")).enterHome());
+    await expect(page.locator("#view-home")).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(page.locator("[data-testid=voici-intro]")).toHaveCount(0);
+  });
+
+  test("gym onboarding the voi.ci intro without a promo, and Not now only closes it", async ({ page }, testInfo) => {
+    const m = await mock(page);
+    suggestions(m);
+    accountsEndpoint(m);
+    m.get("/api/voici/promo", { promo: null });
+    await openNewAccount(page);
+    await expect(await wizardTitle(page)).toHaveText("Secure your account", { timeout: 30_000 });
+    await page.evaluate(async () => {
+      const store = await import("/lib/profilesStore.js");
+      store.set("wizardState", JSON.stringify({ stepIdx: 99, completed: [] }));
+      await (await import("/views/wizard.js")).enterWizard();
+    });
+    const intro = page.locator("[data-testid=voici-intro]");
+    await expect(intro).toBeVisible({ timeout: 15_000 });
+    await expect(intro.locator("[data-testid=voici-intro-promo]")).toBeHidden();
+    await shot(page, testInfo, "voici-intro");
+    await intro.locator("[data-testid=voici-intro-later]").click();
+    await expect(intro).toHaveCount(0);
+    await expect(page.locator("#view-home")).toBeVisible();
+  });
+
   // Opening an account used to re-wrap the device key under the account's
   // keystore record with a random passphrase it then dropped, so after a
   // reload the owner's passphrase no longer opened it, and the admin root

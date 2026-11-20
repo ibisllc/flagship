@@ -14,6 +14,7 @@ import {
 import { humanError } from "../lib/humanError.js";
 import { failureText, rateLimitedError } from "../lib/rateLimited.js";
 import { $, registerView, currentViewId } from "../lib/router.js";
+import { markVoiciIntroPending } from "../lib/voiciIntro.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { inlineConfirm, inlinePrompt, inlineSuggestUsername } from "../lib/modal.js";
 import { recoverFromCloud, takeRecoveryProof } from "../lib/recovery.js";
@@ -292,6 +293,8 @@ async function createAccount() {
       // required; the wizard owns that flow, then the app shell).
     });
     toast(tr("Account created — {0}", chosen), "ok");
+    // A new account only: Home shows the voi.ci intro once, after the creation steps.
+    markVoiciIntroPending(chosen);
     try {
       const { enterWizard } = await import("./wizard.js");
       await enterWizard({ step: "secure-account" });

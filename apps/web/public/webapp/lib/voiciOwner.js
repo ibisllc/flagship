@@ -85,7 +85,7 @@ export function defaultVoiciProfile(username) {
  * What a page carries on its first publish (owner decision 2026-11-16, docs/voici-and-messages.md §5.4): messages on,
  * and calls on from people signed in with Flagship, never anonymous. A later publish keeps the owner's choices.
  */
-export const VOICI_FIRST_PUBLISH = Object.freeze({ acceptsMessages: 1, acceptsCalls: true, callsFrom: "signed-in" });
+export const VOICI_FIRST_PUBLISH = Object.freeze({ acceptsMessages: 1, acceptsCalls: true, callsFrom: "callback" });
 
 /** The page a never-published account starts from: the default profile, messages on. */
 export function newVoiciPageBase(username) {
@@ -250,6 +250,16 @@ const json = (v) => canonicalJsonBytes(v);
  * images: Map sha256 → bytes for any image not already on the page. Returns {index, uploads: [{role, sha256,
  * size, bytes, contentType}]} with only the pieces `published` doesn't list.
  */
+/**
+ * The "who can call" a picker shows and a publish writes. "signed-in" (anyone signed in with Flagship) is no longer
+ * offered (owner, 2026-11-20): an index that still says it reads as "callback", and the next publish writes that.
+ * `.com` and voi.ci keep accepting "signed-in" in indexes old apps publish.
+ */
+export function callsFromChoice(from) {
+  if (from === "signed-in") return "callback";
+  return ["accepted", "anyone", "callback"].includes(from) ? from : "accepted";
+}
+
 /** The calls fields a publish signs: an explicit change (`calls`), else those of the index it replaces. */
 export function carriedCalls(published, calls) {
   if (calls) {
@@ -258,8 +268,7 @@ export function carriedCalls(published, calls) {
   }
   const idx = published?.index;
   if (idx?.acceptsCalls !== 1) return {};
-  const from = ["accepted", "signed-in", "anyone", "callback"].includes(idx.callsFrom) ? idx.callsFrom : "accepted";
-  return { acceptsCalls: 1, callsFrom: from };
+  return { acceptsCalls: 1, callsFrom: callsFromChoice(idx.callsFrom) };
 }
 
 /**
@@ -399,7 +408,7 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
     const first = !published && firstPost ? [firstPostOp(firstPost, ops, { deviceId: deps.deviceId, now: c.now() })] : [];
     const merged = mergeVoiciPage(base, [...first, ...ops]);
     const allImages = new Map([...(published?.pieces ?? new Map()), ...images]);
-    // A first publish turns calls on (signed-in callers); any other carries the index it replaces.
+    // A first publish turns calls on (callers who let the owner call them back); any other carries the index it replaces.
     const callsNow = calls ?? (published ? undefined : { acceptsCalls: VOICI_FIRST_PUBLISH.acceptsCalls, callsFrom: VOICI_FIRST_PUBLISH.callsFrom });
     const shareCard = await drawnShareCard(published, merged, username, allImages, deps);
     const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls: callsNow, search, shareCard });

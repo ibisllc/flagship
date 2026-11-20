@@ -1,7 +1,7 @@
 // The Social tab's Profile (docs/social-tab.md §1.2, §1.3; docs/voici-and-messages.md §2, §5): the page drawn the way
 // voi.ci draws it, in its theme, and edited in place. Photo, name and bio each have a pencil; links have Edit links;
-// posts have New post and their own menu; Page options (behind the title row's ⋯) holds the theme, the link, Accept
-// messages, the visitor-side settings and Remove page. Every edit is a draft; one bar shows only while something is
+// posts have New post and their own menu; Social options (behind the title row's ⋯) holds the theme, the link, Accept
+// messages, the visitor-side settings and Turn off social features. Every edit is a draft; one bar shows only while something is
 // unpublished ("3 changes not published · Publish"). Any device of the account edits; only an admin device signs the
 // page, so on any other device the bar says it is waiting for one and the changes go to it as sealed drafts.
 //
@@ -30,7 +30,7 @@ import {
   VOICI_PROFILE_MAX_LINKS,
   VOICI_POST_MAX_LINKS,
 } from "../lib/voiciProtocol.js";
-import { loadCallSettings, makeDraftOp, postsNewestFirst, publishVoiciPage, saveCallHours, voiciPageUrl } from "../lib/voiciOwner.js";
+import { callsFromChoice, loadCallSettings, makeDraftOp, postsNewestFirst, publishVoiciPage, saveCallHours, voiciPageUrl } from "../lib/voiciOwner.js";
 import {
   addPageOp,
   avatarProblemText,
@@ -544,7 +544,7 @@ async function postMenu(id) {
   }
 }
 
-// ── Page options ──────────────────────────────────────────────────────────
+// ── Social options ──────────────────────────────────────────────────────────
 
 async function copyLink() {
   try {
@@ -568,11 +568,11 @@ async function shareLink() {
   await copyLink();
 }
 
-/** Behind the title row's ⋯: the theme, the link, Accept messages, the visitor-side settings and Remove page. */
+/** Behind the title row's ⋯: the theme, the link, Accept messages, the visitor-side settings and Turn off social features. */
 export function openPageOptions() {
   let redraw = () => {};
   openSheet({
-    title: tr("Page options"),
+    title: tr("Social options"),
     testid: "page-options-sheet",
     build: (body, close) => {
       redraw = () => {
@@ -621,7 +621,7 @@ export function openPageOptions() {
             <button type="button" class="fs-row" id="page-rules"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(VOICI_RULES_TITLE())}</span></span></button>
           </div>
           ${canRotate ? `<p class="note">${escapeHtml(tr("New messages are sealed to a new key. This device keeps reading the old ones."))}</p>` : ""}
-          ${admin && on ? `<div class="fs-group mt-3"><button type="button" class="fs-row fs-row-danger" id="page-remove"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(tr("Remove page"))}</span></span></button></div>` : ""}`;
+          ${admin && on ? `<div class="fs-group mt-3"><button type="button" class="fs-row fs-row-danger" id="page-remove"><span class="fs-row-body"><span class="fs-row-title">${escapeHtml(tr("Turn off social features"))}</span></span></button></div>` : ""}`;
         const url = body.querySelector("[data-testid=page-options-url]");
         if (url) url.textContent = displayUrl();
         body.querySelectorAll("[data-theme-pick]").forEach((b) =>
@@ -660,7 +660,7 @@ export function openPageOptions() {
         body.querySelector("#page-rules").addEventListener("click", () => void inlineAlert({ title: VOICI_RULES_TITLE(), message: VOICI_RULES_TEXT() }));
         body.querySelector("#page-remove")?.addEventListener("click", () => {
           close();
-          void removePage();
+          void removePage({ socialOff: true });
         });
       };
       redraw();
@@ -689,7 +689,6 @@ export async function setShowInSearch(on, deps = {}) {
 
 const CALLS_FROM_CHOICES = () => [
   ["accepted", tr("People whose conversation you accepted")],
-  ["signed-in", tr("Anyone signed in with Flagship")],
   ["anyone", tr("Anyone on the internet")],
   ["callback", tr("Only people you can call back")],
 ];
@@ -719,7 +718,7 @@ async function openCallsSheet() {
   } catch {
     synced = null;
   }
-  const state = { on: idx.acceptsCalls === 1, from: idx.callsFrom ?? "accepted", hours: callHoursFields(synced?.settings.hours ?? null) };
+  const state = { on: idx.acceptsCalls === 1, from: callsFromChoice(idx.callsFrom), hours: callHoursFields(synced?.settings.hours ?? null) };
   openSheet({
     title: tr("Calls"),
     testid: "page-calls-sheet",
@@ -738,7 +737,7 @@ async function openCallsSheet() {
         </div>
         <div class="fs-group mt-3">
           <div class="fs-row">
-            <span class="fs-row-body"><span class="fs-row-title" id="calls-hours-label">${escapeHtml(tr("Only at certain hours"))}</span></span>
+            <span class="fs-row-body"><span class="fs-row-title" id="calls-hours-label">${escapeHtml(tr("Set business hours"))}</span></span>
             <button type="button" role="switch" class="fs-switch" id="calls-hours" aria-labelledby="calls-hours-label" aria-checked="${state.hours.on}"><span class="fs-switch-thumb" aria-hidden="true"></span></button>
           </div>
         </div>
@@ -776,7 +775,7 @@ async function openCallsSheet() {
         sw("#calls-save").disabled = true;
         try {
           await saveCallHours(callHours, synced ? { current: synced } : {});
-          if (acceptsCalls !== (idx.acceptsCalls === 1) || callsFrom !== (idx.callsFrom ?? "accepted")) {
+          if (acceptsCalls !== (idx.acceptsCalls === 1) || (acceptsCalls && callsFrom !== idx.callsFrom)) {
             world.page = await publishVoiciPage({ ops: [], calls: { acceptsCalls, callsFrom } }, { published: world.page });
           }
           emitWorld();

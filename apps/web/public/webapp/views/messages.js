@@ -1,6 +1,6 @@
 // The Social tab (docs/social-tab.md, docs/social-tabs.md, docs/voici-and-messages.md §11): the title row ("Your
-// page", the Public switch, Page options), Profile / Inbox / Requests with their red counts, the conversations, the
-// round call button that opens Calls, and the websites this account is signed in to (Page options).
+// page", the Public switch, Social options), Profile / Inbox / Requests with their red counts, the conversations, the
+// round call button that opens Calls, and the websites this account is signed in to (Social options).
 // Text only: every value a visitor wrote reaches the page through textContent (escapeHtml in templates), never as
 // HTML (§12.1).
 
@@ -44,7 +44,7 @@ function lastLine(cv) {
 const EMPTY_MESSAGES = () =>
   world.page?.acceptsMessages === 1
     ? tr("No messages yet. People who sign in on your page can write to you here.")
-    : tr("No messages yet. Turn on Accept messages in Page options to get them.");
+    : tr("No messages yet. Turn on Accept messages in Social options to get them.");
 
 function listHtml() {
   const list = conversationsIn(side === "requests" ? "requests" : "messages");
@@ -88,7 +88,7 @@ function renderHead() {
           : `<div class="social-actions">
         <span class="social-status" id="social-public-label" data-testid="messages-page-status">${escapeHtml(on ? tr("Public") : tr("Not public"))}</span>
         ${publicSwitchHtml("page-public-switch", { labelledBy: "social-public-label" })}
-        <button type="button" class="social-more" id="page-options" aria-label="${escapeHtml(tr("Page options"))}"><span class="icon" aria-hidden="true">${moreHorizontalIcon}</span></button>
+        <button type="button" class="social-more" id="page-options" aria-label="${escapeHtml(tr("Social options"))}"><span class="icon" aria-hidden="true">${moreHorizontalIcon}</span></button>
       </div>`
       }
     </div>`;
@@ -321,7 +321,7 @@ function updateBadge(c = currentCounts()) {
   badge.classList.toggle("hidden", n === 0);
 }
 
-// ── Page options → Websites you're signed in to ───────────────────────────
+// ── Social options → Websites you're signed in to ───────────────────────────
 
 export async function enterSignedInSites() {
   show("view-signed-in-sites");

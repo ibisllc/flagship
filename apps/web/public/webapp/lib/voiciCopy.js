@@ -23,13 +23,15 @@ export const VOICI_PUBLIC_WARNING = () =>
   tr("Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.");
 /** Under the public warning before a first publish: what the page starts with (VOICI_FIRST_PUBLISH). */
 export const VOICI_FIRST_PUBLISH_DEFAULTS = () =>
-  tr("Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.");
+  tr("Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.");
 /** The same when the owner turned Accept messages off before the first publish: only calls start on. */
 export const VOICI_FIRST_PUBLISH_CALLS_ONLY = () =>
-  tr("Calls from people signed in with Flagship are on. You can turn them off in Page options.");
+  tr("Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.");
 export const VOICI_REMOVE_TITLE = () => tr("Remove your page from voi.ci?");
+/** Turning the page off also stops its messages and calls: the Public switch's off-confirm and "Turn off social features". */
 export const VOICI_REMOVE_TEXT = () =>
-  tr("Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.");
+  tr("Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.");
+export const VOICI_SOCIAL_OFF_TITLE = () => tr("Turn off social features?");
 export const VOICI_PUBLISH_ADMIN_ONLY = () => tr("Only an admin device can publish your page.");
 
 /** The sentence for a VoiciError (or anything else thrown). */

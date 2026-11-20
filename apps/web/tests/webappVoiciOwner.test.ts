@@ -7,6 +7,7 @@ import { p256 } from "@noble/curves/nist.js";
 import * as P from "../public/webapp/lib/voiciProtocol.js";
 import {
   buildVoiciIndex,
+  callsFromChoice,
   carriedSearch,
   canonicalDraftsConsume,
   consumeDraftOps,
@@ -147,16 +148,24 @@ describe("publishing a page from the webapp", () => {
 });
 
 describe("publishing keeps the calls setting (docs/voici-calls.md §6)", () => {
-  it("an edit on top of a v2 index signs v2 with the same calls fields; a v1 index stays v1", async () => {
+  it("an edit on top of a v2 index signs v2 with the same calls fields (signed-in becomes callback); a v1 index stays v1", async () => {
     const merged = { profile: defaultVoiciProfile(U), acceptsMessages: 1, chunks: [] };
     const first = await buildVoiciIndex({ username: U, published: null, merged, images: new Map(), signer, umk: { seed: UMK }, now: NOW });
     expect(first.index.version).toBe(1);
     expect(first.index.acceptsCalls).toBeUndefined();
-    const v2 = { ...first.index, version: 2, acceptsCalls: 1, callsFrom: "signed-in" };
+    const v2 = { ...first.index, version: 2, acceptsCalls: 1, callsFrom: "anyone" };
     const next = await buildVoiciIndex({ username: U, published: { index: v2 }, merged, images: new Map(), signer, umk: { seed: UMK }, now: NOW + 1 });
     expect(next.index.version).toBe(2);
     expect(next.index.acceptsCalls).toBe(1);
-    expect(next.index.callsFrom).toBe("signed-in");
+    expect(next.index.callsFrom).toBe("anyone");
+    // "Anyone signed in with Flagship" is no longer offered (owner, 2026-11-20): an old index's signed-in reads as
+    // callback and the next publish writes callback.
+    const old = await buildVoiciIndex({ username: U, published: { index: { ...v2, callsFrom: "signed-in" } }, merged, images: new Map(), signer, umk: { seed: UMK }, now: NOW + 2 });
+    expect(old.index.callsFrom).toBe("callback");
+    expect(callsFromChoice("signed-in")).toBe("callback");
+    expect(callsFromChoice("accepted")).toBe("accepted");
+    expect(callsFromChoice("anyone")).toBe("anyone");
+    expect(callsFromChoice(undefined)).toBe("accepted");
     expect(P.parseVoiciPageIndex(next.index)).not.toBeNull();
     expect(P.checkVoiciPageIndex(next.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB }).ok).toBe(true);
   });
@@ -213,7 +222,7 @@ describe("Show in search engines (owner decision 2026-11-17)", () => {
     expect(carriedSearch({ index: { showInSearch: true } }, undefined)).toEqual({});
   });
 
-  it("Page options has the switch (admin devices, published pages) with its note, through tr()", () => {
+  it("Social options has the switch (admin devices, published pages) with its note, through tr()", () => {
     const src = readFileSync(new URL("../public/webapp/views/page-editor.js", import.meta.url), "utf8");
     expect(src).toContain('tr("Show in search engines")');
     expect(src).toContain('tr("When this is off, search engines are asked not to list your page. Anyone with the link can still open it.")');
@@ -223,8 +232,8 @@ describe("Show in search engines (owner decision 2026-11-17)", () => {
 });
 
 describe("a page's first publish (owner decision 2026-11-16)", () => {
-  it("turns messages on and calls on from signed-in people, never anonymous", async () => {
-    expect(VOICI_FIRST_PUBLISH).toEqual({ acceptsMessages: 1, acceptsCalls: true, callsFrom: "signed-in" });
+  it("turns messages on and calls on from callers who let the owner call them back, never anonymous", async () => {
+    expect(VOICI_FIRST_PUBLISH).toEqual({ acceptsMessages: 1, acceptsCalls: true, callsFrom: "callback" });
     expect(newVoiciPageBase(U).acceptsMessages).toBe(1);
     const com = fakeCom();
     const profileOp = makeDraftOp("profile", { profile: { ...defaultVoiciProfile(U), displayName: "Alice" } }, { deviceId: "d", now: NOW - 10 });
@@ -232,7 +241,7 @@ describe("a page's first publish (owner decision 2026-11-16)", () => {
     expect(page.index.version).toBe(2);
     expect(page.index.acceptsMessages).toBe(1);
     expect(page.index.acceptsCalls).toBe(1);
-    expect(page.index.callsFrom).toBe("signed-in");
+    expect(page.index.callsFrom).toBe("callback");
     expect(P.checkVoiciPageIndex(com.state.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB }).ok).toBe(true);
   });
 
@@ -283,7 +292,8 @@ describe("a page's first publish (owner decision 2026-11-16)", () => {
     expect(control).toMatch(/hasSeenPublicWarning\(username\) && !firstPublish/);
     expect(control).toContain("VOICI_FIRST_PUBLISH_DEFAULTS()");
     const copy = readFileSync(join(import.meta.dirname, "../public/webapp/lib/voiciCopy.js"), "utf8");
-    expect(copy).toContain('tr("Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.")');
+    expect(copy).toContain('tr("Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.")');
+    expect(copy).not.toContain("Page options");
   });
 });
 

@@ -1282,6 +1282,20 @@ section:not(.hidden) {
   line-height: 1.45;
 }
 
+/* A highlighted offer line (the voi.ci intro's promo from `.com`): the accent wash and a 2 px accent edge, text in ink. */
+.callout-promo {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border-left: 2px solid var(--accent-graphic);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.callout-promo[hidden] { display: none; }
+
 /* First contact: the server's six-digit code, directly above Approve. */
 .server-code-box {
   border: 1px solid var(--border);
@@ -2916,6 +2930,75 @@ section h2.fs-hero-title::before { content: none; }
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 #connect-back { padding-left: 0; }
+
+/* Welcome: the phone (keys) and the server (apps) with the internet between them, drawn like iOS's
+   PhoneAndServerIllustration in the webapp's own Lucide strokes. Decorative. */
+.welcome-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: var(--space-4) 0 var(--space-6, 24px);
+  padding: var(--space-6, 24px) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: linear-gradient(to bottom left, var(--accent-soft), color-mix(in srgb, var(--surface-sunken) 60%, transparent));
+}
+.welcome-node {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.welcome-node > svg { width: 40px; height: 40px; stroke-width: 1.6; }
+.welcome-phone { color: var(--accent-graphic); }
+.welcome-badge {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--surface);
+  background: var(--accent-graphic);
+  color: var(--surface);
+}
+.welcome-badge svg { width: 15px; height: 15px; stroke-width: 2.4; }
+.welcome-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 3px solid var(--surface);
+  background: var(--ok);
+  box-sizing: content-box;
+}
+.welcome-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 var(--space-2);
+  color: var(--accent-graphic);
+}
+.welcome-link i { width: 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--ink-muted) 50%, transparent); }
+.welcome-globe { width: 18px; height: 18px; stroke-width: 1.8; }
+@media (max-width: 360px) {
+  .welcome-node { width: 72px; height: 72px; }
+  .welcome-node > svg { width: 32px; height: 32px; }
+  .welcome-link { gap: 3px; }
+}
+
 
 /* ── Security notices (docs/security-notices.md) ──
  * A banner above the header for a maintenance or update notice, and the

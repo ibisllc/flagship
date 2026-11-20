@@ -337,7 +337,7 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     await page.click("[data-modal-ok]");
     await expect(page.locator(".modal-title")).toHaveText("Make your page public?");
     await expect(page.locator(".modal-message")).toHaveText(
-      "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them. Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
+      "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them. Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
     );
     await page.click("[data-modal-ok]");
     await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
@@ -423,6 +423,45 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     await expect(page.locator("[data-testid=page-search]")).toHaveAttribute("aria-checked", "false");
   });
 
+  test("gym messages Social options: callers who let you call back by default, no signed-in choice, Turn off social features", async ({ page }, testInfo) => {
+    const { m, com } = await messagesWorld(page);
+    m.get(path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
+    await openSocial(page, "profile");
+    await expect(page.locator("#page-options")).toHaveAttribute("aria-label", "Social options");
+    await page.click("#page-public-switch");
+    await page.click("[data-modal-ok]");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Public");
+    // The first publish takes calls from people who let the owner call them back (owner, 2026-11-20).
+    expect([com.index.acceptsCalls, com.index.callsFrom]).toEqual([1, "callback"]);
+
+    await page.click("#page-options");
+    await expect(page.locator("[data-testid=page-options-sheet] .modal-title")).toHaveText("Social options");
+    await page.click("#page-calls");
+    const calls = page.locator("[data-testid=page-calls-sheet]");
+    await expect(calls).toBeVisible();
+    const choices = await calls.locator("input[name=calls-from]").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+    expect(choices).toEqual(["accepted", "anyone", "callback"]);
+    await expect(calls.locator("input[name=calls-from][value=callback]")).toBeChecked();
+    await expect(calls.locator("#calls-hours-label")).toHaveText("Set business hours");
+    await expect(calls).not.toContainText("Do Not Disturb");
+    await shot(page, testInfo, "social-options-calls");
+    await calls.locator("[data-sheet-done]").click();
+
+    await page.click("#page-options");
+    await expect(page.locator("#page-remove")).toHaveText("Turn off social features");
+    await page.click("#page-remove");
+    await expect(page.locator(".modal-title")).toHaveText("Turn off social features?");
+    await expect(page.locator(".modal-message")).toHaveText(
+      "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.",
+    );
+    await expect(page.locator("[data-modal-ok]")).toHaveText("Turn off");
+    await shot(page, testInfo, "social-off-confirm");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "false");
+    expect(com.removals).toHaveLength(1);
+  });
+
   test("gym messages a device without the admin root sees the search switch disabled", async ({ page }, testInfo) => {
     const { m, com } = await messagesWorld(page, "non-admin");
     m.first("GET", path("/api/users/smoketest/device-grants"), { grants: [await deviceGrant(page)] });
@@ -454,7 +493,7 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     await expect(page.locator(".modal-title")).toHaveText("Make your page public?");
     // Messages were turned off: the warning names only what really starts on.
     await expect(page.locator(".modal-message")).toHaveText(
-      "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them. Calls from people signed in with Flagship are on. You can turn them off in Page options.",
+      "Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them. Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
     );
     await page.click("[data-modal-ok]");
     await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Public");
@@ -500,7 +539,7 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "true");
     await expect(page.locator("[data-testid=page-name-text]")).toHaveText("Smoke Test");
 
-    // Page options copies the address and says so.
+    // Social options copies the address and says so.
     const mark = await toastMark(page);
     await page.click("#page-options");
     await expect(page.locator("[data-testid=page-options-url]")).toHaveText("voi.ci/smoketest");
@@ -525,7 +564,7 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     await page.click("#page-public-switch");
     await expect(page.locator(".modal-title")).toHaveText("Remove your page from voi.ci?");
     await expect(page.locator(".modal-message")).toHaveText(
-      "Visitors will see \"There's no page here.\" Your posts and profile stay on your devices, so you can turn it on again.",
+      "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.",
     );
     await shot(page, testInfo, "page-remove-confirm");
     await page.click("[data-modal-ok]");
@@ -710,7 +749,7 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
       { answer, request, caPub },
     );
     expect(verdict).toBe("ok");
-    // Page options → Websites you're signed in to lists the website (from the sealed state blob).
+    // Social options → Websites you're signed in to lists the website (from the sealed state blob).
     expect(com.state?.version).toBe(1);
     await page.evaluate(async () => (await import("/views/messages.js")).enterSignedInSites());
     await expect(page.locator("[data-site-signout]")).toHaveCount(1);

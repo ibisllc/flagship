@@ -24,6 +24,7 @@ import {
   VOICI_REMOVE_TITLE,
   VOICI_RULES_TEXT,
   VOICI_RULES_TITLE,
+  VOICI_SOCIAL_OFF_TITLE,
   voiciErrorText,
 } from "./voiciCopy.js";
 
@@ -222,9 +223,16 @@ export async function publishPending() {
 }
 
 /** Takes the page off voi.ci after the owner confirms; this device keeps what was public. */
-export async function removePage() {
+/** Takes the page off voi.ci. `socialOff`: asked from Social options' "Turn off social features", which says so. */
+export async function removePage({ socialOff = false } = {}) {
   if (!canPublishPage() || busy || !world.page) return false;
-  const ok = await inlineConfirm({ title: VOICI_REMOVE_TITLE(), message: VOICI_REMOVE_TEXT(), okLabel: tr("Remove"), cancelLabel: tr("Cancel"), danger: true });
+  const ok = await inlineConfirm({
+    title: socialOff ? VOICI_SOCIAL_OFF_TITLE() : VOICI_REMOVE_TITLE(),
+    message: VOICI_REMOVE_TEXT(),
+    okLabel: socialOff ? tr("Turn off") : tr("Remove"),
+    cancelLabel: tr("Cancel"),
+    danger: true,
+  });
   if (!ok) return false;
   busy = true;
   emitWorld();

@@ -553,7 +553,10 @@
 //  v238: the owner's call-back ring goes to /api/voici/rings/<ringId> (no account name in the address; lib/voiciOwner.js).
 //  v239: the Business batch says card payments aren't available while `.com` has no card rail (views/orgPlan.js).
 //  v240: the marketplace is hidden while release/version.json says "marketplace": false (0.4).
-const SHELL_VERSION = "v240";
+//  v241: the one-time voi.ci intro after creating an account (lib/voiciIntro.js, GET /api/voici/promo), Page options
+//       renamed Social options (no "Anyone signed in with Flagship"; first publish takes calls from callback callers),
+//       "Turn off social features", "Set business hours", and the welcome picture with the internet between phone and server.
+const SHELL_VERSION = "v241";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -754,6 +757,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciOwner.js",
   "/lib/voiciWorld.js",
   "/lib/voiciCopy.js",
+  "/lib/voiciIntro.js",
   "/lib/voiciPagePublic.js",
   "/lib/voiciPageControl.js",
   "/lib/voiciImage.js",

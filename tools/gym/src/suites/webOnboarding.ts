@@ -28,6 +28,41 @@ export const WEB_ONBOARDING: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-onboarding-voici-intro",
+    "A new account, once its creation steps end on Home, sees the one-time Get your own voi.ci page sheet with voi.ci/<username> and the promo line .com sends (GET /api/voici/promo); Set it up opens the Social tab's Profile, and Home never shows the sheet again for that account.",
+    "gym onboarding a new account sees the voi.ci intro once on Home, with `.com`'s promo; Set it up opens the Profile",
+    {
+      steps: [
+        { kind: "tap", describe: "Create a new account to the end, finish the wizard.", handle: "#bootstrap-create" },
+        { kind: "tap", describe: "Set it up.", handle: "[data-testid=voici-intro-setup]" },
+      ],
+      assertions: [
+        { describe: "The intro sheet", handle: "[data-testid=voici-intro]", expect: "present" },
+        { describe: "The promo line", handle: "[data-testid=voici-intro-promo]", expect: "text", text: "Set it up this week for a free month." },
+        { describe: "The Social tab", handle: "#view-messages", expect: "present" },
+      ],
+      screenshots: [shot("voici-intro-promo", "The voi.ci intro with a promo line.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-onboarding-voici-intro-no-promo",
+    "The voi.ci intro when .com has no promo (promo null): no promo line; Not now closes it and leaves Home.",
+    "gym onboarding the voi.ci intro without a promo, and Not now only closes it",
+    {
+      steps: [
+        { kind: "tap", describe: "Create a new account to the end, finish the wizard.", handle: "#bootstrap-create" },
+        { kind: "tap", describe: "Not now.", handle: "[data-testid=voici-intro-later]" },
+      ],
+      assertions: [
+        { describe: "No promo line", handle: "[data-testid=voici-intro-promo]", expect: "absent" },
+        { describe: "Home", handle: "#view-home", expect: "present" },
+      ],
+      screenshots: [shot("voici-intro", "The voi.ci intro without a promo.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
     "web-total-onboarding-cancels",
     "Cancel at the passphrase prompt makes no key; a short passphrase and a mismatch are refused in the prompts; Cancel on the handle sheet or at Name this device opens no account (no POST /api/accounts); the trade-offs link is a real link.",
     "gym onboarding Cancel on the passphrase prompt or the handle sheet opens no account",

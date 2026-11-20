@@ -31,13 +31,13 @@ export const WEB_MESSAGES: readonly Scenario[] = [
   ),
   webTotal(
     "web-messages-page-publish",
-    "The Social tab's Profile on an admin device: the page drawn in its theme with no bar while nothing waits; a photo re-encoded in the browser, display name and bio behind their pencils (an open field already counts as a change), a link from Edit links, Accept messages from Page options, a post from New post; everything grayed Not published yet and one bar counting 3 changes until Publish, which shows the Page and message rules once and then the warning confirm, then the bar goes; the index is signed by the admin root at seq 1 and the photo piece is a JPEG with no APP1/APP2 within 150 KiB.",
+    "The Social tab's Profile on an admin device: the page drawn in its theme with no bar while nothing waits; a photo re-encoded in the browser, display name and bio behind their pencils (an open field already counts as a change), a link from Edit links, Accept messages from Social options, a post from New post; everything grayed Not published yet and one bar counting 3 changes until Publish, which shows the Page and message rules once and then the warning confirm, then the bar goes; the index is signed by the admin root at seq 1 and the photo piece is a JPEG with no APP1/APP2 within 150 KiB.",
     "gym messages page editor publishes after the warning",
     {
       steps: [
         { kind: "launch", describe: "Social tab, Profile, with no page published." },
         { kind: "tap", describe: "Pick a photo; the name's and the bio's pencils, Done; Edit links → Add.", handle: "#page-edit-done" },
-        { kind: "tap", describe: "Page options → Accept messages; New post → Add post.", handle: "#post-save" },
+        { kind: "tap", describe: "Social options → Accept messages; New post → Add post.", handle: "#post-save" },
         { kind: "tap", describe: "Publish → I agree → Make it public.", handle: "#pe-publish" },
       ],
       assertions: [
@@ -51,46 +51,64 @@ export const WEB_MESSAGES: readonly Scenario[] = [
   ),
   webTotal(
     "web-messages-search-engines-switch",
-    "Page options on an admin device: no Show in search engines row before the page is public; once public it is off (the first index has no showInSearch and lists one share card, a 1200×630 JPEG with no metadata); turning it on publishes seq 2 with showInSearch 1 and the same share card, turning it off publishes seq 3 without the field. A device without the admin root sees the switch disabled with Only an admin device can change this.",
+    "Social options on an admin device: no Show in search engines row before the page is public; once public it is off (the first index has no showInSearch and lists one share card, a 1200×630 JPEG with no metadata); turning it on publishes seq 2 with showInSearch 1 and the same share card, turning it off publishes seq 3 without the field. A device without the admin root sees the switch disabled with Only an admin device can change this.",
     "gym messages Show in search engines publishes showInSearch and keeps the share card",
     {
       steps: [
         { kind: "launch", describe: "Social tab, Profile, with no page published; make it public." },
-        { kind: "tap", describe: "Page options → Show in search engines (on, then off).", handle: "[data-testid=page-search]" },
+        { kind: "tap", describe: "Social options → Show in search engines (on, then off).", handle: "[data-testid=page-search]" },
       ],
       assertions: [
         { describe: "The switch", handle: "[data-testid=page-search]", expect: "enabled" },
         { describe: "The note", handle: "[data-testid=page-search-note]", expect: "text", text: "When this is off, search engines are asked not to list your page. Anyone with the link can still open it." },
       ],
-      screenshots: [shot("page-options-search-on", "Page options with Show in search engines on.")],
+      screenshots: [shot("page-options-search-on", "Social options with Show in search engines on.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-messages-social-options",
+    "Social options (was Page options) on an admin device: the first publish takes calls from people who let the owner call them back (callsFrom callback); the Calls sheet offers accepted, anyone and callback (no Anyone signed in with Flagship) with callback picked and Set business hours (no Do Not Disturb); Turn off social features asks Turn off social features? (the page, messages and calls go) and removes the page.",
+    "gym messages Social options: callers who let you call back by default, no signed-in choice, Turn off social features",
+    {
+      steps: [
+        { kind: "launch", describe: "Social tab, Profile; make the page public." },
+        { kind: "tap", describe: "Social options → Calls.", handle: "#page-calls" },
+        { kind: "tap", describe: "Social options → Turn off social features → Turn off.", handle: "#page-remove" },
+      ],
+      assertions: [
+        { describe: "Business hours toggle", handle: "#calls-hours-label", expect: "text", text: "Set business hours" },
+        { describe: "Off", handle: "#page-public-switch", expect: "present" },
+      ],
+      screenshots: [shot("social-options-calls", "Social options → Calls."), shot("social-off-confirm", "The Turn off social features confirm.")],
       dimension: "D6",
     },
   ),
   webTotal(
     "web-messages-search-engines-admin-only",
-    "Page options on a device without the admin root, for a page another device published with showInSearch 1: Show in search engines reads on and is disabled, with Only an admin device can change this under it.",
+    "Social options on a device without the admin root, for a page another device published with showInSearch 1: Show in search engines reads on and is disabled, with Only an admin device can change this under it.",
     "gym messages a device without the admin root sees the search switch disabled",
     {
       steps: [
         { kind: "launch", describe: "Social tab on a member device; the page is public and shown in search engines." },
-        { kind: "tap", describe: "Page options.", handle: "#page-options" },
+        { kind: "tap", describe: "Social options.", handle: "#page-options" },
       ],
       assertions: [
         { describe: "Disabled", handle: "[data-testid=page-search]", expect: "disabled" },
         { describe: "Why", handle: "[data-testid=page-search-admin-only]", expect: "text", text: "Only an admin device can change this" },
       ],
-      screenshots: [shot("page-options-search-member", "Page options on a member device: the search switch disabled.")],
+      screenshots: [shot("page-options-search-member", "Social options on a member device: the search switch disabled.")],
       dimension: "D6",
     },
   ),
   webTotal(
     "web-messages-first-publish-warning-follows-accepts",
-    "The Social tab's Profile: Accept messages turned off in Page options before the first publish; the one-time public warning then names only what really starts on (calls, not messages), and the published index carries acceptsMessages 0 and acceptsCalls 1.",
+    "The Social tab's Profile: Accept messages turned off in Social options before the first publish; the one-time public warning then names only what really starts on (calls, not messages), and the published index carries acceptsMessages 0 and acceptsCalls 1.",
     "gym messages the first publish's warning follows Accept messages",
     {
       steps: [
         { kind: "launch", describe: "Social tab, Profile, with no page published." },
-        { kind: "tap", describe: "Page options → turn Accept messages off → Done.", handle: "#page-accepts" },
+        { kind: "tap", describe: "Social options → turn Accept messages off → Done.", handle: "#page-accepts" },
         { kind: "tap", describe: "Publish → I agree → Make it public.", handle: "#pe-publish" },
       ],
       assertions: [
@@ -103,7 +121,7 @@ export const WEB_MESSAGES: readonly Scenario[] = [
   ),
   webTotal(
     "web-messages-page-public-switch",
-    "The Social tab's Public switch in the title row: turning it on the first time shows the one-time public warning, then publishes; a name change on a public page is a draft published from the bar; turning it off asks to confirm and removes the page with a signed flagship/voici-page-remove/v1 (voi.ci answers no page); turning it on again republishes at the next seq without the warning; Page options' Copy link writes only the link.",
+    "The Social tab's Public switch in the title row: turning it on the first time shows the one-time public warning, then publishes; a name change on a public page is a draft published from the bar; turning it off asks to confirm and removes the page with a signed flagship/voici-page-remove/v1 (voi.ci answers no page); turning it on again republishes at the next seq without the warning; Social options' Copy link writes only the link.",
     "gym messages the Public switch removes the page and turns it back on",
     {
       steps: [
@@ -159,7 +177,7 @@ export const WEB_MESSAGES: readonly Scenario[] = [
   ),
   webTotal(
     "web-messages-sign-in-approval",
-    "Sign in with Flagship from the webapp (slow tier): a voi.ci sign-in link opens the approval with the page's verified display name, the same 6-digit code as the voi.ci tab over /qr-pipe, and how the visitor appears; Approve shows the rules once and asks for this device's passphrase; the attestation request says deviceCheckRef none; the sealed answer passes voi.ci's checkVoiciSignInAnswer; Page options → Websites you're signed in to lists the website.",
+    "Sign in with Flagship from the webapp (slow tier): a voi.ci sign-in link opens the approval with the page's verified display name, the same 6-digit code as the voi.ci tab over /qr-pipe, and how the visitor appears; Approve shows the rules once and asks for this device's passphrase; the attestation request says deviceCheckRef none; the sealed answer passes voi.ci's checkVoiciSignInAnswer; Social options → Websites you're signed in to lists the website.",
     "gym messages approve a voi.ci sign-in on the slow tier",
     {
       steps: [

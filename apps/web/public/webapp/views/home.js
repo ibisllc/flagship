@@ -17,6 +17,7 @@ import { tickRenewals } from "../lib/leases.js";
 import { activeOperations } from "../lib/activeOperations.js";
 import { $, registerView, show, setSubtitle, currentViewId } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
+import { maybeShowVoiciIntro } from "../lib/voiciIntro.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
@@ -2136,6 +2137,7 @@ export async function enterHome() {
   await renderHome();
   await renderActiveProviderChip();
   planTickSoon();
+  void maybeShowVoiciIntro(getSession()?.username).catch(() => {});
 }
 
 export function initHomeView({ onSettings }) {
