@@ -175,5 +175,17 @@ private fun BoxIllustration() {
         val x0 = px + pw + 10.dp.toPx(); val x1 = sx - 10.dp.toPx()
         drawLine(teal.copy(alpha = 0.55f), androidx.compose.ui.geometry.Offset(x0, cy), androidx.compose.ui.geometry.Offset(x1, cy), strokeWidth = 2.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 6.dp.toPx())))
         drawCircle(teal, radius = 5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x0 + (x1 - x0) * travel, cy))
+        // The internet in the middle: a globe outline in the same 2 dp stroke as the phone and the server
+        val gc = androidx.compose.ui.geometry.Offset((x0 + x1) / 2f, cy)
+        val gr = 13.dp.toPx()
+        val globe = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawCircle(card, radius = gr + 4.dp.toPx(), center = gc)
+        drawCircle(teal, radius = gr, center = gc, style = globe)
+        drawOval(teal, androidx.compose.ui.geometry.Offset(gc.x - gr * 0.45f, gc.y - gr), androidx.compose.ui.geometry.Size(gr * 0.9f, gr * 2f), style = globe)
+        drawLine(teal, androidx.compose.ui.geometry.Offset(gc.x - gr, gc.y), androidx.compose.ui.geometry.Offset(gc.x + gr, gc.y), strokeWidth = 2.dp.toPx())
+        val lat = gr * 0.5f
+        val half = kotlin.math.sqrt(gr * gr - lat * lat)
+        drawLine(teal, androidx.compose.ui.geometry.Offset(gc.x - half, gc.y - lat), androidx.compose.ui.geometry.Offset(gc.x + half, gc.y - lat), strokeWidth = 2.dp.toPx())
+        drawLine(teal, androidx.compose.ui.geometry.Offset(gc.x - half, gc.y + lat), androidx.compose.ui.geometry.Offset(gc.x + half, gc.y + lat), strokeWidth = 2.dp.toPx())
     }
 }
