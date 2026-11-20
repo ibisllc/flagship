@@ -16,16 +16,20 @@ final class VoiciCallsViewModelTests: XCTestCase {
         XCTAssertEqual(VoiciCallSettings.mode("anyone"), "anyone")
         XCTAssertTrue(VoiciCallSettings.indexFields(on: false, from: "signed-in") == (nil, nil))
         XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: nil, callsFrom: nil) == (false, "accepted"))
-        XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: 1, callsFrom: "signed-in") == (true, "signed-in"))
-        XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: 0, callsFrom: "signed-in") == (false, "signed-in"))
+        // "Anyone signed in with Flagship" is no longer offered (owner, 2026-11-20): an index that says so reads as
+        // callback, so the next publish (which carries what it reads) writes callback.
+        XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: 1, callsFrom: "signed-in") == (true, "callback"))
+        XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: 0, callsFrom: "signed-in") == (false, "callback"))
+        XCTAssertTrue(VoiciCallSettings.read(acceptsCalls: 1, callsFrom: "anyone") == (true, "anyone"))
     }
 
     func test_firstPublishDefaultsAndTheModesOffered() {
-        XCTAssertTrue(VoiciCallSettings.firstPublish == (true, "signed-in"))
+        XCTAssertTrue(VoiciCallSettings.firstPublish == (true, "callback"))
         XCTAssertEqual(VoiciCallSettings.firstPublishAcceptsMessages, 1)
-        XCTAssertEqual(VoiciCallSettings.modes, ["signed-in", "anyone", "callback"])
-        XCTAssertEqual(VoiciCallSettings.mode("signed-in"), "signed-in")
+        XCTAssertEqual(VoiciCallSettings.modes, ["anyone", "callback"], "No \"Anyone signed in with Flagship\" in the picker.")
+        XCTAssertEqual(VoiciCallSettings.mode("signed-in"), "callback")
         XCTAssertEqual(VoiciCallSettings.mode("accepted"), "callback")
+        XCTAssertTrue(VoiciCallSettings.fromValues.contains("signed-in"), "Old indexes still read.")
     }
 
     func test_viewState() {
@@ -50,50 +54,18 @@ final class VoiciCallsViewModelTests: XCTestCase {
         XCTAssertTrue(unpublished.noRingNote)
     }
 
-    func test_quietHoursAcrossMidnight() {
-        let q = CallQuietHours(on: true, startMinute: 22 * 60, endMinute: 7 * 60)
-        XCTAssertTrue(q.isQuiet(minuteOfDay: 23 * 60))
-        XCTAssertTrue(q.isQuiet(minuteOfDay: 0))
-        XCTAssertTrue(q.isQuiet(minuteOfDay: 6 * 60 + 59))
-        XCTAssertFalse(q.isQuiet(minuteOfDay: 7 * 60))
-        XCTAssertFalse(q.isQuiet(minuteOfDay: 12 * 60))
-        XCTAssertTrue(q.isQuiet(minuteOfDay: 22 * 60))
-        var off = q
-        off.on = false
-        XCTAssertFalse(off.isQuiet(minuteOfDay: 23 * 60))
-    }
-
-    func test_quietHoursSameDayAndAllDay() {
-        let day = CallQuietHours(on: true, startMinute: 9 * 60, endMinute: 17 * 60)
-        XCTAssertTrue(day.isQuiet(minuteOfDay: 12 * 60))
-        XCTAssertFalse(day.isQuiet(minuteOfDay: 8 * 60))
-        XCTAssertFalse(day.isQuiet(minuteOfDay: 17 * 60))
-        XCTAssertTrue(CallQuietHours(on: true, startMinute: 600, endMinute: 600).isQuiet(minuteOfDay: 5))
-        XCTAssertEqual(CallQuietHours(on: true, startMinute: -60, endMinute: 1500).startMinute, 1380)
-    }
-
-    func test_quietHoursAtADate() throws {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
-        let q = CallQuietHours(on: true, startMinute: 22 * 60, endMinute: 7 * 60)
-        let lateNight = try XCTUnwrap(cal.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 23, minute: 30)))
-        let noon = try XCTUnwrap(cal.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 12)))
-        XCTAssertTrue(q.isQuiet(at: lateNight, calendar: cal))
-        XCTAssertFalse(q.isQuiet(at: noon, calendar: cal))
-    }
-
     func test_settingsStoreRoundTrip() throws {
         let d = try XCTUnwrap(UserDefaults(suiteName: "VoiciCallsViewModelTests"))
         d.removePersistentDomain(forName: "VoiciCallsViewModelTests")
-        XCTAssertEqual(CallSettingsStore.quietHours(d), .standard)
-        XCTAssertEqual(CallSettingsStore.lastFrom(d), "signed-in", "Calls turned on by hand start from the first-publish mode.")
-        let q = CallQuietHours(on: true, startMinute: 60, endMinute: 120)
-        CallSettingsStore.setQuietHours(q, d)
-        CallSettingsStore.setLastFrom("signed-in", d)
-        XCTAssertEqual(CallSettingsStore.quietHours(d), q)
-        XCTAssertEqual(CallSettingsStore.lastFrom(d), "signed-in")
+        XCTAssertEqual(CallSettingsStore.lastFrom(d), "callback", "Calls turned on by hand start from the first-publish mode.")
+        CallSettingsStore.setLastFrom("anyone", d)
+        XCTAssertEqual(CallSettingsStore.lastFrom(d), "anyone")
         CallSettingsStore.setLastFrom("everyone", d)
-        XCTAssertEqual(CallSettingsStore.lastFrom(d), "signed-in")
+        XCTAssertEqual(CallSettingsStore.lastFrom(d), "anyone")
+        // The removed app Do Not Disturb: its old record goes, nothing reads it.
+        d.set(Data([1, 2, 3]), forKey: "flagship.voici.calls.quiet")
+        CallSettingsStore.forgetRemovedSettings(d)
+        XCTAssertNil(d.object(forKey: "flagship.voici.calls.quiet"))
     }
 
     // MARK: thread
@@ -179,18 +151,15 @@ final class VoiciCallsViewModelTests: XCTestCase {
         XCTAssertEqual(VoiciCallConnectSteps.limitSeconds, 45)
     }
 
+    /// No Do Not Disturb of the app's own (owner, 2026-11-20): a fresh call rings (CallKit applies the phone's Focus),
+    /// a late one doesn't.
     @MainActor
-    func test_doNotDisturbKeepsThisDeviceSilent() {
+    func test_aFreshCallRingsWithoutAnAppDoNotDisturb() {
         let c = VoiciCallCenter()
-        var cal = Calendar.current
-        cal.timeZone = .current
         let now = Date()
-        let m = (cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now))
         let at = Int64(now.timeIntervalSince1970 * 1000)
         c.clock = { now }
-        c.quietHours = { CallQuietHours(on: true, startMinute: m, endMinute: m + 30) }
-        XCTAssertFalse(c.shouldRing(issuedAt: at))
-        c.quietHours = { CallQuietHours(on: false, startMinute: m, endMinute: m + 30) }
+        c.ownerHours = { nil }
         XCTAssertTrue(c.shouldRing(issuedAt: at))
         XCTAssertFalse(c.shouldRing(issuedAt: at - VoiciCalls.ringMs - 1))
     }
@@ -218,13 +187,12 @@ final class VoiciCallsViewModelTests: XCTestCase {
         XCTAssertNil(VoiciCallHoursDraft(nil))
     }
 
-    /// Outside the owner's hours this device doesn't ring (the call becomes a missed call), as for Do Not Disturb.
+    /// Outside the owner's business hours this device doesn't ring (the call becomes a missed call).
     @MainActor
     func test_theRingingPhoneKeepsTheOwnersHours() {
         let center = VoiciCallCenter.shared
-        let saved = (center.clock, center.ownerHours, center.quietHours)
-        defer { (center.clock, center.ownerHours, center.quietHours) = saved }
-        center.quietHours = { CallQuietHours(on: false, startMinute: 0, endMinute: 0) }
+        let saved = (center.clock, center.ownerHours)
+        defer { (center.clock, center.ownerHours) = saved }
         let monday10Paris: Int64 = 1_799_053_200_000, monday0859: Int64 = 1_799_049_540_000
         center.ownerHours = { VoiciCallSettingsValue(hours: VoiciCallHours(days: "1111100", from: "0900", to: "1730", zone: "Europe/Paris"), updatedAt: 1) }
         center.clock = { Date(timeIntervalSince1970: TimeInterval(monday10Paris) / 1000) }

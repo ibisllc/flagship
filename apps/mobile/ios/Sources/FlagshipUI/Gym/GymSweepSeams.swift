@@ -84,6 +84,7 @@ public enum GymSweepSeams {
         security(args, app, mocks)
         release03(args, app, mocks)
         messages(args, app, mocks)
+        voiciIntro(args, app)
         localAi(args, app, mocks)
         accelerators(args, app, mocks)
         stack(args, app, mocks)

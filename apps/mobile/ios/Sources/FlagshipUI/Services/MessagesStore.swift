@@ -175,7 +175,7 @@ public final class MessagesStore {
     }
 
     /// The next publish is the page's first: this device has seen no index and no removal. It carries the first-publish
-    /// defaults (messages on, calls on from signed-in people); every later publish keeps the owner's choices.
+    /// defaults (messages on, calls on from people who let the owner call them back); every later publish keeps the owner's choices.
     public var isFirstPublish: Bool { index == nil && !isRemoved && local.highestSeq == 0 }
 
     /// Changes waiting to be published. Accept messages counts once, and only while it differs from the published page,
@@ -748,7 +748,7 @@ public final class MessagesStore {
         return publishError == nil
     }
 
-    /// Page options → "Show in search engines": published at once in the index by an admin device, like the calls
+    /// Social options → "Show in search engines": published at once in the index by an admin device, like the calls
     /// setting (docs/voici-and-messages.md §2.7). Drafts stay drafts. False when it couldn't be published.
     @discardableResult
     public func setShowInSearch(_ on: Bool) async -> Bool {

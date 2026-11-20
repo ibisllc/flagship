@@ -16,7 +16,18 @@ import FlagshipCore
 ///   -smoke-messages-lane      with -smoke-messages: another device's post waiting in the drafts lane
 ///   -smoke-voici-page         another account (river-otter) with a page, for the sign-in approval
 ///   -smoke-voici-attest-limit the attestation is refused: first-contact-limit (retry in 5 hours)
+///   -smoke-voici-intro        the one-time "Get your own voi.ci page" intro is pending for the smoke account, as after
+///                             creating it (VoiciIntro)
+///   -smoke-voici-intro-promo <text>  `.com`'s promo line under it (none without the flag; never the network)
 extension GymSweepSeams {
+    static func voiciIntro(_ args: [String], _ app: AppState) {
+        let promo = value(args, "-smoke-voici-intro-promo")
+        VoiciIntro.fetchPromo = { _ in promo }
+        let user = (app.currentUser ?? "smoketest").lowercased()
+        UserDefaults.standard.removeObject(forKey: VoiciIntro.key(user))
+        if args.contains("-smoke-voici-intro") { VoiciIntro.arm(app, username: user) }
+    }
+
     public static let gymPageId = String(repeating: "5a", count: 16)
     public static let otterPageId = String(repeating: "07", count: 16)
     static let otterAdmin = [UInt8](repeating: 0x33, count: 32)

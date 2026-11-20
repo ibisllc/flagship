@@ -9,10 +9,9 @@ import FlagshipCore
 /// Writers sign v2 only while calls are on, so a page without calls stays readable by v1 readers; the last "who can
 /// call" choice is remembered on the device for the next time calls are turned on.
 ///
-/// Do Not Disturb is per device and never leaves it: each ringing device checks its own hours when a call arrives and
-/// stays silent (it does not join the room, so another device can still answer and an unanswered call becomes a
-/// missed call). Keeping the hours off `.com` and the page index means no server learns the owner's time zone or
-/// habits (AGENTS.md, "An AI never learns who or where the owner is").
+/// The app has no Do Not Disturb of its own (owner, 2026-11-20): CallKit honours the phone's Do Not Disturb and Focus.
+/// Business hours ("Set business hours") are the owner's synced, sealed setting (`VoiciCallSettingsSync`): outside
+/// them no device rings and the call becomes a missed call; no server learns the hours or the time zone.
 public enum VoiciCallSettings {
     public static let fromAccepted = "accepted"
     public static let fromSignedIn = "signed-in"
@@ -21,12 +20,14 @@ public enum VoiciCallSettings {
     public static let fromAnyone = "anyone"
     public static let fromCallback = "callback"
     public static let fromValues = [fromAccepted, fromSignedIn, fromAnyone, fromCallback]
-    /// The modes the Social page offers; an older value ("accepted") turns into "callback" at the next change.
-    /// "signed-in" is the first-publish default (owner decision 2026-11-16), so it is offered too.
-    public static let modes = [fromSignedIn, fromAnyone, fromCallback]
-    /// What a page's first publish carries (owner decision 2026-11-16, docs/voici-and-messages.md §5.4): calls on from
-    /// people signed in with Flagship (never anonymous), and messages on. A later publish keeps the owner's choices.
-    public static let firstPublish = (on: true, from: fromSignedIn)
+    /// The modes the Social page offers; an older value ("accepted", or "signed-in", which is no longer offered:
+    /// owner, 2026-11-20) shows as "callback" and turns into it at the next publish. `.com` and voi.ci still accept
+    /// "signed-in" in indexes old apps publish.
+    public static let modes = [fromAnyone, fromCallback]
+    /// What a page's first publish carries (owner decisions 2026-11-16 and 2026-11-20, docs/voici-and-messages.md §5.4):
+    /// calls on from people who let the owner call them back (never anonymous), and messages on. A later publish keeps
+    /// the owner's choices.
+    public static let firstPublish = (on: true, from: fromCallback)
     public static let firstPublishAcceptsMessages: Int64 = 1
     public static func mode(_ from: String) -> String { modes.contains(from) ? from : fromCallback }
 
@@ -35,9 +36,11 @@ public enum VoiciCallSettings {
         on ? (1, fromValues.contains(from) ? from : fromAccepted) : (nil, nil)
     }
 
-    /// What a calls setting in a published index reads as.
+    /// What a calls setting in a published index reads as, and so what the next publish carries: "signed-in" reads as
+    /// "callback" (no longer offered).
     public static func read(acceptsCalls: Int64?, callsFrom: String?) -> (on: Bool, from: String) {
-        (acceptsCalls == 1, callsFrom.flatMap { fromValues.contains($0) ? $0 : nil } ?? fromAccepted)
+        if callsFrom == fromSignedIn { return (acceptsCalls == 1, fromCallback) }
+        return (acceptsCalls == 1, callsFrom.flatMap { fromValues.contains($0) ? $0 : nil } ?? fromAccepted)
     }
 
     /// Why the Calls controls can't be changed here, if they can't.
@@ -58,48 +61,16 @@ public enum VoiciCallSettings {
     }
 }
 
-/// This device's Do Not Disturb hours for calls, minutes after local midnight. Start == end means all day.
-public struct CallQuietHours: Codable, Equatable, Sendable {
-    public var on: Bool
-    public var startMinute: Int
-    public var endMinute: Int
-
-    public init(on: Bool, startMinute: Int, endMinute: Int) {
-        self.on = on
-        self.startMinute = Self.clamp(startMinute)
-        self.endMinute = Self.clamp(endMinute)
-    }
-
-    public static let standard = CallQuietHours(on: false, startMinute: 22 * 60, endMinute: 7 * 60)
-
-    static func clamp(_ m: Int) -> Int { ((m % 1440) + 1440) % 1440 }
-
-    public func isQuiet(minuteOfDay m: Int) -> Bool {
-        guard on else { return false }
-        let m = Self.clamp(m)
-        if startMinute == endMinute { return true }
-        if startMinute < endMinute { return m >= startMinute && m < endMinute }
-        return m >= startMinute || m < endMinute
-    }
-
-    public func isQuiet(at date: Date, calendar: Calendar = .current) -> Bool {
-        let c = calendar.dateComponents([.hour, .minute], from: date)
-        return isQuiet(minuteOfDay: (c.hour ?? 0) * 60 + (c.minute ?? 0))
-    }
-}
-
 /// Where this device keeps its own calls preferences (UserDefaults; nothing synced).
 public enum CallSettingsStore {
-    static let quietKey = "flagship.voici.calls.quiet"
+    /// Where the app's own Do Not Disturb hours were kept until 2026-11-20; dropped, not migrated (they meant "quiet on
+    /// this device", the opposite of business hours), and removed once by `forgetRemovedSettings`.
+    static let removedQuietKey = "flagship.voici.calls.quiet"
     static let fromKey = "flagship.voici.calls.from"
 
-    public static func quietHours(_ d: UserDefaults = .standard) -> CallQuietHours {
-        guard let data = d.data(forKey: quietKey), let q = try? JSONDecoder().decode(CallQuietHours.self, from: data) else { return .standard }
-        return q
-    }
-
-    public static func setQuietHours(_ q: CallQuietHours, _ d: UserDefaults = .standard) {
-        if let data = try? JSONEncoder().encode(q) { d.set(data, forKey: quietKey) }
+    /// Deletes what removed settings left on this device.
+    public static func forgetRemovedSettings(_ d: UserDefaults = .standard) {
+        d.removeObject(forKey: removedQuietKey)
     }
 
     /// The last "who can call" picked here, for turning calls on again.

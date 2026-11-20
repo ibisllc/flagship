@@ -230,7 +230,7 @@ final class PageControlsTests: XCTestCase {
 
     // MARK: the first publish's defaults (owner decision 2026-11-16)
 
-    func test_firstPublishTurnsOnMessagesAndCallsFromSignedInPeople() async throws {
+    func test_firstPublishTurnsOnMessagesAndCallsFromCallBackCallers() async throws {
         var registered = 0
         MessagesStore.callsTurnedOn = { registered += 1 }
         defer { MessagesStore.callsTurnedOn = nil }
@@ -242,9 +242,9 @@ final class PageControlsTests: XCTestCase {
         let idx = try XCTUnwrap(publishedIndex())
         XCTAssertEqual(idx.acceptsMessages, 1)
         XCTAssertEqual(idx.acceptsCalls, 1)
-        XCTAssertEqual(idx.callsFrom, "signed-in", "Signed-in callers only, never anonymous.")
+        XCTAssertEqual(idx.callsFrom, "callback", "Callers who let the owner call them back, never anonymous (owner, 2026-11-20).")
         XCTAssertTrue(s.callsOn)
-        XCTAssertEqual(s.callsFrom, VoiciCallSettings.fromSignedIn)
+        XCTAssertEqual(s.callsFrom, VoiciCallSettings.fromCallback)
         XCTAssertFalse(s.isFirstPublish)
         XCTAssertEqual(registered, 1, "Calls coming on registers the phone at once, as turning them on by hand does.")
     }
@@ -300,7 +300,7 @@ final class PageControlsTests: XCTestCase {
     func test_aRepublishKeepsTheOwnersChoices() async throws {
         let s = await store()
         await s.goPublic()
-        let off = await s.setCalls(on: false, from: VoiciCallSettings.fromSignedIn)
+        let off = await s.setCalls(on: false, from: VoiciCallSettings.fromCallback)
         XCTAssertTrue(off)
         await s.setAcceptsMessages(false)
         await s.publishNow()
@@ -326,6 +326,20 @@ final class PageControlsTests: XCTestCase {
         XCTAssertEqual(idx.acceptsMessages, 0)
     }
 
+    /// An index an older app published with "signed-in" (no longer offered, owner 2026-11-20) shows as callback, and the
+    /// next publish of anything writes callback.
+    func test_aSignedInIndexRepublishesAsCallback() async throws {
+        let s = await store()
+        await s.goPublic()
+        _ = await s.setCalls(on: true, from: VoiciCallSettings.fromSignedIn)
+        XCTAssertEqual(publishedIndex()?.callsFrom, "signed-in", "As an older app wrote it.")
+        XCTAssertEqual(VoiciCallSettings.mode(s.callsFrom), VoiciCallSettings.fromCallback, "The picker shows callback.")
+        _ = await s.setQuickProfile(displayName: "Maple", avatar: nil)
+        let idx = try XCTUnwrap(publishedIndex())
+        XCTAssertEqual(idx.acceptsCalls, 1)
+        XCTAssertEqual(idx.callsFrom, "callback")
+    }
+
     // MARK: search engines and the share card (owner decisions 2026-11-17)
 
     func test_searchIsHiddenOnAFirstPublishAndTheSwitchPublishesItThenEveryPublishKeepsIt() async throws {
@@ -343,7 +357,7 @@ final class PageControlsTests: XCTestCase {
         await s.addPost(text: "Kept listed.", links: [], images: [:])
         await s.publishNow()
         XCTAssertEqual(publishedIndex()?.showInSearch, 1, "An edit keeps it.")
-        _ = await s.setCalls(on: false, from: VoiciCallSettings.fromSignedIn)
+        _ = await s.setCalls(on: false, from: VoiciCallSettings.fromCallback)
         XCTAssertEqual(publishedIndex()?.showInSearch, 1, "A calls change keeps it.")
         XCTAssertNil(publishedIndex()?.acceptsCalls)
         let off = await s.setShowInSearch(false)

@@ -105,13 +105,17 @@ public struct OnboardingFlow: View {
                     // the existing KeyfileExportScreen; "Skip for now"
                     // confirms then proceeds. Either way we finish
                     // onboarding into the app from here.
+                    // A new account only: the shell then offers its voi.ci page once (VoiciIntro). Not
+                    // here, before the backup, so Set it up can't skip it.
                     SecureAccountScreen(
                         username: username,
                         onSecured: {
                             app.completeOnboarding(username: username, pods: [])
+                            VoiciIntro.arm(app, username: username)
                         },
                         onSkip: {
                             app.completeOnboarding(username: username, pods: [])
+                            VoiciIntro.arm(app, username: username)
                         }
                     )
                 case .connectAccount:

@@ -5,7 +5,7 @@ import FlagshipAPI
 import FlagshipCore
 
 /// Turning the page public or taking it down (docs/voici-and-messages.md §3.3, §11.1). One flow for the Social tab's
-/// Public switch, its Publish bar and Page options: the page and message rules once per device, then the one-time
+/// Public switch, its Publish bar and Social options: the page and message rules once per device, then the one-time
 /// "Everything you put on your page is public" warning per account, then the signature. Nothing is signed before
 /// "Make it public"; a non-admin device never gets past the first step.
 @MainActor
@@ -16,10 +16,11 @@ final class PagePublicFlow {
     var showRules = false
     var showWarning = false
     var confirmRemove = false
-    /// The warning is for the page's first publish: it also says what starts on (messages and signed-in calls).
+    /// The warning is for the page's first publish: it also says what starts on (messages, and calls from people who
+    /// let the owner call them back).
     var firstPublish = false
     /// What that first publish carries for messages: the Accept messages switch as the owner left it. Calls always
-    /// start on (signed-in people) and can be changed only once the page is public.
+    /// start on (call-back callers) and can be changed only once the page is public.
     var firstPublishMessages = true
     @ObservationIgnored private var action: Action?
     @ObservationIgnored private var rulesJustAccepted = false
@@ -123,8 +124,8 @@ private struct PagePublicFlowModifier: ViewModifier {
                     Text("Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.")
                         + Text(verbatim: "\n\n")
                         + (flow.firstPublishMessages
-                            ? Text("Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.")
-                            : Text("Calls from people signed in with Flagship are on. You can turn them off in Page options."))
+                            ? Text("Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.")
+                            : Text("Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options."))
                 } else {
                     Text("Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.")
                 }
@@ -134,7 +135,7 @@ private struct PagePublicFlowModifier: ViewModifier {
                 Button("Remove", role: .destructive) { flow.remove() }
                     .accessibilityIdentifier("page-remove-confirm")
             } message: {
-                Text("Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.")
+                Text("Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.")
             }
     }
 }

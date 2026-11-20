@@ -4,7 +4,7 @@ import FlagshipAPI
 import FlagshipCore
 
 /// The page's profile fields while they are edited (docs/social-tab.md). Every change is a draft op until Publish on an
-/// admin device signs a new index; one model so the page itself, the Page options sheet (theme) and the publish bar
+/// admin device signs a new index; one model so the page itself, the Social options sheet (theme) and the publish bar
 /// count and commit the same fields.
 @MainActor
 @Observable

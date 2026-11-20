@@ -59,8 +59,8 @@ public struct WelcomeScreen: View {
     }
 }
 
-/// A phone that holds the keys, a line to the server that runs the
-/// services: the product in one picture, drawn with system symbols so it
+/// A phone that holds the keys, a line across the internet to the server
+/// that runs the services: the product in one picture, drawn with system symbols so it
 /// follows the text size and both appearances.
 private struct PhoneAndServerIllustration: View {
     @Environment(\.colorScheme) private var scheme
@@ -120,8 +120,10 @@ private struct PhoneAndServerIllustration: View {
             ForEach(0..<4, id: \.self) { _ in
                 Circle().fill(c.textMuted.opacity(0.5)).frame(width: 4, height: 4)
             }
-            Image(systemName: "lock.fill")
-                .font(.system(size: 14, weight: .semibold))
+            // The internet between them (owner, 2026-11-20: a globe, not a lock), outlined in the
+            // illustration's own regular weight.
+            Image(systemName: "globe")
+                .font(.system(size: 18, weight: .regular))
                 .foregroundColor(c.accent)
             ForEach(0..<4, id: \.self) { _ in
                 Circle().fill(c.textMuted.opacity(0.5)).frame(width: 4, height: 4)

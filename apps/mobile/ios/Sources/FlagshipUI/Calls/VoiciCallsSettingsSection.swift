@@ -2,12 +2,12 @@
 import SwiftUI
 import FlagshipCore
 
-/// Settings → Messages → Calls (docs/voici-calls.md §8): calls on/off and who may call (published in the page index by
-/// an admin device), this device's Do Not Disturb hours, and the China mainland note (no CallKit there, D4).
+/// Social options → Calls (docs/voici-calls.md §8): calls on/off and who may call (published in the page index by an
+/// admin device), the business hours (synced, sealed), and the China mainland note (no CallKit there, D4). There is no
+/// Do Not Disturb of the app's own: the phone's Do Not Disturb and Focus decide through CallKit.
 struct VoiciCallsSettingsSection: View {
     private let store = MessagesStore.shared
     @State private var center = VoiciCallCenter.shared
-    @State private var quiet = CallSettingsStore.quietHours()
     @State private var busy = false
     @State private var lockedNote: String?
 
@@ -19,7 +19,6 @@ struct VoiciCallsSettingsSection: View {
                 .accessibilityIdentifier("page-accept-calls")
             if v.showsWho {
                 Picker("Who can call", selection: Binding(get: { VoiciCallSettings.mode(store.callsFrom) }, set: { f in change(on: true, from: f) })) {
-                    Text("Anyone signed in with Flagship").tag(VoiciCallSettings.fromSignedIn)
                     Text("Anyone on the internet").tag(VoiciCallSettings.fromAnyone)
                     Text("People who let you call them back").tag(VoiciCallSettings.fromCallback)
                 }
@@ -38,8 +37,6 @@ struct VoiciCallsSettingsSection: View {
                     switch VoiciCallSettings.mode(store.callsFrom) {
                     case VoiciCallSettings.fromAnyone:
                         Text("Anyone can call you from your page, with or without a Flagship account. Your admin devices ring.")
-                    case VoiciCallSettings.fromSignedIn:
-                        Text("Visitors signed in with Flagship can call you from your page. Your admin devices ring.")
                     default:
                         Text("Callers sign in with Flagship and let you call them back in that conversation. You never learn who they are. Your admin devices ring.")
                     }
@@ -51,7 +48,7 @@ struct VoiciCallsSettingsSection: View {
         }
         if v.showsWho {
             Section {
-                Toggle("Only at certain hours", isOn: Binding(get: { store.callHours != nil }, set: { on in
+                Toggle("Set business hours", isOn: Binding(get: { store.callHours != nil }, set: { on in
                     publishHours(on ? (VoiciCallHoursDraft(store.callHours) ?? .standard()).hours : nil)
                 }))
                 .disabled(busy)
@@ -105,18 +102,6 @@ struct VoiciCallsSettingsSection: View {
                 }
             }
         }
-        Section {
-            Toggle("Do Not Disturb", isOn: Binding(get: { quiet.on }, set: { quiet.on = $0; save() }))
-                .accessibilityIdentifier("calls-dnd")
-            if quiet.on {
-                DatePicker(selection: minuteBinding(\.startMinute), displayedComponents: .hourAndMinute) { Text("From") }
-                    .accessibilityIdentifier("calls-dnd-from")
-                DatePicker(selection: minuteBinding(\.endMinute), displayedComponents: .hourAndMinute) { Text("Until") }
-                    .accessibilityIdentifier("calls-dnd-until")
-            }
-        } footer: {
-            Text("This device doesn't ring during these hours. Your other devices keep their own setting.")
-        }
     }
 
     private func change(on: Bool, from: String) {
@@ -126,8 +111,6 @@ struct VoiciCallsSettingsSection: View {
             busy = false
         }
     }
-
-    private func save() { CallSettingsStore.setQuietHours(quiet) }
 
     private func publishHours(_ hours: VoiciCallHours?) {
         busy = true
@@ -160,16 +143,6 @@ struct VoiciCallsSettingsSection: View {
         let f = DateFormatter()
         f.locale = .current
         return f.veryShortStandaloneWeekdaySymbols[(d + 1) % 7]
-    }
-
-    private func minuteBinding(_ kp: WritableKeyPath<CallQuietHours, Int>) -> Binding<Date> {
-        Binding(get: {
-            Calendar.current.date(bySettingHour: quiet[keyPath: kp] / 60, minute: quiet[keyPath: kp] % 60, second: 0, of: Date()) ?? Date()
-        }, set: { d in
-            let c = Calendar.current.dateComponents([.hour, .minute], from: d)
-            quiet[keyPath: kp] = (c.hour ?? 0) * 60 + (c.minute ?? 0)
-            save()
-        })
     }
 }
 #endif

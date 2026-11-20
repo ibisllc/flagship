@@ -6569,10 +6569,6 @@
     "en": "Remove",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:117"
   },
-  "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.": {
-    "en": "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:120"
-  },
   "This is a sample account. Its page is an example, so you can't change it.": {
     "en": "This is a sample account. Its page is an example, so you can't change it.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:349"
@@ -10350,10 +10346,6 @@
     "en": "Social",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:35"
   },
-  "Page options": {
-    "en": "Page options",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:159"
-  },
   "Only an admin device can publish your page.": {
     "en": "Only an admin device can publish your page.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:37"
@@ -10377,10 +10369,6 @@
   "No requests. New conversations wait here until you reply or accept them.": {
     "en": "No requests. New conversations wait here until you reply or accept them.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/MessagesTab.swift:181"
-  },
-  "No messages yet. Turn on Accept messages in Page options to get them.": {
-    "en": "No messages yet. Turn on Accept messages in Page options to get them.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:298"
   },
   "Publishing your page…": {
     "en": "Publishing your page…",
@@ -10426,10 +10414,6 @@
   "New messages are sealed to a new key. This device keeps reading the old ones.": {
     "en": "New messages are sealed to a new key. This device keeps reading the old ones.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:419"
-  },
-  "Remove page": {
-    "en": "Remove page",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift:424"
   },
   "Rotate": {
     "en": "Rotate",
@@ -15918,10 +15902,6 @@
     "en": "People whose conversation you accepted",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
   },
-  "Anyone signed in with Flagship": {
-    "en": "Anyone signed in with Flagship",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
-  },
   "Calls": {
     "en": "Calls",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
@@ -15930,16 +15910,8 @@
     "en": "Publish your page to take calls.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
   },
-  "Visitors signed in with Flagship can call you from your page. Your admin devices ring.": {
-    "en": "Visitors signed in with Flagship can call you from your page. Your admin devices ring.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
-  },
   "In your region, calls ring only while Flagship is open.": {
     "en": "In your region, calls ring only while Flagship is open.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
-  },
-  "Do Not Disturb": {
-    "en": "Do Not Disturb",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
   },
   "From": {
@@ -15948,10 +15920,6 @@
   },
   "Until": {
     "en": "Until",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
-  },
-  "This device doesn't ring during these hours. Your other devices keep their own setting.": {
-    "en": "This device doesn't ring during these hours. Your other devices keep their own setting.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (voi.ci calls settings, missed calls)"
   },
   "Keys to rotate": {
@@ -16406,10 +16374,6 @@
     "en": "Outgoing call · %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:157"
   },
-  "Only at certain hours": {
-    "en": "Only at certain hours",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:50"
-  },
   "Calls can ring at any time.": {
     "en": "Calls can ring at any time.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift:82"
@@ -16445,14 +16409,6 @@
   "The conversation wasn't deleted.": {
     "en": "The conversation wasn't deleted.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/DestructiveAuth.swift"
-  },
-  "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": {
-    "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:112"
-  },
-  "Calls from people signed in with Flagship are on. You can turn them off in Page options.": {
-    "en": "Calls from people signed in with Flagship are on. You can turn them off in Page options.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift:127"
   },
   "Hello. I am using the Flagship app, from flagshipserver.com": {
     "en": "Hello. I am using the Flagship app, from flagshipserver.com",
@@ -17107,5 +17063,49 @@
   "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": {
     "en": "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift"
+  },
+  "Turn on safe messages, calls and posts": {
+    "en": "Turn on safe messages, calls and posts",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciIntroSheet.swift"
+  },
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/%@.": {
+    "en": "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/%@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciIntroSheet.swift"
+  },
+  "No thanks": {
+    "en": "No thanks",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciIntroSheet.swift"
+  },
+  "Social options": {
+    "en": "Social options",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift"
+  },
+  "Turn off social features": {
+    "en": "Turn off social features",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift"
+  },
+  "Turn off social features?": {
+    "en": "Turn off social features?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift"
+  },
+  "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.": {
+    "en": "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift"
+  },
+  "Set business hours": {
+    "en": "Set business hours",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift"
+  },
+  "No messages yet. Turn on Accept messages in Social options to get them.": {
+    "en": "No messages yet. Turn on Accept messages in Social options to get them.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/SocialTab.swift"
+  },
+  "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": {
+    "en": "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift"
+  },
+  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": {
+    "en": "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift"
   }
 }

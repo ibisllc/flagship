@@ -110,6 +110,9 @@ public final class AppState {
     /// "Create a new account" on the "account was removed" screen: the
     /// device's copy is removed, then Welcome opens the create flow at once.
     public var openCreateAccountOnWelcome = false
+    /// A new account's one-time voi.ci intro is waiting (its username): set by the create flow when Secure your account
+    /// closes, shown once by the shell (VoiciIntro in FlagshipUI keeps the per-account record).
+    public var pendingVoiciIntro: String?
 
     /// B12 — when true, the app requires a successful biometric
     /// evaluation at launch (and on resume from cold-background)

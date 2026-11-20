@@ -30,6 +30,8 @@ public struct SocialTab: View {
     @State private var profileOffset: CGFloat = 0
     @State private var profileBoxHeight: CGFloat = 320
     @State private var flow = PagePublicFlow()
+    /// Set by the new account's "Turn on" before it opens the Profile: go public once there.
+    @MainActor static var goPublicOnOpen = false
     @State private var draft = PageDraft()
     @State private var showOptions = false
     @State private var calling: VoiciOutgoingCall?
@@ -83,7 +85,14 @@ public struct SocialTab: View {
             _ = linker.consume()
             path = []
             section = .profile
-            Task { await store.refresh() }
+            let goPublic = Self.goPublicOnOpen
+            Self.goPublicOnOpen = false
+            Task {
+                await store.refresh()
+                // The new account's "Turn on" (VoiciIntro): the Public switch's own steps, so the rules and the public
+                // warning still come first; a refusal shows its sentence here, on the Profile.
+                if goPublic { flow.setPublic(true) }
+            }
         default:
             break
         }
@@ -177,7 +186,7 @@ public struct SocialTab: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text("Page options"))
+            .accessibilityLabel(Text("Social options"))
             .accessibilityIdentifier("page-options")
         }
         return VStack(alignment: .leading, spacing: 4) {
@@ -383,7 +392,7 @@ public struct SocialTab: View {
         if store.isPublic && store.index?.acceptsMessages == 1 {
             return String(localized: "No messages yet. People who sign in on your page can write to you here.")
         }
-        return String(localized: "No messages yet. Turn on Accept messages in Page options to get them.")
+        return String(localized: "No messages yet. Turn on Accept messages in Social options to get them.")
     }
 
     // MARK: publish bar
@@ -447,8 +456,8 @@ public struct SocialTab: View {
     }
 }
 
-/// Page options, behind the title row's ⋯: the theme, the link, Accept messages, the visitor-side settings (websites
-/// signed in to, the inbox key, the rules) and Remove page.
+/// Social options, behind the title row's ⋯: the theme, the link, Accept messages, the visitor-side settings (websites
+/// signed in to, the inbox key, the rules) and Turn off social features (the page, its messages and calls).
 struct PageOptionsSheet: View {
     let flow: PagePublicFlow
     @Bindable var draft: PageDraft
@@ -533,7 +542,7 @@ struct PageOptionsSheet: View {
                 }
                 if store.isAdmin, store.isPublic {
                     Section {
-                        Button("Remove page", role: .destructive) { confirmRemove = true }
+                        Button("Turn off social features", role: .destructive) { confirmRemove = true }
                             .accessibilityIdentifier("page-remove")
                     }
                 }
@@ -541,7 +550,7 @@ struct PageOptionsSheet: View {
                     Section { Text(verbatim: e).font(.footnote).foregroundStyle(.secondary) }
                 }
             }
-            .navigationTitle(Text("Page options"))
+            .navigationTitle(Text("Social options"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("page-options-done") }
@@ -551,15 +560,15 @@ struct PageOptionsSheet: View {
             } message: {
                 Text("Your page is published again with the new key.")
             }
-            .alert("Remove your page from voi.ci?", isPresented: $confirmRemove) {
+            .alert("Turn off social features?", isPresented: $confirmRemove) {
                 Button("Cancel", role: .cancel) {}
-                Button("Remove", role: .destructive) {
+                Button("Turn off", role: .destructive) {
                     flow.remove()
                     dismiss()
                 }
                 .accessibilityIdentifier("page-remove-confirm")
             } message: {
-                Text("Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.")
+                Text("Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.")
             }
             .sheet(isPresented: $showRules) { VoiciRulesSheet {} }
         }

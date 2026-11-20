@@ -66312,47 +66312,6 @@
         }
       }
     },
-    "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Los visitantes verán «Aquí no hay ninguna página». Tus publicaciones y tu perfil se quedan en tus dispositivos, así que puedes volver a activarla."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les visiteurs verront « Il n’y a pas de page ici. » Vos publications et votre profil restent sur vos appareils, vous pouvez donc la réactiver."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Besucher sehen dann „Hier gibt es keine Seite.“ Deine Beiträge und dein Profil bleiben auf deinen Geräten, sodass du sie wieder einschalten kannst."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Os visitantes verão “Não há nenhuma página aqui.” Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "訪問者には「ここにはページがありません。」と表示されます。投稿とプロフィールはデバイスに残るので、もう一度オンにできます。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "访客会看到“这里没有页面。”你的帖子和个人资料会保留在你的设备上，因此你可以再次打开它。"
-          }
-        }
-      }
-    },
     "This is a sample account. Its page is an example, so you can't change it.": {
       "extractionState": "manual",
       "localizations": {
@@ -103786,47 +103745,6 @@
         }
       }
     },
-    "Page options": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Opciones de la página"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Options de la page"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seitenoptionen"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Opções da página"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ページのオプション"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "页面选项"
-          }
-        }
-      }
-    },
     "Only an admin device can publish your page.": {
       "extractionState": "manual",
       "localizations": {
@@ -104069,47 +103987,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "没有请求。新的对话会在这里等待，直到你回复或接受。"
-          }
-        }
-      }
-    },
-    "No messages yet. Turn on Accept messages in Page options to get them.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aún no hay mensajes. Activa Aceptar mensajes en Opciones de la página para recibirlos."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pas encore de messages. Activez Accepter les messages dans Options de la page pour en recevoir."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Noch keine Nachrichten. Aktiviere „Nachrichten annehmen“ unter Seitenoptionen, um welche zu bekommen."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ainda não há mensagens. Ative Aceitar mensagens em Opções da página para recebê-las."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "まだメッセージはありません。「ページのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有消息。在“页面选项”中打开“接收消息”即可收到消息。"
           }
         }
       }
@@ -104616,47 +104493,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "新消息会用新密钥封存。此设备仍可读取旧消息。"
-          }
-        }
-      }
-    },
-    "Remove page": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quitar la página"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retirer la page"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seite entfernen"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remover página"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ページを削除"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除页面"
           }
         }
       }
@@ -152672,47 +152508,6 @@
         }
       }
     },
-    "Anyone signed in with Flagship": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cualquiera que haya iniciado sesión con Flagship"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toute personne connectée avec Flagship"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alle, die mit Flagship angemeldet sind"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Qualquer pessoa conectada com o Flagship"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Flagship でサインインしている全員"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "任何用 Flagship 登录的人"
-          }
-        }
-      }
-    },
     "Calls": {
       "extractionState": "manual",
       "localizations": {
@@ -152795,47 +152590,6 @@
         }
       }
     },
-    "Visitors signed in with Flagship can call you from your page. Your admin devices ring.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Los visitantes que iniciaron sesión con Flagship pueden llamarte desde tu página. Suenan tus dispositivos de administrador."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les visiteurs connectés avec Flagship peuvent vous appeler depuis votre page. Vos appareils administrateurs sonnent."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mit Flagship angemeldete Besucher können dich von deiner Seite aus anrufen. Deine Administratorgeräte klingeln."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Visitantes conectados com o Flagship podem ligar para você a partir da sua página. Seus dispositivos de administrador tocam."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Flagship でサインインした訪問者は、あなたのページから通話できます。管理者デバイスが着信します。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "用 Flagship 登录的访客可以从你的页面给你打电话。你的管理员设备会响铃。"
-          }
-        }
-      }
-    },
     "In your region, calls ring only while Flagship is open.": {
       "extractionState": "manual",
       "localizations": {
@@ -152873,47 +152627,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "在你所在的地区，只有在 Flagship 打开时来电才会响铃。"
-          }
-        }
-      }
-    },
-    "Do Not Disturb": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No molestar"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ne pas déranger"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nicht stören"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Não perturbe"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "おやすみモード"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "勿扰模式"
           }
         }
       }
@@ -152996,47 +152709,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "结束"
-          }
-        }
-      }
-    },
-    "This device doesn't ring during these hours. Your other devices keep their own setting.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Este dispositivo no suena durante estas horas. Tus otros dispositivos mantienen su propio ajuste."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cet appareil ne sonne pas pendant ces heures. Vos autres appareils gardent leur propre réglage."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dieses Gerät klingelt in diesen Stunden nicht. Deine anderen Geräte behalten ihre eigene Einstellung."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Este dispositivo não toca nesses horários. Seus outros dispositivos mantêm a própria configuração."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このデバイスはこの時間帯に着信音を鳴らしません。ほかのデバイスはそれぞれの設定に従います。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此设备在这些时段不会响铃。你的其他设备保留各自的设置。"
           }
         }
       }
@@ -157674,47 +157346,6 @@
         }
       }
     },
-    "Only at certain hours": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Solo a ciertas horas"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seulement à certaines heures"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nur zu bestimmten Zeiten"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Só em certos horários"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "特定の時間のみ"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仅在特定时间"
-          }
-        }
-      }
-    },
     "Calls can ring at any time.": {
       "extractionState": "manual",
       "localizations": {
@@ -158080,88 +157711,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "对话未被删除。"
-          }
-        }
-      }
-    },
-    "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Los mensajes y las llamadas de personas que iniciaron sesión con Flagship están activados. Puedes desactivarlos en Opciones de la página."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les messages et les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nachrichten und Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mensagens e chamadas de pessoas conectadas com o Flagship estão ativadas. Você pode desativá-las em Opções da página."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Flagship でサインインした人からのメッセージと通話はオンになっています。ページのオプションでオフにできます。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "来自用 Flagship 登录的人的消息和通话已开启。你可以在页面选项中关闭它们。"
-          }
-        }
-      }
-    },
-    "Calls from people signed in with Flagship are on. You can turn them off in Page options.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Las llamadas de personas que iniciaron sesión con Flagship están activadas. Puedes desactivarlas en Opciones de la página."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les appels des personnes connectées avec Flagship sont activés. Vous pouvez les désactiver dans Options de la page."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chamadas de pessoas conectadas com o Flagship estão ativadas. Você pode desativá-las em Opções da página."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Flagship でサインインした人からの通話はオンになっています。ページのオプションでオフにできます。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "来自用 Flagship 登录的人的通话已开启。你可以在页面选项中关闭它们。"
           }
         }
       }
@@ -164599,6 +164148,457 @@
           "stringUnit": {
             "state": "translated",
             "value": "关闭时，会要求搜索引擎不要收录你的页面。有链接的人仍然可以打开它。"
+          }
+        }
+      }
+    },
+    "Turn on safe messages, calls and posts": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activa mensajes, llamadas y publicaciones seguros"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activez des messages, des appels et des publications sécurisés"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sichere Nachrichten, Anrufe und Beiträge einschalten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ative mensagens, chamadas e publicações seguras"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安全なメッセージ・通話・投稿をオンにする"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启安全的消息、通话和动态"
+          }
+        }
+      }
+    },
+    "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/%@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deja que la gente te escriba y te llame, y comparte tus novedades. Todo está protegido frente a los ordenadores cuánticos. Tu página estará en voi.ci/%@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laissez les gens vous écrire et vous appeler, et partagez vos nouvelles. Tout est protégé contre les ordinateurs quantiques. Votre page sera sur voi.ci/%@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lass dir Nachrichten schreiben und dich anrufen, und teile deine Neuigkeiten. Alles ist gegen Quantencomputer geschützt. Deine Seite ist dann unter voi.ci/%@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixe as pessoas mandarem mensagens e ligarem para você, e compartilhe suas novidades. Tudo é protegido contra computadores quânticos. Sua página vai ficar em voi.ci/%@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メッセージや通話を受け取り、近況をシェアできます。すべて量子コンピューターへの対策がされています。あなたのページは voi.ci/%@ になります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "让别人给你发消息、打电话，并分享你的动态。一切都能抵御量子计算机。你的页面将位于 voi.ci/%@。"
+          }
+        }
+      }
+    },
+    "No thanks": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No, gracias"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non merci"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nein danke"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não, obrigado"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今はしない"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不用了"
+          }
+        }
+      }
+    },
+    "Social options": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opciones sociales"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options sociales"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Social-Optionen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opções sociais"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ソーシャルのオプション"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "社交选项"
+          }
+        }
+      }
+    },
+    "Turn off social features": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivar las funciones sociales"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactiver les fonctions sociales"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Social-Funktionen ausschalten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desativar os recursos sociais"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ソーシャル機能をオフにする"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭社交功能"
+          }
+        }
+      }
+    },
+    "Turn off social features?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Desactivar las funciones sociales?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactiver les fonctions sociales ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Social-Funktionen ausschalten?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desativar os recursos sociais?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ソーシャル機能をオフにしますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要关闭社交功能吗？"
+          }
+        }
+      }
+    },
+    "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu página de voi.ci se elimina y dejan de llegar mensajes y llamadas a ella. Tus publicaciones y tu perfil se quedan en tus dispositivos, así que puedes volver a activarla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre page voi.ci est retirée, et les messages et les appels vers elle s’arrêtent. Vos publications et votre profil restent sur vos appareils, vous pouvez donc la réactiver."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine voi.ci-Seite wird entfernt, und Nachrichten und Anrufe an sie hören auf. Deine Beiträge und dein Profil bleiben auf deinen Geräten, du kannst sie also wieder einschalten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua página no voi.ci é removida, e as mensagens e chamadas para ela param. Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "voi.ci のページが削除され、ページへのメッセージと通話も止まります。投稿とプロフィールはデバイスに残るので、もう一度オンにできます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的 voi.ci 页面会被移除，发往它的消息和通话也会停止。你的帖子和个人资料会保留在你的设备上，所以你可以再次开启。"
+          }
+        }
+      }
+    },
+    "Set business hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Establecer horario de atención"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Définir des heures d’ouverture"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geschäftszeiten festlegen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Definir horário de atendimento"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "受付時間を設定"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置营业时间"
+          }
+        }
+      }
+    },
+    "No messages yet. Turn on Accept messages in Social options to get them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no hay mensajes. Activa Aceptar mensajes en Opciones sociales para recibirlos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore de messages. Activez Accepter les messages dans Options sociales pour en recevoir."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Nachrichten. Aktiviere „Nachrichten annehmen“ unter Social-Optionen, um welche zu bekommen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não há mensagens. Ative Aceitar mensagens em Opções sociais para recebê-las."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まだメッセージはありません。「ソーシャルのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有消息。在“社交选项”中打开“接收消息”即可收到消息。"
+          }
+        }
+      }
+    },
+    "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los mensajes y las llamadas están activados. Quien llama inicia sesión con Flagship y te deja devolverle la llamada. Puedes desactivarlos en Opciones sociales."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les messages et les appels sont activés. Les personnes qui appellent se connectent avec Flagship et vous laissent les rappeler. Vous pouvez les désactiver dans Options sociales."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten und Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagens e chamadas estão ativadas. Quem liga entra com o Flagship e deixa você retornar a chamada. Você pode desativá-las em Opções sociais."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メッセージと通話はオンになっています。発信者は Flagship でサインインし、あなたが折り返し電話できるようにします。「ソーシャルのオプション」でオフにできます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "消息和通话已开启。来电者需用 Flagship 登录，并允许你回拨。你可以在社交选项中关闭它们。"
+          }
+        }
+      }
+    },
+    "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las llamadas están activadas. Quien llama inicia sesión con Flagship y te deja devolverle la llamada. Puedes desactivarlas en Opciones sociales."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les appels sont activés. Les personnes qui appellent se connectent avec Flagship et vous laissent les rappeler. Vous pouvez les désactiver dans Options sociales."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As chamadas estão ativadas. Quem liga entra com o Flagship e deixa você retornar a chamada. Você pode desativá-las em Opções sociais."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通話はオンになっています。発信者は Flagship でサインインし、あなたが折り返し電話できるようにします。「ソーシャルのオプション」でオフにできます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通话已开启。来电者需用 Flagship 登录，并允许你回拨。你可以在社交选项中关闭它们。"
           }
         }
       }

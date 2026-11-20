@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import FlagshipCore
 import FlagshipAPI
+import Flagship
 
 /// Adaptive root shell.
 ///
@@ -42,6 +43,12 @@ public struct RootShell: View {
     /// site) is presented the same way: a full-screen cover, account-agnostic,
     /// gated behind the lock screen until the visitor unlocks (they AID-sign).
     @State private var pendingKnock: KnockTarget?
+    /// The account whose one-time voi.ci intro is showing (VoiciIntro).
+    @State private var voiciIntroFor: VoiciIntroTarget?
+    private struct VoiciIntroTarget: Identifiable, Equatable {
+        let username: String
+        var id: String { username }
+    }
     /// A backup's browser download page asked this phone to approve (QR).
     @State private var pendingBackupApproval: BackupApprovalTarget?
     @Environment(\.podScreensClients) private var podClients
@@ -278,6 +285,14 @@ public struct RootShell: View {
                 }
             }
         }
+        // A new account's one-time voi.ci intro, once onboarding has closed and the app is unlocked.
+        .sheet(item: $voiciIntroFor) { t in
+            VoiciIntroSheet(username: t.username) {
+                SocialTab.goPublicOnOpen = true
+                linker.pending = .pageEditor
+            }
+        }
+        .task(id: "\(app.pendingVoiciIntro ?? "")|\(app.currentUser ?? "")|\(app.isUnlocked)|\(app.isPaired)") { await showVoiciIntroIfDue() }
         // The watch's Approve reached a session without its Face ID yet.
         .watchWaitingPrompt()
         // B12 — re-lock when the app moves to background. The .inactive
@@ -308,6 +323,7 @@ public struct RootShell: View {
                 pendingBackupApproval = nil
                 pendingVoiciSignIn = nil
                 pendingVoucherLink = nil
+                voiciIntroFor = nil
                 MessagesStore.shared.lock()
                 lockGeneration += 1
                 PresentationSweeper.dismissAll()
@@ -332,6 +348,19 @@ public struct RootShell: View {
     /// so it only runs while unlocked + paired; the coordinator itself skips
     /// already-tokened pods and derives the IRK (one biometric) only when there's
     /// at least one unpaired pod. Safe to call repeatedly.
+    /// Shows the intro the create flow armed, after the onboarding cover has gone (a short wait, so the two
+    /// presentations don't race). Taking it records it as shown, so it never comes back for that account here.
+    private func showVoiciIntroIfDue() async {
+        // The armed account, or (after a relaunch before it showed) the current one if its intro is still pending.
+        // Only a device that can publish the page is offered it (a new account's creating device is its admin device).
+        guard let user = app.pendingVoiciIntro ?? app.currentUser, app.isUnlocked, app.isPaired, Keystore.hasAdminRoot,
+              VoiciIntro.isPending(username: user) else { return }
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        guard !Task.isCancelled, app.isUnlocked, app.isPaired, voiciIntroFor == nil else { return }
+        app.pendingVoiciIntro = nil
+        if VoiciIntro.take(username: user) { voiciIntroFor = VoiciIntroTarget(username: user) }
+    }
+
     private func runAutoPair() {
         guard app.isUnlocked, app.isPaired, let username = app.currentUser, !username.isEmpty else { return }
         let coord = autoPair ?? AutoPairCoordinator(

@@ -176,6 +176,64 @@ final class GymMessagesTests: GymSweepCase {
         XCTAssertFalse(app.alerts["Make your page public?"].exists, "The warning is shown once per account.")
     }
 
+    /// A new account (owner, 2026-11-20): once, the "Turn on safe messages, calls and posts" offer with `.com`'s promo;
+    /// Turn on opens the Profile and goes public the usual way (rules, warning), with calls from callback callers.
+    /// Social options then has Set business hours, no Do Not Disturb and no "Anyone signed in with Flagship", and
+    /// Turn off social features asks first.
+    func test_aNewAccountTurnsOnSafeMessagesThenTurnsThemOff() throws {
+        let app = launch(tab: "home", ["-smoke-messages-empty", "-smoke-voici-intro", "-smoke-voici-intro-promo", "Set it up this week for a free month."])
+        let promo = any(app, "voici-intro-promo")
+        XCTAssertTrue(promo.waitForExistence(timeout: 20), "The offer shows with .com's promo.")
+        XCTAssertTrue(text(app, containing: "Turn on safe messages, calls and posts").exists)
+        XCTAssertTrue(text(app, containing: "Your page will be at voi.ci/bright-maple.").exists)
+        shot(app, "voici-intro-promo")
+        any(app, "voici-intro-turn-on").tap()
+        let agree = any(app, "rules-agree")
+        XCTAssertTrue(agree.waitForExistence(timeout: 15), "The rules still come first.")
+        agree.tap()
+        let warning = app.alerts["Make your page public?"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 10))
+        XCTAssertTrue(warning.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Callers sign in with Flagship and let you call them back'")).firstMatch.exists)
+        warning.buttons["Make it public"].firstMatch.tap()
+        wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
+        shot(app, "voici-intro-turned-on")
+
+        any(app, "page-options").tap()
+        XCTAssertTrue(app.navigationBars["Social options"].waitForExistence(timeout: 5))
+        let from = any(app, "page-calls-from")
+        XCTAssertTrue(reveal(app, from), "Calls are on from the first publish.")
+        XCTAssertFalse(app.buttons["Anyone signed in with Flagship"].exists)
+        XCTAssertFalse(app.staticTexts["Anyone signed in with Flagship"].exists)
+        XCTAssertTrue(reveal(app, any(app, "calls-hours")))
+        XCTAssertTrue(app.switches["Set business hours"].exists || text(app, containing: "Set business hours").exists)
+        XCTAssertFalse(any(app, "calls-dnd").exists)
+        shot(app, "social-options-calls")
+        let off = any(app, "page-remove")
+        XCTAssertTrue(reveal(app, off))
+        off.tap()
+        let confirm = app.alerts["Turn off social features?"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirm.staticTexts.matching(NSPredicate(format: "label CONTAINS 'messages and calls to it stop'")).firstMatch.exists)
+        shot(app, "social-off-confirm")
+        confirm.buttons["Turn off"].firstMatch.tap()
+        wait(any(app, "messages-page-status"), "label == 'Not public'", timeout: 20)
+    }
+
+    func test_theOfferWithoutAPromoAndNoThanks() throws {
+        let app = launch(tab: "home", ["-smoke-messages-empty", "-smoke-voici-intro"])
+        let no = any(app, "voici-intro-no")
+        XCTAssertTrue(no.waitForExistence(timeout: 20))
+        XCTAssertFalse(any(app, "voici-intro-promo").exists, "No promo from .com: no line.")
+        shot(app, "voici-intro")
+        no.tap()
+        XCTAssertTrue(any(app, "voici-intro").waitForNonExistence(timeout: 5))
+    }
+
+    func test_aDeviceWithoutTheAdminRootIsNotOffered() throws {
+        let app = launch(tab: "home", admin: false, ["-smoke-messages-empty", "-smoke-voici-intro"])
+        XCTAssertFalse(any(app, "voici-intro").waitForExistence(timeout: 6))
+    }
+
     func test_editorChangesWaitInOneBarUntilPublish() throws {
         let app = openMessages(["-smoke-messages"])
         wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
@@ -228,10 +286,11 @@ final class GymMessagesTests: GymSweepCase {
         any(app, "page-options").tap()
         let ink = any(app, "page-theme-ink")
         XCTAssertTrue(ink.waitForExistence(timeout: 5))
-        for id in ["page-copy-link", "page-accept-messages", "page-accept-calls", "calls-dnd", "messages-settings-sites",
+        for id in ["page-copy-link", "page-accept-messages", "page-accept-calls", "messages-settings-sites",
                    "messages-settings-rotate", "messages-settings-rules", "page-remove"] {
-            XCTAssertTrue(reveal(app, any(app, id)), "\(id) is in Page options.")
+            XCTAssertTrue(reveal(app, any(app, id)), "\(id) is in Social options.")
         }
+        XCTAssertFalse(any(app, "calls-dnd").exists, "No Do Not Disturb of the app's own: the phone's Focus decides.")
         app.swipeDown(velocity: .slow)
         let theme = any(app, "page-theme-ink")
         if !theme.isHittable { app.swipeDown() }
@@ -247,7 +306,7 @@ final class GymMessagesTests: GymSweepCase {
         wait(any(app, "messages-page-status"), "label == 'Public'", timeout: 20)
         any(app, "page-options").tap()
         let toggle = app.switches["page-search"].firstMatch
-        XCTAssertTrue(reveal(app, toggle), "The switch is in Page options while the page is public.")
+        XCTAssertTrue(reveal(app, toggle), "The switch is in Social options while the page is public.")
         XCTAssertEqual(toggle.value as? String, "0", "Hidden from search engines by default.")
         let probe = any(app, "gym-page-index")
         XCTAssertTrue(reveal(app, probe))

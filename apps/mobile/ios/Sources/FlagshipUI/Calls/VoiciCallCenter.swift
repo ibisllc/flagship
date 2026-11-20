@@ -46,20 +46,16 @@ public final class VoiciCallCenter: NSObject {
     @ObservationIgnored private var limitTask: Task<Void, Never>?
     @ObservationIgnored private var gaveUp = false
 
-    /// This device's Do Not Disturb hours (Settings → Messages → Calls); read when a call arrives.
-    @ObservationIgnored public var quietHours: () -> CallQuietHours = { CallSettingsStore.quietHours() }
     @ObservationIgnored public var clock: () -> Date = { Date() }
     /// The owner's synced call hours, this device's copy.
     @ObservationIgnored public var ownerHours: () -> VoiciCallSettingsValue? = { CallSettingsStore.ownerHours() }
 
-    /// A call that arrives now rings here only outside this device's Do Not Disturb hours. A quiet device stays out of
-    /// the room, so another device can answer and an unanswered call becomes a missed call.
+    /// A call that arrives now rings here only while fresh and inside the owner's business hours (synced, sealed;
+    /// docs/voici-calls.md, option c): outside them no device rings, and the call ends as a missed call. The phone's own
+    /// Do Not Disturb and Focus are CallKit's: the call is reported normally and iOS decides whether it makes a sound.
     func shouldRing(issuedAt: Int64) -> Bool {
-        let now = clock()
-        let ms = Int64(now.timeIntervalSince1970 * 1000)
-        // The owner's synced call hours (docs/voici-calls.md, option c): outside them no device rings, and the call ends
-        // as a missed call, as for Do Not Disturb.
-        return ms - issuedAt <= VoiciCalls.ringMs && !quietHours().isQuiet(at: now) && VoiciCallSettingsSync.allows(ownerHours()?.hours, now: ms)
+        let ms = Int64(clock().timeIntervalSince1970 * 1000)
+        return ms - issuedAt <= VoiciCalls.ringMs && VoiciCallSettingsSync.allows(ownerHours()?.hours, now: ms)
     }
 
     /// The WebRTC implementation: our libwebrtc build when the app was built with it (CallMediaFactory), else the stub.
@@ -96,6 +92,7 @@ public final class VoiciCallCenter: NSObject {
     /// Called once at launch: decides the ringing mode and registers for VoIP pushes where CallKit is allowed.
     public func start() {
         noRingMode = UserDefaults.standard.bool(forKey: Self.noRingKey)
+        CallSettingsStore.forgetRemovedSettings()
         // A page's first publish turns calls on (owner decision 2026-11-16): register this phone at once, as turning
         // calls on by hand does, instead of at the next unlock.
         MessagesStore.callsTurnedOn = { [weak self] in self?.accountChanged() }
@@ -573,9 +570,9 @@ extension VoiciCallCenter: PKPushRegistryDelegate {
             provider.reportNewIncomingCall(with: id, update: u) { error in
                 Task { @MainActor in
                     guard error == nil, let call, !busy, self.shouldRing(issuedAt: call.issuedAt) else {
-                        // A malformed, late or second call, or Do Not Disturb here: reported (Apple requires it), then
-                        // ended at once.
-                        let why = error != nil ? "callkit-refused" : call == nil ? "malformed-push" : busy ? "busy" : "late-or-do-not-disturb"
+                        // A malformed, late or second call, or outside the business hours: reported (Apple requires
+                        // it), then ended at once.
+                        let why = error != nil ? "callkit-refused" : call == nil ? "malformed-push" : busy ? "busy" : "late-or-outside-hours"
                         voiciCallLog.notice("call not taken: \(why, privacy: .public)")
                         provider.reportCall(with: id, endedAt: nil, reason: call == nil || busy ? .failed : .unanswered)
                         return completion()
