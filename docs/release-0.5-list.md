@@ -106,4 +106,6 @@ over once "let's start 0.5" is said.
     that is gone: make it optional and create its own branch only when a device test is planned.
   - need_gym_secret reads GYM_ADMIN_SECRET with grep|cut and keeps the quotes of a quoted value in .gym-secrets.env
     (step 37's gym sweep got 403): strip quotes or source the file.
+  - no Experimental label on anything (owner, 2026-11-20, regardless of testing): remove step 39's Windows-acceptance
+    gate for the tag and consider deleting the STUDIO_EXPERIMENTAL switch and its tag markup entirely.
   Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
