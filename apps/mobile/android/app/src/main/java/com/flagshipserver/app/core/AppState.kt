@@ -143,6 +143,15 @@ class AppState(
     fun clearSecureAccountNudge() { _pendingSecureAccountNudge.value = false }
 
     /**
+     * The account this device just CREATED (create path only, armed with the backup nudge): the one-time voi.ci intro
+     * shows for it once that nudge is done (VoiciIntro). Join, recovery sign-in and demo never arm it.
+     */
+    private val _pendingVoiciIntro = MutableStateFlow<String?>(null)
+    val pendingVoiciIntro: StateFlow<String?> = _pendingVoiciIntro.asStateFlow()
+    fun armVoiciIntro(username: String) { _pendingVoiciIntro.value = username }
+    fun clearVoiciIntro() { _pendingVoiciIntro.value = null }
+
+    /**
      * E7 — true once we've observed that this device's local push
      * the current account-scoped device identity is rejected by an
      * authenticated directory read, meaning another device ran a revoke,

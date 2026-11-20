@@ -205,6 +205,7 @@ class OpenAccountViewModel(
             //    BEFORE flipping isPaired so the shell never renders
             //    without the overlay above it. Create path only.
             app.armSecureAccountNudge()
+            app.armVoiciIntro(username)
             app.completeOnboarding(username = username, pods = emptyList())
             // 4. Name this device. completeOnboarding upserts the profile
             //    with the (absent) device-capability label; re-upsert with

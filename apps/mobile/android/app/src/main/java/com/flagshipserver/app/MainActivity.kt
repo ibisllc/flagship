@@ -1177,6 +1177,7 @@ private fun AppRoot(
     val pods by app.pods.collectAsState()
 
     val showSecureAccount by app.pendingSecureAccountNudge.collectAsState()
+    val voiciIntroFor by app.pendingVoiciIntro.collectAsState()
 
     // Security notices (docs/security-notices.md): the banner above the content,
     // and the full-screen lock for a verified update-required notice. While the
@@ -1308,6 +1309,34 @@ private fun AppRoot(
             com.flagshipserver.app.ui.screens.SecureAccountOverlay(
                 onDismiss = { app.clearSecureAccountNudge() },
             )
+        }
+        // The one-time voi.ci intro (VoiciIntro): a created account, once its backup step is done, once per device.
+        voiciIntroFor?.let { username ->
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val introStore = remember { com.flagshipserver.app.core.voici.VoiciIntroStore(ctx) }
+            val deepLinker = LocalDeepLinker.current
+            val show = remember(username, showSecureAccount, isPaired) {
+                isPaired && com.flagshipserver.app.core.voici.VoiciIntro.shouldShow(
+                    com.flagshipserver.app.core.voici.VoiciIntro.Path.Created, username, showSecureAccount, introStore.shown(username),
+                )
+            }
+            if (show) {
+                LaunchedEffect(username) { introStore.markShown(username) }
+                com.flagshipserver.app.ui.screens.VoiciIntroSheet(
+                    username = username,
+                    loadPromo = {
+                        if (com.flagshipserver.app.core.Variant.usesMockClients) null else com.flagshipserver.app.core.voici.VoiciIntro.fetchPromo()
+                    },
+                    onSetUp = {
+                        app.clearVoiciIntro()
+                        com.flagshipserver.app.ui.screens.SocialSection.current.value = com.flagshipserver.app.ui.screens.SocialSection.PROFILE
+                        deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.PageEditor)
+                    },
+                    onLater = { app.clearVoiciIntro() },
+                )
+            } else if (!showSecureAccount && isPaired) {
+                LaunchedEffect(username) { app.clearVoiciIntro() }
+            }
         }
         }
         }
