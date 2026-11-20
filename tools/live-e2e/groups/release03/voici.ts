@@ -659,6 +659,8 @@ export const voici: Group = {
 
       // ── the real site in a headless browser ─────────────────────────────────────────────────────────────────────
       let footerHrefs: string[] | null = null;
+      let reportButtons = 0;
+      let sheetHrefs: string[] = [];
       await rec.check(`headless Chromium renders ${VOICI_ORIGIN}/${user}: the page checks out (display name, posts) with no CSP violation and no console error`, async () => {
         let chromium: any;
         try {
@@ -690,6 +692,15 @@ export const voici: Group = {
           assert(body.includes("delivered to the phone") || body.includes("admin phone was away"), `the posts aren't shown: ${short(body, 300)}`);
           assert(!/couldn.t be checked/i.test(body), "the site says the page couldn't be checked");
           footerHrefs = await page.$$eval(".site-footer a", (as: Array<{ href: string }>) => as.map((a) => a.href));
+          // One report control in the footer ("Report this page"); its sheet carries the abuse-page link (§9.7).
+          reportButtons = await page.$$eval(".site-footer button.footer-item", (bs: unknown[]) => bs.length);
+          if (reportButtons === 1) {
+            await page.click(".site-footer button.footer-item");
+            await page.waitForSelector(".sheet .report-form", { timeout: 10_000 });
+            sheetHrefs = await page.$$eval(".sheet a", (as: Array<{ href: string }>) => as.map((a) => a.href));
+            await page.keyboard.press("Escape");
+            await page.waitForSelector(".sheet", { state: "detached", timeout: 5_000 });
+          }
           await page.waitForTimeout(500);
           assert(problems.length === 0, problems.join(" | "));
           return `rendered and checked, no CSP violation or console error`;
@@ -700,8 +711,10 @@ export const voici: Group = {
 
       await rec.check("the site's footer links to the terms and to the abuse/report page (§9.7: published contact info)", async () => {
         if (!footerHrefs) throw new SkipError("the page didn't render (see the headless check)");
-        assert(footerHrefs.includes(`https://${CONTROL}/terms`) && footerHrefs.includes(`https://${CONTROL}/abuse#voici`), `footer links: ${footerHrefs.join(", ")} (a site build from before the footer links: rebuild and deploy apps/voici-site)`);
-        return footerHrefs.join(", ");
+        assert(footerHrefs.includes(`https://${CONTROL}/terms`), `footer links: ${footerHrefs.join(", ")} (a site build from before the footer links: rebuild and deploy apps/voici-site)`);
+        assert(reportButtons === 1, `the footer has ${reportButtons} report controls, expected one ("Report this page")`);
+        assert(sheetHrefs.includes(`https://${CONTROL}/abuse#voici`), `the report sheet has no abuse-page link: ${sheetHrefs.join(", ")}`);
+        return `${footerHrefs.join(", ")}; one report control, its sheet links /abuse#voici`;
       });
 
       // ── a visitor ───────────────────────────────────────────────────────────────────────────────────────────────
