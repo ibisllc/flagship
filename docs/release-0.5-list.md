@@ -46,6 +46,11 @@ over once "let's start 0.5" is said.
      "This post was removed".
    - Moderation: reports and blocks from Messages apply; App Review 1.2 (user-generated content) needs report, block
      and a takedown path before comments ship.
+   - **Owner decision (2026-11-20): who may comment = whoever the owner lets see the page** (public page: anyone the
+     page lets in; a limited page: the people it is limited to). One toggle on post creation, "Allow comments", per
+     post and sticky from the last choice. No case-by-case moderation (no approval queue). Still needed for the
+     stores and the law: the owner can delete a comment on their own post and block its author (Messages' block),
+     visitors can report a comment, and `.com` honours takedowns (DMCA, abuse).
 
 ## Carried over from 0.4
 
