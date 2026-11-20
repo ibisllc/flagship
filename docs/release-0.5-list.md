@@ -80,3 +80,22 @@ over once "let's start 0.5" is said.
   - `ADAPTER_COMPLAINT_SALT` (`openssl rand -hex 32`).
   Until then `release/adapter-vetting-keys.json` is empty, so boxes keep community adapter lookup off. 0.4 shipped
   them unset on purpose.
+- **Fit release.sh to the project as it is now** (owner, 2026-11-20: "no more skipping outdated steps"). The 0.4 run
+  had to skip or wave through steps written for 0.3. Before the 0.5 run, rewrite `scripts/release.sh` (and
+  `release.test.ts`, `docs/runbooks/0.4-deploy-sheet.md`, the browser-tasks list) so every step in `--list` is one the
+  release really needs, and one-time steps that already happened are gone, not just guarded:
+  - step 20 (deploy the 0.3 TS hub, mesh off): remove; keep the mesh-off rollback as a documented rollback, not a step.
+    Drop step 22's `require_done services` with it.
+  - steps 24-27 (relay key, admit iad1, tunnel certs and DNS, switch the feed on): one-time 0.3 mesh setup, already
+    live. Fold into one "relay mesh: check" (directory lists iad1, secrets present, both tunnel names on valid TLS);
+    keep step 28 (deploy the Rust relay) as the relay update.
+  - one-time setup that is done: 5 (catalog keys), 6 (PQ release key ceremony), 15-18 (D1 backup set-up, R2 buckets,
+    feed domain and cache rule, mesh key seed), 22 (root wildcard + CAA). Turn into read-only checks that pass
+    silently.
+  - 0.3-only steps: 36 (pre-GA scrub; the wipe tool is gone), 38 (retire the wipe tool; done), 46 (tell the 0.2
+    apps to update; make it a generic "tell older apps to update" naming the versions), 47 (hall of fame for 0.3),
+    43's feat/UX wording.
+  - re-pin after cosmetic merges (only warns since 2026-11-20): keep, and say in `--list` which steps a re-pin
+    re-opens (11 when the webapp shell moves).
+  - steps that merely wait (12 appliance builds, 31/41 publish) could merge.
+  Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
