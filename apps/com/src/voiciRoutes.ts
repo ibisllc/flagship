@@ -57,9 +57,10 @@ import { checkRateLimit, clientIp, type RateLimitEndpoint, type RateLimitEnv, ty
 import { voiciErrorResponse, voiciShellResponse, voiciSiteFile, type VoiciShellPreview } from "./voiciSite.js";
 import { deriveUrlFragment } from "@flagship/protocol";
 import { deleteVoiciAbuseAccount, isAccountBanned, isPseudonymBanned, pruneVoiciAbuse } from "./voiciAbuse.js";
+import { handleVoiciPromo, VOICI_PROMO_PATH, type VoiciPromoEnv } from "./voiciPromo.js";
 import { handleVoiciCallApi, isVoiciCallPath, voiciCallsEnabled, type VoiciCallEnv } from "./voiciCallRoutes.js";
 
-export interface VoiciEnv extends RateLimitEnv, VoiciCallEnv {
+export interface VoiciEnv extends RateLimitEnv, VoiciCallEnv, VoiciPromoEnv {
   DB?: D1Database;
   /** R2 `flagship-voici` (gym `flagship-voici-gym`), served on files.voi.ci. */
   VOICI?: VoiciBucket;
@@ -215,6 +216,10 @@ export function voiciPagesDeps(env: VoiciEnv, storage: D1Storage, db: D1Database
 
 /** Every `/api/voici/*`, `/api/admin/voici/*` and the account voi.ci lanes. */
 export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: WaitUntilLike): Promise<Response> {
+  if (voiciEnabled(env) && request.method.toUpperCase() === "GET") {
+    const u = new URL(request.url);
+    if (u.pathname === VOICI_PROMO_PATH) return handleVoiciPromo(request, u, env);
+  }
   if (!voiciEnabled(env) || !env.DB) return notFound();
   const url = new URL(request.url);
   const path = url.pathname;

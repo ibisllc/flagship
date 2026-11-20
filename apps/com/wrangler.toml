@@ -363,6 +363,11 @@ VOICI_ENABLED = "on"
 # "Calls on" of docs/runbooks/0.4-deploy-sheet.md, after iOS 1.3 and Android 12 are live in the stores and every item
 # of its readiness checklist holds. Flipping it here earlier would turn calls on at the first 0.4 `.com` deploy.
 VOICI_CALLS = "off"
+# The promo line under the apps' one-time "Get your own voi.ci page" intro (GET /api/voici/promo, src/voiciPromo.ts):
+# a JSON map of locale to text, e.g. '{"en":"Free Pro for a month if you set it up this week."}'. Server config, not
+# an app string, so it changes without a release. Empty = no promo. VOICI_PROMO_UNTIL (ISO time) ends it.
+VOICI_PROMO = ""
+VOICI_PROMO_UNTIL = ""
 # The marketplace (owner, 2026-11-19): hidden in 0.4, opened in 0.5 (docs/release-0.5-list.md). Anything but "on"
 # answers every public /api/marketplace/* and /api/developer/sales/* route 404 `marketplace-off`, so no box can
 # publish and no old client can browse or install. The apps carry their own switch (release/version.json).
