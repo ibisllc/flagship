@@ -100,4 +100,6 @@ over once "let's start 0.5" is said.
   - steps that merely wait (12 appliance builds, 31/41 publish) could merge.
   - step 23 refuses when the caller exported GYM_SECRETS_FILE (the webapp deploy guard): unset it inside release.sh
     for the .com deploy, and stop documenting the prefix (release.sh finds ~/flagship/.gym-secrets.env itself).
+  - step 29 (30-minute relay watch): run it right after step 28 or check it later by hand; make check-versions.mjs
+    carry the product version into rust/Cargo.toml (the 0.4 relay still reports "0.3.0").
   Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
