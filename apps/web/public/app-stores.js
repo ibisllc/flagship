@@ -13,7 +13,7 @@
   const STUDIO_EXPERIMENTAL = {
     mac: false,
     windows: false,
-    linux: true,
+    linux: false,
   };
   document.querySelectorAll("[data-studio-experimental]").forEach((el) => {
     if (STUDIO_EXPERIMENTAL[el.getAttribute("data-studio-experimental")] === false) el.remove();

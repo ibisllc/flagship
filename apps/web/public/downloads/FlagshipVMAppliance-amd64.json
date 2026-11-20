@@ -2,53 +2,53 @@
   "version": 1,
   "arch": "amd64",
   "installerGitRef": "main",
-  "commit": "52c67f8848eeb878cc9f63e84786b81f6933d19c",
+  "commit": "5c74756b5fc9923edfe5e0ec2a7dfc1b6f1c4003",
   "format": "qcow2",
-  "sha256": "ecd620cbd4f31b0e61352291749cce984c7661e490f4cfca76a6a193bce9813b",
-  "sizeBytes": 1965142528,
+  "sha256": "81cfccfd8bd7b7182dc4a8336dcc28748d402b623d16c538f34446b94b2b7581",
+  "sizeBytes": 2039525888,
   "parts": [
     {
       "name": "part-00",
       "sizeBytes": 268435456,
-      "sha256": "24136b067347fa178ac72f1e9750eede2414e5a776bb681810c5b8c514ad5c66"
+      "sha256": "712fb48294a714eca1db606a588d09f3f3d41d017074e416ab809fba07273d3e"
     },
     {
       "name": "part-01",
       "sizeBytes": 268435456,
-      "sha256": "482170719e634a5d1056cc53922a060bd2114a52756b7e175377585e8f87ced7"
+      "sha256": "6e3c37e8969e06df7e91a22aa89e2df8c38cf2a57d84d39e62a36ea12e5689e2"
     },
     {
       "name": "part-02",
       "sizeBytes": 268435456,
-      "sha256": "0d7fef07fa95c59bad4a623a4c33b5871ab3d8a59afe18d7d0570ff99bd850fc"
+      "sha256": "1ae57e78d707afba77e2fe3a9f5e37099c4af5250b18daaa2639a96afe3b8fcd"
     },
     {
       "name": "part-03",
       "sizeBytes": 268435456,
-      "sha256": "19f80cf3adb4e2d02e8c974138278c010e65c205f968f4335a5abf86274626ed"
+      "sha256": "89b0c21d08e388fdde188e1a2837733589e77eecf10eef5e80d1f1ce888b54f7"
     },
     {
       "name": "part-04",
       "sizeBytes": 268435456,
-      "sha256": "ca3e12e31d74a8ea88ccbf421e43ca96b5c95cfcfb9effeedf1c4455ba83ef32"
+      "sha256": "08a0f3a7986b856cae798620ead1aadb1248ebac70f4436291094cfe414d07aa"
     },
     {
       "name": "part-05",
       "sizeBytes": 268435456,
-      "sha256": "4dba5cd46cadcc4dc23943049711a9ab09097f7269cb40d1bdbf92d6de079ab2"
+      "sha256": "730dfad5bdcbc826995d220b59966ee14f0acaee80ffe7a6ab2c9ba9cebe5b60"
     },
     {
       "name": "part-06",
       "sizeBytes": 268435456,
-      "sha256": "37e6c9d546af32f5f43fa3e55b8f17f000f91d14b85ba3ec70432ee760c85c73"
+      "sha256": "93f2afb508b1a27e753fc60bd6cab5fe050647564f48f498493d3aa74be5c125"
     },
     {
       "name": "part-07",
-      "sizeBytes": 86094336,
-      "sha256": "36d48400c01703c39e31501cc22751ea4072a8d6ecf0c2dc87dbfce1ec348ac7"
+      "sizeBytes": 160477696,
+      "sha256": "2fa8c4395c99db18d88e6c4ab1e3d7c94ff5e51c482e82662a6e9626f7a92c23"
     }
   ],
-  "rawSha256": "1bc2dc7f35d0c75ce8ead02a19078bed346620859b54f3458bdac1eb9122461d",
+  "rawSha256": "b29a5176b103d212fa2dd9658bd5b89b074df327778cf8d0b39649861c96494d",
   "rawSizeBytes": 8589934592,
   "source": {
     "name": "debian-13-generic-amd64-20261001-2618.qcow2",
