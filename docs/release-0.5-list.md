@@ -104,4 +104,6 @@ over once "let's start 0.5" is said.
     carry the product version into rust/Cargo.toml (the 0.4 relay still reports "0.3.0").
   - step 33 (DEPLOYED-FINAL for the Windows agent) pushes to a hard-coded device-results/windows-2026-10-17 branch
     that is gone: make it optional and create its own branch only when a device test is planned.
+  - need_gym_secret reads GYM_ADMIN_SECRET with grep|cut and keeps the quotes of a quoted value in .gym-secrets.env
+    (step 37's gym sweep got 403): strip quotes or source the file.
   Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
