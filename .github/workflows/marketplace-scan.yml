@@ -43,8 +43,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The marketplace ships switched off (release/version.json "marketplace": false; `.com` MARKETPLACE = "off")
+      # until 0.5: there is nothing to scan and nowhere to post a result, so the nightly does nothing.
+      - name: Skip while the marketplace is off
+        id: gate
+        run: |
+          on=$(jq -r '.marketplace' release/version.json)
+          echo "on=$on" >> "$GITHUB_OUTPUT"
+          [ "$on" = "true" ] || echo "The marketplace is off in release/version.json; nothing to scan."
+
       - name: Fetch the authed scan queue
         id: queue
+        if: steps.gate.outputs.on == 'true'
         run: |
           set -euo pipefail
           resp=$(curl -fsS \
@@ -57,7 +67,7 @@ jobs:
           jq -r '.[] | "  - \(.creator)/\(.slug)  (last: \(.scanCompletedAt // "never"))"' queue.json
 
       - name: Install scanner deps (Trivy + docker)
-        if: steps.queue.outputs.count != '0'
+        if: steps.gate.outputs.on == 'true' && steps.queue.outputs.count != '0'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -yqq --no-install-recommends jq
@@ -65,7 +75,7 @@ jobs:
           trivy --version | head -1
 
       - name: Drain the queue — scan each listing + post the signed result
-        if: steps.queue.outputs.count != '0'
+        if: steps.gate.outputs.on == 'true' && steps.queue.outputs.count != '0'
         env:
           FLAGSHIP_SCANNER_PRIV_HEX: ${{ secrets.FLAGSHIP_SCANNER_PRIV_HEX }}
           FLAGSHIP_R2_BUCKET: ${{ secrets.FLAGSHIP_R2_BUCKET }}
