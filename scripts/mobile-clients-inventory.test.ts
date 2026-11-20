@@ -35,6 +35,8 @@ const CONSTRUCT = /\bOkHttpClient\s*\(\s*\)|\bOkHttpClient\.Builder\s*\(\s*\)|\b
 const ALLOWED: Record<string, string> = {
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpClientFactory.kt": "the one factory: pin verifier + interceptor are installed here",
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/SecurityNoticeCenter.kt": "anonymous GET to the control apex for signed notices",
+  "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciIntro.kt": "anonymous GET to the control apex for the optional voi.ci intro promo line (no cookies, no redirects; failure = no promo)",
+  "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/VoiciIntroSheet.swift": "anonymous GET to the control apex for the optional voi.ci intro promo line (failure = no promo), see the Android twin",
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpTransport.kt": "default for control-apex transports; box clients are given the factory's client",
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/QrRelayClient.kt": "default for the control apex's QR relay",
   "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BuilderPairClient.kt": "default for the control apex's pairing endpoints",

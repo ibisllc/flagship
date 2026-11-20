@@ -111,3 +111,9 @@ over once "let's start 0.5" is said.
   - step 43 (feat/UX translations, store art, VOICI_CANONICAL): split into the i18n gate (already per merge), a
     native-review status that does not force a yes/stop, and the store-art check next to the store builds.
   Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
+- **Remove the VOICI_CALLS switch** (owner, 2026-11-20: "this entire switch idea is crazy"). A feature ships with the
+  store build that carries it; calls were held off on production while the builds that answer them were already in
+  review. Remove `VOICI_CALLS` (and the deploy sheet's "Calls on" step, release.sh's notes) so calls are simply part
+  of the release; keep a server-side brake only if it is repurposed, e.g. to limit calls for accounts past their
+  data quota. Same review for the other launch switches (`VOICI_ENABLED`, `MARKETPLACE`): a switch is for an outage
+  or abuse brake, not for sequencing a launch.
