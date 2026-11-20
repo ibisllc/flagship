@@ -14350,8 +14350,8 @@
     "ctx": "voi.ci / Messages: confirmation when the Public switch is turned off, title"
   },
   "voici_remove_body": {
-    "en": "Visitors will see “There's no page here.” Your posts and profile stay on your devices, so you can turn it on again.",
-    "ctx": "voi.ci / Messages: confirmation when the Public switch is turned off, body (quotes what visitors see)"
+    "en": "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.",
+    "ctx": "voi.ci / Social: confirmation when the page is turned off (Public switch or Social options → Turn off social features), body"
   },
   "voici_public": {
     "en": "Public",
@@ -14900,7 +14900,7 @@
     "ctx": "Social tab: the switch under the title, the page side"
   },
   "voici_page_options": {
-    "en": "Page options",
+    "en": "Social options",
     "ctx": "Social tab: the ⋯ button and its sheet title"
   },
   "voici_add_display_name": {
@@ -14964,7 +14964,7 @@
     "ctx": "Page options: under Rotate inbox key"
   },
   "voici_remove_page": {
-    "en": "Remove page",
+    "en": "Turn off social features",
     "ctx": "Page options: takes the page off voi.ci (red)"
   },
   "voici_rotate_confirm_title": {
@@ -14988,7 +14988,7 @@
     "ctx": "Social tab Messages: under the reply notices"
   },
   "voici_empty_messages_options": {
-    "en": "No messages yet. Turn on Accept messages in Page options to get them.",
+    "en": "No messages yet. Turn on Accept messages in Social options to get them.",
     "ctx": "Social tab Messages: empty list"
   },
   "voici_empty_messages_on": {
@@ -16290,10 +16290,6 @@
     "en": "People whose conversation you accepted",
     "ctx": "voi.ci calls: settings, missed calls, thread menu"
   },
-  "voici_calls_from_signed_in": {
-    "en": "Anyone signed in with Flagship",
-    "ctx": "voi.ci calls: settings, missed calls, thread menu"
-  },
   "voici_calls_publish_first": {
     "en": "Publish your page to take calls.",
     "ctx": "voi.ci calls: settings, missed calls, thread menu"
@@ -16302,20 +16298,12 @@
     "en": "Visitors signed in with Flagship can call you from your page. Your admin devices ring.",
     "ctx": "voi.ci calls: settings, missed calls, thread menu"
   },
-  "voici_calls_dnd": {
-    "en": "Do Not Disturb",
-    "ctx": "voi.ci calls: settings, missed calls, thread menu"
-  },
   "voici_calls_dnd_from": {
     "en": "From",
     "ctx": "voi.ci calls: settings, missed calls, thread menu"
   },
   "voici_calls_dnd_until": {
     "en": "Until",
-    "ctx": "voi.ci calls: settings, missed calls, thread menu"
-  },
-  "voici_calls_dnd_footer": {
-    "en": "This device doesn't ring during these hours. Your other devices keep their own setting.",
     "ctx": "voi.ci calls: settings, missed calls, thread menu"
   },
   "voici_calls_allow": {
@@ -17171,7 +17159,7 @@
     "ctx": "voi.ci calls: settings group"
   },
   "voici_calls_hours_switch": {
-    "en": "Only at certain hours",
+    "en": "Set business hours",
     "ctx": "voi.ci calls: settings switch"
   },
   "voici_calls_hours_footer": {
@@ -17179,16 +17167,12 @@
     "ctx": "voi.ci calls: settings footer; %1$s is a time zone id"
   },
   "voici_first_publish_defaults": {
-    "en": "Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.",
+    "en": "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
     "ctx": "voi.ci / Messages: public warning before the page's first publish, what starts on"
   },
   "voici_first_publish_defaults_calls": {
-    "en": "Calls from people signed in with Flagship are on. You can turn them off in Page options.",
+    "en": "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
     "ctx": "voi.ci / Messages: public warning before the page's first publish when Accept messages was turned off, what starts on"
-  },
-  "voici_calls_from_signed_in_note": {
-    "en": "Callers sign in with Flagship. They stay anonymous to you.",
-    "ctx": "voi.ci calls: page call mode note"
   },
   "social_inbox": {
     "en": "Inbox",
@@ -17900,5 +17884,21 @@
   "voici_search_engines_note": {
     "en": "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.",
     "ctx": "voi.ci page options: search engines switch and its note"
+  },
+  "voici_turn_off_social_title": {
+    "en": "Turn off social features?",
+    "ctx": "voi.ci / Social: confirmation for Social options → Turn off social features, title"
+  },
+  "voici_intro_title": {
+    "en": "Get your own voi.ci page",
+    "ctx": "voi.ci intro sheet shown once after a new account is created, title"
+  },
+  "voici_intro_body": {
+    "en": "Set up voi.ci/%1$s to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.",
+    "ctx": "voi.ci intro sheet, body; %1$s is the new account's username"
+  },
+  "voici_intro_setup": {
+    "en": "Set it up",
+    "ctx": "voi.ci intro sheet, primary button: opens the Social tab's page editor"
   }
 }

@@ -541,9 +541,11 @@ class VoiciCenter(
                 }
                 val seq = maxOf(idx?.body?.seq ?: 0, local.ladderSeq) + 1
                 // Every publish carries the calls setting of the index it replaces (a profile edit never turns calls off).
-                // A first publish turns calls on for signed-in callers (owner decision 2026-11-16).
+                // A first publish turns calls on for call-back callers (owner decisions 2026-11-16, 2026-11-20); an old
+                // "signed-in" index is carried as "callback", the picker's reading of it.
                 val current = if (isFirstPublish(idx, local)) com.flagshipserver.app.calls.VoiciCallSettings.FIRST_PUBLISH
                 else com.flagshipserver.app.calls.VoiciCallSettings.read(if (local.removed) null else idx?.body?.acceptsCalls, idx?.body?.callsFrom)
+                    .let { (on, from) -> on to com.flagshipserver.app.calls.VoiciCallSettings.carried(from) }
                 val (callsOn, callsFrom) = calls ?: current
                 val fields = com.flagshipserver.app.calls.VoiciCallSettings.indexFields(callsOn, callsFrom)
                 // Like calls, every publish keeps "Show in search engines" from the index it replaces; a first publish
@@ -796,7 +798,7 @@ class VoiciCenter(
     }
 
     /**
-     * Page options → Show in search engines (owner decision 2026-11-17): a publish of its own by an admin device that
+     * Social options → Show in search engines (owner decision 2026-11-17): a publish of its own by an admin device that
      * signs or drops showInSearch; drafts stay drafts. False when it couldn't be published (`page.error` says why).
      */
     suspend fun setShowInSearch(on: Boolean, reason: String): Boolean {

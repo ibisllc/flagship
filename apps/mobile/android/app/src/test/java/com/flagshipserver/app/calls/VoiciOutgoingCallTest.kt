@@ -115,7 +115,7 @@ class VoiciOutgoingCallTest {
     private fun center(mock: MockVoiciClient, k: Keys) =
         VoiciCenter(mock, k, VoiciVault(MemoryVoiciVaultStore()), { listOf(mock.caPub) }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
 
-    /** alice publishes a page (calls on for "anyone signed in" unless [calls] is false); bob is the visitor. */
+    /** alice publishes a page (calls on for anyone unless [calls] is false); bob is the visitor. */
     private fun world(calls: Boolean = true): Triple<MockVoiciClient, VoiciCenter, String> = runBlocking {
         val mock = MockVoiciClient()
         mock.accounts["alice"] = VoiciAccountKeys("ee".repeat(32), VoiciJs.hex(VoiciJs.edPub(root)))
@@ -125,8 +125,8 @@ class VoiciOutgoingCallTest {
         owner.edit("accept-messages", accepts = 1)
         owner.acceptRules()
         assertTrue(owner.publish("test"))
-        // The first publish turns calls on for signed-in callers (owner decision 2026-11-16).
-        if (!calls) assertTrue(owner.setCalls(false, "signed-in", "test"))
+        // The first publish turns calls on for call-back callers (owner decision 2026-11-20); these calls need no channel.
+        assertTrue(owner.setCalls(calls, "anyone", "test"))
         val pageId = VoiciPage.parseVoiciPageIndex(mock.storedIndex("alice"))!!.body.pageId
         val visitor = center(mock, Keys("bob", visitorUmk, ByteArray(32) { 6 }, true, ByteArray(32) { 7 }))
         visitor.refresh()

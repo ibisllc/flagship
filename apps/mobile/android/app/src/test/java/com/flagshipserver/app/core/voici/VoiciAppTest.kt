@@ -135,8 +135,8 @@ class VoiciAppTest {
         assertFalse(b.setCalls(true, "accepted", "test"))
     }
 
-    /** Owner decision 2026-11-16: a page's first publish turns on messages and calls from signed-in people. */
-    @Test fun aFirstPublishTurnsOnMessagesAndSignedInCalls() = runBlocking {
+    /** Owner decisions 2026-11-16 and 2026-11-20: a page's first publish turns on messages and call-back calls. */
+    @Test fun aFirstPublishTurnsOnMessagesAndCallBackCalls() = runBlocking {
         val mock = mock()
         val a = center(mock, admin())
         a.refresh()
@@ -149,7 +149,7 @@ class VoiciAppTest {
         published(mock).first.body.let {
             assertEquals(1, it.acceptsMessages)
             assertEquals(1, it.acceptsCalls)
-            assertEquals("signed-in", it.callsFrom)
+            assertEquals("callback", it.callsFrom)
         }
         assertTrue(a.page.value.callsOn)
         assertFalse(a.page.value.firstPublish)

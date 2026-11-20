@@ -98,15 +98,16 @@ class GymMessagesTest : GymBase() {
     }
 
     /**
-     * docs/voici-calls.md §8: the first publish turns calls on for signed-in callers (owner decision 2026-11-16; a v2
-     * index), Page options shows it, and the thread can allow a caller.
+     * docs/voici-calls.md §8: the first publish turns calls on for call-back callers (owner decision 2026-11-20; a v2
+     * index), Social options shows it with no "Anyone signed in" choice and no Do Not Disturb, and the thread can allow
+     * a caller.
      */
     @Test fun anAdminTurnsCallsOnAndAllowsAVisitorToCall() {
         launch(tab = "messages", adminRoot = true)
         waitUntilExists("social-title", 20_000)
         publishFirstPage()
         eventually(15_000, "calls on at .com") {
-            VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.let { it.acceptsCalls == 1 && it.callsFrom == "signed-in" } == true
+            VoiciPage.parseVoiciPageIndex(GymVoici.client.storedIndex(account()))?.body?.let { it.acceptsCalls == 1 && it.callsFrom == "callback" } == true
         }
         // Messages are on now: the empty Inbox says where they will come from, not to turn them on.
         val ctx = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
@@ -117,8 +118,10 @@ class GymMessagesTest : GymBase() {
         tap("social-tab-profile")
         tap("page-options")
         waitUntilExists("page-calls-from")
-        waitUntilExists("page-calls-from-signed-in")
-        waitUntilExists("calls-dnd")
+        waitUntilExists("page-calls-from-callback")
+        assertEquals(0, tagCount("page-calls-from-signed-in"))
+        assertEquals(0, tagCount("calls-dnd"))
+        waitUntilExists("calls-hours")
         gymShot("calls-settings")
         tap("page-options-done")
 

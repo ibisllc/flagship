@@ -3476,7 +3476,7 @@
     <string name="voici_make_it_public">Öffentlich machen</string>
     <string name="voici_public_warning_body">Alles, was du auf deine Seite stellst, ist öffentlich. Jeder kann es sehen, und es zeigt deinen Benutzernamen, den auch deine Apps und Server verwenden, sodass man sie miteinander verbinden kann.</string>
     <string name="voici_remove_title">Deine Seite von voi.ci entfernen?</string>
-    <string name="voici_remove_body">Besucher sehen dann „Hier gibt es keine Seite.“ Deine Beiträge und dein Profil bleiben auf deinen Geräten, sodass du sie wieder einschalten kannst.</string>
+    <string name="voici_remove_body">Deine voi.ci-Seite wird entfernt, und Nachrichten und Anrufe an sie hören auf. Deine Beiträge und dein Profil bleiben auf deinen Geräten, du kannst sie also wieder einschalten.</string>
     <string name="voici_public">Öffentlich</string>
     <string name="voici_not_public">Nicht öffentlich</string>
     <string name="voici_demo_page_note">Dies ist ein Beispielkonto. Seine Seite ist ein Beispiel, deshalb kannst du sie nicht ändern.</string>
@@ -3610,7 +3610,7 @@
     <string name="couldnt_access_your_account_key_2">Auf deinen Kontoschlüssel konnte nicht zugegriffen werden.</string>
     <string name="the_server_refused_this_change_check_2">Der Server hat diese Änderung abgelehnt. Prüfe die Uhr dieses Telefons und versuche es erneut.</string>
     <string name="voici_profile">Profil</string>
-    <string name="voici_page_options">Seitenoptionen</string>
+    <string name="voici_page_options">Social-Optionen</string>
     <string name="voici_add_display_name">Füge einen Anzeigenamen hinzu.</string>
     <string name="voici_add_photo">Foto hinzufügen</string>
     <string name="voici_change_photo">Foto ändern</string>
@@ -3626,13 +3626,13 @@
     <string name="voici_one_email_link">Eine Seite kann einen E-Mail-Link haben.</string>
     <string name="voici_link_label_problem">Gib dem Link eine kurze Bezeichnung (höchstens 40 Zeichen).</string>
     <string name="voici_rotate_footer">Neue Nachrichten werden mit einem neuen Schlüssel versiegelt. Dieses Gerät kann die alten weiterhin lesen.</string>
-    <string name="voici_remove_page">Seite entfernen</string>
+    <string name="voici_remove_page">Social-Funktionen ausschalten</string>
     <string name="voici_rotate_confirm_title">Posteingangsschlüssel erneuern?</string>
     <string name="voici_rotate_confirm_body">Deine Seite wird mit dem neuen Schlüssel neu veröffentlicht.</string>
     <string name="voici_rotate_short">Erneuern</string>
     <string name="voici_publishing_page">Deine Seite wird veröffentlicht …</string>
     <string name="voici_reply_footer">Deine Unterhaltungen mit anderen Seiten findest du auf voi.ci.</string>
-    <string name="voici_empty_messages_options">Noch keine Nachrichten. Aktiviere „Nachrichten annehmen“ unter Seitenoptionen, um welche zu bekommen.</string>
+    <string name="voici_empty_messages_options">Noch keine Nachrichten. Aktiviere „Nachrichten annehmen“ unter Social-Optionen, um welche zu bekommen.</string>
     <string name="voici_empty_messages_on">Noch keine Nachrichten. Wer sich auf deiner Seite anmeldet, kann dir hier schreiben.</string>
     <string name="push_service">Push-Dienst</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
@@ -3955,13 +3955,10 @@
     <string name="voici_calls_accept">Anrufe annehmen</string>
     <string name="voici_calls_who">Wer anrufen darf</string>
     <string name="voici_calls_from_accepted">Personen, deren Unterhaltung du angenommen hast</string>
-    <string name="voici_calls_from_signed_in">Alle, die mit Flagship angemeldet sind</string>
     <string name="voici_calls_publish_first">Veröffentliche deine Seite, um Anrufe anzunehmen.</string>
     <string name="voici_calls_footer">Mit Flagship angemeldete Besucher können dich von deiner Seite aus anrufen. Deine Administratorgeräte klingeln.</string>
-    <string name="voici_calls_dnd">Nicht stören</string>
     <string name="voici_calls_dnd_from">Von</string>
     <string name="voici_calls_dnd_until">Bis</string>
-    <string name="voici_calls_dnd_footer">Dieses Gerät klingelt in diesen Stunden nicht. Deine anderen Geräte behalten ihre eigene Einstellung.</string>
     <string name="voici_calls_allow">Anrufe von dieser Person erlauben</string>
     <string name="voici_calls_disallow">Anrufe von dieser Person nicht erlauben</string>
     <string name="voici_calls_allowed">Diese Person kann dich jetzt anrufen.</string>
@@ -4175,11 +4172,10 @@
     <string name="voici_reveal_name_unchecked">Diesen Namen hat die Person selbst gewählt. Flagship prüft keine Namen, jeder kann also jeden Namen verwenden.</string>
     <string name="voici_reveal_username_line">%1$s ist die voi.ci-Seite dieser Person.</string>
     <string name="voici_calls_hours">Anrufzeiten</string>
-    <string name="voici_calls_hours_switch">Nur zu bestimmten Zeiten</string>
+    <string name="voici_calls_hours_switch">Geschäftszeiten festlegen</string>
     <string name="voici_calls_hours_footer">Außerhalb dieser Zeiten klingelt kein Anruf auf deinen Geräten, und er wird zum verpassten Anruf. Nur deine eigenen Geräte kennen diese Zeiten. Zeitzone: %1$s.</string>
-    <string name="voici_first_publish_defaults">Nachrichten und Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten.</string>
-    <string name="voici_first_publish_defaults_calls">Anrufe von Personen, die mit Flagship angemeldet sind, sind aktiviert. Du kannst sie in den Seitenoptionen ausschalten.</string>
-    <string name="voici_calls_from_signed_in_note">Anrufende melden sich mit Flagship an. Sie bleiben für dich anonym.</string>
+    <string name="voici_first_publish_defaults">Nachrichten und Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten.</string>
+    <string name="voici_first_publish_defaults_calls">Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten.</string>
     <string name="social_inbox">Posteingang</string>
     <string name="social_who_to_call">Wen anrufen</string>
     <string name="social_who_to_call_hint">Benutzername oder voi.ci-Link</string>
@@ -4365,4 +4361,8 @@
     <string name="voucher_link_signed_out">Melde dich zuerst bei deinem Konto an und öffne den Link dann erneut.</string>
     <string name="voici_search_engines">In Suchmaschinen anzeigen</string>
     <string name="voici_search_engines_note">Wenn das aus ist, werden Suchmaschinen gebeten, deine Seite nicht aufzunehmen. Wer den Link hat, kann sie trotzdem öffnen.</string>
+    <string name="voici_turn_off_social_title">Social-Funktionen ausschalten?</string>
+    <string name="voici_intro_title">Hol dir deine eigene voi.ci-Seite</string>
+    <string name="voici_intro_body">Richte voi.ci/%1$s ein, um private Nachrichten und Anrufe zu senden und zu empfangen und Neuigkeiten zu posten. Ohne Telefonnummer oder E-Mail-Adresse, und geschützt gegen Quantencomputer.</string>
+    <string name="voici_intro_setup">Einrichten</string>
 </resources>

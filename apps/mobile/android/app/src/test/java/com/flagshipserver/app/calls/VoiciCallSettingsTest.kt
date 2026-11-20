@@ -29,12 +29,24 @@ class VoiciCallSettingsTest {
         assertEquals(true to "signed-in", VoiciCallSettings.read(1, "signed-in"))
     }
 
-    /** Owner decision 2026-11-16: the first publish's defaults, and the modes the Social page offers. */
+    /** Owner decisions 2026-11-16 and 2026-11-20: the first publish's defaults, and the modes the Social page offers. */
     @Test fun firstPublishDefaultsAndTheModesOffered() {
-        assertEquals(true to "signed-in", VoiciCallSettings.FIRST_PUBLISH)
+        assertEquals(true to "callback", VoiciCallSettings.FIRST_PUBLISH)
         assertEquals(1, com.flagshipserver.app.core.voici.VoiciOwner.FIRST_PUBLISH_ACCEPTS_MESSAGES)
         assertEquals(1, com.flagshipserver.app.core.voici.VoiciOwner.emptyState("alice").acceptsMessages)
-        assertEquals(listOf("signed-in", "anyone", "callback"), VoiciCallSettings.FROM_CHOICES)
+        assertEquals(listOf("anyone", "callback"), VoiciCallSettings.FROM_CHOICES)
+        assertFalse("no \"Anyone signed in with Flagship\" in the picker", "signed-in" in VoiciCallSettings.FROM_CHOICES)
+    }
+
+    /** An index an older app published with "signed-in" (or "accepted") shows as callback, and the next publish writes it. */
+    @Test fun aSignedInIndexReadsAsCallback() {
+        assertEquals("callback", VoiciCallSettings.mode("signed-in"))
+        assertEquals("callback", VoiciCallSettings.mode("accepted"))
+        assertEquals("callback", VoiciCallSettings.mode(null))
+        assertEquals("anyone", VoiciCallSettings.mode("anyone"))
+        assertEquals("callback", VoiciCallSettings.carried("signed-in"))
+        assertEquals("anyone", VoiciCallSettings.carried("anyone"))
+        assertTrue("old indexes stay readable", "signed-in" in VoiciCallSettings.FROM_VALUES)
     }
 
     @Test fun callHoursEditorFormRoundTripsAndRefusesWhatTheSettingWouldRefuse() {
@@ -50,14 +62,12 @@ class VoiciCallSettingsTest {
     }
 
     @Test fun theRingingPhoneHoldsACallToTheOwnersHours() {
-        val q = CallQuietHours(false, 0, 0)
-        val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
         val mondayTen = 1799053200000L // Monday 10:00 in Paris (09:00 UTC)
         val weekdays = com.flagshipserver.app.core.voici.VoiciCallHours("1111100", "0900", "1730", "Europe/Paris")
-        assertTrue(VoiciCallCenter.shouldRing(mondayTen, mondayTen, q, utc, weekdays))
+        assertTrue(VoiciCallCenter.shouldRing(mondayTen, mondayTen, weekdays))
         val saturdayNoon = 1799492400000L
-        assertFalse("outside the hours nothing rings (the call is missed)", VoiciCallCenter.shouldRing(saturdayNoon, saturdayNoon, q, utc, weekdays))
-        assertTrue("no hours: always", VoiciCallCenter.shouldRing(saturdayNoon, saturdayNoon, q, utc, null))
+        assertFalse("outside the hours nothing rings (the call is missed)", VoiciCallCenter.shouldRing(saturdayNoon, saturdayNoon, weekdays))
+        assertTrue("no hours: always", VoiciCallCenter.shouldRing(saturdayNoon, saturdayNoon, null))
     }
 
     @Test fun viewState() {
@@ -73,25 +83,13 @@ class VoiciCallSettingsTest {
         }
     }
 
-    @Test fun quietHoursAcrossMidnightSameDayAndAllDay() {
-        val night = CallQuietHours(true, 22 * 60, 7 * 60)
-        assertTrue(night.isQuiet(23 * 60)); assertTrue(night.isQuiet(0)); assertTrue(night.isQuiet(6 * 60 + 59))
-        assertFalse(night.isQuiet(7 * 60)); assertFalse(night.isQuiet(12 * 60))
-        assertFalse(night.copy(on = false).isQuiet(23 * 60))
-        val day = CallQuietHours(true, 9 * 60, 17 * 60)
-        assertTrue(day.isQuiet(12 * 60)); assertFalse(day.isQuiet(17 * 60)); assertFalse(day.isQuiet(8 * 60))
-        assertTrue(CallQuietHours(true, 600, 600).isQuiet(5))
-        assertEquals(1380, CallQuietHours(true, -60, 1500).normalized().startMinute)
-    }
-
-    @Test fun shouldRingRespectsQuietHoursAndTheRingWindow() {
+    /** The app has no Do Not Disturb of its own: only the ring window and the owner's hours decide. */
+    @Test fun shouldRingKeepsOnlyTheRingWindow() {
         val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
         cal.clear(); cal.set(2026, 10, 15, 23, 30)
         val lateNight = cal.timeInMillis
-        val night = CallQuietHours(true, 22 * 60, 7 * 60)
-        assertFalse(VoiciCallCenter.shouldRing(lateNight, lateNight, night, Calendar.getInstance(TimeZone.getTimeZone("UTC"))))
-        assertTrue(VoiciCallCenter.shouldRing(lateNight, lateNight, night.copy(on = false), Calendar.getInstance(TimeZone.getTimeZone("UTC"))))
-        assertFalse(VoiciCallCenter.shouldRing(lateNight - 46_000, lateNight, night.copy(on = false), Calendar.getInstance(TimeZone.getTimeZone("UTC"))))
+        assertTrue(VoiciCallCenter.shouldRing(lateNight, lateNight))
+        assertFalse(VoiciCallCenter.shouldRing(lateNight - 46_000, lateNight))
     }
 
     private fun row(id: String, at: Long, conv: String = "c1", video: Boolean = false) = VoiciMissedCallRow(id, conv, "p", "no-answer", at, video)

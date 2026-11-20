@@ -3476,7 +3476,7 @@
     <string name="voici_make_it_public">Tornar pública</string>
     <string name="voici_public_warning_body">Tudo o que você coloca na sua página é público. Qualquer pessoa pode ver, e ela mostra seu nome de usuário, que seus apps e servidores também usam, então as pessoas podem relacioná-los.</string>
     <string name="voici_remove_title">Remover sua página do voi.ci?</string>
-    <string name="voici_remove_body">Os visitantes verão “Não há nenhuma página aqui.” Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo.</string>
+    <string name="voici_remove_body">Sua página no voi.ci é removida, e as mensagens e chamadas para ela param. Suas publicações e seu perfil ficam nos seus dispositivos, então você pode ativá-la de novo.</string>
     <string name="voici_public">Pública</string>
     <string name="voici_not_public">Não pública</string>
     <string name="voici_demo_page_note">Esta é uma conta de exemplo. A página dela é um exemplo, então você não pode alterá-la.</string>
@@ -3610,7 +3610,7 @@
     <string name="couldnt_access_your_account_key_2">Não foi possível acessar a chave da sua conta.</string>
     <string name="the_server_refused_this_change_check_2">O servidor recusou esta mudança. Verifique o relógio deste celular e tente novamente.</string>
     <string name="voici_profile">Perfil</string>
-    <string name="voici_page_options">Opções da página</string>
+    <string name="voici_page_options">Opções sociais</string>
     <string name="voici_add_display_name">Adicione um nome de exibição.</string>
     <string name="voici_add_photo">Adicionar foto</string>
     <string name="voici_change_photo">Alterar foto</string>
@@ -3626,13 +3626,13 @@
     <string name="voici_one_email_link">Uma página pode ter um link de e-mail.</string>
     <string name="voici_link_label_problem">Dê ao link um rótulo curto (no máximo 40 caracteres).</string>
     <string name="voici_rotate_footer">As novas mensagens são seladas com uma nova chave. Este dispositivo continua lendo as antigas.</string>
-    <string name="voici_remove_page">Remover página</string>
+    <string name="voici_remove_page">Desativar os recursos sociais</string>
     <string name="voici_rotate_confirm_title">Trocar a chave da sua caixa de entrada?</string>
     <string name="voici_rotate_confirm_body">Sua página é publicada de novo com a nova chave.</string>
     <string name="voici_rotate_short">Trocar</string>
     <string name="voici_publishing_page">Publicando sua página…</string>
     <string name="voici_reply_footer">Suas conversas com outras páginas ficam no voi.ci.</string>
-    <string name="voici_empty_messages_options">Ainda não há mensagens. Ative Aceitar mensagens em Opções da página para recebê-las.</string>
+    <string name="voici_empty_messages_options">Ainda não há mensagens. Ative Aceitar mensagens em Opções sociais para recebê-las.</string>
     <string name="voici_empty_messages_on">Ainda não há mensagens. Quem entrar na sua página pode escrever para você aqui.</string>
     <string name="push_service">Serviço de notificações push</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
@@ -3955,13 +3955,10 @@
     <string name="voici_calls_accept">Aceitar chamadas</string>
     <string name="voici_calls_who">Quem pode ligar</string>
     <string name="voici_calls_from_accepted">Pessoas cuja conversa você aceitou</string>
-    <string name="voici_calls_from_signed_in">Qualquer pessoa conectada com o Flagship</string>
     <string name="voici_calls_publish_first">Publique sua página para receber chamadas.</string>
     <string name="voici_calls_footer">Visitantes conectados com o Flagship podem ligar para você a partir da sua página. Seus dispositivos de administrador tocam.</string>
-    <string name="voici_calls_dnd">Não perturbe</string>
     <string name="voici_calls_dnd_from">De</string>
     <string name="voici_calls_dnd_until">Até</string>
-    <string name="voici_calls_dnd_footer">Este dispositivo não toca nesses horários. Seus outros dispositivos mantêm a própria configuração.</string>
     <string name="voici_calls_allow">Permitir chamadas dessa pessoa</string>
     <string name="voici_calls_disallow">Não permitir chamadas dessa pessoa</string>
     <string name="voici_calls_allowed">Essa pessoa já pode ligar para você.</string>
@@ -4175,11 +4172,10 @@
     <string name="voici_reveal_name_unchecked">Este é um nome que a pessoa escolheu. O Flagship não verifica nomes, então qualquer um pode usar qualquer nome.</string>
     <string name="voici_reveal_username_line">%1$s é a página no voi.ci desta pessoa.</string>
     <string name="voici_calls_hours">Horário de chamadas</string>
-    <string name="voici_calls_hours_switch">Só em certos horários</string>
+    <string name="voici_calls_hours_switch">Definir horário de atendimento</string>
     <string name="voici_calls_hours_footer">Fora desses horários as chamadas não tocam em nenhum dos seus dispositivos e viram chamadas perdidas. Só os seus próprios dispositivos conhecem esses horários. Fuso horário: %1$s.</string>
-    <string name="voici_first_publish_defaults">Mensagens e chamadas de pessoas conectadas com o Flagship estão ativadas. Você pode desativá-las em Opções da página.</string>
-    <string name="voici_first_publish_defaults_calls">Chamadas de pessoas conectadas com o Flagship estão ativadas. Você pode desativá-las em Opções da página.</string>
-    <string name="voici_calls_from_signed_in_note">Quem liga entra com o Flagship. A pessoa continua anônima para você.</string>
+    <string name="voici_first_publish_defaults">Mensagens e chamadas estão ativadas. Quem liga entra com o Flagship e deixa você retornar a chamada. Você pode desativá-las em Opções sociais.</string>
+    <string name="voici_first_publish_defaults_calls">As chamadas estão ativadas. Quem liga entra com o Flagship e deixa você retornar a chamada. Você pode desativá-las em Opções sociais.</string>
     <string name="social_inbox">Entrada</string>
     <string name="social_who_to_call">Para quem ligar</string>
     <string name="social_who_to_call_hint">Nome de usuário ou link do voi.ci</string>
@@ -4365,4 +4361,8 @@
     <string name="voucher_link_signed_out">Entre na sua conta primeiro e abra o link de novo.</string>
     <string name="voici_search_engines">Mostrar nos mecanismos de busca</string>
     <string name="voici_search_engines_note">Quando isto está desativado, os mecanismos de busca são instruídos a não listar sua página. Qualquer pessoa com o link ainda pode abri-la.</string>
+    <string name="voici_turn_off_social_title">Desativar os recursos sociais?</string>
+    <string name="voici_intro_title">Tenha sua própria página no voi.ci</string>
+    <string name="voici_intro_body">Configure voi.ci/%1$s para enviar e receber mensagens e chamadas privadas e para publicar novidades. Não precisa de número de telefone nem de e-mail, e é protegido contra computadores quânticos.</string>
+    <string name="voici_intro_setup">Configurar</string>
 </resources>

@@ -1,5 +1,6 @@
-// Settings → Messages → Calls (docs/voici-calls.md §8), inside Page options: calls on/off and who may call (published
-// in the page index by an admin device) and this device's Do Not Disturb hours. Same rules as iOS
+// Calls (docs/voici-calls.md §8), inside Social options: calls on/off and who may call (published in the page index by
+// an admin device) and the owner's business hours (synced, sealed; never in the page). No Do Not Disturb of the app's
+// own: the phone's Do Not Disturb decides (VoiciCallCenter.ensureChannel). Same rules as iOS
 // VoiciCallsSettingsSection.swift; Android has no storefront rule, so no regional note.
 
 package com.flagshipserver.app.ui.screens
@@ -24,7 +25,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.R
-import com.flagshipserver.app.calls.CallQuietHours
 import com.flagshipserver.app.calls.CallSettingsStore
 import com.flagshipserver.app.calls.VoiciCallSettings
 import com.flagshipserver.app.core.FSStrings
@@ -44,10 +44,9 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val store = remember { CallSettingsStore(context) }
-    var quiet by remember { mutableStateOf(store.quietHours()) }
     var busy by remember { mutableStateOf(false) }
     val v = VoiciCallSettings.viewState(isAdmin = page.canPublish, isPublic = page.isPublic, callsOn = page.callsOn)
-    val from = if (page.callsOn) page.callsFrom else store.lastFrom()
+    val from = VoiciCallSettings.mode(if (page.callsOn) page.callsFrom else store.lastFrom())
 
     fun change(on: Boolean, f: String) {
         store.setLastFrom(f)
@@ -56,11 +55,6 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
             if (!center.setCalls(on, f, FSStrings.get(R.string.voici_publish_reason))) center.page.value.error?.let { onError(VoiciCopy.publishError(it)) }
             busy = false
         }
-    }
-
-    fun setQuiet(q: CallQuietHours) {
-        quiet = q.normalized()
-        store.setQuietHours(quiet)
     }
 
     fun pickTime(minute: Int, set: (Int) -> Unit) {
@@ -89,11 +83,10 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
             FSDivider(0.dp)
             Column(Modifier.testTag("page-calls-from")) {
                 Text(stringResource(R.string.voici_calls_who), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2))
-                // Owner-approved modes (docs/voici-calls.md "Who may call a page"): anyone signed in (the first-publish
-                // default), anyone on the internet, or signed-in callers who allow a call-back. An older page's mode
-                // ("accepted") shows with none picked until one is chosen.
+                // Owner-approved modes (docs/voici-calls.md "Who may call a page"): anyone on the internet, or signed-in
+                // callers who allow a call-back (the first-publish default). An older page's "signed-in" or "accepted"
+                // shows as call-back, and the next publish writes that.
                 for ((value, res) in listOf(
-                    VoiciCallSettings.FROM_SIGNED_IN to (R.string.voici_calls_from_signed_in to R.string.voici_calls_from_signed_in_note),
                     VoiciCallSettings.FROM_ANYONE to (R.string.voici_calls_from_anyone to R.string.voici_calls_from_anyone_note),
                     VoiciCallSettings.FROM_CALLBACK to (R.string.voici_calls_from_callback to R.string.voici_calls_from_callback_note),
                 )) {
@@ -152,34 +145,6 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
             modifier = Modifier.padding(horizontal = FS.space.s4),
         )
     }
-    FSGroup {
-        FSRow(
-            title = stringResource(R.string.voici_calls_dnd),
-            trailing = { Switch(checked = quiet.on, onCheckedChange = { setQuiet(quiet.copy(on = it)) }, modifier = Modifier.testTag("calls-dnd")) },
-        )
-        if (quiet.on) {
-            FSDivider(0.dp)
-            FSRow(
-                title = stringResource(R.string.voici_calls_dnd_from),
-                onClick = { pickTime(quiet.startMinute) { setQuiet(quiet.copy(startMinute = it)) } },
-                modifier = Modifier.testTag("calls-dnd-from"),
-                trailing = { Text(label(quiet.startMinute)) },
-            )
-            FSDivider(0.dp)
-            FSRow(
-                title = stringResource(R.string.voici_calls_dnd_until),
-                onClick = { pickTime(quiet.endMinute) { setQuiet(quiet.copy(endMinute = it)) } },
-                modifier = Modifier.testTag("calls-dnd-until"),
-                trailing = { Text(label(quiet.endMinute)) },
-            )
-        }
-    }
-    Text(
-        stringResource(R.string.voici_calls_dnd_footer),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = FS.space.s4),
-    )
 }
 
 

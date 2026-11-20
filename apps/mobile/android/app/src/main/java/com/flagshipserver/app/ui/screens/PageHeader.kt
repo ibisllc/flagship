@@ -102,7 +102,9 @@ class PagePublicFlow(private val center: VoiciCenter, private val scope: Corouti
     var showRules by mutableStateOf(false)
     var showWarning by mutableStateOf(false)
     var confirmRemove by mutableStateOf(false)
-    /** The warning is for the page's first publish: it also says what starts on (messages and signed-in calls). */
+    /** The confirm came from Social options → Turn off social features (else from the Public switch). */
+    var turnOff by mutableStateOf(false)
+    /** The warning is for the page's first publish: it also says what starts on (messages and call-back calls). */
     var firstPublish by mutableStateOf(false)
     /** What that first publish carries for messages: Accept messages as the owner left it (calls always start on). */
     var firstPublishMessages by mutableStateOf(true)
@@ -111,7 +113,7 @@ class PagePublicFlow(private val center: VoiciCenter, private val scope: Corouti
     fun setPublic(on: Boolean) {
         val p = center.page.value
         if (!p.canPublish || p.publishing) return
-        if (on && !p.isPublic) begin(Action.GoPublic) else if (!on && p.isPublic) confirmRemove = true
+        if (on && !p.isPublic) begin(Action.GoPublic) else if (!on && p.isPublic) { turnOff = false; confirmRemove = true }
     }
 
     /** The editor's Publish bar: while the page is not public, publishing makes it public, so the same steps apply. */
@@ -203,10 +205,10 @@ fun PagePublicDialogs(flow: PagePublicFlow) {
     )
     if (flow.confirmRemove) AlertDialog(
         onDismissRequest = { flow.confirmRemove = false },
-        title = { Text(stringResource(R.string.voici_remove_title)) },
+        title = { Text(stringResource(if (flow.turnOff) R.string.voici_turn_off_social_title else R.string.voici_remove_title)) },
         text = { Text(stringResource(R.string.voici_remove_body)) },
         confirmButton = {
-            FSGhostButton(stringResource(R.string.voici_remove), { flow.remove() }, modifier = Modifier.testTag("page-remove-confirm"))
+            FSGhostButton(stringResource(if (flow.turnOff) R.string.turn_off else R.string.voici_remove), { flow.remove() }, modifier = Modifier.testTag("page-remove-confirm"))
         },
         dismissButton = { FSGhostButton(stringResource(R.string.voici_cancel), { flow.confirmRemove = false }) },
         modifier = Modifier.testTag("page-remove-dialog"),

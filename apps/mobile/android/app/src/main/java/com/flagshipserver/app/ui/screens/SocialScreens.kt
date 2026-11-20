@@ -801,9 +801,9 @@ private fun AddLinkDialog(existing: List<VoiciProfileLink>, onDismiss: () -> Uni
     )
 }
 
-// ── Page options ──────────────────────────────────────────────────────────
+// ── Social options ──────────────────────────────────────────────────────────
 
-/** Behind the title row's ⋯: the theme, the link, Accept messages, the visitor-side settings and Remove page. */
+/** Social options, behind the title row's ⋯: the theme, the link, Accept messages, the visitor-side settings and Turn off social features. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PageOptionsSheet(
@@ -913,7 +913,7 @@ private fun PageOptionsSheet(
                     FSRow(
                         title = stringResource(R.string.voici_remove_page),
                         titleColor = MaterialTheme.colorScheme.error,
-                        onClick = { onDismiss(); flow.confirmRemove = true },
+                        onClick = { onDismiss(); flow.turnOff = true; flow.confirmRemove = true },
                         modifier = Modifier.testTag("page-remove"),
                     )
                 }

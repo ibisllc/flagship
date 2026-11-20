@@ -133,7 +133,7 @@ private fun Busy(text: String) {
     }
 }
 
-/** Page options → Websites you're signed in to: each voi.ci page this account signed in to, with Sign out. */
+/** Social options → Websites you're signed in to: each voi.ci page this account signed in to, with Sign out. */
 @Composable
 fun SignedInSitesScreen(nav: NavController) {
     val center = LocalVoiciCenter.current ?: return

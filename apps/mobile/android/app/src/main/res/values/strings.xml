@@ -3481,7 +3481,7 @@
     <string name="voici_make_it_public">Make it public</string>
     <string name="voici_public_warning_body">Everything you put on your page is public. Anyone can see it, and it shows your username, which your apps and servers also use, so people can connect them.</string>
     <string name="voici_remove_title">Remove your page from voi.ci?</string>
-    <string name="voici_remove_body">Visitors will see “There\'s no page here.” Your posts and profile stay on your devices, so you can turn it on again.</string>
+    <string name="voici_remove_body">Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.</string>
     <string name="voici_public">Public</string>
     <string name="voici_not_public">Not public</string>
     <string name="voici_demo_page_note">This is a sample account. Its page is an example, so you can\'t change it.</string>
@@ -3615,7 +3615,7 @@
     <string name="couldnt_access_your_account_key_2">Couldn\'t access your account key.</string>
     <string name="the_server_refused_this_change_check_2">The server refused this change. Check this phone\'s clock and try again.</string>
     <string name="voici_profile">Profile</string>
-    <string name="voici_page_options">Page options</string>
+    <string name="voici_page_options">Social options</string>
     <string name="voici_add_display_name">Add a display name.</string>
     <string name="voici_add_photo">Add photo</string>
     <string name="voici_change_photo">Change photo</string>
@@ -3631,13 +3631,13 @@
     <string name="voici_one_email_link">A page can have one email link.</string>
     <string name="voici_link_label_problem">Give the link a short label (40 characters at most).</string>
     <string name="voici_rotate_footer">New messages are sealed to a new key. This device keeps reading the old ones.</string>
-    <string name="voici_remove_page">Remove page</string>
+    <string name="voici_remove_page">Turn off social features</string>
     <string name="voici_rotate_confirm_title">Rotate your inbox key?</string>
     <string name="voici_rotate_confirm_body">Your page is published again with the new key.</string>
     <string name="voici_rotate_short">Rotate</string>
     <string name="voici_publishing_page">Publishing your page…</string>
     <string name="voici_reply_footer">Your conversations with other pages are on voi.ci.</string>
-    <string name="voici_empty_messages_options">No messages yet. Turn on Accept messages in Page options to get them.</string>
+    <string name="voici_empty_messages_options">No messages yet. Turn on Accept messages in Social options to get them.</string>
     <string name="voici_empty_messages_on">No messages yet. People who sign in on your page can write to you here.</string>
     <string name="push_service">Push service</string>
     <string name="push_service_unifiedpush">UnifiedPush</string>
@@ -3960,13 +3960,10 @@
     <string name="voici_calls_accept">Accept calls</string>
     <string name="voici_calls_who">Who can call</string>
     <string name="voici_calls_from_accepted">People whose conversation you accepted</string>
-    <string name="voici_calls_from_signed_in">Anyone signed in with Flagship</string>
     <string name="voici_calls_publish_first">Publish your page to take calls.</string>
     <string name="voici_calls_footer">Visitors signed in with Flagship can call you from your page. Your admin devices ring.</string>
-    <string name="voici_calls_dnd">Do Not Disturb</string>
     <string name="voici_calls_dnd_from">From</string>
     <string name="voici_calls_dnd_until">Until</string>
-    <string name="voici_calls_dnd_footer">This device doesn\'t ring during these hours. Your other devices keep their own setting.</string>
     <string name="voici_calls_allow">Allow calls from them</string>
     <string name="voici_calls_disallow">Don\'t allow calls from them</string>
     <string name="voici_calls_allowed">They can call you now.</string>
@@ -4180,11 +4177,10 @@
     <string name="voici_reveal_name_unchecked">This is a name the person chose. Flagship doesn\'t check names, so anyone can use any name.</string>
     <string name="voici_reveal_username_line">%1$s is this person\'s voi.ci page.</string>
     <string name="voici_calls_hours">Call hours</string>
-    <string name="voici_calls_hours_switch">Only at certain hours</string>
+    <string name="voici_calls_hours_switch">Set business hours</string>
     <string name="voici_calls_hours_footer">Outside these hours calls don\'t ring on any of your devices and become missed calls. Only your own devices know these hours. Time zone: %1$s.</string>
-    <string name="voici_first_publish_defaults">Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.</string>
-    <string name="voici_first_publish_defaults_calls">Calls from people signed in with Flagship are on. You can turn them off in Page options.</string>
-    <string name="voici_calls_from_signed_in_note">Callers sign in with Flagship. They stay anonymous to you.</string>
+    <string name="voici_first_publish_defaults">Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.</string>
+    <string name="voici_first_publish_defaults_calls">Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.</string>
     <string name="social_inbox">Inbox</string>
     <string name="social_who_to_call">Who to call</string>
     <string name="social_who_to_call_hint">Username or voi.ci link</string>
@@ -4372,4 +4368,8 @@
     <string name="voucher_link_signed_out">Sign in to your account first, then open the link again.</string>
     <string name="voici_search_engines">Show in search engines</string>
     <string name="voici_search_engines_note">When this is off, search engines are asked not to list your page. Anyone with the link can still open it.</string>
+    <string name="voici_turn_off_social_title">Turn off social features?</string>
+    <string name="voici_intro_title">Get your own voi.ci page</string>
+    <string name="voici_intro_body">Set up voi.ci/%1$s to send and receive private messages and calls, and to post updates. No phone number or email needed, and it\'s protected against quantum computers.</string>
+    <string name="voici_intro_setup">Set it up</string>
 </resources>

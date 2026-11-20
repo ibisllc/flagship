@@ -101,25 +101,23 @@ object VoiciCallCenter {
     // ── ringing ──
 
     /**
-     * A call that arrives at [nowMs] rings here only while fresh and outside this device's Do Not Disturb hours. A
-     * quiet device stays out of the room, so another device can answer and an unanswered call becomes a missed call.
+     * A call that arrives at [nowMs] rings here only while fresh and inside the owner's business hours. The phone's own
+     * Do Not Disturb applies to the incoming-call notification (see [ensureChannel]); the app keeps no quiet hours.
      */
     fun shouldRing(
         issuedAt: Long,
         nowMs: Long,
-        quiet: CallQuietHours,
-        calendar: java.util.Calendar = java.util.Calendar.getInstance(),
         /** The owner's call hours (synced between the owner's devices): outside them nothing rings, so it's missed. */
         hours: com.flagshipserver.app.core.voici.VoiciCallHours? = null,
     ): Boolean =
-        nowMs - issuedAt <= VoiciCalls.RING_MS && !quiet.isQuiet(nowMs, calendar) && com.flagshipserver.app.core.voici.VoiciCallHoursSettings.allow(hours, nowMs)
+        nowMs - issuedAt <= VoiciCalls.RING_MS && com.flagshipserver.app.core.voici.VoiciCallHoursSettings.allow(hours, nowMs)
 
     fun onPush(context: Context, push: VoiciCallPush.Payload) {
         app = context.applicationContext
         val store = CallSettingsStore(app)
-        // Outside the owner's call hours (or this device's Do Not Disturb) the device stays out of the room: nothing
-        // rings, and the unanswered call becomes a missed call.
-        if (!shouldRing(push.issuedAt, System.currentTimeMillis(), store.quietHours(), hours = store.callHours())) return
+        // Outside the owner's business hours the device stays out of the room: nothing rings, and the unanswered call
+        // becomes a missed call.
+        if (!shouldRing(push.issuedAt, System.currentTimeMillis(), hours = store.callHours())) return
         if (session != null || pendingPush != null) return
         pendingPush = push
         update { Ui(phase = Phase.Ringing, callId = push.callId, name = FSStrings.get(R.string.voici_call_someone)) }
@@ -180,6 +178,12 @@ object VoiciCallCenter {
         }
     }
 
+    /**
+     * The calls channel never bypasses Do Not Disturb (no setBypassDnd), and every ring is a CATEGORY_CALL notification
+     * on it: while the phone is in Do Not Disturb, Android lets it sound and go full screen only when the user's
+     * Do Not Disturb allows calls. The self-managed Telecom connection does not ring by itself; its incoming UI is this
+     * notification (VoiciConnection.onShowIncomingCallUi).
+     */
     fun ensureChannel(context: Context) {
         val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         mgr.createNotificationChannel(

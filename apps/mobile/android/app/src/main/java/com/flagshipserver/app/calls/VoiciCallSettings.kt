@@ -5,32 +5,40 @@
 // before ringing, so they change only by a publish from an admin device and every device sees them in the index.
 // Writers sign v2 only while calls are on; the last "who can call" choice is remembered on the device.
 //
-// Do Not Disturb is per device and never leaves it: a quiet device doesn't ring and stays out of the room, so another
-// device can still answer and an unanswered call becomes a missed call. Keeping the hours off `.com` and the page
-// index means no server learns the owner's time zone or habits.
+// The app has no Do Not Disturb of its own (owner, 2026-11-20): the phone's Do Not Disturb decides, through the
+// incoming-call notification (CATEGORY_CALL on a channel that never bypasses it). The owner's business hours are the
+// synced, sealed setting (VoiciCallHoursSettings), never in the page.
 
 package com.flagshipserver.app.calls
 
 import android.content.Context
 import com.flagshipserver.app.api.VoiciMissedCallItem
 import com.flagshipserver.app.core.voici.VoiciCalls
-import java.util.Calendar
 
 object VoiciCallSettings {
     const val FROM_ACCEPTED = "accepted"
     const val FROM_SIGNED_IN = "signed-in"
-    /** The modes the Social page offers (owner-approved 2026-11-15, signed-in added 2026-11-16); "accepted" stays readable. */
+    /**
+     * The modes the Social page offers (owner-approved 2026-11-15). "signed-in" (the 2026-11-16 first-publish default)
+     * and "accepted" stay readable in old indexes; the picker shows them as "callback" and the next publish writes that.
+     */
     const val FROM_ANYONE = "anyone"
     const val FROM_CALLBACK = "callback"
     val FROM_VALUES = listOf(FROM_ACCEPTED, FROM_SIGNED_IN, FROM_ANYONE, FROM_CALLBACK)
-    val FROM_CHOICES = listOf(FROM_SIGNED_IN, FROM_ANYONE, FROM_CALLBACK)
+    val FROM_CHOICES = listOf(FROM_ANYONE, FROM_CALLBACK)
+
+    /** What a publish carries forward from the index it replaces: "signed-in" (no longer offered) becomes "callback". */
+    fun carried(from: String): String = if (from == FROM_SIGNED_IN) FROM_CALLBACK else from
+
+    /** What the picker shows for a stored mode: one of [FROM_CHOICES]. */
+    fun mode(from: String?): String = if (from in FROM_CHOICES) from!! else FROM_CALLBACK
 
     /**
-     * What a page's first publish carries (owner decision 2026-11-16, docs/voici-and-messages.md §5.4): calls on from
-     * people signed in with Flagship (never anonymous); messages on is VoiciOwner.FIRST_PUBLISH_ACCEPTS_MESSAGES. A
-     * later publish keeps the owner's choices.
+     * What a page's first publish carries (owner decisions 2026-11-16 and 2026-11-20, docs/voici-and-messages.md §5.4):
+     * calls on from people who let you call them back (signed in, never anonymous); messages on is
+     * VoiciOwner.FIRST_PUBLISH_ACCEPTS_MESSAGES. A later publish keeps the owner's choices.
      */
-    val FIRST_PUBLISH: Pair<Boolean, String> = true to FROM_SIGNED_IN
+    val FIRST_PUBLISH: Pair<Boolean, String> = true to FROM_CALLBACK
 
     /** The index fields for a calls setting: v2 fields while on, none (a v1 index) while off. */
     fun indexFields(on: Boolean, from: String): Pair<Int?, String?> =
@@ -78,42 +86,9 @@ object VoiciCallSettings {
     }
 }
 
-/** This device's Do Not Disturb hours for calls, minutes after local midnight. Start == end means all day. */
-data class CallQuietHours(val on: Boolean, val startMinute: Int, val endMinute: Int) {
-    fun normalized() = copy(startMinute = clamp(startMinute), endMinute = clamp(endMinute))
-
-    fun isQuiet(minuteOfDay: Int): Boolean {
-        if (!on) return false
-        val m = clamp(minuteOfDay)
-        val s = clamp(startMinute)
-        val e = clamp(endMinute)
-        if (s == e) return true
-        return if (s < e) m in s until e else m >= s || m < e
-    }
-
-    fun isQuiet(atMs: Long, calendar: Calendar = Calendar.getInstance()): Boolean {
-        calendar.timeInMillis = atMs
-        return isQuiet(calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE))
-    }
-
-    companion object {
-        val STANDARD = CallQuietHours(false, 22 * 60, 7 * 60)
-        fun clamp(m: Int) = ((m % 1440) + 1440) % 1440
-    }
-}
-
 /** This device's own calls preferences (SharedPreferences; nothing synced). */
 class CallSettingsStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences("flagship.voici.calls", Context.MODE_PRIVATE)
-
-    fun quietHours(): CallQuietHours =
-        if (!prefs.contains("quietStart")) CallQuietHours.STANDARD
-        else CallQuietHours(prefs.getBoolean("quietOn", false), prefs.getInt("quietStart", 0), prefs.getInt("quietEnd", 0)).normalized()
-
-    fun setQuietHours(q: CallQuietHours) {
-        val n = q.normalized()
-        prefs.edit().putBoolean("quietOn", n.on).putInt("quietStart", n.startMinute).putInt("quietEnd", n.endMinute).apply()
-    }
+    private val prefs = context.applicationContext.getSharedPreferences("flagship.voici.calls", Context.MODE_PRIVATE).also(::dropQuietHours)
 
     /**
      * The owner's call hours as last synced (VoiciCallHoursSettings): kept here, on this device, so a call that arrives
@@ -127,10 +102,20 @@ class CallSettingsStore(context: Context) {
     }
 
     /** The last "who can call" picked here, for turning calls on again. */
-    fun lastFrom(): String = prefs.getString("from", null)?.takeIf { it in VoiciCallSettings.FROM_CHOICES } ?: VoiciCallSettings.FIRST_PUBLISH.second
+    fun lastFrom(): String = VoiciCallSettings.mode(prefs.getString("from", null) ?: VoiciCallSettings.FIRST_PUBLISH.second)
 
     fun setLastFrom(from: String) {
         if (from in VoiciCallSettings.FROM_VALUES) prefs.edit().putString("from", from).apply()
+    }
+}
+
+/**
+ * The app's own Do Not Disturb hours are gone (owner, 2026-11-20): the phone's Do Not Disturb decides. The stored range
+ * meant "quiet on this device", the opposite of business hours, so it is dropped, not carried over.
+ */
+internal fun dropQuietHours(prefs: android.content.SharedPreferences) {
+    if (prefs.contains("quietOn") || prefs.contains("quietStart") || prefs.contains("quietEnd")) {
+        prefs.edit().remove("quietOn").remove("quietStart").remove("quietEnd").apply()
     }
 }
 
