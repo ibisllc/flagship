@@ -1,6 +1,7 @@
 // The one-time voi.ci intro after a new account is created (owner, 2026-11-20): "Get your own voi.ci page", once per
 // account on this device, only on the create path (never after joining an account, a recovery sign-in or a demo), and
-// only once the create flow's "Secure your account" step is done, so "Set it up" can't skip the backup nudge.
+// only once the create flow's "Secure your account" step is done, so "Turn on" can't skip the backup nudge, and only
+// on a device that can publish the page (an admin device): "Turn on" runs the Public switch's steps.
 // The optional promo line is `.com` config (GET /api/voici/promo), not app text: absent or failed = no promo.
 
 package com.flagshipserver.app.core.voici
@@ -28,9 +29,9 @@ object VoiciIntro {
 
     fun prefsKey(username: String) = "flagship.voici.intro.shown.$username"
 
-    /** The intro shows for an account this device just created, after its backup step, and never twice. */
-    fun shouldShow(path: Path?, username: String?, secureStepOpen: Boolean, alreadyShown: Boolean): Boolean =
-        path == Path.Created && !username.isNullOrBlank() && !secureStepOpen && !alreadyShown
+    /** The intro shows for an account this device just created, after its backup step, on a device that can publish, never twice. */
+    fun shouldShow(path: Path?, username: String?, secureStepOpen: Boolean, alreadyShown: Boolean, canPublish: Boolean): Boolean =
+        path == Path.Created && !username.isNullOrBlank() && !secureStepOpen && !alreadyShown && canPublish
 
     /** `{promo: {text, until} | null}`; anything else (or an empty text) is no promo. */
     fun parsePromo(body: String?): Promo? {

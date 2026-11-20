@@ -4362,7 +4362,7 @@
     <string name="voici_search_engines">Afficher dans les moteurs de recherche</string>
     <string name="voici_search_engines_note">Quand ce réglage est désactivé, les moteurs de recherche sont priés de ne pas référencer votre page. Toute personne qui a le lien peut toujours l\'ouvrir.</string>
     <string name="voici_turn_off_social_title">Désactiver les fonctions sociales ?</string>
-    <string name="voici_intro_title">Obtenez votre propre page voi.ci</string>
-    <string name="voici_intro_body">Configurez voi.ci/%1$s pour envoyer et recevoir des messages et des appels privés, et pour publier des nouvelles. Aucun numéro de téléphone ni e-mail n’est nécessaire, et c’est protégé contre les ordinateurs quantiques.</string>
-    <string name="voici_intro_setup">La configurer</string>
+    <string name="voici_intro_on_title">Activez des messages, des appels et des publications sécurisés</string>
+    <string name="voici_intro_on_body">Laissez les gens vous écrire et vous appeler, et partagez vos nouvelles. Tout est protégé contre les ordinateurs quantiques. Votre page sera sur voi.ci/%1$s.</string>
+    <string name="voici_intro_no">Non merci</string>
 </resources>

@@ -1310,14 +1310,18 @@ private fun AppRoot(
                 onDismiss = { app.clearSecureAccountNudge() },
             )
         }
-        // The one-time voi.ci intro (VoiciIntro): a created account, once its backup step is done, once per device.
+        // The one-time voi.ci intro (VoiciIntro): a created account, once its backup step is done, once per device,
+        // and only on a device that can publish the page (it waits for the page state; never shown otherwise).
         voiciIntroFor?.let { username ->
             val ctx = androidx.compose.ui.platform.LocalContext.current
             val introStore = remember { com.flagshipserver.app.core.voici.VoiciIntroStore(ctx) }
             val deepLinker = LocalDeepLinker.current
-            val show = remember(username, showSecureAccount, isPaired) {
+            val voici = com.flagshipserver.app.ui.screens.LocalVoiciCenter.current
+            val canPublish = voici?.page?.collectAsState()?.value?.canPublish == true
+            LaunchedEffect(voici) { voici?.start() }
+            val show = remember(username, showSecureAccount, isPaired, canPublish) {
                 isPaired && com.flagshipserver.app.core.voici.VoiciIntro.shouldShow(
-                    com.flagshipserver.app.core.voici.VoiciIntro.Path.Created, username, showSecureAccount, introStore.shown(username),
+                    com.flagshipserver.app.core.voici.VoiciIntro.Path.Created, username, showSecureAccount, introStore.shown(username), canPublish,
                 )
             }
             if (show) {
@@ -1327,14 +1331,15 @@ private fun AppRoot(
                     loadPromo = {
                         if (com.flagshipserver.app.core.Variant.usesMockClients) null else com.flagshipserver.app.core.voici.VoiciIntro.fetchPromo()
                     },
-                    onSetUp = {
+                    onTurnOn = {
                         app.clearVoiciIntro()
                         com.flagshipserver.app.ui.screens.SocialSection.current.value = com.flagshipserver.app.ui.screens.SocialSection.PROFILE
+                        com.flagshipserver.app.ui.screens.SocialSection.goPublic.value = true
                         deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.PageEditor)
                     },
-                    onLater = { app.clearVoiciIntro() },
+                    onNo = { app.clearVoiciIntro() },
                 )
-            } else if (!showSecureAccount && isPaired) {
+            } else if (!showSecureAccount && isPaired && introStore.shown(username)) {
                 LaunchedEffect(username) { app.clearVoiciIntro() }
             }
         }

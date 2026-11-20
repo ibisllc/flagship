@@ -4359,7 +4359,7 @@
   "voici_search_engines": "検索エンジンに表示",
   "voici_search_engines_note": "オフのときは、検索エンジンにページを掲載しないよう求めます。リンクを知っている人は引き続き開けます。",
   "voici_turn_off_social_title": "ソーシャル機能をオフにしますか？",
-  "voici_intro_title": "自分の voi.ci ページを作りましょう",
-  "voici_intro_body": "voi.ci/%1$s を設定すると、プライベートなメッセージや通話を送受信したり、近況を投稿したりできます。電話番号もメールアドレスも不要で、量子コンピューターへの対策も施されています。",
-  "voici_intro_setup": "設定する"
+  "voici_intro_on_title": "安全なメッセージ・通話・投稿をオンにする",
+  "voici_intro_on_body": "メッセージや通話を受け取り、近況をシェアできます。すべて量子コンピューターへの対策がされています。あなたのページは voi.ci/%1$s になります。",
+  "voici_intro_no": "今はしない"
 }

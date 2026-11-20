@@ -1,5 +1,6 @@
 // The one-time voi.ci intro after a new account is created (core/voici/VoiciIntro.kt; same sheet as iOS
-// VoiciIntroSheet and the webapp's). "Set it up" opens the Social tab's Profile, "Not now" closes.
+// VoiciIntroSheet and the webapp's). "Turn on" opens the Social tab's Profile and starts the Public switch's steps
+// (rules, the public warning, the first publish); "No thanks" closes.
 
 package com.flagshipserver.app.ui.screens
 
@@ -29,8 +30,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.flagshipserver.app.R
 import com.flagshipserver.app.core.voici.VoiciIntro
-import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.theme.FS
 
 /**
@@ -41,13 +42,13 @@ import com.flagshipserver.app.ui.theme.FS
 fun VoiciIntroSheet(
     username: String,
     loadPromo: suspend () -> VoiciIntro.Promo?,
-    onSetUp: () -> Unit,
-    onLater: () -> Unit,
+    onTurnOn: () -> Unit,
+    onNo: () -> Unit,
 ) {
     var promo by remember { mutableStateOf<VoiciIntro.Promo?>(null) }
     LaunchedEffect(username) { promo = loadPromo() }
     com.flagshipserver.app.ui.components.ModalBottomSheet(
-        onDismissRequest = onLater,
+        onDismissRequest = onNo,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = Modifier.testTag("voici-intro"),
     ) {
@@ -56,11 +57,11 @@ fun VoiciIntroSheet(
             verticalArrangement = Arrangement.spacedBy(FS.space.s3),
         ) {
             Text(
-                stringResource(R.string.voici_intro_title),
+                stringResource(R.string.voici_intro_on_title),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.semantics { heading() },
             )
-            Text(stringResource(R.string.voici_intro_body, username), style = MaterialTheme.typography.bodyLarge, color = FS.colors.textMuted)
+            Text(stringResource(R.string.voici_intro_on_body, username), style = MaterialTheme.typography.bodyLarge, color = FS.colors.textMuted)
             promo?.let {
                 Text(
                     it.text,
@@ -73,8 +74,8 @@ fun VoiciIntroSheet(
                         .testTag("voici-intro-promo"),
                 )
             }
-            FSPrimaryButton(stringResource(R.string.voici_intro_setup), onSetUp, block = true, modifier = Modifier.testTag("voici-intro-setup"))
-            FSGhostButton(stringResource(R.string.not_now), onLater, block = true, modifier = Modifier.testTag("voici-intro-later"))
+            FSPrimaryButton(stringResource(R.string.turn_on), onTurnOn, block = true, modifier = Modifier.testTag("voici-intro-turn-on"))
+            FSGhostButton(stringResource(R.string.voici_intro_no), onNo, block = true, modifier = Modifier.testTag("voici-intro-no"))
             Spacer(Modifier.size(FS.space.s4))
         }
     }

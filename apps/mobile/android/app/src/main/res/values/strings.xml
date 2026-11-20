@@ -4369,7 +4369,7 @@
     <string name="voici_search_engines">Show in search engines</string>
     <string name="voici_search_engines_note">When this is off, search engines are asked not to list your page. Anyone with the link can still open it.</string>
     <string name="voici_turn_off_social_title">Turn off social features?</string>
-    <string name="voici_intro_title">Get your own voi.ci page</string>
-    <string name="voici_intro_body">Set up voi.ci/%1$s to send and receive private messages and calls, and to post updates. No phone number or email needed, and it\'s protected against quantum computers.</string>
-    <string name="voici_intro_setup">Set it up</string>
+    <string name="voici_intro_on_title">Turn on safe messages, calls and posts</string>
+    <string name="voici_intro_on_body">Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/%1$s.</string>
+    <string name="voici_intro_no">No thanks</string>
 </resources>

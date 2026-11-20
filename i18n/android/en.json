@@ -17889,16 +17889,16 @@
     "en": "Turn off social features?",
     "ctx": "voi.ci / Social: confirmation for Social options → Turn off social features, title"
   },
-  "voici_intro_title": {
-    "en": "Get your own voi.ci page",
+  "voici_intro_on_title": {
+    "en": "Turn on safe messages, calls and posts",
     "ctx": "voi.ci intro sheet shown once after a new account is created, title"
   },
-  "voici_intro_body": {
-    "en": "Set up voi.ci/%1$s to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.",
+  "voici_intro_on_body": {
+    "en": "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/%1$s.",
     "ctx": "voi.ci intro sheet, body; %1$s is the new account's username"
   },
-  "voici_intro_setup": {
-    "en": "Set it up",
-    "ctx": "voi.ci intro sheet, primary button: opens the Social tab's page editor"
+  "voici_intro_no": {
+    "en": "No thanks",
+    "ctx": "voi.ci intro sheet, secondary button: closes it for good"
   }
 }

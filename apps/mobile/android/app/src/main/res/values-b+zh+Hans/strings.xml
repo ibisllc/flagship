@@ -4361,7 +4361,7 @@
     <string name="voici_search_engines">在搜索引擎中显示</string>
     <string name="voici_search_engines_note">关闭时，会要求搜索引擎不要收录你的页面。有链接的人仍然可以打开它。</string>
     <string name="voici_turn_off_social_title">要关闭社交功能吗？</string>
-    <string name="voici_intro_title">拥有你自己的 voi.ci 页面</string>
-    <string name="voici_intro_body">设置 voi.ci/%1$s，即可收发私密消息和通话，并发布动态。不需要手机号或电子邮件，而且能抵御量子计算机。</string>
-    <string name="voici_intro_setup">去设置</string>
+    <string name="voici_intro_on_title">开启安全的消息、通话和动态</string>
+    <string name="voici_intro_on_body">让别人给你发消息、打电话，并分享你的动态。一切都能抵御量子计算机。你的页面将位于 voi.ci/%1$s。</string>
+    <string name="voici_intro_no">不用了</string>
 </resources>

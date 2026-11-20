@@ -4362,7 +4362,7 @@
     <string name="voici_search_engines">In Suchmaschinen anzeigen</string>
     <string name="voici_search_engines_note">Wenn das aus ist, werden Suchmaschinen gebeten, deine Seite nicht aufzunehmen. Wer den Link hat, kann sie trotzdem öffnen.</string>
     <string name="voici_turn_off_social_title">Social-Funktionen ausschalten?</string>
-    <string name="voici_intro_title">Hol dir deine eigene voi.ci-Seite</string>
-    <string name="voici_intro_body">Richte voi.ci/%1$s ein, um private Nachrichten und Anrufe zu senden und zu empfangen und Neuigkeiten zu posten. Ohne Telefonnummer oder E-Mail-Adresse, und geschützt gegen Quantencomputer.</string>
-    <string name="voici_intro_setup">Einrichten</string>
+    <string name="voici_intro_on_title">Sichere Nachrichten, Anrufe und Beiträge einschalten</string>
+    <string name="voici_intro_on_body">Lass dir Nachrichten schreiben und dich anrufen, und teile deine Neuigkeiten. Alles ist gegen Quantencomputer geschützt. Deine Seite ist dann unter voi.ci/%1$s.</string>
+    <string name="voici_intro_no">Nein danke</string>
 </resources>

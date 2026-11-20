@@ -11,16 +11,21 @@ import java.util.Locale
 
 class VoiciIntroTest {
     @Test fun showsOnceAfterCreationOnlyOnceTheBackupStepIsDone() {
-        assertTrue(VoiciIntro.shouldShow(VoiciIntro.Path.Created, "alice", secureStepOpen = false, alreadyShown = false))
-        assertFalse("not while Secure your account is still open", VoiciIntro.shouldShow(VoiciIntro.Path.Created, "alice", true, false))
-        assertFalse("never twice for the same account", VoiciIntro.shouldShow(VoiciIntro.Path.Created, "alice", false, true))
-        assertFalse(VoiciIntro.shouldShow(VoiciIntro.Path.Created, "", false, false))
-        assertFalse(VoiciIntro.shouldShow(null, "alice", false, false))
+        assertTrue(VoiciIntro.shouldShow(VoiciIntro.Path.Created, "alice", secureStepOpen = false, alreadyShown = false, canPublish = true))
+        assertFalse("not while Secure your account is still open", VoiciIntro.shouldShow(VoiciIntro.Path.Created, "alice", true, false, true))
+        assertFalse("never twice for the same account", VoiciIntro.shouldShow(VoiciIntro.Path.Created, "alice", false, true, true))
+        assertFalse(VoiciIntro.shouldShow(VoiciIntro.Path.Created, "", false, false, true))
+        assertFalse(VoiciIntro.shouldShow(null, "alice", false, false, true))
+    }
+
+    /** "Turn on" runs the Public switch's steps, so a device that can't publish the page never sees the sheet. */
+    @Test fun notOnADeviceThatCantPublish() {
+        assertFalse(VoiciIntro.shouldShow(VoiciIntro.Path.Created, "alice", secureStepOpen = false, alreadyShown = false, canPublish = false))
     }
 
     @Test fun neverAfterJoinRecoveryOrDemo() {
         for (p in listOf(VoiciIntro.Path.Joined, VoiciIntro.Path.Recovered, VoiciIntro.Path.Demo)) {
-            assertFalse(p.name, VoiciIntro.shouldShow(p, "alice", false, false))
+            assertFalse(p.name, VoiciIntro.shouldShow(p, "alice", false, false, true))
         }
     }
 

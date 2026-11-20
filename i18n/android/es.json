@@ -4360,7 +4360,7 @@
   "voici_search_engines": "Mostrar en los buscadores",
   "voici_search_engines_note": "Si está desactivado, se pide a los buscadores que no muestren tu página. Cualquiera con el enlace puede abrirla igualmente.",
   "voici_turn_off_social_title": "¿Desactivar las funciones sociales?",
-  "voici_intro_title": "Consigue tu propia página de voi.ci",
-  "voici_intro_body": "Configura voi.ci/%1$s para enviar y recibir mensajes y llamadas privados, y para publicar novedades. No necesitas número de teléfono ni correo, y está protegido frente a los ordenadores cuánticos.",
-  "voici_intro_setup": "Configurarla"
+  "voici_intro_on_title": "Activa mensajes, llamadas y publicaciones seguros",
+  "voici_intro_on_body": "Deja que la gente te escriba y te llame, y comparte tus novedades. Todo está protegido frente a los ordenadores cuánticos. Tu página estará en voi.ci/%1$s.",
+  "voici_intro_no": "No, gracias"
 }

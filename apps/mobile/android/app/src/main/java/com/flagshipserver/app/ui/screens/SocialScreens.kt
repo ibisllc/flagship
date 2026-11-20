@@ -156,6 +156,8 @@ object SocialSection {
     const val INBOX = "inbox"
     const val REQUESTS = "requests"
     val current = MutableStateFlow(PROFILE)
+    /** The voi.ci intro's "Turn on": the Profile starts the Public switch's go-public steps once it can publish. */
+    val goPublic = MutableStateFlow(false)
 }
 
 /** The Social page's counts, read again whenever what they come from moves. */
@@ -212,6 +214,13 @@ fun SocialScreen(nav: NavController) {
     val editor = remember(center) { PageEditState(center) }
     var showOptions by rememberSaveable { mutableStateOf(false) }
     PagePublicDialogs(flow)
+    val goPublic by SocialSection.goPublic.collectAsState()
+    LaunchedEffect(goPublic, page.canPublish) {
+        if (goPublic && page.canPublish) {
+            SocialSection.goPublic.value = false
+            if (!page.isPublic) flow.setPublic(true)
+        }
+    }
 
     val profileSide = section == SocialSection.PROFILE
     val counts = rememberSocialCounts(center)
