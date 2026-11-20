@@ -98,4 +98,6 @@ over once "let's start 0.5" is said.
   - re-pin after cosmetic merges (only warns since 2026-11-20): keep, and say in `--list` which steps a re-pin
     re-opens (11 when the webapp shell moves).
   - steps that merely wait (12 appliance builds, 31/41 publish) could merge.
+  - step 23 refuses when the caller exported GYM_SECRETS_FILE (the webapp deploy guard): unset it inside release.sh
+    for the .com deploy, and stop documenting the prefix (release.sh finds ~/flagship/.gym-secrets.env itself).
   Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
