@@ -245,6 +245,7 @@ test.describe("gym webapp onboarding", () => {
     );
     await expect(intro.locator("[data-testid=voici-intro-promo]")).toHaveText("Set it up this week for a free month.");
     expect(promoAsked).toBe(1);
+    await page.waitForTimeout(400); // the sheet's fade-in
     await shot(page, testInfo, "voici-intro-promo");
     await intro.locator("[data-testid=voici-intro-turn-on]").click();
     await expect(intro).toHaveCount(0);
@@ -277,6 +278,7 @@ test.describe("gym webapp onboarding", () => {
     const intro = page.locator("[data-testid=voici-intro]");
     await expect(intro).toBeVisible({ timeout: 15_000 });
     await expect(intro.locator("[data-testid=voici-intro-promo]")).toBeHidden();
+    await page.waitForTimeout(400); // the sheet's fade-in
     await shot(page, testInfo, "voici-intro");
     await intro.locator("[data-testid=voici-intro-no]").click();
     await expect(intro).toHaveCount(0);

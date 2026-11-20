@@ -27,9 +27,9 @@ their branch; this doc and its migrations stay on `main`).
    first answer, and records a content-free missed call. It never sees audio or key material.
 5. **Every admin device rings; the first answer wins; the answering device takes the bare name** for the call, even
    from another of the owner's devices that holds it (§5). One call at a time per account.
-6. **A page's first publish turns calls on for people signed in with Flagship** (`callsFrom: signed-in`, never
-   anonymous; owner decision 2026-11-16, which replaces "off until the owner turns them on" and D1's accepted-only
-   default). A later publish keeps the owner's choice. The page shows a Call action only while calls are on.
+6. **A page's first publish turns calls on for people who let the owner call them back** (`callsFrom: callback`, never
+   anonymous; owner decisions 2026-11-16 and 2026-11-20: first `signed-in`, which the apps no longer offer, see
+   "Social options" below). A later publish keeps the owner's choice. The page shows a Call action only while calls are on.
 7. **Ringing a phone in a pocket** uses the platforms' calling paths: iOS PushKit VoIP pushes and CallKit, Android a
    high-priority FCM (or UnifiedPush) message and a self-managed Telecom connection with a full-screen notification.
 
@@ -347,7 +347,8 @@ are not built). Not compiled for a device yet (iOS: no Xcode build on this Mac u
    asks to open and unlock Flagship before it can be answered. Decide whether a device-held, call-only signing key
    (Keychain / Keystore, available after first unlock) is acceptable.
 4. **D4 legal check** for calls in the China mainland storefront still stands.
-5. **Do Not Disturb is per device, not synced** (below). Syncing it through the sealed Messages state blob is possible
+5. ~~**Do Not Disturb is per device, not synced**~~ Removed 2026-11-20 ("Social options" below): the phone's own Do
+   Not Disturb / Focus decides. Syncing it through the sealed Messages state blob is possible
    (`.com` sees only ciphertext) but changes the state format in four ports; say if one setting for every device is
    wanted.
 6. Native review of the new strings (machine drafts in six languages).
@@ -356,7 +357,7 @@ are not built). Not compiled for a device yet (iOS: no Xcode build on this Mac u
 
 - **Calls settings** (Settings → Messages → Page options → Calls, iOS `Calls/VoiciCallsSettingsSection.swift`, Android
   `ui/screens/VoiciCallsSettings.kt`, models `VoiciCallSettings`): Accept calls, Who can call (accepted conversations |
-  anyone signed in), Do Not Disturb hours. On/off and who can call live in the signed page index: an admin device
+  anyone signed in; that choice is gone since 2026-11-20), Do Not Disturb hours (removed 2026-11-20). On/off and who can call live in the signed page index: an admin device
   changes them with a publish of its own (`setCalls`), other devices see them read-only ("Only an admin device can
   change this"), and an unpublished page says "Publish your page to take calls." **Every publish now carries the calls
   fields of the index it replaces** (iOS, Android and the webapp, shell v216); before this, any publish signed v1 and
@@ -927,3 +928,27 @@ deploy sheet's step "Calls on" (`docs/runbooks/0.4-deploy-sheet.md` §3a), once 
 its readiness checklist (C1-C13: migrations, the call room, the APNs VoIP key, FCM, the pinned WebRTC and TURN
 libraries in the store builds, the relay, the privacy policy's calls lines, D4, rate limits, the relay gaps of §5)
 holds. The off switch is the same flag. Calls stay fail-safe: a calls failure never breaks messages or pages.
+
+## Social options (owner, 2026-11-20, `0.4/social-ux`)
+
+- **Page options is "Social options"** on iOS, Android and the webapp (the sheet, the ⋯ button's label, "Turn on
+  Accept messages in Social options", the first-publish warning lines).
+- **Who can call** no longer offers "Anyone signed in with Flagship" (`signed-in`). The pickers keep: iOS and Android
+  Anyone on the internet and the call-back mode; the webapp also "People whose conversation you accepted"
+  (`accepted`). An index that says `signed-in` shows as `callback`, and the next publish of anything (the calls fields
+  are carried forward) writes `callback`. **The first publish now writes `callback`** (`VOICI_FIRST_PUBLISH` webapp,
+  iOS `VoiciCallSettings.firstPublish`, Android `FIRST_PUBLISH`); its warning line reads "Messages and calls are on.
+  Callers sign in with Flagship and let you call them back. You can turn them off in Social options." `.com` and
+  voi.ci still accept `signed-in` from old apps; no signed format or vector changed.
+- **No Do Not Disturb of the app's own.** The per-device quiet hours are gone (iOS `CallQuietHours`, Android
+  `CallQuietHours` and their prefs, which are deleted once; the range was dropped, not migrated, since it meant the
+  opposite of business hours). iOS reports every VoIP push to CallKit, which applies the phone's Do Not Disturb and
+  Focus. Android posts the incoming call on the `flagship.calls` channel (high importance, `CATEGORY_CALL`, no DND
+  bypass) behind a self-managed Telecom connection, so the system's interruption filter applies: a phone in Do Not
+  Disturb stays silent unless its rules let calls through (our callers carry no contact, so only "calls from anyone"
+  does).
+- **"Set business hours"** is the old "Only at certain hours" toggle: the owner's synced, sealed hours (option c
+  above); devices ring only inside them, outside them a call becomes a missed call. `.com` stores only ciphertext.
+- **"Remove page" is "Turn off social features"**: its confirm "Turn off social features?" says "Your voi.ci page is
+  removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on
+  again." (button Turn off). The Public switch's off-confirm keeps its title and uses the same message.

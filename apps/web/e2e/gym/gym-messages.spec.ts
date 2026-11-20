@@ -456,6 +456,7 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
       "Your voi.ci page is removed, and messages and calls to it stop. Your posts and profile stay on your devices, so you can turn it on again.",
     );
     await expect(page.locator("[data-modal-ok]")).toHaveText("Turn off");
+    await page.waitForTimeout(400); // the confirm's fade-in
     await shot(page, testInfo, "social-off-confirm");
     await page.click("[data-modal-ok]");
     await expect(page.locator("#page-public-switch")).toHaveAttribute("aria-checked", "false");

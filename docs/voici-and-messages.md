@@ -225,7 +225,7 @@ listed image pieces. Caps: 2,000 pieces, 300 KiB index. **No cap on the number o
 only per-piece caps and per-day upload brakes (§9.4).
 
 **Search engines (owner decision 2026-11-17).** An owner's page is hidden from search engines unless the owner turns
-on **Show in search engines** (Page options, admin devices, while the page is public). The setting is one optional
+on **Show in search engines** (Social options, admin devices, while the page is public). The setting is one optional
 field of the index, on either version: `showInSearch: 1` in the envelope, appended as the last canonical field
 (`…|<signerKind>|<signerPub>|1`). Absent means hidden; 1 is the only value written or accepted (`0`, `true`, `null` are
 `malformed`), so a hidden page has exactly one encoding and every index signed before this reads as it did. Stripping or
@@ -521,11 +521,22 @@ creation order. Merging is a pure function in
 The switch is in the index (`acceptsMessages`), so turning it on or off is a publish. `.com` enforces the stored
 index as the first filter on every send (§8.3); the phone enforces its own latest.
 
-**Defaults (owner decision 2026-11-16):** a page's first publish accepts messages and takes calls from people signed in
-with Flagship (`acceptsMessages: 1`, `acceptsCalls: 1`, `callsFrom: "signed-in"`; `VOICI_FIRST_PUBLISH`). A page that
-was never published shows Accept messages on in the editor, the public warning before the first publish says
-"Messages and calls from people signed in with Flagship are on. You can turn them off in Page options.", and every
-later publish keeps the owner's choices. Detail: `voici-calls.md` "First publish".
+**Defaults (owner decisions 2026-11-16, 2026-11-20):** a page's first publish accepts messages and takes calls from
+people who let the owner call them back (`acceptsMessages: 1`, `acceptsCalls: 1`, `callsFrom: "callback"`;
+`VOICI_FIRST_PUBLISH`). A page that was never published shows Accept messages on in the editor, the public warning
+before the first publish says "Messages and calls are on. Callers sign in with Flagship and let you call them back.
+You can turn them off in Social options.", and every later publish keeps the owner's choices (an old `signed-in`
+becomes `callback`).
+
+**The new account's offer (owner, 2026-11-20).** Once a new account's creation steps are done (after Secure your
+account; never on joining, signing in again, a demo or a restore), the apps offer once per account per device, and only
+on a device that can publish the page: "Turn on safe messages, calls and posts" / "Let people message and call you, and
+share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{username}." with
+Turn on and No thanks. Turn on opens the Social tab's Profile and goes public the Public switch's way (the rules once,
+then the public warning with the first-publish defaults), so a refusal shows its sentence there. An optional promo
+callout comes from `GET /api/voici/promo` (`{promo: {text, until} | null}`, by `?lang=` then Accept-Language then
+English), server config `VOICI_PROMO` (a JSON map locale → text) and `VOICI_PROMO_UNTIL` in `apps/com/wrangler.toml`,
+shipped empty. Records: iOS/Android `flagship.voici.intro(.shown).<username>`, webapp `flagship.voici.intro.<username>`. Detail: `voici-calls.md` "First publish".
 
 ## 6. Signing in with Flagship (visitor side)
 

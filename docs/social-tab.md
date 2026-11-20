@@ -23,13 +23,14 @@ internal destination stays `RootDestination.messages` (gym `-smoke-tab messages`
   (`PagePublicFlow`): rules once per device, the one-time "Make your page public?" warning per account, then the
   signature; switching off asks "Remove your page from voi.ci?". Disabled on a device without the admin root, with
   "Only an admin device can publish your page." under the row (`page-admin-only`).
-- **⋯ Page options** (`page-options`), a sheet:
+- **⋯ Social options** (`page-options`; "Page options" until 2026-11-20), a sheet:
   - Theme: Classic / Ink / Sea swatches drawn in each theme's own colours (`page-theme-<id>`). A draft.
   - While public: Copy link, Share, and the address.
   - Accept messages (a draft, as before).
   - Websites you're signed in to (`SignedInSitesScreen`, was Settings → Messages), Rotate inbox key (admin device,
     page published), Page and message rules.
-  - Remove page (admin device, page public), red, last; same confirmation as switching Public off.
+  - Turn off social features (admin device, page public; "Remove page" until 2026-11-20), red, last; its confirm
+    says the page, its messages and calls go (the Public switch's off-confirm uses the same message).
   Settings no longer has a Messages row; Settings → "Your page" opens the tab's Profile.
 
 ### 1.2 Profile / Messages
