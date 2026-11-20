@@ -3764,9 +3764,7 @@
   "{0} ({1})": "{0} ({1})",
   "Call back": "Ligar de volta",
   "Ringing them. When they answer, your phone rings.": "O telefone deles está tocando. Quando atenderem, o seu toca.",
-  "People whose conversation you accepted": "Pessoas cuja conversa você aceitou",
   "Anyone on the internet": "Qualquer pessoa na internet",
-  "Only people you can call back": "Só pessoas para quem você pode ligar de volta",
   "Accept calls": "Aceitar chamadas",
   "Who can call": "Quem pode ligar",
   "Days": "Dias",
@@ -3967,5 +3965,8 @@
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Mensagens e chamadas estão ativadas. Quem liga entra com o Flagship e deixa você retornar a chamada. Você pode desativá-las em Opções sociais.",
   "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "As chamadas estão ativadas. Quem liga entra com o Flagship e deixa você retornar a chamada. Você pode desativá-las em Opções sociais.",
   "Turn on safe messages, calls and posts": "Ative mensagens, chamadas e publicações seguras",
-  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Deixe as pessoas mandarem mensagens e ligarem para você, e compartilhe suas novidades. Tudo é protegido contra computadores quânticos. Sua página vai ficar em voi.ci/{0}."
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Deixe as pessoas mandarem mensagens e ligarem para você, e compartilhe suas novidades. Tudo é protegido contra computadores quânticos. Sua página vai ficar em voi.ci/{0}.",
+  "Your stuff,<br>on your hardware.": "Suas coisas,<br>no seu hardware.",
+  "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "Uma nuvem pessoal que realmente é sua. Você cria e aprova tudo pelo celular; seu servidor executa seus apps.",
+  "People who let you call them back": "Pessoas que deixam você retornar a ligação"
 }

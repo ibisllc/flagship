@@ -4148,8 +4148,8 @@
     <string name="voici_call_back_off">They didn\'t allow call-backs. They can call you again and allow it.</string>
     <string name="voici_calls_from_anyone">Anyone on the internet</string>
     <string name="voici_calls_from_anyone_note">No account needed. Callers can\'t be called back.</string>
-    <string name="voici_calls_from_callback">People with a call-back account</string>
-    <string name="voici_calls_from_callback_note">Callers sign in with Flagship and let you call them back. They stay anonymous to you.</string>
+    <string name="voici_calls_from_callback">People who let you call them back</string>
+    <string name="voici_calls_from_callback_note">Callers sign in with Flagship and let you call them back in that conversation. You never learn who they are. Your admin devices ring.</string>
     <string name="voici_call_back_prompt_title">Let %1$s call you back?</string>
     <string name="voici_call_back_prompt_body">%1$s won\'t learn who you are. Flagship will know this conversation can ring your phone.</string>
     <string name="voici_call_and_allow_back">Call and allow call-back</string>

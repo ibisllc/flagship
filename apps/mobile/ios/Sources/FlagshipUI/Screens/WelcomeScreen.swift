@@ -18,19 +18,32 @@ public struct WelcomeScreen: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         if !typeSize.isAccessibilitySize {
+                            // Capped, so on tall phones the picture and the headline sit high and the leftover
+                            // height goes above the buttons (design audit 2026-11-20).
                             Spacer(minLength: FS.space.s6)
+                                .frame(maxHeight: FS.space.s16 + FS.space.s8)
                             PhoneAndServerIllustration()
                                 .frame(maxWidth: .infinity)
                                 .accessibilityHidden(true)
                         }
-                        Spacer(minLength: FS.space.s8)
+                        // The headline sits a fixed step under the picture (the leftover height goes above the
+                        // picture and above the buttons, which stay at the bottom), not adrift in the middle.
+                        if typeSize.isAccessibilitySize {
+                            Spacer(minLength: FS.space.s8)
+                        } else {
+                            Color.clear.frame(height: FS.space.s12)
+                        }
                         VStack(alignment: .leading, spacing: FS.space.s3) {
+                            // Never squeezed to "Your stuff,…": both lines at any width and text size (the
+                            // ScrollView proposes a short height while the footer is pinned to the bottom).
                             Text("Your stuff,\non your hardware.")
                                 .font(FS.font.h1())
+                                .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityAddTraits(.isHeader)
                             FSColorReader { c in
                                 Text("A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.")
                                     .font(.system(.body))
+                                    .fixedSize(horizontal: false, vertical: true)
                                     .foregroundColor(c.textMuted)
                             }
                         }
@@ -118,15 +131,15 @@ private struct PhoneAndServerIllustration: View {
     private func link(c: FSColors) -> some View {
         HStack(spacing: 5) {
             ForEach(0..<4, id: \.self) { _ in
-                Circle().fill(c.textMuted.opacity(0.5)).frame(width: 4, height: 4)
+                Circle().fill(c.accent.opacity(0.5)).frame(width: 4, height: 4)
             }
-            // The internet between them (owner, 2026-11-20: a globe, not a lock), outlined in the
-            // illustration's own regular weight.
+            // The internet between them (owner, 2026-11-20: a globe, not a lock). Semibold at this size gives a
+            // ~2 pt stroke, like the phone and the server; the teal dots run the protected path through it.
             Image(systemName: "globe")
-                .font(.system(size: 18, weight: .regular))
+                .font(.system(size: 21, weight: .semibold))
                 .foregroundColor(c.accent)
             ForEach(0..<4, id: \.self) { _ in
-                Circle().fill(c.textMuted.opacity(0.5)).frame(width: 4, height: 4)
+                Circle().fill(c.accent.opacity(0.5)).frame(width: 4, height: 4)
             }
         }
         .padding(.horizontal, FS.space.s2)

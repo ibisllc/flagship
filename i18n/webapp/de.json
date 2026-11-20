@@ -3764,9 +3764,7 @@
   "{0} ({1})": "{0} ({1})",
   "Call back": "Zurückrufen",
   "Ringing them. When they answer, your phone rings.": "Es klingelt bei ihnen. Wenn sie annehmen, klingelt dein Telefon.",
-  "People whose conversation you accepted": "Leute, deren Unterhaltung du angenommen hast",
   "Anyone on the internet": "Alle im Internet",
-  "Only people you can call back": "Nur Leute, die du zurückrufen kannst",
   "Accept calls": "Anrufe annehmen",
   "Who can call": "Wer anrufen darf",
   "Days": "Tage",
@@ -3967,5 +3965,8 @@
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Nachrichten und Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten.",
   "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten.",
   "Turn on safe messages, calls and posts": "Sichere Nachrichten, Anrufe und Beiträge einschalten",
-  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Lass dir Nachrichten schreiben und dich anrufen, und teile deine Neuigkeiten. Alles ist gegen Quantencomputer geschützt. Deine Seite ist dann unter voi.ci/{0}."
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Lass dir Nachrichten schreiben und dich anrufen, und teile deine Neuigkeiten. Alles ist gegen Quantencomputer geschützt. Deine Seite ist dann unter voi.ci/{0}.",
+  "Your stuff,<br>on your hardware.": "Deine Sachen,<br>auf deiner Hardware.",
+  "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "Eine persönliche Cloud, die dir wirklich gehört. Du baust und genehmigst alles von deinem Telefon aus; dein Server betreibt deine Apps.",
+  "People who let you call them back": "Leute, die dir Rückrufe erlauben"
 }

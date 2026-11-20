@@ -111,9 +111,12 @@ fun WelcomeScreen(nav: NavController) {
     }
 }
 
+/** The glyph colour on the teal badge: near-black, as iOS's onPrimary on its teal. */
+private val FS_ON_TEAL = Color(0xFF0A0A09)
+
 /**
- * The product in one picture: your phone (the key), a dashed line it signs
- * across, and your server (two drive bays with live LEDs). A dot travels the
+ * The product in one picture: your phone (the key badge), a dashed line across
+ * the internet (a globe), and your server (two drive bays with live LEDs). A dot travels the
  * line; the server's LEDs breathe. Drawn, not an icon, so it scales with the
  * screen and follows both themes.
  */
@@ -156,18 +159,24 @@ private fun BoxIllustration() {
         drawRoundRect(card, androidx.compose.ui.geometry.Offset(px, py), androidx.compose.ui.geometry.Size(pw, ph), androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()))
         drawRoundRect(ink.copy(alpha = 0.85f), androidx.compose.ui.geometry.Offset(px, py), androidx.compose.ui.geometry.Size(pw, ph), androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
         drawRoundRect(ink.copy(alpha = 0.5f), androidx.compose.ui.geometry.Offset(px + pw / 2f - 9.dp.toPx(), py + 8.dp.toPx()), androidx.compose.ui.geometry.Size(18.dp.toPx(), 3.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
-        // Key on the phone: a ring and a shaft
-        val kc = androidx.compose.ui.geometry.Offset(px + pw / 2f, cy - 8.dp.toPx())
-        drawCircle(teal, radius = 11.dp.toPx(), center = kc, style = androidx.compose.ui.graphics.drawscope.Stroke(4.dp.toPx()))
-        drawLine(teal, androidx.compose.ui.geometry.Offset(kc.x, kc.y + 11.dp.toPx()), androidx.compose.ui.geometry.Offset(kc.x, kc.y + 34.dp.toPx()), strokeWidth = 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-        drawLine(teal, androidx.compose.ui.geometry.Offset(kc.x, kc.y + 26.dp.toPx()), androidx.compose.ui.geometry.Offset(kc.x + 9.dp.toPx(), kc.y + 26.dp.toPx()), strokeWidth = 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        // The key badge on the phone's corner, as on iOS (key.fill) and the webapp: a filled key on a teal disc,
+        // ringed in the card colour.
+        val bc = androidx.compose.ui.geometry.Offset(px + pw - 4.dp.toPx(), py + ph - 4.dp.toPx())
+        drawCircle(card, radius = 19.dp.toPx(), center = bc)
+        drawCircle(teal, radius = 16.dp.toPx(), center = bc)
+        val onTeal = FS_ON_TEAL
+        val bow = androidx.compose.ui.geometry.Offset(bc.x, bc.y - 5.dp.toPx())
+        drawCircle(onTeal, radius = 5.5.dp.toPx(), center = bow)
+        drawCircle(teal, radius = 1.8.dp.toPx(), center = androidx.compose.ui.geometry.Offset(bow.x, bow.y - 1.dp.toPx()))
+        drawLine(onTeal, androidx.compose.ui.geometry.Offset(bc.x, bow.y + 4.dp.toPx()), androidx.compose.ui.geometry.Offset(bc.x, bc.y + 10.dp.toPx()), strokeWidth = 3.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(onTeal, androidx.compose.ui.geometry.Offset(bc.x, bc.y + 5.dp.toPx()), androidx.compose.ui.geometry.Offset(bc.x + 4.dp.toPx(), bc.y + 5.dp.toPx()), strokeWidth = 2.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
         // Server: two bays
         val sw = 104.dp.toPx(); val bay = 52.dp.toPx(); val gap = 8.dp.toPx()
         val sx = w * 0.84f - sw; val sy = cy - (bay * 2 + gap) / 2f
         for (i in 0..1) {
             val y = sy + i * (bay + gap)
             drawRoundRect(card, androidx.compose.ui.geometry.Offset(sx, y), androidx.compose.ui.geometry.Size(sw, bay), androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
-            drawRoundRect(ink.copy(alpha = 0.85f), androidx.compose.ui.geometry.Offset(sx, y), androidx.compose.ui.geometry.Size(sw, bay), androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+            drawRoundRect(ink, androidx.compose.ui.geometry.Offset(sx, y), androidx.compose.ui.geometry.Size(sw, bay), androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
             for (k in 0..2) drawLine(line, androidx.compose.ui.geometry.Offset(sx + 14.dp.toPx(), y + (16 + k * 9).dp.toPx()), androidx.compose.ui.geometry.Offset(sx + sw - 38.dp.toPx(), y + (16 + k * 9).dp.toPx()), strokeWidth = 2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
             drawCircle(ok.copy(alpha = if (i == 0) led else 1f), radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(sx + sw - 18.dp.toPx(), y + bay / 2f))
         }

@@ -93,6 +93,11 @@ extension GymSweepSeams {
     /// mismatched pairing), so Join reaches the code and fails after it.
     public static func applyOnboarding(args: [String], mocks: GymMocks) {
         guard args.contains("-smoke-onboarding"), let server = mocks.server else { return }
+        // A new account's safe-messages offer: never the network, never a promo; none left from an earlier walk.
+        VoiciIntro.fetchPromo = { _ in nil }
+        for k in UserDefaults.standard.dictionaryRepresentation().keys where k.hasPrefix("flagship.voici.intro.") {
+            UserDefaults.standard.removeObject(forKey: k)
+        }
         let irk = String(repeating: "11", count: 32)
         server.seedClaimedUsername(gymRecoverableAccount, irkPubHex: irk)
         server.cloudRecoveryByUser[gymRecoverableAccount] = true

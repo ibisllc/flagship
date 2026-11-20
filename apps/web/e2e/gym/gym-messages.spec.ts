@@ -441,7 +441,8 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     const calls = page.locator("[data-testid=page-calls-sheet]");
     await expect(calls).toBeVisible();
     const choices = await calls.locator("input[name=calls-from]").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
-    expect(choices).toEqual(["accepted", "anyone", "callback"]);
+    expect(choices).toEqual(["anyone", "callback"]);
+    await expect(calls.locator("input[name=calls-from][value=callback] + span")).toHaveText("People who let you call them back");
     await expect(calls.locator("input[name=calls-from][value=callback]")).toBeChecked();
     await expect(calls.locator("#calls-hours-label")).toHaveText("Set business hours");
     await expect(calls).not.toContainText("Do Not Disturb");

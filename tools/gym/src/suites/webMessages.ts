@@ -68,7 +68,7 @@ export const WEB_MESSAGES: readonly Scenario[] = [
   ),
   webTotal(
     "web-messages-social-options",
-    "Social options (was Page options) on an admin device: the first publish takes calls from people who let the owner call them back (callsFrom callback); the Calls sheet offers accepted, anyone and callback (no Anyone signed in with Flagship) with callback picked and Set business hours (no Do Not Disturb); Turn off social features asks Turn off social features? (the page, messages and calls go) and removes the page.",
+    "Social options (was Page options) on an admin device: the first publish takes calls from people who let the owner call them back (callsFrom callback); the Calls sheet offers Anyone on the internet and People who let you call them back, as iOS and Android (no Anyone signed in with Flagship) with callback picked and Set business hours (no Do Not Disturb); Turn off social features asks Turn off social features? (the page, messages and calls go) and removes the page.",
     "gym messages Social options: callers who let you call back by default, no signed-in choice, Turn off social features",
     {
       steps: [

@@ -3764,9 +3764,7 @@
   "{0} ({1})": "{0} ({1})",
   "Call back": "Rappeler",
   "Ringing them. When they answer, your phone rings.": "Leur téléphone sonne. Quand ils répondent, c'est le vôtre qui sonne.",
-  "People whose conversation you accepted": "Les personnes dont vous avez accepté la conversation",
   "Anyone on the internet": "Tout le monde sur internet",
-  "Only people you can call back": "Seulement les personnes que vous pouvez rappeler",
   "Accept calls": "Accepter les appels",
   "Who can call": "Qui peut appeler",
   "Days": "Jours",
@@ -3967,5 +3965,8 @@
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Les messages et les appels sont activés. Les personnes qui appellent se connectent avec Flagship et vous laissent les rappeler. Vous pouvez les désactiver dans Options sociales.",
   "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Les appels sont activés. Les personnes qui appellent se connectent avec Flagship et vous laissent les rappeler. Vous pouvez les désactiver dans Options sociales.",
   "Turn on safe messages, calls and posts": "Activez des messages, des appels et des publications sécurisés",
-  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Laissez les gens vous écrire et vous appeler, et partagez vos nouvelles. Tout est protégé contre les ordinateurs quantiques. Votre page sera sur voi.ci/{0}."
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Laissez les gens vous écrire et vous appeler, et partagez vos nouvelles. Tout est protégé contre les ordinateurs quantiques. Votre page sera sur voi.ci/{0}.",
+  "Your stuff,<br>on your hardware.": "Vos affaires,<br>sur votre matériel.",
+  "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "Un cloud personnel qui vous appartient vraiment. Vous créez et approuvez tout depuis votre téléphone ; votre serveur exécute vos apps.",
+  "People who let you call them back": "Les personnes qui vous laissent les rappeler"
 }

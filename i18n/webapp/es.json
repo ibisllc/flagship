@@ -3764,9 +3764,7 @@
   "{0} ({1})": "{0} ({1})",
   "Call back": "Devolver la llamada",
   "Ringing them. When they answer, your phone rings.": "Está sonando su teléfono. Cuando contesten, sonará el tuyo.",
-  "People whose conversation you accepted": "Personas cuya conversación aceptaste",
   "Anyone on the internet": "Cualquiera en internet",
-  "Only people you can call back": "Solo personas a las que puedes devolver la llamada",
   "Accept calls": "Aceptar llamadas",
   "Who can call": "Quién puede llamar",
   "Days": "Días",
@@ -3967,5 +3965,8 @@
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Los mensajes y las llamadas están activados. Quien llama inicia sesión con Flagship y te deja devolverle la llamada. Puedes desactivarlos en Opciones sociales.",
   "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Las llamadas están activadas. Quien llama inicia sesión con Flagship y te deja devolverle la llamada. Puedes desactivarlas en Opciones sociales.",
   "Turn on safe messages, calls and posts": "Activa mensajes, llamadas y publicaciones seguros",
-  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Deja que la gente te escriba y te llame, y comparte tus novedades. Todo está protegido frente a los ordenadores cuánticos. Tu página estará en voi.ci/{0}."
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Deja que la gente te escriba y te llame, y comparte tus novedades. Todo está protegido frente a los ordenadores cuánticos. Tu página estará en voi.ci/{0}.",
+  "Your stuff,<br>on your hardware.": "Tus cosas,<br>en tu hardware.",
+  "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "Una nube personal que de verdad es tuya. Creas y apruebas todo desde tu teléfono; tu servidor ejecuta tus apps.",
+  "People who let you call them back": "Personas que te dejan devolverles la llamada"
 }

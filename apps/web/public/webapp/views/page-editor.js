@@ -30,7 +30,7 @@ import {
   VOICI_PROFILE_MAX_LINKS,
   VOICI_POST_MAX_LINKS,
 } from "../lib/voiciProtocol.js";
-import { callsFromChoice, loadCallSettings, makeDraftOp, postsNewestFirst, publishVoiciPage, saveCallHours, voiciPageUrl } from "../lib/voiciOwner.js";
+import { loadCallSettings, makeDraftOp, postsNewestFirst, publishVoiciPage, saveCallHours, voiciPageUrl } from "../lib/voiciOwner.js";
 import {
   addPageOp,
   avatarProblemText,
@@ -687,10 +687,11 @@ export async function setShowInSearch(on, deps = {}) {
 
 // ── calls: who can call and the hours (docs/voici-calls.md; admin devices publish them in the page index) ──
 
+// The same two modes as iOS and Android (owner, 2026-11-20). An index that says "accepted" or "signed-in" shows as
+// callback; the owner's next save writes it.
 const CALLS_FROM_CHOICES = () => [
-  ["accepted", tr("People whose conversation you accepted")],
   ["anyone", tr("Anyone on the internet")],
-  ["callback", tr("Only people you can call back")],
+  ["callback", tr("People who let you call them back")],
 ];
 
 function weekdayNames() {
@@ -718,7 +719,7 @@ async function openCallsSheet() {
   } catch {
     synced = null;
   }
-  const state = { on: idx.acceptsCalls === 1, from: callsFromChoice(idx.callsFrom), hours: callHoursFields(synced?.settings.hours ?? null) };
+  const state = { on: idx.acceptsCalls === 1, from: idx.callsFrom === "anyone" ? "anyone" : "callback", hours: callHoursFields(synced?.settings.hours ?? null) };
   openSheet({
     title: tr("Calls"),
     testid: "page-calls-sheet",
@@ -761,7 +762,7 @@ async function openCallsSheet() {
       });
       sw("#calls-save").addEventListener("click", async () => {
         const acceptsCalls = sw("#calls-on").getAttribute("aria-checked") === "true";
-        const callsFrom = body.querySelector("input[name=calls-from]:checked")?.value ?? "accepted";
+        const callsFrom = body.querySelector("input[name=calls-from]:checked")?.value ?? "callback";
         let callHours = null;
         if (sw("#calls-hours").getAttribute("aria-checked") === "true") {
           callHours = callHoursValue([...body.querySelectorAll("[data-call-day]")].map((b) => b.checked), sw("#calls-from-time").value, sw("#calls-to-time").value, sw("#calls-zone").value);

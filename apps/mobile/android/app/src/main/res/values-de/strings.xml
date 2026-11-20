@@ -4143,8 +4143,8 @@
     <string name="voici_call_back_off">Diese Person hat Rückrufe nicht erlaubt. Sie kann dich erneut anrufen und es dabei erlauben.</string>
     <string name="voici_calls_from_anyone">Alle im Internet</string>
     <string name="voici_calls_from_anyone_note">Kein Konto nötig. Anrufende können nicht zurückgerufen werden.</string>
-    <string name="voici_calls_from_callback">Personen mit Rückruf-Konto</string>
-    <string name="voici_calls_from_callback_note">Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Sie bleiben für dich anonym.</string>
+    <string name="voici_calls_from_callback">Leute, die dir Rückrufe erlauben</string>
+    <string name="voici_calls_from_callback_note">Anrufende melden sich mit Flagship an und erlauben dir, sie in dieser Unterhaltung zurückzurufen. Du erfährst nie, wer sie sind. Deine Admin-Geräte klingeln.</string>
     <string name="voici_call_back_prompt_title">Darf %1$s dich zurückrufen?</string>
     <string name="voici_call_back_prompt_body">%1$s erfährt nicht, wer du bist. Flagship weiß, dass dieses Gespräch dein Telefon klingeln lassen kann.</string>
     <string name="voici_call_and_allow_back">Anrufen und Rückruf erlauben</string>

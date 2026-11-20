@@ -44,6 +44,12 @@ final class OnboardingSmokeTests: XCTestCase {
         XCTAssertTrue(skipAnyway.waitForExistence(timeout: 5), "Skipping should warn first.")
         skipAnyway.tap()
 
+        // 4b. A new account is offered safe messages, calls and posts once (VoiciIntro); No thanks closes it.
+        let noThanks = app.buttons["voici-intro-no"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 10), "A new account is offered its page once.")
+        noThanks.tap()
+        XCTAssertTrue(noThanks.waitForNonExistence(timeout: 5))
+
         // 5. The empty Home — the device that opened the account holds the
         // admin root, so it gets Add/Restore server; create the first one.
         let addFirst = app.buttons["home-add-server"]

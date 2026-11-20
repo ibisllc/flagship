@@ -4143,8 +4143,8 @@
     <string name="voici_call_back_off">相手は折り返しを許可していません。相手が許可して再度発信できます。</string>
     <string name="voici_calls_from_anyone">インターネット上の誰でも</string>
     <string name="voici_calls_from_anyone_note">アカウント不要です。発信者に折り返すことはできません。</string>
-    <string name="voici_calls_from_callback">折り返し可能なアカウントの人</string>
-    <string name="voici_calls_from_callback_note">発信者は Flagship でサインインし、折り返しを許可します。あなたには匿名のままです。</string>
+    <string name="voici_calls_from_callback">折り返しを許可してくれる人</string>
+    <string name="voici_calls_from_callback_note">発信者は Flagship でサインインし、その会話での折り返しを許可します。発信者が誰かはわかりません。管理者デバイスが鳴ります。</string>
     <string name="voici_call_back_prompt_title">%1$s からの折り返しを許可しますか？</string>
     <string name="voici_call_back_prompt_body">%1$s にはあなたが誰か分かりません。Flagship は、この会話であなたの電話を鳴らせることを把握します。</string>
     <string name="voici_call_and_allow_back">発信して折り返しを許可</string>

@@ -15354,16 +15354,8 @@
     "en": "Ringing them. When they answer, your phone rings.",
     "ctx": "webapp/views/thread.js"
   },
-  "People whose conversation you accepted": {
-    "en": "People whose conversation you accepted",
-    "ctx": "webapp/views/page-editor.js"
-  },
   "Anyone on the internet": {
     "en": "Anyone on the internet",
-    "ctx": "webapp/views/page-editor.js"
-  },
-  "Only people you can call back": {
-    "en": "Only people you can call back",
     "ctx": "webapp/views/page-editor.js"
   },
   "Accept calls": {
@@ -16169,5 +16161,17 @@
   "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": {
     "en": "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.",
     "ctx": "webapp/lib/voiciIntro.js"
+  },
+  "Your stuff,<br>on your hardware.": {
+    "en": "Your stuff,<br>on your hardware.",
+    "ctx": "webapp/index.html"
+  },
+  "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": {
+    "en": "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.",
+    "ctx": "webapp/index.html"
+  },
+  "People who let you call them back": {
+    "en": "People who let you call them back",
+    "ctx": "webapp/views/page-editor.js"
   }
 }

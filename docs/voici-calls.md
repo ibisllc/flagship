@@ -933,9 +933,10 @@ holds. The off switch is the same flag. Calls stay fail-safe: a calls failure ne
 
 - **Page options is "Social options"** on iOS, Android and the webapp (the sheet, the ⋯ button's label, "Turn on
   Accept messages in Social options", the first-publish warning lines).
-- **Who can call** no longer offers "Anyone signed in with Flagship" (`signed-in`). The pickers keep: iOS and Android
-  Anyone on the internet and the call-back mode; the webapp also "People whose conversation you accepted"
-  (`accepted`). An index that says `signed-in` shows as `callback`, and the next publish of anything (the calls fields
+- **Who can call** no longer offers "Anyone signed in with Flagship" (`signed-in`). All three apps offer the same two:
+  "Anyone on the internet" and "People who let you call them back" (`callback`); the webapp's `accepted` choice went
+  too (nothing needs it: `.com` still honours an index that says it, and the apps show it as callback). An index that
+  says `signed-in` shows as `callback`, and the next publish of anything (the calls fields
   are carried forward) writes `callback`. **The first publish now writes `callback`** (`VOICI_FIRST_PUBLISH` webapp,
   iOS `VoiciCallSettings.firstPublish`, Android `FIRST_PUBLISH`); its warning line reads "Messages and calls are on.
   Callers sign in with Flagship and let you call them back. You can turn them off in Social options." `.com` and

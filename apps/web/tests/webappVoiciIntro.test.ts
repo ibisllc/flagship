@@ -123,10 +123,14 @@ describe("Social options (owner, 2026-11-20)", () => {
     );
   });
 
-  it("offers no \"Anyone signed in with Flagship\" and calls the hours Set business hours", () => {
+  it("offers Anyone on the internet and People who let you call them back only, and calls the hours Set business hours", () => {
     expect(editor).not.toContain("Anyone signed in with Flagship");
     expect(editor).not.toMatch(/\["signed-in",/);
-    expect(editor).toContain("from: callsFromChoice(idx.callsFrom)");
+    // The same two modes as iOS and Android; an old accepted or signed-in index shows as callback.
+    expect(editor).toContain('["anyone", tr("Anyone on the internet")]');
+    expect(editor).toContain('["callback", tr("People who let you call them back")]');
+    expect(editor).not.toMatch(/\["accepted",/);
+    expect(editor).toContain('from: idx.callsFrom === "anyone" ? "anyone" : "callback"');
     expect(editor).toContain('tr("Set business hours")');
     expect(editor).not.toContain("Only at certain hours");
     expect(editor).not.toMatch(/Do Not Disturb/);

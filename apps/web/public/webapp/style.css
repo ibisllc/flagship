@@ -2970,9 +2970,9 @@ section h2.fs-hero-title::before { content: none; }
   border-radius: 50%;
   border: 3px solid var(--surface);
   background: var(--accent-graphic);
-  color: var(--surface);
+  color: var(--accent-on);
 }
-.welcome-badge svg { width: 15px; height: 15px; stroke-width: 2.4; }
+.welcome-badge svg { width: 16px; height: 16px; }
 .welcome-dot {
   position: absolute;
   top: -4px;
@@ -2991,8 +2991,27 @@ section h2.fs-hero-title::before { content: none; }
   padding: 0 var(--space-2);
   color: var(--accent-graphic);
 }
-.welcome-link i { width: 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--ink-muted) 50%, transparent); }
-.welcome-globe { width: 18px; height: 18px; stroke-width: 1.8; }
+/* The protected path runs phone → globe → server in the accent at half strength (≥ 3:1 on the dark canvas). */
+.welcome-link i { width: 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--accent-graphic) 50%, transparent); }
+.welcome-globe { width: 22px; height: 22px; stroke-width: 1.8; }
+.welcome-title {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 34px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.welcome-lede { margin: 0 0 var(--space-6, 24px); font-size: 17px; line-height: 1.45; color: var(--ink-muted); }
+/* Short windows (a laptop's 720 px): a smaller picture and headline, so the footer stays on screen. */
+@media (max-height: 780px) {
+  .welcome-art { margin: var(--space-2) 0 var(--space-4); padding: var(--space-3) var(--space-4); }
+  .welcome-node { width: 64px; height: 64px; }
+  .welcome-node > svg { width: 30px; height: 30px; }
+  .welcome-title { font-size: 28px; margin-bottom: var(--space-2); }
+  .welcome-lede { font-size: 15px; margin-bottom: var(--space-4); }
+}
 @media (max-width: 360px) {
   .welcome-node { width: 72px; height: 72px; }
   .welcome-node > svg { width: 32px; height: 32px; }

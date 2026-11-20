@@ -4143,8 +4143,8 @@
     <string name="voici_call_back_off">Cette personne n\'a pas autorisé les rappels. Elle peut vous rappeler et l\'autoriser.</string>
     <string name="voici_calls_from_anyone">Tout le monde sur internet</string>
     <string name="voici_calls_from_anyone_note">Aucun compte nécessaire. Les appelants ne peuvent pas être rappelés.</string>
-    <string name="voici_calls_from_callback">Personnes avec un compte de rappel</string>
-    <string name="voici_calls_from_callback_note">Les appelants se connectent avec Flagship et vous laissent les rappeler. Ils restent anonymes pour vous.</string>
+    <string name="voici_calls_from_callback">Les personnes qui vous laissent les rappeler</string>
+    <string name="voici_calls_from_callback_note">Les appelants se connectent avec Flagship et vous laissent les rappeler dans cette conversation. Vous ne savez jamais qui ils sont. Vos appareils administrateurs sonnent.</string>
     <string name="voici_call_back_prompt_title">Laisser %1$s vous rappeler ?</string>
     <string name="voici_call_back_prompt_body">%1$s ne saura pas qui vous êtes. Flagship saura que cette conversation peut faire sonner votre téléphone.</string>
     <string name="voici_call_and_allow_back">Appeler et autoriser le rappel</string>

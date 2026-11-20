@@ -17043,11 +17043,11 @@
     "ctx": "voi.ci calls: page call mode note"
   },
   "voici_calls_from_callback": {
-    "en": "People with a call-back account",
+    "en": "People who let you call them back",
     "ctx": "voi.ci calls: page call mode"
   },
   "voici_calls_from_callback_note": {
-    "en": "Callers sign in with Flagship and let you call them back. They stay anonymous to you.",
+    "en": "Callers sign in with Flagship and let you call them back in that conversation. You never learn who they are. Your admin devices ring.",
     "ctx": "voi.ci calls: page call mode note"
   },
   "voici_call_back_prompt_title": {

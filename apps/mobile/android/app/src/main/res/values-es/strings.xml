@@ -4143,8 +4143,8 @@
     <string name="voici_call_back_off">No permitieron que les devuelvas la llamada. Pueden volver a llamarte y permitirlo.</string>
     <string name="voici_calls_from_anyone">Cualquier persona en internet</string>
     <string name="voici_calls_from_anyone_note">No hace falta cuenta. No se puede devolver la llamada a quien llama.</string>
-    <string name="voici_calls_from_callback">Personas con una cuenta de devolución de llamada</string>
-    <string name="voici_calls_from_callback_note">Quien llama inicia sesión con Flagship y te permite devolverle la llamada. Sigue siendo anónimo para ti.</string>
+    <string name="voici_calls_from_callback">Personas que te dejan devolverles la llamada</string>
+    <string name="voici_calls_from_callback_note">Quien llama inicia sesión con Flagship y te deja devolverle la llamada en esa conversación. Nunca sabrás quién es. Suenan tus dispositivos de administrador.</string>
     <string name="voici_call_back_prompt_title">¿Dejar que %1$s te devuelva la llamada?</string>
     <string name="voici_call_back_prompt_body">%1$s no sabrá quién eres. Flagship sabrá que esta conversación puede hacer sonar tu teléfono.</string>
     <string name="voici_call_and_allow_back">Llamar y permitir que me devuelvan la llamada</string>
