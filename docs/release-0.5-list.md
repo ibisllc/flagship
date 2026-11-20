@@ -102,4 +102,6 @@ over once "let's start 0.5" is said.
     for the .com deploy, and stop documenting the prefix (release.sh finds ~/flagship/.gym-secrets.env itself).
   - step 29 (30-minute relay watch): run it right after step 28 or check it later by hand; make check-versions.mjs
     carry the product version into rust/Cargo.toml (the 0.4 relay still reports "0.3.0").
+  - step 33 (DEPLOYED-FINAL for the Windows agent) pushes to a hard-coded device-results/windows-2026-10-17 branch
+    that is gone: make it optional and create its own branch only when a device test is planned.
   Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
