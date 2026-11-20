@@ -42,7 +42,7 @@ public enum VoiciIntro {
         guard let url = c?.url else { return nil }
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 6)
         req.setValue(lang, forHTTPHeaderField: "Accept-Language")
-        guard let (data, resp) = try? await URLSession.shared.data(for: req), (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        guard let (data, resp) = try? await URLSession.shared.gatedData(for: req), (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return promoText(data)
     }
 
