@@ -6,7 +6,7 @@
 import * as lib from "./flagship-web/index.js";
 import { routeOf, siteConfig } from "./config.js";
 import { h } from "./dom.js";
-import { LOCALES, initLocale, locale, setLocale, t } from "./i18n.js";
+import { initLocale, locale, t } from "./i18n.js";
 import { openMessages } from "./messages.js";
 import { openCall, openHandoffCall, watchRings } from "./call.js";
 import { footer, renderPage, renderState } from "./page.js";
@@ -21,28 +21,12 @@ let rerender = () => {};
 let storePromise = null;
 const store = () => (storePromise ??= lib.openIndexedDbStore());
 
-function languagePicker() {
-  const sel = h(
-    doc,
-    "select",
-    { class: "lang", "aria-label": t("Language") },
-    LOCALES.map((l) => h(doc, "option", { value: l.code, ...(l.code === locale() ? { selected: true } : {}) }, l.native)),
-  );
-  for (const o of sel.options) o.selected = o.value === locale();
-  sel.addEventListener("change", () => {
-    setLocale(sel.value);
-    doc.documentElement.setAttribute("lang", locale());
-    rerender();
-  });
-  return sel;
-}
-
 function reloadAction() {
   return { label: t("Reload"), run: () => win.location.reload() };
 }
 
 function stateFooter(cfg) {
-  return footer(doc, { apex: cfg?.apex ?? "flagshipserver.com", host: cfg?.host ?? "voi.ci", languagePicker: languagePicker() });
+  return footer(doc, { apex: cfg?.apex ?? "flagshipserver.com", host: cfg?.host ?? "voi.ci" });
 }
 
 function showState(cfg, s) {
@@ -118,7 +102,7 @@ async function showPage(cfg, username, handoff = null) {
         if (!(await loadChunk())) return failure(cfg, "bad-piece", username);
         rerender();
       },
-      languagePicker: languagePicker(),
+      win,
     });
   };
   rerender();
@@ -147,6 +131,7 @@ function showAbout(cfg) {
         h(doc, "p", { class: "label" }, t("This build")),
         h(doc, "p", { class: "mono-value" }, build || "dev"),
         dir ? h(doc, "a", { class: "inline-link", href: `${win.location.origin.startsWith("https://") ? win.location.origin : "https://voi.ci"}/-/${dir}/MANIFEST.json` }, t("Manifest")) : null,
+        h(doc, "a", { class: "inline-link", href: `https://${cfg.apex}/abuse#voici` }, t("Report abuse")),
         stateFooter(cfg),
       ),
     });

@@ -22,6 +22,7 @@ const SAMPLES = {
     theme: "classic",
     pageId: M.derivations.pageId,
     accepts: 1,
+    calls: 1,
     displayName: "Alice Martin",
     bio: "Gardener in Lyon. I build small, slow software with Flagship\nand write about soil, seeds and servers.",
     links: [
@@ -39,6 +40,8 @@ const SAMPLES = {
         links: [{ url: "https://blog.alice.example/seed-swap", card: { title: "A seed swap that runs at home", site: "Alice's notes", description: "A tiny app, a shared list, and why nobody needs an account.", image: "card" } }],
       },
       { text: "Open garden this Saturday from 10. Bring cuttings!\nDetails: https://seeds.alice.example/open-day", links: [{ url: "https://seeds.alice.example/open-day", card: null }] },
+      { text: "First frost tonight. The squash is in, the leeks can stay out, and the server in the shed is warmer than I am.", links: [] },
+      { text: "Thank you to everyone who came on Saturday. Forty-one people, ninety-odd cuttings, one very tired dog.", links: [] },
     ],
   },
   bruno: {
@@ -102,6 +105,7 @@ export function samplePage(username, images = {}, now = Date.now()) {
       seq: 3,
       issuedAt: now - DAY,
       acceptsMessages: s.accepts,
+      ...(s.calls ? { acceptsCalls: 1, callsFrom: "anyone" } : {}),
       inboxEpoch: 1,
       inboxPub: M.derivations.inboxPub,
       ownerSignPub: M.derivations.ownerSignPub,

@@ -79,8 +79,8 @@ const dev = await startDevServer({ port, images });
 const problems = [];
 const sizes = { phone: { width: 390, height: 844 }, desktop: { width: 1280, height: 860 } };
 
-async function shot(name, size, scheme, path, act) {
-  const ctx = await browser.newContext({ viewport: sizes[size], colorScheme: scheme, deviceScaleFactor: 2, hasTouch: size === "phone", isMobile: size === "phone" });
+async function shot(name, size, scheme, path, act, locale = "en-US") {
+  const ctx = await browser.newContext({ viewport: sizes[size], colorScheme: scheme, locale, deviceScaleFactor: 2, hasTouch: size === "phone", isMobile: size === "phone" });
   const page = await ctx.newPage();
   page.on("console", (m) => {
     // Failed fetches are expected (the live ping to a real phone name, a page that doesn't exist); CSP violations and
@@ -165,15 +165,14 @@ for (const size of ["phone", "desktop"]) {
     await p.waitForSelector(".bubble-row.theirs", { timeout: 5000 });
   }));
   files.push(await shot("report", size, "light", "/alice", async (p) => {
-    await p.click(".site-footer .btn-ghost");
+    await p.click(".site-footer button.footer-item");
     await p.waitForSelector(".report-form");
   }));
   files.push(await shot("not-found", size, "light", "/nobody"));
   files.push(await shot("about", size, "light", "/-/about"));
 }
-files.push(await shot("alice-french", "phone", "light", "/alice", async (p) => {
-  await p.selectOption(".lang", "fr");
-}));
+// No language picker: a French browser gets the French page.
+files.push(await shot("alice-french", "phone", "light", "/alice", null, "fr-FR"));
 
 await dev.close();
 await browser.close();

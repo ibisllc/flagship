@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Screenshots of voi.ci's front door (docs/voici-front-door.md) for review: desktop and phone, light and dark, French
-// (an Ivorian browser, fr-CI) and English, plus a page's footer with "Make your own page" and an unknown name. Fails
+// (an Ivorian browser, fr-CI) and English, plus a page's footer with "Make your page" and an unknown name. Fails
 // on any console error or CSP violation, like dev/screenshots.mjs.
 //
 //   node apps/voici-site/build.mjs && node apps/voici-site/dev/front-screenshots.mjs [outDir]

@@ -192,6 +192,12 @@ body.has-sheet {
   display: flex;
   flex-direction: column;
 }
+/* The footer follows the content in normal flow; on a short page this grows so the footer meets the bottom. */
+.page-body {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
 .card-head {
   display: flex;
   flex-direction: column;
@@ -416,11 +422,15 @@ body.has-sheet {
 .message-cta {
   margin-top: 24px;
 }
-.message-cta .btn {
-  height: 52px;
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
-.call-btn {
-  margin-top: 10px;
+/* Equal halves; a button never shrinks below its label, so the row wraps only when the two labels can't fit. */
+.cta-btn {
+  flex: 1 1 0;
+  min-width: max-content;
   height: 52px;
 }
 .btn-danger {
@@ -638,25 +648,109 @@ body.has-sheet {
 }
 .footer-links {
   display: inline-flex;
-  gap: 16px;
-  font-size: 13px;
+  flex-wrap: wrap;
+  gap: 8px 20px;
 }
-.footer-links a {
+/* Every footer item but the "Make your page" callout: one family, size, weight and colour, link or button. */
+.footer-links a,
+.footer-item {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.55;
   color: var(--ink-muted);
   text-decoration: none;
 }
-.footer-links a:hover {
+.footer-item {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.footer-links a:hover,
+.footer-item:hover {
   color: var(--ink);
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
-.lang {
-  font: inherit;
-  font-size: 13px;
-  color: var(--ink-muted);
-  background: transparent;
+
+/* the compact bar: pinned at the top once the full header has scrolled away (page.js watchHeader) */
+
+.compact-bar {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: 40;
+  background: var(--canvas);
+  border-block-end: 1px solid var(--rule);
+  transform: translateY(-100%);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform 180ms ease-out,
+    opacity 180ms ease-out,
+    visibility 0s linear 180ms;
+}
+.compact-bar.is-shown {
+  transform: none;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    transform 180ms ease-out,
+    opacity 180ms ease-out,
+    visibility 0s;
+}
+.compact-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 600px;
+  margin-inline: auto;
+  padding-block: 8px;
+  padding-inline: 20px;
+}
+.compact-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compact-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.bar-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
   border: 1px solid var(--rule-strong);
-  border-radius: 4px;
-  padding: 6px 28px 6px 10px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 200ms ease-out, color 200ms ease-out;
+}
+.bar-btn:hover {
+  border-color: var(--graphic);
+  color: var(--graphic);
+}
+@media (prefers-reduced-motion: reduce) {
+  .compact-bar,
+  .compact-bar.is-shown {
+    transform: none;
+    transition: none;
+  }
 }
 
 /* states */
@@ -1736,6 +1830,7 @@ body.has-call {
   align-items: center;
   gap: 6px;
   flex-basis: 100%;
+  font-family: inherit;
   font-size: 14px;
   font-weight: 500;
   color: var(--link);

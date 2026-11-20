@@ -115,9 +115,16 @@ the inbox key through the directory-key grant mechanism (AGENTS open work item 5
 1. Avatar (circle, 128 px CSS), display name, bio.
 2. Links, in the owner's order, each a full-width button: a known-site icon (§2.4) or a generic link icon, the label,
    the host in small type.
-3. **Send me a message**: the primary button, only while the index says `acceptsMessages = 1`.
-4. Posts, newest first: date, text, up to 3 link cards. "Show older posts" loads the next chunk.
-5. Footer: "Report this page", "Made with Flagship", the language picker.
+3. **Message** and **Call**, side by side on one row (wrapping only when too narrow), each only while the index says
+   `acceptsMessages = 1` / `acceptsCalls = 1`; under them "Quantum-safe encrypted communication."
+4. Posts, newest first (sorted by `createdAt` at render, ties in index order): date, text, up to 3 link cards. "Show
+   older posts" loads the next chunk.
+5. Footer, after the content in normal flow (at the bottom of the viewport on a short page): "Make your page" (the
+   one callout, to the front door), then "Report this page" (the report sheet, which also links to the abuse page)
+   and "Terms" in one style. No language picker: the language is the browser's (first shipped one, else English),
+   never remembered and never the owner's.
+6. Once the visitor scrolls past the header (photo, name, bio, the two buttons and their line), a compact bar is
+   pinned at the top: photo, name, and Message and Call as icon buttons (an IntersectionObserver, no scroll handler).
 
 ### 2.2 Template
 
@@ -386,7 +393,7 @@ words, unpublished pages and held names of deleted accounts are one 404 (the sit
 The 404 and 410 shells carry `<meta name="voici-status">` so the site writes the sentence in the visitor's language.
 Before `VOICI_ENABLED` is on, only links and codes resolve and refusals have no body.
 `voi.ci/` itself is the front door (0.4, `docs/voici-front-door.md`): a static page per language, served before any
-storage is read; the 404/410 shells carry `noindex`, and every footer links to the front door ("Make your own page").
+storage is read; the 404/410 shells carry `noindex`, and every footer links to the front door ("Make your page").
 
 ### 4.2 The site
 
@@ -994,7 +1001,7 @@ code and the appeal link. `restore` reverses it (the owner republishes).
 | Report offensive content, in app | Report on every message and conversation; "Report this page" on every page |
 | Block abusive users | Block on every conversation |
 | Act on reports in a timely way (Apple: 24 h) | `voici-abuse list` is a weekly-plus duty; ops alert when a report is older than 24 h (`npm run ops -- voici`) |
-| Published contact info | abuse.html, the footer link |
+| Published contact info | abuse.html, linked from the footer's "Report this page" sheet and from `/-/about` (the footer has one report link since 2026-11-19) |
 | Account deletion | exists; deletes the page, mailbox and pieces (§10.3) |
 
 ### 9.8 Links, apps, notices and suspension

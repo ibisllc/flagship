@@ -59,7 +59,6 @@
   "Your sign-in for this page has ended. Sign in again.": "Seu login nesta página terminou. Entre novamente.",
   "Links": "Links",
   "Send me a message": "Envie uma mensagem",
-  "Private messages, with your Flagship app.": "Mensagens privadas, com o app Flagship.",
   "Edited": "Editado",
   "Not published yet": "Ainda não publicado",
   "Posts": "Publicações",
@@ -120,7 +119,7 @@
   "Ringing…": "Chamando…",
   "Connecting…": "Conectando…",
   "Call": "Ligar",
-  "Private messages and quantum-safe calls, with your Flagship app.": "Mensagens privadas e chamadas seguras contra computação quântica, com seu app Flagship.",
+  "Quantum-safe encrypted communication.": "Comunicação criptografada segura contra computação quântica.",
   "voi.ci needs your camera to show your video. Allow it in your browser, or keep talking without it.": "O voi.ci precisa da sua câmera para mostrar seu vídeo. Permita no navegador ou continue conversando sem ela.",
   "Camera": "Câmera",
   "Camera off": "Desligar câmera",
@@ -193,5 +192,5 @@
   "Your messages and calls are not public. They are encrypted on the devices at each end, and nobody else can read them, not even us.": "Suas mensagens e chamadas não são públicas. Elas são criptografadas nos aparelhos de cada ponta, e ninguém mais pode lê-las, nem nós.",
   "If someone reports a message to us, we learn which account sent it. We see what it says only if the person reporting chooses to show us.": "Se alguém denunciar uma mensagem para nós, ficamos sabendo qual conta a enviou. Só vemos o que ela diz se quem denunciou decidir nos mostrar.",
   "Your page, your words.": "Sua página, suas palavras.",
-  "Make your own page": "Crie sua própria página"
+  "Make your page": "Crie sua página"
 }

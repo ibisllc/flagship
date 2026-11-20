@@ -6,32 +6,13 @@
 import { pickLanguage } from "./lang.js";
 import { LOCALES, STRINGS } from "./strings.js";
 
-const KEY = "voici-lang";
 let current = "en";
 
-function pick(languages) {
-  return pickLanguage(languages ?? [], LOCALES.map((l) => l.code));
-}
-
-export function initLocale(nav = globalThis.navigator, storage = globalThis.localStorage) {
-  let saved = null;
-  try {
-    saved = storage?.getItem(KEY) ?? null;
-  } catch {
-    saved = null;
-  }
-  current = saved && LOCALES.some((l) => l.code === saved) ? saved : pick(nav?.languages ?? [nav?.language]);
-  return current;
-}
-
-export function setLocale(code, storage = globalThis.localStorage) {
-  if (!LOCALES.some((l) => l.code === code)) return current;
-  current = code;
-  try {
-    storage?.setItem(KEY, code);
-  } catch {
-    /* not remembered */
-  }
+/** The visitor's language: the first of the browser's languages the site ships (pt → pt-BR, zh → zh-Hans by the
+ *  shared rule in lang.js), else English. Never remembered, never the page owner's. */
+export function initLocale(nav = globalThis.navigator) {
+  const prefs = nav?.languages?.length ? nav.languages : [nav?.language].filter(Boolean);
+  current = pickLanguage(prefs, LOCALES.map((l) => l.code));
   return current;
 }
 

@@ -73,7 +73,7 @@ turns on Public. The front door never says "sign up here" and has no form.
 ## 5. From an existing page
 
 Every voi.ci page's footer, and the footer of voi.ci's own states (unknown name, removed link, "couldn't load",
-about), now has **"Make your own page ↗"** (`.make-own`, `page.js` `footer()`), linking to `https://<this voi.ci>/`.
+about), now has **"Make your page ↗"** (was "Make your own page") (`.make-own`, `page.js` `footer()`), linking to `https://<this voi.ci>/`.
 It is a plain same-tab link to the front door, not to the stores: a visitor first learns what a page is.
 
 ## 6. Search and indexing
@@ -150,7 +150,7 @@ The front door is the one voi.ci answer that needs nothing but the Worker's own 
 - `apps/voici-site/src/lang.js`: the language rule, used by the site and the build.
 - `apps/voici-site/build.mjs`: renders the front door per language into the Worker module; noindex on 404/410 shells.
 - `apps/com/src/voiciFrontDoor.ts`, `apps/com/src/voiciRoutes.ts`: language pick and serving at `/`.
-- `apps/voici-site/src/page.js`, `app.js`: "Make your own page" in every footer.
+- `apps/voici-site/src/page.js`, `app.js`: "Make your page" in every footer.
 - `i18n/voici-site/*.json`: the strings (`node apps/voici-site/i18n.mjs extract|build|check`).
 - Tests: `apps/voici-site/tests/front.test.ts`, `render.test.ts`, `apps/com/test/voiciFrontDoor.test.ts`,
   `test-vectors/voici-front-language.json`.

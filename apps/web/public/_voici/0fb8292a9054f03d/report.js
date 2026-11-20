@@ -35,6 +35,7 @@ export async function openReport(ctx) {
     h(doc, "label", { class: "label", for: "report-note" }, t("Note")),
     note,
     error,
+    h(doc, "p", { class: "fine" }, h(doc, "a", { class: "inline-link", href: `https://${cfg.apex}/abuse#voici` }, t("Report abuse"))),
     h(doc, "p", { class: "fine" }, session ? t("Sent as {0}, the name this page knows you by.", visitorName(lib, session.pseudonymPub)) : t("Sent without your name. Flagship reviews every report.")),
     h(doc, "div", { class: "sheet-actions" }, h(doc, "button", { class: "btn btn-secondary", type: "button", on: { click: closeSheet } }, t("Cancel")), submit),
   );

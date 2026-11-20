@@ -1,10 +1,11 @@
-// The page renderer (docs/voici-and-messages.md §2.1): contact card, links, "Send me a message", posts, footer.
+// The page renderer (docs/voici-and-messages.md §2.1): contact card, links, Message and Call, posts, footer, and the
+// compact bar pinned at the top once the header scrolls away.
 // Only ever given content that verify.js already checked against the signed index; it still treats every string as
 // text and every URL as one more thing to check. The apps' editor preview reuses this module (§11.2): pass
 // `pendingIds` for posts that are not published yet, and they render grayed with "Not published yet".
 
 import { h, replace } from "./dom.js";
-import { flagshipMark, icon, siteMark } from "./icons.js";
+import { icon, siteMark } from "./icons.js";
 import { formatDate, t } from "./i18n.js";
 
 /** Text with its https links made into anchors that open a new tab, nothing else interpreted. */
@@ -84,15 +85,71 @@ export function linkList(doc, links, lib) {
   );
 }
 
+/** "Message" and "Call", side by side on one row (they wrap only when the row can't hold both), and one line under
+ *  them. A button the page doesn't offer is left out. */
 export function messageButton(doc, onMessage, onCall) {
   return h(
     doc,
     "div",
     { class: "message-cta" },
-    onMessage ? h(doc, "button", { class: "btn btn-primary btn-wide", type: "button", on: { click: onMessage } }, icon(doc, "message"), h(doc, "span", {}, t("Send me a message"))) : null,
-    onCall ? h(doc, "button", { class: onMessage ? "btn btn-secondary btn-wide call-btn" : "btn btn-primary btn-wide", type: "button", on: { click: onCall } }, icon(doc, "call"), h(doc, "span", {}, t("Call"))) : null,
-    h(doc, "p", { class: "cta-note" }, onCall ? t("Private messages and quantum-safe calls, with your Flagship app.") : t("Private messages, with your Flagship app.")),
+    h(
+      doc,
+      "div",
+      { class: "cta-row" },
+      onMessage ? h(doc, "button", { class: "btn btn-primary cta-btn", type: "button", on: { click: onMessage } }, icon(doc, "message"), h(doc, "span", {}, t("Message"))) : null,
+      onCall ? h(doc, "button", { class: onMessage ? "btn btn-secondary cta-btn call-btn" : "btn btn-primary cta-btn call-btn", type: "button", on: { click: onCall } }, icon(doc, "call"), h(doc, "span", {}, t("Call"))) : null,
+    ),
+    h(doc, "p", { class: "cta-note" }, t("Quantum-safe encrypted communication.")),
   );
+}
+
+/** The bar pinned to the top once the visitor scrolls past the full header: photo, name, and the same two actions as
+ *  icon buttons. Hidden (and inert) until watchHeader shows it. */
+export function compactBar(doc, m, onMessage, onCall) {
+  const bar = h(
+    doc,
+    "div",
+    { class: "compact-bar", "aria-hidden": "true" },
+    h(
+      doc,
+      "div",
+      { class: "compact-inner" },
+      avatarEl(doc, m.profile, m.avatarUrl, "sm"),
+      h(doc, "p", { class: "compact-name" }, m.profile.displayName),
+      h(
+        doc,
+        "div",
+        { class: "compact-actions" },
+        onMessage ? h(doc, "button", { class: "bar-btn", type: "button", "aria-label": t("Message"), title: t("Message"), on: { click: onMessage } }, icon(doc, "message")) : null,
+        onCall ? h(doc, "button", { class: "bar-btn", type: "button", "aria-label": t("Call"), title: t("Call"), on: { click: onCall } }, icon(doc, "call")) : null,
+      ),
+    ),
+  );
+  bar.inert = true;
+  return bar;
+}
+
+function setBarShown(bar, shown) {
+  bar.inert = !shown;
+  bar.setAttribute("aria-hidden", shown ? "false" : "true");
+  bar.setAttribute("class", shown ? "compact-bar is-shown" : "compact-bar");
+}
+
+let headWatch = null;
+
+/** Shows `bar` while `last` (the header's last element) sits wholly above the viewport, through an
+ *  IntersectionObserver (no scroll handler). Without one, the bar never shows. A page too short to scroll past its
+ *  header never fires "above", so its bar stays hidden. */
+export function watchHeader(win, last, bar) {
+  headWatch?.disconnect();
+  headWatch = null;
+  const IO = win?.IntersectionObserver;
+  if (!IO || !last || !bar) return null;
+  headWatch = new IO((entries) => {
+    for (const e of entries) setBarShown(bar, !e.isIntersecting && e.boundingClientRect.bottom <= 0);
+  });
+  headWatch.observe(last);
+  return headWatch;
 }
 
 function card(doc, link, cardImageUrl, lib) {
@@ -138,48 +195,60 @@ export function postEl(doc, post, o) {
   );
 }
 
-/** posts: newest first. */
+/** Newest first by creation time; posts made at the same moment keep the order they came in. */
+export function newestFirst(posts) {
+  return posts
+    .map((p, i) => [p, i])
+    .sort(([a, i], [b, j]) => (b.createdAt ?? 0) - (a.createdAt ?? 0) || i - j)
+    .map(([p]) => p);
+}
+
 export function postList(doc, posts, o) {
   return h(
     doc,
     "section",
     { class: "posts", "aria-label": t("Posts") },
     h(doc, "h2", { class: "eyebrow" }, t("Posts")),
-    h(doc, "div", { class: "post-stream" }, posts.map((p) => postEl(doc, p, o))),
+    h(doc, "div", { class: "post-stream" }, newestFirst(posts).map((p) => postEl(doc, p, o))),
     o.hasOlder
       ? h(doc, "button", { class: "btn btn-secondary btn-wide older", type: "button", on: { click: o.onOlder } }, t("Show older posts"))
       : null,
   );
 }
 
+/** One callout ("Make your page"), then the rest in one quiet style. Report this page leads to the report sheet,
+ *  which also links to the abuse page. */
 export function footer(doc, o) {
   return h(
     doc,
     "footer",
     { class: "site-footer" },
-    o.onReport ? h(doc, "button", { class: "btn-ghost", type: "button", on: { click: o.onReport } }, icon(doc, "flag", "icon icon-sm"), t("Report this page")) : null,
     // voi.ci's front door (docs/voici-front-door.md): how a visitor makes a page of their own.
-    o.host ? h(doc, "a", { class: "make-own", href: `https://${o.host}/` }, t("Make your own page"), icon(doc, "arrowUpRight", "icon icon-sm")) : null,
-    h(doc, "a", { class: "made-with", href: `https://${o.apex}/` }, flagshipMark(doc, "mark icon-sm"), t("Made with Flagship")),
+    o.host ? h(doc, "a", { class: "make-own", href: `https://${o.host}/` }, t("Make your page"), icon(doc, "arrowUpRight", "icon icon-sm")) : null,
     h(
       doc,
       "nav",
       { class: "footer-links", "aria-label": t("Rules and reports") },
-      h(doc, "a", { href: `https://${o.apex}/terms` }, t("Terms")),
-      h(doc, "a", { href: `https://${o.apex}/abuse#voici` }, t("Report abuse")),
+      o.onReport ? h(doc, "button", { class: "footer-item", type: "button", on: { click: o.onReport } }, t("Report this page")) : null,
+      h(doc, "a", { class: "footer-item", href: `https://${o.apex}/terms` }, t("Terms")),
     ),
-    o.languagePicker ?? null,
   );
 }
 
 /**
- * The whole page into `root`. m = {username, host, apex, index, profile, avatarUrl, posts (newest first), hasOlder,
+ * The whole page into `root`. m = {username, host, apex, index, profile, avatarUrl, posts, hasOlder,
  * cardImageUrl(sha) → blob URL|null, pendingIds?, lib (the protocol module), onMessage, onCall, onReport, onOlder,
- * languagePicker}.
+ * win? (for the compact bar's IntersectionObserver; defaults to doc.defaultView)}.
  */
 export function renderPage(doc, root, m) {
+  const onMessage = m.index.acceptsMessages === 1 && m.onMessage ? m.onMessage : null;
+  const onCall = m.index.acceptsCalls === 1 && m.onCall ? m.onCall : null;
+  const head = profileHeader(doc, m);
+  const cta = onMessage || onCall ? messageButton(doc, onMessage, onCall) : null;
+  const bar = compactBar(doc, m, onMessage, onCall);
   replace(
     root,
+    bar,
     h(
       doc,
       "main",
@@ -188,20 +257,26 @@ export function renderPage(doc, root, m) {
         doc,
         "div",
         { class: "column" },
-        profileHeader(doc, m),
-        linkList(doc, m.profile.links, m.lib),
-        (m.index.acceptsMessages === 1 && m.onMessage) || (m.index.acceptsCalls === 1 && m.onCall)
-          ? messageButton(doc, m.index.acceptsMessages === 1 ? m.onMessage : null, m.index.acceptsCalls === 1 ? m.onCall : null)
-          : null,
-        m.posts.length ? postList(doc, m.posts, m) : null,
+        h(
+          doc,
+          "div",
+          { class: "page-body" },
+          head,
+          linkList(doc, m.profile.links, m.lib),
+          cta,
+          m.posts.length ? postList(doc, m.posts, m) : null,
+        ),
         footer(doc, m),
       ),
     ),
   );
+  watchHeader(m.win ?? doc.defaultView, cta ?? head, bar);
 }
 
 /** A full-page state: loading skeleton, or a sentence with an optional action. */
 export function renderState(doc, root, s) {
+  headWatch?.disconnect();
+  headWatch = null;
   if (s.kind === "loading") {
     replace(
       root,
