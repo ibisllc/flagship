@@ -1,7 +1,9 @@
-// The one-time "Get your own voi.ci page" intro (owner, 2026-11-20). Shown once per account on this browser, only
-// after creating a new account (never after joining one, signing in again or restoring): createAccount marks it
-// pending, and Home shows it the first time it opens for that account, after the creation steps. The optional promo
-// line is server config (GET /api/voici/promo), not an app string. Set it up opens the Social tab's Profile.
+// The one-time "Turn on safe messages, calls and posts" intro (owner, 2026-11-20). Shown once per account on this
+// browser, only after creating a new account (never after joining one, signing in again or restoring), and only on a
+// device that can publish the page: createAccount marks it pending, and Home shows it the first time it opens for that
+// account, after the creation steps. The optional promo line is server config (GET /api/voici/promo), not an app
+// string. Turn on opens the Social tab's Profile and makes the page public through the usual steps (the rules once,
+// the public warning with the first-publish defaults, then the first publish); a refusal is toasted there as always.
 
 import { controlApex } from "./apex.js";
 import { currentLanguage, tr } from "./i18n.js";
@@ -61,7 +63,7 @@ export async function fetchVoiciPromo({ fetchImpl = globalThis.fetch, baseUrl = 
 }
 
 /**
- * The intro sheet. Resolves "setup" or "later". The promo callout is added when `promo` resolves to one.
+ * The intro sheet. Resolves "on" or "no". The promo callout is added when `promo` resolves to one.
  * @param {{ username: string, promo?: Promise<{text: string}|null> }} opts
  */
 export function openVoiciIntro({ username, promo = Promise.resolve(null) }) {
@@ -70,12 +72,12 @@ export function openVoiciIntro({ username, promo = Promise.resolve(null) }) {
     const overlay = buildOverlay();
     overlay.innerHTML = `
       <div class="modal-card voici-intro" role="document" data-testid="voici-intro">
-        <h3 class="modal-title" id="voici-intro-title">${escapeHtml(tr("Get your own voi.ci page"))}</h3>
-        <p class="modal-message">${escapeHtml(tr("Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.", username))}</p>
+        <h3 class="modal-title" id="voici-intro-title">${escapeHtml(tr("Turn on safe messages, calls and posts"))}</h3>
+        <p class="modal-message">${escapeHtml(tr("Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.", username))}</p>
         <p class="callout-promo" data-testid="voici-intro-promo" hidden></p>
         <div class="row-2 mt-3">
-          <button class="secondary" data-testid="voici-intro-later" data-intro-later>${escapeHtml(tr("Not now"))}</button>
-          <button data-testid="voici-intro-setup" data-intro-setup>${escapeHtml(tr("Set it up"))}</button>
+          <button class="secondary" data-testid="voici-intro-no" data-intro-no>${escapeHtml(tr("No thanks"))}</button>
+          <button data-testid="voici-intro-turn-on" data-intro-on>${escapeHtml(tr("Turn on"))}</button>
         </div>
       </div>`;
     overlay.setAttribute("aria-labelledby", "voici-intro-title");
@@ -93,16 +95,16 @@ export function openVoiciIntro({ username, promo = Promise.resolve(null) }) {
     const onKey = (ev) => {
       if (ev.key === "Escape") {
         ev.preventDefault();
-        close("later");
+        close("no");
       }
     };
-    overlay.querySelector("[data-intro-setup]").addEventListener("click", () => close("setup"));
-    overlay.querySelector("[data-intro-later]").addEventListener("click", () => close("later"));
+    overlay.querySelector("[data-intro-on]").addEventListener("click", () => close("on"));
+    overlay.querySelector("[data-intro-no]").addEventListener("click", () => close("no"));
     overlay.addEventListener("click", (ev) => {
-      if (ev.target === overlay) close("later");
+      if (ev.target === overlay) close("no");
     });
     document.addEventListener("keydown", onKey);
-    queueMicrotask(() => overlay.querySelector("[data-intro-setup]")?.focus({ preventScroll: true }));
+    queueMicrotask(() => overlay.querySelector("[data-intro-on]")?.focus({ preventScroll: true }));
     void Promise.resolve(promo).then((p) => {
       const line = overlay.querySelector("[data-testid=voici-intro-promo]");
       if (!done && line && p?.text) {
@@ -113,13 +115,20 @@ export function openVoiciIntro({ username, promo = Promise.resolve(null) }) {
   });
 }
 
-/** Home's hook: the intro for a new account, once. Set it up opens the Social tab's Profile. */
+/**
+ * Home's hook: the intro for a new account, once, on a device that can publish the page (others never see it, and it
+ * stays pending). Turn on opens the Social tab's Profile, then makes the page public with the usual steps.
+ */
 export async function maybeShowVoiciIntro(username, deps = {}) {
+  const canPublish = deps.canPublish ?? (async () => (await import("./voiciPageControl.js")).canPublishPage());
+  if (!username || !(await canPublish())) return null;
   if (!takeVoiciIntro(username, deps.storage)) return null;
   const pick = await (deps.open ?? openVoiciIntro)({ username, promo: (deps.fetchPromo ?? fetchVoiciPromo)() });
-  if (pick === "setup") {
+  if (pick === "on") {
     const enter = deps.enterYourPage ?? (async () => (await import("../views/messages.js")).enterYourPage());
+    const goPublic = deps.goPublic ?? (async () => (await import("./voiciPageControl.js")).setPagePublic(true));
     await enter();
+    await goPublic();
   }
   return pick;
 }

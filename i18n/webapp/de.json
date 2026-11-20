@@ -3958,9 +3958,6 @@
   "Your {0} vouchers ({1}) are ready.": "Deine {0} Gutscheine ({1}) sind bereit.",
   "Show in search engines": "In Suchmaschinen anzeigen",
   "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "Wenn das aus ist, werden Suchmaschinen gebeten, deine Seite nicht aufzunehmen. Wer den Link hat, kann sie trotzdem öffnen.",
-  "Get your own voi.ci page": "Hol dir deine eigene voi.ci-Seite",
-  "Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.": "Richte voi.ci/{0} ein, um private Nachrichten und Anrufe zu senden und zu empfangen und Neuigkeiten zu posten. Ohne Telefonnummer oder E-Mail-Adresse, und geschützt gegen Quantencomputer.",
-  "Set it up": "Einrichten",
   "Social options": "Social-Optionen",
   "Turn off social features": "Social-Funktionen ausschalten",
   "Turn off social features?": "Social-Funktionen ausschalten?",
@@ -3968,5 +3965,7 @@
   "Set business hours": "Geschäftszeiten festlegen",
   "No messages yet. Turn on Accept messages in Social options to get them.": "Noch keine Nachrichten. Aktiviere „Nachrichten annehmen“ unter Social-Optionen, um welche zu bekommen.",
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Nachrichten und Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten.",
-  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten."
+  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Anrufe sind aktiviert. Anrufende melden sich mit Flagship an und erlauben dir, sie zurückzurufen. Du kannst sie unter Social-Optionen ausschalten.",
+  "Turn on safe messages, calls and posts": "Sichere Nachrichten, Anrufe und Beiträge einschalten",
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Lass dir Nachrichten schreiben und dich anrufen, und teile deine Neuigkeiten. Alles ist gegen Quantencomputer geschützt. Deine Seite ist dann unter voi.ci/{0}."
 }

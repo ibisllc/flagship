@@ -29,36 +29,36 @@ export const WEB_ONBOARDING: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-onboarding-voici-intro",
-    "A new account, once its creation steps end on Home, sees the one-time Get your own voi.ci page sheet with voi.ci/<username> and the promo line .com sends (GET /api/voici/promo); Set it up opens the Social tab's Profile, and Home never shows the sheet again for that account.",
-    "gym onboarding a new account sees the voi.ci intro once on Home, with `.com`'s promo; Set it up opens the Profile",
+    "A new account, once its creation steps end on Home, is offered Turn on safe messages, calls and posts (its page at voi.ci/<username>) with the promo line .com sends (GET /api/voici/promo); Turn on opens the Social tab's Profile and goes public the usual way (the rules, then the public warning with the first-publish defaults), and the first index takes messages and calls from callback callers, hidden from search; Home never offers it again for that account.",
+    "gym onboarding a new account is offered safe messages, calls and posts once on Home; Turn on makes its page public",
     {
       steps: [
         { kind: "tap", describe: "Create a new account to the end, finish the wizard.", handle: "#bootstrap-create" },
-        { kind: "tap", describe: "Set it up.", handle: "[data-testid=voici-intro-setup]" },
+        { kind: "tap", describe: "Turn on → I agree → Make it public.", handle: "[data-testid=voici-intro-turn-on]" },
       ],
       assertions: [
-        { describe: "The intro sheet", handle: "[data-testid=voici-intro]", expect: "present" },
+        { describe: "The offer", handle: "[data-testid=voici-intro]", expect: "present" },
         { describe: "The promo line", handle: "[data-testid=voici-intro-promo]", expect: "text", text: "Set it up this week for a free month." },
-        { describe: "The Social tab", handle: "#view-messages", expect: "present" },
+        { describe: "Public", handle: "[data-testid=messages-page-status]", expect: "text", text: "Public" },
       ],
-      screenshots: [shot("voici-intro-promo", "The voi.ci intro with a promo line.")],
+      screenshots: [shot("voici-intro-promo", "The offer with a promo line."), shot("voici-intro-turned-on", "The Profile right after Turn on.")],
       dimension: "D1",
     },
   ),
   webTotal(
     "web-total-onboarding-voici-intro-no-promo",
-    "The voi.ci intro when .com has no promo (promo null): no promo line; Not now closes it and leaves Home.",
-    "gym onboarding the voi.ci intro without a promo, and Not now only closes it",
+    "The offer when .com has no promo (promo null): no promo line; No thanks closes it, leaves Home and publishes nothing.",
+    "gym onboarding the safe messages offer without a promo, and No thanks only closes it",
     {
       steps: [
         { kind: "tap", describe: "Create a new account to the end, finish the wizard.", handle: "#bootstrap-create" },
-        { kind: "tap", describe: "Not now.", handle: "[data-testid=voici-intro-later]" },
+        { kind: "tap", describe: "No thanks.", handle: "[data-testid=voici-intro-no]" },
       ],
       assertions: [
         { describe: "No promo line", handle: "[data-testid=voici-intro-promo]", expect: "absent" },
         { describe: "Home", handle: "#view-home", expect: "present" },
       ],
-      screenshots: [shot("voici-intro", "The voi.ci intro without a promo.")],
+      screenshots: [shot("voici-intro", "The offer without a promo.")],
       dimension: "D1",
     },
   ),

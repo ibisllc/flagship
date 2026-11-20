@@ -16130,18 +16130,6 @@
     "en": "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.",
     "ctx": "webapp/views/page-editor.js"
   },
-  "Get your own voi.ci page": {
-    "en": "Get your own voi.ci page",
-    "ctx": "webapp/lib/voiciIntro.js"
-  },
-  "Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.": {
-    "en": "Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.",
-    "ctx": "webapp/lib/voiciIntro.js"
-  },
-  "Set it up": {
-    "en": "Set it up",
-    "ctx": "webapp/lib/voiciIntro.js"
-  },
   "Social options": {
     "en": "Social options",
     "ctx": "webapp/views/page-editor.js"
@@ -16173,5 +16161,13 @@
   "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": {
     "en": "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
     "ctx": "webapp/lib/voiciCopy.js"
+  },
+  "Turn on safe messages, calls and posts": {
+    "en": "Turn on safe messages, calls and posts",
+    "ctx": "webapp/lib/voiciIntro.js"
+  },
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": {
+    "en": "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.",
+    "ctx": "webapp/lib/voiciIntro.js"
   }
 }

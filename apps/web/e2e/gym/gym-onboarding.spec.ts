@@ -139,6 +139,15 @@ async function deviceOnly(page: Page): Promise<void> {
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 15_000 });
 }
 
+/** Past the wizard's last step: it enters Home. */
+async function finishWizard(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const store = await import("/lib/profilesStore.js");
+    store.set("wizardState", JSON.stringify({ stepIdx: 99, completed: [] }));
+    await (await import("/views/wizard.js")).enterWizard();
+  });
+}
+
 async function enterWizardAt(page: Page, stepIdx: number): Promise<void> {
   await page.evaluate(async (stepIdx) => {
     const store = await import("/lib/profilesStore.js");
@@ -214,33 +223,42 @@ test.describe("gym webapp onboarding", () => {
     await shot(page, testInfo, "account-opened-secure-step");
   });
 
-  test("gym onboarding a new account sees the voi.ci intro once on Home, with `.com`'s promo; Set it up opens the Profile", async ({ page }, testInfo) => {
+  test("gym onboarding a new account is offered safe messages, calls and posts once on Home; Turn on makes its page public", async ({ page }, testInfo) => {
     const m = await mock(page);
     suggestions(m);
     accountsEndpoint(m);
     let promoAsked = 0;
     m.get("/api/voici/promo", () => (promoAsked++, { json: { promo: { text: "Set it up this week for a free month.", until: null } } }));
+    let published: any = null;
+    m.post(/\/api\/voici\/pages\/[a-z0-9-]+\/pieces$/, { ok: true });
+    m.post(/\/api\/voici\/pages\/[a-z0-9-]+\/publish$/, (c: { body: any }) => ((published = c.body.index), { json: { ok: true } }));
     await openNewAccount(page);
     await expect(await wizardTitle(page)).toHaveText("Secure your account", { timeout: 30_000 });
     // Not before the creation steps are done: the wizard ends on Home, which shows it.
     await expect(page.locator("[data-testid=voici-intro]")).toHaveCount(0);
-    await page.evaluate(async () => {
-      const store = await import("/lib/profilesStore.js");
-      store.set("wizardState", JSON.stringify({ stepIdx: 99, completed: [] }));
-      await (await import("/views/wizard.js")).enterWizard();
-    });
+    await finishWizard(page);
     const intro = page.locator("[data-testid=voici-intro]");
     await expect(intro).toBeVisible({ timeout: 15_000 });
-    await expect(intro.locator(".modal-title")).toHaveText("Get your own voi.ci page");
+    await expect(intro.locator(".modal-title")).toHaveText("Turn on safe messages, calls and posts");
     await expect(intro.locator(".modal-message")).toHaveText(
-      `Set up voi.ci/${SECOND} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.`,
+      `Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/${SECOND}.`,
     );
     await expect(intro.locator("[data-testid=voici-intro-promo]")).toHaveText("Set it up this week for a free month.");
     expect(promoAsked).toBe(1);
     await shot(page, testInfo, "voici-intro-promo");
-    await intro.locator("[data-testid=voici-intro-setup]").click();
+    await intro.locator("[data-testid=voici-intro-turn-on]").click();
     await expect(intro).toHaveCount(0);
-    await expect(page.locator("#view-messages")).toBeVisible({ timeout: 15_000 });
+    // The usual steps: the rules once, then the public warning with the first-publish defaults.
+    await expect(page.locator(".modal-title")).toHaveText("Page and message rules", { timeout: 15_000 });
+    await page.click("[data-modal-ok]");
+    await expect(page.locator(".modal-title")).toHaveText("Make your page public?");
+    await expect(page.locator(".modal-message")).toContainText("Messages and calls are on. Callers sign in with Flagship and let you call them back.");
+    await page.click("[data-modal-ok]");
+    await expect.poll(() => published?.callsFrom).toBe("callback");
+    expect([published.acceptsMessages, published.acceptsCalls, "showInSearch" in published]).toEqual([1, 1, false]);
+    await expect(page.locator("#view-messages")).toBeVisible();
+    await expect(page.locator("[data-testid=messages-page-status]")).toHaveText("Public");
+    await shot(page, testInfo, "voici-intro-turned-on");
     // Never again for this account on this browser.
     await page.evaluate(async () => (await import("/views/home.js")).enterHome());
     await expect(page.locator("#view-home")).toBeVisible();
@@ -248,25 +266,22 @@ test.describe("gym webapp onboarding", () => {
     await expect(page.locator("[data-testid=voici-intro]")).toHaveCount(0);
   });
 
-  test("gym onboarding the voi.ci intro without a promo, and Not now only closes it", async ({ page }, testInfo) => {
+  test("gym onboarding the safe messages offer without a promo, and No thanks only closes it", async ({ page }, testInfo) => {
     const m = await mock(page);
     suggestions(m);
     accountsEndpoint(m);
     m.get("/api/voici/promo", { promo: null });
     await openNewAccount(page);
     await expect(await wizardTitle(page)).toHaveText("Secure your account", { timeout: 30_000 });
-    await page.evaluate(async () => {
-      const store = await import("/lib/profilesStore.js");
-      store.set("wizardState", JSON.stringify({ stepIdx: 99, completed: [] }));
-      await (await import("/views/wizard.js")).enterWizard();
-    });
+    await finishWizard(page);
     const intro = page.locator("[data-testid=voici-intro]");
     await expect(intro).toBeVisible({ timeout: 15_000 });
     await expect(intro.locator("[data-testid=voici-intro-promo]")).toBeHidden();
     await shot(page, testInfo, "voici-intro");
-    await intro.locator("[data-testid=voici-intro-later]").click();
+    await intro.locator("[data-testid=voici-intro-no]").click();
     await expect(intro).toHaveCount(0);
     await expect(page.locator("#view-home")).toBeVisible();
+    expect(m.sent(/\/api\/voici\/pages\/[a-z0-9-]+\/publish$/)).toEqual([]);
   });
 
   // Opening an account used to re-wrap the device key under the account's

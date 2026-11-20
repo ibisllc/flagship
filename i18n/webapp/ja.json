@@ -3958,9 +3958,6 @@
   "Your {0} vouchers ({1}) are ready.": "{0} 枚のバウチャー（{1}）の準備ができました。",
   "Show in search engines": "検索エンジンに表示",
   "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "オフのときは、検索エンジンにページを掲載しないよう求めます。リンクを知っている人は引き続き開けます。",
-  "Get your own voi.ci page": "自分の voi.ci ページを作りましょう",
-  "Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.": "voi.ci/{0} を設定すると、プライベートなメッセージや通話を送受信したり、近況を投稿したりできます。電話番号もメールアドレスも不要で、量子コンピューターへの対策も施されています。",
-  "Set it up": "設定する",
   "Social options": "ソーシャルのオプション",
   "Turn off social features": "ソーシャル機能をオフにする",
   "Turn off social features?": "ソーシャル機能をオフにしますか？",
@@ -3968,5 +3965,7 @@
   "Set business hours": "受付時間を設定",
   "No messages yet. Turn on Accept messages in Social options to get them.": "まだメッセージはありません。「ソーシャルのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。",
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "メッセージと通話はオンになっています。発信者は Flagship でサインインし、あなたが折り返し電話できるようにします。「ソーシャルのオプション」でオフにできます。",
-  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "通話はオンになっています。発信者は Flagship でサインインし、あなたが折り返し電話できるようにします。「ソーシャルのオプション」でオフにできます。"
+  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "通話はオンになっています。発信者は Flagship でサインインし、あなたが折り返し電話できるようにします。「ソーシャルのオプション」でオフにできます。",
+  "Turn on safe messages, calls and posts": "安全なメッセージ・通話・投稿をオンにする",
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "メッセージや通話を受け取り、近況をシェアできます。すべて量子コンピューターへの対策がされています。あなたのページは voi.ci/{0} になります。"
 }

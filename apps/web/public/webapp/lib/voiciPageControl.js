@@ -222,8 +222,7 @@ export async function publishPending() {
   }
 }
 
-/** Takes the page off voi.ci after the owner confirms; this device keeps what was public. */
-/** Takes the page off voi.ci. `socialOff`: asked from Social options' "Turn off social features", which says so. */
+/** Takes the page off voi.ci after the owner confirms; this device keeps what was public. `socialOff`: asked from Social options' "Turn off social features", which says so. */
 export async function removePage({ socialOff = false } = {}) {
   if (!canPublishPage() || busy || !world.page) return false;
   const ok = await inlineConfirm({

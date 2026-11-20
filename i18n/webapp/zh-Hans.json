@@ -3958,9 +3958,6 @@
   "Your {0} vouchers ({1}) are ready.": "你的 {0} 张代金券（{1}）已就绪。",
   "Show in search engines": "在搜索引擎中显示",
   "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "关闭时，会要求搜索引擎不要收录你的页面。有链接的人仍然可以打开它。",
-  "Get your own voi.ci page": "拥有你自己的 voi.ci 页面",
-  "Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.": "设置 voi.ci/{0}，即可收发私密消息和通话，并发布动态。不需要手机号或电子邮件，而且能抵御量子计算机。",
-  "Set it up": "去设置",
   "Social options": "社交选项",
   "Turn off social features": "关闭社交功能",
   "Turn off social features?": "要关闭社交功能吗？",
@@ -3968,5 +3965,7 @@
   "Set business hours": "设置营业时间",
   "No messages yet. Turn on Accept messages in Social options to get them.": "还没有消息。在“社交选项”中打开“接收消息”即可收到消息。",
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "消息和通话已开启。来电者需用 Flagship 登录，并允许你回拨。你可以在社交选项中关闭它们。",
-  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "通话已开启。来电者需用 Flagship 登录，并允许你回拨。你可以在社交选项中关闭它们。"
+  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "通话已开启。来电者需用 Flagship 登录，并允许你回拨。你可以在社交选项中关闭它们。",
+  "Turn on safe messages, calls and posts": "开启安全的消息、通话和动态",
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "让别人给你发消息、打电话，并分享你的动态。一切都能抵御量子计算机。你的页面将位于 voi.ci/{0}。"
 }

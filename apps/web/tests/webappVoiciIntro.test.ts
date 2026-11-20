@@ -1,6 +1,7 @@
 /**
- * The one-time "Get your own voi.ci page" intro (lib/voiciIntro.js): pending only after creating an account, shown
- * once per account on this browser, the promo line only when `.com` sends one, Set it up opens the Social Profile.
+ * The one-time "Turn on safe messages, calls and posts" intro (lib/voiciIntro.js): pending only after creating an
+ * account, shown once per account on a browser that can publish, the promo line only when `.com` sends one, Turn on
+ * opens the Social Profile and makes the page public through the usual steps.
  * Also the Social options renames and the removed "Anyone signed in with Flagship" choice (owner, 2026-11-20).
  */
 import { describe, expect, it } from "vitest";
@@ -29,27 +30,32 @@ describe("the voi.ci intro shows once, after creating an account", () => {
     expect(takeVoiciIntro("other-name", s)).toBe(false);
   });
 
-  it("Set it up opens the Social tab's Profile; Not now only closes", async () => {
+  it("Turn on opens the Social Profile and makes the page public; No thanks only closes", async () => {
     const s = memoryStorage();
     markVoiciIntroPending("bright-maple", s);
-    let entered = 0;
+    const did: string[] = [];
     let shownWith: { username: string; promo: unknown } | null = null;
-    const pick = await maybeShowVoiciIntro("bright-maple", {
-      storage: s,
-      fetchPromo: async () => null,
-      open: async (o: { username: string; promo: unknown }) => ((shownWith = o), "setup"),
-      enterYourPage: async () => void entered++,
-    });
-    expect(pick).toBe("setup");
-    expect(entered).toBe(1);
+    const base = { storage: s, canPublish: async () => true, fetchPromo: async () => null, enterYourPage: async () => void did.push("profile"), goPublic: async () => void did.push("public") };
+    const pick = await maybeShowVoiciIntro("bright-maple", { ...base, open: async (o: { username: string; promo: unknown }) => ((shownWith = o), "on") });
+    expect(pick).toBe("on");
+    expect(did).toEqual(["profile", "public"]);
     expect(shownWith!.username).toBe("bright-maple");
-    expect(await maybeShowVoiciIntro("bright-maple", { storage: s, open: async () => "setup", enterYourPage: async () => void entered++ })).toBeNull();
-    expect(entered).toBe(1);
+    expect(await maybeShowVoiciIntro("bright-maple", { ...base, open: async () => "on" })).toBeNull();
+    expect(did).toEqual(["profile", "public"]);
 
     markVoiciIntroPending("calm-river", s);
-    const later = await maybeShowVoiciIntro("calm-river", { storage: s, fetchPromo: async () => null, open: async () => "later", enterYourPage: async () => void entered++ });
-    expect(later).toBe("later");
-    expect(entered).toBe(1);
+    expect(await maybeShowVoiciIntro("calm-river", { ...base, open: async () => "no" })).toBe("no");
+    expect(did).toEqual(["profile", "public"]);
+  });
+
+  it("is never offered on a device that can't publish the page (it stays pending)", async () => {
+    const s = memoryStorage();
+    markVoiciIntroPending("bright-maple", s);
+    let opened = 0;
+    const r = await maybeShowVoiciIntro("bright-maple", { storage: s, canPublish: async () => false, open: async () => (opened++, "on") });
+    expect(r).toBeNull();
+    expect(opened).toBe(0);
+    expect(s.map.get(voiciIntroKey("bright-maple"))).toBe("pending");
   });
 
   it("only account creation marks it: not joining, signing in again or restoring", () => {
@@ -67,12 +73,13 @@ describe("the voi.ci intro shows once, after creating an account", () => {
 
   it("draws the sheet through tr(), with the promo line hidden until `.com` sends one", () => {
     const src = read("lib/voiciIntro.js");
-    expect(src).toContain('tr("Get your own voi.ci page")');
+    expect(src).toContain('tr("Turn on safe messages, calls and posts")');
     expect(src).toContain(
-      `tr("Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.", username)`,
+      'tr("Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.", username)',
     );
-    expect(src).toContain('tr("Set it up")');
-    expect(src).toContain('tr("Not now")');
+    expect(src).toContain('tr("Turn on")');
+    expect(src).toContain('tr("No thanks")');
+    expect(src).toContain("setPagePublic(true)");
     expect(src).toMatch(/data-testid="voici-intro-promo" hidden/);
     expect(src).toMatch(/if \(!done && line && p\?\.text\)/);
     expect(src).not.toMatch(/anonymous/i);

@@ -3958,9 +3958,6 @@
   "Your {0} vouchers ({1}) are ready.": "Tus {0} vales ({1}) están listos.",
   "Show in search engines": "Mostrar en los buscadores",
   "When this is off, search engines are asked not to list your page. Anyone with the link can still open it.": "Si está desactivado, se pide a los buscadores que no muestren tu página. Cualquiera con el enlace puede abrirla igualmente.",
-  "Get your own voi.ci page": "Consigue tu propia página de voi.ci",
-  "Set up voi.ci/{0} to send and receive private messages and calls, and to post updates. No phone number or email needed, and it's protected against quantum computers.": "Configura voi.ci/{0} para enviar y recibir mensajes y llamadas privados, y para publicar novedades. No necesitas número de teléfono ni correo, y está protegido frente a los ordenadores cuánticos.",
-  "Set it up": "Configurarla",
   "Social options": "Opciones sociales",
   "Turn off social features": "Desactivar las funciones sociales",
   "Turn off social features?": "¿Desactivar las funciones sociales?",
@@ -3968,5 +3965,7 @@
   "Set business hours": "Establecer horario de atención",
   "No messages yet. Turn on Accept messages in Social options to get them.": "Aún no hay mensajes. Activa Aceptar mensajes en Opciones sociales para recibirlos.",
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Los mensajes y las llamadas están activados. Quien llama inicia sesión con Flagship y te deja devolverle la llamada. Puedes desactivarlos en Opciones sociales.",
-  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Las llamadas están activadas. Quien llama inicia sesión con Flagship y te deja devolverle la llamada. Puedes desactivarlas en Opciones sociales."
+  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Las llamadas están activadas. Quien llama inicia sesión con Flagship y te deja devolverle la llamada. Puedes desactivarlas en Opciones sociales.",
+  "Turn on safe messages, calls and posts": "Activa mensajes, llamadas y publicaciones seguros",
+  "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Deja que la gente te escriba y te llame, y comparte tus novedades. Todo está protegido frente a los ordenadores cuánticos. Tu página estará en voi.ci/{0}."
 }
