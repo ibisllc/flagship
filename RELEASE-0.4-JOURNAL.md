@@ -1753,3 +1753,10 @@ cloud-recovery toggle = passkey), design pass (cover logo looks AI-generated); A
 features), x86 calls/libwebrtc, native debug symbols; push registration race (duplicate rows); Google-free push choice
 in Android Settings. From the browser: restrict the Gemini API keys flagged in Google Cloud; decide whether to exclude
 Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if not in 14).
+
+- 2026-11-21 (after the restart): build-14 additions committed as `3caab6590` on release/0.4 (not yet on main): the app
+  asks for POST_NOTIFICATIONS once after the first unlock on a paired device; Calls settings shows "Allow notifications
+  so calls can ring" / "Allow full-screen calls…" rows only when missing (RingReadiness.kt, API 34
+  canUseFullScreenIntent → ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT). Strings in 7 languages through the tools;
+  testDebugUnitTest, i18n-android check and i18n-literals green. Resume point: waiting for the owner to re-pair Wi-Fi
+  adb; then the three call retests (step 1), then versionCode 14 + AABs (step 2 rest).
