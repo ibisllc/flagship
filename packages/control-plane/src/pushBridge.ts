@@ -194,8 +194,11 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
             return;
           }
           // unconfigured platforms count as failed.
+          console.warn(`push ${t.platform}: not configured`);
           failed++;
-        } catch {
+        } catch (e) {
+          // The provider's status and reason only (never the token): without it a dead push is invisible.
+          console.warn(`push ${t.platform} failed: ${String(e instanceof Error ? e.message : e).replace(/[A-Za-z0-9_:-]{60,}/g, "…").slice(0, 300)}`);
           failed++;
         }
       }),
