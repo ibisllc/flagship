@@ -73,4 +73,8 @@
 # TurnResponder natives.
 -keep class org.webrtc.** { *; }
 -dontwarn org.webrtc.**
+# Its JNI_OnLoad also finds jni_zero's classes by name (the AAR carries org/jni_zero): without this a release
+# build aborts in JNI_OnLoad the moment a call starts.
+-keep class org.jni_zero.** { *; }
+-dontwarn org.jni_zero.**
 -keepclasseswithmembernames class com.flagshipserver.app.calls.TurnResponder { native <methods>; }
