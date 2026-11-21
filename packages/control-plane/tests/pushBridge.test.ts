@@ -90,6 +90,21 @@ describe("buildPushForwarder — APNs", () => {
     });
   });
 
+  it("calls fetch as a plain function (Workers' fetch throws Illegal invocation as a method)", async () => {
+    const { f } = fakeFetch([{ status: 200, body: "" }]);
+    const strict = function (this: unknown, u: string, i?: Parameters<typeof f>[1]) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      return f(u, i);
+    };
+    const forward = buildPushForwarder({
+      apns: { keyId: "ABC1234567", teamId: "TEAM123456", privateKeyPem: APNS_TEST_KEY, bundleId: "com.flagship.app" },
+      fetchImpl: strict,
+      now: () => 1_700_000_000_000,
+    });
+    const r = await forward({ targets: [{ tokenId: "tok1", platform: "apns", providerToken: "ABCDEF1234" }], category: "cert-alert", sealedPayloadHex: "deadbeef" });
+    expect(r.sent).toBe(1);
+  });
+
   it("puts a secret-request's kind and approvals link at the top level of the APNs body", async () => {
     const { f, calls } = fakeFetch([{ status: 200, body: "" }]);
     const forward = buildPushForwarder({

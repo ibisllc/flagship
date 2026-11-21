@@ -105,8 +105,17 @@ export interface PushFanoutResult {
  * are not surfaced to the caller — push errors should not leak token
  * registration state.
  */
+/**
+ * Workers' fetch throws "Illegal invocation" when called as a method of another object (`args.fetchImpl(...)`),
+ * which is how every sender below calls it: wrap it so it is always called as a plain function.
+ */
+function plainFetch(f: FetchLike | undefined): FetchLike {
+  const base = f ?? (globalThis.fetch as unknown as FetchLike);
+  return (input, init) => base(input, init);
+}
+
 export function buildPushForwarder(cfg: PushBridgeConfig) {
-  const fetchImpl = cfg.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const fetchImpl = plainFetch(cfg.fetchImpl);
   const now = cfg.now ?? (() => Date.now());
   const apnsState: { token?: string; mintedAt?: number } = {};
   const fcmState: { token?: string; expiresAt?: number } = {};
@@ -386,7 +395,7 @@ async function sendApns(args: {
  * key. Returns how many tokens Apple accepted; a 410 (token gone) is reported through `gone`.
  */
 export function buildVoipPushSender(cfg: { apns: NonNullable<PushBridgeConfig["apns"]>; fetchImpl?: FetchLike; now?: () => number }) {
-  const fetchImpl = cfg.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const fetchImpl = plainFetch(cfg.fetchImpl);
   const now = cfg.now ?? (() => Date.now());
   const state: { token?: string; mintedAt?: number } = {};
   return async function sendVoip(tokens: string[], call: Record<string, string>, expiresAtSec: number, gone?: (token: string) => void): Promise<number> {
@@ -652,7 +661,7 @@ export type WebPushOutcome = "sent" | "gone" | "failed";
  * (voiciAlerts.ts); the account push tokens keep `buildPushForwarder`.
  */
 export function buildWebPushSender(cfg: { webpush: NonNullable<PushBridgeConfig["webpush"]>; fetchImpl?: FetchLike; now?: () => number }) {
-  const fetchImpl = cfg.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const fetchImpl = plainFetch(cfg.fetchImpl);
   const now = cfg.now ?? (() => Date.now());
   return async (providerToken: string, payloadBytes?: Uint8Array): Promise<WebPushOutcome> => {
     try {
