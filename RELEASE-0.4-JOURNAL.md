@@ -1687,3 +1687,69 @@ Open owner items:
 - 2026-11-21 owner, same 0.5 item: skip the post-creation backup page too; Home needs a "create your social page" reminder/link; the design (cover logo first) looks AI-generated: design pass.
 - 2026-11-21 ~10:55: Android rings. Driving the test phone (Galaxy S948U1, Android 17, release build 13 sideloaded over Wi-Fi adb, new account brisk-quartz) found two production push bugs, both fixed on .com without app updates: (1) .com verified push registrations only under the device key since 0083, but iOS and Android sign with the IRK: every native registration 403 and swallowed (prod had zero APNs/FCM tokens); now the IRK is accepted for a live device (44866bdc3). (2) every APNs/FCM/Web Push send threw "Illegal invocation" (args.fetchImpl called as a method on Workers); only the VoIP sender worked (fix + regression test, after adding provider-failure logs). Deploys: 98d4896d, 38f842ac, 55d8ba98. Also: Android backup step after account creation removed (fb8c06a1d, rides build 14). Build 14 to add: ask for POST_NOTIFICATIONS (the app never asked; granted by adb), canUseFullScreenIntent check. 0.5: duplicate push rows from a register race (same token twice, 13 ms apart).
 - Resume point: owner records the Play video on the test phone; then build 14 (Android) with the permission fixes; browser Part B with 14.
+
+### RESUME POINT (2026-11-21 ~11:30 UTC, owner restarting the Mac): everything left for 0.4 to be live
+
+Code state: `main` == `release/0.4` == `0ca3de7c9` (all pushed). `.com` live version `55d8ba98` (+ deploys today
+98d4896d, 38f842ac). `release/version.json` androidVersionCode **13** (to raise to **14** before the next AAB).
+Test phone: Galaxy S948U1 (Android 17), Wi-Fi adb (pair again after the restart: owner opens Developer options →
+Wireless debugging → Pair with code; I run `adb pair` then `adb connect` (port from `adb mdns services`)); account
+`brisk-quartz` created on it (its admin device); a sideloaded release APK built from `0ca3de7c9` minus nothing (the
+locked-call fixes included) is installed; full-screen intent allowed and POST_NOTIFICATIONS granted by adb.
+
+**Fixed today (2026-11-21), all on main:**
+- `.com` (deployed): push registrations signed by the IRK accepted (iOS + Android sign with it; before, every native
+  registration was 403 and no APNs/FCM token existed in prod); every APNs/FCM/Web Push send threw "Illegal invocation"
+  (args.fetchImpl called as a method; fixed + regression test); provider failures now logged (`push <platform> failed:`).
+  Result: Android rings (verified). Ordinary pushes to iPhones (unlock/access requests, alerts) should now arrive too:
+  not yet checked on an iPhone.
+- Android (needs build 14): manifest marks all implied hardware optional (13 has it); no backup step after account
+  creation (owner); keep `org.jni_zero` in R8 (13 CRASHES when answering any call: libwebrtc JNI_OnLoad); join a call
+  that rang while locked + end a never-joined ring at ring timeout (else Telecom stays "ringing" and later calls are
+  ignored).
+
+**Call testing status:** unlocked phone: rings, answering crashed on 13 (fixed in the test APK, not re-verified by
+answering yet). Locked phone with the setting off: "Unlock Flagship" then no call (fix installed at ~11:25, NOT yet
+retested). Owner's ask: answer without biometrics: already exists as Social → page settings → Calls → "Answer calls
+while Flagship is locked" (call-only key; caller shown as "Someone on voi.ci"); test it. Rate limit on the web caller:
+3 calls/h, 10/day per caller pseudonym: use a private browser window for a fresh caller (no prod change made).
+If the locked path still shows no call: make the call screen's own Unlock button run the biometric prompt
+(BiometricAuthority) and join, instead of sending the owner to Home.
+
+**Next, in order:**
+1. Re-pair adb; retest on the phone: (a) unlocked call, answer, video both ways; (b) locked + "Answer calls while
+   locked" ON → answer from lock screen; (c) locked + setting OFF → Unlock → call screen appears. Fix whatever fails.
+2. Build 14 additions (owner agreed fixes only, plus the backup-step removal): ask for POST_NOTIFICATIONS (the app never
+   asks; i18n strings through the tools, 7 languages, never hand-edit values-*); check `canUseFullScreenIntent()` and
+   offer the settings screen (ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT) when missing; run `testDebugUnitTest` (release
+   unit tests do not compile: debug-only mocks, expected). Then androidVersionCode 14 in release/version.json →
+   `node scripts/check-versions.mjs --write` → commit/push → build both AABs under the native-build lock in ~/flagship
+   (fast-forward it first; it holds keystore + the real google-services.json, project flagshipserver) → verify
+   (versionCodes 14/1000014, no required uses-feature, google_app_id present, org/jni_zero classes in the dex, upload
+   cert 3A:83:…:3C:6B, check-release-clean ok) → `~/flagship-release-artifacts/<sha>/`.
+3. Owner records the Play foreground-service video on the test phone with build 14 (video call answered, Home pressed,
+   ongoing call notification with hang-up visible), uploads Unlisted to YouTube, gives the link to the browser session.
+4. Browser session (Play): replace the production phone draft's **13 with 14** (13 crashes on answer: never ship it);
+   upload 14 to internal testing too; Wear production: owner drags `wear-release.aab` **1000014** (not 1000013), browser
+   re-pastes the Wear notes (unsaved), 100%; foreground-service declaration with the video link (Phone call: "VoIP,
+   telecom APIs"; mic + camera: "Other" + the brief's sentence); reviewer notes → App content → App access → instructions
+   (my recommendation: yes); licence testing: owner adds their own Google account (Setup → License testing); browser
+   shows the full change list, owner says yes → Send for review. Managed publishing is ON: after approval, Publish only
+   on the owner's word, after the purchase test on internal 14 (buy 10 vouchers as a licence tester, balance +$10) and a
+   call test.
+5. Update docs/runbooks/0.4-store-submission-browser.md from 13/1000013 to 14/1000014 before handing back.
+6. App Store: 1.3 (9) + 3 voucher packs Waiting for Review (submitted 2026-11-20 23:48, auto-release, still "Flagship
+   Hub" name/subtitles: rename later). iOS 1.3 (9) lacks: the two CI iOS fixes (harmless) and nothing found for calls
+   (iOS rings use VoIP; ordinary pushes now fixed server-side). Check one ordinary push on an iPhone after this deploy.
+7. After both stores go live: journal, AGENTS.md status, deploy sheet close-out; gym → Pebble; weekly rate-limits check.
+
+**Owner decisions recorded today:** 12 never published (device loss); straight to production via internal, with
+managed publishing and the purchase test during review; full-screen intent pre-grant Yes; no Experimental label;
+UX changes beyond fixes go to 0.5 except the backup-step removal.
+
+**0.5 list additions today** (docs/release-0.5-list.md): onboarding rethink (no "Lock it to your device" screen, no
+backup page, keep the voi.ci intro as the one step, Home reminders for cloud recovery/backup/social page, explain the
+cloud-recovery toggle = passkey), design pass (cover logo looks AI-generated); Android reach guard test (implied
+features), x86 calls/libwebrtc, native debug symbols; push registration race (duplicate rows); Google-free push choice
+in Android Settings. From the browser: restrict the Gemini API keys flagged in Google Cloud; decide whether to exclude
+Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if not in 14).
