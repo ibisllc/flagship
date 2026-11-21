@@ -67,7 +67,7 @@ struct VoiciIntroSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Image(systemName: "bubble.left.and.text.bubble.right")
-                    .font(.system(size: 40, weight: .regular))
+                    .font(FS.font.scaled(40))
                     .foregroundColor(c.primary)
                     .accessibilityHidden(true)
                 Text("Turn on safe messages, calls and posts")
