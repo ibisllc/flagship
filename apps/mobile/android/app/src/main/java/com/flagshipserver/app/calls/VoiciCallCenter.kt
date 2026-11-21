@@ -128,6 +128,12 @@ object VoiciCallCenter {
             if (keys != null) startSession(push, keys) else update { it.copy(phase = Phase.NeedsUnlock) }
             ring(push)
         }
+        // A ring that never joined the room (locked and never unlocked) learns nothing from the caller: end it when
+        // the ring time is up, or Telecom keeps it ringing and every later call is ignored as busy.
+        scope.launch {
+            kotlinx.coroutines.delay((push.issuedAt + VoiciCalls.RING_MS - System.currentTimeMillis()).coerceAtLeast(0L))
+            if (pendingPush === push && session == null) finish("no-answer")
+        }
     }
 
     private fun startSession(push: VoiciCallPush.Payload, keys: VoiciCallKeys) {
@@ -153,8 +159,13 @@ object VoiciCallCenter {
         if (session != null) return
         scope.launch {
             val keys = runCatching { VoiciCenter.shared?.callKeys() }.getOrNull() ?: return@launch
+            if (pendingPush !== push || session != null) return@launch
             update { it.copy(phase = Phase.Ringing) }
             startSession(push, keys)
+            // The unlock lands on Home: bring the call screen forward so Answer is in front of the owner.
+            if (::app.isInitialized) runCatching {
+                app.startActivity(Intent(app, VoiciCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            }
         }
     }
 

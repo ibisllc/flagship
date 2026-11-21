@@ -469,6 +469,8 @@ class MainActivity : FragmentActivity() {
                 isDemo = com.flagshipserver.app.core.AppState.isDemoAccount(p, appState.pods.value),
             )
         }
+        // The app lock lifting (it need not open a new key session) also lets a waiting call join.
+        lifecycleScope.launch { appState.isUnlocked.collect { if (it) com.flagshipserver.app.calls.VoiciCallCenter.onUnlocked() } }
         BiometricAuthority.onSessionUnlocked = {
             // Keep the account device key at hand for silent read tokens once the unlock opened the
             // sealed account seed (iOS keeps it the same way, docs/account-read-token.md).
@@ -479,6 +481,8 @@ class MainActivity : FragmentActivity() {
             }
             // Renewal on use: the unlock that opens the admin root delegates the serving renewal key once.
             com.flagshipserver.app.keystore.ServingRenewal.sessionUnlocked()
+            // A call that rang while Flagship was locked joins its room now ("Open Flagship and unlock it to answer").
+            com.flagshipserver.app.calls.VoiciCallCenter.onUnlocked()
             com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
             com.flagshipserver.app.keystore.QuantumSafetyService.activate(appState.currentUser.value, appState.activeProfile?.deviceId)
             if (mocks == null) lifecycleScope.launch { repairDeviceId(liveFlagshipServer) }
@@ -1074,6 +1078,8 @@ class MainActivity : FragmentActivity() {
      *  (kept on disk across process death) is settled whenever the window gains focus. */
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        // A call that rang while Flagship was locked: the app is in front again, join it if the keys are open now.
+        if (hasFocus) com.flagshipserver.app.calls.VoiciCallCenter.onUnlocked()
         com.flagshipserver.app.core.SensitiveClipboard.appHasFocus = hasFocus
         if (hasFocus) runCatching { com.flagshipserver.app.core.SensitiveClipboard.settle(applicationContext) }
     }
