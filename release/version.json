@@ -3,7 +3,7 @@
   "label": "Beta",
   "iosVersion": "1.3",
   "iosBuild": 9,
-  "androidVersionCode": 12,
+  "androidVersionCode": 13,
   "studio": "0.4.0",
   "marketplace": false
 }

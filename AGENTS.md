@@ -234,7 +234,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 Branch **`release/0.4`** (worktree `~/flagship-0.4`; not on `main`, nothing deployed). Plan, Log and resume point:
 `RELEASE-0.4-JOURNAL.md` on that branch ("resume 0.4" = read it). Product version **0.4 Beta**: iOS 1.3 (9), Android
-12 (Wear 1000012), Studio 0.4.0. It launches what was parked on branches (marketplace fold: Pro / Pro Max with $1
+13 (Wear 1000013; 12 was uploaded, never published), Studio 0.4.0. It launches what was parked on branches (marketplace fold: Pro / Pro Max with $1
 blind-signed vouchers sold through Stripe, App Store and Play; custom domains and names; the outbound proxy with OHTTP),
 plus voi.ci calls (audio/video, own libwebrtc build), the Social tab, Activity for calls and messages, direct access on
 `fshp.app`, restore into a running server, UnifiedPush, the Firefox extension, webapp custody and the responsive webapp,

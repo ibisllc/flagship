@@ -128,3 +128,4 @@ over once "let's start 0.5" is said.
   installs. Fix `checkAgainstManifest` in apps/web/public/webapp/service-worker.js; needs a shell bump and re-sign.
 - **Marketplace scan secrets before turning the marketplace on:** `SERVICES_CONTROL_SECRET`,
   `FLAGSHIP_SCANNER_PRIV_HEX` and the R2 secrets in the repo (the nightly scan skips while `marketplace` is false).
+- Android device reach guard: a test that fails when the merged release manifest has a permission whose implied hardware feature (camera.autofocus, microphone, bluetooth, location.gps, …) is not declared `required="false"` (0.4's phone 12 lost ~1,577 devices this way; fixed in 13). Also build libwebrtc and the TURN FFI for 32-bit x86, or say "calls aren't available on this device" there, and upload native debug symbols to Play.
