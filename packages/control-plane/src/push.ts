@@ -130,6 +130,15 @@ export interface PushRegisterOptions {
   quarantine?: boolean;
 }
 
+function verifiesUnderIrk(claim: PushTokenRegister, sig: Uint8Array, irkPubHex: string | null | undefined): boolean {
+  if (typeof irkPubHex !== "string" || !/^[0-9a-f]{64}$/i.test(irkPubHex)) return false;
+  try {
+    return verifyPushTokenRegister(claim, sig, hexToBytes(irkPubHex));
+  } catch {
+    return false;
+  }
+}
+
 export async function handlePushRegister(
   deps: PushDeps,
   body: RegisterBody | undefined,
@@ -178,7 +187,11 @@ export async function handlePushRegister(
     pushX25519Pub: pushPub,
     issuedAt: r.issuedAt,
   };
-  if (!verifyPushTokenRegister(claim, sig, devicePub)) return forbidden("invalid device authorization");
+  // The webapp signs with the device key; the iOS and Android store builds sign with the account's IRK (as the
+  // revoke does). Either authorises a registration for a live device of this account.
+  if (!verifyPushTokenRegister(claim, sig, devicePub) && !verifiesUnderIrk(claim, sig, userRec.irkPubHex)) {
+    return forbidden("invalid device authorization");
+  }
 
   const freshness = deps.freshnessMs ?? 5 * 60_000;
   const now = (deps.now ?? (() => Date.now()))();

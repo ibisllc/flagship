@@ -82,6 +82,15 @@ describe("account-scoped push registration", () => {
     expect(response.status).toBe(403);
   });
 
+  it("accepts the account IRK's signature for a live device (the iOS and Android store builds sign with it)", async () => {
+    const { storage, irk } = await harness();
+    const deps = { pushTokens: storage.pushTokens, deviceIdentities: storage.deviceIdentities, usernames: storage.usernames, now: () => 100 };
+    expect((await handlePushRegister(deps, signedBody(irk, 100))).status).toBe(200);
+    expect((await storage.pushTokens.listByUser("alice"))[0]?.deviceId).toBe(deviceId);
+    await storage.deviceIdentities.revoke("alice", deviceId, 150);
+    expect((await handlePushRegister(deps, signedBody(irk, 200))).status).toBe(403);
+  });
+
   it("rejects a missing or revoked device identity", async () => {
     const { storage, device } = await harness();
     await storage.deviceIdentities.revoke("alice", deviceId, 50);
