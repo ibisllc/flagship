@@ -97,16 +97,16 @@ class OpenAccountFlowTest {
         assertTrue(server.issuedAuthCodes.isEmpty())
     }
 
-    @Test fun openAccount_armsSecureAccountNudge() = runTest {
-        // The CREATE path arms the SKIPPABLE "Secure your account" backup
-        // step (rendered by AppRoot as an overlay above the shell).
+    @Test fun openAccount_skipsBackupStep_andArmsVoiciIntro() = runTest {
+        // Owner, 2026-11-21: no backup page after creating an account; the
+        // voi.ci intro is the one onboarding step.
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
         val app = AppState()
-        assertFalse(app.pendingSecureAccountNudge.first())
 
         newVm(server, app, "harry").openAccount("Harry's Pixel")
 
-        assertTrue("opening a new account must arm the backup nudge", app.pendingSecureAccountNudge.first())
+        assertFalse("a new account must not get the backup step", app.pendingSecureAccountNudge.first())
+        assertEquals("harry", app.pendingVoiciIntro.first())
     }
 
     @Test fun openAccount_doesNotArmNudge_whenClaimFails() = runTest {
