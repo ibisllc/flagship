@@ -117,3 +117,9 @@ over once "let's start 0.5" is said.
   of the release; keep a server-side brake only if it is repurposed, e.g. to limit calls for accounts past their
   data quota. Same review for the other launch switches (`VOICI_ENABLED`, `MARKETPLACE`): a switch is for an outage
   or abuse brake, not for sequencing a launch.
+- **Make the Google-free push choice visible on Android** (owner, 2026-11-20). FCM is the default where Google Play
+  services exist (0.4 sets up Firebase); a phone with a UnifiedPush distributor (ntfy, NextPush, Sunup) already uses
+  it instead, even with Play services. Add a Settings line under notifications that says which service delivers
+  pushes and, while it is Google, offers "Keep Google out of your notifications: install a UnifiedPush app such as
+  ntfy" with a link and a short why (Google sees that a push arrived and when, never what it says or which account).
+  Every string through i18n; same idea on the webapp's notification settings if it applies.
