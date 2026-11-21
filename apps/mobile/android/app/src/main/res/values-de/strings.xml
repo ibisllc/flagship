@@ -4365,4 +4365,6 @@
     <string name="voici_intro_on_title">Sichere Nachrichten, Anrufe und Beiträge einschalten</string>
     <string name="voici_intro_on_body">Lass dir Nachrichten schreiben und dich anrufen, und teile deine Neuigkeiten. Alles ist gegen Quantencomputer geschützt. Deine Seite ist dann unter voi.ci/%1$s.</string>
     <string name="voici_intro_no">Nein danke</string>
+    <string name="voici_calls_ring_notifications">Erlaube Mitteilungen, damit Anrufe klingeln</string>
+    <string name="voici_calls_ring_full_screen">Erlaube Anrufe im Vollbild, damit sie auf dem Sperrbildschirm erscheinen</string>
 </resources>

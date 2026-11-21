@@ -5,8 +5,12 @@
 
 package com.flagshipserver.app.ui.screens
 
+import android.Manifest
 import android.app.TimePickerDialog
+import android.os.Build
 import android.text.format.DateFormat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
@@ -14,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,11 +26,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.R
 import com.flagshipserver.app.calls.CallSettingsStore
+import com.flagshipserver.app.calls.RingReadiness
 import com.flagshipserver.app.calls.VoiciCallSettings
 import com.flagshipserver.app.core.FSStrings
 import com.flagshipserver.app.core.voici.VoiciCenter
@@ -103,6 +110,7 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
             }
         }
     }
+    if (page.callsOn) RingReadinessRows()
     if (v.showsWho && page.callsOn) CallHoursEditor(center, page, true, onError, ::pickTime, ::label)
     Text(
         stringResource(
@@ -147,6 +155,40 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
     }
 }
 
+/** Shown only when something the system controls would keep a call from ringing; re-read whenever the screen resumes. */
+@Composable
+private fun RingReadinessRows() {
+    val context = LocalContext.current
+    val resumed by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val notifications = remember(resumed) { RingReadiness.notificationsEnabled(context) }
+    val fullScreen = remember(resumed) { RingReadiness.fullScreenAllowed(context) }
+    var asked by remember { mutableStateOf(false) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        asked = true
+        if (!granted) runCatching { context.startActivity(RingReadiness.notificationSettings(context)) }
+    }
+    if (notifications && fullScreen) return
+    FSGroup {
+        if (!notifications) {
+            FSRow(
+                title = stringResource(R.string.voici_calls_ring_notifications),
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= 33 && !asked) ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    else runCatching { context.startActivity(RingReadiness.notificationSettings(context)) }
+                },
+                modifier = Modifier.testTag("calls-ring-notifications"),
+            )
+        }
+        if (!notifications && !fullScreen) FSDivider(0.dp)
+        if (!fullScreen) {
+            FSRow(
+                title = stringResource(R.string.voici_calls_ring_full_screen),
+                onClick = { runCatching { context.startActivity(RingReadiness.fullScreenSettings(context)) } },
+                modifier = Modifier.testTag("calls-ring-full-screen"),
+            )
+        }
+    }
+}
 
 /**
  * Call hours (next to who can call): off = calls ring any time; on = only on the picked days between From and Until,

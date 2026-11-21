@@ -4361,5 +4361,7 @@
   "voici_turn_off_social_title": "ソーシャル機能をオフにしますか？",
   "voici_intro_on_title": "安全なメッセージ・通話・投稿をオンにする",
   "voici_intro_on_body": "メッセージや通話を受け取り、近況をシェアできます。すべて量子コンピューターへの対策がされています。あなたのページは voi.ci/%1$s になります。",
-  "voici_intro_no": "今はしない"
+  "voici_intro_no": "今はしない",
+  "voici_calls_ring_notifications": "通話の着信音を鳴らすには通知を許可してください",
+  "voici_calls_ring_full_screen": "ロック画面に通話を表示するには全画面通話を許可してください"
 }

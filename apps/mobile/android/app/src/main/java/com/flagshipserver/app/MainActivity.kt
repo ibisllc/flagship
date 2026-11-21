@@ -112,6 +112,10 @@ class MainActivity : FragmentActivity() {
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri -> com.flagshipserver.app.core.PendingBackupSave.onPicked(applicationContext, uri) }
 
+    private val notificationPermission = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { }
+
     /** The activity is visible; internet-access requests are fetched only then. */
     private val foreground = MutableStateFlow(false)
 
@@ -470,7 +474,16 @@ class MainActivity : FragmentActivity() {
             )
         }
         // The app lock lifting (it need not open a new key session) also lets a waiting call join.
-        lifecycleScope.launch { appState.isUnlocked.collect { if (it) com.flagshipserver.app.calls.VoiciCallCenter.onUnlocked() } }
+        lifecycleScope.launch {
+            appState.isUnlocked.collect {
+                if (!it) return@collect
+                com.flagshipserver.app.calls.VoiciCallCenter.onUnlocked()
+                if (gymMocks == null && appState.isPaired.value && com.flagshipserver.app.calls.RingReadiness.shouldAskOnUnlock(this@MainActivity)) {
+                    com.flagshipserver.app.calls.RingReadiness.markAsked(this@MainActivity)
+                    notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        }
         BiometricAuthority.onSessionUnlocked = {
             // Keep the account device key at hand for silent read tokens once the unlock opened the
             // sealed account seed (iOS keeps it the same way, docs/account-read-token.md).

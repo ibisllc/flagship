@@ -4364,4 +4364,6 @@
     <string name="voici_intro_on_title">开启安全的消息、通话和动态</string>
     <string name="voici_intro_on_body">让别人给你发消息、打电话，并分享你的动态。一切都能抵御量子计算机。你的页面将位于 voi.ci/%1$s。</string>
     <string name="voici_intro_no">不用了</string>
+    <string name="voici_calls_ring_notifications">允许通知，来电才会响铃</string>
+    <string name="voici_calls_ring_full_screen">允许全屏来电，来电才会显示在锁定屏幕上</string>
 </resources>

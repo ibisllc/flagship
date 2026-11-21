@@ -17900,5 +17900,13 @@
   "voici_intro_no": {
     "en": "No thanks",
     "ctx": "voi.ci intro sheet, secondary button: closes it for good"
+  },
+  "voici_calls_ring_notifications": {
+    "en": "Allow notifications so calls can ring",
+    "ctx": "voi.ci calls: shown when notifications are off for Flagship; opens the permission prompt or settings"
+  },
+  "voici_calls_ring_full_screen": {
+    "en": "Allow full-screen calls so a call shows on the lock screen",
+    "ctx": "voi.ci calls: shown when the full-screen intent permission is off; opens the system settings screen"
   }
 }

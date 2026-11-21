@@ -4372,4 +4372,6 @@
     <string name="voici_intro_on_title">Turn on safe messages, calls and posts</string>
     <string name="voici_intro_on_body">Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/%1$s.</string>
     <string name="voici_intro_no">No thanks</string>
+    <string name="voici_calls_ring_notifications">Allow notifications so calls can ring</string>
+    <string name="voici_calls_ring_full_screen">Allow full-screen calls so a call shows on the lock screen</string>
 </resources>

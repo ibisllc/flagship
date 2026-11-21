@@ -4365,4 +4365,6 @@
     <string name="voici_intro_on_title">Ative mensagens, chamadas e publicações seguras</string>
     <string name="voici_intro_on_body">Deixe as pessoas mandarem mensagens e ligarem para você, e compartilhe suas novidades. Tudo é protegido contra computadores quânticos. Sua página vai ficar em voi.ci/%1$s.</string>
     <string name="voici_intro_no">Não, obrigado</string>
+    <string name="voici_calls_ring_notifications">Permita as notificações para que as chamadas toquem</string>
+    <string name="voici_calls_ring_full_screen">Permita as chamadas em tela cheia para que apareçam na tela de bloqueio</string>
 </resources>
