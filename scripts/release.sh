@@ -2984,7 +2984,12 @@ run_android() {
   [[ "$top" =~ ^[0-9]+$ ]] || fail "type a number"
   if [ "$vc" -le "$top" ]; then fail "release/version.json androidVersionCode $vc must be above $top: raise it, run node scripts/check-versions.mjs --write, commit, and run this step again"; fi
   confirm "Build the Android release bundles (the upload key is linked from your checkout, never copied)?" || return 10
-  local links=(local.properties apps/mobile/android/local.properties apps/mobile/android/keystore/keystore.properties)
+  local gs="$MAIN_CHECKOUT/apps/mobile/android/app/google-services.json"
+  if [ ! -f "$gs" ] || grep -q '"flagship-placeholder"' "$gs"; then
+    err "apps/mobile/android/app/google-services.json in $MAIN_CHECKOUT is missing or the placeholder: the bundles would carry no Firebase config, so Android phones with Google Play services get no pushes (call rings included)."
+    [ "$(ask_word "Type  no-fcm  to build without it anyway, or press Enter to stop and add the real file")" = no-fcm ] || return 10
+  fi
+  local links=(local.properties apps/mobile/android/local.properties apps/mobile/android/keystore/keystore.properties apps/mobile/android/app/google-services.json)
   local kf; for kf in "$MAIN_CHECKOUT"/apps/mobile/android/keystore/*.jks "$MAIN_CHECKOUT"/apps/mobile/android/keystore/*.keystore; do [ -e "$kf" ] && links+=("apps/mobile/android/keystore/$(basename "$kf")"); done
   link_local_files "${links[@]}"
   local rc=0
