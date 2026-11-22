@@ -4374,4 +4374,5 @@
     <string name="voici_intro_no">No thanks</string>
     <string name="voici_calls_ring_notifications">Allow notifications so calls can ring</string>
     <string name="voici_calls_ring_full_screen">Allow full-screen calls so a call shows on the lock screen</string>
+    <string name="voici_call_channel_quiet">Calls in progress</string>
 </resources>

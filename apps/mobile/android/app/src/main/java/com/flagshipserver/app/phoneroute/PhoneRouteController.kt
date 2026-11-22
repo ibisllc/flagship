@@ -12,7 +12,6 @@ import android.content.Context
 import com.flagshipserver.app.core.AccountReadTokens
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.Endpoints
-import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.keystore.Keystore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -120,9 +119,11 @@ object PhoneRouteController {
         val deviceId = app.activeProfile?.deviceId?.takeIf { it.isNotEmpty() } ?: return
         val admin = Keystore.hasAdminRoot()
         job = scope.launch {
-            val umk = runCatching { Keystore.currentUmkSeed() }.getOrNull() ?: return@launch
-            val deviceKey = Keystore.accountDeviceSigner(umk, user, deviceId)
-            val devicePub = HexUtil.encode(Keystore.accountDevicePublicKey(umk, user, deviceId))
+            // The account device key kept on the device after the first unlock (as iOS does), never the UMK: a call
+            // answered from the lock screen (the call key) must still claim the bare name, or its media has no path.
+            val kept = runCatching { Keystore.sessionAccountDeviceKey(user, deviceId) }.getOrNull() ?: return@launch
+            val deviceKey = kept.signer
+            val devicePub = kept.pubHex
             val apex = Endpoints.dataApex
             // "I'm here" to the phone holding the bare name (every device of the account). A 2xx means a holder
             // exists: an admin phone's claim will then be refused and it waits as a standby; no answer: it claims.

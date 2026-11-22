@@ -17908,5 +17908,9 @@
   "voici_calls_ring_full_screen": {
     "en": "Allow full-screen calls so a call shows on the lock screen",
     "ctx": "voi.ci calls: shown when the full-screen intent permission is off; opens the system settings screen"
+  },
+  "voici_call_channel_quiet": {
+    "en": "Calls in progress",
+    "ctx": "voi.ci calls: quiet notification channel for a call in progress or a ring while the call screen is open"
   }
 }

@@ -4367,4 +4367,5 @@
     <string name="voici_intro_no">No, gracias</string>
     <string name="voici_calls_ring_notifications">Permite las notificaciones para que suenen las llamadas</string>
     <string name="voici_calls_ring_full_screen">Permite las llamadas a pantalla completa para que aparezcan en la pantalla de bloqueo</string>
+    <string name="voici_call_channel_quiet">Llamadas en curso</string>
 </resources>

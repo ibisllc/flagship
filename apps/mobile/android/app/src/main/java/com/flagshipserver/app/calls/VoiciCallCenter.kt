@@ -65,6 +65,7 @@ object VoiciCallCenter {
     )
 
     const val CHANNEL_ID = "flagship.calls"
+    const val QUIET_CHANNEL_ID = "flagship.calls.quiet"
     const val NOTIF_ID = 7301
     const val EXTRA_CALL_ID = "voiciCallId"
     private const val ACCOUNT_ID = "voici"
@@ -209,6 +210,10 @@ object VoiciCallCenter {
                 description = FSStrings.get(R.string.voici_call_channel_desc)
             },
         )
+        // The call in progress, and a ring while the call screen is already in front: no heads-up over the call screen.
+        mgr.createNotificationChannel(
+            NotificationChannel(QUIET_CHANNEL_ID, FSStrings.get(R.string.voici_call_channel_quiet), NotificationManager.IMPORTANCE_LOW),
+        )
     }
 
     private fun activityIntent(context: Context, action: String?): PendingIntent {
@@ -222,26 +227,29 @@ object VoiciCallCenter {
     private fun broadcast(context: Context, action: String): PendingIntent =
         PendingIntent.getBroadcast(context, action.hashCode(), Intent(context, VoiciCallActionReceiver::class.java).setAction(action), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-    /** The incoming-call notification: full-screen on a locked phone, a heads-up otherwise. */
-    fun showIncoming(context: Context) {
+    /** The call screen is in front: the incoming notification moves to the quiet channel, so no heads-up covers it. */
+    @Volatile private var screenVisible = false
+
+    /** The incoming-call notification: full-screen on a locked phone, a heads-up otherwise; quiet while the call screen shows. */
+    fun showIncoming(context: Context, quiet: Boolean = screenVisible) {
         ensureChannel(context)
         val caller = Person.Builder().setName(_ui.value.name).setImportant(true).build()
-        val n = NotificationCompat.Builder(context, CHANNEL_ID)
+        val b = NotificationCompat.Builder(context, if (quiet) QUIET_CHANNEL_ID else CHANNEL_ID)
             .setSmallIcon(android.R.drawable.sym_call_incoming)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true)
             .setContentTitle(FSStrings.get(R.string.voici_call_incoming_title))
             .setContentText(FSStrings.get(R.string.voici_call_incoming_from, _ui.value.name))
-            .setFullScreenIntent(activityIntent(context, null), true)
             .setContentIntent(activityIntent(context, null))
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, broadcast(context, VoiciCallActionReceiver.DECLINE), activityIntent(context, VoiciCallActivity.ACTION_ANSWER)))
             .setTimeoutAfter(VoiciCalls.RING_MS)
-            .build()
+        if (!quiet) b.setFullScreenIntent(activityIntent(context, null), true)
+        val n = b.build()
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, n)
     }
 
-    fun ongoingNotification(context: Context) = NotificationCompat.Builder(context, CHANNEL_ID)
+    fun ongoingNotification(context: Context) = NotificationCompat.Builder(context.also { ensureChannel(it) }, QUIET_CHANNEL_ID)
         .setSmallIcon(android.R.drawable.sym_call_outgoing)
         .setCategory(NotificationCompat.CATEGORY_CALL)
         .setOngoing(true)
@@ -323,6 +331,7 @@ object VoiciCallCenter {
 
     /** The call screen left the foreground: pause our camera (voici-calls-v2.md §1.4). */
     fun onScreenHidden() {
+        screenVisible = false
         if (!_ui.value.cameraOn) return
         media?.setCamera(false)
         session?.sendCamera("paused")
@@ -331,6 +340,11 @@ object VoiciCallCenter {
     }
 
     fun onScreenVisible() {
+        screenVisible = true
+        val phase = _ui.value.phase
+        // Only over an unlocked phone: on the lock screen the ring is the full-screen intent, never a heads-up.
+        val locked = ::app.isInitialized && (app.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).isKeyguardLocked
+        if (::app.isInitialized && !locked && (phase == Phase.Ringing || phase == Phase.NeedsUnlock)) showIncoming(app, quiet = true)
         if (!pausedByBackground) return
         pausedByBackground = false
         if (media?.setCamera(true) == true) {
