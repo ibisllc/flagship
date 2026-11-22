@@ -1819,3 +1819,11 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   nothing to skip (old 48-step state files map on; one-time setup is one read-only check, step 4; webapp shell signing is
   step 10; relay echo inside step 18; reap 24; stores 29/30; rate-limits read in step 32). release.test.ts 48 green.
   0.5 list items struck. `VOICI_ENABLED` / `MARKETPLACE` kept as brakes.
+- 2026-11-21 late: merged `0.4/onboarding` (cherry-picked, trailers stripped) and moved its shell to **v246** (v243
+  was below server-refine's v245; release/compatibility.json was still at 241, now 246). Account creation goes straight
+  to Home (voi.ci intro is the one step), Home reminds about cloud recovery then a backup file (week's snooze each),
+  Recovery explains cloud recovery = passkey; SW treats an HTML shell manifest as missing. Gates: agent ran Android
+  unit + assembleDebug, iOS app build, OnboardingSmokeTests 5/5; here apps/web vitest 3,797, i18n, parity, versions.
+  Not run: iOS RecoveryBannerStoreTests (simulator), webapp gym specs gym-onboarding / gym-serverpage, devices. To check
+  on a device: iOS Settings → Cloud recovery now enrols the real account key (used to wrap a random key).
+  Shell numbers from here: posts-cap moves to **v247**, photo-picker to **v248** at merge.
