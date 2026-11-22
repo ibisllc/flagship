@@ -1849,3 +1849,4 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   the final rebase), tsc, i18n, parity, vitest 9,510 (after). 0.5 list item 6 struck. Merged-tree native compile next.
   All seven post-crash branches are in except android-calls (owner phone test).
 - 2026-11-21 late: merged tree (fad75a2d8) compiles: Android :app + :wear compileDebugKotlin clean, iOS FlagshipApp simulator build SUCCEEDED. Lock released, build output deleted, 7.6 GB free. Next: owner phone test → merge android-calls → Android 14 + iOS 1.3 (10) builds.
+- 2026-11-22: owner approved: Xcode DerivedData cleared; NDK 27.0.12077973 installed in ~/Library/Android/sdk/ndk (for the native-symbols check on 0.4/android-calls; AGP 8.9.1). Disk 4.6 GB free after. Owner asked for context on the avatar size (keep 256-512 shrink, recommended) and bank transfer (recommended: launch off, sandbox test after).
