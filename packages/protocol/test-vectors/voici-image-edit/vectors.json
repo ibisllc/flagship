@@ -1,0 +1,481 @@
+{
+  "description": "voi.ci photo editor: turns, flip, square crop (docs/voici-and-messages.md §2.3)",
+  "tolerance": 0.000001,
+  "cases": [
+    {
+      "name": "landscape, untouched",
+      "width": 4032,
+      "height": 3024,
+      "ops": [],
+      "expect": {
+        "turns": 0,
+        "flipped": false,
+        "zoom": 1,
+        "displayWidth": 4032,
+        "displayHeight": 3024,
+        "crop": {
+          "x": 504,
+          "y": 0,
+          "side": 3024
+        },
+        "orient": [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "output512": [
+          0.169312169,
+          0,
+          0,
+          0.169312169,
+          -85.333333333,
+          0
+        ]
+      }
+    },
+    {
+      "name": "portrait, zoomed and panned to a corner",
+      "width": 1377,
+      "height": 1721,
+      "ops": [
+        [
+          "zoom",
+          2.5
+        ],
+        [
+          "pan",
+          400,
+          400,
+          300
+        ]
+      ],
+      "expect": {
+        "turns": 0,
+        "flipped": false,
+        "zoom": 2.5,
+        "displayWidth": 1377,
+        "displayHeight": 1721,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "side": 550.8
+        },
+        "orient": [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "output512": [
+          0.929557008,
+          0,
+          0,
+          0.929557008,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "name": "rotate once",
+      "width": 4032,
+      "height": 3024,
+      "ops": [
+        [
+          "zoom",
+          2
+        ],
+        [
+          "pan",
+          -50,
+          20,
+          320
+        ],
+        [
+          "rotate"
+        ]
+      ],
+      "expect": {
+        "turns": 1,
+        "flipped": false,
+        "zoom": 2,
+        "displayWidth": 3024,
+        "displayHeight": 4032,
+        "crop": {
+          "x": 850.5,
+          "y": 1496.25,
+          "side": 1512
+        },
+        "orient": [
+          0,
+          1,
+          -1,
+          0,
+          3024,
+          0
+        ],
+        "output512": [
+          0,
+          0.338624339,
+          -0.338624339,
+          0,
+          736,
+          -506.666666667
+        ]
+      }
+    },
+    {
+      "name": "rotate four times returns",
+      "width": 800,
+      "height": 600,
+      "ops": [
+        [
+          "zoom",
+          1.5
+        ],
+        [
+          "pan",
+          30,
+          -10,
+          300
+        ],
+        [
+          "rotate"
+        ],
+        [
+          "rotate"
+        ],
+        [
+          "rotate"
+        ],
+        [
+          "rotate"
+        ]
+      ],
+      "expect": {
+        "turns": 0,
+        "flipped": false,
+        "zoom": 1.5,
+        "displayWidth": 800,
+        "displayHeight": 600,
+        "crop": {
+          "x": 160,
+          "y": 113.333333333,
+          "side": 400
+        },
+        "orient": [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "output512": [
+          1.28,
+          0,
+          0,
+          1.28,
+          -204.8,
+          -145.066666667
+        ]
+      }
+    },
+    {
+      "name": "flip then rotate",
+      "width": 1000,
+      "height": 500,
+      "ops": [
+        [
+          "zoom",
+          3
+        ],
+        [
+          "pan",
+          100,
+          0,
+          300
+        ],
+        [
+          "flip"
+        ],
+        [
+          "rotate"
+        ]
+      ],
+      "expect": {
+        "turns": 3,
+        "flipped": true,
+        "zoom": 3,
+        "displayWidth": 500,
+        "displayHeight": 1000,
+        "crop": {
+          "x": 166.666666667,
+          "y": 472.222222222,
+          "side": 166.666666667
+        },
+        "orient": [
+          0,
+          -1,
+          -1,
+          0,
+          500,
+          1000
+        ],
+        "output512": [
+          0,
+          -3.072,
+          -3.072,
+          0,
+          1024,
+          1621.333333333
+        ]
+      }
+    },
+    {
+      "name": "rotate then flip",
+      "width": 1000,
+      "height": 500,
+      "ops": [
+        [
+          "rotate"
+        ],
+        [
+          "flip"
+        ],
+        [
+          "zoom",
+          2
+        ],
+        [
+          "pan",
+          0,
+          80,
+          250
+        ]
+      ],
+      "expect": {
+        "turns": 1,
+        "flipped": true,
+        "zoom": 2,
+        "displayWidth": 500,
+        "displayHeight": 1000,
+        "crop": {
+          "x": 125,
+          "y": 295,
+          "side": 250
+        },
+        "orient": [
+          0,
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "output512": [
+          0,
+          2.048,
+          2.048,
+          0,
+          -256,
+          -604.16
+        ]
+      }
+    },
+    {
+      "name": "flip twice returns",
+      "width": 640,
+      "height": 480,
+      "ops": [
+        [
+          "zoom",
+          2
+        ],
+        [
+          "pan",
+          60,
+          0,
+          200
+        ],
+        [
+          "flip"
+        ],
+        [
+          "flip"
+        ]
+      ],
+      "expect": {
+        "turns": 0,
+        "flipped": false,
+        "zoom": 2,
+        "displayWidth": 640,
+        "displayHeight": 480,
+        "crop": {
+          "x": 128,
+          "y": 120,
+          "side": 240
+        },
+        "orient": [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "output512": [
+          2.133333333,
+          0,
+          0,
+          2.133333333,
+          -273.066666667,
+          -256
+        ]
+      }
+    },
+    {
+      "name": "zoom is capped",
+      "width": 3000,
+      "height": 2000,
+      "ops": [
+        [
+          "zoom",
+          100
+        ]
+      ],
+      "expect": {
+        "turns": 0,
+        "flipped": false,
+        "zoom": 8,
+        "displayWidth": 3000,
+        "displayHeight": 2000,
+        "crop": {
+          "x": 1375,
+          "y": 875,
+          "side": 250
+        },
+        "orient": [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "output512": [
+          2.048,
+          0,
+          0,
+          2.048,
+          -2816,
+          -1792
+        ]
+      }
+    },
+    {
+      "name": "a small picture zooms only to the 64-pixel crop",
+      "width": 90,
+      "height": 120,
+      "ops": [
+        [
+          "zoom",
+          4
+        ],
+        [
+          "pan",
+          50,
+          50,
+          100
+        ]
+      ],
+      "expect": {
+        "turns": 0,
+        "flipped": false,
+        "zoom": 1.40625,
+        "displayWidth": 90,
+        "displayHeight": 120,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "side": 64
+        },
+        "orient": [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "output512": [
+          8,
+          0,
+          0,
+          8,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "name": "three turns",
+      "width": 1200,
+      "height": 900,
+      "ops": [
+        [
+          "rotate"
+        ],
+        [
+          "rotate"
+        ],
+        [
+          "rotate"
+        ],
+        [
+          "zoom",
+          2
+        ],
+        [
+          "pan",
+          -500,
+          -500,
+          300
+        ]
+      ],
+      "expect": {
+        "turns": 3,
+        "flipped": false,
+        "zoom": 2,
+        "displayWidth": 900,
+        "displayHeight": 1200,
+        "crop": {
+          "x": 450,
+          "y": 750,
+          "side": 450
+        },
+        "orient": [
+          0,
+          -1,
+          1,
+          0,
+          0,
+          1200
+        ],
+        "output512": [
+          0,
+          -1.137777778,
+          1.137777778,
+          0,
+          -512,
+          512
+        ]
+      }
+    }
+  ]
+}
