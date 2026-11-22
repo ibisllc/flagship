@@ -11,11 +11,33 @@
  *                     its bound call key, `x-voici-call-key-pub`) set by the Worker after its checks
  */
 import { D1Storage, RequestD1, type D1Database } from "@flagship/storage";
-import { recordVoiciMissedCall, VoiciCallRoomCore, type VoiciCallRoomAction, type VoiciCallRoomInit, type VoiciCallRoomPeer, type VoiciCallRoomState } from "@flagship/control-plane";
+import { recordVoiciMissedCall, VoiciCallRoomCore, type VoiciCallCharge, type VoiciCallRoomAction, type VoiciCallRoomInit, type VoiciCallRoomPeer, type VoiciCallRoomState } from "@flagship/control-plane";
+import { refundSubjectRateLimit, type RateLimitNamespace } from "./rateLimit.js";
+import { isPseudonymBanned } from "./voiciAbuse.js";
 
 export interface VoiciCallRoomEnv {
   DB?: D1Database;
   FLAGSHIP_CA_PRIV_HEX?: string;
+  RATE_LIMITS?: RateLimitNamespace;
+}
+
+const REFUNDED = "refunded";
+
+/** Whether the caller is blocked on the page, or banned, now (a refund goes only to a caller still in good standing). */
+async function callerShunned(db: D1Storage, rawDb: D1Database, s: VoiciCallRoomState, now: number): Promise<boolean> {
+  const r = s.init.request;
+  if (r.kind === "voici-call-request-anon") return db.voiciCalls.isAnonBlocked(s.init.pageId, r.conv, now);
+  const [block, banned] = await Promise.all([db.voici.getBlock(s.init.pageId, r.from), isPseudonymBanned(rawDb, r.from)]);
+  return block?.op === "block" || banned;
+}
+
+/** Gives the ring back to every budget it spent; never the per-address budget or the page's daily D1 count. */
+export async function refundVoiciRing(env: Pick<VoiciCallRoomEnv, "RATE_LIMITS">, c: VoiciCallCharge): Promise<void> {
+  const jobs: Promise<boolean>[] = [];
+  if (c.caller) jobs.push(refundSubjectRateLimit(env, "voici-call-caller", c.caller, c.at));
+  if (c.page) jobs.push(refundSubjectRateLimit(env, "voici-call-page", c.page, c.at));
+  if (c.anonPage) jobs.push(refundSubjectRateLimit(env, "voici-call-anon-page", c.anonPage, c.at));
+  await Promise.all(jobs);
 }
 
 interface RoomStorage {
@@ -175,6 +197,15 @@ export class VoiciCallRoom implements DurableObject {
         await db.voiciCalls.releaseLiveCall(s.init.username, s.init.callId);
       } else if (a.kind === "extend" && db) {
         await db.voiciCalls.extendLiveCall(s.init.username, s.init.callId, a.until);
+      } else if (a.kind === "refund") {
+        // Stored first, so a second end (or a retried event) can never refund twice; a failed refund is no refund.
+        if (await this.state.storage.get(REFUNDED)) continue;
+        await this.state.storage.put(REFUNDED, true);
+        try {
+          if (this.env.DB && db && !(await callerShunned(db, this.env.DB, s, Date.now()))) await refundVoiciRing(this.env, a.charged);
+        } catch {
+          /* no refund */
+        }
       } else if (a.kind === "close-all") {
         for (const ws of [...this.state.getWebSockets(CALLER), ...this.state.getWebSockets(DEVICES)]) {
           try {
