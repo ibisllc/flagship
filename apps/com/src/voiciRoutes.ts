@@ -2,8 +2,9 @@
  * voi.ci pages and Messages on the Worker (docs/voici-and-messages.md §3, §4, §8.3; handlers in
  * packages/control-plane/src/voiciPages.ts and voiciMailbox.ts, storage in packages/storage/src/voici.ts).
  *
- * Everything here answers 404 until `VOICI_ENABLED = "on"` (deploy order: migration 0123, `.com`, the store builds,
- * then the switch). Chunk B2's routes (attestations, reports, bans, takedowns) are voiciAbuseRoutes.ts, dispatched
+ * `VOICI_ENABLED` is the voi.ci brake, not a launch switch: production runs it "on". Pulling it (anything but "on",
+ * then a `.com` deploy) is for an outage or abuse emergency: every page, message and call route answers 404 and voi.ci
+ * falls back to the plain shortener (links and codes still redirect). Chunk B2's routes (attestations, reports, bans, takedowns) are voiciAbuseRoutes.ts, dispatched
  * just before these; its ban checks and account cleanup (voiciAbuse.ts) are called from here.
  *
  * Reply alerts (§8.3 "Alerts:", voiciAlerts.ts): `GET /api/voici/web/alert-key`, `POST /api/voici/web/alerts`, and a
@@ -480,7 +481,7 @@ export function voiciSiteHeaders(env: VoiciEnv): [string, string][] {
     ["cross-origin-opener-policy", "same-origin"],
     // Calls (docs/voici-calls.md §7) need the microphone on voi.ci itself, asked for only on the Call tap; video
     // (voici-calls-v2.md §1.4) the camera, asked for only on the Camera tap.
-    ["permissions-policy", `camera=${env.VOICI_CALLS === "on" ? "(self)" : "()"}, microphone=${env.VOICI_CALLS === "on" ? "(self)" : "()"}, geolocation=()`],
+    ["permissions-policy", "camera=(self), microphone=(self), geolocation=()"],
   ];
 }
 

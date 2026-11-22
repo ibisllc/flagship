@@ -281,7 +281,8 @@ demux, settings and the thread entries), the relays' call work (§5), the CI lan
   `POST /api/accounts/<u>/voici-voip-token` `{token}` / `{token:null}`. "Accepted" = the owner replied, sent an
   unblock (accept) order, or a call-allow; a newer disallow always refuses. A blocked or banned caller is told
   `calls-off`. Buckets `voici-call` (30/h per address), `voici-call-caller` (3/h, 10/day per pseudonym),
-  `voici-call-page` (20/h); D1 cap 100 rings per page per day. Switch `VOICI_CALLS` (on in the gym, off in production).
+  `voici-call-page` (20/h); D1 cap 100 rings per page per day. No switch of their own (removed 2026-11-21): the voi.ci brake
+  `VOICI_ENABLED` stops pages, messages and calls together.
 - **Room messages** (JSON over the WebSocket). Room → caller: `ringing`, `answer {answer}`, `ice {candidate}`,
   `ended {reason, end?}`. Room → device: `request {request, ringingAt}`, `won {receipt}`, `answered-elsewhere`,
   `ice`, `ended`, `error {code}`. Device → room: `answer`, `decline`, `ice`, `end`. Caller → room: `ice`, `end`. A
@@ -305,8 +306,8 @@ so a give-up, a lost signed end or a killed app never leaves the account "on ano
    (`docs/runbooks/0.4-deploy-sheet.md` "APNs key"). iPad builds need the same (D2).
 2. Google Play: the `USE_FULL_SCREEN_INTENT` declaration and the `phoneCall` + `microphone` foreground-service
    declarations when the Android call layer lands.
-3. D1 migration 0146, then a `.com` deploy (the `v6` Durable Object migration adds `VoiciCallRoom`); set
-   `VOICI_CALLS = "on"` only after the store builds with the call layer ship.
+3. D1 migration 0146, then a `.com` deploy (the `v6` Durable Object migration adds `VoiciCallRoom`). Calls are live
+   from that deploy (no separate switch since 2026-11-21).
 4. D4: the legal check for calls in the China mainland storefront before release.
 5. Native review of the voi.ci call strings (machine drafts in six languages).
 
@@ -933,11 +934,11 @@ high:
 
 ## Owner decision 2026-11-17: calls ON in production for 0.4
 
-Calls ship on with 0.4. Production's `VOICI_CALLS` stays `"off"` through the first 0.4 `.com` deploy and flips at the
-deploy sheet's step "Calls on" (`docs/runbooks/0.4-deploy-sheet.md` §3a), once iOS 1.3 and Android 12 are live and
-its readiness checklist (C1-C13: migrations, the call room, the APNs VoIP key, FCM, the pinned WebRTC and TURN
-libraries in the store builds, the relay, the privacy policy's calls lines, D4, rate limits, the relay gaps of §5)
-holds. The off switch is the same flag. Calls stay fail-safe: a calls failure never breaks messages or pages.
+Calls ship on with 0.4. Production turned them on on 2026-11-20 with a `VOICI_CALLS` switch; the owner then removed
+the switch (2026-11-21: "this entire switch idea is crazy"): a feature ships with the store build that carries it.
+The readiness checklist in `docs/runbooks/0.4-deploy-sheet.md` §3a (C1-C13) is now checked before the `.com` deploy,
+not before a flip. The only server-side stop is the voi.ci brake (`VOICI_ENABLED`, an outage or abuse brake), which
+stops pages and messages too. Calls stay fail-safe: a calls failure never breaks messages or pages.
 
 ## Social options (owner, 2026-11-20, `0.4/social-ux`)
 
