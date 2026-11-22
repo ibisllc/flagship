@@ -1848,3 +1848,4 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   "Update Flagship" sentence. Gates: Android unit + assembleDebug, `swift test` shared 758, FlagshipApp build (before
   the final rebase), tsc, i18n, parity, vitest 9,510 (after). 0.5 list item 6 struck. Merged-tree native compile next.
   All seven post-crash branches are in except android-calls (owner phone test).
+- 2026-11-21 late: merged tree (fad75a2d8) compiles: Android :app + :wear compileDebugKotlin clean, iOS FlagshipApp simulator build SUCCEEDED. Lock released, build output deleted, 7.6 GB free. Next: owner phone test → merge android-calls → Android 14 + iOS 1.3 (10) builds.
