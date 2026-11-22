@@ -1835,3 +1835,10 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   Gates: Android 3,209 unit + assembleDebug, iOS app build + VoiciImageEditTests 6/6, tsc, i18n, parity, web 3,824.
   Device tests: the failing photo on the owner's iPhone, camera capture on both phones, webapp Take photo on a phone.
   posts-cap now takes **v249**.
+- 2026-11-21 late: merged `0.4/ios-calls` (ff, `a3ee6668b`): CallKit/PushKit fail closed until the storefront is known
+  and not CHN (live storefront, else the last one seen, else device region CN = China, else no CallKit: rings in the
+  open app only; rechecked each minute, at foreground and on Storefront.updates; switching to China removes the VoIP
+  token from `.com`); CallKit Answer while locked with the setting off = "Unlock Flagship to answer", the next unlock
+  answers once; cold VoIP launch answers even while keys are still loading. Gates: VoiciCallsViewModelTests 15/15
+  (scheme FlagshipMobile-Package, simulator), FlagshipApp build, i18n, parity. For 1.3 (10): TestFlight checks (US
+  fresh install gets CallKit; China never; locked answer; killed+locked both settings; ring window → no-answer).
