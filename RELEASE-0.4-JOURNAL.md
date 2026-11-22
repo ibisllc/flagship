@@ -1788,3 +1788,12 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
 - Disk: removed 14 merged clean agent worktrees; 15 GB free.
 - Resume point: wait for the five agents, review and merge each into release/0.4 (renumber shells), then Android 14
   and iOS 1.3 (10) builds, owner device tests, App Store reply + resubmit, Play Part B.
+- 2026-11-21 ~20:10: merged `0.4/call-limits` (81dbc8f84 budgets after verification + ring-back answers free + refund
+  answered >= 15 s; 473e674e7 push-token dedupe, **D1 0157**, added to the deploy sheet). `0.4/android-calls`
+  (7ad1040c1) pushed UNBUILT (lock held by photo-picker): gates queued in the main session; merge only after
+  testDebugUnitTest + assembleDebug + a phone test (AppRuntime refactors MainActivity start-up).
+- Owner: bring the 0.5 refinements into 0.4 ("not fundamentally new features like the marketplace"). In: posts cap
+  (item 6), release.sh fit, launch switches (VOICI_CALLS removed), adapter review via Flagship Inference, bank-transfer
+  vouchers. Stay 0.5: overlay, cluster backup/Vault, community OHTTP, marketplace on, comments/reposts, payments 6/7,
+  WireGuard, OHTTP initramfs, F14. Asked the owner: logo/design pass, iOS voucher import (waits on Apple).
+  New agents: posts-cap (shell v244), release-fit, server-refine (shell v245).
