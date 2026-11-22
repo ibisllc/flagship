@@ -5059,6 +5059,64 @@
       }
     },
     {
+      "id": "home-recovery-reminders",
+      "title": "No backup page after creating an account (owner, 2026-11-21): the voi.ci intro is the one onboarding step. Home reminds instead, one card at a time: cloud recovery while .com holds none (Secure my account opens Cloud recovery), then Save a backup file once that card is put off and no key file was saved from this device; each x snoozes a week. Cloud recovery says it is a copy locked by a passkey, so no password",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/RecoveryBannerStore.swift",
+              "static func shouldShowBackupFile\\("
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift",
+              "backup-file-reminder"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Screens/RecoveryScreen.swift",
+              "recovery-explainer"
+            ]
+          ]
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RecoveryBannerStore.kt",
+              "fun shouldShowBackupFile\\("
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt",
+              "backup-file-reminder"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/RecoveryScreen.kt",
+              "recovery-explainer"
+            ]
+          ]
+        },
+        "web": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/web/public/webapp/views/home.js",
+              "export function homeReminder\\("
+            ],
+            [
+              "apps/web/public/webapp/views/home.js",
+              "home-backup-file-reminder"
+            ],
+            [
+              "apps/web/public/webapp/index.html",
+              "recovery-explainer"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "id": "home-page-welcome",
       "title": "Home points to the voi.ci page (docs/voici-and-messages.md §11.1), which is managed on the Social tab (docs/social-tab.md): \"Your public page\" with Set up your page below the backup / recovery nudges, shown once .com said there is no page and nothing waits, dismissed per account; after the first publish or the dismiss a compact \"Your page\" row with Public / Not public; both open the Social tab's Profile",
       "ref": "ios",

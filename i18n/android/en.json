@@ -3466,34 +3466,6 @@
     "ctx": "ui/screens/BackupPolicyOptions.kt:76 (arg of Text)",
     "args": 1
   },
-  "lock_it_to_your_device": {
-    "en": "Lock it to your device.",
-    "ctx": "ui/screens/BiometricSetupScreen.kt:52 (text=)"
-  },
-  "your_master_key_lives_in_this": {
-    "en": "Your master key lives in this phone's secure hardware. Approving a server unlock or installing a service will use your phone's biometrics or screen lock.",
-    "ctx": "ui/screens/BiometricSetupScreen.kt:57 (text=)"
-  },
-  "cloud_recovery_backup": {
-    "en": "Cloud-recovery backup",
-    "ctx": "ui/screens/BiometricSetupScreen.kt:65 (text=)"
-  },
-  "wraps_your_master_key_with_a": {
-    "en": "Wraps your master key with a Google Block Store key so a fresh phone can recover it. Without this, losing your phone means losing your data.",
-    "ctx": "ui/screens/BiometricSetupScreen.kt:70 (text=)"
-  },
-  "enabled": {
-    "en": "Enabled",
-    "ctx": "ui/screens/BiometricSetupScreen.kt:81 (ui label)"
-  },
-  "disabled_risky": {
-    "en": "Disabled — risky",
-    "ctx": "ui/screens/BiometricSetupScreen.kt:81 (prose)"
-  },
-  "generate_keys_continue": {
-    "en": "Generate keys & continue",
-    "ctx": "ui/screens/BiometricSetupScreen.kt:96 (label=)"
-  },
   "open_tabs": {
     "en": "Open tabs",
     "ctx": "ui/screens/BrowserTabsScreen.kt:71 (title=)"
@@ -4696,6 +4668,22 @@
     "en": "Your account isn't backed up yet",
     "ctx": "ui/screens/HomeScreen.kt:473 (title=)"
   },
+  "home_backup_file_title": {
+    "en": "Save a backup file",
+    "ctx": "ui/screens/HomeScreen.kt (Home reminder title)"
+  },
+  "home_backup_file_message": {
+    "en": "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account.",
+    "ctx": "ui/screens/HomeScreen.kt (Home reminder body)"
+  },
+  "home_backup_file_cta": {
+    "en": "Save a backup file",
+    "ctx": "ui/screens/HomeScreen.kt (Home reminder button)"
+  },
+  "cloud_recovery_explainer": {
+    "en": "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in Google Password Manager or your password manager, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.",
+    "ctx": "ui/screens/RecoveryScreen.kt (what cloud recovery is, before setting it up)"
+  },
   "if_you_lose_access_to_this": {
     "en": "If you lose access to this device, you may lose access to your Flagship cloud.",
     "ctx": "ui/screens/HomeScreen.kt:474 (message=)"
@@ -5592,10 +5580,6 @@
     "ctx": "ui/screens/RecoveryScreen.kt:260 (arg of Text)",
     "args": 1
   },
-  "store_an_encrypted_copy_of_your": {
-    "en": "Store an encrypted copy of your account key for a new Android device.",
-    "ctx": "ui/screens/RecoveryScreen.kt:273 (arg of Text)"
-  },
   "pick_a_passphrase_8_characters_treat": {
     "en": "Pick a passphrase (8+ characters) — treat it like a password and write it down somewhere safe. You'll need it, plus your passkey, to get back in on a new device. We can't reset it.",
     "ctx": "ui/screens/RecoveryScreen.kt:305 (arg of Text)"
@@ -5720,22 +5704,6 @@
     "en": "%1$s · %2$s apps",
     "ctx": "ui/screens/RestoreFromBackupScreens.kt:109 (subtitle=)",
     "args": 2
-  },
-  "back_up_your_recovery_key": {
-    "en": "Back up your recovery key",
-    "ctx": "ui/screens/SecureAccountScreen.kt:194 (prose)"
-  },
-  "cloud_backup_configured": {
-    "en": "Cloud backup configured.",
-    "ctx": "ui/screens/SecureAccountScreen.kt:233 (prose)"
-  },
-  "recovery_passphrase_8_characters": {
-    "en": "Recovery passphrase (8+ characters)",
-    "ctx": "ui/screens/SecureAccountScreen.kt:283 (label=)"
-  },
-  "setting_up": {
-    "en": "Setting up…",
-    "ctx": "ui/screens/SecureAccountScreen.kt:320 (prose)"
   },
   "secured_sessions": {
     "en": "Secured sessions",
@@ -9679,42 +9647,6 @@
   "couldnt_update_the_recovery_backup_try": {
     "en": "Couldn't update the recovery backup. Try again.",
     "ctx": "viewmodels/RotateAdminRootViewModel.kt:183 (prose)"
-  },
-  "secure_your_account": {
-    "en": "Secure your account",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:61 (prose)"
-  },
-  "back_up_your_account_now_so": {
-    "en": "Back up your account now so you can get back in if you lose this device. We cannot recover it for you.",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:63 (prose)"
-  },
-  "back_up_with_your_passkey": {
-    "en": "Back up with your passkey",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:66 (prose)"
-  },
-  "recover_with_your_google_passkey_or": {
-    "en": "Recover with your Google passkey or password manager.",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:68 (prose)"
-  },
-  "passkeys_arent_available_on_this_device": {
-    "en": "Passkeys aren't available on this device — use a backup file.",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:70 (prose)"
-  },
-  "save_a_backup_file": {
-    "en": "Save a backup file",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:72 (prose)"
-  },
-  "an_encrypted_flagshipkey_you_keep_yourself": {
-    "en": "An encrypted .flagshipkey you keep yourself.",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:73 (prose)"
-  },
-  "without_a_backup_losing_this_device": {
-    "en": "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:79 (prose)"
-  },
-  "skip_anyway": {
-    "en": "Skip anyway",
-    "ctx": "viewmodels/SecureAccountViewModel.kt:81 (prose)"
   },
   "create_app_here": {
     "en": "Create app here",

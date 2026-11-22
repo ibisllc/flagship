@@ -29,9 +29,9 @@ object VoiciIntro {
 
     fun prefsKey(username: String) = "flagship.voici.intro.shown.$username"
 
-    /** The intro shows for an account this device just created, after its backup step, on a device that can publish, never twice. */
-    fun shouldShow(path: Path?, username: String?, secureStepOpen: Boolean, alreadyShown: Boolean, canPublish: Boolean): Boolean =
-        path == Path.Created && !username.isNullOrBlank() && !secureStepOpen && !alreadyShown && canPublish
+    /** The intro shows for an account this device just created (the one step after creating it), on a device that can publish, never twice. */
+    fun shouldShow(path: Path?, username: String?, alreadyShown: Boolean, canPublish: Boolean): Boolean =
+        path == Path.Created && !username.isNullOrBlank() && !alreadyShown && canPublish
 
     /** `{promo: {text, until} | null}`; anything else (or an empty text) is no promo. */
     fun parsePromo(body: String?): Promo? {

@@ -112,6 +112,10 @@ public struct HomeScreen: View {
     var onSetUpRecovery: () -> Void = {}
     var onDismissRecoveryNudge: () -> Void = {}
     var onDismissRecoveryBackupBanner: () -> Void = {}
+    /// The backup file reminder (RecoveryBannerStore.shouldShowBackupFile): after the cloud recovery card was put off.
+    var showBackupFileReminder: Bool = false
+    var onSaveBackupFile: () -> Void = {}
+    var onDismissBackupFileReminder: () -> Void = {}
     /// The welcome card that introduces the voi.ci page (PageWelcomeCardStore.shouldShow); below the recovery cards.
     var showPageWelcome: Bool = false
     var onSetUpPage: () -> Void = {}
@@ -181,6 +185,9 @@ public struct HomeScreen: View {
         onSetUpRecovery: @escaping () -> Void = {},
         onDismissRecoveryNudge: @escaping () -> Void = {},
         onDismissRecoveryBackupBanner: @escaping () -> Void = {},
+        showBackupFileReminder: Bool = false,
+        onSaveBackupFile: @escaping () -> Void = {},
+        onDismissBackupFileReminder: @escaping () -> Void = {},
         showPageWelcome: Bool = false,
         onSetUpPage: @escaping () -> Void = {},
         onDismissPageWelcome: @escaping () -> Void = {},
@@ -226,6 +233,9 @@ public struct HomeScreen: View {
         self.onSetUpRecovery = onSetUpRecovery
         self.onDismissRecoveryNudge = onDismissRecoveryNudge
         self.onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner
+        self.showBackupFileReminder = showBackupFileReminder
+        self.onSaveBackupFile = onSaveBackupFile
+        self.onDismissBackupFileReminder = onDismissBackupFileReminder
         self.showPageWelcome = showPageWelcome
         self.onSetUpPage = onSetUpPage
         self.onDismissPageWelcome = onDismissPageWelcome
@@ -286,10 +296,10 @@ public struct HomeScreen: View {
                 AbuseNoticeHomeSection()
                 // One announcement at a time, highest priority first: an
                 // account-reset (danger) suppresses everything; otherwise the
-                // backup banner, then the recovery nudge, then the page welcome.
+                // cloud recovery card, the backup file card, the recovery nudge, then the page welcome.
                 topAnnouncement(c: c)
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
-                    .animation(.snappy, value: [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, showPageWelcome])
+                    .animation(.snappy, value: [accountWasReset, showRecoveryBackupBanner, showBackupFileReminder, showRecoveryNudge, showPageWelcome])
                 if let on = pageRowPublic {
                     pageRow(c: c, isPublic: on)
                 }
@@ -346,7 +356,7 @@ public struct HomeScreen: View {
 
     /// Everything that adds, removes or moves a block above the server list.
     private var layoutShape: [Bool] {
-        [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, showPageWelcome, pageRowPublic != nil, statusPaused, serverListLocked,
+        [accountWasReset, showRecoveryBackupBanner, showBackupFileReminder, showRecoveryNudge, showPageWelcome, pageRowPublic != nil, statusPaused, serverListLocked,
          pods.isEmpty, canAddServers, canChangeServers]
     }
 
@@ -418,6 +428,16 @@ public struct HomeScreen: View {
                 onDismiss: onDismissRecoveryBackupBanner
             )
             .accessibilityIdentifier("recovery-backup-banner")
+        } else if showBackupFileReminder {
+            FSAnnouncementCard(
+                icon: "doc.badge.arrow.up.fill",
+                title: String(localized: "Save a backup file"),
+                message: String(localized: "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account."),
+                ctaLabel: String(localized: "Save a backup file"),
+                onCta: onSaveBackupFile,
+                onDismiss: onDismissBackupFileReminder
+            )
+            .accessibilityIdentifier("backup-file-reminder")
         } else if showRecoveryNudge {
             FSAnnouncementCard(
                 icon: "key.horizontal.fill",

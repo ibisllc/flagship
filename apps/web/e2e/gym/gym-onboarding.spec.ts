@@ -1,6 +1,6 @@
 /**
  * Onboarding (docs/login-and-account-redesign.md): the cover and the
- * first-run wizard, with no backend. Creating an account runs to the end:
+ * first-run wizard, with no backend. Creating an account runs to Home:
  * the passphrase, the random handle sheet and its Try another, the two name
  * prompts and the account-open POST, whose signatures are checked here the
  * way `.com` checks them (the username claim under the IRK, the account
@@ -139,15 +139,6 @@ async function deviceOnly(page: Page): Promise<void> {
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 15_000 });
 }
 
-/** Past the wizard's last step: it enters Home. */
-async function finishWizard(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const store = await import("/lib/profilesStore.js");
-    store.set("wizardState", JSON.stringify({ stepIdx: 99, completed: [] }));
-    await (await import("/views/wizard.js")).enterWizard();
-  });
-}
-
 async function enterWizardAt(page: Page, stepIdx: number): Promise<void> {
   await page.evaluate(async (stepIdx) => {
     const store = await import("/lib/profilesStore.js");
@@ -193,7 +184,10 @@ test.describe("gym webapp onboarding", () => {
     await openNewAccount(page, testInfo);
 
     await sawToast(page, `Account created — ${SECOND}`, 30_000);
-    await expect(await wizardTitle(page)).toHaveText("Secure your account", { timeout: 15_000 });
+    // No backup page (owner, 2026-11-21): straight to Home, which reminds about cloud recovery.
+    await expect(page.locator("#view-home")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("#view-wizard")).toBeHidden();
+    await expect(page.locator("#home-recovery-banner")).toContainText("Your account isn't backed up yet", { timeout: 15_000 });
     expect(handles.asked).toBe(2);
     expect(open.bodies).toHaveLength(1);
     const body = open.bodies[0];
@@ -220,7 +214,7 @@ test.describe("gym webapp onboarding", () => {
     // This device is the account's admin device: it holds the admin root.
     const admin = await page.evaluate(async () => (await import("/lib/addServerGate.js")).canAddServers());
     expect(admin).toBe(true);
-    await shot(page, testInfo, "account-opened-secure-step");
+    await shot(page, testInfo, "account-opened-home");
   });
 
   test("gym onboarding a new account is offered safe messages, calls and posts once on Home; Turn on makes its page public", async ({ page }, testInfo) => {
@@ -233,10 +227,7 @@ test.describe("gym webapp onboarding", () => {
     m.post(/\/api\/voici\/pages\/[a-z0-9-]+\/pieces$/, { ok: true });
     m.post(/\/api\/voici\/pages\/[a-z0-9-]+\/publish$/, (c: { body: any }) => ((published = c.body.index), { json: { ok: true } }));
     await openNewAccount(page);
-    await expect(await wizardTitle(page)).toHaveText("Secure your account", { timeout: 30_000 });
-    // Not before the creation steps are done: the wizard ends on Home, which shows it.
-    await expect(page.locator("[data-testid=voici-intro]")).toHaveCount(0);
-    await finishWizard(page);
+    // The one step after creating an account: Home offers it right away.
     const intro = page.locator("[data-testid=voici-intro]");
     await expect(intro).toBeVisible({ timeout: 15_000 });
     await expect(intro.locator(".modal-title")).toHaveText("Turn on safe messages, calls and posts");
@@ -273,8 +264,6 @@ test.describe("gym webapp onboarding", () => {
     accountsEndpoint(m);
     m.get("/api/voici/promo", { promo: null });
     await openNewAccount(page);
-    await expect(await wizardTitle(page)).toHaveText("Secure your account", { timeout: 30_000 });
-    await finishWizard(page);
     const intro = page.locator("[data-testid=voici-intro]");
     await expect(intro).toBeVisible({ timeout: 15_000 });
     await expect(intro.locator("[data-testid=voici-intro-promo]")).toBeHidden();
@@ -295,7 +284,7 @@ test.describe("gym webapp onboarding", () => {
     suggestions(m);
     accountsEndpoint(m);
     await openNewAccount(page);
-    await expect(await wizardTitle(page)).toHaveText("Secure your account", { timeout: 30_000 });
+    await expect(page.locator("#view-home")).toBeVisible({ timeout: 30_000 });
     // Reload: the account's key must open with the passphrase the owner chose.
     await page.goto("/index.html?view=home");
     await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 15_000 });

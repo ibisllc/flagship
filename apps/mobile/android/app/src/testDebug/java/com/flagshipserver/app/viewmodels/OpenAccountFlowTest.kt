@@ -36,6 +36,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -105,18 +106,17 @@ class OpenAccountFlowTest {
 
         newVm(server, app, "harry").openAccount("Harry's Pixel")
 
-        assertFalse("a new account must not get the backup step", app.pendingSecureAccountNudge.first())
         assertEquals("harry", app.pendingVoiciIntro.first())
     }
 
-    @Test fun openAccount_doesNotArmNudge_whenClaimFails() = runTest {
+    @Test fun openAccount_doesNotArmVoiciIntro_whenClaimFails() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0, shouldFail = true)
         val app = AppState()
         newVm(server, app, "harry").openAccount("Harry's Pixel")
-        // A failed open doesn't pair, so it must not strand a nudge over
+        // A failed open doesn't pair, so it must not strand the intro over
         // a non-existent shell.
         assertFalse(app.isPaired.first())
-        assertFalse(app.pendingSecureAccountNudge.first())
+        assertNull(app.pendingVoiciIntro.first())
     }
 
     @Test fun openAccount_recordsDeviceName_onActiveProfile() = runTest {

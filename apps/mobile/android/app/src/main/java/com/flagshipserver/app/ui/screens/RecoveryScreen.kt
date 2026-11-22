@@ -285,9 +285,10 @@ private fun ChooseCard(
                 )
             } else {
                 Text(
-                    stringResource(R.string.store_an_encrypted_copy_of_your),
+                    stringResource(R.string.cloud_recovery_explainer),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.semantics { testTag = "recovery-explainer" },
                 )
                 FSPrimaryButton(
                     label = stringResource(R.string.set_up_cloud_recovery),

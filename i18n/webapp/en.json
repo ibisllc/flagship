@@ -9076,10 +9076,6 @@
     "en": "View progress",
     "ctx": "webapp/index.html"
   },
-  "Store an encrypted copy of your account key for a new browser.": {
-    "en": "Store an encrypted copy of your account key for a new browser.",
-    "ctx": "webapp/index.html"
-  },
   "Advanced: legacy wrapped-UMK export": {
     "en": "Advanced: legacy wrapped-UMK export",
     "ctx": "webapp/index.html"
@@ -16189,5 +16185,13 @@
   "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": {
     "en": "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.",
     "ctx": "webapp/views/orgPlan.js:128"
+  },
+  "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": {
+    "en": "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.",
+    "ctx": "webapp/views/home.js:882"
+  },
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": {
+    "en": "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.",
+    "ctx": "webapp/index.html"
   }
 }

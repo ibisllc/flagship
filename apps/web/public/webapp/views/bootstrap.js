@@ -205,7 +205,9 @@ async function abandonNewKey() {
 
 /** CREATE ACCOUNT: a free, random, dashless handle. Passphrase → device key →
  *  fetch candidates → shuffle/accept → claim that EXACT name (no free-text edit,
- *  so a custom name stays a paid change) → on to the recovery step. */
+ *  so a custom name stays a paid change) → Home, where the voi.ci intro is the one
+ *  onboarding step and cloud recovery / a backup file are reminders (owner,
+ *  2026-11-21: no backup page after creating an account). */
 async function createAccount() {
   const pass = await inlinePrompt({
     title: tr("Create your account"),
@@ -289,15 +291,13 @@ async function createAccount() {
       addProfile,
       accountDisplayName,
       deviceDisplayName,
-      // No dispatchInitialView — route into the recovery step (a backup is
-      // required; the wizard owns that flow, then the app shell).
     });
     toast(tr("Account created — {0}", chosen), "ok");
-    // A new account only: Home shows the voi.ci intro once, after the creation steps.
+    // A new account only: Home shows the voi.ci intro once, right away.
     markVoiciIntroPending(chosen);
     try {
-      const { enterWizard } = await import("./wizard.js");
-      await enterWizard({ step: "secure-account" });
+      const { enterHome } = await import("./home.js");
+      await enterHome();
     } catch {
       await dispatchInitialView();
     }

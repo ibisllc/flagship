@@ -6,7 +6,7 @@ import XCTest
 /// Onboarding scenarios launch `-smoke-onboarding` (no keys left from an
 /// earlier run, mock clients, an unpaired app on Welcome); the mock `.com`
 /// holds three existing accounts (GymSweepSeams+Onboarding). Only
-/// `test_createRegeneratesTheHandleAndBacksUpToAFile` creates an account:
+/// `test_createRegeneratesTheHandleAndLandsOnHome` creates an account:
 /// real keys on the simulator, claimed on the mock `.com` only; the next
 /// `-smoke-onboarding` launch wipes them. The demo join leaves a demo
 /// session, which the same launch also drops.
@@ -191,12 +191,12 @@ final class GymSweepOnboardingTests: GymSweepCase {
     // MARK: - Create
 
     /// Create your account: Try another changes the handle (after its
-    /// cooldown); the account and device names are typed; Skip for now
-    /// warns and Back keeps the step; Save a backup file opens the account
-    /// backup sheet, and Done there lands on Home with Add/Restore server
-    /// (the opener holds the admin root). Creates a real account on the
-    /// simulator (mock `.com` only).
-    func test_createRegeneratesTheHandleAndBacksUpToAFile() throws {
+    /// cooldown); the account and device names are typed; then no backup page
+    /// (owner, 2026-11-21): the voi.ci intro, then Home with Add/Restore server
+    /// (the opener holds the admin root) and the cloud recovery reminder, whose
+    /// Secure my account opens Cloud recovery with its plain explanation.
+    /// Creates a real account on the simulator (mock `.com` only).
+    func test_createRegeneratesTheHandleAndLandsOnHome() throws {
         let app = launchOnboarding()
         app.buttons["Create your account"].tap()
         let handle = app.staticTexts["suggest-username-name"]
@@ -221,46 +221,18 @@ final class GymSweepOnboardingTests: GymSweepCase {
         wait(open, "isEnabled == true")
         open.tap()
 
-        let skip = app.buttons["secure-account-skip"]
-        XCTAssertTrue(skip.waitForExistence(timeout: 20), "A new account is offered a backup.")
-        skip.tap()
-        let skipAnyway = app.buttons.matching(identifier: "secure-account-skip-anyway").firstMatch
-        XCTAssertTrue(skipAnyway.waitForExistence(timeout: 5), "Skipping warns first.")
-        // The dialog's Back (cancel role) shows on some layouts only; tapping
-        // away from the dialog cancels it the same way.
-        let keep = app.buttons["Back"].firstMatch
-        if keep.exists && keep.isHittable { keep.tap() } else {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
-        }
-        waitGone(skipAnyway)
-        XCTAssertTrue(skip.waitForExistence(timeout: 5), "Back keeps the backup step.")
-
-        let cloud = app.buttons["secure-account-option-cloud"]
-        let file = app.buttons["secure-account-option-file"]
-        XCTAssertTrue(cloud.exists && file.exists, "Cloud and file are both offered.")
-        XCTAssertFalse(cloud.isSelected, "Cloud starts unticked.")
-        XCTAssertFalse(file.isSelected, "The file starts unticked.")
-        let secureContinue = app.buttons["secure-account-continue"]
-        XCTAssertFalse(secureContinue.isEnabled, "Continue waits for a choice.")
-        let passphrase = app.secureTextFields["secure-account-passphrase"]
-        XCTAssertFalse(passphrase.exists, "The cloud passphrase is hidden until cloud is ticked.")
-        if cloud.isEnabled {
-            cloud.tap()
-            XCTAssertTrue(passphrase.waitForExistence(timeout: 5), "Ticking cloud shows its passphrase.")
-            cloud.tap()
-            waitGone(passphrase)
-        }
-        file.tap()
-        wait(file, "isSelected == true")
-        XCTAssertFalse(passphrase.exists, "The file alone needs no cloud passphrase.")
-        wait(secureContinue, "isEnabled == true")
-        secureContinue.tap()
-        XCTAssertTrue(app.navigationBars["Account backup"].waitForExistence(timeout: 10), "The file backup opens.")
-        XCTAssertFalse(app.buttons["keyfile-export-create"].isEnabled, "A file needs a passphrase first.")
-        shot(app, "secure-account-file")
-        app.navigationBars["Account backup"].buttons["Done"].tap()
+        let noThanks = app.buttons["voici-intro-no"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 20), "The voi.ci intro is the one step after creating.")
+        XCTAssertFalse(app.buttons["secure-account-skip"].exists, "No backup page.")
+        noThanks.tap()
         XCTAssertTrue(app.buttons["home-add-server"].waitForExistence(timeout: 15),
                       "The account opens on Home, where its admin device may add servers.")
+        let reminder = app.descendants(matching: .any)["recovery-backup-banner"]
+        XCTAssertTrue(reminder.waitForExistence(timeout: 15), "Home reminds about cloud recovery.")
+        shot(app, "create-home-reminder")
+        app.buttons["fs-announcement-cta"].tap()
+        XCTAssertTrue(app.navigationBars["Cloud recovery"].waitForExistence(timeout: 15), "Secure my account opens Cloud recovery.")
+        XCTAssertTrue(any(app, "recovery-explainer").waitForExistence(timeout: 5), "It says what cloud recovery is.")
     }
 
     /// Join an account by pairing, from the admin's link: the six-digit

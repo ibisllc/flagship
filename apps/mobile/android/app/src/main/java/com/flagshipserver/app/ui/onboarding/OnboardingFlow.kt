@@ -1,6 +1,6 @@
 // Onboarding flow:
 //   Welcome
-//     ├─ Create your account → ChooseUsername → Biometric → OpenAccount
+//     ├─ Create your account → ChooseUsername → OpenAccount → Home (voi.ci intro)
 //     │     (Phase 2: open the ACCOUNT — ensure UMK + standalone username
 //     │      claim + name this device → Home with ZERO servers + an
 //     │      "add your first server" CTA. A server is a separate, later,
@@ -39,7 +39,6 @@ import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.LocalDeepLinker
-import com.flagshipserver.app.ui.screens.BiometricSetupScreen
 import com.flagshipserver.app.ui.screens.SuggestUsernameScreen
 import com.flagshipserver.app.ui.screens.JoinDeviceScreen
 import com.flagshipserver.app.ui.screens.OpenAccountScreen
@@ -88,22 +87,11 @@ fun OnboardingFlow(onFinished: () -> Unit) {
         composable("welcome") { WelcomeScreen(nav) }
         composable("username") {
             // CREATE path. Picking a username opens the ACCOUNT, not a
-            // server — thread the chosen handle forward to the
-            // biometric + open-account steps.
+            // server. No separate "lock it to your device" step (owner,
+            // 2026-11-21): open-account selects the profile's key slot and
+            // asks for the biometric itself when it mints the account key.
             SuggestUsernameScreen(
                 onContinue = { username ->
-                    nav.navigate("biometric/" + URLEncoder.encode(username, "UTF-8"))
-                },
-            )
-        }
-        composable(
-            route = "biometric/{username}",
-            arguments = listOf(navArgument("username") { type = NavType.StringType }),
-        ) { entry ->
-            val username = URLDecoder.decode(entry.arguments?.getString("username") ?: "", "UTF-8")
-            BiometricSetupScreen(
-                username = username,
-                onContinue = {
                     nav.navigate("open-account/" + URLEncoder.encode(username, "UTF-8"))
                 },
             )
@@ -118,11 +106,9 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             // flips isPaired ⇒ the shell swaps to Home (zero-server empty
             // state). The server is added later from Home.
             //
-            // CREATE path only: openAccount() ALSO arms the SKIPPABLE
-            // "Secure your account" backup nudge, which AppRoot renders as
-            // a full-screen overlay ABOVE the freshly-mounted shell until
-            // the user backs up or skips. (The recovery / "I already have
-            // an account" path never arms it, so it never sees the step.)
+            // CREATE path only: openAccount() arms the one-time voi.ci
+            // intro, the one onboarding step; recovery and the backup file
+            // are Home reminders (HomeReminders).
             OpenAccountScreen(
                 username = username,
                 onOpened = onFinished,

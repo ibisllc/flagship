@@ -8,7 +8,7 @@ import UIKit
 /// replaces that back button — a custom header, `navigationBarBackButtonHidden`,
 /// etc. — silently disables the gesture, so the view follows your finger a
 /// little and then springs back instead of popping. That's the behaviour you
-/// saw on the recovery / secure-account screen.
+/// saw on the recovery screen.
 ///
 /// Re-point the gesture's delegate at the navigation controller itself and let
 /// it begin whenever there's a previous screen to return to. This restores the

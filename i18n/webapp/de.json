@@ -2202,7 +2202,6 @@
   "CLOUD RECOVERY": "CLOUD-WIEDERHERSTELLUNG",
   "See per-app re-anchoring after recovery.": "Sieh dir die Neuanbindung pro App nach der Wiederherstellung an.",
   "View progress": "Fortschritt ansehen",
-  "Store an encrypted copy of your account key for a new browser.": "Speichere eine verschlüsselte Kopie deines Kontoschlüssels für einen neuen Browser.",
   "Advanced: legacy wrapped-UMK export": "Erweitert: veralteter Export des umhüllten UMK",
   "Export wrapped UMK": "Umhüllten UMK exportieren",
   "Import wrapped UMK": "Umhüllten UMK importieren",
@@ -3972,5 +3971,7 @@
   "Pay by bank transfer": "Per Banküberweisung zahlen",
   "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe zeigt deinem Unternehmen die Bankverbindung. Die Gutscheine sind bereit, sobald die ganze Überweisung eingegangen ist, was einige Tage dauern kann.",
   "Bank transfer isn't available right now. Pay by card instead.": "Banküberweisung ist gerade nicht verfügbar. Zahle stattdessen per Karte.",
-  "That batch can no longer be paid. Start a new batch.": "Dieses Paket kann nicht mehr bezahlt werden. Starte ein neues Paket."
+  "That batch can no longer be paid. Start a new batch.": "Dieses Paket kann nicht mehr bezahlt werden. Starte ein neues Paket.",
+  "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "Du nutzt keine Cloud-Wiederherstellung? Bewahre eine verschlüsselte Datei deines Kontoschlüssels sicher auf, damit ein verlorenes Gerät nicht dein Konto kostet.",
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "Die Cloud-Wiederherstellung speichert eine verschlüsselte Kopie deines Kontoschlüssels bei Flagship. Ein Passkey sperrt sie: Dein Browser oder dein Passwortmanager bewahrt den Passkey auf, du musst dir also kein Passwort ausdenken. Auf einem neuen Gerät öffnen der Passkey und deine Wiederherstellungs-Passphrase sie gemeinsam. Flagship kann sie nicht öffnen."
 }

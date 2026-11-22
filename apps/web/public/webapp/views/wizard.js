@@ -54,10 +54,9 @@ registerView("view-wizard");
 // open-account). The store routes those writes through the legacy flat key
 // while still surfacing under the per-profile slot once a username is claimed.
 const WIZARD_STATE_KEY = "flagship.wizard.state.v1";
-// Documentation-pin: home.js + the homeRecoveryBanner static-source test
-// assert that BOTH files reference the same recovery-warn key string. The
-// runtime read/write now goes through profileGet/profileSet on the
-// "recoveryWarn" slot (legacy key is "flagship.recovery.warn.v1").
+// The "recoveryWarn" slot (legacy key "flagship.recovery.warn.v1"), read and
+// written through profileGet/profileSet. Home no longer reads it: its
+// recovery reminders ask `.com` whether cloud recovery is set up.
 const RECOVERY_WARN_KEY = "flagship.recovery.warn.v1";
 const PEER_BACKUP_CHOICE_KEY = "flagship.peerBackup.choice.v1";
 void WIZARD_STATE_KEY; void RECOVERY_WARN_KEY; void PEER_BACKUP_CHOICE_KEY;

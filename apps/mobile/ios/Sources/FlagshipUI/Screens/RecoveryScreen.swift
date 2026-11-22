@@ -66,6 +66,10 @@ public struct RecoveryScreen: View {
                         switch vm.phase {
                         case .idle:
                             Text("Recovery isn't set up yet.").foregroundColor(c.text)
+                            Text("Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in iCloud Keychain or your password manager, so there is no password to make up. On a new device, the passkey and the recovery passphrase below open it together. Flagship can't open it.")
+                                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("recovery-explainer")
                             Text("Pick a passphrase (8+ characters) — treat it like a password and write it down somewhere safe. You'll need it, plus your passkey, to get back in on a new device. We can't reset it.")
                                 .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                             SecureField("Recovery passphrase", text: $enrollPassphrase)

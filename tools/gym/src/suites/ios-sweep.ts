@@ -403,11 +403,11 @@ const ONBOARDING: readonly Scenario[] = [
     "D1",
   ),
   sweep(
-    "ios-sweep-onboarding-create-file-backup",
-    "Create your account: Try another changes the handle; names typed; Skip warns from the Skip button and Back keeps the step; cloud and file start unticked with Continue off and the cloud passphrase hidden; ticking Save a backup file opens Account backup; Done lands on Home with Add/Import (creates a simulator account, mock .com only).",
-    "GymSweepOnboardingTests/test_createRegeneratesTheHandleAndBacksUpToAFile",
-    ["suggest-regenerate", "open-account-continue", "secure-account-skip", "secure-account-option-file", "secure-account-continue", "Done"],
-    ["home-add-server"],
+    "ios-sweep-onboarding-create-lands-on-home",
+    "Create your account: Try another changes the handle; names typed; no backup page: the voi.ci intro, then Home with Add/Import and the cloud recovery reminder, whose Secure my account opens Cloud recovery with its plain explanation (creates a simulator account, mock .com only).",
+    "GymSweepOnboardingTests/test_createRegeneratesTheHandleAndLandsOnHome",
+    ["suggest-regenerate", "open-account-continue", "voici-intro-no", "fs-announcement-cta"],
+    ["home-add-server", "recovery-backup-banner", "recovery-explainer"],
     "D1",
   ),
   sweep(
@@ -714,7 +714,7 @@ const HOME: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-home-recovery-banners",
-    "The backup banner's dismiss sticks across launches; the recovery nudge's dismiss lasts the session; Set it up opens Cloud recovery.",
+    "The cloud recovery card's x snoozes it (a week, across launches) and the backup file card takes its place, also snoozed by its x; the recovery nudge's dismiss lasts the session; Set it up opens Cloud recovery.",
     "GymSweepHomeTests/test_backupBannerAndRecoveryNudge",
     ["fs-announcement-dismiss", "fs-announcement-cta"],
     ["Cloud recovery"],

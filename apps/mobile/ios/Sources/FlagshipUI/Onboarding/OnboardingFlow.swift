@@ -6,14 +6,14 @@ import FlagshipAPI
 /// when AppState.isPaired == false.
 ///
 ///   Welcome
-///     ├─ Create your account → ChooseUsername → OpenAccount →
-///     │     SecureAccount
+///     ├─ Create your account → ChooseUsername → OpenAccount → Home
 ///     │     Phase 2 decouples account identity from server
 ///     │     provisioning: OpenAccount generates the UMK, derives the
 ///     │     IRK, POSTs a standalone `claimUsername`, and names this
-///     │     first device. SecureAccount then nudges a skippable backup
-///     │     (cloud pre-selected) before the user lands on Home with
-///     │     ZERO servers + an "Add your first server" CTA. Provisioning
+///     │     first device. The user lands on Home with ZERO servers + an
+///     │     "Add your first server" CTA, where the voi.ci intro is the
+///     │     one onboarding step and backing up is a Home reminder
+///     │     (owner, 2026-11-21: no backup page after creating). Provisioning
 ///     │     a box (the old CreateServer mint/relay flow, claim removed)
 ///     │     is now a reusable "Add a server" reachable from Home.
 ///     └─ Connect to an existing account → ConnectAccountScreen, one page:
@@ -88,32 +88,11 @@ public struct OnboardingFlow: View {
                                 demoServer: nil,
                                 createdAt: Date()
                             ), setActive: false)
-                            // Not active yet: activating a profile pairs the
-                            // shell, which closes onboarding before the
-                            // backup step below. completeOnboarding (on
-                            // secure or skip) activates it.
-                            // The account/identity now exists. Before
-                            // landing in the app, nudge a backup via the
-                            // skippable "Secure your account" step. This
-                            // is the NEW-account path only.
-                            path.append(.secureAccount(username: username))
-                        }
-                    )
-                case .secureAccount(let username):
-                    // Skippable backup nudge. Cloud is pre-selected (when
-                    // iCloud is available); "Save a backup file" routes to
-                    // the existing KeyfileExportScreen; "Skip for now"
-                    // confirms then proceeds. Either way we finish
-                    // onboarding into the app from here.
-                    // A new account only: the shell then offers its voi.ci page once (VoiciIntro). Not
-                    // here, before the backup, so Set it up can't skip it.
-                    SecureAccountScreen(
-                        username: username,
-                        onSecured: {
-                            app.completeOnboarding(username: username, pods: [])
-                            VoiciIntro.arm(app, username: username)
-                        },
-                        onSkip: {
+                            // completeOnboarding activates the profile and
+                            // lands on Home. No backup page (owner,
+                            // 2026-11-21): Home reminds about cloud recovery
+                            // and a backup file instead. A new account only:
+                            // the shell offers its voi.ci page once (VoiciIntro).
                             app.completeOnboarding(username: username, pods: [])
                             VoiciIntro.arm(app, username: username)
                         }

@@ -30,11 +30,12 @@ public struct HomeTab: View {
     /// Populates `app.boxRequestInbox` so the list / detail / checklist
     /// can read a per-server waiting state from ONE fetch (no N pollers).
     @State private var approvalWatcher: BootApprovalWatcher?
-    /// Persistent dismiss for the post-creation backup-reminder banner
-    /// (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
-    /// store is observed so toggling `dismissed` from "Not now"
-    /// re-renders Home and the banner disappears immediately.
+    /// The recovery reminders' snoozes (cloud recovery, then a backup file).
+    /// Observed, so the x re-renders Home and the card goes at once.
     @State private var recoveryBannerStore = RecoveryBannerStore()
+    /// A backup file of this account was saved from this device (KeyBackupState), read again when the sheet closes.
+    @State private var backupFileSaved = false
+    @State private var showBackupFileExport = false
     /// The voi.ci page welcome card's dismissal, per account on this device.
     @State private var pageWelcome = PageWelcomeCardStore()
     @Environment(\.nameDibsClient) private var nameDibs
@@ -281,6 +282,14 @@ public struct HomeTab: View {
                     onDismissRecoveryBackupBanner: {
                         recoveryBannerStore.dismissed = true
                     },
+                    showBackupFileReminder: !app.isDemoAccount && RecoveryBannerStore.shouldShowBackupFile(
+                        hasCloudRecovery: app.hasCloudRecovery,
+                        recoverySnoozed: recoveryBannerStore.dismissed,
+                        hasBackupFile: backupFileSaved || KeyBackupState.hasBackup(username: app.currentUser ?? ""),
+                        dismissed: recoveryBannerStore.backupFileDismissed
+                    ),
+                    onSaveBackupFile: { showBackupFileExport = true },
+                    onDismissBackupFileReminder: { recoveryBannerStore.backupFileDismissed = true },
                     showPageWelcome: pagePointer == .welcome,
                     onSetUpPage: { linker.pending = .pageEditor },
                     onDismissPageWelcome: { pageWelcome.dismiss(username: app.currentUser) },
@@ -373,6 +382,19 @@ public struct HomeTab: View {
                     app.recoveryNeedsPasskeyUpdate = false
                     toasts.success(RecoveryUpdatePrompt.updated)
                 }
+            }
+        }
+        .sheet(isPresented: $showBackupFileExport, onDismiss: {
+            backupFileSaved = KeyBackupState.hasBackup(username: app.currentUser ?? "")
+        }) {
+            NavigationStack {
+                KeyfileExportScreen(vm: KeyfileExportViewModel(username: app.currentUser ?? ""))
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Done") { showBackupFileExport = false }
+                                .accessibilityIdentifier("backup-file-done")
+                        }
+                    }
             }
         }
         .sheet(item: $pendingDeletePod) { pod in

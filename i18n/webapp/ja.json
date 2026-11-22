@@ -2202,7 +2202,6 @@
   "CLOUD RECOVERY": "クラウドリカバリー",
   "See per-app re-anchoring after recovery.": "リカバリー後のアプリごとの再接続状況を確認します。",
   "View progress": "進行状況を見る",
-  "Store an encrypted copy of your account key for a new browser.": "新しいブラウザー用に、アカウントキーの暗号化コピーを保存します。",
   "Advanced: legacy wrapped-UMK export": "詳細設定：従来のラップ済み UMK エクスポート",
   "Export wrapped UMK": "ラップ済み UMK をエクスポート",
   "Import wrapped UMK": "ラップ済み UMK をインポート",
@@ -3972,5 +3971,7 @@
   "Pay by bank transfer": "銀行振込で支払う",
   "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe が会社に振込先の口座情報を表示します。振込額の全額が届いた時点でバウチャーの準備が整います。数日かかることがあります。",
   "Bank transfer isn't available right now. Pay by card instead.": "現在、銀行振込はご利用いただけません。カードでお支払いください。",
-  "That batch can no longer be paid. Start a new batch.": "この一括購入はもう支払えません。新しく一括購入を始めてください。"
+  "That batch can no longer be paid. Start a new batch.": "この一括購入はもう支払えません。新しく一括購入を始めてください。",
+  "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "クラウドリカバリーを使っていませんか？アカウントキーの暗号化ファイルを安全な場所に保管すれば、デバイスをなくしてもアカウントを失いません。",
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "クラウドリカバリーは、アカウントキーの暗号化コピーを Flagship に保存します。コピーはパスキーで保護されます。パスキーはブラウザーまたはパスワード マネージャーが保管するので、パスワードを考える必要はありません。新しいデバイスでは、パスキーとリカバリー用のパスフレーズの両方でコピーを開きます。Flagship が開くことはできません。"
 }

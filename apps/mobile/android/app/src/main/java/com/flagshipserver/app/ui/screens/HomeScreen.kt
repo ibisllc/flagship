@@ -172,6 +172,10 @@ fun HomeScreen(
      *  account creation and stays hidden across launches once dismissed. */
     showRecoveryBackupBanner: Boolean = false,
     onDismissRecoveryBackupBanner: () -> Unit = {},
+    /** The backup file reminder (RecoveryBannerStore.shouldShowBackupFile): after the cloud recovery card was put off. */
+    showBackupFileReminder: Boolean = false,
+    onSaveBackupFile: () -> Unit = {},
+    onDismissBackupFileReminder: () -> Unit = {},
     /** The welcome card that introduces the voi.ci page (PageWelcomeCardStore.shouldShow); below the recovery cards. */
     showPageWelcome: Boolean = false,
     onSetUpPage: () -> Unit = {},
@@ -287,7 +291,7 @@ fun HomeScreen(
         // list first fills in (the empty-state button becomes the list's). A tap
         // aimed at where it was landed on whatever moved there (device report
         // 2026-10-18), so it waits for the layout to settle after each change.
-        val hasAnnouncement = accountWasReset || showRecoveryBackupBanner || showRecoveryNudge || showPageWelcome
+        val hasAnnouncement = accountWasReset || showRecoveryBackupBanner || showBackupFileReminder || showRecoveryNudge || showPageWelcome
         var addSettled by remember { mutableStateOf(false) }
         LaunchedEffect(hasAnnouncement, pods.isEmpty(), listLocked) {
             addSettled = false
@@ -332,6 +336,9 @@ fun HomeScreen(
             onSetUpRecovery = onSetUpRecovery,
             onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner,
             onDismissRecoveryNudge = onDismissRecoveryNudge,
+            showBackupFileReminder = showBackupFileReminder,
+            onSaveBackupFile = onSaveBackupFile,
+            onDismissBackupFileReminder = onDismissBackupFileReminder,
             showPageWelcome = showPageWelcome,
             username = username,
             onSetUpPage = onSetUpPage,
@@ -505,6 +512,9 @@ private fun TopAnnouncement(
     onSetUpRecovery: () -> Unit,
     onDismissRecoveryBackupBanner: () -> Unit,
     onDismissRecoveryNudge: () -> Unit,
+    showBackupFileReminder: Boolean = false,
+    onSaveBackupFile: () -> Unit = {},
+    onDismissBackupFileReminder: () -> Unit = {},
     showPageWelcome: Boolean = false,
     username: String = "",
     onSetUpPage: () -> Unit = {},
@@ -534,6 +544,17 @@ private fun TopAnnouncement(
                 onCta = onSetUpRecovery,
                 onDismiss = onDismissRecoveryBackupBanner,
                 modifier = Modifier.testTag("recovery-backup-banner"),
+            )
+        }
+        showBackupFileReminder -> {
+            FSAnnouncementCard(
+                icon = Icons.Outlined.Download,
+                title = stringResource(R.string.home_backup_file_title),
+                message = stringResource(R.string.home_backup_file_message),
+                ctaLabel = stringResource(R.string.home_backup_file_cta),
+                onCta = onSaveBackupFile,
+                onDismiss = onDismissBackupFileReminder,
+                modifier = Modifier.testTag("backup-file-reminder"),
             )
         }
         showRecoveryNudge -> {
