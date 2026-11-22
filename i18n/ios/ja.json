@@ -4012,5 +4012,8 @@
   "Set business hours": "受付時間を設定",
   "No messages yet. Turn on Accept messages in Social options to get them.": "まだメッセージはありません。「ソーシャルのオプション」で「メッセージを受け付ける」をオンにすると届くようになります。",
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "メッセージと通話はオンになっています。発信者は Flagship でサインインし、あなたが折り返し電話できるようにします。「ソーシャルのオプション」でオフにできます。",
-  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "通話はオンになっています。発信者は Flagship でサインインし、あなたが折り返し電話できるようにします。「ソーシャルのオプション」でオフにできます。"
+  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "通話はオンになっています。発信者は Flagship でサインインし、あなたが折り返し電話できるようにします。「ソーシャルのオプション」でオフにできます。",
+  "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account.": "クラウドリカバリーを使っていませんか？アカウントキーの暗号化ファイルを安全な場所に保管すれば、スマートフォンをなくしてもアカウントを失いません。",
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in iCloud Keychain or your password manager, so there is no password to make up. On a new device, the passkey and the recovery passphrase below open it together. Flagship can't open it.": "クラウドリカバリーは、アカウントキーの暗号化コピーを Flagship に保存します。コピーはパスキーで保護されます。パスキーはスマートフォンが iCloud キーチェーンまたはお使いのパスワード マネージャーに保管するので、パスワードを考える必要はありません。新しいデバイスでは、パスキーと下のリカバリー用パスフレーズの両方でコピーを開きます。Flagship が開くことはできません。",
+  "Set up cloud recovery": "クラウドリカバリーを設定"
 }

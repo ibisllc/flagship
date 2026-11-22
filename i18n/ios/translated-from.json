@@ -4008,5 +4008,8 @@
   "Set business hours": "35a182ffbca8",
   "No messages yet. Turn on Accept messages in Social options to get them.": "04e4465e44fc",
   "Messages and calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "4ca33024e02b",
-  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "017a22a7ca6b"
+  "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "017a22a7ca6b",
+  "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account.": "bca528b505e2",
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in iCloud Keychain or your password manager, so there is no password to make up. On a new device, the passkey and the recovery passphrase below open it together. Flagship can't open it.": "06e690068c05",
+  "Set up cloud recovery": "dc2300d3b0b6"
 }
