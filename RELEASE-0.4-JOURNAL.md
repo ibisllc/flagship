@@ -1808,3 +1808,9 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   (own `ai-service-day` budget; `ADAPTER_REVIEW_ANTHROPIC_KEY` retired: delete the prod secret), Business batches by
   Stripe bank transfer (off until `STRIPE_BANK_TRANSFER="1"`; restricted key needs Customers: Write + PaymentIntents:
   Read; tested against fakes only). No migration. Agent gates: tsc, i18n, parity, vitest com/web/control-plane 6,879.
+- 2026-11-21 late: `0.4/android-calls` built and gated (`08a9bddb1`, amended over the WIP): testDebugUnitTest +
+  assembleDebug 3,215 green, wear + release Kotlin compile, i18n, parity; fixed AppRuntimeTest imports and the reach
+  grep in check-release-clean.sh (never matched aapt2's indented lines). New check: native symbols in the AAB, which
+  FAILS on this Mac until an NDK is installed (`sdkmanager "ndk;27.0.12077973"`, ~1.5 GB, version unverified).
+  NOT merged: waits for the owner's phone test (killed-app locked answer on/off, lock screen, reopen, warm regression,
+  rotation, UnifiedPush choice). Checklist in the agent report; summary in the session.
