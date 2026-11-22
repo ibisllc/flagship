@@ -46,9 +46,9 @@ describe("home page-welcome wiring", () => {
     expect(HOME_JS).toContain('recoveryStoreSet("voiciWelcomeDismissed", "true")');
   });
 
-  it("waits for the backup nudge and comes back when that one is dismissed", () => {
-    expect(HOME_JS).toMatch(/state === "card" && document\.getElementById\(RECOVERY_BANNER_ID\)\)\) return hide\(\)/);
-    expect(HOME_JS).toMatch(/document\.getElementById\(RECOVERY_BANNER_ID\)\?\.remove\(\);\s*void renderPageWelcome\(\);/);
+  it("waits for the cloud recovery and backup file reminders and comes back when one is dismissed", () => {
+    expect(HOME_JS).toMatch(/state === "card" && \(document\.getElementById\(RECOVERY_BANNER_ID\) \|\| document\.getElementById\(BACKUP_FILE_REMINDER_ID\)\)\)\) return hide\(\)/);
+    expect(HOME_JS).toMatch(/host\.remove\(\);\s*await renderRecoveryBanner\(\);\s*void renderPageWelcome\(\);/);
   });
 
   it("points to the Social tab's Profile, from the card and the compact row", () => {
