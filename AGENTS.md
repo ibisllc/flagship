@@ -240,7 +240,7 @@ plus voi.ci calls (audio/video, own libwebrtc build), the Social tab, Activity f
 `fshp.app`, restore into a running server, UnifiedPush, the Firefox extension, webapp custody and the responsive webapp,
 retail box setup (software), organizations and quantum-safe stage 1. Live gym green on both stacks (R1, R2 groups).
 Ship with `docs/runbooks/0.4-deploy-sheet.md` (order, D1 0090-0094 and 0132-0155, secrets, DNS clean-up, stores) and
-`scripts/release.sh` (48 steps; new step 11 signs the webapp shell); every web console step is in
+`scripts/release.sh` (32 steps since 2026-11-21: one-time setup is a read-only check, step 10 signs the webapp shell); every web console step is in
 `docs/runbooks/0.4-browser-tasks.md` for a browser session. Release notes: `docs/release-notes/0.4.md`, the blog post
 `blog/flagship-0-4.html`, `store/listings/*.json` (machine drafts for review). `main` holds two commits `release/0.4`
 lacks as ancestors (terms text, gym relays off): the deploy sheet §1 says how to make the fast-forward possible.
@@ -1514,13 +1514,10 @@ release, and applies to a VM from its next start).
 `docs/runbooks/device-test-agent.md`** (what to test, how to report: results go
 on a `device-results/<machine>-<date>` branch, never `main`).
 
-**0.3 (owner, 2026-11-02): Windows drops "Experimental" if
-`docs/runbooks/0.3-windows-studio-acceptance.md` passes** (gym, a `release/0.3` build;
-brief for the Windows agent at its end). One switch, `STUDIO_EXPERIMENTAL` in
-`apps/web/public/app-stores.js`, drives the website tag and, through
-`scripts/check-versions.mjs --write`, the Windows and Linux window titles; `release.sh`
-step `studiowl` flips it only on a `Verdict: PASS` results branch. Code signing (the zip
-is unsigned) is an open owner decision; Windows 10 is proposed out of the floor.
+**No Studio carries an "Experimental" tag** (owner, 2026-11-20, regardless of testing; the
+`STUDIO_EXPERIMENTAL` switch and its markup are gone). `docs/runbooks/0.3-windows-studio-acceptance.md`
+stays the Windows hardware checklist. Code signing (the zip is unsigned) is an open owner
+decision; Windows 10 is proposed out of the floor.
 
 Follow `docs/runbooks/desktop-windows-linux-validation.md`: the released
 Windows zip and Linux AppImage each need one real run (pair with a phone, host a

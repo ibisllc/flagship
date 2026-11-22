@@ -82,14 +82,18 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     expect(r.code).toBe(0);
     const steps = planSteps(r.out);
-    expect(steps).toHaveLength(48);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 48 }, (_, i) => i + 1));
+    expect(steps).toHaveLength(32);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 32 }, (_, i) => i + 1));
     const phases = [...r.out.matchAll(/^ {4}phase ([AB]) \|/gm)].map((m) => m[1]);
-    expect(phases).toHaveLength(48);
-    expect(phases.slice(0, 33).every((p) => p === "A")).toBe(true);
-    expect(phases.slice(33).every((p) => p === "B")).toBe(true);
-    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(48);
-    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(48);
+    expect(phases).toHaveLength(32);
+    expect(phases.slice(0, 21).every((p) => p === "A")).toBe(true);
+    expect(phases.slice(21).every((p) => p === "B")).toBe(true);
+    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(32);
+    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(32);
+    // the plan is this release's: no one-time 0.3 step and nothing a person must know to skip
+    for (const gone of ["Pre-GA scrub", "wipe", "hall of fame", "feat/UX", "Experimental", "PQ release key ceremony", "0.3 TS hub"])
+      expect(steps.map((s) => s.title).join("\n"), gone).not.toContain(gone);
+    expect(r.out).toContain("re-opens when the webapp shell version moved");
     expect(calls(env)).toBe("");
   });
 
@@ -97,67 +101,47 @@ describe("release.sh", () => {
     const env = sandbox();
     const r = run(env, ["--list"]);
     const sections = [...r.out.matchAll(/runbook: (\S+?)\. /g)].map((m) => m[1]);
-    // 0 ready | 1 plan | 2 lease | 3 endorse | 9 appliance builds start after the endorsement
-    // | 5 secrets | 6 gym | 1b backup prerequisites | 4 migrations (after the gym gate and a fresh backup)
-    // | 1c-1e the mesh's .com prerequisites (R2 buckets, feed domain, mesh key: before .com binds them)
-    // | 8 .services FIRST | 6a DNS wildcard (before .com: the new .com writes no per-box records)
-    // | 7 .com (+ zone-health post-check) | 8a-8f the relay mesh (key, admission, certs, feed on, Rust iad1, watch)
-    // | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
+    // 0 ready | 0b version | 1 plan | 1f one-time setup (read-only) | 2 lease | 3 endorse | 3b-3e artifacts, catalog,
+    // runtime manifest, shell | 9 appliance builds start | 5 secrets | 6 gym | 4 migrations (after the gym gate)
+    // | 7a DNS broker | 7 .com | 8 relay mesh check | 8e Rust relay (+ watch) | 14 cpu watch | 9 publish | 9 status
+    // | 9b canary | 12 notice, reap | 10 Studios | 9 redeploy | 7 store art... | 11 stores | 11d older apps | 13 final
     expect(sections).toEqual([
-      "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "3d", "3e", "9", "5", "6", "1b", "1c", "1d", "1e", "4", "8", "7a", "6a", "7",
-      "8a", "8b", "8c", "8d", "8e", "8f", "14", "9", "9", "9",
-      "9b", "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11d", "11b", "13",
+      "0", "0b", "1", "1f", "2", "3", "3b", "3c", "3d", "3e", "9", "5", "6", "4", "7a", "7", "8", "8e", "14", "9", "9",
+      "9b", "12", "12", "10", "10", "7", "11c", "11", "11", "11d", "13",
     ]);
     // every referenced heading exists verbatim in the runbook
     for (const m of r.out.matchAll(/runbook: (.+)$/gm)) {
       expect(RUNBOOK, m[1]).toContain(`## ${m[1]}`);
     }
-    // gym gate before any prod change; DNS after the deploys; scrub after DNS; reap after scrub
     const idx = (needle: string) => planSteps(r.out).find((s) => s.title.includes(needle))!.n;
+    // gym gate before any prod change; the one-time setup is checked before anything is signed or deployed
+    expect(idx("One-time setup still in place")).toBeLessThan(idx("CA lease"));
+    expect(idx("One-time setup still in place")).toBeLessThan(idx("Pending D1 migrations"));
     expect(idx("Gym gate")).toBeLessThan(idx("Pending D1 migrations"));
-    expect(idx("D1 backup prerequisites")).toBeLessThan(idx("Pending D1 migrations"));
-    expect(idx("D1 backup prerequisites")).toBeLessThan(idx("Deploy .com"));
-    expect(idx("Pending D1 migrations")).toBeLessThan(idx("Deploy .services"));
-    expect(idx("Deploy .services")).toBeLessThan(idx("Cloudflare DNS by hand"));
-    expect(idx("Cloudflare DNS by hand")).toBeLessThan(idx("Deploy .com"));
+    expect(idx("Pending D1 migrations")).toBeLessThan(idx("Deploy .com"));
     expect(idx("Endorse")).toBeLessThan(idx("Start the VM appliance builds"));
-    expect(idx("Deploy .com")).toBeLessThan(idx("Pre-GA scrub"));
-    expect(idx("Pre-GA scrub")).toBeLessThan(idx("Reap orphaned"));
-    expect(idx("Reap orphaned")).toBeLessThan(idx("Land chore/delete-wipe-tooling"));
     expect(idx("Bump the product version")).toBeLessThan(idx("Endorse"));
-    expect(idx("Release catalog keys")).toBeLessThan(idx("Build, sign and publish the box artifacts"));
     expect(idx("Endorse")).toBeLessThan(idx("Build, sign and publish the box artifacts"));
     expect(idx("Build, sign and publish the box artifacts")).toBeLessThan(idx("Sign and publish the release catalog"));
     expect(idx("Deploy the DNS broker")).toBeLessThan(idx("Deploy .com"));
     expect(idx("Gym gate")).toBeLessThan(idx("Deploy the DNS broker"));
-    expect(idx("hall of fame")).toBeGreaterThan(idx("Redeploy .com"));
-    // The 0.2 apps are told to update only after the 0.3 store builds exist (journal F9).
-    expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("iOS: Release-clean"));
-    expect(idx("Tell the 0.2 apps to update")).toBeGreaterThan(idx("Android: release-clean"));
-    expect(idx("PQ release key")).toBeLessThan(idx("Endorse"));
-    expect(idx("Write DEPLOYED-FINAL")).toBe(33);
-    // the canary opens phase B: after the release is published, before the scrub and the stores
-    expect(idx("Canary cohorts")).toBe(34);
-    // the relay mesh (journal I3/I4): .com's prerequisites before the first .com deploy binds them; the mesh relay
-    // only after .com has admitted it, its certificates exist and the feed publishes a directory naming it
-    expect(idx("R2 buckets the new .com binds")).toBeLessThan(idx("Deploy .com"));
-    expect(idx("Relay feed: custom domain")).toBeLessThan(idx("Deploy .com"));
-    expect(idx("RELAY_MESH_KEY_SEED")).toBeLessThan(idx("Deploy .com"));
-    expect(idx("R2 buckets the new .com binds")).toBeGreaterThan(idx("Gym gate"));
-    expect(idx("Deploy .com")).toBeLessThan(idx("the iad1 relay key"));
-    expect(idx("Pending D1 migrations")).toBeLessThan(idx("admit iad1"));
-    expect(idx("the iad1 relay key")).toBeLessThan(idx("admit iad1"));
-    expect(idx("admit iad1")).toBeLessThan(idx("switch the relay feed on"));
-    expect(idx("Fly certificates and DNS")).toBeLessThan(idx("switch the relay feed on"));
-    expect(idx("switch the relay feed on")).toBeLessThan(idx("deploy the Rust relay as iad1"));
-    expect(idx("deploy the Rust relay as iad1")).toBeLessThan(idx("the 30-minute watch"));
-    expect(idx("the 30-minute watch")).toBeLessThan(idx("Publish the VM appliances"));
+    expect(idx("Deploy .com")).toBeLessThan(idx("Reap orphaned"));
+    // older apps are told to update only after the store builds exist (journal F9)
+    expect(idx("Tell older apps to update")).toBeGreaterThan(idx("iOS: Release-clean"));
+    expect(idx("Tell older apps to update")).toBeGreaterThan(idx("Android: release-clean"));
+    expect(idx("Store art")).toBeLessThan(idx("iOS: Release-clean"));
+    expect(idx("DEPLOYED-FINAL")).toBe(21);
+    // the canary opens phase B: after the release is published, before the reap and the stores
+    expect(idx("Canary cohorts")).toBe(22);
+    // the relay: the mesh is checked (read-only) and the Rust relay deployed only after .com
+    expect(idx("Deploy .com")).toBeLessThan(idx("Relay mesh: check"));
+    expect(idx("Relay mesh: check")).toBeLessThan(idx("deploy the Rust relay as iad1"));
+    expect(idx("deploy the Rust relay as iad1")).toBeLessThan(idx("Publish the VM appliances"));
     // G2: the signed runtime manifest is committed with the other signatures, before the gym and the .com deploy that serves it
     expect(idx("Sign and commit the runtime manifest")).toBeGreaterThan(idx("Sign and publish the release catalog"));
     expect(idx("Sign and commit the runtime manifest")).toBeLessThan(idx("Gym gate"));
     expect(idx("Sign and commit the runtime manifest")).toBeLessThan(idx("Deploy .com"));
     expect(idx("Bump the product version")).toBeLessThan(idx("Sign and commit the runtime manifest"));
-    expect(idx("PQ release key")).toBeLessThan(idx("Sign and commit the runtime manifest"));
     expect(idx("Canary cohorts")).toBeGreaterThan(idx("Sign and publish the release catalog"));
     expect(idx("Canary cohorts")).toBeGreaterThan(idx("Deploy .com"));
     // 0.4: the webapp shell is signed after the version bump and before the .com deploy that publishes it
@@ -165,14 +149,18 @@ describe("release.sh", () => {
     expect(idx("Sign the webapp shell")).toBeLessThan(idx("Deploy .com"));
   });
 
-  it("signs the webapp shell only on --sign and refuses to replace a live relay mesh with the TS hub (0.4)", () => {
+  it("signs the webapp shell only on --sign; the relay step deploys only the Rust mesh relay, the TS hub is a rollback (0.4)", () => {
     const body = SOURCE.slice(SOURCE.indexOf("run_shellsig() {"), SOURCE.indexOf("canary_percent() {"));
     expect(body.indexOf("webapp-shell.ts sign\n")).toBeLessThan(body.indexOf('confirm "Sign webapp shell'));
     expect(body).toContain('with_maintainers XA "$WT" npx tsx scripts/webapp-shell.ts sign --sign');
     expect(body).toContain("land_commits");
-    const services = SOURCE.slice(SOURCE.indexOf("run_services() {"), SOURCE.indexOf("relay_ips() {"));
-    expect(services.indexOf("directory_lists")).toBeLessThan(services.indexOf("flyctl deploy"));
-    expect(services).toContain("mesh-off-rollback");
+    const check = SOURCE.slice(SOURCE.indexOf("run_meshcheck() {"), SOURCE.indexOf("run_meshrelay() {"));
+    expect(check).toContain("directory_lists");
+    expect(check).not.toMatch(/flyctl (deploy|secrets (set|import)|certs add)|wrangler secret put|set_toml_var/);
+    const relay = SOURCE.slice(SOURCE.indexOf("run_meshrelay() {"), SOURCE.indexOf("mesh_watch() {"));
+    expect(relay).toContain("require_done meshcheck");
+    expect(relay).toContain("fly.relay.mesh.toml");
+    expect(relay).not.toMatch(/WX flyctl deploy -a \$RELAY_APP --remote-only/);
     for (const n of ["VOUCHER_SIGNING_KEYS", "OHTTP_GATEWAY_KEYS", "CLOUDFLARE_DIRECT_DNS_API_TOKEN", "WEBPUSH_VAPID_PRIVATE_KEY_PEM"])
       expect(SOURCE).toMatch(new RegExp(`KNOWN_SECRETS=\\([^)]*\\b${n}\\b`));
   });
@@ -197,16 +185,16 @@ describe("release.sh", () => {
     const com = SOURCE.slice(SOURCE.indexOf("run_com() {"), SOURCE.indexOf("serving_relay_key() {"));
     expect(com).toContain("no-runtime-manifest");
     expect(com).toContain('probe_code "runtime manifest served" "$COM_URL/api/runtime/manifest" 200');
-    const dry = run(env, ["--dry-run", "--only", "10"]);
-    expect(planSteps(dry.out)).toEqual([{ n: 10, title: expect.stringContaining("Sign and commit the runtime manifest") }]);
+    const dry = run(env, ["--dry-run", "--only", "9"]);
+    expect(planSteps(dry.out)).toEqual([{ n: 9, title: expect.stringContaining("Sign and commit the runtime manifest") }]);
     expect(calls(env)).toBe("");
   });
 
   it("--list --phase B lists only phase B", () => {
     const r = run(sandbox(), ["--list", "--short", "--phase", "B"]);
     const steps = planSteps(r.out);
-    expect(steps[0]!.n).toBe(34);
-    expect(steps).toHaveLength(15);
+    expect(steps[0]!.n).toBe(22);
+    expect(steps).toHaveLength(11);
   });
 
   it("--dry-run --from 1 prints every command of phase A and runs no tool", () => {
@@ -215,46 +203,34 @@ describe("release.sh", () => {
     expect(r.code, r.err).toBe(0);
     expect(r.out).toContain("[dry-run]");
     const steps = planSteps(r.out);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 33 }, (_, i) => i + 1));
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 21 }, (_, i) => i + 1));
     expect(r.out).toContain("npm run deploy");
     expect(r.out).toContain("bash scripts/gym-release-run.sh");
     expect(r.out).toContain("node scripts/check-versions.mjs --write");
     expect(r.out).toContain("--signer-cmd");
-    expect(r.out).toContain("flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services");
     expect(r.out).toContain("endorse-release.mjs --to <PIN> --from <endorsed> --sign");
     expect(r.out).toContain("wrangler tail flagship-com --format json");
-    // the two-Worker deploy: terminal-attached, domain prompt, webapp/remote post-checks, backup first
+    // the two-Worker deploy: terminal-attached, domain prompt, webapp/remote post-checks
     expect(r.out).toContain("answer YES to the custom-domain prompt");
     expect(r.out).toContain("curl -sI https://webapp.flagshipserver.com/ ; curl -sI https://remote.flagshipserver.com/");
-    expect(r.out).toContain("gh workflow run model-capabilities.yml --ref main");
-    expect(r.out).toContain("wrangler r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30");
     expect(r.out).toContain("put the two custom_domain lines for webapp. and remote. back");
-    // .services, then the DNS wildcard (dig only), then .com with zone-health as its post-check
-    expect(r.out.indexOf("flyctl deploy --remote-only")).toBeLessThan(r.out.indexOf("dig +short A anything-at-all"));
-    expect(r.out.indexOf("dig +short A anything-at-all")).toBeLessThan(r.out.indexOf("(cd apps/com && npm run deploy)"));
+    // the one-time setup is checked read-only before anything is signed: the backup, the buckets, the wildcard
     expect(r.out).toContain("gh secret list");
-    // the relay mesh steps, in order: buckets, mesh key, transition relay, .com, key, admission, certs, feed on, Rust iad1
+    expect(r.out.indexOf("dig +short A anything-at-all")).toBeLessThan(r.out.indexOf("(cd apps/com && npm run deploy)"));
+    expect(r.out.indexOf("wrangler r2 bucket create <name>")).toBeLessThan(r.out.indexOf("(cd apps/com && npm run deploy)"));
+    // the relay: the mesh check, then the Rust relay as iad1 on one machine, the TS hubs only as rollback text
     for (const c of [
-      "wrangler r2 bucket create <name>",
-      "openssl rand -hex 32 | wrangler secret put RELAY_MESH_KEY_SEED",
-      "node scripts/relay-key.mjs new ~/.config/flagship/iad1.seed",
-      "flyctl secrets import --stage -a flagship-services",
-      "npm run relays -- add iad1 <relay key> full iad --ipv4 149.248.216.86 --ipv6 2a09:8280:1::110:d2b6:0",
-      "npm run relays -- backfill",
-      "flyctl certs add tunnel.flagship.services -a flagship-services",
-      "npx tsx scripts/prod-mesh-dns.ts --apply",
-      'TUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"',
-      "npm run relays -- mint-directory",
       "flyctl scale count 1 -a flagship-services --yes",
       "flyctl deploy -c fly.relay.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes",
       "live-check.ts --relay iad1.tunnel.flagship.services --expect rust",
       "npm run ops -- mesh",
-      "flyctl deploy -c fly.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes",
     ]) expect(r.out, c).toContain(c);
     const at = (c: string) => r.out.indexOf(c);
-    expect(at("wrangler r2 bucket create <name>")).toBeLessThan(at("(cd apps/com && npm run deploy)"));
-    expect(at("(cd apps/com && npm run deploy)")).toBeLessThan(at("npm run relays -- add iad1"));
-    expect(at("npm run relays -- mint-directory")).toBeLessThan(at("flyctl deploy -c fly.relay.mesh.toml"));
+    expect(at("(cd apps/com && npm run deploy)")).toBeLessThan(at("directory.json"));
+    expect(at("directory.json")).toBeLessThan(at("flyctl deploy -c fly.relay.mesh.toml"));
+    // the one-time 0.3 mesh setup is gone from the plan
+    for (const gone of ["relay-key.mjs new", "npm run relays -- add iad1", "flyctl certs add", "prod-mesh-dns.ts --apply", "wrangler secret put RELAY_MESH_KEY_SEED"])
+      expect(r.out, gone).not.toContain(gone);
     expect(r.out).not.toMatch(/--strategy=immediate/);
     expect(calls(env)).toBe(""); // no gh, wrangler, flyctl, curl, npm, npx, dig, openssl, and no git fetch/push
     expect(existsSync(join(env.home, ".flagship-release"))).toBe(false); // nothing written, no worktree
@@ -275,7 +251,8 @@ describe("release.sh", () => {
 
     const status = run(env, ["--status"]);
     expect(status.out).toContain(`pinned:      ${sha}`);
-    expect(status.out).toContain("done steps:  1 2 3");
+    // a state file of the 48-step plan recorded numbers: they read as the ids of that plan
+    expect(status.out).toContain("done steps:  preflight version plan");
     expect(status.out).toContain("next step:   4");
 
     const dry = run(env, ["--dry-run", "--phase", "A"]);
@@ -283,6 +260,19 @@ describe("release.sh", () => {
     expect(dry.out).toContain(sha);
     expect(planSteps(dry.out)[0]!.n).toBe(4);
     expect(readFileSync(join(stateDir, "state.json"), "utf8")).toBe(state);
+    expect(calls(env)).toBe("");
+  });
+
+  it("maps an old 48-step state file onto the fitted plan: the folded one-time steps count as the setup check", () => {
+    const env = sandbox();
+    const stateDir = join(env.home, ".flagship-release");
+    mkdirSync(stateDir, { recursive: true });
+    const done = Array.from({ length: 19 }, (_, i) => String(i + 1)).concat(["21", "22", "23"]);
+    writeFileSync(join(stateDir, "state.json"), JSON.stringify({ pinned: "a".repeat(40), done }) + "\n");
+    const status = run(env, ["--status"]);
+    expect(status.out).toContain("done steps:  preflight version plan lease catalogkeys pqkeys endorse artifacts catalog runtime shellsig kickoff secrets gym backup r2buckets feeddomain meshseed migrations dnsbroker dns com setup");
+    // step 17 (the relay mesh check) is the first step of the fitted plan the old run never did
+    expect(status.out).toContain("next step:   17");
     expect(calls(env)).toBe("");
   });
 
@@ -297,7 +287,7 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
       encoding: "utf8",
       env: { PATH: process.env.PATH ?? "", HOME: env.home, FLAGSHIP_RELEASE_HOME: home },
     });
-    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=32"]);
+    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=21"]);
     expect(JSON.parse(readFileSync(join(home, "state.json"), "utf8")).done).toEqual(["2"]);
   });
 
@@ -334,7 +324,7 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
     // the only pushes target main (fast-forward) or the device-results branch
     const pushes = [...SOURCE.matchAll(/push origin (\S+)/g)].map((m) => m[1]!.replace(/["')?]+$/, "").replace(/^"/, ""));
     expect(pushes.length).toBeGreaterThan(3);
-    for (const p of pushes) expect(p).toMatch(/^HEAD:(main|refs\/heads\/(\$RESULTS_BRANCH|device-results\/windows-2026-10-17))$/);
+    for (const p of pushes) expect(p).toMatch(/^HEAD:(main|refs\/heads\/(\$results|device-results\/<machine>-<date>))$/);
   });
 
   it("runs npm run deploy attached to the terminal and refuses .com without the backup", () => {
@@ -661,20 +651,18 @@ describe("release.sh parsers against captured tool output", () => {
     expect(sh("tunnels_ok 39 '' 50", "").code).toBe(1);
   });
 
-  it("relay mesh: the wrangler.toml edit rewrites exactly one line, and refuses an ambiguous file", () => {
+  it("relay mesh: the mesh check reads RELAY_MESH and TUNNEL_HUB_URL from wrangler.toml, which keeps the mesh on", () => {
     const dir = mkdtempSync(join(tmpdir(), "toml-"));
     const f = join(dir, "wrangler.toml");
-    writeFileSync(f, 'A = "1"\nRELAY_MESH = "off"\nTUNNEL_HUB_URL = "wss://flagship-services.fly.dev:8443/tunnel"\n# RELAY_MESH = "x"\n');
-    const r = sh(`set_toml_var ${f} RELAY_MESH on && set_toml_var ${f} TUNNEL_HUB_URL wss://tunnel.flagship.services:8443/tunnel && toml_var ${f} RELAY_MESH`, "");
-    expect(r.out).toBe("on");
-    expect(readFileSync(f, "utf8")).toBe('A = "1"\nRELAY_MESH = "on"\nTUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"\n# RELAY_MESH = "x"\n');
-    writeFileSync(f, 'RELAY_MESH = "off"\nRELAY_MESH = "off"\n');
-    expect(sh(`set_toml_var ${f} RELAY_MESH on`, "").code).not.toBe(0);
-    // the production file has each exactly once; release step 26 turned the mesh on for 0.3 (2026-11-05)
+    writeFileSync(f, 'A = "1"\nRELAY_MESH = "on"\nTUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"\n# RELAY_MESH = "x"\n');
+    expect(sh(`toml_var ${f} RELAY_MESH`, "").out).toBe("on");
+    expect(sh(`toml_var ${f} TUNNEL_HUB_URL`, "").out).toBe("wss://tunnel.flagship.services:8443/tunnel");
+    // production turned the mesh on in 0.3 (2026-11-05); the check fails a tree that lost it
     const prod = join(ROOT, "apps/com/wrangler.toml");
-    expect(["off", "on"]).toContain(sh(`toml_var ${prod} RELAY_MESH`, "").out);
-    expect(sh(`toml_var ${prod} TUNNEL_HUB_URL`, "").out).toMatch(/^wss:\/\/(flagship-services\.fly\.dev|tunnel\.flagship\.services):8443\/tunnel$/);
+    expect(sh(`toml_var ${prod} RELAY_MESH`, "").out).toBe("on");
+    expect(sh(`toml_var ${prod} TUNNEL_HUB_URL`, "").out).toBe("wss://tunnel.flagship.services:8443/tunnel");
   });
+
 
   it("backup-recipient.pub: the placeholder is refused, a real age key is accepted", () => {
     expect(readFileSync(join(ROOT, ".maintainers/backup-recipient.pub"), "utf8").length).toBeGreaterThan(0);

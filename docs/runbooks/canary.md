@@ -2,7 +2,7 @@
 
 Architecture v2 work package V02 (`docs/architecture-v2/IMPLEMENTATION-PLAN.md` §12.3,
 §13.1), on top of the signed release catalog (N13, `packages/protocol/src/releaseMetadata.ts`).
-The release script runs it as step 24, "Canary cohorts" (`docs/runbooks/final-deploy.md` §9b).
+The release script runs it as step 22, "Canary cohorts" (`docs/runbooks/final-deploy.md` §9b).
 
 The order the plan asks for: gym → maintainers' test boxes → consenting canary owners →
 staged cohorts. Each step below says what it proves and what it cannot.
@@ -101,7 +101,7 @@ git add -- release/catalog-releases.json && git commit -m "Canary: <commit> to <
 
 `rollout` signs a new targets version above both the list and the published catalog. Before
 writing anything, it checks the result the way a box holding the published catalog would.
-`release.sh` (step 24) does all of this and records when each stage opened.
+`release.sh` (step 22, the canary) does all of this and records when each stage opened.
 
 **Before the first widening:**
 
