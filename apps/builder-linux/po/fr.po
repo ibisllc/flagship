@@ -139,10 +139,6 @@ msgstr "Recette reçue pour {0}."
 msgid "Pairing failed."
 msgstr "L’association a échoué."
 
-#: wizard.py:1348 (prose)
-msgid "Flagship Studio (Experimental)"
-msgstr "Flagship Studio (expérimental)"
-
 #: wizard.py:1353 (prose)
 msgid "Return to pairing home"
 msgstr "Retour à l’accueil de l’association"

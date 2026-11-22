@@ -25,7 +25,6 @@
   "startThemAgainAfterTheRestart": "Starte sie nach dem Neustart wieder.",
   "restartAsAdministrator": "Als Administrator neu starten?",
   "couldNotRestartAsAdministrator": "Neustart als Administrator nicht möglich",
-  "flagshipStudioExperimental": "Flagship Studio (experimentell)",
   "shuttingDownYourServers": "Deine Server werden heruntergefahren …",
   "flagshipStudio": "Flagship Studio – {0}",
   "flagshipStudioBuildAndHostYour": "Flagship Studio {0}\n\nBaue und hoste deinen eigenen Flagship-Server.\nhttps://flagshipserver.com",

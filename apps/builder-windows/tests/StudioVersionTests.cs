@@ -11,11 +11,8 @@ public class StudioVersionTests
         => Assert.Equal("0.2 Beta", StudioVersion.Display("0.2.0"));
 
     [Fact]
-    public void TheWindowTitle_IsTaggedOnlyWhileThePlatformIsExperimental()
-    {
-        Assert.Equal("Flagship Studio (Experimental)", StudioVersion.WindowTitle(experimental: true));
-        Assert.Equal("Flagship Studio", StudioVersion.WindowTitle(experimental: false));
-    }
+    public void TheWindowTitle_IsTheBrandAlone()
+        => Assert.Equal("Flagship Studio", StudioVersion.WindowTitle());
 
     [Fact]
     public void ADevBuildAndAPatchRelease_AreShownAsIs()

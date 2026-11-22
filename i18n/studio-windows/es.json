@@ -25,7 +25,6 @@
   "startThemAgainAfterTheRestart": "Vuelve a iniciarlos tras el reinicio.",
   "restartAsAdministrator": "¿Reiniciar como administrador?",
   "couldNotRestartAsAdministrator": "No se pudo reiniciar como administrador",
-  "flagshipStudioExperimental": "Flagship Studio (experimental)",
   "shuttingDownYourServers": "Apagando tus servidores…",
   "flagshipStudio": "Flagship Studio — {0}",
   "flagshipStudioBuildAndHostYour": "Flagship Studio {0}\n\nCrea y aloja tu propio servidor Flagship.\nhttps://flagshipserver.com",

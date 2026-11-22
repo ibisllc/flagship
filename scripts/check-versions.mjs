@@ -8,7 +8,11 @@
 //   androidVersionCode    the Play code (only ever climbs; wear = this + 1,000,000)
 //   studio             the desktop Studios' release version ("0.2.0")
 //   marketplace        whether this release shows the marketplace (owner, 2026-11-19: off in 0.4,
-//                      0.5 turns it on); the webapp, iOS and Android hide every entry point while false
+//                      0.5 turns it on); the webapp, iOS and Android hide every entry point while false.
+//                      A product gate (the marketplace is not part of 0.4), not launch sequencing.
+//
+// The Rust crates (rust/Cargo.toml workspace version, the wasi-sdk, and their Cargo.lock entries) carry the
+// product version as "<product>.0", so the relay and the box binaries report this release (0.4's relay said 0.3.0).
 //
 // Not covered, on purpose: protocol and wire versions (CLIENT_PROTOCOL_LEVEL,
 // envelope tags) and the webapp shell number (SHELL_VERSION); they are separate.
@@ -24,20 +28,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const VERSION_FILE = "release/version.json";
-
-// The one switch per desktop platform for the "Experimental" tag (owner, 2026-11-02): the website reads it in
-// the browser, and the Windows and Linux Studios carry a stamped copy for their window title. A platform's tag
-// is dropped only after its hardware acceptance passes (docs/runbooks/0.3-windows-studio-acceptance.md).
-export const STUDIO_TAG_FILE = "apps/web/public/app-stores.js";
-
-/** STUDIO_EXPERIMENTAL from app-stores.js as { mac, windows, linux } booleans, or null when it can't be read. */
-export function parseStudioExperimental(text) {
-  const block = /const STUDIO_EXPERIMENTAL = \{([^}]*)\}/.exec(text ?? "");
-  if (!block) return null;
-  const out = {};
-  for (const m of block[1].matchAll(/\b(mac|windows|linux)\s*:\s*(true|false)\b/g)) out[m[1]] = m[2] === "true";
-  return typeof out.windows === "boolean" && typeof out.linux === "boolean" ? out : null;
-}
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -64,7 +54,7 @@ export const display = (v) => `${v.product} ${v.label}`;
  * it must equal. A generated surface can be fixed by --write; a "pinned" one
  * (no `fix`) only reports.
  */
-export function surfaces(v, experimental = null) {
+export function surfaces(v) {
   const s = [];
   const add = (id, path, pattern, want, why, { fix = true, flags = "m" } = {}) => s.push({ id, path, pattern: new RegExp(pattern, flags), want, why, fix });
 
@@ -85,10 +75,12 @@ export function surfaces(v, experimental = null) {
   add("mac:label", "apps/builder-mac/Sources/FlagshipBuilderCore/StudioVersion.swift", `(static let label = ")([^"]*)(")`, v.label, "Mac Studio About label");
   add("linux:label", "apps/builder-linux/version.py", `(LABEL = ")([^"]*)(")`, v.label, "Linux Studio About label");
   add("windows:label", "apps/builder-windows/src/StudioVersion.cs", `(Label = ")([^"]*)(")`, v.label, "Windows Studio About label");
-  if (experimental) {
-    add("windows:experimental", "apps/builder-windows/src/StudioVersion.cs", `(public const bool Experimental = )(true|false)(;)`, String(experimental.windows), `Windows Studio window title follows ${STUDIO_TAG_FILE} STUDIO_EXPERIMENTAL.windows`);
-    add("linux:experimental", "apps/builder-linux/version.py", `(EXPERIMENTAL = )(True|False)()`, experimental.linux ? "True" : "False", `Linux Studio window title follows ${STUDIO_TAG_FILE} STUDIO_EXPERIMENTAL.linux`);
-  }
+
+  const crate = `${v.product}.0`;
+  add("rust:workspace", "rust/Cargo.toml", `(\\[workspace\\.package\\]\\nversion = ")([^"]*)(")`, crate, "Rust workspace version (the relay and box binaries report it)");
+  add("rust:lock", "rust/Cargo.lock", `(\\nname = "flagship-[a-z0-9-]+"\\nversion = ")([^"]*)(")`, crate, "Rust workspace crates in Cargo.lock", { flags: "gm" });
+  add("rust:wasi-sdk", "rust/wasi-sdk/Cargo.toml", `(\\[package\\]\\nname = "flagship-wasi-sdk"\\nversion = ")([^"]*)(")`, crate, "Rust wasi-sdk version");
+  add("rust:wasi-sdk-lock", "rust/wasi-sdk/Cargo.lock", `(\\nname = "flagship-wasi-sdk"\\nversion = ")([^"]*)(")`, crate, "Rust wasi-sdk in its Cargo.lock");
   return s;
 }
 
@@ -123,9 +115,7 @@ export function checkVersions(repo) {
   }
   for (const e of parsed.errors) findings.push({ key: VERSION_FILE, message: e });
   const { v } = parsed;
-  const experimental = parseStudioExperimental(repo.read(STUDIO_TAG_FILE));
-  if (!experimental) findings.push({ key: STUDIO_TAG_FILE, message: `${STUDIO_TAG_FILE}: STUDIO_EXPERIMENTAL { windows, linux } not found (the Studios' Experimental tag follows it)` });
-  for (const sf of surfaces(v, experimental)) {
+  for (const sf of surfaces(v)) {
     const src = repo.read(sf.path);
     if (src == null) {
       findings.push({ key: sf.id, message: `${sf.path} is missing` });
@@ -160,9 +150,7 @@ export function writeVersions(root) {
   const { v, errors } = parseVersion(readFileSync(join(root, VERSION_FILE), "utf8"));
   if (errors.length) throw new Error(errors.join("; "));
   const changed = new Set();
-  const tags = join(root, STUDIO_TAG_FILE);
-  const experimental = existsSync(tags) ? parseStudioExperimental(readFileSync(tags, "utf8")) : null;
-  for (const sf of surfaces(v, experimental)) {
+  for (const sf of surfaces(v)) {
     const abs = join(root, sf.path);
     if (!existsSync(abs)) continue;
     const src = readFileSync(abs, "utf8");

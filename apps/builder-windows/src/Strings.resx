@@ -109,10 +109,6 @@
     <value>Could not restart as administrator</value>
     <comment>MainWindow.xaml.cs:134 (prose)</comment>
   </data>
-  <data name="flagshipStudioExperimental" xml:space="preserve">
-    <value>Flagship Studio (Experimental)</value>
-    <comment>MainWindow.xaml.cs:142 (prose)</comment>
-  </data>
   <data name="shuttingDownYourServers" xml:space="preserve">
     <value>Shutting down your servers…</value>
     <comment>MainWindow.xaml.cs:150 (prose)</comment>

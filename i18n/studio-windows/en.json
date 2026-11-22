@@ -103,10 +103,6 @@
     "en": "Could not restart as administrator",
     "ctx": "MainWindow.xaml.cs:134 (prose)"
   },
-  "flagshipStudioExperimental": {
-    "en": "Flagship Studio (Experimental)",
-    "ctx": "MainWindow.xaml.cs:142 (prose)"
-  },
   "shuttingDownYourServers": {
     "en": "Shutting down your servers…",
     "ctx": "MainWindow.xaml.cs:150 (prose)"

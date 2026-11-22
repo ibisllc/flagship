@@ -25,7 +25,6 @@
   "startThemAgainAfterTheRestart": "重启后请再次启动它们。",
   "restartAsAdministrator": "以管理员身份重新启动？",
   "couldNotRestartAsAdministrator": "无法以管理员身份重新启动",
-  "flagshipStudioExperimental": "Flagship Studio（实验性）",
   "shuttingDownYourServers": "正在关闭你的服务器…",
   "flagshipStudio": "Flagship Studio — {0}",
   "flagshipStudioBuildAndHostYour": "Flagship Studio {0}\n\n构建并托管你自己的 Flagship 服务器。\nhttps://flagshipserver.com",

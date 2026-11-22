@@ -138,10 +138,6 @@ msgstr ""
 msgid "Pairing failed."
 msgstr ""
 
-#: wizard.py:1348 (prose)
-msgid "Flagship Studio (Experimental)"
-msgstr ""
-
 #: wizard.py:1353 (prose)
 msgid "Return to pairing home"
 msgstr ""

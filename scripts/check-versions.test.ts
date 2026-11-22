@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs
-import { checkVersions, parseVersion, parseStudioExperimental, surfaces, writeVersions, READERS, STUDIO_TAG_FILE } from "./check-versions.mjs";
+import { checkVersions, parseVersion, surfaces, writeVersions, READERS } from "./check-versions.mjs";
 
 const ROOT = resolve(__dirname, "..");
 // The drift cases below start from what the real file says, so a release bump touches only the pin in the first test.
@@ -24,7 +24,7 @@ const repoAt = (root: string) => ({
 
 function copyOfTree(): string {
   const dir = mkdtempSync(join(tmpdir(), "versions-"));
-  const rels = new Set<string>(["release/version.json", STUDIO_TAG_FILE]);
+  const rels = new Set<string>(["release/version.json"]);
   const v = parseVersion(readFileSync(join(ROOT, "release/version.json"), "utf8")).v;
   for (const s of surfaces(v)) rels.add(s.path);
   for (const [, path] of READERS) rels.add(path);
@@ -43,7 +43,7 @@ describe("release/version.json", () => {
     expect(v.label).toBe("Beta");
     expect(v.iosVersion).toBe("1.3");
     expect(v.iosBuild).toBe(9);
-    expect(v.androidVersionCode).toBe(12);
+    expect(v.androidVersionCode).toBe(13);
     expect(v.studio).toBe("0.4.0");
     expect(v.marketplace).toBe(false);
   });
@@ -57,7 +57,7 @@ describe("release/version.json", () => {
   it("puts the Wear OS app one million above the phone's version code", () => {
     const kts = readFileSync(join(ROOT, "apps/mobile/android/wear/build.gradle.kts"), "utf8");
     expect(kts).toMatch(/versionCode = 1_000_000 \+ \(releaseVersion\["androidVersionCode"\] as Number\)\.toInt\(\)/);
-    expect(1_000_000 + V.androidVersionCode).toBe(1_000_012);
+    expect(1_000_000 + V.androidVersionCode).toBe(1_000_013);
   });
 
   it("keeps the iOS version above the approved 1.0 (4) and Android above Play's 8", () => {
@@ -143,23 +143,20 @@ describe("drift is caught", () => {
     expect(readFileSync(join(dir, "apps/web/public/index.html"), "utf8")).toContain(`<span>v${next} Beta</span>`);
   });
 
-  it("a Studio window title that disagrees with the website's Experimental switch", () => {
-    const now = parseStudioExperimental(readFileSync(join(ROOT, STUDIO_TAG_FILE), "utf8"));
-    const { findings } = drift(STUDIO_TAG_FILE, /windows:\s*(true|false)/, `windows: ${!now.windows}`);
-    expect(findings.map((f: { key: string }) => f.key)).toEqual(["windows:experimental"]);
+  it("a Rust crate version that is not the product version (the relay reported 0.3.0 in 0.4)", () => {
+    const { findings } = drift("rust/Cargo.toml", /\[workspace\.package\]\nversion = "[^"]*"/, '[workspace.package]\nversion = "0.0.1"');
+    expect(findings.map((f: { key: string }) => f.key)).toEqual(["rust:workspace"]);
+    const dir = copyOfTree();
+    const toml = join(dir, "rust/Cargo.toml");
+    writeFileSync(toml, readFileSync(toml, "utf8").replace(/(\[workspace\.package\]\nversion = ")[^"]*/, "$10.0.1"));
+    expect(writeVersions(dir)).toContain("rust/Cargo.toml");
+    expect(readFileSync(toml, "utf8")).toContain(`[workspace.package]\nversion = "${V.product}.0"`);
   });
 
-  it("--write drops the Windows Studio's tag when the website's switch does", () => {
-    const dir = copyOfTree();
-    const tags = join(dir, STUDIO_TAG_FILE);
-    const studio = join(dir, "apps/builder-windows/src/StudioVersion.cs");
-    writeFileSync(tags, readFileSync(tags, "utf8").replace(/windows:\s*(true|false)/, "windows: true"));
-    writeVersions(dir);
-    expect(readFileSync(studio, "utf8")).toContain("public const bool Experimental = true;");
-    writeFileSync(tags, readFileSync(tags, "utf8").replace(/windows:\s*true/, "windows: false"));
-    expect(writeVersions(dir)).toContain("apps/builder-windows/src/StudioVersion.cs");
-    expect(checkVersions(repoAt(dir)).findings).toEqual([]);
-    expect(readFileSync(join(dir, "apps/builder-windows/src/StudioVersion.cs"), "utf8")).toContain("public const bool Experimental = false;");
+  it("no Studio carries an Experimental tag (owner, 2026-11-20)", () => {
+    for (const f of ["apps/web/public/app-stores.js", "apps/builder-windows/src/StudioVersion.cs", "apps/builder-linux/version.py"]) {
+      expect(readFileSync(join(ROOT, f), "utf8"), f).not.toMatch(/experimental/i);
+    }
   });
 
   it("a webapp or iOS marketplace switch that disagrees with the file", () => {
@@ -182,11 +179,6 @@ describe("drift is caught", () => {
 
   it("a marketplace switch that is not a boolean", () => {
     expect(parseVersion(JSON.stringify({ ...V, marketplace: "off" })).errors.join(" ")).toMatch(/marketplace must be true or false/);
-  });
-
-  it("a missing Experimental switch", () => {
-    expect(parseStudioExperimental("const STORES = {};")).toBeNull();
-    expect(parseStudioExperimental("const STUDIO_EXPERIMENTAL = { mac: false, windows: true, linux: false };")).toEqual({ mac: false, windows: true, linux: false });
   });
 
   it("a studio version that disagrees with the product version", () => {
