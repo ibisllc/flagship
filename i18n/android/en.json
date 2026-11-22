@@ -13474,8 +13474,60 @@
     "en": "Remove photo",
     "ctx": "voi.ci / Messages: button"
   },
-  "voici_photo_failed": {
-    "en": "This photo can't be used. Try another one.",
+  "voici_photo_take": {
+    "en": "Take photo",
+    "ctx": "voi.ci / Messages: page photo source"
+  },
+  "voici_photo_library": {
+    "en": "Choose from library",
+    "ctx": "voi.ci / Messages: page photo source (the phone's photos)"
+  },
+  "voici_photo_file": {
+    "en": "Choose a file",
+    "ctx": "voi.ci / Messages: page photo source"
+  },
+  "voici_photo_edit_title": {
+    "en": "Edit photo",
+    "ctx": "voi.ci / Messages: photo editor title"
+  },
+  "voici_photo_use": {
+    "en": "Use",
+    "ctx": "voi.ci / Messages: photo editor, confirms the edited photo"
+  },
+  "voici_photo_rotate": {
+    "en": "Rotate",
+    "ctx": "voi.ci / Messages: photo editor button, a quarter turn"
+  },
+  "voici_photo_flip": {
+    "en": "Flip",
+    "ctx": "voi.ci / Messages: photo editor button, mirror left to right"
+  },
+  "voici_photo_hint": {
+    "en": "Drag to move the photo, pinch to zoom.",
+    "ctx": "voi.ci / Messages: photo editor hint"
+  },
+  "voici_photo_crop": {
+    "en": "Photo crop",
+    "ctx": "voi.ci / Messages: accessibility label of the crop area"
+  },
+  "voici_photo_unreadable": {
+    "en": "That file couldn't be read as a photo. Try another one.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_photo_encode_failed": {
+    "en": "The photo couldn't be saved on this device. Try again.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_photo_too_detailed": {
+    "en": "That photo is too detailed to fit. Try another one.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_photo_load_failed": {
+    "en": "That photo couldn't be loaded. Try again.",
+    "ctx": "voi.ci / Messages: error"
+  },
+  "voici_photo_camera_denied": {
+    "en": "Flagship can't use the camera. Allow it in Settings, then try again.",
     "ctx": "voi.ci / Messages: error"
   },
   "voici_display_name": {

@@ -10,6 +10,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -124,6 +125,7 @@ import com.flagshipserver.app.core.voici.VoiciCard
 import com.flagshipserver.app.core.voici.VoiciCenter
 import com.flagshipserver.app.core.voici.VoiciCopy
 import com.flagshipserver.app.core.voici.VoiciJpeg
+import com.flagshipserver.app.core.voici.VoiciImageException
 import com.flagshipserver.app.core.voici.VoiciOutcome
 import com.flagshipserver.app.core.voici.VoiciPage
 import com.flagshipserver.app.core.voici.VoiciPageUi
@@ -422,14 +424,46 @@ private fun PageProfile(center: VoiciCenter, page: VoiciPageUi, editor: PageEdit
     val context = LocalContext.current
     var photoMenu by remember { mutableStateOf(false) }
     var editingLinks by remember { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri ?: return@rememberLauncherForActivityResult
+    var editingPhoto by remember { mutableStateOf<Bitmap?>(null) }
+    // A picked photo: read, decoded upright (VoiciJpeg.decode), then shown in the crop editor.
+    fun openPhoto(read: () -> ByteArray?) {
         scope.launch {
-            val sha = withContext(Dispatchers.IO) {
-                runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()?.let(VoiciJpeg::avatar)?.let(center::putImage)
+            val bytes = withContext(Dispatchers.IO) { runCatching(read).getOrNull() }
+            if (bytes == null) {
+                editor.note = FSStrings.get(R.string.voici_photo_load_failed)
+                return@launch
             }
-            if (sha == null) editor.note = FSStrings.get(R.string.voici_photo_failed) else editor.commit { it.copy(avatar = sha) }
+            val decoded = withContext(Dispatchers.Default) { VoiciJpeg.decode(bytes) }
+            decoded.onSuccess { editor.note = null; editingPhoto = it }
+                .onFailure { editor.note = VoiciCopy.photoProblem((it as? VoiciImageException)?.failure) }
         }
+    }
+    val readUri = { uri: Uri -> openPhoto { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } } }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(readUri) }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(readUri) }
+    val cameraFile = remember { java.io.File(context.cacheDir, "camera/page-photo.jpg") }
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) openPhoto { cameraFile.readBytes().also { cameraFile.delete() } } else cameraFile.delete()
+    }
+    fun launchCamera() {
+        cameraFile.parentFile?.mkdirs()
+        runCatching { takePicture.launch(androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cameraFile)) }
+            .onFailure { editor.note = FSStrings.get(R.string.voici_photo_camera_denied) }
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCamera() else editor.note = FSStrings.get(R.string.voici_photo_camera_denied)
+    }
+    val hasCamera = remember { context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY) }
+    editingPhoto?.let { bmp ->
+        PhotoCropEditor(bmp, onUse = { edit ->
+            editingPhoto = null
+            scope.launch {
+                val out = withContext(Dispatchers.Default) { VoiciJpeg.avatar(bmp, edit) }
+                val sha = out.getOrNull()?.let { bytes -> withContext(Dispatchers.IO) { center.putImage(bytes) } }
+                if (sha == null) editor.note = VoiciCopy.photoProblem((out.exceptionOrNull() as? VoiciImageException)?.failure)
+                else editor.commit { it.copy(avatar = sha) }
+            }
+        }, onCancel = { editingPhoto = null })
     }
     val pending = if (page.canPublish) stringResource(R.string.voici_not_published_yet) else stringResource(R.string.voici_waiting_for_admin)
     CompositionLocalProvider(LocalContentColor provides t.ink) {
@@ -457,10 +491,24 @@ private fun PageProfile(center: VoiciCenter, page: VoiciPageUi, editor: PageEdit
                             PencilCircle(t.ink, t.surface, 32.dp)
                         }
                         DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
+                            if (hasCamera) DropdownMenuItem(
+                                text = { Text(stringResource(R.string.voici_photo_take)) },
+                                onClick = {
+                                    photoMenu = false
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) launchCamera()
+                                    else cameraPermission.launch(android.Manifest.permission.CAMERA)
+                                },
+                                modifier = Modifier.testTag("page-photo-camera"),
+                            )
                             DropdownMenuItem(
-                                text = { Text(photoLabel) },
+                                text = { Text(stringResource(R.string.voici_photo_library)) },
                                 onClick = { photoMenu = false; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                                 modifier = Modifier.testTag("page-photo"),
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.voici_photo_file)) },
+                                onClick = { photoMenu = false; filePicker.launch(arrayOf("image/*")) },
+                                modifier = Modifier.testTag("page-photo-file"),
                             )
                             if (working.profile.avatar != null) DropdownMenuItem(
                                 text = { Text(stringResource(R.string.voici_remove_photo), color = MaterialTheme.colorScheme.error) },

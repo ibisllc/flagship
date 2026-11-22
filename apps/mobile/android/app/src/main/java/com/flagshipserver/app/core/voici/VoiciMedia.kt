@@ -7,12 +7,15 @@
 package com.flagshipserver.app.core.voici
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.ColorSpace
+import android.graphics.ImageDecoder
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import kotlin.math.roundToInt
 
 object VoiciJpeg {
     const val AVATAR_SIZE = 512
@@ -45,30 +48,68 @@ object VoiciJpeg {
         return null
     }
 
-    private fun decode(bytes: ByteArray, target: Int): Bitmap? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = 1
-        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= target) sample *= 2
-        val opts = BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.ARGB_8888
-            inPreferredColorSpace = ColorSpace.get(ColorSpace.Named.SRGB)
+    /** The longest side the photo editor works on. */
+    const val EDITOR_MAX_SIDE = 2048
+
+    /**
+     * The picked bytes as an upright ARGB_8888 sRGB bitmap whose longest side is at most [maxSide]: ImageDecoder applies
+     * the EXIF orientation (BitmapFactory ignores it) and reads HEIF, wide-gamut and 16-bit sources the same way.
+     */
+    fun decode(bytes: ByteArray, maxSide: Int = EDITOR_MAX_SIDE): Result<Bitmap> {
+        if (bytes.isEmpty()) return failure(VoiciImageFailure.UNREADABLE, "decode: no bytes")
+        val bmp = try {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
+                val w = info.size.width
+                val h = info.size.height
+                val k = minOf(1.0, maxSide.toDouble() / maxOf(w, h))
+                if (k < 1.0) decoder.setTargetSize(maxOf(1, (w * k).roundToInt()), maxOf(1, (h * k).roundToInt()))
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
+            }
+        } catch (e: Exception) {
+            return failure(VoiciImageFailure.UNREADABLE, "decode: ${e.javaClass.simpleName}")
         }
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+        if (bmp.config == Bitmap.Config.ARGB_8888) return Result.success(bmp)
+        // A 16-bit or hardware bitmap: redraw it as 8-bit sRGB.
+        return Result.success(draw(bmp, Rect(0, 0, bmp.width, bmp.height), bmp.width, bmp.height))
     }
 
-    private fun encode(bmp: Bitmap, maxBytes: Int): ByteArray? {
-        var q = 82
-        while (q >= 60) {
-            val out = ByteArrayOutputStream()
-            bmp.compress(Bitmap.CompressFormat.JPEG, q, out)
-            val clean = stripMetadata(out.toByteArray())
-            if (clean != null && clean.size <= maxBytes && !VoiciPage.voiciJpegHasMetadata(clean)) return clean
-            q -= 4
+    private fun failure(f: VoiciImageFailure, step: String): Result<Nothing> {
+        runCatching { android.util.Log.w("voici-image", step) }
+        return Result.failure(VoiciImageException(f))
+    }
+
+    /**
+     * The first JPEG within [maxBytes]: quality 82 stepping down to 60, then the picture a fifth smaller each round (never
+     * under [minSide]). An encoder that fails at one size gets a freshly drawn copy at the next, so ENCODE_FAILED means
+     * no size worked at all.
+     */
+    internal fun encode(bmp: Bitmap, maxBytes: Int, minSide: Int = 256): Result<ByteArray> {
+        var current = bmp
+        var smallest = Int.MAX_VALUE
+        var wrote = false
+        while (true) {
+            var q = 82
+            while (q >= 60) {
+                val out = ByteArrayOutputStream()
+                val clean = if (current.compress(Bitmap.CompressFormat.JPEG, q, out)) stripMetadata(out.toByteArray()) else null
+                if (clean == null || VoiciPage.voiciJpegHasMetadata(clean)) {
+                    runCatching { android.util.Log.w("voici-image", "jpeg failed at ${current.width}x${current.height} q=$q") }
+                    break
+                }
+                wrote = true
+                if (clean.size <= maxBytes) return Result.success(clean)
+                smallest = minOf(smallest, clean.size)
+                q -= 4
+            }
+            val k = 0.8
+            val w = (current.width * k).toInt()
+            val h = (current.height * k).toInt()
+            if (maxOf(w, h) < minSide || minOf(w, h) < 1) break
+            current = draw(current, Rect(0, 0, current.width, current.height), w, h)
         }
-        return null
+        if (!wrote) return failure(VoiciImageFailure.ENCODE_FAILED, "jpeg: no size could be written")
+        return failure(VoiciImageFailure.TOO_DETAILED, "too detailed: $smallest bytes, cap $maxBytes")
     }
 
     private fun draw(src: Bitmap, from: Rect, w: Int, h: Int): Bitmap {
@@ -80,23 +121,42 @@ object VoiciJpeg {
         return dst
     }
 
-    /** The avatar: centre square crop, 512 × 512, ≤ 150 KiB. Null when the picture can't be read or won't fit. */
-    fun avatar(bytes: ByteArray): ByteArray? {
-        val src = decode(bytes, AVATAR_SIZE) ?: return null
-        val side = minOf(src.width, src.height)
-        val from = Rect((src.width - side) / 2, (src.height - side) / 2, (src.width - side) / 2 + side, (src.height - side) / 2 + side)
-        return encode(draw(src, from, AVATAR_SIZE, AVATAR_SIZE), VoiciPage.VOICI_AVATAR_MAX_BYTES)
+    /** An affine map [a, b, c, d, tx, ty] as an android.graphics.Matrix. */
+    fun matrixOf(m: DoubleArray): Matrix = Matrix().apply {
+        setValues(floatArrayOf(m[0].toFloat(), m[2].toFloat(), m[4].toFloat(), m[1].toFloat(), m[3].toFloat(), m[5].toFloat(), 0f, 0f, 1f))
     }
+
+    /** [src] (upright) mapped through the edit onto a white [side] × [side] sRGB square. */
+    fun render(src: Bitmap, edit: VoiciImageEdit, side: Int): Bitmap {
+        val dst = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888, false, ColorSpace.get(ColorSpace.Named.SRGB))
+        Canvas(dst).apply {
+            drawColor(android.graphics.Color.WHITE)
+            drawBitmap(src, matrixOf(edit.output(side.toDouble())), Paint(Paint.FILTER_BITMAP_FLAG))
+        }
+        return dst
+    }
+
+    /** The avatar: the editor's crop of [src] (turns, flip, square) at 512 × 512, ≤ 150 KiB. */
+    fun avatar(src: Bitmap, edit: VoiciImageEdit): Result<ByteArray> = encode(render(src, edit, AVATAR_SIZE), VoiciPage.VOICI_AVATAR_MAX_BYTES)
+
+    /** The avatar from picked bytes with the centred crop. Null when the picture can't be read or won't fit. */
+    fun avatar(bytes: ByteArray): ByteArray? =
+        decode(bytes, AVATAR_SIZE * 2).getOrNull()?.let { avatar(it, VoiciImageEdit.of(it.width, it.height)).getOrNull() }
 
     /** A card image: scaled to fit 400 × 210, ≤ 40 KiB. */
     fun cardImage(bytes: ByteArray): ByteArray? {
-        val src = decode(bytes, CARD_MAX_H) ?: return null
+        val src = decode(bytes, CARD_MAX_W).getOrNull() ?: return null
         val scale = minOf(CARD_MAX_W.toFloat() / src.width, CARD_MAX_H.toFloat() / src.height, 1f)
         val w = maxOf(1, (src.width * scale).toInt())
         val h = maxOf(1, (src.height * scale).toInt())
-        return encode(draw(src, Rect(0, 0, src.width, src.height), w, h), VoiciPage.VOICI_CARD_IMAGE_MAX_BYTES)
+        return encode(draw(src, Rect(0, 0, src.width, src.height), w, h), VoiciPage.VOICI_CARD_IMAGE_MAX_BYTES, minSide = 160).getOrNull()
     }
 }
+
+/** Why a picture could not become a voi.ci image; each has its own sentence (VoiciCopy.photoProblem). */
+enum class VoiciImageFailure { UNREADABLE, ENCODE_FAILED, TOO_DETAILED }
+
+class VoiciImageException(val failure: VoiciImageFailure) : Exception(failure.name)
 
 /** What a link card keeps from a page's og: tags. */
 data class VoiciOgFields(val title: String?, val site: String?, val description: String?, val image: String?)

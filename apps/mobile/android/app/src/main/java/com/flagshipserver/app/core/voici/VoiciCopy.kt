@@ -7,6 +7,15 @@ import com.flagshipserver.app.R
 import com.flagshipserver.app.core.FSStrings
 
 object VoiciCopy {
+    /** Why a picked photo could not become the page photo. */
+    fun photoProblem(f: VoiciImageFailure?): String = FSStrings.get(
+        when (f) {
+            VoiciImageFailure.UNREADABLE -> R.string.voici_photo_unreadable
+            VoiciImageFailure.TOO_DETAILED -> R.string.voici_photo_too_detailed
+            VoiciImageFailure.ENCODE_FAILED, null -> R.string.voici_photo_encode_failed
+        },
+    )
+
     private val TEXT_CODES = setOf("too-long", "too-short", "control", "bidi", "bom", "edge-invisible", "not-nfc", "surrogate", "not-string")
 
     /** Turning "Answer calls while Flagship is locked" on or off failed. */
