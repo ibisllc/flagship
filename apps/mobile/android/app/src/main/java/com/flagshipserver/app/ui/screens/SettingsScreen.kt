@@ -832,4 +832,24 @@ private fun PushServiceRow() {
         icon = Icons.Outlined.Notifications,
         modifier = Modifier.testTag("settings-push-service"),
     )
+    // While Google delivers: the Google-free choice, a UnifiedPush app such as ntfy (Flagship switches when you're back).
+    if (status.transport == com.flagshipserver.app.push.PushTransport.FCM) {
+        FSRow(
+            title = stringResource(R.string.push_google_out_title),
+            subtitle = stringResource(R.string.push_google_out_body),
+            icon = Icons.Outlined.Shield,
+            onClick = {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(UNIFIEDPUSH_APPS_URL))
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            },
+            modifier = Modifier.testTag("settings-push-google-out"),
+        )
+    }
 }
+
+/** UnifiedPush's own list of distributor apps (ntfy first), each with its install links. */
+internal const val UNIFIEDPUSH_APPS_URL = "https://unifiedpush.org/users/distributors/"

@@ -36,6 +36,8 @@ object VoiciRingCenter {
     fun onPush(context: Context, push: VoiciRingPush.Payload) {
         val app = context.applicationContext
         scope.launch {
+            // A push that woke a killed app finds the voi.ci center the main screen would have made.
+            runCatching { com.flagshipserver.app.AppRuntime.prepareCalls(app) }
             val hint = runCatching { VoiciCenter.shared?.openRingHint(push.ringId, push.hint) }.getOrNull()
             // Locked (the thread keys are with the account) or not for a page this device knows: a generic ring that
             // opens the app; the owner's ring shows again in the conversation while it lasts.

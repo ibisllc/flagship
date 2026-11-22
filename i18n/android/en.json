@@ -14999,6 +14999,14 @@
     "en": "None: this phone has no push service. Install a UnifiedPush app, such as ntfy, to get notifications.",
     "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: which service delivers this phone's pushes)"
   },
+  "push_google_out_title": {
+    "en": "Keep Google out of your notifications",
+    "ctx": "ui/screens/SettingsScreen.kt PushServiceRow (Settings, Notifications: shown while Google's FCM delivers this phone's pushes; tapping opens UnifiedPush's list of apps). Google is a product name"
+  },
+  "push_google_out_body": {
+    "en": "Install a UnifiedPush app such as ntfy; Flagship switches to it when you come back. Google sees that a push arrived and when, never what it says or which account.",
+    "ctx": "ui/screens/SettingsScreen.kt PushServiceRow, under push_google_out_title: what to do and why. UnifiedPush and ntfy are product names"
+  },
   "second_approval_waiting": {
     "en": "One more approval for %1$s: authorize it to join your cloud.",
     "ctx": "toast when a new server asks for its second first-boot approval; %1$s is the server name"
@@ -15941,6 +15949,10 @@
   "voici_call_media_unavailable": {
     "en": "This version of Flagship can't connect calls yet.",
     "ctx": "voi.ci calls: no media stack in this build"
+  },
+  "voici_call_device_unsupported": {
+    "en": "Calls aren't available on this device.",
+    "ctx": "calls/VoiciCallActivity.kt, VoiciCallsSettings.kt, VoiciCallHistoryScreen.kt: this phone's processor (32-bit x86) has no call library, shown on an incoming call, on a call it places (which goes to the browser) and in Calls settings"
   },
   "voici_call_limit": {
     "en": "Calls end after 60 minutes.",

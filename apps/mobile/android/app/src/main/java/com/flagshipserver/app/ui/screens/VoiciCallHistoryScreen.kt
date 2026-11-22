@@ -143,7 +143,13 @@ fun VoiciOutgoingCallPanel(call: VoiciOutgoingCall) {
                 offersVideo = call.video && (state is VoiciOutgoingState.Connecting || state is VoiciOutgoingState.Connected),
                 over = over,
                 media = call.media,
-                notice = if (cameraRefused) stringResource(R.string.voici_call_camera_denied) else null,
+                notice = when {
+                    cameraRefused -> stringResource(R.string.voici_call_camera_denied)
+                    // A 32-bit x86 device hands every call it places to the browser: say why.
+                    state is VoiciOutgoingState.Browser && com.flagshipserver.app.calls.CallSupport.unavailableOnThisDevice ->
+                        stringResource(R.string.voici_call_device_unsupported)
+                    else -> null
+                },
             ),
             CallStageActions(
                 toggleMute = { call.setMuted(!muted) },

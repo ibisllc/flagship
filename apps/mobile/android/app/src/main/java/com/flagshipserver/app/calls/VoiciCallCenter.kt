@@ -123,6 +123,9 @@ object VoiciCallCenter {
         pendingPush = push
         update { Ui(phase = Phase.Ringing, callId = push.callId, name = FSStrings.get(R.string.voici_call_someone)) }
         scope.launch {
+            // A push that woke a killed app: make the account, the voi.ci center and the phone route the main screen
+            // would have made, so the locked call key can answer and the route can claim the bare name.
+            runCatching { com.flagshipserver.app.AppRuntime.prepareCalls(app) }
             val keys = runCatching { VoiciCenter.shared?.callKeys() }.getOrNull()
                 // "Answer calls while Flagship is locked" is on: the call key answers; the caller stays "Someone on voi.ci".
                 ?: runCatching { VoiciCenter.shared?.lockedCallKeys() }.getOrNull()
@@ -293,6 +296,8 @@ object VoiciCallCenter {
     fun answer(context: Context) {
         val s = session ?: return
         if (_ui.value.phase != Phase.Ringing) return
+        // No call media for this processor (32-bit x86): say so instead of a call that never connects.
+        if (CallSupport.unavailableOnThisDevice) return finish("device-unsupported")
         update { it.copy(phase = Phase.Connecting) }
         startConnectClock()
         step(VoiciCallConnectStep.Route)

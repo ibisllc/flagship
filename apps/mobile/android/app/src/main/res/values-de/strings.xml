@@ -3635,6 +3635,8 @@
     <string name="push_service_unifiedpush_through">UnifiedPush, über %1$s</string>
     <string name="push_service_fcm">Google (Firebase Cloud Messaging)</string>
     <string name="push_service_none">Keiner: Dieses Telefon hat keinen Push-Dienst. Installiere eine UnifiedPush-App wie ntfy, um Benachrichtigungen zu erhalten.</string>
+    <string name="push_google_out_title">Halte Google aus deinen Benachrichtigungen heraus</string>
+    <string name="push_google_out_body">Installiere eine UnifiedPush-App wie ntfy; Flagship wechselt dorthin, wenn du zurückkommst. Google sieht, dass eine Push-Nachricht ankam und wann, aber nie, was sie sagt oder zu welchem Konto sie gehört.</string>
     <string name="second_approval_waiting">Noch eine Freigabe für %1$s: erlaube ihm, deiner Cloud beizutreten.</string>
     <string name="admin_promotion_under_review">In seinen ersten 14 Tagen wird es überprüft und gilt als Gerät ohne Adminrechte.</string>
     <string name="admin_only_backups_note">Nur ein Admin-Gerät kann Backups verwalten und Server wiederherstellen.</string>
@@ -3868,6 +3870,7 @@
     <string name="voici_call_open_app">Zum Annehmen entsperren</string>
     <string name="voici_call_failed">Der Anruf konnte nicht verbunden werden.</string>
     <string name="voici_call_media_unavailable">Diese Flagship-Version kann noch keine Anrufe verbinden.</string>
+    <string name="voici_call_device_unsupported">Anrufe sind auf diesem Gerät nicht verfügbar.</string>
     <string name="voici_call_limit">Anrufe enden nach 60 Minuten.</string>
     <string name="voici_call_camera_denied">Flagship braucht die Kamera, um dein Video zu zeigen. Du kannst ohne sie weitersprechen.</string>
     <string name="voici_call_close">Schließen</string>

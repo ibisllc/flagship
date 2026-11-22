@@ -156,6 +156,7 @@ object VoiciCallScreenModel {
         VoiciCallCenter.Phase.Idle, VoiciCallCenter.Phase.Ended -> when (ui.endCode) {
             "answered-elsewhere" -> R.string.voici_call_answered_elsewhere
             "media-unavailable" -> R.string.voici_call_media_unavailable
+            "device-unsupported" -> R.string.voici_call_device_unsupported
             "failed" -> R.string.voici_call_failed
             "limit" -> R.string.voici_call_limit
             else -> R.string.voici_call_ended
