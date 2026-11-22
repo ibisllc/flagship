@@ -66,10 +66,24 @@ public enum PhoneRouteController {
 
     private static var lifecycle = PhoneRouteLifecycle()
 
+    /// Who this device is for a call that arrives before the app's state is restored (a VoIP push that launched the app
+    /// in the background, with no screen): the locked call key's account and device. Used only during a call, while the
+    /// app has no signed-in state of its own.
+    public static var callIdentity: (user: String, deviceId: String)?
+
+    private static func identity() -> (user: String, deviceId: String)? {
+        if let app, let user = app.currentUser, !user.isEmpty {
+            guard !app.isDemoAccount, let deviceId = app.activeProfile?.deviceId, !deviceId.isEmpty else { return nil }
+            return (user, deviceId)
+        }
+        guard lifecycle.calls > 0, let id = callIdentity, !id.user.isEmpty, !id.deviceId.isEmpty else { return nil }
+        return id
+    }
+
     private static func open() {
-        guard client == nil, task == nil, let app, let user = app.currentUser, !user.isEmpty, !app.isDemoAccount,
-              let deviceId = app.activeProfile?.deviceId, !deviceId.isEmpty,
-              let deviceKey = Keystore.sessionAccountDeviceKey(accountId: user, deviceId: deviceId) else { return }
+        guard client == nil, task == nil, let id = identity(),
+              let deviceKey = Keystore.sessionAccountDeviceKey(accountId: id.user, deviceId: id.deviceId) else { return }
+        let user = id.user
         let apex = Endpoints.dataApex
         let base = Endpoints.controlBaseUrl
         let admin = Keystore.hasAdminRoot

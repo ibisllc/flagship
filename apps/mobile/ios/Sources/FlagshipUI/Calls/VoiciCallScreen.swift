@@ -27,8 +27,9 @@ public struct VoiciCallScreen: View {
     }
 
     /// The ringing screen where there's no CallKit (the China mainland storefront): the same stage, Decline and Answer.
+    /// On a call that needs Flagship unlocked, Answer is "unlock, then answer" (the screen steps aside for the unlock).
     private var ringing: some View {
-        VoiciRingingStage(name: center.callerName, status: status, canAnswer: center.phase == .ringing,
+        VoiciRingingStage(name: center.callerName, status: status, canAnswer: center.phase == .ringing || center.phase == .needsUnlock,
                           decline: { center.declineOrHangUp() }, answer: { center.answerInApp() })
     }
 
@@ -74,7 +75,7 @@ public struct VoiciCallScreen: View {
         return status
     }
 
-    private var visible: Bool { VoiciCallScreenModel.visible(center.phase, noRingMode: center.noRingMode) }
+    private var visible: Bool { VoiciCallScreenModel.visible(center.phase, noRingMode: center.noRingMode, unlockPending: center.unlockPending) }
 
     private var status: String { VoiciCallScreenModel.status(center.phase, step: center.connectStep) }
 
@@ -123,10 +124,12 @@ struct VoiciRingingStage: View {
 
 /// What the call screen shows for each phase (pure, so the view-model tests can pin it).
 enum VoiciCallScreenModel {
-    static func visible(_ phase: VoiciCallCenter.Phase, noRingMode: Bool) -> Bool {
+    static func visible(_ phase: VoiciCallCenter.Phase, noRingMode: Bool, unlockPending: Bool = false) -> Bool {
         switch phase {
         case .idle: return false
-        case .ringing, .needsUnlock: return noRingMode
+        case .ringing: return noRingMode
+        // "Unlock to answer" was pressed: the lock screen (or Face ID) comes first; the screen returns once it joins.
+        case .needsUnlock: return noRingMode && !unlockPending
         default: return true
         }
     }

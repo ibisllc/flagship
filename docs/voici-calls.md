@@ -337,7 +337,20 @@ are not built). Not compiled for a device yet (iOS: no Xcode build on this Mac u
   (`VoiciCallSession`: request check, signed answer, receipt check, frame keys). `supportsVideo` on, `hasVideo` follows
   either camera, calls stay out of Recents. **China mainland storefront** (`Storefront.current` = `CHN`, remembered):
   no CallKit and no VoIP token (an old one is removed), so `.com` sends the `voici-call` alert push and the open app rings
-  on `VoiciCallScreen`; calls work only while the app is open (D4). The camera pauses when the app leaves the foreground
+  on `VoiciCallScreen`; calls work only while the app is open (D4). **CallKit fails closed** (App Review 5, MIIT,
+  2026-11-21; `VoiciCallCenter.callKitMode`): no `CXProvider`, `CXCallController` or PushKit registry exists until the
+  storefront is known and is not `CHN`. Order: the live storefront; else the last one this device saw
+  (`flagship.voici.calls.callKitMode`, so a cold VoIP launch outside China reaches CallKit before StoreKit answers);
+  else a device whose region is `CN` counts as China; else unknown, which rings like China (in the open app only) and
+  asks the storefront again every minute, at each foreground and on `Storefront.updates`. A storefront change switches
+  either way at runtime. Nothing else in the iOS tree (widgets, watch) touches CallKit or call intents. **Unlock to
+  answer** (2026-11-21): CallKit's Answer on a call that waits for the account keys is fulfilled at once, CallKit's
+  screen reads "Unlock Flagship to answer", and the unlock that follows (the lock screen, or one Face ID when the app
+  shows no lock screen) joins the room and answers that one call after the full request check, camera off; a call not
+  unlocked within its ring window ends as no-answer. The in-app Answer does the same. Several unlock signals join the
+  room once. A VoIP push that launches the app with no screen answers a locked call through the `.com` client set at
+  app init and the call key's account and device for the phone route. An Answer that arrives while a cold launch still looks up
+  the call's keys is fulfilled and answers once the request is checked (or after the unlock, if the call needs one). The camera pauses when the app leaves the foreground
   (the caller sees "Camera paused"). Info.plist: background modes `voip`, `audio`; `NSMicrophoneUsageDescription`; the
   camera sentence now names calls.
 - **Android** (`app/.../calls/`): `voici-call` push → `VoiciCallCenter` → a self-managed `ConnectionService`

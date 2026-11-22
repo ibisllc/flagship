@@ -92,7 +92,8 @@ struct FlagshipApp: App {
         self.readTokens = readTokens
         self.liveVoiciName = LiveVoiciNameClient(readTokens: readTokens)
         self.liveDirectNames = LiveDirectNamesClient(readTokens: readTokens)
-        self.liveVoiciCom = LiveVoiciComClient(readTokens: readTokens, caKeys: { await TrustChecker().authorizedCaKeys() })
+        let voiciCom = LiveVoiciComClient(readTokens: readTokens, caKeys: { await TrustChecker().authorizedCaKeys() })
+        self.liveVoiciCom = voiciCom
         self.livePayments = LivePaymentsComClient(readTokens: readTokens)
         ServerShareServices.readTokens.set(readTokens)
         var pqLive = true
@@ -108,6 +109,9 @@ struct FlagshipApp: App {
         }
         #endif
         if pqLive { PqIdentityBindingService.configure(client: LivePqKeyBindingClient(readTokens: readTokens)) }
+        // A VoIP push can launch the app in the background with no screen: a locked call then needs `.com` before
+        // Messages is configured.
+        if pqLive { VoiciCallCenter.shared.fallbackClient = voiciCom }
         // Every LIVE /pods response feeds the cert-pin registry (verify the
         // STK-signed daemon-status per pod → install/clear that box's
         // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -916,6 +920,9 @@ struct FlagshipApp: App {
                     #endif
                     appDelegate.linker = linker
                     linker.makeCurrent()
+                    // "Unlock to answer" on an open app that shows no lock screen may ask Face ID for the account keys
+                    // itself; a locked app has its lock screen, whose unlock reaches the call through `unlocked()`.
+                    VoiciCallCenter.shared.mayAskForKeys = { [appState] in appState.isUnlocked && !appState.isDemoAccount }
                     WatchBridge.shared.activate(
                         client: activeClient,
                         mailbox: activeMailbox,
@@ -967,6 +974,9 @@ struct FlagshipApp: App {
                     PaymentsCenter.shared.configure(client: activePayments, username: appState.isUnlocked ? appState.currentUser : nil,
                                                     deviceId: appState.activeProfile?.deviceId)
                     if appState.isUnlocked {
+                        // A call waiting for this unlock joins first (when Messages already holds the page); the
+                        // second call below covers a page that loads with the refresh. Only one joins.
+                        VoiciCallCenter.shared.unlocked()
                         await PaymentsCenter.shared.refreshAndTick()
                         await OrgPlanTrickle.runAll()
                         await MessagesStore.shared.refresh()

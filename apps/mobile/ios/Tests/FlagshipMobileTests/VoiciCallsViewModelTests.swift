@@ -122,6 +122,27 @@ final class VoiciCallsViewModelTests: XCTestCase {
         XCTAssertTrue(VoiciCallScreenModel.visible(.needsUnlock, noRingMode: true))
         XCTAssertTrue(VoiciCallScreenModel.visible(.connected, noRingMode: false))
         XCTAssertTrue(VoiciCallScreenModel.visible(.ended("hangup"), noRingMode: false))
+        XCTAssertFalse(VoiciCallScreenModel.visible(.needsUnlock, noRingMode: true, unlockPending: true),
+                       "Unlock to answer: the lock screen comes first")
+        XCTAssertTrue(VoiciCallScreenModel.visible(.ringing, noRingMode: true, unlockPending: false))
+    }
+
+    /// App Review 5 (MIIT): CallKit never runs in the China mainland storefront, and fails closed while the storefront
+    /// is unknown.
+    func test_callKitOnlyOnceTheStorefrontIsKnownAndNotChina() {
+        typealias M = VoiciCallCenter.CallKitMode
+        let mode = VoiciCallCenter.callKitMode
+        XCTAssertEqual(mode("CHN", nil, "US"), M.china)
+        XCTAssertEqual(mode("chn", .allowed, "US"), M.china, "the live storefront wins over a remembered one")
+        XCTAssertEqual(mode("USA", nil, "CN"), M.allowed, "the storefront decides, not the device region")
+        XCTAssertEqual(mode("USA", .china, nil), M.allowed)
+        XCTAssertEqual(mode(nil, nil, "CN"), M.china)
+        XCTAssertEqual(mode(nil, nil, "US"), M.unknown, "no storefront yet: no CallKit until it answers")
+        XCTAssertEqual(mode(nil, nil, nil), M.unknown)
+        XCTAssertEqual(mode("", nil, "US"), M.unknown)
+        XCTAssertEqual(mode(nil, .allowed, "CN"), M.allowed, "the last storefront seen answers a cold VoIP launch")
+        XCTAssertEqual(mode(nil, .china, "US"), M.china)
+        XCTAssertEqual(mode(nil, .unknown, "CN"), M.china)
     }
 
     func test_callScreenStatus() {

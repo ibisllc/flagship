@@ -1,6 +1,7 @@
 #if os(iOS)
 import Foundation
 import AVFoundation
+import UIKit
 import CallKit
 import PushKit
 import StoreKit
@@ -10,6 +11,9 @@ import FlagshipAPI
 import FlagshipCore
 
 /// Rings and runs voi.ci calls on this iPhone or iPad (docs/voici-calls.md §4, §8; voici-calls-v2.md §1.4).
+///
+/// CallKit and PushKit run only once this device's App Store storefront is known and is not the China mainland
+/// (`callKitMode`, MIIT via App Review 5): until then no CXProvider, CXCallController or PushKit registry exists.
 ///
 /// Everywhere but the China mainland storefront: a PushKit VoIP token goes to `.com`
 /// (`POST /api/accounts/<u>/voici-voip-token`), every VoIP push is reported to CallKit at once (Apple requires it, even
@@ -65,7 +69,23 @@ public final class VoiciCallCenter: NSObject {
     @ObservationIgnored private var holdsRoute = false
     @ObservationIgnored private var registry: PKPushRegistry?
     @ObservationIgnored private var provider: CXProvider?
-    @ObservationIgnored private let callController = CXCallController()
+    @ObservationIgnored private var callController: CXCallController?
+    @ObservationIgnored private var mode: CallKitMode = .unknown
+    @ObservationIgnored private var storefrontWatch: Task<Void, Never>?
+    @ObservationIgnored private var storefrontRetry: Task<Void, Never>?
+    /// The `.com` client for a call that arrives before the UI configured Messages (a VoIP push that launched the app).
+    @ObservationIgnored public var fallbackClient: (any VoiciComClient)?
+    /// Whether the app shows no lock screen, so "Unlock to answer" may ask Face ID for the account keys itself (set by
+    /// the app). A locked app's lock screen does the unlock, which reaches the call through `unlocked()`.
+    @ObservationIgnored public var mayAskForKeys: () -> Bool = { false }
+    @ObservationIgnored private var openingKeys = false
+    /// "Unlock to answer" (CallKit's Answer, or the in-app button, on a call that needs the account keys): the call that
+    /// the next unlock answers, after the unlocked session's full request check. A call that ends first is never answered.
+    @ObservationIgnored private var answerAfterUnlock: String?
+    /// Waiting for that unlock: the in-app ringing screen steps aside for the lock screen.
+    public private(set) var unlockPending = false
+    @ObservationIgnored private var joiningAfterUnlock = false
+    @ObservationIgnored private var unlockWindow: Task<Void, Never>?
     @ObservationIgnored private var session: VoiciCallSession?
     @ObservationIgnored private var media: CallMediaEngine?
     /// The call's media engine, for the call screen's video views.
@@ -86,12 +106,36 @@ public final class VoiciCallCenter: NSObject {
     var connectedSince: Date? { connectedAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) } }
 
     static let noRingKey = "flagship.voici.calls.noRing"
+    static let modeKey = "flagship.voici.calls.callKitMode"
+
+    /// Whether CallKit may run here (App Review 5, MIIT: no CallKit in the China mainland storefront).
+    enum CallKitMode: String { case allowed, china, unknown }
+
+    /// The rule, failing closed: the live storefront decides; without one (no App Store account, offline, StoreKit not
+    /// answered yet) the last storefront this device saw; without that, a device whose region is mainland China is
+    /// treated as China, and any other stays `unknown`: no CallKit, calls ring in the open app, and the storefront is
+    /// asked again (every minute, at each foreground and on `Storefront.updates`) until it answers.
+    nonisolated static func callKitMode(storefront: String?, stored: CallKitMode?, region: String?) -> CallKitMode {
+        if let storefront, !storefront.isEmpty { return storefront.uppercased() == "CHN" ? .china : .allowed }
+        if let stored, stored != .unknown { return stored }
+        if region?.uppercased() == "CN" { return .china }
+        return .unknown
+    }
+
+    private static var storedMode: CallKitMode? {
+        let d = UserDefaults.standard
+        if let raw = d.string(forKey: modeKey) { return CallKitMode(rawValue: raw) }
+        // Builds before the fail-closed rule kept only `noRing`, set to true in the China storefront.
+        return d.bool(forKey: noRingKey) ? .china : nil
+    }
+
+    private static var region: String? { Locale.current.region?.identifier }
 
     // MARK: start
 
-    /// Called once at launch: decides the ringing mode and registers for VoIP pushes where CallKit is allowed.
+    /// Called once at launch: decides the ringing mode and registers for VoIP pushes where CallKit is allowed. The
+    /// remembered storefront answers at once, so a cold VoIP launch outside China reaches CallKit before StoreKit does.
     public func start() {
-        noRingMode = UserDefaults.standard.bool(forKey: Self.noRingKey)
         CallSettingsStore.forgetRemovedSettings()
         // A page's first publish turns calls on (owner decision 2026-11-16): register this phone at once, as turning
         // calls on by hand does, instead of at the next unlock.
@@ -100,29 +144,47 @@ public final class VoiciCallCenter: NSObject {
             guard let call = VoiciCallEvents.call(from: n) else { return }
             Task { @MainActor in self?.ringInApp(call) }
         }
-        if !noRingMode { startCallKit() }
+        apply(Self.callKitMode(storefront: nil, stored: Self.storedMode, region: Self.region))
         Task { await refreshStorefront() }
-    }
-
-    /// China mainland storefront (`CHN`): no CallKit. Remembered, so a cold VoIP launch knows before StoreKit answers.
-    private func refreshStorefront() async {
-        guard let code = await Storefront.current?.countryCode else { return }
-        let china = code == "CHN"
-        guard china != noRingMode else { return }
-        noRingMode = china
-        UserDefaults.standard.set(china, forKey: Self.noRingKey)
-        if china {
-            registry?.desiredPushTypes = []
-            registry = nil
-            provider?.invalidate()
-            provider = nil
-            await sendToken(nil)
-        } else {
-            startCallKit()
+        storefrontWatch = Task { [weak self] in
+            for await sf in Storefront.updates {
+                await self?.storefront(sf.countryCode)
+            }
         }
     }
 
+    private func refreshStorefront() async {
+        let code = await Storefront.current?.countryCode
+        await storefront(code)
+    }
+
+    private func storefront(_ code: String?) async {
+        let next = Self.callKitMode(storefront: code, stored: Self.storedMode, region: Self.region)
+        if code != nil, next != .unknown { UserDefaults.standard.set(next.rawValue, forKey: Self.modeKey) }
+        let was = mode
+        apply(next)
+        if next == .china, was != .china { await sendToken(nil) }
+        if next == .unknown { retryStorefrontLater() } else { storefrontRetry?.cancel(); storefrontRetry = nil }
+    }
+
+    private func retryStorefrontLater() {
+        guard storefrontRetry == nil else { return }
+        storefrontRetry = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.storefrontRetry = nil
+            await self.refreshStorefront()
+        }
+    }
+
+    private func apply(_ next: CallKitMode) {
+        mode = next
+        noRingMode = next != .allowed
+        if next == .allowed { startCallKit() } else { stopCallKit() }
+    }
+
     private func startCallKit() {
+        guard mode == .allowed else { return }
         if provider == nil {
             let cfg = CXProviderConfiguration()
             cfg.supportsVideo = true
@@ -135,12 +197,22 @@ public final class VoiciCallCenter: NSObject {
             p.setDelegate(self, queue: .main)
             provider = p
         }
+        if callController == nil { callController = CXCallController() }
         if registry == nil {
             let r = PKPushRegistry(queue: .main)
             r.delegate = self
             r.desiredPushTypes = [.voIP]
             registry = r
         }
+    }
+
+    private func stopCallKit() {
+        registry?.desiredPushTypes = []
+        registry = nil
+        provider?.invalidate()
+        provider = nil
+        callController = nil
+        lastToken = nil
     }
 
     /// The account changed or unlocked: send the current VoIP token again.
@@ -184,6 +256,23 @@ public final class VoiciCallCenter: NSObject {
         } else {
             voiciCallLog.notice("call waits: needs-unlock")
             phase = .needsUnlock
+            endAfterRingWindow(call)
+            // CallKit's Answer came while this call's keys were looked up (a cold VoIP launch): unlock, then answer.
+            if answerAfterUnlock == call.callId { unlockToAnswer() }
+            // The account may have been unlocked while this call's keys were looked up.
+            unlocked()
+        }
+    }
+
+    /// A call waiting for the unlock ends with its ring window: nothing else would end it, since no room socket is open.
+    private func endAfterRingWindow(_ call: VoiciCallPush) {
+        unlockWindow?.cancel()
+        let left = max(0, call.issuedAt + VoiciCalls.ringMs - Int64(clock().timeIntervalSince1970 * 1000))
+        unlockWindow = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(left) * 1_000_000)
+            guard let self, !Task.isCancelled, self.phase == .needsUnlock, self.session == nil, self.push?.callId == call.callId else { return }
+            voiciCallLog.notice("call ended: not unlocked in the ring window")
+            self.finish("no-answer")
         }
     }
 
@@ -209,24 +298,68 @@ public final class VoiciCallCenter: NSObject {
     /// The call key of this device's account, while the setting is on (it was made and bound on an unlocked device).
     private func lockedKeys() async -> VoiciCallKeys? {
         guard let k = VoiciCallKeyStore.currentAccountKey else { return nil }
-        let client = MessagesStore.shared.client
+        // A VoIP push may have launched the app with no screen yet: Messages isn't configured then.
+        let client = MessagesStore.shared.client ?? fallbackClient
         let ca = await client?.caKeys() ?? []
         var keys = VoiciCallKeys.locked(k, caKeys: ca, origin: Endpoints.voiciOrigin)
         // A locked device keeps no copy of the page's call mode: an anonymous call is checked against the live index.
         if let client {
             keys.liveMode = { await VoiciCallModes.liveCallMode(client: client, username: k.username, pageId: k.pageId)?.mode }
         }
+        PhoneRouteController.callIdentity = (k.username, k.deviceId)
         return keys
     }
 
-    /// The account was unlocked while a call rings: join the room now.
+    /// The account was unlocked while a call rings: join the room now. Several unlock signals can arrive together:
+    /// only one joins (a second room socket would win nothing, end this device's ring and leave `.com` thinking it is
+    /// on another call).
     public func unlocked() {
-        guard phase == .needsUnlock, let call = push else { return }
+        guard phase == .needsUnlock, let call = push, !joiningAfterUnlock else { return }
+        joiningAfterUnlock = true
         Task {
-            guard let keys = await MessagesStore.shared.callKeys() else { return }
+            defer { joiningAfterUnlock = false }
+            guard let keys = await MessagesStore.shared.callKeys(),
+                  phase == .needsUnlock, session == nil, push?.callId == call.callId else { return }
+            unlockWindow?.cancel()
+            unlockPending = false
             phase = .ringing
             join(call, keys)
+            updateCallKit()
         }
+    }
+
+    /// "Unlock to answer" on a call that needs the account keys: the unlock that follows answers this one call.
+    func unlockToAnswer() {
+        guard phase == .needsUnlock, let call = push else { return }
+        answerAfterUnlock = call.callId
+        unlockPending = true
+        updateCallKit()
+        openKeysToAnswer()
+    }
+
+    /// The account keys close when the app leaves the foreground, while the app itself may stay unlocked (no app lock):
+    /// then nothing else would unlock, so one Face ID opens them, in the foreground only.
+    private func openKeysToAnswer() {
+        guard unlockPending, phase == .needsUnlock, !openingKeys, mayAskForKeys(),
+              UIApplication.shared.applicationState == .active else { return }
+        openingKeys = true
+        Task {
+            defer { openingKeys = false }
+            if Keystore.messagesUMKIfCached() == nil {
+                guard (try? await Keystore.messagesUMK(reason: String(localized: "Unlock Flagship"))) != nil else { return }
+            }
+            unlocked()
+            await MessagesStore.shared.refresh()
+            unlocked()
+        }
+    }
+
+    /// The unlocked session checked the call's request: answer it if "Unlock to answer" was pressed for it (camera off).
+    private func maybeAnswerAfterUnlock(_ callId: String) {
+        guard answerAfterUnlock == callId, phase == .ringing, session?.request?.callId == callId else { return }
+        answerAfterUnlock = nil
+        voiciCallLog.notice("answering after unlock")
+        Task { await answerNow() }
     }
 
     private func ringInApp(_ call: VoiciCallPush) {
@@ -237,7 +370,8 @@ public final class VoiciCallCenter: NSObject {
     private func updateCallKit() {
         guard let id = callUUID, let provider else { return }
         let u = CXCallUpdate()
-        u.localizedCallerName = callerName
+        // CallKit's screen says what the owner must do while the answered call waits for Flagship to be unlocked.
+        u.localizedCallerName = unlockPending ? String(localized: "Unlock Flagship to answer") : callerName
         u.hasVideo = cameraOn || remoteCamera == "on"
         u.supportsDTMF = false
         u.supportsHolding = false
@@ -270,7 +404,8 @@ public final class VoiciCallCenter: NSObject {
     }
 
     public func answerInApp() {
-        if let id = callUUID, provider != nil {
+        if phase == .needsUnlock { return unlockToAnswer() }
+        if let id = callUUID, provider != nil, let callController {
             callController.request(CXTransaction(action: CXAnswerCallAction(call: id))) { _ in }
         } else {
             Task { await answerNow() }
@@ -278,7 +413,7 @@ public final class VoiciCallCenter: NSObject {
     }
 
     public func declineOrHangUp() {
-        if let id = callUUID, provider != nil {
+        if let id = callUUID, provider != nil, let callController {
             callController.request(CXTransaction(action: CXEndCallAction(call: id))) { [weak self] err in
                 guard err != nil else { return }
                 Task { @MainActor in self?.endNow() }
@@ -346,6 +481,9 @@ public final class VoiciCallCenter: NSObject {
     }
 
     public func appForegrounded() {
+        if mode == .unknown { Task { await refreshStorefront() } }
+        // Answered with CallKit while the keys were closed: the app came forward to be unlocked.
+        if unlockPending, phase == .needsUnlock { openKeysToAnswer() }
         guard pausedByBackground else { return }
         pausedByBackground = false
         if media?.setCamera(true) == true {
@@ -361,7 +499,9 @@ public final class VoiciCallCenter: NSObject {
 
     private func onSession(_ e: VoiciCallSession.Event) {
         switch e {
-        case .request(let r): offersVideo = r.hasVideo
+        case .request(let r):
+            offersVideo = r.hasVideo
+            maybeAnswerAfterUnlock(r.callId)
         case .won:
             phase = .connecting
             step(.path)
@@ -391,10 +531,12 @@ public final class VoiciCallCenter: NSObject {
         u.hasVideo = hint?.media == VoiciCalls.mediaVideo
         u.supportsHolding = false
         u.supportsDTMF = false
-        guard let provider, ringing == nil, session == nil, push == nil, hint != nil || Keystore.messagesUMKIfCached() == nil else {
+        // No CallKit here (no registry either, so this is a late delivery from before a switch): nothing to report to.
+        guard let provider else { return completion() }
+        guard ringing == nil, session == nil, push == nil, hint != nil || Keystore.messagesUMKIfCached() == nil else {
             // A second ring, or a hint none of this account's pages opens: reported, then ended at once.
             voiciCallLog.notice("ring-back not taken: \(hint == nil ? "not-ours" : "busy", privacy: .public)")
-            let p = provider ?? CXProvider(configuration: CXProviderConfiguration())
+            let p = provider
             p.reportNewIncomingCall(with: id, update: u) { _ in
                 Task { @MainActor in p.reportCall(with: id, endedAt: nil, reason: .failed); completion() }
             }
@@ -506,6 +648,10 @@ public final class VoiciCallCenter: NSObject {
         }
         incomingPeer = nil
         connectedAt = nil
+        answerAfterUnlock = nil
+        unlockPending = false
+        unlockWindow?.cancel()
+        unlockWindow = nil
         if let id = callUUID, let provider {
             let reason: CXCallEndedReason = switch code {
             case "answered-elsewhere": .answeredElsewhere
@@ -598,6 +744,19 @@ extension VoiciCallCenter: CXProviderDelegate {
         Task { @MainActor in
             if let r = self.ringing, r.id == action.callUUID {
                 self.answerRing()
+                return action.fulfill()
+            }
+            // Flagship is locked (the account keys are closed): CallKit's Answer means "unlock, then answer". The
+            // action is fulfilled now (CallKit needs it settled promptly); the room is joined and answered after the
+            // unlock, or the call ends with its ring window.
+            if self.phase == .needsUnlock, self.callUUID == action.callUUID {
+                self.unlockToAnswer()
+                return action.fulfill()
+            }
+            // Answered while the call's keys are still being looked up (a cold VoIP launch): the call is answered once
+            // its request is checked, or after the unlock if it turns out to need one.
+            if self.phase == .ringing, self.session == nil, self.callUUID == action.callUUID, let call = self.push {
+                self.answerAfterUnlock = call.callId
                 return action.fulfill()
             }
             if await self.answerNow() { action.fulfill() } else { action.fail() }
