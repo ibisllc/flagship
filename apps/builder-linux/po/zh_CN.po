@@ -139,10 +139,6 @@ msgstr "已收到 {0} 的配方。"
 msgid "Pairing failed."
 msgstr "配对失败。"
 
-#: wizard.py:1348 (prose)
-msgid "Flagship Studio (Experimental)"
-msgstr "Flagship Studio（实验性）"
-
 #: wizard.py:1353 (prose)
 msgid "Return to pairing home"
 msgstr "返回配对首页"

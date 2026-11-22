@@ -7352,16 +7352,16 @@
       "studio/index.html"
     ]
   },
-  "sb623240f19": {
-    "en": "<1> <2>Recommended for this computer</2> <3>Download for Windows <4>Experimental</4></3> <5>Windows 11 or Windows 10 22H2 · ZIP · not yet proven on every PC</5> </1>",
+  "s64b7d4fa99": {
+    "en": "<1> <2>Recommended for this computer</2> <3>Download for Windows</3> <4>Windows 11 or Windows 10 22H2 · ZIP · not yet proven on every PC</4> </1>",
     "kind": "text",
     "ctx": "div",
     "pages": [
       "studio/index.html"
     ]
   },
-  "sa31b171250": {
-    "en": "<1> <2>Recommended for this computer</2> <3>Download for Linux <4>Experimental</4></3> <5>x86-64 · AppImage · needs Node.js 22 or later, pkexec and xorriso</5> </1>",
+  "s741d06c59a": {
+    "en": "<1> <2>Recommended for this computer</2> <3>Download for Linux</3> <4>x86-64 · AppImage · needs Node.js 22 or later, pkexec and xorriso</4> </1>",
     "kind": "text",
     "ctx": "div",
     "pages": [

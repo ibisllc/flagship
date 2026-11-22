@@ -25,7 +25,6 @@
   "startThemAgainAfterTheRestart": "Redémarrez-les après le redémarrage.",
   "restartAsAdministrator": "Redémarrer en tant qu’administrateur ?",
   "couldNotRestartAsAdministrator": "Impossible de redémarrer en tant qu’administrateur",
-  "flagshipStudioExperimental": "Flagship Studio (expérimental)",
   "shuttingDownYourServers": "Arrêt de vos serveurs…",
   "flagshipStudio": "Flagship Studio — {0}",
   "flagshipStudioBuildAndHostYour": "Flagship Studio {0}\n\nConstruisez et hébergez votre propre serveur Flagship.\nhttps://flagshipserver.com",

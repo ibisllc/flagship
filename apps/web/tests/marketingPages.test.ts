@@ -509,29 +509,16 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
   });
 });
 
-describe("Studio platforms: the Experimental tag stays behind one switch, every platform off (owner, 2026-11-20)", () => {
+describe("Studio platforms: no Experimental tag anywhere (owner, 2026-11-20, regardless of testing)", () => {
   const pub = join(__dirname, "../public");
-  it("the Windows and Linux downloads on /studio keep the tag markup under one switch per platform, all off", () => {
-    const studio = readFileSync(join(pub, "studio/index.html"), "utf8");
-    expect(studio).toContain('Download for Windows <em class="tag" data-studio-experimental="windows">Experimental</em>');
-    expect(studio).toContain('Download for Linux <em class="tag" data-studio-experimental="linux">Experimental</em>');
-    expect(studio).not.toMatch(/Download for macOS[^]{0,80}Experimental/);
-    // Every tag is under the switch, so dropping one is a one-line change (docs/runbooks/final-deploy.md §10).
-    expect(studio.match(/>Experimental</g)?.length).toBe(studio.match(/data-studio-experimental="/g)?.length);
-    // The switch: app-stores.js runs (not deferred) after the tags are parsed.
-    expect(studio).toContain('<script src="/app-stores.js"></script>');
-    const stores = readFileSync(join(pub, "app-stores.js"), "utf8");
-    const sw = /const STUDIO_EXPERIMENTAL = \{([^}]*)\}/.exec(stores)?.[1] ?? "";
-    expect(sw).toMatch(/\bmac: false,/);
-    expect(sw).toMatch(/\bwindows: false,/);
-    expect(sw).toMatch(/\blinux: false,/);
-    // The localised pages keep the marker on the translated tag.
-    for (const lang of ["es", "fr", "de", "pt-br", "ja", "zh-hans"]) {
+  it("the /studio downloads, in every language, carry no maturity tag and no switch for one", () => {
+    for (const lang of ["", "es", "fr", "de", "pt-br", "ja", "zh-hans"]) {
       const page = readFileSync(join(pub, lang, "studio/index.html"), "utf8");
-      expect(page, lang).toContain('data-studio-experimental="windows"');
-      expect(page, lang).toContain('data-studio-experimental="linux"');
-      expect(page, lang).toContain('href="/download/linux"');
+      expect(page, lang || "en").not.toContain("data-studio-experimental");
+      expect(page, lang || "en").toContain('href="/download/linux"');
     }
+    expect(readFileSync(join(pub, "studio/index.html"), "utf8")).not.toMatch(/Experimental/);
+    expect(readFileSync(join(pub, "app-stores.js"), "utf8")).not.toMatch(/experimental/i);
   });
   it("the floors on /studio are the ones the owner set: Windows 11 or Windows 10 22H2, Node.js 22", () => {
     const studio = readFileSync(join(pub, "studio/index.html"), "utf8");
@@ -540,18 +527,14 @@ describe("Studio platforms: the Experimental tag stays behind one switch, every 
     expect(studio).toContain("Node.js 22");
     expect(studio).not.toContain("Node.js 20");
   });
-  it("the Windows and Linux window titles carry the label while the same switch says so", () => {
+  it("the Windows and Linux window titles are the brand alone", () => {
     const root = join(__dirname, "../../");
-    const sw = /const STUDIO_EXPERIMENTAL = \{([^}]*)\}/.exec(readFileSync(join(pub, "app-stores.js"), "utf8"))?.[1] ?? "";
-    const on = (p: string) => new RegExp(`\\b${p}: true,`).test(sw);
-    // scripts/check-versions.mjs --write stamps the switch into each Studio (docs/runbooks/0.3-windows-studio-acceptance.md).
     const win = readFileSync(join(root, "builder-windows/src/StudioVersion.cs"), "utf8");
-    expect(win).toContain(`public const bool Experimental = ${on("windows")};`);
-    expect(win).toContain('Strings.T("flagshipStudioExperimental")');
+    expect(win).toContain("public static string WindowTitle() => ProductName;");
+    expect(win).not.toMatch(/Experimental/);
     expect(readFileSync(join(root, "builder-windows/src/MainWindow.xaml.cs"), "utf8")).toContain("Title = StudioVersion.WindowTitle();");
     const linux = readFileSync(join(root, "builder-linux/version.py"), "utf8");
-    expect(linux).toContain(`EXPERIMENTAL = ${on("linux") ? "True" : "False"}`);
-    expect(linux).toContain('tr("Flagship Studio (Experimental)")');
+    expect(linux).not.toMatch(/Experimental/i);
     expect(readFileSync(join(root, "builder-linux/wizard.py"), "utf8")).toContain("window.set_title(window_title())");
   });
 });

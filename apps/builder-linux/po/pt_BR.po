@@ -139,10 +139,6 @@ msgstr "Receita recebida para {0}."
 msgid "Pairing failed."
 msgstr "Falha no pareamento."
 
-#: wizard.py:1348 (prose)
-msgid "Flagship Studio (Experimental)"
-msgstr "Flagship Studio (experimental)"
-
 #: wizard.py:1353 (prose)
 msgid "Return to pairing home"
 msgstr "Voltar ao início do pareamento"

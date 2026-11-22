@@ -83,9 +83,6 @@
   <data name="couldNotRestartAsAdministrator" xml:space="preserve">
     <value>无法以管理员身份重新启动</value>
   </data>
-  <data name="flagshipStudioExperimental" xml:space="preserve">
-    <value>Flagship Studio（实验性）</value>
-  </data>
   <data name="shuttingDownYourServers" xml:space="preserve">
     <value>正在关闭你的服务器…</value>
   </data>

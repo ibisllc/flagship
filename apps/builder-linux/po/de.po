@@ -139,10 +139,6 @@ msgstr "Rezept für {0} empfangen."
 msgid "Pairing failed."
 msgstr "Kopplung fehlgeschlagen."
 
-#: wizard.py:1348 (prose)
-msgid "Flagship Studio (Experimental)"
-msgstr "Flagship Studio (experimentell)"
-
 #: wizard.py:1353 (prose)
 msgid "Return to pairing home"
 msgstr "Zurück zum Kopplungsbeginn"

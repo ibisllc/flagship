@@ -129,10 +129,6 @@
     "ctx": "wizard.py:1325 (prose)",
     "translatable": false
   },
-  "Flagship Studio (Experimental)": {
-    "en": "Flagship Studio (Experimental)",
-    "ctx": "wizard.py:1348 (prose)"
-  },
   "Return to pairing home": {
     "en": "Return to pairing home",
     "ctx": "wizard.py:1353 (prose)"

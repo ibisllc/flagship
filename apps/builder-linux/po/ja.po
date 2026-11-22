@@ -139,10 +139,6 @@ msgstr "{0} のレシピを受信しました。"
 msgid "Pairing failed."
 msgstr "ペアリングに失敗しました。"
 
-#: wizard.py:1348 (prose)
-msgid "Flagship Studio (Experimental)"
-msgstr "Flagship Studio（試験運用）"
-
 #: wizard.py:1353 (prose)
 msgid "Return to pairing home"
 msgstr "ペアリングのホームに戻る"

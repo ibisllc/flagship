@@ -83,9 +83,6 @@
   <data name="couldNotRestartAsAdministrator" xml:space="preserve">
     <value>Neustart als Administrator nicht möglich</value>
   </data>
-  <data name="flagshipStudioExperimental" xml:space="preserve">
-    <value>Flagship Studio (experimentell)</value>
-  </data>
   <data name="shuttingDownYourServers" xml:space="preserve">
     <value>Deine Server werden heruntergefahren …</value>
   </data>

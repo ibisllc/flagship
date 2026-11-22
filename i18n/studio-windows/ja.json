@@ -25,7 +25,6 @@
   "startThemAgainAfterTheRestart": "再起動後に、もう一度起動してください。",
   "restartAsAdministrator": "管理者として再起動しますか？",
   "couldNotRestartAsAdministrator": "管理者として再起動できませんでした",
-  "flagshipStudioExperimental": "Flagship Studio（試験運用）",
   "shuttingDownYourServers": "サーバーをシャットダウンしています…",
   "flagshipStudio": "Flagship Studio — {0}",
   "flagshipStudioBuildAndHostYour": "Flagship Studio {0}\n\n自分の Flagship サーバーを作成してホストします。\nhttps://flagshipserver.com",

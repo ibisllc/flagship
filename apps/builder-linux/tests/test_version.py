@@ -22,6 +22,5 @@ def test_the_label_is_the_shared_release_files():
     assert version.LABEL == shared["label"]
 
 
-def test_the_window_title_is_tagged_only_while_linux_is_experimental():
-    assert version.window_title(True) == "Flagship Studio (Experimental)"
-    assert version.window_title(False) == "Flagship Studio"
+def test_the_window_title_is_the_brand_alone():
+    assert version.window_title() == "Flagship Studio"
