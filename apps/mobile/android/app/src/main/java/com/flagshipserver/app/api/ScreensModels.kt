@@ -1259,19 +1259,6 @@ data class ProvisionStatusRecord(
 @Serializable
 data class ServerSeenWire(val stkPubHex: String, val macHex: String, val at: Long? = null)
 
-// ---------- P1.16 tier-status ------------------------------------------
-
-@Serializable
-data class TierStatusResponse(
-    val tier: String,                              // "free" | "promo" | "byok"
-    val llmCreditsRemainingDay: Long? = null,
-    val llmCreditsRemainingTotal: Long? = null,
-    val dispatcherUsageGBmonth: Double? = null,
-    val dispatcherFreeQuotaGBmonth: Double? = null,
-    val customDomains: List<String>,
-    val reservedNames: List<String>,
-)
-
 // ---------- P1.17 / P1.18 url-controller -------------------------------
 
 @Serializable

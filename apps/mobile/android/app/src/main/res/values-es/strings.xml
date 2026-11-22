@@ -3541,21 +3541,6 @@
     <string name="separate_lists">Listas separadas</string>
     <string name="one_list">Una lista</string>
     <string name="browse_marketplace">Explorar el marketplace</string>
-    <string name="plan_subscription">Plan / Suscripción</string>
-    <string name="tier_llm_credits_dispatcher_usage_custom">Plan, créditos de LLM, uso del despachador, dominios personalizados.</string>
-    <string name="tier_usage">Plan y uso</string>
-    <string name="your_subscription_llm_credits_dispatcher">Tu suscripción, créditos de LLM, uso del despachador, dominios personalizados y nombres reservados.</string>
-    <string name="llm_credits">Créditos de LLM</string>
-    <string name="dispatcher_relay">Relé despachador</string>
-    <string name="custom_domains">Dominios personalizados</string>
-    <string name="none_your_default_subdomain_is_forever">ninguno: tu subdominio predeterminado es gratis para siempre</string>
-    <string name="reserved_names">Nombres reservados</string>
-    <string name="none_your_username_is_fcfs_free">ninguno: tu nombre de usuario es gratis por orden de llegada</string>
-    <string name="tier">Plan</string>
-    <string name="today_remaining">restante hoy</string>
-    <string name="lifetime_remaining">restante en total</string>
-    <string name="this_month">este mes</string>
-    <string name="gb_free">%1$s / %2$s GB libres</string>
     <string name="install_3">Instalar %1$s/%2$s</string>
     <string name="give_a_separate_list_on_each">Dar a %1$s una lista aparte en cada servidor</string>
     <string name="use_one_list_for_on_every">Usar una sola lista para %1$s en todos los servidores</string>
@@ -4219,7 +4204,7 @@
     <string name="voici_call_route_speaker">Altavoz</string>
     <string name="voici_call_route_bluetooth">Bluetooth</string>
     <string name="voici_call_route_wired">Auriculares</string>
-    <string name="payments_settings_subtitle">Tu plan, saldo prepago y tráfico extra</string>
+    <string name="payments_settings_subtitle">Uso de datos, tu plan y saldo prepago</string>
     <string name="payments_title">Plan y pagos</string>
     <string name="payments_plan_free">Gratis</string>
     <string name="payments_current_free">Usas el plan Gratis. Tus servidores siguen funcionando; el tráfico que supera la asignación gratuita va más lento.</string>
@@ -4365,4 +4350,12 @@
     <string name="voici_calls_ring_full_screen">Permite las llamadas a pantalla completa para que aparezcan en la pantalla de bloqueo</string>
     <string name="voici_call_channel_quiet">Llamadas en curso</string>
     <string name="voici_err_too_many_chunks">Esta página guarda en voi.ci más publicaciones de las que voi.ci permite. Actualiza Flagship y vuelve a publicar.</string>
+    <string name="payments_usage_title">Uso de datos</string>
+    <string name="payments_usage_line">%1$s de %2$s usados este mes</string>
+    <string name="payments_usage_note">Todos los datos que tu cuenta envió este mes a través de los relés de Flagship.</string>
+    <string name="payments_usage_unavailable">Ahora no se puede leer el uso de datos. Inténtalo más tarde.</string>
+    <string name="payments_usage_mb">%1$s MB</string>
+    <string name="payments_usage_gb">%1$s GB</string>
+    <string name="app_has_a_separate_access_list">1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de %1$s.</string>
+    <string name="app_has_a_separate_access_list_2">1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de su servidor principal.</string>
 </resources>

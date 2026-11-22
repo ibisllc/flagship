@@ -1804,7 +1804,7 @@ button.choice-source {
   to   { opacity: 1; }
 }
 
-/* Slim progress bar (tier-status dispatcher relay). */
+/* Slim progress bar (Plan: data usage this month). */
 .progress-track {
   height: 6px;
   background: var(--surface-sunken);

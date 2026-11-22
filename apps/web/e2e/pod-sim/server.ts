@@ -17,7 +17,6 @@
  *   GET  /api/screens/unlock-approvals/pending  pending-store snapshot
  *   POST /api/services                        IRK-verified install (record only)
  *   GET  /api/screens/paired-sessions/list  recorded paired-session orders
- *   GET  /api/screens/tier-status         static fixture
  */
 
 import { readFileSync } from "node:fs";
@@ -264,11 +263,6 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
         addedAt: o.receivedAt,
         kind: "device",
       })),
-  }));
-
-  app.get("/api/screens/tier-status", async () => ({
-    tier: "free",
-    quotas: { storageBytes: 50 * 1024 ** 3, used: 1024 ** 3 },
   }));
 
   // ──────────────────────────────────────────────────────────────────

@@ -432,15 +432,15 @@ final class GymOctoberTests: XCTestCase {
         gymShot(app, "access-control-list-scope-office")
     }
 
-    func test_tierStatusWarnsAboutSeparateLists() throws {
+    func test_planWarnsAboutSeparateLists() throws {
         let app = launch(tab: "settings", ["-smoke-access-fixture", "-smoke-list-scope", "separate"])
-        let row = app.buttons["settings-open-subscription"]
+        let row = app.buttons["settings-open-plan"]
         XCTAssertTrue(reveal(app, row), "Settings offers the plan screen.")
         row.tap()
-        let warning = app.descendants(matching: .any)["tier-status-separate-lists-warning"]
+        let warning = app.descendants(matching: .any)["plan-separate-lists-warning"]
         XCTAssertTrue(warning.waitForExistence(timeout: 15), "Pro with a separate list on each server warns first.")
         XCTAssertTrue(warning.label.contains("When Pro ends it will use Home's list."), "Got: \(warning.label)")
-        gymShot(app, "tier-status-separate-lists")
+        gymShot(app, "plan-separate-lists")
     }
 
     // ─── Server order: Make leader stays gray until the box confirms ─────────

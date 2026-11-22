@@ -173,6 +173,8 @@ data class PaymentsUi(
     val isAdmin: Boolean = false,
     /** The wallet can be opened here (the UMK is available). */
     val canOpen: Boolean = false,
+    /** The account's data this month (`.com` `/allowance`, read with the account read token: no server needed). */
+    val usedBytes: Long? = null,
     val remainingBytes: Long? = null,
     val quotaBytes: Long? = null,
     val busy: Boolean = false,
@@ -259,6 +261,7 @@ class PaymentsCenter(
                 version = maxOf(version, if (wallet != null) it.version else 0),
                 isAdmin = keyring.isAdmin(),
                 canOpen = umk != null,
+                usedBytes = allowance?.usedBytes ?: it.usedBytes,
                 remainingBytes = allowance?.remainingBytes ?: it.remainingBytes,
                 quotaBytes = allowance?.quotaBytes ?: it.quotaBytes,
                 ohttp = ohttp,

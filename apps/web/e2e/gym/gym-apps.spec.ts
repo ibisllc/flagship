@@ -1361,7 +1361,6 @@ test.describe("gym webapp apps", () => {
         match: on(HOME, svc("/list-scope")),
         answer: () => ({ json: { serviceRef: SERVICE_ID, scope: "account", pending: false, plan, self: HOME, leader: HOME, servers: [HOME, MEDIA] } }),
       },
-      { method: "GET", match: on(HOME, "/api/screens/tier-status"), answer: () => ({ json: { tier: "free", customDomains: [], reservedNames: [] } }) },
       { method: "GET", match: on(HOME, "/api/screens/access-lists/summary"), answer: () => ({ json: { plan: "pro", separateApps: 2, leaders: [HOME] } }) },
     ]);
     await openApp(page);
@@ -1375,10 +1374,10 @@ test.describe("gym webapp apps", () => {
 
     plan = "pro";
     await page.evaluate(async () => {
-      const { enterTierStatus } = await import("/views/tier-status.js");
-      await enterTierStatus();
+      const { enterPlan } = await import("/views/plan.js");
+      await enterPlan(false);
     });
-    await expect(page.locator("#tier-status-separate-lists-warning")).toHaveText(
+    await expect(page.locator("#plan-separate-lists-warning")).toHaveText(
       "2 apps have a separate access list on each server. When Pro ends they'll all use home's list.",
       { timeout: 10_000 },
     );

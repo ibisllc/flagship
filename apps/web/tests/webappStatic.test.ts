@@ -151,7 +151,6 @@ describe("/webapp PWA static surface", () => {
       ["/api/screens/apps-list", "/webapp/views/services-list.js"],
       ["/api/screens/app-detail/", "/webapp/views/service-detail.js"],
       ["/api/screens/paired-sessions/list", "/webapp/views/paired-sessions.js"],
-      ["/api/screens/tier-status", "/webapp/views/tier-status.js"],
       ["/api/screens/marketplace-browse", "/webapp/views/marketplace.js"],
       ["/api/screens/vibe-code/start", "/webapp/views/vibe-code.js"],
       // install-progress.js no longer uses a /api/screens/* BFF — it reads the
@@ -402,7 +401,7 @@ describe("/webapp PWA static surface", () => {
     // v56 picks each new app's server, lists a server's apps and copies apps between servers.
     // v57 titles a server's page with its name.
     // v58 shows one status pill per app across its servers, and each server's state on the app page.
-    expect(r.body).toContain('SHELL_VERSION = "v249"');
+    expect(r.body).toContain('SHELL_VERSION = "v250"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

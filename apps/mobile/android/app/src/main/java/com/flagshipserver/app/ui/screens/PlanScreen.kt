@@ -1,11 +1,14 @@
 // Settings → Plan and payments (docs/payments-privacy-and-rails.md §6 and "As built"), the Android port in spirit of
-// iOS PlanScreen: the plan and time left, the prepaid balance in round amounts, the plan choice with the optional
+// iOS PlanScreen: the plan and time left, the account's data usage this month (from `.com`, so it shows with no
+// server paired), the prepaid balance in round amounts, the plan choice with the optional
 // random start, automatic paying, the monthly limit for extra traffic, and the Google Play shop (§11: packs at Play's
 // price, admin devices only). Never a code field, a scan, a file import or a web-shop link for vouchers.
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.foundation.selection.selectable
@@ -26,7 +29,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.flagshipserver.app.R
+import com.flagshipserver.app.core.AppListScope
 import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.fsString
 import com.flagshipserver.app.core.payments.PaymentsCenter
 import com.flagshipserver.app.core.payments.PaymentsConfig
@@ -44,6 +50,7 @@ import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.Switch
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.SeparateListsWarningViewModel
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -92,9 +99,20 @@ object PaymentsCopy {
 
 @Composable
 fun PlanScreen(nav: NavController) {
+    val client = LocalScreensClient.current
+    val appState = LocalAppState.current
+    val lists = remember {
+        SeparateListsWarningViewModel(client, serverName = { fqdn ->
+            appState.pods.value.firstOrNull { it.fqdn.equals(fqdn, ignoreCase = true) }?.name?.takeIf { it.isNotBlank() }
+                ?: AppListScope.firstLabel(fqdn)
+        })
+    }
+    val listsWarning by lists.warning.collectAsState()
+    LaunchedEffect(Unit) { lists.load() }
     val center = PaymentsCenter.shared
     if (center == null) {
         FSScreen(title = stringResource(R.string.payments_title), onBack = { nav.popBackStack() }) {
+            SeparateListsCard(listsWarning)
             Text(stringResource(R.string.payments_error_not_available), modifier = Modifier.testTag("plan-unavailable"))
         }
         return
@@ -112,8 +130,50 @@ fun PlanScreen(nav: NavController) {
         titleTag = "plan-title",
         onBack = { nav.popBackStack() },
     ) {
+        SeparateListsCard(listsWarning)
         PlanBody(center, s, shop, shopUi)
     }
+}
+
+/** Before Pro ends while apps keep a separate access list on each server (only a reachable server can say). */
+@Composable
+private fun SeparateListsCard(line: String?) {
+    if (line == null) return
+    FSCard(modifier = Modifier.testTag("plan-separate-lists-warning")) {
+        Text(line, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** The account's data this month, counted by `.com` for the whole account (0 MB when nothing was sent). */
+@Composable
+private fun DataUsageGroup(s: PaymentsUi) {
+    val used = s.usedBytes
+    val quota = s.quotaBytes
+    if (!s.loaded && (used == null || quota == null)) return
+    FSGroup(header = stringResource(R.string.payments_usage_title)) {
+        if (used == null || quota == null) {
+            FSRow(
+                title = stringResource(R.string.payments_usage_unavailable),
+                modifier = Modifier.testTag("plan-usage-unavailable"),
+            )
+        } else {
+            FSRow(
+                title = fsString(R.string.payments_usage_line, dataAmount(used), dataAmount(quota)),
+                subtitle = stringResource(R.string.payments_usage_note),
+                modifier = Modifier.testTag("plan-usage"),
+            )
+            LinearProgressIndicator(
+                progress = { if (quota > 0) (used.toFloat() / quota).coerceIn(0f, 1f) else 0f },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = FS.space.s4, vertical = FS.space.s2),
+            )
+        }
+    }
+}
+
+@Composable
+private fun dataAmount(bytes: Long): String {
+    val a = PlanFormat.dataAmount(bytes)
+    return fsString(if (a.gb) R.string.payments_usage_gb else R.string.payments_usage_mb, a.number)
 }
 
 @Composable
@@ -144,6 +204,8 @@ private fun PlanBody(center: PaymentsCenter, s: PaymentsUi, shop: VoucherShop?, 
             modifier = Modifier.padding(top = FS.space.s2).testTag("plan-privacy"),
         )
     }
+
+    DataUsageGroup(s)
 
     // Balance, as round amounts.
     FSGroup(header = stringResource(R.string.payments_balance_title)) {

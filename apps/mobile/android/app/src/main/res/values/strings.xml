@@ -3546,21 +3546,6 @@
     <string name="separate_lists">Separate lists</string>
     <string name="one_list">One list</string>
     <string name="browse_marketplace">Browse marketplace</string>
-    <string name="plan_subscription">Plan / Subscription</string>
-    <string name="tier_llm_credits_dispatcher_usage_custom">Tier, LLM credits, dispatcher usage, custom domains.</string>
-    <string name="tier_usage">Tier &amp; usage</string>
-    <string name="your_subscription_llm_credits_dispatcher">Your subscription, LLM credits, dispatcher usage, custom domains, and reserved names.</string>
-    <string name="llm_credits">LLM credits</string>
-    <string name="dispatcher_relay">Dispatcher relay</string>
-    <string name="custom_domains">Custom domains</string>
-    <string name="none_your_default_subdomain_is_forever">none — your default subdomain is forever-free</string>
-    <string name="reserved_names">Reserved names</string>
-    <string name="none_your_username_is_fcfs_free">none — your username is FCFS-free</string>
-    <string name="tier">Tier</string>
-    <string name="today_remaining">today remaining</string>
-    <string name="lifetime_remaining">lifetime remaining</string>
-    <string name="this_month">this month</string>
-    <string name="gb_free">%1$s / %2$s GB free</string>
     <string name="install_3">Install %1$s/%2$s</string>
     <string name="give_a_separate_list_on_each">Give %1$s a separate list on each server</string>
     <string name="use_one_list_for_on_every">Use one list for %1$s on every server</string>
@@ -4224,7 +4209,7 @@
     <string name="voici_call_route_speaker">Speaker</string>
     <string name="voici_call_route_bluetooth">Bluetooth</string>
     <string name="voici_call_route_wired">Headphones</string>
-    <string name="payments_settings_subtitle">Your plan, prepaid balance and extra traffic</string>
+    <string name="payments_settings_subtitle">Data usage, your plan and prepaid balance</string>
     <string name="payments_title">Plan and payments</string>
     <string name="payments_plan_free">Free</string>
     <string name="payments_plan_pro" translatable="false">Pro</string>
@@ -4372,4 +4357,12 @@
     <string name="voici_calls_ring_full_screen">Allow full-screen calls so a call shows on the lock screen</string>
     <string name="voici_call_channel_quiet">Calls in progress</string>
     <string name="voici_err_too_many_chunks">This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.</string>
+    <string name="payments_usage_title">Data usage</string>
+    <string name="payments_usage_line">%1$s of %2$s used this month</string>
+    <string name="payments_usage_note">All data your account sent through Flagship\'s relays this month.</string>
+    <string name="payments_usage_unavailable">Data usage can\'t be read right now. Try again later.</string>
+    <string name="payments_usage_mb">%1$s MB</string>
+    <string name="payments_usage_gb">%1$s GB</string>
+    <string name="app_has_a_separate_access_list">1 app has a separate access list on each server. When Pro ends it will use %1$s\'s list.</string>
+    <string name="app_has_a_separate_access_list_2">1 app has a separate access list on each server. When Pro ends it will use its lead server\'s list.</string>
 </resources>

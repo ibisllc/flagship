@@ -32,7 +32,7 @@ const SETTINGS = [
   "view-settings", "view-account-security", "view-quantum-safety", "view-add-device", "view-recovery",
   "view-paired-sessions", "view-secured-sessions", "view-peer-backup", "view-companion-dock",
   "view-companion-requests", "view-profiles", "view-trusted-devices", "view-account-delete",
-  "view-appearance", "view-privacy", "view-about", "view-tier-status",
+  "view-appearance", "view-privacy", "view-about",
 ];
 for (const id of HOME) registerSplit(id, "view-home");
 for (const id of APPS) registerSplit(id, "view-services-list");

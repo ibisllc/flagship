@@ -1,6 +1,6 @@
-// The plan screen's warning before Pro ends while apps keep a separate access
-// list on each server (feat/marketplace): the three wordings, and nothing
-// without Pro, without such apps, or when the server can't say.
+// The Plan page's warning before Pro ends while apps keep a separate access
+// list on each server: the three wordings, and nothing without Pro, without
+// such apps, or when no server can say.
 
 package com.flagshipserver.app.viewmodels
 
@@ -45,18 +45,18 @@ class SeparateListsWarningTest {
             listScopePlan = "pro"
             listScopes["bright-maple--notes"] = "server"
         }
-        val vm = TierStatusViewModel(client, scope = backgroundScope, serverName = { if (it.startsWith("home.")) "Living room" else it })
+        val vm = SeparateListsWarningViewModel(client, scope = backgroundScope, serverName = { if (it.startsWith("home.")) "Living room" else it })
         vm.load().join()
         assertEquals(
             "1 app has a separate access list on each server. When Pro ends it will use Living room's list.",
-            vm.separateListsWarning.value,
+            vm.warning.value,
         )
     }
 
     @Test fun theViewModelHidesItWhenTheServerCantSay() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0).apply { shouldFail = true }
-        val vm = TierStatusViewModel(client, scope = backgroundScope)
+        val vm = SeparateListsWarningViewModel(client, scope = backgroundScope)
         vm.load().join()
-        assertNull(vm.separateListsWarning.value)
+        assertNull(vm.warning.value)
     }
 }

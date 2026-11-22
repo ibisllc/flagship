@@ -1,9 +1,12 @@
-// Settings → Plan (docs/payments-privacy-and-rails.md §6 and "As built"): the account's plan and time left, the
-// prepaid balance shown as round dollars, the plan choice, auto-pay, the random start, the monthly overage cap and
-// the shop (cards through Stripe Checkout, §11; Monero comes later; the phone apps sell through their stores). Only an
-// admin device of the account changes anything, buys or spends; every other device reads.
+// Settings → Plan (docs/payments-privacy-and-rails.md §6 and "As built"): the account's plan and time left, its data
+// usage this month (read from `.com` with the account read token, so it shows with no server paired), the prepaid
+// balance shown as round dollars, the plan choice, auto-pay, the random start, the monthly overage cap and the shop
+// (cards through Stripe Checkout, §11; Monero comes later; the phone apps sell through their stores). Only an admin
+// device of the account changes anything, buys or spends; every other device reads.
 
 import { $, registerView, show } from "../lib/router.js";
+import { screensFetch } from "../lib/api.js";
+import { fetchSeparateListsSummary, separateListsWarning } from "../lib/listScope.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { confirmFreshUnlock } from "../lib/freshUnlock.js";
@@ -15,6 +18,7 @@ import {
   consumeShopReturn,
   finishShopOrders,
   flushVoucherInbox,
+  loadAllowance,
   loadPaymentsConfig,
   loadPlanState,
   loadWallet,
@@ -31,6 +35,8 @@ import { addVouchers, isPaidPlan, monthsOfPlan } from "../lib/vouchers.js";
 registerView("view-plan");
 
 const DAY_MS = 86_400_000;
+const MB = 1024 * 1024;
+const GB = MB * 1024;
 
 export const planName = (plan) => (plan === "pro" ? tr("Pro") : plan === "pro-max" ? tr("Pro Max") : tr("Free"));
 const usd = (n) => `$${n}`;
@@ -85,6 +91,30 @@ export function balanceText(cfg, wallet) {
   return { amount: usd(n * cfg.unitUsd), detail };
 }
 
+/** A data amount in the locale's words: whole MB under 1 GB, else GB to one decimal (binary units). */
+export function dataAmountText(bytes) {
+  const b = Math.max(0, Number(bytes) || 0);
+  const gb = b >= GB;
+  const n = gb ? Math.floor((b / GB) * 10) / 10 : Math.floor(b / MB);
+  return new Intl.NumberFormat(dateLocale(), { style: "unit", unit: gb ? "gigabyte" : "megabyte", unitDisplay: "short", maximumFractionDigits: gb ? 1 : 0 }).format(n);
+}
+
+/** The Data usage card: the account's bytes this month from `.com` (0 MB when nothing was sent). */
+export function dataUsageHtml(allowance) {
+  const ok = allowance && typeof allowance.usedBytes === "number" && typeof allowance.quotaBytes === "number";
+  if (!ok) {
+    return `<h2 class="mt-4">${escapeHtml(tr("Data usage"))}</h2>
+    <div class="card" data-testid="plan-usage-unavailable"><p class="caption">${escapeHtml(tr("Data usage can't be read right now. Try again later."))}</p></div>`;
+  }
+  const pct = allowance.quotaBytes > 0 ? Math.min(100, Math.round((allowance.usedBytes / allowance.quotaBytes) * 100)) : 0;
+  return `<h2 class="mt-4">${escapeHtml(tr("Data usage"))}</h2>
+    <div class="card" data-testid="plan-usage">
+      <div class="row"><span class="label" id="plan-usage-line">${escapeHtml(tr("{0} of {1} used this month", dataAmountText(allowance.usedBytes), dataAmountText(allowance.quotaBytes)))}</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <p class="caption">${escapeHtml(tr("All data your account sent through Flagship's relays this month."))}</p>
+    </div>`;
+}
+
 /** The overage cap choices: off, then one block at a time up to the most a month allows (at most ten choices). */
 export function overageCapOptions(cfg) {
   const step = cfg.overage.blockUnits;
@@ -112,6 +142,7 @@ export function planViewHtml(m) {
       <div class="row"><span class="label">${escapeHtml(tr("Plan"))}</span><span class="value" id="plan-current-name">${escapeHtml(planName(planState.plan))}</span></div>
       <p class="caption" id="plan-time-left">${escapeHtml(timeLeftText(planState, now))}</p>
     </div>
+    ${m.allowance !== undefined ? dataUsageHtml(m.allowance) : ""}
     <div class="card mt-3" data-testid="plan-balance">
       <div class="row"><span class="label">${escapeHtml(tr("Prepaid balance"))}</span><span class="value" id="plan-balance-amount">${escapeHtml(bal.amount)}</span></div>
       <p class="caption" id="plan-balance-detail">${escapeHtml(bal.detail)}</p>
@@ -164,11 +195,16 @@ let model = null;
 
 async function loadModel() {
   const pc = await loadPaymentsConfig();
-  const [planState, cur] = await Promise.all([loadPlanState().catch(() => ({ plan: null, paidUntil: 0 })), loadWallet(pc.config)]);
+  const [planState, cur, allowance] = await Promise.all([
+    loadPlanState().catch(() => ({ plan: null, paidUntil: 0 })),
+    loadWallet(pc.config),
+    loadAllowance(),
+  ]);
   return {
     ...pc,
     planState,
     cur,
+    allowance,
     wallet: cur.wallet,
     admin: canSignAdminOrders(),
     now: Date.now(),
@@ -290,6 +326,18 @@ export async function renderPlan() {
   }
 }
 
+/** The card before Pro ends while apps keep a separate access list on each server; empty when there is none. */
+export function listsWarningHtml(warning) {
+  return warning ? `<div class="card warn mb-2" id="plan-separate-lists-warning" data-testid="plan-separate-lists-warning"><p class="note">${escapeHtml(warning)}</p></div>` : "";
+}
+
+/** Only a reachable server can say whether apps keep separate lists; with none paired the warning just stays away. */
+async function renderListsWarning() {
+  const root = $("plan-lists-warning");
+  if (!root) return;
+  root.innerHTML = listsWarningHtml(separateListsWarning(await fetchSeparateListsSummary({ fetchJson: (path) => screensFetch(path) })));
+}
+
 /** The automatic spend on start and whenever the Plan section opens; quiet on any failure. */
 export async function planTick() {
   let back = null;
@@ -337,6 +385,9 @@ function hasShopReturn() {
 export async function enterPlan(tick = true) {
   show("view-plan");
   model = null;
+  const lists = $("plan-lists-warning");
+  if (lists) lists.innerHTML = "";
+  void renderListsWarning();
   if (tick) await planTick();
   await renderPlan();
 }

@@ -566,7 +566,9 @@
 //       one sentence per failure.
 //  v249: voi.ci's capped server copy (docs/voici-and-messages.md §2.7a): publishes sign phoneChunks and carry the
 //       phone-only chunks this browser doesn't hold; the "too many posts on voi.ci" sentence.
-const SHELL_VERSION = "v249";
+//  v250: the old "Tier & usage" screen (views/tier-status.js) is gone; Settings → Plan shows the account's data usage
+//       this month from `.com` (no server needed) and the warning before Pro ends while apps keep separate lists.
+const SHELL_VERSION = "v250";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -882,7 +884,6 @@ const OPTIONAL_SHELL = [
   "/views/app-access.js",
   "/views/app-db.js",
   "/views/paired-sessions.js",
-  "/views/tier-status.js",
   "/views/plan.js",
   "/views/voucher-link.js",
   "/views/voucher-shop.js",

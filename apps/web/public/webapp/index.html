@@ -361,7 +361,6 @@
             <button class="fs-row" id="settings-tab-quantum-safety" data-split-view="view-quantum-safety"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Quantum-safe protection</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-providers" data-split-view="view-settings"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI API keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-plan" data-split-view="view-plan"><span class="fs-row-icon icon" data-row-icon="plan"></span><span class="fs-row-body"><span class="fs-row-title">Plan</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-tier" data-split-view="view-tier-status"><span class="fs-row-icon icon" data-row-icon="tier"></span><span class="fs-row-body"><span class="fs-row-title">Tier &amp; usage</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-recovery" data-split-view="view-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Cloud recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row hidden" id="settings-tab-name-dibs"><span class="fs-row-icon icon" data-row-icon="dibs"></span><span class="fs-row-body"><span class="fs-row-title">Claim your .com name</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
@@ -694,21 +693,13 @@
         </div>
       </section>
 
-      <!-- View 11: Tier dashboard (P2.11) -->
+      <!-- View 11: Plan (data usage, plan, prepaid balance) -->
       <section id="view-plan" class="hidden">
         <h2>Plan</h2>
+        <div id="plan-lists-warning"></div>
         <div id="plan-content"></div>
         <div class="row-2">
           <button class="secondary" id="plan-back">← Back</button>
-        </div>
-      </section>
-
-      <section id="view-tier-status" class="hidden">
-        <h2>Tier &amp; usage</h2>
-        <div id="tier-status-content"></div>
-        <div class="row-2">
-          <button class="secondary" id="tier-status-refresh">Refresh</button>
-          <button class="secondary" id="tier-status-back">← Back</button>
         </div>
       </section>
 

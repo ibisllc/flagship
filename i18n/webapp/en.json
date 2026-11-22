@@ -13646,70 +13646,6 @@
     "en": "promo",
     "ctx": "webapp/views/tier-status.js:30"
   },
-  "BYOK": {
-    "en": "BYOK",
-    "ctx": "webapp/views/tier-status.js:31"
-  },
-  "today remaining": {
-    "en": "today remaining",
-    "ctx": "webapp/views/tier-status.js:44"
-  },
-  "today": {
-    "en": "today",
-    "ctx": "webapp/views/tier-status.js:45"
-  },
-  "— (BYOK or promo not in use)": {
-    "en": "— (BYOK or promo not in use)",
-    "ctx": "webapp/views/tier-status.js:45"
-  },
-  "lifetime remaining": {
-    "en": "lifetime remaining",
-    "ctx": "webapp/views/tier-status.js:47"
-  },
-  "{0} GB free": {
-    "en": "{0} GB free",
-    "ctx": "webapp/views/tier-status.js:56"
-  },
-  "this month": {
-    "en": "this month",
-    "ctx": "webapp/views/tier-status.js:55"
-  },
-  "{0} GB / {1}": {
-    "en": "{0} GB / {1}",
-    "ctx": "webapp/views/tier-status.js:56"
-  },
-  "usage": {
-    "en": "usage",
-    "ctx": "webapp/views/tier-status.js:62"
-  },
-  "none — your default subdomain is forever-free": {
-    "en": "none — your default subdomain is forever-free",
-    "ctx": "webapp/views/tier-status.js:66"
-  },
-  "none — your username is FCFS-free": {
-    "en": "none — your username is FCFS-free",
-    "ctx": "webapp/views/tier-status.js:72"
-  },
-  "Tier": {
-    "en": "Tier",
-    "ctx": "webapp/views/tier-status.js:38"
-  },
-  "LLM credits": {
-    "en": "LLM credits",
-    "ctx": "webapp/views/tier-status.js:41"
-  },
-  "Dispatcher relay": {
-    "en": "Dispatcher relay",
-    "ctx": "webapp/views/tier-status.js:50"
-  },
-  "Custom domains": {
-    "en": "Custom domains",
-    "ctx": "webapp/views/tier-status.js:64"
-  },
-  "Reserved names": {
-    "en": "Reserved names",
-    "ctx": "webapp/views/tier-status.js:70"
-  },
   "published as <code>{0}</code> on the marketplace": {
     "en": "published as <code>{0}</code> on the marketplace",
     "ctx": "webapp/views/vibe-code.js:999"
@@ -13745,10 +13681,6 @@
   "Back to one access list": {
     "en": "Back to one access list",
     "ctx": "webapp/lib/activityFeed.js:41"
-  },
-  "Tier & usage": {
-    "en": "Tier & usage",
-    "ctx": "webapp/index.html"
   },
   "Browse the marketplace, vibe-code a new service, or share-install one\n            from a creator.": {
     "en": "Browse the marketplace, vibe-code a new service, or share-install one\n            from a creator.",
@@ -16233,5 +16165,21 @@
   "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": {
     "en": "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.",
     "ctx": "webapp/lib/voiciCopy.js:93"
+  },
+  "Data usage": {
+    "en": "Data usage",
+    "ctx": "webapp/views/plan.js:105"
+  },
+  "Data usage can't be read right now. Try again later.": {
+    "en": "Data usage can't be read right now. Try again later.",
+    "ctx": "webapp/views/plan.js:106"
+  },
+  "{0} of {1} used this month": {
+    "en": "{0} of {1} used this month",
+    "ctx": "webapp/views/plan.js:111"
+  },
+  "All data your account sent through Flagship's relays this month.": {
+    "en": "All data your account sent through Flagship's relays this month.",
+    "ctx": "webapp/views/plan.js:113"
   }
 }

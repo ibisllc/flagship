@@ -163,10 +163,7 @@ public enum SettingsRoute: Hashable, Sendable {
     case aiKeys
     /// Settings → "Claim your .com name" (name dibs; only while the window is open).
     case nameDibs
-    /// P7 — the dedicated tier-status / subscription screen, reached from
-    /// the Settings "Subscription" nav row.
-    case tierStatus
-    /// Settings → Plan: the plan, the voucher balance, auto-pay and the overage limit (docs/payments-privacy-and-rails.md).
+    /// Settings → Plan: data usage, the plan, the voucher balance, auto-pay and the overage limit (docs/payments-privacy-and-rails.md).
     case plan
     case recovery
     /// Settings → Account security. TOTP enroll/disable, recovery codes, and

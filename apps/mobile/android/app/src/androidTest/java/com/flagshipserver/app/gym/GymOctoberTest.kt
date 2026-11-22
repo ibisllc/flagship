@@ -842,14 +842,14 @@ class GymOctoberTest : GymBase() {
         gymShot("access-list-scope-office")
     }
 
-    /** Tier & usage warns before Pro ends while an app keeps separate lists. */
+    /** The Plan page warns before Pro ends while an app keeps separate lists. */
     @Test
-    fun tierStatusWarnsAboutSeparateLists() {
+    fun planWarnsAboutSeparateLists() {
         launch(tab = "settings", listsPlan = "pro", separateLists = true)
-        waitUntilTextExists("Plan / Subscription", timeoutMs = 20_000)
-        composeRule.onNodeWithText("Plan / Subscription").performScrollTo().performClick()
-        waitUntilExists("tier-status-separate-lists-warning", timeoutMs = 15_000)
+        waitUntilExists("settings-open-plan", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("settings-open-plan").performScrollTo().performClick()
+        waitUntilExists("plan-separate-lists-warning", timeoutMs = 15_000)
         waitUntilTextExists("1 app has a separate access list on each server.")
-        gymShot("tier-status-separate-lists-warning")
+        gymShot("plan-separate-lists-warning")
     }
 }

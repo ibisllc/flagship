@@ -160,9 +160,9 @@ describe("view wiring", () => {
 
   it("the plan screen warns, and the shell knows the push and precaches the lib", async () => {
     const app = buildServer();
-    const tier = await app.inject({ method: "GET", url: "/webapp/views/tier-status.js" });
-    expect(tier.body).toContain("fetchSeparateListsSummary");
-    expect(tier.body).toContain('id="tier-status-separate-lists-warning"');
+    const plan = await app.inject({ method: "GET", url: "/webapp/views/plan.js" });
+    expect(plan.body).toContain("fetchSeparateListsSummary");
+    expect(plan.body).toContain('id="plan-separate-lists-warning"');
     const sw = await app.inject({ method: "GET", url: "/webapp/service-worker.js" });
     expect(sw.body).toContain('"/lib/listScope.js"');
     expect(sw.body).toContain('data.category === "access-lists"');

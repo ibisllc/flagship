@@ -53,16 +53,16 @@ object AppListScope {
     fun offConfirm(leaderName: String): String =
         FSStrings.get(R.string.every_server_will_use_s_list, leaderName)
 
-    /** The plan screen's warning before Pro ends; null when there is nothing to warn about. */
+    /** The Plan page's warning before Pro ends; null when there is nothing to warn about. */
     fun separateListsWarning(plan: String, separateApps: Int, leaders: List<String>, nameOf: (String) -> String): String? {
         if (plan != "pro" || separateApps <= 0) return null
         val distinct = leaders.map { it.lowercase() }.distinct()
         val one = distinct.singleOrNull()
         return when {
             separateApps == 1 && one != null ->
-                "1 app has a separate access list on each server. When Pro ends it will use ${nameOf(one)}'s list."
+                FSStrings.get(R.string.app_has_a_separate_access_list, nameOf(one))
             separateApps == 1 ->
-                "1 app has a separate access list on each server. When Pro ends it will use its lead server's list."
+                FSStrings.get(R.string.app_has_a_separate_access_list_2)
             one != null ->
                 FSStrings.get(R.string.apps_have_a_separate_access_list, separateApps, nameOf(one))
             else ->

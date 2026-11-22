@@ -121,7 +121,6 @@ import {
 } from "./views/companion-requests.js";
 import { enterNameDibs } from "./views/name-dibs.js";
 import { fetchDibsWindow } from "./lib/nameDibs.js";
-import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initPlanView, enterPlan } from "./views/plan.js";
 import { takeShopReturn } from "./lib/plan.js";
 import { stashVoucherLinkFromLocation } from "./lib/voucherLink.js";
@@ -228,7 +227,6 @@ const SUB_VIEW_TABS = {
   "view-companion-dock": "settings",
   "view-companion-requests": "settings",
   "view-profiles": "settings",
-  "view-tier-status": "settings",
   "view-plan": "settings",
   // Settings sub-screens that previously left the tab bar dark.
   "view-trusted-devices": "settings",
@@ -250,7 +248,6 @@ const SETTINGS_ROW_ICONS = {
   providers: sparklesIcon,
   security: shieldIcon,
   push: activityIcon,
-  tier: activityIcon,
   plan: flagIcon,
   recovery: keyIcon,
   backupkey: downloadIcon,
@@ -350,9 +347,7 @@ function wireSettingsTabEntries() {
     document.querySelector("#push-switch")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
   wire("settings-tab-name-dibs", enterNameDibs);
-  // Tier & usage (marketplace) — dedicated subscription/tier-status screen.
-  wire("settings-tab-tier", enterTierStatus);
-  // Plan: the plan, the prepaid voucher balance and the shop (docs/payments-privacy-and-rails.md).
+  // Plan: the account's data usage, the plan, the prepaid voucher balance and the shop (docs/payments-privacy-and-rails.md).
   wire("settings-tab-plan", enterPlan);
   wire("settings-tab-recovery", enterRecovery);
   // "Back up account key" reuses the Recovery screen's `.flagshipkey`
@@ -618,7 +613,6 @@ async function boot() {
   initLocalAiView();
   initAddDeviceView();
   initJoinView();
-  initTierStatusView();
   initPlanView();
   initMarketplaceView();
   initDeveloperView();

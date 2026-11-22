@@ -18,6 +18,26 @@ object PlanFormat {
         return f.format(units * cfg.unitUsd)
     }
 
+    /** A data amount for the Data usage line: whole MiB under 1 GiB, else GiB to one decimal (the number only, in
+     *  the locale's digits); [gb] says which unit the screen's sentence names. */
+    data class Amount(val number: String, val gb: Boolean)
+
+    fun dataAmount(bytes: Long, locale: Locale = Locale.getDefault()): Amount {
+        val f = NumberFormat.getNumberInstance(locale)
+        f.minimumFractionDigits = 0
+        val b = bytes.coerceAtLeast(0).toDouble()
+        return if (b < GIB) {
+            f.maximumFractionDigits = 0
+            Amount(f.format(Math.floor(b / MIB)), gb = false)
+        } else {
+            f.maximumFractionDigits = 1
+            Amount(f.format(Math.floor(b / GIB * 10) / 10), gb = true)
+        }
+    }
+
+    private const val MIB = 1024.0 * 1024.0
+    private const val GIB = MIB * 1024.0
+
     /** Whole days left on the plan (0 when ended). */
     fun daysLeft(paidUntil: Long, now: Long): Int = if (paidUntil <= now) 0 else ceil((paidUntil - now).toDouble() / PaymentsConfig.DAY_MS).toInt()
 

@@ -119,7 +119,6 @@ public struct SettingsTab: View {
                 SettingsScreen(
                     username: app.currentUser ?? "",
                     accountDisplayName: vm.accountDisplayName,
-                    tier: vm.tier,
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
                     pendingRePair: vm.pendingRePair,
@@ -187,7 +186,6 @@ public struct SettingsTab: View {
                         app.signOut()
                     },
                     onOpenAiKeys: { path.append(.aiKeys) },
-                    onOpenSubscription: { path.append(.tierStatus) },
                     onOpenPlan: { path.append(.plan) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
@@ -390,7 +388,7 @@ public struct SettingsTab: View {
                     }
                 )
             }
-            if case .idle = vm?.tier { await vm?.load() }
+            if case .idle = vm?.browserSessions { await vm?.load() }
         }
         .task {
             await refreshCompanionPendingCount()
@@ -452,15 +450,15 @@ public struct SettingsTab: View {
             )
         case .nameDibs:
             NameDibsScreen(vm: NameDibsViewModel(client: nameDibs, username: app.currentUser ?? ""))
-        case .tierStatus:
-            TierStatusScreen(vm: TierStatusViewModel(
-                client: client,
-                serverNames: Dictionary(app.pods.map { ($0.fqdn.lowercased(), AppPlacementCopy.serverName($0)) },
-                                        uniquingKeysWith: { a, _ in a })))
         case .plan:
-            PlanScreen(gate: { reason in
-                do { try await BiometricGate().evaluate(reason: reason); return true } catch { return false }
-            })
+            PlanScreen(
+                lists: SeparateListsWarningViewModel(
+                    client: client,
+                    serverNames: Dictionary(app.pods.map { ($0.fqdn.lowercased(), AppPlacementCopy.serverName($0)) },
+                                            uniquingKeysWith: { a, _ in a })),
+                gate: { reason in
+                    do { try await BiometricGate().evaluate(reason: reason); return true } catch { return false }
+                })
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .accountSecurity:

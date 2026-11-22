@@ -332,6 +332,28 @@ describe("webapp plan: the section", () => {
     expect(ro).toMatch(/id="plan-autopay"[^>]*disabled/);
   });
 
+  it("shows the account's data usage from .com, 0 MB when nothing was sent, with no server needed", () => {
+    const GiB = 1024 ** 3;
+    expect(V.dataAmountText(0)).toBe("0 MB");
+    expect(V.dataAmountText(512 * 1024 ** 2 + 900_000)).toBe("512 MB");
+    expect(V.dataAmountText(25 * GiB)).toBe("25 GB");
+    expect(V.dataAmountText(1.5 * GiB)).toBe("1.5 GB");
+    const used = V.dataUsageHtml({ usedBytes: 0, quotaBytes: 25 * GiB, remainingBytes: 25 * GiB });
+    expect(used).toContain('data-testid="plan-usage"');
+    expect(used).toContain("Data usage");
+    expect(used).toContain("0 MB of 25 GB used this month");
+    expect(used).toContain('style="width:0%"');
+    expect(V.dataUsageHtml(null)).toContain('data-testid="plan-usage-unavailable"');
+    const html = V.planViewHtml({ config: cfg, wallet: wallet(0), planState: { plan: null, paidUntil: 0 }, admin: true, testIssue: false, now: t, allowance: { usedBytes: 2 * GiB, quotaBytes: 25 * GiB } });
+    expect(html).toContain("2 GB of 25 GB used this month");
+    expect(html.indexOf("plan-usage")).toBeLessThan(html.indexOf("plan-balance"));
+  });
+
+  it("warns before Pro ends only when a server says apps keep separate lists", () => {
+    expect(V.listsWarningHtml(null)).toBe("");
+    expect(V.listsWarningHtml("1 app has a separate access list on each server.")).toContain('id="plan-separate-lists-warning"');
+  });
+
   it("caps overage in dollars and GB, off first", () => {
     const opts = V.overageCapOptions(cfg);
     expect(opts[0]).toEqual({ units: 0, label: "Off: slow down past the plan" });
@@ -342,13 +364,16 @@ describe("webapp plan: the section", () => {
 
 describe("webapp plan: wiring", () => {
   const read = (p: string) => readFileSync(join(root, "apps/web/public/webapp", p), "utf8");
-  it("has a Settings row, a view, a precached module set and the v249 shell", () => {
+  it("has a Settings row, a view, a precached module set and the v250 shell", () => {
     expect(read("index.html")).toContain('id="settings-tab-plan"');
     expect(read("index.html")).toContain('id="view-plan"');
     expect(read("app.js")).toContain('wire("settings-tab-plan", enterPlan)');
+    expect(read("index.html")).not.toContain("settings-tab-tier");
+    expect(read("index.html")).not.toContain("view-tier-status");
+    expect(read("index.html")).toContain('id="plan-lists-warning"');
     const sw = read("service-worker.js");
     for (const f of ["/lib/vouchers.js", "/lib/plan.js", "/views/plan.js"]) expect(sw).toContain(`"${f}"`);
-    expect(sw).toContain('SHELL_VERSION = "v249"');
+    expect(sw).toContain('SHELL_VERSION = "v250"');
   });
 });
 

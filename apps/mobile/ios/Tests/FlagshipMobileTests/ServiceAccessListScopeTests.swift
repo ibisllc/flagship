@@ -289,7 +289,7 @@ final class ServiceAccessListScopeTests: XCTestCase {
     func testPlanWarningCopy() {
         let h = home
         let name: (String) -> String = { $0 == h ? "Home" : "Office" }
-        typealias T = TierStatusViewModel
+        typealias T = SeparateListsWarningViewModel
         XCTAssertEqual(T.separateListsWarning(AccessListsSummary(plan: "pro", separateApps: 1, leaders: [home]), name: name),
                        "1 app has a separate access list on each server. When Pro ends it will use Home's list.")
         XCTAssertEqual(T.separateListsWarning(AccessListsSummary(plan: "pro", separateApps: 3, leaders: [home]), name: name),
@@ -304,17 +304,16 @@ final class ServiceAccessListScopeTests: XCTestCase {
     func testPlanScreenLoadsTheSummaryBestEffort() async {
         let client = MockScreensClient()
         client.simulatedLatency = 0
-        let none = TierStatusViewModel(client: client)
+        let none = SeparateListsWarningViewModel(client: client)
         await none.load()
-        guard case .loaded = none.state else { return XCTFail("the tier still loads") }
         XCTAssertNil(none.separateListsWarning, "an older box: no card")
 
         client.mockAccessListsSummary = AccessListsSummary(plan: "pro", separateApps: 1, leaders: [home])
-        let named = TierStatusViewModel(client: client, serverNames: [home: "Living room"])
+        let named = SeparateListsWarningViewModel(client: client, serverNames: [home: "Living room"])
         await named.load()
         XCTAssertEqual(named.separateListsWarning,
                        "1 app has a separate access list on each server. When Pro ends it will use Living room's list.")
-        let unnamed = TierStatusViewModel(client: client)
+        let unnamed = SeparateListsWarningViewModel(client: client)
         await unnamed.load()
         XCTAssertEqual(unnamed.separateListsWarning,
                        "1 app has a separate access list on each server. When Pro ends it will use home's list.")

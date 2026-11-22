@@ -13952,22 +13952,6 @@
     "en": "This device cannot install services. Use a primary device.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:561"
   },
-  "Tier & usage": {
-    "en": "Tier & usage",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1354"
-  },
-  "Custom domains:": {
-    "en": "Custom domains:",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1387"
-  },
-  "LLM credits today": {
-    "en": "LLM credits today",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1381"
-  },
-  "Bandwidth": {
-    "en": "Bandwidth",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1384"
-  },
   "Manifest hash mismatch — refusing to install a tampered listing.": {
     "en": "Manifest hash mismatch — refusing to install a tampered listing.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/MarketplaceViewModel.swift:90"
@@ -14288,49 +14272,17 @@
     "en": "Subscription",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:541"
   },
-  "Free • credits, usage, domains": {
-    "en": "Free • credits, usage, domains",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:558"
-  },
-  "Credits, usage, custom domains, reserved names": {
-    "en": "Credits, usage, custom domains, reserved names",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:561"
-  },
-  "LLM credits": {
-    "en": "LLM credits",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TierStatusScreen.swift:63"
-  },
-  "Dispatcher relay": {
-    "en": "Dispatcher relay",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TierStatusScreen.swift:80"
-  },
   "Custom domains": {
     "en": "Custom domains",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TierStatusScreen.swift:105"
   },
-  "Reserved names": {
-    "en": "Reserved names",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TierStatusScreen.swift:117"
-  },
-  "Tier": {
-    "en": "Tier",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TierStatusScreen.swift:53"
-  },
-  "this month": {
-    "en": "this month",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TierStatusScreen.swift:85"
-  },
-  "%@ / %@ GB free": {
-    "en": "%@ / %@ GB free",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TierStatusScreen.swift:153"
-  },
   "%lld apps have a separate access list on each server. When Pro ends they'll all use %@'s list.": {
     "en": "%lld apps have a separate access list on each server. When Pro ends they'll all use %@'s list.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/TierStatusViewModel.swift:59"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SeparateListsWarningViewModel.swift"
   },
   "%lld apps have a separate access list on each server. When Pro ends each will use its lead server's list.": {
     "en": "%lld apps have a separate access list on each server. When Pro ends each will use its lead server's list.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/TierStatusViewModel.swift:60"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SeparateListsWarningViewModel.swift"
   },
   "Too soon — try again in %llds.": {
     "en": "Too soon — try again in %llds.",
@@ -16693,10 +16645,6 @@
     "en": "Add to your balance",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift:206"
   },
-  "Pro, Pro Max and your balance": {
-    "en": "Pro, Pro Max and your balance",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:548"
-  },
   "Added %@ to your balance.": {
     "en": "Added %@ to your balance.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/PaymentsCenter.swift:210"
@@ -17167,5 +17115,33 @@
   "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": {
     "en": "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:1512"
+  },
+  "Data usage, your plan and prepaid balance": {
+    "en": "Data usage, your plan and prepaid balance",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift"
+  },
+  "Data usage": {
+    "en": "Data usage",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift"
+  },
+  "%@ of %@ used this month": {
+    "en": "%@ of %@ used this month",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift"
+  },
+  "All data your account sent through Flagship's relays this month.": {
+    "en": "All data your account sent through Flagship's relays this month.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift"
+  },
+  "Data usage can't be read right now. Try again later.": {
+    "en": "Data usage can't be read right now. Try again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PlanScreen.swift"
+  },
+  "1 app has a separate access list on each server. When Pro ends it will use %@'s list.": {
+    "en": "1 app has a separate access list on each server. When Pro ends it will use %@'s list.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SeparateListsWarningViewModel.swift"
+  },
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": {
+    "en": "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SeparateListsWarningViewModel.swift"
   }
 }

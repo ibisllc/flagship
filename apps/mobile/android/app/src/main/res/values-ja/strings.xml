@@ -3541,21 +3541,6 @@
     <string name="separate_lists">別々のリスト</string>
     <string name="one_list">1つのリスト</string>
     <string name="browse_marketplace">マーケットプレイスを見る</string>
-    <string name="plan_subscription">プラン / サブスクリプション</string>
-    <string name="tier_llm_credits_dispatcher_usage_custom">プラン、LLM クレジット、ディスパッチャーの使用量、カスタムドメイン。</string>
-    <string name="tier_usage">プランと使用量</string>
-    <string name="your_subscription_llm_credits_dispatcher">サブスクリプション、LLM クレジット、ディスパッチャーの使用量、カスタムドメイン、予約済みの名前。</string>
-    <string name="llm_credits">LLM クレジット</string>
-    <string name="dispatcher_relay">ディスパッチャーリレー</string>
-    <string name="custom_domains">カスタムドメイン</string>
-    <string name="none_your_default_subdomain_is_forever">なし — デフォルトのサブドメインはずっと無料です</string>
-    <string name="reserved_names">予約済みの名前</string>
-    <string name="none_your_username_is_fcfs_free">なし — ユーザー名は先着順で無料です</string>
-    <string name="tier">プラン</string>
-    <string name="today_remaining">本日の残り</string>
-    <string name="lifetime_remaining">生涯の残り</string>
-    <string name="this_month">今月</string>
-    <string name="gb_free">空き %1$s / %2$s GB</string>
     <string name="install_3">%1$s/%2$s をインストール</string>
     <string name="give_a_separate_list_on_each">%1$s にサーバーごとの別リストを与える</string>
     <string name="use_one_list_for_on_every">%1$s をすべてのサーバーで 1 つのリストにする</string>
@@ -4219,7 +4204,7 @@
     <string name="voici_call_route_speaker">スピーカー</string>
     <string name="voici_call_route_bluetooth">Bluetooth</string>
     <string name="voici_call_route_wired">ヘッドホン</string>
-    <string name="payments_settings_subtitle">プラン、前払い残高、追加の通信量</string>
+    <string name="payments_settings_subtitle">データ使用量、プラン、前払い残高</string>
     <string name="payments_title">プランと支払い</string>
     <string name="payments_plan_free">無料</string>
     <string name="payments_current_free">無料プランです。サーバーは動き続けますが、無料枠を超えた通信は低速になります。</string>
@@ -4364,4 +4349,12 @@
     <string name="voici_calls_ring_full_screen">ロック画面に通話を表示するには全画面通話を許可してください</string>
     <string name="voici_call_channel_quiet">通話中</string>
     <string name="voici_err_too_many_chunks">このページは voi.ci が許可するより多くの投稿を voi.ci に保存しようとしています。Flagship をアップデートしてから、もう一度公開してください。</string>
+    <string name="payments_usage_title">データ使用量</string>
+    <string name="payments_usage_line">今月の使用量: %2$s 中 %1$s</string>
+    <string name="payments_usage_note">今月、あなたのアカウントが Flagship のリレー経由で送信したすべてのデータです。</string>
+    <string name="payments_usage_unavailable">現在データ使用量を読み込めません。後でもう一度お試しください。</string>
+    <string name="payments_usage_mb">%1$s MB</string>
+    <string name="payments_usage_gb">%1$s GB</string>
+    <string name="app_has_a_separate_access_list">1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、%1$s のリストを使います。</string>
+    <string name="app_has_a_separate_access_list_2">1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、そのリードサーバーのリストを使います。</string>
 </resources>

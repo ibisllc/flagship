@@ -6,7 +6,7 @@ import FlagshipCore
 
 /// Settings tab, organised into the spec S1 six-group taxonomy:
 ///   - ACCOUNT — account security · AI keys · Recovery · Back up account key · Profiles
-///   - SUBSCRIPTION — tier, credits, bandwidth, manage providers
+///   - SUBSCRIPTION — the Plan page: data usage, plan, prepaid balance
 ///   - DEVICES — trusted devices · browser sessions · companions (dock / requests)
 ///   - WEB ACCESS — open secured sessions · process URL
 ///   - BACKUP & PEERS — peer-backup
@@ -59,7 +59,6 @@ public struct SettingsScreen: View {
     @State private var nameEditMessage: String?
     let username: String
     let accountDisplayName: String?
-    let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
     /// Peer-class devices on this user's account (push-token holders).
     /// The new "Trusted devices" section. Empty list renders an
@@ -105,8 +104,6 @@ public struct SettingsScreen: View {
     var onSignOut: () -> Void = {}
     /// Open Settings → AI keys (device-local BYOK key manager).
     var onOpenAiKeys: () -> Void = {}
-    /// P7 — open the dedicated tier-status / subscription screen.
-    var onOpenSubscription: () -> Void = {}
     /// Open Settings → Plan (the plan, the voucher balance, auto-pay and the overage limit).
     var onOpenPlan: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
@@ -207,7 +204,6 @@ public struct SettingsScreen: View {
     public init(
         username: String,
         accountDisplayName: String? = nil,
-        tier: LoadingState<TierStatusResponse>,
         controlDevices: LoadingState<[PairedSessionSummary]>,
         trustedDevices: LoadingState<[SettingsViewModel.DirectoryDevice]> = .loaded([]),
         pendingRePair: PendingRePairSnapshot? = nil,
@@ -227,7 +223,6 @@ public struct SettingsScreen: View {
         onLock: @escaping () -> Void = {},
         onSignOut: @escaping () -> Void = {},
         onOpenAiKeys: @escaping () -> Void = {},
-        onOpenSubscription: @escaping () -> Void = {},
         onOpenPlan: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
@@ -268,7 +263,6 @@ public struct SettingsScreen: View {
         self.onUpdateRecovery = onUpdateRecovery
         self.username = username
         self.accountDisplayName = accountDisplayName
-        self.tier = tier
         self.controlDevices = controlDevices
         self.trustedDevices = trustedDevices
         self.pendingRePair = pendingRePair
@@ -288,7 +282,6 @@ public struct SettingsScreen: View {
         self.onLock = onLock
         self.onSignOut = onSignOut
         self.onOpenAiKeys = onOpenAiKeys
-        self.onOpenSubscription = onOpenSubscription
         self.onOpenPlan = onOpenPlan
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
@@ -539,39 +532,17 @@ public struct SettingsScreen: View {
         }
     }
 
-    /// SUBSCRIPTION group (marketplace) — tier / usage / credits / domains.
+    /// SUBSCRIPTION group: the Plan page (data usage, the plan and the prepaid balance).
     private func subscription(c: FSColors) -> some View {
         FSSettingsListSection(String(localized: "Subscription"), rows: [
             FSSettingsRow(
                 icon: "dollarsign.circle.fill",
                 title: String(localized: "Plan"),
-                subtitle: String(localized: "Pro, Pro Max and your balance"),
+                subtitle: String(localized: "Data usage, your plan and prepaid balance"),
                 accessibilityId: "settings-open-plan",
                 action: onOpenPlan
-            ),
-            FSSettingsRow(
-                icon: "creditcard.fill",
-                title: String(localized: "Tier & usage"),
-                subtitle: subscriptionSubtitle,
-                accessibilityId: "settings-open-subscription",
-                action: onOpenSubscription
             )
         ])
-    }
-
-    private var subscriptionSubtitle: String {
-        switch tier {
-        case .loaded(let t):
-            switch t.tier {
-            case "byok":  return "Bring-your-own-key • credits, usage, domains"
-            case "promo": return "Free credits • credits, usage, domains"
-            default:      return String(localized: "Free • credits, usage, domains")
-            }
-        case .failed:
-            return String(localized: "Credits, usage, custom domains, reserved names")
-        default:
-            return String(localized: "Loading…")
-        }
     }
 
     /// The ACCOUNT group (spec S1 group 1): account security, AI keys,

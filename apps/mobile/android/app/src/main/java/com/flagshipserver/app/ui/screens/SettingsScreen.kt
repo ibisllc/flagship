@@ -231,14 +231,7 @@ fun SettingsScreen(nav: NavController) {
         FSSettingsGroup(
             header = stringResource(R.string.account),
             rows = listOf(
-                // Plan / Subscription: the dedicated tier-status screen (marketplace).
-                FSSettingsRowData(
-                    icon = Icons.Outlined.CreditCard,
-                    title = stringResource(R.string.plan_subscription),
-                    subtitle = stringResource(R.string.tier_llm_credits_dispatcher_usage_custom),
-                    onClick = { nav.navigate("tier-status") },
-                ),
-                // Plan and payments: the plan, the prepaid balance (round amounts) and extra traffic.
+                // Plan and payments: the account's data usage, the plan, the prepaid balance (round amounts) and extra traffic.
                 FSSettingsRowData(
                     icon = Icons.Outlined.CreditCard,
                     title = stringResource(R.string.payments_title),

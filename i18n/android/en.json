@@ -14613,67 +14613,6 @@
     "en": "Browse marketplace",
     "ctx": "ui/screens/ServicesListScreen.kt:219 (label=)"
   },
-  "plan_subscription": {
-    "en": "Plan / Subscription",
-    "ctx": "ui/screens/SettingsScreen.kt:229 (title=)"
-  },
-  "tier_llm_credits_dispatcher_usage_custom": {
-    "en": "Tier, LLM credits, dispatcher usage, custom domains.",
-    "ctx": "ui/screens/SettingsScreen.kt:230 (subtitle=)"
-  },
-  "tier_usage": {
-    "en": "Tier & usage",
-    "ctx": "ui/screens/TierStatusScreen.kt:81 (arg of Text)"
-  },
-  "your_subscription_llm_credits_dispatcher": {
-    "en": "Your subscription, LLM credits, dispatcher usage, custom domains, and reserved names.",
-    "ctx": "ui/screens/TierStatusScreen.kt:86 (arg of Text)"
-  },
-  "llm_credits": {
-    "en": "LLM credits",
-    "ctx": "ui/screens/TierStatusScreen.kt:117 (arg of SectionHeader)"
-  },
-  "dispatcher_relay": {
-    "en": "Dispatcher relay",
-    "ctx": "ui/screens/TierStatusScreen.kt:122 (arg of SectionHeader)"
-  },
-  "custom_domains": {
-    "en": "Custom domains",
-    "ctx": "ui/screens/TierStatusScreen.kt:127 (arg of SectionHeader)"
-  },
-  "none_your_default_subdomain_is_forever": {
-    "en": "none — your default subdomain is forever-free",
-    "ctx": "ui/screens/TierStatusScreen.kt:130 (arg of PlaceholderCard)"
-  },
-  "reserved_names": {
-    "en": "Reserved names",
-    "ctx": "ui/screens/TierStatusScreen.kt:141 (arg of SectionHeader)"
-  },
-  "none_your_username_is_fcfs_free": {
-    "en": "none — your username is FCFS-free",
-    "ctx": "ui/screens/TierStatusScreen.kt:144 (arg of PlaceholderCard)"
-  },
-  "tier": {
-    "en": "Tier",
-    "ctx": "ui/screens/TierStatusScreen.kt:164 (arg of Text)"
-  },
-  "today_remaining": {
-    "en": "today remaining",
-    "ctx": "ui/screens/TierStatusScreen.kt:180 (arg of LabelValueRow)"
-  },
-  "lifetime_remaining": {
-    "en": "lifetime remaining",
-    "ctx": "ui/screens/TierStatusScreen.kt:185 (arg of LabelValueRow)"
-  },
-  "this_month": {
-    "en": "this month",
-    "ctx": "ui/screens/TierStatusScreen.kt:197 (arg of LabelValueRow)"
-  },
-  "gb_free": {
-    "en": "%1$s / %2$s GB free",
-    "ctx": "ui/screens/TierStatusScreen.kt:263 (prose)",
-    "args": 2
-  },
   "install_3": {
     "en": "Install %1$s/%2$s",
     "ctx": "viewmodels/MarketplaceViewModel.kt:123 (prose)",
@@ -17345,7 +17284,7 @@
     "ctx": "voi.ci calls: where the call's sound goes"
   },
   "payments_settings_subtitle": {
-    "en": "Your plan, prepaid balance and extra traffic",
+    "en": "Data usage, your plan and prepaid balance",
     "ctx": "plan and payments (Settings)"
   },
   "payments_title": {
@@ -17900,5 +17839,37 @@
   "voici_err_too_many_chunks": {
     "en": "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.",
     "ctx": "voi.ci / Messages: error"
+  },
+  "payments_usage_title": {
+    "en": "Data usage",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_usage_line": {
+    "en": "%1$s of %2$s used this month",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_usage_note": {
+    "en": "All data your account sent through Flagship's relays this month.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_usage_unavailable": {
+    "en": "Data usage can't be read right now. Try again later.",
+    "ctx": "plan and payments (Settings)"
+  },
+  "payments_usage_mb": {
+    "en": "%1$s MB",
+    "ctx": "plan and payments (Settings): a data amount"
+  },
+  "payments_usage_gb": {
+    "en": "%1$s GB",
+    "ctx": "plan and payments (Settings): a data amount"
+  },
+  "app_has_a_separate_access_list": {
+    "en": "1 app has a separate access list on each server. When Pro ends it will use %1$s's list.",
+    "ctx": "core/AppListScope.kt (plan page warning)"
+  },
+  "app_has_a_separate_access_list_2": {
+    "en": "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.",
+    "ctx": "core/AppListScope.kt (plan page warning)"
   }
 }

@@ -2,8 +2,8 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// Settings → Plan (docs/payments-privacy-and-rails.md "As built"): the plan and its time left, the balance in round
-/// dollars, the plan choice, auto-pay with an optional random start, the monthly limit for extra traffic, and the
+/// Settings → Plan (docs/payments-privacy-and-rails.md "As built"): the plan and its time left, the account's data usage
+/// this month (read from `.com`, so it shows with no server paired), the balance in round dollars, the plan choice, auto-pay with an optional random start, the monthly limit for extra traffic, and the
 /// packs on sale through the App Store (in-app purchase only: no other way to buy is named here). The phone holds the balance and pays a little at a time, ahead of need.
 ///
 /// App Store 3.1.1: no code field, QR scan or file import for vouchers here, ever.
@@ -12,11 +12,15 @@ public struct PlanScreen: View {
     @State private var center: PaymentsCenter
     @State private var delayStart = false
     @State private var error: String?
+    @State private var lists: SeparateListsWarningViewModel?
     private let gate: (String) async -> Bool
 
     /// `gate` asks for Face ID (or the device passcode) before a spend the owner starts; true to go ahead.
-    public init(center: PaymentsCenter = .shared, gate: @escaping (String) async -> Bool) {
+    /// `lists` reads the warning before Pro ends while apps keep a separate access list on each server.
+    public init(center: PaymentsCenter = .shared, lists: SeparateListsWarningViewModel? = nil,
+                gate: @escaping (String) async -> Bool) {
         _center = State(initialValue: center)
+        _lists = State(initialValue: lists)
         self.gate = gate
     }
 
@@ -26,7 +30,16 @@ public struct PlanScreen: View {
 
     public var body: some View {
         List {
+            if let warning = lists?.separateListsWarning {
+                Section {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .accessibilityIdentifier("plan-separate-lists-warning")
+                }
+                .listRowBackground(rowBg)
+            }
             statusSection.listRowBackground(rowBg)
+            usageSection.listRowBackground(rowBg)
             if center.isAdmin && center.hasKey {
                 chooseSection.listRowBackground(rowBg)
                 autoPaySection.listRowBackground(rowBg)
@@ -56,7 +69,9 @@ public struct PlanScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await center.refreshAndTick() }
         .task {
+            async let warning: Void = lists?.load() ?? ()
             await center.refreshAndTick()
+            await warning
             delayStart = center.wallet?.settings.delayStart ?? false
             show(center.lastError)
         }
@@ -100,6 +115,33 @@ public struct PlanScreen: View {
                 .accessibilityIdentifier("plan-privacy")
         } footer: {
             Text("Your phone pays a little at a time, a few days ahead of need. A payment can't be linked to the purchase that paid for it.")
+        }
+    }
+
+    /// The account's data this month, counted by `.com` for the whole account (0 MB when nothing was sent).
+    @ViewBuilder
+    private var usageSection: some View {
+        if let a = center.allowance {
+            Section {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("\(Self.dataAmount(a.usedBytes)) of \(Self.dataAmount(a.quotaBytes)) used this month")
+                    ProgressView(value: Self.usedFraction(a))
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("plan-usage")
+            } header: {
+                Text("Data usage")
+            } footer: {
+                Text("All data your account sent through Flagship's relays this month.")
+            }
+        } else if !center.isLoading {
+            Section {
+                Text("Data usage can't be read right now. Try again later.")
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("plan-usage-unavailable")
+            } header: {
+                Text("Data usage")
+            }
         }
     }
 
@@ -240,6 +282,20 @@ public struct PlanScreen: View {
                 Text("Paid through the App Store.")
             }
         }
+    }
+
+    /// A data amount in MB under 1 GB, else GB, binary units, in the locale's words ("0 MB" when nothing was sent).
+    static func dataAmount(_ bytes: Int64) -> String {
+        let f = ByteCountFormatter()
+        f.countStyle = .memory
+        f.allowedUnits = bytes < 1_073_741_824 ? [.useMB] : [.useGB]
+        f.allowsNonnumericFormatting = false
+        f.includesActualByteCount = false
+        return f.string(fromByteCount: max(0, bytes))
+    }
+
+    static func usedFraction(_ a: AccountAllowance) -> Double {
+        a.quotaBytes > 0 ? min(1, max(0, Double(a.usedBytes) / Double(a.quotaBytes))) : 0
     }
 
     static func date(_ ms: Int64) -> String { Date(timeIntervalSince1970: TimeInterval(ms) / 1000).formatted(date: .abbreviated, time: .omitted) }

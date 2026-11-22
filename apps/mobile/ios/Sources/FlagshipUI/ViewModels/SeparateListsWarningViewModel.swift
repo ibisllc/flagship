@@ -2,15 +2,13 @@ import Foundation
 import Observation
 import FlagshipAPI
 
-/// Backs the dedicated tier-status / subscription screen (P7). Loads
-/// `GET /api/screens/tier-status` and exposes the rendering-friendly
-/// derivations the webapp `views/tier-status.js` computes inline.
+/// The Plan page's warning before Pro ends while apps keep a separate access list on each server
+/// (docs/service-access-gating.md "Separate lists per server (Pro)"). It asks the current server, so it stays
+/// quietly empty with no server paired or reachable.
 @MainActor
 @Observable
-public final class TierStatusViewModel {
-    public private(set) var state: LoadingState<TierStatusResponse> = .idle
-    /// The account's apps with a separate access list on each server; nil
-    /// when the box can't say (best-effort, the card just hides).
+public final class SeparateListsWarningViewModel {
+    /// The account's apps with a separate access list on each server; nil when no server can say.
     public private(set) var accessLists: AccessListsSummary?
 
     private let client: any ScreensClient
@@ -22,18 +20,7 @@ public final class TierStatusViewModel {
     }
 
     public func load() async {
-        state = .loading
-        async let lists = summary()
-        do {
-            state = .loaded(try await client.tierStatus())
-        } catch {
-            state = .failed(error.localizedDescription)
-        }
-        accessLists = await lists
-    }
-
-    private func summary() async -> AccessListsSummary? {
-        try? await client.accessListsSummary()
+        accessLists = try? await client.accessListsSummary()
     }
 
     /// What happens to separate access lists when Pro ends (the apps have no
@@ -53,18 +40,10 @@ public final class TierStatusViewModel {
         let n = s.separateApps
         let one = s.leaders.count == 1 ? s.leaders.first.map(name) : nil
         if n == 1 {
-            return one.map { "1 app has a separate access list on each server. When Pro ends it will use \($0)'s list." }
-                ?? "1 app has a separate access list on each server. When Pro ends it will use its lead server's list."
+            return one.map { String(localized: "1 app has a separate access list on each server. When Pro ends it will use \($0)'s list.") }
+                ?? String(localized: "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.")
         }
         return one.map { String(localized: "\(n) apps have a separate access list on each server. When Pro ends they'll all use \($0)'s list.") }
             ?? String(localized: "\(n) apps have a separate access list on each server. When Pro ends each will use its lead server's list.")
-    }
-
-    /// Dispatcher usage progress, 0...100. Mirrors `pct(used, quota)` in
-    /// tier-status.js: 0 when either is missing or quota is 0, else
-    /// `min(100, round(used / quota * 100))`.
-    public static func usagePercent(used: Double?, quota: Double?) -> Int {
-        guard let used, let quota, quota != 0 else { return 0 }
-        return min(100, Int((used / quota * 100).rounded()))
     }
 }
