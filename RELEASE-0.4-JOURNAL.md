@@ -1842,3 +1842,9 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   answers once; cold VoIP launch answers even while keys are still loading. Gates: VoiciCallsViewModelTests 15/15
   (scheme FlagshipMobile-Package, simulator), FlagshipApp build, i18n, parity. For 1.3 (10): TestFlight checks (US
   fresh install gets CallKit; China never; locked answer; killed+locked both settings; ring window → no-answer).
+- 2026-11-21 late: merged `0.4/posts-cap` (ff, shell **v249**, no migration): `.com` keeps a capped copy of a page's
+  posts; older chunks are phone-only (`phoneChunks`), served by the owner's phone (`/api/phone/voici-piece/<sha256>`,
+  8 in flight on both phones) and carried by the owner's other devices; publish refuses `too-many-chunks` with an
+  "Update Flagship" sentence. Gates: Android unit + assembleDebug, `swift test` shared 758, FlagshipApp build (before
+  the final rebase), tsc, i18n, parity, vitest 9,510 (after). 0.5 list item 6 struck. Merged-tree native compile next.
+  All seven post-crash branches are in except android-calls (owner phone test).

@@ -23,7 +23,7 @@ over once "let's start 0.5" is said.
    `/marketplace/` page and links from git history (removed in the `0.4/marketplace-off` website commit), flip the
    tests that expect its absence (they read the switch or say "0.4"), and ship new store builds.
 
-6. **voi.ci posts: a capped server copy, older posts from the phone** (owner, 2026-11-20). `.com` keeps only the
+6. ~~**voi.ci posts: a capped server copy, older posts from the phone**~~ pulled into 0.4 (`0.4/posts-cap`, 2026-11-21). (owner, 2026-11-20). `.com` keeps only the
    newest chunks of a page (a cap to choose, e.g. the newest 10 chunks = 200 posts). Chunks stay numbered 0..N, so a
    visitor's browser sees which ones `.com` doesn't hold and asks the owner's phone for them: a signed request over the
    same phone route calls use (`voi.ci/<user>` → the phone's bare name), answered with the chunk exactly as signed in
