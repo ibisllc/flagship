@@ -15943,11 +15943,11 @@
     "ctx": "voi.ci calls: status"
   },
   "voici_call_unlock": {
-    "en": "Open Flagship and unlock it to answer",
+    "en": "Unlock Flagship to answer",
     "ctx": "voi.ci calls: the account is locked"
   },
   "voici_call_open_app": {
-    "en": "Open Flagship",
+    "en": "Unlock to answer",
     "ctx": "voi.ci calls: button"
   },
   "voici_call_failed": {

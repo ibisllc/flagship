@@ -3873,8 +3873,8 @@
     <string name="voici_call_connected">Quantum-safe call</string>
     <string name="voici_call_ended">Call ended</string>
     <string name="voici_call_answered_elsewhere">Answered on another device</string>
-    <string name="voici_call_unlock">Open Flagship and unlock it to answer</string>
-    <string name="voici_call_open_app">Open Flagship</string>
+    <string name="voici_call_unlock">Unlock Flagship to answer</string>
+    <string name="voici_call_open_app">Unlock to answer</string>
     <string name="voici_call_failed">The call couldn\'t connect.</string>
     <string name="voici_call_media_unavailable">This version of Flagship can\'t connect calls yet.</string>
     <string name="voici_call_limit">Calls end after 60 minutes.</string>

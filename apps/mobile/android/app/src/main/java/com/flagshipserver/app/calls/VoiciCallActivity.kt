@@ -62,7 +62,14 @@ class VoiciCallActivity : ComponentActivity() {
 
     private fun granted(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
 
+    private fun unlockToAnswer() {
+        VoiciCallCenter.unlockToAnswer()
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
     private fun answer() {
+        // The notification's Answer on a phone whose app is locked: the unlock is the answer.
+        if (VoiciCallCenter.ui.value.phase == VoiciCallCenter.Phase.NeedsUnlock) return unlockToAnswer()
         if (granted(Manifest.permission.RECORD_AUDIO)) VoiciCallCenter.answer(this) else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
@@ -86,7 +93,7 @@ class VoiciCallActivity : ComponentActivity() {
                     finish()
                 },
                 onAnswer = null,
-                onOpenApp = { startActivity(Intent(this@VoiciCallActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
+                onOpenApp = { unlockToAnswer() },
             )
             else -> {
                 val over = ui.phase == VoiciCallCenter.Phase.Ended || ui.phase == VoiciCallCenter.Phase.Idle

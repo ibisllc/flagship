@@ -59,6 +59,11 @@ over once "let's start 0.5" is said.
 - Payments step 6 (the Monero view wallet, after the accountant's advice) and step 7 (paid marketplace apps, 10% cut).
 - WireGuard full tunnel for the outbound proxy.
 - OHTTP for every box's setup, and the OHTTP client in the initramfs.
+- **Answering while locked from a killed app (owner, 2026-11-21).** "Answer calls while Flagship is locked" works only
+  while the app process is alive: VoiciCenter, AppState and the phone route are built by MainActivity, so a call push
+  that cold-starts the process finds no call key (VoiciCenter.shared is null) and falls back to "Unlock to answer".
+  Build the call path from the push itself (Android FlagshipFcmService, iOS PushKit) without the main screen; test
+  with the process killed (`adb shell am kill`) on both phones.
 
 ## Reassess at the start of 0.5
 

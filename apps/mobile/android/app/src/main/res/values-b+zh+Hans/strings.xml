@@ -3868,8 +3868,8 @@
     <string name="voici_call_connected">抗量子通话</string>
     <string name="voici_call_ended">通话已结束</string>
     <string name="voici_call_answered_elsewhere">已在其他设备上接听</string>
-    <string name="voici_call_unlock">打开 Flagship 并解锁后即可接听</string>
-    <string name="voici_call_open_app">打开 Flagship</string>
+    <string name="voici_call_unlock">解锁 Flagship 以接听</string>
+    <string name="voici_call_open_app">解锁以接听</string>
     <string name="voici_call_failed">无法接通通话。</string>
     <string name="voici_call_media_unavailable">此版本的 Flagship 还无法接通通话。</string>
     <string name="voici_call_limit">通话在 60 分钟后结束。</string>

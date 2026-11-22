@@ -170,6 +170,8 @@ object VoiciCallCenter {
             val keys = runCatching { VoiciCenter.shared?.callKeys() }.getOrNull() ?: return@launch
             if (!startSession(push, keys)) return@launch
             update { it.copy(phase = Phase.Ringing) }
+            // The room's request may have been checked before the phase moved to Ringing.
+            session?.request?.let { maybeAnswerAfterUnlock(it.callId) }
             // The unlock lands on Home: bring the call screen forward so Answer is in front of the owner.
             if (::app.isInitialized) runCatching {
                 app.startActivity(Intent(app, VoiciCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
@@ -264,6 +266,27 @@ object VoiciCallCenter {
     }
 
     // ── actions ──
+
+    /** The call the owner pressed "Unlock to answer" on: answered once the unlocked app has checked its request. */
+    @Volatile private var answerAfterUnlock: String? = null
+
+    /**
+     * "Unlock to answer": the unlock that follows is the answer. Bound to this one call: if it ends or another rings
+     * first, nothing is answered. The answer still waits for the unlocked session's full request check (signatures,
+     * the local block list, who may call), and the call starts with the camera off.
+     */
+    fun unlockToAnswer() {
+        val u = _ui.value
+        if (u.phase == Phase.NeedsUnlock) answerAfterUnlock = u.callId
+    }
+
+    private fun maybeAnswerAfterUnlock(callId: String) {
+        if (answerAfterUnlock != callId || _ui.value.phase != Phase.Ringing || !::app.isInitialized) return
+        answerAfterUnlock = null
+        // No microphone permission yet: leave the Answer button, which asks for it.
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        answer(app)
+    }
 
     fun hasCamera(context: Context): Boolean = context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
 
@@ -396,6 +419,7 @@ object VoiciCallCenter {
         recordIncoming(session?.request, code)
         connectedAt = null
         pendingPush = null
+        answerAfterUnlock = null
         val ending = session
         session = null
         // Whatever ended the call, its room socket closes too (a no-op when the session ended it): an open one would
@@ -422,7 +446,9 @@ object VoiciCallCenter {
     private fun listenerFor(owner: () -> VoiciCallSession) = object : VoiciCallSession.Listener {
         private fun current() = session === owner()
         override fun onRequest(request: VoiciCallRequest) {
-            if (current()) update { it.copy(video = request.hasVideo) }
+            if (!current()) return
+            update { it.copy(video = request.hasVideo) }
+            maybeAnswerAfterUnlock(request.callId)
         }
         override fun onWon() {
             if (!current()) return

@@ -3868,8 +3868,8 @@
     <string name="voici_call_connected">Llamada a prueba de computación cuántica</string>
     <string name="voici_call_ended">Llamada finalizada</string>
     <string name="voici_call_answered_elsewhere">Respondida en otro dispositivo</string>
-    <string name="voici_call_unlock">Abre Flagship y desbloquéalo para responder</string>
-    <string name="voici_call_open_app">Abrir Flagship</string>
+    <string name="voici_call_unlock">Desbloquea Flagship para responder</string>
+    <string name="voici_call_open_app">Desbloquear para responder</string>
     <string name="voici_call_failed">No se ha podido conectar la llamada.</string>
     <string name="voici_call_media_unavailable">Esta versión de Flagship todavía no puede conectar llamadas.</string>
     <string name="voici_call_limit">Las llamadas terminan a los 60 minutos.</string>

@@ -3868,8 +3868,8 @@
     <string name="voici_call_connected">耐量子通話</string>
     <string name="voici_call_ended">通話終了</string>
     <string name="voici_call_answered_elsewhere">別のデバイスで応答しました</string>
-    <string name="voici_call_unlock">応答するには Flagship を開いてロックを解除してください</string>
-    <string name="voici_call_open_app">Flagship を開く</string>
+    <string name="voici_call_unlock">応答するには Flagship のロックを解除してください</string>
+    <string name="voici_call_open_app">ロック解除して応答</string>
     <string name="voici_call_failed">通話を接続できませんでした。</string>
     <string name="voici_call_media_unavailable">このバージョンの Flagship ではまだ通話を接続できません。</string>
     <string name="voici_call_limit">通話は 60 分で終了します。</string>

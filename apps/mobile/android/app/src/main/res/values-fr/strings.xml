@@ -3868,8 +3868,8 @@
     <string name="voici_call_connected">Appel protégé contre l\'informatique quantique</string>
     <string name="voici_call_ended">Appel terminé</string>
     <string name="voici_call_answered_elsewhere">Répondu sur un autre appareil</string>
-    <string name="voici_call_unlock">Ouvrez Flagship et déverrouillez-le pour répondre</string>
-    <string name="voici_call_open_app">Ouvrir Flagship</string>
+    <string name="voici_call_unlock">Déverrouillez Flagship pour répondre</string>
+    <string name="voici_call_open_app">Déverrouiller pour répondre</string>
     <string name="voici_call_failed">L\'appel n\'a pas pu être établi.</string>
     <string name="voici_call_media_unavailable">Cette version de Flagship ne peut pas encore établir d\'appels.</string>
     <string name="voici_call_limit">Les appels se terminent au bout de 60 minutes.</string>

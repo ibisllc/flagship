@@ -3868,8 +3868,8 @@
     <string name="voici_call_connected">Quantensicherer Anruf</string>
     <string name="voici_call_ended">Anruf beendet</string>
     <string name="voici_call_answered_elsewhere">Auf einem anderen Gerät angenommen</string>
-    <string name="voici_call_unlock">Öffne Flagship und entsperre es, um anzunehmen</string>
-    <string name="voici_call_open_app">Flagship öffnen</string>
+    <string name="voici_call_unlock">Entsperre Flagship, um anzunehmen</string>
+    <string name="voici_call_open_app">Zum Annehmen entsperren</string>
     <string name="voici_call_failed">Der Anruf konnte nicht verbunden werden.</string>
     <string name="voici_call_media_unavailable">Diese Flagship-Version kann noch keine Anrufe verbinden.</string>
     <string name="voici_call_limit">Anrufe enden nach 60 Minuten.</string>
