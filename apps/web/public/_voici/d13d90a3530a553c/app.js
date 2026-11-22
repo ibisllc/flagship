@@ -84,7 +84,7 @@ async function blobUrlOf(bytes) {
 
 async function showPage(cfg, username, handoff = null) {
   renderState(doc, root, { kind: "loading" });
-  const r = await lib.loadVoiciPage({ username, filesBase: cfg.files, apiBase: cfg.apiBase });
+  const r = await lib.loadVoiciPage({ username, filesBase: cfg.files, apiBase: cfg.apiBase, services: cfg.services });
   if (!r.ok) return failure(cfg, r.code, username);
   const { index, reader } = r;
   const profile = await reader.profile();
@@ -95,9 +95,18 @@ async function showPage(cfg, username, handoff = null) {
   const images = new Map();
   const posts = [];
   let next = reader.chunkCount() - 1;
+  // Older chunks only the owner's phone holds (§2.7a): when neither `.com`'s cache nor the phone has one, the page says
+  // so and offers Try again; it is not a failure of the page.
+  let olderOffline = false;
   const loadChunk = async () => {
     while (next >= 0) {
-      const c = await reader.chunk(next);
+      const r = await reader.chunkResult(next);
+      if (!r.ok && r.code === "phone-offline") {
+        olderOffline = true;
+        return true;
+      }
+      olderOffline = false;
+      const c = r.ok ? r.chunk : null;
       next -= 1;
       if (!c) return false;
       const shas = [...new Set(c.posts.flatMap((p) => p.links.map((l) => l.card?.image).filter(Boolean)))];
@@ -121,7 +130,13 @@ async function showPage(cfg, username, handoff = null) {
       host: cfg.host,
       apex: cfg.apex,
       posts,
-      hasOlder: next >= 0,
+      hasOlder: next >= 0 && !olderOffline,
+      olderOffline: olderOffline ? profile.displayName : null,
+      onOlderRetry: async () => {
+        reader.forgetChunk(next);
+        if (!(await loadChunk())) return failure(cfg, "bad-piece", username);
+        rerender();
+      },
       cardImageUrl: (sha) => images.get(sha) ?? null,
       lib: P,
       onMessage: () => withStore(openMessages),
@@ -140,7 +155,7 @@ async function showPage(cfg, username, handoff = null) {
   const goToHash = async () => {
     if (!/^#p-/.test(win.location.hash)) return;
     let post = postForHash(win.location.hash, posts);
-    while (!post && next >= 0) {
+    while (!post && next >= 0 && !olderOffline) {
       if (!(await loadChunk())) return failure(cfg, "bad-piece", username);
       rerender();
       post = postForHash(win.location.hash, posts);

@@ -74,6 +74,19 @@ describe("voici vectors (test-vectors/voici) in the webapp", () => {
     expect(P.signVoiciPageIndex({ ...V.index.body, showInSearch: 1 }, h(V.keys.adminRootSeed))).toEqual(s.signed);
   });
 
+  it("the index: phoneChunks (capped server copy, §2.7a)", () => {
+    const s = V.index.phone;
+    expect(dec(P.canonicalVoiciPageIndex(s.signed))).toBe(s.canonical);
+    expect(dec(P.canonicalVoiciPageIndex(s.signedV2))).toBe(s.canonicalV2);
+    expect(P.parseVoiciPageIndex(JSON.stringify(s.signed))).toEqual(s.signed);
+    expect(P.parseVoiciPageIndex(JSON.stringify(s.signedV2))).toEqual(s.signedV2);
+    expect(P.signVoiciPageIndex({ ...V.index.body, phoneChunks: 1 }, h(V.keys.adminRootSeed))).toEqual(s.signed);
+    expect([P.voiciIsPhoneChunk(s.signed, "chunk-0"), P.voiciIsPhoneChunk(s.signed, "chunk-1")]).toEqual([true, false]);
+    expect(P.VOICI_COM_MAX_CHUNKS).toBe(V.constants.comMaxChunks);
+    expect(P.PHONE_PIECE_PATH_PREFIX).toBe(M.constants.phonePiecePathPrefix);
+    for (const c of s.phoneChunksFor) expect(P.voiciPhoneChunksFor(c.chunks)).toBe(c.phoneChunks);
+  });
+
   it("piece upload, chunking and the merge", () => {
     const u = V.pieceUpload;
     expect(dec(P.canonicalVoiciPieceUpload(u.cases[0].upload))).toBe(u.canonical);

@@ -17,6 +17,7 @@ import {
   openInbox,
   publishVoiciPage,
   updateMessagesState,
+  verifyPublishedIndex,
   isRequest,
   isUnread,
   voiciWebOrigin,
@@ -144,6 +145,39 @@ describe("publishing a page from the webapp", () => {
     expect(page.acceptsMessages).toBe(1);
     expect(page.chunks.flat().map((p: any) => p.text)).toEqual(["one", "two", "three"]);
     expect(page.index.pageId).toBe(first.index.pageId);
+  });
+});
+
+describe("the capped server copy (docs/voici-and-messages.md §2.7a)", () => {
+  const twelve = () => Array.from({ length: 12 }, (_, c) => Array.from({ length: 20 }, (_, i) => post((c * 20 + i + 1).toString(16).padStart(32, "0"), `p${c}-${i}`, NOW - 100_000 + c * 20 + i)));
+
+  it("signs phoneChunks past the cap, then carries the phone-only chunks .com doesn't have, unchanged", async () => {
+    const com = fakeCom();
+    const merged = { profile: defaultVoiciProfile(U), acceptsMessages: 1, chunks: twelve() };
+    const built = await buildVoiciIndex({ username: U, published: null, merged, images: new Map(), signer, umk: { seed: UMK }, now: NOW });
+    expect(built.index.phoneChunks).toBe(2);
+    expect(P.checkVoiciPublish(built.index, { username: U, sensitiveKind: "admin-root", sensitivePub: ADMIN_PUB, storedSeq: 0, storedPageId: null, now: NOW }).ok).toBe(true);
+    // .com keeps only what it holds: the two phone-only chunks are missing there.
+    const phoneOnly = new Set(built.index.pieces.filter((p: any) => P.voiciIsPhoneChunk(built.index, p.role)).map((p: any) => p.sha256));
+    expect(phoneOnly.size).toBe(2);
+    for (const u of built.uploads) if (!phoneOnly.has(u.sha256)) com.pieces.set(u.sha256, u.bytes);
+    com.state.index = built.index;
+    const read = await verifyPublishedIndex(U, built.index, deps(com));
+    expect(read.carried.map((r: any) => r.role)).toEqual(["chunk-0", "chunk-1"]);
+    expect(read.chunks[0]).toEqual([]);
+    expect(read.chunks[11]).toHaveLength(20);
+
+    const next = await buildVoiciIndex({ username: U, published: read, merged: P.mergeVoiciPage(read, [makeDraftOp("post-add", { post: post("ff".repeat(16), "new", NOW) }, { now: NOW })]), images: new Map(), signer, umk: { seed: UMK }, now: NOW + 1 });
+    const role = (i: any, r: string) => i.pieces.find((p: any) => p.role === r);
+    expect(role(next.index, "chunk-0")).toEqual(role(built.index, "chunk-0"));
+    expect(role(next.index, "chunk-1")).toEqual(role(built.index, "chunk-1"));
+    expect(next.index.phoneChunks).toBe(3);
+    expect(next.uploads.map((u: any) => u.role)).toEqual(["chunk-12"]);
+    expect(next.carried.map((r: any) => r.role)).toEqual(["chunk-0", "chunk-1"]);
+  });
+
+  it("says why .com refused a page past the cap", () => {
+    expect(voiciErrorText({ code: "too-many-chunks" })).toBe("This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.");
   });
 });
 

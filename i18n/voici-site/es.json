@@ -195,5 +195,7 @@
   "Make your page": "Crea tu página",
   "Link to this post": "Enlace a esta publicación",
   "Link copied": "Enlace copiado",
-  "Couldn't copy the link.": "No se pudo copiar el enlace."
+  "Couldn't copy the link.": "No se pudo copiar el enlace.",
+  "Older posts are on {0}'s phone, which is offline right now.": "Las publicaciones anteriores están en el teléfono de {0}, que ahora mismo no tiene conexión.",
+  "Try again": "Reintentar"
 }

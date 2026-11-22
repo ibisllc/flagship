@@ -34,6 +34,7 @@ import {
   VOICI_DRAFTS_CONSUME_MAX,
   VOICI_INDEX_MAX_BYTES,
   VOICI_INDEX_SKEW_MS,
+  voiciIsPhoneChunk,
   type DeviceCapabilityGrant,
   type DeviceScope,
   type VoiciPageIndex,
@@ -179,7 +180,8 @@ async function checkPiece(deps: VoiciPagesDeps, pageId: string, role: string, re
 
 /**
  * `voiciPieceRefsOk` over the remembered parses: the profile's avatar is exactly the avatar piece (or neither), and the
- * card images the chunks name are exactly the card pieces.
+ * card images the held chunks name are card pieces. With every chunk on `.com` the card pieces are exactly those; with
+ * phone-only chunks (§2.7a) the other card pieces are presumed theirs (a reader with every chunk checks the rest).
  */
 function refsMatch(index: VoiciPageIndex, refsByRole: Map<string, string[]>): boolean {
   const avatar = index.pieces.find((p) => p.role === "avatar")?.sha256 ?? null;
@@ -187,7 +189,10 @@ function refsMatch(index: VoiciPageIndex, refsByRole: Map<string, string[]>): bo
   const named = new Set<string>();
   for (const [role, refs] of refsByRole) if (role.startsWith("chunk-")) for (const r of refs) named.add(r);
   const cards = index.pieces.filter((p) => p.role.startsWith("card-"));
-  return cards.length === named.size && cards.every((p) => named.has(p.sha256) && p.role === voiciCardRole(p.sha256));
+  if (!cards.every((p) => p.role === voiciCardRole(p.sha256))) return false;
+  const listed = new Set(cards.map((p) => p.sha256));
+  if (![...named].every((h) => listed.has(h))) return false;
+  return (index.phoneChunks ?? 0) > 0 || cards.length === named.size;
 }
 
 export async function handleVoiciPublish(deps: VoiciPagesDeps, username: string, bodyText: string): Promise<HandlerResponseWithHeaders> {
@@ -220,20 +225,30 @@ export async function handleVoiciPublish(deps: VoiciPagesDeps, username: string,
   if (!verdict.ok) {
     if (verdict.code === "seq-conflict") return seqConflict(stored);
     if (verdict.code === "wrong-page") return voiciRefusal(409, "wrong-page", { pageId: stored?.pageId ?? null });
-    const status = verdict.code === "malformed" || verdict.code === "wrong-username" ? 400 : 403;
+    const status = verdict.code === "malformed" || verdict.code === "wrong-username" || verdict.code === "too-many-chunks" ? 400 : 403;
     return voiciRefusal(status, verdict.code === "wrong-username" ? "malformed" : verdict.code);
   }
   const index = verdict.index;
   const rows = new Map((await deps.voici.getPieces(index.pageId, index.pieces.map((p) => p.sha256))).map((r) => [r.sha256, r]));
   const refsByRole = new Map<string, string[]>();
-  const checks = await Promise.all(index.pieces.map((p) => checkPiece(deps, index.pageId, p.role, p, rows.get(p.sha256))));
+  // Capped server copy (§2.7a): phone-only chunks are not checked here (the phone serves them); card pieces wait until
+  // the held chunks say which ones `.com` must hold.
+  const first = index.pieces.filter((p) => !voiciIsPhoneChunk(index, p.role) && !p.role.startsWith("card-"));
+  const checks = await Promise.all(first.map((p) => checkPiece(deps, index.pageId, p.role, p, rows.get(p.sha256))));
   for (let i = 0; i < checks.length; i++) {
     const c = checks[i]!;
     if (!c.ok) return voiciRefusal(c.code === "missing-piece" ? 409 : 400, c.code);
-    const role = index.pieces[i]!.role;
+    const role = first[i]!.role;
     if (role === "profile" || role.startsWith("chunk-")) refsByRole.set(role, c.refs);
   }
+  const named = new Set<string>();
+  for (const [role, refs] of refsByRole) if (role.startsWith("chunk-")) for (const r of refs) named.add(r);
+  const heldCards = index.pieces.filter((p) => p.role.startsWith("card-") && named.has(p.sha256));
+  const cardChecks = await Promise.all(heldCards.map((p) => checkPiece(deps, index.pageId, p.role, p, rows.get(p.sha256))));
+  const badCard = cardChecks.find((c) => !c.ok);
+  if (badCard && !badCard.ok) return voiciRefusal(badCard.code === "missing-piece" ? 409 : 400, badCard.code);
   if (!refsMatch(index, refsByRole)) return voiciRefusal(400, "bad-piece");
+  const held = [...first, ...heldCards];
   const indexJson = JSON.stringify(index);
   const accepted = await deps.voici.publishPage(
     {
@@ -251,11 +266,13 @@ export async function handleVoiciPublish(deps: VoiciPagesDeps, username: string,
   );
   if (!accepted) return seqConflict(await deps.voici.getPage(u));
   const before = stored ? (parseVoiciPageIndex(stored.indexJson)?.pieces.map((p) => p.sha256) ?? []) : [];
-  const after = new Set(index.pieces.map((p) => p.sha256));
+  // Only what `.com` holds stays referenced; phone-only pieces it still has (and cached copies) go with the sweep.
+  const after = new Set(held.map((p) => p.sha256));
+  const gone = [...new Set([...before, ...index.pieces.map((p) => p.sha256)])].filter((h) => !after.has(h));
   await Promise.all([
     deps.bucket.put(voiciIndexKey(u), indexJson, { httpMetadata: { contentType: "application/json", cacheControl: VOICI_INDEX_CACHE } }),
-    deps.voici.markPieces(index.pageId, [...after], before.filter((h) => !after.has(h)), now),
-    ...index.pieces
+    deps.voici.markPieces(index.pageId, [...after], gone, now),
+    ...first
       .map((p, i) => ({ p, c: checks[i]! }))
       .filter(({ c }) => c.ok && c.parsed)
       .map(({ p, c }) => deps.voici.setPieceParse(index.pageId, p.sha256, p.role, (c as { refs: string[] }).refs)),
@@ -336,6 +353,49 @@ export async function handleVoiciRemove(deps: VoiciPagesDeps, username: string, 
   }
   await deps.voici.deletePagePieces(r.pageId);
   return okNoStore({ ok: true, pageId: r.pageId, seq: r.seq });
+}
+
+/**
+ * `POST /api/voici/pages/<u>/pieces/<sha256>`, no auth (§2.7a): a visitor's browser offers a piece it fetched from the
+ * owner's phone. Taken only when the stored index lists it as a phone-only chunk or a card image no held chunk names,
+ * with the exact size and hash; a chunk must parse, an image must be a JPEG. Stored under the same R2 key, marked
+ * unreferenced, so the 30-day sweep drops it. The route limits callers per IP address. The index pins the hash, so a cached piece can never be a wrong one.
+ */
+export async function handleVoiciPieceCache(
+  deps: Pick<VoiciPagesDeps, "voici" | "bucket" | "now">,
+  username: string,
+  sha256: string,
+  body: Uint8Array,
+): Promise<HandlerResponseWithHeaders> {
+  const now = nowOf(deps);
+  const u = username.toLowerCase();
+  if (!isLowerHex(sha256, 32)) return voiciRefusal(404, "not-found");
+  if (body.length < 1 || body.length > VOICI_CHUNK_MAX_BYTES) return voiciRefusal(413, "too-large");
+  const page = await deps.voici.getPage(u);
+  if (!page || page.takenDownAt !== null || isRemoved(page)) return voiciRefusal(404, "not-found");
+  const index = parseVoiciPageIndex(page.indexJson);
+  const ref = index?.pieces.find((p) => p.sha256 === sha256);
+  if (!index || !ref || !(voiciIsPhoneChunk(index, ref.role) || ref.role.startsWith("card-"))) return voiciRefusal(404, "not-found");
+  if (body.length !== ref.size || sha256Hex(body) !== sha256) return voiciRefusal(400, "bad-piece");
+  const [have] = await deps.voici.getPieces(page.pageId, [sha256]);
+  if (have) return okNoStore({ ok: true, cached: true });
+  const jpeg = isVoiciJpeg(body);
+  let imageRefs: string[] | null = null;
+  if (ref.role.startsWith("chunk-")) {
+    const c = parseVoiciChunkPiece(body, Number(ref.role.slice("chunk-".length)));
+    if (!c) return voiciRefusal(400, "bad-piece");
+    imageRefs = [...new Set(c.posts.flatMap((p) => p.links.flatMap((l) => (l.card?.image ? [l.card.image] : []))))].sort();
+  } else if (!jpeg) {
+    return voiciRefusal(400, "bad-piece");
+  }
+  await deps.bucket.put(voiciPieceKey(page.pageId, sha256), body, {
+    httpMetadata: { contentType: jpeg ? "image/jpeg" : "application/json", cacheControl: VOICI_PIECE_CACHE },
+  });
+  // uploadedAt 0: a cached copy is not the owner's upload, so it never counts toward the owner's daily brake. Each
+  // piece is cached once until the sweep, so the stored bytes are bounded by the page's own phone-only pieces.
+  await deps.voici.putPiece({ pageId: page.pageId, sha256, username: u, size: body.length, jpeg, uploadedAt: 0, unreferencedAt: now });
+  if (imageRefs) await deps.voici.setPieceParse(page.pageId, sha256, ref.role, imageRefs);
+  return okNoStore({ ok: true, cached: true });
 }
 
 /** `GET /api/voici/pages/<u>/pieces/<sha256>` (the webapp's read; its CSP cannot reach files.voi.ci): a piece the stored

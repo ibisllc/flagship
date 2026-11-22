@@ -124,6 +124,66 @@ describe("flagship-web", () => {
     expect(await W.loadVoiciPage({ ...o, username: "carol" })).toEqual({ ok: false, code: "not-found" });
   });
 
+  it("reads a phone-only chunk from .com's cache, else the owner's phone, checks it, and offers it back (§2.7a)", async () => {
+    const idx = V.index.phone.signed;
+    const c0 = W.pieceRef(idx, "chunk-0");
+    const c0Bytes = enc.encode(V.pieces.chunkTexts[0]);
+    const held = new Map<string, Uint8Array>();
+    held.set(W.pieceRef(idx, "profile").sha256, enc.encode(V.pieces.profileText));
+    held.set(W.pieceRef(idx, "chunk-1").sha256, enc.encode(V.pieces.chunkTexts[1]));
+    held.set(W.pieceRef(idx, "avatar").sha256, h(V.pieces.avatarHex));
+    for (const p of idx.pieces.filter((x: { role: string }) => x.role.startsWith("card-"))) held.set(p.sha256, h(V.pieces.cardImageHex));
+    const account = { username: "alice", irkPub: V.keys.irkPub, adminRootPub: V.keys.adminRootPub };
+    let phone: "up" | "down" | "liar" = "down";
+    let cached: Uint8Array | null = null;
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetch = async (url: string, init: RequestInit = {}) => {
+      calls.push({ url, init });
+      if (url === "https://files.voi.ci/v1/u/alice.json") return new Response(JSON.stringify(idx));
+      if (url === "https://flagshipserver.com/api/username/alice") return new Response(JSON.stringify(account));
+      if (url === `https://flagshipserver.com/api/voici/pages/alice/pieces/${c0.sha256}`) {
+        if (init.method === "POST") {
+          cached = init.body as Uint8Array;
+          return new Response("{}");
+        }
+        return cached ? new Response(cached) : new Response("no", { status: 404 });
+      }
+      if (url === `https://alice.flagship.services/api/phone/voici-piece/${c0.sha256}`) {
+        if (phone === "down") throw new TypeError("offline");
+        return new Response(phone === "liar" ? enc.encode(V.pieces.chunkTexts[1]) : c0Bytes);
+      }
+      const m = url.match(/^https:\/\/files\.voi\.ci\/v1\/p\/([0-9a-f]{32})\/([0-9a-f]{64})$/);
+      if (m && held.has(m[2]!)) return new Response(held.get(m[2]!)!);
+      return new Response("no", { status: 404 });
+    };
+    const o = { username: "alice", filesBase: "https://files.voi.ci", apiBase: "https://flagshipserver.com", services: "flagship.services", fetch, seqStore: { get: () => null, set: () => {} } };
+    const r = await W.loadVoiciPage(o);
+    expect(r.ok).toBe(true);
+    expect([r.reader.isPhoneChunk(0), r.reader.isPhoneChunk(1)]).toEqual([true, false]);
+    expect((await r.reader.chunk(1)).chunk).toBe(1);
+    // Never from files.voi.ci: the cache first, then the phone; offline phone → "phone-offline".
+    expect(await r.reader.chunkResult(0)).toEqual({ ok: false, code: "phone-offline" });
+    expect(calls.some((c) => c.url.includes(`/v1/p/${idx.pageId}/${c0.sha256}`))).toBe(false);
+    // A phone answering the wrong bytes is the same as no answer.
+    phone = "liar";
+    r.reader.forgetChunk(0);
+    expect(await r.reader.chunkResult(0)).toEqual({ ok: false, code: "phone-offline" });
+    expect(cached).toBeNull();
+    phone = "up";
+    r.reader.forgetChunk(0);
+    const got = await r.reader.chunkResult(0);
+    expect(got.ok && got.chunk.chunk).toBe(0);
+    const ask = calls.filter((c) => c.url.includes("/api/phone/voici-piece/")).at(-1)!;
+    expect([ask.init.credentials, ask.init.method ?? "GET"]).toEqual(["omit", "GET"]);
+    await new Promise((res) => setTimeout(res, 0));
+    expect(cached).toEqual(c0Bytes);
+    // The next visitor gets it from .com's cache with the phone offline.
+    phone = "down";
+    const r2 = await W.loadVoiciPage(o);
+    const again = await r2.reader.chunkResult(0);
+    expect(again.ok && again.chunk.chunk).toBe(0);
+  });
+
   it("signs with a WebCrypto browser key in the form receivers verify", async () => {
     const b = await W.createBrowserKey();
     expect(b.delegatePub).toMatch(/^04[0-9a-f]{128}$/);

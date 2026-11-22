@@ -3968,10 +3968,10 @@
   "Your stuff,<br>on your hardware.": "あなたのデータを、<br>あなたのハードウェアで。",
   "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "本当に自分のものと言えるパーソナルクラウド。作成も承認もすべてスマートフォンから。アプリはサーバーが動かします。",
   "People who let you call them back": "折り返しを許可してくれる人",
-  "Pay by bank transfer": "銀行振込で支払う",
-  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe が会社に振込先の口座情報を表示します。振込額の全額が届いた時点でバウチャーの準備が整います。数日かかることがあります。",
   "Bank transfer isn't available right now. Pay by card instead.": "現在、銀行振込はご利用いただけません。カードでお支払いください。",
   "That batch can no longer be paid. Start a new batch.": "この一括購入はもう支払えません。新しく一括購入を始めてください。",
+  "Pay by bank transfer": "銀行振込で支払う",
+  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe が会社に振込先の口座情報を表示します。振込額の全額が届いた時点でバウチャーの準備が整います。数日かかることがあります。",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "クラウドリカバリーを使っていませんか？アカウントキーの暗号化ファイルを安全な場所に保管すれば、デバイスをなくしてもアカウントを失いません。",
   "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "クラウドリカバリーは、アカウントキーの暗号化コピーを Flagship に保存します。コピーはパスキーで保護されます。パスキーはブラウザーまたはパスワード マネージャーが保管するので、パスワードを考える必要はありません。新しいデバイスでは、パスキーとリカバリー用のパスフレーズの両方でコピーを開きます。Flagship が開くことはできません。",
   "This browser couldn't save the photo. Try again.": "このブラウザで写真を保存できませんでした。もう一度お試しください。",
@@ -3982,5 +3982,6 @@
   "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": "写真の切り抜き。ドラッグまたは矢印キーで移動し、+ と - で拡大・縮小します。",
   "Zoom": "ズーム",
   "Flip": "反転",
-  "Use": "使用"
+  "Use": "使用",
+  "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": "このページは voi.ci が許可するより多くの投稿を voi.ci に保存しようとしています。Flagship をアップデートしてから、もう一度公開してください。"
 }

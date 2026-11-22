@@ -3968,10 +3968,10 @@
   "Your stuff,<br>on your hardware.": "你的东西，<br>运行在你的硬件上。",
   "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "一个真正归你所有的个人云。你在手机上构建并批准一切，你的服务器运行你的应用。",
   "People who let you call them back": "允许你回拨的人",
-  "Pay by bank transfer": "通过银行转账支付",
-  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe 会向贵公司显示银行账户信息。全部转账款项到账后，代金券即可使用，这可能需要几天时间。",
   "Bank transfer isn't available right now. Pay by card instead.": "银行转账暂时不可用。请改用银行卡支付。",
   "That batch can no longer be paid. Start a new batch.": "该批次已无法支付。请重新发起一个批次。",
+  "Pay by bank transfer": "通过银行转账支付",
+  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe 会向贵公司显示银行账户信息。全部转账款项到账后，代金券即可使用，这可能需要几天时间。",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "没有使用云恢复？请把账户密钥的加密文件保存在安全的地方，这样丢了设备也不会丢掉账户。",
   "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "云恢复会把账户密钥的加密副本保存在 Flagship。它由通行密钥锁定：浏览器或你的密码管理器会保存通行密钥，因此不需要另设密码。在新设备上，通行密钥和你的恢复密码短语一起才能打开它。Flagship 无法打开它。",
   "This browser couldn't save the photo. Try again.": "此浏览器无法保存这张照片。请重试。",
@@ -3982,5 +3982,6 @@
   "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": "照片裁剪。拖动或使用方向键移动，按 + 和 - 缩放。",
   "Zoom": "缩放",
   "Flip": "翻转",
-  "Use": "使用"
+  "Use": "使用",
+  "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": "此页面在 voi.ci 上保留的帖子超出了 voi.ci 允许的数量。请更新 Flagship，然后重新发布。"
 }

@@ -47,6 +47,8 @@ import {
   signWebEnvelopeEd25519,
   parsePhoneLiveAnswer,
   voiciCardRole,
+  voiciIsPhoneChunk,
+  voiciPhoneChunksFor,
   VOICI_WEB_ORIGIN,
   VOICI_WEB_ORIGIN_GYM,
   PHONE_LIVE_PATH,
@@ -210,8 +212,23 @@ export async function verifyPublishedIndex(username, rawIndex, deps = {}) {
   const profile = parseVoiciProfilePiece(await read(byRole.get("profile")));
   if (!profile) throw new VoiciError("page-unverified", { reason: "bad-piece" });
   const chunks = [];
+  // Phone-only chunks (§2.7a): read from `.com`'s cache when it has one; else carried unchanged into the next publish
+  // (an empty placeholder here, its ref in `carried`). The webapp's origin can't reach the owner's phone.
+  const carried = [];
   for (let i = 0; byRole.has(`chunk-${i}`); i++) {
-    const chunk = parseVoiciChunkPiece(await read(byRole.get(`chunk-${i}`)), i);
+    const ref = byRole.get(`chunk-${i}`);
+    let bytes = null;
+    try {
+      bytes = await read(ref);
+    } catch (e) {
+      if (!voiciIsPhoneChunk(index, ref.role)) throw e;
+    }
+    if (!bytes) {
+      carried.push(ref);
+      chunks.push([]);
+      continue;
+    }
+    const chunk = parseVoiciChunkPiece(bytes, i);
     if (!chunk) throw new VoiciError("page-unverified", { reason: "bad-piece" });
     chunks.push(chunk.posts);
   }
@@ -222,7 +239,7 @@ export async function verifyPublishedIndex(username, rawIndex, deps = {}) {
       /* the photo is shown when it can be read; the page stays usable without it */
     }
   }
-  return { index, profile, acceptsMessages: index.acceptsMessages, chunks, issuedAt: index.issuedAt, pieces };
+  return { index, profile, acceptsMessages: index.acceptsMessages, chunks, issuedAt: index.issuedAt, pieces, carried };
 }
 
 /** F (spec §3): the apps read a piece from `.com` (`GET /api/voici/pages/<u>/pieces/<sha256>`), whose bytes equal
@@ -286,6 +303,11 @@ export async function buildVoiciIndex({ username, published, merged, images, sig
   const inboxEpoch = rotate && published ? prevEpoch + 1 : prevEpoch;
   const keys = ownerKeys(umk, pageId, inboxEpoch);
   const listed = new Map((published?.index.pieces ?? []).map((p) => [p.sha256, p]));
+  // Capped server copy (§2.7a): `.com` holds the newest VOICI_COM_MAX_CHUNKS chunks, the older ones are phone-only. A
+  // changed phone-only chunk is still uploaded, so the owner's phone can fetch it before `.com`'s sweep drops it; a
+  // chunk this device doesn't hold goes out as its listed ref, with the card images no held chunk names.
+  const phoneChunks = voiciPhoneChunksFor(merged.chunks.length);
+  const carried = new Map((published?.carried ?? []).map((r) => [r.role, r]));
   const pieces = [];
   const uploads = [];
   const add = (role, bytes, sha, size, contentType) => {
@@ -307,10 +329,18 @@ export async function buildVoiciIndex({ username, published, merged, images, sig
   if (merged.profile.avatar) addImage("avatar", merged.profile.avatar);
   const cards = new Set();
   merged.chunks.forEach((posts, i) => {
-    addJson(`chunk-${i}`, { v: 1, chunk: i, posts });
+    const role = `chunk-${i}`;
+    const keep = carried.get(role);
+    if (keep && posts.length === 0) return add(role, null, keep.sha256, keep.size, "application/json");
+    const bytes = json({ v: 1, chunk: i, posts });
+    add(role, bytes, sha256Hex(bytes), bytes.length, "application/json");
     for (const p of posts) for (const l of p.links) if (l.card?.image) cards.add(l.card.image);
   });
   for (const sha of [...cards].sort()) addImage(voiciCardRole(sha), sha);
+  // The card images of chunks this device carries without holding them: kept as listed.
+  if (carried.size) {
+    for (const p of published.index.pieces) if (p.role.startsWith("card-") && !cards.has(p.sha256)) add(p.role, null, p.sha256, p.size, "image/jpeg");
+  }
   // The share card (§2.10): a freshly drawn one, else the listed one when the name, photo and theme are unchanged.
   const share = shareCard ?? carriedShareCard(published, merged);
   if (share) add("share", share.bytes, share.sha256, share.size, "image/jpeg");
@@ -331,9 +361,11 @@ export async function buildVoiciIndex({ username, published, merged, images, sig
     signerPub: signer.pub,
     // Like calls, every publish keeps the search setting of the index it replaces.
     ...carriedSearch(published, search),
+    ...(phoneChunks > 0 ? { phoneChunks } : {}),
   };
   const signature = await signer.sign(canonicalVoiciPageIndex(body));
-  return { index: { kind: "VoiciPage", version: body.acceptsCalls !== undefined ? 2 : 1, ...body, signature }, uploads };
+  const stillCarried = [...carried.values()].filter((r) => pieces.some((p) => p.role === r.role && p.sha256 === r.sha256));
+  return { index: { kind: "VoiciPage", version: body.acceptsCalls !== undefined ? 2 : 1, ...body, signature }, uploads, carried: stillCarried };
 }
 
 function sortPieces(pieces) {
@@ -411,7 +443,7 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
     // A first publish turns calls on (callers who let the owner call them back); any other carries the index it replaces.
     const callsNow = calls ?? (published ? undefined : { acceptsCalls: VOICI_FIRST_PUBLISH.acceptsCalls, callsFrom: VOICI_FIRST_PUBLISH.callsFrom });
     const shareCard = await drawnShareCard(published, merged, username, allImages, deps);
-    const { index, uploads } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls: callsNow, search, shareCard });
+    const { index, uploads, carried } = await buildVoiciIndex({ username, published, merged, images: allImages, signer, umk, now: c.now(), rotate, calls: callsNow, search, shareCard });
     for (const u of uploads) await uploadPiece(username, index.pageId, u, signer, c);
     const r = await c.fetch(`${c.apex}/api/voici/pages/${encodeURIComponent(username)}/publish`, {
       method: "POST",
@@ -421,7 +453,7 @@ export async function publishVoiciPage({ ops = [], images = new Map(), rotate = 
     if (r.ok) {
       const pieces = new Map(allImages);
       for (const u of uploads) pieces.set(u.sha256, u.bytes);
-      return { index, profile: merged.profile, acceptsMessages: index.acceptsMessages, chunks: merged.chunks, issuedAt: index.issuedAt, pieces };
+      return { index, profile: merged.profile, acceptsMessages: index.acceptsMessages, chunks: merged.chunks, issuedAt: index.issuedAt, pieces, carried };
     }
     const err = await readError(r);
     if (err.code !== "seq-conflict") throw err;

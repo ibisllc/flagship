@@ -564,7 +564,9 @@
 //  v248: the page photo opens a photo editor first (views/photo-editor.js, lib/voiciImageEdit.js): square crop with
 //       drag/pinch/wheel/keys, Rotate, Flip, Use; "Take photo" on touch screens; a smaller square before refusing;
 //       one sentence per failure.
-const SHELL_VERSION = "v248";
+//  v249: voi.ci's capped server copy (docs/voici-and-messages.md §2.7a): publishes sign phoneChunks and carry the
+//       phone-only chunks this browser doesn't hold; the "too many posts on voi.ci" sentence.
+const SHELL_VERSION = "v249";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

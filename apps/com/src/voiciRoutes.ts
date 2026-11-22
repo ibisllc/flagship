@@ -28,6 +28,7 @@ import {
   handleVoiciDraftList,
   handleVoiciGetPage,
   handleVoiciInbox,
+  handleVoiciPieceCache,
   handleVoiciPieceUpload,
   handleVoiciPublish,
   handleVoiciRemove,
@@ -56,7 +57,7 @@ import { workerCaTrustChain } from "./caTrustChainLoader.js";
 import { buildOptionalPushForwarder, type ControlPlaneEnv } from "./controlPlaneRoutes.js";
 import { checkRateLimit, clientIp, type RateLimitEndpoint, type RateLimitEnv, type WaitUntilLike } from "./rateLimit.js";
 import { voiciErrorResponse, voiciShellResponse, voiciSiteFile, type VoiciShellPreview } from "./voiciSite.js";
-import { deriveUrlFragment } from "@flagship/protocol";
+import { deriveUrlFragment, VOICI_CHUNK_MAX_BYTES } from "@flagship/protocol";
 import { deleteVoiciAbuseAccount, isAccountBanned, isPseudonymBanned, pruneVoiciAbuse } from "./voiciAbuse.js";
 import { handleVoiciPromo, VOICI_PROMO_PATH, type VoiciPromoEnv } from "./voiciPromo.js";
 import { handleVoiciCallApi, isVoiciCallPath, voiciCallsEnabled, type VoiciCallEnv } from "./voiciCallRoutes.js";
@@ -111,6 +112,8 @@ export function isVoiciCorsPath(method: string, pathname: string): boolean {
   if (m === "GET" && /^\/api\/username\/[^/]+$/.test(pathname)) return true;
   if (m === "GET" && /^\/api\/voici\/pages\/[^/]+$/.test(pathname)) return true;
   if (m === "GET" && /^\/api\/voici\/pages\/[^/]+\/call-challenge$/.test(pathname)) return true;
+  // A phone-only piece (§2.7a): read from `.com`'s cache, or offered to it after the owner's phone answered.
+  if ((m === "GET" || m === "POST") && /^\/api\/voici\/pages\/[^/]+\/pieces\/[0-9a-f]{64}$/.test(pathname)) return true;
   if (m === "POST" && pathname === "/api/voici/reports") return true;
   if (m === "POST" && pathname === "/api/voici/calls") return true;
   return (m === "GET" || m === "POST") && pathname.startsWith("/api/voici/web/");
@@ -321,6 +324,16 @@ export async function handleVoiciApi(request: Request, env: VoiciEnv, ctx?: Wait
       return new Response(method === "HEAD" ? null : got.bytes, {
         headers: { "content-type": got.contentType, "cache-control": VOICI_PIECE_CACHE, "x-content-type-options": "nosniff" },
       });
+    }
+    if (tail === "pieces" && piece && method === "POST") {
+      // A piece a visitor's browser got from the owner's phone, offered to the cache (§2.7a).
+      const wait = await limited(env, "voici-piece-cache", request, undefined, ctx);
+      if (wait !== null) return tooMany(wait);
+      if (!env.VOICI) return toResponse(voiciRefusal(503, "unavailable"));
+      const declared = Number(request.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > VOICI_CHUNK_MAX_BYTES) return toResponse(voiciRefusal(413, "too-large"));
+      const body = new Uint8Array(await request.arrayBuffer());
+      return toResponse(await handleVoiciPieceCache({ voici: storage.voici, bucket: env.VOICI }, username, piece, body));
     }
     if (piece) return notFound();
     if (tail === "pieces" && method === "POST") {

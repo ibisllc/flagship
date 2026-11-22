@@ -195,5 +195,7 @@
   "Make your page": "ページを作る",
   "Link to this post": "この投稿へのリンク",
   "Link copied": "リンクをコピーしました",
-  "Couldn't copy the link.": "リンクをコピーできませんでした。"
+  "Couldn't copy the link.": "リンクをコピーできませんでした。",
+  "Older posts are on {0}'s phone, which is offline right now.": "以前の投稿は{0}さんのスマートフォンにあり、そのスマートフォンは現在オフラインです。",
+  "Try again": "再試行"
 }

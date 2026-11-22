@@ -234,6 +234,47 @@ of the index it replaces (as the calls fields), so an edit never changes it. A r
 index that has it (exact keys), which only matters once an owner turns the switch on. Vectors: the `index.search`
 section and seven `index.checks` cases of `test-vectors/voici/vectors.json` (TS, webapp, Swift, Kotlin).
 
+### 2.7a Capped server copy (0.4)
+
+Owner, 2026-11-20 (docs/release-0.5-list.md item 6, pulled into 0.4). `.com` keeps only the newest chunks of a page;
+older chunks live on the owner's phone and reach visitors from there.
+
+- **Cap:** `VOICI_COM_MAX_CHUNKS = 10` chunks on `.com` (`packages/protocol/src/voiciPage.ts`), the newest 200 posts,
+  at most 2.5 MiB of chunk pieces per page. Chosen because a visitor almost never reads past the newest 200 posts
+  ("Show older posts" loads one chunk at a time), 10 chunk fetches is still one page view, and it bounds what `.com`
+  stores per page without a per-account size plan. One constant; raising it later needs no client change.
+- **Index:** one optional field, `phoneChunks: <n>` (an integer, 1 ≤ n < the number of chunks): chunks `0..n-1` are
+  held only by the owner's phone. Chunks stay numbered and contiguous in the index, so a reader still checks every
+  chunk against its listed hash. In the canonical bytes it is the last field, written `phone:<n>`, after the optional
+  search `1` (`…|<signerPub>[|1]|phone:<n>`). Absent means every chunk is on `.com`, so every index signed before this
+  (0.3, earlier 0.4) reads exactly as before. Writers set `n = max(0, chunks − 10)` and omit it at 0. A reader older
+  than this refuses an index that has it (exact keys), which only matters for a page past 200 posts.
+- **Publish (`.com`):** refuses `held = chunks − phoneChunks > 10` with 400 `too-many-chunks` (the apps' sentence:
+  "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again."). Required in R2:
+  profile, avatar, share, the held chunks and the card images they name. Phone-only chunks, and card images no held
+  chunk names, need not be uploaded; any `.com` still has are marked unreferenced and go with the 30-day sweep (§2.8).
+- **The phone serves them:** `GET https://<u>.<servicesApex>/api/phone/voici-piece/<sha256>`, a simple GET from a
+  `PHONE_WEB_ORIGINS` origin (no preflight, no cookie, no credentials) or a native client. The phone answers with the
+  bytes of a chunk or card image its current index lists (regenerated from its own page copy, canonical JSON, and
+  checked against the hash before it is sent) and 404 for anything else. Same endpoint, same TLS (ending on the
+  phone), same 8-request limit as `deliver`. The request carries no signature: the content is public, and the answer
+  is only taken if it is exactly the piece the signed index names.
+- **Who fetches:** the visitor's browser, directly. First `.com`'s `GET /api/voici/pages/<u>/pieces/<sha256>` (a cached
+  copy), then the phone. A piece from the phone is checked against the index, shown, and offered back to `.com`
+  with `POST /api/voici/pages/<u>/pieces/<sha256>` (no auth; `.com` takes only a phone-only chunk or card image its
+  stored index lists, exact size and SHA-256, a chunk must parse and an image must be a JPEG). `.com` keeps it in R2
+  under the same key, marked unreferenced, so the sweep drops it 30 days after it was cached. Because the index pins
+  the hash, the cache can never serve a wrong piece. What this tells whom: the phone sees the visitor's IP address,
+  as for a direct message (privacy §2.11); `.com` learns which old chunk someone read and its content, which is the
+  owner's public page content it held before the cap. `.com` never talks to the phone, so it learns nothing else.
+- **Offline phone:** the phone answers only while the app holds its name (foreground). When neither `.com` nor the
+  phone has a chunk, voi.ci shows "Older posts are on {name}'s phone, which is offline right now." with Try again.
+- **Publishing devices:** a device publishes from its own page copy. A phone-only chunk it doesn't hold (a second
+  device, a reinstall) it first asks `.com`'s cache for; failing that it carries the chunk's listed ref, and the card
+  images no held chunk names, unchanged into the next index (a new post only rewrites the newest chunk, which `.com`
+  holds). The device doesn't show the posts of a chunk it doesn't hold, so it can't edit them until it has the chunk. iOS and
+  Android serve the phone endpoint; the webapp publishes with the cap and reads like a visitor, but serves nothing.
+
 ### 2.8 Storage and caching
 
 R2 bucket `flagship-voici` (gym `flagship-voici-gym`), binding `VOICI`, custom domain `files.voi.ci`

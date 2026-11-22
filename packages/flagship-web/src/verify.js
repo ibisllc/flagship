@@ -8,6 +8,7 @@
 //   verifyPiece(bytes, ref)                        bytes are exactly the listed piece (size, then SHA-256)
 //   readProfilePiece / readChunkPiece / readImagePiece   verify, then parse, then cross-check with the index
 //   loadVoiciPage(o)                               fetch + verify the index and the account key; a reader for pieces
+//                                                  (phone-only chunks, §2.7a: `.com`'s cache, then the owner's phone)
 //   localSeqStore(storage?)                        the highest verified seq per pageId (anti-rollback, §2.9)
 //   verifyThreadItem(input, ctx)                   one envelope of the visitor's thread: signatures, then decrypt
 
@@ -31,9 +32,11 @@ import {
   parseVoiciProfilePiece,
   parseVoiciThreadStatement,
   parseWebEnvelope,
+  PHONE_PIECE_PATH_PREFIX,
   sha256Hex,
   verifyWebEnvelopeSignature,
   voiciConv,
+  voiciIsPhoneChunk,
 } from "./proto/lib/voiciProtocol.js";
 
 const USERNAME = /^[a-z0-9](?:-?[a-z0-9]){0,31}$/;
@@ -188,7 +191,8 @@ const NO_CREDS = { credentials: "omit", referrerPolicy: "no-referrer", mode: "co
 /**
  * Fetch and verify a page (§4.2): the signed index from files (`<filesBase>/v1/u/<u>.json`) and the account's keys
  * from `.com` (`<apiBase>/api/username/<u>`) in parallel; check the signature and the seq against `seqStore`.
- * o = {username, filesBase, apiBase, fetch?, seqStore?}. Answers {ok:true, index, reader} or {ok:false, code} with
+ * o = {username, filesBase, apiBase, services?, fetch?, seqStore?}; `services` is the services apex, where the owner's
+ * phone answers for phone-only pieces (§2.7a). Answers {ok:true, index, reader} or {ok:false, code} with
  * code not-found | unavailable | too-large | malformed | no-account | wrong-username | not-sensitive-key |
  * bad-signature | rolled-back. `reader` fetches pieces under the index and verifies each before returning it.
  */
@@ -227,29 +231,77 @@ export async function loadVoiciPage(o) {
   const r = verifyPageIndex(peek, account, { username: o.username, ...(seen !== null ? { highestSeenSeq: seen } : {}) });
   if (!r.ok) return r;
   seqStore.set(r.index.pageId, r.index.seq);
-  return { ok: true, index: r.index, reader: pieceReader(r.index, o.filesBase, f) };
+  const phoneBase = o.services ? `https://${o.username}.${o.services}` : null;
+  return { ok: true, index: r.index, reader: pieceReader(r.index, o.filesBase, f, { apiBase: o.apiBase, phoneBase }) };
 }
 
-/** Fetches pieces of one verified index; every method verifies before it returns, and returns null on any failure. */
-export function pieceReader(index, filesBase, f = globalThis.fetch.bind(globalThis)) {
+/** How long the owner's phone gets to answer for a phone-only piece. */
+export const PHONE_PIECE_TIMEOUT_MS = 5000;
+
+/**
+ * Fetches pieces of one verified index; every method verifies before it returns, and returns null on any failure.
+ * p = {apiBase, phoneBase}: a phone-only chunk (§2.7a), and a card image files doesn't have on a page with phone-only
+ * chunks, is read from `.com`'s cache (`<apiBase>/api/voici/pages/<u>/pieces/<sha256>`), else from the owner's phone
+ * (`<phoneBase>/api/phone/voici-piece/<sha256>`); a piece the phone gave is checked against the index first and then
+ * offered back to `.com`'s cache. `chunkResult(n)` says why a chunk is missing: "phone-offline" (neither had it) or
+ * "bad-piece".
+ */
+export function pieceReader(index, filesBase, f = globalThis.fetch.bind(globalThis), p = {}) {
   const cache = new Map();
+  const cacheUrl = (sha) => (p.apiBase ? `${p.apiBase}/api/voici/pages/${index.username}/pieces/${sha}` : null);
+  const fetchCapped = async (url, cap, init = {}) => {
+    try {
+      const res = await f(url, { ...NO_CREDS, ...init });
+      if (!res.ok) return null;
+      return await readCapped(res, cap);
+    } catch {
+      return null;
+    }
+  };
+  const fromPhone = async (ref, cap) => {
+    if (!p.phoneBase) return null;
+    const ac = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ac ? setTimeout(() => ac.abort(), PHONE_PIECE_TIMEOUT_MS) : null;
+    try {
+      const b = await fetchCapped(`${p.phoneBase}${PHONE_PIECE_PATH_PREFIX}${ref.sha256}`, cap, { cache: "no-store", ...(ac ? { signal: ac.signal } : {}) });
+      if (!b || !verifyPiece(b, ref)) return null;
+      const url = cacheUrl(ref.sha256);
+      if (url) {
+        f(url, { ...NO_CREDS, method: "POST", headers: { "content-type": "application/octet-stream" }, body: b }).catch(() => {});
+      }
+      return b;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+  const phoneOnly = async (ref, cap) => {
+    const url = cacheUrl(ref.sha256);
+    const cached = url ? await fetchCapped(url, cap) : null;
+    if (cached && verifyPiece(cached, ref)) return cached;
+    return fromPhone(ref, cap);
+  };
   const get = (ref, cap) => {
     if (!ref) return Promise.resolve(null);
     if (!cache.has(ref.sha256)) {
+      const limit = Math.min(cap, ref.size);
       cache.set(
         ref.sha256,
         (async () => {
-          try {
-            const res = await f(`${filesBase}/v1/p/${index.pageId}/${ref.sha256}`, { ...NO_CREDS });
-            if (!res.ok) return null;
-            return await readCapped(res, Math.min(cap, ref.size));
-          } catch {
-            return null;
-          }
+          if (voiciIsPhoneChunk(index, ref.role)) return phoneOnly(ref, limit);
+          const b = await fetchCapped(`${filesBase}/v1/p/${index.pageId}/${ref.sha256}`, limit);
+          if (b || !(index.phoneChunks > 0) || !ref.role.startsWith("card-")) return b;
+          return phoneOnly(ref, limit);
         })(),
       );
     }
     return cache.get(ref.sha256);
+  };
+  const chunkResult = async (n) => {
+    const ref = pieceRef(index, `chunk-${n}`);
+    const b = await get(ref, VOICI_CHUNK_MAX_BYTES);
+    if (!b) return { ok: false, code: ref && voiciIsPhoneChunk(index, ref.role) ? "phone-offline" : "bad-piece" };
+    const chunk = readChunkPiece(b, index, n);
+    return chunk ? { ok: true, chunk } : { ok: false, code: "bad-piece" };
   };
   return {
     async profile() {
@@ -257,9 +309,20 @@ export function pieceReader(index, filesBase, f = globalThis.fetch.bind(globalTh
       return b ? readProfilePiece(b, index) : null;
     },
     chunkCount: () => chunkCount(index),
+    /** Whether chunk n is one only the owner's phone holds (§2.7a). */
+    isPhoneChunk: (n) => voiciIsPhoneChunk(index, `chunk-${n}`),
+    chunkResult,
     async chunk(n) {
-      const b = await get(pieceRef(index, `chunk-${n}`), VOICI_CHUNK_MAX_BYTES);
-      return b ? readChunkPiece(b, index, n) : null;
+      const r = await chunkResult(n);
+      return r.ok ? r.chunk : null;
+    },
+    /** Forget a missing piece, so the next read asks again (Try again after the phone was offline). */
+    forget(sha256) {
+      cache.delete(sha256);
+    },
+    forgetChunk(n) {
+      const ref = pieceRef(index, `chunk-${n}`);
+      if (ref) cache.delete(ref.sha256);
     },
     async image(sha256) {
       const ref = pieceRefBySha(index, sha256);

@@ -910,6 +910,8 @@ export const PHONE_WEB_ORIGINS = ["https://voi.ci"];
 export const PHONE_WEB_ORIGINS_GYM = ["https://gym.voi.ci"];
 export const PHONE_DELIVER_PATH = "/api/phone/deliver";
 export const PHONE_LIVE_PATH = "/api/phone/live";
+/** A phone-only voi.ci piece (§2.7a): `GET <prefix><sha256 hex>`, a simple GET. */
+export const PHONE_PIECE_PATH_PREFIX = "/api/phone/voici-piece/";
 export const PHONE_ENVELOPE_CONTENT_TYPE = "application/flagship-envelope+json";
 export const PHONE_DELIVER_MAX_BYTES = 64 * 1024;
 export const PHONE_DELIVER_MAX_CONCURRENT = 8;
@@ -924,7 +926,8 @@ export function phoneWebCheck(r, o) {
   const method = r.method.toUpperCase();
   const listed = r.origin !== null && o.origins.includes(r.origin);
   if (r.origin !== null && !listed) return { kind: "refuse", status: 403, code: "origin" };
-  const known = r.path === PHONE_DELIVER_PATH || r.path === PHONE_LIVE_PATH;
+  const isPiece = r.path.startsWith(PHONE_PIECE_PATH_PREFIX);
+  const known = r.path === PHONE_DELIVER_PATH || r.path === PHONE_LIVE_PATH || isPiece;
   if (method === "OPTIONS") {
     if (r.path !== PHONE_DELIVER_PATH || !listed) return { kind: "refuse", status: 403, code: "preflight" };
     const hdrs = (r.acrHeaders ?? "").split(",").map((h) => h.trim().toLowerCase()).filter((h) => h !== "");
@@ -943,6 +946,12 @@ export function phoneWebCheck(r, o) {
   }
   if (!known) return r.origin !== null ? { kind: "refuse", status: 403, code: "origin" } : { kind: "other" };
   if (r.path === PHONE_LIVE_PATH) return method === "GET" ? { kind: "live", corsHeaders: corsFor(r.origin) } : { kind: "refuse", status: 405, code: "method" };
+  if (isPiece) {
+    if (method !== "GET") return { kind: "refuse", status: 405, code: "method" };
+    const sha256 = r.path.slice(PHONE_PIECE_PATH_PREFIX.length);
+    if (!/^[0-9a-f]{64}$/.test(sha256)) return { kind: "refuse", status: 404, code: "not-found" };
+    return { kind: "piece", sha256, corsHeaders: corsFor(r.origin) };
+  }
   if (method !== "POST") return { kind: "refuse", status: 405, code: "method" };
   if (r.contentType !== PHONE_ENVELOPE_CONTENT_TYPE) return { kind: "refuse", status: 415, code: "content-type" };
   return { kind: "deliver", corsHeaders: corsFor(r.origin) };

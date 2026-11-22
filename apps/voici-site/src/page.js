@@ -232,6 +232,15 @@ export function postList(doc, posts, o) {
     o.hasOlder
       ? h(doc, "button", { class: "btn btn-secondary btn-wide older", type: "button", on: { click: o.onOlder } }, t("Show older posts"))
       : null,
+    o.olderOffline
+      ? h(
+          doc,
+          "div",
+          { class: "older-offline", role: "status" },
+          h(doc, "p", { class: "muted" }, t("Older posts are on {0}'s phone, which is offline right now.", o.olderOffline)),
+          o.onOlderRetry ? h(doc, "button", { class: "btn btn-secondary btn-wide older", type: "button", on: { click: o.onOlderRetry } }, t("Try again")) : null,
+        )
+      : null,
   );
 }
 
@@ -255,7 +264,8 @@ export function footer(doc, o) {
 }
 
 /**
- * The whole page into `root`. m = {username, host, apex, index, profile, avatarUrl, posts, hasOlder,
+ * The whole page into `root`. m = {username, host, apex, index, profile, avatarUrl, posts, hasOlder, olderOffline (the
+ * owner's display name while older posts wait for their offline phone, §2.7a), onOlderRetry?,
  * cardImageUrl(sha) → blob URL|null, pendingIds?, lib (the protocol module), onMessage, onCall, onReport, onOlder,
  * onPostLink?(anchor), win? (for the compact bar's IntersectionObserver; defaults to doc.defaultView)}.
  */

@@ -3968,10 +3968,10 @@
   "Your stuff,<br>on your hardware.": "Suas coisas,<br>no seu hardware.",
   "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "Uma nuvem pessoal que realmente é sua. Você cria e aprova tudo pelo celular; seu servidor executa seus apps.",
   "People who let you call them back": "Pessoas que deixam você retornar a ligação",
-  "Pay by bank transfer": "Pagar por transferência bancária",
-  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "A Stripe mostra à sua empresa os dados bancários. Os vales ficam prontos quando a transferência inteira chegar, o que pode levar alguns dias.",
   "Bank transfer isn't available right now. Pay by card instead.": "A transferência bancária não está disponível agora. Pague com cartão.",
   "That batch can no longer be paid. Start a new batch.": "Esse lote não pode mais ser pago. Comece um novo lote.",
+  "Pay by bank transfer": "Pagar por transferência bancária",
+  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "A Stripe mostra à sua empresa os dados bancários. Os vales ficam prontos quando a transferência inteira chegar, o que pode levar alguns dias.",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "Não usa a recuperação na nuvem? Guarde um arquivo criptografado da chave da sua conta em um lugar seguro, para que perder o dispositivo não faça você perder a conta.",
   "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "A recuperação na nuvem guarda uma cópia criptografada da chave da sua conta no Flagship. Uma passkey a protege: seu navegador ou seu gerenciador de senhas guarda a passkey, então não há senha para inventar. Em um dispositivo novo, a passkey e sua frase secreta de recuperação a abrem juntas. O Flagship não consegue abri-la.",
   "This browser couldn't save the photo. Try again.": "Este navegador não conseguiu salvar a foto. Tente de novo.",
@@ -3982,5 +3982,6 @@
   "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": "Recorte da foto. Arraste ou use as setas para movê-la, e + e - para dar zoom.",
   "Zoom": "Zoom",
   "Flip": "Espelhar",
-  "Use": "Usar"
+  "Use": "Usar",
+  "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": "Esta página mantém no voi.ci mais publicações do que o voi.ci permite. Atualize o Flagship e publique de novo."
 }

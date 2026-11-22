@@ -77,6 +77,8 @@ export function buildPage(o: {
   username?: string;
   /** "Show in search engines" on (the index says showInSearch 1). */
   search?: boolean;
+  /** The oldest chunks only the owner's phone holds (§2.7a). */
+  phoneChunks?: number;
 }): BuiltPage {
   const pieces = new Map<string, Uint8Array>();
   const refs: VoiciPieceRef[] = [];
@@ -104,6 +106,7 @@ export function buildPage(o: {
       pieces: refs,
       signerKind: o.signer ?? "admin-root",
       ...(o.search ? { showInSearch: 1 as const } : {}),
+      ...(o.phoneChunks ? { phoneChunks: o.phoneChunks } : {}),
     },
     o.signer === "irk" ? irkSeed : adminSeed,
   );

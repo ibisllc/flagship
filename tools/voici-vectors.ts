@@ -306,6 +306,25 @@ const SHARE_SHA = P.sha256Hex(enc.encode("share card"));
 const withShare = (size: number, role = "share") => (b: Record<string, unknown>) => (b.pieces = [...(b.pieces as P.VoiciPieceRef[]), { role, sha256: SHARE_SHA, size }]);
 const shareIndex = reSign(withShare(90_000));
 want("search hidden", P.voiciPageShowsInSearch(index), false);
+// Capped server copy (§2.7a): `phoneChunks: n` on either version; chunks 0..n-1 are phone-only.
+const phoneIndex = reSign((b) => (b.phoneChunks = 1));
+const phoneSearchIndexV2 = reSign((b) => {
+  b.acceptsCalls = 1;
+  b.callsFrom = "signed-in";
+  b.showInSearch = 1;
+  b.phoneChunks = 1;
+});
+const fakeChunks = (total: number) => (b: Record<string, unknown>) =>
+  (b.pieces = [
+    ...(b.pieces as P.VoiciPieceRef[]),
+    ...Array.from({ length: total - chunkBytes.length }, (_, i) => ({ role: `chunk-${i + chunkBytes.length}`, sha256: P.sha256Hex(enc.encode(`chunk ${i}`)), size: 100 + i })),
+  ]);
+const twelveChunks = (phone: number | null) => reSign((b) => {
+  fakeChunks(12)(b);
+  if (phone !== null) b.phoneChunks = phone;
+});
+want("phone chunk", P.voiciIsPhoneChunk(phoneIndex, "chunk-0"), true);
+want("held chunk", P.voiciIsPhoneChunk(phoneIndex, "chunk-1"), false);
 const indexChecks = (
   [
     ["valid", index, readerCtx, "ok"],
@@ -346,6 +365,19 @@ const indexChecks = (
     ["share card over 256 KiB", tamper(withShare(256 * 1024 + 1)), readerCtx, "malformed"],
     ["two share cards", tamper((b) => (b.pieces = [...(shareIndex.pieces as P.VoiciPieceRef[]), { role: "share", sha256: "ab".repeat(32), size: 10 }])), readerCtx, "malformed"],
     ["share-0 is no role", tamper(withShare(10, "share-0")), readerCtx, "malformed"],
+    ["oldest chunk on the phone", phoneIndex, readerCtx, "ok"],
+    ["v2, search and a phone chunk", phoneSearchIndexV2, readerCtx, "ok"],
+    ["phoneChunks stripped", (() => {
+      const b = clone(phoneIndex) as unknown as Record<string, unknown>;
+      delete b.phoneChunks;
+      return b;
+    })(), readerCtx, "bad-signature"],
+    ["phoneChunks added", tamper((b) => (b.phoneChunks = 1)), readerCtx, "bad-signature"],
+    ["phoneChunks 0", tamper((b) => (b.phoneChunks = 0)), readerCtx, "malformed"],
+    ["phoneChunks every chunk", tamper((b) => (b.phoneChunks = 2)), readerCtx, "malformed"],
+    ["phoneChunks a string", tamper((b) => (b.phoneChunks = "1")), readerCtx, "malformed"],
+    ["phoneChunks not an integer", tamper((b) => (b.phoneChunks = 0.5)), readerCtx, "malformed"],
+    ["phoneChunks null", tamper((b) => (b.phoneChunks = null)), readerCtx, "malformed"],
   ] as [string, unknown, Parameters<typeof P.checkVoiciPageIndex>[1], string][]
 ).map(([name, idx, ctx, expected]) => ({ name, index: idx, ctx, expected: want(`index ${name}`, code(P.checkVoiciPageIndex(idx, ctx)), expected) }));
 
@@ -360,6 +392,10 @@ const publishChecks = (
     ["issued 11 minutes ahead", index, { ...pubCtx, now: T0 - 11 * 60_000 }, "stale"],
     ["another pageId than stored", index, { ...pubCtx, storedPageId: OTHER_PAGE }, "wrong-page"],
     ["not the sensitive key", index, { ...pubCtx, sensitivePub: devicePub }, "not-sensitive-key"],
+    ["12 chunks, 2 on the phone", twelveChunks(2), pubCtx, "ok"],
+    ["12 chunks, 1 on the phone", twelveChunks(1), pubCtx, "too-many-chunks"],
+    ["12 chunks, none on the phone", twelveChunks(null), pubCtx, "too-many-chunks"],
+    ["oldest chunk on the phone", phoneIndex, pubCtx, "ok"],
   ] as [string, unknown, Parameters<typeof P.checkVoiciPublish>[1], string][]
 ).map(([name, idx, ctx, expected]) => ({ name, index: idx, ctx, expected: want(`publish ${name}`, code(P.checkVoiciPublish(idx, ctx)), expected) }));
 
@@ -408,6 +444,7 @@ const voici = {
     indexMaxBytes: P.VOICI_INDEX_MAX_BYTES,
     indexMaxPieces: P.VOICI_INDEX_MAX_PIECES,
     indexSkewMs: P.VOICI_INDEX_SKEW_MS,
+    comMaxChunks: P.VOICI_COM_MAX_CHUNKS,
     linkUrlMax: P.VOICI_LINK_URL_MAX,
     textRules: P.VOICI_TEXT_RULES,
   },
@@ -437,6 +474,14 @@ const voici = {
       signed: searchIndex,
       canonicalV2: new TextDecoder().decode(P.canonicalVoiciPageIndex(searchIndexV2)),
       signedV2: searchIndexV2,
+    },
+    // The same body with phoneChunks 1 (v1), and with calls, search and phoneChunks (v2) (§2.7a).
+    phone: {
+      canonical: new TextDecoder().decode(P.canonicalVoiciPageIndex(phoneIndex)),
+      signed: phoneIndex,
+      canonicalV2: new TextDecoder().decode(P.canonicalVoiciPageIndex(phoneSearchIndexV2)),
+      signedV2: phoneSearchIndexV2,
+      phoneChunksFor: [0, 1, 10, 11, 25].map((chunks) => ({ chunks, phoneChunks: P.voiciPhoneChunksFor(chunks) })),
     },
     checks: indexChecks,
     publishChecks,
@@ -839,6 +884,14 @@ const phoneWeb = [
   ["another route, no Origin", req({ path: "/" })],
   ["wrong host", req({ host: "bob.flagship.services", origin: ORIGIN })],
   ["gym origin on prod", req({ origin: P.VOICI_WEB_ORIGIN_GYM })],
+  ["piece from voi.ci", req({ path: `${P.PHONE_PIECE_PATH_PREFIX}${"ab".repeat(32)}`, origin: ORIGIN })],
+  ["piece from a native app", req({ path: `${P.PHONE_PIECE_PATH_PREFIX}${"ab".repeat(32)}` })],
+  ["piece from another site", req({ path: `${P.PHONE_PIECE_PATH_PREFIX}${"ab".repeat(32)}`, origin: "https://evil.example" })],
+  ["POST a piece", req({ method: "POST", path: `${P.PHONE_PIECE_PATH_PREFIX}${"ab".repeat(32)}`, origin: ORIGIN })],
+  ["preflight for a piece", req({ method: "OPTIONS", path: `${P.PHONE_PIECE_PATH_PREFIX}${"ab".repeat(32)}`, origin: ORIGIN, acrMethod: "GET", acrHeaders: "" })],
+  ["piece with upper-case hex", req({ path: `${P.PHONE_PIECE_PATH_PREFIX}${"AB".repeat(32)}`, origin: ORIGIN })],
+  ["piece with a short name", req({ path: `${P.PHONE_PIECE_PATH_PREFIX}abc`, origin: ORIGIN })],
+  ["piece prefix only", req({ path: P.PHONE_PIECE_PATH_PREFIX })],
 ].map(([name, r]) => ({ name, request: r, hostname: HOST, origins: P.PHONE_WEB_ORIGINS, expected: P.phoneWebCheck(r as P.PhoneWebRequest, { hostname: HOST, origins: P.PHONE_WEB_ORIGINS }) }));
 want("preflight ok", phoneWeb[0]!.expected.kind, "preflight");
 want("evil origin", phoneWeb[3]!.expected, { kind: "refuse", status: 403, code: "origin" });
@@ -879,6 +932,7 @@ const messages = {
     phoneDeliverMaxBytes: P.PHONE_DELIVER_MAX_BYTES,
     phoneWebOrigins: P.PHONE_WEB_ORIGINS,
     phoneWebOriginsGym: P.PHONE_WEB_ORIGINS_GYM,
+    phonePiecePathPrefix: P.PHONE_PIECE_PATH_PREFIX,
     webOrigin: P.VOICI_WEB_ORIGIN,
     webOriginGym: P.VOICI_WEB_ORIGIN_GYM,
   },

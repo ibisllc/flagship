@@ -132,6 +132,17 @@ describe("voi.ci renderer", () => {
     expect(root.textContent).not.toContain("<svg>G");
   });
 
+  it("says older posts wait for the owner's offline phone, with Try again instead of Show older posts (§2.7a)", () => {
+    let retried = 0;
+    const root = page({ hasOlder: false, olderOffline: "Alice", onOlderRetry: () => void retried++ });
+    expect(root.textContent).toContain("Older posts are on Alice's phone, which is offline right now.");
+    expect(root.textContent).not.toContain("Show older posts");
+    const retry = [...root.walk()].find((e) => e.tagName === "button" && e.textContent === "Try again")!;
+    (retry.listeners.click![0] as () => void)();
+    expect(retried).toBe(1);
+    expect(page().textContent).not.toContain("offline right now");
+  });
+
   it("grays posts that are not published yet, and shows the message button only when the page accepts messages", () => {
     const root = page();
     const pending = [...root.walk()].filter((e) => (e.getAttribute("class") ?? "").includes("is-pending"));

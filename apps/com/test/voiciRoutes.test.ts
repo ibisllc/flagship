@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { D1Database } from "@flagship/storage";
 import { D1Storage } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
-import { adminPub, adminSeed, buildPage, caSeed, fakeBucket, hex, irkPub, uploadHeaders, USER, visitor } from "../../../packages/control-plane/tests/support/voiciFixture.js";
+import { adminPub, adminSeed, buildPage, caSeed, fakeBucket, hex, irkPub, post, uploadHeaders, USER, visitor } from "../../../packages/control-plane/tests/support/voiciFixture.js";
 import { sha256Hex, signVoiciAlertsP256, signVoiciPageRemove } from "@flagship/protocol";
 import { route, type RouteEnv } from "../src/route.js";
 import { isVoiciApiPath } from "../src/voiciRoutes.js";
@@ -41,9 +41,14 @@ async function world(enabled = true) {
   return { sqlite, seed, bucket, env, call, close: () => sqlite.close() };
 }
 
-async function publishPage(w: Awaited<ReturnType<typeof world>>, now: number, o: { seq?: number; search?: boolean } = {}) {
-  const page = buildPage({ seq: o.seq ?? 1, issuedAt: now, ...(o.search ? { search: true } : {}) });
-  for (const bytes of page.pieces.values()) {
+async function publishPage(
+  w: Awaited<ReturnType<typeof world>>,
+  now: number,
+  o: { seq?: number; search?: boolean; posts?: Parameters<typeof buildPage>[0]["posts"]; phoneChunks?: number; skip?: Set<string> } = {},
+) {
+  const page = buildPage({ seq: o.seq ?? 1, issuedAt: now, ...(o.search ? { search: true } : {}), ...(o.posts ? { posts: o.posts } : {}), ...(o.phoneChunks ? { phoneChunks: o.phoneChunks } : {}) });
+  for (const [sha, bytes] of page.pieces) {
+    if (o.skip?.has(sha)) continue;
     const h = uploadHeaders(bytes, now);
     const r = await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/pieces`, {
       method: "POST",
@@ -146,6 +151,32 @@ describe("voi.ci routes", () => {
       expect([r.status, r.headers.get("content-type"), r.headers.get("cache-control")]).toEqual([200, "image/jpeg", "public, max-age=31536000, immutable"]);
       expect(new Uint8Array(await r.arrayBuffer())).toEqual(page.pieces.get(avatar.sha256));
       expect((await w.call(`https://flagshipserver.com/api/voici/pages/${USER}/pieces/${"ab".repeat(32)}`)).status).toBe(404);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("take a phone-only chunk a visitor's browser offers, with CORS for voi.ci, and serve it from the cache (§2.7a)", async () => {
+    const w = await world();
+    try {
+      const posts = Array.from({ length: 11 }, (_, i) => [post(i + 1)]);
+      const probe = buildPage({ seq: 1, issuedAt: 0, posts, phoneChunks: 1 });
+      const c0 = probe.index.pieces.find((p) => p.role === "chunk-0")!.sha256;
+      await publishPage(w, Date.now(), { posts, phoneChunks: 1, skip: new Set([c0]) });
+      const url = `https://flagshipserver.com/api/voici/pages/${USER}/pieces/${c0}`;
+      expect((await w.call(url, { headers: { origin: "https://voi.ci" } })).status).toBe(404);
+      const pre = await w.call(url, {
+        method: "OPTIONS",
+        headers: { origin: "https://voi.ci", "access-control-request-method": "POST", "access-control-request-headers": "content-type" },
+      });
+      expect([pre.status, pre.headers.get("access-control-allow-origin")]).toEqual([204, "https://voi.ci"]);
+      const offered = await w.call(url, { method: "POST", headers: { origin: "https://voi.ci", "content-type": "application/octet-stream" }, body: probe.pieces.get(c0)! });
+      expect([offered.status, offered.headers.get("access-control-allow-origin")]).toEqual([200, "https://voi.ci"]);
+      const got = await w.call(url, { headers: { origin: "https://voi.ci" } });
+      expect([got.status, got.headers.get("access-control-allow-origin")]).toEqual([200, "https://voi.ci"]);
+      expect(new Uint8Array(await got.arrayBuffer())).toEqual(probe.pieces.get(c0));
+      const wrong = await w.call(url, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: new Uint8Array([1, 2, 3]) });
+      expect(wrong.status).toBe(400);
     } finally {
       w.close();
     }

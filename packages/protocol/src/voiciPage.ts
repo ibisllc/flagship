@@ -24,6 +24,11 @@
  * page has one encoding and an index without the field reads exactly as before. Writers add it only while the owner's
  * "Show in search engines" switch is on.
  *
+ * Capped server copy (0.4, docs/voici-and-messages.md §2.7a): either version may carry `phoneChunks: <n>` (1 ≤ n <
+ * the number of chunks): chunks 0..n-1 are held only by the owner's phone. It is the last canonical field, written
+ * `phone:<n>` (after the optional search `1`). Absent = every chunk is on `.com`. `.com` holds at most
+ * VOICI_COM_MAX_CHUNKS chunks; writers set n = voiciPhoneChunksFor(chunks).
+ *
  * Pieces are canonical JSON (webEnvelope.ts `canonicalJson`) or JPEG:
  *   profile  {v:1, displayName, bio, avatar:<sha256>|null, theme, links:[{url, label, site:<id>|null}]}  ≤ 16 KiB
  *   chunk    {v:1, chunk:<n>, posts:[{id, createdAt, editedAt|null, text, links:[{url, card|null}]}]}    ≤ 256 KiB
@@ -76,6 +81,8 @@ export const VOICI_SHARE_IMAGE_WIDTH = 1200;
 export const VOICI_SHARE_IMAGE_HEIGHT = 630;
 export const VOICI_INDEX_MAX_BYTES = 300 * 1024;
 export const VOICI_INDEX_MAX_PIECES = 2000;
+/** The newest chunks `.com` keeps of a page (§2.7a): 10 chunks = the newest 200 posts. Older ones are phone-only. */
+export const VOICI_COM_MAX_CHUNKS = 10;
 export const VOICI_PROFILE_MAX_LINKS = 12;
 export const VOICI_POST_MAX_LINKS = 3;
 /** issuedAt must be within this of `.com`'s clock at upload / publish. */
@@ -248,6 +255,8 @@ export interface VoiciPageIndexBody {
   signerPub: string;
   /** Present (always 1) only while the owner shows the page in search engines; absent = hidden (noindex). */
   showInSearch?: 1;
+  /** Present only when the oldest chunks are phone-only (§2.7a): chunks 0..phoneChunks-1 are not on `.com`. */
+  phoneChunks?: number;
 }
 
 export interface VoiciPageIndex extends VoiciPageIndexBody {
@@ -261,6 +270,22 @@ const isV2 = (b: VoiciPageIndexBody) => b.acceptsCalls !== undefined || b.callsF
 /** Whether search engines may list the page: only an index that says `showInSearch: 1`. */
 export function voiciPageShowsInSearch(b: Pick<VoiciPageIndexBody, "showInSearch"> | null | undefined): boolean {
   return b?.showInSearch === 1;
+}
+
+/** The number of chunks an index lists. */
+export function voiciChunkCount(b: Pick<VoiciPageIndexBody, "pieces">): number {
+  return b.pieces.filter((p) => p.role.startsWith("chunk-")).length;
+}
+
+/** The phoneChunks a writer signs for a page of `chunks` chunks: the oldest beyond the cap (0 = omit the field). */
+export function voiciPhoneChunksFor(chunks: number): number {
+  return Math.max(0, chunks - VOICI_COM_MAX_CHUNKS);
+}
+
+/** True when `role` is a chunk the index says only the owner's phone holds. */
+export function voiciIsPhoneChunk(b: Pick<VoiciPageIndexBody, "phoneChunks">, role: string): boolean {
+  const m = /^chunk-(\d+)$/.exec(role);
+  return !!m && Number(m[1]) < (b.phoneChunks ?? 0);
 }
 
 /** Calls on (a v2 index with acceptsCalls 1); a v1 index never takes calls. */
@@ -306,6 +331,7 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
   if (b.signerKind !== "admin-root" && b.signerKind !== "irk") throw bad("signerKind");
   if (!isLowerHex(b.signerPub, 32)) throw bad("signerPub");
   if (b.showInSearch !== undefined && b.showInSearch !== 1) throw bad("showInSearch");
+  if (b.phoneChunks !== undefined && (!isTime(b.phoneChunks) || b.phoneChunks < 1 || b.phoneChunks >= voiciChunkCount(b))) throw bad("phoneChunks");
   return enc(
     [
       v2 ? TAG_VOICI_PAGE_V2 : TAG_VOICI_PAGE,
@@ -322,6 +348,7 @@ export function canonicalVoiciPageIndex(b: VoiciPageIndexBody): Bytes {
       b.signerKind,
       b.signerPub,
       ...(b.showInSearch === 1 ? ["1"] : []),
+      ...(b.phoneChunks !== undefined ? [`phone:${b.phoneChunks}`] : []),
     ].join("|"),
   );
 }
@@ -356,7 +383,7 @@ export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
     }
   }
   if (!isObj(v) || v.kind !== "VoiciPage" || !isLowerHex(v.signature, 64)) return null;
-  const search = "showInSearch" in v ? ["showInSearch"] : [];
+  const search = [...("showInSearch" in v ? ["showInSearch"] : []), ...("phoneChunks" in v ? ["phoneChunks"] : [])];
   if (!(v.version === 1 && exactKeys(v, [...INDEX_KEYS, ...search])) && !(v.version === 2 && exactKeys(v, [...INDEX_KEYS_V2, ...search]))) return null;
   if ("showInSearch" in v && v.showInSearch !== 1) return null;
   const r = v as unknown as VoiciPageIndex;
@@ -381,11 +408,12 @@ export function parseVoiciPageIndex(input: unknown): VoiciPageIndex | null {
     signerKind: r.signerKind,
     signerPub: r.signerPub,
     ...(r.showInSearch === 1 ? { showInSearch: 1 as const } : {}),
+    ...(r.phoneChunks !== undefined ? { phoneChunks: r.phoneChunks } : {}),
     signature: r.signature,
   };
 }
 
-export type VoiciPageRefusal = "malformed" | "wrong-username" | "not-sensitive-key" | "bad-signature" | "rolled-back" | "stale" | "seq-conflict" | "wrong-page";
+export type VoiciPageRefusal = "malformed" | "wrong-username" | "not-sensitive-key" | "bad-signature" | "rolled-back" | "stale" | "seq-conflict" | "wrong-page" | "too-many-chunks";
 
 /**
  * A reader's check (voi.ci, the apps): shape, the username asked for, `signerPub` = the account's current sensitive
@@ -408,7 +436,8 @@ export function checkVoiciPageIndex(
 
 /**
  * `.com`'s publish check (§3) after the reader's: `issuedAt` within 10 minutes of `now`, `seq` = stored + 1 (stored 0
- * when none), and the pageId unchanged from the stored index. Piece presence and parsing are `.com`'s (storage).
+ * when none), the pageId unchanged from the stored index, and at most VOICI_COM_MAX_CHUNKS chunks held on `.com`
+ * (`too-many-chunks`, §2.7a). Piece presence and parsing are `.com`'s (storage).
  */
 export function checkVoiciPublish(
   input: unknown,
@@ -419,6 +448,7 @@ export function checkVoiciPublish(
   if (Math.abs(r.index.issuedAt - o.now) > VOICI_INDEX_SKEW_MS) return { ok: false, code: "stale" };
   if (r.index.seq !== o.storedSeq + 1) return { ok: false, code: "seq-conflict" };
   if (o.storedPageId !== null && r.index.pageId !== o.storedPageId) return { ok: false, code: "wrong-page" };
+  if (voiciChunkCount(r.index) - (r.index.phoneChunks ?? 0) > VOICI_COM_MAX_CHUNKS) return { ok: false, code: "too-many-chunks" };
   return r;
 }
 

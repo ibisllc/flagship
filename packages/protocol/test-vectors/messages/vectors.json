@@ -31,6 +31,7 @@
     "phoneWebOriginsGym": [
       "https://gym.voi.ci"
     ],
+    "phonePiecePathPrefix": "/api/phone/voici-piece/",
     "webOrigin": "https://voi.ci",
     "webOriginGym": "https://gym.voi.ci"
   },
@@ -5387,6 +5388,177 @@
           "kind": "refuse",
           "status": 403,
           "code": "origin"
+        }
+      },
+      {
+        "name": "piece from voi.ci",
+        "request": {
+          "method": "GET",
+          "path": "/api/phone/voici-piece/abababababababababababababababababababababababababababababababab",
+          "host": "alice.flagship.services",
+          "origin": "https://voi.ci",
+          "contentType": null,
+          "acrMethod": null,
+          "acrHeaders": null
+        },
+        "hostname": "alice.flagship.services",
+        "origins": [
+          "https://voi.ci"
+        ],
+        "expected": {
+          "kind": "piece",
+          "sha256": "abababababababababababababababababababababababababababababababab",
+          "corsHeaders": {
+            "Access-Control-Allow-Origin": "https://voi.ci",
+            "Vary": "Origin"
+          }
+        }
+      },
+      {
+        "name": "piece from a native app",
+        "request": {
+          "method": "GET",
+          "path": "/api/phone/voici-piece/abababababababababababababababababababababababababababababababab",
+          "host": "alice.flagship.services",
+          "origin": null,
+          "contentType": null,
+          "acrMethod": null,
+          "acrHeaders": null
+        },
+        "hostname": "alice.flagship.services",
+        "origins": [
+          "https://voi.ci"
+        ],
+        "expected": {
+          "kind": "piece",
+          "sha256": "abababababababababababababababababababababababababababababababab",
+          "corsHeaders": {}
+        }
+      },
+      {
+        "name": "piece from another site",
+        "request": {
+          "method": "GET",
+          "path": "/api/phone/voici-piece/abababababababababababababababababababababababababababababababab",
+          "host": "alice.flagship.services",
+          "origin": "https://evil.example",
+          "contentType": null,
+          "acrMethod": null,
+          "acrHeaders": null
+        },
+        "hostname": "alice.flagship.services",
+        "origins": [
+          "https://voi.ci"
+        ],
+        "expected": {
+          "kind": "refuse",
+          "status": 403,
+          "code": "origin"
+        }
+      },
+      {
+        "name": "POST a piece",
+        "request": {
+          "method": "POST",
+          "path": "/api/phone/voici-piece/abababababababababababababababababababababababababababababababab",
+          "host": "alice.flagship.services",
+          "origin": "https://voi.ci",
+          "contentType": null,
+          "acrMethod": null,
+          "acrHeaders": null
+        },
+        "hostname": "alice.flagship.services",
+        "origins": [
+          "https://voi.ci"
+        ],
+        "expected": {
+          "kind": "refuse",
+          "status": 405,
+          "code": "method"
+        }
+      },
+      {
+        "name": "preflight for a piece",
+        "request": {
+          "method": "OPTIONS",
+          "path": "/api/phone/voici-piece/abababababababababababababababababababababababababababababababab",
+          "host": "alice.flagship.services",
+          "origin": "https://voi.ci",
+          "contentType": null,
+          "acrMethod": "GET",
+          "acrHeaders": ""
+        },
+        "hostname": "alice.flagship.services",
+        "origins": [
+          "https://voi.ci"
+        ],
+        "expected": {
+          "kind": "refuse",
+          "status": 403,
+          "code": "preflight"
+        }
+      },
+      {
+        "name": "piece with upper-case hex",
+        "request": {
+          "method": "GET",
+          "path": "/api/phone/voici-piece/ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+          "host": "alice.flagship.services",
+          "origin": "https://voi.ci",
+          "contentType": null,
+          "acrMethod": null,
+          "acrHeaders": null
+        },
+        "hostname": "alice.flagship.services",
+        "origins": [
+          "https://voi.ci"
+        ],
+        "expected": {
+          "kind": "refuse",
+          "status": 404,
+          "code": "not-found"
+        }
+      },
+      {
+        "name": "piece with a short name",
+        "request": {
+          "method": "GET",
+          "path": "/api/phone/voici-piece/abc",
+          "host": "alice.flagship.services",
+          "origin": "https://voi.ci",
+          "contentType": null,
+          "acrMethod": null,
+          "acrHeaders": null
+        },
+        "hostname": "alice.flagship.services",
+        "origins": [
+          "https://voi.ci"
+        ],
+        "expected": {
+          "kind": "refuse",
+          "status": 404,
+          "code": "not-found"
+        }
+      },
+      {
+        "name": "piece prefix only",
+        "request": {
+          "method": "GET",
+          "path": "/api/phone/voici-piece/",
+          "host": "alice.flagship.services",
+          "origin": null,
+          "contentType": null,
+          "acrMethod": null,
+          "acrHeaders": null
+        },
+        "hostname": "alice.flagship.services",
+        "origins": [
+          "https://voi.ci"
+        ],
+        "expected": {
+          "kind": "refuse",
+          "status": 404,
+          "code": "not-found"
         }
       }
     ],

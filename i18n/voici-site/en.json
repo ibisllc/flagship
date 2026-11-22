@@ -45,39 +45,39 @@
   },
   "About voi.ci": {
     "en": "About voi.ci",
-    "ctx": "voici-site/app.js:168"
+    "ctx": "voici-site/app.js:183"
   },
   "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.": {
     "en": "voi.ci shows the public pages of Flagship accounts. Your browser checks every page against its owner's signature before showing it. The site is open source, and every file of this build is listed with its SHA-256 in its manifest.",
-    "ctx": "voici-site/app.js:173"
+    "ctx": "voici-site/app.js:188"
   },
   "This build": {
     "en": "This build",
-    "ctx": "voici-site/app.js:178"
+    "ctx": "voici-site/app.js:193"
   },
   "Manifest": {
     "en": "Manifest",
-    "ctx": "voici-site/app.js:180"
+    "ctx": "voici-site/app.js:195"
   },
   "Report abuse": {
     "en": "Report abuse",
-    "ctx": "voici-site/app.js:181"
+    "ctx": "voici-site/app.js:196"
   },
   "This copy of the site isn't running on voi.ci.": {
     "en": "This copy of the site isn't running on voi.ci.",
-    "ctx": "voici-site/app.js:197"
+    "ctx": "voici-site/app.js:212"
   },
   "Check the address and try again.": {
     "en": "Check the address and try again.",
-    "ctx": "voici-site/app.js:202"
+    "ctx": "voici-site/app.js:217"
   },
   "This link was removed.": {
     "en": "This link was removed.",
-    "ctx": "voici-site/app.js:206"
+    "ctx": "voici-site/app.js:221"
   },
   "It doesn't lead anywhere any more. Ask whoever shared it for a new one.": {
     "en": "It doesn't lead anywhere any more. Ask whoever shared it for a new one.",
-    "ctx": "voici-site/app.js:206"
+    "ctx": "voici-site/app.js:221"
   },
   "They aren't taking calls right now.": {
     "en": "They aren't taking calls right now.",
@@ -711,17 +711,25 @@
     "en": "Show older posts",
     "ctx": "voici-site/page.js:233"
   },
+  "Older posts are on {0}'s phone, which is offline right now.": {
+    "en": "Older posts are on {0}'s phone, which is offline right now.",
+    "ctx": "voici-site/page.js:240"
+  },
+  "Try again": {
+    "en": "Try again",
+    "ctx": "voici-site/page.js:241"
+  },
   "Make your page": {
     "en": "Make your page",
-    "ctx": "voici-site/page.js:246"
+    "ctx": "voici-site/page.js:255"
   },
   "Report this page": {
     "en": "Report this page",
-    "ctx": "voici-site/page.js:251"
+    "ctx": "voici-site/page.js:260"
   },
   "Loading": {
     "en": "Loading",
-    "ctx": "voici-site/page.js:305"
+    "ctx": "voici-site/page.js:315"
   },
   "Spam": {
     "en": "Spam",

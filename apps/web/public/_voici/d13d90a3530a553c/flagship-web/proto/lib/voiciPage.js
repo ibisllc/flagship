@@ -30,6 +30,8 @@ export const VOICI_SHARE_IMAGE_WIDTH = 1200;
 export const VOICI_SHARE_IMAGE_HEIGHT = 630;
 export const VOICI_INDEX_MAX_BYTES = 300 * 1024;
 export const VOICI_INDEX_MAX_PIECES = 2000;
+/** The newest chunks `.com` keeps of a page (§2.7a): 10 chunks = the newest 200 posts. Older ones are phone-only. */
+export const VOICI_COM_MAX_CHUNKS = 10;
 export const VOICI_PROFILE_MAX_LINKS = 12;
 export const VOICI_POST_MAX_LINKS = 3;
 export const VOICI_INDEX_SKEW_MS = 10 * 60_000;
@@ -173,6 +175,14 @@ export const voiciPageAcceptsCalls = (b) => b.acceptsCalls === 1;
 // Search engines (owner decision 2026-11-17): `showInSearch: 1` on either version, the last canonical field; absent =
 // hidden (voi.ci sends noindex). 1 is the only value written or read.
 export const voiciPageShowsInSearch = (b) => b?.showInSearch === 1;
+// Capped server copy (§2.7a): `phoneChunks: n` (1 ≤ n < chunks), the last canonical field as `phone:<n>`; chunks
+// 0..n-1 are held only by the owner's phone. Absent = every chunk on `.com`.
+export const voiciChunkCount = (b) => b.pieces.filter((p) => p.role.startsWith("chunk-")).length;
+export const voiciPhoneChunksFor = (chunks) => Math.max(0, chunks - VOICI_COM_MAX_CHUNKS);
+export function voiciIsPhoneChunk(b, role) {
+  const m = /^chunk-(\d+)$/.exec(role);
+  return !!m && Number(m[1]) < (b.phoneChunks ?? 0);
+}
 
 export function canonicalVoiciPageIndex(b) {
   const bad = (f) => new Error(`${TAG_VOICI_PAGE}: bad ${f}`);
@@ -189,6 +199,7 @@ export function canonicalVoiciPageIndex(b) {
   if (b.signerKind !== "admin-root" && b.signerKind !== "irk") throw bad("signerKind");
   if (!isLowerHex(b.signerPub, 32)) throw bad("signerPub");
   if (b.showInSearch !== undefined && b.showInSearch !== 1) throw bad("showInSearch");
+  if (b.phoneChunks !== undefined && (!isTime(b.phoneChunks) || b.phoneChunks < 1 || b.phoneChunks >= voiciChunkCount(b))) throw bad("phoneChunks");
   return enc(
     [
       v2 ? TAG_VOICI_PAGE_V2 : TAG_VOICI_PAGE,
@@ -205,6 +216,7 @@ export function canonicalVoiciPageIndex(b) {
       b.signerKind,
       b.signerPub,
       ...(b.showInSearch === 1 ? ["1"] : []),
+      ...(b.phoneChunks !== undefined ? [`phone:${b.phoneChunks}`] : []),
     ].join("|"),
   );
 }
@@ -236,7 +248,7 @@ export function parseVoiciPageIndex(input) {
     }
   }
   if (!isObj(v) || v.kind !== "VoiciPage" || !isLowerHex(v.signature, 64)) return null;
-  const search = "showInSearch" in v ? ["showInSearch"] : [];
+  const search = [...("showInSearch" in v ? ["showInSearch"] : []), ...("phoneChunks" in v ? ["phoneChunks"] : [])];
   if (!(v.version === 1 && exactKeys(v, [...INDEX_KEYS, ...search])) && !(v.version === 2 && exactKeys(v, [...INDEX_KEYS_V2, ...search]))) return null;
   if ("showInSearch" in v && v.showInSearch !== 1) return null;
   try {
@@ -260,6 +272,7 @@ export function parseVoiciPageIndex(input) {
     signerKind: v.signerKind,
     signerPub: v.signerPub,
     ...(v.showInSearch === 1 ? { showInSearch: 1 } : {}),
+    ...(v.phoneChunks !== undefined ? { phoneChunks: v.phoneChunks } : {}),
     signature: v.signature,
   };
 }
@@ -286,6 +299,7 @@ export function checkVoiciPublish(input, o) {
   if (Math.abs(r.index.issuedAt - o.now) > VOICI_INDEX_SKEW_MS) return { ok: false, code: "stale" };
   if (r.index.seq !== o.storedSeq + 1) return { ok: false, code: "seq-conflict" };
   if (o.storedPageId !== null && r.index.pageId !== o.storedPageId) return { ok: false, code: "wrong-page" };
+  if (voiciChunkCount(r.index) - (r.index.phoneChunks ?? 0) > VOICI_COM_MAX_CHUNKS) return { ok: false, code: "too-many-chunks" };
   return r;
 }
 

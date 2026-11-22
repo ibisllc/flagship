@@ -246,6 +246,8 @@ export type RateLimitEndpoint =
   | "voici-thread"
   | "voici-owner"
   | "voici-page-read"
+  // A visitor's browser offering a phone-only voi.ci piece to `.com`'s cache (docs/voici-and-messages.md §2.7a).
+  | "voici-piece-cache"
   // The operator's example voi.ci page of a sample account (POST /api/dev/sample-user/<u>/voici-example-page): admin
   // secret only, and each run signs and writes a whole page. Per source and per account (the path names it), so a
   // leaked secret or a loop can't churn a page or R2.
@@ -575,6 +577,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "voici-thread": [{ axis: "ip", limit: 1000, windowSec: 3600 }],
   "voici-owner": [{ axis: "ip", limit: 1000, windowSec: 3600 }],
   "voici-page-read": [{ axis: "ip", limit: 300, windowSec: 60 }],
+  "voici-piece-cache": [{ axis: "ip", limit: 120, windowSec: 3600 }],
   "abuse-report": [{ axis: "ip", limit: 10, windowSec: 3600 }],
   "abuse-notices": [{ axis: "ip", limit: 600, windowSec: 3600 }],
   "abuse-notice-done": [{ axis: "ip", limit: 30, windowSec: 3600 }],

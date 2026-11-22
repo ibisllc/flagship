@@ -16229,5 +16229,9 @@
   "Use": {
     "en": "Use",
     "ctx": "webapp/views/photo-editor.js:35"
+  },
+  "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": {
+    "en": "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.",
+    "ctx": "webapp/lib/voiciCopy.js:93"
   }
 }

@@ -195,5 +195,7 @@
   "Make your page": "创建你的页面",
   "Link to this post": "此帖子的链接",
   "Link copied": "链接已复制",
-  "Couldn't copy the link.": "无法复制链接。"
+  "Couldn't copy the link.": "无法复制链接。",
+  "Older posts are on {0}'s phone, which is offline right now.": "较早的帖子在 {0} 的手机上，这部手机现在处于离线状态。",
+  "Try again": "重试"
 }

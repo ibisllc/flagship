@@ -491,6 +491,8 @@ export const PHONE_WEB_ORIGINS: readonly string[] = ["https://voi.ci"];
 export const PHONE_WEB_ORIGINS_GYM: readonly string[] = ["https://gym.voi.ci"];
 export const PHONE_DELIVER_PATH = "/api/phone/deliver";
 export const PHONE_LIVE_PATH = "/api/phone/live";
+/** A phone-only voi.ci piece (docs/voici-and-messages.md §2.7a): `GET <prefix><sha256 hex>`, a simple GET. */
+export const PHONE_PIECE_PATH_PREFIX = "/api/phone/voici-piece/";
 export const PHONE_ENVELOPE_CONTENT_TYPE = "application/flagship-envelope+json";
 /** Phone limits (§8.2): a message body; drafts may be larger (VOICI_DRAFT_MAX_ENVELOPE_BYTES). */
 export const PHONE_DELIVER_MAX_BYTES = 64 * 1024;
@@ -513,7 +515,9 @@ export interface PhoneWebRequest {
 export type PhoneWebVerdict =
   | { kind: "preflight"; status: 204; headers: Record<string, string> }
   | { kind: "live" | "deliver"; corsHeaders: Record<string, string> }
-  | { kind: "refuse"; status: 403 | 405 | 415 | 421; code: "wrong-host" | "origin" | "preflight" | "method" | "content-type" }
+  /** GET /api/phone/voici-piece/<sha256>: the handler answers the piece's bytes or 404. */
+  | { kind: "piece"; sha256: string; corsHeaders: Record<string, string> }
+  | { kind: "refuse"; status: 403 | 404 | 405 | 415 | 421; code: "wrong-host" | "origin" | "preflight" | "method" | "content-type" | "not-found" }
   /** No Origin and not one of the two operations: the endpoint's other (native / same-origin) rules apply. */
   | { kind: "other" };
 
@@ -526,14 +530,16 @@ function corsFor(origin: string | null): Record<string, string> {
  * present, must be in `origins` (403, no CORS headers); `OPTIONS /api/phone/deliver` is a preflight only for
  * method POST and exactly the `content-type` request header (204 with the allow headers, never Allow-Credentials);
  * `GET /api/phone/live`; `POST /api/phone/deliver` only with Content-Type exactly application/flagship-envelope+json
- * (415). Anything else with an Origin is 403. No cookie is read or set.
+ * (415); `GET /api/phone/voici-piece/<64 lowercase hex>` (404 for any other name under the prefix; never a preflight).
+ * Anything else with an Origin is 403. No cookie is read or set.
  */
 export function phoneWebCheck(r: PhoneWebRequest, o: { hostname: string; origins: readonly string[] }): PhoneWebVerdict {
   if (r.host.toLowerCase() !== o.hostname.toLowerCase()) return { kind: "refuse", status: 421, code: "wrong-host" };
   const method = r.method.toUpperCase();
   const listed = r.origin !== null && o.origins.includes(r.origin);
   if (r.origin !== null && !listed) return { kind: "refuse", status: 403, code: "origin" };
-  const known = r.path === PHONE_DELIVER_PATH || r.path === PHONE_LIVE_PATH;
+  const isPiece = r.path.startsWith(PHONE_PIECE_PATH_PREFIX);
+  const known = r.path === PHONE_DELIVER_PATH || r.path === PHONE_LIVE_PATH || isPiece;
   if (method === "OPTIONS") {
     if (r.path !== PHONE_DELIVER_PATH || !listed) return { kind: "refuse", status: 403, code: "preflight" };
     const hdrs = (r.acrHeaders ?? "").split(",").map((h) => h.trim().toLowerCase()).filter((h) => h !== "");
@@ -553,6 +559,12 @@ export function phoneWebCheck(r: PhoneWebRequest, o: { hostname: string; origins
   if (!known) return r.origin !== null ? { kind: "refuse", status: 403, code: "origin" } : { kind: "other" };
   if (r.path === PHONE_LIVE_PATH) {
     return method === "GET" ? { kind: "live", corsHeaders: corsFor(r.origin) } : { kind: "refuse", status: 405, code: "method" };
+  }
+  if (isPiece) {
+    if (method !== "GET") return { kind: "refuse", status: 405, code: "method" };
+    const sha256 = r.path.slice(PHONE_PIECE_PATH_PREFIX.length);
+    if (!/^[0-9a-f]{64}$/.test(sha256)) return { kind: "refuse", status: 404, code: "not-found" };
+    return { kind: "piece", sha256, corsHeaders: corsFor(r.origin) };
   }
   if (method !== "POST") return { kind: "refuse", status: 405, code: "method" };
   if (r.contentType !== PHONE_ENVELOPE_CONTENT_TYPE) return { kind: "refuse", status: 415, code: "content-type" };

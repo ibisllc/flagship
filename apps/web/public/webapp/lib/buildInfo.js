@@ -10,7 +10,7 @@
 import { tr } from "./i18n.js";
 
 export const PLATFORM = "web";
-export const WEB_BUILD = 248;
+export const WEB_BUILD = 249;
 export const PROTOCOL_LEVEL = 1;
 
 // The one product version every Flagship surface shows (release/version.json;

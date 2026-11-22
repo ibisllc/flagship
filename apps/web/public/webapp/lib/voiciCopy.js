@@ -89,6 +89,8 @@ export function voiciErrorText(e) {
       return tr("Your Messages settings couldn't be opened on this device.");
     case "too-large":
       return tr("That's too big to publish.");
+    case "too-many-chunks":
+      return tr("This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.");
     case "sign-out-failed":
       return tr("Couldn't sign out of that website. Try again.");
     default:
