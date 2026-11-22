@@ -179,6 +179,11 @@ interface PhoneWebHandler {
     fun live(): com.flagshipserver.app.core.voici.PhoneLiveAnswer?
     /** `POST /api/phone/deliver`: (status, JSON body). */
     fun deliver(body: ByteArray, phoneRoutePub: String): Pair<Int, String>
+    /**
+     * `GET /api/phone/voici-piece/<sha256>`: a phone-only chunk or card image of the published page, exactly as the
+     * index lists it, with its content type (docs/voici-and-messages.md §2.7a); null = 404.
+     */
+    fun phonePiece(sha256: String): Pair<ByteArray, String>? = null
 }
 
 /**
@@ -259,6 +264,20 @@ class PhoneEndpoint(
                     }
                 }
             }
+            is com.flagshipserver.app.core.voici.PhoneWebVerdict.Piece -> {
+                val notFound = """{"error":"not found","code":"not-found"}"""
+                val handler = web ?: return answer(404, notFound, verdict.corsHeaders)
+                if (inFlight.incrementAndGet() > com.flagshipserver.app.core.voici.VoiciPhoneWeb.PHONE_DELIVER_MAX_CONCURRENT) {
+                    inFlight.decrementAndGet()
+                    return answer(429, """{"error":"busy","code":"rate-limited","retryAfterSec":5}""", verdict.corsHeaders)
+                }
+                try {
+                    val (bytes, type) = handler.phonePiece(verdict.sha256) ?: return answer(404, notFound, verdict.corsHeaders)
+                    answer(200, bytes, type, verdict.corsHeaders)
+                } finally {
+                    inFlight.decrementAndGet()
+                }
+            }
             com.flagshipserver.app.core.voici.PhoneWebVerdict.Other -> {
                 val policy = PhoneEndpointPolicy.check(
                     PhoneEndpointRequest(
@@ -278,15 +297,17 @@ class PhoneEndpoint(
         }
     }
 
-    private fun answer(status: Int, json: String, cors: Map<String, String> = emptyMap()): ByteArray {
+    private fun answer(status: Int, json: String, cors: Map<String, String> = emptyMap()): ByteArray =
+        answer(status, json.toByteArray(Charsets.UTF_8), if (status != 204) "application/json" else null, cors)
+
+    private fun answer(status: Int, body: ByteArray, contentType: String?, cors: Map<String, String> = emptyMap()): ByteArray {
         val reason = when (status) {
             200 -> "OK"; 204 -> "No Content"; 400 -> "Bad Request"; 403 -> "Forbidden"; 404 -> "Not Found"; 405 -> "Method Not Allowed"
             409 -> "Conflict"; 413 -> "Payload Too Large"; 415 -> "Unsupported Media Type"; 421 -> "Misdirected Request"
             429 -> "Too Many Requests"; else -> "Error"
         }
-        val body = json.toByteArray(Charsets.UTF_8)
         val head = StringBuilder("HTTP/1.1 $status $reason\r\n")
-        if (status != 204) head.append("content-type: application/json\r\n")
+        if (contentType != null) head.append("content-type: ").append(contentType).append("\r\n")
         head.append("content-length: ${body.size}\r\n")
             .append("cache-control: no-store\r\n")
             .append("x-content-type-options: nosniff\r\n")

@@ -141,6 +141,9 @@ final class PhoneEndpointResponderTests: XCTestCase {
             got.append(body)
             return (200, #"{"ack":{}}"#)
         }
+        func phonePiece(_ sha256: String) -> (bytes: [UInt8], contentType: String)? {
+            sha256 == String(repeating: "ab", count: 32) ? (Array(#"{"v":1}"#.utf8), "application/json") : nil
+        }
     }
 
     private func headers(_ d: Data) -> String { String(String(decoding: d, as: UTF8.self).components(separatedBy: "\r\n\r\n").first!).lowercased() }
@@ -188,6 +191,17 @@ final class PhoneEndpointResponderTests: XCTestCase {
         let native = await ep.handle(head("POST", "/api/phone/deliver", ["content-type": "application/flagship-envelope+json"]), body: env)
         XCTAssertEqual(status(native), 200)
         XCTAssertEqual(status(ep.respond(head("GET", "/.well-known/flagship-phone", ["host": "notes.\(host)"]), body: Data())), 421)
+        // A phone-only voi.ci piece (§2.7a): a simple GET from voi.ci or a native app; 404 for any other name.
+        let piecePath = "/api/phone/voici-piece/" + String(repeating: "ab", count: 32)
+        let piece = ep.respond(head("GET", piecePath, voici), body: Data())
+        XCTAssertEqual(status(piece), 200)
+        XCTAssertEqual(body(piece), #"{"v":1}"#)
+        XCTAssertTrue(headers(piece).contains("access-control-allow-origin: https://voi.ci"))
+        XCTAssertTrue(headers(piece).contains("content-type: application/json"))
+        XCTAssertEqual(status(ep.respond(head("GET", piecePath, [:]), body: Data())), 200)
+        XCTAssertEqual(status(ep.respond(head("GET", "/api/phone/voici-piece/" + String(repeating: "cd", count: 32), voici), body: Data())), 404)
+        XCTAssertEqual(status(ep.respond(head("POST", piecePath, voici), body: Data())), 405)
+        XCTAssertEqual(status(ep.respond(head("GET", piecePath, ["origin": "https://evil.example"]), body: Data())), 403)
     }
 
     func testASignedHelloIsRecorded() throws {

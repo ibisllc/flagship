@@ -4026,5 +4026,6 @@
   "That file couldn't be read as a photo. Try another one.": "そのファイルを写真として読み込めませんでした。別のファイルをお試しください。",
   "The photo couldn't be saved on this device. Try again.": "このデバイスで写真を保存できませんでした。もう一度お試しください。",
   "That photo is too detailed to fit. Try another one.": "その写真は細部が多すぎて収まりません。別の写真をお試しください。",
-  "Flagship can't use the camera. Allow it in Settings, then try again.": "Flagship はカメラを使用できません。設定で許可してから、もう一度お試しください。"
+  "Flagship can't use the camera. Allow it in Settings, then try again.": "Flagship はカメラを使用できません。設定で許可してから、もう一度お試しください。",
+  "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": "このページは voi.ci が許可するより多くの投稿を voi.ci に保存しようとしています。Flagship をアップデートしてから、もう一度公開してください。"
 }

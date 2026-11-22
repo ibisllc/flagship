@@ -14,6 +14,8 @@ public enum VoiciPhoneWeb {
     public static let originsGym = ["https://gym.voi.ci"]
     public static let deliverPath = "/api/phone/deliver"
     public static let livePath = "/api/phone/live"
+    /// A phone-only voi.ci piece (docs/voici-and-messages.md §2.7a): `GET <prefix><sha256 hex>`, a simple GET.
+    public static let piecePathPrefix = "/api/phone/voici-piece/"
     public static let envelopeContentType = "application/flagship-envelope+json"
     public static let deliverMaxBytes = 64 * 1024
     public static let deliverMaxConcurrent = 8
@@ -41,7 +43,9 @@ public enum VoiciPhoneWeb {
         case preflight(headers: [String: String])
         case live(corsHeaders: [String: String])
         case deliver(corsHeaders: [String: String])
-        /// status 403 | 405 | 415 | 421; code wrong-host | origin | preflight | method | content-type.
+        /// GET /api/phone/voici-piece/<sha256>: the handler answers the piece's bytes or 404.
+        case piece(sha256: String, corsHeaders: [String: String])
+        /// status 403 | 404 | 405 | 415 | 421; code wrong-host | origin | preflight | method | content-type | not-found.
         case refuse(status: Int, code: String)
         /// No Origin and not one of the two operations: the endpoint's other (native / same-origin) rules apply.
         case other
@@ -53,6 +57,7 @@ public enum VoiciPhoneWeb {
             case .preflight(let headers): return ["kind": "preflight", "status": 204, "headers": h(headers)]
             case .live(let c): return ["kind": "live", "corsHeaders": h(c)]
             case .deliver(let c): return ["kind": "deliver", "corsHeaders": h(c)]
+            case .piece(let sha, let c): return ["kind": "piece", "sha256": .string(sha), "corsHeaders": h(c)]
             case .refuse(let status, let code): return ["kind": "refuse", "status": .number(Double(status)), "code": .string(code)]
             case .other: return ["kind": "other"]
             }
@@ -71,7 +76,8 @@ public enum VoiciPhoneWeb {
         let method = r.method.uppercased()
         let listed = r.origin.map { o in origins.contains { CanonicalJson.same($0, o) } } ?? false
         if r.origin != nil && !listed { return .refuse(status: 403, code: "origin") }
-        let known = r.path == deliverPath || r.path == livePath
+        let isPiece = r.path.hasPrefix(piecePathPrefix)
+        let known = r.path == deliverPath || r.path == livePath || isPiece
         if method == "OPTIONS" {
             if r.path != deliverPath || !listed { return .refuse(status: 403, code: "preflight") }
             let hdrs = (r.acrHeaders ?? "").split(separator: ",", omittingEmptySubsequences: false)
@@ -82,6 +88,12 @@ public enum VoiciPhoneWeb {
         }
         if !known { return r.origin != nil ? .refuse(status: 403, code: "origin") : .other }
         if r.path == livePath { return method == "GET" ? .live(corsHeaders: cors(r.origin)) : .refuse(status: 405, code: "method") }
+        if isPiece {
+            guard method == "GET" else { return .refuse(status: 405, code: "method") }
+            let sha = String(r.path.dropFirst(piecePathPrefix.count))
+            guard CanonicalJson.isLowerHex(sha, bytes: 32) else { return .refuse(status: 404, code: "not-found") }
+            return .piece(sha256: sha, corsHeaders: cors(r.origin))
+        }
         if method != "POST" { return .refuse(status: 405, code: "method") }
         if r.contentType != envelopeContentType { return .refuse(status: 415, code: "content-type") }
         return .deliver(corsHeaders: cors(r.origin))

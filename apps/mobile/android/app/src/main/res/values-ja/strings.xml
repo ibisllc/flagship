@@ -4363,4 +4363,5 @@
     <string name="voici_calls_ring_notifications">通話の着信音を鳴らすには通知を許可してください</string>
     <string name="voici_calls_ring_full_screen">ロック画面に通話を表示するには全画面通話を許可してください</string>
     <string name="voici_call_channel_quiet">通話中</string>
+    <string name="voici_err_too_many_chunks">このページは voi.ci が許可するより多くの投稿を voi.ci に保存しようとしています。Flagship をアップデートしてから、もう一度公開してください。</string>
 </resources>

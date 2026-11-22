@@ -134,9 +134,16 @@ object VoiciOwner {
     /**
      * Every piece of [state]: profile, avatar, chunk-n, card-<prefix>. An image's bytes come from [image]; one
      * that is only in the [published] index keeps its listed size (it is already stored). Throws when an image is
-     * nowhere.
+     * nowhere. Capped server copy (docs/voici-and-messages.md §2.7a): a chunk in [carried] (a phone-only chunk this
+     * device doesn't hold) goes out as its listed ref with no bytes, and so do the listed card images no chunk this
+     * device holds names.
      */
-    fun planPieces(state: VoiciPageState, image: (String) -> ByteArray?, published: List<VoiciPieceRef> = emptyList()): List<VoiciPlannedPiece> {
+    fun planPieces(
+        state: VoiciPageState,
+        image: (String) -> ByteArray?,
+        published: List<VoiciPieceRef> = emptyList(),
+        carried: List<VoiciPieceRef> = emptyList(),
+    ): List<VoiciPlannedPiece> {
         val known = published.associateBy { it.sha256 }
         val out = ArrayList<VoiciPlannedPiece>()
         val profile = profileBytes(state.profile)
@@ -152,24 +159,89 @@ object VoiciOwner {
             }
         }
         state.profile.avatar?.let { img("avatar", it) }
+        val carriedByRole = carried.associateBy { it.role }
+        val cards = LinkedHashSet<String>()
         state.chunks.forEachIndexed { i, posts ->
+            val keep = carriedByRole["chunk-$i"]
+            if (keep != null && posts.isEmpty()) {
+                out += VoiciPlannedPiece(keep.role, keep.sha256, keep.size, null, "application/json")
+                return@forEachIndexed
+            }
             val b = chunkBytes(i, posts)
             out += VoiciPlannedPiece("chunk-$i", WebEnvelopes.sha256Hex(b), b.size.toLong(), b, "application/json")
+            for (p in posts) for (l in p.links) l.card?.image?.let(cards::add)
         }
-        val cards = LinkedHashSet<String>()
-        for (c in state.chunks) for (p in c) for (l in p.links) l.card?.image?.let(cards::add)
         for (sha in cards) img(VoiciPage.voiciCardRole(sha), sha)
+        if (carriedByRole.isNotEmpty()) {
+            for (l in published) if (l.role.startsWith("card-") && l.sha256 !in cards) out += VoiciPlannedPiece(l.role, l.sha256, l.size, null, "image/jpeg")
+        }
         return out
     }
 
-    /** A published index's pieces read back into a page state ([fetch] returns a piece's bytes, checked here). */
+    /**
+     * The phone-only chunks of [index] this device doesn't hold: [state] (its copy of that index's content) can't
+     * produce their listed bytes. A publish carries these refs unchanged (§2.7a).
+     */
+    fun carriedChunks(index: VoiciPageIndex?, state: VoiciPageState?): List<VoiciPieceRef> {
+        if (index == null || (index.body.phoneChunks ?: 0) <= 0) return emptyList()
+        return index.body.pieces.filter { ref ->
+            if (!index.body.isPhoneChunk(ref.role)) return@filter false
+            val b = state?.let { heldChunkBytes(it, ref) } ?: return@filter true
+            WebEnvelopes.sha256Hex(b) != ref.sha256
+        }
+    }
+
+    /** The canonical bytes of the chunk [ref] names from [state], or null when the state has no such chunk. */
+    fun heldChunkBytes(state: VoiciPageState, ref: VoiciPieceRef): ByteArray? {
+        val n = ref.role.removePrefix("chunk-").toIntOrNull() ?: return null
+        if (!ref.role.startsWith("chunk-") || n !in state.chunks.indices) return null
+        return chunkBytes(n, state.chunks[n])
+    }
+
+    /**
+     * What the phone endpoint answers for `GET /api/phone/voici-piece/<sha256>` (§2.7a): the bytes of a phone-only
+     * chunk of [index], regenerated from this phone's copy [state], or of a card image (from [image]) on a page with
+     * phone-only chunks; checked against the listed hash and size. Null for anything else (404).
+     */
+    fun phonePiece(sha256: String, index: VoiciPageIndex, state: VoiciPageState?, image: (String) -> ByteArray?): ByteArray? {
+        if ((index.body.phoneChunks ?: 0) <= 0) return null
+        val ref = index.body.pieces.firstOrNull { it.sha256 == sha256 } ?: return null
+        val b = when {
+            index.body.isPhoneChunk(ref.role) -> state?.let { heldChunkBytes(it, ref) }
+            ref.role.startsWith("card-") -> image(sha256)
+            else -> null
+        } ?: return null
+        return b.takeIf { it.size.toLong() == ref.size && WebEnvelopes.sha256Hex(it) == ref.sha256 }
+    }
+
+    /**
+     * A published index's pieces read back into a page state ([fetch] returns a piece's bytes, checked here). A
+     * phone-only chunk (§2.7a) [fetch] can't give becomes an empty placeholder; the next publish carries its listed
+     * ref ([carriedChunks]).
+     */
     fun readPublished(index: VoiciPageIndex, fetch: (VoiciPieceRef) -> ByteArray?): VoiciPageState? {
         fun get(ref: VoiciPieceRef): ByteArray? = fetch(ref)?.takeIf { it.size.toLong() == ref.size && WebEnvelopes.sha256Hex(it) == ref.sha256 }
         val byRole = index.body.pieces.associateBy { it.role }
         val profile = byRole["profile"]?.let(::get)?.let(VoiciPage::parseVoiciProfilePiece) ?: return null
-        val n = index.body.pieces.count { it.role.startsWith("chunk-") }
-        val chunks = (0 until n).map { i -> byRole["chunk-$i"]?.let(::get)?.let { VoiciPage.parseVoiciChunkPiece(it, i) } }
-        if (!VoiciPage.voiciPieceRefsOk(index.body, profile, chunks)) return null
+        val n = index.body.chunkCount
+        var placeholders = false
+        val chunks = (0 until n).map { i ->
+            val c = byRole["chunk-$i"]?.let(::get)?.let { VoiciPage.parseVoiciChunkPiece(it, i) }
+            if (c == null && index.body.isPhoneChunk("chunk-$i")) {
+                placeholders = true
+                VoiciChunk(i, emptyList())
+            } else {
+                c
+            }
+        }
+        if (placeholders) {
+            // Not every chunk is here: the avatar must match and every card a held chunk names must be listed.
+            val listed = index.body.pieces.filter { it.role.startsWith("card-") }.map { it.sha256 }.toSet()
+            if (profile.avatar != byRole["avatar"]?.sha256 || chunks.any { it == null }) return null
+            if (chunks.any { c -> c!!.posts.any { p -> p.links.any { l -> l.card?.image?.let { it !in listed } == true } } }) return null
+        } else if (!VoiciPage.voiciPieceRefsOk(index.body, profile, chunks)) {
+            return null
+        }
         return VoiciPageState(profile, index.body.acceptsMessages, chunks.map { it!!.posts }, index.body.issuedAt)
     }
 

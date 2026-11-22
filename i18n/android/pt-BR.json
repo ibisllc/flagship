@@ -4361,5 +4361,6 @@
   "voici_intro_no": "Não, obrigado",
   "voici_calls_ring_notifications": "Permita as notificações para que as chamadas toquem",
   "voici_calls_ring_full_screen": "Permita as chamadas em tela cheia para que apareçam na tela de bloqueio",
-  "voici_call_channel_quiet": "Chamadas em andamento"
+  "voici_call_channel_quiet": "Chamadas em andamento",
+  "voici_err_too_many_chunks": "Esta página mantém no voi.ci mais publicações do que o voi.ci permite. Atualize o Flagship e publique de novo."
 }

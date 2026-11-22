@@ -4026,5 +4026,6 @@
   "That file couldn't be read as a photo. Try another one.": "无法将该文件读取为照片。请换一个。",
   "The photo couldn't be saved on this device. Try again.": "无法在此设备上保存这张照片。请重试。",
   "That photo is too detailed to fit. Try another one.": "这张照片细节太多，无法放入。请换一张。",
-  "Flagship can't use the camera. Allow it in Settings, then try again.": "Flagship 无法使用相机。请在“设置”中允许后重试。"
+  "Flagship can't use the camera. Allow it in Settings, then try again.": "Flagship 无法使用相机。请在“设置”中允许后重试。",
+  "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": "此页面在 voi.ci 上保留的帖子超出了 voi.ci 允许的数量。请更新 Flagship，然后重新发布。"
 }

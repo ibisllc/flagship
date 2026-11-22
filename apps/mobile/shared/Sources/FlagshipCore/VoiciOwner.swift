@@ -51,26 +51,76 @@ public enum VoiciOwner {
     }
 
     /// The pieces a page state publishes as: the profile, each chunk, the avatar and every card image the posts name.
-    /// `images` holds the JPEG bytes by SHA-256; nil when one the content names is missing.
-    public static func pieces(_ state: VoiciPageState, images: [String: [UInt8]]) throws -> [Piece]? {
+    /// `images` holds the JPEG bytes by SHA-256; nil when one the content names is missing and `listed` doesn't name it.
+    /// Capped server copy (docs/voici-and-messages.md §2.7a): `listed` is the index this publish replaces; a chunk in
+    /// `carried` (one this device doesn't hold) goes out as its listed ref with no bytes, and so do the listed card
+    /// images no chunk this device holds names. An image already listed may come without its bytes (empty: not uploaded).
+    public static func pieces(_ state: VoiciPageState, images: [String: [UInt8]], listed: [VoiciPieceRef] = [],
+                              carried: [VoiciPieceRef] = []) throws -> [Piece]? {
         var out: [Piece] = []
         let profile = try CanonicalJson.canonicalJsonBytes(state.profile.json)
         out.append(Piece(ref: VoiciPieceRef(role: "profile", sha256: CanonicalJson.sha256Hex(profile), size: Int64(profile.count)), bytes: profile))
+        let carriedByRole = Dictionary(carried.map { ($0.role, $0) }, uniquingKeysWith: { a, _ in a })
+        var cards = Set<String>()
         for (n, posts) in state.chunks.enumerated() {
+            if let keep = carriedByRole["chunk-\(n)"], posts.isEmpty {
+                out.append(Piece(ref: keep, bytes: []))
+                continue
+            }
             let b = try CanonicalJson.canonicalJsonBytes(VoiciChunk(chunk: Int64(n), posts: posts).json)
             out.append(Piece(ref: VoiciPieceRef(role: "chunk-\(n)", sha256: CanonicalJson.sha256Hex(b), size: Int64(b.count)), bytes: b))
+            for p in posts { for l in p.links { if let i = l.card?.image { cards.insert(i) } } }
+        }
+        let listedBySha = Dictionary(listed.map { ($0.sha256, $0) }, uniquingKeysWith: { a, _ in a })
+        func image(_ role: String, _ sha: String) -> Piece? {
+            if let b = images[sha] { return Piece(ref: VoiciPieceRef(role: role, sha256: sha, size: Int64(b.count)), bytes: b) }
+            if let l = listedBySha[sha] { return Piece(ref: VoiciPieceRef(role: role, sha256: sha, size: l.size), bytes: []) }
+            return nil
         }
         if let a = state.profile.avatar {
-            guard let b = images[a] else { return nil }
-            out.append(Piece(ref: VoiciPieceRef(role: "avatar", sha256: a, size: Int64(b.count)), bytes: b))
+            guard let p = image("avatar", a) else { return nil }
+            out.append(p)
         }
-        var cards = Set<String>()
-        for c in state.chunks { for p in c { for l in p.links { if let i = l.card?.image { cards.insert(i) } } } }
         for sha in cards.sorted() {
-            guard let b = images[sha] else { return nil }
-            out.append(Piece(ref: VoiciPieceRef(role: VoiciPage.voiciCardRole(sha), sha256: sha, size: Int64(b.count)), bytes: b))
+            guard let p = image(VoiciPage.voiciCardRole(sha), sha) else { return nil }
+            out.append(p)
+        }
+        if !carriedByRole.isEmpty {
+            for l in listed where l.role.hasPrefix("card-") && !cards.contains(l.sha256) { out.append(Piece(ref: l, bytes: [])) }
         }
         return out
+    }
+
+    /// One chunk's canonical bytes from a page state, or nil when the state has no chunk n.
+    public static func chunkBytes(_ state: VoiciPageState, _ n: Int) -> [UInt8]? {
+        guard n >= 0, n < state.chunks.count else { return nil }
+        return try? CanonicalJson.canonicalJsonBytes(VoiciChunk(chunk: Int64(n), posts: state.chunks[n]).json)
+    }
+
+    /// The phone-only chunks of `index` this device doesn't hold: `state` (its copy of that index's content) can't
+    /// produce their listed bytes. A publish carries these refs unchanged (§2.7a).
+    public static func carriedChunks(_ index: VoiciPageIndex?, state: VoiciPageState?) -> [VoiciPieceRef] {
+        guard let index, (index.phoneChunks ?? 0) > 0 else { return [] }
+        return index.pieces.filter { ref in
+            guard index.isPhoneChunk(ref.role), let n = Int(ref.role.dropFirst(6)) else { return false }
+            guard let state, let b = chunkBytes(state, n) else { return true }
+            return CanonicalJson.sha256Hex(b) != ref.sha256
+        }
+    }
+
+    /// What the phone endpoint answers for `GET /api/phone/voici-piece/<sha256>` (§2.7a): the bytes of a phone-only
+    /// chunk of `index`, regenerated from this phone's copy `state`, or of a card image (from `image`) on a page with
+    /// phone-only chunks; checked against the listed hash and size. Nil for anything else (404).
+    public static func phonePiece(_ sha256: String, index: VoiciPageIndex, state: VoiciPageState?, image: (String) -> [UInt8]?) -> [UInt8]? {
+        guard (index.phoneChunks ?? 0) > 0, let ref = index.pieces.first(where: { $0.sha256 == sha256 }) else { return nil }
+        var bytes: [UInt8]?
+        if index.isPhoneChunk(ref.role), let n = Int(ref.role.dropFirst(6)), let state {
+            bytes = chunkBytes(state, n)
+        } else if ref.role.hasPrefix("card-") {
+            bytes = image(sha256)
+        }
+        guard let b = bytes, Int64(b.count) == ref.size, CanonicalJson.sha256Hex(b) == ref.sha256 else { return nil }
+        return b
     }
 
     /// The image hashes a page state names (avatar and card images).
@@ -81,11 +131,24 @@ public enum VoiciOwner {
         return s
     }
 
-    /// A verified index's content: the profile and every chunk, each checked against its hash and size.
+    /// A verified index's content: the profile and every chunk, each checked against its hash and size. A phone-only
+    /// chunk (§2.7a) that `fetch` can't give (it throws or answers other bytes) becomes an empty placeholder; the next
+    /// publish carries its listed ref (`carriedChunks`).
     public static func content(_ index: VoiciPageIndex, fetch: (VoiciPieceRef) async throws -> [UInt8]) async throws -> VoiciPageState? {
         var profile: VoiciProfile?
         var chunks: [(Int64, [VoiciPost])] = []
+        var placeholders = false
         for p in index.pieces where p.role == "profile" || p.role.hasPrefix("chunk-") {
+            if index.isPhoneChunk(p.role), let n = Int64(p.role.dropFirst(6)) {
+                let b = try? await fetch(p)
+                guard let b, Int64(b.count) == p.size, CanonicalJson.sha256Hex(b) == p.sha256, let c = VoiciPage.parseVoiciChunkPiece(b, n: n) else {
+                    chunks.append((n, []))
+                    placeholders = true
+                    continue
+                }
+                chunks.append((n, c.posts))
+                continue
+            }
             let b = try await fetch(p)
             guard Int64(b.count) == p.size, CanonicalJson.sha256Hex(b) == p.sha256 else { return nil }
             if p.role == "profile" {
@@ -99,6 +162,13 @@ public enum VoiciOwner {
         guard let profile else { return nil }
         let ordered = chunks.sorted { $0.0 < $1.0 }
         let state = VoiciPageState(profile: profile, acceptsMessages: index.acceptsMessages, chunks: ordered.map(\.1), issuedAt: index.issuedAt)
+        if placeholders {
+            // Not every chunk is here: the avatar must match and every card a held chunk names must be listed.
+            let listed = Set(index.pieces.filter { $0.role.hasPrefix("card-") }.map(\.sha256))
+            guard (profile.avatar ?? "") == (index.pieces.first { $0.role == "avatar" }?.sha256 ?? ""),
+                  ordered.allSatisfy({ $0.1.allSatisfy { $0.links.allSatisfy { $0.card?.image.map(listed.contains) ?? true } } }) else { return nil }
+            return state
+        }
         guard VoiciPage.voiciPieceRefsOk(index, profile: profile, chunks: ordered.map { VoiciChunk(chunk: $0.0, posts: $0.1) }) else { return nil }
         return state
     }

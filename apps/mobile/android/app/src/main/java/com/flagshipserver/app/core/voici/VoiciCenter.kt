@@ -370,7 +370,15 @@ class VoiciCenter(
     private suspend fun adopt(u: String, idx: VoiciPageIndex): VoiciPageState? {
         val umk = keyring.umk() ?: return null
         val fetched = HashMap<String, ByteArray>()
+        // A phone-only chunk (§2.7a) comes from this device's own copy when it still has it, else `.com`'s cache; one
+        // neither has is carried unchanged by the next publish.
+        val mine = withLocal { _, _, l -> VoiciOwner.parsePageState(l.publishedState) }
         for (p in idx.body.pieces) {
+            if (idx.body.isPhoneChunk(p.role)) {
+                val own = mine?.let { VoiciOwner.heldChunkBytes(it, p) }?.takeIf { WebEnvelopes.sha256Hex(it) == p.sha256 }
+                (own ?: runCatching { client.piece(u, idx.body.pageId, p.sha256) }.getOrNull())?.let { fetched[p.sha256] = it }
+                continue
+            }
             val have = vault.image(umk, u, p.sha256)
             val b = have ?: client.piece(u, idx.body.pageId, p.sha256) ?: continue
             fetched[p.sha256] = b
@@ -531,7 +539,9 @@ class VoiciCenter(
                     working, u, VoiciShareCards.listed(have), if (have.isEmpty()) null else base.profile, shareCard,
                     { vault.image(umk, u, it) }, { vault.putImage(umk, u, it) },
                 )
-                val plan = VoiciOwner.planPieces(working, { vault.image(umk, u, it) }, have) + listOfNotNull(share)
+                // Capped server copy (§2.7a): phone-only chunks this device doesn't hold go out as their listed refs.
+                val carried = if (local.removed) emptyList() else VoiciOwner.carriedChunks(idx, VoiciOwner.parsePageState(local.publishedState))
+                val plan = VoiciOwner.planPieces(working, { vault.image(umk, u, it) }, have, carried) + listOfNotNull(share)
                 val listed = have.map { it.sha256 }.toSet()
                 for (p in plan) {
                     if (p.sha256 in listed || p.bytes == null) continue
@@ -555,6 +565,7 @@ class VoiciCenter(
                     u, pageId, seq, now(), working.acceptsMessages, keys.epoch, keys.inboxPub, keys.signPub,
                     plan.map { it.ref }, kind, acceptsCalls = fields.first, callsFrom = fields.second,
                     showInSearch = if (searchOn) 1 else null,
+                    phoneChunks = VoiciPage.voiciPhoneChunksFor(working.chunks.size).takeIf { it > 0 }?.toLong(),
                 )
                 val signed = VoiciPage.signVoiciPageIndex(body, seed)
                 try {
@@ -1684,6 +1695,18 @@ class VoiciCenter(
 
     private val deliverTimes = ArrayDeque<Long>()
     private val deliverBySender = HashMap<String, ArrayDeque<Long>>()
+
+    /**
+     * `GET /api/phone/voici-piece/<sha256>` (§2.7a): a phone-only chunk or card image of the published page,
+     * regenerated from this phone's copy and checked against the index; null = 404.
+     */
+    fun phonePiece(sha256: String): Pair<ByteArray, String>? {
+        val (u, umk, local) = withLocal { u, umk, l -> Triple(u, umk, l) } ?: return null
+        if (local.removed) return null
+        val idx = local.publishedIndex?.let(VoiciPage::parseVoiciPageIndex) ?: return null
+        val b = VoiciOwner.phonePiece(sha256, idx, VoiciOwner.parsePageState(local.publishedState)) { vault.image(umk, u, it) } ?: return null
+        return b to if (VoiciPage.isVoiciJpeg(b)) "image/jpeg" else "application/json"
+    }
 
     /** `GET /api/phone/live`: null when this phone has no published page to receive for. */
     fun phoneLive(): PhoneLiveAnswer? {

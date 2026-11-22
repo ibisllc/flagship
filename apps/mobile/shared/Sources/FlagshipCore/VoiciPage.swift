@@ -92,6 +92,7 @@ public struct VoiciPageIndex: Equatable, Sendable {
     public enum Refusal: String, Sendable {
         case malformed, wrongUsername = "wrong-username", notSensitiveKey = "not-sensitive-key", badSignature = "bad-signature"
         case rolledBack = "rolled-back", stale, seqConflict = "seq-conflict", wrongPage = "wrong-page"
+        case tooManyChunks = "too-many-chunks"
     }
 
     public var username: String
@@ -107,6 +108,9 @@ public struct VoiciPageIndex: Equatable, Sendable {
     /// Search engines (owner decision 2026-11-17): 1 while the owner shows the page in search engines, nil = hidden
     /// (voi.ci sends noindex). Either version; the last canonical field when present.
     public var showInSearch: Int64?
+    /// Capped server copy (docs/voici-and-messages.md §2.7a): chunks 0..phoneChunks-1 are held only by the owner's
+    /// phone; nil = every chunk is on `.com`. The very last canonical field (`phone:<n>`) when present.
+    public var phoneChunks: Int64?
     public var inboxEpoch: Int64
     public var inboxPub: String
     public var ownerSignPub: String
@@ -119,9 +123,9 @@ public struct VoiciPageIndex: Equatable, Sendable {
 
     public init(username: String, pageId: String, seq: Int64, issuedAt: Int64, acceptsMessages: Int64, inboxEpoch: Int64,
                 inboxPub: String, ownerSignPub: String, pieces: [VoiciPieceRef], signerKind: String, signerPub: String = "", signature: String = "",
-                acceptsCalls: Int64? = nil, callsFrom: String? = nil, showInSearch: Int64? = nil) {
+                acceptsCalls: Int64? = nil, callsFrom: String? = nil, showInSearch: Int64? = nil, phoneChunks: Int64? = nil) {
         self.username = username; self.pageId = pageId; self.seq = seq; self.issuedAt = issuedAt; self.acceptsMessages = acceptsMessages
-        self.acceptsCalls = acceptsCalls; self.callsFrom = callsFrom; self.showInSearch = showInSearch
+        self.acceptsCalls = acceptsCalls; self.callsFrom = callsFrom; self.showInSearch = showInSearch; self.phoneChunks = phoneChunks
         self.inboxEpoch = inboxEpoch; self.inboxPub = inboxPub; self.ownerSignPub = ownerSignPub; self.pieces = pieces
         self.signerKind = signerKind; self.signerPub = signerPub; self.signature = signature
     }
@@ -131,6 +135,13 @@ public struct VoiciPageIndex: Equatable, Sendable {
     public var takesCalls: Bool { acceptsCalls == 1 }
     /// Search engines may list the page: only an index that says showInSearch 1.
     public var showsInSearch: Bool { showInSearch == 1 }
+    /// The number of chunks the index lists.
+    public var chunkCount: Int { pieces.filter { $0.role.hasPrefix("chunk-") }.count }
+    /// True when `role` is a chunk only the owner's phone holds (§2.7a).
+    public func isPhoneChunk(_ role: String) -> Bool {
+        guard role.hasPrefix("chunk-"), let n = Int64(role.dropFirst(6)) else { return false }
+        return n < (phoneChunks ?? 0)
+    }
 
     /// The signed envelope.
     public var json: JSONValue {
@@ -144,6 +155,7 @@ public struct VoiciPageIndex: Equatable, Sendable {
             o["callsFrom"] = callsFrom.map { .string($0) } ?? .null
         }
         if let showInSearch { o["showInSearch"] = .int(showInSearch) }
+        if let phoneChunks { o["phoneChunks"] = .int(phoneChunks) }
         return .object(o)
     }
 }
@@ -191,6 +203,10 @@ public enum VoiciPage {
     public static let shareImageHeight = 630
     public static let indexMaxBytes = 300 * 1024
     public static let indexMaxPieces = 2000
+    /// The newest chunks `.com` keeps of a page (§2.7a): 10 chunks = the newest 200 posts. Older ones are phone-only.
+    public static let comMaxChunks = 10
+    /// The phoneChunks a writer signs for a page of `chunks` chunks (0 = leave the field out).
+    public static func phoneChunksFor(_ chunks: Int) -> Int { max(0, chunks - comMaxChunks) }
     public static let profileMaxLinks = 12
     public static let postMaxLinks = 3
     /// issuedAt must be within this of `.com`'s clock at upload / publish.
@@ -345,10 +361,11 @@ public enum VoiciPage {
         guard b.signerKind == "admin-root" || b.signerKind == "irk" else { throw bad("signerKind") }
         guard CanonicalJson.isLowerHex(b.signerPub, bytes: 32) else { throw bad("signerPub") }
         if let s = b.showInSearch, s != 1 { throw bad("showInSearch") }
+        if let n = b.phoneChunks, !(CanonicalJson.isTime(n) && n >= 1 && n < Int64(b.chunkCount)) { throw bad("phoneChunks") }
         let calls = b.isV2 ? [String(b.acceptsCalls!), b.callsFrom!] : []
         return CanonicalJson.join([b.isV2 ? tagVoiciPageV2 : tagVoiciPage, b.username, b.pageId, String(b.seq), String(b.issuedAt), String(b.acceptsMessages)]
                                   + calls + [String(b.inboxEpoch), b.inboxPub, b.ownerSignPub, b.pieces.map(\.key).joined(separator: ","),
-                                   b.signerKind, b.signerPub] + (b.showInSearch == 1 ? ["1"] : []))
+                                   b.signerKind, b.signerPub] + (b.showInSearch == 1 ? ["1"] : []) + (b.phoneChunks.map { ["phone:\($0)"] } ?? []))
     }
 
     /// Sorts the pieces, sets signerPub from the seed, signs (randomized Ed25519: verify, never compare bytes).
@@ -372,7 +389,8 @@ public enum VoiciPage {
         }
         guard let r = v.object, r["kind"]?.string == "VoiciPage" else { return nil }
         let v2 = r["version"]?.safeInt == 2
-        let search: Set<String> = r["showInSearch"] != nil ? ["showInSearch"] : []
+        var search: Set<String> = r["showInSearch"] != nil ? ["showInSearch"] : []
+        if r["phoneChunks"] != nil { search.insert("phoneChunks") }
         guard (r["version"]?.isOne == true && exactKeys(r, indexKeys.union(search))) || (v2 && exactKeys(r, indexKeys.union(["acceptsCalls", "callsFrom"]).union(search))),
               CanonicalJson.isLowerHex(r["signature"], bytes: 64),
               let username = r["username"]?.string, let pageId = r["pageId"]?.string, let seq = r["seq"]?.safeInt,
@@ -396,6 +414,10 @@ public enum VoiciPage {
         if r["showInSearch"] != nil {
             guard r["showInSearch"]?.isOne == true else { return nil }
             out.showInSearch = 1
+        }
+        if r["phoneChunks"] != nil {
+            guard let n = r["phoneChunks"]?.safeInt else { return nil }
+            out.phoneChunks = n
         }
         return (try? canonicalVoiciPageIndex(out)) != nil ? out : nil
     }
@@ -421,6 +443,7 @@ public enum VoiciPage {
         if abs(idx.issuedAt - now) > indexSkewMs { return .refused(.stale) }
         if idx.seq != storedSeq + 1 { return .refused(.seqConflict) }
         if let stored = storedPageId, !CanonicalJson.same(idx.pageId, stored) { return .refused(.wrongPage) }
+        if Int64(idx.chunkCount) - (idx.phoneChunks ?? 0) > Int64(comMaxChunks) { return .refused(.tooManyChunks) }
         return r
     }
 

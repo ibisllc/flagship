@@ -33,6 +33,7 @@ object VoiciCopy {
             "not-sensitive-key", "bad-signature" -> R.string.voici_err_not_admin
             "bad-piece", "missing-piece", "too-large", "malformed", "wrong-page" -> R.string.voici_err_bad_page
             "banned" -> R.string.voici_err_banned_page
+            "too-many-chunks" -> R.string.voici_err_too_many_chunks
             in TEXT_CODES -> R.string.voici_err_text
             else -> R.string.voici_err_network
         },

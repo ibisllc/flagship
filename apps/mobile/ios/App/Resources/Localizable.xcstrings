@@ -165176,6 +165176,47 @@
           }
         }
       }
+    },
+    "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta página guarda en voi.ci más publicaciones de las que voi.ci permite. Actualiza Flagship y vuelve a publicar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette page garde plus de publications sur voi.ci que voi.ci ne le permet. Mettez Flagship à jour, puis publiez à nouveau."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Seite behält mehr Beiträge auf voi.ci, als voi.ci erlaubt. Aktualisiere Flagship und veröffentliche dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta página mantém no voi.ci mais publicações do que o voi.ci permite. Atualize o Flagship e publique de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このページは voi.ci が許可するより多くの投稿を voi.ci に保存しようとしています。Flagship をアップデートしてから、もう一度公開してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此页面在 voi.ci 上保留的帖子超出了 voi.ci 允许的数量。请更新 Flagship，然后重新发布。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

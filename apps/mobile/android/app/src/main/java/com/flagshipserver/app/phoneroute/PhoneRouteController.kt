@@ -204,4 +204,5 @@ object VoiciPhoneWebHandler : PhoneWebHandler {
     override fun deliver(body: ByteArray, phoneRoutePub: String): Pair<Int, String> =
         com.flagshipserver.app.core.voici.VoiciCenter.shared?.phoneDeliver(body, phoneRoutePub)
             ?: (404 to """{"error":"not found","code":"not-found"}""")
+    override fun phonePiece(sha256: String) = com.flagshipserver.app.core.voici.VoiciCenter.shared?.phonePiece(sha256)
 }

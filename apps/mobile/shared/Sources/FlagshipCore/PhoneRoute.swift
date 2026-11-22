@@ -340,6 +340,13 @@ public protocol PhoneWebInbox: AnyObject, Sendable {
     /// One envelope as delivered (the body, at most the draft cap). Answers the HTTP status and a JSON body:
     /// `{ack}` on 200, `{error, code}` otherwise.
     func deliver(_ body: Data, origin: String?) async -> (status: Int, json: String)
+    /// A phone-only voi.ci piece of the published page, exactly as the index lists it (docs/voici-and-messages.md §2.7a),
+    /// with its content type; nil = 404.
+    func phonePiece(_ sha256: String) -> (bytes: [UInt8], contentType: String)?
+}
+
+public extension PhoneWebInbox {
+    func phonePiece(_ sha256: String) -> (bytes: [UInt8], contentType: String)? { nil }
 }
 
 /// The endpoint's answers. Thread-safe; the tunnel feeds it whole requests and writes back what it returns.
@@ -442,6 +449,9 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
             return Self.answer(200, #"{"account":"\#(account)","live":true,"ownerSignPub":"\#(pub)"}"#, headers: cors)
         case .deliver(let cors):
             return Self.answer(503, #"{"error":"unavailable","code":"unavailable"}"#, headers: cors)
+        case .piece(let sha, let cors):
+            guard let p = web?.phonePiece(sha) else { return Self.answer(404, #"{"error":"not found","code":"not-found"}"#, headers: cors) }
+            return Self.answer(200, body: Data(p.bytes), contentType: p.contentType, headers: cors)
         case .other:
             break
         }
@@ -456,12 +466,15 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
     }
 
     static func answer(_ status: Int, _ json: String?, headers: [String: String] = [:]) -> Data {
+        answer(status, body: Data((json ?? "").utf8), contentType: json != nil ? "application/json" : nil, headers: headers)
+    }
+
+    static func answer(_ status: Int, body: Data, contentType: String?, headers: [String: String] = [:]) -> Data {
         let reasons = [200: "OK", 204: "No Content", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed",
                        413: "Content Too Large", 415: "Unsupported Media Type", 421: "Misdirected Request", 429: "Too Many Requests",
                        503: "Service Unavailable"]
-        let body = Data((json ?? "").utf8)
         var head = "HTTP/1.1 \(status) \(reasons[status] ?? "Error")\r\n"
-        if json != nil { head += "content-type: application/json\r\n" }
+        if let contentType { head += "content-type: \(contentType)\r\n" }
         head += "content-length: \(body.count)\r\n" +
             "cache-control: no-store\r\n" +
             "x-content-type-options: nosniff\r\n" +

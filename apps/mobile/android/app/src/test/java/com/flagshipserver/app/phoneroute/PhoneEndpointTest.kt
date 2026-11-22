@@ -166,6 +166,7 @@ class PhoneEndpointTest {
                 delivered += body
                 return 200 to """{"ack":{"route":"$phoneRoutePub"}}"""
             }
+            override fun phonePiece(sha256: String) = if (sha256 == "ab".repeat(32)) "{\"v\":1}".toByteArray() to "application/json" else null
         })
         val voici = "origin" to "https://voi.ci"
         // The preflight: only POST, only content-type; no credentials ever.
@@ -201,6 +202,16 @@ class PhoneEndpointTest {
         assertFalse(String(session).lowercase().contains("set-cookie"))
         assertEquals(403, status(ep.respond(req("POST", "/api/phone/ping").first, ByteArray(0))))
         assertEquals(1, delivered.size)
+        // A phone-only voi.ci piece (§2.7a): a simple GET from voi.ci or a native app; 404 for any other name.
+        val piece = ep.respond(req("GET", "/api/phone/voici-piece/${"ab".repeat(32)}", voici).first, ByteArray(0))
+        assertEquals(200, status(piece))
+        assertEquals("{\"v\":1}", body(piece))
+        assertTrue(String(piece).lowercase().contains("access-control-allow-origin: https://voi.ci"))
+        assertEquals(200, status(ep.respond(req("GET", "/api/phone/voici-piece/${"ab".repeat(32)}").first, ByteArray(0))))
+        assertEquals(404, status(ep.respond(req("GET", "/api/phone/voici-piece/${"cd".repeat(32)}", voici).first, ByteArray(0))))
+        assertEquals(404, status(ep.respond(req("GET", "/api/phone/voici-piece/${"AB".repeat(32)}", voici).first, ByteArray(0))))
+        assertEquals(405, status(ep.respond(req("POST", "/api/phone/voici-piece/${"ab".repeat(32)}", voici).first, ByteArray(0))))
+        assertEquals(403, status(ep.respond(req("GET", "/api/phone/voici-piece/${"ab".repeat(32)}", "origin" to "https://evil.example").first, ByteArray(0))))
     }
 
     @Test fun hellosFromKeysOutsideTheDeviceBookCannotFloodTheList() {

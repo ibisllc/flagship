@@ -4364,4 +4364,5 @@
     <string name="voici_calls_ring_notifications">Erlaube Mitteilungen, damit Anrufe klingeln</string>
     <string name="voici_calls_ring_full_screen">Erlaube Anrufe im Vollbild, damit sie auf dem Sperrbildschirm erscheinen</string>
     <string name="voici_call_channel_quiet">Laufende Anrufe</string>
+    <string name="voici_err_too_many_chunks">Diese Seite behält mehr Beiträge auf voi.ci, als voi.ci erlaubt. Aktualisiere Flagship und veröffentliche dann erneut.</string>
 </resources>

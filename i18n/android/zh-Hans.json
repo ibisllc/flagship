@@ -4360,5 +4360,6 @@
   "voici_intro_no": "不用了",
   "voici_calls_ring_notifications": "允许通知，来电才会响铃",
   "voici_calls_ring_full_screen": "允许全屏来电，来电才会显示在锁定屏幕上",
-  "voici_call_channel_quiet": "进行中的通话"
+  "voici_call_channel_quiet": "进行中的通话",
+  "voici_err_too_many_chunks": "此页面在 voi.ci 上保留的帖子超出了 voi.ci 允许的数量。请更新 Flagship，然后重新发布。"
 }

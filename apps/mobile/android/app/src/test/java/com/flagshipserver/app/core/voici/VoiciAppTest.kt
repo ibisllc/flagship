@@ -100,6 +100,48 @@ class VoiciAppTest {
         assertNull(again.first { it.role == "avatar" }.bytes)
     }
 
+    /** Capped server copy (§2.7a): the oldest chunks are phone-only; the phone serves them, another device carries them. */
+    @Test fun phoneOnlyChunksAreServedByThePhoneAndCarriedByADeviceWithoutThem() {
+        val card = fakeJpeg(9)
+        val cardSha = WebEnvelopes.sha256Hex(card)
+        val chunks = (0 until 12).map { i ->
+            val links = if (i == 0) listOf(VoiciPostLink("https://example.com/old", VoiciCard("Old", "example.com", "", cardSha))) else emptyList()
+            listOf(post("Post $i", 1_000L + i).copy(links = links))
+        }
+        val state = VoiciPageState(VoiciOwner.defaultProfile("Alice"), 1, chunks, 0)
+        val plan = VoiciOwner.planPieces(state, { if (it == cardSha) card else null })
+        val phone = VoiciPage.voiciPhoneChunksFor(state.chunks.size)
+        assertEquals(2, phone)
+        val keys = VoiciOwnerKeys.derive(umk, "ab".repeat(16), 1)
+        val idx = VoiciPage.signVoiciPageIndex(
+            VoiciPageIndexBody("alice", "ab".repeat(16), 1, 1_000, 1, 1, keys.inboxPub, keys.signPub, plan.map { it.ref }, "admin-root", phoneChunks = phone.toLong()),
+            root,
+        )
+        assertTrue(VoiciPage.checkVoiciPublish(idx.toJson(), "alice", "admin-root", rootPub, 0, null, 1_000).ok)
+        val noPhone = VoiciPage.signVoiciPageIndex(idx.body.copy(phoneChunks = null), root)
+        assertEquals("too-many-chunks", VoiciPage.checkVoiciPublish(noPhone.toJson(), "alice", "admin-root", rootPub, 0, null, 1_000).code)
+
+        val byRole = plan.associateBy { it.role }
+        val image = { sha: String -> if (sha == cardSha) card else null }
+        assertEquals(byRole.getValue("chunk-0").bytes!!.toList(), VoiciOwner.phonePiece(byRole.getValue("chunk-0").sha256, idx, state, image)!!.toList())
+        assertEquals(card.toList(), VoiciOwner.phonePiece(cardSha, idx, state, image)!!.toList())
+        assertNull(VoiciOwner.phonePiece(byRole.getValue("chunk-5").sha256, idx, state, image))
+        assertNull(VoiciOwner.phonePiece(byRole.getValue("profile").sha256, idx, state, image))
+        assertNull(VoiciOwner.phonePiece(byRole.getValue("chunk-0").sha256, noPhone, state, image))
+
+        val onCom = plan.filter { !idx.body.isPhoneChunk(it.role) }.associate { it.sha256 to it.bytes!! }
+        val second = VoiciOwner.readPublished(idx) { onCom[it.sha256] }!!
+        assertEquals(listOf(0, 0), second.chunks.take(2).map { it.size })
+        assertEquals(state.chunks.drop(2), second.chunks.drop(2))
+        val carried = VoiciOwner.carriedChunks(idx, second)
+        assertEquals(listOf("chunk-0", "chunk-1"), carried.map { it.role })
+        assertTrue(VoiciOwner.carriedChunks(idx, state).isEmpty())
+        val again = VoiciOwner.planPieces(second, { null }, idx.body.pieces, carried)
+        assertEquals(plan.map { it.ref }.sortedBy { it.key }, again.map { it.ref }.sortedBy { it.key })
+        assertTrue(again.filter { idx.body.isPhoneChunk(it.role) || it.role.startsWith("card-") }.all { it.bytes == null })
+        assertNull(VoiciOwner.readPublished(idx) { if (it.role == "chunk-5") null else onCom[it.sha256] })
+    }
+
     @Test fun callsSettingIsPublishedAndEveryLaterPublishKeepsIt() = runBlocking {
         val mock = mock()
         val a = center(mock, admin())

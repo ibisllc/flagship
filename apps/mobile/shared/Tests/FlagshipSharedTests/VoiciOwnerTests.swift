@@ -39,6 +39,64 @@ final class VoiciOwnerTests: XCTestCase {
         return idx
     }
 
+    /// Capped server copy (§2.7a): the oldest chunks are phone-only; the phone serves them, another device carries them.
+    func testPhoneOnlyChunksAreServedByThePhoneAndCarriedByADeviceWithoutThem() async throws {
+        let card: [UInt8] = [0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 9, 0xff, 0xd9]
+        let cardSha = CanonicalJson.sha256Hex(card)
+        let chunks: [[VoiciPost]] = (0..<12).map { i in
+            let links = i == 0 ? [VoiciPostLink(url: "https://example.com/old", card: VoiciCard(title: "Old", site: "example.com", description: "", image: cardSha))] : []
+            return [VoiciPost(id: String(format: "%032x", i + 1), createdAt: now - 100 + Int64(i), editedAt: nil, text: "Post \(i)", links: links)]
+        }
+        let full = VoiciPageState(profile: VoiciProfile(displayName: "Ana", bio: "", avatar: nil, theme: "classic", links: []),
+                                  acceptsMessages: 1, chunks: chunks, issuedAt: now)
+        let pieces = try XCTUnwrap(try VoiciOwner.pieces(full, images: [cardSha: card]))
+        let phone = VoiciPage.phoneChunksFor(chunks.count)
+        XCTAssertEqual(phone, 2)
+        let inbox = try VoiciMessages.deriveVoiciInboxKey(umk: umk, pageId: pageId, inboxEpoch: 1)
+        let sign = try VoiciMessages.deriveVoiciOwnerSignKey(umk: umk, pageId: pageId, inboxEpoch: 1)
+        let body = VoiciPageIndex(username: "ana", pageId: pageId, seq: 1, issuedAt: now, acceptsMessages: 1, inboxEpoch: 1,
+                                  inboxPub: CanonicalJson.hex(inbox.publicKey), ownerSignPub: CanonicalJson.hex(sign.publicKey),
+                                  pieces: pieces.map(\.ref), signerKind: "admin-root", phoneChunks: Int64(phone))
+        let idx = try VoiciPage.signVoiciPageIndex(body, signerSeed: admin)
+        let adminPub = CanonicalJson.hex(try CanonicalJson.ed25519PublicKey(seed: admin))
+        XCTAssertEqual(VoiciPage.checkVoiciPublish(idx.json, username: "ana", sensitiveKind: "admin-root", sensitivePub: adminPub,
+                                                   storedSeq: 0, storedPageId: nil, now: now).code, "ok")
+        var unCapped = body
+        unCapped.phoneChunks = nil
+        let noPhone = try VoiciPage.signVoiciPageIndex(unCapped, signerSeed: admin)
+        XCTAssertEqual(VoiciPage.checkVoiciPublish(noPhone.json, username: "ana", sensitiveKind: "admin-root", sensitivePub: adminPub,
+                                                   storedSeq: 0, storedPageId: nil, now: now).code, "too-many-chunks")
+
+        let byRole = Dictionary(uniqueKeysWithValues: pieces.map { ($0.ref.role, $0) })
+        let image: (String) -> [UInt8]? = { $0 == cardSha ? card : nil }
+        XCTAssertEqual(VoiciOwner.phonePiece(byRole["chunk-0"]!.ref.sha256, index: idx, state: full, image: image), byRole["chunk-0"]!.bytes)
+        XCTAssertEqual(VoiciOwner.phonePiece(cardSha, index: idx, state: full, image: image), card)
+        XCTAssertNil(VoiciOwner.phonePiece(byRole["chunk-5"]!.ref.sha256, index: idx, state: full, image: image))
+        XCTAssertNil(VoiciOwner.phonePiece(byRole["profile"]!.ref.sha256, index: idx, state: full, image: image))
+        XCTAssertNil(VoiciOwner.phonePiece(byRole["chunk-0"]!.ref.sha256, index: noPhone, state: full, image: image))
+
+        let onCom = Dictionary(uniqueKeysWithValues: pieces.filter { !idx.isPhoneChunk($0.ref.role) }.map { ($0.ref.sha256, $0.bytes) })
+        struct Missing: Error {}
+        let read = try await VoiciOwner.content(idx) { ref in
+            guard let b = onCom[ref.sha256] else { throw Missing() }
+            return b
+        }
+        let second = try XCTUnwrap(read)
+        XCTAssertEqual(second.chunks.prefix(2).map(\.count), [0, 0])
+        XCTAssertEqual(Array(second.chunks.dropFirst(2)), Array(chunks.dropFirst(2)))
+        let carried = VoiciOwner.carriedChunks(idx, state: second)
+        XCTAssertEqual(carried.map(\.role), ["chunk-0", "chunk-1"])
+        XCTAssertTrue(VoiciOwner.carriedChunks(idx, state: full).isEmpty)
+        let again = try XCTUnwrap(try VoiciOwner.pieces(second, images: [:], listed: idx.pieces, carried: carried))
+        XCTAssertEqual(Set(again.map(\.ref.key)), Set(pieces.map(\.ref.key)))
+        XCTAssertTrue(again.filter { idx.isPhoneChunk($0.ref.role) || $0.ref.role.hasPrefix("card-") }.allSatisfy { $0.bytes.isEmpty })
+        let broken = try? await VoiciOwner.content(idx) { ref in
+            guard ref.role != "chunk-5", let b = onCom[ref.sha256] else { throw Missing() }
+            return b
+        }
+        XCTAssertNil(broken)
+    }
+
     func testPublishThenSeqConflictCarriesTheStoredIndex() async throws {
         let m = try mock()
         let post = VoiciPost(id: String(repeating: "b2", count: 16), createdAt: now - 5, editedAt: nil, text: "First post", links: [])

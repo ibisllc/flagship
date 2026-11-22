@@ -44,6 +44,7 @@ final class VoiciVectorTests: XCTestCase {
         XCTAssertEqual(S.i(c["indexMaxBytes"]), Int64(VoiciPage.indexMaxBytes))
         XCTAssertEqual(S.i(c["indexMaxPieces"]), Int64(VoiciPage.indexMaxPieces))
         XCTAssertEqual(S.i(c["indexSkewMs"]), VoiciPage.indexSkewMs)
+        XCTAssertEqual(S.i(c["comMaxChunks"]), Int64(VoiciPage.comMaxChunks))
         XCTAssertEqual(S.i(c["linkUrlMax"]), Int64(VoiciText.linkUrlMax))
         let rules = try XCTUnwrap(c["textRules"]?.object)
         XCTAssertEqual(Set(rules.keys), Set(VoiciText.Field.allCases.map(\.rawValue)))
@@ -168,7 +169,7 @@ final class VoiciVectorTests: XCTestCase {
             XCTAssertEqual(r.code, S.s(c["expected"]), S.s(c["name"]))
             n += 1
         }
-        XCTAssertEqual(n, 34)
+        XCTAssertEqual(n, 43)
         for c in S.a(x["publishChecks"]) {
             let ctx = c["ctx"]!
             let r = VoiciPage.checkVoiciPublish(c["index"]!, username: S.s(ctx["username"]), sensitiveKind: S.s(ctx["sensitiveKind"]),
@@ -200,6 +201,31 @@ final class VoiciVectorTests: XCTestCase {
         XCTAssertEqual(S.text(try VoiciPage.canonicalVoiciPageIndex(mine)), S.s(x["canonical"]))
         XCTAssertEqual(VoiciPage.checkVoiciPageIndex(mine.json, username: "alice", sensitiveKind: "admin-root", sensitivePub: S.s(keys["adminRootPub"])).code, "ok")
         XCTAssertFalse(try XCTUnwrap(VoiciPage.parseVoiciPageIndex(v["index"]!["signed"]!)).showsInSearch)
+    }
+
+    /// Capped server copy (§2.7a): phoneChunks is the very last canonical field, `phone:<n>`, on either version.
+    func testIndexPhoneChunks() throws {
+        let v = try vectors()
+        let x = try XCTUnwrap(v["index"]?["phone"])
+        for (signedKey, canonicalKey) in [("signed", "canonical"), ("signedV2", "canonicalV2")] {
+            let signedJson = x[signedKey]!
+            let signed = try XCTUnwrap(VoiciPage.parseVoiciPageIndex(signedJson))
+            XCTAssertEqual(signed.phoneChunks, 1)
+            XCTAssertTrue(signed.isPhoneChunk("chunk-0"))
+            XCTAssertFalse(signed.isPhoneChunk("chunk-1"))
+            XCTAssertEqual(S.cj(signed.json), S.cj(signedJson))
+            XCTAssertEqual(S.text(try VoiciPage.canonicalVoiciPageIndex(signed)), S.s(x[canonicalKey]))
+        }
+        XCTAssertEqual(S.s(x["canonical"]), S.s(v["index"]?["canonical"]) + "|phone:1")
+        let keys = v["keys"]!
+        var b = body(v["index"]!["body"]!)
+        b.phoneChunks = 1
+        let mine = try VoiciPage.signVoiciPageIndex(b, signerSeed: S.h(keys["adminRootSeed"]))
+        XCTAssertEqual(S.text(try VoiciPage.canonicalVoiciPageIndex(mine)), S.s(x["canonical"]))
+        for c in S.a(x["phoneChunksFor"]) {
+            XCTAssertEqual(Int64(VoiciPage.phoneChunksFor(Int(S.i(c["chunks"])))), S.i(c["phoneChunks"]))
+        }
+        XCTAssertNil(try XCTUnwrap(VoiciPage.parseVoiciPageIndex(v["index"]!["signed"]!)).phoneChunks)
     }
 
     func testPieceUploadChunkingMerge() throws {

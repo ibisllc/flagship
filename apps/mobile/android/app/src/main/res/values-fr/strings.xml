@@ -4364,4 +4364,5 @@
     <string name="voici_calls_ring_notifications">Autorisez les notifications pour que les appels sonnent</string>
     <string name="voici_calls_ring_full_screen">Autorisez les appels en plein écran pour qu’ils s’affichent sur l’écran de verrouillage</string>
     <string name="voici_call_channel_quiet">Appels en cours</string>
+    <string name="voici_err_too_many_chunks">Cette page garde plus de publications sur voi.ci que voi.ci ne le permet. Mettez Flagship à jour, puis publiez à nouveau.</string>
 </resources>

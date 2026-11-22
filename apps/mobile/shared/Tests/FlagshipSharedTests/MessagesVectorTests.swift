@@ -424,7 +424,7 @@ final class MessagesVectorTests: XCTestCase {
             XCTAssertEqual(S.cj(got.json), S.cj(c["expected"]!), S.s(c["name"]))
             n += 1
         }
-        XCTAssertEqual(n, 16)
+        XCTAssertEqual(n, 24)
         for c in S.a(v["phoneWeb"]?["liveAnswers"]) {
             XCTAssertEqual(.bool(VoiciPhoneWeb.parsePhoneLiveAnswer(c["answer"]) != nil), c["expected"])
         }

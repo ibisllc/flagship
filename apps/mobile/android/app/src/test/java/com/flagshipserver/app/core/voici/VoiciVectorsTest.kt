@@ -127,7 +127,7 @@ class VoiciVectorsTest {
             assertEquals(c.s("name"), c.s("expected"), r.code)
             n++
         }
-        assertEquals(34, n)
+        assertEquals(43, n)
         for (c in ix.a("publishChecks").map { it.jsonObject }) {
             val ctx = c.o("ctx")
             val r = VoiciPage.checkVoiciPublish(c["index"], ctx.s("username"), ctx.s("sensitiveKind"), ctx.s("sensitivePub"), ctx.l("storedSeq"), ctx.sOrNull("storedPageId"), ctx.l("now"))
@@ -151,6 +151,28 @@ class VoiciVectorsTest {
         val mine = VoiciPage.signVoiciPageIndex(bodyOf(ix.o("body")).copy(showInSearch = 1), h(V.o("keys").s("adminRootSeed")))
         assertEquals(x["signed"], mine.toJson())
         assertFalse(VoiciPage.parseVoiciPageIndex(ix["signed"])!!.body.showsInSearch)
+    }
+
+    /** Capped server copy (§2.7a): phoneChunks is the very last canonical field, `phone:<n>`, on either version. */
+    @Test fun theIndexPhoneChunks() {
+        val ix = V.o("index")
+        val x = ix.o("phone")
+        for ((signedKey, canonicalKey) in listOf("signed" to "canonical", "signedV2" to "canonicalV2")) {
+            val signed = VoiciPage.parseVoiciPageIndex(x[signedKey])!!
+            assertEquals(1L, signed.body.phoneChunks)
+            assertTrue(signed.body.isPhoneChunk("chunk-0"))
+            assertFalse(signed.body.isPhoneChunk("chunk-1"))
+            assertEquals(x[signedKey], signed.toJson())
+            assertEquals(x.s(canonicalKey), String(VoiciPage.canonicalVoiciPageIndex(signed.body), Charsets.UTF_8))
+        }
+        assertEquals(ix.s("canonical") + "|phone:1", x.s("canonical"))
+        val mine = VoiciPage.signVoiciPageIndex(bodyOf(ix.o("body")).copy(phoneChunks = 1), h(V.o("keys").s("adminRootSeed")))
+        assertEquals(x["signed"], mine.toJson())
+        for (c in x.a("phoneChunksFor").map { it.jsonObject }) {
+            assertEquals(c.l("phoneChunks").toInt(), VoiciPage.voiciPhoneChunksFor(c.l("chunks").toInt()))
+        }
+        assertNull(VoiciPage.parseVoiciPageIndex(ix["signed"])!!.body.phoneChunks)
+        assertEquals(V.o("constants").l("comMaxChunks").toInt(), VoiciPage.VOICI_COM_MAX_CHUNKS)
     }
 
     @Test fun pieceUploadAndMerge() {

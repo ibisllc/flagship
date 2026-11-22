@@ -17163,5 +17163,9 @@
   "Flagship can't use the camera. Allow it in Settings, then try again.": {
     "en": "Flagship can't use the camera. Allow it in Settings, then try again.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
+  },
+  "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.": {
+    "en": "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/MessagesStore.swift:1512"
   }
 }

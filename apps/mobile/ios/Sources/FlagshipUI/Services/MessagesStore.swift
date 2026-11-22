@@ -394,7 +394,14 @@ public final class MessagesStore {
             }
             return
         }
-        guard let content = try await VoiciOwner.content(idx, fetch: { try await client.piece(pageId: idx.pageId, sha256: $0.sha256) }) else {
+        // A phone-only chunk (§2.7a) comes from this device's own copy when it still has it, else `.com`'s cache; one
+        // neither has is carried unchanged by the next publish.
+        let mine = published
+        guard let content = try await VoiciOwner.content(idx, fetch: { ref in
+            if idx.isPhoneChunk(ref.role), let mine, let n = Int(ref.role.dropFirst(6)), let b = VoiciOwner.chunkBytes(mine, n),
+               CanonicalJson.sha256Hex(b) == ref.sha256 { return b }
+            return try await client.piece(pageId: idx.pageId, sha256: ref.sha256)
+        }) else {
             throw VoiciComError(status: 200, code: "page-unchecked")
         }
         for sha in VoiciOwner.imageHashes(content) where VoiciImageStore.load(sha) == nil {
@@ -944,7 +951,12 @@ public final class MessagesStore {
         let merged = VoiciPage.mergeVoiciPage(base, ops: ops)
         var images: [String: [UInt8]] = [:]
         for sha in VoiciOwner.imageHashes(merged) { images[sha] = VoiciImageStore.load(sha) }
-        guard var pieces = try VoiciOwner.pieces(merged, images: images) else { throw VoiciComError(status: 0, code: "missing-image") }
+        // Capped server copy (§2.7a): phone-only chunks this device doesn't hold go out as their listed refs.
+        let listed = isRemoved ? [] : (index?.pieces ?? [])
+        let carried = isRemoved ? [] : VoiciOwner.carriedChunks(index, state: published)
+        guard var pieces = try VoiciOwner.pieces(merged, images: images, listed: listed, carried: carried) else {
+            throw VoiciComError(status: 0, code: "missing-image")
+        }
         // The share card (§2.10): carried while the name, photo and theme are unchanged, else drawn again. A card that
         // can't be drawn leaves the page without one (the piece is optional).
         let listedShare = isRemoved ? nil : index?.pieces.first { $0.role == "share" }
@@ -956,9 +968,10 @@ public final class MessagesStore {
         }
         let seed = Array(signer.rawRepresentation)
         let signerPub = HexUtil.encode(signer.publicKey.rawRepresentation)
+        let phoneChunks = VoiciPage.phoneChunksFor(merged.chunks.count)
         // After a removal `.com` may have dropped the pieces: send them all again.
         let have = isRemoved ? [] : Set(index?.pieces.map(\.sha256) ?? [])
-        for p in pieces where !have.contains(p.ref.sha256) {
+        for p in pieces where !have.contains(p.ref.sha256) && !p.bytes.isEmpty {
             let up = VoiciPieceUpload(username: username, pageId: k.pageId, sha256: p.ref.sha256, size: p.ref.size, issuedAt: now())
             try await client.uploadPiece(username: username, upload: up, signerPub: signerPub,
                                          signature: try VoiciPage.signVoiciPieceUpload(up, signerSeed: seed), bytes: p.bytes)
@@ -973,7 +986,8 @@ public final class MessagesStore {
         let body = VoiciPageIndex(username: username, pageId: k.pageId, seq: nextSeq, issuedAt: now(),
                                   acceptsMessages: merged.acceptsMessages, inboxEpoch: epoch, inboxPub: k.inboxPub, ownerSignPub: k.signPub,
                                   pieces: pieces.map(\.ref), signerKind: Keystore.hasAdminRoot ? "admin-root" : "irk",
-                                  acceptsCalls: fields.acceptsCalls, callsFrom: fields.callsFrom, showInSearch: search ? 1 : nil)
+                                  acceptsCalls: fields.acceptsCalls, callsFrom: fields.callsFrom, showInSearch: search ? 1 : nil,
+                                  phoneChunks: phoneChunks > 0 ? Int64(phoneChunks) : nil)
         let idx = try VoiciPage.signVoiciPageIndex(body, signerSeed: seed)
         try await client.publish(username: username, index: idx.json)
         if only == nil {
@@ -1454,7 +1468,8 @@ public final class MessagesStore {
             username: username, pageId: idx.pageId, accepts: idx.acceptsMessages == 1, ownerSignSeed: k.sign.seed, ownerSignPub: k.signPub,
             draftsKey: VoiciMessages.deriveVoiciDraftsKey(umk: k.umk), deviceSeed: Array(device.rawRepresentation),
             phoneRoutePub: HexUtil.encode(device.publicKey.rawRepresentation), blocked: Set(state.blocks + local.blocks),
-            revoked: Set(local.revoked), accountKeys: accountKeys, origin: Endpoints.voiciOrigin, client: client))
+            revoked: Set(local.revoked), accountKeys: accountKeys, origin: Endpoints.voiciOrigin, client: client,
+            index: isRemoved ? nil : idx, published: published))
         phoneInbox.onMessage = { [weak self] env in Task { @MainActor in await self?.received(message: env) } }
         phoneInbox.onDraft = { [weak self] op in Task { @MainActor in await self?.received(draft: op) } }
     }
@@ -1494,6 +1509,7 @@ public final class MessagesStore {
         case "taken-down": return String(localized: "This page was removed by Flagship. You can appeal from flagshipserver.com/abuse.")
         case "banned": return String(localized: "Your account can't send messages. If you think this is a mistake, tell us.")
         case "missing-image": return String(localized: "A photo for this page is missing on this device. Pick it again.")
+        case "too-many-chunks": return String(localized: "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.")
         case "page-unchecked": return String(localized: "Your published page couldn't be checked. Try again later.")
         case "not-sensitive-key", "bad-signature": return String(localized: "Only an admin device can publish this page.")
         case "awaiting-reply": return String(localized: "Reply first to keep this conversation going.")

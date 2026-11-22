@@ -21,6 +21,9 @@ final class MessagesPhoneInbox: PhoneWebInbox, @unchecked Sendable {
         let accountKeys: [String]
         let origin: String
         let client: any VoiciComClient
+        /// The published index and this phone's copy of its content: what `phonePiece` serves from (§2.7a).
+        var index: VoiciPageIndex? = nil
+        var published: VoiciPageState? = nil
     }
 
     private let lock = NSLock()
@@ -34,6 +37,14 @@ final class MessagesPhoneInbox: PhoneWebInbox, @unchecked Sendable {
     func set(_ s: Snapshot?) { lock.withLock { snap = s } }
 
     func liveOwnerSignPub() -> String? { lock.withLock { snap?.ownerSignPub } }
+
+    /// A phone-only chunk or card image of the published page (docs/voici-and-messages.md §2.7a), regenerated from this
+    /// phone's copy and checked against the index; voi.ci asks for it when `.com` holds only the newest chunks.
+    func phonePiece(_ sha256: String) -> (bytes: [UInt8], contentType: String)? {
+        guard let s = lock.withLock({ snap }), let index = s.index,
+              let b = VoiciOwner.phonePiece(sha256, index: index, state: s.published, image: { VoiciImageStore.load($0) }) else { return nil }
+        return (b, VoiciPage.isVoiciJpeg(b) ? "image/jpeg" : "application/json")
+    }
 
     private static func refuse(_ status: Int, _ code: String) -> (Int, String) { (status, #"{"error":"refused","code":"\#(code)"}"#) }
 

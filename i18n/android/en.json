@@ -17896,5 +17896,9 @@
   "voici_call_channel_quiet": {
     "en": "Calls in progress",
     "ctx": "voi.ci calls: quiet notification channel for a call in progress or a ring while the call screen is open"
+  },
+  "voici_err_too_many_chunks": {
+    "en": "This page keeps more posts on voi.ci than voi.ci allows. Update Flagship, then publish again.",
+    "ctx": "voi.ci / Messages: error"
   }
 }

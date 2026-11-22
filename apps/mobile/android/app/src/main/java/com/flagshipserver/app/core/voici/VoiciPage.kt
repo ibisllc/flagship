@@ -4,7 +4,7 @@
 // packages/protocol/test-vectors/voici/.
 //
 //   flagship/voici-page/v1|<username>|<pageId>|<seq>|<issuedAt>|<acceptsMessages 0|1>|<inboxEpoch>|<inboxPub>
-//     |<ownerSignPub>|<pieces>|<signerKind admin-root|irk>|<signerPub>
+//     |<ownerSignPub>|<pieces>|<signerKind admin-root|irk>|<signerPub>[|1][|phone:<n>]
 //   pieces = "<role>:<sha256>:<size>" sorted (code-unit order), joined by ","
 //   flagship/voici-piece-upload/v1|<u>|<pageId>|<sha256>|<size>|<issuedAt>
 //
@@ -12,7 +12,7 @@
 // isVoiciJpeg, voiciJpegHasMetadata, parseVoiciProfile, parseVoiciProfilePiece, parseVoiciPost,
 // parseVoiciChunkPiece, voiciCardRole, canonicalVoiciPageIndex, signVoiciPageIndex, parseVoiciPageIndex,
 // checkVoiciPageIndex, checkVoiciPublish (codes malformed, wrong-username, not-sensitive-key, bad-signature,
-// rolled-back, stale, seq-conflict, wrong-page), voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload,
+// rolled-back, stale, seq-conflict, wrong-page, too-many-chunks), voiciPieceRefsOk, canonicalVoiciPieceUpload, signVoiciPieceUpload,
 // verifyVoiciPieceUpload, chunkVoiciPosts, mergeVoiciPage. Data classes VoiciProfile, VoiciProfileLink, VoiciCard,
 // VoiciPostLink, VoiciPost, VoiciChunk, VoiciPieceRef, VoiciPageIndexBody, VoiciPageIndex, VoiciPieceUpload,
 // VoiciPageState (each with toJson where it travels).
@@ -100,10 +100,23 @@ data class VoiciPageIndexBody(
      * (voi.ci sends noindex). Either version; the last canonical field when present.
      */
     val showInSearch: Int? = null,
+    /**
+     * Capped server copy (docs/voici-and-messages.md §2.7a): chunks 0..phoneChunks-1 are held only by the owner's
+     * phone; null = every chunk is on `.com`. The very last canonical field (`phone:<n>`) when present.
+     */
+    val phoneChunks: Long? = null,
 ) {
     val isV2: Boolean get() = acceptsCalls != null || callsFrom != null
     val takesCalls: Boolean get() = acceptsCalls == 1
     val showsInSearch: Boolean get() = showInSearch == 1
+    val chunkCount: Int get() = pieces.count { it.role.startsWith("chunk-") }
+
+    /** True when `role` is a chunk only the owner's phone holds (§2.7a). */
+    fun isPhoneChunk(role: String): Boolean {
+        if (!role.startsWith("chunk-")) return false
+        val n = role.removePrefix("chunk-").toLongOrNull() ?: return false
+        return n < (phoneChunks ?: 0)
+    }
 }
 
 data class VoiciPageIndex(val body: VoiciPageIndexBody, val signature: String) {
@@ -129,6 +142,7 @@ data class VoiciPageIndex(val body: VoiciPageIndexBody, val signature: String) {
                 put("callsFrom", JsonPrimitive(body.callsFrom))
             }
             body.showInSearch?.let { put("showInSearch", JsonPrimitive(it)) }
+            body.phoneChunks?.let { put("phoneChunks", JsonPrimitive(it)) }
         },
     )
 }
@@ -169,10 +183,15 @@ object VoiciPage {
     const val VOICI_SHARE_IMAGE_HEIGHT = 630
     const val VOICI_INDEX_MAX_BYTES = 300 * 1024
     const val VOICI_INDEX_MAX_PIECES = 2000
+    /** The newest chunks `.com` keeps of a page (§2.7a): 10 chunks = the newest 200 posts. Older ones are phone-only. */
+    const val VOICI_COM_MAX_CHUNKS = 10
     const val VOICI_PROFILE_MAX_LINKS = 12
     const val VOICI_POST_MAX_LINKS = 3
     const val VOICI_INDEX_SKEW_MS = 10L * 60_000
     val VOICI_THEMES: List<String> = listOf("classic", "ink", "sea")
+
+    /** The phoneChunks a writer signs for a page of `chunks` chunks (0 = leave the field out). */
+    fun voiciPhoneChunksFor(chunks: Int): Int = maxOf(0, chunks - VOICI_COM_MAX_CHUNKS)
 
     private val PAGE_ID = Regex("^[0-9a-f]{32}$")
     private val USERNAME = Regex("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
@@ -330,12 +349,14 @@ object VoiciPage {
         if (b.signerKind != "admin-root" && b.signerKind != "irk") bad("signerKind")
         if (!hex(b.signerPub, 32)) bad("signerPub")
         if (b.showInSearch != null && b.showInSearch != 1) bad("showInSearch")
+        if (b.phoneChunks != null && (!isTime(b.phoneChunks) || b.phoneChunks < 1 || b.phoneChunks >= b.chunkCount)) bad("phoneChunks")
         return VoiciJs.utf8(
             (listOf(
                 if (b.isV2) TAG_VOICI_PAGE_V2 else TAG_VOICI_PAGE, b.username, b.pageId, b.seq.toString(), b.issuedAt.toString(), b.acceptsMessages.toString(),
             ) + (if (b.isV2) listOf(b.acceptsCalls.toString(), b.callsFrom!!) else emptyList()) + listOf(
                 b.inboxEpoch.toString(), b.inboxPub, b.ownerSignPub, b.pieces.joinToString(",") { it.key }, b.signerKind, b.signerPub,
-            ) + (if (b.showInSearch == 1) listOf("1") else emptyList())).joinToString("|"),
+            ) + (if (b.showInSearch == 1) listOf("1") else emptyList()) +
+                (if (b.phoneChunks != null) listOf("phone:${b.phoneChunks}") else emptyList())).joinToString("|"),
         )
     }
 
@@ -357,11 +378,13 @@ object VoiciPage {
         }
         val o = VoiciJs.obj(v) ?: return null
         val v2 = VoiciJs.isNumEq(o["version"], 2)
-        val search = if (o.containsKey("showInSearch")) listOf("showInSearch") else emptyList()
+        val search = (if (o.containsKey("showInSearch")) listOf("showInSearch") else emptyList()) +
+            (if (o.containsKey("phoneChunks")) listOf("phoneChunks") else emptyList())
         val shapeOk = (VoiciJs.isNumEq(o["version"], 1) && VoiciJs.exactKeys(o, INDEX_KEYS + search)) ||
             (v2 && VoiciJs.exactKeys(o, INDEX_KEYS + listOf("acceptsCalls", "callsFrom") + search))
         if (!shapeOk || VoiciJs.str(o["kind"]) != "VoiciPage" || !hex(o["signature"], 64)) return null
-        if (search.isNotEmpty() && !VoiciJs.isNumEq(o["showInSearch"], 1)) return null
+        if (o.containsKey("showInSearch") && !VoiciJs.isNumEq(o["showInSearch"], 1)) return null
+        val phoneChunks = if (o.containsKey("phoneChunks")) (VoiciJs.time(o["phoneChunks"]) ?: return null) else null
         val calls = if (v2) (VoiciJs.safeInt(o["acceptsCalls"]) ?: return null).toInt() else null
         val callsFrom = if (v2) (VoiciJs.str(o["callsFrom"]) ?: return null) else null
         val accepts = VoiciJs.num(o["acceptsMessages"])
@@ -388,7 +411,8 @@ object VoiciPage {
             signerPub = VoiciJs.str(o["signerPub"]) ?: return null,
             acceptsCalls = calls,
             callsFrom = callsFrom,
-            showInSearch = if (search.isNotEmpty()) 1 else null,
+            showInSearch = if (o.containsKey("showInSearch")) 1 else null,
+            phoneChunks = phoneChunks,
         )
         return try {
             canonicalVoiciPageIndex(body)
@@ -435,6 +459,7 @@ object VoiciPage {
         if (Math.abs(idx.body.issuedAt - now) > VOICI_INDEX_SKEW_MS) return VoiciOutcome.Refused("stale")
         if (idx.body.seq != storedSeq + 1) return VoiciOutcome.Refused("seq-conflict")
         if (storedPageId != null && idx.body.pageId != storedPageId) return VoiciOutcome.Refused("wrong-page")
+        if (idx.body.chunkCount - (idx.body.phoneChunks ?: 0) > VOICI_COM_MAX_CHUNKS) return VoiciOutcome.Refused("too-many-chunks")
         return r
     }
 
