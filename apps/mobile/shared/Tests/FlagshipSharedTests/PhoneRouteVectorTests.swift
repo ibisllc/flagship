@@ -193,7 +193,7 @@ final class PhoneEndpointResponderTests: XCTestCase {
         XCTAssertEqual(status(ep.respond(head("GET", "/.well-known/flagship-phone", ["host": "notes.\(host)"]), body: Data())), 421)
         // A phone-only voi.ci piece (§2.7a): a simple GET from voi.ci or a native app; 404 for any other name.
         let piecePath = "/api/phone/voici-piece/" + String(repeating: "ab", count: 32)
-        let piece = ep.respond(head("GET", piecePath, voici), body: Data())
+        let piece = await ep.handle(head("GET", piecePath, voici), body: Data())
         XCTAssertEqual(status(piece), 200)
         XCTAssertEqual(body(piece), #"{"v":1}"#)
         XCTAssertTrue(headers(piece).contains("access-control-allow-origin: https://voi.ci"))

@@ -417,9 +417,12 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
             hostname: hostname, origins: webOrigins)
     }
 
-    /// Every request: `deliver` waits for the app's check, store, forward and ack; the rest answer at once.
+    /// Every request: `deliver` waits for the app's check, store, forward and ack; a voi.ci piece is read outside the
+    /// lock, up to the same 8 at once (§2.7a); the rest answer at once.
     public func handle(_ head: HttpHead, body: Data) async -> Data {
-        guard case .deliver(let cors) = verdict(head) else { return respond(head, body: body) }
+        let v = verdict(head)
+        if case .piece(let sha, let cors) = v { return piece(sha, cors: cors) }
+        guard case .deliver(let cors) = v else { return respond(head, body: body) }
         let inbox: (any PhoneWebInbox)? = lock.withLock {
             guard inFlight < VoiciPhoneWeb.deliverMaxConcurrent else { return nil }
             inFlight += 1
@@ -433,6 +436,18 @@ public final class PhoneEndpointResponder: @unchecked Sendable {
         defer { lock.withLock { inFlight -= 1 } }
         let (status, json) = await inbox.deliver(body, origin: head.header("origin"))
         return Self.answer(status, json, headers: cors)
+    }
+
+    private func piece(_ sha: String, cors: [String: String]) -> Data {
+        let inbox: (any PhoneWebInbox)?? = lock.withLock {
+            guard inFlight < VoiciPhoneWeb.deliverMaxConcurrent else { return .none }
+            inFlight += 1
+            return .some(web)
+        }
+        guard let inbox else { return Self.answer(429, #"{"error":"busy","code":"rate-limited"}"#, headers: cors) }
+        defer { lock.withLock { inFlight -= 1 } }
+        guard let p = inbox?.phonePiece(sha) else { return Self.answer(404, #"{"error":"not found","code":"not-found"}"#, headers: cors) }
+        return Self.answer(200, body: Data(p.bytes), contentType: p.contentType, headers: cors)
     }
 
     /// The synchronous answers (everything but a delivery, which `handle` takes).
