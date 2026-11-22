@@ -3973,5 +3973,14 @@
   "Bank transfer isn't available right now. Pay by card instead.": "Banküberweisung ist gerade nicht verfügbar. Zahle stattdessen per Karte.",
   "That batch can no longer be paid. Start a new batch.": "Dieses Paket kann nicht mehr bezahlt werden. Starte ein neues Paket.",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "Du nutzt keine Cloud-Wiederherstellung? Bewahre eine verschlüsselte Datei deines Kontoschlüssels sicher auf, damit ein verlorenes Gerät nicht dein Konto kostet.",
-  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "Die Cloud-Wiederherstellung speichert eine verschlüsselte Kopie deines Kontoschlüssels bei Flagship. Ein Passkey sperrt sie: Dein Browser oder dein Passwortmanager bewahrt den Passkey auf, du musst dir also kein Passwort ausdenken. Auf einem neuen Gerät öffnen der Passkey und deine Wiederherstellungs-Passphrase sie gemeinsam. Flagship kann sie nicht öffnen."
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "Die Cloud-Wiederherstellung speichert eine verschlüsselte Kopie deines Kontoschlüssels bei Flagship. Ein Passkey sperrt sie: Dein Browser oder dein Passwortmanager bewahrt den Passkey auf, du musst dir also kein Passwort ausdenken. Auf einem neuen Gerät öffnen der Passkey und deine Wiederherstellungs-Passphrase sie gemeinsam. Flagship kann sie nicht öffnen.",
+  "This browser couldn't save the photo. Try again.": "Dieser Browser konnte das Foto nicht speichern. Versuch es noch einmal.",
+  "That file couldn't be read as a photo. Try another one.": "Diese Datei konnte nicht als Foto gelesen werden. Versuch eine andere.",
+  "Take photo": "Foto aufnehmen",
+  "Choose a photo": "Foto auswählen",
+  "Edit photo": "Foto bearbeiten",
+  "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": "Fotoausschnitt. Zum Verschieben ziehen oder die Pfeiltasten nutzen, + und - zum Zoomen.",
+  "Zoom": "Zoom",
+  "Flip": "Spiegeln",
+  "Use": "Verwenden"
 }

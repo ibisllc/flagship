@@ -536,15 +536,16 @@ describe("reply alerts on the visitor's side", () => {
 });
 
 describe("the page photo", () => {
-  it("crops the centre square and steps the JPEG quality down until it fits", async () => {
+  it("crops the centre square by default and steps the JPEG quality down until it fits", async () => {
     expect(squareCrop(400, 300)).toEqual({ sx: 50, sy: 0, side: 300 });
     const qualities: number[] = [];
     const jpeg = (n: number) => Uint8Array.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x04, 0, 0, 0xff, 0xda, ...new Array(n).fill(0)]);
     const bytes = await reencodeAvatar(new Blob([]), {
       decode: async () => ({ width: 1000, height: 800, source: {} }),
-      encode: async (_s: unknown, crop: unknown, size: number, q: number) => {
+      encode: async (_s: unknown, matrix: number[], size: number, q: number) => {
         expect(size).toBe(512);
-        expect(crop).toEqual({ sx: 100, sy: 0, side: 800 });
+        // The centred 800-pixel square of a 1000 × 800 picture, scaled to 512.
+        expect(matrix.map((v) => Math.round(v * 1e6) / 1e6)).toEqual([0.64, 0, 0, 0.64, -64, 0]);
         qualities.push(q);
         return jpeg(q > 0.7 ? 200 * 1024 : 100 * 1024);
       },
@@ -558,7 +559,8 @@ describe("the page photo", () => {
     expect([...clean]).toEqual([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 1, 2, 0xff, 0xda, 9, 9]);
     expect(P.voiciJpegHasMetadata(clean)).toBe(false);
     const broken = Uint8Array.from([0xff, 0xd8, 0xff, 0xe1, 0x40, 0x00, 0]);
-    await expect(reencodeAvatar(new Blob([]), { decode: async () => ({ width: 10, height: 10, source: {} }), encode: async () => broken })).rejects.toMatchObject({ code: "unreadable" });
+    await expect(reencodeAvatar(new Blob([]), { decode: async () => ({ width: 10, height: 10, source: {} }), encode: async () => broken })).rejects.toMatchObject({ code: "encode-failed" });
+    await expect(reencodeAvatar(new Blob([]), { decode: async () => { throw new Error("bad"); } })).rejects.toMatchObject({ code: "unreadable" });
   });
 });
 

@@ -281,6 +281,12 @@ test.describe("gym webapp voi.ci pages and the Social tab", () => {
     await expect(page.locator("[data-testid=pe-publish-bar]")).toHaveCount(0);
 
     await page.setInputFiles("#page-photo", { name: "me.png", mimeType: "image/png", buffer: ONE_PX_PNG });
+    // The photo editor comes first: turn, mirror, then Use.
+    await expect(page.locator("[data-testid=photo-editor]")).toBeVisible();
+    await page.click("#photo-edit-rotate");
+    await page.click("#photo-edit-flip");
+    await page.click("#photo-edit-use");
+    await expect(page.locator("[data-testid=photo-editor]")).toHaveCount(0);
     await expect(page.locator("#page-avatar-img")).toBeVisible();
     // The name and the bio read as the page; a pencil opens each, and the open field already counts as a change.
     await page.click("#page-edit-name");

@@ -3973,5 +3973,14 @@
   "Bank transfer isn't available right now. Pay by card instead.": "Le virement bancaire n'est pas disponible pour le moment. Payez plutôt par carte.",
   "That batch can no longer be paid. Start a new batch.": "Ce lot ne peut plus être payé. Commencez un nouveau lot.",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "Vous n’utilisez pas la récupération dans le cloud ? Gardez un fichier chiffré de la clé de votre compte en lieu sûr, pour qu’un appareil perdu ne vous fasse pas perdre votre compte.",
-  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "La récupération dans le cloud enregistre une copie chiffrée de la clé de votre compte chez Flagship. Une clé d’accès la verrouille : votre navigateur ou votre gestionnaire de mots de passe garde la clé d’accès, vous n’avez donc aucun mot de passe à inventer. Sur un nouvel appareil, la clé d’accès et votre phrase secrète de récupération l’ouvrent ensemble. Flagship ne peut pas l’ouvrir."
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "La récupération dans le cloud enregistre une copie chiffrée de la clé de votre compte chez Flagship. Une clé d’accès la verrouille : votre navigateur ou votre gestionnaire de mots de passe garde la clé d’accès, vous n’avez donc aucun mot de passe à inventer. Sur un nouvel appareil, la clé d’accès et votre phrase secrète de récupération l’ouvrent ensemble. Flagship ne peut pas l’ouvrir.",
+  "This browser couldn't save the photo. Try again.": "Ce navigateur n’a pas pu enregistrer la photo. Réessayez.",
+  "That file couldn't be read as a photo. Try another one.": "Ce fichier n’a pas pu être lu comme une photo. Essayez-en un autre.",
+  "Take photo": "Prendre une photo",
+  "Choose a photo": "Choisir une photo",
+  "Edit photo": "Modifier la photo",
+  "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": "Recadrage de la photo. Faites-la glisser ou utilisez les flèches pour la déplacer, + et - pour zoomer.",
+  "Zoom": "Zoom",
+  "Flip": "Retourner",
+  "Use": "Utiliser"
 }

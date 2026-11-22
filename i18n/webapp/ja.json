@@ -3973,5 +3973,14 @@
   "Bank transfer isn't available right now. Pay by card instead.": "現在、銀行振込はご利用いただけません。カードでお支払いください。",
   "That batch can no longer be paid. Start a new batch.": "この一括購入はもう支払えません。新しく一括購入を始めてください。",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "クラウドリカバリーを使っていませんか？アカウントキーの暗号化ファイルを安全な場所に保管すれば、デバイスをなくしてもアカウントを失いません。",
-  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "クラウドリカバリーは、アカウントキーの暗号化コピーを Flagship に保存します。コピーはパスキーで保護されます。パスキーはブラウザーまたはパスワード マネージャーが保管するので、パスワードを考える必要はありません。新しいデバイスでは、パスキーとリカバリー用のパスフレーズの両方でコピーを開きます。Flagship が開くことはできません。"
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "クラウドリカバリーは、アカウントキーの暗号化コピーを Flagship に保存します。コピーはパスキーで保護されます。パスキーはブラウザーまたはパスワード マネージャーが保管するので、パスワードを考える必要はありません。新しいデバイスでは、パスキーとリカバリー用のパスフレーズの両方でコピーを開きます。Flagship が開くことはできません。",
+  "This browser couldn't save the photo. Try again.": "このブラウザで写真を保存できませんでした。もう一度お試しください。",
+  "That file couldn't be read as a photo. Try another one.": "そのファイルを写真として読み込めませんでした。別のファイルをお試しください。",
+  "Take photo": "写真を撮る",
+  "Choose a photo": "写真を選択",
+  "Edit photo": "写真を編集",
+  "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": "写真の切り抜き。ドラッグまたは矢印キーで移動し、+ と - で拡大・縮小します。",
+  "Zoom": "ズーム",
+  "Flip": "反転",
+  "Use": "使用"
 }

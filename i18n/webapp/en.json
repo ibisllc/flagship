@@ -16193,5 +16193,41 @@
   "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": {
     "en": "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.",
     "ctx": "webapp/index.html"
+  },
+  "This browser couldn't save the photo. Try again.": {
+    "en": "This browser couldn't save the photo. Try again.",
+    "ctx": "webapp/lib/voiciPageControl.js:167"
+  },
+  "That file couldn't be read as a photo. Try another one.": {
+    "en": "That file couldn't be read as a photo. Try another one.",
+    "ctx": "webapp/lib/voiciPageControl.js:168"
+  },
+  "Take photo": {
+    "en": "Take photo",
+    "ctx": "webapp/views/page-editor.js:359"
+  },
+  "Choose a photo": {
+    "en": "Choose a photo",
+    "ctx": "webapp/views/page-editor.js:360"
+  },
+  "Edit photo": {
+    "en": "Edit photo",
+    "ctx": "webapp/views/photo-editor.js:20"
+  },
+  "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": {
+    "en": "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.",
+    "ctx": "webapp/views/photo-editor.js:23"
+  },
+  "Zoom": {
+    "en": "Zoom",
+    "ctx": "webapp/views/photo-editor.js:26"
+  },
+  "Flip": {
+    "en": "Flip",
+    "ctx": "webapp/views/photo-editor.js:31"
+  },
+  "Use": {
+    "en": "Use",
+    "ctx": "webapp/views/photo-editor.js:35"
   }
 }

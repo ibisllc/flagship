@@ -342,13 +342,13 @@ describe("webapp plan: the section", () => {
 
 describe("webapp plan: wiring", () => {
   const read = (p: string) => readFileSync(join(root, "apps/web/public/webapp", p), "utf8");
-  it("has a Settings row, a view, a precached module set and the v246 shell", () => {
+  it("has a Settings row, a view, a precached module set and the v248 shell", () => {
     expect(read("index.html")).toContain('id="settings-tab-plan"');
     expect(read("index.html")).toContain('id="view-plan"');
     expect(read("app.js")).toContain('wire("settings-tab-plan", enterPlan)');
     const sw = read("service-worker.js");
     for (const f of ["/lib/vouchers.js", "/lib/plan.js", "/views/plan.js"]) expect(sw).toContain(`"${f}"`);
-    expect(sw).toContain('SHELL_VERSION = "v246"');
+    expect(sw).toContain('SHELL_VERSION = "v248"');
   });
 });
 

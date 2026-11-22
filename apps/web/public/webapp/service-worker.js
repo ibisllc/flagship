@@ -561,7 +561,10 @@
 //  v246: a non-JSON /shell-manifest.json answer (an SPA fallback's index.html) counts as no manifest, so the worker
 //       still installs. Creating an account goes straight to Home (the voi.ci intro is the one step); Home reminds
 //       about cloud recovery, then a backup file (a week's snooze each); Recovery says what cloud recovery is.
-const SHELL_VERSION = "v246";
+//  v248: the page photo opens a photo editor first (views/photo-editor.js, lib/voiciImageEdit.js): square crop with
+//       drag/pinch/wheel/keys, Rotate, Flip, Use; "Take photo" on touch screens; a smaller square before refusing;
+//       one sentence per failure.
+const SHELL_VERSION = "v248";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -766,6 +769,7 @@ const OPTIONAL_SHELL = [
   "/lib/voiciPagePublic.js",
   "/lib/voiciPageControl.js",
   "/lib/voiciImage.js",
+  "/lib/voiciImageEdit.js",
   "/lib/voiciShareCard.js",
   "/lib/voiciSignIn.js",
   "/lib/voiciReplies.js",
@@ -783,6 +787,7 @@ const OPTIONAL_SHELL = [
   "/views/thread.js",
   "/views/calls.js",
   "/views/page-editor.js",
+  "/views/photo-editor.js",
   "/views/page-header.js",
   "/views/voici-sign-in.js",
   "/views/org-join.js",

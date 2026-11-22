@@ -3973,5 +3973,14 @@
   "Bank transfer isn't available right now. Pay by card instead.": "A transferência bancária não está disponível agora. Pague com cartão.",
   "That batch can no longer be paid. Start a new batch.": "Esse lote não pode mais ser pago. Comece um novo lote.",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "Não usa a recuperação na nuvem? Guarde um arquivo criptografado da chave da sua conta em um lugar seguro, para que perder o dispositivo não faça você perder a conta.",
-  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "A recuperação na nuvem guarda uma cópia criptografada da chave da sua conta no Flagship. Uma passkey a protege: seu navegador ou seu gerenciador de senhas guarda a passkey, então não há senha para inventar. Em um dispositivo novo, a passkey e sua frase secreta de recuperação a abrem juntas. O Flagship não consegue abri-la."
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "A recuperação na nuvem guarda uma cópia criptografada da chave da sua conta no Flagship. Uma passkey a protege: seu navegador ou seu gerenciador de senhas guarda a passkey, então não há senha para inventar. Em um dispositivo novo, a passkey e sua frase secreta de recuperação a abrem juntas. O Flagship não consegue abri-la.",
+  "This browser couldn't save the photo. Try again.": "Este navegador não conseguiu salvar a foto. Tente de novo.",
+  "That file couldn't be read as a photo. Try another one.": "Não foi possível ler esse arquivo como foto. Tente outro.",
+  "Take photo": "Tirar foto",
+  "Choose a photo": "Escolher uma foto",
+  "Edit photo": "Editar foto",
+  "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": "Recorte da foto. Arraste ou use as setas para movê-la, e + e - para dar zoom.",
+  "Zoom": "Zoom",
+  "Flip": "Espelhar",
+  "Use": "Usar"
 }

@@ -3973,5 +3973,14 @@
   "Bank transfer isn't available right now. Pay by card instead.": "La transferencia bancaria no está disponible ahora. Paga con tarjeta.",
   "That batch can no longer be paid. Start a new batch.": "Ese lote ya no se puede pagar. Empieza un lote nuevo.",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "¿No usas la recuperación en la nube? Guarda un archivo cifrado de la clave de tu cuenta en un lugar seguro, para que perder el dispositivo no signifique perder tu cuenta.",
-  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "La recuperación en la nube guarda una copia cifrada de la clave de tu cuenta en Flagship. Una llave de acceso la protege: tu navegador o tu gestor de contraseñas guarda la llave de acceso, así que no tienes que inventar ninguna contraseña. En un dispositivo nuevo, la llave de acceso y tu frase de contraseña de recuperación la abren juntas. Flagship no puede abrirla."
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "La recuperación en la nube guarda una copia cifrada de la clave de tu cuenta en Flagship. Una llave de acceso la protege: tu navegador o tu gestor de contraseñas guarda la llave de acceso, así que no tienes que inventar ninguna contraseña. En un dispositivo nuevo, la llave de acceso y tu frase de contraseña de recuperación la abren juntas. Flagship no puede abrirla.",
+  "This browser couldn't save the photo. Try again.": "Este navegador no pudo guardar la foto. Vuelve a intentarlo.",
+  "That file couldn't be read as a photo. Try another one.": "Ese archivo no se pudo leer como foto. Prueba con otro.",
+  "Take photo": "Hacer foto",
+  "Choose a photo": "Elegir una foto",
+  "Edit photo": "Editar foto",
+  "Photo crop. Drag or use the arrow keys to move it, + and - to zoom.": "Recorte de la foto. Arrástrala o usa las flechas para moverla, y + y - para hacer zoom.",
+  "Zoom": "Zoom",
+  "Flip": "Voltear",
+  "Use": "Usar"
 }

@@ -39,11 +39,13 @@ import {
   editorModel,
   pageBusy,
   pageUsername,
-  pickAvatar,
   profileOp,
   publishPending,
   removePage,
+  useEditedAvatar,
 } from "../lib/voiciPageControl.js";
+import { decodeForEditing } from "../lib/voiciImage.js";
+import { openPhotoEditor } from "./photo-editor.js";
 import { avatarUrl, displayUrl } from "./page-header.js";
 import { copyIcon, moreHorizontalIcon, pencilCircleIcon, plusIcon, sendIcon, userIcon, xIcon } from "../lib/icons.js";
 import { VOICI_ACCEPT_NOTE, VOICI_NOT_PUBLISHED, VOICI_RULES_TEXT, VOICI_RULES_TITLE, VOICI_WAITING_ADMIN, voiciErrorText, voiciTextProblem } from "../lib/voiciCopy.js";
@@ -220,6 +222,7 @@ export function renderProfile() {
           ${avatarUrl(p.avatar) ? `<img class="vp-avatar" id="page-avatar-img" alt="" />` : `<span class="vp-avatar vp-avatar-empty icon" aria-hidden="true">${userIcon}</span>`}
           <button type="button" class="vp-pencil vp-photo-pencil" id="page-edit-photo" aria-label="${escapeHtml(photoLabel)}"><span class="icon" aria-hidden="true">${pencilCircleIcon}</span></button>
           <input type="file" id="page-photo" accept="image/*" hidden />
+          <input type="file" id="page-photo-camera" accept="image/*" capture="user" hidden />
         </div>
         ${nameHtml(m)}
         ${bioHtml(m)}
@@ -296,7 +299,13 @@ function wireProfile(root) {
   $("page-edit-name")?.addEventListener("click", () => beginEdit("name"));
   $("page-edit-bio")?.addEventListener("click", () => beginEdit("bio"));
   $("page-edit-photo").addEventListener("click", () => void photoMenu());
-  $("page-photo").addEventListener("change", (ev) => void pickPhoto(ev.target.files?.[0]));
+  for (const id of ["page-photo", "page-photo-camera"]) {
+    $(id).addEventListener("change", (ev) => {
+      const file = ev.target.files?.[0];
+      ev.target.value = "";
+      void pickPhoto(file);
+    });
+  }
   $("page-edit-links").addEventListener("click", () => openLinksSheet());
   $("page-new-post-open").addEventListener("click", () => openPostSheet(null));
   root.querySelectorAll("[data-post-menu]").forEach((b) => b.addEventListener("click", () => void postMenu(b.getAttribute("data-post-menu"))));
@@ -338,24 +347,30 @@ export function renderBar(m = editorModel()) {
 
 // ── photo, links, posts ───────────────────────────────────────────────────
 
+// A phone's browser offers the camera through `capture`; a computer's file picker has no camera, so only a touch
+// screen gets "Take photo". Library and files are the same picker in a browser.
+const canTakePhoto = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+
 async function photoMenu() {
   const p = editorModel().merged.profile;
-  if (!p.avatar) return void $("page-photo").click();
-  const pick = await inlineChoice({
-    title: tr("Change photo"),
-    choices: [
-      { id: "remove", label: tr("Remove photo"), secondary: true, danger: true },
-      { id: "change", label: tr("Change photo") },
-    ],
-  });
+  if (!p.avatar && !canTakePhoto()) return void $("page-photo").click();
+  const choices = [];
+  if (p.avatar) choices.push({ id: "remove", label: tr("Remove photo"), secondary: true, danger: true });
+  if (canTakePhoto()) choices.push({ id: "camera", label: tr("Take photo"), secondary: true });
+  choices.push({ id: "change", label: tr("Choose a photo") });
+  const pick = await inlineChoice({ title: p.avatar ? tr("Change photo") : tr("Add photo"), choices });
   if (pick === "change") $("page-photo").click();
+  else if (pick === "camera") $("page-photo-camera").click();
   else if (pick === "remove") await commitProfile({ avatar: null });
 }
 
 async function pickPhoto(file) {
   if (!file) return;
   try {
-    const { sha, bytes } = await pickAvatar(file);
+    const img = await decodeForEditing(file);
+    const edit = await openPhotoEditor(img);
+    if (!edit) return;
+    const { sha, bytes } = await useEditedAvatar(img, edit);
     // The photo rides in the draft, so it survives a reload and reaches the other devices.
     await commitProfile({ avatar: sha }, [bytes]);
   } catch (e) {

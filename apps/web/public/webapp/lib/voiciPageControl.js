@@ -12,7 +12,7 @@ import { toast } from "./toast.js";
 import { tr } from "./i18n.js";
 import { mergeVoiciPage, sha256Hex } from "./voiciProtocol.js";
 import { consumeDraftOps, makeDraftOp, newVoiciPageBase, opImages, publishVoiciPage, removeVoiciPage, sendDraftOp } from "./voiciOwner.js";
-import { reencodeAvatar } from "./voiciImage.js";
+import { encodeEditedAvatar, reencodeAvatar } from "./voiciImage.js";
 import { emitWorld, pendingOps, world } from "./voiciWorld.js";
 import { clearRemovedSnapshot, hasSeenPublicWarning, markPublicWarningSeen, saveRemovedSnapshot } from "./voiciPagePublic.js";
 import {
@@ -145,16 +145,27 @@ export function profileOp(patch, images = []) {
   return makeDraftOp("profile", { profile }, { deviceId: deviceId(), images });
 }
 
-/** Re-encodes a picked photo (voiciImage.js, the editor's processing) and keeps its bytes for the next publish. */
+/** Re-encodes a picked photo with the centred crop (voiciImage.js) and keeps its bytes for the next publish. */
 export async function pickAvatar(file) {
-  const bytes = await reencodeAvatar(file);
+  return keepAvatar(await reencodeAvatar(file));
+}
+
+/** The photo editor's result (voiciImage.js encodeEditedAvatar), kept for the next publish. */
+export async function useEditedAvatar(img, edit) {
+  return keepAvatar(await encodeEditedAvatar(img, edit));
+}
+
+function keepAvatar(bytes) {
   const sha = sha256Hex(bytes);
   localImages.set(sha, bytes);
   return { sha, bytes };
 }
 
+/** One sentence per reason a photo could not become the page photo. */
 export function avatarProblemText(e) {
-  return e?.code === "too-large" ? tr("That photo is too detailed to fit. Try another one.") : tr("That file couldn't be read as a photo.");
+  if (e?.code === "too-large") return tr("That photo is too detailed to fit. Try another one.");
+  if (e?.code === "encode-failed") return tr("This browser couldn't save the photo. Try again.");
+  return tr("That file couldn't be read as a photo. Try another one.");
 }
 
 function storageFlag(k) {

@@ -1,11 +1,17 @@
-// The page photo, re-encoded in the browser (docs/voici-and-messages.md §2.3): square crop from the centre,
-// 512 × 512, JPEG at quality 0.82 stepping down to 0.6, at most 150 KiB. Drawing the decoded pixels onto a fresh
+// The page photo, re-encoded in the browser (docs/voici-and-messages.md §2.3): the photo editor's square crop
+// (lib/voiciImageEdit.js: turns, flip, zoom, pan; the centre by default), 512 × 512, JPEG at quality 0.82 stepping
+// down to 0.6 (then a smaller square), at most 150 KiB. Drawing the decoded pixels onto a fresh
 // canvas and encoding that drops every EXIF/XMP/ICC/GPS segment; the result is checked anyway (no APP1/APP2).
 
 import { isVoiciJpeg, voiciJpegHasMetadata, VOICI_AVATAR_MAX_BYTES } from "./voiciProtocol.js";
+import { newEdit, outputMatrix } from "./voiciImageEdit.js";
 
 export const VOICI_AVATAR_SIZE = 512;
 export const VOICI_AVATAR_QUALITIES = [0.82, 0.76, 0.7, 0.65, 0.6];
+/** The sizes tried in turn when a detailed photo does not fit the cap at full size. */
+export const VOICI_AVATAR_SIZES = [512, 410, 328, 262];
+/** The longest side the photo editor works on. */
+export const VOICI_EDITOR_MAX_SIDE = 2048;
 
 /** The centred square crop of a w × h image: {sx, sy, side}. */
 export function squareCrop(w, h) {
@@ -23,12 +29,11 @@ export class VoiciImageError extends Error {
 }
 
 /**
- * Re-encodes a picked image file (or Blob). Resolves the JPEG bytes. `deps.decode` / `deps.encode` are seams for
- * tests: decode(blob) → {width, height, source}, encode(source, crop, size, quality) → Uint8Array.
+ * A picked image file (or Blob) decoded upright (EXIF orientation applied), its longest side at most `maxSide`:
+ * {width, height, source}. `deps.decode` is the seam for tests. Throws VoiciImageError("unreadable").
  */
-export async function reencodeAvatar(file, deps = {}) {
-  const decode = deps.decode ?? decodeImage;
-  const encode = deps.encode ?? encodeJpeg;
+export async function decodeForEditing(file, deps = {}, maxSide = VOICI_EDITOR_MAX_SIDE) {
+  const decode = deps.decode ?? ((f) => decodeImage(f, maxSide));
   let img;
   try {
     img = await decode(file);
@@ -36,13 +41,39 @@ export async function reencodeAvatar(file, deps = {}) {
     throw new VoiciImageError("unreadable");
   }
   if (!img?.width || !img?.height) throw new VoiciImageError("unreadable");
-  const crop = squareCrop(img.width, img.height);
-  for (const q of VOICI_AVATAR_QUALITIES) {
-    const bytes = stripJpegMetadata(await encode(img.source, crop, VOICI_AVATAR_SIZE, q));
-    if (!bytes || voiciJpegHasMetadata(bytes)) throw new VoiciImageError("unreadable");
-    if (bytes.length <= VOICI_AVATAR_MAX_BYTES) return bytes;
+  return img;
+}
+
+/**
+ * The avatar from a decoded picture and the editor's edit (turns, flip, square crop): drawn at 512 × 512 through
+ * outputMatrix and written as JPEG within the cap, quality stepping down, then the square a fifth smaller each round
+ * (never under 256). `deps.encode(source, matrix, size, quality)` is the test seam. Throws
+ * VoiciImageError("encode-failed") when the browser's encoder fails at every size, ("too-large") when nothing fits.
+ */
+export async function encodeEditedAvatar(img, edit, deps = {}) {
+  const encode = deps.encode ?? encodeJpeg;
+  let wrote = false;
+  for (const size of VOICI_AVATAR_SIZES) {
+    const matrix = outputMatrix(edit, size);
+    for (const q of VOICI_AVATAR_QUALITIES) {
+      let bytes = null;
+      try {
+        bytes = stripJpegMetadata(await encode(img.source, matrix, size, q));
+      } catch {
+        bytes = null;
+      }
+      if (!bytes || voiciJpegHasMetadata(bytes)) break;
+      wrote = true;
+      if (bytes.length <= VOICI_AVATAR_MAX_BYTES) return bytes;
+    }
   }
-  throw new VoiciImageError("too-large");
+  throw new VoiciImageError(wrote ? "too-large" : "encode-failed");
+}
+
+/** Re-encodes a picked image file with the centred square crop. Resolves the JPEG bytes. */
+export async function reencodeAvatar(file, deps = {}) {
+  const img = await decodeForEditing(file, deps);
+  return encodeEditedAvatar(img, newEdit(img.width, img.height), deps);
 }
 
 /**
@@ -75,21 +106,39 @@ export function stripJpegMetadata(bytes) {
   return null;
 }
 
-async function decodeImage(file) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image", colorSpaceConversion: "default" });
+async function decodeImage(file, maxSide = VOICI_EDITOR_MAX_SIDE) {
+  let bitmap = await createImageBitmap(file, { imageOrientation: "from-image", colorSpaceConversion: "default" });
+  const k = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  if (k < 1) {
+    const w = Math.max(1, Math.round(bitmap.width * k));
+    const h = Math.max(1, Math.round(bitmap.height * k));
+    const smaller = await createImageBitmap(bitmap, { resizeWidth: w, resizeHeight: h, resizeQuality: "high" });
+    bitmap.close?.();
+    bitmap = smaller;
+  }
   return { width: bitmap.width, height: bitmap.height, source: bitmap };
 }
 
-async function encodeJpeg(source, crop, size, quality) {
-  const canvas = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(size, size) : Object.assign(document.createElement("canvas"), { width: size, height: size });
-  const g = canvas.getContext("2d", { colorSpace: "srgb" });
+/** Draws `source` through `matrix` ([a, b, c, d, tx, ty]) onto a white size × size canvas. */
+export function drawEdited(g, source, matrix, size) {
+  g.setTransform(1, 0, 0, 1, 0, 0);
   g.fillStyle = "#ffffff";
   g.fillRect(0, 0, size, size);
+  g.imageSmoothingEnabled = true;
   g.imageSmoothingQuality = "high";
-  g.drawImage(source, crop.sx, crop.sy, crop.side, crop.side, 0, 0, size, size);
+  g.setTransform(matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5]);
+  g.drawImage(source, 0, 0);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+async function encodeJpeg(source, matrix, size, quality) {
+  const canvas = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(size, size) : Object.assign(document.createElement("canvas"), { width: size, height: size });
+  const g = canvas.getContext("2d", { colorSpace: "srgb" });
+  drawEdited(g, source, matrix, size);
   const blob = canvas.convertToBlob
     ? await canvas.convertToBlob({ type: "image/jpeg", quality })
     : await new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
+  if (!blob) throw new Error("no blob");
   return new Uint8Array(await blob.arrayBuffer());
 }
 
