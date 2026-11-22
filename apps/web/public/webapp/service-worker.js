@@ -556,6 +556,8 @@
 //  v241: the one-time voi.ci intro after creating an account (lib/voiciIntro.js, GET /api/voici/promo), Page options
 //       renamed Social options (no "Anyone signed in with Flagship"; first publish takes calls from callback callers),
 //       "Turn off social features", "Set business hours", and the welcome picture with the internet between phone and server.
+//  v243: a non-JSON /shell-manifest.json answer (an SPA fallback's index.html) counts as no manifest, so the worker
+//       still installs.
 //  v245: a Business batch may be paid by bank transfer while `.com` offers it ("Pay by bank transfer"; lib/orgPlan.js,
 //       views/orgPlan.js), and a batch that can no longer be paid says so.
 const SHELL_VERSION = "v245";
@@ -979,9 +981,17 @@ async function checkAgainstManifest(cache) {
   if (typeof cache.match !== "function") return;
   const res = await cache.match("/shell-manifest.json");
   if (!res) return;
+  // A host with an SPA fallback (wrangler dev, the gym Worker) answers a deploy with no manifest
+  // with index.html: that is a missing manifest, not a broken one.
+  const type = String((res.headers && typeof res.headers.get === "function" && res.headers.get("content-type")) || "").toLowerCase();
+  const text = await res.clone().text();
+  if ((type && !type.includes("json")) || /^\s*</.test(text)) {
+    if (typeof cache.delete === "function") await cache.delete("/shell-manifest.json");
+    return;
+  }
   let manifest;
   try {
-    manifest = JSON.parse(await res.clone().text());
+    manifest = JSON.parse(text);
   } catch {
     throw new Error("shell manifest unreadable");
   }
