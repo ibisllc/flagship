@@ -71,6 +71,17 @@ describe("account-scoped push registration", () => {
     expect(record).not.toHaveProperty("label");
   });
 
+  it("two registrations of the same token racing leave one row and answer the same token id", async () => {
+    const { storage, device } = await harness();
+    const deps = { pushTokens: storage.pushTokens, deviceIdentities: storage.deviceIdentities, usernames: storage.usernames, now: () => 100 };
+    const [a, b] = await Promise.all([handlePushRegister(deps, signedBody(device, 100)), handlePushRegister(deps, signedBody(device, 100))]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const rows = await storage.pushTokens.listByUser("alice");
+    expect(rows).toHaveLength(1);
+    expect((a.body as { tokenId: string }).tokenId).toBe(rows[0]!.tokenId);
+    expect((b.body as { tokenId: string }).tokenId).toBe(rows[0]!.tokenId);
+  });
+
   it("rejects a registration signed by any key other than the bound device", async () => {
     const { storage } = await harness();
     const response = await handlePushRegister({

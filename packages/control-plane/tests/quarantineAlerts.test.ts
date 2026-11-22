@@ -233,10 +233,10 @@ describe("scheduleQuarantineAlerts — guards", () => {
   it("walks multiple quarantined devices in admit-ascending order", async () => {
     const s = new InMemoryStorage();
     await s.pushTokens.put(
-      quarantinedToken({ tokenId: "dev-late", registeredAt: FIXED_NOW + 200 }),
+      quarantinedToken({ tokenId: "dev-late", providerToken: "provider-late", registeredAt: FIXED_NOW + 200 }),
     );
     await s.pushTokens.put(
-      quarantinedToken({ tokenId: "dev-early", registeredAt: FIXED_NOW + 100 }),
+      quarantinedToken({ tokenId: "dev-early", providerToken: "provider-early", registeredAt: FIXED_NOW + 100 }),
     );
     const rec = recordingFirePush();
     await scheduleQuarantineAlerts({

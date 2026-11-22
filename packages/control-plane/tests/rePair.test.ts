@@ -831,7 +831,7 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
       username: USERNAME,
       deviceId: "10112233445566778899aabbccddeeff",
       platform: "apns",
-      providerToken: "p",
+      providerToken: `p-${args.tokenId}`,
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
       registeredAt: 1,

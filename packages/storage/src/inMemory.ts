@@ -744,6 +744,17 @@ export class InMemoryPushTokenStorage implements PushTokenStorage {
     // caller doesn't set it, matching the SQL column default. Lets
     // pre-cascade callers (Phase 2 hasn't shipped yet) keep working
     // without touching every put-site.
+    // Same token for the same device under another id (a racing
+    // registration): update that row, as D1's unique index does.
+    const same = [...this.byId.values()].find(
+      (r) => r.tokenId !== rec.tokenId && r.username === rec.username && r.deviceId === rec.deviceId && r.platform === rec.platform && r.providerToken === rec.providerToken,
+    );
+    if (same && !this.byId.has(rec.tokenId)) {
+      same.pushX25519PubHex = rec.pushX25519PubHex;
+      same.registrationSignatureHex = rec.registrationSignatureHex;
+      same.lastSeenAt = rec.lastSeenAt;
+      return;
+    }
     this.byId.set(rec.tokenId, {
       ...rec,
       quarantineUntil: rec.quarantineUntil ?? 0,

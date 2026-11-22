@@ -798,7 +798,7 @@ describe("D1 ↔ InMemory parity", () => {
       username: u,
       deviceId,
       platform: "apns" as const,
-      providerToken: "tok",
+      providerToken: `tok-${id}`,
       pushX25519PubHex: "pk",
       registrationSignatureHex: "sig",
       registeredAt: reg,
@@ -820,6 +820,23 @@ describe("D1 ↔ InMemory parity", () => {
       });
       expectParity(r);
       expect(r.d1).toEqual({ list: ["t1", "t2"], lastSeen: 50, afterRemove: ["t1"] });
+    });
+
+    it("two registrations of one token for one device converge on the first row (migration 0157)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await seedDevice(s, "alice");
+        await s.pushTokens.put(mk("first", "alice", 1, { providerToken: "same", quarantineUntil: 9_000 }));
+        await s.pushTokens.put(mk("racer", "alice", 1, { providerToken: "same", registrationSignatureHex: "sig2", lastSeenAt: 2 }));
+        await s.pushTokens.put(mk("other", "alice", 1, { providerToken: "same", platform: "fcm" }));
+        return (await s.pushTokens.listByUser("alice"))
+          .map((t) => ({ id: t.tokenId, platform: t.platform, sig: t.registrationSignatureHex, seen: t.lastSeenAt, q: t.quarantineUntil }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+      });
+      expectParity(r);
+      expect(r.d1).toEqual([
+        { id: "first", platform: "apns", sig: "sig2", seen: 2, q: 9_000 },
+        { id: "other", platform: "fcm", sig: "sig", seen: 1, q: 0 },
+      ]);
     });
 
     it("setQuarantineUntil + listQuarantined ordering + orInQuarantineAlertBit", async () => {
