@@ -1804,3 +1804,7 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   (dead photo-picker) cleared. Seven resume agents started, one per worktree: finish, gate, rebase on
   origin/release/0.4, push the branch; no merges or deploys. Disk 5.6 GB free (DerivedData 2.3 GB, ~/.gradle 6.8 GB).
   Resume point: review and merge the seven branches (shells v242-v245), then Android 14 + iOS 1.3 (10) builds.
+- 2026-11-21 late: merged `0.4/server-refine` (ff, shell **v245**): adapter review + insight on Flagship Inference
+  (own `ai-service-day` budget; `ADAPTER_REVIEW_ANTHROPIC_KEY` retired: delete the prod secret), Business batches by
+  Stripe bank transfer (off until `STRIPE_BANK_TRANSFER="1"`; restricted key needs Customers: Write + PaymentIntents:
+  Read; tested against fakes only). No migration. Agent gates: tsc, i18n, parity, vitest com/web/control-plane 6,879.
