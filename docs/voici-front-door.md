@@ -24,8 +24,8 @@ big public feeds. User copy never names a competitor. What it says, and why each
 
 - **Your own page, your posts.** One page at `voi.ci/<account name>`, short posts newest first, links. No algorithm
   picks who sees a post (there is no feed at all).
-- **People can message you and call you.** "Send me a message" and "Call" on the page (calls need `VOICI_CALLS`; see
-  §9).
+- **People can message you and call you.** "Send me a message" and "Call" on the page (calls ship with the
+  release; see §9).
 - **Nobody reads it but you.** Said of messages and calls only, never of the page: the page is public. Messages are
   sealed to the owner's inbox key (§7 of the main spec), calls are end to end. A report tells Flagship which account
   sent a message and shows its text only if the reporter chooses to (§9.2), and the page says exactly that.

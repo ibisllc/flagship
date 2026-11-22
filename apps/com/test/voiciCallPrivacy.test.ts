@@ -49,7 +49,6 @@ async function world() {
     SERVICES_BASE_URL: "https://services.invalid",
     DB: db,
     VOICI_ENABLED: "on",
-    VOICI_CALLS: "on",
     VOICI_CALL_ROOM: {
       idFromName: (n: string) => n,
       get: () => ({ fetch: async (r: Request | string) => (typeof r !== "string" && joins.push(r.headers), new Response("{}")) }),

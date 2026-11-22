@@ -1,7 +1,7 @@
 /**
  * voi.ci calls on the Worker (docs/voici-calls.md §6; handlers in packages/control-plane/src/voiciCalls.ts, the room
- * in voiciCallRoom.ts). Off (404) until `VOICI_CALLS = "on"` and the `VOICI_CALL_ROOM` binding exist, besides
- * `VOICI_ENABLED`.
+ * in voiciCallRoom.ts). Calls ship with the release that carries them: they answer 404 only without the
+ * `VOICI_CALL_ROOM` binding or D1, or while the voi.ci brake (`VOICI_ENABLED` not "on", voiciRoutes.ts) is pulled.
  *
  *   POST /api/voici/calls                          the caller's signed request (CORS: the voi.ci origin)
  *   GET  /api/voici/calls/<callId>/caller?t=       the caller's room WebSocket (Origin: the voi.ci origin)
@@ -57,7 +57,6 @@ interface DurableObjectNamespaceLike {
 export interface VoiciCallEnv extends RateLimitEnv {
   DB?: D1Database;
   VOICI_ENABLED?: string;
-  VOICI_CALLS?: string;
   VOICI_CALL_ROOM?: DurableObjectNamespaceLike;
   VOICI_WEB_ORIGIN?: string;
   CONTROL_APEX?: string;
@@ -78,7 +77,7 @@ const RING = /^\/api\/voici\/rings\/([0-9a-f]{32})$/;
 const VOIP_TOKEN = /^\/api\/accounts\/([^/]+)\/voici-voip-token$/;
 const CALL_KEY = /^\/api\/accounts\/([^/]+)\/voici-call-key(\/revoke)?$/;
 
-export const voiciCallsEnabled = (env: VoiciCallEnv) => env.VOICI_ENABLED === "on" && env.VOICI_CALLS === "on" && !!env.VOICI_CALL_ROOM && !!env.DB;
+export const voiciCallsEnabled = (env: VoiciCallEnv) => env.VOICI_ENABLED === "on" && !!env.VOICI_CALL_ROOM && !!env.DB;
 
 export function isVoiciCallPath(pathname: string): boolean {
   return pathname === "/api/voici/calls" || pathname === RING_BACK || RING.test(pathname) || CALL_PATH.test(pathname) || PAGE_CALLS.test(pathname) || VOIP_TOKEN.test(pathname) || CALL_KEY.test(pathname);

@@ -275,7 +275,7 @@ bucket_name = "flagship-relay-feed"
 # voi.ci pages (docs/voici-and-messages.md §2.8; apps/com/src/voiciRoutes.ts): the current signed index of each page
 # (v1/u/<username>.json, max-age 30) and its content-addressed pieces (v1/p/<pageId>/<sha256>, immutable), served on
 # https://files.voi.ci (an R2 custom domain plus a cache rule that ignores query strings). Nothing is written while
-# VOICI_ENABLED is not "on". Provision once:
+# the voi.ci brake is pulled (VOICI_ENABLED not "on"). Provision once:
 #   npx wrangler r2 bucket create flagship-voici
 #   then in the dashboard: R2 > flagship-voici > Settings > Custom domain files.voi.ci
 [[r2_buckets]]
@@ -357,13 +357,10 @@ FLAGSHIP_INFERENCE_ENDPOINT = '{"baseUrl":"https://inference.flagshipserver.com"
 # from the 0.3 release (owner, 2026-10-23). Removing both turns dibs off and opens every free name.
 DIBS_WINDOW_START = "2026-11-05T00:00:00Z"
 DIBS_WINDOW_END = "2027-05-05T00:00:00Z"
-# voi.ci pages and Messages (docs/voici-and-messages.md, "Interfaces the chunks share"): "on" only after migration
-# 0123 and the store builds that speak it; off, every voi.ci page and Messages route answers 404.
+# The voi.ci brake (an outage or abuse brake, not a launch switch; voiciRoutes.ts): "on" is normal. Anything else,
+# then a .com deploy, answers every voi.ci page, Messages and call route 404 and leaves voi.ci a plain shortener.
+# Calls have no switch of their own: they ship with the release that carries them (owner, 2026-11-20).
 VOICI_ENABLED = "on"
-# voi.ci calls (docs/voici-calls.md): on (owner, 2026-11-20: the 0.4 store builds under review are the ones that
-# answer calls, so reviewers must be able to try them). Off switch: "off" and a .com deploy (routes 404, the page's
-# Call button says they aren't taking calls; messages and pages are untouched).
-VOICI_CALLS = "on"
 # Google Play licence testers' purchases (purchaseType 0) are accepted, so Play review and our own testers can buy a
 # voucher pack (owner, 2026-11-20). Only accounts on the Play Console licence-tester list can make them.
 GOOGLE_PLAY_ALLOW_TEST = "1"
@@ -372,7 +369,8 @@ GOOGLE_PLAY_ALLOW_TEST = "1"
 # an app string, so it changes without a release. Empty = no promo. VOICI_PROMO_UNTIL (ISO time) ends it.
 VOICI_PROMO = ""
 VOICI_PROMO_UNTIL = ""
-# The marketplace (owner, 2026-11-19): hidden in 0.4, opened in 0.5 (docs/release-0.5-list.md). Anything but "on"
+# The marketplace (owner, 2026-11-19): hidden in 0.4, opened in 0.5 (docs/release-0.5-list.md). A product gate, not
+# launch sequencing: the marketplace is not part of 0.4 although its code is. Anything but "on"
 # answers every public /api/marketplace/* and /api/developer/sales/* route 404 `marketplace-off`, so no box can
 # publish and no old client can browse or install. The apps carry their own switch (release/version.json).
 MARKETPLACE = "off"

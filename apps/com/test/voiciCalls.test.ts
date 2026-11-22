@@ -18,7 +18,7 @@ import { endpointFor } from "../src/rateLimit.js";
 const V: any = JSON.parse(readFileSync(join(import.meta.dirname, "../../../packages/protocol/test-vectors/voici-calls/vectors.json"), "utf8"));
 const K = V.keys;
 
-async function world(calls = "on") {
+async function world(callRoom = true) {
   const sqlite = createSqliteD1();
   const db = sqlite as unknown as D1Database;
   const seed = new D1Storage(db);
@@ -32,11 +32,12 @@ async function world(calls = "on") {
     SERVICES_BASE_URL: "https://services.invalid",
     DB: db,
     VOICI_ENABLED: "on",
-    VOICI_CALLS: calls,
-    VOICI_CALL_ROOM: {
-      idFromName: (n: string) => n,
-      get: () => ({ fetch: async (_u: string, init?: RequestInit) => (inits.push(JSON.parse(String(init?.body))), new Response("{}")) }),
-    },
+    VOICI_CALL_ROOM: callRoom
+      ? {
+          idFromName: (n: string) => n,
+          get: () => ({ fetch: async (_u: string, init?: RequestInit) => (inits.push(JSON.parse(String(init?.body))), new Response("{}")) }),
+        }
+      : undefined,
     FLAGSHIP_CA_PRIV_HEX: K.caSeed,
     SITE_PUBLIC: "1",
   } as unknown as RouteEnv;
@@ -60,8 +61,8 @@ describe("voi.ci call routes", () => {
     }
   });
 
-  it("answer 404 while VOICI_CALLS is off", async () => {
-    const w = await world("off");
+  it("answer 404 without the call-room binding", async () => {
+    const w = await world(false);
     try {
       expect((await w.call("https://flagshipserver.com/api/voici/calls", post(V.request.signed))).status).toBe(404);
     } finally {
