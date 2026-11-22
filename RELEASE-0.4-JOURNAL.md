@@ -1760,3 +1760,13 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   canUseFullScreenIntent → ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT). Strings in 7 languages through the tools;
   testDebugUnitTest, i18n-android check and i18n-literals green. Resume point: waiting for the owner to re-pair Wi-Fi
   adb; then the three call retests (step 1), then versionCode 14 + AABs (step 2 rest).
+- 2026-11-21 evening, call retest with the owner on the S948U1 (all on release/0.4, local main fast-forwarded, not pushed):
+  `f2a3e6593` one room join per call (three unlock signals opened 2-3 sockets; extras ended the call with
+  won-without-answer and the orphaned answering socket kept the account "on another call"); `214605a67` the phone route
+  signs with the kept account device key, not the UMK (locked call-key answers stuck at "opening a connection": no
+  route), and call notifications go quiet (no heads-up over the call screen); `bbce8f84e` "Unlock to answer" answers
+  the call after the unlocked request check (owner: Android, 0.4). Killed-app locked answering → 0.5 list (owner).
+  Owner verified after f2a3e6593: unlocked answer, locked+setting off, call again (no false busy). To retest on
+  bbce8f84e: locked+setting on, unlock-to-answer, no pop-up over the call screen, ring continues with screen open.
+  iOS untouched; note: iOS CallKit Answer while the app is locked (setting off) fails the CXAnswerCallAction (phase
+  needsUnlock), not yet tested on TestFlight.
