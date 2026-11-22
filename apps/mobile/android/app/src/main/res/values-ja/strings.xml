@@ -3620,6 +3620,8 @@
     <string name="push_service_unifiedpush_through">UnifiedPush（%1$s 経由）</string>
     <string name="push_service_fcm">Google（Firebase Cloud Messaging）</string>
     <string name="push_service_none">なし：このスマートフォンにはプッシュサービスがありません。通知を受け取るには、ntfy などの UnifiedPush アプリをインストールしてください。</string>
+    <string name="push_google_out_title">通知から Google を外す</string>
+    <string name="push_google_out_body">ntfy などの UnifiedPush アプリをインストールしてください。戻ると Flagship がそのアプリに切り替えます。Google にわかるのはプッシュが届いたこととその時刻だけで、内容やどのアカウント宛てかは決してわかりません。</string>
     <string name="second_approval_waiting">%1$s の承認があと1つあります: クラウドへの参加を許可してください。</string>
     <string name="admin_promotion_under_review">最初の 14 日間は確認期間となり、管理者ではないデバイスとして動作します。</string>
     <string name="admin_only_backups_note">バックアップの管理とサーバーの復元ができるのは管理者デバイスだけです。</string>
@@ -3853,6 +3855,7 @@
     <string name="voici_call_open_app">ロック解除して応答</string>
     <string name="voici_call_failed">通話を接続できませんでした。</string>
     <string name="voici_call_media_unavailable">このバージョンの Flagship ではまだ通話を接続できません。</string>
+    <string name="voici_call_device_unsupported">このデバイスでは通話を利用できません。</string>
     <string name="voici_call_limit">通話は 60 分で終了します。</string>
     <string name="voici_call_camera_denied">ビデオを表示するには Flagship にカメラが必要です。カメラなしで通話を続けることもできます。</string>
     <string name="voici_call_close">閉じる</string>

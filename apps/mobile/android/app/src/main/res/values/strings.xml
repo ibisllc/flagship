@@ -3625,6 +3625,8 @@
     <string name="push_service_unifiedpush_through">UnifiedPush, through %1$s</string>
     <string name="push_service_fcm">Google (Firebase Cloud Messaging)</string>
     <string name="push_service_none">None: this phone has no push service. Install a UnifiedPush app, such as ntfy, to get notifications.</string>
+    <string name="push_google_out_title">Keep Google out of your notifications</string>
+    <string name="push_google_out_body">Install a UnifiedPush app such as ntfy; Flagship switches to it when you come back. Google sees that a push arrived and when, never what it says or which account.</string>
     <string name="second_approval_waiting">One more approval for %1$s: authorize it to join your cloud.</string>
     <string name="admin_promotion_under_review">During its first 14 days it is under review and acts as a non-admin device.</string>
     <string name="admin_only_backups_note">Only an admin device can manage backups and restore servers.</string>
@@ -3858,6 +3860,7 @@
     <string name="voici_call_open_app">Unlock to answer</string>
     <string name="voici_call_failed">The call couldn\'t connect.</string>
     <string name="voici_call_media_unavailable">This version of Flagship can\'t connect calls yet.</string>
+    <string name="voici_call_device_unsupported">Calls aren\'t available on this device.</string>
     <string name="voici_call_limit">Calls end after 60 minutes.</string>
     <string name="voici_call_camera_denied">Flagship needs the camera to show your video. You can keep talking without it.</string>
     <string name="voici_call_close">Close</string>

@@ -74,6 +74,15 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
     }
 
     FSGroup(header = stringResource(R.string.voici_calls_header)) {
+        if (com.flagshipserver.app.calls.CallSupport.unavailableOnThisDevice) {
+            Text(
+                stringResource(R.string.voici_call_device_unsupported),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2).testTag("page-calls-device-unsupported"),
+            )
+            FSDivider(0.dp)
+        }
         FSRow(
             title = stringResource(R.string.voici_calls_accept),
             enabled = v.canEdit && !busy,

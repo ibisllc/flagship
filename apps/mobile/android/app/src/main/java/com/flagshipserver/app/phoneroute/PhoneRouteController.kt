@@ -27,9 +27,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 object PhoneRouteController {
-    private var appState: AppState? = null
-    private var okHttp: OkHttpClient? = null
-    private var store: PhoneCertStore? = null
+    @Volatile private var appState: AppState? = null
+    @Volatile private var okHttp: OkHttpClient? = null
+    @Volatile private var store: PhoneCertStore? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var job: Job? = null
     @Volatile private var client: PhoneTunnelClient? = null
@@ -60,6 +60,9 @@ object PhoneRouteController {
             ).execute().use { it.isSuccessful }
         }.getOrDefault(false)
     }
+
+    /** The route has its account and client (MainActivity, or a call push that woke the app: AppRuntime). */
+    val installed: Boolean get() = appState != null
 
     fun install(context: Context, appState: AppState, okHttp: OkHttpClient) {
         this.appState = appState

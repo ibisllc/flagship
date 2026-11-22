@@ -165,25 +165,12 @@ class MainActivity : FragmentActivity() {
         BiometricAuthority.set(biometric)
 
         val privacy = PrivacySettings.fromContext(applicationContext)
-        appState = AppState(
-            requireBiometricAtLaunch = privacy.requireBiometricAtLaunch.value,
-        )
-        appState.presentationNames = com.flagshipserver.app.core.PresentationNameStore.from(applicationContext)
-        appState.deviceIdStore = KeystoreDeviceIdStore
-        // GYM: each smoke launch starts with no remembered names, as with the AI keys below.
-        if (savedInstanceState == null && com.flagshipserver.app.core.Variant.isGymLaunch(intent)) appState.presentationNames?.clear()
-        // Restore a previously paired session: if the Keystore still holds
-        // a UMK seed (a real identity that survives process death) and we
-        // know which cloud was active, land on the gated shell instead of
-        // forcing a fresh sign-in every launch. The AppState constructor
-        // already left the biometric latch armed, so a restored session
-        // opens behind the lock screen. Skipped when the user opted into a
-        // full passphrase sign-in every open. Demo/mock never store a seed.
-        if (!privacy.requirePassphraseAtLaunch.value) {
-            Keystore.activeProfile()?.let { activeCloud ->
-                if (Keystore.hasUmkSeed()) appState.restorePersistedSession(activeCloud)
-            }
-        }
+        // The process's one AppState (AppRuntime): a call push may have made it before this screen, restored from the
+        // Keystore behind the app lock (unless a full passphrase sign-in is asked on every open). A gym launch starts
+        // from a fresh one, with no remembered names, as with the AI keys below.
+        val gymFresh = savedInstanceState == null && com.flagshipserver.app.core.Variant.isGymLaunch(intent)
+        appState = if (gymFresh) AppRuntime.freshAppState(applicationContext) else AppRuntime.appState(applicationContext)
+        if (gymFresh) appState.presentationNames?.clear()
         // App lock (device bug M12): a cold start of a signed-in device with
         // "Lock with biometrics" on opens locked. Logged (no account data) so
         // a report of the app opening unlocked can be traced.
@@ -254,7 +241,7 @@ class MainActivity : FragmentActivity() {
         if (smokeInitialTab != null) AiKeyStore.clear()
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
         com.flagshipserver.app.core.InviteOwners.attach(applicationContext)
-        val okHttp = buildOkHttp()
+        val okHttp = AppRuntime.okHttp()
         // LAN-direct probes are only valid for the network they ran on.
         // Registered once per activity and dropped with it: the system allows only
         // about a hundred per app, and an unremoved one made a long-lived process
@@ -355,18 +342,8 @@ class MainActivity : FragmentActivity() {
         // when the biometric session is already fresh — never a prompt.
         // A gym run on mocks mints nothing: the fixture account does not exist on `.com`, and each refused mint
         // was charged to the account-resolve budget (journal F15).
-        com.flagshipserver.app.core.AccountReadTokens.shared = if (!useLive) null else com.flagshipserver.app.core.AccountReadTokens(
-            transport = OkHttpJsonTransport(okHttp),
-            store = com.flagshipserver.app.keystore.KeystoreReadTokenStore(),
-            signers = { username ->
-                com.flagshipserver.app.keystore.KeystoreReadTokenSigners.resolve(
-                    username = username,
-                    currentUser = appState.currentUser.value,
-                    profile = appState.activeProfile,
-                )
-            },
-            isDemo = { com.flagshipserver.app.core.AppState.isDemoAccount(appState.activeProfile, appState.pods.value) },
-        )
+        AppRuntime.mockRun = !useLive
+        if (!useLive) com.flagshipserver.app.core.AccountReadTokens.shared = null else AppRuntime.readTokens(appState)
         // Abuse notices and suspension (docs/abuse-handling.md): read with the account read token; a gym run
         // on mocks has no `.com` to ask.
         com.flagshipserver.app.core.AbuseNoticeCenter.shared = if (mocks != null) null else com.flagshipserver.app.core.AbuseNoticeCenter(
@@ -377,19 +354,16 @@ class MainActivity : FragmentActivity() {
 
         // voi.ci pages and Messages (docs/voici-and-messages.md): one center per process; it reads the account
         // lazily, so a profile switch only needs a refresh.
-        val voiciCenter = com.flagshipserver.app.core.voici.VoiciCenter(
-            client = mocks?.voici ?: com.flagshipserver.app.api.LiveVoiciClient(OkHttpJsonTransport(okHttp), okHttp),
-            keyring = com.flagshipserver.app.core.voici.VoiciKeystoreKeyring(appState, { com.flagshipserver.app.core.Variant.forceAdminRoot }, mockRun = mocks != null),
-            vault = com.flagshipserver.app.core.voici.VoiciVault(
-                if (mocks != null) com.flagshipserver.app.core.voici.MemoryVoiciVaultStore()
-                else com.flagshipserver.app.core.voici.FileVoiciVaultStore(java.io.File(filesDir, "voici")),
-            ),
-            caKeysSource = mocks?.voiciCaKeys ?: { TrustChecker(OkHttpJsonTransport(okHttp)).verifiedCaKeys() },
-            http = if (mocks != null) null else okHttp,
-            callKeyVault = if (mocks != null) com.flagshipserver.app.calls.MemoryCallKeyVault() else com.flagshipserver.app.calls.KeystoreCallKeyVault(this),
+        // The live one is the process's (AppRuntime), so a call push that woke the app already rings through it.
+        val voiciCenter = if (mocks == null) AppRuntime.voiciCenter(applicationContext) else com.flagshipserver.app.core.voici.VoiciCenter(
+            client = mocks.voici ?: com.flagshipserver.app.api.LiveVoiciClient(OkHttpJsonTransport(okHttp), okHttp),
+            keyring = com.flagshipserver.app.core.voici.VoiciKeystoreKeyring(appState, { com.flagshipserver.app.core.Variant.forceAdminRoot }, mockRun = true),
+            vault = com.flagshipserver.app.core.voici.VoiciVault(com.flagshipserver.app.core.voici.MemoryVoiciVaultStore()),
+            caKeysSource = mocks.voiciCaKeys ?: { TrustChecker(OkHttpJsonTransport(okHttp)).verifiedCaKeys() },
+            http = null,
+            callKeyVault = com.flagshipserver.app.calls.MemoryCallKeyVault(),
             shareCard = com.flagshipserver.app.core.voici.AndroidShareCardRenderer,
-        )
-        com.flagshipserver.app.core.voici.VoiciCenter.shared = voiciCenter
+        ).also { com.flagshipserver.app.core.voici.VoiciCenter.shared = it }
         // Vouchers and the plan (docs/payments-privacy-and-rails.md): the wallet lives on the admin phones, sealed
         // under the UMK and synced like the call hours; only an admin device spends.
         val paymentsKeys = com.flagshipserver.app.core.voici.VoiciKeystoreKeyring(appState, { com.flagshipserver.app.core.Variant.forceAdminRoot }, mockRun = mocks != null)
@@ -518,19 +492,22 @@ class MainActivity : FragmentActivity() {
             dropUnifiedPush = { com.flagshipserver.app.push.UnifiedPushTransport.unregister(this) },
         )
         PushHolder.registrar = registrar
-        com.flagshipserver.app.push.UnifiedPushTransport.resolve(this, this) { transport, distributor ->
-            val previous = pushTransports.transport
-            pushTransports.setTransport(transport, distributor)
-            if (previous == com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH && transport != previous) {
-                pushTransports.unifiedPushToken = null
-                com.flagshipserver.app.push.UnifiedPushTransport.unregister(this)
-            }
-            if (privacy.pushNotificationsEnabled.value &&
-                (transport != previous || transport == com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH)
-            ) {
-                registrar.registerCurrentTokenAsync()
+        resolvePushTransport = {
+            com.flagshipserver.app.push.UnifiedPushTransport.resolve(this, this) { transport, distributor ->
+                val previous = pushTransports.transport
+                pushTransports.setTransport(transport, distributor)
+                if (previous == com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH && transport != previous) {
+                    pushTransports.unifiedPushToken = null
+                    com.flagshipserver.app.push.UnifiedPushTransport.unregister(this)
+                }
+                if (privacy.pushNotificationsEnabled.value &&
+                    (transport != previous || transport == com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH)
+                ) {
+                    registrar.registerCurrentTokenAsync()
+                }
             }
         }
+        resolvePushTransport?.invoke()
 
         // Boot-secret RELAY: a `secret-request` push routes into the approval
         // list. The FCM service also synthesizes the deep link for the tap;
@@ -1044,6 +1021,9 @@ class MainActivity : FragmentActivity() {
 
     private var registeredNetworkCallback: android.net.ConnectivityManager.NetworkCallback? = null
 
+    /** Picks the push service (UnifiedPush distributor, else FCM) and registers its token when it changed. */
+    private var resolvePushTransport: (() -> Unit)? = null
+
     override fun onDestroy() {
         super.onDestroy()
         com.flagshipserver.app.core.PendingBackupSave.launcher = null
@@ -1079,6 +1059,11 @@ class MainActivity : FragmentActivity() {
             }
         }
         com.flagshipserver.app.keystore.ServingRenewal.appOpened()
+        // Back from installing a UnifiedPush app (Settings, "Keep Google out of your notifications"): switch to it now.
+        val pushStore = com.flagshipserver.app.push.PushTransportStore.from(this)
+        if (pushStore.transport != com.flagshipserver.app.push.PushTransport.UNIFIEDPUSH &&
+            com.flagshipserver.app.push.UnifiedPushTransport.distributors(this).isNotEmpty()
+        ) resolvePushTransport?.invoke()
         com.flagshipserver.app.phoneroute.PhoneRouteController.appForeground()
         // voi.ci reply notices are checked on foreground only (no push, no background polling).
         com.flagshipserver.app.core.voici.VoiciCenter.shared?.let { c -> c.scope.launch { runCatching { c.checkReplies() } } }
@@ -1121,9 +1106,6 @@ class MainActivity : FragmentActivity() {
         val link = com.flagshipserver.app.core.AppLink.resolve(uri) ?: return
         deepLinker.enqueue(link)
     }
-
-    private fun buildOkHttp(): OkHttpClient =
-        com.flagshipserver.app.core.HttpClientFactory.build()
 
     /** Builds before the device ID was saved invented one per cold start: find the registered one
      *  again (once per account; saved IDs skip this). Runs after an unlock, never prompts. */
@@ -1413,15 +1395,5 @@ private fun AppRoot(
             )
         }
         Toaster(queue = toastQueue, onDismiss = { toasts.dismiss(it) })
-    }
-}
-
-/** The Keystore keeps each account's registered device ID under that account's profile. */
-private object KeystoreDeviceIdStore : AppState.DeviceIdStore {
-    private fun isActive(cloudName: String) = Keystore.activeProfile()?.lowercase() == cloudName.lowercase()
-    override fun load(cloudName: String): String? =
-        runCatching { if (isActive(cloudName)) Keystore.accountDeviceId() else null }.getOrNull()
-    override fun save(cloudName: String, deviceId: String) {
-        runCatching { if (isActive(cloudName)) Keystore.storeAccountDeviceId(deviceId) }
     }
 }

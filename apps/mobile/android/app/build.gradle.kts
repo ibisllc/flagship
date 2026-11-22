@@ -149,6 +149,9 @@ android {
                 "proguard-rules.pro",
             )
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // Native debug symbols for Play's crash reports (BUNDLE-METADATA in the AAB; nothing extra reaches the
+            // phones). Our libwebrtc and TURN .so files ship stripped, so the symbol table is all there is to keep.
+            ndk { debugSymbolLevel = "SYMBOL_TABLE" }
         }
     }
 

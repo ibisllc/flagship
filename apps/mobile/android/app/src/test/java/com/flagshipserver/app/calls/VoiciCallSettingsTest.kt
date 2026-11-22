@@ -128,6 +128,7 @@ class VoiciCallScreenModelTest {
         assertEquals(com.flagshipserver.app.R.string.voici_call_connected, VoiciCallScreenModel.status(ui(VoiciCallCenter.Phase.Connected)))
         assertEquals(com.flagshipserver.app.R.string.voici_call_answered_elsewhere, VoiciCallScreenModel.status(ui(VoiciCallCenter.Phase.Ended, "answered-elsewhere")))
         assertEquals(com.flagshipserver.app.R.string.voici_call_media_unavailable, VoiciCallScreenModel.status(ui(VoiciCallCenter.Phase.Ended, "media-unavailable")))
+        assertEquals(com.flagshipserver.app.R.string.voici_call_device_unsupported, VoiciCallScreenModel.status(ui(VoiciCallCenter.Phase.Ended, "device-unsupported")))
         assertEquals(com.flagshipserver.app.R.string.voici_call_limit, VoiciCallScreenModel.status(ui(VoiciCallCenter.Phase.Ended, "limit")))
         assertEquals(com.flagshipserver.app.R.string.voici_call_ended, VoiciCallScreenModel.status(ui(VoiciCallCenter.Phase.Ended, "no-answer")))
     }
