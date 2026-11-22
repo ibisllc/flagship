@@ -125,7 +125,7 @@ object VoiciCallCenter {
             val keys = runCatching { VoiciCenter.shared?.callKeys() }.getOrNull()
                 // "Answer calls while Flagship is locked" is on: the call key answers; the caller stays "Someone on voi.ci".
                 ?: runCatching { VoiciCenter.shared?.lockedCallKeys() }.getOrNull()
-            if (keys != null) startSession(push, keys) else update { it.copy(phase = Phase.NeedsUnlock) }
+            if ((keys == null || !startSession(push, keys)) && session == null) update { it.copy(phase = Phase.NeedsUnlock) }
             ring(push)
         }
         // A ring that never joined the room (locked and never unlocked) learns nothing from the caller: end it when
@@ -136,7 +136,13 @@ object VoiciCallCenter {
         }
     }
 
-    private fun startSession(push: VoiciCallPush.Payload, keys: VoiciCallKeys) {
+    private val joinLock = Any()
+
+    /** Joins the room once per call: the unlock fires several signals at once, and a second socket for the same device
+     *  would get the room's "won" too and end the call; the answering one would then be left open, so `.com` keeps the
+     *  account "on another call". Returns false when a session already exists. */
+    private fun startSession(push: VoiciCallPush.Payload, keys: VoiciCallKeys): Boolean = synchronized(joinLock) {
+        if (session != null || pendingPush !== push) return false
         val sealed = runCatching { android.util.Base64.decode(push.sealed, android.util.Base64.DEFAULT) }.getOrNull()
         val who = sealed?.let { keys.openPush(push.callId, it) }
         if (who != null) update { it.copy(name = keys.nicknames[who.third] ?: VoiciCopy.visitorName(who.third)) }
@@ -148,9 +154,11 @@ object VoiciCallCenter {
             holdsRoute = true
             com.flagshipserver.app.phoneroute.PhoneRouteController.callStarted()
         }
-        val s = VoiciCallSession(push, keys, m, http, scope, listener)
+        lateinit var s: VoiciCallSession
+        s = VoiciCallSession(push, keys, m, http, scope, listenerFor { s })
         session = s
         s.connect()
+        true
     }
 
     /** The account was unlocked while a call rings: join the room now. */
@@ -159,9 +167,8 @@ object VoiciCallCenter {
         if (session != null) return
         scope.launch {
             val keys = runCatching { VoiciCenter.shared?.callKeys() }.getOrNull() ?: return@launch
-            if (pendingPush !== push || session != null) return@launch
+            if (!startSession(push, keys)) return@launch
             update { it.copy(phase = Phase.Ringing) }
-            startSession(push, keys)
             // The unlock lands on Home: bring the call screen forward so Answer is in front of the owner.
             if (::app.isInitialized) runCatching {
                 app.startActivity(Intent(app, VoiciCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
@@ -375,7 +382,11 @@ object VoiciCallCenter {
         recordIncoming(session?.request, code)
         connectedAt = null
         pendingPush = null
+        val ending = session
         session = null
+        // Whatever ended the call, its room socket closes too (a no-op when the session ended it): an open one would
+        // keep `.com` holding the account as "on another call".
+        ending?.leave()
         media = null
         pausedByBackground = false
         if (holdsRoute) {
@@ -393,24 +404,32 @@ object VoiciCallCenter {
         update { it.copy(phase = Phase.Ended, endCode = code, cameraOn = false, step = null, slow = false, connectedAt = null) }
     }
 
-    private val listener = object : VoiciCallSession.Listener {
+    /** Events count only from the call's current session; a stray one (a duplicate join) is ignored. */
+    private fun listenerFor(owner: () -> VoiciCallSession) = object : VoiciCallSession.Listener {
+        private fun current() = session === owner()
         override fun onRequest(request: VoiciCallRequest) {
-            update { it.copy(video = request.hasVideo) }
+            if (current()) update { it.copy(video = request.hasVideo) }
         }
         override fun onWon() {
+            if (!current()) return
             update { it.copy(phase = Phase.Connecting) }
             step(VoiciCallConnectStep.Path)
         }
-        override fun onPathOpen() = step(VoiciCallConnectStep.Audio)
+        override fun onPathOpen() {
+            if (current()) step(VoiciCallConnectStep.Audio)
+        }
         override fun onConnected() {
+            if (!current()) return
             stopConnectClock()
             val at = System.currentTimeMillis()
             connectedAt = at
             update { it.copy(phase = Phase.Connected, step = null, slow = false, connectedAt = at) }
         }
-        override fun onEnded(reason: String) = finish(reason)
+        override fun onEnded(reason: String) {
+            if (current()) finish(reason)
+        }
         override fun onRemoteCamera(state: String) {
-            update { it.copy(remoteCamera = state) }
+            if (current()) update { it.copy(remoteCamera = state) }
         }
     }
 
