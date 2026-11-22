@@ -752,6 +752,28 @@ async function hitCounter(
   };
 }
 
+/**
+ * Gives one pass back to a subject budget (`${endpoint}|subject|${id}`): from each of its windows, the pass logged
+ * nearest `at`. Used only for voi.ci rings of answered calls (docs/voici-calls.md §6). Answers whether a window gave
+ * one back; any failure is no refund (never retried).
+ */
+export async function refundSubjectRateLimit(env: Pick<RateLimitEnv, "RATE_LIMITS">, endpoint: RateLimitEndpoint, subject: string, at: number): Promise<boolean> {
+  const ns = env.RATE_LIMITS;
+  if (!ns) return false;
+  if (!LIMITS[endpoint].every((r) => r.axis === "subject")) return false;
+  try {
+    const key = `${endpoint}|subject|${subject}`;
+    const res = await ns.get(ns.idFromName(key) as never).fetch(
+      new Request("https://rate-limits.internal/refund", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "refund", at }) }),
+    );
+    if (!res.ok) return false;
+    const body = (await res.json()) as { refunded?: unknown };
+    return typeof body.refunded === "number" && body.refunded > 0;
+  } catch {
+    return false;
+  }
+}
+
 function identifierFor(input: RateLimitInput, axis: AxisLimit["axis"]): string | null {
   if (axis === "ip") return input.ip;
   if (axis === "irk") return input.irkPub ?? null;

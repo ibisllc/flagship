@@ -75,6 +75,29 @@ export function hitWindows(
   return { result: near ? { ok: true, retryAfterSec: 0, near } : { ok: true, retryAfterSec: 0 }, logs: next };
 }
 
+/** How far from the ring time a logged pass may be and still count as that ring's (the counter's clock is its own). */
+export const REFUND_TOLERANCE_MS = 60_000;
+
+/**
+ * Pure core of a refund: from every stored window log, drop the one logged pass nearest `at` (within the tolerance).
+ * The windows are the stored keys, which already carry RATE_LIMIT_SCALE, so the caller needs no rules. Answers the
+ * new logs and how many windows gave a slot back.
+ */
+export function refundWindows(logs: Logs, at: number): { logs: Logs; refunded: number } {
+  const next: Logs = {};
+  let refunded = 0;
+  for (const [key, log] of Object.entries(logs)) {
+    let best = -1;
+    for (let i = 0; i < log.length; i++) {
+      const d = Math.abs(log[i]! - at);
+      if (d <= REFUND_TOLERANCE_MS && (best < 0 || d < Math.abs(log[best]! - at))) best = i;
+    }
+    next[key] = best < 0 ? log : [...log.slice(0, best), ...log.slice(best + 1)];
+    if (best >= 0) refunded++;
+  }
+  return { logs: next, refunded };
+}
+
 export function isWindowRules(value: unknown): value is WindowRule[] {
   return (
     Array.isArray(value) &&
@@ -111,12 +134,17 @@ export class RateLimitCounter {
   ) {}
 
   async fetch(request: Request): Promise<Response> {
-    let rules: unknown;
+    let body: { rules?: unknown; op?: unknown; at?: unknown } = {};
     try {
-      rules = ((await request.json()) as { rules?: unknown }).rules;
+      body = (await request.json()) as typeof body;
     } catch {
-      rules = undefined;
+      body = {};
     }
+    if (body.op === "refund") {
+      if (typeof body.at !== "number" || !Number.isSafeInteger(body.at)) return Response.json({ error: "bad refund" }, { status: 400 });
+      return Response.json(await this.refund(body.at));
+    }
+    const rules = body.rules;
     if (!isWindowRules(rules)) return Response.json({ error: "bad rules" }, { status: 400 });
     return Response.json(await this.hit(rules));
   }
@@ -138,6 +166,15 @@ export class RateLimitCounter {
     await this.state.storage.put(REFUSING_KEY, true);
     await this.state.storage.setAlarm(now + longest * 1000 + 1000);
     return { ...out.result, firstRefusal: true };
+  }
+
+  /** Gives back the pass logged nearest `at` in every window (an answered voi.ci call, docs/voici-calls.md §6). */
+  async refund(at: number): Promise<{ refunded: number }> {
+    const logs = await this.state.storage.get<Logs>(LOGS_KEY);
+    if (!logs) return { refunded: 0 };
+    const out = refundWindows(logs, at);
+    if (out.refunded > 0) await this.state.storage.put(LOGS_KEY, out.logs);
+    return { refunded: out.refunded };
   }
 
   async alarm(): Promise<void> {

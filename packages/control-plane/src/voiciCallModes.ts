@@ -80,9 +80,9 @@ export async function handleVoiciCallChallenge(
 }
 
 /**
- * The anonymous branch of the request route, cheapest first: page and mode, a blocked browser key, the page's
- * anonymous budget, the request (shape, conv, SDP, work, signature, freshness), the challenge's MAC and window, and
- * spending it once. Answers the request, or a refusal.
+ * The anonymous branch of the request route, cheapest first: page and mode, a blocked browser key, the request
+ * (shape, conv, SDP, work, signature, freshness), the challenge's MAC and window, spending it once, and only then the
+ * page's anonymous budget. Answers the request, or a refusal.
  */
 export async function checkAnonymousCall(
   deps: {
@@ -101,14 +101,16 @@ export async function checkAnonymousCall(
   if (!deps.powSecret) return no(503, "unavailable");
   const conv = isObj(raw) && typeof raw.conv === "string" ? raw.conv : "";
   if (conv && (await deps.calls.isAnonBlocked(page.pageId, conv, now))) return no(403, "calls-off");
-  const wait = await deps.limitAnonPage(page.pageId);
-  if (wait !== null) return no(429, "rate-limited", { retryAfterSec: wait });
   const r = checkVoiciCallRequestAnon(raw, { pageId: page.pageId, acceptsCalls: true, callsFrom: "anyone", now });
   if (!r.ok) return no(r.code === "malformed" || r.code === "too-large" ? 400 : 403, r.code);
   const pow = checkVoiciCallPowChallenge(r.request.pow.challenge, { secret: deps.powSecret, pageId: page.pageId, now });
   if (pow !== "ok") return no(403, "bad-pow");
   const c = parseVoiciCallPow(r.request.pow.challenge)!;
   if (!(await deps.calls.spendPow(await deps.sha256Hex(new TextEncoder().encode(r.request.pow.challenge)), c.issuedAt + VOICI_CALL_POW_TTL_MS + 60_000))) return no(403, "bad-pow");
+  // The page's anonymous budget is spent only after the work verified and was spent once, so a forged or replayed
+  // request cannot use it up.
+  const wait = await deps.limitAnonPage(page.pageId);
+  if (wait !== null) return no(429, "rate-limited", { retryAfterSec: wait });
   return { ok: true, request: r.request };
 }
 

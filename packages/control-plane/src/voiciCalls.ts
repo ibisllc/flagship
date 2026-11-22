@@ -119,7 +119,23 @@ export interface VoiciCallRoomInit {
   callerPub: string;
   callerTokenHash: string;
   ringingAt: number;
+  /**
+   * The ring budgets this call spent (docs/voici-calls.md §6), so the room can give them back when the call is
+   * answered and talked through: the caller pseudonym (`voici-call-caller`), the page (`voici-call-page`), the page's
+   * anonymous budget (`voici-call-anon-page`). Absent when nothing was spent (an answer to the owner's ring-back).
+   */
+  charged?: VoiciCallCharge;
 }
+
+export interface VoiciCallCharge {
+  at: number;
+  caller?: string;
+  page?: string;
+  anonPage?: string;
+}
+
+/** An answered call refunds its ring once it ran this long (owner-approved). */
+export const VOICI_CALL_REFUND_MIN_MS = 15_000;
 
 export interface VoiciCallRequestDeps {
   voici: VoiciStorage;
@@ -185,15 +201,26 @@ export async function handleVoiciCallRequest(deps: VoiciCallRequestDeps, bodyTex
   if (block?.op === "block" || banned) return voiciRefusal(403, "calls-off");
   const delegatePub = isObj(r.cred) && isObj(r.cred.delegation) ? r.cred.delegation.delegatePub : undefined;
   if (typeof delegatePub === "string" && (await deps.voici.isRevoked(delegatePub, r.from, now))) return voiciRefusal(403, "revoked");
-  for (const wait of [await deps.limitIp(), await deps.limitCaller(r.from), await deps.limitPage(page.pageId)]) {
-    if (wait !== null) return voiciRefusal(429, "rate-limited", { retryAfterSec: wait });
-  }
+  const ipWait = await deps.limitIp();
+  if (ipWait !== null) return voiciRefusal(429, "rate-limited", { retryAfterSec: ipWait });
   const checked = checkVoiciCallRequest(r, { pageId: page.pageId, acceptsCalls: true, origin: deps.origin, caKeys: deps.caKeys(now), now });
   if (!checked.ok) return voiciRefusal(checked.code === "malformed" || checked.code === "too-large" ? 400 : 403, checked.code);
+  // Budgets are spent only by a request that verified, so a forged one cannot use up a page's or a caller's rings.
+  // Answering the owner's ring-back (the visitor's tab places an ordinary call into the ringing conversation) is free:
+  // the owner asked for this call.
+  const ringBackAnswer = !!(await deps.calls.getRing(page.pageId, r.conv, now));
+  if (!ringBackAnswer) {
+    const callerWait = await deps.limitCaller(r.from);
+    if (callerWait !== null) return voiciRefusal(429, "rate-limited", { retryAfterSec: callerWait });
+  }
   if (!(await voiciCallerAllowed(deps, page, calls.from, r.conv, r.from, now))) return voiciRefusal(403, "not-allowed");
   // "Callback accounts only": calling is consent to a ring-back, so the conversation's channel must be attached.
   if (calls.from === "callback" && !(await voiciHasRingBack(deps.calls, page.pageId, r.conv, now))) return voiciRefusal(403, "ring-back-required");
-  if (!(await deps.calls.countRing(page.pageId, callDay(now), VOICI_CALL_PAGE_DAILY_MAX))) return voiciRefusal(429, "rate-limited", { retryAfterSec: 3600 });
+  if (!ringBackAnswer) {
+    const pageWait = await deps.limitPage(page.pageId);
+    if (pageWait !== null) return voiciRefusal(429, "rate-limited", { retryAfterSec: pageWait });
+    if (!(await deps.calls.countRing(page.pageId, callDay(now), VOICI_CALL_PAGE_DAILY_MAX))) return voiciRefusal(429, "rate-limited", { retryAfterSec: 3600 });
+  }
   if (!(await deps.calls.claimLiveCall(page.username, r.callId, now, now + VOICI_CALL_RING_MS + 15_000))) {
     await recordVoiciMissedCall(deps.calls, { pageId: page.pageId, inboxPub: calls.inboxPub, request: r, ringingAt: now, endedAt: now, reason: "busy" });
     return voiciRefusal(409, "busy");
@@ -209,6 +236,7 @@ export async function handleVoiciCallRequest(deps: VoiciCallRequestDeps, bodyTex
     callerPub: checked.delegation.delegatePub,
     callerTokenHash: await deps.sha256Hex(new TextEncoder().encode(token)),
     ringingAt: now,
+    ...(ringBackAnswer ? {} : { charged: { at: now, caller: r.from, page: page.pageId } }),
   };
   if (!(await deps.openRoom(init))) {
     await deps.calls.releaseLiveCall(page.username, r.callId);
@@ -251,6 +279,7 @@ async function handleAnonymousCallRequest(deps: VoiciCallRequestDeps, raw: Recor
     callerPub: r.browserPub,
     callerTokenHash: await deps.sha256Hex(new TextEncoder().encode(token)),
     ringingAt: now,
+    charged: { at: now, anonPage: page.pageId },
   };
   if (!(await deps.openRoom(init))) {
     await deps.calls.releaseLiveCall(page.username, r.callId);
@@ -331,7 +360,8 @@ export type VoiciCallRoomAction =
   | { kind: "alarm"; at: number }
   | { kind: "missed"; reason: VoiciMissedCallReason; endedAt: number }
   | { kind: "release" }
-  | { kind: "extend"; until: number };
+  | { kind: "extend"; until: number }
+  | { kind: "refund"; charged: VoiciCallCharge };
 
 export interface VoiciCallRoomState {
   init: VoiciCallRoomInit;
@@ -464,6 +494,10 @@ export class VoiciCallRoomCore {
     ];
     if (wasRinging && (reason === "no-answer" || reason === "cancel" || reason === "decline" || reason === "busy")) {
       out.push({ kind: "missed", reason: reason as VoiciMissedCallReason, endedAt: now });
+    }
+    // An answered call that was talked through gives its ring back (the room checks a block or ban, and refunds once).
+    if (!wasRinging && s.init.charged && s.answeredAt !== null && (reason === "hangup" || reason === "limit") && now - s.answeredAt >= VOICI_CALL_REFUND_MIN_MS) {
+      out.push({ kind: "refund", charged: s.init.charged });
     }
     out.push({ kind: "release" }, { kind: "close-all" });
     return out;

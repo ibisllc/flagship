@@ -137,8 +137,9 @@ for the browser, hybrid for strict owners), which only need to hold while the ca
 ## 6. `.com`
 
 - `POST /api/voici/calls` (the request; checks cheapest first, as the mailbox send: size → shape → page exists and
-  `acceptsCalls` → caller not blocked / banned / revoked → limits → signatures → caller allowed by the owner's
-  setting → owner not in a call). Answers `{callId, room}` or a refusal code (`calls-off`, `not-allowed`, `busy`,
+  `acceptsCalls` → caller not blocked / banned / revoked → per-address limit → signatures → caller budget →
+  caller allowed by the owner's setting → page budget and daily cap → owner not in a call; anonymous: per-address
+  limit → request and proof of work verified and spent → the page's anonymous budget). Answers `{callId, room}` or a refusal code (`calls-off`, `not-allowed`, `busy`,
   `rate-limited` + `retryAfterSec`, the send codes).
 - `CallRoom` Durable Object per call: WebSockets to the browser and to each ringing device, relays signed messages,
   compare-and-sets the first answer, mints the receipt, ends the room on hang-up, timeout (45 s ring, 60 min call:
@@ -153,6 +154,15 @@ for the browser, hybrid for strict owners), which only need to hold while the ca
 - Limits (`rateLimit.ts` buckets): rings per pseudonym 3 an hour and 10 a day; rings per page 20 an hour; one live
   call per account; new accounts follow the Messages slow start. D1: a `voici_calls` counter row per (page, day) for
   limits only; no call log.
+- Budget fairness (owner-approved 2026-11-21): the caller, page and anonymous-page budgets are spent only by a
+  request that verified (signatures, or the proof of work), so a forged request costs only the per-address budget.
+  Answering the owner's ring-back is free: a signed call into a conversation with a live owner ring (`voici_rings`,
+  45 s) spends no caller, page or daily budget. An answered call that ends `hangup` or `limit` at least 15 s after
+  the answer gives its ring back to `voici-call-caller` (both windows), `voici-call-page` and, anonymous,
+  `voici-call-anon-page`, unless the caller is blocked or banned by then: the room stores `refunded` first, then
+  asks each counter to drop the pass logged nearest the ring time (`RateLimitCounter` op `refund`); a failed refund
+  is no refund. The per-address budget and the D1 daily cap are never refunded. An owner's call-allow does not
+  refund (the room that charged is gone by then).
 
 ## 7. The visitor's side (voi.ci, `packages/flagship-web`)
 
