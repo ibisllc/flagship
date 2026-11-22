@@ -1851,3 +1851,16 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
 - 2026-11-21 late: merged tree (fad75a2d8) compiles: Android :app + :wear compileDebugKotlin clean, iOS FlagshipApp simulator build SUCCEEDED. Lock released, build output deleted, 7.6 GB free. Next: owner phone test → merge android-calls → Android 14 + iOS 1.3 (10) builds.
 - 2026-11-22: owner approved: Xcode DerivedData cleared; NDK 27.0.12077973 installed in ~/Library/Android/sdk/ndk (for the native-symbols check on 0.4/android-calls; AGP 8.9.1). Disk 4.6 GB free after. Owner asked for context on the avatar size (keep 256-512 shrink, recommended) and bank transfer (recommended: launch off, sandbox test after).
 - 2026-11-22 owner decisions: avatar keeps the shrink (512 → 410/328/262, never under 256) so every photo fits 150 KB; bank transfer for Business batches launches OFF (STRIPE_BANK_TRANSFER unset), sandbox test and switch-on after launch.
+- 2026-11-22: android-calls rebased onto release/0.4 (b31809b3b, local, not yet pushed), release APK built (signed, signing files copied in and removed) and installed over build 13 on the S948U1 (account kept, notifications + full-screen granted). Owner phone test starting; logcat captured in the session scratchpad.
+- 2026-11-22 phone test (S948U1, android-calls + c2bb65ad6): T1 killed app + setting on, answered from the lock screen:
+  PASS. T2 killed app + setting off: CRASH after unlock (VoiciCallActivity.onStart → showIncoming(quiet) posted a
+  CallStyle notification without a full-screen intent and no FGS: Android 14+ throws). Fixed `c2bb65ad6` on
+  0.4/android-calls (FSI kept on the quiet channel, notify wrapped), retest PASS. iPhone 14 Pro: Debug build of
+  release/0.4 (246338982, production) installed over 1.3 (9) for phone-to-phone calls (T4).
+- Owner UX bug: Android Settings "Plan / Subscription" opened the marketplace-era Tier & usage screen (couldn't load
+  without a server, no back). Merged `0.4/settings-plan` (a97994004, shell **v250**): the old screen and row removed on
+  all three clients; Plan has a Data usage section from `.com` (works with no server); separate-lists warning moved to
+  Plan. Gates: tsc, i18n, parity, web 3,818, Android unit + assembleDebug, iOS simulator build (main session). Open
+  owner question: should call traffic count toward the data allowance (today only phone→caller bytes are metered via
+  the phone tunnel, per code reading)? Follow-up: Android NameDibsScreen has no back button.
+- Disk: removed 5 merged clean worktrees (ios-calls, no-experimental, photo-picker, posts-cap, server-refine); 4.7 GB.
