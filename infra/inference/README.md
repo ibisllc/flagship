@@ -35,6 +35,19 @@ box has already passed through its model redactor. Never the box's address,
 the owner's account name, a `user` field or any box header. Swapping the
 upstream is a shim config change; boxes and apps never notice.
 
+`.com` uses the same door for its own model work (the adapter review and the
+weekly adapter insight, `apps/com/src/serviceInference.ts`): no provider key
+on `.com`. It mints itself a 10-minute **service pass** with the shared
+`FLAGSHIP_INFERENCE_TOKEN_SECRET` (claims `service: "adapter-review"` or
+`"adapter-insights"`, account `service:<name>`, which no username can be) and
+posts to `FLAGSHIP_INFERENCE_ENDPOINT`. The shim treats it like any pass; `.com`'s
+allowance and usage routes recognise it: the model is fixed per service
+(DeepSeek-V4-Flash, catalog id `medium`, even when the menus have it off), and
+usage goes on the service's own daily budget (`ai-service-day`, 5M weighted
+tokens) plus raw counts (`ai-service-input`/`-output`), never an account's free
+AI, `ai-tokens` or the promotion's all-accounts cap. The prompts carry only the
+public adapter (repo URL, manifest, patch); owners' notes never reach them.
+
 ## Launch backend: a hosted model API
 
 No GPUs to run, pay per token. Choose a provider whose API:

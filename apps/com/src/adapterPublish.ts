@@ -17,9 +17,10 @@ import { renderDirectory } from "./adapterDirectory.js";
 import { RequestD1, type D1Database } from "@flagship/storage";
 import { splitAdapterFile } from "@flagship/protocol";
 import { aiReview, utcDay, type AdapterBucketLike } from "./adapterIndex.js";
+import { serviceInferenceFrom, type ServiceInferenceEnv } from "./serviceInference.js";
 import { RETIRE_AT_SOURCES } from "./adapterVetting.js";
 
-export interface AdapterPublishEnv {
+export interface AdapterPublishEnv extends ServiceInferenceEnv {
   DB?: D1Database;
   ADAPTERS_BUCKET?: AdapterBucketLike;
   /** Fine-grained PAT, contents:write on ADAPTERS_REPO only. Unset ⇒ no publish. */
@@ -27,12 +28,12 @@ export interface AdapterPublishEnv {
   /** "owner/name" of the public index repo. Unset ⇒ no publish. */
   ADAPTERS_REPO?: string;
   /**
+   * FLAGSHIP_INFERENCE_ENDPOINT + FLAGSHIP_INFERENCE_TOKEN_SECRET (ServiceInferenceEnv).
    * Unset: adapters are published after the rule checks alone, and owners'
    * reports are only stored. Once set, each publish also reviews what went
    * out without it and every adapter reported since its last review, and
    * withdraws what fails.
    */
-  ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
 }
 
 /**
@@ -41,7 +42,7 @@ export interface AdapterPublishEnv {
  * benign. Nothing is published until the signed, reviewed index of
  * docs/security-hardening (SEC-ADAPTER-002) exists. Submissions still queue,
  * quarantined, so nothing is lost. This is a code switch on purpose: setting
- * `ADAPTER_REVIEW_ANTHROPIC_KEY` must never re-open it. Tests flip it.
+ * configuring the review model must never re-open it. Tests flip it.
  */
 export const communityPublish = { enabled: false };
 
@@ -149,7 +150,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
 
   const all = async <T>(sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).all<T>()).results;
 
-  const reviewKey = env.ADAPTER_REVIEW_ANTHROPIC_KEY;
+  const reviewKey = serviceInferenceFrom(env);
   const [fresh, bumped, listChanges, unreviewed, maxComplaint] = await Promise.all([
     all<Row>(
       `SELECT * FROM repo_adapters WHERE published_day IS NULL ORDER BY created_day, file_sha256 LIMIT ${MAX_NEW_PER_PUBLISH}`,

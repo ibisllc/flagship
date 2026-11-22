@@ -378,8 +378,6 @@ export interface RouteEnv extends OhttpEnv {
   BUILDER_RELAY?: BuildRelayNamespaceLike;
   /** R2 bucket holding queued repo adapters until they are published (adapterIndex.ts). */
   ADAPTERS_BUCKET?: AdapterBucketLike;
-  /** Optional Worker secret: enables the AI review of submitted adapters. */
-  ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
   /** Worker secret, 64 hex: the adapter attestation key boxes pin (adapterVetting.ts). */
   ADAPTER_ATTESTATION_SIGNING_KEY?: string;
   /** Worker secret: keys the per-adapter hash of a complaint's network. */

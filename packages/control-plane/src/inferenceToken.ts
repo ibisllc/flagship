@@ -38,6 +38,20 @@ export interface InferenceTokenClaims {
   dailyOutputTokenCap: number;
   /** The box FQDN the token was scoped to (audit / optional pin). */
   serverFqdn?: string;
+  /**
+   * Set only on a pass `.com` mints for its own calls (inferenceService.ts):
+   * `username` is then `service:<name>`, which no account can hold, and the
+   * calls are metered on the service's own counters, never an account's.
+   */
+  service?: InferenceService;
+}
+
+/** `.com`'s own callers of Flagship Inference. */
+export const INFERENCE_SERVICES = ["adapter-review", "adapter-insights"] as const;
+export type InferenceService = (typeof INFERENCE_SERVICES)[number];
+
+export function isInferenceService(v: unknown): v is InferenceService {
+  return (INFERENCE_SERVICES as readonly unknown[]).includes(v);
 }
 
 const PREFIX = "v1";

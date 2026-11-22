@@ -275,6 +275,8 @@ import {
   freeAiConfigFrom,
   inferenceLineup,
   recordFreeAiUsage,
+  recordServiceUsage,
+  isInferenceService,
   chargeMultiplier,
   type FreeAiDeps,
   parseBlessedInferenceEndpoint,
@@ -4463,8 +4465,29 @@ export async function tryControlPlane(
         tiers: storage.tiers,
         verifyToken: async (token) => {
           const v = await verifyScopedInferenceToken(token, inferenceSecret);
-          if (v.ok) reportedFor = v.claims.username;
-          return v.ok ? { ok: true, username: v.claims.username } : { ok: false };
+          if (!v.ok) return { ok: false };
+          // `.com`'s own calls (adapter review): the service's counters, never an account's.
+          if (v.claims.service !== undefined) {
+            return isInferenceService(v.claims.service)
+              ? { ok: true, username: v.claims.username, service: v.claims.service }
+              : { ok: false };
+          }
+          reportedFor = v.claims.username;
+          return { ok: true, username: v.claims.username };
+        },
+        recordServiceUsage: async (service, inputTokens, outputTokens) => {
+          const inferenceSettings = await loadInferenceSettings(env);
+          await recordServiceUsage(
+            {
+              meter,
+              tiers: storage.tiers,
+              config: freeAiConfigFrom(env, inferenceSettings),
+              lineup: inferenceLineup(inferenceSettings),
+            },
+            service,
+            inputTokens,
+            outputTokens,
+          );
         },
       },
       usageBody,

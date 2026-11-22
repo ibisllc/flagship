@@ -74,12 +74,9 @@ over once "let's start 0.5" is said.
   without a new build (not verified).
 - **Bank transfer for Business batches:** a paid `send_invoice` invoice doesn't produce vouchers yet
   (`docs/runbooks/payments-setup.md`).
-- **Adapter review through Flagship Inference, any vendor** (owner, 2026-11-19). `apps/com/src/adapterReview.ts`
-  calls only Anthropic's API (`ADAPTER_REVIEW_ANTHROPIC_KEY`). Route it through Flagship Inference (the shim and its
-  OpenAI-compatible upstreams: DeepInfra, OpenRouter fallback, any vendor later) to save cost, with no
-  provider-specific secret. The same goes for any other server-side AI review. Update release.sh's secret list.
 - **Community adapters, turned on together** (2026-11-19). Three pieces must arrive together, or none does anything:
-  - the review model, through Flagship Inference as above;
+  - the review model: built in 0.4 on Flagship Inference (`apps/com/src/serviceInference.ts`), needs only the
+    `FLAGSHIP_INFERENCE_*` settings free AI already uses;
   - `ADAPTER_ATTESTATION_SIGNING_KEY` (`openssl rand -hex 32`, offline copy on the FlagshipKeys volume), with its
     public half added to `release/adapter-vetting-keys.json` in an endorsed box release;
   - `ADAPTER_COMPLAINT_SALT` (`openssl rand -hex 32`).

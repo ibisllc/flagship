@@ -640,7 +640,8 @@ check is off and recovery takes the passphrase-only path) and `FLAGSHIP_TOTP_KEK
 extra is to stay on. Set both on the gym Worker too.
 Community adapters (SEC-ADAPTER-002, `docs/repo-adapters.md`): `ADAPTER_ATTESTATION_SIGNING_KEY` (an Ed25519
 seed, `openssl rand -hex 32`; keep an offline copy), `ADAPTER_COMPLAINT_SALT` (`openssl rand -hex 32`; without
-it complaints never withdraw anything) and `ADAPTER_REVIEW_ANTHROPIC_KEY` (without it nothing is vetted). Boxes
+it complaints never withdraw anything) and Flagship Inference on `.com` (`FLAGSHIP_INFERENCE_ENDPOINT` + `FLAGSHIP_INFERENCE_TOKEN_SECRET`, already set for
+free AI; without them nothing is vetted). Boxes
 turn adapter lookup on only once the key's public half is in `release/adapter-vetting-keys.json`
 (`{pubHex, notBefore, notAfter}`) in an endorsed box release; D1 migration 0113 goes before the `.com` deploy.
 voi.ci pages + Messages, abuse side (`docs/voici-and-messages.md` §9.3, §9.5, §9.6; chunk B2): D1 migration

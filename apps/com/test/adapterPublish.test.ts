@@ -16,6 +16,7 @@ import {
 } from "../src/adapterPublish.js";
 import { scheduled } from "../src/scheduled.js";
 import { runAdapterInsights } from "../src/adapterInsights.js";
+import { INFERENCE_ENV, INFERENCE_URL, chatAnswer } from "./fakeInference.js";
 
 const REPO_NAME = "ibisllc/flagship-adapters";
 const API = `https://api.github.com/repos/${REPO_NAME}`;
@@ -171,7 +172,7 @@ afterEach(() => {
 describe("community adapters are quarantined by default (SEC-ADAPTER-001)", () => {
   it("publishes nothing, whatever the token, repo or review key, and never touches GitHub", async () => {
     communityPublish.enabled = false;
-    const r = await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, NOW);
+    const r = await runAdapterPublish({ ...env, ...INFERENCE_ENV }, NOW);
     expect(r).toEqual({ published: false, reason: "quarantined" });
     expect(gh.calls).toEqual([]);
   });
@@ -454,13 +455,11 @@ describe("review once a key exists", () => {
         const body = gh.files()[req.url.slice(`https://raw.githubusercontent.com/${REPO_NAME}/main/`.length)];
         return body == null ? new Response("404", { status: 404 }) : new Response(body);
       }
-      if (req.url === "https://api.anthropic.com/v1/messages") {
+      if (req.url === INFERENCE_URL) {
         const text = JSON.stringify(await req.json());
         reviewed.push(text);
         const ok = !text.includes("evil");
-        return new Response(
-          JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ ok, reason: "x" }) }] }),
-        );
+        return chatAnswer({ ok, reason: "x" });
       }
       return new Response("unexpected", { status: 500 });
     }) as typeof globalThis.fetch;
@@ -494,7 +493,7 @@ describe("review once a key exists", () => {
     expect(JSON.parse(gh.files()["directory.json"]!).projects[0].adapters).toHaveLength(3);
 
     const later = new Date(Date.UTC(2026, 9, 13, 0, 0, 1));
-    const r = await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, later);
+    const r = await runAdapterPublish({ ...env, ...INFERENCE_ENV }, later);
     expect(r).toMatchObject({ published: true, added: 0, withdrawn: 1 });
     expect(reviewed).toHaveLength(3);
     const files = gh.files();
@@ -512,7 +511,7 @@ describe("review once a key exists", () => {
 
     // Reviewed once: the next run has nothing to do.
     reviewed.length = 0;
-    expect(await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, later)).toEqual({
+    expect(await runAdapterPublish({ ...env, ...INFERENCE_ENV }, later)).toEqual({
       published: false,
       reason: "nothing to publish",
     });
@@ -522,14 +521,14 @@ describe("review once a key exists", () => {
   it("withdrawing a repo's only adapter removes its index too", async () => {
     await queueFile(1, adapterFile("evil"));
     await runAdapterPublish(env, NOW);
-    await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, new Date(Date.UTC(2026, 9, 13, 0, 0, 1)));
+    await runAdapterPublish({ ...env, ...INFERENCE_ENV }, new Date(Date.UTC(2026, 9, 13, 0, 0, 1)));
     expect(Object.keys(gh.files()).some((p) => p.startsWith("adapters/github.com/me/notes/"))).toBe(false);
   });
 
   it("with a key, a queued adapter that fails review is dropped before it is ever published", async () => {
     await queueFile(1, adapterFile("evil"));
     await queueFile(2, adapterFile("fine"));
-    const r = await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, NOW);
+    const r = await runAdapterPublish({ ...env, ...INFERENCE_ENV }, NOW);
     expect(r).toMatchObject({ published: true, added: 1, withdrawn: 0 });
     expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeUndefined();
     expect(await all("SELECT file_sha256, review FROM repo_adapters")).toEqual([{ file_sha256: sha(2), review: "rules+ai" }]);
@@ -544,7 +543,7 @@ describe("complaints, retirement and insights", () => {
       ...MANIFEST,
       adapter: { version: 1, source: { repo: NOTES, base: BASE_A }, add: { "src/flagship.js": ["export {};", `// ${marker}`, ""] } },
     });
-  const KEY = { ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" };
+  const KEY = { ...INFERENCE_ENV };
   let prompts: string[];
   let answer: (prompt: string) => Response;
 
@@ -559,7 +558,7 @@ describe("complaints, retirement and insights", () => {
         const body = gh.files()[req.url.slice(rawPrefix.length)];
         return body == null ? new Response("404", { status: 404 }) : new Response(body);
       }
-      if (req.url === "https://api.anthropic.com/v1/messages") {
+      if (req.url === INFERENCE_URL) {
         const text = JSON.stringify(await req.json());
         prompts.push(text);
         return answer(text);
@@ -569,12 +568,7 @@ describe("complaints, retirement and insights", () => {
   });
 
   function verdictFor(ok: boolean): Response {
-    return new Response(
-      JSON.stringify({
-        stop_reason: "end_turn",
-        content: [{ type: "text", text: JSON.stringify({ ok, category: ok ? "none" : "sends data out of the server" }) }],
-      }),
-    );
+    return chatAnswer({ ok, category: ok ? "none" : "sends data out of the server" });
   }
 
   async function publishFiles(...markers: string[]) {
@@ -779,15 +773,15 @@ describe("complaints, retirement and insights", () => {
       await retireOne(2, "another", "2026-10-11", "review");
       await complaint(1, "build");
       await complaint(1, "report", "fails at boot, my email is me@example.com");
-      answer = () =>
-        new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(insightAnswer) }] }));
+      answer = () => chatAnswer(insightAnswer);
       const r = await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket, ...KEY }, NOW);
       expect(r).toMatchObject({ stored: true, retired: 2 });
       expect(prompts).toHaveLength(1);
       const sent = JSON.parse(prompts[0]!);
-      expect(sent.model).toBe("claude-haiku-5-5");
-      expect(sent.output_config.format.schema.required).toEqual(["patterns", "harness_suggestions"]);
-      const content = sent.messages[0].content as string;
+      expect(sent.model).toBe("medium");
+      expect(sent.response_format).toEqual({ type: "json_object" });
+      expect(sent.messages[0].content).toContain('"required":["patterns","harness_suggestions"]');
+      const content = sent.messages[1].content as string;
       expect(content).not.toContain("<user_reports>");
       expect(content).not.toContain("me@example.com");
       expect(content).toContain("Retired because of: problem reports");
@@ -806,8 +800,7 @@ describe("complaints, retirement and insights", () => {
       answer = () => new Response("down", { status: 500 });
       expect(await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket, ...KEY }, NOW)).toMatchObject({ stored: false });
       await retireOne(2, "two", "2026-10-15");
-      answer = () =>
-        new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(insightAnswer) }] }));
+      answer = () => chatAnswer(insightAnswer);
       expect(await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket, ...KEY }, new Date(Date.UTC(2026, 9, 19)))).toMatchObject({
         stored: true,
         retired: 2,

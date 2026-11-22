@@ -25,6 +25,7 @@ import {
   sourceNetwork,
 } from "../src/adapterVetting.js";
 import { REVIEW_MODEL, REVIEW_POLICY_VERSION } from "../src/adapterReview.js";
+import { INFERENCE_ENV, INFERENCE_URL, chatAnswer } from "./fakeInference.js";
 
 const ORIGIN = "https://flagshipserver.com";
 const REPO = "https://github.com/me/notes";
@@ -66,23 +67,20 @@ class MemoryBucket implements AdapterBucketLike {
 
 let raw: Map<string, string>;
 let reviews: string[];
-let anthropic: () => Response;
+let inference: () => Response;
 const realFetch = globalThis.fetch;
 const verdict = (ok: boolean, category = ok ? "none" : "sends data out of the server") =>
-  new Response(
-    JSON.stringify({ model: "claude-haiku-5-5-20261001", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ ok, category }) }] }),
-    { status: 200 },
-  );
+  chatAnswer({ ok, category }, { model: "deepseek-ai/DeepSeek-V4-Flash" });
 
 beforeEach(() => {
   raw = new Map([[`${RAW}LICENSE`, MIT], ...Object.entries(ORIGINAL).map(([p, c]) => [`${RAW}${p}`, c] as [string, string])]);
   reviews = [];
-  anthropic = () => verdict(true);
+  inference = () => verdict(true);
   globalThis.fetch = vi.fn(async (input: Request | string | URL, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : input.toString();
-    if (url === "https://api.anthropic.com/v1/messages") {
-      reviews.push(JSON.parse(init!.body as string).messages[0].content as string);
-      return anthropic();
+    if (url === INFERENCE_URL) {
+      reviews.push(JSON.parse(init!.body as string).messages[1].content as string);
+      return inference();
     }
     const body = raw.get(url);
     return body == null ? new Response("404", { status: 404 }) : new Response(body, { status: 200 });
@@ -109,7 +107,7 @@ function makeFx(over: Partial<AdapterIndexEnv> = {}): Fx {
       DB: db,
       ADAPTERS_BUCKET: bucket,
       FLAGSHIP_ADMIN_SECRET: ADMIN,
-      ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test",
+      ...INFERENCE_ENV,
       ADAPTER_ATTESTATION_SIGNING_KEY: SEED,
       ADAPTER_COMPLAINT_SALT: "salt",
       ...over,
@@ -166,7 +164,7 @@ describe("vetting a submission", () => {
       validatorVersion: "adapter-rules/1",
       policyVersion: REVIEW_POLICY_VERSION,
       reviewerModel: REVIEW_MODEL,
-      modelVersion: "claude-haiku-5-5-20261001",
+      modelVersion: "deepseek-ai/DeepSeek-V4-Flash",
       outcome: "pass",
     });
     expect(a.attestation.expiresAt).toBeGreaterThan(a.attestation.issuedAt);
@@ -194,16 +192,16 @@ describe("vetting a submission", () => {
   });
 
   it("a failed or unavailable review attests nothing", async () => {
-    anthropic = () => verdict(false);
+    inference = () => verdict(false);
     expect((await ask()).reasons?.map((r) => r.code)).toEqual(["review"]);
-    anthropic = () => new Response("overloaded", { status: 529 });
+    inference = () => new Response("busy", { status: 503 });
     expect((await ask()).reasons?.map((r) => r.code)).toEqual(["review-unavailable"]);
     expect(await attestations()).toEqual([]);
     expect(await fileStatus(await sha256(adapterFile()))).toBe(404);
   });
 
   it("neither key alone vets anything", async () => {
-    for (const over of [{ ADAPTER_ATTESTATION_SIGNING_KEY: undefined }, { ADAPTER_REVIEW_ANTHROPIC_KEY: undefined }]) {
+    for (const over of [{ ADAPTER_ATTESTATION_SIGNING_KEY: undefined }, { FLAGSHIP_INFERENCE_TOKEN_SECRET: undefined }, { FLAGSHIP_INFERENCE_ENDPOINT: undefined }]) {
       const f = makeFx(over);
       try {
         expect((await ask(adapterFile(), f)).status).toBe("kept");
@@ -315,7 +313,7 @@ describe("withdrawal", () => {
 
 describe("the daily vetting run", () => {
   it("vets what was kept before there was a key, checks first, then signs the index", async () => {
-    const noKey = makeFx({ ADAPTER_REVIEW_ANTHROPIC_KEY: undefined });
+    const noKey = makeFx({ FLAGSHIP_INFERENCE_ENDPOINT: undefined });
     try {
       const file = adapterFile();
       await ask(file, noKey);
@@ -330,7 +328,7 @@ describe("the daily vetting run", () => {
         .bind(brokenSha, REPO, BASE, `pending/${brokenSha}.json`)
         .run();
       expect(reviews).toEqual([]);
-      const r = await runAdapterVetting({ ...noKey.env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, new Date());
+      const r = await runAdapterVetting({ ...noKey.env, ...INFERENCE_ENV }, new Date());
       expect(r).toMatchObject({ vetted: 1, failed: 1, index: { published: true, sequence: 1 } });
       expect(reviews).toEqual([`<adaptation>\n${file}\n</adaptation>`]);
       expect((await attestations(noKey)).map((a) => a.adapter_sha256)).toEqual([await sha256(file)]);
@@ -344,7 +342,7 @@ describe("the daily vetting run", () => {
     expect(await runAdapterVetting({ ...fx.env, ADAPTER_ATTESTATION_SIGNING_KEY: undefined }, new Date())).toBeNull();
     // Due for renewal: the pass ends inside the renewal window.
     await fx.db.prepare("UPDATE adapter_attestations SET expires_at = ?").bind(Date.now() + 86_400_000).run();
-    anthropic = () => verdict(false);
+    inference = () => verdict(false);
     const r = await runAdapterVetting(fx.env, new Date());
     expect(r).toMatchObject({ revoked: 1 });
     expect((await attestations()).map((a) => [a.outcome, a.reason])).toEqual([["pass", null], ["revoked", "review"]]);

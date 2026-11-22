@@ -42,6 +42,7 @@ import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterVetting } from "./adapterVetting.js";
 import { runNamesCron, runVoiciNamesCron } from "./voiciNamesCron.js";
 import { runAdapterInsights } from "./adapterInsights.js";
+import type { ServiceInferenceEnv } from "./serviceInference.js";
 import { runRelayDirectoryCron, type RelayDirectoryEnv } from "./relayDirectory.js";
 import { cronPlan, SUGGESTION_ATTEMPTS_PER_TICK, type CronJobId, type CronPlan } from "./cronPlan.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
@@ -55,7 +56,7 @@ import { pruneUpdateReceipts } from "./updateReceipts.js";
 import { runDirectNamesCron, type DirectNamesEnv } from "./directNames.js";
 import type { VoiciBucket } from "@flagship/control-plane";
 
-export interface ScheduledEnv extends IssuanceEnv, OhttpEnv, DirectNamesEnv {
+export interface ScheduledEnv extends IssuanceEnv, OhttpEnv, DirectNamesEnv, ServiceInferenceEnv {
   CONTROL_APEX?: string;
   DB?: D1Database;
   /** .services :8443 base (wrangler.toml) — custom-domain verifier
@@ -107,8 +108,6 @@ export interface ScheduledEnv extends IssuanceEnv, OhttpEnv, DirectNamesEnv {
   ADAPTERS_BUCKET?: AdapterBucketLike;
   ADAPTERS_GITHUB_TOKEN?: string;
   ADAPTERS_REPO?: string;
-  /** Optional: AI review of adapters, and the weekly private insight on retired ones. */
-  ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
   /** The adapter attestation key (adapterVetting.ts); unset, nothing is vetted or indexed. */
   ADAPTER_ATTESTATION_SIGNING_KEY?: string;
   ADAPTER_COMPLAINT_SALT?: string;

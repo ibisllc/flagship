@@ -32,6 +32,7 @@ import {
   type LlmProvider,
 } from "@flagship/protocol";
 import type { InferenceEndpoint } from "./inferenceEndpoint.js";
+import type { InferenceService } from "./inferenceToken.js";
 import { meterCheck, meterRecord, type MeterVerdict } from "./meter.js";
 import type {
   DemoLlmLedgerStorage,
@@ -315,7 +316,15 @@ export interface LlmPromoUsageDeps {
    * identifies the user — no separate shared secret needed. The Worker
    * wires this to `verifyScopedInferenceToken(env secret)`.
    */
-  verifyToken: (token: string) => Promise<{ ok: true; username: string } | { ok: false }>;
+  verifyToken: (
+    token: string,
+  ) => Promise<{ ok: true; username: string; service?: InferenceService } | { ok: false }>;
+  /**
+   * A report for one of `.com`'s own service passes (inferenceService.ts):
+   * counted on the service's counters only, never an account's ledger or
+   * allowance. Absent ⇒ such a report is accepted and not counted.
+   */
+  recordServiceUsage?: (service: InferenceService, inputTokens: number, outputTokens: number) => Promise<void>;
   now?: () => number;
   /** Present ⇒ the report's tokens (input + output) are also recorded as
    *  the metering core's "ai-tokens", and the reply carries the allowance
@@ -359,6 +368,10 @@ export async function handleLlmPromoUsage(
   }
   const v = await deps.verifyToken(body.token);
   if (!v.ok) return forbidden("invalid inference token");
+  if (v.service !== undefined) {
+    await deps.recordServiceUsage?.(v.service, Math.floor(body.inputTokens), Math.floor(body.outputTokens));
+    return ok({ ok: true });
+  }
   const now = (deps.now ?? (() => Date.now()))();
   const day = Math.floor(now / 86_400_000);
   await deps.llmPromo.recordMeteredUsage(

@@ -118,8 +118,11 @@ flagshipserver.com.
   - the repo doesn't carry its own `flagship.app.json`;
   - every edited file exists at `base` and every hunk fits it exactly, which
     shows the adapter only edits public code;
-  - an optional cheap-AI review passes, when `ADAPTER_REVIEW_ANTHROPIC_KEY`
-    is set.
+  - an optional cheap-AI review passes, when Flagship Inference is configured
+    on `.com` (`FLAGSHIP_INFERENCE_ENDPOINT` + `FLAGSHIP_INFERENCE_TOKEN_SECRET`): `.com`
+    calls the shim with its own short service pass (`apps/com/src/serviceInference.ts`),
+    on the catalog's DeepSeek-V4-Flash ("medium"), metered on the service's own daily
+    budget (`ai-service-day`, account `service:adapter-review`), never an account's.
 - Accepted adapters queue up. A daily job publishes the queue in one commit
   dated to the day, so commit times can't be matched to anyone's import.
 - A resubmitted adapter counts as a confirmation.

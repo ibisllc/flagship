@@ -212,8 +212,9 @@ bucket_name = "flagship-iso-temp"
 # ADAPTERS_REPO (src/adapterPublish.ts), keyed pending/<sha256>.json and deleted
 # once published. Also the vetting pipeline (src/adapterVetting.ts): attested
 # files at attested/<sha256>.json and the signed index chain at index/<n>.json,
-# served through the Worker. Vetting needs the secrets
-# ADAPTER_REVIEW_ANTHROPIC_KEY and ADAPTER_ATTESTATION_SIGNING_KEY (64-hex
+# served through the Worker. Vetting needs the model review (Flagship Inference
+# as .com's own service: FLAGSHIP_INFERENCE_ENDPOINT + FLAGSHIP_INFERENCE_TOKEN_SECRET,
+# src/serviceInference.ts) and the secret ADAPTER_ATTESTATION_SIGNING_KEY (64-hex
 # Ed25519 seed; its public half in release/adapter-vetting-keys.json), and
 # ADAPTER_COMPLAINT_SALT for complaints to count toward a withdrawal.
 # Private (no public dev-url). Provision once:
@@ -405,7 +406,7 @@ SITE_PUBLIC = "1"
 # Public repo the daily cron publishes the repo adapter index to (boxes read it
 # from raw.githubusercontent.com). Needs the ADAPTERS_GITHUB_TOKEN secret, a
 # fine-grained PAT with contents:write on this repo only; unset ⇒ the queue
-# just waits. Optional ADAPTER_REVIEW_ANTHROPIC_KEY adds an AI review.
+# just waits. With Flagship Inference configured, a model reviews them too.
 ADAPTERS_REPO = "ibisllc/flagship-adapters"
 # Fly's TLS-term endpoint (port 8443). The flagship.services apex itself
 # runs SNI passthrough on :443, so https://flagship.services/api/* will

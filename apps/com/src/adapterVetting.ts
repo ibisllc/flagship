@@ -34,6 +34,7 @@ import {
 import type { D1Database } from "@flagship/storage";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 import { REVIEW_MODEL, REVIEW_POLICY_VERSION, reviewAdapterFile, reviewPolicyDigest, type ReviewResult } from "./adapterReview.js";
+import { serviceInferenceFrom, type ServiceInferenceEnv } from "./serviceInference.js";
 
 export const ADAPTER_INDEX_PATH = "/api/adapters/index";
 export const ADAPTER_FILE_PATH = "/api/adapters/file/";
@@ -52,10 +53,13 @@ export const MAX_VETS_PER_RUN = 4;
 const RENEW_BEFORE_MS = 14 * DAY_MS;
 const INDEX_VERSIONS_KEPT = 30;
 
-export interface AdapterVettingEnv {
+/**
+ * With Flagship Inference configured (FLAGSHIP_INFERENCE_ENDPOINT and _TOKEN_SECRET), a model reviews
+ * each adapter as `.com`'s own service and a pass can be attested; without it there is no review.
+ */
+export interface AdapterVettingEnv extends ServiceInferenceEnv {
   DB?: D1Database;
   ADAPTERS_BUCKET?: AdapterBucketLike;
-  ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
   /** 64 hex: the Ed25519 seed of the online attestation key. Unset: nothing is attested. */
   ADAPTER_ATTESTATION_SIGNING_KEY?: string;
   /** HMAC key for complaint sources. Unset: complaints are kept but count toward no withdrawal. */
@@ -397,8 +401,8 @@ export async function runAdapterVetting(env: AdapterVettingEnv, now: Date): Prom
     if ((await distinctComplaintSources(db, r.sha, now)) >= RETIRE_AT_SOURCES && (await revokeAdapter(env, r.sha, "reports", t))) result.revoked++;
   }
 
-  const reviewKey = env.ADAPTER_REVIEW_ANTHROPIC_KEY;
-  if (reviewKey) {
+  const reviewer = serviceInferenceFrom(env);
+  if (reviewer) {
     const due = (
       await db
         .prepare(
@@ -427,7 +431,7 @@ export async function runAdapterVetting(env: AdapterVettingEnv, now: Date): Prom
         result.failed++;
         continue;
       }
-      const review = await reviewAdapterFile(reviewKey, text);
+      const review = await reviewAdapterFile(reviewer, text);
       if (review.kind === "fail") {
         result.failed++;
         if (await revokeAdapter(env, row.file_sha256, "review", t)) result.revoked++;

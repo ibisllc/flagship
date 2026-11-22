@@ -9,6 +9,7 @@ import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes
 import { D1Storage, type D1Database } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
 import { deriveIRK, signLlmPromoIssue, type LlmPromoIssueRequest } from "@flagship/protocol";
+import { mintServiceInferenceToken } from "@flagship/control-plane";
 
 const ORIGIN = "https://flagshipserver.com";
 const BOX = "home.alice.flagship.services";
@@ -103,6 +104,27 @@ describe("free AI routes", () => {
       await post(env, "/api/llm-promo/usage", { token, inputTokens: 100, outputTokens: 50, model: "high" });
       const status = await post(env, "/api/free-ai/status", signedBody());
       expect(status.body).toMatchObject({ credits: { week: { used: 1050 } } });
+    } finally {
+      close();
+    }
+  });
+
+  it("a service pass (.com's adapter review) is metered on its own budget, never an account's or the promo's", async () => {
+    const { env, close } = await setup({ AI_PROMO_ENDS_AT: "2020-01-01T00:00:00Z" });
+    try {
+      const token = await mintServiceInferenceToken("adapter-review", "route-secret");
+      const before = await post(env, "/api/free-ai/allowance", { token, model: "high" });
+      expect(before.body).toMatchObject({ ok: true, remainingTokens: 5_000_000, model: { id: "medium" } });
+      expect(before.body.code).toBeUndefined();
+      expect((await post(env, "/api/llm-promo/usage", { token, inputTokens: 100, outputTokens: 50, model: "medium" })).status).toBe(200);
+      const after = await post(env, "/api/free-ai/allowance", { token });
+      expect(after.body).toMatchObject({ remainingTokens: 5_000_000 - 300 });
+      const rows = await env.DB!.prepare("SELECT account, resource FROM meter_counters ORDER BY resource").bind().all<{
+        account: string;
+        resource: string;
+      }>();
+      expect(rows.results.every((r) => r.account === "service:adapter-review")).toBe(true);
+      expect(rows.results.map((r) => r.resource).sort()).toEqual(["ai-service-day", "ai-service-input", "ai-service-output"]);
     } finally {
       close();
     }

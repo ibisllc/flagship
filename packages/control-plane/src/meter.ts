@@ -21,6 +21,9 @@
 //       token counts. Their allowances come from `.com` config at call time
 //       (freeAiCredits.ts passes them as `deps.resources`); the entries here
 //       are the defaults.
+//   "ai-service-day" / "ai-service-input" / "ai-service-output": `.com`'s
+//       own model calls (adapter review, inferenceService.ts), counted on a
+//       "service:<name>" account, apart from every user's allowance.
 //
 // API (runtime-agnostic; Worker and tests alike):
 //   meterRecord(deps, account, resource, amount, need = 0) → MeterVerdict
@@ -75,7 +78,10 @@ export type MeterResource =
   | "ai-promo-starter"
   | "ai-promo-global"
   | "ai-promo-input"
-  | "ai-promo-output";
+  | "ai-promo-output"
+  | "ai-service-day"
+  | "ai-service-input"
+  | "ai-service-output";
 
 /** Every tier gets the same plan (the promotion isn't tiered). */
 export function sameForEveryTier(allowance: number, over: OverAllowancePolicy): Record<TierName, MeterPlan> {
@@ -117,6 +123,12 @@ export const METER_RESOURCES: Readonly<MeterCatalog<MeterResource, TierName>> = 
   "ai-promo-global": { unit: "tokens", period: "day", plans: sameForEveryTier(50_000_000, "stop") },
   "ai-promo-input": { unit: "tokens", period: "month", plans: sameForEveryTier(RECORD_ONLY, "allow") },
   "ai-promo-output": { unit: "tokens", period: "month", plans: sameForEveryTier(RECORD_ONLY, "allow") },
+  // `.com`'s own calls through Flagship Inference (inferenceService.ts), on a
+  // "service:<name>" account no username can take: weighted tokens per day,
+  // and the raw counts. Never an account's allowance, never the promo's cap.
+  "ai-service-day": { unit: "tokens", period: "day", plans: sameForEveryTier(5_000_000, "stop") },
+  "ai-service-input": { unit: "tokens", period: "month", plans: sameForEveryTier(RECORD_ONLY, "allow") },
+  "ai-service-output": { unit: "tokens", period: "month", plans: sameForEveryTier(RECORD_ONLY, "allow") },
 };
 
 export interface MeterDeps {

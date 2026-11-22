@@ -37,7 +37,8 @@ import type {
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
 import type { InferenceEndpoint } from "./inferenceEndpoint.js";
-import { mintScopedInferenceToken, verifyScopedInferenceToken } from "./inferenceToken.js";
+import { isInferenceService, mintScopedInferenceToken, verifyScopedInferenceToken } from "./inferenceToken.js";
+import { serviceAllowance } from "./inferenceService.js";
 import { resolveInferenceModel, type InferenceLineup } from "./inferenceSettings.js";
 import { meterCheck, meterRecord, sameForEveryTier, type MeterDeps, type MeterResource } from "./meter.js";
 import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
@@ -406,6 +407,11 @@ export async function handleFreeAiAllowance(
   if (!body || typeof body.token !== "string") return malformed("malformed body");
   const v = await verifyScopedInferenceToken(body.token, deps.tokenSecret, nowOf(deps));
   if (!v.ok) return forbidden("invalid inference token");
+  if (v.claims.service !== undefined) {
+    const service = v.claims.service;
+    if (!isInferenceService(service)) return forbidden("invalid inference token");
+    return serviceAllowance(deps, { ...v.claims, service });
+  }
   const credits = await freeAiCredits(deps, v.claims.username);
   const stop = ended(deps)
     ? { code: "free-ai-ended", message: FREE_AI_MESSAGES.ended }

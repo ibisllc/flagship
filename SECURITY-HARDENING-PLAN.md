@@ -283,7 +283,8 @@ model in §10.2. Revoke all live companion sessions when the fix deploys.
 - `/api/adapters/submit` intentionally accepts anonymous submissions.
 - Deterministic rules verify shape, source fit, license, paths, obvious secrets,
   and server addresses, but they cannot establish benign behavior.
-- `ADAPTER_REVIEW_ANTHROPIC_KEY` is optional. When absent, rule-passing adapters
+- The model review is optional (Flagship Inference as `.com`'s own service,
+  `FLAGSHIP_INFERENCE_ENDPOINT` + `FLAGSHIP_INFERENCE_TOKEN_SECRET`). When absent, rule-passing adapters
   are stored as `review = "rules"` and the publisher may publish them. A model
   review, even when configured, is probabilistic and prompt-injectable and is
   not an authorization authority.
@@ -1048,7 +1049,7 @@ the explicit delegated build/deploy case in §16.2.
 
 Immediate containment is to stop publishing and consuming anonymous adapters;
 leave submissions quarantined and display no automatic candidate. Do not make
-setting `ADAPTER_REVIEW_ANTHROPIC_KEY` the re-enable condition.
+configuring the review model the re-enable condition.
 
 The safer product model has three provenance classes:
 
@@ -1385,7 +1386,7 @@ mode after owner consent; a local marker alone is not an accepted mitigation.
   route, cross-creator update/migration path, adapter ingestion path, browser
   principal, boot trust input, runtime/toolchain installer, and mutable ref;
 - check production configuration rather than assuming optional gates are set
-  (`ADAPTER_REVIEW_ANTHROPIC_KEY`, TOTP KEK, enforcement flags, helper signing);
+  (the adapter review model, TOTP KEK, enforcement flags, helper signing);
   and
 - publish the route capability matrix and process/data-flow diagrams as review
   artifacts.
@@ -1714,8 +1715,8 @@ boundary.
   edited-file checks, plus checks for added secrets and server addresses. The
   ordinary submit response is asynchronous (`202`); `wait: true` returns the
   validation verdict. Passing those checks is not a human security review.
-- The AI review is optional (`ADAPTER_REVIEW_ANTHROPIC_KEY`) and cannot be
-  treated as an authorization decision. With no key, rule-passing adapters may
+- The AI review is optional (Flagship Inference as `.com`'s own service) and cannot be
+  treated as an authorization decision. Without it, rule-passing adapters may
   still be queued and included by the daily publisher in the public
   `ibisllc/flagship-adapters` repository. Boxes currently consume that shared
   catalog automatically.

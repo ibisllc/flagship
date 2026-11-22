@@ -44,6 +44,7 @@ import {
 } from "@flagship/protocol";
 import { checkRateLimit, clientIp, rateLimitedResponse, type RateLimitEnv } from "./rateLimit.js";
 import { reviewAdapterFile, type ReviewResult } from "./adapterReview.js";
+import { serviceInferenceFrom } from "./serviceInference.js";
 import {
   ADAPTER_FILE_PATH,
   ADAPTER_INDEX_PATH,
@@ -75,8 +76,6 @@ export interface AdapterIndexEnv extends RateLimitEnv, AdapterVettingEnv {
   DB?: D1Database;
   ADAPTERS_BUCKET?: AdapterBucketLike;
   FLAGSHIP_ADMIN_SECRET?: string;
-  /** Optional: when set, a cheap model reviews each adapter before it is kept, and a pass can be attested. */
-  ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
 }
 
 export interface WaitUntilLike {
@@ -301,8 +300,9 @@ export async function evaluateSubmission(
   // Every deterministic check passed; only now may a model read the file, and only the file.
   let review = "rules";
   let passed: ReviewResult | null = null;
-  if (env.ADAPTER_REVIEW_ANTHROPIC_KEY) {
-    const v = await reviewAdapterFile(env.ADAPTER_REVIEW_ANTHROPIC_KEY, s.file);
+  const reviewer = serviceInferenceFrom(env);
+  if (reviewer) {
+    const v = await reviewAdapterFile(reviewer, s.file);
     if (v.kind === "fail") return refuse("review", v.category);
     if (v.kind === "unavailable") return refuse("review-unavailable");
     review = "rules+ai";

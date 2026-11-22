@@ -1621,8 +1621,8 @@ published (not CI) appliance, the Android fixes landed after `eb08dcdc4`.
     complaints (3 retire an adapter), weekly insights at
     `/api/admin/adapter-insights`. Endorsed for boxes as `1584bfe8`.
     Remaining: a live import on a box and the first 00:00 UTC publish;
-    `ADAPTER_REVIEW_ANTHROPIC_KEY` before release (no key = no review, no
-    insights); per-IP limits on submit/complain (anyone can retire an
+    the review and weekly insights run on Flagship Inference as `.com`'s own
+    service (no provider key; unset inference = no review, no insights); per-IP limits on submit/complain (anyone can retire an
     adapter with 3 anonymous complaints). Git and IDE builds still live only
     in daemon memory, so a restart forgets them (journals survive).
 16. **Flagship Inference region choice:** both shim upstreams are US

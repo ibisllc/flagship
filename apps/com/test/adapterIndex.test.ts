@@ -17,6 +17,8 @@ import {
 } from "../src/adapterIndex.js";
 import { route, type RouteEnv } from "../src/route.js";
 import { memoryRateLimits } from "./rateLimitFakes.js";
+import { verifyScopedInferenceToken } from "@flagship/control-plane";
+import { INFERENCE_ENV, INFERENCE_SECRET, INFERENCE_URL, chatAnswer } from "./fakeInference.js";
 
 const ORIGIN = "https://flagshipserver.com";
 const REPO = "https://github.com/me/notes";
@@ -71,7 +73,7 @@ function adapterFile(opts: { repo?: string; base?: string; adapted?: Record<stri
 
 let raw: Map<string, string>;
 let fetchCalls: Array<{ url: string; init?: RequestInit }>;
-let anthropic: () => Response;
+let inference: () => Response;
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -80,11 +82,11 @@ beforeEach(() => {
     ...Object.entries(ORIGINAL).map(([p, c]) => [`${RAW}${p}`, c] as [string, string]),
   ]);
   fetchCalls = [];
-  anthropic = () => verdict(true);
+  inference = () => verdict(true);
   globalThis.fetch = vi.fn(async (input: Request | string | URL, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : input.toString();
     fetchCalls.push({ url, ...(init ? { init } : {}) });
-    if (url === "https://api.anthropic.com/v1/messages") return anthropic();
+    if (url === INFERENCE_URL) return inference();
     const body = raw.get(url);
     return body == null ? new Response("404: Not Found", { status: 404 }) : new Response(body, { status: 200 });
   }) as typeof globalThis.fetch;
@@ -95,13 +97,7 @@ afterEach(() => {
 });
 
 function verdict(ok: boolean): Response {
-  return new Response(
-    JSON.stringify({
-      stop_reason: "end_turn",
-      content: [{ type: "text", text: JSON.stringify({ ok, reason: ok ? "fine" : "phones home" }) }],
-    }),
-    { status: 200, headers: { "content-type": "application/json" } },
-  );
+  return chatAnswer({ ok, reason: ok ? "fine" : "phones home" });
 }
 
 class MemoryBucket implements AdapterBucketLike {
@@ -397,25 +393,29 @@ describe("POST /api/adapters/submit", () => {
 // ---- AI review -------------------------------------------------------------
 
 describe("AI review", () => {
-  it("is skipped without the secret", async () => {
+  it("is skipped without Flagship Inference", async () => {
     await submit(submission());
-    expect(fetchCalls.some((c) => c.url.includes("anthropic"))).toBe(false);
+    expect(fetchCalls.some((c) => c.url === INFERENCE_URL)).toBe(false);
     expect((await rows())[0]!.review).toBe("rules");
   });
 
-  it("runs with the secret and records it", async () => {
-    const f = makeFixture({ ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" });
+  it("runs through Flagship Inference on a service pass and records it", async () => {
+    const f = makeFixture(INFERENCE_ENV);
     try {
       await submit(submission(), f);
-      const ai = fetchCalls.find((c) => c.url === "https://api.anthropic.com/v1/messages");
+      const ai = fetchCalls.find((c) => c.url === INFERENCE_URL);
       expect(ai).toBeDefined();
       const headers = new Headers(ai!.init!.headers);
-      expect(headers.get("x-api-key")).toBe("sk-test");
-      expect(headers.get("anthropic-version")).toBe("2023-06-01");
+      const pass = /^Bearer (.+)$/.exec(headers.get("authorization") ?? "")![1]!;
+      const v = await verifyScopedInferenceToken(pass, INFERENCE_SECRET);
+      expect(v.ok && v.claims).toMatchObject({ service: "adapter-review", username: "service:adapter-review" });
+      expect([...headers.keys()].sort()).toEqual(["authorization", "content-type"]);
       const body = JSON.parse(ai!.init!.body as string);
-      expect(body.model).toBe("claude-haiku-5-5");
+      expect(body.model).toBe("medium");
       expect(body.max_tokens).toBe(400);
-      expect(body.messages[0].content).toContain("index.js");
+      expect(body.response_format).toEqual({ type: "json_object" });
+      expect(body.messages[0].role).toBe("system");
+      expect(body.messages[1].content).toContain("index.js");
       expect((await rows(f))[0]!.review).toBe("rules+ai");
     } finally {
       f.close();
@@ -423,14 +423,15 @@ describe("AI review", () => {
   });
 
   it("drops on a rejecting verdict, an API error, or a garbled answer", async () => {
-    const f = makeFixture({ ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" });
+    const f = makeFixture(INFERENCE_ENV);
     try {
-      anthropic = () => verdict(false);
+      inference = () => verdict(false);
       await submit(submission(), f);
-      anthropic = () => new Response("overloaded", { status: 529 });
+      inference = () => new Response("busy", { status: 503 });
       await submit(submission(), f);
-      anthropic = () =>
-        new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: "sure!" }] }), { status: 200 });
+      inference = () => chatAnswer("sure!");
+      await submit(submission(), f);
+      inference = () => chatAnswer({ ok: true, category: "none" }, { finish: "length" });
       await submit(submission(), f);
       expect(await rows(f)).toHaveLength(0);
     } finally {
@@ -439,12 +440,12 @@ describe("AI review", () => {
   });
 
   it("says so when the adaptation had to be cut", async () => {
-    const f = makeFixture({ ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" });
+    const f = makeFixture(INFERENCE_ENV);
     try {
       const big = Array.from({ length: 20_000 }, (_, i) => `line ${i} of a long generated file`).join("\n");
       await submit(submission({ file: adapterFile({ adapted: { ...ADAPTED, "big.txt": big } }) }), f);
-      const ai = fetchCalls.find((c) => c.url.includes("anthropic"))!;
-      const content = JSON.parse(ai.init!.body as string).messages[0].content as string;
+      const ai = fetchCalls.find((c) => c.url === INFERENCE_URL)!;
+      const content = JSON.parse(ai.init!.body as string).messages[1].content as string;
       expect(content.length).toBeLessThan(151_000);
       expect(content).toMatch(/only the first 150000 are shown/);
     } finally {
@@ -614,10 +615,7 @@ async function ask(over: Record<string, unknown> = {}, f: Fixture = fx): Promise
 const codes = (b: VerdictBody) => (b.reasons ?? []).map((r) => r.code);
 
 function categoryVerdict(ok: boolean, category: string, extra: Record<string, unknown> = {}): Response {
-  return new Response(
-    JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ ok, category, ...extra }) }] }),
-    { status: 200 },
-  );
+  return chatAnswer({ ok, category, ...extra });
 }
 
 describe("POST /api/adapters/submit with wait", () => {
@@ -720,20 +718,20 @@ describe("POST /api/adapters/submit with wait", () => {
   });
 
   it("reports a review refusal as a fixed category, never the model's words", async () => {
-    const f = makeFixture({ ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" });
+    const f = makeFixture(INFERENCE_ENV);
     try {
-      anthropic = () => categoryVerdict(false, "sends data out of the server", { note: "SECRET MODEL TEXT" });
+      inference = () => categoryVerdict(false, "sends data out of the server", { note: "SECRET MODEL TEXT" });
       let { body } = await ask({}, f);
       expect(body.reasons).toEqual([{ code: "review", message: "sends data out of the server", fixable: true }]);
       expect(JSON.stringify(body)).not.toContain("SECRET MODEL TEXT");
-      anthropic = () => categoryVerdict(false, "something the model made up");
+      inference = () => categoryVerdict(false, "something the model made up");
       ({ body } = await ask({}, f));
       expect(body.reasons).toEqual([{ code: "review", message: "other concern", fixable: true }]);
-      anthropic = () => new Response("overloaded", { status: 529 });
+      inference = () => new Response("busy", { status: 503 });
       ({ body } = await ask({}, f));
       expect(codes(body)).toEqual(["review-unavailable"]);
       expect(body.reasons![0]!.fixable).toBe(false);
-      anthropic = () => categoryVerdict(true, "none");
+      inference = () => categoryVerdict(true, "none");
       ({ body } = await ask({}, f));
       expect(body.status).toBe("kept");
       expect((await rows(f))[0]!.review).toBe("rules+ai");
@@ -742,15 +740,15 @@ describe("POST /api/adapters/submit with wait", () => {
     }
   });
 
-  it("asks for the fixed categories in the review schema", async () => {
-    const f = makeFixture({ ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" });
+  it("asks for the fixed categories in the review prompt", async () => {
+    const f = makeFixture(INFERENCE_ENV);
     try {
-      anthropic = () => categoryVerdict(true, "none");
+      inference = () => categoryVerdict(true, "none");
       await ask({}, f);
-      const ai = fetchCalls.find((c) => c.url.includes("anthropic"))!;
-      const schema = JSON.parse(ai.init!.body as string).output_config.format.schema;
-      expect(schema.required).toEqual(["ok", "category"]);
-      expect(schema.properties.category.enum).toEqual([...REVIEW_CATEGORIES, "none"]);
+      const ai = fetchCalls.find((c) => c.url === INFERENCE_URL)!;
+      const system = JSON.parse(ai.init!.body as string).messages[0].content as string;
+      expect(system).toContain('{"ok": boolean, "category": string}');
+      for (const c of REVIEW_CATEGORIES) expect(system).toContain(JSON.stringify(c));
     } finally {
       f.close();
     }

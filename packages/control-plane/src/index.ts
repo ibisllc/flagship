@@ -19,6 +19,7 @@ export * from "./provisionStatus.js";
 export * from "./isoManifest.js";
 export * from "./inferenceEndpoint.js";
 export * from "./inferenceToken.js";
+export * from "./inferenceService.js";
 export * from "./cloudflareDns.js";
 export * from "./brokerDnsClient.js";
 export * from "./accountDns.js";
