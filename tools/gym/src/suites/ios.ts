@@ -867,12 +867,12 @@ const O = "FlagshipAppUITests/GymOctoberTests/";
 const OCTOBER: readonly Scenario[] = [
   iosTotal(
     "ios-oct-onboarding-walk",
-    "D1-A1: Welcome → handle → Open account → skip backup → empty Home → Add/Import a server → Create a new server → designer → delivery chooser, against the mock clients (-smoke-onboarding).",
+    "D1-A1: Welcome → handle → Open account → the voi.ci intro (no backup page) → empty Home → Add/Import a server → Create a new server → designer → delivery chooser, against the mock clients (-smoke-onboarding).",
     "FlagshipAppUITests/OnboardingSmokeTests/test_coldLaunchReachesDeliveryChooser",
     {
       steps: [
         { kind: "tap", describe: "Create your account → Continue.", handle: "open-account-continue" },
-        { kind: "tap", describe: "Skip the backup.", handle: "secure-account-skip-anyway" },
+        { kind: "tap", describe: "No thanks on the voi.ci intro.", handle: "voici-intro-no" },
         { kind: "tap", describe: "Add/Import a server (the account's opener holds the admin root).", handle: "home-add-server" },
         { kind: "tap", describe: "Create a new server.", handle: "home-add-new-server" },
         { kind: "assert", describe: "Delivery chooser.", handle: "cs-delivery-pair" },

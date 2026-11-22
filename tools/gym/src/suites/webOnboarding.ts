@@ -10,30 +10,30 @@ import { webTotal, shot } from "./helpers.js";
 export const WEB_ONBOARDING: readonly Scenario[] = [
   webTotal(
     "web-total-onboarding-create-account",
-    "Create a new account to the end: both passphrases, the random handle sheet with ↻ Try another, Name this account (empty refused) and Name this device, then the account-open POST, checked as .com checks it: the username claim under the IRK, the account profile under the admin root it publishes (not the IRK), the device profile under the device key, the names only as ciphertext; lands on Secure your account as an admin device.",
+    "Create a new account to the end: both passphrases, the random handle sheet with ↻ Try another, Name this account (empty refused) and Name this device, then the account-open POST, checked as .com checks it: the username claim under the IRK, the account profile under the admin root it publishes (not the IRK), the device profile under the device key, the names only as ciphertext; lands on Home (no backup page) as an admin device, with the cloud recovery reminder.",
     "gym onboarding creates an account to the end with a suggested handle and its two names",
     {
       steps: [
         { kind: "tap", describe: "Create a new account → passphrase ×2.", handle: "#bootstrap-create" },
         { kind: "tap", describe: "Try another, then Continue.", handle: "[data-suggest-regen]" },
         { kind: "type", describe: "Name the account and the device.", handle: ".modal-input" },
-        { kind: "assert", describe: "POST /api/accounts with valid signatures; the wizard's secure step.", handle: "#view-wizard" },
+        { kind: "assert", describe: "POST /api/accounts with valid signatures; Home.", handle: "#view-home" },
       ],
       assertions: [
         { describe: "Second handle shown after Try another", handle: "[data-suggest-name]", expect: "present" },
-        { describe: "Secure your account", handle: "#view-wizard .card-title", expect: "text", text: "Secure your account" },
+        { describe: "Home's cloud recovery reminder", handle: "#home-recovery-banner", expect: "present" },
       ],
-      screenshots: [shot("handle-sheet", "The handle sheet."), shot("account-opened-secure-step", "The secure step.")],
+      screenshots: [shot("handle-sheet", "The handle sheet."), shot("account-opened-home", "Home right after creating the account.")],
       dimension: "D1",
     },
   ),
   webTotal(
     "web-total-onboarding-voici-intro",
-    "A new account, once its creation steps end on Home, is offered Turn on safe messages, calls and posts (its page at voi.ci/<username>) with the promo line .com sends (GET /api/voici/promo); Turn on opens the Social tab's Profile and goes public the usual way (the rules, then the public warning with the first-publish defaults), and the first index takes messages and calls from callback callers, hidden from search; Home never offers it again for that account.",
+    "A new account, right after creating it (the one onboarding step), is offered Turn on safe messages, calls and posts (its page at voi.ci/<username>) with the promo line .com sends (GET /api/voici/promo); Turn on opens the Social tab's Profile and goes public the usual way (the rules, then the public warning with the first-publish defaults), and the first index takes messages and calls from callback callers, hidden from search; Home never offers it again for that account.",
     "gym onboarding a new account is offered safe messages, calls and posts once on Home; Turn on makes its page public",
     {
       steps: [
-        { kind: "tap", describe: "Create a new account to the end, finish the wizard.", handle: "#bootstrap-create" },
+        { kind: "tap", describe: "Create a new account to the end.", handle: "#bootstrap-create" },
         { kind: "tap", describe: "Turn on → I agree → Make it public.", handle: "[data-testid=voici-intro-turn-on]" },
       ],
       assertions: [
@@ -51,7 +51,7 @@ export const WEB_ONBOARDING: readonly Scenario[] = [
     "gym onboarding the safe messages offer without a promo, and No thanks only closes it",
     {
       steps: [
-        { kind: "tap", describe: "Create a new account to the end, finish the wizard.", handle: "#bootstrap-create" },
+        { kind: "tap", describe: "Create a new account to the end.", handle: "#bootstrap-create" },
         { kind: "tap", describe: "No thanks.", handle: "[data-testid=voici-intro-no]" },
       ],
       assertions: [

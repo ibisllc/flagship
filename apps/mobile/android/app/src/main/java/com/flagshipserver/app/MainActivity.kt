@@ -1195,7 +1195,6 @@ private fun AppRoot(
     val operations = LocalActiveOperationsCenter.current
     val pods by app.pods.collectAsState()
 
-    val showSecureAccount by app.pendingSecureAccountNudge.collectAsState()
     val voiciIntroFor by app.pendingVoiciIntro.collectAsState()
 
     // Security notices (docs/security-notices.md): the banner above the content,
@@ -1321,15 +1320,7 @@ private fun AppRoot(
                 }
             }
         }
-        // SKIPPABLE "Secure your account" backup nudge — layered ABOVE
-        // the freshly-mounted shell on the CREATE path only, until the
-        // user backs up or skips. Armed by OpenAccountViewModel.
-        if (showSecureAccount) {
-            com.flagshipserver.app.ui.screens.SecureAccountOverlay(
-                onDismiss = { app.clearSecureAccountNudge() },
-            )
-        }
-        // The one-time voi.ci intro (VoiciIntro): a created account, once its backup step is done, once per device,
+        // The one-time voi.ci intro (VoiciIntro): a created account, the one step after creating it, once per device,
         // and only on a device that can publish the page (it waits for the page state; never shown otherwise).
         voiciIntroFor?.let { username ->
             val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -1338,9 +1329,9 @@ private fun AppRoot(
             val voici = com.flagshipserver.app.ui.screens.LocalVoiciCenter.current
             val canPublish = voici?.page?.collectAsState()?.value?.canPublish == true
             LaunchedEffect(voici) { voici?.start() }
-            val show = remember(username, showSecureAccount, isPaired, canPublish) {
+            val show = remember(username, isPaired, canPublish) {
                 isPaired && com.flagshipserver.app.core.voici.VoiciIntro.shouldShow(
-                    com.flagshipserver.app.core.voici.VoiciIntro.Path.Created, username, showSecureAccount, introStore.shown(username), canPublish,
+                    com.flagshipserver.app.core.voici.VoiciIntro.Path.Created, username, introStore.shown(username), canPublish,
                 )
             }
             if (show) {
@@ -1358,7 +1349,7 @@ private fun AppRoot(
                     },
                     onNo = { app.clearVoiciIntro() },
                 )
-            } else if (!showSecureAccount && isPaired && introStore.shown(username)) {
+            } else if (isPaired && introStore.shown(username)) {
                 LaunchedEffect(username) { app.clearVoiciIntro() }
             }
         }

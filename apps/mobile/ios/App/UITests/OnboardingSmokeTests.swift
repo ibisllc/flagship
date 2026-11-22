@@ -1,8 +1,9 @@
 import XCTest
 
 /// Smoke test for the cold-launch path: Welcome → Create → SuggestUsername →
-/// Open account → Secure your account (skipped) → the empty Home → Add your
-/// first server → the three-page server designer → the delivery chooser.
+/// Open account → the voi.ci intro (the one onboarding step; no backup page)
+/// → the empty Home → Add your first server → the three-page server designer
+/// → the delivery chooser.
 ///
 /// `-smoke-onboarding` starts unpaired with no keys left from an earlier run
 /// and talks to the mock clients only, so nothing reaches a real `.com`.
@@ -36,17 +37,11 @@ final class OnboardingSmokeTests: XCTestCase {
         waitForExpectations(timeout: 10)
         open.tap()
 
-        // 4. Secure your account — skip behind its warning.
-        let skip = app.buttons["secure-account-skip"]
-        XCTAssertTrue(skip.waitForExistence(timeout: 20), "A new account should be offered a backup next.")
-        skip.tap()
-        let skipAnyway = app.buttons.matching(identifier: "secure-account-skip-anyway").firstMatch
-        XCTAssertTrue(skipAnyway.waitForExistence(timeout: 5), "Skipping should warn first.")
-        skipAnyway.tap()
-
-        // 4b. A new account is offered safe messages, calls and posts once (VoiciIntro); No thanks closes it.
+        // 4. No backup page: a new account is offered safe messages, calls and posts once (VoiciIntro); No thanks
+        // closes it.
+        XCTAssertFalse(app.buttons["secure-account-skip"].exists, "No backup step after creating an account.")
         let noThanks = app.buttons["voici-intro-no"]
-        XCTAssertTrue(noThanks.waitForExistence(timeout: 10), "A new account is offered its page once.")
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 20), "A new account is offered its page once.")
         noThanks.tap()
         XCTAssertTrue(noThanks.waitForNonExistence(timeout: 5))
 

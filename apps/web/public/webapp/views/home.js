@@ -793,91 +793,119 @@ let renewalLastServerList = null; // dedupe: only kick a tick when servers chang
 
 const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
 
-// Mirrors wizard.js's `recoveryWarn` slot — the wizard SETs this to "true"
-// when the user skips "Secure your account" and REMOVES it once a backup
-// (cloud passkey or .flagshipkey file) actually completes. So a "true"
-// value is the single, consistent signal that recovery is not enrolled.
-// Pinned to the legacy flat key (unused at runtime; the homeRecoveryBanner
-// test asserts the source string is identical on both surfaces).
-const RECOVERY_WARN_KEY = "flagship.recovery.warn.v1";
-// Per-device dismiss for the home nudge — local state only, no API. Mirrors
-// the dismissable backup nudge on iOS/Android (a UI preference, not a
-// security decision; clearing the warn key on real enrolment is the source
-// of truth, this only quiets a still-unenrolled reminder the user has seen).
+// Home's recovery reminders (owner, 2026-11-21: no backup page after creating an account; Home reminds instead).
+// Two cards, one at a time: cloud recovery while it isn't set up, then a backup file once the cloud card was put
+// off and there is still neither cloud recovery nor a backup file written from this browser (`keyBackupAt`). Their
+// x snoozes the card for a week rather than hiding it for good. Same rule as iOS and Android RecoveryBannerStore.
+// The dismiss stamps live in the per-profile store; the legacy key below is the slot's old flat name.
 const RECOVERY_BANNER_DISMISS_KEY = "flagship.recovery.banner.dismissed.v1";
+void RECOVERY_BANNER_DISMISS_KEY;
 const RECOVERY_BANNER_ID = "home-recovery-banner";
-// The above two constants are pinned-to-string for the homeRecoveryBanner
-// static-source test (which asserts both home.js + wizard.js still use the
-// same key strings). Runtime reads now go through the per-profile store.
-void RECOVERY_WARN_KEY; void RECOVERY_BANNER_DISMISS_KEY;
+const BACKUP_FILE_REMINDER_ID = "home-backup-file-reminder";
+export const REMINDER_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * Pure predicate for the home backup-reminder banner. Show it iff the
- * wizard flagged recovery as not-yet-enrolled (`warn === "true"`) AND the
- * user hasn't dismissed the nudge on this device. Extracted so the rule
- * is testable without a DOM (mirrors accountReset.test.ts's approach).
- */
-export function shouldShowRecoveryBanner({ warn, dismissed } = {}) {
-  return warn === "true" && dismissed !== "true";
+/** A stamp (ms) less than a week old. */
+export function isSnoozed(at, now = Date.now()) {
+  const n = Number(at);
+  return Number.isFinite(n) && n > 0 && now - n < REMINDER_SNOOZE_MS;
 }
 
 /**
- * Render (or remove) the dismissable "secure your account" nudge above the
- * server list. Routes into Settings → Recovery via the existing
- * enterRecovery(); the dismiss writes a local flag so it stays hidden.
+ * Which recovery reminder Home shows, if any: "cloud-recovery", "backup-file" or null. Pure, so the rule is
+ * testable without a DOM.
  */
-function renderRecoveryBanner() {
-  let warn = null;
-  let dismissed = null;
+export function homeReminder({ demo = false, hasCloudRecovery = false, recoveryDismissedAt = null, hasBackupFile = false, backupFileDismissedAt = null, now = Date.now() } = {}) {
+  if (demo || hasCloudRecovery) return null;
+  if (!isSnoozed(recoveryDismissedAt, now)) return "cloud-recovery";
+  if (!hasBackupFile && !isSnoozed(backupFileDismissedAt, now)) return "backup-file";
+  return null;
+}
+
+/** A dismissal from before the snooze ("true") counts as put off from now. */
+function readSnooze(slot) {
+  let at = null;
   try {
-    // P12 — per-profile recovery flags. The store handles its own legacy
-    // fallback at read time for the pre-migration case; we no longer need a
-    // belt-and-braces localStorage probe here.
-    warn = recoveryStoreGet("recoveryWarn");
-    dismissed = recoveryStoreGet("recoveryBannerDismissed");
-  } catch { /* localStorage disabled — treat as no banner */ }
+    at = recoveryStoreGet(slot);
+    if (at === "true") {
+      at = String(Date.now());
+      recoveryStoreSet(slot, at);
+    }
+  } catch { /* storage off: no snooze */ }
+  return at;
+}
 
-  const existing = document.getElementById(RECOVERY_BANNER_ID);
-  if (!shouldShowRecoveryBanner({ warn, dismissed })) {
-    existing?.remove();
-    return;
+/**
+ * Render (or remove) the recovery reminder above the server list. The cloud card opens Settings → Recovery; the
+ * backup file card runs the key file ceremony. Resolves once the card is settled, so the page welcome can wait.
+ */
+async function renderRecoveryBanner() {
+  const session = getSession();
+  const username = session?.username;
+  const demo = !username || isDemoProfile(getActiveProfile());
+  let enrolled = false;
+  if (!demo) {
+    try {
+      const { hasCloudRecovery } = await import("../lib/recovery.js");
+      enrolled = await hasCloudRecovery(username);
+    } catch { /* treat as not set up: a reminder too many beats none */ }
   }
-  if (existing) return;
-
-  // One clean teal announcement card (mirrors iOS FSAnnouncementCard) in
-  // place of the old left-rule banner. CTA → recovery enrollment; the "x"
-  // dismiss writes the per-device flag so it stays hidden.
-  const host = document.createElement("div");
-  host.id = RECOVERY_BANNER_ID;
-  host.innerHTML = announcementCard({
-    icon: keyIcon,
-    title: tr("Your account isn't backed up yet"),
-    message:
-      tr("Save a passkey so you can recover your account if you get a new device."),
-    ctaLabel: tr("Secure my account"),
-    dismissible: true,
-    tone: "teal",
+  let hasBackupFile = false;
+  try { hasBackupFile = Boolean(recoveryStoreGet("keyBackupAt")); } catch { /* storage off */ }
+  const which = homeReminder({
+    demo,
+    hasCloudRecovery: enrolled,
+    recoveryDismissedAt: readSnooze("recoveryBannerDismissed"),
+    hasBackupFile,
+    backupFileDismissedAt: readSnooze("backupFileReminderDismissed"),
   });
+  const id = which === "cloud-recovery" ? RECOVERY_BANNER_ID : which === "backup-file" ? BACKUP_FILE_REMINDER_ID : null;
+  for (const other of [RECOVERY_BANNER_ID, BACKUP_FILE_REMINDER_ID]) {
+    if (other !== id) document.getElementById(other)?.remove();
+  }
+  if (!id || document.getElementById(id)) return;
+
+  const host = document.createElement("div");
+  host.id = id;
+  host.setAttribute("data-testid", id);
+  host.innerHTML = which === "cloud-recovery"
+    ? announcementCard({
+      icon: keyIcon,
+      title: tr("Your account isn't backed up yet"),
+      message: tr("Save a passkey so you can recover your account if you get a new device."),
+      ctaLabel: tr("Secure my account"),
+      dismissible: true,
+      tone: "teal",
+    })
+    : announcementCard({
+      icon: keyIcon,
+      title: tr("Save a backup file"),
+      message: tr("Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account."),
+      ctaLabel: tr("Save a backup file"),
+      dismissible: true,
+      tone: "teal",
+    });
   const list = document.getElementById("servers-list");
   list?.parentNode?.insertBefore(host, list);
 
-  host
-    .querySelector("[data-ann-cta]")
-    ?.addEventListener("click", async () => {
+  host.querySelector("[data-ann-cta]")?.addEventListener("click", async () => {
+    if (which === "cloud-recovery") {
       const { enterRecovery } = await import("./recovery.js");
       if (typeof enterRecovery === "function") enterRecovery();
-    });
-  host
-    .querySelector("[data-ann-dismiss]")
-    ?.addEventListener("click", () => {
-      try {
-        // P12 — write to the active profile's slot (the store also mirrors
-        // to the legacy flat key, so unmigrated read-sites stay aligned).
-        recoveryStoreSet("recoveryBannerDismissed", "true");
-      } catch { /* swallow */ }
-      document.getElementById(RECOVERY_BANNER_ID)?.remove();
-      void renderPageWelcome();
-    });
+      return;
+    }
+    const { runKeyfileExportCeremony } = await import("./recovery.js");
+    await runKeyfileExportCeremony();
+    await renderRecoveryBanner();
+    void renderPageWelcome();
+  });
+  host.querySelector("[data-ann-dismiss]")?.addEventListener("click", async () => {
+    try {
+      recoveryStoreSet(which === "cloud-recovery" ? "recoveryBannerDismissed" : "backupFileReminderDismissed", String(Date.now()));
+    } catch { /* swallow */ }
+    host.remove();
+    await renderRecoveryBanner();
+    void renderPageWelcome();
+  });
 }
 
 const ALLOWANCE_CARD_ID = "home-allowance-card";
@@ -927,7 +955,7 @@ function goToPage() {
 }
 
 /**
- * While the backup nudge shows, the card waits (its dismiss renders this one); the row doesn't.
+ * While a recovery reminder shows, the card waits (its dismiss renders this one); the row doesn't.
  *
  * It fills a slot that is always in the page, below the servers (index.html): it arrives once `.com` answered,
  * after Home painted, and inserted above Add / Restore a server it moved that button under a tap (the button then
@@ -967,7 +995,7 @@ async function renderPageWelcome() {
     dismissed,
     sample,
   });
-  if (!state || (state === "card" && document.getElementById(RECOVERY_BANNER_ID))) return hide();
+  if (!state || (state === "card" && (document.getElementById(RECOVERY_BANNER_ID) || document.getElementById(BACKUP_FILE_REMINDER_ID)))) return hide();
   const host = slot();
   if (!host) return;
   host.setAttribute("data-state", state);
@@ -1684,11 +1712,8 @@ export async function renderHome() {
   // transient network blip doesn't flash a banner.
   detectAccountReset(session.username).catch(() => {});
 
-  // Post-creation backup nudge — shown when the wizard flagged recovery
-  // as skipped (not enrolled) and the user hasn't dismissed it on this
-  // device. Local-only signal; no API call.
-  renderRecoveryBanner();
-  void renderPageWelcome();
+  // The recovery reminders (cloud recovery, then a backup file), then the page welcome below them.
+  void renderRecoveryBanner().catch(() => {}).then(() => renderPageWelcome());
 
   // An operator's abuse notice (admin devices) or the account's suspension (docs/abuse-handling.md).
   renderAbuseNoticeBanners();

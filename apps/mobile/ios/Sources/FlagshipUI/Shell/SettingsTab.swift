@@ -829,13 +829,21 @@ struct RecoveryContainer: View {
                 RecoveryScreen(
                     vm: vm,
                     onRunSetup: { passphrase in
-                        // Fresh UMK seed for the demo. Real call site
-                        // (SecureAccountScreen) passes the live UMK from
-                        // Keystore. The passphrase comes from the screen's
-                        // validated SecureFields.
-                        let seed = SymmetricKey(size: .bits256)
-                        await vm.setup(umkSeed: seed, passphrase: passphrase)
+                        // Wrap THIS account's key (the UMK in its Keystore
+                        // slot); the passphrase comes from the screen's
+                        // validated SecureFields. This is the one place a
+                        // phone enrolls cloud recovery since the backup
+                        // page after account creation is gone.
+                        let umk: SymmetricKey
+                        do {
+                            umk = try await Keystore.currentUMK(reason: String(localized: "Set up cloud recovery"))
+                        } catch {
+                            if !BiometricGate.GateError.from(error).isSilent { vm.phase = .failed(UserErrorText.of(error)) }
+                            return
+                        }
+                        await vm.setup(umkSeed: umk, passphrase: passphrase)
                         if case .registered = vm.phase {
+                            app.hasCloudRecovery = true
                             toasts.success(String(localized: "Recovery is active."))
                         }
                     },

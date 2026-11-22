@@ -409,16 +409,23 @@ final class GymSweepHomeTests: GymSweepCase {
         var app = launch(admin: true, ["-smoke-banners-fresh"])
         XCTAssertTrue(text(app, containing: "Your account isn't backed up yet").waitForExistence(timeout: 20))
         app.buttons["fs-announcement-dismiss"].tap()
-        XCTAssertTrue(text(app, containing: "Set up recovery").waitForExistence(timeout: 10),
-                      "With the banner gone the recovery nudge shows.")
+        // Putting cloud recovery off offers the backup file instead (owner, 2026-11-21).
+        let file = app.descendants(matching: .any)["backup-file-reminder"]
+        XCTAssertTrue(file.waitForExistence(timeout: 10), "With the cloud card snoozed, the backup file card shows.")
         XCTAssertFalse(text(app, containing: "Your account isn't backed up yet").exists)
+        shot(app, "home-backup-file-reminder")
+        app.buttons["fs-announcement-dismiss"].tap()
+        waitGone(file)
+        XCTAssertTrue(text(app, containing: "Set up recovery").waitForExistence(timeout: 10),
+                      "With both cards snoozed the recovery nudge shows.")
         app.buttons["fs-announcement-dismiss"].tap()
         waitGone(text(app, containing: "Set up recovery"))
 
         app = launch(admin: true)
         XCTAssertTrue(text(app, containing: "Set up recovery").waitForExistence(timeout: 20),
-                      "The nudge comes back next launch; the banner doesn't.")
+                      "The nudge comes back next launch; the snoozed cards don't (for a week).")
         XCTAssertFalse(text(app, containing: "Your account isn't backed up yet").exists)
+        XCTAssertFalse(app.descendants(matching: .any)["backup-file-reminder"].exists)
         app.buttons["fs-announcement-cta"].tap()
         XCTAssertTrue(app.navigationBars["Cloud recovery"].waitForExistence(timeout: 15), "Set it up opens Cloud recovery.")
     }

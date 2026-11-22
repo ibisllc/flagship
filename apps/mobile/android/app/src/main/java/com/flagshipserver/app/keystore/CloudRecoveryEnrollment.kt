@@ -1,5 +1,5 @@
 // Shared passphrase-gated cloud-recovery ceremony, factored out of the
-// enroll screens (RecoveryScreen + SecureAccountScreen) and the restore
+// enroll screen (RecoveryScreen) and the restore
 // path (LoginViewModel) so the security-critical derive → wrap → sign →
 // upload logic lives in ONE place and is unit-tested once.
 //

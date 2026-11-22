@@ -557,7 +557,8 @@
 //       renamed Social options (no "Anyone signed in with Flagship"; first publish takes calls from callback callers),
 //       "Turn off social features", "Set business hours", and the welcome picture with the internet between phone and server.
 //  v243: a non-JSON /shell-manifest.json answer (an SPA fallback's index.html) counts as no manifest, so the worker
-//       still installs.
+//       still installs. Creating an account goes straight to Home (the voi.ci intro is the one step); Home reminds
+//       about cloud recovery, then a backup file (a week's snooze each); Recovery says what cloud recovery is.
 //  v245: a Business batch may be paid by bank transfer while `.com` offers it ("Pay by bank transfer"; lib/orgPlan.js,
 //       views/orgPlan.js), and a batch that can no longer be paid says so.
 const SHELL_VERSION = "v245";

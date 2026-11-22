@@ -2202,7 +2202,6 @@
   "CLOUD RECOVERY": "云端恢复",
   "See per-app re-anchoring after recovery.": "查看恢复后各应用的重新关联情况。",
   "View progress": "查看进度",
-  "Store an encrypted copy of your account key for a new browser.": "为新浏览器保存一份加密的账户密钥副本。",
   "Advanced: legacy wrapped-UMK export": "高级：旧版包裹 UMK 导出",
   "Export wrapped UMK": "导出包裹的 UMK",
   "Import wrapped UMK": "导入包裹的 UMK",
@@ -3972,5 +3971,7 @@
   "Pay by bank transfer": "通过银行转账支付",
   "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe 会向贵公司显示银行账户信息。全部转账款项到账后，代金券即可使用，这可能需要几天时间。",
   "Bank transfer isn't available right now. Pay by card instead.": "银行转账暂时不可用。请改用银行卡支付。",
-  "That batch can no longer be paid. Start a new batch.": "该批次已无法支付。请重新发起一个批次。"
+  "That batch can no longer be paid. Start a new batch.": "该批次已无法支付。请重新发起一个批次。",
+  "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "没有使用云恢复？请把账户密钥的加密文件保存在安全的地方，这样丢了设备也不会丢掉账户。",
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "云恢复会把账户密钥的加密副本保存在 Flagship。它由通行密钥锁定：浏览器或你的密码管理器会保存通行密钥，因此不需要另设密码。在新设备上，通行密钥和你的恢复密码短语一起才能打开它。Flagship 无法打开它。"
 }

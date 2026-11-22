@@ -299,7 +299,11 @@ fun HomeTab() {
             val dismissed by app.recoveryNudgeDismissedThisSession.collectAsState()
             val reset by app.accountWasReset.collectAsState()
             val capability by app.deviceCapability.collectAsState()
-            val bannerDismissed by recoveryBannerStore.dismissed.collectAsState()
+            // Read the snooze stamps so a tap on x re-renders; isDismissed() compares them with the clock.
+            val bannerDismissedAt by recoveryBannerStore.dismissedAt.collectAsState()
+            val backupFileDismissedAt by recoveryBannerStore.backupFileDismissedAt.collectAsState()
+            val bannerDismissed = remember(bannerDismissedAt) { recoveryBannerStore.isDismissed() }
+            val backupFileDismissed = remember(backupFileDismissedAt) { recoveryBannerStore.isBackupFileDismissed() }
             val profiles by app.profiles.collectAsState()
             val activeCloud by app.activeCloudName.collectAsState()
             // A demo session holds no account keys: backup and recovery nudges
@@ -317,6 +321,14 @@ fun HomeTab() {
             val showBackupBanner = !isDemoAccount && RecoveryBannerStore.shouldShow(
                 hasCloudRecovery = hasRecovery,
                 dismissed = bannerDismissed,
+            )
+            // Read on every composition (a cheap preferences read), so a file saved from Home counts on return.
+            val backupFileSaved = com.flagshipserver.app.core.KeyBackupStore.isWritten(ctx, app.currentUser.collectAsState().value)
+            val showBackupFileReminder = !isDemoAccount && RecoveryBannerStore.shouldShowBackupFile(
+                hasCloudRecovery = hasRecovery,
+                recoverySnoozed = bannerDismissed,
+                hasBackupFile = backupFileSaved,
+                dismissed = backupFileDismissed,
             )
             // The voi.ci page welcome: only once `.com` said this account has no page (null center = no account open).
             val voiciCenter = com.flagshipserver.app.ui.screens.LocalVoiciCenter.current
@@ -413,6 +425,9 @@ fun HomeTab() {
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
                 showRecoveryBackupBanner = showBackupBanner,
                 onDismissRecoveryBackupBanner = { recoveryBannerStore.setDismissed(true) },
+                showBackupFileReminder = showBackupFileReminder,
+                onSaveBackupFile = { nav.navigate("keyfile-export") },
+                onDismissBackupFileReminder = { recoveryBannerStore.setBackupFileDismissed(true) },
                 showPageWelcome = pagePointer == com.flagshipserver.app.core.PagePointer.Welcome,
                 pageRowPublic = (pagePointer as? com.flagshipserver.app.core.PagePointer.Row)?.isPublic,
                 onSetUpPage = { deepLinker.enqueue(DeepLink.PageEditor) },
@@ -457,6 +472,7 @@ fun HomeTab() {
                 proxyAlerts = proxyAlerts,
             )
         }
+        composable("keyfile-export") { com.flagshipserver.app.ui.screens.KeyfileExportScreen(nav) }
         composable("restore-backup") {
             if (!AddServerGate.allows(app)) {
                 AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })

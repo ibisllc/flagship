@@ -122,9 +122,13 @@ extension GymSweepSeams {
             app.accountWasReset = true
         }
 
-        // Forget a persistent "Not now" on the backup banner from an earlier run.
+        // Forget the recovery reminders' snoozes and any backup file from an earlier run.
         if args.contains("-smoke-banners-fresh") {
-            UserDefaults.standard.removeObject(forKey: "flagship.recoveryBanner.dismissed.v1")
+            for key in ["flagship.recoveryBanner.dismissed.v1", "flagship.recoveryBanner.dismissedAt.v2",
+                        "flagship.backupFileReminder.dismissedAt.v1"] {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+            KeyBackupState.forget(username: user)
         }
 
         // The Apple Watch asked to approve Home's start-up and waits for the

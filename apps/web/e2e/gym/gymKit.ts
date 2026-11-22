@@ -129,6 +129,9 @@ export interface SessionSeed {
   kind?: Kind;
   /** Servers this device has a session for; the first is the current one. */
   servers?: string[];
+  /** Leave Home's recovery reminders on. Off by default: the gym's `.com` knows no
+   *  cloud recovery for the account, so they would sit above every Home. */
+  recoveryReminders?: boolean;
 }
 
 export interface Keys {
@@ -142,8 +145,9 @@ export interface Keys {
 export async function seedSession(page: Page, seed: SessionSeed = {}): Promise<Keys> {
   const kind = seed.kind ?? "admin";
   const servers = seed.servers ?? [HOME];
+  const reminders = seed.recoveryReminders ?? false;
   return page.evaluate(
-    async ({ kind, servers, USER, ACCOUNT_ID, DEVICE_ID, ADMIN_SEED_HEX, CONTROL }) => {
+    async ({ kind, servers, reminders, USER, ACCOUNT_ID, DEVICE_ID, ADMIN_SEED_HEX, CONTROL }) => {
       const ks = await import("/keystore.js");
       const profiles = await import("/lib/profiles.js");
       const store = await import("/lib/profilesStore.js");
@@ -161,6 +165,10 @@ export async function seedSession(page: Page, seed: SessionSeed = {}): Promise<K
       store.ensureProfile(USER);
       store.setActiveCloudName(USER);
       store.set("username", USER);
+      if (!reminders) {
+        store.set("recoveryBannerDismissed", String(Date.now()));
+        store.set("backupFileReminderDismissed", String(Date.now()));
+      }
       const s = getSession();
       s.username = USER;
       const adminSeed = ks.hexToBytes(ADMIN_SEED_HEX);
@@ -176,7 +184,7 @@ export async function seedSession(page: Page, seed: SessionSeed = {}): Promise<K
         irkPubHex: ks.bytesToHex(irk.publicKey),
       };
     },
-    { kind, servers, USER, ACCOUNT_ID, DEVICE_ID, ADMIN_SEED_HEX, CONTROL },
+    { kind, servers, reminders, USER, ACCOUNT_ID, DEVICE_ID, ADMIN_SEED_HEX, CONTROL },
   );
 }
 

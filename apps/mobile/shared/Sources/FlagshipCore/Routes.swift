@@ -284,13 +284,6 @@ public enum OnboardingRoute: Hashable, Sendable {
     /// (HomeRoute.provisionServer), so onboarding no longer carries a
     /// server-mint route.
     case openAccount(username: String)
-    /// Skippable "Secure your account" step. Shown right after a
-    /// brand-new account is opened (OpenAccount) and BEFORE the user
-    /// lands in the main app — the new-account path only (never the
-    /// "Connect to an existing account" path). Nudges a backup with the cloud
-    /// option pre-selected; lets the user skip behind a clear warning.
-    /// Reuses the existing cloud-recovery + `.flagshipkey` mechanisms.
-    case secureAccount(username: String)
     /// "Connect to an existing account": one page with both ways in.
     /// Sign in by account name — on submit a single preflight
     /// (`/api/account/resolve`, 200 always) branches: demo attaches a

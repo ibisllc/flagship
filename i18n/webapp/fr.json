@@ -2202,7 +2202,6 @@
   "CLOUD RECOVERY": "RÉCUPÉRATION DANS LE CLOUD",
   "See per-app re-anchoring after recovery.": "Consultez le rattachement par app après la récupération.",
   "View progress": "Voir la progression",
-  "Store an encrypted copy of your account key for a new browser.": "Conservez une copie chiffrée de votre clé de compte pour un nouveau navigateur.",
   "Advanced: legacy wrapped-UMK export": "Avancé : export UMK enveloppé (ancien format)",
   "Export wrapped UMK": "Exporter l’UMK enveloppé",
   "Import wrapped UMK": "Importer l’UMK enveloppé",
@@ -3972,5 +3971,7 @@
   "Pay by bank transfer": "Payer par virement bancaire",
   "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe indique à votre entreprise les coordonnées bancaires. Les bons sont prêts une fois le virement entier reçu, ce qui peut prendre quelques jours.",
   "Bank transfer isn't available right now. Pay by card instead.": "Le virement bancaire n'est pas disponible pour le moment. Payez plutôt par carte.",
-  "That batch can no longer be paid. Start a new batch.": "Ce lot ne peut plus être payé. Commencez un nouveau lot."
+  "That batch can no longer be paid. Start a new batch.": "Ce lot ne peut plus être payé. Commencez un nouveau lot.",
+  "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost device doesn't lose your account.": "Vous n’utilisez pas la récupération dans le cloud ? Gardez un fichier chiffré de la clé de votre compte en lieu sûr, pour qu’un appareil perdu ne vous fasse pas perdre votre compte.",
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your browser or password manager keeps the passkey, so there is no password to make up. On a new device, the passkey and your recovery passphrase open it together. Flagship can't open it.": "La récupération dans le cloud enregistre une copie chiffrée de la clé de votre compte chez Flagship. Une clé d’accès la verrouille : votre navigateur ou votre gestionnaire de mots de passe garde la clé d’accès, vous n’avez donc aucun mot de passe à inventer. Sur un nouvel appareil, la clé d’accès et votre phrase secrète de récupération l’ouvrent ensemble. Flagship ne peut pas l’ouvrir."
 }

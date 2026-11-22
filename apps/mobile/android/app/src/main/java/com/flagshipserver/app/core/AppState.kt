@@ -130,21 +130,8 @@ class AppState(
     fun dismissRecoveryNudgeForSession() { _recoveryNudgeDismissedThisSession.value = true }
 
     /**
-     * Set the instant a BRAND-NEW account is opened (create path only),
-     * so the SKIPPABLE "Secure your account" backup nudge shows once —
-     * AFTER isPaired flips and the shell mounts, but layered ABOVE it
-     * until the user backs up or skips. The recovery / "I already have
-     * an account" path never sets this, so it never sees the step.
-     * One-shot: cleared on done / skip and never re-armed automatically.
-     */
-    private val _pendingSecureAccountNudge = MutableStateFlow(false)
-    val pendingSecureAccountNudge: StateFlow<Boolean> = _pendingSecureAccountNudge.asStateFlow()
-    fun armSecureAccountNudge() { _pendingSecureAccountNudge.value = true }
-    fun clearSecureAccountNudge() { _pendingSecureAccountNudge.value = false }
-
-    /**
-     * The account this device just CREATED (create path only, armed with the backup nudge): the one-time voi.ci intro
-     * shows for it once that nudge is done (VoiciIntro). Join, recovery sign-in and demo never arm it.
+     * The account this device just CREATED (create path only): the one-time voi.ci intro, the one onboarding step,
+     * shows for it on Home (VoiciIntro). Join, recovery sign-in and demo never arm it.
      */
     private val _pendingVoiciIntro = MutableStateFlow<String?>(null)
     val pendingVoiciIntro: StateFlow<String?> = _pendingVoiciIntro.asStateFlow()

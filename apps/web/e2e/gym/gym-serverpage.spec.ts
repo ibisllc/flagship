@@ -143,34 +143,58 @@ async function scrollTo(page: Page, sel: string): Promise<void> {
 test.describe("gym webapp server page and Home leftovers", () => {
   // ─────────────────────────────── Home ───────────────────────────────
 
-  test("gym serverpage the recovery nudge opens recovery, and once dismissed stays away", async ({ page }, testInfo) => {
-    await reachHome(page, { kind: "admin", servers: [HOME] });
+  test("gym serverpage the recovery reminders: cloud recovery, then a backup file, each snoozed a week", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME], recoveryReminders: true });
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
-    await page.evaluate(async () => {
-      const store = await import("/lib/profilesStore.js");
-      store.set("recoveryWarn", "true");
-      store.remove("recoveryBannerDismissed");
-    });
+    // `.com` knows no cloud recovery for the account (the mock's 404).
     await renderHome(page);
     const banner = page.locator("#home-recovery-banner");
     await expect(banner).toContainText("Your account isn't backed up yet", { timeout: 10_000 });
+    await expect(page.locator("#home-backup-file-reminder")).toHaveCount(0);
     await shot(page, testInfo, "home-recovery-nudge");
 
-    // "Secure my account" goes to recovery.
+    // "Secure my account" goes to recovery, which says what cloud recovery is.
     await banner.locator("[data-ann-cta]").click();
     await expect(page.locator("#view-recovery")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#recovery-explainer")).toContainText("A passkey locks it");
 
-    // Back on Home the nudge is still there until dismissed; then it's gone for good.
+    // Back on Home it's still there until put off; then the backup file card takes its place.
     await page.click('[data-tab-target="home"]');
     await expect(page.locator("#home-recovery-banner")).toBeVisible({ timeout: 10_000 });
+    const before = Date.now();
     await page.locator("#home-recovery-banner [data-ann-dismiss]").click();
     await expect(page.locator("#home-recovery-banner")).toHaveCount(0);
     const dismissed = await page.evaluate(async () => (await import("/lib/profilesStore.js")).get("recoveryBannerDismissed"));
-    expect(dismissed).toBe("true");
+    expect(Number(dismissed)).toBeGreaterThanOrEqual(before);
+    const file = page.locator("#home-backup-file-reminder");
+    await expect(file).toContainText("Save a backup file", { timeout: 10_000 });
+    await shot(page, testInfo, "home-backup-file-reminder");
+    await file.locator("[data-ann-dismiss]").click();
+    await expect(file).toHaveCount(0);
     await renderHome(page);
     await expect(card(page, HOME)).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#home-recovery-banner")).toHaveCount(0);
+    await expect(page.locator("#home-recovery-banner, #home-backup-file-reminder")).toHaveCount(0);
+
+    // A week later the cloud card is back.
+    await page.evaluate(async () => {
+      const store = await import("/lib/profilesStore.js");
+      store.set("recoveryBannerDismissed", String(Date.now() - 8 * 24 * 60 * 60 * 1000));
+    });
+    await renderHome(page);
+    await expect(page.locator("#home-recovery-banner")).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("gym serverpage no recovery reminder once cloud recovery is set up", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME], recoveryReminders: true });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+    m.get("/api/recovery/by-username/smoketest", { credentialId: "aa" });
+    await renderHome(page);
+    await expect(card(page, HOME)).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(500);
+    await expect(page.locator("#home-recovery-banner, #home-backup-file-reminder")).toHaveCount(0);
+    await shot(page, testInfo, "home-recovery-set-up");
   });
 
   test("gym serverpage a device removed from the account is told so and Sign in again reloads to unlock", async ({ page }, testInfo) => {
