@@ -171,6 +171,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0155",
   // Business plan for orgs: the trial's end and the seats the org's vouchers pay for.
   "0156",
+  // One push-token row per (account, device, platform, token): racing registrations converge (release-0.5 list).
+  "0157",
 ];
 
 export interface SchemaStatusDeps {

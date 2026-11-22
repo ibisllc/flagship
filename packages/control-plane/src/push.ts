@@ -238,8 +238,18 @@ export async function handlePushRegister(
     quarantineUntil,
     ...(carriedBitmap && quarantineUntil > now ? { quarantineAlertsFiredBitmap: carriedBitmap } : {}),
   });
-  for (const token of superseded) await deps.pushTokens.remove(token.tokenId);
-  if (quarantine && !existingToken && deps.auditEvents) {
+  // Two registrations of the same token can race (FCM's onNewToken and the Settings switch): storage keeps one row
+  // per (device, platform, token), so the later one lands on the earlier row. Answer that row's id, and leave the
+  // device-added audit to the registration that made it.
+  let storedId = tokenId;
+  if (!existingToken) {
+    const stored = (await deps.pushTokens.listByUser(r.username)).find(
+      (token) => token.deviceId === deviceId && token.platform === r.platform && token.providerToken === r.providerToken,
+    );
+    if (stored) storedId = stored.tokenId;
+  }
+  for (const token of superseded) if (token.tokenId !== storedId) await deps.pushTokens.remove(token.tokenId);
+  if (quarantine && !existingToken && storedId === tokenId && deps.auditEvents) {
     // Best-effort: the audit insert never fails the admission. The
     // device-added row carries quarantineUntil so the Activity feed
     // renders "joined — under review until …".
@@ -255,7 +265,7 @@ export async function handlePushRegister(
       },
     );
   }
-  return ok({ ok: true, tokenId, ...(quarantine ? { quarantineUntil } : {}) });
+  return ok({ ok: true, tokenId: storedId, ...(quarantine ? { quarantineUntil } : {}) });
 }
 
 /**

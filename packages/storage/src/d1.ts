@@ -3578,7 +3578,9 @@ export class D1PushTokenStorage implements PushTokenStorage {
     // overwrite quarantine_until on re-put: a benign push_token
     // refresh must not silently clear a 14-day quarantine. Phase 2's
     // device-admit handler bumps quarantine_until via a dedicated
-    // UPDATE.
+    // UPDATE. A second row for the same (account, device, platform,
+    // token) under a new token_id (two registrations racing) lands on
+    // the existing row instead (migration 0157's unique index).
     await this.db.prepare(
       `INSERT INTO push_tokens (token_id, username, device_id, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, registered_at, last_seen_at, quarantine_until, quarantine_alerts_fired_bitmap)
        VALUES (?,?,?,?,?,?,?,?,?,?,?)
@@ -3587,6 +3589,10 @@ export class D1PushTokenStorage implements PushTokenStorage {
          push_x25519_pub_hex=excluded.push_x25519_pub_hex,
          registration_signature_hex=excluded.registration_signature_hex,
          device_id=excluded.device_id,
+         last_seen_at=excluded.last_seen_at
+       ON CONFLICT(username, device_id, platform, provider_token) DO UPDATE SET
+         push_x25519_pub_hex=excluded.push_x25519_pub_hex,
+         registration_signature_hex=excluded.registration_signature_hex,
          last_seen_at=excluded.last_seen_at`,
     ).bind(
       rec.tokenId, rec.username, rec.deviceId, rec.platform, rec.providerToken,
