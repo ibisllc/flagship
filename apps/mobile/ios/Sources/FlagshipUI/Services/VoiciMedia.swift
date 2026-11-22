@@ -2,29 +2,185 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import CoreGraphics
+import UIKit
+import os
 import FlagshipAPI
 import FlagshipCore
 
+/// Why a picture could not become a voi.ci image; each has its own sentence (`PageDraft.sentence`).
+public enum VoiciImageFailure: String, Error, Sendable {
+    /// ImageIO could not open or decode the bytes.
+    case unreadable
+    /// Drawing or writing the JPEG failed, or the written file still carried metadata.
+    case encodeFailed
+    /// Still over the cap at the lowest quality.
+    case tooDetailed
+}
+
 /// Images for a voi.ci page, re-encoded on the device from pixels (docs/voici-and-messages.md §2.3, §2.5): the source's
 /// orientation applied, a square (avatar) or fitted (card) bitmap drawn in sRGB, written fresh with ImageIO, so no
-/// EXIF, XMP, ICC or GPS survives. Quality steps down to 0.6, then the image is refused.
+/// EXIF, XMP, ICC or GPS survives. Quality steps down to 0.6, then the picture shrinks a fifth at a time, then the
+/// image is refused. Each step logs a code (never pixels) under `com.flagshipserver.app` / `voici-image`.
 public enum VoiciImageEncoder {
     public enum Shape: Sendable { case avatar, card }
 
-    public static func encode(_ data: Data, shape: Shape) -> [UInt8]? {
-        guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
-        let maxSide = shape == .avatar ? 1024 : 800
+    static let log = Logger(subsystem: "com.flagshipserver.app", category: "voici-image")
+    /// The longest side the photo editor works on.
+    public static let editorMaxSide = 2048
+
+    public static func encode(_ data: Data, shape: Shape) -> [UInt8]? { try? encodeResult(data, shape: shape).get() }
+
+    public static func encodeResult(_ data: Data, shape: Shape) -> Result<[UInt8], VoiciImageFailure> {
+        switch shape {
+        case .avatar:
+            return decode(data, maxSide: 1024).flatMap { encodeAvatar($0, edit: VoiciImageEdit(width: Double($0.width), height: Double($0.height))) }
+        case .card:
+            return decode(data, maxSide: 800).flatMap { image in
+                guard let bitmap = draw(image, shape: .card) else {
+                    log.error("card draw failed")
+                    return .failure(.encodeFailed)
+                }
+                return smallest(bitmap, cap: VoiciPage.cardImageMaxBytes, minSide: 160)
+            }
+        }
+    }
+
+    /// The picked bytes as an upright 8-bit sRGB picture whose longest side is at most `maxSide` (the source's
+    /// orientation applied). HDR, wide-gamut, 16-bit and gain-map sources all come out the same way.
+    public static func decode(_ data: Data, maxSide: Int) -> Result<CGImage, VoiciImageFailure> {
+        guard !data.isEmpty, let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              CGImageSourceGetCount(src) > 0 else {
+            log.error("decode: no image source (bytes=\(data.count, privacy: .public))")
+            return .failure(.unreadable)
+        }
+        let type = (CGImageSourceGetType(src) as String?) ?? "?"
         let thumb: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                                       kCGImageSourceThumbnailMaxPixelSize: maxSide, kCGImageSourceShouldCacheImmediately: true]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(src, 0, thumb as CFDictionary) else { return nil }
-        guard let bitmap = draw(image, shape: shape) else { return nil }
-        let cap = shape == .avatar ? VoiciPage.avatarMaxBytes : VoiciPage.cardImageMaxBytes
-        var q = 0.82
-        while q >= 0.6 - 0.001 {
-            if let out = jpeg(bitmap, quality: q), out.count <= cap { return out }
-            q -= 0.05
+        var image = CGImageSourceCreateThumbnailAtIndex(src, 0, thumb as CFDictionary)
+        if image == nil {
+            log.error("decode: thumbnail failed (type=\(type, privacy: .public)), trying a full decode")
+            image = fullDecode(src, maxSide: maxSide)
         }
-        return nil
+        guard let image else {
+            log.error("decode: no picture (type=\(type, privacy: .public))")
+            return .failure(.unreadable)
+        }
+        guard let upright = normalized(image, maxSide: maxSide) else {
+            log.error("decode: redraw failed (type=\(type, privacy: .public) bpc=\(image.bitsPerComponent, privacy: .public) bpp=\(image.bitsPerPixel, privacy: .public))")
+            return .failure(.unreadable)
+        }
+        log.info("decode: ok (type=\(type, privacy: .public) \(upright.width, privacy: .public)x\(upright.height, privacy: .public))")
+        return .success(upright)
+    }
+
+    /// The camera's picture (any orientation) as the editor's upright sRGB picture.
+    public static func decode(_ image: UIImage, maxSide: Int) -> Result<CGImage, VoiciImageFailure> {
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return .failure(.unreadable) }
+        let k = min(1, CGFloat(maxSide) / max(size.width, size.height))
+        let target = CGSize(width: max(1, (size.width * k).rounded()), height: max(1, (size.height * k).rounded()))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        format.preferredRange = .standard
+        let out = UIGraphicsImageRenderer(size: target, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
+        guard let cg = out.cgImage, let upright = normalized(cg, maxSide: maxSide) else {
+            log.error("decode: camera picture redraw failed")
+            return .failure(.unreadable)
+        }
+        return .success(upright)
+    }
+
+    /// The avatar: the editor's crop of `image` (turns, flip, square) drawn at 512 × 512 and written within the cap.
+    public static func encodeAvatar(_ image: CGImage, edit: VoiciImageEdit) -> Result<[UInt8], VoiciImageFailure> {
+        guard let bitmap = render(image, edit: edit, side: 512) else {
+            log.error("avatar draw failed")
+            return .failure(.encodeFailed)
+        }
+        return smallest(bitmap, cap: VoiciPage.avatarMaxBytes)
+    }
+
+    /// The first JPEG within `cap`: quality 0.82 stepping down to 0.6, then the picture a fifth smaller each round
+    /// (never under `minSide`). A device whose encoder fails at one size gets a freshly drawn copy at the next, so
+    /// `.encodeFailed` means no size worked at all.
+    static func smallest(_ bitmap: CGImage, cap: Int, minSide: Int = 256) -> Result<[UInt8], VoiciImageFailure> {
+        var current = bitmap
+        var smallest = Int.max
+        var wrote = false
+        while true {
+            var q = 0.82
+            while q >= 0.6 - 0.001 {
+                guard let out = jpeg(current, quality: q) else {
+                    log.error("jpeg failed at \(current.width, privacy: .public)x\(current.height, privacy: .public) q=\(q, privacy: .public)")
+                    break
+                }
+                wrote = true
+                if out.count <= cap {
+                    if current.width != bitmap.width { log.info("fit after downscale to \(current.width, privacy: .public)x\(current.height, privacy: .public)") }
+                    return .success(out)
+                }
+                smallest = min(smallest, out.count)
+                q -= 0.05
+            }
+            let next = Int(Double(max(current.width, current.height)) * 0.8)
+            guard next >= minSide, let smaller = normalized(current, maxSide: next) else { break }
+            current = smaller
+        }
+        guard wrote else { return .failure(.encodeFailed) }
+        log.error("too detailed: \(smallest, privacy: .public) bytes at the smallest size and quality, cap \(cap, privacy: .public)")
+        return .failure(.tooDetailed)
+    }
+
+    static func fullDecode(_ src: CGImageSource, maxSide: Int) -> CGImage? {
+        guard let full = CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
+        let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any]
+        let raw = (props?[kCGImagePropertyOrientation] as? NSNumber)?.uint32Value ?? 1
+        let orientation: UIImage.Orientation = switch CGImagePropertyOrientation(rawValue: raw) ?? .up {
+        case .upMirrored: .upMirrored
+        case .down: .down
+        case .downMirrored: .downMirrored
+        case .leftMirrored: .leftMirrored
+        case .right: .right
+        case .rightMirrored: .rightMirrored
+        case .left: .left
+        default: .up
+        }
+        return try? decode(UIImage(cgImage: full, scale: 1, orientation: orientation), maxSide: maxSide).get()
+    }
+
+    /// `image` redrawn into an 8-bit sRGB bitmap no larger than `maxSide`.
+    static func normalized(_ image: CGImage, maxSide: Int) -> CGImage? {
+        let w = Double(image.width), h = Double(image.height)
+        guard w > 0, h > 0, let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let k = min(1, Double(maxSide) / max(w, h))
+        let tw = max(1, Int((w * k).rounded())), th = max(1, Int((h * k).rounded()))
+        guard let ctx = CGContext(data: nil, width: tw, height: th, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: tw, height: th))
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: tw, height: th))
+        return ctx.makeImage()
+    }
+
+    /// `image` (upright, top-left origin) mapped through the edit onto a white `side` × `side` sRGB square.
+    public static func render(_ image: CGImage, edit: VoiciImageEdit, side: Int) -> CGImage? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        let s = CGFloat(side)
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
+        ctx.interpolationQuality = .high
+        // Work top-left with y down, as the edit's maps do, then draw the picture upright in that space.
+        ctx.translateBy(x: 0, y: s)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.concatenate(edit.outputTransform(side: Double(side)))
+        let h = CGFloat(image.height)
+        ctx.translateBy(x: 0, y: h)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(image.width), height: h))
+        return ctx.makeImage()
     }
 
     /// Avatar: center square crop at 512 × 512. Card: fit within 400 × 210.
@@ -54,14 +210,24 @@ public enum VoiciImageEncoder {
 
     static func jpeg(_ image: CGImage, quality: Double) -> [UInt8]? {
         let out = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        guard let dest = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else {
+            log.error("jpeg: no destination")
+            return nil
+        }
         CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: quality,
                                                  kCGImagePropertyOrientation: 1] as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { return nil }
+        guard CGImageDestinationFinalize(dest) else {
+            log.error("jpeg: finalize failed")
+            return nil
+        }
         // ImageIO (iOS 26, macOS 26) adds an EXIF APP1 (colour space, size) and an empty Photoshop APP13 even for a
         // bare bitmap: drop every APPn but JFIF (APP0) and Adobe (APP14), then refuse anything that still carries one.
         let bytes = stripAppSegments([UInt8](out as Data))
-        return VoiciPage.voiciJpegHasMetadata(bytes) ? nil : bytes
+        if VoiciPage.voiciJpegHasMetadata(bytes) {
+            log.error("jpeg: metadata left after strip (markers \(markers([UInt8](out as Data)), privacy: .public))")
+            return nil
+        }
+        return bytes
     }
 
     /// The JPEG without its APP1-APP13 and APP15 segments (everything before the scan is walked; the rest is copied).
@@ -71,6 +237,10 @@ public enum VoiciImageEncoder {
         var i = 2
         while i + 4 <= b.count, b[i] == 0xff {
             let m = b[i + 1]
+            if m == 0xff {
+                i += 1
+                continue
+            }
             if m == 0xda || m == 0xd9 { break }
             let end = i + 2 + (Int(b[i + 2]) << 8 | Int(b[i + 3]))
             guard end <= b.count else { return b }
@@ -79,6 +249,20 @@ public enum VoiciImageEncoder {
         }
         out += b[i...]
         return out
+    }
+
+    /// The marker list before the scan, for the log (e.g. "e0 e1 ed c0 c4 db da").
+    static func markers(_ b: [UInt8]) -> String {
+        var names: [String] = []
+        var i = 2
+        while i + 4 <= b.count, b[i] == 0xff, names.count < 40 {
+            let m = b[i + 1]
+            if m == 0xff { i += 1; continue }
+            names.append(String(format: "%02x", m))
+            if m == 0xda || m == 0xd9 { break }
+            i += 2 + (Int(b[i + 2]) << 8 | Int(b[i + 3]))
+        }
+        return names.joined(separator: " ")
     }
 }
 

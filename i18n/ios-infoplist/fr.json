@@ -1,5 +1,5 @@
 {
-  "NSCameraUsageDescription": "Flagship utilise la caméra pour scanner un QR d'association affiché par votre serveur, et pour votre vidéo pendant un appel, uniquement quand vous l'activez.",
+  "NSCameraUsageDescription": "Flagship utilise la caméra pour scanner un QR d’association affiché par votre serveur, pour prendre la photo de votre page, et pour votre vidéo pendant un appel, uniquement quand vous l’activez.",
   "NSBluetoothAlwaysUsageDescription": "Flagship utilise le Bluetooth pour trouver un boîtier Flagship que vous avez acheté et le configurer. Il ne cherche que pendant la configuration d'un boîtier.",
   "NSFaceIDUsageDescription": "Flagship utilise Face ID pour confirmer des actions sensibles, comme approuver un déverrouillage ou révoquer un serveur.",
   "NSLocalNetworkUsageDescription": "Flagship communique directement avec votre serveur lorsqu'il est sur le même réseau, ce qui est plus rapide que de passer par le relais, et l'y retrouve lorsque Flagship est injoignable.",

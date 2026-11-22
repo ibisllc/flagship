@@ -1575,7 +1575,6 @@
   "Open account %@": "Ouvrir le compte %@",
   "Authorize your private account name": "Autorisez le nom privé de votre compte",
   "Create your private account directory": "Créez l’annuaire privé de votre compte",
-  "That photo couldn't be made small enough. Try another.": "Cette photo n’a pas pu être assez réduite. Essayez-en une autre.",
   "Add photo": "Ajouter une photo",
   "Change photo": "Changer la photo",
   "Remove photo": "Supprimer la photo",
@@ -4017,5 +4016,17 @@
   "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Les appels sont activés. Les personnes qui appellent se connectent avec Flagship et vous laissent les rappeler. Vous pouvez les désactiver dans Options sociales.",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account.": "Vous n’utilisez pas la récupération dans le cloud ? Gardez un fichier chiffré de la clé de votre compte en lieu sûr, pour qu’un téléphone perdu ne vous fasse pas perdre votre compte.",
   "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in iCloud Keychain or your password manager, so there is no password to make up. On a new device, the passkey and the recovery passphrase below open it together. Flagship can't open it.": "La récupération dans le cloud enregistre une copie chiffrée de la clé de votre compte chez Flagship. Une clé d’accès la verrouille : votre téléphone garde la clé d’accès dans le trousseau iCloud ou votre gestionnaire de mots de passe, vous n’avez donc aucun mot de passe à inventer. Sur un nouvel appareil, la clé d’accès et la phrase secrète de récupération ci-dessous l’ouvrent ensemble. Flagship ne peut pas l’ouvrir.",
-  "Set up cloud recovery": "Configurer la récupération dans le cloud"
+  "Set up cloud recovery": "Configurer la récupération dans le cloud",
+  "Drag to move the photo, pinch to zoom.": "Faites glisser pour déplacer la photo, pincez pour zoomer.",
+  "Edit photo": "Modifier la photo",
+  "Use": "Utiliser",
+  "Photo crop": "Recadrage de la photo",
+  "Take photo": "Prendre une photo",
+  "Choose from library": "Choisir dans la photothèque",
+  "Choose a file": "Choisir un fichier",
+  "That photo couldn't be loaded. If it's in iCloud, check your connection and try again.": "Impossible de charger cette photo. Si elle est dans iCloud, vérifiez votre connexion et réessayez.",
+  "That file couldn't be read as a photo. Try another one.": "Ce fichier n’a pas pu être lu comme une photo. Essayez-en un autre.",
+  "The photo couldn't be saved on this device. Try again.": "La photo n’a pas pu être enregistrée sur cet appareil. Réessayez.",
+  "That photo is too detailed to fit. Try another one.": "Cette photo est trop détaillée pour tenir. Essayez-en une autre.",
+  "Flagship can't use the camera. Allow it in Settings, then try again.": "Flagship ne peut pas utiliser la caméra. Autorisez-la dans Réglages, puis réessayez."
 }

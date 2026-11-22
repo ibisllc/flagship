@@ -1,5 +1,5 @@
 {
-  "NSCameraUsageDescription": "Flagship は、サーバーに表示されるペアリング用 QR コードの読み取りと、通話であなたがオンにしたときのビデオにのみカメラを使用します。",
+  "NSCameraUsageDescription": "Flagship は、サーバーに表示されるペアリング用 QR コードの読み取り、ページ用の写真の撮影、通話であなたがオンにしたときのビデオにのみカメラを使用します。",
   "NSBluetoothAlwaysUsageDescription": "Flagship は Bluetooth を使って、購入した Flagship ボックスを見つけて設定します。ボックスを設定している間だけ探します。",
   "NSFaceIDUsageDescription": "Flagship は、ロック解除の承認やサーバーの取り消しなど、重要な操作を確認するために Face ID を使用します。",
   "NSLocalNetworkUsageDescription": "サーバーが同じネットワーク上にある場合、Flagship はサーバーと直接通信します。リレーを経由するより高速で、Flagship に接続できないときもそのネットワーク上でサーバーを見つけられます。",

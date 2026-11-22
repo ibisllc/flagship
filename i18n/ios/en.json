@@ -6401,10 +6401,6 @@
     "en": "Create your private account directory",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OpenAccountViewModel.swift:183"
   },
-  "That photo couldn't be made small enough. Try another.": {
-    "en": "That photo couldn't be made small enough. Try another.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:220"
-  },
   "Add photo": {
     "en": "Add photo",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift:144"
@@ -17119,5 +17115,53 @@
   "Set up cloud recovery": {
     "en": "Set up cloud recovery",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift"
+  },
+  "Drag to move the photo, pinch to zoom.": {
+    "en": "Drag to move the photo, pinch to zoom.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PhotoCropEditor.swift"
+  },
+  "Edit photo": {
+    "en": "Edit photo",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PhotoCropEditor.swift"
+  },
+  "Use": {
+    "en": "Use",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PhotoCropEditor.swift: confirms the edited photo"
+  },
+  "Photo crop": {
+    "en": "Photo crop",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PhotoCropEditor.swift: accessibility label of the crop area"
+  },
+  "Take photo": {
+    "en": "Take photo",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
+  },
+  "Choose from library": {
+    "en": "Choose from library",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
+  },
+  "Choose a file": {
+    "en": "Choose a file",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
+  },
+  "That photo couldn't be loaded. If it's in iCloud, check your connection and try again.": {
+    "en": "That photo couldn't be loaded. If it's in iCloud, check your connection and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
+  },
+  "That file couldn't be read as a photo. Try another one.": {
+    "en": "That file couldn't be read as a photo. Try another one.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
+  },
+  "The photo couldn't be saved on this device. Try again.": {
+    "en": "The photo couldn't be saved on this device. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
+  },
+  "That photo is too detailed to fit. Try another one.": {
+    "en": "That photo is too detailed to fit. Try another one.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
+  },
+  "Flagship can't use the camera. Allow it in Settings, then try again.": {
+    "en": "Flagship can't use the camera. Allow it in Settings, then try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageEditorScreen.swift"
   }
 }

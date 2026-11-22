@@ -1575,7 +1575,6 @@
   "Open account %@": "Abrir la cuenta %@",
   "Authorize your private account name": "Autoriza el nombre privado de tu cuenta",
   "Create your private account directory": "Crea el directorio privado de tu cuenta",
-  "That photo couldn't be made small enough. Try another.": "No se pudo reducir lo suficiente esa foto. Prueba con otra.",
   "Add photo": "Añadir foto",
   "Change photo": "Cambiar foto",
   "Remove photo": "Quitar foto",
@@ -4017,5 +4016,17 @@
   "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": "Las llamadas están activadas. Quien llama inicia sesión con Flagship y te deja devolverle la llamada. Puedes desactivarlas en Opciones sociales.",
   "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account.": "¿No usas la recuperación en la nube? Guarda un archivo cifrado de la clave de tu cuenta en un lugar seguro, para que perder el teléfono no signifique perder tu cuenta.",
   "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in iCloud Keychain or your password manager, so there is no password to make up. On a new device, the passkey and the recovery passphrase below open it together. Flagship can't open it.": "La recuperación en la nube guarda una copia cifrada de la clave de tu cuenta en Flagship. Una llave de acceso la protege: tu teléfono guarda la llave de acceso en el Llavero de iCloud o en tu gestor de contraseñas, así que no tienes que inventar ninguna contraseña. En un dispositivo nuevo, la llave de acceso y la frase de contraseña de recuperación de abajo la abren juntas. Flagship no puede abrirla.",
-  "Set up cloud recovery": "Configurar la recuperación en la nube"
+  "Set up cloud recovery": "Configurar la recuperación en la nube",
+  "Drag to move the photo, pinch to zoom.": "Arrastra para mover la foto y pellizca para hacer zoom.",
+  "Edit photo": "Editar foto",
+  "Use": "Usar",
+  "Photo crop": "Recorte de la foto",
+  "Take photo": "Hacer foto",
+  "Choose from library": "Elegir de la fototeca",
+  "Choose a file": "Elegir un archivo",
+  "That photo couldn't be loaded. If it's in iCloud, check your connection and try again.": "No se pudo cargar esa foto. Si está en iCloud, comprueba tu conexión y vuelve a intentarlo.",
+  "That file couldn't be read as a photo. Try another one.": "Ese archivo no se pudo leer como foto. Prueba con otro.",
+  "The photo couldn't be saved on this device. Try again.": "No se pudo guardar la foto en este dispositivo. Vuelve a intentarlo.",
+  "That photo is too detailed to fit. Try another one.": "Esa foto tiene demasiado detalle para caber. Prueba con otra.",
+  "Flagship can't use the camera. Allow it in Settings, then try again.": "Flagship no puede usar la cámara. Permítelo en Ajustes y vuelve a intentarlo."
 }

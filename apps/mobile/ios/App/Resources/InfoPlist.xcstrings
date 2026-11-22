@@ -7,43 +7,43 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship uses the camera to scan a pairing QR shown by your server, and for your video in a call, only when you turn it on."
+            "value": "Flagship uses the camera to scan a pairing QR shown by your server, to take your page photo, and for your video in a call, only when you turn it on."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship usa la cámara para escanear un QR de vinculación que muestra tu servidor y para tu vídeo en una llamada, solo cuando la activas."
+            "value": "Flagship usa la cámara para escanear un QR de vinculación que muestra tu servidor, para hacer la foto de tu página y para tu vídeo en una llamada, solo cuando la activas."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship utilise la caméra pour scanner un QR d'association affiché par votre serveur, et pour votre vidéo pendant un appel, uniquement quand vous l'activez."
+            "value": "Flagship utilise la caméra pour scanner un QR d’association affiché par votre serveur, pour prendre la photo de votre page, et pour votre vidéo pendant un appel, uniquement quand vous l’activez."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship nutzt die Kamera, um einen Kopplungs-QR-Code deines Servers zu scannen, und für dein Video in einem Anruf, nur wenn du sie einschaltest."
+            "value": "Flagship nutzt die Kamera, um einen Kopplungs-QR-Code deines Servers zu scannen, um das Foto für deine Seite aufzunehmen, und für dein Video in einem Anruf, nur wenn du sie einschaltest."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O Flagship usa a câmera para ler um QR de pareamento mostrado pelo seu servidor e para o seu vídeo em uma chamada, só quando você a liga."
+            "value": "O Flagship usa a câmera para ler um QR de pareamento mostrado pelo seu servidor, para tirar a foto da sua página e para o seu vídeo em uma chamada, só quando você a liga."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship は、サーバーに表示されるペアリング用 QR コードの読み取りと、通話であなたがオンにしたときのビデオにのみカメラを使用します。"
+            "value": "Flagship は、サーバーに表示されるペアリング用 QR コードの読み取り、ページ用の写真の撮影、通話であなたがオンにしたときのビデオにのみカメラを使用します。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship 使用摄像头扫描服务器显示的配对二维码，以及在通话中你打开摄像头时传送你的视频。"
+            "value": "Flagship 使用摄像头扫描服务器显示的配对二维码、拍摄你的主页照片，以及在通话中你打开摄像头时传送你的视频。"
           }
         }
       }

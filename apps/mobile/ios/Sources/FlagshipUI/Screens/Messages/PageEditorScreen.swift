@@ -63,16 +63,89 @@ final class PageDraft {
         if !changed { reload() }
     }
 
+    /// The picture waiting in the crop editor.
+    var editingPhoto: EditingPhoto?
+
+    struct EditingPhoto: Identifiable {
+        let id = UUID()
+        let image: CGImage
+    }
+
+    /// A photo from the library: loaded, decoded upright, then shown in the crop editor.
     func pick(_ item: PhotosPickerItem?) async {
-        guard let item, let data = try? await item.loadTransferable(type: Data.self) else { return }
-        guard let jpeg = VoiciImageEncoder.encode(data, shape: .avatar) else {
-            note = String(localized: "That photo couldn't be made small enough. Try another.")
+        guard let item else { return }
+        let data: Data?
+        do {
+            data = try await item.loadTransferable(type: Data.self)
+        } catch {
+            VoiciImageEncoder.log.error("library: load failed (\(String(describing: type(of: error)), privacy: .public))")
+            note = String(localized: "That photo couldn't be loaded. If it's in iCloud, check your connection and try again.")
             return
         }
-        avatarBytes = jpeg
-        avatar = CanonicalJson.sha256Hex(jpeg)
-        note = nil
-        await commit()
+        guard let data else {
+            VoiciImageEncoder.log.error("library: no data")
+            note = String(localized: "That photo couldn't be loaded. If it's in iCloud, check your connection and try again.")
+            return
+        }
+        await open(data)
+    }
+
+    /// A photo from Files.
+    func pickFile(_ result: Result<[URL], Error>) async {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
+            VoiciImageEncoder.log.error("files: read failed")
+            note = String(localized: "That file couldn't be read as a photo. Try another one.")
+            return
+        }
+        await open(data)
+    }
+
+    /// A photo from the camera.
+    func took(_ photo: UIImage?) async {
+        guard let photo else { return }
+        let r = await Task.detached(priority: .userInitiated) { VoiciImageEncoder.decode(photo, maxSide: VoiciImageEncoder.editorMaxSide) }.value
+        show(r)
+    }
+
+    func open(_ data: Data) async {
+        let r = await Task.detached(priority: .userInitiated) { VoiciImageEncoder.decode(data, maxSide: VoiciImageEncoder.editorMaxSide) }.value
+        show(r)
+    }
+
+    private func show(_ r: Result<CGImage, VoiciImageFailure>) {
+        switch r {
+        case .success(let image):
+            note = nil
+            editingPhoto = EditingPhoto(image: image)
+        case .failure(let f):
+            note = Self.sentence(f)
+        }
+    }
+
+    /// Use in the crop editor: the edited square becomes the page photo.
+    func use(_ image: CGImage, edit: VoiciImageEdit) async {
+        editingPhoto = nil
+        let r = await Task.detached(priority: .userInitiated) { VoiciImageEncoder.encodeAvatar(image, edit: edit) }.value
+        switch r {
+        case .success(let jpeg):
+            avatarBytes = jpeg
+            avatar = CanonicalJson.sha256Hex(jpeg)
+            note = nil
+            await commit()
+        case .failure(let f):
+            note = Self.sentence(f)
+        }
+    }
+
+    nonisolated static func sentence(_ f: VoiciImageFailure) -> String {
+        switch f {
+        case .unreadable: String(localized: "That file couldn't be read as a photo. Try another one.")
+        case .encodeFailed: String(localized: "The photo couldn't be saved on this device. Try again.")
+        case .tooDetailed: String(localized: "That photo is too detailed to fit. Try another one.")
+        }
     }
 
     /// Records the fields as one profile draft (it replaces this device's earlier one). False when a field is refused.
@@ -106,6 +179,8 @@ struct PageEditorView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var photo: PhotosPickerItem?
     @State private var choosingPhoto = false
+    @State private var choosingFile = false
+    @State private var takingPhoto = false
     @State private var photoMenu = false
     @State private var editingLinks = false
     @State private var composing = false
@@ -137,10 +212,34 @@ struct PageEditorView: View {
                 photo = nil
             }
         }
-        .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
+        .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images, preferredItemEncoding: .compatible)
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image], allowsMultipleSelection: false) { r in
+            Task { await draft.pickFile(r) }
+        }
+        .fullScreenCover(isPresented: $takingPhoto) {
+            CameraCapture { image in
+                takingPhoto = false
+                Task { await draft.took(image) }
+            }
+            .ignoresSafeArea()
+        }
+        .sheet(item: $draft.editingPhoto) { p in
+            PhotoCropEditor(image: p.image, onUse: { e in Task { await draft.use(p.image, edit: e) } }, onCancel: { draft.editingPhoto = nil })
+                .interactiveDismissDisabled()
+        }
         .confirmationDialog(Text("Photo"), isPresented: $photoMenu) {
-            Button(draft.avatar == nil ? String(localized: "Add photo") : String(localized: "Change photo")) { choosingPhoto = true }
+            if PhotoSource.cameraAvailable {
+                Button("Take photo") {
+                    if PhotoSource.cameraAllowed { takingPhoto = true } else {
+                        draft.note = String(localized: "Flagship can't use the camera. Allow it in Settings, then try again.")
+                    }
+                }
+                .accessibilityIdentifier("page-photo-camera")
+            }
+            Button("Choose from library") { choosingPhoto = true }
                 .accessibilityIdentifier("page-photo")
+            Button("Choose a file") { choosingFile = true }
+                .accessibilityIdentifier("page-photo-file")
             if draft.avatar != nil {
                 Button("Remove photo", role: .destructive) {
                     draft.avatar = nil
