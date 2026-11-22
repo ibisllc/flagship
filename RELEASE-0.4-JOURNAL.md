@@ -1827,3 +1827,11 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   Not run: iOS RecoveryBannerStoreTests (simulator), webapp gym specs gym-onboarding / gym-serverpage, devices. To check
   on a device: iOS Settings → Cloud recovery now enrols the real account key (used to wrap a random key).
   Shell numbers from here: posts-cap moves to **v247**, photo-picker to **v248** at merge.
+- 2026-11-21 late: merged `0.4/photo-picker` (ff, shell **v248**): page photo from camera / library / Files on iOS
+  and Android, file or camera on the webapp, then a square crop editor with rotate and flip (shared vectors
+  `voici-image-edit`); Android decodes with ImageDecoder (EXIF orientation applied). iOS "couldn't be made small
+  enough" was a catch-all: decode now redraws to 8-bit sRGB with a full-decode fallback, encode shrinks a fifth per round
+  to 256 px (160 for link cards), four honest failure sentences, `voici-image` log codes; same shrink on Android and web.
+  Gates: Android 3,209 unit + assembleDebug, iOS app build + VoiciImageEditTests 6/6, tsc, i18n, parity, web 3,824.
+  Device tests: the failing photo on the owner's iPhone, camera capture on both phones, webapp Take photo on a phone.
+  posts-cap now takes **v249**.
