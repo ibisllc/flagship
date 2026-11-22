@@ -249,9 +249,12 @@ object VoiciCallCenter {
             .setContentIntent(activityIntent(context, null))
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, broadcast(context, VoiciCallActionReceiver.DECLINE), activityIntent(context, VoiciCallActivity.ACTION_ANSWER)))
             .setTimeoutAfter(VoiciCalls.RING_MS)
-        if (!quiet) b.setFullScreenIntent(activityIntent(context, null), true)
+            // Android 14+ refuses a CallStyle notification without a full-screen intent unless a foreground service
+            // runs; the quiet channel's low importance already keeps it from popping up over the call screen.
+            .setFullScreenIntent(activityIntent(context, null), true)
         val n = b.build()
-        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, n)
+        runCatching { (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, n) }
+            .onFailure { android.util.Log.w("voici-call", "incoming notification refused: ${it.javaClass.simpleName}") }
     }
 
     fun ongoingNotification(context: Context) = NotificationCompat.Builder(context.also { ensureChannel(it) }, QUIET_CHANNEL_ID)
