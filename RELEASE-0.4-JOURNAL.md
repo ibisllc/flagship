@@ -1770,3 +1770,21 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   bbce8f84e: locked+setting on, unlock-to-answer, no pop-up over the call screen, ring continues with screen open.
   iOS untouched; note: iOS CallKit Answer while the app is locked (setting off) fails the CXAnswerCallAction (phase
   needsUnlock), not yet tested on TestFlight.
+
+### 2026-11-21 evening — scope widened (owner): call budgets, photo picker, China CallKit, 0.5 app items into 0.4
+- Owner approved the call-budget fix (agent review: charge caller/page/anon budgets only after signature/PoW; answering
+  the owner's ring-back is free; refund answered calls >= 15 s from caller/page/anon-page, never IP or the daily cap).
+- Owner: profile photo picker (camera/files + crop/rotate/flip) in 0.4 as core UX; iOS bug "couldn't be made small
+  enough" is a catch-all message (Mac reproduction encodes fine: device-specific).
+- Apple rejected iOS 1.3 (9), Guideline 5: CallKit must be inactive in the China storefront. China mode exists
+  (VoiciCallCenter noRingMode) but a fresh install starts CallKit/PushKit before the storefront check. Needs 1.3 (10).
+- Owner: also do the 0.5 list's app items now (killed-app locked answering, onboarding/Home reminders, reach guard,
+  x86 "calls unavailable", native symbols, Google-free push line, push registration dedupe, SW manifest fix).
+  Excluded pending owner: logo/design pass, posts cap (item 6), comments/reposts (7), marketplace on, server work.
+- Agents (worktrees ~/flagship-0.4-<name>, branches 0.4/<name>, pushed, not merged): call-limits (.com + push dedupe),
+  photo-picker (all clients, shell v242), ios-calls (China fail-closed, CallKit Answer while locked, cold-start
+  locked), android-calls (killed-app, reach guard, x86, symbols, Google-free push), onboarding (all clients, SW fix,
+  shell v243). Device locks: native-build.lock, iphone.lock, android-phone.lock under /private/tmp/claude-501/flagship-locks.
+- Disk: removed 14 merged clean agent worktrees; 15 GB free.
+- Resume point: wait for the five agents, review and merge each into release/0.4 (renumber shells), then Android 14
+  and iOS 1.3 (10) builds, owner device tests, App Store reply + resubmit, Play Part B.
