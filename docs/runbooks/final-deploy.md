@@ -24,43 +24,35 @@ force-pushes and keeps its progress in `~/.flagship-release/state.json` so a fai
 run resumes at the failed step. The commands below stay as the reference it follows.
 
 ```sh
-bash scripts/release.sh --list                # the 47 steps, with phase, commands, gate, rollback
-bash scripts/release.sh --phase A             # deploy the real state (steps 1-32), before the Windows test
-bash scripts/release.sh --phase B             # after the Windows results (steps 33-47; 33 is the canary, re-run with --only 33)
+bash scripts/release.sh --list                # the 32 steps, with phase, commands, gate, rollback
+bash scripts/release.sh --phase A             # sign, gate and deploy (steps 1-21)
+bash scripts/release.sh --phase B             # the canary, the notice, the reap, the Studios, the stores (steps 22-32)
 bash scripts/release.sh --dry-run --phase A   # print every command, run nothing
 bash scripts/release.sh --status              # pinned sha, finished steps, next step
 bash scripts/release.sh --from 10             # resume at, or --only 10 to run only, one step
 ```
 
-Phase A ends by writing `device-results/DEPLOYED-FINAL-<date>.md` (main sha, endorsed
-release, shell version, DNS design, appliance sha256, what is live) and, on your yes,
-pushes it to `device-results/windows-2026-10-17` so the Windows agent tests the real
-deployed state. Phase B (scrub, reap, retire the wipe tool, public Studio, stores)
-refuses to start until phase A is recorded finished.
+Every step in `--list` is one the release runs (owner, 2026-11-20: "no more skipping outdated steps"). One-time
+setup that already happened is not a step: step 4 (section 1f) and step 17 (section 8) check it, read-only and
+quiet while it holds, and name the section that sets it up again when it does not. The state file records steps by
+id; a state file of the old 48-step plan is read through a map of the old numbers. A re-pin (origin/main moved
+mid-run) keeps done steps done, except step 10 (the webapp shell signature), which re-opens when the shell version
+moved. Phase A ends with an optional status file for a planned device test (on its own
+`device-results/<machine>-<date>` branch, created from `main`); phase B refuses to start until phase A is recorded
+finished.
 
-The script's order differs from the section numbers below in four places, on purpose:
-the gym gate (6) and a fresh D1 backup come before the migrations (4), so nothing on
-prod changes until the gate is green; the VM appliance builds start right after the
-endorsement (3) so the hours-long builds overlap the deploys; the deploys run
-`.services` (8) first, then the manual DNS step (6a), then `.com` (7): the new `.com`
-publishes no per-box address records, so a box registering while the wildcard does not
-exist yet would get names that do not resolve (and resolvers negative-cache that for
-30 minutes), and the relay must already drop unregistered names uniformly when the
-wildcard starts answering them. Adding the wildcard first is safe for existing
-accounts, whose own records keep answering. `zone-health` ships with the `.com`
-deploy, so the DNS step is checked with `dig` and `zone-health` runs as a post-check
-of the `.com` deploy. The relay mesh (owner, 2026-11-03: mesh on, one Rust relay `iad1` on one machine) splits
-around the `.com` deploy: what the new `.com` binds or reads comes before it (1c R2 buckets, 1d the feed's custom
-domain and cache rule, 1e `RELAY_MESH_KEY_SEED`), the mesh itself after it (8a-8f: the relay key, admission and
-backfill, the tunnel certificates and DNS, the feed switched on with `TUNNEL_HUB_URL`, the Rust relay as `iad1`,
-a 30-minute watch), because a mesh relay is blessed only once `.com` publishes a directory naming it. The canary (9b) opens phase B: it is deferred, not done, until the
-release reaches 100%, so run it again with `--only 33` after each observation window; it never
-holds the other phase B steps. The maintenance notice (12.1) is its own step after it. What it cannot do for you: the DNS canary after the gym run (the gym itself runs from the
-script: `scripts/gym-release-run.sh`, gated on its exit code), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
-tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
-reading the Windows results (typed `windows-ok` before the scrub).
+The script's order differs from the section numbers below, on purpose: the gym gate (6) comes before the migrations
+(4), so nothing on prod changes until it is green; the VM appliance builds start right after the box artifacts so
+the hours-long builds overlap the deploys; the relay (8) is updated after `.com` (7), because a mesh relay is
+blessed only by the directory `.com` publishes. The canary (9b) opens phase B: it is deferred, not done, until the
+release reaches 100%, so run it again with `--only 22` after each observation window; it never holds the other
+phase B steps. What it cannot do for you: the YubiKey and PIN prompts (the tools ask on `/dev/tty`), the App Store
+Connect and Play Console submissions, and the Cloudflare dashboard.
 
-### The 0.2 apps, Studios and servers until 0.3 ships (owner rule 2026-11-02)
+Rollbacks that are not steps: the mesh-off TS hub (`fly.toml`, section 8f) and a `.com` rollback
+(`wrangler rollback`, section 7).
+
+### The 0.2 apps, Studios and servers until 0.3 ships (owner rule 2026-11-02; 0.3 history, step numbers of the old plan)
 
 The 0.2 apps (iOS 1.1 build 5 and 1.0 build 4, Android 9 + Wear, webapp shell v156), the 0.2
 Studios and 0.2 boxes must keep working on production until the release; after it they may only
@@ -146,9 +138,9 @@ The script stops and asks at each of these; nothing else needs you.
 | before the voi.ci deploy | `npm run voici-namespace-report`, decide each collision (D2) | 5 |
 | at least daily once Messages is on | `npm run ops -- voici`; act on reports within 24 h (`npm run voici-abuse`) | (outside the script) |
 
-Two things to know before `--phase A`: step 14 (backup prerequisites, runbook step 1b) must be
-done before the `.com` deploy because that deploy removes the Worker's own D1 backup, and the
-`.com` step refuses without it unless you type `no-backup-accepted`; and the `.com` deploy
+Two things to know before `--phase A`: the setup check (step 4, section 1f) must pass before the
+`.com` deploy, because it is what proves the daily D1 backup works (the Worker keeps none of its
+own), and the `.com` step refuses without it unless you type `no-backup-accepted`; and the `.com` deploy
 (`npm run deploy`) runs in the foreground of your terminal because wrangler asks to move the
 `webapp.` and `remote.` custom domains to the new `flagship-webapp` Worker (answer yes). The gym
 does not exercise that static-only Worker, so that deploy's post-checks are its first real test:
@@ -346,7 +338,24 @@ openssl rand -hex 32 | npx wrangler secret put RELAY_MESH_KEY_SEED    # piped: n
 
 The gym Worker has its own, different value (`--config wrangler.gym.toml`).
 
-## 2. Renew the CA lease (due 2026-11-05, and do it before anything that needs the CA)
+## 1f. One-time setup still in place (checked every release)
+
+`release.sh` step 4. Everything in 1b-1e, 2b, 2c and 6a was done once (0.3); the step checks, read-only, that it
+still holds, one `ok` line each and no prompt:
+
+| Check | Set up again with |
+|---|---|
+| `release/catalog-root.json` is pinned | 2b |
+| `release/box-artifact-trust.json` names the PQ release key | 2c |
+| repo secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; a real age key in `.maintainers/backup-recipient.pub`; the `d1/daily/` rule on `flagship-d1-backups`; `latest.json` taken in the last 36 hours | 1b |
+| every R2 bucket the pinned `apps/com/wrangler.toml` binds exists (a bucket new in this release is offered for creation: the `.com` deploy fails without it) | 1c |
+| `feed.flagshipserver.com` answers over valid TLS | 1d |
+| `.com` holds `RELAY_MESH_KEY_SEED` and `SERVING_REVOCATION_SEED` | 1e |
+| the `flagship.services` root wildcard answers the relay's two addresses; the apex CAA names Let's Encrypt | 6a |
+
+A failed line fails the step; fix it with the named section, then `--only 4`.
+
+## 2. Renew the CA lease (before anything that needs the CA)
 
 Renewed in `072ee32de`: the live lease ends 2027-01-17 (`.maintainers/
 ca-endorsements/bundle.json`), so sign a new one only when `rotate-ca.mjs status`
@@ -548,7 +557,7 @@ the manifest accepts the release's runtime lock and is not older than one the bo
 or unverifiable manifest is not passed, and the artifact's own signed lock decides as before: a missing or
 stale manifest never stops an update, a rollback, a boot or the update guard.
 
-**Freshness:** it is valid 45 days (`--valid-days`, at most 366). Re-sign with `bash scripts/release.sh --only 10`
+**Freshness:** it is valid 45 days (`--valid-days`, at most 366). Re-sign with `bash scripts/release.sh --only 9`
 (or the commands above) and deploy `.com` before it ends; an expired one shows "expired" on every server page
 and stops being checked at updates. A release that changes `release/runtime-lock.json` needs a new manifest
 deployed before boxes are ordered onto it. Rollback: before the `.com` deploy, revert the commit; after, sign a
@@ -771,8 +780,8 @@ account's before these exist (the guard in `docs/wildcard-dns.md` section 5). Do
 this step **after `.services` (8) and before the `.com` deploy (7)**: the new `.com`
 writes no per-box address records, so a box that registers while the wildcard is
 missing gets names that do not resolve (resolvers cache that for 30 minutes), and the
-trim (step 8's follow-up and step 12) needs the wildcard too. `scripts/release.sh`
-runs it in that order (`9ed418ce3`).
+trim (step 8's follow-up and step 12) needs the wildcard too. Done once in 0.3; `scripts/release.sh`
+step 4 now only checks, read-only, that the wildcard and the CAA still answer.
 
 1. Look up the relay's exact addresses (read-only), and compare with the repo
    (`apps/com/wrangler.toml`: `SERVICES_PASSTHROUGH_IPV4/6`, the same pair
@@ -963,7 +972,15 @@ From 0.3 the broker refuses every `publishTxtChallenge` (challenge records are t
 with the release, or delete it (`npx wrangler delete`) if nothing else calls it. Rolling it back reopens a box's way
 to the bare account name.
 
-## 8. Deploy `.services` (Fly): needed, one image
+## 8. The relay: the mesh check, the Rust relay deploy and the mesh-off rollback
+
+Since 0.3 production runs the Rust mesh relay `iad1` on one machine. Every release: `release.sh` step 17 checks the
+mesh set up once in 8a-8d still holds (iad1 in the feed directory, its Fly secrets, both tunnel names on valid TLS,
+`RELAY_MESH` on and `TUNNEL_HUB_URL` at `tunnel.flagship.services`), read-only; step 18 deploys the Rust relay
+(8e) and offers the 30-minute watch (8f). The rest of this section and 8a-8d are the one-time setup and the
+mesh-off rollback (`fly.toml`, the 0.3 TS hub), kept for reference: never a step.
+
+### The mesh-off TS hub (rollback reference)
 
 The earlier wildcard change adds the relay's uniform drop timing for an
 unregistered first-party name (the root wildcard itself needs nothing on Fly);
@@ -1042,7 +1059,7 @@ on ONE machine of the existing Fly app `flagship-services`, running the Rust rel
 stay: 0.2 boxes and phones keep reaching it by those. More relays later: their own Fly app (or a non-Fly host)
 each, admitted, and added to `tunnel.flagship.services` as more A/AAAA records (DNS round-robin; journal I6).
 
-Order and why (steps 22-28 of `release.sh`): the 0.3 TS hub, mesh off, goes out first (step 19, section 8:
+Order and why (0.3, the old plan's steps 22-28 of `release.sh`): the 0.3 TS hub, mesh off, goes out first (step 19, section 8:
 production runs the 0.2 relay, which has no serving authority); `.com` deploys with migrations 0120-0130
 (0122 the mesh tables and log triggers, 0126 grant ids); only then can `.com` admit a relay and publish a
 directory naming it, and **a mesh relay that starts before its directory exists is never blessed** (health 503).
@@ -1314,29 +1331,11 @@ off (a typed one that disagrees fails the run). The workflow stamps the
 version into both apps and fails if the built exe or AppImage reports a
 different one. Then update the two URLs in
 `apps/com/src/route.ts` (`INSTALLER_DOWNLOADS.windows` / `.linux`, they pin
-`studio-v0.1.3`, to `studio-v0.2.0` and the `0.2.0` file names), land, and redeploy `.com` (step 7). They ship marked
-"Experimental"; neither has been run on a real Windows PC or Linux desktop beyond the
-2026-10-18 Windows run recorded in AGENTS.md.
+`studio-v0.1.3`, to `studio-v0.2.0` and the `0.2.0` file names), land, and redeploy `.com` (step 7).
 
-**Dropping a platform's "Experimental" tag** (0.3: Windows, owner 2026-11-02) needs its
-acceptance first: for Windows, `docs/runbooks/0.3-windows-studio-acceptance.md` passed,
-with the report (`Verdict: PASS`) on an origin `device-results/windows-<date>` branch.
-Then it is one setting: the platform to `false` in `STUDIO_EXPERIMENTAL` at the top of
-`apps/web/public/app-stores.js` (e.g. `windows: false,`). The same setting drives the
-Studio's own window title: `node scripts/check-versions.mjs --write` stamps it into
-`apps/builder-windows/src/StudioVersion.cs` (`Experimental`) and
-`apps/builder-linux/version.py` (`EXPERIMENTAL`), and the checker (also run by
-`studio-release.yml` and `npm run parity`) fails when they disagree. So decide it
-**before** `studio-release.yml` builds the public release: the title is compiled into
-the exe. `scripts/release.sh` step `studiowl` asks first, checks the results branch,
-flips the setting, stamps, tests and lands it before dispatching the build; the website
-loses the tag at the phase B redeploy (step 7). Every page in every language marks the
-tag with `data-studio-experimental="<platform>"`, so no page or translation is edited.
-Update the pin in `apps/web/tests/marketingPages.test.ts` ("Studio platforms that have
-not passed a hardware run say so") in the same commit (the script does). The homepage
-shows no per-platform tag: it has a single "Download Flagship Studio on your computer"
-link to `/studio`. Code signing is a separate owner decision (the acceptance runbook,
-"Code signing").
+No Studio carries a maturity tag (owner, 2026-11-20, regardless of testing): the website's `STUDIO_EXPERIMENTAL`
+switch, its tag markup and the stamped window titles are gone. Code signing for Windows is a separate owner
+decision (`docs/runbooks/0.3-windows-studio-acceptance.md`, "Code signing").
 
 **Mac** (`scripts/release-studio.sh`, needs the notary credentials in the
 keychain and `wrangler` on PATH):
@@ -1420,24 +1419,25 @@ review login, and unlock an auto-unlock server.
 Rollback: a store build cannot be recalled; halt the rollout in the console and
 ship a higher version. The notice mechanism (step 12) can ask people to update.
 
-## 11d. Tell the 0.2 apps to update
+## 11d. Tell older apps to update
 
-Run once both stores carry the 0.3 builds (`bash scripts/release.sh --only 45`). The script
+Only when a release leaves older apps unable to work. Run once both stores carry this release's builds
+(`bash scripts/release.sh --only 31`; the step asks first and does nothing without a yes). The script
 previews an `update-required` notice naming this release's store builds and webapp shell; you
 sign it in another terminal (ca-track YubiKey, plus the PQ half from the release key), and it
 commits `.maintainers/notices`, pushes and redeploys `.com`.
 
 ```sh
 node scripts/security-notice.mjs required \
-  --message "Flagship 0.3 is here. Update the app to keep using your account and servers: this version no longer works with them." \
+  --message "Flagship <product> is here. Update the app to keep using your account and servers: this version no longer works with them." \
   --event <approval time> --lock-at <time or now> \
   --platform ios:<iosBuild> --platform android:<androidVersionCode> --platform web:<shell> \
-  --advisory <FSA id for the 0.3 fixes> \
-  --security-reason "0.3 fixes security issues in how this version signs and checks account and server messages." \
+  --advisory <FSA id for the fixes> \
+  --security-reason "<one sentence>" \
   --sign
 ```
 
-What each 0.2 client does with it: iOS 1.1 (5) and Android 9 show the message as a banner with an
+What each 0.2 client did with 0.3's notice (the same holds for later ones): iOS 1.1 (5) and Android 9 show the message as a banner with an
 Update button (store) on every launch: their release builds turn a lock into that banner. A 0.2
 webapp shell locks, and its Update button loads the new shell (which is above `web:`); most
 browsers have the new shell already from the `.com` deploy. iOS 1.0 (4) predates notices and shows
@@ -1452,30 +1452,28 @@ After 0.3 is live (never before: the entry describes what 0.3 fixed), merge the 
 The first commit of `release/0.3` addresses the reported issues alone, so the write-up can point at it.
 The script skips the step when the branch is absent.
 
-## 11c. Translations, store art and voi.ci
+## 11c. Store art and the translations' review status
 
-From `feat/UX` once it is merged: `npm run i18n` (every user-facing string goes through the
-translation system; the gate fails on a missing key or a stale native output), the native review in
-`i18n/REVIEW.md` (recovery, pairing, unlock and backup wording first; you type `reviewed`),
-`npm run store-assets:release-check` (store screenshots and banners per language), and the voi.ci
-canonical links: `VOICI_CANONICAL = "1"` in `apps/com/wrangler.toml` once the gym's named-links group
-is green, shipped by the phase B `.com` redeploy. The D1 migrations go in number order (0110, 0111,
-0112); the webapp shell number and the compatibility matrix move with the UX merge.
+`release.sh` step 28, right before the store builds: `npm run store-assets:release-check` (store screenshots and
+banners per language, from the native captures in `docs/store-assets/capture-plan.md`; the git-ignored captures are
+copied in from your checkout). Missing captures: type `keep-current-art` to build with the screenshots the stores
+already have. It also prints how many lines of `i18n/REVIEW.md` still wait for a native reader: a status, not a gate
+(the translation gate, `npm run i18n`, runs in preflight and on every merge).
 
-## 12. The pre-GA scrub, the reap and the maintenance notice
+## 12. The maintenance notice and the reap
 
-Order matters; read `docs/runbooks/pre-ga-scrub.md` end to end first. Summary,
-with the go/no-go points:
+The pre-GA scrub ran once before 0.3 (`docs/runbooks/pre-ga-scrub.md`, history) and its tool is gone: accounts are
+never bulk-wiped after GA.
 
-1. **Publish a maintenance notice first** (people with test accounts will find
-   their accounts gone). Preview only until you decide; signing needs the
+1. **A maintenance notice** (optional, `release.sh` step 23: only when maintenance with visible downtime is
+   planned). Preview only until you decide; signing needs the
    YubiKey:
 
    ```sh
    cd ~/flagship-deploy
    node scripts/security-notice.mjs maintenance \
      --message "We will update Flagship on {date}. Your servers keep running, but flagshipserver.com may be briefly unavailable." \
-     --event <ISO time of the scrub>               # PREVIEW: prints the canonical bytes, writes nothing
+     --event <ISO time of the maintenance>               # PREVIEW: prints the canonical bytes, writes nothing
    # to publish: the same command with --sign, then
    git add .maintainers/notices && git commit -m "Notice: maintenance on <date>" && git push origin HEAD:main
    cd apps/com && npm run deploy                     # the Worker bundles current.json
@@ -1485,16 +1483,7 @@ with the go/no-go points:
    Retract with `node scripts/security-notice.mjs clear --sign` (then commit and
    deploy). Apps pick a notice up on their next launch or foreground (15 minute
    minimum between polls).
-2. Dry run: `WIPE_ENV=prod WIPE_D1=flagship-state bash scripts/wipe-all-users.sh --list-accounts`
-   and take its output to yourself for an explicit go. The only kept account is
-   `playstore-test-0725`. **Do not run it while a store review is open and that
-   account is missing.**
-3. Real run (a real terminal; types the database name):
-   `WIPE_ENV=prod WIPE_D1=flagship-state WIPE_CONFIRM=prod bash scripts/wipe-all-users.sh --yes`
-4. Verify with the runbook's step 4 (the four orphan counts are 0; the review
-   login signs in).
-5. **Reap** DNS and demo servers of removed accounts (needs the `.com` deploy of
-   step 7, which contains the reap rules). `release.sh` step 36 runs all of this:
+2. **Reap** DNS and demo servers of accounts that no longer exist. `release.sh` step 24 runs all of this:
    the gym sweep is part of it by default (`npx tsx tools/live-e2e/sweep-cli.ts`,
    then `--destroy`; the step asks you to type `sweep`, or `skip-gym` to skip it,
    and refuses the sweep while `/private/tmp/claude-501/flagship-locks/gym.lock`
@@ -1534,28 +1523,11 @@ with the go/no-go points:
    - R2 buckets: per-account objects of wiped accounts (`flagship-d1-backups`
      and `flagship-iso` stay).
    - Fly: apps, volumes and secrets besides `flagship-services`.
-6. **Retire the wipe tooling** only after step 4 and the reap are verified: the
-   ready commit is on the branch `chore/delete-wipe-tooling` (deliberately not
-   on `main`; rebase it first):
+Check: `npm run zone-health` is OK; the review login's server is online (give it one heartbeat).
 
-   ```sh
-   git fetch origin && git checkout chore/delete-wipe-tooling && git rebase origin/main
-   npx tsc -b && npx vitest run scripts && RELEASE=1 bash scripts/release-guard.sh
-   git push origin HEAD:main
-   ```
-
-   It deletes `scripts/wipe-all-users*`, makes the release guard fail any build
-   in which one reappears, and drops GA close-out item 1 from AGENTS.md.
-
-Check: D1 holds only the kept account(s); `curl -s https://flagshipserver.com/api/health`
-is 200; the review login's server is online (give it one heartbeat).
-
-Rollback: the wipe cannot be undone except from the 6-hourly R2 D1 dump
-(`docs/runbooks/d1-restore.md`): take a manual export first
-(`cd apps/com && npx wrangler d1 export flagship-state --remote --output ~/d1-before-scrub.sql`).
-The reap deletes DNS records and demo servers. The DNS records need no recreating
-(the root wildcard answers every name); a demo server is recreated from its
-account. The plan file and its `.log.jsonl` list exactly what went.
+Rollback: the reap deletes DNS records and demo servers. The DNS records need no recreating (the root wildcard
+answers every name); a demo server is recreated from its account. The plan file and its `.log.jsonl` list exactly
+what went.
 
 ## 13. What should block GA
 
@@ -1568,10 +1540,8 @@ account. The plan file and its `.log.jsonl` list exactly what went.
   and `.com` are in step.
 - The arm64 appliance needs a green `main` run published (step 9): until then
   Apple Silicon hosting gets the 2026-10-13 image, which stops at first boot.
-- Windows and Linux Studio have not run end to end on real hardware; ship them
-  as Experimental (owner, 2026-10-20). 0.3: Windows drops the tag only if
-  `0.3-windows-studio-acceptance.md` passes before step `studiowl` (owner, 2026-11-02);
-  otherwise it ships tagged again, which does not block the release.
+- Windows and Linux Studio have not run end to end on real hardware; they ship without
+  any maturity tag (owner, 2026-11-20). Windows code signing is a separate owner decision.
 - Mac Studio reports version 0.2.0 (step 10; stamped from `release/version.json`).
 - Not run by anyone yet, per AGENTS.md: the whole server restore, docker
   save/load and pg_dump/restore against a real box, and the final root-wildcard

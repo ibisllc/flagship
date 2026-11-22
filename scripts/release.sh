@@ -3,15 +3,16 @@
 # release.sh: take current origin/main to a full production release, by hand.
 #
 # The owner runs this from a terminal. It walks docs/runbooks/final-deploy.md
-# step by step in two phases, asks before every command that changes anything
+# step by step in two phases (every step in --list is one this release runs;
+# one-time setup that already happened is a read-only check, not a step), asks before every command that changes anything
 # outside the local checkout, and never reads, echoes or stores a secret:
 # wrangler, flyctl, gh and the Apple tools prompt or use their own login, the
 # YubiKey tools read their PIN from /dev/tty, and FLAGSHIP_ADMIN_SECRET comes
 # only from a silent prompt (kept in memory, handed to the child processes that
 # need it, unset on exit).
 #
-#   bash scripts/release.sh --phase A      deploy the real state (before the Windows test)
-#   bash scripts/release.sh --phase B      after the Windows results: scrub, reap, Studio, stores
+#   bash scripts/release.sh --phase A      sign, gate and deploy (.com, the relay, the appliances)
+#   bash scripts/release.sh --phase B      the canary, the notice, the reap, the Studios, the stores
 #
 #   bash scripts/release.sh --list [--short]       print the plan (every step: phase, commands, gate, rollback)
 #   bash scripts/release.sh --dry-run [--phase P]  print every command of the steps that would run; run nothing
@@ -40,7 +41,6 @@ STATE="$RELEASE_HOME/state.json"
 WT="$RELEASE_HOME/worktree"
 LOCKDIR="$RELEASE_HOME/lock"
 ARTIFACTS="$HOME/flagship-release-artifacts"
-RESULTS_BRANCH="device-results/windows-2026-10-17"
 COM_URL="https://flagshipserver.com"
 SERVICES_URL="https://flagship.services"
 WEBAPP_URL="https://webapp.flagshipserver.com"
@@ -83,12 +83,19 @@ fail() { err "$*"; exit 1; }
 
 # ---------------------------------------------------------------- state
 
-# One tiny node helper owns the JSON file (atomic write, mode 600).
+# One tiny node helper owns the JSON file (atomic write, mode 600). Steps are recorded by id (plan 2). A state
+# file of the 48-step plan (0.3, 0.4's first run) recorded step numbers: they are read through LEGACY, and the
+# file is rewritten by id at its next write; the one-time steps folded into "setup" count as it when all were done.
 ST_JS='
 const fs=require("fs"),path=require("path");
 const [f,op,k,v]=process.argv.slice(1);
 let s={};try{s=JSON.parse(fs.readFileSync(f,"utf8"))}catch{}
-const w=()=>{fs.mkdirSync(path.dirname(f),{recursive:true});const t=f+".tmp";fs.writeFileSync(t,JSON.stringify(s,null,2)+"\n",{mode:0o600});fs.renameSync(t,f)};
+const LEGACY="preflight version plan lease catalogkeys pqkeys endorse artifacts catalog runtime shellsig kickoff secrets gym backup r2buckets feeddomain meshseed migrations services dnsbroker dns com relaykey relayadmit meshcerts meshon meshrelay meshwatch cpu publish redeployA status canary notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android upgradenotice hof final".split(" ");
+if(s.planVersion!==2&&Object.keys(s).length){
+ for(const key of ["done","skipped"])if(Array.isArray(s[key]))s[key]=[...new Set(s[key].map(x=>/^[0-9]+$/.test(x)&&LEGACY[x-1]?LEGACY[x-1]:x))];
+ const d=s.done||[];if(["catalogkeys","pqkeys","backup","r2buckets","feeddomain","meshseed","dns"].every(x=>d.includes(x))&&!d.includes("setup"))d.push("setup");
+}
+const w=()=>{s.planVersion=2;fs.mkdirSync(path.dirname(f),{recursive:true});const t=f+".tmp";fs.writeFileSync(t,JSON.stringify(s,null,2)+"\n",{mode:0o600});fs.renameSync(t,f)};
 switch(op){
  case "get": console.log(s[k]===undefined?"":(Array.isArray(s[k])?s[k].join(" "):String(s[k])));break;
  case "set": s[k]=v;w();break;
@@ -104,10 +111,10 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 
 # ---------------------------------------------------------------- the plan
 
-STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog runtime shellsig kickoff secrets gym backup r2buckets feeddomain meshseed migrations services dnsbroker dns com
-          relaykey relayadmit meshcerts meshon meshrelay meshwatch cpu publish redeployA status
-          canary notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android upgradenotice hof final)
-LAST_A=33   # the last step of phase A (status)
+STEP_IDS=(preflight version plan setup lease endorse artifacts catalog runtime shellsig kickoff secrets gym migrations dnsbroker com
+          meshcheck meshrelay cpu publish status
+          canary notice reap studiowl studiomac redeployB storeart ios android upgradenotice final)
+LAST_A=21   # the last step of phase A (status)
 
 step_id()    { echo "${STEP_IDS[$(($1 - 1))]}"; }
 step_count() { echo "${#STEP_IDS[@]}"; }
@@ -120,7 +127,7 @@ TITLE=""; WHAT=""; RUNBOOK=""; CMDS=""; GATE=""; ROLLBACK=""; REQUIRED=0; OUTWAR
 meta_version() {
   TITLE="Bump the product version (one version on every surface), and open name dibs on release day"
   RUNBOOK="0b. Bump the product version"
-  WHAT="Asks for the new product version (0.4 for this release; release/0.4 already carries the bump) and the store numbers, which must climb, writes release/version.json, regenerates every surface's copy with check-versions --write, commits and pushes to main, then re-pins. A run that keeps the version skips it."
+  WHAT="Asks for the new product version (a release branch usually carries the bump already: answer keep) and the store numbers, which must climb, writes release/version.json, regenerates every surface's copy with check-versions --write, commits and pushes to main, then re-pins. A run that keeps the version skips it."
   read -r -d '' CMDS <<'EOF' || true
 cat release/version.json                  (product, label, iosVersion, iosBuild, androidVersionCode, studio)
 (edit release/version.json with your answers)
@@ -131,36 +138,6 @@ git push origin HEAD:main            (then the pin moves to this commit)
 EOF
   GATE="check-versions passes; the version commit is on origin/main and pinned."
   ROLLBACK="Revert the commit on main before anything is built from it; store numbers already uploaded are burned (take the next ones)."
-}
-meta_catalogkeys() {
-  TITLE="Release catalog keys and root (once), timestamp secret"
-  RUNBOOK="2b. Release catalog keys (once)"
-  WHAT="Skipped when release/catalog-root.json is already pinned. Otherwise makes two keys in an offline folder you choose (the root key signs root, targets and snapshot; the timestamp key is the only one kept online), writes the root, sets the repo secret RELEASE_CATALOG_TIMESTAMP_KEY from the timestamp key file, commits the pinned root to main and re-pins. Boxes built from this commit on follow the catalog (N13)."
-  read -r -d '' CMDS <<'EOF' || true
-npx tsx tools/release-catalog/catalog.ts keygen --id root-1 --out <offline>/catalog-root-1.key.json
-npx tsx tools/release-catalog/catalog.ts keygen --id timestamp-1 --out <offline>/catalog-timestamp-1.key.json
-npx tsx tools/release-catalog/catalog.ts root --key root-1=<pub> --key timestamp-1=<pub> --role root=root-1 --role targets=root-1 --role snapshot=root-1 --role timestamp=timestamp-1 --version 1 --expires-days 730 --out release/catalog-root.json
-gh secret set RELEASE_CATALOG_TIMESTAMP_KEY < <offline>/catalog-timestamp-1.key.json
-git add -- release/catalog-root.json && git commit -m "Pin the release catalog root" && git push origin HEAD:main
-EOF
-  GATE="release/catalog-root.json is on origin/main and pinned; gh secret list shows RELEASE_CATALOG_TIMESTAMP_KEY; both key files are in the offline folder and nowhere else."
-  ROLLBACK="Before any catalog is published, delete the commit's file and the secret and start again. After, rotate with a root signed by the old one (catalog.ts root --version 2 --sign <old key>)."
-}
-meta_pqkeys() {
-  TITLE="PQ release key ceremony (once): two YubiKeys, paper backup, the three pins"
-  RUNBOOK="2c. PQ release key (once)"
-  WHAT="Do it ahead of time with node scripts/pq-ceremony.mjs (guided, checked between steps, resumable); this step then finds the key pinned. Skipped once release/box-artifact-trust.json names a PQ key. Otherwise makes the ML-DSA-65 half of the release key, encrypts it with age to your two YubiKeys, prints the paper backup, proves each YubiKey opens it, then pins it for release endorsements, CA leases and box artifacts (each with its cut-over: what is already signed stays valid), commits the pins and the binding, and re-pins. From then on endorsements, leases and artifacts carry a PQ companion and boxes need it."
-  read -r -d '' CMDS <<'EOF' || true
-brew install age age-plugin-yubikey          (once)
-age-plugin-yubikey --generate --name flagship-release --pin-policy always --touch-policy always   (each YubiKey; recipients and stubs to ~/.flagship-release/)
-node scripts/pq-release-key.mjs init --recipient <yubikey-1> --recipient <yubikey-2>       (PIN + touch; prints the paper code)
-node scripts/pq-release-key.mjs verify-yubikey      (each YubiKey in turn)
-node scripts/pq-release-key.mjs pin --key-id <id> --require-pq-after auto --ca-lease --box-artifact --legacy-manifest <published manifest>...
-node scripts/gen-box-release.mjs --write && npx tsc -b
-git add -- packages/protocol/src/releasePqPin.ts packages/protocol/src/caLeasePq.ts release/box-artifact-trust.json <client pin files> .maintainers/release-pq && git commit -m "Pin the PQ release key" && git push origin HEAD:main
-EOF
-  GATE="show-pub lists the key as pinned; the paper code is written down and stored apart from both YubiKeys; both YubiKeys opened the key file."
-  ROLLBACK="Before anything is signed with it: revert the pin commit. After: a lost or leaked key is replaced with init and a new pin (docs/runbooks/pq-release-key.md, Losing things)."
 }
 meta_artifacts() {
   TITLE="Build, sign and publish the box artifacts (+ gVisor mirror, box release, pins)"
@@ -212,9 +189,9 @@ EOF
   ROLLBACK="Before the .com deploy: revert the commit. After: a signed manifest cannot be taken back; sign a newer sequence (boxes refuse a lower one). Committing null again makes .com answer 204; boxes keep the last one they accepted, and updates fall back to the artifact's signed lock."
 }
 meta_shellsig() {
-  TITLE="Sign the webapp shell (YubiKey), so the webapp can prove it is the release (0.4)"
+  TITLE="Sign the webapp shell (YubiKey), so the webapp can prove it is the release"
   RUNBOOK="3e. Sign the webapp shell"
-  WHAT="The webapp checks /shell-signature.json against the ca-track authority (docs/webapp-key-custody.md, 'Signing a release shell'). Builds the webapp assets exactly as the deploy does, previews the shell version, file count and manifest digest, then on your yes signs flagship/webapp-shell/v1 with the ca-track YubiKey and the release key's PQ half, writes release/webapp-shell/<version>.json, commits and pushes to main and re-pins. The .com deploy copies it to /shell-signature.json only when it signs exactly that build, so any later shell change needs this step again. Skipped when the shell is already signed. Once a signed shell is live, SHELL_SIGNATURE_REQUIRED = true in lib/shellTrust.js is its own shell change: bump the shell, run this step again, redeploy (the 0.4 deploy sheet)."
+  WHAT="The webapp checks /shell-signature.json against the ca-track authority (docs/webapp-key-custody.md, 'Signing a release shell'). Builds the webapp assets exactly as the deploy does, previews the shell version, file count and manifest digest, then on your yes signs flagship/webapp-shell/v1 with the ca-track YubiKey and the release key's PQ half, writes release/webapp-shell/<version>.json, commits and pushes to main and re-pins. The .com deploy copies it to /shell-signature.json only when it signs exactly that build, so any later shell change needs this step again. Skipped when the shell is already signed. Once a signed shell is live, SHELL_SIGNATURE_REQUIRED = true in lib/shellTrust.js is its own shell change: bump the shell, run this step again, redeploy (the 0.4 deploy sheet). A re-pin re-opens this step when the webapp shell version moved."
   read -r -d '' CMDS <<'EOF2' || true
 grep 'const SHELL_VERSION' apps/web/public/webapp/service-worker.js        (the version to sign)
 npx tsx scripts/webapp-shell.ts sign                                     (preview: no signature, no write)
@@ -253,29 +230,17 @@ EOF
   GATE="Skipped with no DNS_BROKER_URL; else the deployment is listed and /service answers 401 without the secret. After the .com deploy, a certificate order reaches issued (its challenge records went through the broker)."
   ROLLBACK="npx wrangler rollback in apps/dns-broker. To take .com off the broker: remove DNS_BROKER_URL from apps/com/wrangler.toml, put CLOUDFLARE_DNS_API_TOKEN back on flagship-com, redeploy .com."
 }
-meta_uxchecks() {
-  TITLE="Translations, store art and voi.ci (from feat/UX)"
-  RUNBOOK="11c. Translations, store art and voi.ci"
-  WHAT="Runs the translation gate, asks you to confirm the native review of the recovery, pairing, unlock and backup wording (i18n/REVIEW.md), runs the store-art release check, and turns on canonical voi.ci links after the gym's named-links group is green. Each part is skipped when the branch carrying it is not merged yet."
+meta_storeart() {
+  TITLE="Store art: the release check before the store builds (and the translations' review status)"
+  RUNBOOK="11c. Store art and the translations' review status"
+  OUTWARD=0
+  WHAT="Runs npm run store-assets:release-check on the native captures (docs/store-assets/capture-plan.md; the git-ignored captures are copied in from your checkout) right before the store builds. When captures are missing you may go on with the screenshots the stores already have (typed keep-current-art). Also prints how many lines of i18n/REVIEW.md still wait for a native reader: a status, not a gate (the translation gate, npm run i18n, runs in preflight and on every merge)."
   read -r -d '' CMDS <<'EOF' || true
-npm run i18n                              (every ga language complete, placeholders and terms intact)
-(open i18n/REVIEW.md: the reviewed lines, then type: reviewed)
-npm run store-assets:release-check        (after the native captures, docs/store-assets/capture-plan.md)
-(apps/com/wrangler.toml: VOICI_CANONICAL = "1", then the .com redeploy step)
+npm run store-assets:release-check        (the native captures, docs/store-assets/capture-plan.md)
+grep -c '^- \[ \]' i18n/REVIEW.md          (lines still waiting for a native reader: status only)
 EOF
-  GATE="npm run i18n and the store-assets check pass; you typed reviewed."
-  ROLLBACK="Nothing ships from this step; a failing gate blocks the store builds."
-}
-meta_hof() {
-  TITLE="Publish the hall of fame entry (after 0.3 is live)"
-  RUNBOOK="11b. Publish the hall of fame entry"
-  WHAT="The hall of fame credits the reviewers whose reports 0.3 fixes, only once the fixes are deployed. The entry is already on main (cherry-picked with its translations); this checks it is at the pin and redeploys .com."
-  read -r -d '' CMDS <<'EOF' || true
-grep -q "credit: Jay" apps/web/public/security/hall-of-fame.html
-(cd apps/com && npm run deploy)
-EOF
-  GATE="https://flagshipserver.com/security/hall-of-fame shows the new entry in every language."
-  ROLLBACK="Revert the merge on main and redeploy .com."
+  GATE="The store-art check passes, or you typed keep-current-art (the stores keep their screenshots)."
+  ROLLBACK="Nothing ships from this step."
 }
 meta_preflight() {
   TITLE="Preflight: tools, logins, disk, build, checks"
@@ -289,6 +254,7 @@ npx tsc -b
 node scripts/check-versions.mjs
 npm run parity
 RELEASE=1 bash scripts/release-guard.sh
+npm run i18n
 npx vitest run <touched packages>   (quick)   or   npx vitest run   (full)
 EOF
   GATE="Every command above exits 0; the tool versions print; both logins show the right accounts."
@@ -298,17 +264,37 @@ meta_plan() {
   TITLE="Cloudflare plan and DNS limits (acknowledge)"
   RUNBOOK="1. Cloudflare plan and DNS limits (do this first)"
   OUTWARD=0
-  WHAT="Records which Workers plan .com runs on (Free today) and prints the limits and the signals that mean upgrade."
+  WHAT="Records which Workers plan .com runs on (Paid since 2026-10-20) and prints the limits and the signals to watch."
   read -r -d '' CMDS <<'EOF' || true
 (no command: a typed answer, free or paid)
 open https://dash.cloudflare.com -> Workers & Pages -> flagship-com -> Settings (shows the plan)
 EOF
-  GATE="You typed free or paid; on Free you accept the 10 ms CPU, 100,000 requests a day, 50 subrequests limits and the D1 backup moving to GitHub Actions."
+  GATE="You typed free or paid; on Free you accept the 10 ms CPU, 100,000 requests a day and 50 subrequests limits."
   ROLLBACK="A plan change is reversible in the dashboard."
+}
+meta_setup() {
+  TITLE="One-time setup still in place (read-only: catalog root, PQ key, D1 backup, R2 buckets, relay feed, mesh key, root wildcard)"
+  RUNBOOK="1f. One-time setup still in place (checked every release)"
+  OUTWARD=0
+  WHAT="Read-only and quiet while everything holds (one ok line each, no prompt): the release catalog root (2b) and the PQ release key (2c) are pinned; the daily D1 backup works (the repo secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, a real age recipient, the d1/daily/ rule on flagship-d1-backups, latest.json under 36 hours old: 1b), the net under the migrations; every R2 bucket the pinned apps/com/wrangler.toml binds exists (1c: a bucket new in this release is offered for creation, the .com deploy fails without it); feed.flagshipserver.com answers over valid TLS (1d); .com holds RELAY_MESH_KEY_SEED and SERVING_REVOCATION_SEED (1e); the flagship.services root wildcard answers the relay's two addresses and the apex CAA names Let's Encrypt (6a). A failed line names the runbook section that sets it up again, and the step fails until it holds."
+  read -r -d '' CMDS <<'EOF' || true
+test -f release/catalog-root.json ; (release/box-artifact-trust.json names a PQ key)
+gh secret list                                   (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID)
+grep age1 .maintainers/backup-recipient.pub
+(cd apps/com && wrangler r2 bucket lifecycle list flagship-d1-backups)        (the d1/daily/ rule)
+(cd apps/com && wrangler r2 object get flagship-d1-backups/latest.json --file <tmp> --remote)   (taken in the last 36 hours)
+grep '^bucket_name' apps/com/wrangler.toml ; (cd apps/com && wrangler r2 bucket list)   (a missing one, on your yes: wrangler r2 bucket create <name>)
+curl -sI https://feed.flagshipserver.com/v1/head.json                        (valid TLS)
+(cd apps/com && wrangler secret list)            (RELAY_MESH_KEY_SEED, SERVING_REVOCATION_SEED)
+dig +short A anything-at-all.flagship.services @1.1.1.1 ; dig +short AAAA anything-at-all.flagship.services @1.1.1.1
+dig +short CAA flagship.services @1.1.1.1
+EOF
+  GATE="Every line ok."
+  ROLLBACK="Read-only (a bucket it creates on your yes is empty and harmless)."
 }
 meta_lease() {
   TITLE="CA lease: check the expiry, renew with the YubiKey"
-  RUNBOOK="2. Renew the CA lease (due 2026-11-05, and do it before anything that needs the CA)"
+  RUNBOOK="2. Renew the CA lease (before anything that needs the CA)"
   WHAT="Reads the real expiry from .maintainers/ca-endorsements/bundle.json, previews and (on your yes) signs a new 30 day lease, regenerates bundle.json, commits and pushes it to main, then re-pins."
   read -r -d '' CMDS <<'EOF' || true
 node scripts/rotate-ca.mjs status
@@ -363,11 +349,11 @@ EOF
   ROLLBACK="Read-only."
 }
 meta_gym() {
-  TITLE="Gym gate: every live group green on this commit (the 0.3 groups included)"
+  TITLE="Gym gate: every live group green on this commit, on both stacks"
   RUNBOOK="6. Gym refresh and live verification (GATE: nothing deploys to prod until this passes)"
   REQUIRED=1
   OUTWARD=1
-  WHAT="Runs scripts/gym-release-run.sh: refreshes the gym onto this commit, takes the gym lock, runs every live group (core, sharing, invites ... and release03: first contact, app-name certificates, cross-owner chat, passkey recovery, origin generations, release catalog, policed browser, upstream sync, keyd), tears the fleet down. Exit 0 = go, 3 = skips you must accept, 5 = build new boxes on classic, 6 = only the policed browser failed: ship it off (appBrowser false), anything else = no-go. Then the DNS canary and the two health URLs."
+  WHAT="Runs scripts/gym-release-run.sh: refreshes the gym onto this commit, takes the gym lock, runs every live group on both container stacks, tears the fleet down. It reads the gym secrets from your checkout's .gym-secrets.env (this script passes the path; no prefix needed). Exit 0 = go, 3 = skips you must accept, 5 = build new boxes on classic, 6 = only the policed browser failed: ship it off (appBrowser false), anything else = no-go. Then the DNS canary and the two health URLs."
   read -r -d '' CMDS <<'EOF' || true
 bash scripts/gym-release-run.sh          (GYM_START_REF=origin/gym-ux to run a UX branch's gym)
 npx tsx tools/live-e2e/dns-ent-experiment.ts --canary
@@ -375,28 +361,10 @@ EOF
   GATE="gym-release-run.sh exits 0 (or 3 and you type accept-skips), then you type verified"
   ROLLBACK="No-go blocks the prod deploys: fix on main, run this step again."
 }
-meta_backup() {
-  TITLE="D1 backup prerequisites: bucket, secrets, age key, first backup (BEFORE .com)"
-  RUNBOOK="1b. Free-plan prerequisites: GitHub secrets, the backup bucket, the first backup"
-  WHAT="Follows runbook step 1b: the private bucket with its 30-day rule on d1/daily/, the two repo secrets, a real age public key, then runs d1-backup.yml and model-capabilities.yml once and verifies latest.json. The .com deploy removes the Worker's own backup, so this MUST be done before it; the .com step refuses without it."
-  read -r -d '' CMDS <<'EOF' || true
-gh secret list                      (names CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID)
-cat .maintainers/backup-recipient.pub   (a real age1... public key, not the placeholder)
-wrangler r2 bucket list             (flagship-d1-backups)
-wrangler r2 bucket lifecycle list flagship-d1-backups           (the d1/daily/ 30 day rule)
-(if absent, on your yes:) wrangler r2 bucket create flagship-d1-backups
-                          wrangler r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30
-gh workflow run d1-backup.yml --ref main ; gh run watch <id> --exit-status
-wrangler r2 object get flagship-d1-backups/latest.json --file <tmp> --remote      (takenAt fresh, tables > 0, key under d1/daily/)
-gh workflow run model-capabilities.yml --ref main ; gh run watch <id> --exit-status
-EOF
-  GATE="d1-backup.yml is green and latest.json is fresh (taken in the last 15 minutes) with a key under d1/daily/; model-capabilities.yml is green."
-  ROLLBACK="None needed: the workflows only read D1 and write the new bucket."
-}
 meta_migrations() {
   TITLE="Pending D1 migrations (check, apply, stamp the ledger)"
   RUNBOOK="4. Pending D1 migrations"
-  WHAT="Compares packages/storage/migrations with the prod schema_version ledger (read-only) and applies each pending file after its own confirm, in file order. For 0.4 that is 0090, 0091, 0093, 0094 (the folded marketplace and name-change tables), 0133, 0134, 0136-0138, 0141, 0146-0155 (and 0132 if the ledger lacks it). For 0.3 it included 0120 (serving authority), 0122 (relay mesh: relay_log, relays, directories, mesh-key epochs and the triggers that append to the log) and 0126 (relay log grant ids): all before the .com deploy and before any relay is admitted."
+  WHAT="Compares packages/storage/migrations with the prod schema_version ledger (read-only) and applies each pending file after its own confirm, in file order. For 0.4 that is 0090, 0091, 0093, 0094 (the folded marketplace and name-change tables), 0133, 0134, 0136-0138, 0141, 0146-0157 (and 0132 if the ledger lacks it): all before the .com deploy (npm run deploy refuses while one is missing). The setup check (step 4) proved the daily backup is fresh."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && wrangler d1 execute flagship-state --remote --json --command "SELECT version FROM schema_version")
 for each pending file, in order:
@@ -406,143 +374,45 @@ EOF
   GATE="A second read of the ledger lists every repo migration."
   ROLLBACK="There are no down-migrations: roll the code back, leave additive tables, forward-fix. Data damage: docs/runbooks/d1-restore.md."
 }
-meta_r2buckets() {
-  TITLE="R2 buckets the new .com binds: flagship-relay-feed and flagship-voici (BEFORE .com)"
-  RUNBOOK="1c. R2 buckets the new .com binds (relay feed, voi.ci)"
-  REQUIRED=1
-  WHAT="Reads every bucket_name the pinned apps/com/wrangler.toml binds and lists the account's R2 buckets; creates each missing one on your yes (private, no public access). Needed even with the mesh off: the .com deploy fails while a bound bucket (RELAY_FEED = flagship-relay-feed, VOICI = flagship-voici) does not exist."
-  read -r -d '' CMDS <<'EOF' || true
-grep '^bucket_name' apps/com/wrangler.toml          (flagship-iso, flagship-iso-temp, flagship-adapters, flagship-relay-feed, flagship-voici)
-(cd apps/com && wrangler r2 bucket list)
-(for each missing one, on your yes:) (cd apps/com && wrangler r2 bucket create <name>)
-EOF
-  GATE="wrangler r2 bucket list names every bucket the pinned wrangler.toml binds."
-  ROLLBACK="An empty bucket is harmless; remove one only before a .com deploy binds it (wrangler r2 bucket delete <name>)."
-}
-meta_feeddomain() {
-  TITLE="Relay feed: custom domain feed.flagshipserver.com and its cache rule (Cloudflare dashboard, by hand)"
-  RUNBOOK="1d. The relay feed's custom domain and cache rule"
-  WHAT="Prints the two dashboard steps (R2 custom domain on flagship-relay-feed; a Cache Rule on that host that ignores the query string, so ?x=random cannot bust the cache), waits for a typed done, then checks with dig and curl that feed.flagshipserver.com resolves and answers over valid TLS from R2 (404 until the mesh publishes is expected). The query-string check runs after the feed is on (step 'Switch the relay feed on')."
-  read -r -d '' CMDS <<'EOF' || true
-(dashboard) R2 > flagship-relay-feed > Settings > Custom Domains > Connect domain: feed.flagshipserver.com
-(dashboard) flagshipserver.com zone > Caching > Cache Rules > Create: hostname equals feed.flagshipserver.com,
-            "Eligible for cache", Cache key: Ignore query string ON, Browser/Edge TTL: respect the origin's Cache-Control
-dig +short feed.flagshipserver.com @1.1.1.1
-curl -sI https://feed.flagshipserver.com/v1/head.json        (valid TLS; 404 before the feed is on, 200 after)
-EOF
-  GATE="feed.flagshipserver.com resolves and answers over valid TLS (any HTTP status from R2), and you typed done for the cache rule."
-  ROLLBACK="Remove the custom domain and the cache rule in the dashboard; nothing reads the feed until a mesh relay runs."
-}
-meta_meshseed() {
-  TITLE="Relay mesh key seed RELAY_MESH_KEY_SEED on .com (generated, never printed; once)"
-  RUNBOOK="1e. The relay mesh key (RELAY_MESH_KEY_SEED)"
-  WHAT="Skipped when prod already has RELAY_MESH_KEY_SEED (never replaced in place: replacing it needs npm run relays -- republish). Otherwise generates 32 random bytes and pipes them straight into wrangler secret put (nothing is echoed, stored or put in argv). Also checks SERVING_REVOCATION_SEED, which signs the relay log."
-  read -r -d '' CMDS <<'EOF' || true
-(cd apps/com && wrangler secret list)                         (RELAY_MESH_KEY_SEED, SERVING_REVOCATION_SEED)
-(if absent, on your yes:) (cd apps/com && openssl rand -hex 32 | wrangler secret put RELAY_MESH_KEY_SEED)
-EOF
-  GATE="wrangler secret list names RELAY_MESH_KEY_SEED and SERVING_REVOCATION_SEED."
-  ROLLBACK="Before RELAY_MESH is on nothing uses it. After: a new seed means wrangler secret put, a .com deploy and npm run relays -- republish."
-}
-meta_relaykey() {
-  TITLE="Relay mesh: the iad1 relay key and its Fly secrets (staged, no restart)"
-  RUNBOOK="8a. Relay mesh: the iad1 relay key and its Fly secrets"
-  WHAT="Makes the iad1 relay key seed once (node scripts/relay-key.mjs new; the file is mode 600, the seed is never printed, an existing file is reused), prints its public relay key, reads .com's relay-log key (GET /api/serving/revocation-key, public) and, on your yes, stages FLAGSHIP_RELAY_KEY_SEED and FLAGSHIP_RELAY_LOG_PUB on flagship-services through flyctl secrets import --stage (stdin, not argv). Nothing restarts: the mesh relay deploy applies them. Checks that SERVICES_CONTROL_SECRET and USAGE_REPORT_SECRET are already on the app."
-  read -r -d '' CMDS <<'EOF' || true
-node scripts/relay-key.mjs new ~/.config/flagship/iad1.seed        (once; else: node scripts/relay-key.mjs pub ~/.config/flagship/iad1.seed)
-curl -s https://flagshipserver.com/api/serving/revocation-key | jq -r .publicKey
-flyctl secrets list -a flagship-services                            (SERVICES_CONTROL_SECRET, USAGE_REPORT_SECRET)
-(FLAGSHIP_RELAY_KEY_SEED=<seed file>, FLAGSHIP_RELAY_LOG_PUB=<key> on stdin) | flyctl secrets import --stage -a flagship-services
-EOF
-  GATE="flyctl secrets list shows FLAGSHIP_RELAY_KEY_SEED and FLAGSHIP_RELAY_LOG_PUB (staged); the seed file exists, mode 600; keep it (an admitted relay that comes back with the same seed needs no new admission)."
-  ROLLBACK="flyctl secrets unset --stage FLAGSHIP_RELAY_KEY_SEED FLAGSHIP_RELAY_LOG_PUB -a flagship-services (a mesh-off relay ignores both)."
-}
-meta_relayadmit() {
-  TITLE="Relay mesh: admit iad1 (full, iad, the relay's two addresses) and backfill the relay log"
-  RUNBOOK="8b. Relay mesh: admit iad1 and backfill the log"
-  WHAT="Needs migrations 0122+ and the new .com live. Lists the admitted relays; admits iad1 under the seed's relay key with the dedicated IPv4/IPv6 from apps/com/wrangler.toml (refuses if iad1 is admitted under another key: a relay key is never replaced in place, use stage-key), then runs the idempotent backfill (one box-register, account-authority and policy-head per existing server and account, then the revocations). Admin secret."
-  read -r -d '' CMDS <<'EOF' || true
-npm run relays -- list --json
-npm run relays -- add iad1 <relay key> full iad --ipv4 149.248.216.86 --ipv6 2a09:8280:1::110:d2b6:0
-npm run relays -- backfill
-EOF
-  GATE="relays -- list shows iad1, full, active, under the seed's key; the backfill reports its counts with no error."
-  ROLLBACK="npm run relays -- retire iad1 (the id is then never reused: admit a new id). The backfill only appends to the log."
-}
-meta_meshcerts() {
-  TITLE="Relay mesh: Fly certificates and DNS for iad1.tunnel.flagship.services and tunnel.flagship.services"
-  RUNBOOK="8c. Relay mesh: certificates and DNS for the tunnel names"
-  WHAT="Adds both names as Fly certificates on flagship-services (DNS-01: :443 is raw passthrough, so HTTP-01 and TLS-ALPN cannot work), shows the DNS plan of scripts/prod-mesh-dns.ts (A/AAAA at the relay's two addresses for both names, DNS only, and the _acme-challenge CNAMEs Fly asks for; only names under tunnel.flagship.services are touched), writes it on your yes, waits for Fly to issue, then checks both names over real TLS on :8443 (the current relay answers there already). Needs ~/.config/flagship/prod-dns-token (Zone.DNS:Edit on flagship.services)."
-  read -r -d '' CMDS <<'EOF' || true
-flyctl certs add iad1.tunnel.flagship.services -a flagship-services
-flyctl certs add tunnel.flagship.services -a flagship-services
-npx tsx scripts/prod-mesh-dns.ts                  (dry run: the plan)
-npx tsx scripts/prod-mesh-dns.ts --apply
-flyctl certs check iad1.tunnel.flagship.services -a flagship-services ; flyctl certs check tunnel.flagship.services -a flagship-services
-dig +short A iad1.tunnel.flagship.services @1.1.1.1 ; dig +short A tunnel.flagship.services @1.1.1.1
-curl -s -o /dev/null -w "%{http_code}" https://iad1.tunnel.flagship.services:8443/api/health     (valid TLS)
-curl -s -o /dev/null -w "%{http_code}" https://tunnel.flagship.services:8443/api/health
-EOF
-  GATE="Both names resolve to the relay's addresses (DNS only) and answer /api/health on :8443 with a certificate curl accepts."
-  ROLLBACK="npx tsx scripts/prod-mesh-dns.ts reads what is there; delete the records under tunnel.flagship.services in the dashboard and flyctl certs remove <name> -a flagship-services. Nothing dials these names until TUNNEL_HUB_URL moves."
-}
-meta_meshon() {
-  TITLE="Relay mesh: switch the relay feed on (RELAY_MESH on, TUNNEL_HUB_URL tunnel.flagship.services), deploy .com, mint the directory"
-  RUNBOOK="8d. Relay mesh: switch the feed on and mint the directory"
-  WHAT="Refuses until both tunnel names answer over valid TLS. Sets RELAY_MESH = \"on\" and TUNNEL_HUB_URL = wss://tunnel.flagship.services:8443/tunnel in apps/com/wrangler.toml (same Fly app: 0.2 and 0.3 boxes read it from /api/services/endpoints at their next start and reach the same relay; their compiled-in fallback stays flagship-services.fly.dev; SERVICES_BASE_URL stays fly.dev), commits, pushes to main, re-pins, deploys .com with its checks, then mints the directory (nothing writes directory.json while the mesh was off). Then checks the feed: directory.json lists iad1, head.json is public max-age=2, two query strings hit one cache entry, and /api/services/endpoints names the new hub and iad1. The relay is unchanged (a mesh-off relay ignores the feed)."
-  read -r -d '' CMDS <<'EOF' || true
-(apps/com/wrangler.toml)  RELAY_MESH = "on" ; TUNNEL_HUB_URL = "wss://tunnel.flagship.services:8443/tunnel"
-git add -- apps/com/wrangler.toml && git commit -m "Relay mesh on: publish the feed; boxes dial tunnel.flagship.services"
-git push origin HEAD:main            (then the pin moves to this commit)
-(cd apps/com && npm run deploy)      (and the .com post-checks)
-npm run relays -- mint-directory
-curl -s https://feed.flagshipserver.com/v1/directory.json | jq '.directory.directoryVersion, [.directory.relays[].relayId]'
-curl -sI https://feed.flagshipserver.com/v1/head.json            (cache-control: public, max-age=2)
-curl -sI "https://feed.flagshipserver.com/v1/head.json?x=<a>" ; curl -sI "https://feed.flagshipserver.com/v1/head.json?x=<b>"   (second: cf-cache-status HIT)
-curl -s https://flagshipserver.com/api/services/endpoints | jq '.tunnelHub, [.relays[].relayId]'
-EOF
-  GATE="directory.json lists iad1; endpoints answer tunnelHub wss://tunnel.flagship.services:8443/tunnel; the .com checks pass."
-  ROLLBACK="Revert the wrangler.toml commit on main (RELAY_MESH off, TUNNEL_HUB_URL fly.dev) and npm run deploy, or wrangler rollback <version-id> in apps/com. The log keeps being appended and signed either way."
-}
-meta_meshrelay() {
-  TITLE="Relay mesh: deploy the Rust relay as iad1 (fly.relay.mesh.toml, ONE machine; every tunnel drops ~20-60 s)"
-  RUNBOOK="8e. Relay mesh: deploy the Rust relay as iad1"
-  REQUIRED=1
-  WHAT="Checks the preconditions live (directory.json names iad1, the two Fly secrets staged, both tunnel names on valid TLS), asks you to confirm the demo box (playstore-test-0725) runs 0.3, takes a tunnel-count baseline, scales flagship-services to ONE machine (one relay id = one machine), then deploys fly.relay.mesh.toml (Dockerfile.relay, FLAGSHIP_MESH=on, iad1, full, feed.flagshipserver.com) rolling: the only machine stops and starts, every box redials. Then: health 200 and mesh-ready on both names, live-check --expect rust (health + the :8444 echo), npm run ops -- mesh, the relay echo on the dedicated address, one machine. Prints the rollback commands."
+meta_meshcheck() {
+  TITLE="Relay mesh: check (iad1 in the feed directory, its Fly secrets, both tunnel names on valid TLS)"
+  RUNBOOK="8. The relay: the mesh check, the Rust relay deploy and the mesh-off rollback"
+  OUTWARD=0
+  WHAT="Read-only. The mesh was set up once in 0.3 (runbook 8a-8d: the iad1 relay key, its admission, the tunnel certificates and DNS, the feed switched on). This checks it still holds before the relay deploy: the live feed directory lists iad1; flagship-services holds FLAGSHIP_RELAY_KEY_SEED, SERVICES_CONTROL_SECRET and .com's relay-log key (FLAGSHIP_RELAY_LOG_PUB or FLAGSHIP_SERVING_REVOCATION_PUB); iad1.tunnel.flagship.services and tunnel.flagship.services answer /api/health on :8443 over valid TLS; the pinned apps/com/wrangler.toml keeps RELAY_MESH on and TUNNEL_HUB_URL at tunnel.flagship.services. A failed line names the 8a-8d section that sets it up again."
   read -r -d '' CMDS <<'EOF' || true
 curl -s https://feed.flagshipserver.com/v1/directory.json | jq '[.directory.relays[].relayId]'     (iad1)
-flyctl secrets list -a flagship-services          (FLAGSHIP_RELAY_KEY_SEED, FLAGSHIP_RELAY_LOG_PUB)
+flyctl secrets list -a flagship-services --json       (FLAGSHIP_RELAY_KEY_SEED, SERVICES_CONTROL_SECRET, FLAGSHIP_RELAY_LOG_PUB)
+curl -s -o /dev/null -w "%{http_code}" https://iad1.tunnel.flagship.services:8443/api/health     (200, valid TLS)
+curl -s -o /dev/null -w "%{http_code}" https://tunnel.flagship.services:8443/api/health
+grep -E '^(RELAY_MESH|TUNNEL_HUB_URL) = ' apps/com/wrangler.toml
+EOF
+  GATE="Every line ok."
+  ROLLBACK="Read-only."
+}
+meta_meshrelay() {
+  TITLE="Relay: deploy the Rust relay as iad1 (fly.relay.mesh.toml, ONE machine; every tunnel drops ~20-60 s), then the 30-minute watch"
+  RUNBOOK="8e. Relay mesh: deploy the Rust relay as iad1"
+  REQUIRED=1
+  WHAT="The relay update of every release (quiet hours). Takes a tunnel-count baseline, keeps flagship-services at ONE machine (one relay id = one machine), then deploys fly.relay.mesh.toml (Dockerfile.relay, FLAGSHIP_MESH=on, iad1, full, feed.flagshipserver.com) rolling: the only machine stops and starts, every box redials. Then: health 200 and mesh-ready, live-check --expect rust on both names (health + the :8444 echo), npm run ops -- mesh, the relay echo on the dedicated address, one machine. Then offers the 30-minute watch (once a minute: status, runtime, mesh readiness, tunnel count against the baseline; three failures in a row, a relay that is not Rust, or tunnels below 80% after minute 10 print the rollback); say no to check it later by hand (the health URL and npm run ops -- mesh). The mesh-off TS hub (fly.toml) is a documented rollback, never a step."
+  read -r -d '' CMDS <<'EOF' || true
 npm run ops -- services                           (baseline: box tunnels online; needs USAGE_REPORT_SECRET in your shell)
-flyctl machines list -a flagship-services
-flyctl scale count 1 -a flagship-services --yes
+flyctl machines list -a flagship-services          (one machine; else flyctl scale count 1 -a flagship-services --yes)
 flyctl deploy -c fly.relay.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes
 curl -s https://iad1.tunnel.flagship.services:8443/api/health | jq '.runtime, .mesh, .tunnelsOnline'
 npx tsx tools/relay-conformance/live-check.ts --relay iad1.tunnel.flagship.services --expect rust
 npx tsx tools/relay-conformance/live-check.ts --relay flagship-services.fly.dev --expect rust
 npm run ops -- mesh                               (iad1 ready)
 openssl s_client -connect 149.248.216.86:8444 -servername flagship-services.fly.dev   (GET /echo names 149.248.216.86)
+(on your yes) curl -s https://iad1.tunnel.flagship.services:8443/api/health   every 60 s, 30 times; then npm run ops -- mesh
 EOF
-  GATE="iad1 answers /api/health 200 with runtime rust and mesh.ready true; both live-checks exit 0; ops -- mesh shows iad1 ready; the echo names the dedicated address; one machine."
-  ROLLBACK="Rust -> TS hub, mesh kept: flyctl deploy -c fly.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes (then live-check --expect ts). TS mesh -> mesh off: flyctl deploy -a flagship-services --remote-only --strategy=rolling --yes (fly.toml) and flyctl scale count 2 -a flagship-services --yes. Boxes need nothing."
-}
-meta_meshwatch() {
-  TITLE="Relay mesh: the 30-minute watch (tunnel count, mesh readiness), then rollback or go"
-  RUNBOOK="8f. Relay mesh: the 30-minute watch, and rollback"
-  OUTWARD=0
-  WHAT="Read-only. Polls https://iad1.tunnel.flagship.services:8443/api/health once a minute for 30 minutes and prints status, runtime, mesh readiness and tunnelsOnline. Fails (with the rollback commands) on three non-200 answers in a row, on a relay that is not Rust, or when the tunnel count stays below 80% of the baseline (or of its own peak) after minute 10. Ends with npm run ops -- mesh."
-  read -r -d '' CMDS <<'EOF' || true
-curl -s https://iad1.tunnel.flagship.services:8443/api/health        (every 60 s, 30 times)
-npm run ops -- mesh
-npm run ops -- health                                                  (box heartbeats)
-EOF
-  GATE="30 minutes without three failures in a row; tunnelsOnline back to at least 80% of the baseline by minute 10 and held; mesh.ready true at the end."
-  ROLLBACK="As the previous step: fly.mesh.toml (TS hub, mesh kept), then fly.toml + flyctl scale count 2 (mesh off). docs/runbooks/final-deploy.md 8f."
+  GATE="iad1 answers /api/health 200 with runtime rust and mesh.ready true; both live-checks exit 0; ops -- mesh shows iad1 ready; the echo names the dedicated address; one machine; the watch (when run) ends clean."
+  ROLLBACK="Rust -> TS hub, mesh kept: flyctl deploy -c fly.mesh.toml -a flagship-services --remote-only --strategy=rolling --yes (then live-check --expect ts). TS mesh -> mesh off: flyctl deploy -a flagship-services --remote-only --strategy=rolling --yes (fly.toml) and flyctl scale count 2 -a flagship-services --yes. Boxes need nothing (runbook 8f)."
 }
 meta_com() {
   TITLE="Deploy .com (Cloudflare Worker) and check it"
   RUNBOOK="7. Deploy \`.com\` (two Workers)"
   REQUIRED=1
-  WHAT="Runs 'npm run deploy' in apps/com in the foreground of your terminal: the guards, then the NEW static-only Worker flagship-webapp, then flagship-com. The first run moves the webapp. and remote. custom domains and wrangler ASKS to confirm: answer yes. Refuses without the D1 backup step, and asks for a typed reason while release/runtime-manifest.json is still null. Then probes the webapp and remote hosts (200, strict CSP), the tree's shell version, the marketing page, health, notices, account-not-found, the boot route, the shim, and runs zone-health as a post-check."
+  WHAT="Runs 'npm run deploy' in apps/com in the foreground of your terminal: the guards, then the NEW static-only Worker flagship-webapp, then flagship-com. The first run moves the webapp. and remote. custom domains and wrangler ASKS to confirm: answer yes. Refuses until the setup check (the D1 backup among it) is recorded, and asks for a typed reason while release/runtime-manifest.json is still null. Any GYM_* variable in your shell is dropped for the deploy (the webapp deploy guard refuses them), so no prefix is needed. Then probes the webapp and remote hosts (200, strict CSP), the tree's shell version, the marketing page, health, notices, account-not-found, the boot route, the shim, and runs zone-health as a post-check."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && wrangler deployments list)         (the rollback target)
 (cd apps/com && npm run deploy)     (flagship-webapp first, then flagship-com; answer YES to the custom-domain prompt; no pipe, no redirect)
@@ -573,39 +443,10 @@ EOF
   GATE="Zero exceededCpu events in the 60 s window."
   ROLLBACK="If it fires: upgrade to Workers Paid (USD 5 a month, dashboard) or roll .com back."
 }
-meta_services() {
-  TITLE="Deploy .services (Fly relay): the 0.3 TS hub, mesh off, as the transition relay"
-  RUNBOOK="8. Deploy \`.services\` (Fly): needed, one image"
-  WHAT="From 0.4 on, production already runs the Rust mesh relay: skip this step (the step refuses unless you type mesh-off-rollback) and update the relay with the step 'Deploy the Rust relay as iad1'. For 0.3 it deployed the 0.3 relay image from fly.toml (the TS hub, mesh off, two machines rolling with DrainNotice: no gap) BEFORE .com: production still runs the 0.2 relay, which has no serving authority, and a mesh relay cannot start before .com publishes the feed and admits it. The Rust mesh relay replaces this one after .com (step 'Deploy the Rust relay as iad1'). A re-run after that step is a mesh-off rollback and asks first."
-  read -r -d '' CMDS <<'EOF' || true
-flyctl releases -a flagship-services | head -5
-flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services          (fly.toml: the 0.3 TS hub, mesh off, two machines)
-curl -s -o /dev/null -w "%{http_code}" https://flagship.services/api/health
-openssl s_client -connect 149.248.216.86:8444 -servername flagship-services.fly.dev   (GET /echo names 149.248.216.86)
-EOF
-  GATE="https://flagship.services/api/health answers 200 and https://flagshipserver.com/status/ shows boxes back online within a minute."
-  ROLLBACK="flyctl releases rollback -a flagship-services (stateless; clean)."
-}
-meta_dns() {
-  TITLE="Cloudflare DNS by hand: root wildcard + apex CAA (before the .com deploy)"
-  RUNBOOK="6a. The one-time manual DNS step: the root wildcard and the apex CAA"
-  WHAT="Prints the exact records for you to create in the Cloudflare dashboard (grey cloud) and checks them with dig only. It comes before the .com deploy: the new .com writes no per-box address records, so a box registering while no wildcard exists would get names that do not resolve (and resolvers cache that for 30 minutes). Existing accounts keep answering from their own records."
-  read -r -d '' CMDS <<'EOF' || true
-flyctl ips list -a flagship-services          (must list SERVICES_PASSTHROUGH_IPV4/6 from apps/com/wrangler.toml)
-(dashboard, flagship.services zone, DNS only / grey cloud:)
-  A     *   <relay IPv4>        AAAA  *   <relay IPv6>
-  CAA   @   issue     letsencrypt.org        CAA  @   issuewild   letsencrypt.org
-dig +short A anything-at-all.flagship.services @1.1.1.1
-dig +short AAAA anything-at-all.flagship.services @1.1.1.1
-dig +short CAA flagship.services @1.1.1.1
-EOF
-  GATE="The wildcard A and AAAA answer the relay address and the CAA pair is visible (zone-health is not deployed yet; it runs as a post-check of the .com deploy)."
-  ROLLBACK="Delete the two wildcard records and the two CAA records. Do not roll back after the reap has trimmed accounts."
-}
 meta_publish() {
-  TITLE="Publish the VM appliances that are ready (amd64 now, arm64 when green)"
+  TITLE="Publish the VM appliances that are ready (and the USB seed), then redeploy .com so /downloads/ serves them"
   RUNBOOK="9. Publish the VM appliances"
-  WHAT="Finds the newest green vm-appliance runs on main built after the endorsement, checks the boot smoke, uploads each arch to R2 and commits the manifests. arm64 may be skipped here and published in phase B. Also publishes the phone USB boot seed (reproducible build, GitHub release asset) and switches on FLAGSHIP_ISO_SEED, so the Android burn works from the .com deploy after this."
+  WHAT="Finds the newest green vm-appliance runs on main built after the endorsement (or waits for the running ones), checks the boot smoke, uploads each arch to R2 and commits the manifests; arm64 (TCG, up to three hours) may be left for the phase B redeploy, which publishes it first. Publishes the phone USB boot seed (reproducible build, GitHub release asset) and switches on FLAGSHIP_ISO_SEED. Then deploys .com with its post-checks and compares each live manifest's sha256 with the published run."
   read -r -d '' CMDS <<'EOF' || true
 gh run list --workflow vm-appliance.yml --branch main --status success
 gh api repos/{owner}/{repo}/actions/runs/<id>/artifacts       (arch = artifact name)
@@ -616,38 +457,29 @@ gh workflow run iso-seed.yml --ref main                       (rebuilds the USB 
 bash scripts/publish-iso-seed.sh <iso-seed run id>            (GitHub release asset + FLAGSHIP_ISO_SEED in apps/com/wrangler.toml)
 git add -- apps/com/wrangler.toml && git commit -m "Publish the USB seed"
 git push origin HEAD:main
-EOF
-  GATE="Each manifest's commit equals release/box-release.json's commit (the box artifact 0.3 recipes name); its sha256 is recorded for the status file. FLAGSHIP_ISO_SEED is set with the seed's real url and size, and the seed sha256 equals the iso-seed.yml pin."
-  ROLLBACK="Re-point the manifest at the previous commit and redeploy .com; old R2 parts stay."
-}
-meta_redeployA() {
-  TITLE="Redeploy .com so /downloads/ serves the new manifests"
-  RUNBOOK="9. Publish the VM appliances"
-  WHAT="Deploys the pinned commit (which now carries the appliance manifests) with 'npm run deploy' and repeats the post-checks, plus the manifest sha256 on the live site."
-  read -r -d '' CMDS <<'EOF' || true
-(cd apps/com && npm run deploy)
+(cd apps/com && npm run deploy)                               (and the .com post-checks)
 curl -s https://flagshipserver.com/downloads/FlagshipVMAppliance-<arch>.json | jq .sha256
-(the same health, shell, notices, account-not-found, boot probes as the first .com deploy)
 EOF
-  GATE="The live manifest sha256 equals the published run's."
-  ROLLBACK="wrangler rollback <version-id> in apps/com."
+  GATE="Each manifest's commit equals release/box-release.json's commit; FLAGSHIP_ISO_SEED is set with the seed's real url and size, its sha256 equals the iso-seed.yml pin; the live manifest sha256 equals the published run's."
+  ROLLBACK="Re-point the manifest at the previous commit and redeploy .com (old R2 parts stay), or wrangler rollback <version-id> in apps/com."
 }
 meta_status() {
-  TITLE="Write DEPLOYED-FINAL status for the Windows agent"
+  TITLE="Optional: DEPLOYED-FINAL status for a planned device test (on its own device-results branch)"
   RUNBOOK="9. Publish the VM appliances"
-  WHAT="Writes device-results/DEPLOYED-FINAL-<date>.md (main sha, endorsed release, shell version, DNS design, appliances with sha256, what is live), prints it, and on your yes commits it to the device-results branch from a temporary worktree."
+  WHAT="Only when a device test (the Windows agent, hardware) is planned against this deploy: asks, and with no test planned writes nothing. Otherwise writes DEPLOYED-FINAL-<date>.md (main sha, endorsed release, shell version, DNS design, appliances with sha256, what is live), prints it, and on your yes commits it to device-results/<machine>-<date> from a temporary worktree: the branch is created from main when it does not exist yet."
   read -r -d '' CMDS <<'EOF' || true
-git worktree add --detach <tmp> origin/device-results/windows-2026-10-17
+(typed: is a device test planned? Enter = no, nothing written)
+git worktree add --detach <tmp> origin/device-results/<machine>-<date>      (or origin/main for a new branch)
 cp DEPLOYED-FINAL-<date>.md <tmp>/device-results/ && git add -- device-results/DEPLOYED-FINAL-<date>.md && git commit
-git push origin HEAD:refs/heads/device-results/windows-2026-10-17        (fast-forward only)
+git push origin HEAD:refs/heads/device-results/<machine>-<date>        (fast-forward or a new branch)
 EOF
-  GATE="The push is a fast-forward of the branch; main is not touched."
+  GATE="No device test planned, or the push is a fast-forward (or creates the branch); main is not touched."
   ROLLBACK="Revert the commit on the device-results branch; it is a status note."
 }
 meta_notice() {
-  TITLE="Maintenance notice (preview; you sign it)"
-  RUNBOOK="12. The pre-GA scrub, the reap and the maintenance notice"
-  WHAT="Previews the maintainer-signed notice people will see before the scrub; you sign it in another terminal (YubiKey), then this step commits it, pushes and redeploys .com."
+  TITLE="Maintenance notice (optional: preview, you sign it)"
+  RUNBOOK="12. The maintenance notice and the reap"
+  WHAT="Only when maintenance with visible downtime is planned (Enter = no notice): previews the maintainer-signed notice the apps show as a banner; you sign it in another terminal (YubiKey), then this step commits it, pushes and redeploys .com."
   read -r -d '' CMDS <<'EOF' || true
 node scripts/security-notice.mjs maintenance --message "<text>" --event <ISO time>            (preview: writes nothing)
 (you, in another terminal, in the worktree: the same command with --sign)
@@ -658,25 +490,9 @@ EOF
   GATE="/api/notices returns the notice."
   ROLLBACK="node scripts/security-notice.mjs clear --sign, commit, deploy."
 }
-meta_scrub() {
-  TITLE="Pre-GA scrub of prod D1 (GA go/no-go gate first)"
-  RUNBOOK="12. The pre-GA scrub, the reap and the maintenance notice"
-  REQUIRED=1
-  WHAT="After you confirm the Windows results were reviewed, takes a D1 export, shows the dry run, and runs the wipe tool, which asks you to type the database name itself; then verifies the orphan counts."
-  read -r -d '' CMDS <<'EOF' || true
-(typed gate: windows-ok, or skip-windows)
-(cd apps/com && wrangler d1 export flagship-state --remote --output ~/d1-before-scrub-<ts>.sql)
-WIPE_ENV=prod WIPE_D1=flagship-state bash scripts/wipe-all-users.sh --list-accounts
-WIPE_ENV=prod WIPE_D1=flagship-state WIPE_CONFIRM=prod bash scripts/wipe-all-users.sh --yes     (asks you to type flagship-state)
-(cd apps/com && wrangler d1 execute flagship-state --remote --json --command "SELECT username FROM usernames")
-(cd apps/com && wrangler d1 execute flagship-state --remote --json --command "<four orphan counts>")
-EOF
-  GATE="Only playstore-test-0725 remains; the four orphan counts are 0."
-  ROLLBACK="The wipe cannot be undone except from the D1 export taken first (docs/runbooks/d1-restore.md)."
-}
 meta_reap() {
   TITLE="Reap orphaned DNS records and demo servers, then zone-health"
-  RUNBOOK="12. The pre-GA scrub, the reap and the maintenance notice"
+  RUNBOOK="12. The maintenance notice and the reap"
   WHAT="Sweeps the gym leftovers (default; refused while the gym lock exists, skippable with a typed answer), dry-runs the reap (saved plan), applies it (the tool asks you to type the counts), re-runs the dry run and zone-health, prints what is left on purpose and why (you type reviewed), then the owner checklist of what no tool can see (you type checked or skipped for each)."
   read -r -d '' CMDS <<'EOF' || true
 (typed: sweep, or skip-gym; refused while /private/tmp/claude-501/flagship-locks/gym.lock exists)
@@ -691,36 +507,20 @@ EOF
   GATE="The second dry run lists 0 orphaned records and servers; zone-health is OK; you typed reviewed and answered every owner-checklist line."
   ROLLBACK="DNS records need no recreating (the wildcard answers every name); a demo server is recreated from its account. ~/pre-ga-reap-plan.json.log.jsonl lists what went."
 }
-meta_retire() {
-  TITLE="Land chore/delete-wipe-tooling (retire the wipe tool)"
-  RUNBOOK="12. The pre-GA scrub, the reap and the maintenance notice"
-  WHAT="Rebases the retire branch onto origin/main in the worktree, runs tsc, the scripts tests and the release guard, and on your yes pushes it to main."
-  read -r -d '' CMDS <<'EOF' || true
-git fetch origin chore/delete-wipe-tooling
-git switch -c retire-wipe-tooling origin/chore/delete-wipe-tooling && git rebase origin/main
-npx tsc -b && npx vitest run scripts && RELEASE=1 bash scripts/release-guard.sh
-git push origin HEAD:main
-EOF
-  GATE="The push is a fast-forward and release-guard passes without scripts/wipe-all-users*."
-  ROLLBACK="git revert the commits on main (history keeps the script)."
-}
 meta_studiowl() {
   TITLE="Studio for Windows and Linux: public GitHub release + download URLs"
   RUNBOOK="10. Studio releases (Mac, Windows, Linux)"
-  WHAT="First asks whether the Windows Studio acceptance passed (docs/runbooks/0.3-windows-studio-acceptance.md): only then, and only with a device-results/windows-<date> branch on origin whose report says 'Verdict: PASS', it sets STUDIO_EXPERIMENTAL.windows to false in apps/web/public/app-stores.js, stamps the window title (check-versions --write) and lands that before the build. Then dispatches studio-release.yml with publish=true, waits for it, points INSTALLER_DOWNLOADS in apps/com/src/route.ts (and its test) at the new asset names, tests, pushes."
+  WHAT="Dispatches studio-release.yml with publish=true (skipped when the release for this Studio version exists), waits for it, checks the Windows zip and Linux AppImage names, points INSTALLER_DOWNLOADS in apps/com/src/route.ts (and its test) at the new asset names, tests, pushes. No Studio carries a maturity tag (owner, 2026-11-20)."
   read -r -d '' CMDS <<'EOF' || true
-(only if the Windows acceptance passed) git grep '^Verdict: PASS' origin/device-results/windows-<date> -- 'device-results/windows-0.3-acceptance-*.md'
-(only if the Windows acceptance passed) set windows: false in STUDIO_EXPERIMENTAL (apps/web/public/app-stores.js) and its pin in apps/web/tests/marketingPages.test.ts
-(only if the Windows acceptance passed) node scripts/check-versions.mjs --write && git commit && git push origin HEAD:main
 gh workflow run studio-release.yml --ref main -f publish=true
 gh run watch <id> --exit-status
 gh release view studio-v<studio version> --json assets
-node -e '<rewrite studio-v0.1.3 URLs in apps/com/src/route.ts and apps/com/test/route.test.ts>'
+node -e '<rewrite the studio-v<old> URLs in apps/com/src/route.ts and apps/com/test/route.test.ts>'
 npx vitest run apps/com/test/route.test.ts
 git add -- apps/com/src/route.ts apps/com/test/route.test.ts && git commit -m "Point the Windows and Linux Studio downloads at studio-v<version>"
 git push origin HEAD:main
 EOF
-  GATE="The Experimental tag is dropped only on a passed Windows acceptance; the release has the Windows zip and the Linux AppImage; the route test passes on the new names."
+  GATE="The release has the Windows zip and the Linux AppImage; the route test passes on the new names."
   ROLLBACK="Point INSTALLER_DOWNLOADS back at the previous tag and redeploy .com; delete the release with gh release delete if it is wrong."
 }
 meta_studiomac() {
@@ -736,24 +536,13 @@ EOF
   GATE="Notarization accepted; the DMG passes spctl."
   ROLLBACK="git revert the DMG commit and redeploy .com."
 }
-meta_publisharm() {
-  TITLE="Publish the arm64 VM appliance if it is still pending"
-  RUNBOOK="9. Publish the VM appliances"
-  WHAT="Same as the appliance publish, for arm64 only (the arm64 build runs under TCG and may have finished after phase A)."
-  read -r -d '' CMDS <<'EOF' || true
-gh run list --workflow vm-appliance.yml --branch main --status success
-bash scripts/publish-vm-appliance.sh <arm64 run id>
-git add -- apps/web/public/downloads/FlagshipVMAppliance-arm64.json && git commit -m "Publish the rebuilt arm64 VM appliance"
-git push origin HEAD:main
-EOF
-  GATE="The arm64 manifest commit equals release/box-release.json's commit."
-  ROLLBACK="Re-point the manifest at the previous commit and redeploy .com."
-}
 meta_redeployB() {
   TITLE="Redeploy .com with everything pushed in phase B"
   RUNBOOK="7. Deploy \`.com\` (two Workers)"
-  WHAT="One deploy that carries the notice, the Studio download URLs, the DMG and the arm64 manifest, with the post-checks and the download redirects."
+  WHAT="Publishes the arm64 VM appliance first when the publish step left it pending, applies any D1 migration that landed since the migrations step, then one deploy that carries everything pushed in phase B (the notice, the Studio download URLs, the DMG, the arm64 manifest), with the post-checks and the download redirects."
   read -r -d '' CMDS <<'EOF' || true
+(only if arm64 is still pending) bash scripts/publish-vm-appliance.sh <arm64 run id> ; git commit ; git push origin HEAD:main
+(cd apps/com && wrangler d1 execute flagship-state --remote --json --command "SELECT version FROM schema_version")   (and any pending file)
 (cd apps/com && npm run deploy)
 curl -sI https://flagshipserver.com/download/mac ; curl -sI https://flagshipserver.com/download/windows ; curl -sI https://flagshipserver.com/download/linux
 (the same health, shell, notices, account-not-found, boot probes)
@@ -785,18 +574,19 @@ EOF
   GATE="check-release-clean prints ok for app and wear; the AAB versionCode is above Play's highest."
   ROLLBACK="Nothing is uploaded by this step; upload to the Play internal track by hand."
 }
+ver_field() { node -p "require('$REPO/release/version.json').$1" 2>/dev/null || echo "?"; }
 meta_upgradenotice() {
-  TITLE="Tell the 0.2 apps to update (signed notice, once the stores carry 0.3)"
-  RUNBOOK="11d. Tell the 0.2 apps to update"
-  WHAT="Run it (--only) once App Store and Google Play have approved the 0.3 builds: previews an update-required notice naming the new store builds and the live webapp shell, you sign it with the YubiKey in another terminal, then it commits, pushes and redeploys .com. 0.2 iOS 1.1 (5) and Android 9 show a banner with an Update button on every launch (their release builds never lock); a 0.2 webapp shell locks until its Update button loads the new one. iOS 1.0 (4) predates notices and shows nothing."
+  TITLE="Tell older apps to update (optional signed notice, once the stores carry iOS $(ver_field iosVersion) ($(ver_field iosBuild)) and Android $(ver_field androidVersionCode))"
+  RUNBOOK="11d. Tell older apps to update"
+  WHAT="Only when this release leaves older apps unable to work (Enter = no notice). Run it (--only) once App Store and Google Play have approved this release's builds: previews an update-required notice naming the new store builds (from release/version.json) and the live webapp shell, with an advisory id and the one-sentence reason you give; you sign it with the YubiKey in another terminal, then it commits, pushes and redeploys .com. Older store apps show a banner with an Update button on every launch (their release builds never lock); an older webapp shell locks until its Update button loads the new one."
   read -r -d '' CMDS <<'EOF' || true
 node scripts/security-notice.mjs required --message "<text>" --event <approval time> --lock-at <time> --platform ios:<iosBuild> --platform android:<androidVersionCode> --platform web:<shell> --advisory <id> --security-reason "<one sentence>"     (preview)
 (you, in another terminal: the same command with --sign)
-git add -- .maintainers/notices && git commit -m "Notice: the 0.2 apps must update" && git push origin HEAD:main
+git add -- .maintainers/notices && git commit -m "Notice: apps before <product> must update" && git push origin HEAD:main
 (cd apps/com && npm run deploy)
 curl -s https://flagshipserver.com/api/notices
 EOF
-  GATE="Both stores list the 0.3 builds; /api/notices returns the notice; a 0.2 phone shows the update banner."
+  GATE="No notice needed, or: both stores list this release's builds; /api/notices returns the notice; an older phone shows the update banner."
   ROLLBACK="node scripts/security-notice.mjs clear --sign (with --supersede-lock while the lock is in force), commit, deploy."
 }
 meta_final() {
@@ -806,6 +596,8 @@ meta_final() {
   WHAT="Re-probes everything that is live, compares the endorsed release with box-code changes on main, and prints the sha, versions, URLs and what is still manual."
   read -r -d '' CMDS <<'EOF' || true
 curl health: .com, .services, status page, shell version, notices, downloads, zone-health, schema-status (admin secret)
+npm run rate-limits -- --days 30                 (read-only, admin secret: the weekly budget check, AGENTS.md)
+npm run release-manifest
 git diff --stat <endorsed>..<PIN> -- packages/server-daemon installer packages/boot-core
 EOF
   GATE="All probes pass."
@@ -1111,9 +903,22 @@ pin_guard() { # stop (or re-pin) when origin/main is not the pinned commit
       [ "$lock_old" = "$lock_new" ] || XA "$WT" npm ci
       XA "$WT" npx tsc -b
     fi
+    repin_reopen
     return 0
   fi
   fail "stopped: origin/main moved. Re-run to re-pin, or land nothing until the release is done."
+}
+
+# What a re-pin re-opens (also printed by --list): the webapp shell signature signs one exact shell, so a pin whose
+# shell version has no release/webapp-shell/<v>.json needs that step again (then a .com deploy). Every other done
+# step stays done; the gym gate only warns at the deploys.
+repin_reopen() {
+  local v; v=$(git -C "$REPO" show "$PIN:apps/web/public/webapp/service-worker.js" 2>/dev/null | sed -n 's/^const SHELL_VERSION *= *"\(v[0-9]*\)".*/\1/p' | head -1)
+  [ -n "$v" ] || return 0
+  if st_has done shellsig && ! git -C "$REPO" cat-file -e "$PIN:release/webapp-shell/$v.json" 2>/dev/null; then
+    st_w del done shellsig
+    warn "the webapp shell moved to $v, which is not signed: step $(step_index shellsig) is open again (bash scripts/release.sh --only $(step_index shellsig), then a .com deploy)"
+  fi
 }
 
 commit_paths() { # commit_paths "message" path...
@@ -1159,11 +964,10 @@ with_maintainers() { # run a command with the maintainers clone linked into the 
 }
 
 require_done() { # require_done id...  (warn and ask when a step this one depends on is not recorded)
-  local id idx
+  local id
   for id in "$@"; do
-    idx=$(step_index "$id")
-    if ! st_has done "$idx"; then
-      warn "step $idx ($id) is not recorded as done."
+    if ! st_has done "$id"; then
+      warn "step $(step_index "$id") ($id) is not recorded as done."
       confirm "Continue anyway?" || return 10
     fi
   done
@@ -1229,7 +1033,11 @@ com_deploy() { # deploy the pinned commit from the worktree
   from the old Worker; rerun the step to be asked again.
 EOF
   confirm "Deploy .com now ('npm run deploy' in apps/com)?" || return 10
-  XA "$WT/apps/com" npm run deploy
+  # The webapp deploy guard (static-assets.ts) refuses while any GYM_* variable is set: a gym run's environment
+  # must never reach the production hostnames. Drop them for the deploy only (0.4 step 23 was refused once).
+  ( local v; for v in $(compgen -e | grep -E '^(GYM_|FLAGSHIP_GYM_)' || true); do unset "$v"; done
+    XA "$WT/apps/com" npm run deploy
+  ) || return 1
   st_w set comDeployedSha "$PIN"
   st_w set shellVersion "$(shell_version "$WT")"
 }
@@ -1269,6 +1077,7 @@ run_preflight() {
   hdr "Gates on the pinned commit"
   WX node scripts/check-versions.mjs
   WX npm run parity
+  WX npm run i18n
   XA "$WT" env RELEASE=1 bash scripts/release-guard.sh
   local E touched mode
   E=$(latest_endorsed)
@@ -1290,12 +1099,9 @@ touched_test_filters() { # a vitest filter list from the files changed since the
 }
 
 run_plan() {
-  say "  .com runs on the Workers Free plan today (owner, 2026-10-18): 10 ms CPU a request, 100,000"
-  say "  requests a day (about 75 always-on accounts), 50 subrequests a request. The 6-hourly D1 backup"
-  say "  made 89 D1 calls and does not run on Free: step $(step_index backup) moves it to GitHub Actions."
-  say "  Upgrade to Paid (USD 5 a month) if wrangler tail shows exceededCpu, or the dashboard shows"
-  say "  more than 70,000 requests in a day (Workers & Pages -> flagship-com -> Metrics)."
-  say "  The flagship.services 200-record zone cap is removed by the root wildcard (step $(step_index dns))."
+  say "  .com runs on Workers Paid since 2026-10-20 (owner): no 100,000-a-day hard stop. On Free it would be 10 ms CPU a"
+  say "  request, 100,000 requests a day and 50 subrequests a request. Watch the CPU step (step $(step_index cpu)) and"
+  say "  npm run ops -- workers --hours 72 after the deploy. The flagship.services zone holds the root wildcard (step $(step_index setup) checks it)."
   local a; a=$(ask_word "Which plan is flagship-com on? type: free or paid")
   case "$a" in free|paid) st_w set workersPlan "$a"; ok "recorded: $a" ;; *) fail "type free or paid" ;; esac
 }
@@ -1412,61 +1218,11 @@ run_version() {
 }
 
 CATALOG_ROOT_FILE=release/catalog-root.json
-run_catalogkeys() {
-  ensure_wt
-  if [ -f "$WT/$CATALOG_ROOT_FILE" ]; then ok "$CATALOG_ROOT_FILE is pinned (version $(json_field version < "$WT/$CATALOG_ROOT_FILE"))"; return 0; fi
-  say "  The catalog keys live OFFLINE (an encrypted stick), never in this repo or this script's state."
-  local dir; dir=$(ask_word "Offline folder for the catalog keys (absolute path)")
-  [ -d "$dir" ] || fail "no such folder: $dir"
-  case "$dir" in "$REPO"*|"$WT"*) fail "the key folder must be outside the repository";; esac
-  confirm "Create the root key and the timestamp key in $dir now?" || return 10
-  local rootpub tspub
-  rootpub=$(cd "$WT" && npx tsx tools/release-catalog/catalog.ts keygen --id root-1 --out "$dir/catalog-root-1.key.json")
-  tspub=$(cd "$WT" && npx tsx tools/release-catalog/catalog.ts keygen --id timestamp-1 --out "$dir/catalog-timestamp-1.key.json")
-  chmod 600 "$dir"/catalog-*.key.json
-  WX npx tsx tools/release-catalog/catalog.ts root --key "root-1=$rootpub" --key "timestamp-1=$tspub" \
-    --role root=root-1 --role targets=root-1 --role snapshot=root-1 --role timestamp=timestamp-1 \
-    --version 1 --expires-days 730 --out "$CATALOG_ROOT_FILE"
-  if confirm "Set the repo secret RELEASE_CATALOG_TIMESTAMP_KEY from $dir/catalog-timestamp-1.key.json (gh reads the file; nothing is shown)?"; then
-    ( cd "$REPO" && gh secret set RELEASE_CATALOG_TIMESTAMP_KEY < "$dir/catalog-timestamp-1.key.json" ) || fail "gh secret set failed"
-    ( cd "$REPO" && gh secret list ) | gh_secret_names | grep -qx RELEASE_CATALOG_TIMESTAMP_KEY && ok "RELEASE_CATALOG_TIMESTAMP_KEY is set"
-  else
-    warn "set it before the catalog step: gh secret set RELEASE_CATALOG_TIMESTAMP_KEY < $dir/catalog-timestamp-1.key.json"
-  fi
-  commit_paths "Pin the release catalog root" "$CATALOG_ROOT_FILE"
-  land_commits || return $?
-  st_w set catalogKeyDir "$dir"
-}
 
 
 PQ_KEY_FILE="${FLAGSHIP_PQ_KEY_FILE:-$HOME/.flagship-release/pq-release-key.age}"
 pq_pinned() { node -e 'const t=require(process.argv[1]);process.exit((t.pq?.keyIds?.length??0)>0?0:1)' "$WT/release/box-artifact-trust.json"; }
 
-run_pqkeys() {
-  ensure_wt
-  if pq_pinned; then ok "the PQ release key is pinned"; XA "$WT" node scripts/pq-release-key.mjs show-pub; return 0; fi
-  command -v age >/dev/null && command -v age-plugin-yubikey >/dev/null || fail "install age and age-plugin-yubikey first (brew install age age-plugin-yubikey)"
-  say "  docs/runbooks/pq-release-key.md walks through this. You need both YubiKeys, paper and a pen."
-  local r1 r2; r1=$(ask_word "age recipient of YubiKey 1 (age1yubikey1...)"); r2=$(ask_word "age recipient of YubiKey 2")
-  case "$r1$r2" in *age1yubikey1*age1yubikey1*) ;; *) fail "both recipients must be age1yubikey1... values" ;; esac
-  confirm "Make the PQ release key now (PIN + touch; the paper code prints once: write it down)?" || return 10
-  with_maintainers XA "$WT" node scripts/pq-release-key.mjs init --recipient "$r1" --recipient "$r2" --signing-key yubikey-piv:slot=9c
-  say "  Prove each YubiKey opens the key file: insert YubiKey 1, then YubiKey 2."
-  XA "$WT" node scripts/pq-release-key.mjs verify-yubikey
-  XA "$WT" node scripts/pq-release-key.mjs verify-yubikey
-  [ "$(ask_word "Type  written  once the paper code is written down and stored apart from both YubiKeys")" = written ] || fail "the paper backup is required"
-  local id; id=$(cd "$WT" && node scripts/pq-release-key.mjs show-pub | sed -n 's/.*key id:* *\([0-9a-f]\{64\}\).*/\1/p' | head -1)
-  [ -n "$id" ] || id=$(ask_word "The key id show-pub printed (64 hex)")
-  local legacy=() f
-  for f in $(find "$ARTIFACTS" -name 'flagship-box-*.manifest.json' 2>/dev/null); do legacy+=(--legacy-manifest "$f"); done
-  XA "$WT" node scripts/pq-release-key.mjs pin --key-id "$id" --require-pq-after auto --ca-lease --box-artifact "${legacy[@]}"
-  WX node scripts/gen-box-release.mjs --write
-  WX npx tsc -b
-  local changed; changed=$(wt_git status --porcelain | awk '{print $2}')
-  # shellcheck disable=SC2086
-  commit_paths "Pin the PQ release key for endorsements, CA leases and box artifacts" $changed
-  land_commits || return $?
-}
 
 run_artifacts() {
   ensure_wt
@@ -1691,7 +1447,7 @@ run_dnsbroker() {
   local url names code n
   url=$(dns_broker_url "$WT/apps/com/wrangler.toml")
   if [ -z "$url" ]; then
-    warn "apps/com/wrangler.toml sets no DNS_BROKER_URL: .com keeps its own DNS token; nothing to deploy (step skipped)"
+    ok "apps/com/wrangler.toml sets no DNS_BROKER_URL: .com keeps its own DNS token; nothing to deploy"
     return 0
   fi
   names=$(cd "$WT/apps/dns-broker" && npx wrangler secret list 2>/dev/null | json_names || true)
@@ -1707,37 +1463,7 @@ run_dnsbroker() {
   ok "the broker answers at $url"
 }
 
-run_uxchecks() {
-  ensure_wt
-  local has; has() { node -e 'process.exit(require(process.argv[1]).scripts?.[process.argv[2]]?0:1)' "$WT/package.json" "$1"; }
-  if has i18n; then WX npm run i18n; else warn "no npm run i18n on this commit: the translation work is not merged yet"; fi
-  if [ -f "$WT/i18n/REVIEW.md" ]; then
-    say "  Read i18n/REVIEW.md: recovery, pairing, unlock and backup wording first, by a native reader per language."
-    [ "$(ask_word "Type  reviewed  when every listed line is reviewed (or  later  to stop here)")" = reviewed ] || return 10
-  fi
-  if has store-assets:release-check; then
-    # The native captures (and the rendered store/out) are git-ignored: they live in the checkout that made them, so
-    # bring that checkout's copies into the release worktree before checking them against the pinned code.
-    local sd
-    for sd in captures out; do
-      if [ -d "$REPO/store/$sd" ]; then rm -rf "$WT/store/$sd"; mkdir -p "$WT/store"; cp -R "$REPO/store/$sd" "$WT/store/$sd"; fi
-    done
-    [ -f "$WT/store/out/manifest.json" ] || WX npm run store-assets:render
-    WX npm run store-assets:release-check
-  else warn "no store-assets:release-check on this commit"; fi
-  if grep -q 'VOICI_CANONICAL' "$WT/apps/com/wrangler.toml" 2>/dev/null; then
-    say "  voi.ci canonical links: set VOICI_CANONICAL = \"1\" in apps/com/wrangler.toml once the gym's named-links group is green; the .com redeploy step ships it."
-  fi
-}
 
-run_hof() {
-  ensure_wt
-  grep -q "credit: Jay" "$WT/apps/web/public/security/hall-of-fame.html" || fail "the hall of fame entry is not on main at the pin: cherry-pick it (with its six translations, node scripts/i18n-web.mjs build) onto main first"
-  confirm "0.3 is live. Redeploy .com now so the hall of fame entry is published?" || return 10
-  com_deploy || return $?
-  probe_code "hall of fame" "$COM_URL/security/hall-of-fame" 200
-  probe_end
-}
 
 run_kickoff() {
   [ -n "$(st_get endorsed)" ] || warn "no endorsement is recorded in this run: the appliances bake the newest endorsed release, so a build started before the endorsement is stale"
@@ -1748,7 +1474,7 @@ run_kickoff() {
   st_w set applianceDispatchedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   sleep 6
   XA "$REPO" gh run list --workflow vm-appliance.yml --limit 4
-  say "  amd64 takes about an hour, arm64 (TCG) up to three. Step 14 collects them."
+  say "  amd64 takes about an hour, arm64 (TCG) up to three. Step $(step_index publish) collects them."
 }
 
 KNOWN_SECRETS=(VOUCHER_SIGNING_KEYS OHTTP_GATEWAY_KEYS CLOUDFLARE_DIRECT_DNS_API_TOKEN CLOUDFLARE_DIRECT_ZONE_ID WEBPUSH_VAPID_PRIVATE_KEY_PEM WEBPUSH_VAPID_PUBLIC_KEY_B64URL WEBPUSH_CONTACT VOICI_CALL_POW_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET APPLE_IAP_ENVIRONMENTS GOOGLE_PLAY_SERVICE_ACCOUNT_JSON APNS_KEY_ID APNS_TEAM_ID APNS_PRIVATE_KEY_PEM SERVING_REVOCATION_SEED ISSUANCE_ACME_ACCOUNT_KEY RELAY_MESH_KEY_SEED ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT VOICI_DEVICE_SECRET APPLE_TEAM_ID APPLE_DEVICECHECK_KEY_ID APPLE_DEVICECHECK_KEY PLAY_INTEGRITY_SA_JSON CLOUDFLARE_PURGE_TOKEN)
@@ -1799,10 +1525,7 @@ run_gym() {
   say "  what new boxes are built on) runs every group, classic (Docker + TS, the boxes already out there)"
   say "  runs the groups covering them. arch-v2 not green: new boxes are built on classic. The policed"
   say "  app browser ships on only if its group (browser-grants) passes; if only it fails, it ships off."
-  say "  Every group"
-  say "  (the 0.3 groups included:"
-  say "  first contact, app-name certificates, cross-owner chat, passkey recovery, origin generations,"
-  say "  the release catalog, the policed browser, upstream sync, keyd custody) on real UpCloud boxes."
+  say "  Every group runs on real UpCloud boxes; the gym secrets come from $GYM_SECRETS_FILE."
   say "  It takes the gym lock, so no other live run may be in progress (the gym and prod share the"
   say "  Let's Encrypt budget of 50 a week). About 70 minutes."
   local base="${GYM_START_REF:-}"
@@ -1811,7 +1534,7 @@ run_gym() {
     local rc=0
     if [ "$DRY" = 1 ]; then XA "$WT" bash scripts/gym-release-run.sh --dry-run; return 0; fi
     printf '%s+ (cd %s && bash scripts/gym-release-run.sh)%s\n' "$C_D" "$WT" "$C_0"
-    ( cd "$WT" && GYM_BASE_REF="${GYM_BASE_REF:-origin/main}" bash scripts/gym-release-run.sh ) || rc=$?
+    ( cd "$WT" && GYM_SECRETS_FILE="$GYM_SECRETS_FILE" GYM_BASE_REF="${GYM_BASE_REF:-origin/main}" bash scripts/gym-release-run.sh ) || rc=$?
     case "$rc" in
       0) ok "every live group is green on both stacks on $(short "$PIN"): new boxes are built on $(json_field newBoxStack < "$WT/release/box-release.json"); the app browser ships $(app_browser_state)" ;;
       3) warn "nothing failed, but some groups were skipped (see the summary above)"
@@ -1836,7 +1559,7 @@ run_gym() {
       *) fail "the gym run failed on the classic stack (exit $rc): fix on main, run this step again" ;;
     esac
   else
-    say "  Run it yourself, in another terminal:  (cd $WT && bash scripts/gym-release-run.sh)"
+    say "  Run it yourself, in another terminal:  (cd $WT && GYM_SECRETS_FILE=$GYM_SECRETS_FILE bash scripts/gym-release-run.sh)"
     [ "$(ask_word "Type  verified  once that run exits 0 on $(short "$PIN")")" = verified ] || fail "gate not passed"
   fi
   cat <<'EOF'
@@ -1853,60 +1576,7 @@ EOF
   st_w set gymVerifiedSha "$PIN"
 }
 
-dispatch_and_wait() { # dispatch_and_wait workflow.yml  -> 0 when the run it started is green
-  local wf=$1 t0 id i
-  t0=$(date -u -v-30S +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '-30 seconds' +%Y-%m-%dT%H:%M:%SZ)
-  XA "$WT" gh workflow run "$wf" --ref main
-  for i in 1 2 3 4 5 6; do
-    sleep 6
-    id=$( (cd "$WT" && gh run list --workflow "$wf" --event workflow_dispatch --json databaseId,createdAt --limit 5 2>/dev/null) | newest_run_since "$t0" || true)
-    [ -n "$id" ] && break
-  done
-  [ -n "$id" ] || fail "could not find the run that $wf started"
-  XA "$WT" gh run watch "$id" --exit-status
-}
 
-run_backup() {
-  ensure_wt
-  local wf
-  for wf in d1-backup.yml model-capabilities.yml; do
-    [ -f "$WT/.github/workflows/$wf" ] || fail ".github/workflows/$wf is not on the pinned commit: this release cannot back up D1 (the .com deploy removes the Worker's own backup)"
-  done
-  local bad=0 names s
-  names=$( (cd "$WT" && gh secret list 2>/dev/null) | gh_secret_names || true)
-  for s in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
-    if echo "$names" | grep -qx "$s"; then ok "repo secret $s exists"; else err "repo secret $s is missing (repo Settings > Secrets and variables > Actions; runbook step 1b.2-3: a token with D1 Edit + Workers R2 Storage Edit only)"; bad=1; fi
-  done
-  if age_recipient_ok < "$WT/.maintainers/backup-recipient.pub"; then ok ".maintainers/backup-recipient.pub holds a real age public key"
-  else err ".maintainers/backup-recipient.pub is still the placeholder (runbook step 1b.4: age-keygen offline, commit the single age1... line to main, then re-run with a new pin)"; bad=1; fi
-  [ "$bad" = 0 ] || return 11
-  if WRQ r2 bucket list 2>/dev/null | grep -q 'flagship-d1-backups'; then ok "R2 bucket flagship-d1-backups exists"
-  else
-    warn "R2 bucket flagship-d1-backups does not exist"
-    confirm "Create it (private, no public access) with the 30 day rule on d1/daily/?" || return 10
-    WRX r2 bucket create flagship-d1-backups
-    WRX r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30
-  fi
-  local rules; rules=$(WRQ r2 bucket lifecycle list flagship-d1-backups 2>&1 || true)
-  echo "$rules" | sed 's/^/    /'
-  if echo "$rules" | grep -q 'd1/daily/'; then ok "a lifecycle rule covers d1/daily/"
-  else
-    warn "no lifecycle rule on d1/daily/ was found in that output"
-    if confirm "Add the rule (expire-daily, d1/daily/, 30 days)?"; then WRX r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30; else return 11; fi
-  fi
-  say "  This runs the backup workflow on GitHub (exports prod D1, age-encrypts, uploads to R2) and the model capability refresh once."
-  confirm "Run d1-backup.yml now?" || return 10
-  dispatch_and_wait d1-backup.yml
-  local tmp; tmp=$(mktemp "$RELEASE_HOME/latest.XXXXXX")
-  ( cd "$WT/apps/com" && WR r2 object get flagship-d1-backups/latest.json --file "$tmp" --remote >/dev/null 2>&1 ) || { rm -f "$tmp"; fail "could not read flagship-d1-backups/latest.json"; }
-  if latest_json_ok 15 < "$tmp" | sed 's/^/    /'; then :; fi
-  if latest_json_ok 15 < "$tmp" >/dev/null; then ok "latest.json is fresh with a key under d1/daily/"; else rm -f "$tmp"; fail "latest.json is stale or malformed: the backup did not land"; fi
-  rm -f "$tmp"
-  confirm "Run model-capabilities.yml once (about 350 model rows into D1)?" || return 10
-  dispatch_and_wait model-capabilities.yml
-  st_w set d1BackupAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  ok "backup prerequisites done: the .com deploy may now remove the Worker's own backup"
-}
 
 run_migrations() {
   ensure_wt
@@ -1916,7 +1586,7 @@ run_migrations() {
   pending=$(printf '%s' "$json" | pending_migrations "$WT/packages/storage/migrations")
   if [ -z "$pending" ]; then ok "nothing is pending: every migration file is in the prod ledger"; return 0; fi
   warn "pending migrations:"; echo "$pending" | sed 's/^/    /'
-  say "  Make sure the backup of step $(step_index backup) is fresh: a migration cannot be undone."
+  say "  The setup check (step $(step_index setup)) proved the daily D1 backup is fresh: a migration cannot be undone."
   local f ver
   for f in $pending; do
     ver=${f:0:4}
@@ -1932,13 +1602,13 @@ run_migrations() {
 
 run_com() {
   require_gym_gate || return $?
-  require_done migrations services dns || return 10
+  require_done setup migrations || return 10
   if [ "$(tr -d '[:space:]' < "$WT/release/runtime-manifest.json")" = null ]; then
     warn "release/runtime-manifest.json is still null (step $(step_index runtime)): /api/runtime/manifest will answer 204 and every Runtime card says 'not published'. Boxes keep updating on the artifact's signed lock."
     [ "$(ask_word "Type  no-runtime-manifest  to deploy anyway, or press Enter to stop and run step $(step_index runtime)")" = no-runtime-manifest ] || return 10
   fi
-  if ! st_has done "$(step_index backup)" && [ -z "$(st_get d1BackupAt)" ]; then
-    err "the D1 backup prerequisites (step $(step_index backup)) are not recorded. This deploy REMOVES the Worker's own D1 backup: without them there is no backup at all (Time Travel's 7 days is the only net)."
+  if ! st_has done setup; then
+    err "the setup check (step $(step_index setup)) is not recorded, so nothing proved the daily D1 backup works (the Worker keeps no backup of its own; Time Travel's 7 days is the only other net)."
     [ "$(ask_word "Type  no-backup-accepted  to deploy anyway, or press Enter to stop")" = no-backup-accepted ] || return 10
     st_w set noBackupAccepted "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   fi
@@ -1962,8 +1632,8 @@ serving_relay_key() {
   fi
   say "  .com's revocation key: $key"
   if flyctl secrets list -a flagship-services 2>/dev/null | grep -qw FLAGSHIP_SERVING_REVOCATION_PUB; then
-    say "  the relay already holds FLAGSHIP_SERVING_REVOCATION_PUB (Fly shows only a digest: if .com's key changed, set it again)."
-    confirm "Set it again to the key above anyway?" || return 0
+    ok "the relay already holds FLAGSHIP_SERVING_REVOCATION_PUB (set in 0.3; after a SERVING_REVOCATION_SEED change, set it again by hand: flyctl secrets set FLAGSHIP_SERVING_REVOCATION_PUB=<key above> -a flagship-services)"
+    return 0
   else
     confirm "Give the relay this key now (turns on the serving authority; a rolling restart)?" || { warn "the relay runs without the serving authority until this is set"; return 0; }
   fi
@@ -1974,7 +1644,7 @@ serving_relay_key() {
   say "  check by hand that the feed is up: curl -H 'x-usage-secret: <secret>' $SERVICES_URL/api/stats  (serving.contact true, feed.lag 0)"
 }
 require_gym_gate() {
-  st_has done "$(step_index gym)" || fail "the gym gate (step $(step_index gym)) is not recorded: nothing deploys to prod until it passes"
+  st_has done gym || fail "the gym gate (step $(step_index gym)) is not recorded: nothing deploys to prod until it passes"
   local gs; gs=$(st_get gymVerifiedSha)
   if [ -n "$gs" ] && [ "$gs" != "$PIN" ]; then
     if wt_exists || [ "$DRY" = 0 ]; then
@@ -2016,33 +1686,6 @@ EOF
   say "  Requests per day: dashboard -> Workers & Pages -> flagship-com -> Metrics. Alarm at 70,000 (cap 100,000)."
 }
 
-run_services() {
-  require_gym_gate || return $?
-  require_done migrations || return 10
-  ensure_wt
-  local live_mesh=""
-  if curl -fsS -m 20 "$FEED_URL/directory.json?release=$(date +%s)" 2>/dev/null | directory_lists "$MESH_RELAY_ID"; then live_mesh=1; fi
-  if [ -n "$live_mesh" ] && [ -z "$(st_get meshRelayDeployedAt)" ]; then
-    warn "production already runs the relay mesh ($MESH_RELAY_ID is in the live directory, since 0.3): a relay update is the step 'Deploy the Rust relay as iad1' (--only $(step_index meshrelay)), not this one."
-    warn "this step deploys the mesh-off TS hub (fly.toml), i.e. the full mesh-off rollback."
-    [ "$(ask_word "Type  mesh-off-rollback  to go on, or Enter to stop")" = mesh-off-rollback ] || return 10
-  elif [ -n "$(st_get meshRelayDeployedAt)" ]; then
-    warn "the Rust mesh relay (iad1) was deployed at $(st_get meshRelayDeployedAt): this step now REPLACES it with the mesh-off TS hub (fly.toml), i.e. the full mesh-off rollback."
-    [ "$(ask_word "Type  mesh-off-rollback  to go on, or Enter to stop")" = mesh-off-rollback ] || return 10
-  fi
-  say "  recent Fly releases:"; flyctl releases -a flagship-services 2>&1 | head -5 | sed 's/^/    /' || true
-  say "  last relay-path commit on the pin:"; wt_git log -1 --format='    %h %cI %s' -- apps/web/src packages Dockerfile fly.toml billing
-  say "  --strategy=rolling (fly.toml): one machine at a time, the old hub sends DrainNotice so tunnels move over; with two machines running there is no gap."
-  confirm "Deploy .services to Fly now?" || return 10
-  XA "$WT" flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services
-  PROBE_FAILS=0
-  probe_code ".services health" "$SERVICES_URL/api/health" 200 8
-  info_code "status page" "$COM_URL/status/"
-  say "  watch $COM_URL/status/ until every box is back online (about a minute)."
-  probe_end
-  relay_echo_check
-  say "  /api/stats needs USAGE_REPORT_SECRET on Fly (503 = not set): check by hand: curl -H 'x-usage-secret: <secret>' $SERVICES_URL/api/stats"
-}
 
 relay_ips() { # prints "<v4> <v6>" from apps/com/wrangler.toml
   local v4 v6
@@ -2050,270 +1693,83 @@ relay_ips() { # prints "<v4> <v6>" from apps/com/wrangler.toml
   v6=$(sed -n 's/^SERVICES_PASSTHROUGH_IPV6 *= *"\(.*\)"/\1/p' "$WT/apps/com/wrangler.toml" | head -1)
   echo "$v4 $v6"
 }
-run_dns() {
-  require_done services || return 10
-  ensure_wt
-  local v4 v6; read -r v4 v6 < <(relay_ips)
-  [ -n "$v4" ] || fail "SERVICES_PASSTHROUGH_IPV4 not found in apps/com/wrangler.toml"
-  say "  relay addresses in the repo: $v4  $v6"
-  local ips; ips=$(flyctl ips list -a flagship-services 2>&1 || true)
-  echo "$ips" | sed 's/^/    /'
-  if echo "$ips" | ips_agree "$v4" "$v6"; then ok "flyctl agrees with wrangler.toml"
-  else fail "flyctl ips and apps/com/wrangler.toml disagree: fix the repo first (zone-health compares against the Worker's variables)"; fi
-  cat <<EOF
-
-  In the Cloudflare dashboard, flagship.services zone -> DNS -> Records. Proxy status MUST be
-  "DNS only" (grey cloud) on both wildcard records; the dashboard offers orange by default.
-
-      Type   Name            Content                   Proxy        TTL
-      A      *               $v4              DNS only     60 s or Auto
-      AAAA   *               $v6      DNS only     60 s or Auto
-      CAA    @               0 issue "letsencrypt.org"
-      CAA    @               0 issuewild "letsencrypt.org"
-
-  After the CAA pair, check SSL/TLS -> Edge Certificates still shows the apex certificate active.
-EOF
-  local a; a=$(ask_word "Type  done  when the four records exist")
-  [ "$a" = done ] || return 10
-  PROBE_FAILS=0
-  local i got6 got4 caa
-  for i in 1 2 3 4 5 6; do
-    got4=$(dig +short A anything-at-all.flagship.services @1.1.1.1 2>/dev/null | head -1 || true)
-    [ "$got4" = "$v4" ] && break; sleep 5
-  done
-  if [ "$got4" = "$v4" ]; then ok "wildcard A answers the relay ($got4)"; else err "wildcard A answered '$got4', want $v4"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  if [ -n "$v6" ]; then
-    got6=$(dig +short AAAA anything-at-all.flagship.services @1.1.1.1 2>/dev/null | head -1 || true)
-    if [ "$got6" = "$v6" ]; then ok "wildcard AAAA answers the relay ($got6)"; else err "wildcard AAAA answered '$got6', want $v6"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  fi
-  caa=$(dig +short CAA flagship.services @1.1.1.1 2>/dev/null || true)
-  if echo "$caa" | grep -q issuewild && echo "$caa" | grep -q 'letsencrypt.org'; then ok "apex CAA pair visible"; else err "apex CAA not visible yet: '$caa'"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  say "  (zone-health is not deployed yet: it runs as a post-check of the .com deploy.)"
-  st_w set dnsWildcardAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  probe_end
-}
 
 # ---------------------------------------------------------------- the relay mesh (docs/runbooks/final-deploy.md 1c-1e, 8a-8f)
 
-run_r2buckets() {
-  ensure_wt
+r2_buckets_ok() { # every bucket the pinned wrangler.toml binds exists (a missing one is offered for creation)
   local want have missing b
   want=$(wrangler_buckets < "$WT/apps/com/wrangler.toml")
-  [ -n "$want" ] || fail "no bucket_name found in apps/com/wrangler.toml"
+  [ -n "$want" ] || { err "no bucket_name found in apps/com/wrangler.toml"; return 11; }
   have=$(WRQ r2 bucket list 2>/dev/null | r2_bucket_names || true)
-  [ -n "$have" ] || fail "could not list the R2 buckets (wrangler login?)"
+  [ -n "$have" ] || { err "could not list the R2 buckets (wrangler login?)"; return 11; }
   missing=$(printf '%s\n' "$want" | names_missing "$have")
-  for b in $want; do printf '%s\n' "$missing" | grep -qx "$b" || ok "R2 bucket $b exists"; done
-  [ -z "$missing" ] && return 0
+  [ -z "$missing" ] && { ok "every R2 bucket apps/com/wrangler.toml binds exists"; return 0; }
   for b in $missing; do
-    warn "R2 bucket $b is bound in apps/com/wrangler.toml but does not exist: the .com deploy fails without it"
+    warn "R2 bucket $b is bound in apps/com/wrangler.toml but does not exist: the .com deploy fails without it (runbook 1c)"
     confirm "Create R2 bucket $b now (private, no public access)?" || return 10
     WRX r2 bucket create "$b"
   done
   have=$(WRQ r2 bucket list 2>/dev/null | r2_bucket_names || true)
   missing=$(printf '%s\n' "$want" | names_missing "$have")
-  [ -z "$missing" ] || fail "still missing after the create: $missing"
+  [ -z "$missing" ] || { err "still missing after the create: $missing"; return 11; }
   ok "every bound bucket exists"
-  say "  flagship-voici: its public custom domain files.voi.ci is a dashboard step of its own (wrangler.toml comment at the VOICI binding)."
 }
 
-run_feeddomain() {
-  cat <<'EOF'
+SETUP_BAD=0
+setup_ok()   { ok "$1"; }
+setup_fail() { err "$1 (set it up again: runbook $2)"; SETUP_BAD=1; }
 
-  Cloudflare dashboard (the account of flagship-com):
-    1. R2 > flagship-relay-feed > Settings > Custom Domains > Connect domain: feed.flagshipserver.com
-       (Cloudflare adds the DNS record itself; leave it as it makes it).
-    2. flagshipserver.com zone > Caching > Cache Rules > Create rule:
-         When: Hostname equals feed.flagshipserver.com
-         Then: Eligible for cache; Cache key: "Ignore query string" ON (so ?x=random cannot bust the cache);
-               Edge TTL and Browser TTL: "Respect origin" (the feed sets max-age=2 on head.json).
-EOF
-  [ "$(ask_word "Type  done  when both exist")" = done ] || return 10
-  PROBE_FAILS=0
-  local i a=""
-  for i in 1 2 3 4 5 6; do a=$(dig +short feed.flagshipserver.com @1.1.1.1 2>/dev/null | head -1 || true); [ -n "$a" ] && break; sleep 5; done
-  if [ -n "$a" ]; then ok "feed.flagshipserver.com resolves ($a)"; else err "feed.flagshipserver.com does not resolve yet"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  local code; code=$(http_code "$FEED_URL/head.json")
-  case "$code" in
-    200|404) ok "the feed host answers over valid TLS ($code: 404 is expected until the mesh publishes)" ;;
-    *) err "the feed host answered $code (000 = no TLS or no answer)"; PROBE_FAILS=$((PROBE_FAILS + 1)) ;;
-  esac
-  probe_end
-}
-
-run_meshseed() {
+# One-time setup that happened in earlier releases (runbook 1f): read-only, one ok line each, no prompt while it holds.
+run_setup() {
   ensure_wt
-  local names; names=$(WRQ secret list 2>/dev/null | json_names || true)
-  [ -n "$names" ] || fail "could not list the prod secrets (wrangler login?)"
-  if echo "$names" | grep -qx SERVING_REVOCATION_SEED; then ok "SERVING_REVOCATION_SEED is set (it signs the relay log)"
-  else warn "SERVING_REVOCATION_SEED is NOT set: .com cannot sign the relay log. Create it: cd apps/com && openssl rand -hex 32 | wrangler secret put SERVING_REVOCATION_SEED"; confirm "Continue anyway?" || return 10; fi
-  if echo "$names" | grep -qx RELAY_MESH_KEY_SEED; then ok "RELAY_MESH_KEY_SEED is already set: kept (never replaced in place)"; return 0; fi
-  say "  32 random bytes go from openssl straight into wrangler secret put: nothing is shown, stored or put in argv."
-  confirm "Create the prod secret RELAY_MESH_KEY_SEED now?" || return 10
-  printf '%s+ (cd apps/com && openssl rand -hex 32 | wrangler secret put RELAY_MESH_KEY_SEED)%s\n' "$C_D" "$C_0"
-  ( cd "$WT/apps/com" && openssl rand -hex 32 | WR secret put RELAY_MESH_KEY_SEED ) || fail "wrangler secret put RELAY_MESH_KEY_SEED failed"
+  SETUP_BAD=0
+  local names s n rules tmp code v4 v6 got4 got6 caa
+  if [ -f "$WT/$CATALOG_ROOT_FILE" ]; then setup_ok "release catalog root pinned ($CATALOG_ROOT_FILE)"; else setup_fail "no release catalog root is pinned" 2b; fi
+  if pq_pinned; then setup_ok "PQ release key pinned (release/box-artifact-trust.json)"; else setup_fail "the PQ release key is not pinned" 2c; fi
+  names=$( (cd "$WT" && gh secret list 2>/dev/null) | gh_secret_names || true)
+  for s in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+    if echo "$names" | grep -qx "$s"; then setup_ok "repo secret $s"; else setup_fail "repo secret $s is missing (the D1 backup workflow needs it)" 1b; fi
+  done
+  if age_recipient_ok < "$WT/.maintainers/backup-recipient.pub"; then setup_ok "the D1 backup is encrypted to a real age key"; else setup_fail ".maintainers/backup-recipient.pub is the placeholder" 1b; fi
+  rules=$(WRQ r2 bucket lifecycle list flagship-d1-backups 2>&1 || true)
+  if echo "$rules" | grep -q 'd1/daily/'; then setup_ok "flagship-d1-backups expires d1/daily/ after 30 days"; else setup_fail "no d1/daily/ lifecycle rule on flagship-d1-backups (or no bucket)" 1b; fi
+  tmp=$(mktemp "$RELEASE_HOME/latest.XXXXXX")
+  if ( cd "$WT/apps/com" && WR r2 object get flagship-d1-backups/latest.json --file "$tmp" --remote >/dev/null 2>&1 ) && latest_json_ok 2160 < "$tmp" >/dev/null; then
+    setup_ok "daily D1 backup: $(latest_json_ok 2160 < "$tmp")"
+  else setup_fail "the daily D1 backup is missing or over 36 hours old (gh run list --workflow d1-backup.yml)" 1b; fi
+  rm -f "$tmp"
+  local rc=0; r2_buckets_ok || rc=$?
+  [ "$rc" = 10 ] && return 10
+  [ "$rc" = 0 ] || SETUP_BAD=1
+  code=$(http_code "$FEED_URL/head.json")
+  case "$code" in 200|404) setup_ok "feed.flagshipserver.com answers over valid TLS ($code)" ;; *) setup_fail "feed.flagshipserver.com answered $code (000 = no TLS or no answer)" 1d ;; esac
   names=$(WRQ secret list 2>/dev/null | json_names || true)
-  echo "$names" | grep -qx RELAY_MESH_KEY_SEED || fail "RELAY_MESH_KEY_SEED is not listed after the put"
-  ok "RELAY_MESH_KEY_SEED set"
+  for n in RELAY_MESH_KEY_SEED SERVING_REVOCATION_SEED; do
+    if echo "$names" | grep -qx "$n"; then setup_ok ".com holds $n"; else setup_fail ".com has no $n secret" 1e; fi
+  done
+  read -r v4 v6 < <(relay_ips)
+  got4=$(dig +short A anything-at-all.flagship.services @1.1.1.1 2>/dev/null | head -1 || true)
+  if [ -n "$v4" ] && [ "$got4" = "$v4" ]; then setup_ok "the root wildcard A answers the relay ($v4)"; else setup_fail "the root wildcard A answered '$got4', want '$v4'" 6a; fi
+  if [ -n "$v6" ]; then
+    got6=$(dig +short AAAA anything-at-all.flagship.services @1.1.1.1 2>/dev/null | head -1 || true)
+    if [ "$got6" = "$v6" ]; then setup_ok "the root wildcard AAAA answers the relay ($v6)"; else setup_fail "the root wildcard AAAA answered '$got6', want '$v6'" 6a; fi
+  fi
+  caa=$(dig +short CAA flagship.services @1.1.1.1 2>/dev/null || true)
+  if echo "$caa" | grep -q issuewild && echo "$caa" | grep -q 'letsencrypt.org'; then setup_ok "the apex CAA names Let's Encrypt"; else setup_fail "the apex CAA is not visible: '$caa'" 6a; fi
+  [ "$SETUP_BAD" = 0 ] || return 11
 }
 
-relay_log_pub() { # .com's relay-log key (public), or nothing
-  curl -fsS -m 15 "$COM_URL/api/serving/revocation-key" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const k=JSON.parse(s).publicKey;if(/^[0-9a-f]{64}$/.test(k))process.stdout.write(k)}catch{}})' || true
-}
+
+
 # --json: the table marks a staged secret "* NAME", which a first-word parse read as "*".
 fly_secret_names() { flyctl secrets list -a "$RELAY_APP" --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{for(const x of JSON.parse(s))console.log(x.name??x.Name)}catch{}})' | sort -u; }
-mesh_relay_key() { ( cd "$WT" && node scripts/relay-key.mjs pub "$MESH_SEED_FILE" ) 2>/dev/null | tail -1; }
 
-run_relaykey() {
-  ensure_wt
-  if [ -f "$MESH_SEED_FILE" ]; then ok "the $MESH_RELAY_ID seed exists: $MESH_SEED_FILE (reused)"
-  else
-    say "  A new relay key for $MESH_RELAY_ID: $MESH_SEED_FILE (mode 600; back it up offline, never commit it)."
-    confirm "Make the $MESH_RELAY_ID relay key seed now?" || return 10
-    mkdir -p "$(dirname "$MESH_SEED_FILE")"
-    WX node scripts/relay-key.mjs new "$MESH_SEED_FILE"
-  fi
-  local key; key=$(mesh_relay_key)
-  [[ "$key" =~ ^[0-9a-f]{64}$ ]] || fail "could not read the relay key of $MESH_SEED_FILE"
-  say "  relay key ($MESH_RELAY_ID): $key"
-  st_w set meshRelayKey "$key"
-  local logpub; logpub=$(relay_log_pub)
-  [ -n "$logpub" ] || fail ".com serves no relay-log key at $COM_URL/api/serving/revocation-key (SERVING_REVOCATION_SEED and the .com deploy first)"
-  say "  relay-log key (.com, public): $logpub"
-  local names n; names=$(fly_secret_names)
-  for n in SERVICES_CONTROL_SECRET USAGE_REPORT_SECRET; do
-    if echo "$names" | grep -qx "$n"; then ok "$n is on $RELAY_APP"; else warn "$n is NOT on $RELAY_APP (the same value .com holds: flyctl secrets set $n=... -a $RELAY_APP --stage)"; fi
-  done
-  confirm "Stage FLAGSHIP_RELAY_KEY_SEED and FLAGSHIP_RELAY_LOG_PUB on $RELAY_APP (flyctl secrets import --stage: no restart)?" || return 10
-  printf '%s+ (FLAGSHIP_RELAY_KEY_SEED, FLAGSHIP_RELAY_LOG_PUB on stdin) | flyctl secrets import --stage -a %s%s\n' "$C_D" "$RELAY_APP" "$C_0"
-  { printf 'FLAGSHIP_RELAY_KEY_SEED=%s\n' "$(tr -d '[:space:]' < "$MESH_SEED_FILE")"; printf 'FLAGSHIP_RELAY_LOG_PUB=%s\n' "$logpub"; } \
-    | flyctl secrets import --stage -a "$RELAY_APP" >/dev/null || fail "flyctl secrets import failed"
-  names=$(fly_secret_names)
-  for n in FLAGSHIP_RELAY_KEY_SEED FLAGSHIP_RELAY_LOG_PUB; do echo "$names" | grep -qx "$n" || fail "$n is not listed on $RELAY_APP after the import"; done
-  ok "both staged; the mesh relay deploy applies them"
-}
 
-relays_cmd() { # relays_cmd args... : npm run relays against prod .com with the admin secret (never the gym's base URL)
-  local a q=""; for a in "$@"; do q="$q '$a'"; done
-  printf '%s+ npm run relays --%s%s\n' "$C_D" "$q" "$C_0"
-  with_secret bash -c "cd '$WT' && FLAGSHIP_BASE_URL='$COM_URL' npm run -s relays --$q"
-}
 
-run_relayadmit() {
-  require_done migrations com || return 10
-  ensure_wt
-  need_admin_secret || fail "the admin secret is needed to admit a relay"
-  local key; key=$(st_get meshRelayKey); [ -n "$key" ] || key=$(mesh_relay_key)
-  [[ "$key" =~ ^[0-9a-f]{64}$ ]] || fail "no relay key for $MESH_RELAY_ID: run step $(step_index relaykey) first"
-  local list; list=$(with_secret bash -c "cd '$WT' && FLAGSHIP_BASE_URL='$COM_URL' npm run -s relays -- list --json" 2>/dev/null) || fail "npm run relays -- list failed (is the 0.3 .com deployed with migration 0122?)"
-  local state; state=$(printf '%s' "$list" | relay_admitted "$MESH_RELAY_ID")
-  case "$state" in
-    "active $key") ok "$MESH_RELAY_ID is already admitted under this key" ;;
-    active\ *) fail "$MESH_RELAY_ID is admitted under ANOTHER key (${state#active }): a relay key is never replaced in place. Use the seed that made it, or npm run relays -- stage-key (docs/runbooks/relay-mesh.md 6)." ;;
-    retired\ *) fail "$MESH_RELAY_ID was retired: an id is never reused. Pick a new id (and change fly.relay.mesh.toml, fly.mesh.toml and MESH_RELAY_ID)." ;;
-    *)
-      local v4 v6; read -r v4 v6 < <(relay_ips)
-      [ -n "$v4" ] || fail "SERVICES_PASSTHROUGH_IPV4 not found in apps/com/wrangler.toml"
-      local ips; ips=$(flyctl ips list -a "$RELAY_APP" 2>&1 || true)
-      echo "$ips" | ips_agree "$v4" "$v6" || fail "flyctl ips list and apps/com/wrangler.toml disagree: fix the repo first"
-      confirm "Admit $MESH_RELAY_ID ($key, full, $MESH_RELAY_REGION, $v4 $v6) on prod .com?" || return 10
-      relays_cmd add "$MESH_RELAY_ID" "$key" full "$MESH_RELAY_REGION" --ipv4 "$v4" --ipv6 "$v6" || fail "admission refused"
-      ;;
-  esac
-  confirm "Run the relay-log backfill now (idempotent: existing servers, accounts, policies, revocations)?" || return 10
-  relays_cmd backfill || fail "the backfill failed"
-}
 
-run_meshcerts() {
-  ensure_wt
-  local have h
-  have=$(flyctl certs list -a "$RELAY_APP" 2>/dev/null || true)
-  for h in "$MESH_RELAY_HOST" "$MESH_TUNNEL_HOST"; do
-    if echo "$have" | grep -qw "$h"; then ok "Fly certificate for $h exists"
-    else
-      confirm "Add the Fly certificate for $h on $RELAY_APP (DNS-01 validation)?" || return 10
-      WX flyctl certs add "$h" -a "$RELAY_APP"
-    fi
-  done
-  [ -n "${PROD_DNS_TOKEN:-}" ] || [ -f "$HOME/.config/flagship/prod-dns-token" ] \
-    || fail "no Cloudflare DNS token: write ~/.config/flagship/prod-dns-token (Zone.DNS:Edit on flagship.services only)"
-  say "  the DNS plan (dry run, nothing written):"
-  ( cd "$WT" && npx tsx scripts/prod-mesh-dns.ts ) || warn "the dry run exited non-zero (a challenge target may not be known yet)"
-  confirm "Write this plan to the flagship.services zone?" || return 10
-  WX npx tsx scripts/prod-mesh-dns.ts --apply
-  PROBE_FAILS=0
-  local i out
-  for h in "$MESH_RELAY_HOST" "$MESH_TUNNEL_HOST"; do
-    for i in $(seq 1 20); do
-      out=$(flyctl certs check "$h" -a "$RELAY_APP" 2>&1 || true)
-      echo "$out" | grep -qiE 'issued|ready|valid' && break
-      [ "$i" = 1 ] && say "  waiting for Fly to issue $h (up to 10 minutes) ..."
-      sleep 30
-    done
-    echo "$out" | tail -4 | sed 's/^/    /'
-    probe_code "$h :8443 over valid TLS" "https://$h:8443/api/health" 200 6
-    local a; a=$(dig +short A "$h" @1.1.1.1 2>/dev/null | head -1 || true)
-    local v4 v6; read -r v4 v6 < <(relay_ips)
-    if [ "$a" = "$v4" ]; then ok "$h resolves to $v4"; else err "$h resolves to '$a', want $v4"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  done
-  probe_end
-}
 
-set_toml_var() { # set_toml_var file NAME value : exactly one top-level line NAME = "..." is rewritten
-  local f=$1 k=$2 v=$3 n
-  n=$(grep -c "^$k = \"" "$f" || true)
-  [ "$n" = 1 ] || fail "$f has $n lines '$k = \"...\"' (want exactly one)"
-  sed -i.bak "s|^$k = \".*\"|$k = \"$v\"|" "$f" && rm -f "$f.bak"
-}
 toml_var() { sed -n "s/^$2 = \"\(.*\)\".*/\1/p" "$1" | head -1; }
 
-run_meshon() {
-  require_done relayadmit meshcerts || return 10
-  ensure_wt
-  need_admin_secret || fail "the admin secret is needed to mint the directory"
-  PROBE_FAILS=0
-  local hub="$MESH_HUB_URL"
-  probe_code "$MESH_TUNNEL_HOST :8443 over valid TLS" "https://$MESH_TUNNEL_HOST:8443/api/health" 200 3
-  if [ "$PROBE_FAILS" -gt 0 ]; then
-    PROBE_FAILS=0
-    warn "tunnel.flagship.services does not answer over valid TLS: moving TUNNEL_HUB_URL there now would strand every box that restarts."
-    [ "$(ask_word "Type  keep-fly-dev  to switch the feed on but leave TUNNEL_HUB_URL at flagship-services.fly.dev, or Enter to stop")" = keep-fly-dev ] || return 10
-    hub="$LEGACY_HUB_URL"
-  fi
-  local toml="$WT/apps/com/wrangler.toml"
-  if [ "$(toml_var "$toml" RELAY_MESH)" = on ] && [ "$(toml_var "$toml" TUNNEL_HUB_URL)" = "$hub" ]; then
-    ok "the pinned wrangler.toml already has RELAY_MESH on and TUNNEL_HUB_URL $hub"
-  else
-    set_toml_var "$toml" RELAY_MESH on
-    set_toml_var "$toml" TUNNEL_HUB_URL "$hub"
-    wt_git diff -- apps/com/wrangler.toml | sed 's/^/    /'
-    commit_paths "Relay mesh on: publish the feed; boxes dial $(echo "$hub" | sed 's#wss://##;s#:.*##')" apps/com/wrangler.toml
-    land_commits || return $?
-  fi
-  if [ "$(st_get comDeployedSha)" != "$PIN" ]; then com_deploy || return $?; com_checks; fi
-  confirm "Mint the relay directory now (npm run relays -- mint-directory)?" || return 10
-  relays_cmd mint-directory || fail "mint-directory failed"
-  PROBE_FAILS=0
-  local i dir="" key; key=$(st_get meshRelayKey)
-  for i in 1 2 3 4 5 6; do
-    dir=$(curl -fsS -m 20 "$FEED_URL/directory.json?release=$(date +%s)" 2>/dev/null || true)
-    printf '%s' "$dir" | directory_lists "$MESH_RELAY_ID" "$key" && break
-    sleep 10
-  done
-  if printf '%s' "$dir" | directory_lists "$MESH_RELAY_ID" "$key"; then ok "directory.json lists $MESH_RELAY_ID under its key"
-  else err "directory.json does not list $MESH_RELAY_ID (yet): $FEED_URL/directory.json"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  local hdrs; hdrs=$(curl -sI -m 20 "$FEED_URL/head.json" | tr -d '\r' || true)
-  if echo "$hdrs" | grep -qi '^cache-control:.*max-age=2'; then ok "head.json: public, max-age=2"; else err "head.json headers: $(echo "$hdrs" | head -3 | tr '\n' ' ')"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  local r1 c2; r1=$RANDOM$RANDOM
-  curl -s -o /dev/null -m 20 "$FEED_URL/head.json?x=$r1" || true
-  c2=$(curl -sI -m 20 "$FEED_URL/head.json?x=$r1-other" | tr -d '\r' | sed -n 's/^cf-cache-status: *//Ip' | head -1)
-  if [ "$c2" = HIT ]; then ok "a different query string hit the same cache entry (the cache rule ignores it)"
-  else warn "the second query string answered cf-cache-status '${c2:-none}' (want HIT): check the cache rule (Ignore query string) before relays depend on it"; fi
-  local ep; ep=$(curl -fsS -m 20 "$COM_URL/api/services/endpoints" 2>/dev/null || true)
-  if [ "$(printf '%s' "${ep:-null}" | json_field tunnelHub 2>/dev/null || true)" = "$hub" ]; then ok "/api/services/endpoints: tunnelHub $hub"; else err "/api/services/endpoints tunnelHub is not $hub"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  st_w set meshOnAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  probe_end
-}
 
 relay_echo_check() { # the relay echo (docs/relay-addresses.md): the phones drop any address whose echo is not itself
   local v4 v6; read -r v4 v6 < <(relay_ips)
@@ -2344,22 +1800,30 @@ EOF
 health_of() { curl -s -m 20 "https://$1:8443/api/health" 2>/dev/null || true; }
 health_code() { curl -s -o /dev/null -m 20 -w '%{http_code}' "https://$1:8443/api/health" 2>/dev/null || echo 000; }
 
+run_meshcheck() {
+  ensure_wt
+  local bad=0 names n h toml="$WT/apps/com/wrangler.toml"
+  if curl -fsS -m 20 "$FEED_URL/directory.json?release=$(date +%s)" 2>/dev/null | directory_lists "$MESH_RELAY_ID"; then ok "the feed directory lists $MESH_RELAY_ID"
+  else err "the feed directory does not list $MESH_RELAY_ID (runbook 8b admits it, 8d mints the directory)"; bad=1; fi
+  names=$(fly_secret_names)
+  for n in FLAGSHIP_RELAY_KEY_SEED SERVICES_CONTROL_SECRET; do
+    if echo "$names" | grep -qx "$n"; then ok "$n is on $RELAY_APP"; else err "$n is not on $RELAY_APP (runbook 8a)"; bad=1; fi
+  done
+  if echo "$names" | grep -qxE 'FLAGSHIP_RELAY_LOG_PUB|FLAGSHIP_SERVING_REVOCATION_PUB'; then ok "$RELAY_APP holds .com's relay-log key"
+  else err "neither FLAGSHIP_RELAY_LOG_PUB nor FLAGSHIP_SERVING_REVOCATION_PUB is on $RELAY_APP (runbook 8a)"; bad=1; fi
+  for h in "$MESH_RELAY_HOST" "$MESH_TUNNEL_HOST"; do
+    if [ "$(health_code "$h")" = 200 ]; then ok "$h :8443 answers over valid TLS"; else err "$h :8443 does not answer over valid TLS (runbook 8c)"; bad=1; fi
+  done
+  if [ "$(toml_var "$toml" RELAY_MESH)" = on ] && [ "$(toml_var "$toml" TUNNEL_HUB_URL)" = "$MESH_HUB_URL" ]; then ok "apps/com/wrangler.toml: RELAY_MESH on, TUNNEL_HUB_URL $MESH_HUB_URL"
+  else err "apps/com/wrangler.toml does not keep RELAY_MESH on and TUNNEL_HUB_URL $MESH_HUB_URL (runbook 8d)"; bad=1; fi
+  [ "$bad" = 0 ] || return 11
+}
+
 run_meshrelay() {
-  require_done meshon || return 10
+  require_done meshcheck || return 10
   ensure_wt
   [ -f "$WT/fly.relay.mesh.toml" ] || fail "fly.relay.mesh.toml is not on the pinned commit"
-  local key; key=$(st_get meshRelayKey)
-  curl -fsS -m 20 "$FEED_URL/directory.json?release=$(date +%s)" 2>/dev/null | directory_lists "$MESH_RELAY_ID" "$key" \
-    || fail "the feed's directory.json does not list $MESH_RELAY_ID under its key: a mesh relay would not be blessed (step $(step_index meshon))"
-  ok "directory.json lists $MESH_RELAY_ID"
-  local names n; names=$(fly_secret_names)
-  for n in FLAGSHIP_RELAY_KEY_SEED SERVICES_CONTROL_SECRET; do echo "$names" | grep -qx "$n" || fail "$n is not on $RELAY_APP (step $(step_index relaykey))"; done
-  echo "$names" | grep -qxE 'FLAGSHIP_RELAY_LOG_PUB|FLAGSHIP_SERVING_REVOCATION_PUB' || fail "neither FLAGSHIP_RELAY_LOG_PUB nor FLAGSHIP_SERVING_REVOCATION_PUB is on $RELAY_APP"
-  ok "the relay's secrets are there"
-  local h; for h in "$MESH_RELAY_HOST" "$MESH_TUNNEL_HOST"; do [ "$(health_code "$h")" = 200 ] || fail "$h does not answer over valid TLS (step $(step_index meshcerts))"; done
-  ok "both tunnel names answer over valid TLS"
-  say "  The 0.2 review/demo box (playstore-test-0725) must already run 0.3 (RELEASE-0.3-JOURNAL I2); 0.2 store apps keep working against it."
-  confirm "Is the demo box on 0.3 (or do you accept it reconnecting as a 0.2 box)?" || return 10
+  local h
   if [ -n "${USAGE_REPORT_SECRET:-}" ]; then ( cd "$WT" && npm run -s ops -- services ) 2>&1 | head -12 | sed 's/^/    /' || true
   else say "  (USAGE_REPORT_SECRET is not in this shell: run 'npm run ops -- services' in another terminal for the box tunnel count.)"; fi
   local base; base=$(ask_word "Box tunnels online right now (a number, or Enter for none)")
@@ -2399,11 +1863,15 @@ EOF
   count=$(flyctl machines list -a "$RELAY_APP" --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).length)}catch{console.log("?")}})')
   if [ "$count" = 1 ]; then ok "one machine"; else err "$count machines (want 1): flyctl scale count 1 -a $RELAY_APP --yes"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
   mesh_rollback_text
-  probe_end
+  probe_end || return $?
+  if confirm "Watch the relay for 30 minutes now? (no: check it later by hand, $MESH_RELAY_HOST:8443/api/health and npm run ops -- mesh)"; then
+    mesh_watch || return $?
+  else
+    warn "no watch now: check $MESH_RELAY_HOST:8443/api/health and npm run ops -- mesh within the hour"
+  fi
 }
 
-run_meshwatch() {
-  require_done meshrelay || return 10
+mesh_watch() {
   local base; base=$(st_get meshBaseline)
   local mins=${MESH_WATCH_MINUTES:-30} i code line n peak=0 fails=0 low=0 bad=0
   say "  watching $MESH_RELAY_HOST for $mins minutes (baseline: ${base:-none}); Ctrl-C stops, resume with --only $CURRENT_STEP"
@@ -2457,7 +1925,7 @@ publish_arch() {
            id=$(find_green_run "$arch") ;;
       t|T) id=$(ask_word "Run id") ;;
     esac
-    if [ -z "$id" ]; then st_w add deferred "$arch"; warn "$arch deferred: publish it in phase B (publisharm)"; return 20; fi
+    if [ -z "$id" ]; then st_w add deferred "$arch"; warn "$arch deferred: the phase B redeploy publishes it"; return 20; fi
   fi
   smoke_ok "$id" || { err "run $id: the boot smoke step is not green"; st_w add deferred "$arch"; return 20; }
   ok "$arch: run $id is green with the boot smoke passing"
@@ -2466,9 +1934,9 @@ publish_arch() {
   XA "$WT" env "PATH=$PATH" bash scripts/publish-vm-appliance.sh "$id"
   local mf="$WT/apps/web/public/downloads/FlagshipVMAppliance-$arch.json" commit sha
   commit=$(json_field commit < "$mf"); sha=$(json_field sha256 < "$mf")
-  # 0.3 Studios use an appliance only when its commit equals the recipe's, i.e. box-release.json's commit.
+  # Studios use an appliance only when its commit equals the recipe's, i.e. box-release.json's commit.
   local want; want=$(st_get artifactCommit); [ -n "$want" ] || want=$(json_field commit < "$WT/release/box-release.json")
-  if [ -n "$want" ] && [ "$commit" != "$want" ]; then warn "the $arch image bakes $(short "$commit"), not the box release $(short "$want") that 0.3 recipes name"; confirm "Publish it anyway?" || return 11; fi
+  if [ -n "$want" ] && [ "$commit" != "$want" ]; then warn "the $arch image bakes $(short "$commit"), not the box release $(short "$want") that recipes name"; confirm "Publish it anyway?" || return 11; fi
   st_w set "appliance_$arch" "$sha"
   st_w set "applianceRun_$arch" "$id"
   st_w del deferred "$arch"
@@ -2485,10 +1953,8 @@ run_publish() {
   say "  arm64 may be skipped here and published in phase B."
   publish_arch arm64 || rc=$?
   [ "$rc" = 0 ] || [ "$rc" = 20 ] || return "$rc"
+  [ "$rc" = 20 ] && say "  arm64 is left for the phase B redeploy (step $(step_index redeployB)), which publishes it first."
   land_commits || return $?
-}
-
-run_redeployA() {
   com_deploy || return $?
   com_checks
   local arch want got
@@ -2501,10 +1967,16 @@ run_redeployA() {
   probe_end
 }
 
+
 run_status() {
+  local planned; planned=$(ask_word "Is a device test (the Windows agent, hardware) planned against this deploy? [y/N]")
+  case "$planned" in y|Y|yes) ;; *) ok "no device test planned: no status file"; return 0 ;; esac
+  local machine; machine=$(ask_word "Which machine (a short name, default windows)"); machine=${machine:-windows}
+  [[ "$machine" =~ ^[a-z0-9-]+$ ]] || fail "use lowercase letters, digits and dashes"
   ensure_wt
   local date out; date=$(date -u +%Y-%m-%d); out="$RELEASE_HOME/DEPLOYED-FINAL-$date.md"
-  local endorsed shell deployed arch row="" dns_at
+  local results="device-results/$machine-$date"
+  local endorsed shell arch row=""
   endorsed=$(st_get endorsed); [ -n "$endorsed" ] || endorsed=$(latest_endorsed)
   shell=$(live_shell_version)
   for arch in amd64 arm64; do
@@ -2514,48 +1986,47 @@ run_status() {
     else row="$row- $arch: NOT published yet (the older image is still what Studio downloads for $arch)
 "; fi
   done
-  dns_at=$(st_get dnsWildcardAt)
   {
     echo "# DEPLOYED-FINAL $date"
     echo
-    echo "This is the real deployed state the Windows test should run against. Nothing below is a caveat: if a line is not true when you test, stop and report it."
+    echo "This is the real deployed state the device test should run against. Nothing below is a caveat: if a line is not true when you test, stop and report it."
     echo
     echo "- main (release pin): \`$PIN\`"
     echo "- endorsed release commit (what new boxes install): \`$endorsed\`"
     echo "- .com deployed from: \`$(st_get comDeployedSha)\`, webapp shell version live: \`${shell:-unknown}\`"
-    echo "- .services (Fly relay): deployed from this release"
-    echo "- DNS design: the flagship.services zone holds a root wildcard (\`*\` A and AAAA, DNS only, grey cloud, pointing at the relay) and an apex CAA pair (issue and issuewild: letsencrypt.org). Accounts and boxes hold no address or CAA records; only short-lived \`_acme-challenge\` TXT records exist during issuance. Rollout order: the relay (.services) was deployed first, then the wildcard and CAA were added (${dns_at:-time unknown}), then the new .com; existing accounts kept their own records until the phase B reap."
+    echo "- .services: the Rust mesh relay iad1 (one machine), deployed from this release"
+    echo "- DNS design: the flagship.services zone holds a root wildcard (\`*\` A and AAAA, DNS only, grey cloud, pointing at the relay) and an apex CAA pair (issue and issuewild: letsencrypt.org). Accounts and boxes hold no address or CAA records; only short-lived \`_acme-challenge\` TXT records exist during issuance."
     echo "- Workers plan: $(st_get workersPlan)"
     echo "- Published VM appliances (Studio \"Host on this PC\" downloads these):"
     printf '%s' "$row"
-    echo "- Not live yet (phase B, after the Windows results): the public Windows and Linux Studio release, the pre-GA scrub and reap, the store builds."
-    echo "- Windows Studio under test is still the previous build; the download links on the site are unchanged."
+    echo "- Not live yet (phase B): the public Windows and Linux Studio release, the reap, the store builds."
+    echo "- The Studio under test is still the previous build; the download links on the site are unchanged."
   } > "$out"
   hdr "Status file ($out)"
   cat "$out"
   echo
-  confirm "Commit this to branch $RESULTS_BRANCH as device-results/DEPLOYED-FINAL-$date.md (plain push, no force)?" || { say "  left at $out"; return 0; }
-  local tw="$RELEASE_HOME/wt-results"
-  X git -C "$REPO" fetch -q origin "$RESULTS_BRANCH"
+  confirm "Commit this to branch $results as device-results/DEPLOYED-FINAL-$date.md (plain push, no force)?" || { say "  left at $out"; return 0; }
+  local tw="$RELEASE_HOME/wt-results" base="origin/main"
+  if git -C "$REPO" fetch -q origin "+refs/heads/$results:refs/remotes/origin/$results" 2>/dev/null; then base="origin/$results"; else say "  $results is new: it starts from main"; fi
   case "$tw" in "$RELEASE_HOME"/*) rm -rf "$tw" ;; esac
   git -C "$REPO" worktree prune
-  X git -C "$REPO" worktree add --detach "$tw" "origin/$RESULTS_BRANCH"
+  X git -C "$REPO" worktree add --detach "$tw" "$base"
   mkdir -p "$tw/device-results"
   cp "$out" "$tw/device-results/DEPLOYED-FINAL-$date.md"
   X git -C "$tw" add -- "device-results/DEPLOYED-FINAL-$date.md"
-  X git -C "$tw" commit -q -m "Record the deployed final state for the Windows test ($date)" -- "device-results/DEPLOYED-FINAL-$date.md"
+  X git -C "$tw" commit -q -m "Record the deployed final state for the $machine test ($date)" -- "device-results/DEPLOYED-FINAL-$date.md"
   local rc=0
-  git -C "$tw" push origin "HEAD:refs/heads/$RESULTS_BRANCH" || rc=$?
+  git -C "$tw" push origin "HEAD:refs/heads/$results" || rc=$?
   git -C "$REPO" worktree remove --force "$tw" >/dev/null 2>&1 || true
-  [ "$rc" = 0 ] || fail "the push to $RESULTS_BRANCH was not a fast-forward (someone pushed to it): fetch it and run this step again"
-  ok "pushed to $RESULTS_BRANCH"
+  [ "$rc" = 0 ] || fail "the push to $results was not a fast-forward (someone pushed to it): fetch it and run this step again"
+  ok "pushed to $results"
 }
 
 run_notice() {
   ensure_wt
   local msg event
   msg="We will update Flagship on {date}. Your servers keep running, but flagshipserver.com may be briefly unavailable."
-  event=$(ask_word "When is the scrub? ISO time, e.g. 2026-10-22T09:00:00Z (Enter = skip the notice)")
+  event=$(ask_word "When is the maintenance? ISO time, e.g. 2026-12-02T09:00:00Z (Enter = no notice)")
   [ -n "$event" ] || { ok "no notice"; return 0; }
   say "  Preview (writes nothing):"
   with_maintainers XA "$WT" node scripts/security-notice.mjs maintenance --message "$msg" --event "$event"
@@ -2581,23 +2052,26 @@ EOF
   com_checks
 }
 
-# The 0.2 apps learn they must update only from a signed notice (journal F9): their release builds show an
-# update-required notice as a banner with an Update button (never a lock); a 0.2 webapp shell locks until it reloads.
+# Older apps learn they must update only from a signed notice (journal F9): their release builds show an
+# update-required notice as a banner with an Update button (never a lock); an older webapp shell locks until it reloads.
 run_upgradenotice() {
   ensure_wt
-  local ib av sv msg reason event lock advisory
+  local ib av iv pv sv msg reason event lock advisory
   ib=$(node -p "require('$WT/release/version.json').iosBuild"); av=$(node -p "require('$WT/release/version.json').androidVersionCode")
+  iv=$(node -p "require('$WT/release/version.json').iosVersion"); pv=$(node -p "require('$WT/release/version.json').product")
   sv=$(shell_version "$WT"); sv=${sv#v}
-  [ "$ib" -gt 5 ] && [ "$av" -gt 9 ] || fail "release/version.json still names the 0.2 store builds (iOS build $ib, Android $av): the notice would ask nobody to update"
-  say "  Only once BOTH stores carry the 0.3 builds (iOS build $ib, Android versionCode $av): the banner's Update"
-  say "  button opens the store, so before approval it would send people to the version they already have."
-  [ "$(ask_word "Type  approved  when App Store and Google Play both show the 0.3 builds (Enter = later)")" = approved ] || return 20
-  msg="Flagship 0.3 is here. Update the app to keep using your account and servers: this version no longer works with them."
-  reason="0.3 fixes security issues in how this version signs and checks account and server messages."
+  say "  The notice names this release's builds as the minimum: iOS $iv ($ib), Android versionCode $av, webapp shell v$sv."
+  [ "$(ask_word "Does this release leave older apps unable to work, so they must update? [y/N]")" = y ] || { ok "no update notice for $pv"; return 0; }
+  say "  Only once BOTH stores carry these builds: the banner's Update button opens the store, so before approval it"
+  say "  would send people to the version they already have."
+  [ "$(ask_word "Type  approved  when App Store and Google Play both show iOS $iv ($ib) and Android $av (Enter = later)")" = approved ] || return 20
+  msg="Flagship $pv is here. Update the app to keep using your account and servers: this version no longer works with them."
+  reason=$(ask_word "The security reason in one sentence (it is shown and signed)")
+  [ -n "$reason" ] || return 10
   event=$(ask_word "When were the store builds approved? ISO time, e.g. 2026-11-20T00:00:00Z")
   [ -n "$event" ] || return 10
-  lock=$(ask_word "When should a 0.2 webapp lock? ISO time or now (Enter = now)"); lock=${lock:-now}
-  advisory=$(ask_word "Advisory id for the 0.3 security fixes (e.g. FSA-2026-003)")
+  lock=$(ask_word "When should an older webapp shell lock? ISO time or now (Enter = now)"); lock=${lock:-now}
+  advisory=$(ask_word "Advisory id for the security fixes (e.g. FSA-2026-004)")
   [ -n "$advisory" ] || return 10
   local args=(required --message "$msg" --event "$event" --lock-at "$lock" --platform "ios:$ib" --platform "android:$av" --platform "web:$sv" --advisory "$advisory" --security-reason "$reason")
   say "  Preview (writes nothing):"
@@ -2613,50 +2087,13 @@ run_upgradenotice() {
   say "  Then come back here. This step commits .maintainers/notices, pushes it and redeploys .com."
   [ "$(ask_word "Type  signed  when done, or press Enter to leave it for later")" = signed ] || return 20
   [ -n "$(wt_git status --porcelain -- .maintainers/notices)" ] || fail "nothing new under .maintainers/notices in the worktree"
-  commit_paths "Notice: the 0.2 apps must update" .maintainers/notices
+  commit_paths "Notice: apps before $pv must update" .maintainers/notices
   land_commits || return $?
   com_deploy || return $?
   say "  $(curl -s -m 25 "$COM_URL/api/notices" | head -c 400)"
   com_checks
 }
 
-DANGER_TABLES="servers routing auth_codes device_identities daemon_status secret_mailbox meter_counters audit_events demo_users"
-run_scrub() {
-  ensure_wt
-  if [ ! -f "$WT/scripts/wipe-all-users.sh" ]; then ok "scripts/wipe-all-users.sh is already retired on this commit: nothing to scrub"; return 0; fi
-  hdr "GA go/no-go gate"
-  cat <<'EOF'
-  The scrub deletes EVERY account on prod except playstore-test-0725 (the shared App Store /
-  Google Play review login: do not run it while a store review is open and that account is
-  missing). It cannot be undone except from the export taken below.
-    [ ] the Windows device results (branch device-results/*) were reviewed and nothing blocks GA
-    [ ] the maintenance notice has been live long enough (event time recorded: see below)
-    [ ] nobody has a test account they still need
-EOF
-  say "  notice event time on record: $(st_get noticeEvent)"
-  local a; a=$(ask_word "Type  windows-ok  (results reviewed) or  skip-windows  (explicitly skipping them)")
-  case "$a" in windows-ok|skip-windows) st_w set windowsGate "$a" ;; *) fail "gate not passed ('$a')" ;; esac
-  local stamp; stamp=$(date -u +%Y%m%dT%H%M%SZ)
-  confirm "Export prod D1 to ~/d1-before-scrub-$stamp.sql first (read-only, a local file)?" || return 10
-  WRX d1 export flagship-state --remote --output "$HOME/d1-before-scrub-$stamp.sql"
-  say "  demo users with a running cloud server (the reap removes them after the wipe):"
-  WRQ d1 execute flagship-state --remote --command "SELECT username, state, active_server_id FROM demo_users WHERE active_server_id IS NOT NULL" 2>&1 | tail -20 | sed 's/^/    /' || true
-  hdr "Dry run (every query is a SELECT)"
-  XA "$WT" env WIPE_ENV=prod WIPE_D1=flagship-state bash scripts/wipe-all-users.sh --list-accounts
-  say "  Read the keep list and the accounts above. The kept account must be playstore-test-0725 only."
-  confirm "Go: run the REAL wipe on prod? (the tool then asks you to type flagship-state)" || return 10
-  XA "$WT" env WIPE_ENV=prod WIPE_D1=flagship-state WIPE_CONFIRM=prod bash scripts/wipe-all-users.sh --yes
-  hdr "Verify (read-only)"
-  local users orphans
-  users=$(WRQ d1 execute flagship-state --remote --json --command "SELECT username FROM usernames ORDER BY username" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);console.log((Array.isArray(p)?p:[p]).flatMap(r=>r.results||[]).map(r=>r.username).join(" "))})' || true)
-  say "  accounts left: $users"
-  [ "$users" = playstore-test-0725 ] && ok "only the review account remains" || { err "expected only playstore-test-0725"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
-  orphans=$(WRQ d1 execute flagship-state --remote --json --command "SELECT (SELECT count(*) FROM servers WHERE lower(username) NOT IN (SELECT lower(username) FROM usernames)) AS a, (SELECT count(*) FROM device_identities WHERE account_id NOT IN (SELECT username FROM usernames)) AS b, (SELECT count(*) FROM daemon_status WHERE lower(server_domain) NOT IN (SELECT lower(server_domain) FROM servers)) AS c, (SELECT count(*) FROM auth_codes WHERE lower(username) NOT IN (SELECT lower(username) FROM usernames)) AS d" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);const r=(Array.isArray(p)?p:[p]).flatMap(x=>x.results||[])[0]||{};console.log([r.a,r.b,r.c,r.d].join(" "))})' || true)
-  if [ "$orphans" = "0 0 0 0" ]; then ok "the four orphan counts are 0"; else err "orphan counts: '$orphans'"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  say "  Now sign in as the review login (demo test-account entry, playstore-test-0725) on a phone or the webapp and open its server list."
-  [ "$(ask_word "Does it sign in and show its server? (y/n)")" = y ] || PROBE_FAILS=$((PROBE_FAILS + 1))
-  probe_end
-}
 
 GYM_LOCK="${FLAGSHIP_GYM_LOCK:-/private/tmp/claude-501/flagship-locks/gym.lock}"
 gym_lock_held() { [ -e "$GYM_LOCK" ]; }
@@ -2666,10 +2103,16 @@ gym_lock_held() { [ -e "$GYM_LOCK" ]; }
 # checkout's .gym-secrets.env, else typed silently; never put in argv or the log.
 GYM_SECRETS_FILE="${FLAGSHIP_GYM_SECRETS_FILE:-$MAIN_CHECKOUT/.gym-secrets.env}"
 GYM_SECRET="${GYM_ADMIN_SECRET:-}"
+env_file_value() { # env_file_value file NAME: the value of NAME=..., `export NAME=...` too, without surrounding quotes
+  node -e '
+const [f,k]=process.argv.slice(1);let t="";try{t=require("fs").readFileSync(f,"utf8")}catch{process.exit(0)}
+for(const line of t.split(/\r?\n/)){const m=line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);if(!m||m[1]!==k)continue;
+let v=m[2];const q=v[0];if((q===`"`||q==="\x27")&&v.endsWith(q)&&v.length>=2)v=v.slice(1,-1);else v=v.replace(/\s+#.*$/,"");process.stdout.write(v);break}' "$1" "$2"
+}
 need_gym_secret() {
   [ -n "$GYM_SECRET" ] && return 0
   if [ -f "$GYM_SECRETS_FILE" ]; then
-    GYM_SECRET=$(grep -m1 '^GYM_ADMIN_SECRET=' "$GYM_SECRETS_FILE" | cut -d= -f2- || true)
+    GYM_SECRET=$(env_file_value "$GYM_SECRETS_FILE" GYM_ADMIN_SECRET)
     [ -n "$GYM_SECRET" ] && return 0
   fi
   printf '%sGYM_ADMIN_SECRET%s (not in %s; typed silently, kept in memory; empty = stop): ' "$C_Y" "$C_0" "$GYM_SECRETS_FILE" >&2
@@ -2711,7 +2154,6 @@ reap_review_ack() { # a typed 'reviewed' once the left-on-purpose list was shown
 }
 
 run_reap() {
-  require_done scrub || return 10
   ensure_wt
   need_admin_secret || fail "the reap talks to the .com admin routes: the admin secret is required"
   hdr "Gym leftovers (shared services zone and gym servers)"
@@ -2735,7 +2177,7 @@ run_reap() {
   hdr "Reap dry run (writes nothing in Cloudflare, UpCloud or D1)"
   printf '%s+ node scripts/reap-orphans.mjs --show --out %s%s\n' "$C_D" "$plan" "$C_0"
   with_secret bash -c "cd '$WT' && node scripts/reap-orphans.mjs --show --out '$plan'" || fail "the reap dry run failed"
-  say "  Read it: orphans are the wiped accounts; the kept list is exactly playstore-test-0725; the zone after the reap is well under 200."
+  say "  Read it: orphans are records and demo servers of accounts that no longer exist; the review account playstore-test-0725 is kept; the zone after the reap is well under 200."
   confirm "Apply this plan? (the tool prints it again and asks you to type 'delete N records and M servers')" || return 10
   printf '%s+ node scripts/reap-orphans.mjs --apply --plan %s%s\n' "$C_D" "$plan" "$C_0"
   with_secret bash -c "cd '$WT' && node scripts/reap-orphans.mjs --apply --plan '$plan'" || fail "the reap apply reported failures (see $plan.log.jsonl); rerun the step"
@@ -2751,89 +2193,17 @@ run_reap() {
   run_owner_checklist
 }
 
-run_retire() {
-  ensure_wt
-  # Already retired (4949356d8 deleted the tool on main and the branch is gone): nothing to land.
-  if ! compgen -G "$WT/scripts/wipe-all-users*" >/dev/null && ! git -C "$WT" ls-remote --exit-code -q origin chore/delete-wipe-tooling >/dev/null 2>&1; then
-    ok "the wipe tooling is already gone from main and its branch is deleted: nothing to land"
-    return 0
-  fi
-  require_done scrub reap || return 10
-  X git -C "$WT" fetch -q origin chore/delete-wipe-tooling
-  local branch=retire-wipe-tooling
-  wt_git branch -D "$branch" >/dev/null 2>&1 || true
-  X git -C "$WT" switch -q -c "$branch" origin/chore/delete-wipe-tooling
-  if ! wt_git rebase origin/main >/dev/null 2>&1; then
-    wt_git rebase --abort >/dev/null 2>&1 || true
-    fail "rebasing chore/delete-wipe-tooling onto main conflicts: rebase it by hand, then run this step again"
-  fi
-  say "  commits that would land:"; wt_git log --oneline --no-decorate origin/main..HEAD | sed 's/^/    /'
-  wt_git diff --stat origin/main HEAD | tail -12 | sed 's/^/    /'
-  XA "$WT" npx tsc -b
-  XA "$WT" npx vitest run scripts
-  XA "$WT" env RELEASE=1 bash scripts/release-guard.sh
-  land_commits || { local rc=$?; wt_git switch -q --detach "$PIN" 2>/dev/null || true; return $rc; }
-  X git -C "$WT" switch -q --detach "$PIN"
-  wt_git branch -D "$branch" >/dev/null 2>&1 || true
-}
 
 studio_version() { node -p "require('$WT/release/version.json').studio"; }
 
-# The Windows Studio's "Experimental" tag (owner, 2026-11-02) is dropped only on a passed acceptance run
-# (docs/runbooks/0.3-windows-studio-acceptance.md). One switch, STUDIO_EXPERIMENTAL in apps/web/public/app-stores.js,
-# drives the website and (stamped by check-versions.mjs --write) the window title compiled into the exe, so it is
-# decided before studio-release.yml builds the public release, never after.
-STUDIO_TAGS=apps/web/public/app-stores.js
-studio_windows_experimental() { grep -Eq '^[[:space:]]*windows:[[:space:]]*true,' "$WT/$STUDIO_TAGS"; }
-studio_windows_tag() {
-  if ! studio_windows_experimental; then
-    ok "Windows Studio carries no Experimental tag (STUDIO_EXPERIMENTAL.windows is false in $STUDIO_TAGS)"
-    XA "$WT" node scripts/check-versions.mjs
-    return 0
-  fi
-  say "  Windows Studio is tagged Experimental, on the website and in its window title (STUDIO_EXPERIMENTAL.windows)."
-  say "  Drop it only if docs/runbooks/0.3-windows-studio-acceptance.md passed: every required row pass on a build of"
-  say "  this release line, the report on an origin device-results/windows-<date> branch saying 'Verdict: PASS', and"
-  say "  row 6 of docs/runbooks/0.3-hardware-acceptance.md (section 19) filled in. Code signing is the owner's separate call."
-  if ! confirm "Did the 0.3 Windows Studio acceptance pass, and should this release drop Windows' Experimental tag?"; then
-    ok "Windows Studio ships tagged Experimental"; return 0
-  fi
-  local branch; branch=$(ask_word "Its results branch on origin (device-results/windows-YYYY-MM-DD)")
-  if ! [[ "$branch" =~ ^device-results/windows-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-    err "'$branch' is not a device-results/windows-<date> branch: Windows keeps its Experimental tag"; return 0
-  fi
-  if ! wt_git fetch -q origin "+refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null; then
-    err "origin has no $branch: Windows keeps its Experimental tag"; return 0
-  fi
-  if ! wt_git grep -q -E '^Verdict: PASS' "origin/$branch" -- 'device-results/windows-0.3-acceptance-*.md'; then
-    err "no device-results/windows-0.3-acceptance-*.md on $branch says 'Verdict: PASS': Windows keeps its Experimental tag"; return 0
-  fi
-  ok "$branch reports the Windows acceptance passed"
-  ( cd "$WT" && node -e '
-const fs=require("fs");
-const edit=(f,from,to)=>{const s=fs.readFileSync(f,"utf8");const n=s.replace(from,to);if(n===s)throw new Error(`${f}: nothing to change`);fs.writeFileSync(f,n)};
-edit("apps/web/public/app-stores.js",/^(\s*windows:\s*)true,/m,"$1false,");
-edit("apps/web/tests/marketingPages.test.ts","toMatch(/\\bwindows: true,/)","toMatch(/\\bwindows: false,/)");' ) \
-    || fail "could not set STUDIO_EXPERIMENTAL.windows to false"
-  XA "$WT" node scripts/check-versions.mjs --write
-  XA "$WT" node scripts/check-versions.mjs
-  XA "$WT" npx vitest run scripts/check-versions.test.ts apps/web/tests/marketingPages.test.ts apps/web/tests/studioPage.test.ts
-  commit_paths "Windows Studio: drop the Experimental tag (acceptance passed, $branch)" \
-    "$STUDIO_TAGS" apps/web/tests/marketingPages.test.ts apps/builder-windows/src/StudioVersion.cs
-  land_commits || return $?
-  say "  The website loses the tag at the redeploy step; the window title of the build this step dispatches has none."
-}
 
 run_studiowl() {
   ensure_wt
   local v tag; v=$(studio_version); tag="studio-v$v"
   say "  Studio version from release/version.json: $v (tag $tag)"
-  say "  Windows is unsigned; Linux has not run on real hardware: Linux ships tagged Experimental."
   if (cd "$WT" && gh release view "$tag" >/dev/null 2>&1); then
     ok "release $tag already exists: skipping the build"
-    if studio_windows_experimental; then warn "Windows Studio in $tag is tagged Experimental (decided when it was built)"; fi
   else
-    studio_windows_tag || return $?
     confirm "Dispatch studio-release.yml with publish=true (creates the PUBLIC GitHub release $tag)?" || return 10
     local t0; t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     XA "$WT" gh workflow run studio-release.yml --ref main -f publish=true
@@ -2879,24 +2249,16 @@ run_studiomac() {
   say "  The .com redeploy that serves it is the redeploy step."
 }
 
-run_publisharm() {
-  ensure_wt
-  if [ -n "$(st_get appliance_arm64)" ]; then ok "arm64 was already published in phase A"; return 0; fi
-  local rc=0
-  publish_arch arm64 || rc=$?
-  [ "$rc" = 0 ] || return "$rc"
-  land_commits || return $?
-}
 
-# 0.2 Studios can't tell they're out of date; the pairing relay tells them once the 0.3 Studios are downloadable
+# 0.2 Studios can't tell they're out of date; the pairing relay tells them once newer Studios are downloadable
 # (STUDIO_PIPE_MIN, builderRelay.ts; journal F9). Never before: a refused 0.2 Studio would have nothing to update to.
 studio_pipe_switch() {
   local toml="$WT/apps/com/wrangler.toml"
   if grep -q '^STUDIO_PIPE_MIN *= *"2"' "$toml"; then ok "STUDIO_PIPE_MIN is on: 0.2 Studios are told to download the new one"; return 0; fi
-  if ! st_has done "$(step_index studiowl)" || ! st_has done "$(step_index studiomac)"; then
-    warn "the 0.3 Studios are not all published (steps studiowl, studiomac): 0.2 Studios keep pairing for now"; return 0
+  if ! st_has done studiowl || ! st_has done studiomac; then
+    warn "the new Studios are not all published (steps studiowl, studiomac): 0.2 Studios keep pairing for now"; return 0
   fi
-  confirm "All three 0.3 Studios are downloadable. Turn on STUDIO_PIPE_MIN=2, so a 0.2 Studio is told to download the new one when it pairs?" || return 0
+  confirm "All three new Studios are downloadable. Turn on STUDIO_PIPE_MIN=2, so a 0.2 Studio is told to download the new one when it pairs?" || return 0
   sed -i.bak 's/^# STUDIO_PIPE_MIN = "2"$/STUDIO_PIPE_MIN = "2"/' "$toml" && rm -f "$toml.bak"
   grep -q '^STUDIO_PIPE_MIN = "2"' "$toml" || fail "could not turn on STUDIO_PIPE_MIN in apps/com/wrangler.toml"
   commit_paths "Tell 0.2 Studios to download the new one" apps/com/wrangler.toml
@@ -2904,9 +2266,14 @@ studio_pipe_switch() {
 }
 
 run_redeployB() {
-  ensure_wt   # the pipe switch below edits the worktree's wrangler.toml; a --from 41 run has none yet
+  ensure_wt   # the pipe switch below edits the worktree's wrangler.toml; a --from run has none yet
+  if [ -z "$(st_get appliance_arm64)" ]; then
+    say "  the arm64 VM appliance is still pending: publishing it first"
+    local rc=0; publish_arch arm64 || rc=$?
+    case "$rc" in 0) land_commits || return $? ;; 20) warn "arm64 is still not ready: Studio keeps the older arm64 image (run this step again later)" ;; *) return "$rc" ;; esac
+  fi
   studio_pipe_switch || return $?
-  # Phase B may land migrations after step 18 ran (0131 did): apply them before the Worker that reads them.
+  # Phase B may land migrations after the migrations step ran (0131 did): apply them before the Worker that reads them.
   run_migrations || return $?
   com_deploy || return $?
   com_checks
@@ -2919,6 +2286,25 @@ run_redeployB() {
   local v; v=$(studio_version)
   curl -sI -m 25 "$COM_URL/download/windows" | grep -qi "studio-v$v" && ok "windows redirect names studio-v$v" || { err "windows redirect is not studio-v$v"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
   probe_end
+}
+
+run_storeart() {
+  ensure_wt
+  local n; n=$(grep -c '^- \[ \]' "$WT/i18n/REVIEW.md" 2>/dev/null || true)
+  say "  native review: ${n:-0} line(s) of i18n/REVIEW.md still wait for a native reader (status only; npm run i18n gates the translations)"
+  # The native captures (and the rendered store/out) are git-ignored: they live in the checkout that made them, so
+  # bring that checkout's copies into the release worktree before checking them against the pinned code.
+  local sd
+  for sd in captures out; do
+    if [ -d "$REPO/store/$sd" ]; then rm -rf "$WT/store/$sd"; mkdir -p "$WT/store"; cp -R "$REPO/store/$sd" "$WT/store/$sd"; fi
+  done
+  local rc=0
+  [ -f "$WT/store/out/manifest.json" ] || ( cd "$WT" && npm run -s store-assets:render ) || rc=$?
+  [ "$rc" = 0 ] && { ( cd "$WT" && npm run -s store-assets:release-check ) || rc=$?; }
+  if [ "$rc" = 0 ]; then ok "store art is ready for upload"; return 0; fi
+  warn "the store-art check failed (missing native captures?): docs/store-assets/capture-plan.md"
+  [ "$(ask_word "Type  keep-current-art  to build the stores with the screenshots they already have, or Enter to stop")" = keep-current-art ] || return 10
+  st_w set storeArt kept-current
 }
 
 xcode_dir() {
@@ -3023,13 +2409,15 @@ run_final() {
   if need_admin_secret; then
     say "  zone-health:"; with_secret bash -c "cd '$WT' && npm run -s zone-health" || { err "zone-health not OK"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
     say "  schema-status:"; admin_curl "$COM_URL/api/admin/schema-status" | head -c 600; echo
+    say "  rate limits, last 30 days (refused sources = real people hit a budget; record the check date in AGENTS.md):"
+    with_secret bash -c "cd '$WT' && npm run -s rate-limits -- --days 30" || warn "rate-limits did not answer: run it by hand (npm run rate-limits -- --days 30)"
   fi
   hdr "release-manifest (receipts and checks)"
   if wt_exists; then
     ( cd "$WT" && npm run -s release-manifest ) || { err "release-manifest lists blockers: each MISSING or STALE receipt is a real-device or production proof still owed"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
   fi
   say "  Cloudflare Universal SSL on flagship.services must be OFF so the apex CAA lists only Let's Encrypt (dashboard -> SSL/TLS -> Edge Certificates). zone-health above fails on extra issuers."
-  say "  Workers Free: re-read AGENTS.md 'Workers Free ceiling' and decide upgrade or move before real users arrive."
+  say "  Workers Paid: look at npm run ops -- workers --hours 72 in the days after the deploy."
   local e; e=$(st_get endorsed)
   if [ -n "$e" ] && wt_exists; then
     say "  box code changed on main since the endorsed release $(short "$e"):"
@@ -3108,10 +2496,11 @@ step_prompt() { # idx -> 0 run, 1 skip; exit on N/quit
   esac
 }
 
-phase_open() { # steps of a phase that are neither done nor skipped
-  local i out=""
+phase_open() { # steps of a phase that are neither done nor skipped (as numbers)
+  local i id out=""
   for ((i = $(phase_first "$1"); i <= $(phase_last "$1"); i++)); do
-    if ! st_has done "$i" && ! st_has skipped "$i"; then out="$out $i"; fi
+    id=$(step_id "$i")
+    if ! st_has done "$id" && ! st_has skipped "$id"; then out="$out $i"; fi
   done
   echo "${out# }"
 }
@@ -3122,7 +2511,7 @@ run_steps() { # run_steps first last forced_first_flag phase
   for ((idx = first; idx <= last; idx++)); do
     id=$(step_id "$idx")
     if [ "$DRY" = 1 ]; then show_meta "$idx" full; continue; fi
-    if st_has done "$idx" && ! { [ "$forced" = 1 ] && [ "$idx" = "$first" ]; }; then
+    if st_has done "$id" && ! { [ "$forced" = 1 ] && [ "$idx" = "$first" ]; }; then
       say "${C_G}[done]${C_0} $(printf '%02d' "$idx") $id (recorded earlier)"; continue
     fi
     CURRENT_STEP=$idx
@@ -3133,12 +2522,12 @@ run_steps() { # run_steps first last forced_first_flag phase
       if [ "$REQUIRED" = 1 ]; then
         [ "$(ask_word "This step is required for the release. Type  skip-required  to skip it anyway")" = skip-required ] || { say "not skipped."; exit 0; }
       fi
-      st_w add skipped "$idx"; warn "step $idx skipped"; CURRENT_STEP=""; continue
+      st_w add skipped "$id"; warn "step $idx skipped"; CURRENT_STEP=""; continue
     fi
     rc=0
     "run_$id" || rc=$?
     case "$rc" in
-      0)  st_w add done "$idx"; st_w del skipped "$idx"; ok "step $idx done"; CURRENT_STEP="" ;;
+      0)  st_w add done "$id"; st_w del skipped "$id"; ok "step $idx done"; CURRENT_STEP="" ;;
       20) st_w add deferred "$id"; warn "step $idx deferred (not done): resume later with --only $idx"; CURRENT_STEP=""; stopped=0 ;;
       10) CURRENT_STEP=""; say "step $idx stopped at a declined prompt. Resume with: bash scripts/release.sh --from $idx"; exit 0 ;;
       *)  fail "step $idx failed (code $rc)" ;;
@@ -3176,7 +2565,9 @@ main() {
   done
 
   if [ "$mode" = list ]; then
-    echo "Release plan: $n steps in two phases (A before the Windows test, B after the Windows results)"
+    echo "Release plan: $n steps in two phases (A: sign, gate and deploy; B: the canary, the notice, the reap, the Studios, the stores)"
+    echo "A re-pin (origin/main moved mid-run) keeps done steps done, except step $(step_index shellsig) (Sign the webapp shell), which"
+    echo "re-opens when the webapp shell version moved; the gym gate only warns at the deploys."
     echo
     if [ "$short" = 1 ]; then list_plan short "$phase"; else list_plan full "$phase"; fi
     exit 0
@@ -3196,7 +2587,7 @@ main() {
     echo "skipped:     $(st_get skipped)"
     echo "deferred:    $(st_get deferred)"
     echo "phase A:     $(st_get phaseA)   phase B: $(st_get phaseB)"
-    local i next=""; for ((i = 1; i <= n; i++)); do st_has done "$i" || { next=$i; break; }; done
+    local i next=""; for ((i = 1; i <= n; i++)); do st_has done "$(step_id "$i")" || { next=$i; break; }; done
     echo "next step:   ${next:-none (release complete)}"
     exit 0
   fi
@@ -3208,7 +2599,7 @@ main() {
   if [ -z "$phase" ]; then
     if [ "$DRY" = 1 ]; then phase=""; else
       [ -t 0 ] || { echo "run with --phase A or --phase B (stdin is not a terminal)" >&2; exit 2; }
-      phase=$(ask_word "Which phase? A (deploy the real state, before the Windows test) or B (after the Windows results) [A/B]")
+      phase=$(ask_word "Which phase? A (sign, gate and deploy) or B (the canary, the notice, the reap, the Studios, the stores) [A/B]")
       phase=$(echo "$phase" | tr a-z A-Z)
       [ "$phase" = A ] || [ "$phase" = B ] || { echo "type A or B" >&2; exit 2; }
     fi
@@ -3225,7 +2616,7 @@ main() {
       l=$( [ -n "$phase" ] && phase_last "$phase" || echo "$n")
       if [ -z "$from" ]; then
         # resume: the first step of the phase not yet done
-        local i; for ((i = f; i <= l; i++)); do st_has done "$i" || { f=$i; break; }; done
+        local i; for ((i = f; i <= l; i++)); do st_has done "$(step_id "$i")" || { f=$i; break; }; done
       fi
     fi
     echo "[dry-run] would start at step $f"
@@ -3271,7 +2662,7 @@ main() {
     else
       [ "$(st_get phaseB)" = finished ] && fail "the state file belongs to a finished release (pinned $(short "$(st_get pinned)"), whose phase B is done: start this one with --new (the old file is kept aside), or name a step with --from N / --only N"
       f=$(phase_first "$phase")
-      local i; for ((i = f; i <= l; i++)); do st_has done "$i" || { f=$i; break; }; done
+      local i; for ((i = f; i <= l; i++)); do st_has done "$(step_id "$i")" || { f=$i; break; }; done
       if [ "$i" -gt "$l" ]; then say "phase $phase has every step recorded done. Use --new for a new release or --from N to redo a step."; exit 0; fi
     fi
   fi
@@ -3279,7 +2670,7 @@ main() {
   run_steps "$f" "$l" "$forced_first" "$phase"
   CURRENT_STEP=""
   [ "$phase" = B ] && [ "$(st_get phaseB)" = finished ] && summary
-  say "Done. Next: $( [ "$phase" = A ] && echo 'give the Windows agent device-results/DEPLOYED-FINAL-*.md, then run: bash scripts/release.sh --phase B' || echo 'the manual items above' )"
+  say "Done. Next: $( [ "$phase" = A ] && echo 'bash scripts/release.sh --phase B (after any planned device test)' || echo 'the manual items above' )"
 }
 
 if [ "${RELEASE_SOURCE_ONLY:-0}" = 1 ]; then

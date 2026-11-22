@@ -111,7 +111,7 @@ in the same change. Also cost out pools, origins and health-check regions (§16 
 
 Production at launch (one relay `iad1`, Rust, one machine of `flagship-services`): the ladder is in
 `docs/runbooks/final-deploy.md` 8f (`fly.mesh.toml` = the TS hub with the mesh kept, then `fly.toml` + `flyctl scale count 2`
-= mesh off); `bash scripts/release.sh --list` steps 23-28 are the bring-up.
+= mesh off); the 0.3 bring-up was a one-time run (final-deploy 8a-8d); every release now runs `release.sh` step 17 (the read-only mesh check) and step 18 (the Rust relay deploy).
 
 - One relay misbehaving: retire it (section 5). Its boxes drain to the rest.
 - Leave mesh mode: retire down to one relay; on it set `FLAGSHIP_MESH=off` (Fly: remove the env line, or deploy the
