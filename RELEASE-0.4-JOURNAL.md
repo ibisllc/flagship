@@ -1797,3 +1797,10 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   vouchers. Stay 0.5: overlay, cluster backup/Vault, community OHTTP, marketplace on, comments/reposts, payments 6/7,
   WireGuard, OHTTP initramfs, F14. Asked the owner: logo/design pass, iOS voucher import (waits on Apple).
   New agents: posts-cap (shell v244), release-fit, server-refine (shell v245).
+- 2026-11-21 late (after a system crash): every running agent died. State found: photo-picker (73 files uncommitted),
+  ios-calls (6 uncommitted), onboarding (2 local commits + iOS strings uncommitted), posts-cap (1 local + 6
+  uncommitted), release-fit (2 local + 6 uncommitted, ~1,100-line release.sh/runbook trim), server-refine (1 local + 34
+  uncommitted), android-calls (pushed 7ad1040c1, unbuilt). None of the local work was pushed. Stale native-build lock
+  (dead photo-picker) cleared. Seven resume agents started, one per worktree: finish, gate, rebase on
+  origin/release/0.4, push the branch; no merges or deploys. Disk 5.6 GB free (DerivedData 2.3 GB, ~/.gradle 6.8 GB).
+  Resume point: review and merge the seven branches (shells v242-v245), then Android 14 + iOS 1.3 (10) builds.
