@@ -80,43 +80,7 @@ over once "let's start 0.5" is said.
   - `ADAPTER_COMPLAINT_SALT` (`openssl rand -hex 32`).
   Until then `release/adapter-vetting-keys.json` is empty, so boxes keep community adapter lookup off. 0.4 shipped
   them unset on purpose.
-- **Fit release.sh to the project as it is now** (owner, 2026-11-20: "no more skipping outdated steps"). The 0.4 run
-  had to skip or wave through steps written for 0.3. Before the 0.5 run, rewrite `scripts/release.sh` (and
-  `release.test.ts`, `docs/runbooks/0.4-deploy-sheet.md`, the browser-tasks list) so every step in `--list` is one the
-  release really needs, and one-time steps that already happened are gone, not just guarded:
-  - step 20 (deploy the 0.3 TS hub, mesh off): remove; keep the mesh-off rollback as a documented rollback, not a step.
-    Drop step 22's `require_done services` with it.
-  - steps 24-27 (relay key, admit iad1, tunnel certs and DNS, switch the feed on): one-time 0.3 mesh setup, already
-    live. Fold into one "relay mesh: check" (directory lists iad1, secrets present, both tunnel names on valid TLS);
-    keep step 28 (deploy the Rust relay) as the relay update.
-  - one-time setup that is done: 5 (catalog keys), 6 (PQ release key ceremony), 15-18 (D1 backup set-up, R2 buckets,
-    feed domain and cache rule, mesh key seed), 22 (root wildcard + CAA). Turn into read-only checks that pass
-    silently.
-  - 0.3-only steps: 36 (pre-GA scrub; the wipe tool is gone), 38 (retire the wipe tool; done), 46 (tell the 0.2
-    apps to update; make it a generic "tell older apps to update" naming the versions), 47 (hall of fame for 0.3),
-    43's feat/UX wording.
-  - re-pin after cosmetic merges (only warns since 2026-11-20): keep, and say in `--list` which steps a re-pin
-    re-opens (11 when the webapp shell moves).
-  - steps that merely wait (12 appliance builds, 31/41 publish) could merge.
-  - step 23 refuses when the caller exported GYM_SECRETS_FILE (the webapp deploy guard): unset it inside release.sh
-    for the .com deploy, and stop documenting the prefix (release.sh finds ~/flagship/.gym-secrets.env itself).
-  - step 29 (30-minute relay watch): run it right after step 28 or check it later by hand; make check-versions.mjs
-    carry the product version into rust/Cargo.toml (the 0.4 relay still reports "0.3.0").
-  - step 33 (DEPLOYED-FINAL for the Windows agent) pushes to a hard-coded device-results/windows-2026-10-17 branch
-    that is gone: make it optional and create its own branch only when a device test is planned.
-  - need_gym_secret reads GYM_ADMIN_SECRET with grep|cut and keeps the quotes of a quoted value in .gym-secrets.env
-    (step 37's gym sweep got 403): strip quotes or source the file.
-  - no Experimental label on anything (owner, 2026-11-20, regardless of testing): remove step 39's Windows-acceptance
-    gate for the tag and consider deleting the STUDIO_EXPERIMENTAL switch and its tag markup entirely.
-  - step 43 (feat/UX translations, store art, VOICI_CANONICAL): split into the i18n gate (already per merge), a
-    native-review status that does not force a yes/stop, and the store-art check next to the store builds.
-  Goal: a fresh run's `--list` reads as this release's plan, start to finish, with no step a person must know to skip.
-- **Remove the VOICI_CALLS switch** (owner, 2026-11-20: "this entire switch idea is crazy"). A feature ships with the
-  store build that carries it; calls were held off on production while the builds that answer them were already in
-  review. Remove `VOICI_CALLS` (and the deploy sheet's "Calls on" step, release.sh's notes) so calls are simply part
-  of the release; keep a server-side brake only if it is repurposed, e.g. to limit calls for accounts past their
-  data quota. Same review for the other launch switches (`VOICI_ENABLED`, `MARKETPLACE`): a switch is for an outage
-  or abuse brake, not for sequencing a launch.
+- ~~Fit release.sh~~ and ~~remove the VOICI_CALLS switch~~: done in 0.4 (`0.4/release-fit`, 2026-11-21; 32 steps).
 - **Make the Google-free push choice visible on Android** (owner, 2026-11-20). FCM is the default where Google Play
   services exist (0.4 sets up Firebase); a phone with a UnifiedPush distributor (ntfy, NextPush, Sunup) already uses
   it instead, even with Play services. Add a Settings line under notifications that says which service delivers

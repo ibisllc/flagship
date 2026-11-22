@@ -1814,3 +1814,8 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   FAILS on this Mac until an NDK is installed (`sdkmanager "ndk;27.0.12077973"`, ~1.5 GB, version unverified).
   NOT merged: waits for the owner's phone test (killed-app locked answer on/off, lock screen, reopen, warm regression,
   rotation, UnifiedPush choice). Checklist in the agent report; summary in the session.
+- 2026-11-21 late: merged `0.4/release-fit` (cherry-picked onto b2817b6ec): VOICI_CALLS switch removed, Studio
+  Experimental tag + switch gone, Rust crates carry the product version, `scripts/release.sh` is **32 steps** with
+  nothing to skip (old 48-step state files map on; one-time setup is one read-only check, step 4; webapp shell signing is
+  step 10; relay echo inside step 18; reap 24; stores 29/30; rate-limits read in step 32). release.test.ts 48 green.
+  0.5 list items struck. `VOICI_ENABLED` / `MARKETPLACE` kept as brakes.
