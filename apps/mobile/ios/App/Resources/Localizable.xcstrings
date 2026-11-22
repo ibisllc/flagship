@@ -164602,6 +164602,129 @@
           }
         }
       }
+    },
+    "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿No usas la recuperación en la nube? Guarda un archivo cifrado de la clave de tu cuenta en un lugar seguro, para que perder el teléfono no signifique perder tu cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous n’utilisez pas la récupération dans le cloud ? Gardez un fichier chiffré de la clé de votre compte en lieu sûr, pour qu’un téléphone perdu ne vous fasse pas perdre votre compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du nutzt keine Cloud-Wiederherstellung? Bewahre eine verschlüsselte Datei deines Kontoschlüssels sicher auf, damit ein verlorenes Telefon nicht dein Konto kostet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não usa a recuperação na nuvem? Guarde um arquivo criptografado da chave da sua conta em um lugar seguro, para que perder o celular não faça você perder a conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クラウドリカバリーを使っていませんか？アカウントキーの暗号化ファイルを安全な場所に保管すれば、スマートフォンをなくしてもアカウントを失いません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有使用云恢复？请把账户密钥的加密文件保存在安全的地方，这样丢了手机也不会丢掉账户。"
+          }
+        }
+      }
+    },
+    "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in iCloud Keychain or your password manager, so there is no password to make up. On a new device, the passkey and the recovery passphrase below open it together. Flagship can't open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La recuperación en la nube guarda una copia cifrada de la clave de tu cuenta en Flagship. Una llave de acceso la protege: tu teléfono guarda la llave de acceso en el Llavero de iCloud o en tu gestor de contraseñas, así que no tienes que inventar ninguna contraseña. En un dispositivo nuevo, la llave de acceso y la frase de contraseña de recuperación de abajo la abren juntas. Flagship no puede abrirla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La récupération dans le cloud enregistre une copie chiffrée de la clé de votre compte chez Flagship. Une clé d’accès la verrouille : votre téléphone garde la clé d’accès dans le trousseau iCloud ou votre gestionnaire de mots de passe, vous n’avez donc aucun mot de passe à inventer. Sur un nouvel appareil, la clé d’accès et la phrase secrète de récupération ci-dessous l’ouvrent ensemble. Flagship ne peut pas l’ouvrir."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Cloud-Wiederherstellung speichert eine verschlüsselte Kopie deines Kontoschlüssels bei Flagship. Ein Passkey sperrt sie: Dein Telefon bewahrt den Passkey im iCloud-Schlüsselbund oder deinem Passwortmanager auf, du musst dir also kein Passwort ausdenken. Auf einem neuen Gerät öffnen der Passkey und die Wiederherstellungs-Passphrase unten sie gemeinsam. Flagship kann sie nicht öffnen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recuperação na nuvem guarda uma cópia criptografada da chave da sua conta no Flagship. Uma passkey a protege: seu celular guarda a passkey nas Chaves do iCloud ou no seu gerenciador de senhas, então não há senha para inventar. Em um dispositivo novo, a passkey e a frase secreta de recuperação abaixo a abrem juntas. O Flagship não consegue abri-la."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クラウドリカバリーは、アカウントキーの暗号化コピーを Flagship に保存します。コピーはパスキーで保護されます。パスキーはスマートフォンが iCloud キーチェーンまたはお使いのパスワード マネージャーに保管するので、パスワードを考える必要はありません。新しいデバイスでは、パスキーと下のリカバリー用パスフレーズの両方でコピーを開きます。Flagship が開くことはできません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "云恢复会把账户密钥的加密副本保存在 Flagship。它由通行密钥锁定：手机会把通行密钥保存在 iCloud 钥匙串或你的密码管理器中，因此不需要另设密码。在新设备上，通行密钥和下面的恢复密码短语一起才能打开它。Flagship 无法打开它。"
+          }
+        }
+      }
+    },
+    "Set up cloud recovery": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar la recuperación en la nube"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurer la récupération dans le cloud"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud-Wiederherstellung einrichten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar a recuperação na nuvem"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クラウドリカバリーを設定"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置云恢复"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -7637,7 +7637,7 @@
   },
   "Save a backup file": {
     "en": "Save a backup file",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecureAccountScreen.swift:213"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift"
   },
   "An encrypted .flagshipkey you keep yourself.": {
     "en": "An encrypted .flagshipkey you keep yourself.",
@@ -17107,5 +17107,17 @@
   "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.": {
     "en": "Calls are on. Callers sign in with Flagship and let you call them back. You can turn them off in Social options.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/Messages/PageHeader.swift"
+  },
+  "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account.": {
+    "en": "Not using cloud recovery? Keep an encrypted file of your account key somewhere safe, so a lost phone doesn't lose your account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift"
+  },
+  "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in iCloud Keychain or your password manager, so there is no password to make up. On a new device, the passkey and the recovery passphrase below open it together. Flagship can't open it.": {
+    "en": "Cloud recovery saves an encrypted copy of your account key with Flagship. A passkey locks it: your phone keeps the passkey in iCloud Keychain or your password manager, so there is no password to make up. On a new device, the passkey and the recovery passphrase below open it together. Flagship can't open it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RecoveryScreen.swift"
+  },
+  "Set up cloud recovery": {
+    "en": "Set up cloud recovery",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift"
   }
 }
