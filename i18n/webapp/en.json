@@ -16173,5 +16173,21 @@
   "People who let you call them back": {
     "en": "People who let you call them back",
     "ctx": "webapp/views/page-editor.js"
+  },
+  "Bank transfer isn't available right now. Pay by card instead.": {
+    "en": "Bank transfer isn't available right now. Pay by card instead.",
+    "ctx": "webapp/views/orgPlan.js:54"
+  },
+  "That batch can no longer be paid. Start a new batch.": {
+    "en": "That batch can no longer be paid. Start a new batch.",
+    "ctx": "webapp/views/orgPlan.js:56"
+  },
+  "Pay by bank transfer": {
+    "en": "Pay by bank transfer",
+    "ctx": "webapp/views/orgPlan.js:128"
+  },
+  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": {
+    "en": "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.",
+    "ctx": "webapp/views/orgPlan.js:128"
   }
 }

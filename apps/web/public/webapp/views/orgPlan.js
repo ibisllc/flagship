@@ -50,6 +50,10 @@ export function orgPlanErrorText(e) {
       return tr("That isn't a Flagship batch key file.");
     case "rail-off":
       return tr("Card payments aren't available right now.");
+    case "bank-off":
+      return tr("Bank transfer isn't available right now. Pay by card instead.");
+    case "payment-void":
+      return tr("That batch can no longer be paid. Start a new batch.");
     case "wallet-key-missing":
     case "wallet-unreadable":
       return tr("This browser can't open the org's wallet yet. Ask another admin to rotate the org's keys.");
@@ -121,6 +125,7 @@ export async function renderOrgPlan(seat, snap, host, { isOrgAdmin, refresh }) {
       <label>${escapeHtml(tr("Invoiced batch for the company"))} <input type="number" data-org-batch-units min="${cfg.business.batchMinUnits}" max="${cfg.business.batchMaxUnits}" value="${Math.max(cfg.business.batchMinUnits, price.units * 12)}"></label>
       <p class="note">${escapeHtml(tr("The invoice names your company and the number of vouchers, never this org or anyone in it."))}</p>
       <button data-org-batch-buy ${pc.rails?.stripe ? "" : "disabled"}>${escapeHtml(tr("Buy a batch"))}</button>
+      ${pc.rails?.stripeBank ? `<button class="secondary" data-org-batch-bank>${escapeHtml(tr("Pay by bank transfer"))}</button><p class="note">${escapeHtml(tr("Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days."))}</p>` : ""}
       ${pc.rails?.stripe ? "" : `<p class="note" data-org-batch-rail-off>${escapeHtml(tr("Card payments aren't available right now."))}</p>`}
       <button class="secondary" data-org-batch-key>${escapeHtml(tr("Finish a batch from its key file"))}</button>
       ${batches.length ? batches.map((b) => `<div class="stack-sm"><p class="note">${escapeHtml(trn(b.units, "Batch of {0} voucher", "Batch of {0} vouchers"))}</p><button data-org-batch-wallet="${escapeHtml(b.session)}">${escapeHtml(tr("Add to the org's wallet"))}</button><button class="secondary" data-org-batch-files="${escapeHtml(b.session)}">${escapeHtml(tr("Save as voucher files for staff"))}</button></div>`).join("") : ""}
@@ -160,17 +165,19 @@ export async function renderOrgPlan(seat, snap, host, { isOrgAdmin, refresh }) {
     if (files.length === 0) return;
     await run(() => op.importVoucherFiles(seat, snap, cfg, keys, files, opts()), (r) => trn(r.added, "Added {0} voucher.", "Added {0} vouchers."));
   });
-  host.querySelector("[data-org-batch-buy]")?.addEventListener("click", async () => {
+  const buy = async (method) => {
     const units = Number(host.querySelector("[data-org-batch-units]")?.value);
     try {
-      const r = await op.buyBatch(units, { paymentsConfig: pc });
+      const r = await op.buyBatch(units, { paymentsConfig: pc, method });
       downloadTextFile(r.keyFile.name, r.keyFile.text);
       toast(tr("Keep the batch key file: it finishes the batch on any computer, and anyone holding it can claim the vouchers."), "ok");
       location.assign(r.url);
     } catch (e) {
       toast(orgPlanErrorText(e), "err");
     }
-  });
+  };
+  host.querySelector("[data-org-batch-buy]")?.addEventListener("click", () => buy("card"));
+  host.querySelector("[data-org-batch-bank]")?.addEventListener("click", () => buy("bank"));
   host.querySelector("[data-org-batch-key]")?.addEventListener("click", async () => {
     const files = await pickFiles(".json,application/json", false);
     if (files.length === 0) return;

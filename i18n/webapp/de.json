@@ -3968,5 +3968,9 @@
   "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "Lass dir Nachrichten schreiben und dich anrufen, und teile deine Neuigkeiten. Alles ist gegen Quantencomputer geschützt. Deine Seite ist dann unter voi.ci/{0}.",
   "Your stuff,<br>on your hardware.": "Deine Sachen,<br>auf deiner Hardware.",
   "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "Eine persönliche Cloud, die dir wirklich gehört. Du baust und genehmigst alles von deinem Telefon aus; dein Server betreibt deine Apps.",
-  "People who let you call them back": "Leute, die dir Rückrufe erlauben"
+  "People who let you call them back": "Leute, die dir Rückrufe erlauben",
+  "Pay by bank transfer": "Per Banküberweisung zahlen",
+  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe zeigt deinem Unternehmen die Bankverbindung. Die Gutscheine sind bereit, sobald die ganze Überweisung eingegangen ist, was einige Tage dauern kann.",
+  "Bank transfer isn't available right now. Pay by card instead.": "Banküberweisung ist gerade nicht verfügbar. Zahle stattdessen per Karte.",
+  "That batch can no longer be paid. Start a new batch.": "Dieses Paket kann nicht mehr bezahlt werden. Starte ein neues Paket."
 }

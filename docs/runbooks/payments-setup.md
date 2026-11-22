@@ -66,8 +66,8 @@ live-only settings (the invoice template) are hidden there. Everything here is r
    Create, then **Reveal** the signing secret (`whsec_…`).
 3. **Payment methods.** Settings → Payments → Payment methods: Cards on; Apple Pay on; **[OWNER CONFIRMS]** Google
    Pay on (turning it on accepts Google's Google Pay API Terms of Service). Checkout shows them where the buyer's
-   browser supports them. Business batches take cards only (with the wallets), whatever is on here ("Bank transfer
-   for business batches" below). Leave Link as you like (Link stores the buyer's details at
+   browser supports them. Business batches take cards (with the wallets), and bank transfer only when `.com` has
+   `STRIPE_BANK_TRANSFER = "1"` ("Bank transfer for business batches" below). Leave Link as you like (Link stores the buyer's details at
    Stripe, not with us).
 4. **Stripe Tax.** Settings → Tax: turn on; Origin address: IBIS LLC's address (head office Texas); **Include tax
    in prices: Yes** (inclusive; the code sends `tax_behavior=inclusive` on each line anyway, so the $10 shown is the
@@ -273,24 +273,36 @@ the owner fixes it under Settings → Business, or live payouts stay blocked.
 
 ## Bank transfer for business batches
 
-Checked against Stripe's docs (docs.stripe.com/payments/bank-transfers/accept-a-payment, Checkout, 2026-11-17):
-Checkout does support bank transfer (`customer_balance`) in `mode=payment`, but "Bank transfers aren't available on
-Checkout Sessions that didn't include an existing Customer"; the batch session creates its customer
-(`customer_creation=always`, so the company's address and tax id come from Checkout and nothing names an org). Bank
-transfer is also a delayed method: the session completes unpaid, and the browser's signature request would answer
-"not paid yet" until the money arrives. So **the batch Checkout offers cards only** (`payment_method_types=card`;
-Apple Pay and Google Pay ride on card) and never shows bank transfer, whatever the Dashboard's payment methods say.
+Built in 0.4 (2026-11-21), off until the owner turns it on. Checked against Stripe's docs
+(docs.stripe.com/payments/bank-transfers/accept-a-payment, Checkout): Checkout offers bank transfer
+(`customer_balance`) in `mode=payment` only on a session that names an existing Customer, and the payment is
+delayed (the session completes unpaid and turns paid once the money arrives).
 
-A company that must pay by bank transfer (owner, by hand):
-1. Settings → Payments → Payment methods: Bank transfers on (**[OWNER CONFIRMS]**, live only).
-2. Invoices → Create invoice for the company's Customer: one line "Flagship vouchers" × the count at $1, tax
-   behaviour inclusive, tax code `txcd_10000000`; collection **Send invoice** (`send_invoice`) with bank transfer as
-   the payment method. Nothing on it names an org, an account or a seat.
-3. **Open gap:** nothing turns a paid invoice into vouchers yet. `/api/vouchers/batch-issue` reads only Checkout
-   Sessions, and `POST /api/admin/vouchers/issue` (admin secret) signs blinded requests, which only the org admin's
-   browser can make; the webapp has no step that hands them to the owner for a manual invoice. Until a send_invoice
-   flow is built (`.com` checks the paid invoice the way it checks a session), don't promise bank transfer to a
-   customer: the safe answer is the card Checkout.
+How it works (`voucherRails.ts` `handleStripeBatchCheckout`, `handleBatchIssue`):
+- The org admin presses "Pay by bank transfer" (shown only while `GET /api/payments/config` says
+  `rails.stripeBank`). `.com` creates an **empty** Customer (metadata `flagship_kind=voucher-batch` only: no name,
+  email or address) and a Checkout Session for it with `customer_update[name|address]=auto`, so the company's name,
+  address and tax id come from the Checkout form as they do for cards; nothing names an org, account or seat. The
+  session allows only `customer_balance` with `funding_type=bank_transfer`, `us_bank_transfer` (USD).
+- Stripe shows the company its bank details and reconciles the transfer. The browser keeps the batch pending (and
+  the buyer keeps the batch key file); "Add to the org's wallet" answers "That batch isn't paid yet. A bank transfer
+  can take a few days." until the session is paid **and** its PaymentIntent has `amount_received >= amount` (a short
+  transfer never counts). An expired session or a canceled PaymentIntent answers `payment-void` (410): start a new
+  batch.
+- Signing is the same as a card batch: same commitment, chunks, refund and dispute handling.
+
+Owner, to turn it on (live, after the card batch works):
+1. Stripe Dashboard → Settings → Payments → Payment methods: **Bank transfers** on (**[OWNER CONFIRMS]**: Stripe's
+   fee for bank transfers, and which currencies; the code asks for USD US bank transfer only).
+2. The restricted key (`flagship-com-vouchers`) gains **Customers: Write** and **PaymentIntents: Read** (card batches
+   need neither; only bank sessions read their PaymentIntent).
+3. `apps/com/wrangler.toml` `[vars]`: `STRIPE_BANK_TRANSFER = "1"` (gym: `wrangler.gym.toml`, sandbox first), then
+   deploy `.com`.
+4. Test in the gym: a batch of 100 by bank transfer; in the sandbox, fund the customer balance from the Customer's
+   page ("Send test bank transfer"), first part of the amount (still unpaid), then the rest (vouchers sign).
+
+Not built: a manual `send_invoice` invoice from the Dashboard still turns into no vouchers (`batch-issue` reads only
+Checkout Sessions); use the Checkout bank transfer above instead.
 
 ## Refunds, in one place
 

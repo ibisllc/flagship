@@ -30,7 +30,7 @@ describe("voucher rails routes", () => {
     try {
       const env: ControlPlaneEnv = { DB: sqlite as unknown as D1Database, VOUCHER_SIGNING_KEYS: JSON.stringify([{ jwk }]), APPLE_IAP_ENVIRONMENTS: "Sandbox" };
       const cfg = (await (await tryControlPlane(new Request(`${ORIGIN}/api/payments/config`), env))!.json()) as Record<string, unknown>;
-      expect(cfg.rails).toEqual({ stripe: false, apple: true, google: false });
+      expect(cfg.rails).toEqual({ stripe: false, stripeBank: false, apple: true, google: false });
       expect(cfg.products).toEqual([
         { units: 10, productId: "com.flagshipserver.app.vouchers.10" },
         { units: 30, productId: "com.flagshipserver.app.vouchers.30" },

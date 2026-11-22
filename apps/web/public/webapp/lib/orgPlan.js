@@ -7,7 +7,8 @@
 //   updateOrgWallet      PUT  /api/orgs/<id>/voucher-wallet       (one org admin's approval, compare-and-set)
 //   orgSpendTick         the org trickle: seats × 6 a month, a voucher at a time, through the private relay
 //   importVoucherFiles   voucher files (a company batch, a colleague's leftovers) into the org wallet
-//   buyBatch / finishBatches  a company's invoiced batch (Stripe Checkout with the tax id and an invoice), from one
+//   buyBatch / finishBatches  a company's invoiced batch (Stripe Checkout with the tax id and an invoice; card, or bank
+//                        transfer when `.com` offers it), from one
 //                        seed kept in this browser and in a batch key file the buyer may save
 //   refreshAfterRotation every voucher an earlier `wallet` key could read is exchanged for a fresh one, so an admin
 //                        who left can't spend them
@@ -243,12 +244,15 @@ export function addBatchKey(text, store = globalThis.localStorage) {
 /**
  * Starts a company's invoiced batch of `units`: a fresh seed, every blinded request made from it, and a Stripe
  * Checkout that commits to them. Returns {url, keyFile}: the buyer saves the key file before paying (it finishes the
- * batch from any computer; it is a secret).
+ * batch from any computer; it is a secret). `deps.method` "bank" pays by bank transfer (only while `.com` offers it):
+ * Stripe shows the company its bank details and the batch finishes once the whole transfer has arrived.
  */
 export async function buyBatch(units, deps = {}) {
   const c = c0(deps);
   const pc = deps.paymentsConfig ?? (await loadPaymentsConfig(deps));
+  const method = deps.method === "bank" ? "bank" : "card";
   if (!pc.rails?.stripe) throw new PlanError("rail-off");
+  if (method === "bank" && !pc.rails?.stripeBank) throw new PlanError("bank-off");
   const b = pc.config.business;
   if (!Number.isSafeInteger(units) || units < b.batchMinUnits || units > b.batchMaxUnits) throw new PlanError("batch-size", { min: b.batchMinUnits, max: b.batchMaxUnits });
   const key = pc.keys.find((k) => k.issuing !== false);
@@ -260,10 +264,13 @@ export async function buyBatch(units, deps = {}) {
     credentials: "omit",
     cache: "no-store",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ v: 1, units, k: key.keyId, commit }),
+    body: JSON.stringify(method === "bank" ? { v: 1, units, k: key.keyId, commit, method } : { v: 1, units, k: key.keyId, commit }),
   });
   const body = await r.json().catch(() => null);
-  if (!r.ok) throw new PlanError(typeof body?.code === "string" ? body.code : "failed", { status: r.status, body });
+  if (!r.ok) {
+    const code = typeof body?.code === "string" ? body.code : "failed";
+    throw new PlanError(method === "bank" && code === "rail-off" ? "bank-off" : code, { status: r.status, body });
+  }
   if (typeof body?.url !== "string" || !body.url.startsWith("https://") || typeof body?.sessionId !== "string") throw new PlanError("failed");
   const batch = { k: key.keyId, units, seed: hex(seed), session: body.sessionId };
   saveBatches([...pendingBatches(c.store).filter((x) => x.session !== batch.session), { kind: "flagship-voucher-batch", v: 1, ...batch }], c.store);

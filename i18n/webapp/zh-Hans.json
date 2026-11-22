@@ -3968,5 +3968,9 @@
   "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "让别人给你发消息、打电话，并分享你的动态。一切都能抵御量子计算机。你的页面将位于 voi.ci/{0}。",
   "Your stuff,<br>on your hardware.": "你的东西，<br>运行在你的硬件上。",
   "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "一个真正归你所有的个人云。你在手机上构建并批准一切，你的服务器运行你的应用。",
-  "People who let you call them back": "允许你回拨的人"
+  "People who let you call them back": "允许你回拨的人",
+  "Pay by bank transfer": "通过银行转账支付",
+  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe 会向贵公司显示银行账户信息。全部转账款项到账后，代金券即可使用，这可能需要几天时间。",
+  "Bank transfer isn't available right now. Pay by card instead.": "银行转账暂时不可用。请改用银行卡支付。",
+  "That batch can no longer be paid. Start a new batch.": "该批次已无法支付。请重新发起一个批次。"
 }

@@ -52,6 +52,7 @@ export type RailRefusal =
   | "payment-unpaid"
   | "payment-refunded"
   | "payment-used"
+  | "payment-void"
   | "wrong-count"
   | "rail-unreachable";
 
@@ -72,6 +73,11 @@ export interface StripeRail {
   cancelUrl: string;
   taxBehavior: "inclusive" | "exclusive";
   taxCode: string;
+  /**
+   * Business batches may also be paid by bank transfer (`STRIPE_BANK_TRANSFER=1`, after the owner turns bank transfers
+   * on in the Stripe Dashboard: docs/runbooks/payments-setup.md "Bank transfer for business batches").
+   */
+  bankTransfer?: boolean;
   fetch?: typeof fetch;
 }
 
@@ -103,7 +109,7 @@ export interface VoucherRailsDeps {
 /** What `GET /api/payments/config` adds: which rails sell, and the store product id of each pack. */
 export function railsSummary(deps: Pick<VoucherRailsDeps, "stripe" | "apple" | "google" | "config">) {
   return {
-    rails: { stripe: !!deps.stripe, apple: !!deps.apple, google: !!deps.google },
+    rails: { stripe: !!deps.stripe, stripeBank: !!deps.stripe?.bankTransfer, apple: !!deps.apple, google: !!deps.google },
     products: deps.config.packs.map((units) => ({ units, productId: voucherPackProductId(units) })),
   };
 }
@@ -115,6 +121,7 @@ export function stripeRailFromEnv(env: {
   STRIPE_BATCH_SUCCESS_URL?: string;
   STRIPE_TAX_BEHAVIOR?: string;
   STRIPE_TAX_CODE?: string;
+  STRIPE_BANK_TRANSFER?: string;
   CONTROL_APEX?: string;
 }): StripeRail | undefined {
   const key = env.STRIPE_SECRET_KEY;
@@ -128,6 +135,7 @@ export function stripeRailFromEnv(env: {
     cancelUrl: env.STRIPE_VOUCHER_CANCEL_URL || `https://webapp.${apex}/?shop=cancel`,
     taxBehavior: env.STRIPE_TAX_BEHAVIOR === "exclusive" ? "exclusive" : "inclusive",
     taxCode: env.STRIPE_TAX_CODE && /^txcd_\d{8}$/.test(env.STRIPE_TAX_CODE) ? env.STRIPE_TAX_CODE : "txcd_10000000",
+    ...(env.STRIPE_BANK_TRANSFER === "1" ? { bankTransfer: true } : {}),
   };
 }
 
@@ -361,11 +369,18 @@ export async function handleStripeVoucherCheckout(deps: VoucherRailsDeps, body: 
 export const BATCH_ISSUE_CHUNK = 100;
 
 /**
- * `POST /api/vouchers/stripe/batch-checkout` (public): `{v: 1, units, k, commit}` → `{url, sessionId}`. A company's
+ * `POST /api/vouchers/stripe/batch-checkout` (public): `{v: 1, units, k, commit, method?}` → `{url, sessionId}`. A company's
  * invoiced voucher batch: at least `business.batchMinUnits`, at most `business.batchMaxUnits`. Stripe collects the
  * company's name, address and tax id and issues an invoice that reads "Flagship vouchers" × units. The session and
  * the invoice name no org, account or seat; the metadata carries the count, the key and the commitment to the
  * blinded requests (voucherBatch.ts), exactly as a pack does.
+ *
+ * `method: "bank"` (only while the rail has `bankTransfer`) has the company pay by bank transfer instead of card. Checkout
+ * offers bank transfer (`customer_balance`) only for an existing Customer, so `.com` first creates an empty one (no
+ * name, email or address: Checkout fills them from the form, as `customer_creation=always` does for cards, and `.com`
+ * never sees them). The session completes unpaid; Stripe shows the company its bank details, reconciles the transfer
+ * and the session turns paid only when the whole amount has arrived (a short transfer leaves it unpaid). The browser
+ * asks for its signatures with the same session id, through the same batch-issue checks, whenever it is paid.
  */
 export async function handleStripeBatchCheckout(deps: VoucherRailsDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = (deps.now ?? Date.now)();
@@ -377,8 +392,37 @@ export async function handleStripeBatchCheckout(deps: VoucherRailsDeps, body: un
   const b = deps.config.business;
   const units = typeof body.units === "number" && Number.isSafeInteger(body.units) && body.units >= b.batchMinUnits && body.units <= b.batchMaxUnits ? body.units : null;
   if (units === null) return refuse(400, "malformed", { min: b.batchMinUnits, max: b.batchMaxUnits });
+  const method = body.method === undefined || body.method === "card" ? "card" : body.method === "bank" ? "bank" : null;
+  if (method === null) return refuse(400, "malformed");
+  if (method === "bank" && !rail.bankTransfer) return refuse(404, "rail-off");
   const key = deps.keys.find((x) => x.pub.keyId === body.k && (x.issueUntil === 0 || now < x.issueUntil));
   if (!key) return refuse(409, "no-key");
+  const f = rail.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
+  const stripePost = (path: string, form: URLSearchParams, idempotencyKey: string) =>
+    f(`https://api.stripe.com/v1/${path}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${rail.secretKey}`,
+        "content-type": "application/x-www-form-urlencoded",
+        "stripe-version": STRIPE_API_VERSION,
+        "idempotency-key": idempotencyKey,
+      },
+      body: form.toString(),
+    });
+
+  let customer: string | null = null;
+  if (method === "bank") {
+    const cf = new URLSearchParams();
+    cf.set("metadata[flagship_kind]", "voucher-batch");
+    try {
+      const cr = await stripePost("customers", cf, `flagship-voucher-batch-customer-${body.commit}`);
+      const cj: any = await cr.json().catch(() => null);
+      if (!cr.ok || typeof cj?.id !== "string" || !/^cus_[A-Za-z0-9]{6,200}$/.test(cj.id)) return refuse(502, "rail-unreachable");
+      customer = cj.id;
+    } catch {
+      return refuse(502, "rail-unreachable");
+    }
+  }
 
   const form = new URLSearchParams();
   form.set("mode", "payment");
@@ -392,7 +436,15 @@ export async function handleStripeBatchCheckout(deps: VoucherRailsDeps, body: un
   form.set("automatic_tax[enabled]", "true");
   form.set("billing_address_collection", "required");
   form.set("tax_id_collection[enabled]", "true");
-  form.set("customer_creation", "always");
+  if (customer) {
+    form.set("customer", customer);
+    // The empty Customer takes the company's name and address from the form (tax id collection and automatic tax
+    // need them on it).
+    form.set("customer_update[name]", "auto");
+    form.set("customer_update[address]", "auto");
+  } else {
+    form.set("customer_creation", "always");
+  }
   form.set("invoice_creation[enabled]", "true");
   form.set("invoice_creation[invoice_data][description]", "Flagship vouchers");
   form.set("invoice_creation[invoice_data][metadata][flagship_kind]", "voucher-batch");
@@ -403,28 +455,22 @@ export async function handleStripeBatchCheckout(deps: VoucherRailsDeps, body: un
   form.set("metadata[flagship_key]", key.pub.keyId);
   form.set("metadata[flagship_commit]", body.commit);
   form.set("payment_intent_data[metadata][flagship_kind]", "voucher-batch");
-  form.set("payment_intent_data[statement_descriptor_suffix]", STRIPE_STATEMENT_SUFFIX);
-  // Cards only (Apple Pay and Google Pay ride on card). Checkout offers bank transfer (customer_balance) only when
-  // the session names an existing Customer, and this one creates its own; a delayed payment would also leave the
-  // session unpaid when the browser asks for its signatures. A company that must pay by bank transfer gets a
-  // send_invoice invoice from the Dashboard (docs/runbooks/payments-setup.md, "Bank transfer").
-  form.set("payment_method_types[0]", "card");
+  if (method === "bank") {
+    // Bank transfer only, in dollars to Stripe's US account details for this customer.
+    form.set("payment_method_types[0]", "customer_balance");
+    form.set("payment_method_options[customer_balance][funding_type]", "bank_transfer");
+    form.set("payment_method_options[customer_balance][bank_transfer][type]", "us_bank_transfer");
+  } else {
+    // Cards only (Apple Pay and Google Pay ride on card); the statement suffix applies to card payments.
+    form.set("payment_intent_data[statement_descriptor_suffix]", STRIPE_STATEMENT_SUFFIX);
+    form.set("payment_method_types[0]", "card");
+  }
   form.set("success_url", rail.batchSuccessUrl ?? rail.successUrl);
   form.set("cancel_url", rail.cancelUrl);
 
-  const f = rail.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
   let resp: Response;
   try {
-    resp = await f("https://api.stripe.com/v1/checkout/sessions", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${rail.secretKey}`,
-        "content-type": "application/x-www-form-urlencoded",
-        "stripe-version": STRIPE_API_VERSION,
-        "idempotency-key": `flagship-voucher-batch-${body.commit}`,
-      },
-      body: form.toString(),
-    });
+    resp = await stripePost("checkout/sessions", form, `flagship-voucher-batch-${method === "bank" ? "bank-" : ""}${body.commit}`);
   } catch {
     return refuse(502, "rail-unreachable");
   }
@@ -438,7 +484,8 @@ export async function handleStripeBatchCheckout(deps: VoucherRailsDeps, body: un
  * units, done}`. `blinded` is the whole batch, in order (it must match the session's commitment); the answer signs
  * up to BATCH_ISSUE_CHUNK of them from `from`, so a large batch never blocks one request. Every call re-checks the
  * paid session; a retry or a call from another computer gets the same signatures (blind signing is deterministic),
- * and a session's payment can never be claimed for another set.
+ * and a session's payment can never be claimed for another set. A bank-transfer session is "unpaid" (402) until the
+ * whole amount has arrived; one that can no longer be paid (expired, its payment canceled) is `payment-void` (410).
  */
 export async function handleBatchIssue(deps: VoucherRailsDeps, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = (deps.now ?? Date.now)();
@@ -481,7 +528,27 @@ export async function handleBatchIssue(deps: VoucherRailsDeps, body: unknown): P
   }
   if (blinded.length !== units) return refuse(409, "wrong-count", { units });
   if (md.flagship_commit !== voucherOrderCommit(body.k, blinded)) return refuse(400, "payment-invalid");
+  if (s.status === "expired") return refuse(410, "payment-void");
+  // Only a bank-transfer session reads its PaymentIntent: card batches keep working with a key that may read
+  // Checkout Sessions alone (the bank rail's key also needs PaymentIntents: Read).
+  const bank = Array.isArray(s.payment_method_types) && s.payment_method_types.includes("customer_balance");
+  let pi: Record<string, any> | null = null;
+  if (bank && typeof s.payment_intent === "string" && /^pi_[A-Za-z0-9]{8,200}$/.test(s.payment_intent)) {
+    let p: { status: number; json: any };
+    try {
+      p = await stripeGet(rail, `payment_intents/${encodeURIComponent(s.payment_intent)}`);
+    } catch {
+      return refuse(502, "rail-unreachable");
+    }
+    if (p.status !== 200 || !isObj(p.json)) return refuse(502, "rail-unreachable");
+    pi = p.json;
+  }
+  if (pi?.status === "canceled") return refuse(410, "payment-void");
   if (s.status !== "complete" || s.payment_status !== "paid") return refuse(402, "payment-unpaid");
+  // Belt to Stripe's own reconciliation: a transfer that covered only part of the amount never counts as paid.
+  if (bank && (!pi || pi.status !== "succeeded" || typeof pi.amount_received !== "number" || typeof pi.amount !== "number" || pi.amount_received < pi.amount)) {
+    return refuse(402, "payment-unpaid");
+  }
 
   const paymentHash = voucherPaymentHash("stripe", id);
   const blindedHash = voucherBlindedSetHash(body.k, blinded);

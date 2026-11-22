@@ -3968,5 +3968,9 @@
   "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.": "メッセージや通話を受け取り、近況をシェアできます。すべて量子コンピューターへの対策がされています。あなたのページは voi.ci/{0} になります。",
   "Your stuff,<br>on your hardware.": "あなたのデータを、<br>あなたのハードウェアで。",
   "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": "本当に自分のものと言えるパーソナルクラウド。作成も承認もすべてスマートフォンから。アプリはサーバーが動かします。",
-  "People who let you call them back": "折り返しを許可してくれる人"
+  "People who let you call them back": "折り返しを許可してくれる人",
+  "Pay by bank transfer": "銀行振込で支払う",
+  "Stripe shows your company the bank details. The vouchers are ready once the whole transfer has arrived, which can take a few days.": "Stripe が会社に振込先の口座情報を表示します。振込額の全額が届いた時点でバウチャーの準備が整います。数日かかることがあります。",
+  "Bank transfer isn't available right now. Pay by card instead.": "現在、銀行振込はご利用いただけません。カードでお支払いください。",
+  "That batch can no longer be paid. Start a new batch.": "この一括購入はもう支払えません。新しく一括購入を始めてください。"
 }

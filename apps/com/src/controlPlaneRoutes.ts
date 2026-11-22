@@ -487,6 +487,8 @@ export interface ControlPlaneEnv extends DirectNamesEnv {
   STRIPE_VOUCHER_CANCEL_URL?: string;
   STRIPE_TAX_BEHAVIOR?: string;
   STRIPE_TAX_CODE?: string;
+  /** "1": business batches may also be paid by bank transfer (owner turns bank transfers on in Stripe first). */
+  STRIPE_BANK_TRANSFER?: string;
   /** Apple: accepted transaction environments, "Production" (prod) or "Sandbox" (gym); unset = rail off. */
   APPLE_IAP_ENVIRONMENTS?: string;
   /** Apple: the app's bundle id (default com.flagshipserver.app). */

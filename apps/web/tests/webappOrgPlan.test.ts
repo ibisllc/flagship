@@ -86,7 +86,7 @@ describe("the org's Plan in the webapp", () => {
   });
   afterEach(() => kc.setCustodyAuthenticatorForTests(null));
 
-  async function world() {
+  async function world(opts: { bank?: boolean } = {}) {
     const clock = { now: NOW };
     const store = new InMemoryOrgStorage();
     const base = new InMemoryStorage();
@@ -102,13 +102,17 @@ describe("the org's Plan in the webapp", () => {
     const redeem = { keys, config: cfg, store: wallets, tiers: new InMemoryTierStorage(), usernames: { async get() { return undefined; } }, meter: new InMemoryMeterStorage(), orgs: d, now: () => clock.now };
     let session: any = null;
     const stripe = {
-      ...stripeRailFromEnv({ STRIPE_SECRET_KEY: "rk_test_web" })!,
+      ...stripeRailFromEnv({ STRIPE_SECRET_KEY: "rk_test_web", ...(opts.bank ? { STRIPE_BANK_TRANSFER: "1" } : {}) })!,
       fetch: (async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST" && url.endsWith("/v1/customers")) return new Response(JSON.stringify({ id: "cus_WebBatch0001" }));
         if (init?.method === "POST") {
           const form = new URLSearchParams(String(init.body));
-          session = { id: "cs_test_webbatch01", livemode: false, mode: "payment", status: "complete", payment_status: "paid", currency: "usd", amount_subtotal: Number(form.get("line_items[0][quantity]")) * 100, metadata: { flagship_kind: "voucher-batch", flagship_units: form.get("metadata[flagship_units]"), flagship_key: form.get("metadata[flagship_key]"), flagship_commit: form.get("metadata[flagship_commit]") } };
+          const bank = form.get("payment_method_types[0]") === "customer_balance";
+          session = { id: "cs_test_webbatch01", livemode: false, mode: "payment", status: "complete", payment_status: bank ? "unpaid" : "paid", currency: "usd", amount_subtotal: Number(form.get("line_items[0][quantity]")) * 100, metadata: { flagship_kind: "voucher-batch", flagship_units: form.get("metadata[flagship_units]"), flagship_key: form.get("metadata[flagship_key]"), flagship_commit: form.get("metadata[flagship_commit]") } };
+          if (bank) Object.assign(session, { payment_method_types: ["customer_balance"], payment_intent: "pi_WebBatch0001", pi: { id: "pi_WebBatch0001", status: "requires_action", amount: session.amount_subtotal, amount_received: 0 } });
           return new Response(JSON.stringify({ id: session.id, url: "https://checkout.stripe.com/c/pay/cs_test_webbatch01" }));
         }
+        if (url.includes("/v1/payment_intents/")) return new Response(JSON.stringify(session.pi));
         return new Response(JSON.stringify(session));
       }) as typeof fetch,
     };
@@ -119,7 +123,7 @@ describe("the org's Plan in the webapp", () => {
       const body = raw ? JSON.parse(raw) : undefined;
       let r: any;
       let x: RegExpMatchArray | null;
-      if (path === "/api/payments/config") r = handlePaymentsConfig({ config: cfg, keys, testIssue: false, rails: { rails: { stripe: true, apple: false, google: false }, products: [] } });
+      if (path === "/api/payments/config") r = handlePaymentsConfig({ config: cfg, keys, testIssue: false, rails: { rails: { stripe: true, stripeBank: !!opts.bank, apple: false, google: false }, products: [] } });
       else if (path === "/api/vouchers/redeem") r = await handleVoucherRedeem(redeem, body);
       else if (path === "/api/vouchers/exchange") r = await handleVoucherExchange(redeem, body);
       else if (path === "/api/vouchers/stripe/batch-checkout") r = await handleStripeBatchCheckout(rails, body);
@@ -145,7 +149,7 @@ describe("the org's Plan in the webapp", () => {
     const seat = { orgId: ORG, seatId: A.seatId, genesisHash: V.genesisHash, adminBinding: A.binding };
     const os = await import("../public/webapp/lib/orgSeat.js");
     const snap = await os.orgSnapshot(os.orgApi(deps), ORG, V.genesisHash, NOW);
-    return { clock, d, seat, snap, deps, wallets };
+    return { clock, d, seat, snap, deps, wallets, session: () => session };
   }
 
   it("makes the wallet key, imports voucher files, pays seats by the trickle and saves staff files", async () => {
@@ -198,6 +202,28 @@ describe("the org's Plan in the webapp", () => {
     expect(vouchers.every((v: Voucher) => org.verifyVoucher(vkey, v))).toBe(true);
     op.forgetBatch(key.session);
     expect(op.pendingBatches()).toEqual([]);
+  });
+
+  it("pays a batch by bank transfer: unpaid until the whole transfer arrives, then the same vouchers as a card batch", async () => {
+    const off = await world();
+    await expect(op.buyBatch(100, { ...off.deps, method: "bank" })).rejects.toMatchObject({ code: "bank-off" });
+    const w = await world({ bank: true });
+    const r = await op.buyBatch(100, { ...w.deps, method: "bank" });
+    expect(org.parseVoucherBatchKey(r.keyFile.text)).toMatchObject({ units: 100, session: "cs_test_webbatch01" });
+    const b = op.pendingBatches()[0];
+    expect(await op.finishBatch(b, w.deps)).toBeNull();
+    w.session().pi = { ...w.session().pi, amount_received: 40 * 100 };
+    expect(await op.finishBatch(b, w.deps)).toBeNull();
+    Object.assign(w.session(), { payment_status: "paid", pi: { ...w.session().pi, status: "succeeded", amount_received: 100 * 100 } });
+    const vouchers = await op.finishBatch(b, w.deps);
+    expect(vouchers).toHaveLength(100);
+    expect(vouchers.every((v: Voucher) => org.verifyVoucher(vkey, v))).toBe(true);
+    w.session().status = "expired";
+    await expect(op.finishBatch(b, w.deps)).rejects.toMatchObject({ code: "payment-void" });
+    expect(view.orgPlanErrorText({ code: "payment-void" })).toBe("That batch can no longer be paid. Start a new batch.");
+    expect(view.orgPlanErrorText({ code: "bank-off" })).toBe("Bank transfer isn't available right now. Pay by card instead.");
+    const src = readFileSync(here("../public/webapp/views/orgPlan.js"), "utf8");
+    expect(src).toContain("${pc.rails?.stripeBank ? `<button class=\"secondary\" data-org-batch-bank>");
   });
 
   it("exchanges every voucher after the wallet key rotates", async () => {

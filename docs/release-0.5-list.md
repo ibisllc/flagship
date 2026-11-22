@@ -72,8 +72,6 @@ over once "let's start 0.5" is said.
   in-app purchase review. Once Apple has approved the in-app purchases, decide whether to add the file import to iOS,
   citing 3.1.3(b) in the review notes. If Apple ever objects to the link, check whether it can be switched off
   without a new build (not verified).
-- **Bank transfer for Business batches:** a paid `send_invoice` invoice doesn't produce vouchers yet
-  (`docs/runbooks/payments-setup.md`).
 - **Community adapters, turned on together** (2026-11-19). Three pieces must arrive together, or none does anything:
   - the review model: built in 0.4 on Flagship Inference (`apps/com/src/serviceInference.ts`), needs only the
     `FLAGSHIP_INFERENCE_*` settings free AI already uses;

@@ -482,7 +482,7 @@ describe("payments config", () => {
     const d = baseDeps({ google: undefined, stripe: undefined });
     const r = handlePaymentsConfig({ config: cfg, keys, testIssue: false, rails: railsSummary(d), now: () => NOW });
     expect(r.body).toMatchObject({
-      rails: { stripe: false, apple: true, google: false },
+      rails: { stripe: false, stripeBank: false, apple: true, google: false },
       products: [
         { units: 10, productId: "com.flagshipserver.app.vouchers.10" },
         { units: 30, productId: "com.flagshipserver.app.vouchers.30" },

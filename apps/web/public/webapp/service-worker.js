@@ -556,7 +556,9 @@
 //  v241: the one-time voi.ci intro after creating an account (lib/voiciIntro.js, GET /api/voici/promo), Page options
 //       renamed Social options (no "Anyone signed in with Flagship"; first publish takes calls from callback callers),
 //       "Turn off social features", "Set business hours", and the welcome picture with the internet between phone and server.
-const SHELL_VERSION = "v241";
+//  v245: a Business batch may be paid by bank transfer while `.com` offers it ("Pay by bank transfer"; lib/orgPlan.js,
+//       views/orgPlan.js), and a batch that can no longer be paid says so.
+const SHELL_VERSION = "v245";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

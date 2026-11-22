@@ -38,7 +38,7 @@ const { blinded, commit } = batchRequests(key, SEED, UNITS);
 
 let calls: { url: string; init?: RequestInit }[];
 let session: Record<string, any>;
-function deps(): VoucherRailsDeps & { payments: InMemoryVoucherPaymentStorage; webhookSecret: string } {
+function deps(env: { STRIPE_BANK_TRANSFER?: string } = {}): VoucherRailsDeps & { payments: InMemoryVoucherPaymentStorage; webhookSecret: string } {
   return {
     keys,
     config: cfg,
@@ -46,10 +46,12 @@ function deps(): VoucherRailsDeps & { payments: InMemoryVoucherPaymentStorage; w
     now: () => NOW,
     webhookSecret: "whsec_t",
     stripe: {
-      ...stripeRailFromEnv({ STRIPE_SECRET_KEY: "rk_test_123", CONTROL_APEX: "gym.flagshipserver.com" })!,
+      ...stripeRailFromEnv({ STRIPE_SECRET_KEY: "rk_test_123", CONTROL_APEX: "gym.flagshipserver.com", ...env })!,
       fetch: (async (url: string, init?: RequestInit) => {
         calls.push({ url, init });
+        if (init?.method === "POST" && url.endsWith("/v1/customers")) return new Response(JSON.stringify({ id: "cus_TestBatch0001", object: "customer" }));
         if (init?.method === "POST") return new Response(JSON.stringify({ id: "cs_test_batch0001", url: "https://checkout.stripe.com/c/pay/cs_test_batch0001" }));
+        if (url.includes("/v1/payment_intents/")) return new Response(JSON.stringify(session.__pi));
         if (url.includes("payment_intent=")) return new Response(JSON.stringify({ data: [{ id: "cs_test_batch0001", metadata: { flagship_kind: "voucher-batch" } }] }));
         return new Response(JSON.stringify(session));
       }) as typeof fetch,
@@ -155,5 +157,96 @@ describe("batch issue", () => {
     expect(d.payments.rows.get(voucherPaymentHash("stripe", "cs_test_batch0001"))?.state).toBe("refunded");
     expect((await issue(d, BATCH_ISSUE_CHUNK)).body).toMatchObject({ code: "payment-refunded" });
     expect(isVoucherStripeEvent({ type: "checkout.session.completed", data: { object: { metadata: { flagship_kind: "voucher-batch" } } } })).toBe(true);
+  });
+});
+
+describe("bank transfer for a batch", () => {
+  // A basil-shaped Checkout Session paid by bank transfer; its PaymentIntent is what GET payment_intents/<id> answers.
+  function bankSession(pi: Record<string, unknown>, over: Record<string, unknown> = {}) {
+    session = {
+      ...session,
+      customer: "cus_TestBatch0001",
+      payment_method_types: ["customer_balance"],
+      payment_status: "unpaid",
+      payment_intent: "pi_TestBatch0001",
+      __pi: { id: "pi_TestBatch0001", object: "payment_intent", amount: UNITS * 100, currency: "usd", ...pi },
+      ...over,
+    };
+  }
+
+  it("is off until the owner turns it on, and only card or bank are methods", async () => {
+    expect(stripeRailFromEnv({ STRIPE_SECRET_KEY: "rk_test_1" })!.bankTransfer).toBeUndefined();
+    expect(stripeRailFromEnv({ STRIPE_SECRET_KEY: "rk_test_1", STRIPE_BANK_TRANSFER: "1" })!.bankTransfer).toBe(true);
+    expect((await handleStripeBatchCheckout(deps(), { v: 1, units: UNITS, k: key.keyId, commit, method: "bank" })).body).toMatchObject({ code: "rail-off" });
+    expect((await handleStripeBatchCheckout(deps({ STRIPE_BANK_TRANSFER: "1" }), { v: 1, units: UNITS, k: key.keyId, commit, method: "wire" })).body).toMatchObject({ code: "malformed" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("makes an empty Customer, then a bank-transfer Checkout that fills it from the form and names nobody", async () => {
+    const d = deps({ STRIPE_BANK_TRANSFER: "1" });
+    const r = await handleStripeBatchCheckout(d, { v: 1, units: UNITS, k: key.keyId, commit, method: "bank" });
+    expect(r.body).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_batch0001", sessionId: "cs_test_batch0001" });
+    expect(calls.map((c) => c.url)).toEqual(["https://api.stripe.com/v1/customers", "https://api.stripe.com/v1/checkout/sessions"]);
+    const cust = new URLSearchParams(String(calls[0]!.init!.body));
+    expect([...cust.keys()]).toEqual(["metadata[flagship_kind]"]);
+    expect((calls[0]!.init!.headers as Record<string, string>)["idempotency-key"]).toBe(`flagship-voucher-batch-customer-${commit}`);
+    const form = new URLSearchParams(String(calls[1]!.init!.body));
+    expect(form.get("customer")).toBe("cus_TestBatch0001");
+    expect(form.get("customer_creation")).toBeNull();
+    expect(form.get("customer_update[name]")).toBe("auto");
+    expect(form.get("customer_update[address]")).toBe("auto");
+    expect(form.get("payment_method_types[0]")).toBe("customer_balance");
+    expect(form.get("payment_method_types[1]")).toBeNull();
+    expect(form.get("payment_method_options[customer_balance][funding_type]")).toBe("bank_transfer");
+    expect(form.get("payment_method_options[customer_balance][bank_transfer][type]")).toBe("us_bank_transfer");
+    expect(form.get("payment_intent_data[statement_descriptor_suffix]")).toBeNull();
+    expect(form.get("tax_id_collection[enabled]")).toBe("true");
+    expect(form.get("automatic_tax[enabled]")).toBe("true");
+    expect(form.get("invoice_creation[enabled]")).toBe("true");
+    expect(form.get("metadata[flagship_kind]")).toBe("voucher-batch");
+    expect(form.get("metadata[flagship_commit]")).toBe(commit);
+    expect((calls[1]!.init!.headers as Record<string, string>)["idempotency-key"]).toBe(`flagship-voucher-batch-bank-${commit}`);
+    expect([...form.keys(), ...cust.keys()].some((k) => /username|org|seat|client_reference_id|customer_email/.test(k))).toBe(false);
+  });
+
+  it("signs only once the whole transfer has arrived, then the same set again on a retry, never another", async () => {
+    const d = deps({ STRIPE_BANK_TRANSFER: "1" });
+    // Submitted, nothing transferred yet.
+    bankSession({ status: "requires_action", amount_received: 0 });
+    expect((await issue(d, 0)).body).toMatchObject({ code: "payment-unpaid" });
+    expect(calls.map((c) => c.url)).toEqual(["https://api.stripe.com/v1/checkout/sessions/cs_test_batch0001", "https://api.stripe.com/v1/payment_intents/pi_TestBatch0001"]);
+    // A short transfer: Stripe funds the PaymentIntent partly and the session stays unpaid.
+    bankSession({ status: "requires_action", amount_received: 5000 });
+    expect((await issue(d, 0)).body).toMatchObject({ code: "payment-unpaid" });
+    // Even a session that reads paid while its PaymentIntent is short is refused.
+    bankSession({ status: "requires_action", amount_received: 5000 }, { payment_status: "paid" });
+    expect((await issue(d, 0)).body).toMatchObject({ code: "payment-unpaid" });
+    expect(d.payments.rows.size).toBe(0);
+    // The rest arrives: checkout.session.async_payment_succeeded's state.
+    bankSession({ status: "succeeded", amount_received: UNITS * 100 }, { payment_status: "paid" });
+    const first = await issue(d, 0);
+    expect(first.status).toBe(200);
+    const again = await issue(d, 0);
+    expect((again.body as { sigs: string[] }).sigs).toEqual((first.body as { sigs: string[] }).sigs);
+    expect(d.payments.rows.size).toBe(1);
+    const other = batchRequests(key, new Uint8Array(32).fill(7), UNITS).blinded;
+    expect((await issue(d, 0, other)).body).toMatchObject({ code: "payment-invalid" });
+  });
+
+  it("a card batch never reads a PaymentIntent (its key may read Checkout Sessions only)", async () => {
+    const d = deps({ STRIPE_BANK_TRANSFER: "1" });
+    expect((await issue(d, 0)).status).toBe(200);
+    expect(calls.map((c) => c.url)).toEqual(["https://api.stripe.com/v1/checkout/sessions/cs_test_batch0001"]);
+  });
+
+  it("a session that can no longer be paid is void", async () => {
+    const d = deps({ STRIPE_BANK_TRANSFER: "1" });
+    bankSession({ status: "canceled", amount_received: 0 });
+    const r = await issue(d, 0);
+    expect(r.status).toBe(410);
+    expect(r.body).toMatchObject({ code: "payment-void" });
+    bankSession({ status: "requires_payment_method", amount_received: 0 }, { status: "expired" });
+    expect((await issue(d, 0)).body).toMatchObject({ code: "payment-void" });
+    expect(d.payments.rows.size).toBe(0);
   });
 });

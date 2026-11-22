@@ -200,14 +200,19 @@ export async function loadPaymentsConfig(deps = {}) {
       /* the cache is a convenience: a voucher link then asks to open Plan once */
     }
     const ohttp = parseOhttpPublicConfig(body?.ohttp, new URL(c.apex).hostname);
-    const rails = { stripe: body?.rails?.stripe === true, apple: body?.rails?.apple === true, google: body?.rails?.google === true };
+    const rails = {
+      stripe: body?.rails?.stripe === true,
+      stripeBank: body?.rails?.stripe === true && body?.rails?.stripeBank === true,
+      apple: body?.rails?.apple === true,
+      google: body?.rails?.google === true,
+    };
     return { config: mergePaymentsConfig(body?.config), keys, testIssue: body?.testIssue === true, rails, ohttp };
   } catch {
     return {
       config: mergePaymentsConfig(null),
       keys: [],
       testIssue: false,
-      rails: { stripe: false, apple: false, google: false },
+      rails: { stripe: false, stripeBank: false, apple: false, google: false },
       ohttp: parseOhttpPublicConfig(null),
     };
   }
