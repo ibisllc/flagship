@@ -54,6 +54,11 @@ over once "let's start 0.5" is said.
 
 ## Carried over from 0.4
 
+- **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in
+  `docs/runbooks/payments-setup.md` "Bank transfer for business batches": Stripe bank transfers on (confirm the fee),
+  restricted key gains Customers: Write + PaymentIntents: Read, gym sandbox test (partial then full transfer), then
+  `STRIPE_BANK_TRANSFER = "1"` on production.
+
 - F14, the parked after-launch work: a second relay by DNS round-robin, Rust production qualification (G10), removing
   old implementations once proven (G8), the gym on IPv6 only, `VOICI_CANONICAL`.
 - Payments step 6 (the Monero view wallet, after the accountant's advice) and step 7 (paid marketplace apps, 10% cut).
