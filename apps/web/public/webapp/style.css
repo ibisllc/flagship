@@ -2931,69 +2931,24 @@ section h2.fs-hero-title::before { content: none; }
 }
 #connect-back { padding-left: 0; }
 
-/* Welcome: the phone (keys) and the server (apps) with the internet between them, drawn like iOS's
-   PhoneAndServerIllustration in the webapp's own Lucide strokes. Decorative. */
+/* Welcome: the owner's art (a day and a night painting, picked by prefers-color-scheme in index.html). Its edges
+   fade to transparent into the canvas, so no border, card, background or shadow. Square, the reading column's width,
+   at most 40 % of the window's height, and smaller still where the text and both buttons need the room (this page
+   has the browser-key warning under the lede that the apps don't), so the footer stays on screen wherever it did
+   with the old drawing: 620 px is the rest of the page down to "Connect to an existing account". Decorative. */
 .welcome-art {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: var(--space-4) 0 var(--space-6, 24px);
-  padding: var(--space-6, 24px) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: linear-gradient(to bottom left, var(--accent-soft), color-mix(in srgb, var(--surface-sunken) 60%, transparent));
+  display: block;
+  margin: var(--space-2) 0 var(--space-6, 24px);
 }
-.welcome-node {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 88px;
-  height: 88px;
-  flex: none;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-  color: var(--ink);
+.welcome-art img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: max(80px, min(40vh, calc(100vh - 620px)));
+  max-height: max(80px, min(40dvh, calc(100dvh - 620px)));
+  margin: 0 auto;
 }
-.welcome-node > svg { width: 40px; height: 40px; stroke-width: 1.6; }
-.welcome-phone { color: var(--accent-graphic); }
-.welcome-badge {
-  position: absolute;
-  right: -6px;
-  bottom: -6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 3px solid var(--surface);
-  background: var(--accent-graphic);
-  color: var(--accent-on);
-}
-.welcome-badge svg { width: 16px; height: 16px; }
-.welcome-dot {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 3px solid var(--surface);
-  background: var(--ok);
-  box-sizing: content-box;
-}
-.welcome-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 var(--space-2);
-  color: var(--accent-graphic);
-}
-/* The protected path runs phone → globe → server in the accent at half strength (≥ 3:1 on the dark canvas). */
-.welcome-link i { width: 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--accent-graphic) 50%, transparent); }
-.welcome-globe { width: 22px; height: 22px; stroke-width: 1.8; }
 .welcome-title {
   margin: 0 0 var(--space-3);
   font-family: var(--font-sans);
@@ -3006,16 +2961,10 @@ section h2.fs-hero-title::before { content: none; }
 .welcome-lede { margin: 0 0 var(--space-6, 24px); font-size: 17px; line-height: 1.45; color: var(--ink-muted); }
 /* Short windows (a laptop's 720 px): a smaller picture and headline, so the footer stays on screen. */
 @media (max-height: 780px) {
-  .welcome-art { margin: var(--space-2) 0 var(--space-4); padding: var(--space-3) var(--space-4); }
-  .welcome-node { width: 64px; height: 64px; }
-  .welcome-node > svg { width: 30px; height: 30px; }
+  .welcome-art { margin-bottom: var(--space-4); }
+  .welcome-art img { max-height: max(80px, min(40dvh, calc(100dvh - 580px))); }
   .welcome-title { font-size: 28px; margin-bottom: var(--space-2); }
   .welcome-lede { font-size: 15px; margin-bottom: var(--space-4); }
-}
-@media (max-width: 360px) {
-  .welcome-node { width: 72px; height: 72px; }
-  .welcome-node > svg { width: 32px; height: 32px; }
-  .welcome-link { gap: 3px; }
 }
 
 

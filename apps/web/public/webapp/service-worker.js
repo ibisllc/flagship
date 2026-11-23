@@ -578,7 +578,9 @@
 //       any more), and an Activity row when someone joins an app through an invite.
 //  v254: the privacy policy notice (docs/security-notices.md, kind policy-update): a dismissible banner, in the
 //       person's language, saying the policy changes (or changed) on a date, with a link to read it.
-const SHELL_VERSION = "v254";
+//  v255: the owner's welcome art (a day and a night painting, picked by prefers-color-scheme) replaces the drawn
+//       phone-and-server card on the first screen; precaches /welcome-day.png and /welcome-night.png.
+const SHELL_VERSION = "v255";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -608,6 +610,8 @@ const ESSENTIAL_PATHS = [
 // network (and then cache whatever it gets). Keeps the webapp's
 // offline launch path resilient while a deploy rolls forward.
 const OPTIONAL_SHELL = [
+  "/welcome-day.png",
+  "/welcome-night.png",
   "/lib/i18n.js",
   "/lib/i18nLocales.js",
   "/providers.js",
