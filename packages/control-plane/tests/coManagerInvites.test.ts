@@ -158,7 +158,8 @@ describe("co-manager invite create", () => {
   it("refuses a stale relay and a manual-approve one", async () => {
     const { deps } = await seed();
     expect((await handleCreateServiceInvite(deps, USER, coCreate({ relayAt: NOW - 10 * 60_000 }).body)).status).toBe(403);
-    expect((await handleCreateServiceInvite(deps, USER, coCreate({ approvalMode: "manual" }).body)).status).toBe(400);
+    // Manual approval is off for everyone (security report F4).
+    expect((await handleCreateServiceInvite(deps, USER, coCreate({ approvalMode: "manual" }).body)).status).toBe(410);
   });
 
   it("refuses a relay from a revoked server", async () => {

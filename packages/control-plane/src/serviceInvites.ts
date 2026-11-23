@@ -352,7 +352,6 @@ export async function handleCreateServiceInvite(
   // documented exception in scripts/admin-authority-guard.sh): Member tier.
   const relayed = body.relay !== undefined && body.relay !== null;
   if (relayed && typeof body.relay !== "object") return malformed("malformed co-manager relay");
-  if (relayed && approvalMode === "manual") return malformed("a co-manager's invite lets people in when they open it");
   // Who may invite: the admin gate first (admin root / admin-granted device;
   // on an account with no admin root, the account's own AID or IRK, as
   // before). A create the gate refused may still come from a device's own
