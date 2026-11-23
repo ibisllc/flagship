@@ -1483,6 +1483,13 @@ export async function tryControlPlane(
       servers: storage.servers,
       offers: storage.usernameOffers,
       aliases: storage.usernameAliases,
+      names: storage.names,
+      // Blind $1 vouchers pay too, through the redeem route's nullifier store (nameChange.ts header).
+      blind: {
+        keys: voucherSigningKeysFromEnv(env.VOUCHER_SIGNING_KEYS),
+        config: paymentsConfigFromEnv(env.PAYMENTS_CONFIG),
+        store: new D1BlindVoucherStorage(env.DB),
+      },
       grants: storage.deviceCapabilityGrants,
       auditEvents: storage.auditEvents,
       window: parseDibsWindow(env.DIBS_WINDOW_START, env.DIBS_WINDOW_END),

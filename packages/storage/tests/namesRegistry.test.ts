@@ -111,8 +111,10 @@ for (const [label, make] of adapters()) {
       await s.usernames.put(user("alice"));
       expect(await s.names.renameUsername("alice", "alice-smith", 10_000)).toEqual({ ok: true });
       const old = await s.names.lookup("alice");
-      expect(old).toMatchObject({ kind: "username", status: "held", owner: "alice", heldUntil: 10_000 + NAME_HOLD_MS });
-      expect((await s.names.activeUsername("alice"))?.name).toBe("alice-smith");
+      // Every row the account owns follows it to its new name (accounts are keyed by their username everywhere).
+      expect(old).toMatchObject({ kind: "username", status: "held", owner: "alice-smith", heldUntil: 10_000 + NAME_HOLD_MS });
+      expect((await s.names.activeUsername("alice-smith"))?.name).toBe("alice-smith");
+      expect(await s.names.activeUsername("alice")).toBeUndefined();
       expect(await s.usernames.put(user("alice", IRK_B, 11_000))).toEqual({ ok: false, reason: "taken" });
       expect(await s.voiciNames.claim(link("a1ice", "rapid-bison"))).toEqual({ ok: false, reason: "taken" });
     });

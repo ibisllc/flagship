@@ -1915,6 +1915,9 @@ export interface NameChangeRecord {
   oldUsername: string;
   newUsername: string;
   at: number;
+  /** How long the names registry holds the old name (redirecting to the new one); 0 releases it at once. Default:
+   *  `NAME_HOLD_MS` (30 days). Not stored in the history. */
+  oldNameHoldMs?: number;
 }
 
 export interface NameChangeStorage {

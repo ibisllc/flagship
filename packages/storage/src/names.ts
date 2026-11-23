@@ -59,8 +59,9 @@ export interface NameRegistryStorage {
   /** The scheduled job: held usernames whose hold ended at or before `now` are released. */
   releaseExpiredHolds(now: number): Promise<number>;
   /**
-   * The registry half of a rename (the action itself ships with feat/custom-names): in one transaction insert `to`
-   * as the account's active username and hold its current one for `holdMs`. If `to` is taken nothing changes.
+   * The registry half of a rename, on its own (the paid rename runs {@link renameOwnerStatements} inside its own
+   * batch): in one transaction hold the account's current username for `holdMs` (0 or less: release it at once),
+   * move every row the account owns to `to`, and insert `to` as its active username. If `to` is taken nothing changes.
    */
   renameUsername(owner: string, to: string, now: number, holdMs?: number): Promise<{ ok: true } | { ok: false; reason: "taken" | "no-account" }>;
 }
@@ -131,6 +132,33 @@ export function claimUsernameStatement(db: D1Database, name: string, at: number)
        WHERE NOT EXISTS (SELECT 1 FROM names WHERE kind = 'username' AND name = ?1 AND owner = ?1 AND status = 'active')`,
     )
     .bind(name, voiciNameKey(name), at);
+}
+
+/**
+ * A rename, in the registry (run inside the account rename's batch, so the account and its names move together):
+ *   1. the active username is held for `holdMs` with reason `renamed` (it redirects to the new name while held), or
+ *      released at once when `holdMs` is 0 or less (a name nobody but its owner ever saw: nameChange.ts);
+ *   2. every row the account owns (that held name, earlier held names, links, codes) moves to the new owner, so a held
+ *      name finds the account's current name (`activeUsername`) and a link keeps its owner;
+ *   3. the new name is claimed as the active username: a unique violation (taken, or too similar to a live name)
+ *      fails the whole batch.
+ * Step 1 runs before step 3, so a released old name never blocks a look-alike new one; a held one does (D8).
+ */
+export function renameOwnerStatements(db: D1Database, owner: string, to: string, now: number, holdMs = NAME_HOLD_MS): D1PreparedStatement[] {
+  const o = owner.toLowerCase();
+  const n = to.toLowerCase();
+  const hold = holdMs > 0
+    ? db
+        .prepare("UPDATE names SET status = 'held', held_until = ?2, reason = 'renamed', status_changed_at = ?3 WHERE kind = 'username' AND owner = ?1 AND status = 'active'")
+        .bind(o, now + holdMs, now)
+    : db
+        .prepare("UPDATE names SET status = 'released', held_until = NULL, reason = 'renamed', status_changed_at = ?2 WHERE kind = 'username' AND owner = ?1 AND status = 'active'")
+        .bind(o, now);
+  return [
+    hold,
+    db.prepare("UPDATE names SET owner = ?2 WHERE owner = ?1").bind(o, n),
+    claimNameStatement(db, { name: n, kind: "username", owner: n, at: now }),
+  ];
 }
 
 /** Account deletion: its usernames are held for GRACE, its links and codes retired for good. */
@@ -216,12 +244,7 @@ export class D1NameRegistryStorage implements NameRegistryStorage {
     const current = await this.activeUsername(o);
     if (!current) return { ok: false as const, reason: "no-account" as const };
     try {
-      await this.db.batch([
-        this.db
-          .prepare("UPDATE names SET status = 'held', held_until = ?2, reason = 'renamed', status_changed_at = ?3 WHERE id = ?1 AND status = 'active'")
-          .bind(current.id, now + holdMs, now),
-        claimNameStatement(this.db, { name: to.toLowerCase(), kind: "username", owner: o, at: now }),
-      ]);
+      await this.db.batch(renameOwnerStatements(this.db, o, to, now, holdMs));
       return { ok: true as const };
     } catch (e) {
       if (isUniqueViolation(e)) return { ok: false as const, reason: "taken" as const };
@@ -337,10 +360,18 @@ export class InMemoryNameRegistryStorage implements NameRegistryStorage {
     const o = owner.toLowerCase();
     const current = this.rows.filter((x) => x.kind === "username" && x.owner === o && x.status === "active").pop();
     if (!current) return { ok: false as const, reason: "no-account" as const };
-    // One transaction: the new name must be free (the current name, held, still blocks its own look-alikes).
-    if (this.blocking(voiciNameKey(to))) return { ok: false as const, reason: "taken" as const };
-    Object.assign(current, { status: "held", heldUntil: now + holdMs, reason: "renamed", statusChangedAt: now });
-    this.claim({ name: to.toLowerCase(), kind: "username", owner: o, at: now });
+    // One transaction (renameOwnerStatements): a held current name still blocks its own look-alikes, a released one not.
+    const n = to.toLowerCase();
+    const blocker = this.blocking(voiciNameKey(n));
+    if (blocker && !(holdMs <= 0 && blocker === current)) return { ok: false as const, reason: "taken" as const };
+    Object.assign(
+      current,
+      holdMs > 0
+        ? { status: "held", heldUntil: now + holdMs, reason: "renamed", statusChangedAt: now }
+        : { status: "released", heldUntil: null, reason: "renamed", statusChangedAt: now },
+    );
+    for (const r of this.rows) if (r.owner === o) r.owner = n;
+    this.claim({ name: n, kind: "username", owner: n, at: now });
     return { ok: true as const };
   }
 }

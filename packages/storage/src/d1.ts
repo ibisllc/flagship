@@ -18,6 +18,8 @@ import { D1PqTrustStorage, type PqTrustStorage } from "./pqTrust.js";
 import {
   accountGoneStatements,
   claimNameStatement,
+  NAME_HOLD_MS,
+  renameOwnerStatements,
   claimUsernameStatement,
   D1NameRegistryStorage,
   demoGoneStatements,
@@ -5688,6 +5690,10 @@ export class D1NameChangeStorage implements NameChangeStorage {
     for (const [t, c] of present) {
       stmts.push(this.db.prepare(`UPDATE ${t} SET ${c} = ?1 WHERE ${c} = ?2`).bind(newName, oldName));
     }
+    // The names registry (migration 0127) moves in the same batch: the old name is held (or released, for a name
+    // nobody but its owner saw) and the new one claimed under its look-alike key, so a taken or too-similar new name
+    // rolls the whole rename back.
+    if (tables.has("names")) stmts.push(...renameOwnerStatements(this.db, oldName, newName, rec.at, rec.oldNameHoldMs ?? NAME_HOLD_MS));
     stmts.push(this.db.prepare("DELETE FROM usernames WHERE username = ?1").bind(oldName));
     stmts.push(
       this.db
