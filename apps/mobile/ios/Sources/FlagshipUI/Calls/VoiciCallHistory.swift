@@ -36,7 +36,74 @@ public struct VoiciCallRecord: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// The device's own call records, per account, in the app's defaults. Capped; cleared when the account leaves the
+/// Where the records are kept. The phone's store is a file per account (`FileCallHistoryStore`); tests use defaults.
+public protocol VoiciCallHistoryStore: Sendable {
+    func read(_ username: String) -> Data?
+    func write(_ username: String, _ data: Data)
+    func delete(_ username: String)
+    func deleteAll()
+}
+
+/// One file per account in Application Support, `flagship-call-history/<username>.json`: protected until the first
+/// unlock since boot (a call answered with the call key is recorded while the account is locked, so it can't be sealed
+/// under the account), and excluded from backups, so the pages this account called and its visitors' pseudonyms never
+/// reach an iCloud or computer backup or a restored phone (docs/voici-locked-caller-names.md §8 D6). Records an older
+/// build kept in the app's defaults (which a backup carries) move here on first read.
+public struct FileCallHistoryStore: VoiciCallHistoryStore, @unchecked Sendable {
+    public static let standard = FileCallHistoryStore(
+        dir: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("flagship-call-history", isDirectory: true),
+        legacy: .standard)
+
+    let dir: URL
+    let legacy: UserDefaults?
+
+    static func legacyKey(_ username: String) -> String { "flagship.voici.callHistory.\(username.lowercased())" }
+
+    func file(_ username: String) -> URL { dir.appendingPathComponent("\(username.lowercased()).json") }
+
+    public func read(_ username: String) -> Data? {
+        if let d = try? Data(contentsOf: file(username)) { return d }
+        guard let legacy, let old = legacy.data(forKey: Self.legacyKey(username)) else { return nil }
+        write(username, old)
+        legacy.removeObject(forKey: Self.legacyKey(username))
+        return old
+    }
+
+    public func write(_ username: String, _ data: Data) {
+        var d = dir
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        var v = URLResourceValues()
+        v.isExcludedFromBackup = true
+        try? d.setResourceValues(v)
+        try? data.write(to: file(username), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    public func delete(_ username: String) {
+        try? FileManager.default.removeItem(at: file(username))
+        legacy?.removeObject(forKey: Self.legacyKey(username))
+    }
+
+    public func deleteAll() {
+        try? FileManager.default.removeItem(at: dir)
+        if let legacy {
+            for k in legacy.dictionaryRepresentation().keys where k.hasPrefix("flagship.voici.callHistory.") { legacy.removeObject(forKey: k) }
+        }
+    }
+}
+
+/// Records in a defaults suite (tests).
+public struct DefaultsCallHistoryStore: VoiciCallHistoryStore, @unchecked Sendable {
+    let defaults: UserDefaults
+    public init(_ defaults: UserDefaults) { self.defaults = defaults }
+    public func read(_ username: String) -> Data? { defaults.data(forKey: FileCallHistoryStore.legacyKey(username)) }
+    public func write(_ username: String, _ data: Data) { defaults.set(data, forKey: FileCallHistoryStore.legacyKey(username)) }
+    public func delete(_ username: String) { defaults.removeObject(forKey: FileCallHistoryStore.legacyKey(username)) }
+    public func deleteAll() {
+        for k in defaults.dictionaryRepresentation().keys where k.hasPrefix("flagship.voici.callHistory.") { defaults.removeObject(forKey: k) }
+    }
+}
+
+/// The device's own call records, per account (`VoiciCallHistoryStore`). Capped; cleared when the account leaves the
 /// device (MessagesStore.forgetLocal).
 @MainActor
 @Observable
@@ -46,18 +113,17 @@ public final class VoiciCallHistory {
 
     public private(set) var records: [VoiciCallRecord] = []
     @ObservationIgnored private var username: String?
-    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let store: VoiciCallHistoryStore
     /// A record was added or forgotten (the locked-names table follows the calls, docs/voici-locked-caller-names.md).
     @ObservationIgnored public var onChange: (() -> Void)?
 
-    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
-
-    nonisolated static func key(_ username: String) -> String { "flagship.voici.callHistory.\(username.lowercased())" }
+    public init(store: VoiciCallHistoryStore = FileCallHistoryStore.standard) { self.store = store }
+    public convenience init(defaults: UserDefaults) { self.init(store: DefaultsCallHistoryStore(defaults)) }
 
     public func configure(username: String?) {
         guard username?.lowercased() != self.username else { return }
         self.username = username?.lowercased()
-        records = username.flatMap { u in defaults.data(forKey: Self.key(u)).flatMap { try? JSONDecoder().decode([VoiciCallRecord].self, from: $0) } } ?? []
+        records = username.flatMap { u in store.read(u).flatMap { try? JSONDecoder().decode([VoiciCallRecord].self, from: $0) } } ?? []
     }
 
     /// Adds (or replaces, by direction and call id) one record.
@@ -67,7 +133,7 @@ public final class VoiciCallHistory {
         records.sort { $0.at > $1.at }
         if records.count > Self.maxRecords { records.removeLast(records.count - Self.maxRecords) }
         guard let u = username, let data = try? JSONEncoder().encode(records) else { return }
-        defaults.set(data, forKey: Self.key(u))
+        store.write(u, data)
         onChange?()
     }
 
@@ -76,7 +142,7 @@ public final class VoiciCallHistory {
         let before = records.count
         records.removeAll(where: drop)
         guard records.count != before, let u = username, let data = try? JSONEncoder().encode(records) else { return }
-        defaults.set(data, forKey: Self.key(u))
+        store.write(u, data)
         onChange?()
     }
 
@@ -97,12 +163,16 @@ public final class VoiciCallHistory {
     }
 
     /// The account left this device.
-    nonisolated static func forget(username: String?, allProfiles: Bool, defaults: UserDefaults = .standard) {
+    nonisolated static func forget(username: String?, allProfiles: Bool, store: VoiciCallHistoryStore = FileCallHistoryStore.standard) {
         if allProfiles {
-            for k in defaults.dictionaryRepresentation().keys where k.hasPrefix("flagship.voici.callHistory.") { defaults.removeObject(forKey: k) }
+            store.deleteAll()
         } else if let u = username, !u.isEmpty {
-            defaults.removeObject(forKey: key(u))
+            store.delete(u)
         }
+    }
+
+    nonisolated static func forget(username: String?, allProfiles: Bool, defaults: UserDefaults) {
+        forget(username: username, allProfiles: allProfiles, store: DefaultsCallHistoryStore(defaults))
     }
 
     func forgetInMemory() {

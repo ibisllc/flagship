@@ -508,6 +508,11 @@ Design and owner decisions D1-D7: `docs/voici-locked-caller-names.md` (all as re
 - **Where the rings come from**: iOS, this device's own calls to the page (each call to a call-back page attached the
   channel) minus a "Stop call-backs" made after the last one; Android, its call-back pages. A device that never called
   the page learns it at its first call to it, not before (no synced record of attached channels exists).
+- **D6, the Calls list** (iOS, follow-up commit): `VoiciCallHistory` moved out of the app's defaults (which an iCloud or
+  computer backup carries) into `Application Support/flagship-call-history/<username>.json`, excluded from backups and
+  protected until the first unlock (a call answered with the call key is recorded while the account is locked, so it
+  can't be sealed under the account); an older build's records move over on first read. Android's list was already in
+  the UMK-sealed Messages vault (`VoiciLocal.callHistory`), not plain preferences as the design read it.
 - **Tests**: protocol vectors (TS, Swift, Kotlin), storage (both adapters), control-plane (`voiciCallModes.test.ts`:
   stored key, exact push keys, refusals), iOS `VoiciLockedNamesTests`, Android `VoiciLockedNamesTest`. Not run on a
   device; the Android Keystore file store is not exercised by the JVM tests.
