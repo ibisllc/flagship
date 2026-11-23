@@ -125,6 +125,4 @@ export const NOT_RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string,
   ["marketplace_installs", "creator", "app ids embed the creator and are immutable"],
   ["app_purchases", "creator", "app ids embed the creator and are immutable"],
   ["app_sales", "creator_account", "app ids embed the creator and are immutable"],
-  // A salted hash of the username, computed by the client that owns the record.
-  ["user_identity_records", "username_hash", "salted hash — the owning client must re-key it"],
 ];

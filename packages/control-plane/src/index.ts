@@ -79,7 +79,6 @@ export * from "./freeAiCredits.js";
 export * from "./inferenceModels.js";
 export * from "./inferenceSettings.js";
 export * from "./modelCapabilities.js";
-export * from "./userIdentity.js";
 export * from "./inheritance.js";
 export * from "./podInventory.js";
 export * from "./boxUpdateRequired.js";

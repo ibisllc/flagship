@@ -287,8 +287,6 @@ import {
   handleFetchWrappedUmkWithToken,
   accountUnderStrict,
   handleUploadWebauthnRecovery,
-  handleGetUserIdentity,
-  handlePutUserIdentity,
   handleCreateDemoAccount,
   handleCleanupDemoAccount,
   handleGetDemoUser,
@@ -1056,8 +1054,6 @@ const ROUTE_RE = {
   RECOVERY_FETCH_GATED: /^\/api\/recovery\/by-username\/([^/]+)\/fetch$/,
   RECOVERY_CHALLENGE: /^\/api\/recovery\/by-username\/([^/]+)\/challenge$/,
   RECOVERY_BY_USERNAME: /^\/api\/recovery\/by-username\/([^/]+)$/,
-  USER_IDENTITY_PUT: /^\/api\/user-identity$/,
-  USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
   INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
   INTERNAL_REDIRECTION_LOOKUP: /^\/api\/internal\/redirection-lookup$/,
   INTERNAL_MARKETPLACE_SCAN_QUEUE: /^\/api\/internal\/marketplace-scan-queue$/,
@@ -2862,24 +2858,6 @@ export async function tryControlPlane(
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
-      ),
-    );
-  }
-
-  // ---- Encrypted user-identity mandate store (#71) ----
-  if (method === "POST" && ROUTE_RE.USER_IDENTITY_PUT.test(path)) {
-    return finishPlain(
-      await handlePutUserIdentity(
-        { storage: storage.userIdentity },
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "GET" && (m = path.match(ROUTE_RE.USER_IDENTITY_GET))) {
-    return finishPlain(
-      await handleGetUserIdentity(
-        { storage: storage.userIdentity },
-        decodeURIComponent(m[1]!),
       ),
     );
   }

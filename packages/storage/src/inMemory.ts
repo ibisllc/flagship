@@ -102,8 +102,6 @@ import type {
   Storage,
   TierStorage,
   TierSubscriptionRecord,
-  UserIdentityRecord,
-  UserIdentityRecordStorage,
   UsernameAliasRecord,
   UsernameAliasStorage,
   UsernameRecord,
@@ -1966,29 +1964,6 @@ export class InMemoryWebauthnRecoveryStorage implements WebauthnRecoveryStorage 
   }
 }
 
-export class InMemoryUserIdentityRecordStorage implements UserIdentityRecordStorage {
-  private byHash = new Map<string, UserIdentityRecord>();
-  private clone(r: UserIdentityRecord): UserIdentityRecord {
-    return {
-      ...r,
-      encryptedBlob: new Uint8Array(r.encryptedBlob),
-      authorizedSigners: [...r.authorizedSigners],
-    };
-  }
-  async putIfNewer(rec: UserIdentityRecord) {
-    const existing = this.byHash.get(rec.usernameHash);
-    if (existing && rec.blobVersion <= existing.blobVersion) {
-      return { stored: this.clone(existing), accepted: false };
-    }
-    this.byHash.set(rec.usernameHash, this.clone(rec));
-    return { stored: this.clone(rec), accepted: true };
-  }
-  async get(usernameHash: string) {
-    const r = this.byHash.get(usernameHash);
-    return r ? this.clone(r) : undefined;
-  }
-}
-
 export class InMemoryServerHealthStorage implements ServerHealthStorage {
   private rows = new Map<string, ServerHealthRecord>();
   async put(rec: ServerHealthRecord) {
@@ -2639,7 +2614,6 @@ export class InMemoryStorage implements Storage {
   llmPromo = new InMemoryLlmPromoStorage();
   tiers = new InMemoryTierStorage();
   entitlementRevocations = new InMemoryEntitlementRevocationStorage();
-  userIdentity = new InMemoryUserIdentityRecordStorage();
   userServiceAliases = new InMemoryUserServiceAliasStorage();
   voiciLinks = new InMemoryVoiciLinkStorage(this.names);
   voiciNames = new InMemoryVoiciNameStorage(this.names);

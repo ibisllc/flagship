@@ -822,7 +822,7 @@ describe("D1 ↔ InMemory parity — CAS / conditional surface", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
-  // entitlementRevocations + userIdentity — the monotonic putIfNewer CAS
+  // entitlementRevocations — the monotonic putIfNewer CAS
   // (strictly-greater accepted; equal/older rejected; loser returns the
   // UNCHANGED stored record).
   // ────────────────────────────────────────────────────────────────────
@@ -860,47 +860,6 @@ describe("D1 ↔ InMemory parity — CAS / conditional surface", () => {
         olderAccepted: false,
         finalCerts: '["a","b"]',
         finalIssued: 200,
-      });
-    });
-  });
-
-  describe("userIdentity (monotonic putIfNewer by blobVersion)", () => {
-    const mk = (hash: string, version: number, signers: string[]) => ({
-      usernameHash: hash,
-      encryptedBlob: new Uint8Array([version, version + 1]),
-      authorizedSigners: signers,
-      blobVersion: version,
-      signatureHex: `sig-${version}`,
-      updatedAt: version,
-    });
-
-    it("higher blobVersion accepted; equal/lower rejected, returning the stored record", async () => {
-      const r = await parityCase(async (s) => {
-        const v1 = await s.userIdentity.putIfNewer(mk("h", 1, ["s1"]));
-        const v2 = await s.userIdentity.putIfNewer(mk("h", 2, ["s1", "s2"]));
-        const equal = await s.userIdentity.putIfNewer(mk("h", 2, ["z"]));
-        const lower = await s.userIdentity.putIfNewer(mk("h", 1, ["q"]));
-        const final = await s.userIdentity.get("h");
-        return {
-          v1Accepted: v1.accepted,
-          v2Accepted: v2.accepted,
-          equalAccepted: equal.accepted,
-          equalSigners: equal.stored.authorizedSigners, // unchanged v2 signers
-          lowerAccepted: lower.accepted,
-          finalVersion: final?.blobVersion,
-          finalSigners: final?.authorizedSigners,
-          finalBlob: final ? Array.from(final.encryptedBlob) : null,
-        };
-      });
-      expect(r).toEqual({
-        v1Accepted: true,
-        v2Accepted: true,
-        equalAccepted: false,
-        equalSigners: ["s1", "s2"],
-        lowerAccepted: false,
-        finalVersion: 2,
-        finalSigners: ["s1", "s2"],
-        finalBlob: [2, 3],
       });
     });
   });
