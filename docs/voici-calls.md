@@ -622,8 +622,20 @@ superseded. What we promise instead:
 - **The page owner never learns who the caller is**, with or without call-back. The pseudonymous side always dials
   out; its bare name is never used.
 - **"Call anonymously"** leaves no ring-back channel.
-- **"Call and allow call-back"** tells the caller plainly: "<name> won't learn who you are. Flagship will know this
-  conversation can ring your phone." The ring-back uses today's push path on `.com`.
+- **"Call and allow call-back"** tells the caller plainly: "<name> won't learn who you are." with an info button
+  (owner wording 2026-11-23, no "voi.ci/" before the name). It opens **"About call-backs"**: the page sees only the
+  caller's visitor name (named when the client can derive it) or a nickname, never the account; Flagship keeps a note
+  linking the conversation to the account so it can ring the phone, and never sees messages or hears calls (voi.ci:
+  a browser's order names no account, so the site says the note rings that page while it is open and names no
+  account); the note goes on "Stop call-backs", a block, page removal or 90 days after the last call with call-back
+  on; calling without call-back (voi.ci: anonymously, where offered) leaves no note (the apps add "unless you allowed
+  it on an earlier call": calling without call-back doesn't stop an earlier channel). The ring-back uses today's push
+  path on `.com`.
+- **Call back from the Calls list (2026-11-23):** a caller who never wrote has no thread, so the iOS and Android Calls
+  rows offer "Call back" for an incoming call from a visitor (not anonymous) while ring-back is still allowed (not
+  refused by `.com` before, not blocked, calls on). The call's signed request carries the caller's thread key
+  (`threadStmt`); the call record and the opened missed call keep it, and `callVisitor` seals the ring hint to it when
+  there is no conversation.
 - **Policy, not cryptography:** no log of who called whom, the channel is deleted on "Stop call-backs" or when the
   conversation ends, and pushes carry no content.
 
@@ -742,7 +754,7 @@ Built and tested in TS, `.com`, flagship-web, voi.ci and the webapp; the native 
   day per page) and `voici-call-challenge`. An anonymous key's conversation can be blocked for 30 days (storage only;
   no owner route yet).
 - **The pop-up** on voi.ci ("Let <name> call you back?", "Call anonymously" / "Call and allow call-back", and "<name>
-  won't learn who you are. Flagship will know this conversation can ring your phone."). A callback page shows only the
+  won't learn who you are." with the "About call-backs" info button). A callback page shows only the
   second with the reason, and takes a signed-in call only once the conversation's channel is attached
   (`ring-back-required`). "Stop call-backs" in the voi.ci thread.
 - **Ring-back** (`flagship/voici-ring-back/v1` by the caller; `flagship/voici-ring/v1` by the owner with a hint sealed to
