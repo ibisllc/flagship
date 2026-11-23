@@ -181,6 +181,9 @@ export async function handleMessagesAttestation(
   }
 
   const verdict: IntegrityResult = evidence ? await deps.integrity.check(evidence, requestBytes, now) : { attested: false, reason: "none" };
+  // Why a device's evidence didn't check out: the reason only (never the key, P, the tag or the account), so a
+  // platform-wide failure is visible in the logs instead of every new account quietly landing in the unattested tier.
+  if (evidence && !verdict.attested) console.warn(`messages-attestation unattested: ${evidence.platform} ${verdict.reason.slice(0, 120)}`);
   const later = (p: Promise<unknown>) => (deps.waitUntil ? deps.waitUntil(p) : void p.catch(() => undefined));
 
   if (await isAccountBanned(db, account)) {
