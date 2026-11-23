@@ -32,21 +32,17 @@ import { readFile, rename } from "node:fs/promises";
 import {
   openInviteBundle,
   serviceInviteSecretHash,
-  signServiceInviteCreateQuery,
   signServiceInviteListQuery,
-  verifyAcceptServiceInvite,
   verifyCreateServiceInvite,
   verifyRedeemServiceInvite,
   verifyRemoveServiceAllow,
   verifyServiceVisitProof,
   verifySetServiceAccessMode,
-  type AcceptServiceInvite,
   type CreateServiceInvite,
   type InviteBundle,
   type Keypair,
   type RemoveServiceAllow,
   type ServiceAccessMode,
-  type ServiceInviteCreateQuery,
   type ServiceInviteListQuery,
   type ServiceVisitProof,
   type SetServiceAccessMode,
@@ -71,7 +67,7 @@ import {
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { Principal, PrincipalResolver } from "./accessPrincipals.js";
-import type { AccessEntry } from "./accessJournal.js";
+import { entryHash, type AccessEntry } from "./accessJournal.js";
 import type { AccessWrites } from "./accessWrites.js";
 import { serialFileWriter } from "./serialFileWriter.js";
 import { keepCorruptAside } from "./durableFile.js";
@@ -157,6 +153,14 @@ export interface MemberRoles {
    * the share, check a co-manager's invites against it.
    */
   coManagers: Record<string, CoManagerRecord>;
+  /**
+   * `<inviteId>/<aid>` → `<at>:<entryHash>` of every redemption this box let in
+   * through a capped invite (security report F4). The cap counts these, not the
+   * people still on the list: removing someone frees no slot for anyone else on
+   * that invite. When more redemptions than the cap reach the app's servers,
+   * each keeps the same first N by (`at`, entry hash), so their lists agree.
+   */
+  redeemed: Record<string, string>;
 }
 
 /** A co-manager as an app's journal knows them (the box that holds the share uses its share store). */
@@ -223,7 +227,7 @@ function higher(a: MemberRole | null, b: MemberRole | null): MemberRole | null {
 }
 
 function emptyRoles(): MemberRoles {
-  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {}, evidence: {}, withdrawn: {}, coManagers: {} };
+  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {}, evidence: {}, withdrawn: {}, coManagers: {}, redeemed: {} };
 }
 
 function readCoManagers(v: unknown, into: Record<string, CoManagerRecord>): void {
@@ -261,10 +265,12 @@ function readRoles(v: unknown): MemberRoles {
   strMap(r.ranks, out.ranks);
   strMap(r.evidence, out.evidence);
   strMap(r.withdrawn, out.withdrawn);
+  strMap(r.redeemed, out.redeemed);
   readCoManagers(r.coManagers, out.coManagers);
   for (const [k, v] of Object.entries(out.creators)) if (!/^[0-9a-f]{64}$/.test(v)) delete out.creators[k];
   for (const [k, v] of Object.entries(out.evidence)) if (!/^[0-9a-f]{128}:flagship\/app-rank\/v1\|/.test(v) || v.length > 4400) delete out.evidence[k];
   for (const [k, v] of Object.entries(out.withdrawn)) if (!/^\d+:[0-9a-f]{128}$/.test(v)) delete out.withdrawn[k];
+  for (const [k, v] of Object.entries(out.redeemed)) if (!/^[^/]+\/[0-9a-f]{64}$/.test(k) || !/^\d+:[0-9a-f]{64}$/.test(v)) delete out.redeemed[k];
   for (const [k, v] of Object.entries(out.ranks)) {
     if (!/^(device:[0-9a-f]{64}|share:[0-9a-f]{32})$/.test(k) || accountRank(v) === null) delete out.ranks[k];
   }
@@ -285,6 +291,7 @@ function copyRoles(r: MemberRoles): MemberRoles {
     ranks: { ...r.ranks },
     evidence: { ...r.evidence },
     withdrawn: { ...r.withdrawn },
+    redeemed: { ...r.redeemed },
     coManagers: Object.fromEntries(Object.entries(r.coManagers).map(([k, v]) => [k, { ...v }])),
   };
 }
@@ -721,6 +728,60 @@ export class ServiceAccessStore {
     return !already;
   }
 
+  /**
+   * Let `aid` in through a capped invite as one redemption (`at`, `hash` of its
+   * join entry), or say why not (security report F4). The check and the add
+   * are one step. People bound before the ledger existed count first and are
+   * never displaced. When the invite is full, a redemption that sorts before
+   * the last one let in takes its place (that person loses this grant), so
+   * every server keeps the same first `cap`; anything later is refused, and
+   * stays refused when someone is removed.
+   */
+  private async ts_admitRedemption(
+    serviceRef: string,
+    inviteId: string,
+    aidHex: string,
+    at: number,
+    hash: string,
+    cap: number,
+  ): Promise<"admitted" | "full" | "list-full"> {
+    const e = this.entry(serviceRef);
+    const aid = aidHex.toLowerCase();
+    const key = `${inviteId}/${aid}`;
+    const mine = `${at}:${hash.toLowerCase()}`;
+    if (!e.allow.includes(aid) && e.allow.length >= ALLOW_LIST_CAP) return "list-full";
+    if (!(key in e.roles.redeemed)) {
+      const prefix = `${inviteId}/`;
+      const ledger = Object.entries(e.roles.redeemed)
+        .filter(([k]) => k.startsWith(prefix))
+        .map(([k, v]) => ({ aid: k.slice(prefix.length), ...splitRedemption(v) }));
+      const legacy = (e.groups[inviteId] ?? []).filter((x) => !(`${prefix}${x}` in e.roles.redeemed)).length;
+      if (ledger.length + legacy >= cap) {
+        const worst = ledger.reduce<(typeof ledger)[number] | null>((w, x) => (w === null || laterRedemption(x, w) ? x : w), null);
+        if (worst === null || !laterRedemption(worst, { at, hash: hash.toLowerCase() })) return "full";
+        delete e.roles.redeemed[`${prefix}${worst.aid}`];
+        this.dropGrant(e, inviteId, worst.aid);
+      }
+      e.roles.redeemed[key] = mine;
+    }
+    await this.ts_addAllowed(serviceRef, aid, inviteId);
+    await this.persist();
+    return e.allow.includes(aid) ? "admitted" : "list-full";
+  }
+
+  /** Drop one person's grant through one invite; someone left with no grant stops being a member. */
+  private dropGrant(e: ServiceAccessEntry, inviteId: string, aid: string): void {
+    const g = e.groups[inviteId];
+    if (g) {
+      e.groups[inviteId] = g.filter((x) => x !== aid);
+      if (e.groups[inviteId]!.length === 0) delete e.groups[inviteId];
+    }
+    delete e.roles.grants[`${inviteId}/${aid}`];
+    if (this.grantsOf(e, aid).length > 0) return;
+    e.allow = e.allow.filter((x) => x !== aid);
+    delete e.roles.aids[aid];
+  }
+
   /** Remove an AID from a service's allow-list (idempotent). Also drops it from any group. */
   private async ts_removeAllowed(serviceRef: string, visitorAidHex: string): Promise<boolean> {
     const e = this.byService.get(serviceRef);
@@ -1104,6 +1165,12 @@ export class ServiceAccessStore {
     return this.write("addAllowed", { serviceRef, aid: visitorAidHex, inviteId }, () => this.ts_addAllowed(serviceRef, visitorAidHex, inviteId)) as Promise<boolean>;
   }
 
+  async admitRedemption(serviceRef: string, inviteId: string, aidHex: string, at: number, hash: string, cap: number): Promise<"admitted" | "full" | "list-full"> {
+    return this.write("admitRedemption", { serviceRef, inviteId, aid: aidHex, at, hash, cap }, () =>
+      this.ts_admitRedemption(serviceRef, inviteId, aidHex, at, hash, cap),
+    ) as Promise<"admitted" | "full" | "list-full">;
+  }
+
   async removeAllowed(serviceRef: string, visitorAidHex: string): Promise<boolean> {
     return this.write("removeAllowed", { serviceRef, aid: visitorAidHex }, () => this.ts_removeAllowed(serviceRef, visitorAidHex)) as Promise<boolean>;
   }
@@ -1164,6 +1231,16 @@ export class ServiceAccessStore {
     }
     return JSON.stringify(out);
   }
+}
+
+function splitRedemption(v: string): { at: number; hash: string } {
+  const i = v.indexOf(":");
+  return { at: Number(v.slice(0, i)), hash: v.slice(i + 1) };
+}
+
+/** Whether redemption `a` sorts after `b`: by time, then entry hash. */
+function laterRedemption(a: { at: number; hash: string }, b: { at: number; hash: string }): boolean {
+  return a.at !== b.at ? a.at > b.at : a.hash > b.hash;
 }
 
 /** The state file's rows; anything but a JSON object is unreadable. */
@@ -1416,6 +1493,8 @@ export interface ServiceAccessHttpOptions {
    * handed to the app's other servers. Box-internal changes aren't reported.
    */
   onEntry?: (serviceRef: string, entry: AccessEntry) => void;
+  /** Someone new joined an app through an invite redeemed on this box (an Activity entry for the owner). */
+  onJoined?: (serviceRef: string) => void;
   /** Permissions a restore held back (N09): approved here, with an admin's signature over the draft. */
   drafts?: RestoredAccessDrafts | null;
   store: ServiceAccessStore;
@@ -1431,6 +1510,8 @@ export interface ServiceAccessHttpOptions {
    * owner key). These three are what that fetch needs. When ANY is absent the
    * accept path falls back to accepting a client-supplied `{create, createSig}`
    * in the body (back-compat / no-AID transition), so it never hard-breaks.
+   * Unused while that finalize is refused (security report F4); kept for an
+   * author-signed finalize.
    */
   username?: string;
   /** The box's own FQDN — the server record `.com` resolves the STK against. */
@@ -1615,6 +1696,8 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
   const fetchImpl = opts.fetchImpl ?? fetch;
   const establishNonces = new EstablishNonceStore();
   const rateLimiter = new RateLimiter(opts.rateLimitPerMin ?? 30);
+  /** The join running per invite (`<serviceRef>\n<inviteId>`): bindJoin's check and add are one step. */
+  const inviteLocks = new Map<string, Promise<void>>();
 
   const pinnedRoot = opts.adminRootPub && opts.adminRootPub.length === 32 ? opts.adminRootPub : undefined;
   /** An admin-only order: the admin root (or an admin device) on a pinned box, the owner key otherwise. */
@@ -1980,21 +2063,34 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (typeof comBody.boundAID !== "string" || !/^[0-9a-f]{64}$/i.test(comBody.boundAID)) {
       return bad(502, "incomplete upstream response");
     }
-    // The bound AID is the authority's answer; add IT (not the request's claim).
-    // For a GROUP invite (create.maxRedemptions present) bind under the inviteId
-    // so a group revoke can prune the whole set.
-    const boundAID = comBody.boundAID.toLowerCase();
-    const bound = await bindJoin(verified, boundAID);
+    // `.com` must say it bound THIS visitor (security report F4 d: an older
+    // `.com` named the invite's first binder, and the box then handed a later
+    // redeemer a session as that person). Anything else binds nobody.
+    if (comBody.boundAID.toLowerCase() !== visitorAID) return bad(502, "upstream bound another account");
+    if (verified.expiresAt !== undefined && body.redeemedAt > verified.expiresAt) return bad(410, "invite expired");
+    const join: AccessEntry = {
+      kind: "join",
+      create: comBody.create as Record<string, unknown>,
+      createSig: String(comBody.createSig).toLowerCase(),
+      redeem: { secretHash, visitorAID, redeemedAt: body.redeemedAt, aidSig: body.aidSig.toLowerCase() },
+    };
+    // Every invite binds under its inviteId so a revoke can prune the set; a
+    // capped one counts this redemption on this box too (bindJoin).
+    const wasIn = opts.store.grants(verified.serviceRef, visitorAID).includes(verified.inviteId);
+    const bound = await bindJoin(verified, visitorAID, { at: body.redeemedAt, hash: entryHash(join) });
     if (bound) return bound;
-    if (boundAID === visitorAID) {
-      opts.onEntry?.(verified.serviceRef, {
-        kind: "join",
-        create: comBody.create as Record<string, unknown>,
-        createSig: String(comBody.createSig).toLowerCase(),
-        redeem: { secretHash, visitorAID, redeemedAt: body.redeemedAt, aidSig: body.aidSig.toLowerCase() },
-      });
+    opts.onEntry?.(verified.serviceRef, join);
+    // The owner hears of a new person on the server they joined through (the
+    // app's other servers take the join quietly, so one join is one entry).
+    if (!wasIn) {
+      try {
+        opts.onJoined?.(verified.serviceRef);
+      } catch {
+        /* a notice never stops a join */
+      }
     }
-    // Hand the redeemer a browser cookie bound to their AID + this service.
+    // Hand the redeemer a browser cookie bound to their own AID + this service.
+    const boundAID = visitorAID;
     const responseHeaders: Record<string, string> = { ...H };
     if (opts.sessions) {
       const token = await opts.sessions.issue(verified.serviceRef, boundAID, now(), sessionTtlMs, {
@@ -2017,137 +2113,18 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
   }
 
   /**
-   * POST /api/service-access/accept — MANUAL-approve finalize (v2 Phase 3 tier 2).
-   * The AUTHOR submits only the friend's AID-signed `AcceptServiceInvite`
-   * (`{accept, acceptSig}`); the box FETCHES the owner's signed create from `.com`
-   * by the acceptance's inviteId (STK-signed — box-as-authority, ANY-DEVICE
-   * finalize), verifies the owner's create authority AND the friend's contact-AID
-   * sig, confirms the create matches the acceptance's inviteId + serviceRef, then
-   * binds the contact AID. The author finalizes (so a link-thief who never reached
-   * the author's friend-channel can't produce an acceptance the author submits) —
-   * and can do so from ANY of their devices (no local create cache).
-   *
-   * Back-compat: when the box has no STK-fetch identity wired, OR the fetch can't
-   * resolve the create (an in-flight v1 row with no stored signature), it falls
-   * back to a client-supplied `{create, createSig}` in the body — so a transitional
-   * client that still carries the create never hard-fails.
+   * POST /api/service-access/accept — the MANUAL-approve finalize, refused on
+   * every request (security report F4 e): it took the friend's acceptance from
+   * anyone, so a link holder could add any number of keys, past the invite's
+   * cap, expiry and use. A finalize signed by the invite's author is future
+   * work (docs/service-access-gating.md "Manual approval").
    */
-  async function handleAccept(req: HttpRequest): Promise<HttpResponse> {
-    let body: {
-      accept?: { inviteId?: unknown; serviceRef?: unknown; contactAID?: unknown; acceptedAt?: unknown };
-      acceptSig?: unknown;
-      create?: unknown;
-      createSig?: unknown;
+  async function handleAccept(_req: HttpRequest): Promise<HttpResponse> {
+    return {
+      status: 410,
+      headers: H,
+      body: JSON.stringify({ error: "manual approval is unavailable", code: "manual-approval-unavailable" }),
     };
-    try {
-      body = JSON.parse(req.body.toString("utf8"));
-    } catch {
-      return bad(400, "invalid json");
-    }
-    const a = body.accept;
-    if (
-      !a ||
-      typeof a.inviteId !== "string" ||
-      typeof a.serviceRef !== "string" ||
-      typeof a.contactAID !== "string" ||
-      !/^[0-9a-f]{64}$/i.test(a.contactAID) ||
-      typeof a.acceptedAt !== "number" ||
-      typeof body.acceptSig !== "string" ||
-      !/^[0-9a-f]{128}$/i.test(body.acceptSig)
-    ) {
-      return bad(400, "malformed acceptance");
-    }
-
-    // Obtain the owner's SIGNED create. Primary path: fetch it from `.com` by the
-    // acceptance's inviteId (the author submits NO create). Fallback: a
-    // body-supplied create (a transitional client / a row `.com` can't serve).
-    const fetched = await fetchComCreate(a.inviteId);
-    const fromFetch = fetched ? await verifyComCreate(fetched.create, fetched.createSig, undefined, fetched.creatorPubHex) : null;
-    const verified = fromFetch
-      ? { ...fromFetch, fromFetched: true }
-      : await verifyComCreate(body.create, body.createSig, undefined, undefined).then((v) => (v ? { ...v, fromFetched: false } : null));
-    if (!verified) return bad(403, "owner create signature did not verify");
-    if (verified.inviteId !== a.inviteId || verified.serviceRef !== a.serviceRef) {
-      return bad(403, "acceptance does not match the create");
-    }
-    if (!opts.serviceInstalled(verified.serviceRef)) {
-      return bad(409, "invite is not for a service hosted on this box");
-    }
-    // Verify the FRIEND's contact-AID signature over the acceptance.
-    const accept: AcceptServiceInvite = {
-      inviteId: a.inviteId,
-      serviceRef: a.serviceRef,
-      contactAID: hexToBytes(a.contactAID),
-      acceptedAt: a.acceptedAt,
-    };
-    let acceptOk = false;
-    try {
-      acceptOk = verifyAcceptServiceInvite(accept, hexToBytes(body.acceptSig), hexToBytes(a.contactAID));
-    } catch {
-      acceptOk = false;
-    }
-    if (!acceptOk) return bad(403, "invalid acceptance signature");
-
-    const contactAID = a.contactAID.toLowerCase();
-    // Always bind under the inviteId so a later (group or single) revoke can find
-    // + prune this acceptance.
-    const bound = await bindJoin(verified, contactAID);
-    if (bound) return bound;
-    const usedCreate = fetched && verified.fromFetched ? fetched : { create: body.create, createSig: body.createSig };
-    opts.onEntry?.(verified.serviceRef, {
-      kind: "accept",
-      create: usedCreate.create as Record<string, unknown>,
-      createSig: String(usedCreate.createSig).toLowerCase(),
-      accept: { inviteId: a.inviteId, serviceRef: a.serviceRef, contactAID, acceptedAt: a.acceptedAt },
-      acceptSig: body.acceptSig.toLowerCase(),
-    });
-    return jsonResponse(200, { bound: true, serviceRef: verified.serviceRef, boundAID: contactAID });
-  }
-
-  /**
-   * Fetch the owner's signed create from `.com` by inviteId, STK-signing the
-   * query (box-as-authority any-device finalize). Returns the raw `{create,
-   * createSig}` the caller re-verifies, or null when the box has no STK-fetch
-   * identity wired or `.com` can't serve it. Best-effort: any failure (no
-   * identity / network / 404 / malformed) returns null so the body fallback runs.
-   */
-  async function fetchComCreate(
-    inviteId: string,
-  ): Promise<{ create: unknown; createSig: unknown; creatorPubHex?: unknown } | null> {
-    if (!opts.username || !opts.serverDomain || !opts.stk) return null;
-    if (typeof inviteId !== "string" || !/^[0-9a-f]+$/i.test(inviteId) || inviteId.length % 2 !== 0) {
-      return null;
-    }
-    const query: ServiceInviteCreateQuery = {
-      username: opts.username,
-      inviteId: inviteId.toLowerCase(),
-      serverDomain: opts.serverDomain,
-      issuedAt: now(),
-    };
-    const sig = bytesToHex(signServiceInviteCreateQuery(query, opts.stk));
-    const params = new URLSearchParams({
-      serverDomain: query.serverDomain,
-      issuedAt: String(query.issuedAt),
-      sig,
-    });
-    let res: Response;
-    try {
-      res = await fetchImpl(
-        `${opts.controlPlaneBaseUrl}/api/users/${encodeURIComponent(opts.username)}/service-invites/${encodeURIComponent(query.inviteId)}/create?${params.toString()}`,
-        { method: "GET" } as RequestInit,
-      );
-    } catch {
-      return null;
-    }
-    if (!res.ok) return null;
-    let json: { create?: unknown; createSig?: unknown; creatorPubHex?: unknown };
-    try {
-      json = (await res.json()) as typeof json;
-    } catch {
-      return null;
-    }
-    if (!json.create || typeof json.createSig !== "string") return null;
-    return { create: json.create, createSig: json.createSig, creatorPubHex: json.creatorPubHex };
   }
 
   /**
@@ -2245,20 +2222,43 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
    * join is never briefly uncapped. Null when bound.
    */
   async function bindJoin(
-    v: { serviceRef: string; inviteId: string; tier: InviteTier; creatorPub: string },
+    v: { serviceRef: string; inviteId: string; tier: InviteTier; creatorPub: string; maxRedemptions?: number },
     aid: string,
+    redemption: { at: number; hash: string },
   ): Promise<HttpResponse | null> {
-    if (withdrawnHere(v.serviceRef, v.inviteId, v.creatorPub)) return bad(403, "invite revoked");
-    const refused = creatorRefusal(v);
-    if (refused) return refused;
-    await opts.store.setInviteTier(v.serviceRef, v.inviteId, v.tier);
-    await opts.store.setInviteCreator(v.serviceRef, v.inviteId, v.creatorPub);
-    // Every invite is a grant (a personal one holds one person), so revoking it
-    // or giving it a role reaches exactly the people who joined through it.
-    const added = await opts.store.addAllowed(v.serviceRef, aid, v.inviteId);
-    if (!added && !opts.store.isAllowed(v.serviceRef, aid)) return bad(409, "service allow-list is full");
-    return null;
+    // One join per invite at a time, so two can't both pass the cap (F4 b).
+    const lockKey = `${v.serviceRef}\n${v.inviteId}`;
+    const prev = inviteLocks.get(lockKey) ?? Promise.resolve();
+    let release!: () => void;
+    const mine = new Promise<void>((r) => (release = r));
+    const tail = prev.then(() => mine);
+    inviteLocks.set(lockKey, tail);
+    await prev;
+    try {
+      if (withdrawnHere(v.serviceRef, v.inviteId, v.creatorPub)) return bad(403, "invite revoked");
+      const refused = creatorRefusal(v);
+      if (refused) return refused;
+      await opts.store.setInviteTier(v.serviceRef, v.inviteId, v.tier);
+      await opts.store.setInviteCreator(v.serviceRef, v.inviteId, v.creatorPub);
+      // Every invite is a grant (a personal one holds one person), so revoking it
+      // or giving it a role reaches exactly the people who joined through it.
+      // A personal invite admits one redemption, a group link its cap (0: no cap).
+      const cap = v.maxRedemptions === undefined ? 1 : v.maxRedemptions;
+      if (cap > 0) {
+        const r = await opts.store.admitRedemption(v.serviceRef, v.inviteId, aid, redemption.at, redemption.hash, cap);
+        if (r === "full") return bad(409, "invite is full");
+        if (r === "list-full") return bad(409, "service allow-list is full");
+        return null;
+      }
+      const added = await opts.store.addAllowed(v.serviceRef, aid, v.inviteId);
+      if (!added && !opts.store.isAllowed(v.serviceRef, aid)) return bad(409, "service allow-list is full");
+      return null;
+    } finally {
+      release();
+      if (inviteLocks.get(lockKey) === tail) inviteLocks.delete(lockKey);
+    }
   }
+
 
   /** Whether a withdraw this box holds for the invite verifies (an admin's, or its creator's). */
   function withdrawnHere(serviceRef: string, inviteId: string, creatorPub: string): boolean {
@@ -2358,27 +2358,12 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
         if (!verifyServiceVisitRedeem(d.secretHash.toLowerCase(), aid, d.redeemedAt, d.aidSig)) return "refused";
         const v = await peerCreate(e.create, e.createSig, d.secretHash.toLowerCase());
         if (!v || v.serviceRef !== serviceRef || !opts.serviceInstalled(serviceRef)) return "refused";
-        return joinFromPeer(v, aid, d.redeemedAt);
+        return joinFromPeer(v, aid, d.redeemedAt, entryHash(e));
       }
-      case "accept": {
-        const a = e.accept;
-        const aid = a.contactAID.toLowerCase();
-        const v = await peerCreate(e.create, e.createSig, undefined);
-        if (!v || v.inviteId !== a.inviteId || v.serviceRef !== serviceRef || a.serviceRef !== serviceRef) return "refused";
-        if (!opts.serviceInstalled(serviceRef)) return "refused";
-        let ok = false;
-        try {
-          ok = verifyAcceptServiceInvite(
-            { inviteId: a.inviteId, serviceRef: a.serviceRef, contactAID: hexToBytes(aid), acceptedAt: a.acceptedAt },
-            hexToBytes(e.acceptSig),
-            hexToBytes(aid),
-          );
-        } catch {
-          ok = false;
-        }
-        if (!ok) return "refused";
-        return joinFromPeer(v, aid, a.acceptedAt);
-      }
+      case "accept":
+        // A manual-approve acceptance carried no author proof (security report
+        // F4 e): no server lets one in any more, whichever server took it.
+        return "refused";
     }
   }
 
@@ -2395,22 +2380,22 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
 
   /**
    * A join another server accepted (`.com` arbitrated it there): this box
-   * re-checks the create, the cap (a personal invite binds one person), the
-   * expiry, a withdraw it holds, the creator and a later removal of the person.
+   * re-checks the create, the expiry, a later removal of the person, a
+   * withdraw it holds, the creator and the cap. The cap is decided the same
+   * way on every server (the first N redemptions by time, then entry hash), so
+   * a refused join stays refused when a slot is freed by a removal.
    */
   async function joinFromPeer(
     v: { serviceRef: string; inviteId: string; tier: InviteTier; creatorPub: string; maxRedemptions?: number; expiresAt?: number },
     aid: string,
     at: number,
+    hash: string,
   ): Promise<EntryResult> {
     const already = opts.store.grants(v.serviceRef, aid).includes(v.inviteId);
     if (already) return "unchanged";
     if (v.expiresAt !== undefined && at > v.expiresAt) return "refused";
-    const bound = opts.store.boundThrough(v.serviceRef, v.inviteId);
-    const cap = v.maxRedemptions === undefined ? 1 : v.maxRedemptions;
-    if (cap > 0 && bound >= cap) return "refused";
     if (opts.store.removedAfter(v.serviceRef, aid, at)) return "stale";
-    return (await bindJoin(v, aid)) ? "refused" : "applied";
+    return (await bindJoin(v, aid, { at, hash })) ? "refused" : "applied";
   }
 
   /**

@@ -7,7 +7,7 @@
 use crate::access_entry::{
     EntryTrust, InviteTier, Verdict, Verified, VerifiedCreate, verify_entry,
 };
-use crate::access_journal::AccessEntry;
+use crate::access_journal::{AccessEntry, entry_hash};
 use crate::people::{People, Person, Tier};
 use crate::store::{CoManagerRecord, RoleTarget, Store, ladder_role};
 use flagship_crypto::access_orders::{
@@ -281,6 +281,7 @@ fn tier_str(t: InviteTier) -> &'static str {
 }
 
 /// `joinFromPeer` + `bindJoin`.
+#[allow(clippy::too_many_arguments)]
 fn join(
     store: &mut Store,
     people: &People,
@@ -289,15 +290,12 @@ fn join(
     c: &VerifiedCreate,
     aid: &str,
     at: u64,
+    hash: &str,
 ) -> EntryResult {
     if store.grants(r, aid).contains(&c.invite_id) {
         return EntryResult::Unchanged;
     }
     if c.expires_at.is_some_and(|e| at > e) {
-        return EntryResult::Refused;
-    }
-    let cap = c.max_redemptions.unwrap_or(1);
-    if cap > 0 && u64::try_from(store.bound_through(r, &c.invite_id)).unwrap_or(u64::MAX) >= cap {
         return EntryResult::Refused;
     }
     if store.removed_after(r, aid, at) {
@@ -340,6 +338,14 @@ fn join(
     }
     store.set_invite_tier(r, &c.invite_id, tier_str(c.tier));
     store.set_invite_creator(r, &c.invite_id, &c.creator_pub);
+    // A personal invite admits one redemption, a group link its cap (0: no cap); the same first N on every server.
+    let cap = c.max_redemptions.unwrap_or(1);
+    if cap > 0 {
+        return match store.admit_redemption(r, &c.invite_id, aid, at, hash, cap) {
+            "admitted" => EntryResult::Applied,
+            _ => EntryResult::Refused,
+        };
+    }
     let added = store.add_allowed(r, aid, Some(&c.invite_id));
     let view = View {
         store: &*store,
@@ -525,12 +531,16 @@ pub fn apply_entry(
                 create,
                 visitor_aid,
                 redeemed_at,
-            } => join(store, people, f, r, &create, &visitor_aid, redeemed_at),
-            Verified::Accept {
-                create,
-                contact_aid,
-                accepted_at,
-            } => join(store, people, f, r, &create, &contact_aid, accepted_at),
+            } => join(
+                store,
+                people,
+                f,
+                r,
+                &create,
+                &visitor_aid,
+                redeemed_at,
+                &entry_hash(entry),
+            ),
             Verified::Share {
                 share_id,
                 member_pub,

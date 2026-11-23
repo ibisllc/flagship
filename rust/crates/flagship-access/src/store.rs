@@ -77,6 +77,8 @@ pub struct Roles {
     pub evidence: BTreeMap<String, String>,
     pub withdrawn: BTreeMap<String, String>,
     pub co_managers: BTreeMap<String, CoManagerRecord>,
+    /// `<inviteId>/<aid>` → `<at>:<entryHash>`: the redemptions let in through a capped invite (security report F4).
+    pub redeemed: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -116,6 +118,24 @@ impl Row {
     fn remove_group(&mut self, id: &str) -> Option<Vec<String>> {
         let i = self.groups.iter().position(|(g, _)| g == id)?;
         Some(self.groups.remove(i).1)
+    }
+
+    /// Drop one person's grant through one invite; someone left with no grant stops being a member.
+    fn drop_grant(&mut self, invite_id: &str, aid: &str) {
+        if let Some(i) = self.groups.iter().position(|(g, _)| g == invite_id) {
+            #[allow(clippy::indexing_slicing)]
+            self.groups[i].1.retain(|x| x != aid);
+            #[allow(clippy::indexing_slicing)]
+            if self.groups[i].1.is_empty() {
+                self.groups.remove(i);
+            }
+        }
+        self.roles.grants.remove(&format!("{invite_id}/{aid}"));
+        if !self.grants_of(aid).is_empty() {
+            return;
+        }
+        self.allow.retain(|x| x != aid);
+        self.roles.aids.remove(aid);
     }
 
     /// The invites a member joined through (their grants), in the groups' order.
@@ -160,6 +180,7 @@ fn read_roles(v: Option<&Value>) -> Roles {
         ranks: str_map(r.get("ranks")),
         evidence: str_map(r.get("evidence")),
         withdrawn: str_map(r.get("withdrawn")),
+        redeemed: str_map(r.get("redeemed")),
         ..Roles::default()
     };
     if let Some(m) = r.get("coManagers").and_then(Value::as_object) {
@@ -215,6 +236,11 @@ fn read_roles(v: Option<&Value>) -> Roles {
         v.split_once(':').is_some_and(|(n, s)| {
             !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && lower_hex(s, 128)
         })
+    });
+    out.redeemed.retain(|k, v| {
+        k.split_once('/')
+            .is_some_and(|(id, aid)| !id.is_empty() && lower_hex(aid, 64))
+            && split_redemption(v).is_some()
     });
     out.ranks.retain(|k, v| {
         let key_ok = k.strip_prefix("device:").is_some_and(|h| lower_hex(h, 64))
@@ -274,11 +300,21 @@ fn roles_json(r: &Roles) -> Value {
         "ranks": m(&r.ranks),
         "evidence": m(&r.evidence),
         "withdrawn": m(&r.withdrawn),
+        "redeemed": m(&r.redeemed),
         "coManagers": Value::Object(r.co_managers.iter().map(|(k, c)| (k.clone(), json!({
             "pub": c.pub_hex, "level": c.level, "label": c.label, "serverDomain": c.server_domain,
             "issuedAt": Value::Number(c.issued_at.clone()), "ended": c.ended,
         }))).collect()),
     })
+}
+
+/// `<at>:<entryHash>` of a kept redemption.
+fn split_redemption(v: &str) -> Option<(u64, &str)> {
+    let (n, h) = v.split_once(':')?;
+    if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) || !lower_hex(h, 64) {
+        return None;
+    }
+    Some((n.parse().ok()?, h))
 }
 
 /// Why the state file could not be read: the caller refuses the change (fail closed), never writes over it.
@@ -458,6 +494,62 @@ impl Store {
             }
         }
         !already
+    }
+
+    /// `admitRedemption`: let `aid` in through a capped invite as one redemption, the same first `cap` by
+    /// (`at`, entry hash) on every server (security report F4). `admitted`, `full` or `list-full`.
+    pub fn admit_redemption(
+        &mut self,
+        r: &str,
+        invite_id: &str,
+        aid: &str,
+        at: u64,
+        hash: &str,
+        cap: u64,
+    ) -> &'static str {
+        let aid = aid.to_lowercase();
+        let hash = hash.to_lowercase();
+        let e = self.entry(r);
+        if !e.allow.contains(&aid) && e.allow.len() >= ALLOW_LIST_CAP {
+            return "list-full";
+        }
+        let prefix = format!("{invite_id}/");
+        let key = format!("{prefix}{aid}");
+        if !e.roles.redeemed.contains_key(&key) {
+            let ledger: Vec<(String, u64, String)> = e
+                .roles
+                .redeemed
+                .iter()
+                .filter_map(|(k, v)| {
+                    let who = k.strip_prefix(&prefix)?;
+                    let (t, h) = split_redemption(v)?;
+                    Some((who.to_owned(), t, h.to_owned()))
+                })
+                .collect();
+            let legacy = e.group(invite_id).map_or(0, |g| {
+                g.iter()
+                    .filter(|x| !e.roles.redeemed.contains_key(&format!("{prefix}{x}")))
+                    .count()
+            });
+            if u64::try_from(ledger.len().saturating_add(legacy)).unwrap_or(u64::MAX) >= cap {
+                let worst = ledger.iter().max_by(|a, b| (a.1, &a.2).cmp(&(b.1, &b.2)));
+                let Some((w_aid, w_at, w_hash)) = worst.cloned() else {
+                    return "full";
+                };
+                if (w_at, w_hash.as_str()) <= (at, hash.as_str()) {
+                    return "full";
+                }
+                e.roles.redeemed.remove(&format!("{prefix}{w_aid}"));
+                e.drop_grant(invite_id, &w_aid);
+            }
+            e.roles.redeemed.insert(key, format!("{at}:{hash}"));
+        }
+        self.add_allowed(r, &aid, Some(invite_id));
+        if self.row(r).is_some_and(|e| e.allow.contains(&aid)) {
+            "admitted"
+        } else {
+            "list-full"
+        }
     }
 
     pub fn remove_allowed(&mut self, r: &str, aid: &str) -> bool {

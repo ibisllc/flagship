@@ -442,7 +442,7 @@ describe("invites: admins at any rank, manager-class devices at Member", () => {
     const b = await box();
     expect((await b.rank(`device:${hex(laptop.publicKey)}`, "member", adminRoot)).status).toBe(200);
     expect((await b.redeem(laptop)).res.status).toBe(403);
-    expect((await b.accept(laptop)).res.status).toBe(403);
+    expect((await b.accept(laptop)).res.status).toBe(410);
     expect((await b.rank(`device:${hex(tablet.publicKey)}`, "refused", adminRoot)).status).toBe(200);
     expect((await b.redeem(tablet)).res.status).toBe(403);
     expect(b.store.isAllowed(SERVICE, FRIEND)).toBe(false);
@@ -455,12 +455,13 @@ describe("invites: admins at any rank, manager-class devices at Member", () => {
     expect(b.store.isAllowed(SERVICE, FRIEND)).toBe(true);
   });
 
-  it("a manual-approve acceptance of a non-admin's invite is capped too", async () => {
+  it("a manual-approve acceptance is refused whoever created the invite (security report F4)", async () => {
     const b = await box({ defaultRole: "master" });
-    const { res, inviteId } = await b.accept(laptop);
-    expect(res.status).toBe(200);
-    expect(b.store.inviteTier(SERVICE, inviteId)).toBe("member");
-    expect(b.seen(FRIEND)?.role).toBe("member");
+    for (const k of [laptop, adminRoot]) {
+      const { res } = await b.accept(k);
+      expect(res.status).toBe(410);
+    }
+    expect(b.store.isAllowed(SERVICE, FRIEND)).toBe(false);
   });
 
   it("a box with no admin root: any account key is the owner's authority", async () => {

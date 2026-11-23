@@ -5984,6 +5984,7 @@ async function wireOwnerHandlers(deps: {
     ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
     adminGrants: () => deviceBook.adminGrants(),
     onEntry: (ref, e) => deps.accessSyncRef.current?.record(ref, e),
+    onJoined: (ref) => deps.activityLog.note("app.member.joined", `Someone joined ${ref} through an invite.`, { target: ref }),
     store: accessStore,
     sessions: sessionStore,
     serviceInstalled: (ref) =>

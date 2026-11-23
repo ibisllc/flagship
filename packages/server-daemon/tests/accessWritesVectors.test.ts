@@ -275,8 +275,14 @@ const SCENARIOS: Array<{ name: string; pinned: boolean; steps: Step[] }> = [
       A(joinE(remoteMember, inv(6), friend4, NOW - 370), "a demoted co-manager's link lets nobody new in"),
       A(shareE(remoteMember, root, root), "the share ends"),
       A(shareE(remoteMember, root), "an ended share never comes back"),
-      A(acceptE(adminDev, inv(7), contact, NOW - 300), "an accept through an admin device's invite"),
+      A(acceptE(adminDev, inv(7), contact, NOW - 300), "an accept is refused, even through an admin device's invite (F4)"),
       A(acceptE(stranger, inv(8), contact, NOW - 290), "an accept through a stranger's invite"),
+      A(joinE(root, inv(12), friend3, NOW - 240, { maxRedemptions: 2 }), "a join through a two-person link"),
+      A(joinE(root, inv(12), friend4, NOW - 220, { maxRedemptions: 2 }), "the second join fills it"),
+      A(joinE(root, inv(12), contact, NOW - 230, { maxRedemptions: 2 }), "an earlier join takes the last one's place (F4)"),
+      A(joinE(root, inv(12), friend, NOW - 210, { maxRedemptions: 2 }), "a later join stays out"),
+      A(removeE(contact, root, NOW - 205), "the admin removes one of the two"),
+      A(joinE(root, inv(12), friend, NOW - 210, { maxRedemptions: 2 }), "a removal frees no place on the link"),
       A(joinE(member, inv(9), friend4, NOW - 280), "this server's own co-manager is refused here (the admin refused them)"),
       A(joinE(tablet, inv(10), friend4, NOW - 270, { expiresAt: NOW - 275 }), "a join after the invite expired"),
       A(joinE(tablet, inv(11), friend4, NOW - 260), "a join through a non-admin device's invite"),
@@ -293,6 +299,10 @@ const SCENARIOS: Array<{ name: string; pinned: boolean; steps: Step[] }> = [
       M("setRole", { serviceRef: "alice--notes", target: { kind: "aid", aid: aidOf(friend2) }, targetKey: `aid:${aidOf(friend2)}`, role: "member", issuedAt: NOW - 9 }, "a role no newer is stale"),
       M("setAccountRank", { serviceRef: "alice--notes", targetKey: `device:${aidOf(laptop)}`, rank: "master", issuedAt: NOW - 8, evidence: `${"c".repeat(128)}:flagship/app-rank/v1|x` }, "an account rank with evidence"),
       M("noteCoManager", { serviceRef: "alice--notes", shareId: REMOTE_SHARE, rec: { pub: aidOf(remoteMember).toUpperCase(), level: "view", label: "R", serverDomain: OTHER.toUpperCase(), issuedAt: NOW - 7, ended: false } }, "a co-manager record"),
+      M("admitRedemption", { serviceRef: "alice--notes", inviteId: "capped", aid: aidOf(friend3), at: NOW - 6, hash: "b".repeat(64), cap: 1 }, "a redemption through a one-person link"),
+      M("admitRedemption", { serviceRef: "alice--notes", inviteId: "capped", aid: aidOf(friend4), at: NOW - 6, hash: "c".repeat(64), cap: 1 }, "a same-time one with a larger hash is refused"),
+      M("admitRedemption", { serviceRef: "alice--notes", inviteId: "capped", aid: aidOf(friend4).toUpperCase(), at: NOW - 6, hash: "A".repeat(64), cap: 1 }, "a smaller hash takes its place"),
+      M("admitRedemption", { serviceRef: "alice--notes", inviteId: "manual", aid: aidOf(friend3), at: NOW - 5, hash: "d".repeat(64), cap: 1 }, "a person bound before the ledger fills a link"),
       M("removeIfUngranted", { serviceRef: "alice--notes", aid: aidOf(friend) }, "someone with a grant stays"),
       M("removeIfUngranted", { serviceRef: "alice--notes", aid: aidOf(friend2) }, "someone without one goes"),
       M("revokeGroup", { inviteId: "manual" }, "a group revoked on every app"),
@@ -344,6 +354,7 @@ async function runScenario(sc: (typeof SCENARIOS)[number]) {
       const call: Record<string, () => Promise<unknown>> = {
         setMode: () => store.setMode(a.serviceRef, a.mode),
         addAllowed: () => store.addAllowed(a.serviceRef, a.aid, a.inviteId),
+        admitRedemption: () => store.admitRedemption(a.serviceRef, a.inviteId, a.aid, a.at, a.hash, a.cap),
         setInviteTier: () => store.setInviteTier(a.serviceRef, a.inviteId, a.tier),
         setInviteCreator: () => store.setInviteCreator(a.serviceRef, a.inviteId, a.pub),
         noteWithdrawn: () => store.noteWithdrawn(a.serviceRef, a.inviteId, a.issuedAt, a.signature),
@@ -384,7 +395,10 @@ describe("access write vectors", () => {
   it("the vectors exercise every kind of step", async () => {
     const v = JSON.parse(readFileSync(FILE, "utf8")) as { scenarios: Array<{ steps: Array<{ op: string; entry?: { kind: string }; expect: { result: unknown } }> }> };
     const steps = v.scenarios.flatMap((s) => s.steps);
-    for (const kind of ["mode", "remove", "join", "accept", "withdraw", "share", "rank"]) {
+    // A manual-approve acceptance is refused everywhere (security report F4).
+    expect(steps.filter((s) => s.entry?.kind === "accept").every((s) => s.expect.result === "refused")).toBe(true);
+    expect(steps.filter((s) => s.op === "mutate" && (s as { method?: string }).method === "admitRedemption").map((s) => s.expect.result)).toEqual(["admitted", "full", "admitted", "full"]);
+    for (const kind of ["mode", "remove", "join", "withdraw", "share", "rank"]) {
       const ofKind = steps.filter((s) => s.entry?.kind === kind).map((s) => s.expect.result);
       expect(ofKind, kind).toContain("applied");
       expect(ofKind.some((r) => r === "refused" || r === "stale" || r === "unchanged"), kind).toBe(true);

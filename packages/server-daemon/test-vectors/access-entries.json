@@ -305,7 +305,7 @@
         },
         "acceptSig": "91254b43fade2d896f0aafa06a37f070075b6b6693c6df4ae5663eea3e3bc6c8c9f215e651b9bb6e469591c18070a537d6968d0c3628504430631e42469b6808"
       },
-      "expect": "ok"
+      "expect": "refused"
     },
     {
       "name": "an accept signed by another key than the contact is refused",

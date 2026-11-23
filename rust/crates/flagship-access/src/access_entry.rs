@@ -15,8 +15,8 @@ use flagship_crypto::server_share::{
     verify_revoke,
 };
 use flagship_crypto::service_invite::{
-    AcceptServiceInvite, CreateServiceInvite, RedeemServiceInvite, RevokeServiceInvite,
-    verify_accept, verify_create, verify_redeem, verify_revoke as verify_invite_revoke,
+    CreateServiceInvite, RedeemServiceInvite, RevokeServiceInvite, verify_create, verify_redeem,
+    verify_revoke as verify_invite_revoke,
 };
 use serde_json::{Map, Value};
 
@@ -86,11 +86,6 @@ pub enum Verified {
         create: VerifiedCreate,
         visitor_aid: String,
         redeemed_at: u64,
-    },
-    Accept {
-        create: VerifiedCreate,
-        contact_aid: String,
-        accepted_at: u64,
     },
     Share {
         share_id: String,
@@ -376,37 +371,8 @@ pub fn verify_entry(entry: &AccessEntry, service_ref: &str, t: &EntryTrust) -> V
                 redeemed_at,
             })
         })(),
-        Some("accept") => (|| {
-            let a = obj(e.get("accept")?)?;
-            let aid = text(a, "contactAID")?.to_lowercase();
-            let (invite_id, a_ref, accepted_at) = (
-                text(a, "inviteId")?,
-                text(a, "serviceRef")?,
-                int(a, "acceptedAt")?,
-            );
-            let create = verify_com_create(e.get("create")?, e.get("createSig")?, None, t)?;
-            if create.invite_id != invite_id
-                || create.service_ref != service_ref
-                || a_ref != service_ref
-                || !installed
-            {
-                return None;
-            }
-            let accept = AcceptServiceInvite {
-                invite_id: invite_id.to_string(),
-                service_ref: a_ref.to_string(),
-                contact_aid: decode_hex(&aid)?,
-                accepted_at,
-            };
-            if !verify_accept(&accept, text(e.as_object()?, "acceptSig")?, &aid) {
-                return None;
-            }
-            Some(Verified::Accept {
-                create,
-                contact_aid: aid,
-                accepted_at,
-            })
-        })(),
+        // A manual-approve acceptance carried no author proof (security report F4 e): refused, whoever signed it.
+        Some("accept") => None,
         _ => None,
     };
     verified.map_or(Verdict::Refused, Verdict::Verified)

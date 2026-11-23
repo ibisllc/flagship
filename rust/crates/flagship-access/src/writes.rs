@@ -249,6 +249,14 @@ pub fn handle_store_mutate(p: &WritePaths, a: &Value) -> Result<Value, String> {
             text(&x, "aid")?,
             x.get("inviteId").and_then(Value::as_str)
         )),
+        "admitRedemption" => json!(s.admit_redemption(
+            r()?,
+            text(&x, "inviteId")?,
+            text(&x, "aid")?,
+            int(&x, "at")?,
+            text(&x, "hash")?,
+            int(&x, "cap")?
+        )),
         "removeAllowed" => json!(s.remove_allowed(r()?, text(&x, "aid")?)),
         "removeIfUngranted" => json!(s.remove_if_ungranted(r()?, text(&x, "aid")?)),
         "revokeGroup" => json!(s.revoke_group(
