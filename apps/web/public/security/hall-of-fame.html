@@ -93,6 +93,79 @@
         records in it, instead of patching it.
       </p>
 
+      <h2>Turning on code protection in the webapp failed with a misleading &ldquo;Network error&rdquo;</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/321bc1de">321bc1de</a>
+        and
+        <a href="https://github.com/ibisllc/flagship/commit/9dc6ffed">9dc6ffed</a>
+        &middot; credit pending the reporter&rsquo;s preference
+      </p>
+      <p>
+        Turning on code protection (a second factor for account recovery)
+        from the webapp could fail with &ldquo;Network error, check your
+        connection&rdquo; while the connection was fine. When our server
+        failed on a request, its answer lacked the header that lets the
+        webapp read it, so the browser reported a network failure, and the
+        webapp called many other failures a network error too. Nothing was
+        exposed, but a user could not turn the protection on from the browser
+        and was not told why.
+      </p>
+      <p>
+        Our server now answers every failure in a form the webapp can read,
+        and the webapp names each cause separately. Looking at this flow, we
+        also tightened it: starting the setup again no longer replaces a
+        working authenticator, a setup that was never finished no longer
+        counts as a second factor, and only an admin device can turn code
+        protection on or off.
+      </p>
+
+      <h2>Account recovery state was public, and a cancelled recovery could be restarted by replaying it</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/ce51f35f">ce51f35f</a>
+        &middot; credit pending the reporter&rsquo;s preference
+      </p>
+      <p>
+        When a new device recovers an account, the account&rsquo;s other
+        devices and servers can see the pending change before it takes effect.
+        That record was readable by anyone who knew the account name,
+        including the complete signed request that started it. Because the
+        request stayed valid for five minutes, anyone who read it could send
+        it again after the recovery was cancelled and start it once more.
+      </p>
+      <p>
+        Nobody could take over an account this way: only the holder of the
+        new device&rsquo;s key can complete a recovery, and the owner was
+        notified of each attempt. The pending record can now be read only by
+        the account&rsquo;s own devices and servers, each request is accepted
+        once, and a request dated before a cancellation is refused.
+      </p>
+
+      <h2>Parallel redemptions let a single-use invite admit more people than it allowed</h2>
+      <p class="hof-meta">
+        Medium &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/14329ad6">14329ad6</a>
+        and
+        <a href="https://github.com/ibisllc/flagship/commit/91b992f4">91b992f4</a>
+        &middot; credit pending the reporter&rsquo;s preference
+      </p>
+      <p>
+        An invite to an app can be limited to one person or a set number. Our
+        server counted the people already in and then added the new one as two
+        separate steps, so many redemptions of the same link sent at once
+        could all pass the count. The servers that run the app did not hold
+        the limit themselves either, and when an app runs on several servers,
+        people one server had refused were let in later elsewhere.
+      </p>
+      <p>
+        Every path needed the invite link itself. The count and the addition
+        are now one step, redeeming invites is rate-limited, and each server
+        holds an invite&rsquo;s limit and admits the same first people as the
+        app&rsquo;s other servers, from each server&rsquo;s next update.
+        Over-limit test invites left in production were revoked.
+      </p>
+
       <h2>Review notes: a mutable install ref, boot tampering, and the app browser</h2>
       <p class="hof-meta">
         Design review &middot; October 2026 &middot; addressed in release 0.3

@@ -6778,6 +6778,102 @@
       "security/hall-of-fame.html"
     ]
   },
+  "s9edb5099c4": {
+    "en": "Turning on code protection in the webapp failed with a misleading “Network error”",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sde0f400eec": {
+    "en": "Low · reported and fixed November 2026 · fix <1>321bc1de</1> and <2>9dc6ffed</2> · credit pending the reporter’s preference",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sc8efbace44": {
+    "en": "Turning on code protection (a second factor for account recovery) from the webapp could fail with “Network error, check your connection” while the connection was fine. When our server failed on a request, its answer lacked the header that lets the webapp read it, so the browser reported a network failure, and the webapp called many other failures a network error too. Nothing was exposed, but a user could not turn the protection on from the browser and was not told why.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s2de866a5b1": {
+    "en": "Our server now answers every failure in a form the webapp can read, and the webapp names each cause separately. Looking at this flow, we also tightened it: starting the setup again no longer replaces a working authenticator, a setup that was never finished no longer counts as a second factor, and only an admin device can turn code protection on or off.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "scf1c971b1f": {
+    "en": "Account recovery state was public, and a cancelled recovery could be restarted by replaying it",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s3d866a265e": {
+    "en": "Low · reported and fixed November 2026 · fix <1>ce51f35f</1> · credit pending the reporter’s preference",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s61bf72e6ff": {
+    "en": "When a new device recovers an account, the account’s other devices and servers can see the pending change before it takes effect. That record was readable by anyone who knew the account name, including the complete signed request that started it. Because the request stayed valid for five minutes, anyone who read it could send it again after the recovery was cancelled and start it once more.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sc1353eda16": {
+    "en": "Nobody could take over an account this way: only the holder of the new device’s key can complete a recovery, and the owner was notified of each attempt. The pending record can now be read only by the account’s own devices and servers, each request is accepted once, and a request dated before a cancellation is refused.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s3e35828888": {
+    "en": "Parallel redemptions let a single-use invite admit more people than it allowed",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "se88c7ca78a": {
+    "en": "Medium · reported and fixed November 2026 · fix <1>14329ad6</1> and <2>91b992f4</2> · credit pending the reporter’s preference",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sef0fd5b0ca": {
+    "en": "An invite to an app can be limited to one person or a set number. Our server counted the people already in and then added the new one as two separate steps, so many redemptions of the same link sent at once could all pass the count. The servers that run the app did not hold the limit themselves either, and when an app runs on several servers, people one server had refused were let in later elsewhere.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s52f632bc3e": {
+    "en": "Every path needed the invite link itself. The count and the addition are now one step, redeeming invites is rate-limited, and each server holds an invite’s limit and admits the same first people as the app’s other servers, from each server’s next update. Over-limit test invites left in production were revoked.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
   "sb032726b26": {
     "en": "Review notes: a mutable install ref, boot tampering, and the app browser",
     "kind": "text",
