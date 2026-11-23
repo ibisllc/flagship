@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "floor": 0,
   "releases": [
     {
@@ -14,6 +14,13 @@
       "label": "0.4",
       "securityVersion": 2,
       "artifactSha256": "37923f45bf471350a611702bcd8d9202ed230f3463e81f88656398acbb844e88",
+      "rolloutPercent": 100
+    },
+    {
+      "commit": "3079462b5e9d8a2a1768e774279db12bb3ee5bc8",
+      "label": "0.4",
+      "securityVersion": 3,
+      "artifactSha256": "bf02a49cbee24c3d6ead54527bf50d489767b3ebc525221efb35d90e8783eae2",
       "rolloutPercent": 100
     }
   ]
