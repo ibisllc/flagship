@@ -338,13 +338,15 @@ describe("one access list per app", () => {
     const f = await fleet(["home", "home2"]);
     const { carrier, secretHash } = await f.redeem(f.box("home"), adminRoot);
     await f.settle();
-    // A second person "joining" the same personal invite, handed straight to home2.
-    const aidSig = hex(signRedeemServiceInvite({ secretHash, visitorAID: friend2.publicKey, redeemedAt: NOW }, friend2));
+    // A second person "joining" the same personal invite a minute later, handed straight to home2. (At the same
+    // time the first-N order falls to the entry hash, which the random invite secret makes either way.)
+    const later = NOW + 60_000;
+    const aidSig = hex(signRedeemServiceInvite({ secretHash, visitorAID: friend2.publicKey, redeemedAt: later }, friend2));
     const r = await f.box("home2").access.applyEntry(SERVICE, {
       kind: "join",
       create: carrier!.create,
       createSig: carrier!.createSig,
-      redeem: { secretHash, visitorAID: hex(friend2.publicKey), redeemedAt: NOW, aidSig },
+      redeem: { secretHash, visitorAID: hex(friend2.publicKey), redeemedAt: later, aidSig },
     });
     expect(r).toBe("refused");
     expect(f.box("home2").store.isAllowed(SERVICE, hex(friend2.publicKey))).toBe(false);

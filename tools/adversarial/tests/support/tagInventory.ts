@@ -220,6 +220,8 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/voici-page/v1": "vectors voiciVectors.test.ts + test-vectors/voici (22 index cases: tampered seq/accepts/pieces/inbox key, IRK vs admin root, rollback, unsorted or missing pieces; 8 publish cases)",
   "flagship/voici-thread-key/v1": "vectors voiciVectors.test.ts + test-vectors/messages (thread key swapped, other page)",
   "flagship/voici-ack/v1": "vectors voiciVectors.test.ts + test-vectors/messages (other message, phone key swapped, other signer)",
+  "flagship/voici-ring-tag/v1": "kdf: a page's ring tag key from the Messages secret (docs/voici-locked-caller-names.md); the push tag is an HMAC under it",
+  "flagship/voici-locked-name/v1": "hash: the lookup key of a locked-phone name, from the caller's pseudonym key (no key involved)",
   "flagship/voici-block/v1": "vectors voiciVectors.test.ts + test-vectors/messages (block/unblock swap)",
   "flagship/voici-page-remove/v1": "vectors packages/protocol/test-vectors/voici-page-remove (valid + malformed, wrong-signer, bad-signature, wrong-page, stale, seq-conflict) in packages/protocol/tests/voiciPageRemove.test.ts, Swift VoiciPageRemoveVectorTests and Kotlin VoiciPageRemoveVectorsTest; replay of the removal and of an old index, takedown/ban refusals in packages/control-plane/tests/voiciPageRemove.test.ts",
   "flagship/voici-drafts-consume/v1": "bespoke packages/protocol/tests/voiciDraftsConsume.test.ts (pinned bytes, op-id refusals); wrong-signer refusal in packages/control-plane/tests/voiciPages.test.ts",

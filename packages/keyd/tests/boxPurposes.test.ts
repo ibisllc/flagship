@@ -18,6 +18,9 @@ const UNWIRED_BOX_PURPOSES = new Set([
   "flagship/sibling-sync/v1",
   // An org box's registration: the org install path (install blob carrying the server code) is not built yet.
   "flagship/org-server-register/v1",
+  // The box fetched an invite's signed create for the manual-approval finalize, which F4 closed until an
+  // author-signed finalize exists (docs/service-access-gating.md "Manual approval"); that finalize signs it again.
+  "flagship/service-invite-create-fetch/v1",
 ]);
 
 /**
