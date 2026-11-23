@@ -61,6 +61,7 @@ import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
 import { spendVouchersExactly, unspendVouchers, type VoucherSigningKey } from "./blindVouchers.js";
+import { checkNameGrant, returnNameGrant, spendNameGrant, takeNameGrant } from "./nameGrant.js";
 import { DIBS_CLAIM_PRICE_USD, dibsWindowState, reservedForDotComHolder, type DibsFetch, type DibsWindow } from "./nameDibs.js";
 import { OFFER_TTL_MS } from "./usernameClaim.js";
 import { consumeNameVoucher, NAME_CHANGE_PRICE_USD, releaseNameVoucher } from "./voucher.js";
@@ -123,7 +124,12 @@ function nowOf(deps: { now?: () => number }): number {
  * it a valid, free, unreserved name — and if it's held for a .com holder, is
  * this account the verified holder? Shared by the quote and the rename.
  */
-async function assessName(deps: NameChangeDeps, oldUsername: string, rawNew: string): Promise<Assessment | Refusal> {
+async function assessName(
+  deps: NameChangeDeps,
+  oldUsername: string,
+  rawNew: string,
+  opts: { liftDibs?: boolean } = {},
+): Promise<Assessment | Refusal> {
   // The sign-up format (docs/voici-namespace-spec.md D12) and the account-label grammar + reserved list.
   const problem = voiciNameProblem(String(rawNew));
   if (problem) return { ok: false, status: 400, reason: "not a valid username", code: "invalid", extra: { problem } };
@@ -140,7 +146,8 @@ async function assessName(deps: NameChangeDeps, oldUsername: string, rawNew: str
   if (deps.offers && (await deps.offers.isOffered(name, nowOf(deps) - OFFER_TTL_MS))) {
     return { ok: false, status: 409, reason: "that name was just offered to someone signing up — try again later", code: "offered" };
   }
-  if (await reservedForDotComHolder(deps, name)) {
+  // A name grant from the owner (nameGrant.ts) lifts only this hold, for only its own name.
+  if (!opts.liftDibs && (await reservedForDotComHolder(deps, name))) {
     const winner = await deps.claims.winner(name);
     if (!winner || winner.username !== oldUsername) {
       return {
@@ -179,18 +186,26 @@ async function liveServerCount(deps: NameChangeDeps, username: string): Promise<
  *  it reveals only what the public username lookup and DNS already do. */
 export async function handleNameChangeQuote(
   deps: NameChangeDeps,
-  body: { username?: unknown; newUsername?: unknown } | undefined,
+  body: { username?: unknown; newUsername?: unknown; nameGrant?: unknown } | undefined,
 ): Promise<HandlerResponseWithHeaders> {
   if (typeof body?.username !== "string" || typeof body?.newUsername !== "string") {
     return malformed("username and newUsername are required");
   }
   const old = body.username.toLowerCase();
   if (!(await deps.usernames.get(old))) return notFound("unknown account");
-  const a = await assessName(deps, old, body.newUsername);
+  // A grant is checked, never taken, here.
+  let grantPaid = false;
+  if (body.nameGrant !== undefined) {
+    const g = await checkNameGrant({ vouchers: deps.vouchers, now: deps.now }, body.newUsername.toLowerCase(), body.nameGrant);
+    if (!g.ok) return ok({ available: false, reason: g.reason, code: g.code });
+    grantPaid = g.paid;
+  }
+  const a = await assessName(deps, old, body.newUsername, { liftDibs: body.nameGrant !== undefined });
   if (!a.ok) return ok({ available: false, reason: a.reason, code: a.code, ...(a.extra ?? {}) });
   if ((await liveServerCount(deps, old)) > 0) {
     return ok({ available: false, reason: HAS_SERVERS, code: "has-servers" });
   }
+  if (grantPaid) return ok({ available: true, kind: a.kind, priceUsd: 0, paid: true });
   const units = unitsFor(deps, a.priceUsd);
   return ok({ available: true, kind: a.kind, priceUsd: a.priceUsd, ...(units !== null ? { units } : {}) });
 }
@@ -202,6 +217,8 @@ interface NameChangeBody {
   voucherCode?: unknown;
   /** Or blind $1 vouchers, exactly the price's worth. */
   vouchers?: unknown;
+  /** The owner's grant for exactly this name (nameGrant.ts): lifts its dibs hold; a free one also pays. */
+  nameGrant?: unknown;
 }
 
 /** `POST /api/account/name-change` — the rename. */
@@ -225,8 +242,10 @@ export async function handleNameChange(
   }
   const code = typeof body.voucherCode === "string" && body.voucherCode.trim() !== "" ? body.voucherCode : null;
   const blindVouchers = Array.isArray(body.vouchers) ? body.vouchers : null;
-  // Exactly one way to pay.
-  if ((code === null) === (blindVouchers === null)) return malformed("malformed name change");
+  const hasGrant = body.nameGrant !== undefined && body.nameGrant !== null;
+  // At most one way to pay (none only with a grant that pays; checked below).
+  if (code !== null && blindVouchers !== null) return malformed("malformed name change");
+  if (code === null && blindVouchers === null && !hasGrant) return malformed("malformed name change");
   if (Math.abs(now - r.issuedAt) > (deps.freshnessMs ?? 5 * 60_000)) return forbidden("stale request");
 
   const oldUsername = r.oldUsername.toLowerCase();
@@ -257,28 +276,55 @@ export async function handleNameChange(
     return { status: 429, body: { error: "you can change your name once every 30 days", code: "cooldown" } };
   }
 
-  const a = await assessName(deps, oldUsername, r.newUsername);
-  if (!a.ok) return { status: a.status, body: refusalBody(a) };
   const newUsername = r.newUsername.toLowerCase();
+  const grantDeps = { vouchers: deps.vouchers, now: () => now };
+  let grant: { codeHash: string; paid: boolean } | null = null;
+  if (hasGrant) {
+    const g = await checkNameGrant(grantDeps, newUsername, body.nameGrant);
+    if (!g.ok) return { status: g.status, body: { error: g.reason, code: g.code } };
+    grant = g;
+    if (!g.paid && code === null && blindVouchers === null) return { status: 402, body: { error: "this name still needs paying for", code: "payment-required" } };
+  }
+  const a = await assessName(deps, oldUsername, r.newUsername, { liftDibs: grant !== null });
+  if (!a.ok) return { status: a.status, body: refusalBody(a) };
   const firstRename = (await deps.nameChanges.countSince(claim.aidPubHex, 0)) === 0;
   const signupRename = firstRename && now - userRec.claimedAt >= 0 && now - userRec.claimedAt <= SIGNUP_RENAME_WINDOW_MS;
 
   // (1) Pay, then rename; refund if the rename fails. Both spends are atomic,
   // so of two racing requests with one payment only one reaches the rename.
-  let refund: () => Promise<void>;
-  if (code !== null) {
+  const refunds: Array<() => Promise<void>> = [];
+  const refund = async () => {
+    for (const f of refunds) await f();
+  };
+  if (grant) {
+    const g = grant;
+    if (!(await takeNameGrant(grantDeps, g.codeHash))) return { status: 402, body: { error: "this link was already used", code: "grant-used" } };
+    refunds.push(() => returnNameGrant(grantDeps, g.codeHash));
+  }
+  if (grant?.paid) {
+    // The grant pays for the rename; a code or vouchers sent with it are not taken.
+  } else if (code !== null) {
     const paid = await consumeNameVoucher(deps, { code, kind: a.kind, username: oldUsername });
-    if (!paid.ok) return { status: 402, body: { error: paid.reason, code: paid.code } };
+    if (!paid.ok) {
+      await refund();
+      return { status: 402, body: { error: paid.reason, code: paid.code } };
+    }
     // The voucher row's redeemed_by is untouched by the rename only when the
     // rename rolled back — which is exactly when we release it.
-    refund = () => releaseNameVoucher(deps, { codeHash: paid.codeHash, username: oldUsername });
+    refunds.push(() => releaseNameVoucher(deps, { codeHash: paid.codeHash, username: oldUsername }));
   } else {
     const units = unitsFor(deps, a.priceUsd);
-    if (units === null || !deps.blind) return { status: 402, body: { error: "vouchers aren't accepted here", code: "vouchers-off" } };
+    if (units === null || !deps.blind) {
+      await refund();
+      return { status: 402, body: { error: "vouchers aren't accepted here", code: "vouchers-off" } };
+    }
     const spent = await spendVouchersExactly({ ...deps.blind, now: () => now }, blindVouchers!, units);
-    if (!spent.ok) return spent.response;
+    if (!spent.ok) {
+      await refund();
+      return spent.response;
+    }
     const store = deps.blind.store;
-    refund = () => unspendVouchers(store, spent.nullifiers);
+    refunds.push(() => unspendVouchers(store, spent.nullifiers));
   }
 
   let renamed: { ok: true } | { ok: false; reason: string };
@@ -300,6 +346,7 @@ export async function handleNameChange(
     return { status: 409, body: { error: renamed.reason, code } };
   }
 
+  if (grant) await spendNameGrant(grantDeps, grant.codeHash);
   if (a.kind === "dibs-claim") {
     // The claim row moved with the account (name_dibs_claims.username).
     await deps.claims.markConsumed(newUsername, newUsername, now);

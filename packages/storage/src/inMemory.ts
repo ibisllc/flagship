@@ -2986,6 +2986,9 @@ export class InMemoryVoucherStorage implements VoucherStorage {
     delete r.redeemedBy;
     return true;
   }
+  async delete(codeHash: string): Promise<boolean> {
+    return this.rows.delete(codeHash);
+  }
 }
 
 /** In-memory name-dibs claims. Mirrors the D1 store's one-verified-per-name rule. */

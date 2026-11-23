@@ -4207,7 +4207,10 @@ export class D1VoucherStorage implements VoucherStorage {
     return r
       ? {
           codeHash: r.code_hash,
-          kind: r.kind === "name-change" || r.kind === "dibs-claim" ? r.kind : "tier",
+          kind:
+            r.kind === "name-change" || r.kind === "dibs-claim" || r.kind === "name-grant" || r.kind === "name-grant-paid"
+              ? r.kind
+              : "tier",
           tier: r.tier as VoucherRecord["tier"],
           durationDays: r.duration_days,
           createdAt: r.created_at,
@@ -4236,6 +4239,11 @@ export class D1VoucherStorage implements VoucherStorage {
       )
       .bind(codeHash, username)
       .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+
+  async delete(codeHash: string): Promise<boolean> {
+    const r = await this.db.prepare(`DELETE FROM vouchers WHERE code_hash = ?`).bind(codeHash).run();
     return (r.meta?.changes ?? 0) > 0;
   }
 }

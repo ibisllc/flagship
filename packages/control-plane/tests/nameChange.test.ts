@@ -19,6 +19,7 @@ import { InMemoryBlindVoucherStorage, InMemoryStorage, InMemoryVoucherStorage } 
 import { handleVoucherIssue, voucherSigningKeysFromEnv } from "../src/blindVouchers.js";
 import { handleNameChange, handleNameChangeQuote, SIGNUP_RENAME_WINDOW_MS, type NameChangeDeps } from "../src/nameChange.js";
 import { resolveVoiciPath } from "../src/voici.js";
+import { handleIssueNameGrant, nameGrantHash } from "../src/nameGrant.js";
 import { handleNameDibsInitiate, handleNameDibsVerify, type DibsFetch } from "../src/nameDibs.js";
 import { issueVoucher } from "../src/voucher.js";
 
@@ -320,6 +321,71 @@ describe("paying with blind $1 vouchers", () => {
     expect((await handleNameChangeQuote(deps, { username: "fresh-poppy", newUsername: "acme-tools" })).body).toMatchObject({ priceUsd: 10, units: 10 });
     const both = { ...renameWithVouchers("acme-tools", mintBlind(10)), voucherCode: await voucher("name-change") };
     expect((await handleNameChange(deps, both)).status).toBe(400);
+  });
+});
+
+describe("a name grant from the owner", () => {
+  async function grant(vouchers: InMemoryVoucherStorage, name: string, opts: { free?: boolean; hours?: number } = {}) {
+    const r = await handleIssueNameGrant({ vouchers, now: () => NOW }, { name, ...opts });
+    expect(r.status).toBe(200);
+    const b = r.body as { code: string; expiresAt: number; free: boolean };
+    return { code: b.code, expiresAt: b.expiresAt };
+  }
+
+  it("lifts the dibs hold on exactly its name; a code still pays; the row is gone afterwards", async () => {
+    const { storage, deps, vouchers, voucher } = await setup({ registered: ["acme.com"] });
+    const g = await grant(vouchers, "acme");
+    expect((await handleNameChangeQuote(deps, { username: "fresh-poppy", newUsername: "acme", nameGrant: g })).body).toMatchObject({ available: true, priceUsd: 10 });
+    const r = await handleNameChange(deps, { ...rename("acme", await voucher("name-change")), nameGrant: g });
+    expect(r.status).toBe(200);
+    expect(await storage.usernames.get("acme")).toBeDefined();
+    // Nothing marks the account: the grant's row was deleted.
+    expect(await vouchers.get(await nameGrantHash("acme", g.expiresAt, g.code))).toBeUndefined();
+  });
+
+  it("a free grant pays too, and is useless for any other name", async () => {
+    const { storage, deps, vouchers } = await setup({ registered: ["acme.com", "acmy.com"] });
+    const g = await grant(vouchers, "acme", { free: true });
+    expect((await handleNameChange(deps, { ...rename("acmy", "unused"), voucherCode: undefined, nameGrant: g })).body).toMatchObject({ code: "grant-invalid" });
+    const r = await handleNameChange(deps, { ...rename("acme", "unused"), voucherCode: undefined, nameGrant: g });
+    expect(r.status).toBe(200);
+    expect(await storage.usernames.get("acme")).toBeDefined();
+  });
+
+  it("keeps every other rule: taken and look-alike names, and a grant that doesn't pay needs payment", async () => {
+    const { storage, deps, vouchers, voucher } = await setup();
+    await storage.usernames.put({ username: "acme-tools", irkPubHex: hex(other.publicKey), claimedAt: 1 });
+    const g = await grant(vouchers, "acmetools", { free: true });
+    const code = await voucher("name-change");
+    expect(await handleNameChange(deps, { ...rename("acmetools", code), nameGrant: g })).toMatchObject({ status: 409, body: { code: "taken" } });
+    // The grant was put back: it still checks out for a quote.
+    expect((await handleNameChangeQuote(deps, { username: "fresh-poppy", newUsername: "acmetools", nameGrant: g })).body).toMatchObject({ code: "taken" });
+    const g2 = await grant(vouchers, "brand-new");
+    expect(await handleNameChange(deps, { ...rename("brand-new", "x"), voucherCode: undefined, nameGrant: g2 })).toMatchObject({ status: 402, body: { code: "payment-required" } });
+  });
+
+  it("expires, and a failed rename returns it for a later try", async () => {
+    const { deps, vouchers, voucher } = await setup({ registered: ["acme.com"] });
+    const g = await grant(vouchers, "acme", { hours: 1 });
+    const late = { ...deps, now: () => NOW + 2 * 3_600_000 };
+    const req = (now: number) => {
+      const request = { aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "acme", issuedAt: now };
+      return { request, signature: hex(signNameChange(request, irk)), nameGrant: g };
+    };
+    expect(await handleNameChange(late, { ...req(NOW + 2 * 3_600_000), voucherCode: await voucher("name-change") })).toMatchObject({ status: 402, body: { code: "grant-expired" } });
+    const failing: NameChangeDeps = {
+      ...deps,
+      nameChanges: { ...deps.nameChanges, renameAccount: async () => ({ ok: false, reason: "name already taken" }), countSince: async () => 0, history: async () => [] },
+    };
+    const code = await voucher("name-change");
+    expect((await handleNameChange(failing, { ...req(NOW), voucherCode: code })).status).toBe(409);
+    expect((await handleNameChange(deps, { ...req(NOW), voucherCode: code })).status).toBe(200);
+  });
+
+  it("the admin route refuses a bad name or too many hours", async () => {
+    const vouchers = new InMemoryVoucherStorage();
+    expect((await handleIssueNameGrant({ vouchers, now: () => NOW }, { name: "Bad--name" })).status).toBe(400);
+    expect((await handleIssueNameGrant({ vouchers, now: () => NOW }, { name: "acme", hours: 24 * 365 })).status).toBe(400);
   });
 });
 
