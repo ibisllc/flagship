@@ -9,7 +9,7 @@ public struct VoiciCallRecord: Codable, Equatable, Identifiable, Sendable {
     public enum Direction: String, Codable, Sendable { case incoming, outgoing }
     public enum Outcome: String, Codable, Sendable { case answered, missed, declined, noAnswer = "no-answer", failed, browser }
     /// The other side: a page this account called as a visitor, or a visitor of this account's page (a pseudonym in
-    /// one of its conversations, which can't be called back yet: the owner's decision on that path is pending).
+    /// one of its conversations, rung back through its ring-back channel).
     public enum Peer: Codable, Equatable, Sendable {
         case page(username: String, pageId: String)
         case visitor(conv: String, pseudonymPub: String)
@@ -23,10 +23,14 @@ public struct VoiciCallRecord: Codable, Equatable, Identifiable, Sendable {
     public var video: Bool
     public var at: Int64
     public var durationMs: Int64
+    /// A visitor's thread key for this conversation, from the call's signed request: lets the Calls list ring back a
+    /// caller who never wrote (no thread here). Nil for pages, anonymous callers and records from older builds.
+    public var threadPub: String?
 
-    public init(callId: String, direction: Direction, outcome: Outcome, peer: Peer, video: Bool, at: Int64, durationMs: Int64 = 0) {
+    public init(callId: String, direction: Direction, outcome: Outcome, peer: Peer, video: Bool, at: Int64, durationMs: Int64 = 0,
+                threadPub: String? = nil) {
         self.callId = callId; self.direction = direction; self.outcome = outcome; self.peer = peer; self.video = video; self.at = at
-        self.durationMs = durationMs
+        self.durationMs = durationMs; self.threadPub = threadPub
     }
 
     /// A page this device can call back from the list.
@@ -157,7 +161,8 @@ public final class VoiciCallHistory {
         let known = Set(records.filter { $0.direction == .incoming }.map(\.callId))
         for m in missed where !known.contains(m.callId) {
             out.append(VoiciCallRecord(callId: m.callId, direction: .incoming, outcome: m.reason == "decline" ? .declined : .missed,
-                                       peer: .visitor(conv: m.conv, pseudonymPub: m.pseudonymPub), video: m.video, at: m.ringingAt))
+                                       peer: .visitor(conv: m.conv, pseudonymPub: m.pseudonymPub), video: m.video, at: m.ringingAt,
+                                       threadPub: m.threadPub.isEmpty ? nil : m.threadPub))
         }
         return out.sorted { $0.at == $1.at ? $0.id < $1.id : $0.at > $1.at }
     }

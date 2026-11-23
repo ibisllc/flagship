@@ -70,7 +70,7 @@ struct VoiciOutgoingCallScreen: View {
 
 /// The Calls page (Social tab's call button): "Who to call" with Call and Video call on top, then this device's calls
 /// and the page's missed calls, newest first. A page this account called (or can call) has Call and Video call; a
-/// visitor of this account's page can't be called back yet.
+/// visitor of this account's page is rung back from their thread, or from the row (Call back) when they never wrote.
 struct VoiciCallsScreen: View {
     @Environment(\.voiciComClient) private var client
     @Environment(\.colorScheme) private var scheme
@@ -83,6 +83,7 @@ struct VoiciCallsScreen: View {
     @State private var resolving = false
     @State private var resolved: VoiciCallee?
     @State private var resolvedVideo = false
+    @State private var chosen: (callee: VoiciCallee, allowCallBack: Bool)?
     @State private var opened: Opened?
 
     /// What a tapped row opens: the caller's thread on this account's page, or this account's conversation on the
@@ -123,15 +124,9 @@ struct VoiciCallsScreen: View {
             }
         }
         .fullScreenCover(item: $calling) { c in VoiciOutgoingCallScreen(call: c) { calling = nil } }
-        .confirmationDialog(Text(verbatim: String(localized: "Let voi.ci/\(resolved?.username ?? "") call you back?")),
-                            isPresented: Binding(get: { resolved != nil }, set: { if !$0 { resolved = nil } }), titleVisibility: .visible) {
-            Button("Call and allow call-back") { place(allowCallBack: true) }
-                .accessibilityIdentifier("voici-call-allow-back")
-            Button("Call without call-back") { place(allowCallBack: false) }
-                .accessibilityIdentifier("voici-call-no-back")
-            Button("Cancel", role: .cancel) { resolved = nil }
-        } message: {
-            Text(verbatim: String(localized: "voi.ci/\(resolved?.username ?? "") won't learn who you are. Flagship will know this conversation can ring your phone."))
+        // The call opens once the pop-up has gone (a cover can't be presented while a sheet is still closing).
+        .sheet(item: $resolved, onDismiss: placeChosen) { callee in
+            VoiciCallBackPrompt(callee: callee, choose: { chosen = (callee, $0); resolved = nil }, cancel: { resolved = nil })
         }
     }
 
@@ -204,10 +199,10 @@ struct VoiciCallsScreen: View {
         }
     }
 
-    private func place(allowCallBack: Bool) {
-        guard let client, let callee = resolved else { return }
-        resolved = nil
-        calling = VoiciOutgoingCall.live(callee: callee, video: resolvedVideo, allowCallBack: allowCallBack, client: client)
+    private func placeChosen() {
+        guard let client, let c = chosen else { return }
+        chosen = nil
+        calling = VoiciOutgoingCall.live(callee: c.callee, video: resolvedVideo, allowCallBack: c.allowCallBack, client: client)
     }
 
     private func row(_ r: VoiciCallRecord) -> some View {
@@ -220,6 +215,12 @@ struct VoiciCallsScreen: View {
             Spacer()
             if let p = r.callablePage {
                 VoiciCallButtons(callee: VoiciCallee(username: p.username, pageId: p.pageId)) { calling = $0 }
+            } else if let back = Self.callBack(r, hasThread: { store.conversation($0) != nil }, canRingBack: store.canRingBack(conv:pseudonymPub:threadPub:)) {
+                // A caller who never wrote, while their conversation still allows call-backs: ring them back here, as
+                // the thread's Call would (there is no thread to open).
+                Button("Call back") { ringBack(back, video: r.video) }
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("voici-calls-call-back")
             } else if case .visitor(let conv, let pseudonym) = r.peer, pseudonym.isEmpty {
                 // An anonymous caller (no account): the owner can block that conversation from calling again.
                 Button(store.anonBlocked.contains(conv) ? String(localized: "Unblock") : String(localized: "Block")) {
@@ -233,6 +234,31 @@ struct VoiciCallsScreen: View {
         // The row's own Call / Block buttons keep their taps; the rest of the row opens the conversation.
         .onTapGesture { if let o = Self.opens(r, hasThread: { store.conversation($0) != nil }, title: name(r)) { opened = o } }
         .accessibilityIdentifier("voici-calls-row")
+    }
+
+    /// A visitor who can be rung back from their row: an incoming call from a visitor (not anonymous) with no thread
+    /// here, whose call left their thread key, while their conversation still allows call-backs.
+    struct CallBack: Equatable {
+        let conv: String
+        let pseudonymPub: String
+        let threadPub: String
+    }
+
+    static func callBack(_ r: VoiciCallRecord, hasThread: (String) -> Bool, canRingBack: (String, String, String) -> Bool) -> CallBack? {
+        guard r.direction == .incoming, case .visitor(let conv, let pseudonym) = r.peer, !pseudonym.isEmpty, !hasThread(conv),
+              let threadPub = r.threadPub, !threadPub.isEmpty, canRingBack(conv, pseudonym, threadPub) else { return nil }
+        return CallBack(conv: conv, pseudonymPub: pseudonym, threadPub: threadPub)
+    }
+
+    /// The thread screen's ring-back, with the same sentences (ThreadScreen.ringBack).
+    private func ringBack(_ b: CallBack, video: Bool) {
+        Task {
+            switch await store.callVisitor(conv: b.conv, video: video, threadPub: b.threadPub) {
+            case .rang: note = String(localized: "Ringing \(store.name(pseudonymPub: b.pseudonymPub)). When they answer, their phone calls you here.")
+            case .noRingBack: note = String(localized: "They didn't allow call-backs in this conversation.")
+            case .failed(let code): note = code == "locked" ? String(localized: "Unlock Flagship and try again.") : VoiciOutgoingCall.sentence(code)
+            }
+        }
     }
 
     /// Nil when there is nothing to open: an anonymous caller, or a caller who never wrote (no thread here).
@@ -280,14 +306,13 @@ struct VoiciCallsScreen: View {
     }
 }
 
-/// "Call" and "Video call" for a page this account can call. Before the call, the call-back pop-up (docs/voici-calls.md,
-/// owner additions, as Android): "Call and allow call-back" attaches this conversation's ring-back channel, "Call
-/// without call-back" doesn't. The page owner never learns who this account is either way.
+/// "Call" and "Video call" for a page this account can call. Before the call, the call-back pop-up (VoiciCallBackPrompt).
 struct VoiciCallButtons: View {
     let callee: VoiciCallee
     var onCall: (VoiciOutgoingCall) -> Void
     @Environment(\.voiciComClient) private var client
     @State private var asking: Bool?
+    @State private var chosen: (video: Bool, allowCallBack: Bool)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -299,22 +324,105 @@ struct VoiciCallButtons: View {
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
         .disabled(client == nil)
-        .confirmationDialog(Text(verbatim: String(localized: "Let voi.ci/\(callee.username) call you back?")),
-                            isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), titleVisibility: .visible) {
-            Button("Call and allow call-back") { start(allowCallBack: true) }
-                .accessibilityIdentifier("voici-call-allow-back")
-            Button("Call without call-back") { start(allowCallBack: false) }
-                .accessibilityIdentifier("voici-call-no-back")
-            Button("Cancel", role: .cancel) { asking = nil }
-        } message: {
-            Text(verbatim: String(localized: "voi.ci/\(callee.username) won't learn who you are. Flagship will know this conversation can ring your phone."))
+        // The call opens once the pop-up has gone (a cover can't be presented while a sheet is still closing).
+        .sheet(isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), onDismiss: startChosen) {
+            VoiciCallBackPrompt(callee: callee, choose: { allow in chosen = asking.map { ($0, allow) }; asking = nil }, cancel: { asking = nil })
         }
     }
 
-    private func start(allowCallBack: Bool) {
-        guard let client, let video = asking else { return }
-        asking = nil
-        onCall(VoiciOutgoingCall.live(callee: callee, video: video, allowCallBack: allowCallBack, client: client))
+    private func startChosen() {
+        guard let client, let c = chosen else { return }
+        chosen = nil
+        onCall(VoiciOutgoingCall.live(callee: callee, video: c.video, allowCallBack: c.allowCallBack, client: client))
+    }
+}
+
+/// The call-back question before a call (docs/voici-calls.md, owner wording 2026-11-23): "Let brisk-quartz call you
+/// back?", "brisk-quartz won't learn who you are." with an info button that opens "About call-backs", then "Call and
+/// allow call-back" (attaches this conversation's ring-back channel) or "Call without call-back".
+struct VoiciCallBackPrompt: View {
+    let callee: VoiciCallee
+    var choose: (Bool) -> Void
+    var cancel: () -> Void
+    @State private var about = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(verbatim: String(localized: "Let \(callee.username) call you back?"))
+                    .font(.title3.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: String(localized: "\(callee.username) won't learn who you are."))
+                    Button { about = true } label: { Image(systemName: "info.circle") }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(Text("About call-backs"))
+                        .accessibilityIdentifier("voici-call-back-about")
+                }
+                .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button { choose(true) } label: { Text("Call and allow call-back").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("voici-call-allow-back")
+                Button { choose(false) } label: { Text("Call without call-back").frame(maxWidth: .infinity) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("voici-call-no-back")
+            }
+            .padding()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: cancel) }
+            }
+            .navigationDestination(isPresented: $about) {
+                VoiciCallBackAbout(username: callee.username, visitorName: Self.visitorName(pageId: callee.pageId))
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    /// This account's visitor name on the page ("Visitor 4F3A"), when the account key is open; nil otherwise (no Face
+    /// ID just to show it).
+    @MainActor
+    static func visitorName(pageId: String) -> String? {
+        guard let umk = Keystore.messagesUMKIfCached(),
+              let p = try? VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: VoiciMessages.deriveMessagesSecret(umk: Array(umk)), pageId: pageId)
+        else { return nil }
+        return try? VoiciText.voiciPseudonymName(CanonicalJson.hex(p.publicKey), prefix: String(localized: "Visitor "))
+    }
+}
+
+/// "About call-backs": what the page sees, the note Flagship keeps and when it goes.
+struct VoiciCallBackAbout: View {
+    let username: String
+    let visitorName: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(Self.points(username: username, visitorName: visitorName).enumerated()), id: \.offset) { _, p in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(verbatim: "•").accessibilityHidden(true)
+                        Text(verbatim: p).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        }
+        .navigationTitle(Text("About call-backs"))
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("voici-call-back-about-text")
+    }
+
+    static func points(username: String, visitorName: String?) -> [String] {
+        [
+            visitorName.map { String(localized: "\(username) sees only your visitor name, \($0) (or a nickname they gave you), never your account.") }
+                ?? String(localized: "\(username) sees only a visitor name (or a nickname they gave you), never your account."),
+            String(localized: "Flagship keeps a note linking this conversation to your Flagship account, so it can ring your phone. It never sees your messages or hears your calls."),
+            String(localized: "The note is deleted when you tap “Stop call-backs”, when \(username) blocks you or removes the page, or 90 days after you last called them with call-back on."),
+            String(localized: "Calling without call-back leaves no note, and \(username) can't call you back, unless you allowed it on an earlier call."),
+        ]
     }
 }
 #endif

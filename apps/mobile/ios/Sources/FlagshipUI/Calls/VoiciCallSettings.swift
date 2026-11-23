@@ -103,6 +103,8 @@ public struct VoiciMissedCallRow: Equatable, Sendable, Identifiable {
     public var reason: String
     public var ringingAt: Int64
     public var video: Bool
+    /// The caller's thread key from the call's signed request (empty for an anonymous caller).
+    public var threadPub: String = ""
 }
 
 /// One thread line: a message or a missed call, in time order.

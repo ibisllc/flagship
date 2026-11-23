@@ -16374,10 +16374,6 @@
     "en": "This page takes calls only from people who let it call them back.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCall.swift:375"
   },
-  "Let voi.ci/%@ call you back?": {
-    "en": "Let voi.ci/%@ call you back?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:182"
-  },
   "Call and allow call-back": {
     "en": "Call and allow call-back",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:184"
@@ -16386,9 +16382,37 @@
     "en": "Call without call-back",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:186"
   },
-  "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": {
-    "en": "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift:190"
+  "Let %@ call you back?": {
+    "en": "Let %@ call you back?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (VoiciCallBackPrompt title; %@ is the page's username)"
+  },
+  "%@ won't learn who you are.": {
+    "en": "%@ won't learn who you are.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (VoiciCallBackPrompt; followed by an info button)"
+  },
+  "About call-backs": {
+    "en": "About call-backs",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (explainer title and the info button's label)"
+  },
+  "%@ sees only your visitor name, %@ (or a nickname they gave you), never your account.": {
+    "en": "%@ sees only your visitor name, %@ (or a nickname they gave you), never your account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (About call-backs; first %@ the page's username, second the caller's visitor name like Visitor 4F3A)"
+  },
+  "%@ sees only a visitor name (or a nickname they gave you), never your account.": {
+    "en": "%@ sees only a visitor name (or a nickname they gave you), never your account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (About call-backs; %@ is the page's username)"
+  },
+  "Flagship keeps a note linking this conversation to your Flagship account, so it can ring your phone. It never sees your messages or hears your calls.": {
+    "en": "Flagship keeps a note linking this conversation to your Flagship account, so it can ring your phone. It never sees your messages or hears your calls.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (About call-backs)"
+  },
+  "The note is deleted when you tap “Stop call-backs”, when %@ blocks you or removes the page, or 90 days after you last called them with call-back on.": {
+    "en": "The note is deleted when you tap “Stop call-backs”, when %@ blocks you or removes the page, or 90 days after you last called them with call-back on.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (About call-backs; “Stop call-backs” is the thread's button)"
+  },
+  "Calling without call-back leaves no note, and %@ can't call you back, unless you allowed it on an earlier call.": {
+    "en": "Calling without call-back leaves no note, and %@ can't call you back, unless you allowed it on an earlier call.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciOutgoingCallScreen.swift (About call-backs)"
   },
   "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.": {
     "en": "Your devices ring only at these hours, in the time zone %@; outside them a call becomes a missed call. Only your own devices know these hours. An end before the start runs past midnight.",

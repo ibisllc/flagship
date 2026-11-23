@@ -57,6 +57,9 @@ public struct VoiciCallRequest: Equatable, Sendable {
     public var json: JSONValue
     /// What the caller is able to send: "audio" or "audio,video" (voici-calls-v2.md §1.1; absent on the wire = audio).
     public var media: String = "audio"
+    /// The caller's thread key for this conversation, from the request's checked thread statement (empty for an
+    /// anonymous caller): the owner's ring-back hint is sealed to it, so a caller who never wrote can be rung back.
+    public var threadPub: String = ""
     public var hasVideo: Bool { media == VoiciCalls.mediaVideo }
 }
 
@@ -344,7 +347,8 @@ public enum VoiciCalls {
         if !ctx.skipFresh && abs(f.at - ctx.now) > skewMs { return .refused(.stale) }
         if let allowed = ctx.allowed, !allowed(raw) { return .refused(.notAllowed) }
         return .ok(VoiciCallRequest(pageId: f.pageId, conv: f.conv, callId: f.callId, from: f.from, callerXwingPub: f.xpub,
-                                    offerSdp: f.sdp, issuedAt: f.at, delegatePub: del.delegatePub, json: raw, media: f.media ?? mediaAudio))
+                                    offerSdp: f.sdp, issuedAt: f.at, delegatePub: del.delegatePub, json: raw, media: f.media ?? mediaAudio,
+                                    threadPub: ts.threadPub))
     }
 
     // MARK: per-call keys

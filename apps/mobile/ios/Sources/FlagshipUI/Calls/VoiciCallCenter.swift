@@ -104,6 +104,9 @@ public final class VoiciCallCenter: NSObject {
     /// table named for it, and whether Answer was pressed (then the unlock dials).
     @ObservationIgnored private var lockedRing: (push: VoiciRingPush, cached: (username: String, pageId: String)?, answered: Bool)?
     @ObservationIgnored private var incomingPeer: VoiciCallRecord.Peer?
+    /// The caller's thread key from the room's signed request, kept with the record so the Calls list can ring back a
+    /// caller who never wrote.
+    @ObservationIgnored private var incomingThreadPub: String?
     @ObservationIgnored private var connectedAt: Int64?
     /// When the call connected, for the call screen's timer (set with the phase change that redraws it).
     var connectedSince: Date? { connectedAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) } }
@@ -563,6 +566,7 @@ public final class VoiciCallCenter: NSObject {
         switch e {
         case .request(let r):
             offersVideo = r.hasVideo
+            incomingThreadPub = r.threadPub.isEmpty ? nil : r.threadPub
             // A locked phone (the call key answers) can't open the push's sealed caller, but the room's signed request
             // names the caller's key for this conversation: show its visitor name instead of "Someone on voi.ci".
             if incomingPeer == nil {
@@ -735,9 +739,11 @@ public final class VoiciCallCenter: NSObject {
         if let call = push, let peer = incomingPeer, let outcome = Self.incomingOutcome(code: code, wasConnected: connectedAt != nil) {
             let end = Int64(clock().timeIntervalSince1970 * 1000)
             VoiciCallHistory.shared.record(VoiciCallRecord(callId: call.callId, direction: .incoming, outcome: outcome, peer: peer, video: offersVideo,
-                                                           at: call.issuedAt, durationMs: connectedAt.map { end - $0 } ?? 0))
+                                                           at: call.issuedAt, durationMs: connectedAt.map { end - $0 } ?? 0,
+                                                           threadPub: incomingThreadPub))
         }
         incomingPeer = nil
+        incomingThreadPub = nil
         connectedAt = nil
         answerAfterUnlock = nil
         unlockPending = false

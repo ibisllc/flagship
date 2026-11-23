@@ -157346,47 +157346,6 @@
         }
       }
     },
-    "Let voi.ci/%@ call you back?": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "¿Dejar que voi.ci/%@ te devuelva la llamada?"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Laisser voi.ci/%@ vous rappeler ?"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "voi.ci/%@ dich zurückrufen lassen?"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Deixar voi.ci/%@ retornar sua ligação?"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "voi.ci/%@ からの折り返しを許可しますか？"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允许 voi.ci/%@ 回拨你吗？"
-          }
-        }
-      }
-    },
     "Call and allow call-back": {
       "extractionState": "manual",
       "localizations": {
@@ -157469,43 +157428,330 @@
         }
       }
     },
-    "voi.ci/%@ won't learn who you are. Flagship will know this conversation can ring your phone.": {
+    "Let %@ call you back?": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "voi.ci/%@ no sabrá quién eres. Flagship sabrá que esta conversación puede hacer sonar tu teléfono."
+            "value": "¿Dejar que %@ te devuelva la llamada?"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "voi.ci/%@ ne saura pas qui vous êtes. Flagship saura que cette conversation peut faire sonner votre téléphone."
+            "value": "Laisser %@ vous rappeler ?"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "voi.ci/%@ erfährt nicht, wer du bist. Flagship weiß, dass diese Unterhaltung dein Telefon klingeln lassen kann."
+            "value": "%@ dich zurückrufen lassen?"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "voi.ci/%@ não vai saber quem você é. O Flagship vai saber que esta conversa pode fazer seu telefone tocar."
+            "value": "Deixar %@ retornar sua ligação?"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "voi.ci/%@ にはあなたが誰かわかりません。Flagship は、この会話からあなたの電話を鳴らせることを把握します。"
+            "value": "%@ からの折り返しを許可しますか？"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "voi.ci/%@ 不会知道你是谁。Flagship 会知道此对话可以让你的手机响铃。"
+            "value": "允许 %@ 回拨你吗？"
+          }
+        }
+      }
+    },
+    "%@ won't learn who you are.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ no sabrá quién eres."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ne saura pas qui vous êtes."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ erfährt nicht, wer du bist."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ não vai saber quem você é."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ にはあなたが誰かわかりません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 不会知道你是谁。"
+          }
+        }
+      }
+    },
+    "About call-backs": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sobre las llamadas de vuelta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À propos des rappels"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Über Rückrufe"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sobre retornos de chamada"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "折り返しについて"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关于回拨"
+          }
+        }
+      }
+    },
+    "%@ sees only your visitor name, %@ (or a nickname they gave you), never your account.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ solo ve tu nombre de visitante, %@ (o un apodo que te haya puesto), nunca tu cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ne voit que votre nom de visiteur, %@ (ou le surnom qu'on vous a donné), jamais votre compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sieht nur deinen Besuchernamen, %@ (oder einen Spitznamen, den man dir gegeben hat), nie dein Konto."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ vê só seu nome de visitante, %@ (ou um apelido que deram a você), nunca sua conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ に見えるのはあなたの訪問者名 %@（または相手が付けたニックネーム）だけで、アカウントは見えません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 只能看到你的访客名 %@（或对方给你起的昵称），绝不会看到你的账户。"
+          }
+        }
+      }
+    },
+    "%@ sees only a visitor name (or a nickname they gave you), never your account.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ solo ve un nombre de visitante (o un apodo que te haya puesto), nunca tu cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ne voit qu'un nom de visiteur (ou le surnom qu'on vous a donné), jamais votre compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sieht nur einen Besuchernamen (oder einen Spitznamen, den man dir gegeben hat), nie dein Konto."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ vê só um nome de visitante (ou um apelido que deram a você), nunca sua conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ に見えるのは訪問者名（または相手が付けたニックネーム）だけで、アカウントは見えません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 只能看到一个访客名（或对方给你起的昵称），绝不会看到你的账户。"
+          }
+        }
+      }
+    },
+    "Flagship keeps a note linking this conversation to your Flagship account, so it can ring your phone. It never sees your messages or hears your calls.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship guarda una nota que vincula esta conversación con tu cuenta de Flagship, para poder hacer sonar tu teléfono. Nunca ve tus mensajes ni escucha tus llamadas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship conserve une note qui relie cette conversation à votre compte Flagship, pour pouvoir faire sonner votre téléphone. Flagship ne voit jamais vos messages et n'entend jamais vos appels."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship speichert eine Notiz, die diese Unterhaltung mit deinem Flagship-Konto verknüpft, damit es dein Telefon klingeln lassen kann. Deine Nachrichten sieht und deine Anrufe hört es nie."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship guarda uma nota que liga esta conversa à sua conta Flagship, para poder fazer seu telefone tocar. Ele nunca vê suas mensagens nem ouve suas ligações."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship は、あなたの電話を鳴らせるように、この会話とあなたの Flagship アカウントを結び付けるメモを保存します。メッセージを見たり通話を聞いたりすることはありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 会保存一条备注，把此对话与你的 Flagship 账户关联起来，以便让你的手机响铃。它从不查看你的消息，也从不收听你的通话。"
+          }
+        }
+      }
+    },
+    "The note is deleted when you tap “Stop call-backs”, when %@ blocks you or removes the page, or 90 days after you last called them with call-back on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La nota se borra cuando tocas «Dejar de recibir llamadas de vuelta», cuando %@ te bloquea o elimina la página, o 90 días después de la última vez que llamaste con la llamada de vuelta permitida."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La note est supprimée quand vous touchez « Arrêter les rappels », quand %@ vous bloque ou supprime la page, ou 90 jours après votre dernier appel avec rappel autorisé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Notiz wird gelöscht, wenn du auf „Rückrufe beenden“ tippst, wenn %@ dich blockiert oder die Seite entfernt, oder 90 Tage nach deinem letzten Anruf mit erlaubtem Rückruf."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A nota é apagada quando você toca em “Parar retornos de chamada”, quando %@ bloqueia você ou remove a página, ou 90 dias depois da última vez que você ligou com retorno permitido."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このメモは、あなたが「折り返しをやめる」をタップしたとき、%@ があなたをブロックしたかページを削除したとき、または折り返しを許可して最後に発信してから 90 日後に削除されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当你轻点“停止回拨”、%@ 屏蔽你或删除页面时，或在你最后一次允许回拨的呼叫 90 天后，这条备注就会被删除。"
+          }
+        }
+      }
+    },
+    "Calling without call-back leaves no note, and %@ can't call you back, unless you allowed it on an earlier call.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Llamar sin permitir que te devuelvan la llamada no deja ninguna nota, y %@ no puede devolverte la llamada, salvo que lo hayas permitido en una llamada anterior."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appeler sans rappel ne laisse aucune note, et %@ ne peut pas vous rappeler, sauf si vous l'avez autorisé lors d'un appel précédent."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Anruf ohne Rückruf hinterlässt keine Notiz, und %@ kann dich nicht zurückrufen, außer du hast es bei einem früheren Anruf erlaubt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligar sem retorno não deixa nenhuma nota, e %@ não pode retornar sua ligação, a menos que você tenha permitido em uma ligação anterior."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "折り返しなしで発信するとメモは残らず、%@ はあなたに折り返せません。ただし、以前の通話で折り返しを許可した場合は別です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不允许回拨的呼叫不会留下备注，%@ 也无法回拨你，除非你在之前的呼叫中允许过。"
           }
         }
       }

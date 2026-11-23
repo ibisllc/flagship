@@ -553,7 +553,7 @@ public final class MessagesStore {
                 guard let m = VoiciCalls.openMissedCall(inboxSeed: seed, callId: item.callId, sealed: sealed, pageId: pageId, origin: origin, caKeys: caKeys) else { continue }
                 if !out.contains(where: { $0.callId == item.callId }) {
                     out.append(VoiciMissedCallRow(callId: item.callId, conv: m.request.conv, pseudonymPub: m.request.from, reason: m.reason,
-                                                  ringingAt: m.ringingAt, video: m.request.hasVideo))
+                                                  ringingAt: m.ringingAt, video: m.request.hasVideo, threadPub: m.request.threadPub))
                 }
                 break
             }
@@ -1190,9 +1190,19 @@ public final class MessagesStore {
         isAdmin && index?.takesCalls == true && !c.threadPub.isEmpty && !noRingBack.contains(c.conv) && ringBackFlags[c.conv] != false
     }
 
-    public func callVisitor(conv: String, video: Bool = false) async -> CallVisitorOutcome {
+    /// Whether a Calls row can ring back a visitor who never wrote (no thread here): the call's signed request named
+    /// the visitor's thread key, calls are on, `.com` hasn't refused a ring to that conversation, the visitor isn't blocked.
+    public func canRingBack(conv: String, pseudonymPub: String, threadPub: String) -> Bool {
+        isAdmin && index?.takesCalls == true && !threadPub.isEmpty && !pseudonymPub.isEmpty && !noRingBack.contains(conv)
+            && ringBackFlags[conv] != false && !state.blocks.contains(pseudonymPub) && !local.blocks.contains(pseudonymPub)
+    }
+
+    /// `threadPub` stands in for the conversation's when there is none (a caller who never wrote: the key comes from
+    /// the call's signed request).
+    public func callVisitor(conv: String, video: Bool = false, threadPub: String? = nil) async -> CallVisitorOutcome {
         guard let client, let idx = index, let k = keys(epoch: idx.inboxEpoch) else { return .failed("locked") }
-        guard let c = conversation(conv), let tpub = try? CanonicalJson.hexToBytes(c.threadPub), !c.threadPub.isEmpty else { return .noRingBack }
+        let threadHex = conversation(conv)?.threadPub ?? threadPub ?? ""
+        guard !threadHex.isEmpty, let tpub = try? CanonicalJson.hexToBytes(threadHex) else { return .noRingBack }
         let ringId = newId()
         let at = now()
         let media = video ? VoiciCalls.mediaVideo : VoiciCalls.mediaAudio
