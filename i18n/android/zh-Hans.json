@@ -4382,5 +4382,8 @@
   "re_pair_refused_replay": "此恢复请求已被使用。请重新开始恢复。",
   "re_pair_refused_credential_used": "该代码已用于一次恢复。请等待新代码，或重做恢复步骤，然后再试。",
   "re_pair_refused_stale": "此设备的时钟与 Flagship 的不一致。请将日期和时间设为自动，然后再试。",
-  "someone_joined_an_app_through_an_invite": "有人通过邀请加入了一个应用"
+  "someone_joined_an_app_through_an_invite": "有人通过邀请加入了一个应用",
+  "our_privacy_policy_changes_on": "我们的隐私政策将于%1$s更改。",
+  "our_privacy_policy_changed_on": "我们的隐私政策已于%1$s更改。",
+  "read_the_policy": "阅读政策"
 }

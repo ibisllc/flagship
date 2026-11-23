@@ -44,7 +44,7 @@ data class SecurityNotice(
     val validUntil: Long,
     val eventAt: Long,
     val lockFrom: Long,
-    /** Sorted by name; empty means everyone (none and maintenance only). */
+    /** Sorted by name; empty means everyone (none, maintenance and policy-update only). */
     val platforms: Map<String, NoticeMinimum>,
     val advisoryId: String,
     val deprecatesProtocol: Long,
@@ -89,7 +89,7 @@ object SecurityNoticeProtocol {
 
     const val PLATFORM = "android"
 
-    val KINDS = listOf("none", "maintenance", "update-advisory", "update-required")
+    val KINDS = listOf("none", "maintenance", "update-advisory", "update-required", "policy-update")
     val PLATFORMS = listOf("android", "ios", "web")
 
     private val HEX64 = Regex("^[0-9a-f]{64}$")
@@ -156,6 +156,9 @@ object SecurityNoticeProtocol {
             if (entries.isNotEmpty()) fail("platforms-not-allowed")
             if (message.isNotEmpty()) fail("message-not-allowed")
             if (eventAt != 0L) fail("bad-event-at")
+        } else if (kind == "policy-update") {
+            if (eventAt == 0L) fail("event-required")
+            if (message.isNotEmpty()) fail("message-not-allowed")
         } else if (message.isEmpty()) {
             fail("message-required")
         }
@@ -309,9 +312,9 @@ object SecurityNoticeProtocol {
         if (n.kind == "none") return NoticeOutcome.None("kind-none")
         if (now < n.validFrom) return NoticeOutcome.None("not-yet")
         if (now >= n.validUntil) return NoticeOutcome.None("expired")
-        if (n.kind == "maintenance") {
+        if (n.kind == "maintenance" || n.kind == "policy-update") {
             if (n.platforms.isNotEmpty() && c.platform !in n.platforms) return NoticeOutcome.None("other-platform")
-            return NoticeOutcome.Banner("maintenance", n)
+            return NoticeOutcome.Banner(if (n.kind == "maintenance") "maintenance" else "policy", n)
         }
         if (c.platform !in n.platforms) return NoticeOutcome.None("other-platform")
         if (!clientBelowMinimum(n, c)) return NoticeOutcome.None("up-to-date")
@@ -340,6 +343,9 @@ object SecurityNoticeProtocol {
     }
 
     /** The notice's message with `{date}` replaced by the caller's rendering of eventAt. */
+    /** Has a policy-update's date passed? The banner says "changes on" before it and "changed on" from it on. */
+    fun policyInEffect(n: SecurityNotice, now: Long): Boolean = n.kind == "policy-update" && now >= n.eventAt
+
     fun text(n: SecurityNotice, formatDate: (Long) -> String): String =
         if (n.eventAt == 0L) n.message else n.message.split("{date}").joinToString(formatDate(n.eventAt))
 

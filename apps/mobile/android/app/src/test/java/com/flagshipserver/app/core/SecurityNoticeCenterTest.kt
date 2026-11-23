@@ -264,6 +264,32 @@ class SecurityNoticeCenterTest {
         assertNull(SecurityNoticeModels.banner(NoticeOutcome.Banner("maintenance", n)) { "DATE" }.action)
     }
 
+    @Test fun aPolicyNoticeShowsTheAppsOwnSentenceAndLinkAndStaysDismissed() = runBlocking {
+        val eventAt = t0 + 10 * day
+        val policy = a.notice(seq = 6, kind = "policy-update", validFrom = t0, validUntil = t0 + 20 * day, message = "", eventAt = eventAt)
+        val n = SecurityNoticeProtocol.parse(policy)!!
+        val outcome = SecurityNoticeProtocol.outcome(n, NoticeClient("android", 1, 1), t0 + day)
+        assertEquals(NoticeOutcome.Banner("policy", n), outcome)
+        val before = SecurityNoticeModels.banner(outcome as NoticeOutcome.Banner, now = eventAt - 1, formatDay = { "December 9, 2026" })
+        assertEquals("Our privacy policy changes on December 9, 2026.", before.text)
+        assertEquals("Read the policy", before.link)
+        assertEquals("Dismiss", before.dismiss)
+        assertNull(before.action)
+        assertEquals("Our privacy policy changed on December 9, 2026.", SecurityNoticeModels.banner(outcome, now = eventAt, formatDay = { "December 9, 2026" }).text)
+        assertEquals("https://flagshipserver.com/privacy", SecurityNoticeCopy.PRIVACY_URL)
+
+        serve(a, policy)
+        val c = center()
+        c.refresh()
+        val shown = c.banner.value
+        assertEquals("policy", shown?.style)
+        c.dismiss(shown!!)
+        clock = t0 + 15 * day
+        val relaunch = center()
+        relaunch.evaluate()
+        assertNull(relaunch.banner.value)
+    }
+
     // ---- the lock's network gate ----
 
     private fun gateClient(sent: MutableList<Request>) = OkHttpClient.Builder()

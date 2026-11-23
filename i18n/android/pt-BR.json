@@ -4383,5 +4383,8 @@
   "re_pair_refused_replay": "Esta solicitação de recuperação já foi usada. Inicie a recuperação novamente.",
   "re_pair_refused_credential_used": "Esse código já foi usado em uma recuperação. Aguarde um código novo, ou repita a etapa de recuperação, e tente de novo.",
   "re_pair_refused_stale": "O relógio deste dispositivo não corresponde ao do Flagship. Defina a data e a hora como automáticas e tente de novo.",
-  "someone_joined_an_app_through_an_invite": "Alguém entrou em um app por um convite"
+  "someone_joined_an_app_through_an_invite": "Alguém entrou em um app por um convite",
+  "our_privacy_policy_changes_on": "Nossa política de privacidade muda em %1$s.",
+  "our_privacy_policy_changed_on": "Nossa política de privacidade mudou em %1$s.",
+  "read_the_policy": "Ler a política"
 }

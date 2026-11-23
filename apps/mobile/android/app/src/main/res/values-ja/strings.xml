@@ -4385,4 +4385,7 @@
     <string name="re_pair_refused_credential_used">そのコードはすでにリカバリーに使用されています。新しいコードを待つか、リカバリーの手順をやり直してから、もう一度お試しください。</string>
     <string name="re_pair_refused_stale">このデバイスの時計が Flagship の時計と一致しません。日付と時刻を自動設定にしてから、もう一度お試しください。</string>
     <string name="someone_joined_an_app_through_an_invite">誰かが招待からアプリに参加しました</string>
+    <string name="our_privacy_policy_changes_on">プライバシーポリシーは%1$sに変更されます。</string>
+    <string name="our_privacy_policy_changed_on">プライバシーポリシーは%1$sに変更されました。</string>
+    <string name="read_the_policy">ポリシーを読む</string>
 </resources>

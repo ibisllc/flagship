@@ -223,7 +223,7 @@ class SecurityNoticeCenter(
     }
 
     /**
-     * Should this banner show? A maintenance banner stays dismissed for its seq.
+     * Should this banner show? A maintenance or policy banner stays dismissed for its seq.
      * An update banner returns after a day; the grace window of an
      * update-required comes back on every launch (dismissal lasts the launch).
      */
@@ -232,7 +232,7 @@ class SecurityNoticeCenter(
         if (sessionDismissed) return false
         if (n.kind == "update-required") return true
         if (store.dismissedSeq != n.seq) return true
-        if (banner.style == "maintenance") return false
+        if (banner.style == "maintenance" || banner.style == "policy") return false
         return now - store.dismissedAt >= ADVISORY_REAPPEAR_MS
     }
 

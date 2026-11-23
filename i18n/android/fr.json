@@ -4383,5 +4383,8 @@
   "re_pair_refused_replay": "Cette demande de récupération a déjà été utilisée. Recommencez la récupération.",
   "re_pair_refused_credential_used": "Ce code a déjà servi pour une récupération. Attendez un nouveau code, ou refaites l’étape de récupération, puis réessayez.",
   "re_pair_refused_stale": "L’horloge de cet appareil ne correspond pas à celle de Flagship. Réglez la date et l’heure sur automatique, puis réessayez.",
-  "someone_joined_an_app_through_an_invite": "Quelqu’un a rejoint une app grâce à une invitation"
+  "someone_joined_an_app_through_an_invite": "Quelqu’un a rejoint une app grâce à une invitation",
+  "our_privacy_policy_changes_on": "Notre politique de confidentialité change le %1$s.",
+  "our_privacy_policy_changed_on": "Notre politique de confidentialité a changé le %1$s.",
+  "read_the_policy": "Lire la politique"
 }

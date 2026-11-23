@@ -1,6 +1,6 @@
 // The security notice's banner (docs/security-notices.md section 6.4): one
 // dismissible card above the main content, below the status bar. A maintenance
-// notice has a teal left rule; the update banner (an advisory, or the grace
+// notice and a privacy policy change (with "Read the policy") have a teal left rule; the update banner (an advisory, or the grace
 // window of an update-required) has a warning tint and rule and an Update
 // button that opens the store listing. A status region, not an alert; every
 // button is at least 48 dp.
@@ -41,6 +41,14 @@ import com.flagshipserver.app.core.SecurityNoticeCenter
 import com.flagshipserver.app.core.SecurityNoticeCopy
 import com.flagshipserver.app.core.SecurityNoticeModels
 import com.flagshipserver.app.ui.theme.FS
+
+/** Opens the privacy policy in the browser; false when nothing on the phone can show it. */
+fun openPrivacyPolicy(context: android.content.Context): Boolean = try {
+    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SecurityNoticeCopy.PRIVACY_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    true
+} catch (_: Throwable) {
+    false
+}
 
 /** Opens the app's own store listing; false when nothing on the phone can show it. */
 fun openStoreListing(context: android.content.Context): Boolean = try {
@@ -83,6 +91,13 @@ fun NoticeBanner(center: SecurityNoticeCenter?) {
                                 if (!openStoreListing(ctx)) toasts.error(SecurityNoticeCopy.UPDATE_FAILED)
                             },
                             modifier = Modifier.heightIn(min = 48.dp).testTag("notice-banner-update"),
+                        )
+                    }
+                    model.link?.let { label ->
+                        FSPrimaryButton(
+                            label = label,
+                            onClick = { openPrivacyPolicy(ctx) },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("notice-banner-link"),
                         )
                     }
                     FSGhostButton(

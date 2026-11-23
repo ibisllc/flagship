@@ -12,8 +12,9 @@ import java.util.Locale
 import java.util.TimeZone
 
 object SecurityNoticeCopy {
-    const val BANNER_DISMISS = "Dismiss"
-    const val BANNER_UPDATE = "Update"
+    val BANNER_DISMISS get() = FSStrings.get(R.string.dismiss)
+    val BANNER_UPDATE get() = FSStrings.get(R.string.update_2)
+    val POLICY_READ get() = FSStrings.get(R.string.read_the_policy)
     val LOCK_KICKER get() = FSStrings.get(R.string.security_update)
     val LOCK_TITLE get() = FSStrings.get(R.string.update_required)
     const val WHY_LABEL = "Why"
@@ -25,6 +26,21 @@ object SecurityNoticeCopy {
     val SIGN_OUT get() = FSStrings.get(R.string.sign_out_2)
     val SIGNED_BY get() = FSStrings.get(R.string.signed_by_the_flagship_maintainers)
     val UPDATE_FAILED get() = FSStrings.get(R.string.couldnt_update_yet_check_your_connection)
+
+    /** The privacy policy, the app's own link: a policy notice carries only the date. */
+    const val PRIVACY_URL = "https://flagshipserver.com/privacy"
+
+    /** A policy notice's sentence, in the person's language; the notice itself carries no text. */
+    fun policy(dayText: String, inEffect: Boolean): String =
+        if (inEffect) FSStrings.get(R.string.our_privacy_policy_changed_on, dayText)
+        else FSStrings.get(R.string.our_privacy_policy_changes_on, dayText)
+
+    /** A day for a person (a policy's effective date), in their own locale and zone. */
+    fun formatDay(ms: Long, locale: Locale = Locale.getDefault(), zone: TimeZone = TimeZone.getDefault()): String {
+        val pattern = runCatching { android.text.format.DateFormat.getBestDateTimePattern(locale, "MMMMdyyyy") }
+            .getOrNull()?.takeIf { it.isNotEmpty() } ?: "MMMM d, yyyy"
+        return SimpleDateFormat(pattern, locale).apply { timeZone = zone }.format(Date(ms))
+    }
 
     /** The app's own store listing, kept only here and never taken from a notice. */
     const val STORE_URL = "https://play.google.com/store/apps/details?id=com.flagshipserver.app"
@@ -39,8 +55,15 @@ object SecurityNoticeCopy {
     }
 }
 
-/** The banner's contents for a notice. */
-data class BannerModel(val style: String, val text: String, val update: Boolean, val dismiss: String, val action: String?)
+/** The banner's contents for a notice; [link] is the policy banner's "Read the policy". */
+data class BannerModel(
+    val style: String,
+    val text: String,
+    val update: Boolean,
+    val dismiss: String,
+    val action: String?,
+    val link: String? = null,
+)
 
 /** The lock screen's contents for a notice, top to bottom. */
 data class LockModel(
@@ -56,8 +79,22 @@ data class LockModel(
 )
 
 object SecurityNoticeModels {
-    fun banner(b: NoticeOutcome.Banner, formatDate: (Long) -> String = SecurityNoticeCopy::formatDate): BannerModel =
-        BannerModel(
+    fun banner(
+        b: NoticeOutcome.Banner,
+        now: Long = System.currentTimeMillis(),
+        formatDay: (Long) -> String = SecurityNoticeCopy::formatDay,
+        formatDate: (Long) -> String = SecurityNoticeCopy::formatDate,
+    ): BannerModel =
+        if (b.style == "policy") {
+            BannerModel(
+                style = b.style,
+                text = SecurityNoticeCopy.policy(formatDay(b.notice.eventAt), SecurityNoticeProtocol.policyInEffect(b.notice, now)),
+                update = false,
+                dismiss = SecurityNoticeCopy.BANNER_DISMISS,
+                action = null,
+                link = SecurityNoticeCopy.POLICY_READ,
+            )
+        } else BannerModel(
             style = b.style,
             text = SecurityNoticeProtocol.text(b.notice, formatDate),
             update = b.style == "update",
