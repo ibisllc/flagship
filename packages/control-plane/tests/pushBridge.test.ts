@@ -497,4 +497,27 @@ describe("APNs with a team-scoped key", () => {
       }
     });
   }
+  it("retries a development build's token (production says BadDeviceToken) on the sandbox host", async () => {
+    const bad = { status: 400, body: JSON.stringify({ reason: "BadDeviceToken" }) };
+    const { f, calls } = fakeFetch([bad, { status: 200, body: "" }, bad, { status: 200, body: "" }]);
+    const forward = buildPushForwarder({ apns, fetchImpl: f, now: () => 1_700_000_000_000 });
+    await forward({ targets: [{ tokenId: "t", platform: "apns", providerToken: "ALERT0001" }], category: "cert-alert", sealedPayloadHex: "00" });
+    const voip = buildVoipPushSender({ apns, fetchImpl: f, now: () => 1_700_000_000_000 });
+    expect(await voip(["VOIP0001"], { id: "c1" }, 1_700_000_060)).toBe(1);
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://api.push.apple.com/3/device/ALERT0001",
+      "https://api.sandbox.push.apple.com/3/device/ALERT0001",
+      "https://api.push.apple.com/3/device/VOIP0001",
+      "https://api.sandbox.push.apple.com/3/device/VOIP0001",
+    ]);
+  });
+
+  it("does not retry other refusals or a configured host", async () => {
+    const { f, calls } = fakeFetch([{ status: 400, body: JSON.stringify({ reason: "BadDeviceToken" }) }, { status: 403, body: JSON.stringify({ reason: "InvalidProviderToken" }) }]);
+    const sandboxed = buildVoipPushSender({ apns: { ...apns, host: "api.sandbox.push.apple.com" }, fetchImpl: f, now: () => 1_700_000_000_000 });
+    expect(await sandboxed(["VOIP0001"], { id: "c1" }, 1_700_000_060)).toBe(0);
+    const prod = buildVoipPushSender({ apns, fetchImpl: f, now: () => 1_700_000_000_000 });
+    expect(await prod(["VOIP0002"], { id: "c1" }, 1_700_000_060)).toBe(0);
+    expect(calls).toHaveLength(2);
+  });
 });

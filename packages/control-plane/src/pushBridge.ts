@@ -342,6 +342,25 @@ export function secretRequestDisplayData(apex = "flagshipserver.com"): Record<st
   return { kind: "secret-request", deepLink: appRouteLink("secret-requests", {}, apex) };
 }
 
+const APNS_PRODUCTION_HOST = "api.push.apple.com";
+const APNS_SANDBOX_HOST = "api.sandbox.push.apple.com";
+
+/**
+ * One APNs POST. A development-signed build (Xcode Debug) registers sandbox tokens, which production APNs refuses
+ * with 400 BadDeviceToken; the same key works on the sandbox host, so that one refusal is retried there. A configured
+ * `host` other than production is used as is.
+ */
+async function postApns(fetchImpl: FetchLike, host: string | undefined, token: string, init: Parameters<FetchLike>[1]): Promise<{ status: number; ok: boolean; text: string }> {
+  const first = host ?? APNS_PRODUCTION_HOST;
+  let r = await fetchImpl(`https://${first}/3/device/${token}`, init);
+  let text = r.ok ? "" : await r.text();
+  if (r.status === 400 && first === APNS_PRODUCTION_HOST && text.includes("BadDeviceToken")) {
+    r = await fetchImpl(`https://${APNS_SANDBOX_HOST}/3/device/${token}`, init);
+    text = r.ok ? "" : await r.text();
+  }
+  return { status: r.status, ok: r.ok, text };
+}
+
 async function sendApns(args: {
   cfg: NonNullable<PushBridgeConfig["apns"]>;
   providerToken: string;
@@ -357,7 +376,6 @@ async function sendApns(args: {
     state.token = await mintApnsJwt(cfg, now);
     state.mintedAt = now();
   }
-  const url = `https://${cfg.host ?? "api.push.apple.com"}/3/device/${args.providerToken}`;
   const apsBody: Record<string, unknown> = {
     alert: apnsLocalizedAlertFor(args.category, args.displayData?.kind),
     "mutable-content": 1,
@@ -375,7 +393,7 @@ async function sendApns(args: {
     for (const [k, v] of Object.entries(args.displayData)) bodyObj[k] = v;
   }
   const body = JSON.stringify(bodyObj);
-  const r = await args.fetchImpl(url, {
+  const r = await postApns(args.fetchImpl, cfg.host, args.providerToken, {
     method: "POST",
     headers: {
       authorization: `bearer ${state.token}`,
@@ -385,7 +403,7 @@ async function sendApns(args: {
     },
     body,
   });
-  if (!r.ok) throw new Error(`apns ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw new Error(`apns ${r.status}: ${r.text}`);
 }
 
 /**
@@ -407,7 +425,7 @@ export function buildVoipPushSender(cfg: { apns: NonNullable<PushBridgeConfig["a
     await Promise.all(
       tokens.map(async (t) => {
         try {
-          const r = await fetchImpl(`https://${cfg.apns.host ?? "api.push.apple.com"}/3/device/${t}`, {
+          const r = await postApns(fetchImpl, cfg.apns.host, t, {
             method: "POST",
             headers: {
               authorization: `bearer ${state.token}`,
@@ -420,9 +438,13 @@ export function buildVoipPushSender(cfg: { apns: NonNullable<PushBridgeConfig["a
             body: JSON.stringify({ "flagship-call": call }),
           });
           if (r.ok) sent++;
-          else if (r.status === 410) gone?.(t);
-        } catch {
-          /* one token failing is not the call failing */
+          else {
+            if (r.status === 410) gone?.(t);
+            console.warn(`push voip failed: ${r.status} ${r.text.replace(/[A-Za-z0-9_:-]{60,}/g, "…").slice(0, 200)}`);
+          }
+        } catch (e) {
+          // One token failing is not the call failing.
+          console.warn(`push voip failed: ${String(e instanceof Error ? e.message : e).slice(0, 200)}`);
         }
       }),
     );
