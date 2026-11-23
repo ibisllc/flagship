@@ -1,0 +1,13 @@
+-- Names on a locked phone (docs/voici-locked-caller-names.md, owner-agreed 2026-11-22). Storage
+-- packages/storage/src/voiciCalls.ts (putRingBack / getRingBack), handlers packages/control-plane/src/voiciCallModes.ts.
+--
+-- `ring_tag_key`: the caller's per-page ring tag key (64 hex, HKDF of their Messages secret and the page id), sent by
+-- the caller's app beside its signed attach. A ring's push carries `tag` = HMAC of the ring's random id under it, so a
+-- locked caller phone can name the page that rings it back while APNs and FCM see fresh bytes each ring. `.com` learns
+-- nothing new: the row already ties the conversation to the caller's account. NULL for every existing channel (its
+-- ring shows the generic "Someone you wrote to" until the caller's app attaches again). Replaced by the next attach
+-- that carries one, gone with the row.
+--
+-- APPLY-ONCE (bare ALTER TABLE ADD COLUMN): a re-run fails with "duplicate column name", which is expected, not a
+-- failure. Apply it before the `.com` deploy that reads the column.
+ALTER TABLE voici_ring_backs ADD COLUMN ring_tag_key TEXT;

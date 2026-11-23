@@ -32,13 +32,18 @@ export interface VoiciCallKeyRecord {
   registeredAt: number;
 }
 
-/** A caller's ring-back channel (flagship/voici-ring-back/v1; migration 0149); `username` when the caller's app attached it. */
+/**
+ * A caller's ring-back channel (flagship/voici-ring-back/v1; migration 0149); `username` when the caller's app attached
+ * it. `ringTagKey` (migration 0158, docs/voici-locked-caller-names.md): the caller's per-page key the ring push's `tag`
+ * is made under, sent by the caller's app; like `username`, an attach without one keeps the stored one.
+ */
 export interface VoiciRingBackRecord {
   pageId: string;
   conv: string;
   username: string | null;
   issuedAt: number;
   expiresAt: number;
+  ringTagKey?: string | null;
 }
 
 /** The owner's ring still ringing (flagship/voici-ring/v1; migration 0149). */
@@ -310,20 +315,21 @@ export class D1VoiciCallStorage implements VoiciCallStorage {
   async putRingBack(rec: VoiciRingBackRecord) {
     const r = await this.db
       .prepare(
-        "INSERT INTO voici_ring_backs (page_id, conv, username, issued_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5) " +
-          "ON CONFLICT (page_id, conv) DO UPDATE SET username = COALESCE(?3, voici_ring_backs.username), issued_at = ?4, expires_at = ?5 WHERE voici_ring_backs.issued_at < ?4",
+        "INSERT INTO voici_ring_backs (page_id, conv, username, issued_at, expires_at, ring_tag_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6) " +
+          "ON CONFLICT (page_id, conv) DO UPDATE SET username = COALESCE(?3, voici_ring_backs.username), issued_at = ?4, expires_at = ?5, " +
+          "ring_tag_key = COALESCE(?6, voici_ring_backs.ring_tag_key) WHERE voici_ring_backs.issued_at < ?4",
       )
-      .bind(rec.pageId, rec.conv, rec.username, rec.issuedAt, rec.expiresAt)
+      .bind(rec.pageId, rec.conv, rec.username, rec.issuedAt, rec.expiresAt, rec.ringTagKey ?? null)
       .run();
     return (r.meta.changes ?? 0) === 1;
   }
 
   async getRingBack(pageId: string, conv: string, now: number) {
     const r = await this.db
-      .prepare("SELECT page_id, conv, username, issued_at, expires_at FROM voici_ring_backs WHERE page_id = ?1 AND conv = ?2 AND expires_at > ?3")
+      .prepare("SELECT page_id, conv, username, issued_at, expires_at, ring_tag_key FROM voici_ring_backs WHERE page_id = ?1 AND conv = ?2 AND expires_at > ?3")
       .bind(pageId, conv, now)
-      .first<{ page_id: string; conv: string; username: string | null; issued_at: number; expires_at: number }>();
-    return r ? { pageId: r.page_id, conv: r.conv, username: r.username ?? null, issuedAt: r.issued_at, expiresAt: r.expires_at } : null;
+      .first<{ page_id: string; conv: string; username: string | null; issued_at: number; expires_at: number; ring_tag_key: string | null }>();
+    return r ? { pageId: r.page_id, conv: r.conv, username: r.username ?? null, issuedAt: r.issued_at, expiresAt: r.expires_at, ringTagKey: r.ring_tag_key ?? null } : null;
   }
 
   async deleteRingBack(pageId: string, conv: string) {
@@ -526,7 +532,7 @@ export class InMemoryVoiciCallStorage implements VoiciCallStorage {
     const k = `${rec.pageId}|${rec.conv}`;
     const cur = this.ringBacks.get(k);
     if (cur && cur.issuedAt >= rec.issuedAt) return false;
-    this.ringBacks.set(k, { ...rec, username: rec.username ?? cur?.username ?? null });
+    this.ringBacks.set(k, { ...rec, username: rec.username ?? cur?.username ?? null, ringTagKey: rec.ringTagKey ?? cur?.ringTagKey ?? null });
     return true;
   }
   async getRingBack(pageId: string, conv: string, now: number) {

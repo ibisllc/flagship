@@ -11,7 +11,7 @@ import { InMemoryStorage, InMemoryVoiciCallStorage, InMemoryVoiciStorage } from 
 import * as P from "@flagship/protocol";
 import { canonicalVoiciThreadFetch, hexToBytes, signVoiciAnonBlock, signVoiciBlock, signVoiciRing, signVoiciRingBackPseudonym } from "@flagship/protocol";
 import { p256 } from "@noble/curves/nist.js";
-import { handleVoiciAnonBlock, handleVoiciBlock, handleVoiciCallSettingsGet, handleVoiciCallSettingsPut, handleVoiciConvDelete, handleVoiciInbox, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
+import { buildVoiciRingPusher, handleVoiciAnonBlock, handleVoiciBlock, handleVoiciCallSettingsGet, handleVoiciCallSettingsPut, handleVoiciConvDelete, handleVoiciInbox, handleVoiciCallChallenge, handleVoiciCallRequest, handleVoiciRing, handleVoiciRingBack, handleVoiciThread, type VoiciCallRequestDeps, type VoiciCallRoomInit } from "../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -140,6 +140,78 @@ describe("ringing a caller back", () => {
   it("no channel, no ring", async () => {
     const w = await world("callback");
     expect(code(await handleVoiciRing({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { ring: CM.ring.order, signature: CM.ring.signature }))).toBe("no-ring-back");
+  });
+});
+
+describe("names on a locked phone: the ring tag (docs/voici-locked-caller-names.md)", () => {
+  const tagKey = "5a".repeat(32);
+  const d = (w: Awaited<ReturnType<typeof world>>) => ({ voici: w.voici, calls: w.calls, origin: V.constants.origin, caKeys: () => [K.caPub], now: () => NOW });
+  const ring = (ringId: string) => {
+    const r = { ...CM.ring.order, ringId };
+    return { ring: r, signature: signVoiciRing(r, hexToBytes(M.derivations.ownerSignSeed)) };
+  };
+
+  it("the app's attach stores its key; each ring's push carries a fresh tag and nothing else new", async () => {
+    const w = await world("callback");
+    expect((await handleVoiciRingBack(d(w), { ...CM.ringBack.app, ringTagKey: tagKey }, "visitor")).status).toBe(200);
+    expect((await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW))!.ringTagKey).toBe(tagKey);
+    const pushed: Record<string, string>[] = [];
+    const pushRing = async (_u: string, payload: Record<string, string>) => (pushed.push(payload), 1);
+    for (const id of ["77".repeat(16), "88".repeat(16)]) expect((await handleVoiciRing({ voici: w.voici, calls: w.calls, pushRing, now: () => NOW }, "alice", ring(id))).status).toBe(200);
+    expect(pushed.map((p) => Object.keys(p).sort())).toEqual([["hint", "kind", "ringId", "tag"], ["hint", "kind", "ringId", "tag"]]);
+    expect(pushed.map((p) => p.tag)).toEqual(["77".repeat(16), "88".repeat(16)].map((id) => P.voiciRingTag(hexToBytes(tagKey), id)));
+    expect(pushed[0]!.tag).not.toBe(pushed[1]!.tag);
+  });
+
+  it("a re-attach replaces the key; an attach without one keeps it", async () => {
+    const w = await world("callback");
+    await handleVoiciRingBack(d(w), { ...CM.ringBack.app, ringTagKey: tagKey }, "visitor");
+    const seed = hexToBytes(M.derivations.pseudonymSeed);
+    await handleVoiciRingBack(d(w), { ...signVoiciRingBackPseudonym({ ...CM.ringBack.app.order, issuedAt: NOW + 1 }, seed), ringTagKey: "6b".repeat(32) }, "visitor");
+    expect((await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW))!.ringTagKey).toBe("6b".repeat(32));
+    await handleVoiciRingBack(d(w), signVoiciRingBackPseudonym({ ...CM.ringBack.app.order, issuedAt: NOW + 2 }, seed), "visitor");
+    expect((await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW))!.ringTagKey).toBe("6b".repeat(32));
+  });
+
+  it("no key, no tag; a key without an account is dropped; a bad or browser-borne key is refused", async () => {
+    const w = await world("callback");
+    expect(code(await handleVoiciRingBack(d(w), { ...CM.ringBack.app, ringTagKey: "ZZ" }, "visitor"))).toBe("malformed");
+    expect(code(await handleVoiciRingBack(d(w), { ...CM.ringBack.browser, ringTagKey: tagKey }))).toBe("malformed");
+    expect(await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW)).toBeNull();
+    expect((await handleVoiciRingBack(d(w), { ...CM.ringBack.app, ringTagKey: tagKey })).status).toBe(200);
+    expect((await w.calls.getRingBack(K.pageId, M.derivations.conv, NOW))!.ringTagKey).toBeNull();
+    const w2 = await world("callback");
+    await handleVoiciRingBack(d(w2), CM.ringBack.app, "visitor");
+    const pushed: Record<string, string>[] = [];
+    await handleVoiciRing({ voici: w2.voici, calls: w2.calls, pushRing: async (_u, p) => (pushed.push(p), 1), now: () => NOW }, "alice", ring("77".repeat(16)));
+    expect(Object.keys(pushed[0]!).sort()).toEqual(["hint", "kind", "ringId"]);
+  });
+
+  it("the key goes with the channel: stop and the owner's block", async () => {
+    const w = await world("callback");
+    await handleVoiciRingBack(d(w), { ...CM.ringBack.app, ringTagKey: tagKey }, "visitor");
+    await handleVoiciRingBack(d(w), CM.ringBack.stop);
+    expect(JSON.stringify([...w.calls.ringBacks.values()])).not.toContain(tagKey);
+    await handleVoiciRingBack(d(w), { ...signVoiciRingBackPseudonym({ ...CM.ringBack.app.order, issuedAt: NOW + 5 }, hexToBytes(M.derivations.pseudonymSeed)), ringTagKey: tagKey }, "visitor");
+    const block = { pageId: K.pageId, pseudonymPub: M.derivations.pseudonymPub, op: "block" as const, issuedAt: NOW };
+    await handleVoiciBlock({ voici: w.voici, calls: w.calls, now: () => NOW }, "alice", { block, signature: signVoiciBlock(block, hexToBytes(M.derivations.ownerSignSeed)) });
+    expect(JSON.stringify([...w.calls.ringBacks.values()])).not.toContain(tagKey);
+  });
+
+  it("the pusher sends exactly kind, ringId, hint, room and tag, to VoIP and ordinary tokens alike", async () => {
+    const sent: Record<string, string>[] = [];
+    const pusher = buildVoiciRingPusher({
+      pushTokens: { listByUser: async () => [{ tokenId: "t2", deviceId: "d2", platform: "fcm", providerToken: "x" }] as never },
+      calls: { listVoipTokens: async () => [{ deviceId: "d1", token: "v1" }] as never, deleteVoipToken: async () => {} },
+      voip: async (_t, call) => (sent.push(call), 1),
+      forward: async (a) => void sent.push(a.displayData as Record<string, string>),
+      apex: "flagshipserver.com",
+    });
+    expect(await pusher("visitor", { kind: "voici-ring", ringId: "77".repeat(16), hint: "aGludA", tag: "ab".repeat(16) }, NOW + 45_000)).toBe(2);
+    expect(sent.map((p) => Object.keys(p).sort())).toEqual([["hint", "kind", "ringId", "room", "tag"], ["hint", "kind", "ringId", "room", "tag"]]);
+    sent.length = 0;
+    await pusher("visitor", { kind: "voici-ring", ringId: "77".repeat(16), hint: "aGludA" }, NOW + 45_000);
+    expect(sent.map((p) => Object.keys(p).sort())).toEqual([["hint", "kind", "ringId", "room"], ["hint", "kind", "ringId", "room"]]);
   });
 });
 

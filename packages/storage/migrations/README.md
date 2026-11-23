@@ -55,6 +55,7 @@ Bare `ALTER TABLE ... ADD COLUMN` (apply-once; re-run ⇒ `duplicate column name
 | `0132_messages_slow_tier.sql`     | `messages_enrollments.slow_tier` |
 | `0137_voici_name_changes_and_domain_grace.sql` | `voici_name_changes.op`, `voici_name_changes.counted`, `custom_domain_orders.lapsed_at` |
 | `0138_pq_authority_records.sql`  | `admin_root_rotations.pq_json`, `device_capability_grants.pq_signature_json` |
+| `0158_voici_ring_tag.sql`        | `voici_ring_backs.ring_tag_key` |
 
 Apply-once `RENAME COLUMN` (re-run ⇒ `no such column`):
 

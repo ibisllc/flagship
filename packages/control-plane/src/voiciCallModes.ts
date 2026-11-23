@@ -26,9 +26,11 @@ import {
   verifyVoiciAnonBlock,
   checkVoiciRingBackOrder,
   issueVoiciCallPow,
+  parseVoiciRingBackBody,
   parseVoiciCallPow,
   parseVoiciRing,
   verifyVoiciRing,
+  voiciRingTag,
   VOICI_CALL_POW_BITS,
   VOICI_CALL_POW_TTL_MS,
   VOICI_CALL_SKEW_MS,
@@ -49,7 +51,7 @@ const ok = (body: unknown): HandlerResponseWithHeaders => ({ status: 200, body, 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 /** Pushes a ring to every device of the caller's account (today's push path); answers how many got it. */
-export type VoiciRingPusher = (username: string, payload: { kind: "voici-ring"; ringId: string; hint: string }, expiresAt: number) => Promise<number>;
+export type VoiciRingPusher = (username: string, payload: { kind: "voici-ring"; ringId: string; hint: string; tag?: string }, expiresAt: number) => Promise<number>;
 
 /** The calls settings of a stored page, with the new modes. */
 function pageMode(indexJson: string): string | null {
@@ -117,9 +119,10 @@ export async function checkAnonymousCall(
 // ── the ring-back channel ─────────────────────────────────────────────────
 
 /**
- * Body: the signed order (`checkVoiciRingBackOrder`). `account` is the caller's account when the route authorized the
- * caller's app's device headers (a pseudonym-signed order only); a browser's order names no account. Answers
- * {ok, expiresAt?}.
+ * Body: the signed order (`checkVoiciRingBackOrder`), plus, from the caller's app, an optional `ringTagKey` (64 hex,
+ * docs/voici-locked-caller-names.md) kept with the channel so the ring push can carry a tag the caller's locked phone
+ * recognises. `account` is the caller's account when the route authorized the caller's app's device headers (a
+ * pseudonym-signed order only); a browser's order names no account. Answers {ok, expiresAt?}.
  */
 export async function handleVoiciRingBack(
   deps: { voici: VoiciStorage; calls: VoiciCallStorage; origin: string; caKeys: (now: number) => string[]; now?: () => number },
@@ -127,6 +130,9 @@ export async function handleVoiciRingBack(
   account: string | null = null,
 ): Promise<HandlerResponseWithHeaders> {
   const now = (deps.now ?? Date.now)();
+  const parsed = parseVoiciRingBackBody(body);
+  if (!parsed) return voiciRefusal(400, "malformed");
+  body = parsed.envelope;
   const order = isObj(body) && isObj(body.order) ? body.order : null;
   if (!order || typeof order.pageId !== "string") return voiciRefusal(400, "malformed");
   const page = await deps.voici.getPageById(order.pageId);
@@ -138,12 +144,14 @@ export async function handleVoiciRingBack(
   const r = checkVoiciRingBackOrder(body, { pageId: page.pageId, origin: deps.origin, caKeys: deps.caKeys(now), now, revoked });
   if (!r.ok) return voiciRefusal(r.code === "malformed" ? 400 : 403, r.code);
   if (account !== null && isObj(body) && body.signer !== "pseudonym") return voiciRefusal(400, "malformed");
+  // The key is useful only with an account to push to; one without (an order from a page that isn't the app's) is dropped.
+  const ringTagKey = account !== null ? parsed.ringTagKey : null;
   if (r.order.op === "stop") {
     await deps.calls.deleteRingBack(page.pageId, r.order.conv);
     return ok({ ok: true });
   }
   const expiresAt = now + VOICI_RING_BACK_TTL_MS;
-  if (!(await deps.calls.putRingBack({ pageId: page.pageId, conv: r.order.conv, username: account, issuedAt: r.order.issuedAt, expiresAt }))) return voiciRefusal(409, "stale");
+  if (!(await deps.calls.putRingBack({ pageId: page.pageId, conv: r.order.conv, username: account, issuedAt: r.order.issuedAt, expiresAt, ringTagKey }))) return voiciRefusal(409, "stale");
   return ok({ ok: true, expiresAt });
 }
 
@@ -158,6 +166,8 @@ export async function voiciHasRingBack(calls: VoiciCallStorage, pageId: string, 
  * Body {ring, signature} by the page's ownerSignPub. The conversation must have a ring-back channel. Stores the ring
  * (the caller's thread fetch shows it while it rings) and, when the caller's app attached the channel, pushes
  * {kind:"voici-ring", ringId, hint} to that account's devices: no text, the hint sealed to the caller's thread key.
+ * When the channel holds a ring tag key the push also carries `tag` = HMAC(key, ringId), 16 bytes: fresh each ring,
+ * it lets the caller's locked phone name the page (docs/voici-locked-caller-names.md §4).
  * Answers {ok, ringId, pushed, expiresAt}.
  */
 export async function handleVoiciRing(
@@ -181,7 +191,8 @@ export async function handleVoiciRing(
   let pushed = 0;
   if (deps.pushRing && channel.username) {
     try {
-      pushed = await deps.pushRing(channel.username, { kind: "voici-ring", ringId: ring.ringId, hint: ring.hint }, expiresAt);
+      const tag = channel.ringTagKey ? voiciRingTag(hexToBytes(channel.ringTagKey), ring.ringId) : undefined;
+      pushed = await deps.pushRing(channel.username, { kind: "voici-ring", ringId: ring.ringId, hint: ring.hint, ...(tag ? { tag } : {}) }, expiresAt);
     } catch {
       pushed = 0;
     }
@@ -200,7 +211,8 @@ export const voiciPowSecret = (hex: string | undefined): Uint8Array | undefined 
 /**
  * The ring push (today's push path): every device of the caller's account, VoIP pushes where a device registered a
  * PushKit token (the call must ring through CallKit), else its ordinary push token; never a browser's Web Push. The
- * payload is {kind:"voici-ring", ringId, hint, room}: no text; the hint is sealed to the caller's thread key.
+ * payload is {kind:"voici-ring", ringId, hint, room} and, when the channel has a ring tag key, `tag`: no text; the
+ * hint is sealed to the caller's thread key.
  */
 export function buildVoiciRingPusher(deps: {
   pushTokens: Pick<PushTokenStorage, "listByUser">;
@@ -210,7 +222,8 @@ export function buildVoiciRingPusher(deps: {
   apex: string;
 }): VoiciRingPusher {
   return async (username, payload, expiresAt) => {
-    const data = { kind: payload.kind, ringId: payload.ringId, hint: payload.hint, room: deps.apex };
+    const data: Record<string, string> = { kind: payload.kind, ringId: payload.ringId, hint: payload.hint, room: deps.apex };
+    if (payload.tag) data.tag = payload.tag;
     const voip = await deps.calls.listVoipTokens(username);
     const voipDevices = new Set(voip.map((t) => t.deviceId));
     let n = 0;

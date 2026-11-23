@@ -28,8 +28,19 @@
  *            visitor's thread key T (from the conversation's thread statement); plaintext canonical JSON
  *            {v:1, pageId, username, conv, ringId, media, issuedAt}. It rides in the content-free push (the relay
  *            push carries no content): the visitor's app opens it with its T for that page and dials out to the page.
+ *
+ * Names on a locked phone (docs/voici-locked-caller-names.md, owner-agreed 2026-11-22):
+ *   ring tag key  HKDF-SHA256(ikm = messagesSecret, salt = "", info = "flagship/voici-ring-tag/v1|<pageId>"), 32 bytes.
+ *                 The caller's app sends it beside a pseudonym-signed attach (body field `ringTagKey`, unsigned: a forged
+ *                 key only keeps the page name off a locked ring); `.com` keeps it with the channel.
+ *   ring tag      first 16 bytes (hex) of HMAC-SHA256(tagKey, UTF-8 of the ring's ringId hex). Rides in the ring push
+ *                 as `tag`: fresh per ring, so APNs/FCM see unlinkable bytes; a locked caller phone matches it against
+ *                 the tag keys it keeps for the pages that may ring it back.
+ *   locked name   first 16 bytes (hex) of SHA-256("flagship/voici-locked-name/v1|<pseudonymPub>"): the key a locked page
+ *                 owner's phone looks a caller's nickname up under (never the pub itself).
  */
 import { p256 } from "@noble/curves/nist.js";
+import { hkdf } from "@noble/hashes/hkdf";
 import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
 import { hex } from "./canonicalBase.js";
@@ -48,6 +59,8 @@ export const TAG_VOICI_CALL_POW = "flagship/voici-call-pow/v1";
 export const TAG_VOICI_RING_BACK = "flagship/voici-ring-back/v1";
 export const TAG_VOICI_RING = "flagship/voici-ring/v1";
 export const TAG_VOICI_RING_HINT = "flagship/voici-ring-hint/v1";
+export const TAG_VOICI_RING_TAG = "flagship/voici-ring-tag/v1";
+export const TAG_VOICI_LOCKED_NAME = "flagship/voici-locked-name/v1";
 
 export const VOICI_CALL_POW_TTL_MS = 2 * 60_000;
 export const VOICI_CALL_POW_MIN_BITS = 12;
@@ -307,6 +320,36 @@ export function checkVoiciRingBackOrder(
   if (!ts || ts.pageId !== ctx.pageId || ts.pseudonymPub !== input.from || typeof c.threadSig !== "string" || !ed25519VerifyHex(c.threadSig, canonicalVoiciThreadStatement(ts), input.from)) return no("bad-thread");
   if (!isLowerHex(input.sig, 64) || !p256VerifyP1363(input.sig, bytes, del.delegation.delegatePub)) return no("bad-signature");
   return { ok: true, order: o, from: input.from };
+}
+
+/**
+ * The attach body: the signed order (`checkVoiciRingBackOrder`) and, from the caller's app only, an optional
+ * `ringTagKey` (64 lowercase hex). Answers the order without it, or null when the key is there in any other shape or
+ * rides on a browser's order (a browser attach names no account and gets no push).
+ */
+export function parseVoiciRingBackBody(v: unknown): { envelope: Record<string, unknown>; ringTagKey: string | null } | null {
+  if (!isObj(v)) return null;
+  if (!Object.prototype.hasOwnProperty.call(v, "ringTagKey")) return { envelope: v, ringTagKey: null };
+  const { ringTagKey, ...envelope } = v;
+  if (!isLowerHex(ringTagKey, 32) || envelope.signer !== "pseudonym") return null;
+  return { envelope, ringTagKey };
+}
+
+/** The caller's per-page ring tag key: every device of the account derives the same one from the Messages secret. */
+export function deriveVoiciRingTagKey(messagesSecret: Bytes, pageId: string): Bytes {
+  if (!PAGE_ID.test(pageId)) throw new Error(`${TAG_VOICI_RING_TAG}: bad pageId`);
+  return hkdf(sha256, messagesSecret, new Uint8Array(0), utf8(`${TAG_VOICI_RING_TAG}|${pageId}`), 32);
+}
+
+/** The ring push's `tag` for one ring: 16 bytes, hex. */
+export function voiciRingTag(tagKey: Bytes, ringId: string): string {
+  if (tagKey.length !== 32 || !isLowerHex(ringId, 16)) throw new Error(`${TAG_VOICI_RING_TAG}: bad field`);
+  return hex(hmac(sha256, tagKey, utf8(ringId))).slice(0, 32);
+}
+
+/** Where a locked owner's phone keeps a caller's nickname: 16 bytes of a hash of the pseudonym pub, hex. */
+export function voiciLockedNameKey(pseudonymPub: string): string {
+  return hex(sha256(utf8(`${TAG_VOICI_LOCKED_NAME}|${pseudonymPub}`))).slice(0, 32);
 }
 
 // ── the ring ───────────────────────────────────────────────────────────────

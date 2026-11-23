@@ -57,4 +57,27 @@ describe.each(["InMemory", "D1"] as const)("VoiciCallStorage (%s)", (adapter) =>
       done();
     }
   });
+  it("keeps the ring tag key with its channel: replaced by an attach that carries one, kept by one that doesn't, gone with the row", async () => {
+    const { c, done } = fresh(adapter);
+    const k1 = "11".repeat(32);
+    const k2 = "22".repeat(32);
+    try {
+      await c.putRingBack({ pageId: PAGE, conv: CONV, username: "bob", issuedAt: NOW, expiresAt: NOW + 1e6, ringTagKey: k1 });
+      expect((await c.getRingBack(PAGE, CONV, NOW))?.ringTagKey).toBe(k1);
+      await c.putRingBack({ pageId: PAGE, conv: CONV, username: "bob", issuedAt: NOW + 1, expiresAt: NOW + 1e6, ringTagKey: k2 });
+      expect((await c.getRingBack(PAGE, CONV, NOW))?.ringTagKey).toBe(k2);
+      // A browser attach (no account, no key) renews the channel and keeps the account and its key.
+      await c.putRingBack({ pageId: PAGE, conv: CONV, username: null, issuedAt: NOW + 2, expiresAt: NOW + 2e6 });
+      expect(await c.getRingBack(PAGE, CONV, NOW)).toMatchObject({ username: "bob", ringTagKey: k2, expiresAt: NOW + 2e6 });
+      // An older attach changes nothing.
+      expect(await c.putRingBack({ pageId: PAGE, conv: CONV, username: "bob", issuedAt: NOW, expiresAt: NOW + 3e6, ringTagKey: k1 })).toBe(false);
+      expect((await c.getRingBack(PAGE, CONV, NOW))?.ringTagKey).toBe(k2);
+      await c.deleteRingBack(PAGE, CONV);
+      expect(await c.getRingBack(PAGE, CONV, NOW)).toBeNull();
+      await c.putRingBack({ pageId: PAGE, conv: CONV, username: "bob", issuedAt: NOW + 5, expiresAt: NOW + 1e6 });
+      expect((await c.getRingBack(PAGE, CONV, NOW))?.ringTagKey).toBeNull();
+    } finally {
+      done();
+    }
+  });
 });

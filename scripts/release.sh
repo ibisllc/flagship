@@ -364,7 +364,7 @@ EOF
 meta_migrations() {
   TITLE="Pending D1 migrations (check, apply, stamp the ledger)"
   RUNBOOK="4. Pending D1 migrations"
-  WHAT="Compares packages/storage/migrations with the prod schema_version ledger (read-only) and applies each pending file after its own confirm, in file order. For 0.4 that is 0090, 0091, 0093, 0094 (the folded marketplace and name-change tables), 0133, 0134, 0136-0138, 0141, 0146-0157 (and 0132 if the ledger lacks it): all before the .com deploy (npm run deploy refuses while one is missing). The setup check (step 4) proved the daily backup is fresh."
+  WHAT="Compares packages/storage/migrations with the prod schema_version ledger (read-only) and applies each pending file after its own confirm, in file order. For 0.4 that is 0090, 0091, 0093, 0094 (the folded marketplace and name-change tables), 0133, 0134, 0136-0138, 0141, 0146-0158 (and 0132 if the ledger lacks it): all before the .com deploy (npm run deploy refuses while one is missing). The setup check (step 4) proved the daily backup is fresh."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && wrangler d1 execute flagship-state --remote --json --command "SELECT version FROM schema_version")
 for each pending file, in order:
