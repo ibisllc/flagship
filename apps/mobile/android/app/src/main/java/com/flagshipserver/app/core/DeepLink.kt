@@ -288,7 +288,7 @@ sealed interface DeepLink {
                 // Off in 0.4 (release/version.json "marketplace"): the link does nothing.
                 "marketplace" -> Marketplace.takeIf { com.flagshipserver.app.BuildConfig.MARKETPLACE }
                 "create-server" -> CreateServer
-                NameGrant.ROUTE -> ChooseName(NameGrant.parseFragment(uri.encodedFragment))
+                "choose-name" -> ChooseName(NameGrant.parseFragment(uri.encodedFragment))
                 "share" -> ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 "backup-download" -> {
                     val s = (params["s"] ?: "").lowercase()
