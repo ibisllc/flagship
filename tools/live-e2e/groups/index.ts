@@ -17,6 +17,7 @@ import { lifecycle } from "./lifecycle.js";
 import { mcpIde } from "./mcpIde.js";
 import { migrate } from "./migrate.js";
 import { namedLinks } from "./namedLinks.js";
+import { chooseName } from "./chooseName.js";
 import { oneList } from "./oneList.js";
 import { ohttpFailure } from "./ohttpFailure.js";
 import { outboundProxy } from "./outboundProxy.js";
@@ -58,6 +59,7 @@ export const GROUPS: Group[] = [
   backups,
   oneList,
   namedLinks,
+  chooseName,
   directAccess,
   vouchers,
   outboundProxy,
