@@ -173,14 +173,20 @@ final class VoiciOutgoingCallTests: XCTestCase {
         let engine = Engine()
         engine.offerSdp = calls["sdp"]!["offerRaw"]!.string!
         client.placeRefusal = (403, "not-allowed")
-        let c = call(engine: engine, socket: Socket())
+        let history = VoiciCallHistory(defaults: UserDefaults(suiteName: "voici-out-\(UUID())")!)
+        history.configure(username: "me")
+        let c = call(engine: engine, socket: Socket(), history: history)
         await c.start()
         XCTAssertEqual(c.phase, .failed("not-allowed"))
         XCTAssertEqual(c.statusLine, VoiciOutgoingCall.sentence("not-allowed"))
         client.pages["alice"] = nil
-        let gone = call(engine: Engine(), socket: Socket())
+        let gone = call(engine: Engine(), socket: Socket(), history: history)
         await gone.start()
         XCTAssertEqual(gone.phase, .failed("not-found"))
+        // Both tries show in Calls as failed, the one refused before it had a call id too.
+        XCTAssertEqual(history.records.count, 2)
+        XCTAssertEqual(history.records.map(\.outcome), [.failed, .failed])
+        XCTAssertEqual(history.records.map(\.direction), [.outgoing, .outgoing])
     }
 
     /// No media engine: the call goes to the browser, once the tab joins the pipe; the delivery opens with the tab's

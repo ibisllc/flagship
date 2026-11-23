@@ -285,6 +285,9 @@ final class VoiciOutgoingCall: Identifiable {
         over = true
         deps.socket.close()
         deps.media.stop()
+        // Every call the owner tried shows in Calls, a refusal before `.com` placed it too (it has no call id yet).
+        if callId.isEmpty { callId = "failed-\(CanonicalJson.hex(Self.rand(16)))" }
+        record(.failed, duration: 0)
         phase = .failed(code)
     }
 
