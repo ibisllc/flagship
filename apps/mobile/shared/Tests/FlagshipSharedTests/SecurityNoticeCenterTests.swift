@@ -47,6 +47,26 @@ final class SecurityNoticeCenterTests: XCTestCase {
         return (center, feed, clock, lock)
     }
 
+    func testAPolicyNoticeShowsAPolicyBannerThatStaysDismissed() async throws {
+        let eventAt: Int64 = 1_793_209_600_000
+        let a = make(["policy"], at: t0 + 86_400_000)
+        await a.center.refresh()
+        guard case let .banner(style, notice) = a.center.outcome else { return XCTFail("no banner: \(a.center.outcome)") }
+        XCTAssertEqual(style, .policy)
+        XCTAssertEqual(notice.eventAt, eventAt)
+        XCTAssertEqual(notice.message, "")
+        XCTAssertFalse(a.center.policyInEffect(notice))
+        XCTAssertTrue(a.center.bannerVisible)
+        XCTAssertFalse(a.lock.isLocked)
+        a.center.dismissBanner()
+        XCTAssertFalse(a.center.bannerVisible)
+        a.clock.ms = eventAt + 86_400_000
+        XCTAssertTrue(a.center.policyInEffect(notice))
+        let relaunch = make([], at: eventAt + 86_400_000)
+        relaunch.center.evaluate()
+        XCTAssertFalse(relaunch.center.bannerVisible)
+    }
+
     func testMaintenanceShowsABannerWithTheLocalDateAndStaysDismissed() async throws {
         let a = make(["maintenance"], at: t0 + 86_400_000)
         await a.center.refresh()
@@ -211,6 +231,7 @@ final class SecurityNoticeCenterTests: XCTestCase {
                 XCTAssertEqual(try gym("maintenance"), try named("maintenance"))
                 XCTAssertEqual(try gym("lock"), try named("update-required with a grace window"))
                 XCTAssertEqual(try gym("clear"), try named("none (all clear)"))
+                XCTAssertEqual(try gym("policy"), try named("policy-update"))
                 let seed = try XCTUnwrap((v["keys"] as? [String: Any])?["authoritySeedHex"] as? String)
                 XCTAssertEqual(SecurityNoticeGym.authoritySeedHex, seed)
                 return

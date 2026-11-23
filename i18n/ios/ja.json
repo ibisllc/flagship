@@ -4048,5 +4048,8 @@
   "This recovery request was already used. Start the recovery again.": "このリカバリーのリクエストはすでに使用されています。リカバリーをもう一度始めてください。",
   "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "そのコードはすでにリカバリーに使用されています。新しいコードを待つか、リカバリーの手順をやり直してから、もう一度お試しください。",
   "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "このデバイスの時計が Flagship の時計と一致しません。日付と時刻を自動設定にしてから、もう一度お試しください。",
-  "Someone joined an app through an invite": "誰かが招待からアプリに参加しました"
+  "Someone joined an app through an invite": "誰かが招待からアプリに参加しました",
+  "Our privacy policy changes on %@.": "プライバシーポリシーは%@に変更されます。",
+  "Our privacy policy changed on %@.": "プライバシーポリシーは%@に変更されました。",
+  "Read the policy": "ポリシーを読む"
 }

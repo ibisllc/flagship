@@ -11,6 +11,12 @@ public enum AppStoreListing {
     public static let url = URL(string: "https://apps.apple.com/app/id6768945985")!
 }
 
+/// The privacy policy. Like the store listing it is the app's own constant: a
+/// policy notice carries only the date the policy changes.
+public enum PrivacyPolicyLink {
+    public static let url = URL(string: "https://flagshipserver.com/privacy")!
+}
+
 /// Every string of the banner and the lock screen, from `NOTICE_COPY` in the
 /// webapp's `noticeUi.js` (native: the update button is "Update" on the banner
 /// and "Update Flagship" on the lock; both open the store listing).
@@ -30,13 +36,23 @@ public enum NoticeCopy {
 
     public static func why(_ reason: String) -> String { reason.isEmpty ? "" : "Why: \(reason)" }
     public static func meta(advisoryId: String) -> String { String(localized: "Advisory \(advisoryId) · \(signedBy)") }
+
+    /// A policy notice's sentence: the app's own words in the person's language, never the notice's text.
+    public static func policy(_ notice: SecurityNotice, inEffect: Bool, formatDay: (Date) -> String = SecurityNotice.localDay) -> String {
+        let day = formatDay(Date(timeIntervalSince1970: Double(notice.eventAt) / 1000))
+        return inEffect
+            ? String(localized: "Our privacy policy changed on \(day).")
+            : String(localized: "Our privacy policy changes on \(day).")
+    }
+    public static let policyRead = String(localized: "Read the policy")
 }
 
 // MARK: - Banner
 
 /// One banner above the main content, below the status bar: a maintenance
-/// notice, or the update nag (an advisory, or the grace window of an
-/// update-required). Hidden under the biometric lock like the other slivers.
+/// notice, a privacy policy change, or the update nag (an advisory, or the
+/// grace window of an update-required). Hidden under the biometric lock like
+/// the other slivers.
 public struct NoticeBannerView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(SecurityNoticeCenter.self) private var notices: SecurityNoticeCenter?
@@ -51,7 +67,7 @@ public struct NoticeBannerView: View {
             HStack(alignment: .top, spacing: 0) {
                 Rectangle().fill(tint).frame(width: 4)
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    Text(notice.text())
+                    Text(style == .policy ? NoticeCopy.policy(notice, inEffect: notices.policyInEffect(notice)) : notice.text())
                         .font(FS.font.body())
                         .foregroundColor(c.text)
                         .fixedSize(horizontal: false, vertical: true)
@@ -70,6 +86,20 @@ public struct NoticeBannerView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                             }
                             .accessibilityIdentifier("notice-banner-update")
+                        }
+                        if style == .policy {
+                            Button {
+                                UIApplication.shared.open(PrivacyPolicyLink.url)
+                            } label: {
+                                Text(NoticeCopy.policyRead)
+                                    .font(FS.font.scaled(15, weight: .semibold))
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .padding(.horizontal, FS.space.s3)
+                                    .background(c.primaryFill)
+                                    .foregroundColor(c.onPrimary)
+                                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                            }
+                            .accessibilityIdentifier("notice-banner-link")
                         }
                         Button {
                             notices.dismissBanner()

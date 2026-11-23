@@ -33,6 +33,15 @@ final class UpdateLockModelTests: XCTestCase {
         XCTAssertEqual(AppStoreListing.url.absoluteString, "https://apps.apple.com/app/id6768945985")
     }
 
+    func testThePolicyBannerSaysTheAppsOwnSentenceAndLinksToThePolicy() throws {
+        let json = try XCTUnwrap(SecurityNoticeGym.notices["policy"])
+        let n = try XCTUnwrap(SecurityNotice.parse(try JSONSerialization.jsonObject(with: Data(json.utf8))))
+        XCTAssertEqual(NoticeCopy.policy(n, inEffect: false) { _ in "December 9, 2026" }, "Our privacy policy changes on December 9, 2026.")
+        XCTAssertEqual(NoticeCopy.policy(n, inEffect: true) { _ in "December 9, 2026" }, "Our privacy policy changed on December 9, 2026.")
+        XCTAssertEqual(NoticeCopy.policyRead, "Read the policy")
+        XCTAssertEqual(PrivacyPolicyLink.url.absoluteString, "https://flagshipserver.com/privacy")
+    }
+
     func testBannerStrings() {
         XCTAssertEqual(NoticeCopy.bannerDismiss, "Dismiss")
         XCTAssertEqual(NoticeCopy.bannerUpdate, "Update")

@@ -14,7 +14,8 @@ import FlagshipAPI
 /// Launch arguments (with `-smoke-mode`):
 ///   `-gym-notice <name>[,<name>...]`  what the mocked `.com` serves, one
 ///        answer per poll: `maintenance`, `lock` (update-required with a
-///        grace window), `clear` (a signed all clear, seq 5), `forged` (a lock
+///        grace window), `clear` (a signed all clear, seq 5), `policy` (a
+///        privacy policy change, seq 6), `forged` (a lock
 ///        signed by another key), `failed` (a 500), `junk`, `empty` (204).
 ///   `-gym-notice-now <ms>`           the clock starts here and runs
 ///   `-gym-notice-build <n>`          this build's number (default: the real one)
@@ -32,6 +33,9 @@ public enum SecurityNoticeGym {
         """#,
         "clear": #"""
         {"advisoryId":"","deprecatesProtocol":0,"eventAt":0,"kind":"none","lockFrom":0,"message":"","platforms":{},"reason":"","seq":5,"signature":"304f617d94b2a8dcc4ac7af2162f8ed2387867b306f82676fc552be52787781225d936df5c61978b090e736bf47477fb789ab7f7e4034d413de151c1e2fb6803","signedBy":"c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7","type":"SecurityNotice","validFrom":1792000000000,"validUntil":1792691200000,"version":1}
+        """#,
+        "policy": #"""
+        {"advisoryId":"","deprecatesProtocol":0,"eventAt":1793209600000,"kind":"policy-update","lockFrom":0,"message":"","platforms":{},"reason":"","seq":6,"signature":"3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608","signedBy":"c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7","type":"SecurityNotice","validFrom":1792000000000,"validUntil":1794419200000,"version":1}
         """#,
         "forged": #"""
         {"advisoryId":"FSA-2026-001","deprecatesProtocol":1,"eventAt":1793209600000,"kind":"update-required","lockFrom":1793209600000,"message":"You must update Flagship by {date}. Older versions will stop working.","platforms":{"android":{"minBuild":40,"minProtocol":2},"ios":{"minBuild":12,"minProtocol":2},"web":{"minBuild":150,"minProtocol":2}},"reason":"A flaw in how a signed message is checked lets an attacker act as you.","seq":3,"signature":"51f122a95d6a5088e124fd17dc74586c8eaff03033cbbda5bcbf778e7d7b21e01441e226afe2a969dab05de6c1d23926d4e5d92b5138599996c10344bce6b502","signedBy":"ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c","type":"SecurityNotice","validFrom":1792000000000,"validUntil":1794592000000,"version":1}

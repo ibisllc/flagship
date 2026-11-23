@@ -4044,5 +4044,8 @@
   "This recovery request was already used. Start the recovery again.": "0f2a82b48a5c",
   "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "163a0577575e",
   "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "81289097ae16",
-  "Someone joined an app through an invite": "5f387cd74f3b"
+  "Someone joined an app through an invite": "5f387cd74f3b",
+  "Our privacy policy changes on %@.": "a5dfb0996b35",
+  "Our privacy policy changed on %@.": "3b021d1bc138",
+  "Read the policy": "fa7c3af42a80"
 }

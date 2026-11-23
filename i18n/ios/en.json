@@ -17251,5 +17251,17 @@
   "Someone joined an app through an invite": {
     "en": "Someone joined an app through an invite",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift"
+  },
+  "Our privacy policy changes on %@.": {
+    "en": "Our privacy policy changes on %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift"
+  },
+  "Our privacy policy changed on %@.": {
+    "en": "Our privacy policy changed on %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift"
+  },
+  "Read the policy": {
+    "en": "Read the policy",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift"
   }
 }

@@ -126,7 +126,7 @@ public enum SecurityNoticeRules {
     public static let maxMessage = 280
     public static let maxReason = 160
     static let maxSafe: Int64 = 9_007_199_254_740_991
-    static let kinds = ["none", "maintenance", "update-advisory", "update-required"]
+    static let kinds = ["none", "maintenance", "update-advisory", "update-required", "policy-update"]
     static let platformNames = ["android", "ios", "web"]
 
     static func isUint(_ v: Int64) -> Bool { v >= 0 && v <= maxSafe }
@@ -194,6 +194,9 @@ public enum SecurityNoticeRules {
             if !entries.isEmpty { throw SecurityNoticeError("platforms-not-allowed") }
             if !b.message.isEmpty { throw SecurityNoticeError("message-not-allowed") }
             if b.eventAt != 0 { throw SecurityNoticeError("bad-event-at") }
+        } else if b.kind == "policy-update" {
+            if b.eventAt == 0 { throw SecurityNoticeError("event-required") }
+            if !b.message.isEmpty { throw SecurityNoticeError("message-not-allowed") }
         } else if b.message.isEmpty {
             throw SecurityNoticeError("message-required")
         }
@@ -307,6 +310,17 @@ extension SecurityNotice {
         return body.message.replacingOccurrences(of: "{date}", with: formatDate(date))
     }
 
+    /// Has a policy-update's date passed? The banner says "changes on" before
+    /// it and "changed on" from it on.
+    public func policyInEffect(nowMs: Int64) -> Bool {
+        body.kind == "policy-update" && nowMs >= body.eventAt
+    }
+
+    /// A day for a person (a policy's effective date), in their own locale and zone ("December 9, 2026").
+    public static func localDay(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.wide).year())
+    }
+
     /// A date for a person, in their own locale and zone, never sent anywhere
     /// ("Wednesday, October 21 at 9:00 AM").
     public static func localDate(_ date: Date) -> String {
@@ -384,7 +398,7 @@ public enum SecurityNoticeOutcome: Equatable, Sendable {
     case banner(style: BannerStyle, notice: SecurityNotice)
     case lock(notice: SecurityNotice)
 
-    public enum BannerStyle: String, Equatable, Sendable { case maintenance, update }
+    public enum BannerStyle: String, Equatable, Sendable { case maintenance, update, policy }
 
     public var isLock: Bool {
         if case .lock = self { return true }
@@ -406,9 +420,9 @@ extension SecurityNoticeVerifier {
         if n.kind == "none" { return .none(why: "kind-none") }
         if now < n.validFrom { return .none(why: "not-yet") }
         if now >= n.validUntil { return .none(why: "expired") }
-        if n.kind == "maintenance" {
+        if n.kind == "maintenance" || n.kind == "policy-update" {
             if !n.platforms.isEmpty && n.platforms[c.platform] == nil { return .none(why: "other-platform") }
-            return .banner(style: .maintenance, notice: n)
+            return .banner(style: n.kind == "maintenance" ? .maintenance : .policy, notice: n)
         }
         if n.platforms[c.platform] == nil { return .none(why: "other-platform") }
         if !clientBelowMinimum(n, c) { return .none(why: "up-to-date") }

@@ -325,7 +325,7 @@ public final class SecurityNoticeCenter {
 
     public static let advisoryReappear: TimeInterval = 24 * 3600
 
-    /// Should the banner for this outcome show? A maintenance banner stays
+    /// Should the banner for this outcome show? A maintenance or policy banner stays
     /// dismissed for its seq. An update banner returns after a day. The grace
     /// window of an update-required comes back on every launch (dismissal lasts
     /// the launch). A new seq shows again.
@@ -335,8 +335,13 @@ public final class SecurityNoticeCenter {
         if sessionDismissed { return false }
         if n.kind == "update-required" { return true }
         guard let d = storage.load().dismissed, d.seq == n.seq else { return true }
-        if style == .maintenance { return false }
+        if style == .maintenance || style == .policy { return false }
         return Self.ms(now()) - d.at >= Int64(Self.advisoryReappear * 1000)
+    }
+
+    /// Has this policy notice's date passed, at the center's clock?
+    public func policyInEffect(_ n: SecurityNotice) -> Bool {
+        n.policyInEffect(nowMs: Self.ms(now()))
     }
 
     public func dismissBanner() {

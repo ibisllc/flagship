@@ -4050,5 +4050,8 @@
   "This recovery request was already used. Start the recovery again.": "Cette demande de récupération a déjà été utilisée. Recommencez la récupération.",
   "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "Ce code a déjà servi pour une récupération. Attendez un nouveau code, ou refaites l’étape de récupération, puis réessayez.",
   "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "L’horloge de cet appareil ne correspond pas à celle de Flagship. Réglez la date et l’heure sur automatique, puis réessayez.",
-  "Someone joined an app through an invite": "Quelqu’un a rejoint une app grâce à une invitation"
+  "Someone joined an app through an invite": "Quelqu’un a rejoint une app grâce à une invitation",
+  "Our privacy policy changes on %@.": "Notre politique de confidentialité change le %@.",
+  "Our privacy policy changed on %@.": "Notre politique de confidentialité a changé le %@.",
+  "Read the policy": "Lire la politique"
 }
