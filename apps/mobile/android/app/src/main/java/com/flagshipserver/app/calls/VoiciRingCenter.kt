@@ -72,9 +72,30 @@ object VoiciRingCenter {
                 .setStyle(NotificationCompat.CallStyle.forIncomingCall(Person.Builder().setName(name).setImportant(true).build(), decline, answerPi))
         }
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, b.build())
+        // The calls channel is silent (VoiciCallCenter.ensureChannel): the ring is the phone's ringtone, for the ring time.
+        CallRinger.start(context)
+        ringTimeout?.cancel()
+        ringTimeout = scope.launch {
+            kotlinx.coroutines.delay(VoiciRings.RING_TTL_MS)
+            val p = VoiciCallCenter.ui.value.phase
+            if (p != VoiciCallCenter.Phase.Ringing && p != VoiciCallCenter.Phase.NeedsUnlock) CallRinger.stop()
+        }
+    }
+
+    @Volatile private var ringTimeout: kotlinx.coroutines.Job? = null
+
+    /** The app came to the front: the ring stops, the notification stays for the ring time. */
+    fun stopRinging() {
+        if (ringTimeout?.isActive != true) return
+        ringTimeout?.cancel()
+        // A call to this account's page ringing at the same time keeps its ring.
+        val p = VoiciCallCenter.ui.value.phase
+        if (p != VoiciCallCenter.Phase.Ringing && p != VoiciCallCenter.Phase.NeedsUnlock) CallRinger.stop()
     }
 
     fun clear(context: Context) {
+        ringTimeout?.cancel()
+        CallRinger.stop()
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID)
     }
 

@@ -156,14 +156,8 @@ object VoiciCallCenter {
         if (session != null || pendingPush !== push) return false
         val sealed = runCatching { android.util.Base64.decode(push.sealed, android.util.Base64.DEFAULT) }.getOrNull()
         val who = sealed?.let { keys.openPush(push.callId, it) }
-        if (who != null) {
-            val name = keys.nicknames[who.third] ?: VoiciCopy.visitorName(who.third)
-            update { it.copy(name = name) }
-            // The ring was shown as "Someone on voi.ci" before the unlock: the notification and Telecom learn the name.
-            connection?.setCallerDisplayName(name, TelecomManager.PRESENTATION_ALLOWED)
-            val p = _ui.value.phase
-            if (::app.isInitialized && (p == Phase.Ringing || p == Phase.NeedsUnlock)) runCatching { showIncoming(app) }
-        }
+        callerOpened = who != null
+        if (who != null) showCallerName(keys.nicknames[who.third] ?: VoiciCopy.visitorName(who.third))
         val m = mediaFactory()
         media = m
         // The caller's media arrives only through this phone's bare name: hold it while the call rings and runs, even
@@ -177,6 +171,17 @@ object VoiciCallCenter {
         session = s
         s.connect()
         true
+    }
+
+    /** The push's sealed caller was opened (an unlocked account); false while only the call key answers. */
+    @Volatile private var callerOpened = false
+
+    /** The ring was shown as "Someone on voi.ci": the call screen, the notification and Telecom learn the name. */
+    private fun showCallerName(name: String) {
+        update { it.copy(name = name) }
+        connection?.setCallerDisplayName(name, TelecomManager.PRESENTATION_ALLOWED)
+        val p = _ui.value.phase
+        if (::app.isInitialized && (p == Phase.Ringing || p == Phase.NeedsUnlock)) runCatching { showIncoming(app) }
     }
 
     /** The account was unlocked while a call rings: join the room now. */
@@ -473,6 +478,10 @@ object VoiciCallCenter {
         override fun onRequest(request: VoiciCallRequest) {
             if (!current()) return
             update { it.copy(video = request.hasVideo) }
+            // A locked phone (the call key answers) can't open the push's sealed caller, but the room's signed request
+            // names the caller's key for this conversation: its visitor name replaces "Someone on voi.ci". Nicknames
+            // are account data and wait for the unlock.
+            if (!callerOpened) showCallerName(VoiciCopy.visitorName(request.from))
             maybeAnswerAfterUnlock(request.callId)
         }
         override fun onWon() {

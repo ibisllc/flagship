@@ -1045,6 +1045,8 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         foreground.value = true
+        // A page owner's ring-back rings until the app is opened (its ring shows again in the conversation).
+        com.flagshipserver.app.calls.VoiciRingCenter.stopRinging()
         com.flagshipserver.app.core.SecurityNoticeCenter.shared?.onForeground()
         com.flagshipserver.app.core.AbuseNoticeCenter.shared?.let { c -> lifecycleScope.launch { runCatching { c.refresh() } } }
         // The voucher trickle: a foreground tick (never prompts; without the UMK it waits for the next unlock).

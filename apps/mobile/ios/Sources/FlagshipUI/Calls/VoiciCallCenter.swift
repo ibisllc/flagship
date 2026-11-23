@@ -497,10 +497,26 @@ public final class VoiciCallCenter: NSObject {
         if case .ended = phase { phase = .idle }
     }
 
+    /// The caller's name from a request alone: its visitor name, or "Anonymous caller" for a browser key. Nicknames
+    /// are account data and wait for the unlock.
+    nonisolated static func lockedCallerName(from: String) -> String {
+        let isPseudonym = from.count == 64 && from.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
+        guard isPseudonym, let n = try? VoiciText.voiciPseudonymName(from, prefix: String(localized: "Visitor ")) else {
+            return String(localized: "Anonymous caller")
+        }
+        return n
+    }
+
     private func onSession(_ e: VoiciCallSession.Event) {
         switch e {
         case .request(let r):
             offersVideo = r.hasVideo
+            // A locked phone (the call key answers) can't open the push's sealed caller, but the room's signed request
+            // names the caller's key for this conversation: show its visitor name instead of "Someone on voi.ci".
+            if incomingPeer == nil {
+                callerName = Self.lockedCallerName(from: r.from)
+                updateCallKit()
+            }
             maybeAnswerAfterUnlock(r.callId)
         case .won:
             phase = .connecting
