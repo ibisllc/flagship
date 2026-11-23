@@ -465,7 +465,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(priv).toContain("aren't responsible for how it behaves");
     expect(priv).toContain("We may change provider at any time");
     expect(priv).not.toMatch(/to be named|to be confirmed|free AI/i);
-    expect(priv).toContain("Last updated: 2026-11-18");
+    expect(priv).toContain("Last updated: 2026-11-23");
   });
 
   it("privacy §2.12 says what calls reveal and what is never seen (deploy sheet C10)", async () => {

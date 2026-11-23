@@ -173,6 +173,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0156",
   // One push-token row per (account, device, platform, token): racing registrations converge (release-0.5 list).
   "0157",
+  // The ring-back channel's ring tag key: a locked caller phone names the page ringing it back.
+  "0158",
+  // Drops the removed user-identity store (security report F1).
+  "0159",
 ];
 
 export interface SchemaStatusDeps {
