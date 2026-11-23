@@ -4002,7 +4002,15 @@
     <string name="org_key_disk">%1$s 的磁盘密钥</string>
     <string name="org_disk_key_later">磁盘密钥会在其服务器重新加密时更换，此功能尚不可用。</string>
     <string name="voici_calls_answer_locked">在 Flagship 锁定时接听来电</string>
-    <string name="voici_calls_answer_locked_footer">此设备保存一个只能用于接听来电的密钥，因此可以在锁定屏幕上接听。在你解锁之前，来电者显示为“voi.ci 上的某人”。</string>
+    <string name="voici_calls_answer_locked_footer">这部手机保存一把只能接听来电的密钥，因此你可以在锁屏上接听。你的消息仍保持锁定。</string>
+    <string name="voici_calls_names_locked">锁定时显示名字</string>
+    <string name="voici_calls_names_locked_on">你给通话过的人起的名字，以及会回电给你的页面，可能显示在锁屏、配对的手表或汽车上。来电时，拿着这部手机的任何人都能看到。它们只保存在这部手机上，每次解锁时更新。</string>
+    <string name="voici_calls_names_locked_off">Flagship 锁定时，来电者显示为“访客 4F3A”，回电显示为“你写过信的人”。</string>
+    <string name="voici_calls_names_locked_alone_on">会回电给你的页面可能显示在锁屏、配对的手表或汽车上。来电时，拿着这部手机的任何人都能看到。它们只保存在这部手机上，每次解锁时更新。</string>
+    <string name="voici_calls_names_locked_alone_off">Flagship 锁定时，回电显示为“你写过信的人”。</string>
+    <string name="voici_calls_names_sheet_title">在锁屏上显示名字？</string>
+    <string name="voici_calls_names_sheet_body">当通话过的人来电时，即使 Flagship 已锁定，这部手机也能显示你给对方起的名字。拿着手机的任何人也会看到。</string>
+    <string name="voici_calls_names_sheet_show">显示名字</string>
     <string name="voici_calls_answer_locked_unlock">请解锁 Flagship 后重试。</string>
     <string name="org_cancel">取消</string>
     <string name="org_create">创建组织</string>
@@ -4136,6 +4144,7 @@
     <string name="voici_call_ring_back_required">此页面只接听允许回拨的人的通话。</string>
     <string name="voici_ring_incoming">%1$s 正在回拨给你</string>
     <string name="voici_ring_incoming_locked">你写过信的人正在回拨给你。打开 Flagship 接听。</string>
+    <string name="voici_ring_incoming_locked_named">voi.ci/%1$s 正在回电。打开 Flagship 即可接听。</string>
     <string name="voici_delete_forget_body">它会立即从你的设备和 Flagship 中删除。已在 %1$s 设备上的消息会保留在那里。</string>
     <string name="voici_delete_prompt_title">删除此对话</string>
     <string name="voici_anonymous_caller">匿名来电者</string>

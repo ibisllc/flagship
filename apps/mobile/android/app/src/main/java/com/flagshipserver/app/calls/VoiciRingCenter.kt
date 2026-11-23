@@ -39,13 +39,16 @@ object VoiciRingCenter {
             // A push that woke a killed app finds the voi.ci center the main screen would have made.
             runCatching { com.flagshipserver.app.AppRuntime.prepareCalls(app) }
             val hint = runCatching { VoiciCenter.shared?.openRingHint(push.ringId, push.hint) }.getOrNull()
-            // Locked (the thread keys are with the account) or not for a page this device knows: a generic ring that
-            // opens the app; the owner's ring shows again in the conversation while it lasts.
-            ring(app, hint)
+            // Locked (the thread keys are with the account) or not for a page this device knows: a ring that opens the
+            // app; the owner's ring shows again in the conversation while it lasts. With "Show names while locked" on,
+            // the push's tag may name the page (docs/voici-locked-caller-names.md §4); the dial still waits for the
+            // unlock, which opens the real hint.
+            val cached = if (hint == null) runCatching { VoiciCenter.shared?.lockedRingPage(push.ringId, push.tag) }.getOrNull() else null
+            ring(app, hint, cached)
         }
     }
 
-    private fun ring(context: Context, hint: VoiciRingHint?) {
+    private fun ring(context: Context, hint: VoiciRingHint?, cached: VoiciCallTarget? = null) {
         VoiciCallCenter.ensureChannel(context)
         val name = hint?.let { FSStrings.get(R.string.voici_calls_peer_page, it.target.username) }
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP }
@@ -60,7 +63,7 @@ object VoiciRingCenter {
             .setAutoCancel(true)
             .setTimeoutAfter(VoiciRings.RING_TTL_MS)
         if (hint == null) {
-            b.setContentText(FSStrings.get(R.string.voici_ring_incoming_locked))
+            b.setContentText(lockedRingText(cached))
         } else {
             val answer = Intent(launch).setAction(ACTION_ANSWER)
                 .putExtra(EXTRA_USERNAME, hint.target.username).putExtra(EXTRA_PAGE_ID, hint.target.pageId).putExtra(EXTRA_VIDEO, hint.video)
@@ -83,6 +86,10 @@ object VoiciRingCenter {
     }
 
     @Volatile private var ringTimeout: kotlinx.coroutines.Job? = null
+
+    /** A ring-back on a locked phone: the page the locked-names table matched, else the generic line. */
+    fun lockedRingText(cached: VoiciCallTarget?): String =
+        cached?.let { FSStrings.get(R.string.voici_ring_incoming_locked_named, it.username) } ?: FSStrings.get(R.string.voici_ring_incoming_locked)
 
     /** The app came to the front: the ring stops, the notification stays for the ring time. */
     fun stopRinging() {

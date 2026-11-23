@@ -4000,7 +4000,7 @@
   "org_key_disk": "Clave del disco de %1$s",
   "org_disk_key_later": "La clave de un disco cambia cuando su servidor se vuelve a cifrar, algo que aún no está disponible.",
   "voici_calls_answer_locked": "Contestar llamadas con Flagship bloqueado",
-  "voici_calls_answer_locked_footer": "Este dispositivo guarda una clave que solo sirve para contestar llamadas, así puedes contestar desde la pantalla de bloqueo. Quien llama aparece como “Alguien en voi.ci” hasta que desbloquees.",
+  "voici_calls_answer_locked_footer": "Este teléfono guarda una llave que solo puede contestar llamadas, para que puedas contestar desde la pantalla de bloqueo. Tus mensajes siguen bloqueados.",
   "voici_calls_answer_locked_unlock": "Desbloquea Flagship y vuelve a intentarlo.",
   "org_cancel": "Cancelar",
   "org_create": "Crear una organización",
@@ -4358,5 +4358,14 @@
   "payments_usage_mb": "%1$s MB",
   "payments_usage_gb": "%1$s GB",
   "app_has_a_separate_access_list": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de %1$s.",
-  "app_has_a_separate_access_list_2": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de su servidor principal."
+  "app_has_a_separate_access_list_2": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de su servidor principal.",
+  "voici_calls_names_locked": "Mostrar nombres con el bloqueo",
+  "voici_calls_names_locked_on": "Los nombres que diste a las personas con las que hablaste y las páginas que te devuelven la llamada pueden aparecer en la pantalla de bloqueo, en un reloj vinculado o en el coche. Cualquiera que tenga este teléfono puede verlos cuando entra una llamada. Se quedan en este teléfono y se actualizan cada vez que desbloqueas.",
+  "voici_calls_names_locked_off": "Mientras Flagship está bloqueado, quien llama aparece como «Visitante 4F3A» y las devoluciones de llamada como «Alguien a quien escribiste».",
+  "voici_calls_names_locked_alone_on": "Las páginas que te devuelven la llamada pueden aparecer en la pantalla de bloqueo, en un reloj vinculado o en el coche. Cualquiera que tenga este teléfono puede verlas cuando entra una llamada. Se quedan en este teléfono y se actualizan cada vez que desbloqueas.",
+  "voici_calls_names_locked_alone_off": "Mientras Flagship está bloqueado, las devoluciones de llamada aparecen como «Alguien a quien escribiste».",
+  "voici_calls_names_sheet_title": "¿Mostrar nombres en la pantalla de bloqueo?",
+  "voici_calls_names_sheet_body": "Cuando te llama alguien con quien hablaste, este teléfono puede mostrar el nombre que le diste, aunque Flagship esté bloqueado. Cualquiera que tenga el teléfono también lo verá.",
+  "voici_calls_names_sheet_show": "Mostrar nombres",
+  "voici_ring_incoming_locked_named": "voi.ci/%1$s te devuelve la llamada. Abre Flagship para contestar."
 }

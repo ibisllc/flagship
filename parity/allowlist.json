@@ -805,6 +805,16 @@
       "check": "deep-links",
       "key": "android-lacks-host:vouchers",
       "reason": "Android routes https://<control host>/app/vouchers by its path in DeepLink.parse (VoucherLink.PATH) before the app-route table the checker reads, so the vouchers stay in the fragment and never go through appRouteTwin. Covered by VoucherLinkDeepLinkTest and GymVoucherLinkTest."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-ring-tag/v1",
+      "reason": "Names on a locked phone (docs/voici-locked-caller-names.md): the webapp doesn't ring and the voi.ci site's browser attach names no account and gets no push, so no browser derives a ring tag key; .com computes the tag (packages/control-plane/src/voiciCallModes.ts), pinned with the phones to test-vectors/voici/ring-tag.json."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-locked-name/v1",
+      "reason": "Names on a locked phone (docs/voici-locked-caller-names.md): only a phone that rings keeps the locked-names table; the webapp never answers a call (docs/voici-calls.md §8)."
     }
   ]
 }

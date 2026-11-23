@@ -108,6 +108,8 @@ data class VoiciPageUi(
     val callHours: VoiciCallHours? = null,
     /** "Answer calls while Flagship is locked" is on here: this device holds a bound call key. */
     val answersWhileLocked: Boolean = false,
+    /** "Show names while locked" is on here (docs/voici-locked-caller-names.md): this device keeps the locked-names table. */
+    val showsNamesWhileLocked: Boolean = false,
     /** "Show in search engines" is on in the published index (showInSearch 1; owner decision 2026-11-17). */
     val showInSearch: Boolean = false,
 )
@@ -153,6 +155,9 @@ class VoiciCenter(
     private val callKeyVault: com.flagshipserver.app.calls.VoiciCallKeyVault? = null,
     /** Draws the page's share card (docs/voici-and-messages.md §2.10); null publishes pages without one. */
     private val shareCard: VoiciShareCardRenderer? = null,
+    /** The locked-names table (docs/voici-locked-caller-names.md); null where calls never ring. */
+    private val lockedNames: com.flagshipserver.app.calls.VoiciLockedNamesStore? = null,
+    private val lockedNamesSettings: com.flagshipserver.app.calls.VoiciLockedNamesSettings? = null,
 ) {
     private val mutex = Mutex()
     private val _page = MutableStateFlow(VoiciPageUi())
@@ -193,6 +198,7 @@ class VoiciCenter(
         val next = applyForgotten(block(vault.load(umk, u)), umk)
         vault.save(umk, u, next)
         publishUi(u, next)
+        rebuildLockedNames(u, umk, next)
         next
     }
 
@@ -289,6 +295,7 @@ class VoiciCenter(
             callsFrom = com.flagshipserver.app.calls.VoiciCallSettings.read(idx?.body?.acceptsCalls, idx?.body?.callsFrom).second,
             callHours = callHoursSetting(local)?.hours,
             answersWhileLocked = callKeyVault?.load(u) != null,
+            showsNamesWhileLocked = lockedNamesSettings?.isOn(u) == true,
             showInSearch = idx != null && !local.removed && idx.body.showsInSearch,
         )
         val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
@@ -308,6 +315,9 @@ class VoiciCenter(
             callKeyVault.delete(u)
             if (body != null) scope.launch { runCatching { client.revokeCallKey(u, body) } }
         }
+        // The locked-names table (its Keystore key with the last one) and its switch go with the account.
+        runCatching { lockedNames?.delete(u) }
+        lockedNamesSettings?.forget(u)
         vault.forget(u)
         pageCheckedFor = null
         _page.value = VoiciPageUi()
@@ -330,7 +340,10 @@ class VoiciCenter(
         runCatching { rebindCallKeyIfNeeded() }
         runCatching { checkReplies() }
         // Every change waits for Publish on an admin device (or the Messages header's quick controls).
-        withLocal { u, _, local -> publishUi(u, local) }
+        withLocal { u, umk, local ->
+            publishUi(u, local)
+            rebuildLockedNames(u, umk, local)
+        }
     }
 
     private suspend fun refreshAccount(): VoiciAccountKeys? {
@@ -896,7 +909,10 @@ class VoiciCenter(
             client.registerCallKey(u, device, proof)
             vault.load(u)?.takeIf { it.pubHex != signer.pubHex }?.let { old -> runCatching { client.revokeCallKey(u, ownerRevokeBody(old, keys)) } }
             vault.save(com.flagshipserver.app.calls.VoiciCallKey(u, device.deviceId, idx.body.pageId, keys.signPub, proof, signer))
-            withLocal { uu, _, l -> publishUi(uu, l) }
+            withLocal { uu, umkk, l ->
+                publishUi(uu, l)
+                rebuildLockedNames(uu, umkk, l)
+            }
             null
         } catch (e: VoiciHttpError) {
             vault.discard(signer)
@@ -915,6 +931,8 @@ class VoiciCenter(
 
     /** Off: a revocation signed by the owner key when this device holds it, else by the call key itself. */
     suspend fun revokeCallKey() {
+        // "Show names while locked" sits under this switch and goes with it (D2): the table is erased at once.
+        setShowNamesWhileLocked(false)
         val vault = callKeyVault ?: return
         val u = user() ?: return
         val k = vault.load(u) ?: return
@@ -940,6 +958,81 @@ class VoiciCenter(
         runCatching { client.registerCallKey(u, device, proof) }.onSuccess {
             vault.save(com.flagshipserver.app.calls.VoiciCallKey(u, k.deviceId, idx.body.pageId, keys.signPub, proof, k.signer))
         }
+    }
+
+    // ── names on a locked phone (docs/voici-locked-caller-names.md) ──
+
+    /** "Answer calls while Flagship is locked" can be offered here: an admin device of a page that takes calls. */
+    fun answerWhileLockedAvailable(ui: VoiciPageUi = _page.value): Boolean = ui.canPublish && ui.callsOn
+
+    /** Where "Show names while locked" shows: under the answer switch while it is on, or alone (ring-back names only, D1). */
+    fun namesWhileLockedVisible(ui: VoiciPageUi = _page.value): Boolean = !answerWhileLockedAvailable(ui) || ui.answersWhileLocked
+
+    /** The switch. On: the table is built now (when the account is open) and at every later change. Off: erased. */
+    fun setShowNamesWhileLocked(on: Boolean) {
+        val u = user() ?: return
+        val settings = lockedNamesSettings ?: return
+        settings.setOn(u, on)
+        _page.value = _page.value.copy(showsNamesWhileLocked = on)
+        if (on) withLocal { uu, umk, l -> rebuildLockedNames(uu, umk, l) } else runCatching { lockedNames?.delete(u) }
+    }
+
+    /** The one-time "Show names on the lock screen?" question after the answer switch goes on. */
+    fun shouldOfferNamesSheet(): Boolean {
+        val u = user() ?: return false
+        val s = lockedNamesSettings ?: return false
+        return _page.value.answersWhileLocked && !s.isOn(u) && !s.sheetShown(u)
+    }
+
+    fun namesSheetAnswered(show: Boolean) {
+        val u = user() ?: return
+        lockedNamesSettings?.markSheetShown(u)
+        if (show) setShowNamesWhileLocked(true)
+    }
+
+    /**
+     * Rebuilds the whole table from the unlocked account (§3.4): nicknames only while the answer switch is on for a page
+     * that takes calls, ring-back pages from this device's call-back pages. Nothing happens with the setting off, or
+     * before the account's keys were read (the admin check isn't known yet); a switch the owner can no longer see (the
+     * answer switch is offered but off) turns off and erases.
+     */
+    private fun rebuildLockedNames(u: String, umk: ByteArray, local: VoiciLocal) {
+        val store = lockedNames ?: return
+        val settings = lockedNamesSettings ?: return
+        if (!settings.isOn(u) || account == null) return
+        val ui = _page.value
+        if (!namesWhileLockedVisible(ui)) {
+            settings.setOn(u, false)
+            runCatching { store.delete(u) }
+            _page.value = ui.copy(showsNamesWhileLocked = false)
+            return
+        }
+        val state = local.state?.let(VoiciMessages::parseMessagesState) ?: MessagesState()
+        val t = now()
+        val pages = local.callBackPages.mapNotNull { pid ->
+            val calls = local.callHistory.filter { it.peerPageId == pid && it.direction == "out" }
+            val name = local.signInPages[pid] ?: calls.firstNotNullOfOrNull { it.peerUsername } ?: return@mapNotNull null
+            com.flagshipserver.app.calls.VoiciLockedNames.RingPage(name, pid, calls.maxOfOrNull { it.at } ?: t)
+        }
+        val table = com.flagshipserver.app.calls.VoiciLockedNames.build(
+            account = u, now = t, includeNames = answerWhileLockedAvailable(ui) && callKeyVault?.load(u) != null,
+            nicknames = state.nicknames.mapValues { it.value.name }, blocked = (local.inboxBlocks + state.blocks).toSet(),
+            forgotten = state.forgotten.filterValues { t - it.at < VoiciMessages.FORGET_KEEP_MS }, records = local.callHistory,
+            missed = _messages.value.missedCalls, ringPages = pages, messagesSecret = VoiciMessages.deriveMessagesSecret(umk),
+        )
+        runCatching { store.save(table) }
+    }
+
+    /** A locked ring: the owner's nickname for the caller, from the table of the account whose call key answers. */
+    fun lockedNickname(pseudonymPub: String): String? {
+        val u = user() ?: callKeyVault?.currentAccount() ?: return null
+        return com.flagshipserver.app.calls.VoiciLockedNames.name(pseudonymPub, runCatching { lockedNames?.load(u) }.getOrNull(), u, now())
+    }
+
+    /** A locked ring-back: the page the table names for the push's tag. */
+    fun lockedRingPage(ringId: String, tag: String?): com.flagshipserver.app.calls.VoiciCallTarget? {
+        val u = user() ?: callKeyVault?.currentAccount() ?: return null
+        return com.flagshipserver.app.calls.VoiciLockedNames.ringPage(ringId, tag, runCatching { lockedNames?.load(u) }.getOrNull(), now())
     }
 
     /** A ringing phone that is locked: its call key, when the setting is on. */
@@ -1339,7 +1432,9 @@ class VoiciCenter(
         val device = keyring.device() ?: return "locked"
         val visitor = VoiciVisitorKeys.derive(umk, pageId)
         val conv = VoiciMessages.voiciConv(pageId, visitor.pseudonymPub)
-        val body = VoiciCallModes.signRingBackPseudonym(pageId, conv, if (allow) "attach" else "stop", now(), visitor.pseudonym.seed)
+        // The page's ring tag key rides along on an attach, so a ring-back can be named on this account's locked phones.
+        val tagKey = if (allow) runCatching { VoiciRings.deriveRingTagKey(VoiciMessages.deriveMessagesSecret(umk), pageId) }.getOrNull() else null
+        val body = VoiciCallModes.signRingBackPseudonym(pageId, conv, if (allow) "attach" else "stop", now(), visitor.pseudonym.seed, tagKey)
         return try {
             client.ringBack(u, device, body)
             update { it.copy(callBackPages = if (allow) (it.callBackPages + pageId).distinct().sorted() else it.callBackPages - pageId) }

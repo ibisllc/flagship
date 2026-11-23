@@ -239,15 +239,21 @@ class MockVoiciClient(
         callSettingsBlobs[username] = blob
     }
 
+    /** Ring tag keys kept with each attached channel (docs/voici-locked-caller-names.md). */
+    val ringTagKeys = HashMap<String, String>()
+
     override suspend fun ringBack(username: String, device: VoiciDeviceSigner, body: JsonObject): Unit = synchronized(this) {
-        val order = body["order"] as? JsonObject ?: refuse(400, "malformed")
+        // As `.com`: the optional ring tag key is checked and kept apart from the signed order.
+        val (signed, tagKey) = com.flagshipserver.app.core.voici.VoiciCallModes.parseRingBackBody(body) ?: refuse(400, "malformed")
+        val order = signed["order"] as? JsonObject ?: refuse(400, "malformed")
         val pageId = VoiciJs.str(order["pageId"]) ?: refuse(400, "malformed")
         ownerOf(pageId) ?: refuse(404, "not-found")
-        when (val r = com.flagshipserver.app.core.voici.VoiciCallModes.checkRingBack(body, pageId, com.flagshipserver.app.core.Endpoints.voiciOrigin, listOf(caPub), now())) {
+        when (val r = com.flagshipserver.app.core.voici.VoiciCallModes.checkRingBack(signed, pageId, com.flagshipserver.app.core.Endpoints.voiciOrigin, listOf(caPub), now())) {
             is com.flagshipserver.app.core.voici.VoiciOutcome.Refused -> refuse(403, r.reason)
             is com.flagshipserver.app.core.voici.VoiciOutcome.Ok -> {
                 val conv = VoiciJs.str(order["conv"])!!
                 if (r.value == "attach") ringBacks += conv else ringBacks -= conv
+                if (r.value == "attach" && tagKey != null) ringTagKeys[conv] = tagKey else if (r.value != "attach") ringTagKeys -= conv
                 ringBackOrders += body
             }
         }

@@ -363,6 +363,8 @@ class MainActivity : FragmentActivity() {
             http = null,
             callKeyVault = com.flagshipserver.app.calls.MemoryCallKeyVault(),
             shareCard = com.flagshipserver.app.core.voici.AndroidShareCardRenderer,
+            lockedNames = com.flagshipserver.app.calls.MemoryLockedNamesStore(),
+            lockedNamesSettings = com.flagshipserver.app.calls.VoiciLockedNamesSettings(applicationContext),
         ).also { com.flagshipserver.app.core.voici.VoiciCenter.shared = it }
         // Vouchers and the plan (docs/payments-privacy-and-rails.md): the wallet lives on the admin phones, sealed
         // under the UMK and synced like the call hours; only an admin device spends.

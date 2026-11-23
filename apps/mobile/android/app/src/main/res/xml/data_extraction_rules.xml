@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ backup and device-to-device transfer rules. allowBackup="false" already stops cloud backup, but not a
+     device-to-device transfer, so what must never leave this phone is excluded here by name. voici-locked-names: the
+     "Show names while locked" table (docs/voici-locked-caller-names.md §3.2); its Keystore key never moves anyway. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="voici-locked-names/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="voici-locked-names/" />
+    </device-transfer>
+</data-extraction-rules>

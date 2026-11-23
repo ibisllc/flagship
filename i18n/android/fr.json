@@ -4000,7 +4000,7 @@
   "org_key_disk": "Clé du disque de %1$s",
   "org_disk_key_later": "Une clé de disque change quand son serveur est rechiffré, ce qui n'est pas encore disponible.",
   "voici_calls_answer_locked": "Répondre aux appels quand Flagship est verrouillé",
-  "voici_calls_answer_locked_footer": "Cet appareil garde une clé qui ne sert qu'à répondre aux appels : vous pouvez ainsi répondre depuis l'écran verrouillé. L'appelant s'affiche comme « Quelqu'un sur voi.ci » jusqu'au déverrouillage.",
+  "voici_calls_answer_locked_footer": "Ce téléphone garde une clé qui ne peut que répondre aux appels, pour que vous puissiez répondre depuis l'écran verrouillé. Vos messages restent verrouillés.",
   "voici_calls_answer_locked_unlock": "Déverrouillez Flagship et réessayez.",
   "org_cancel": "Annuler",
   "org_create": "Créer une organisation",
@@ -4358,5 +4358,14 @@
   "payments_usage_mb": "%1$s Mo",
   "payments_usage_gb": "%1$s Go",
   "app_has_a_separate_access_list": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de %1$s.",
-  "app_has_a_separate_access_list_2": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de son serveur principal."
+  "app_has_a_separate_access_list_2": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de son serveur principal.",
+  "voici_calls_names_locked": "Afficher les noms verrouillé",
+  "voici_calls_names_locked_on": "Les noms que vous avez donnés aux personnes avec qui vous avez parlé, et les pages qui vous rappellent, peuvent s'afficher sur l'écran verrouillé, une montre jumelée ou une voiture. Toute personne qui tient ce téléphone peut les voir quand un appel arrive. Ils restent sur ce téléphone et sont mis à jour à chaque déverrouillage.",
+  "voici_calls_names_locked_off": "Tant que Flagship est verrouillé, les appelants s'affichent comme « Visiteur 4F3A » et les rappels comme « Quelqu'un à qui vous avez écrit ».",
+  "voici_calls_names_locked_alone_on": "Les pages qui vous rappellent peuvent s'afficher sur l'écran verrouillé, une montre jumelée ou une voiture. Toute personne qui tient ce téléphone peut les voir quand un appel arrive. Elles restent sur ce téléphone et sont mises à jour à chaque déverrouillage.",
+  "voici_calls_names_locked_alone_off": "Tant que Flagship est verrouillé, les rappels s'affichent comme « Quelqu'un à qui vous avez écrit ».",
+  "voici_calls_names_sheet_title": "Afficher les noms sur l'écran verrouillé ?",
+  "voici_calls_names_sheet_body": "Quand quelqu'un avec qui vous avez parlé appelle, ce téléphone peut afficher le nom que vous lui avez donné, même quand Flagship est verrouillé. Toute personne qui tient le téléphone le verra aussi.",
+  "voici_calls_names_sheet_show": "Afficher les noms",
+  "voici_ring_incoming_locked_named": "voi.ci/%1$s vous rappelle. Ouvrez Flagship pour répondre."
 }

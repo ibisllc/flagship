@@ -4007,7 +4007,15 @@
     <string name="org_key_disk">Disk key of %1$s</string>
     <string name="org_disk_key_later">A disk key changes when its server is re-keyed, which isn\'t available yet.</string>
     <string name="voici_calls_answer_locked">Answer calls while Flagship is locked</string>
-    <string name="voici_calls_answer_locked_footer">This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.</string>
+    <string name="voici_calls_answer_locked_footer">This phone keeps a key that can answer calls and nothing else, so you can answer from the lock screen. Your messages stay locked.</string>
+    <string name="voici_calls_names_locked">Show names while locked</string>
+    <string name="voici_calls_names_locked_on">Your names for people you\'ve talked to, and the pages that call you back, can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.</string>
+    <string name="voici_calls_names_locked_off">While Flagship is locked, callers show as “Visitor 4F3A” and call-backs as “Someone you wrote to”.</string>
+    <string name="voici_calls_names_locked_alone_on">The pages that call you back can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.</string>
+    <string name="voici_calls_names_locked_alone_off">While Flagship is locked, call-backs show as “Someone you wrote to”.</string>
+    <string name="voici_calls_names_sheet_title">Show names on the lock screen?</string>
+    <string name="voici_calls_names_sheet_body">When someone you\'ve talked to calls, this phone can show the name you gave them, even while Flagship is locked. Anyone holding the phone will see it too.</string>
+    <string name="voici_calls_names_sheet_show">Show names</string>
     <string name="voici_calls_answer_locked_unlock">Unlock Flagship and try again.</string>
     <string name="org_cancel">Cancel</string>
     <string name="org_create">Create an organization</string>
@@ -4141,6 +4149,7 @@
     <string name="voici_call_ring_back_required">This page takes calls only from people who allow a call-back.</string>
     <string name="voici_ring_incoming">%1$s is calling you back</string>
     <string name="voici_ring_incoming_locked">Someone you wrote to is calling you back. Open Flagship to answer.</string>
+    <string name="voici_ring_incoming_locked_named">voi.ci/%1$s is calling you back. Open Flagship to answer.</string>
     <string name="voici_delete_forget_body">It\'s removed from your devices and from Flagship at once. Messages already on %1$s\'s device stay there.</string>
     <string name="voici_delete_prompt_title">Delete this conversation</string>
     <string name="voici_anonymous_caller">Anonymous caller</string>

@@ -479,9 +479,10 @@ object VoiciCallCenter {
             if (!current()) return
             update { it.copy(video = request.hasVideo) }
             // A locked phone (the call key answers) can't open the push's sealed caller, but the room's signed request
-            // names the caller's key for this conversation: its visitor name replaces "Someone on voi.ci". Nicknames
-            // are account data and wait for the unlock.
-            if (!callerOpened) showCallerName(VoiciCopy.visitorName(request.from))
+            // names the caller's key for this conversation: its visitor name replaces "Someone on voi.ci".
+            // With "Show names while locked" on, the owner's nickname for a caller they've had calls with comes from the
+            // locked-names table (docs/voici-locked-caller-names.md).
+            if (!callerOpened) showCallerName(runCatching { VoiciCenter.shared?.lockedNickname(request.from) }.getOrNull() ?: VoiciCopy.visitorName(request.from))
             maybeAnswerAfterUnlock(request.callId)
         }
         override fun onWon() {

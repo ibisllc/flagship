@@ -129,6 +129,8 @@ object AppRuntime {
                 http = okHttp,
                 callKeyVault = com.flagshipserver.app.calls.KeystoreCallKeyVault(app),
                 shareCard = com.flagshipserver.app.core.voici.AndroidShareCardRenderer,
+                lockedNames = com.flagshipserver.app.calls.KeystoreLockedNamesStore(app),
+                lockedNamesSettings = com.flagshipserver.app.calls.VoiciLockedNamesSettings(app),
             )
         }
 

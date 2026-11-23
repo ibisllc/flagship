@@ -6660,6 +6660,90 @@
           ]
         }
       }
+    },
+    {
+      "id": "voici-locked-names",
+      "title": "Names on a locked phone (docs/voici-locked-caller-names.md): \"Show names while locked\" under \"Answer calls while Flagship is locked\" (a one-time question when that goes on), or on its own where the answer switch isn't offered; a table outside the app lock (iOS Keychain AfterFirstUnlockThisDeviceOnly; Android Keystore-sealed file excluded from backup and transfer) with the nicknames of visitors called with in 90 days, keyed by a hash of the pseudonym; rebuilt from the unlocked account, erased with either switch, sign-out, removal and wipe",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciLockedNames.swift",
+              "kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallsSettingsSection.swift",
+              "calls-names-locked"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallCenter.swift",
+              "static func lockedNickname"
+            ]
+          ]
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/calls/VoiciLockedNames.kt",
+              "class KeystoreLockedNamesStore"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/VoiciCallsSettings.kt",
+              "calls-names-locked"
+            ],
+            [
+              "apps/mobile/android/app/src/main/res/xml/data_extraction_rules.xml",
+              "voici-locked-names/"
+            ]
+          ]
+        },
+        "web": {
+          "status": "na",
+          "reason": "The webapp doesn't ring.",
+          "anchors": []
+        }
+      }
+    },
+    {
+      "id": "voici-ring-back-locked-name",
+      "title": "A ring-back on a locked phone names the page: the app sends the page's ring tag key with its call-back attach, .com adds tag = HMAC(key, ringId) to the ring push, and the phone matches it against its locked-names table (\"voi.ci/<page> is calling back\"); Answer while locked asks for the unlock, then dials only if the opened hint names that page",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/VoiciRing.swift",
+              "static func ringTagMatches"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Calls/VoiciCallCenter.swift",
+              "ring-back-tag-mismatch"
+            ]
+          ]
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/voici/VoiciRing.kt",
+              "fun ringTagMatches"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/calls/VoiciRingCenter.kt",
+              "fun lockedRingText"
+            ]
+          ]
+        },
+        "web": {
+          "status": "na",
+          "reason": "The webapp doesn't ring; the voi.ci site's browser attach names no account and gets no push.",
+          "anchors": []
+        }
+      }
     }
   ]
 }

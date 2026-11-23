@@ -135,6 +135,7 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
     )
     if (v.showsWho && page.canPublish) {
         var lockedBusy by remember { mutableStateOf(false) }
+        var namesSheet by remember { mutableStateOf(false) }
         FSGroup {
             FSRow(
                 title = stringResource(R.string.voici_calls_answer_locked),
@@ -145,8 +146,10 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
                         onCheckedChange = { on ->
                             lockedBusy = true
                             scope.launch {
-                                center.setAnswerWhileLocked(on)?.let { onError(VoiciCopy.callKeyError(it)) }
+                                val err = center.setAnswerWhileLocked(on)
+                                err?.let { onError(VoiciCopy.callKeyError(it)) }
                                 lockedBusy = false
+                                if (on && err == null && center.shouldOfferNamesSheet()) namesSheet = true
                             }
                         },
                         enabled = !lockedBusy,
@@ -155,13 +158,59 @@ internal fun VoiciCallsSettings(center: VoiciCenter, page: VoiciPageUi, onError:
                 },
             )
         }
-        Text(
-            stringResource(R.string.voici_calls_answer_locked_footer),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = FS.space.s4),
+        Footnote(stringResource(R.string.voici_calls_answer_locked_footer))
+        if (page.answersWhileLocked) {
+            NamesWhileLockedRow(center, page)
+            Footnote(stringResource(if (page.showsNamesWhileLocked) R.string.voici_calls_names_locked_on else R.string.voici_calls_names_locked_off))
+        }
+        if (namesSheet) {
+            // The one-time question (docs/voici-locked-caller-names.md §5.2): "Not now" leaves the switch off and isn't asked again.
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = {},
+                title = { Text(stringResource(R.string.voici_calls_names_sheet_title)) },
+                text = { Text(stringResource(R.string.voici_calls_names_sheet_body)) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { center.namesSheetAnswered(true); namesSheet = false },
+                        modifier = Modifier.testTag("calls-names-sheet-show"),
+                    ) { Text(stringResource(R.string.voici_calls_names_sheet_show)) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { center.namesSheetAnswered(false); namesSheet = false },
+                        modifier = Modifier.testTag("calls-names-sheet-not-now"),
+                    ) { Text(stringResource(R.string.not_now)) }
+                },
+            )
+        }
+    } else if (page.username.isNotEmpty()) {
+        // A device that can't answer while locked (no page that takes calls, or not an admin device) still gets
+        // ring-backs from the pages this account calls (D1): the switch stands alone and names only those.
+        NamesWhileLockedRow(center, page)
+        Footnote(stringResource(if (page.showsNamesWhileLocked) R.string.voici_calls_names_locked_alone_on else R.string.voici_calls_names_locked_alone_off))
+    }
+}
+
+/** "Show names while locked" (docs/voici-locked-caller-names.md §5.1). */
+@Composable
+private fun NamesWhileLockedRow(center: VoiciCenter, page: VoiciPageUi) {
+    FSGroup {
+        FSRow(
+            title = stringResource(R.string.voici_calls_names_locked),
+            trailing = {
+                Switch(
+                    checked = page.showsNamesWhileLocked,
+                    onCheckedChange = { on -> center.setShowNamesWhileLocked(on) },
+                    modifier = Modifier.testTag("calls-names-locked"),
+                )
+            },
         )
     }
+}
+
+@Composable
+private fun Footnote(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = FS.space.s4))
 }
 
 /** Shown only when something the system controls would keep a call from ringing; re-read whenever the screen resumes. */

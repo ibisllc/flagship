@@ -7,9 +7,11 @@ package com.flagshipserver.app.push
 object VoiciRingPush {
     const val CATEGORY = "voici-ring"
 
-    data class Payload(val ringId: String, val hint: String)
+    /** [tag]: HMAC of the ring id under the caller's ring tag key, so a locked phone can name the page (absent without a key). */
+    data class Payload(val ringId: String, val hint: String, val tag: String? = null)
 
     private val RING_ID = Regex("^[0-9a-f]{32}$")
+    private val TAG = Regex("^[0-9a-f]{32}$")
 
     fun matches(data: Map<String, String>): Boolean = data["category"] == CATEGORY || data["kind"] == CATEGORY
 
@@ -17,6 +19,7 @@ object VoiciRingPush {
         if (!matches(data)) return null
         val ringId = data["ringId"]?.takeIf { RING_ID.matches(it) } ?: return null
         val hint = data["hint"]?.takeIf { it.isNotEmpty() && it.length <= 4096 } ?: return null
-        return Payload(ringId, hint)
+        val tag = data["tag"]?.takeIf { TAG.matches(it) }
+        return Payload(ringId, hint, tag)
     }
 }

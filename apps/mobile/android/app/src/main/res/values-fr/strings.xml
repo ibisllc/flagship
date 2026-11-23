@@ -4002,7 +4002,15 @@
     <string name="org_key_disk">Clé du disque de %1$s</string>
     <string name="org_disk_key_later">Une clé de disque change quand son serveur est rechiffré, ce qui n\'est pas encore disponible.</string>
     <string name="voici_calls_answer_locked">Répondre aux appels quand Flagship est verrouillé</string>
-    <string name="voici_calls_answer_locked_footer">Cet appareil garde une clé qui ne sert qu\'à répondre aux appels : vous pouvez ainsi répondre depuis l\'écran verrouillé. L\'appelant s\'affiche comme « Quelqu\'un sur voi.ci » jusqu\'au déverrouillage.</string>
+    <string name="voici_calls_answer_locked_footer">Ce téléphone garde une clé qui ne peut que répondre aux appels, pour que vous puissiez répondre depuis l\'écran verrouillé. Vos messages restent verrouillés.</string>
+    <string name="voici_calls_names_locked">Afficher les noms verrouillé</string>
+    <string name="voici_calls_names_locked_on">Les noms que vous avez donnés aux personnes avec qui vous avez parlé, et les pages qui vous rappellent, peuvent s\'afficher sur l\'écran verrouillé, une montre jumelée ou une voiture. Toute personne qui tient ce téléphone peut les voir quand un appel arrive. Ils restent sur ce téléphone et sont mis à jour à chaque déverrouillage.</string>
+    <string name="voici_calls_names_locked_off">Tant que Flagship est verrouillé, les appelants s\'affichent comme « Visiteur 4F3A » et les rappels comme « Quelqu\'un à qui vous avez écrit ».</string>
+    <string name="voici_calls_names_locked_alone_on">Les pages qui vous rappellent peuvent s\'afficher sur l\'écran verrouillé, une montre jumelée ou une voiture. Toute personne qui tient ce téléphone peut les voir quand un appel arrive. Elles restent sur ce téléphone et sont mises à jour à chaque déverrouillage.</string>
+    <string name="voici_calls_names_locked_alone_off">Tant que Flagship est verrouillé, les rappels s\'affichent comme « Quelqu\'un à qui vous avez écrit ».</string>
+    <string name="voici_calls_names_sheet_title">Afficher les noms sur l\'écran verrouillé ?</string>
+    <string name="voici_calls_names_sheet_body">Quand quelqu\'un avec qui vous avez parlé appelle, ce téléphone peut afficher le nom que vous lui avez donné, même quand Flagship est verrouillé. Toute personne qui tient le téléphone le verra aussi.</string>
+    <string name="voici_calls_names_sheet_show">Afficher les noms</string>
     <string name="voici_calls_answer_locked_unlock">Déverrouillez Flagship et réessayez.</string>
     <string name="org_cancel">Annuler</string>
     <string name="org_create">Créer une organisation</string>
@@ -4136,6 +4144,7 @@
     <string name="voici_call_ring_back_required">Cette page n\'accepte que les appels de personnes qui autorisent le rappel.</string>
     <string name="voici_ring_incoming">%1$s vous rappelle</string>
     <string name="voici_ring_incoming_locked">Une personne à qui vous avez écrit vous rappelle. Ouvrez Flagship pour répondre.</string>
+    <string name="voici_ring_incoming_locked_named">voi.ci/%1$s vous rappelle. Ouvrez Flagship pour répondre.</string>
     <string name="voici_delete_forget_body">Elle est supprimée de vos appareils et de Flagship immédiatement. Les messages déjà sur l\'appareil de %1$s y restent.</string>
     <string name="voici_delete_prompt_title">Supprimer cette conversation</string>
     <string name="voici_anonymous_caller">Appel anonyme</string>

@@ -4000,7 +4000,7 @@
   "org_key_disk": "%1$s のディスクの鍵",
   "org_disk_key_later": "ディスクの鍵はサーバーの再暗号化で変わります。この機能はまだ使えません。",
   "voici_calls_answer_locked": "Flagship がロック中でも通話に応答",
-  "voici_calls_answer_locked_footer": "このデバイスは通話への応答にしか使えない鍵を保持するので、ロック画面から応答できます。ロックを解除するまで、発信者は「voi.ci のユーザー」と表示されます。",
+  "voici_calls_answer_locked_footer": "この電話は通話への応答だけができる鍵を保持するので、ロック画面から応答できます。メッセージはロックされたままです。",
   "voici_calls_answer_locked_unlock": "Flagship のロックを解除して、もう一度お試しください。",
   "org_cancel": "キャンセル",
   "org_create": "組織を作成",
@@ -4357,5 +4357,14 @@
   "payments_usage_mb": "%1$s MB",
   "payments_usage_gb": "%1$s GB",
   "app_has_a_separate_access_list": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、%1$s のリストを使います。",
-  "app_has_a_separate_access_list_2": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、そのリードサーバーのリストを使います。"
+  "app_has_a_separate_access_list_2": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、そのリードサーバーのリストを使います。",
+  "voici_calls_names_locked": "ロック中も名前を表示",
+  "voici_calls_names_locked_on": "話したことのある相手に付けた名前と、折り返し電話してくるページが、ロック画面、ペアリングしたウォッチ、車に表示されることがあります。着信時にこの電話を持っている人なら誰でも見られます。名前はこの電話にだけ保存され、ロックを解除するたびに更新されます。",
+  "voici_calls_names_locked_off": "Flagship がロック中は、発信者は「訪問者 4F3A」、折り返しは「メッセージを送った相手」と表示されます。",
+  "voici_calls_names_locked_alone_on": "折り返し電話してくるページが、ロック画面、ペアリングしたウォッチ、車に表示されることがあります。着信時にこの電話を持っている人なら誰でも見られます。この電話にだけ保存され、ロックを解除するたびに更新されます。",
+  "voici_calls_names_locked_alone_off": "Flagship がロック中は、折り返しは「メッセージを送った相手」と表示されます。",
+  "voici_calls_names_sheet_title": "ロック画面に名前を表示しますか？",
+  "voici_calls_names_sheet_body": "話したことのある相手から電話があると、Flagship がロック中でも、あなたが付けた名前をこの電話に表示できます。電話を持っている人にも見えます。",
+  "voici_calls_names_sheet_show": "名前を表示",
+  "voici_ring_incoming_locked_named": "voi.ci/%1$s から折り返しの電話です。応答するには Flagship を開いてください。"
 }

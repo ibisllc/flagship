@@ -58,4 +58,31 @@ object VoiciRings {
 
     fun verifyRing(r: VoiciRing, signature: String, ownerSignPub: String): Boolean =
         runCatching { WebEnvelopes.ed25519VerifyHex(signature, canonicalRing(r), ownerSignPub) }.getOrDefault(false)
+
+    // ── names on a locked phone (docs/voici-locked-caller-names.md; vectors test-vectors/voici/ring-tag.json) ──
+
+    const val TAG_RING_TAG = "flagship/voici-ring-tag/v1"
+    const val TAG_LOCKED_NAME = "flagship/voici-locked-name/v1"
+
+    /** The caller's per-page ring tag key: HKDF-SHA256 of the Messages secret, info `flagship/voici-ring-tag/v1|<pageId>`. */
+    fun deriveRingTagKey(messagesSecret: ByteArray, pageId: String): ByteArray {
+        require(PAGE_ID.matches(pageId)) { TAG_RING_TAG }
+        return VoiciJs.hkdf32(messagesSecret, "$TAG_RING_TAG|$pageId")
+    }
+
+    /** The ring push's `tag`: the first 16 bytes (hex) of HMAC-SHA256(tagKey, ringId); null for a bad key or ring id. */
+    fun ringTag(tagKey: ByteArray, ringId: String): String? {
+        if (tagKey.size != 32 || !hex(ringId, 16)) return null
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256").apply { init(javax.crypto.spec.SecretKeySpec(tagKey, "HmacSHA256")) }.doFinal(VoiciJs.utf8(ringId))
+        return VoiciJs.hex(mac).substring(0, 32)
+    }
+
+    /** Whether a push's tag was made for this ring under [tagKey]; constant time over the whole tag. */
+    fun ringTagMatches(tagKey: ByteArray, ringId: String, tag: String): Boolean {
+        val want = ringTag(tagKey, ringId) ?: return false
+        return java.security.MessageDigest.isEqual(VoiciJs.utf8(want), VoiciJs.utf8(tag))
+    }
+
+    /** Where a locked page owner's phone keeps a caller's nickname: 16 bytes (hex) of SHA-256 of the tag and the pub. */
+    fun lockedNameKey(pseudonymPub: String): String = VoiciJs.hex(VoiciJs.sha256(VoiciJs.utf8("$TAG_LOCKED_NAME|$pseudonymPub"))).substring(0, 32)
 }

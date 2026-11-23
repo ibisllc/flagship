@@ -148,16 +148,28 @@ object VoiciCallModes {
     }
 
     /** The caller's app: the order signed by its pseudonym P for that page. */
-    fun signRingBackPseudonym(pageId: String, conv: String, op: String, issuedAt: Long, pseudonymSeed: ByteArray): JsonObject {
+    /** [ringTagKey] (an attach only): the page's ring tag key, unsigned beside the order (docs/voici-locked-caller-names.md). */
+    fun signRingBackPseudonym(pageId: String, conv: String, op: String, issuedAt: Long, pseudonymSeed: ByteArray, ringTagKey: ByteArray? = null): JsonObject {
         val sig = VoiciJs.hex(VoiciJs.edSign(pseudonymSeed, canonicalRingBack(pageId, conv, op, issuedAt)))
-        return JsonObject(
-            linkedMapOf(
-                "order" to JsonObject(linkedMapOf("pageId" to JsonPrimitive(pageId), "conv" to JsonPrimitive(conv), "op" to JsonPrimitive(op), "issuedAt" to JsonPrimitive(issuedAt))),
-                "signer" to JsonPrimitive("pseudonym"),
-                "from" to JsonPrimitive(VoiciJs.hex(VoiciJs.edPub(pseudonymSeed))),
-                "sig" to JsonPrimitive(sig),
-            ),
+        val body = linkedMapOf<String, kotlinx.serialization.json.JsonElement>(
+            "order" to JsonObject(linkedMapOf("pageId" to JsonPrimitive(pageId), "conv" to JsonPrimitive(conv), "op" to JsonPrimitive(op), "issuedAt" to JsonPrimitive(issuedAt))),
+            "signer" to JsonPrimitive("pseudonym"),
+            "from" to JsonPrimitive(VoiciJs.hex(VoiciJs.edPub(pseudonymSeed))),
+            "sig" to JsonPrimitive(sig),
         )
+        if (ringTagKey != null && ringTagKey.size == 32 && op == "attach") body["ringTagKey"] = JsonPrimitive(VoiciJs.hex(ringTagKey))
+        return JsonObject(body)
+    }
+
+    /**
+     * The attach body as `.com` reads it (TS parseVoiciRingBackBody): the signed order without `ringTagKey`, and the key
+     * (64 lowercase hex, pseudonym orders only); null when the key is there in any other shape.
+     */
+    fun parseRingBackBody(body: JsonObject): Pair<JsonObject, String?>? {
+        if (!body.containsKey("ringTagKey")) return body to null
+        val key = (body["ringTagKey"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        if (key == null || !hex(key, 32) || str(body["signer"]) != "pseudonym") return null
+        return JsonObject(body - "ringTagKey") to key
     }
 
     /** The message cred's checks (attestation, delegation to B, thread statement) for a browser-signed order; B or a refusal. */

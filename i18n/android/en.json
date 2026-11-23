@@ -16478,8 +16478,40 @@
     "ctx": "voi.ci calls: answering while locked setting"
   },
   "voici_calls_answer_locked_footer": {
-    "en": "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.",
+    "en": "This phone keeps a key that can answer calls and nothing else, so you can answer from the lock screen. Your messages stay locked.",
     "ctx": "voi.ci calls: answering while locked setting"
+  },
+  "voici_calls_names_locked": {
+    "en": "Show names while locked",
+    "ctx": "voi.ci calls: names on a locked phone (docs/voici-locked-caller-names.md)"
+  },
+  "voici_calls_names_locked_on": {
+    "en": "Your names for people you've talked to, and the pages that call you back, can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.",
+    "ctx": "voi.ci calls: names on a locked phone (docs/voici-locked-caller-names.md)"
+  },
+  "voici_calls_names_locked_off": {
+    "en": "While Flagship is locked, callers show as “Visitor 4F3A” and call-backs as “Someone you wrote to”.",
+    "ctx": "voi.ci calls: names on a locked phone (docs/voici-locked-caller-names.md)"
+  },
+  "voici_calls_names_locked_alone_on": {
+    "en": "The pages that call you back can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.",
+    "ctx": "voi.ci calls: names on a locked phone (docs/voici-locked-caller-names.md)"
+  },
+  "voici_calls_names_locked_alone_off": {
+    "en": "While Flagship is locked, call-backs show as “Someone you wrote to”.",
+    "ctx": "voi.ci calls: names on a locked phone (docs/voici-locked-caller-names.md)"
+  },
+  "voici_calls_names_sheet_title": {
+    "en": "Show names on the lock screen?",
+    "ctx": "voi.ci calls: names on a locked phone (docs/voici-locked-caller-names.md)"
+  },
+  "voici_calls_names_sheet_body": {
+    "en": "When someone you've talked to calls, this phone can show the name you gave them, even while Flagship is locked. Anyone holding the phone will see it too.",
+    "ctx": "voi.ci calls: names on a locked phone (docs/voici-locked-caller-names.md)"
+  },
+  "voici_calls_names_sheet_show": {
+    "en": "Show names",
+    "ctx": "voi.ci calls: names on a locked phone (docs/voici-locked-caller-names.md)"
   },
   "voici_calls_answer_locked_unlock": {
     "en": "Unlock Flagship and try again.",
@@ -17012,6 +17044,10 @@
   "voici_ring_incoming_locked": {
     "en": "Someone you wrote to is calling you back. Open Flagship to answer.",
     "ctx": "voi.ci calls: a ring-back while the account is locked"
+  },
+  "voici_ring_incoming_locked_named": {
+    "en": "voi.ci/%1$s is calling you back. Open Flagship to answer.",
+    "ctx": "voi.ci calls: a ring-back while the account is locked, named by the locked-names table; %1$s is the page's voi.ci name"
   },
   "voici_delete_forget_body": {
     "en": "It's removed from your devices and from Flagship at once. Messages already on %1$s's device stay there.",

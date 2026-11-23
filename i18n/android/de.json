@@ -4000,7 +4000,7 @@
   "org_key_disk": "Festplattenschlüssel von %1$s",
   "org_disk_key_later": "Ein Festplattenschlüssel ändert sich, wenn sein Server neu verschlüsselt wird. Das ist noch nicht verfügbar.",
   "voici_calls_answer_locked": "Anrufe annehmen, während Flagship gesperrt ist",
-  "voici_calls_answer_locked_footer": "Dieses Gerät behält einen Schlüssel, der nur Anrufe annehmen kann, damit du vom Sperrbildschirm aus annehmen kannst. Der Anrufer erscheint als „Jemand auf voi.ci“, bis du entsperrst.",
+  "voici_calls_answer_locked_footer": "Dieses Telefon behält einen Schlüssel, der nur Anrufe annehmen kann, damit du vom Sperrbildschirm aus annehmen kannst. Deine Nachrichten bleiben gesperrt.",
   "voici_calls_answer_locked_unlock": "Entsperre Flagship und versuche es erneut.",
   "org_cancel": "Abbrechen",
   "org_create": "Organisation erstellen",
@@ -4358,5 +4358,14 @@
   "payments_usage_mb": "%1$s MB",
   "payments_usage_gb": "%1$s GB",
   "app_has_a_separate_access_list": "1 App hat auf jedem Server eine eigene Zugangsliste. Wenn Pro endet, gilt für sie die Liste von %1$s.",
-  "app_has_a_separate_access_list_2": "1 App hat auf jedem Server eine eigene Zugangsliste. Wenn Pro endet, gilt für sie die Liste ihres Leit-Servers."
+  "app_has_a_separate_access_list_2": "1 App hat auf jedem Server eine eigene Zugangsliste. Wenn Pro endet, gilt für sie die Liste ihres Leit-Servers.",
+  "voici_calls_names_locked": "Namen bei Sperre zeigen",
+  "voici_calls_names_locked_on": "Deine Namen für Menschen, mit denen du gesprochen hast, und die Seiten, die dich zurückrufen, können auf dem Sperrbildschirm, einer gekoppelten Uhr oder im Auto erscheinen. Wer dieses Telefon in der Hand hat, sieht sie, wenn ein Anruf kommt. Sie bleiben auf diesem Telefon und werden bei jedem Entsperren aktualisiert.",
+  "voici_calls_names_locked_off": "Solange Flagship gesperrt ist, erscheinen Anrufer als „Besucher 4F3A“ und Rückrufe als „Jemand, dem du geschrieben hast“.",
+  "voici_calls_names_locked_alone_on": "Die Seiten, die dich zurückrufen, können auf dem Sperrbildschirm, einer gekoppelten Uhr oder im Auto erscheinen. Wer dieses Telefon in der Hand hat, sieht sie, wenn ein Anruf kommt. Sie bleiben auf diesem Telefon und werden bei jedem Entsperren aktualisiert.",
+  "voici_calls_names_locked_alone_off": "Solange Flagship gesperrt ist, erscheinen Rückrufe als „Jemand, dem du geschrieben hast“.",
+  "voici_calls_names_sheet_title": "Namen auf dem Sperrbildschirm zeigen?",
+  "voici_calls_names_sheet_body": "Wenn jemand anruft, mit dem du gesprochen hast, kann dieses Telefon den Namen zeigen, den du ihm gegeben hast, auch wenn Flagship gesperrt ist. Wer das Telefon in der Hand hat, sieht ihn ebenfalls.",
+  "voici_calls_names_sheet_show": "Namen zeigen",
+  "voici_ring_incoming_locked_named": "voi.ci/%1$s ruft dich zurück. Öffne Flagship, um anzunehmen."
 }

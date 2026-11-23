@@ -4002,7 +4002,15 @@
     <string name="org_key_disk">Festplattenschlüssel von %1$s</string>
     <string name="org_disk_key_later">Ein Festplattenschlüssel ändert sich, wenn sein Server neu verschlüsselt wird. Das ist noch nicht verfügbar.</string>
     <string name="voici_calls_answer_locked">Anrufe annehmen, während Flagship gesperrt ist</string>
-    <string name="voici_calls_answer_locked_footer">Dieses Gerät behält einen Schlüssel, der nur Anrufe annehmen kann, damit du vom Sperrbildschirm aus annehmen kannst. Der Anrufer erscheint als „Jemand auf voi.ci“, bis du entsperrst.</string>
+    <string name="voici_calls_answer_locked_footer">Dieses Telefon behält einen Schlüssel, der nur Anrufe annehmen kann, damit du vom Sperrbildschirm aus annehmen kannst. Deine Nachrichten bleiben gesperrt.</string>
+    <string name="voici_calls_names_locked">Namen bei Sperre zeigen</string>
+    <string name="voici_calls_names_locked_on">Deine Namen für Menschen, mit denen du gesprochen hast, und die Seiten, die dich zurückrufen, können auf dem Sperrbildschirm, einer gekoppelten Uhr oder im Auto erscheinen. Wer dieses Telefon in der Hand hat, sieht sie, wenn ein Anruf kommt. Sie bleiben auf diesem Telefon und werden bei jedem Entsperren aktualisiert.</string>
+    <string name="voici_calls_names_locked_off">Solange Flagship gesperrt ist, erscheinen Anrufer als „Besucher 4F3A“ und Rückrufe als „Jemand, dem du geschrieben hast“.</string>
+    <string name="voici_calls_names_locked_alone_on">Die Seiten, die dich zurückrufen, können auf dem Sperrbildschirm, einer gekoppelten Uhr oder im Auto erscheinen. Wer dieses Telefon in der Hand hat, sieht sie, wenn ein Anruf kommt. Sie bleiben auf diesem Telefon und werden bei jedem Entsperren aktualisiert.</string>
+    <string name="voici_calls_names_locked_alone_off">Solange Flagship gesperrt ist, erscheinen Rückrufe als „Jemand, dem du geschrieben hast“.</string>
+    <string name="voici_calls_names_sheet_title">Namen auf dem Sperrbildschirm zeigen?</string>
+    <string name="voici_calls_names_sheet_body">Wenn jemand anruft, mit dem du gesprochen hast, kann dieses Telefon den Namen zeigen, den du ihm gegeben hast, auch wenn Flagship gesperrt ist. Wer das Telefon in der Hand hat, sieht ihn ebenfalls.</string>
+    <string name="voici_calls_names_sheet_show">Namen zeigen</string>
     <string name="voici_calls_answer_locked_unlock">Entsperre Flagship und versuche es erneut.</string>
     <string name="org_cancel">Abbrechen</string>
     <string name="org_create">Organisation erstellen</string>
@@ -4136,6 +4144,7 @@
     <string name="voici_call_ring_back_required">Diese Seite nimmt nur Anrufe von Personen an, die einen Rückruf erlauben.</string>
     <string name="voici_ring_incoming">%1$s ruft dich zurück</string>
     <string name="voici_ring_incoming_locked">Jemand, dem du geschrieben hast, ruft dich zurück. Öffne Flagship, um anzunehmen.</string>
+    <string name="voici_ring_incoming_locked_named">voi.ci/%1$s ruft dich zurück. Öffne Flagship, um anzunehmen.</string>
     <string name="voici_delete_forget_body">Es wird sofort von deinen Geräten und von Flagship entfernt. Nachrichten, die schon auf dem Gerät von %1$s sind, bleiben dort.</string>
     <string name="voici_delete_prompt_title">Diese Unterhaltung löschen</string>
     <string name="voici_anonymous_caller">Anonymer Anruf</string>
