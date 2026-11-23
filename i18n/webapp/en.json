@@ -16181,5 +16181,89 @@
   "All data your account sent through Flagship's relays this month.": {
     "en": "All data your account sent through Flagship's relays this month.",
     "ctx": "webapp/views/plan.js:113"
+  },
+  "You're offline. Connect to the internet and try again.": {
+    "en": "You're offline. Connect to the internet and try again.",
+    "ctx": "webapp/lib/totp.js:50"
+  },
+  "Couldn't reach Flagship. If your connection works, a browser extension, VPN or firewall may be blocking flagshipserver.com.": {
+    "en": "Couldn't reach Flagship. If your connection works, a browser extension, VPN or firewall may be blocking flagshipserver.com.",
+    "ctx": "webapp/lib/totp.js:51"
+  },
+  "This browser can't make the signature this needs. Update it, or turn this on from the Flagship app.": {
+    "en": "This browser can't make the signature this needs. Update it, or turn this on from the Flagship app.",
+    "ctx": "webapp/lib/totp.js:53"
+  },
+  "This browser couldn't sign the request. Try again.": {
+    "en": "This browser couldn't sign the request. Try again.",
+    "ctx": "webapp/lib/totp.js:54"
+  },
+  "Code protection is already on for this account. Turn it off first to set up a new authenticator.": {
+    "en": "Code protection is already on for this account. Turn it off first to set up a new authenticator.",
+    "ctx": "webapp/lib/totp.js:55"
+  },
+  "Code protection is already off for this account.": {
+    "en": "Code protection is already off for this account.",
+    "ctx": "webapp/lib/totp.js:56"
+  },
+  "This browser hasn't loaded your account. Lock and unlock it, then try again.": {
+    "en": "This browser hasn't loaded your account. Lock and unlock it, then try again.",
+    "ctx": "webapp/lib/totp.js:57"
+  },
+  "Only an admin device of this account can change code protection.": {
+    "en": "Only an admin device of this account can change code protection.",
+    "ctx": "webapp/lib/totp.js:59"
+  },
+  "Code protection isn't available on this server yet. Try again later.": {
+    "en": "Code protection isn't available on this server yet. Try again later.",
+    "ctx": "webapp/lib/totp.js:60"
+  },
+  "This setup expired. Start again to get a new key.": {
+    "en": "This setup expired. Start again to get a new key.",
+    "ctx": "webapp/lib/totp.js:61"
+  },
+  "Flagship doesn't know this account. Lock and unlock this browser, then try again.": {
+    "en": "Flagship doesn't know this account. Lock and unlock this browser, then try again.",
+    "ctx": "webapp/lib/totp.js:64"
+  },
+  "Enter your 6-digit code or a recovery code to confirm.": {
+    "en": "Enter your 6-digit code or a recovery code to confirm.",
+    "ctx": "webapp/lib/totp.js:289"
+  },
+  "Code protection is on": {
+    "en": "Code protection is on",
+    "ctx": "webapp/views/account-security.js:113"
+  },
+  "Why turn it on?": {
+    "en": "Why turn it on?",
+    "ctx": "webapp/views/account-security.js:140"
+  },
+  "Turn off code protection": {
+    "en": "Turn off code protection",
+    "ctx": "webapp/views/account-security.js:219"
+  },
+  "Turn on code protection": {
+    "en": "Turn on code protection",
+    "ctx": "webapp/views/account-security.js:230"
+  },
+  "This browser signs with its admin key — no phone required.": {
+    "en": "This browser signs with its admin key — no phone required.",
+    "ctx": "webapp/views/account-security.js:233"
+  },
+  "Turn off code protection?": {
+    "en": "Turn off code protection?",
+    "ctx": "webapp/views/account-security.js:376"
+  },
+  "Confirm with your code": {
+    "en": "Confirm with your code",
+    "ctx": "webapp/views/account-security.js:384"
+  },
+  "Enter a live 6-digit code from your authenticator (or a recovery code) to turn code protection off.": {
+    "en": "Enter a live 6-digit code from your authenticator (or a recovery code) to turn code protection off.",
+    "ctx": "webapp/views/account-security.js:385"
+  },
+  "Code protection is off.": {
+    "en": "Code protection is off.",
+    "ctx": "webapp/views/account-security.js:407"
   }
 }

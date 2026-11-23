@@ -1117,12 +1117,9 @@
         </div>
       </section>
 
-      <!-- v1.2 Phase 4 — Account security drill-down. Surfaces the
-           account-type badge (single vs multi-device + 2FA) and
-           drives the enroll / disable / recovery-codes flow. The
-           IRK-signed envelopes are owned by the mobile app for now;
-           the webapp surface mirrors the badge + lets users print
-           recovery codes from a larger screen. -->
+      <!-- Account security: code protection (TOTP) on / off and its
+           recovery codes, signed by this browser's admin key
+           (views/account-security.js, lib/totp.js). -->
       <section id="view-account-security" class="hidden">
         <p class="fs-detail-label">ACCOUNT SECURITY</p>
         <div id="account-security-content"></div>

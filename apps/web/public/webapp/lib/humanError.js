@@ -86,7 +86,9 @@ function isNetwork(e) {
   if (!e) return false;
   if (typeof e === "object") {
     if (e.code === "network") return true;
-    if (e.name === "TypeError") return true; // fetch() rejects with TypeError offline
+    // A fetch() rejection is a TypeError, but so is any bug ("x is not a
+    // function"): only the browsers' fetch-failure messages below count as
+    // network (security report F2 showed a bug as "Network error").
   }
   const m = String(e?.message ?? e).toLowerCase();
   return (

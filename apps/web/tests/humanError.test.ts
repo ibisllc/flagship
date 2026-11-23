@@ -67,6 +67,13 @@ describe("humanError — thrown-error mapping", () => {
     expect(humanError(new TypeError("Failed to fetch"))).toMatch(/internet connection/i);
   });
 
+  it("a TypeError that is a bug, not a failed fetch, is NOT a network error (F2)", async () => {
+    const { humanError } = await load();
+    expect(humanError(new TypeError("Cannot read properties of null (reading 'secret')"))).toMatch(/didn't work/i);
+    expect(humanError(new TypeError("NetworkError when attempting to fetch resource."))).toMatch(/internet connection/i);
+    expect(humanError(new TypeError("Load failed"))).toMatch(/internet connection/i);
+  });
+
   it("an unknown thrown thing → generic copy, NEVER the raw message", async () => {
     const { humanError } = await load();
     const out = humanError(new Error("HTTP 418 teapot stack trace"));

@@ -92,6 +92,9 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/abuse-notice-done/v1", //      mark an operator's abuse notice done (docs/abuse-handling.md)
   "flagship/rck-register/v1", //           a new server's routing key (adding a server)
   "flagship/voici-name/v1", //             an app's custom voi.ci name (set / clear)
+  "flagship/totp-enroll-begin/v1", //      turn code protection on (security report F2: admin-only)
+  "flagship/totp-enroll-confirm/v1", //    confirm it with the first code
+  "flagship/totp-disable/v1", //           turn code protection off
   "flagship/direct-name/v1", //            an app's name on the direct domain (directName.js)
   "flagship/service-invite/create/v1", //  service collaborator invite (D-2)
   "flagship/service-invite/revoke/v1", //  service collaborator revoke (D-2)

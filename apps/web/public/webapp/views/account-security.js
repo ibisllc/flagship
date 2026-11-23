@@ -2,16 +2,15 @@
 // Mirror of iOS AccountSecurityScreen.swift / AccountSecurityViewModel
 // and the Android equivalent.
 //
-// Drives the FULL IRK-signed flow (the webapp holds the IRK via
-// keystore.js signWithIrk over WebCrypto Ed25519, so it signs the same
-// envelopes the mobile app does — superseding the earlier "use your
-// phone" placeholder):
+// Code protection (TOTP), the same name and flow as iOS and Android. It is
+// an admin order (owner, 2026-11-23): this browser signs with its admin key
+// (lib/totp.js), and a non-admin device sees the setting read-only:
 //   1. Read the account-type badge from GET /api/users/:u.
 //   2. Four-step enrollment (explainer → QR + secret → sample code →
 //      recovery codes display, gated behind "I've saved these"). The
 //      QR + manual-secret + recovery-codes display also let users
 //      print/screenshot from a larger surface.
-//   3. Disable via the IRK-signed POST /api/users/:u/totp/disable.
+//   3. Turn off via the admin-signed POST /api/users/:u/totp/disable.
 //
 // All three signed POSTs live in lib/totp.js, which mirrors the iOS
 // AccountSecurityViewModel state machine + the @flagship/protocol
@@ -22,13 +21,16 @@ import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { formatWhen } from "../lib/dateFormat.js";
-import { humanError } from "../lib/humanError.js";
 import {
+  TOTP_COPY,
   fetchAccountType as totpFetchAccountType,
   totpEnrollBegin,
   totpEnrollConfirm,
   totpDisable,
+  totpErrorText,
 } from "../lib/totp.js";
+import { canSignAdminOrders } from "../lib/addServerGate.js";
+import { humanError } from "../lib/humanError.js";
 import { runRotateAdminRoot } from "../lib/adminRootRotation.js";
 import { setupCloudRecovery, hasCloudRecovery } from "../lib/recovery.js";
 
@@ -70,20 +72,34 @@ const state = {
   recoveryCodes: null,
   savedRecoveryCodes: false,
   failureMessage: null,
+  loadError: null,           // the badge couldn't be read: no buttons, this sentence
   busy: false,               // a signed POST is in flight
 };
+
+/** Whether this device may turn code protection on or off (an admin device, or a demo account's). */
+function mayChange(session = getSession()) {
+  return canSignAdminOrders(session);
+}
 
 async function fetchAccountType() {
   const session = getSession();
   const username = session.username;
+  state.loadError = null;
   if (!username) {
     state.accountType = null;
+    state.loadError = TOTP_COPY.notLoaded;
     return;
   }
   state.username = username;
-  const { accountType, totpEnrolledAt } = await totpFetchAccountType(username);
-  state.accountType = accountType;
-  state.totpEnrolledAt = totpEnrolledAt;
+  try {
+    const { accountType, totpEnrolledAt } = await totpFetchAccountType(username);
+    state.accountType = accountType;
+    state.totpEnrolledAt = totpEnrolledAt;
+  } catch (e) {
+    console.error("account type read failed", e);
+    state.accountType = null;
+    state.loadError = totpErrorText(e);
+  }
 }
 
 function fmtDate(ms) {
@@ -94,7 +110,7 @@ function fmtDate(ms) {
 /** Renders the badge + explainer at the top of the screen. */
 function renderBadge() {
   const isMulti = state.accountType === "multi";
-  const titleText = isMulti ? tr("Multi-device + 2FA") : tr("Single-device account");
+  const titleText = isMulti ? tr("Code protection is on") : tr("Single-device account");
   const explainer = isMulti
     ? tr("Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.")
     : tr("Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it.");
@@ -121,7 +137,7 @@ function renderExplainer() {
     `;
   }
   return `
-    <h3 class="mt-3">${tr("Why enable this?")}</h3>
+    <h3 class="mt-3">${tr("Why turn it on?")}</h3>
     <p>
       ${tr("A check outside your browser's password manager: anyone who breaks into it still needs a live code from your authenticator app to take over your account.")}
     </p>
@@ -189,14 +205,20 @@ function renderRecoveryCodes() {
 }
 
 function renderActions() {
+  if (state.loadError) return "";
+  const admin = mayChange();
+  const adminOnly = admin
+    ? ""
+    : `<p class="faint-sm mt-2" data-account-security-admin-only>${escapeHtml(TOTP_COPY.adminOnly)}</p>`;
   if (state.accountType === "multi") {
     return `
       <div class="card mt-3">
         <button class="danger" id="account-security-disable"
                 data-account-security-disable-btn
-                ${state.busy ? "disabled" : ""}>
-          ${state.busy ? tr("Working…") : tr("Disable multi-device + 2FA")}
+                ${state.busy || !admin ? "disabled" : ""}>
+          ${state.busy ? tr("Working…") : tr("Turn off code protection")}
         </button>
+        ${adminOnly}
       </div>
     `;
   }
@@ -204,12 +226,12 @@ function renderActions() {
     <div class="card mt-3">
       <button id="account-security-enable"
               data-account-security-enable-btn
-              ${state.busy ? "disabled" : ""}>
-        ${state.busy ? tr("Working…") : tr("Enable multi-device + 2FA")}
+              ${state.busy || !admin ? "disabled" : ""}>
+        ${state.busy ? tr("Working…") : tr("Turn on code protection")}
       </button>
-      <p class="faint-sm mt-2">
-        ${tr("This browser signs the enrollment with your account key — no phone required.")}
-      </p>
+      ${admin
+        ? `<p class="faint-sm mt-2">${tr("This browser signs with its admin key — no phone required.")}</p>`
+        : adminOnly}
     </div>
   `;
 }
@@ -269,10 +291,11 @@ export function renderAdminKeyCustody(custody = state.custody) {
 export const CUSTODY_LABEL = tr("Browser: software key, unlocked with a passkey");
 
 function renderFailure() {
-  if (!state.failureMessage) return "";
+  const message = state.failureMessage ?? state.loadError;
+  if (!message) return "";
   return `
     <div class="card mt-2 err-text" data-account-security-failed-msg>
-      ${escapeHtml(state.failureMessage)}
+      ${escapeHtml(message)}
     </div>
   `;
 }
@@ -296,8 +319,17 @@ async function renderAccountSecurity() {
     ].join("");
     bindHandlers();
   } catch (e) {
-    root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(e.message ?? tr("Couldn't load."))}</div>`;
+    console.error("account security render failed", e);
+    root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(totpErrorText(e))}</div>`;
   }
+}
+
+/** Why this browser can't send a code protection order right now, or null. Exported for tests. */
+export function preflight(session = getSession()) {
+  if (!session?.username) return TOTP_COPY.notLoaded;
+  if (!session.umk) return TOTP_COPY.locked;
+  if (!mayChange(session)) return TOTP_COPY.adminOnly;
+  return null;
 }
 
 function bindHandlers() {
@@ -315,8 +347,9 @@ function bindHandlers() {
   });
   document.getElementById("account-security-enable")?.addEventListener("click", async () => {
     const session = getSession();
-    if (!session.umk) {
-      state.failureMessage = tr("Unlock the webapp first.");
+    const blocked = preflight(session);
+    if (blocked) {
+      state.failureMessage = blocked;
       await renderAccountSecurity();
       return;
     }
@@ -331,9 +364,7 @@ function bindHandlers() {
       state.staged = staged;
     } catch (e) {
       console.error("totp enroll-begin failed", e);
-      state.failureMessage = e?.status === 503
-        ? tr("Two-factor isn't enabled on this server yet. Try again later.")
-        : humanError(e);
+      state.failureMessage = totpErrorText(e);
     } finally {
       state.busy = false;
       await renderAccountSecurity();
@@ -342,7 +373,7 @@ function bindHandlers() {
   document.getElementById("account-security-disable")?.addEventListener("click", async () => {
     const { inlineConfirm } = await import("../lib/modal.js");
     const ok = await inlineConfirm({
-      title: tr("Disable multi-device + 2FA?"),
+      title: tr("Turn off code protection?"),
       message: tr("Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist."),
       okLabel: tr("Disable"),
       danger: true,
@@ -350,14 +381,15 @@ function bindHandlers() {
     if (!ok) return;
     const { inlinePrompt } = await import("../lib/modal.js");
     const code = await inlinePrompt({
-      title: tr("Confirm with your 2FA code"),
-      message: tr("Enter a live 6-digit code from your authenticator (or a recovery code) to disable."),
+      title: tr("Confirm with your code"),
+      message: tr("Enter a live 6-digit code from your authenticator (or a recovery code) to turn code protection off."),
       placeholder: "123456",
     });
     if (!code) return;
     const session = getSession();
-    if (!session.umk) {
-      state.failureMessage = tr("Unlock the webapp first.");
+    const blocked = preflight(session);
+    if (blocked) {
+      state.failureMessage = blocked;
       await renderAccountSecurity();
       return;
     }
@@ -372,14 +404,14 @@ function bindHandlers() {
       });
       state.accountType = accountType;
       state.totpEnrolledAt = null;
-      toast(tr("Two-factor disabled."));
+      toast(tr("Code protection is off."));
     } catch (e) {
       console.error("totp disable failed", e);
-      state.failureMessage = e?.status === 401
-        ? tr("That code didn't match. Try a fresh code from your authenticator.")
-        : e?.status === 409
-          ? tr("Disable refused — other devices are still trusted on this account. Disconnect them first.")
-          : humanError(e);
+      state.failureMessage = totpErrorText(e);
+      if (e?.code === "totp-not-enrolled") {
+        state.accountType = "single";
+        state.totpEnrolledAt = null;
+      }
     } finally {
       state.busy = false;
       await renderAccountSecurity();
@@ -394,8 +426,9 @@ function bindHandlers() {
       return;
     }
     const session = getSession();
-    if (!session.umk) {
-      state.failureMessage = tr("Unlock the webapp first.");
+    const blocked = preflight(session);
+    if (blocked) {
+      state.failureMessage = blocked;
       await renderAccountSecurity();
       return;
     }
@@ -414,15 +447,20 @@ function bindHandlers() {
       state.staged = null;
     } catch (e) {
       console.error("totp enroll-confirm failed", e);
-      state.failureMessage = e?.status === 401
+      state.failureMessage = e?.code === "invalid-totp-code"
         ? tr("That code didn't match. Try again with a fresh code from your authenticator.")
-        : humanError(e);
+        : totpErrorText(e);
+      // The setup is gone (expired, or code protection is on already): back to the start.
+      if (e?.code === "totp-pending-expired" || e?.code === "totp-no-pending" || e?.code === "totp-already-enrolled") {
+        state.staged = null;
+      }
     } finally {
       state.busy = false;
       await renderAccountSecurity();
     }
   });
   document.getElementById("account-security-cancel-enroll")?.addEventListener("click", async () => {
+    // `.com` drops the staged secret after an hour; it never counts as code protection meanwhile.
     state.staged = null;
     state.failureMessage = null;
     await renderAccountSecurity();

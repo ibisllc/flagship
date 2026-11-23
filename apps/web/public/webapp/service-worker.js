@@ -568,7 +568,10 @@
 //       phone-only chunks this browser doesn't hold; the "too many posts on voi.ci" sentence.
 //  v250: the old "Tier & usage" screen (views/tier-status.js) is gone; Settings → Plan shows the account's data usage
 //       this month from `.com` (no server needed) and the warning before Pro ends while apps keep separate lists.
-const SHELL_VERSION = "v250";
+//  v251: code protection (security report F2): one name on every surface, signed with the admin key (read-only on
+//       other devices), and a sentence per failure (offline, blocked, server, browser, refusal codes) instead of
+//       "Network error" for all of them; humanError no longer reads every TypeError as offline.
+const SHELL_VERSION = "v251";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
