@@ -139,7 +139,9 @@ export async function handleOrgProposalPost(deps: OrgDeps, orgId: string, body: 
     const open = (await deps.orgs.listObjects(orgId, "proposal")).filter((o) => parse<StoredProposal>(o.bodyJson).decision === null).length;
     if (open >= MAX_OPEN_PROPOSALS) return forbidden("too many open proposals");
     const stored: StoredProposal = { bundle: { proposal: b.proposal, roles: b.roles, recipients: b.recipients, signature: b.signature }, decision: null };
-    const put = await deps.orgs.putObject(orgId, { kind: "proposal", key: b.proposal.proposalId, bodyJson: JSON.stringify(stored), issuedAt: b.proposal.issuedAt, storedAt: now });
+    // The insert holds the limit too, so parallel posts can't all pass the count above.
+    const put = await deps.orgs.putOpenProposal(orgId, { kind: "proposal", key: b.proposal.proposalId, bodyJson: JSON.stringify(stored), issuedAt: b.proposal.issuedAt, storedAt: now }, MAX_OPEN_PROPOSALS);
+    if (put === "full") return forbidden("too many open proposals");
     if (!put) return conflict("proposal exists");
     await deps.orgs.appendLog(orgId, `proposal-${b.proposal.kind}`, orgSha256Hex(canonicalOrgProposal(b.proposal)), now);
     return ok({ proposalId: b.proposal.proposalId });

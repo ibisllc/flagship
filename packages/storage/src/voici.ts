@@ -152,7 +152,14 @@ export interface VoiciStorage {
   }>;
 
   /** False when (conv, msgId) is already stored. */
-  insertMessage(rec: Omit<VoiciMessageRecord, "id" | "fetchedAt">): Promise<{ ok: true; id: number } | { ok: false }>;
+  /**
+   * With `awaitingCap`, a message into a conversation the owner hasn't replied to lands only while it holds fewer
+   * than that many messages (`awaiting: true` otherwise): the insert holds the cap itself (security report F4, §6).
+   */
+  insertMessage(
+    rec: Omit<VoiciMessageRecord, "id" | "fetchedAt">,
+    opts?: { awaitingCap?: number },
+  ): Promise<{ ok: true; id: number } | { ok: false; awaiting?: true }>;
   /** Conversation reads are scoped to (pageId, conv): a row stored under another page never counts as this page's
    *  (security review M2). */
   getMessage(pageId: string, conv: string, msgId: string): Promise<VoiciMessageRecord | null>;
@@ -185,8 +192,11 @@ export interface VoiciStorage {
   listRevoked(pageId: string, now: number): Promise<string[]>;
   deleteExpiredRevoked(now: number, limit: number): Promise<number>;
 
-  /** False when the op is already stored. */
-  putDraft(rec: VoiciDraftRecord): Promise<boolean>;
+  /**
+   * False when the op is already stored. With `max`, "full" when the account already holds that many drafts: the
+   * insert holds the limit itself, so parallel posts can't pass a stale count (security report F4, §6).
+   */
+  putDraft(rec: VoiciDraftRecord, max?: number): Promise<boolean | "full">;
   listDrafts(username: string): Promise<VoiciDraftRecord[]>;
   countDrafts(username: string): Promise<number>;
   consumeDrafts(username: string, opIds: readonly string[]): Promise<number>;
@@ -498,16 +508,26 @@ export class D1VoiciStorage implements VoiciStorage {
     };
   }
 
-  async insertMessage(rec: Omit<VoiciMessageRecord, "id" | "fetchedAt">) {
+  async insertMessage(rec: Omit<VoiciMessageRecord, "id" | "fetchedAt">, opts: { awaitingCap?: number } = {}) {
+    const capped = opts.awaitingCap !== undefined;
     try {
       const r = await this.db
         .prepare(
           "INSERT INTO voici_messages (page_id, conv, msg_id, kind, from_pub, delegate_pub, sent_at, envelope, size, direct, pushed, stored_at) " +
-            "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12) RETURNING id",
+            (capped
+              ? "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12 WHERE " +
+                "EXISTS (SELECT 1 FROM voici_messages WHERE page_id = ?1 AND conv = ?2 AND kind = 'voici-reply') OR " +
+                "(SELECT COUNT(*) FROM voici_messages WHERE page_id = ?1 AND conv = ?2 AND kind = 'voici-message') < ?13 RETURNING id"
+              : "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12) RETURNING id"),
         )
-        .bind(rec.pageId, rec.conv, rec.msgId, rec.kind, rec.fromPub, rec.delegatePub, rec.sentAt, rec.envelope, rec.size, rec.direct ? 1 : 0, rec.pushed ? 1 : 0, rec.storedAt)
+        .bind(
+          rec.pageId, rec.conv, rec.msgId, rec.kind, rec.fromPub, rec.delegatePub, rec.sentAt, rec.envelope, rec.size,
+          rec.direct ? 1 : 0, rec.pushed ? 1 : 0, rec.storedAt,
+          ...(capped ? [opts.awaitingCap] : []),
+        )
         .first<{ id: number }>();
-      return r ? { ok: true as const, id: r.id } : { ok: false as const };
+      if (r) return { ok: true as const, id: r.id };
+      return capped ? { ok: false as const, awaiting: true as const } : { ok: false as const };
     } catch (e) {
       if (isConflict(e)) return { ok: false as const };
       throw e;
@@ -666,12 +686,27 @@ export class D1VoiciStorage implements VoiciStorage {
     return res.meta.changes ?? 0;
   }
 
-  async putDraft(rec: VoiciDraftRecord) {
+  async putDraft(rec: VoiciDraftRecord, max?: number) {
+    if (max === undefined) {
+      const res = await this.db
+        .prepare("INSERT OR IGNORE INTO voici_drafts (username, op_id, device_pub, envelope, size, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+        .bind(rec.username, rec.opId, rec.devicePub, rec.envelope, rec.size, rec.createdAt)
+        .run();
+      return (res.meta.changes ?? 0) === 1;
+    }
     const res = await this.db
-      .prepare("INSERT OR IGNORE INTO voici_drafts (username, op_id, device_pub, envelope, size, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
-      .bind(rec.username, rec.opId, rec.devicePub, rec.envelope, rec.size, rec.createdAt)
+      .prepare(
+        `INSERT OR IGNORE INTO voici_drafts (username, op_id, device_pub, envelope, size, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE (SELECT COUNT(*) FROM voici_drafts WHERE username = ?1) < ?7`,
+      )
+      .bind(rec.username, rec.opId, rec.devicePub, rec.envelope, rec.size, rec.createdAt, max)
       .run();
-    return (res.meta.changes ?? 0) === 1;
+    if ((res.meta.changes ?? 0) === 1) return true;
+    const had = await this.db
+      .prepare("SELECT 1 AS x FROM voici_drafts WHERE username = ?1 AND op_id = ?2")
+      .bind(rec.username, rec.opId)
+      .first<{ x: number }>();
+    return had ? false : ("full" as const);
   }
 
   async listDrafts(username: string) {
@@ -985,8 +1020,14 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     return doomed.map((p) => ({ pageId: p.pageId, sha256: p.sha256 }));
   }
 
-  async insertMessage(rec: Omit<VoiciMessageRecord, "id" | "fetchedAt">) {
+  async insertMessage(rec: Omit<VoiciMessageRecord, "id" | "fetchedAt">, opts: { awaitingCap?: number } = {}) {
     if (this.messages.some((m) => m.conv === rec.conv && m.msgId === rec.msgId)) return { ok: false as const };
+    if (opts.awaitingCap !== undefined) {
+      const ms = this.messages.filter((m) => m.pageId === rec.pageId && m.conv === rec.conv);
+      if (!ms.some((m) => m.kind === "voici-reply") && ms.filter((m) => m.kind === "voici-message").length >= opts.awaitingCap) {
+        return { ok: false as const, awaiting: true as const };
+      }
+    }
     const id = this.nextId++;
     this.messages.push({ ...rec, id, fetchedAt: null });
     return { ok: true as const, id };
@@ -1114,9 +1155,10 @@ export class InMemoryVoiciStorage implements VoiciStorage {
     return n;
   }
 
-  async putDraft(rec: VoiciDraftRecord) {
+  async putDraft(rec: VoiciDraftRecord, max?: number) {
     const k = InMemoryVoiciStorage.pk(rec.username, rec.opId);
     if (this.drafts.has(k)) return false;
+    if (max !== undefined && [...this.drafts.values()].filter((d) => d.username === rec.username).length >= max) return "full" as const;
     this.drafts.set(k, { ...rec });
     return true;
   }

@@ -240,6 +240,39 @@ describe.each(["InMemory", "D1"] as const)("VoiciStorage (%s)", (adapter) => {
     }
   });
 
+  it("holds the awaiting-reply cap in the insert, also for parallel sends (security report F4, §6)", async () => {
+    const { s, done } = fresh(adapter);
+    try {
+      const c = "c".repeat(64);
+      const out = await Promise.all(
+        Array.from({ length: 6 }, (_, i) => s.voici.insertMessage(msg(c, (i + 1).toString(16).padStart(2, "0").repeat(16)), { awaitingCap: 3 })),
+      );
+      expect(out.filter((r) => r.ok)).toHaveLength(3);
+      expect(out.filter((r) => !r.ok && r.awaiting)).toHaveLength(3);
+      // Once the owner replies, the conversation is no longer capped.
+      await s.voici.insertMessage(msg(c, "a0".repeat(16), { kind: "voici-reply" }));
+      expect((await s.voici.insertMessage(msg(c, "a1".repeat(16)), { awaitingCap: 3 })).ok).toBe(true);
+    } finally {
+      done();
+    }
+  });
+
+  it("holds the draft limit in the insert, also for parallel posts (security report F4, §6)", async () => {
+    const { s, done } = fresh(adapter);
+    try {
+      const d = (n: number) => ({ username: "alice", opId: n.toString(16).padStart(2, "0").repeat(16), devicePub: "aa".repeat(32), envelope: "{}", size: 2, createdAt: n });
+      const out = await Promise.all(Array.from({ length: 7 }, (_, i) => s.voici.putDraft(d(i + 1), 3)));
+      expect(out.filter((x) => x === true)).toHaveLength(3);
+      expect(out.filter((x) => x === "full")).toHaveLength(4);
+      expect(await s.voici.countDrafts("alice")).toBe(3);
+      // An op already stored is still "already stored", not "full".
+      const kept = (await s.voici.listDrafts("alice"))[0]!;
+      expect(await s.voici.putDraft({ ...kept }, 3)).toBe(false);
+    } finally {
+      done();
+    }
+  });
+
   it("keeps draft ops once, consumes and expires them", async () => {
     const { s, done } = fresh(adapter);
     try {

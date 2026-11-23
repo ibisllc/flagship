@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deriveIRK, ed, signVoiciNameOrder, type Keypair, type VoiciNameOrder } from "@flagship/protocol";
-import { InMemoryStorage } from "@flagship/storage";
+import { D1Storage, InMemoryStorage, type Storage } from "@flagship/storage";
+import { createSqliteD1 } from "../../storage/tests/support/sqliteD1.js";
 import {
   VOICI_CHANGES_PER_ACCOUNT_DAY,
   VOICI_CLAIM_BUDGETS,
@@ -39,8 +40,8 @@ function dns(registered: string[] = [], failDns = false): DibsFetch {
   };
 }
 
-async function setup(opts: { registered?: string[]; failDns?: boolean; window?: { start?: number; end?: number }; tier?: "free" | "hobby" | "maker"; now?: () => number } = {}) {
-  const s = new InMemoryStorage();
+async function setup(opts: { registered?: string[]; failDns?: boolean; window?: { start?: number; end?: number }; tier?: "free" | "hobby" | "maker"; now?: () => number; storage?: Storage } = {}) {
+  const s = opts.storage ?? new InMemoryStorage();
   await s.usernames.put({ username: "alice", irkPubHex: hex(alice.publicKey), claimedAt: 1 });
   await s.usernames.put({ username: "bob", irkPubHex: hex(deriveIRK({ seed: new Uint8Array(32).fill(2) }).publicKey), claimedAt: 1 });
   if (opts.tier && opts.tier !== "free") await s.tiers.put({ username: "alice", tier: opts.tier, updatedAt: 1 });
@@ -244,6 +245,21 @@ describe("handleVoiciNameSet", () => {
     // Clearing frees a slot at once.
     expect((await clear(deps, "alice--app1")).status).toBe(200);
     expect((await set(deps, "onetoomany", "alice--extra")).status).toBe(200);
+  });
+
+  it("parallel orders over the D1 adapter never hold more names than the plan allows (security report F4, §6)", async () => {
+    const sqlite = createSqliteD1();
+    try {
+      const { deps, s } = await setup({ storage: new D1Storage(sqlite) });
+      const free = VOICI_NAME_LIMITS.free;
+      const res = await Promise.all(
+        Array.from({ length: free + 3 }, (_, i) => set(deps, `para${"abcdefghijklmnop"[i]}llelname`, `alice--p${i}`)),
+      );
+      expect(res.filter((r) => r.status === 200).length).toBeLessThanOrEqual(free);
+      expect(await s.voiciNames.countLive("alice")).toBeLessThanOrEqual(free);
+    } finally {
+      sqlite.close();
+    }
   });
 
   it("after a downgrade the account keeps its names but can neither add nor replace until it is back within the limit", async () => {

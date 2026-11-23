@@ -484,14 +484,19 @@ export async function handleVoiciDraftDeposit(
   if (!r.ok) return voiciRefusal(r.code === "too-large" ? 413 : r.code === "malformed" || r.code === "wrong-kind" || r.code === "wrong-audience" ? 400 : 403, r.code);
   if (r.envelope.from !== caller.signerPubHex) return voiciRefusal(403, "bad-signature");
   if ((await deps.voici.countDrafts(u)) >= VOICI_MAX_PENDING_DRAFTS) return voiciRefusal(429, "rate-limited", { retryAfterSec: 3600 });
-  const fresh = await deps.voici.putDraft({
-    username: u,
-    opId: r.envelope.msgId,
-    devicePub: r.envelope.from,
-    envelope: JSON.stringify(r.envelope),
-    size: bodyText.length,
-    createdAt: now,
-  });
+  // The insert holds the limit too, so parallel posts can't all pass the count above.
+  const fresh = await deps.voici.putDraft(
+    {
+      username: u,
+      opId: r.envelope.msgId,
+      devicePub: r.envelope.from,
+      envelope: JSON.stringify(r.envelope),
+      size: bodyText.length,
+      createdAt: now,
+    },
+    VOICI_MAX_PENDING_DRAFTS,
+  );
+  if (fresh === "full") return voiciRefusal(429, "rate-limited", { retryAfterSec: 3600 });
   if (fresh && deps.notifyAdmins) await deps.notifyAdmins(u);
   return okNoStore({ ok: true, opId: r.envelope.msgId });
 }

@@ -131,6 +131,27 @@ describe.each(["InMemory", "D1"] as const)("ServerShareStorage (%s)", (adapter) 
     done();
   });
 
+  it("parallel adds never pass the push or inbox cap (security report F4, §6)", async () => {
+    const { s, done } = fresh(adapter);
+    await s.create(share());
+    const push = (n: number) => ({
+      shareId: ID,
+      serverDomain: S,
+      memberPubHex: "bb".repeat(32),
+      tokenSha256: n.toString(16).padStart(2, "0").repeat(32),
+      platform: "apns" as const,
+      providerToken: `tok-${n}`,
+      registeredAt: 7,
+    });
+    const pushed = await Promise.all(Array.from({ length: 6 }, (_, i) => s.putPush(push(i + 1), 2)));
+    expect(pushed.filter(Boolean)).toHaveLength(2);
+    const box = (n: number) => ({ inboxId: "33".repeat(32), entryId: n.toString(16).padStart(2, "0").repeat(16), ctHex: "ct", createdAt: n });
+    const put = await Promise.all(Array.from({ length: 6 }, (_, i) => s.inboxPut(box(i + 1), 3)));
+    expect(put.filter(Boolean)).toHaveLength(3);
+    expect(await s.inboxList("33".repeat(32))).toHaveLength(3);
+    done();
+  });
+
   it("keeps an inbox, capped, per inbox id", async () => {
     const { s, done } = fresh(adapter);
     const e = (entryId: string, createdAt: number) => ({ inboxId: "11".repeat(32), entryId, ctHex: `ct${entryId}`, createdAt });

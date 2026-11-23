@@ -2173,7 +2173,12 @@ export class InMemoryVoiciNameStorage implements VoiciNameStorage {
   async countLive(username: string) {
     return (await this.listLive(username)).length;
   }
-  async claim(rec: VoiciNameRecord) {
+  async claim(rec: VoiciNameRecord, opts: { maxLive?: number } = {}) {
+    if (opts.maxLive !== undefined) {
+      const u = rec.username.toLowerCase();
+      const others = this.liveRows().filter((r) => r.owner === u && r.serviceId !== rec.serviceId).length;
+      if (others >= opts.maxLive) return { ok: false as const, reason: "limit" as const };
+    }
     const claimed = this.names.claim({
       name: rec.display.toLowerCase(),
       kind: "link",

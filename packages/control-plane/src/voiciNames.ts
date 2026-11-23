@@ -367,8 +367,12 @@ export async function handleVoiciNameSet(
   const rec: VoiciNameRecord = {
     key: typed, display: typed, username: u, serviceId: order.serviceId, state: "live", setAt: now, lastActiveAt: now, warned: 0,
   };
-  const claimed = await deps.voiciNames.claim(rec);
-  // The registry insert is the collision check: anything holding the safety key refuses it.
+  // The registry insert is the collision check (anything holding the safety key refuses it) and holds the plan's
+  // name limit itself, so parallel orders can't all pass the count above.
+  const claimed = await deps.voiciNames.claim(rec, { maxLive: limit });
+  if (!claimed.ok && claimed.reason === "limit") {
+    return refuse(409, "name-limit", "all of this plan's custom names are in use", { held: await deps.voiciNames.countLive(u), limit });
+  }
   if (!claimed.ok) return refuse(409, "taken", "taken or too similar to an existing name");
   if (current) await deps.voiciNames.release(u, order.serviceId, "replaced", now, current.key);
   await deps.voiciNames.recordChange(u, order.serviceId, now, order.nonce, { op: "set", counted: !correction });

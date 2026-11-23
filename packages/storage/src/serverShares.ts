@@ -286,30 +286,23 @@ export class D1ServerShareStorage implements ServerShareStorage {
   }
 
   async putPush(rec: ServerSharePushRecord, cap: number): Promise<boolean> {
-    const existing = await this.db
-      .prepare(`SELECT 1 AS x FROM server_share_push WHERE share_id = ?1 AND token_sha256 = ?2`)
-      .bind(rec.shareId, rec.tokenSha256)
-      .first<{ x: number }>();
-    if (!existing) {
-      const n = await this.db
-        .prepare(`SELECT COUNT(*) AS n FROM server_share_push WHERE share_id = ?1`)
-        .bind(rec.shareId)
-        .first<{ n: number }>();
-      if ((n?.n ?? 0) >= cap) return false;
-    }
-    await this.db
+    // One statement: a new token lands only while the share holds fewer than `cap` (a re-register always does), so
+    // parallel registrations can't pass a stale count (security report F4, §6).
+    const res = await this.db
       .prepare(
         `INSERT INTO server_share_push
            (share_id, server_domain, member_pub_hex, token_sha256, platform, provider_token, registered_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+          WHERE EXISTS (SELECT 1 FROM server_share_push WHERE share_id = ?1 AND token_sha256 = ?4)
+             OR (SELECT COUNT(*) FROM server_share_push WHERE share_id = ?1) < ?8
          ON CONFLICT(share_id, token_sha256) DO UPDATE SET
            server_domain = excluded.server_domain, member_pub_hex = excluded.member_pub_hex,
            platform = excluded.platform, provider_token = excluded.provider_token,
            registered_at = excluded.registered_at`,
       )
-      .bind(rec.shareId, rec.serverDomain, rec.memberPubHex, rec.tokenSha256, rec.platform, rec.providerToken, rec.registeredAt)
+      .bind(rec.shareId, rec.serverDomain, rec.memberPubHex, rec.tokenSha256, rec.platform, rec.providerToken, rec.registeredAt, cap)
       .run();
-    return true;
+    return (res.meta.changes ?? 0) > 0;
   }
 
   async deletePush(shareId: string, tokenSha256: string): Promise<boolean> {
@@ -335,25 +328,18 @@ export class D1ServerShareStorage implements ServerShareStorage {
   }
 
   async inboxPut(rec: ShareInboxRecord, cap: number): Promise<boolean> {
-    const existing = await this.db
-      .prepare(`SELECT 1 AS x FROM share_inbox WHERE inbox_id = ?1 AND entry_id = ?2`)
-      .bind(rec.inboxId, rec.entryId)
-      .first<{ x: number }>();
-    if (!existing) {
-      const n = await this.db
-        .prepare(`SELECT COUNT(*) AS n FROM share_inbox WHERE inbox_id = ?1`)
-        .bind(rec.inboxId)
-        .first<{ n: number }>();
-      if ((n?.n ?? 0) >= cap) return false;
-    }
-    await this.db
+    // One statement, so parallel adds can't pass a stale count (security report F4, §6); a re-put always lands.
+    const res = await this.db
       .prepare(
-        `INSERT INTO share_inbox (inbox_id, entry_id, ct_hex, created_at) VALUES (?1, ?2, ?3, ?4)
+        `INSERT INTO share_inbox (inbox_id, entry_id, ct_hex, created_at)
+         SELECT ?1, ?2, ?3, ?4
+          WHERE EXISTS (SELECT 1 FROM share_inbox WHERE inbox_id = ?1 AND entry_id = ?2)
+             OR (SELECT COUNT(*) FROM share_inbox WHERE inbox_id = ?1) < ?5
          ON CONFLICT(inbox_id, entry_id) DO UPDATE SET ct_hex = excluded.ct_hex`,
       )
-      .bind(rec.inboxId, rec.entryId, rec.ctHex, rec.createdAt)
+      .bind(rec.inboxId, rec.entryId, rec.ctHex, rec.createdAt, cap)
       .run();
-    return true;
+    return (res.meta.changes ?? 0) > 0;
   }
 
   async inboxList(inboxId: string): Promise<ShareInboxRecord[]> {

@@ -93,6 +93,11 @@ export interface OrgStorage {
   setPlanIf(orgId: string, plan: OrgPlanUpdate, expectPaidUntil: number | null): Promise<boolean>;
   /** Inserts; when `replace` is false an existing key is left alone and false is returned. */
   putObject(orgId: string, obj: OrgObject, replace?: boolean): Promise<boolean>;
+  /**
+   * Inserts a proposal (`decision` null) only while the org holds fewer than `maxOpen` undecided ones: the insert
+   * holds the limit itself (security report F4, §6). False when the key exists, "full" at the limit.
+   */
+  putOpenProposal(orgId: string, obj: OrgObject, maxOpen: number): Promise<boolean | "full">;
   getObject(orgId: string, kind: OrgObjectKind, key: string): Promise<OrgObject | null>;
   listObjects(orgId: string, kind: OrgObjectKind): Promise<OrgObject[]>;
   deleteObject(orgId: string, kind: OrgObjectKind, key: string): Promise<void>;
@@ -147,6 +152,14 @@ export class InMemoryOrgStorage implements OrgStorage {
   async putObject(orgId: string, obj: OrgObject, replace = false) {
     const m = this.bucket(orgId, obj.kind);
     if (m.has(obj.key) && !replace) return false;
+    m.set(obj.key, { ...obj });
+    return true;
+  }
+  async putOpenProposal(orgId: string, obj: OrgObject, maxOpen: number) {
+    const m = this.bucket(orgId, obj.kind);
+    if (m.has(obj.key)) return false;
+    const open = [...m.values()].filter((o) => (JSON.parse(o.bodyJson) as { decision?: unknown }).decision == null).length;
+    if (open >= maxOpen) return "full" as const;
     m.set(obj.key, { ...obj });
     return true;
   }
@@ -288,6 +301,19 @@ export class D1OrgStorage implements OrgStorage {
       : `INSERT INTO org_objects (org_id, kind, object_key, body_json, issued_at, stored_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT DO NOTHING`;
     const r = await this.db.prepare(sql).bind(orgId, obj.kind, obj.key, obj.bodyJson, obj.issuedAt, obj.storedAt).run();
     return (r.meta.changes ?? 0) > 0;
+  }
+  async putOpenProposal(orgId: string, obj: OrgObject, maxOpen: number) {
+    const r = await this.db
+      .prepare(
+        `INSERT INTO org_objects (org_id, kind, object_key, body_json, issued_at, stored_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6
+          WHERE (SELECT COUNT(*) FROM org_objects WHERE org_id = ?1 AND kind = ?2 AND json_extract(body_json, '$.decision') IS NULL) < ?7
+         ON CONFLICT DO NOTHING`,
+      )
+      .bind(orgId, obj.kind, obj.key, obj.bodyJson, obj.issuedAt, obj.storedAt, maxOpen)
+      .run();
+    if ((r.meta.changes ?? 0) > 0) return true;
+    return (await this.getObject(orgId, obj.kind, obj.key)) ? false : ("full" as const);
   }
   async getObject(orgId: string, kind: OrgObjectKind, key: string) {
     const r = await this.db

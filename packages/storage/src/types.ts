@@ -1686,8 +1686,12 @@ export interface VoiciNameStorage {
   getLiveByService(username: string, serviceId: string): Promise<VoiciNameRecord | undefined>;
   listLive(username: string): Promise<VoiciNameRecord[]>;
   countLive(username: string): Promise<number>;
-  /** One INSERT into the registry: "taken" when anything blocks the name's safety key. */
-  claim(rec: VoiciNameRecord): Promise<{ ok: true } | { ok: false; reason: "taken" }>;
+  /**
+   * One INSERT into the registry: "taken" when anything blocks the name's safety key. With `maxLive`, the
+   * INSERT itself also checks the account holds fewer live names than that on its other services ("limit"
+   * otherwise), so parallel orders can't pass a stale count (security report F4, §6).
+   */
+  claim(rec: VoiciNameRecord, opts?: { maxLive?: number }): Promise<{ ok: true } | { ok: false; reason: "taken" | "limit" }>;
   /** Live → retired for the service's name. Undefined when it has none. Pass `key` (the name) when the
    *  service briefly holds two live names (a replace claims the new one first). */
   release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number, key?: string): Promise<VoiciNameRecord | undefined>;

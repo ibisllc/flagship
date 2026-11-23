@@ -4,6 +4,7 @@ import {
   type BootSuspensionOrder,
   type BootSuspensionState,
   type SuspensionOutcome,
+  voiciNameKey,
 } from "@flagship/protocol";
 import { D1ServerShareStorage, type ServerShareStorage } from "./serverShares.js";
 import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js";
@@ -1253,17 +1254,29 @@ export class D1VoiciNameStorage implements VoiciNameStorage {
       .first<{ n: number }>();
     return r?.n ?? 0;
   }
-  async claim(rec: VoiciNameRecord) {
+  async claim(rec: VoiciNameRecord, opts: { maxLive?: number } = {}) {
+    const n = {
+      name: rec.display.toLowerCase(),
+      kind: "link" as const,
+      owner: rec.username.toLowerCase(),
+      serviceId: rec.serviceId,
+      lastActiveAt: rec.lastActiveAt,
+      at: rec.setAt,
+    };
     try {
-      await claimNameStatement(this.db, {
-        name: rec.display.toLowerCase(),
-        kind: "link",
-        owner: rec.username.toLowerCase(),
-        serviceId: rec.serviceId,
-        lastActiveAt: rec.lastActiveAt,
-        at: rec.setAt,
-      }).run();
-      return { ok: true as const };
+      if (opts.maxLive === undefined) {
+        await claimNameStatement(this.db, n).run();
+        return { ok: true as const };
+      }
+      const r = await this.db
+        .prepare(
+          `INSERT INTO names (name, safety_key, kind, status, owner, service_id, target, expires_at, last_active_at, warned, created_at, status_changed_at)
+           SELECT ?1, ?2, 'link', 'active', ?3, ?4, NULL, NULL, ?5, 0, ?6, ?6
+            WHERE (SELECT COUNT(*) FROM names WHERE kind = 'link' AND owner = ?3 AND status = 'active' AND service_id IS NOT ?4) < ?7`,
+        )
+        .bind(n.name, voiciNameKey(n.name), n.owner, n.serviceId, n.lastActiveAt, n.at, opts.maxLive)
+        .run();
+      return (r.meta?.changes ?? 0) > 0 ? { ok: true as const } : { ok: false as const, reason: "limit" as const };
     } catch (e) {
       if (isUniqueViolation(e)) return { ok: false as const, reason: "taken" as const };
       throw e;

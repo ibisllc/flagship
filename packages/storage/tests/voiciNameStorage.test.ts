@@ -33,6 +33,23 @@ function names(label: string, make: () => VoiciNameStorage, teardown?: () => voi
       expect(await s.get("halloween-party")).toBeUndefined();
     });
 
+    it("claim() with maxLive holds the account's name limit in the insert (security report F4, §6)", async () => {
+      const s = make();
+      expect(await s.claim(rec("firstname", "fresh-poppy", "fresh-poppy--a"), { maxLive: 2 })).toEqual({ ok: true });
+      expect(await s.claim(rec("secondname", "fresh-poppy", "fresh-poppy--b"), { maxLive: 2 })).toEqual({ ok: true });
+      expect(await s.claim(rec("thirdname", "fresh-poppy", "fresh-poppy--c"), { maxLive: 2 })).toEqual({ ok: false, reason: "limit" });
+      // A replace for a service that already holds a name is counted without it.
+      expect(await s.claim(rec("replacement", "fresh-poppy", "fresh-poppy--b"), { maxLive: 2 })).toEqual({ ok: true });
+      // Another account's names don't count.
+      expect(await s.claim(rec("othername", "rapid-bison", "rapid-bison--x"), { maxLive: 1 })).toEqual({ ok: true });
+      // Parallel claims for new services: at most the limit lands.
+      const more = await Promise.all(
+        ["p", "q", "r", "s"].map((x) => s.claim(rec(`${x}${x}name`, "quiet-otter", `quiet-otter--${x}`), { maxLive: 2 })),
+      );
+      expect(more.filter((r) => r.ok)).toHaveLength(2);
+      expect(await s.countLive("quiet-otter")).toBe(2);
+    });
+
     it("release() retires a service's live name and says why", async () => {
       const s = make();
       await s.claim(rec("halloweenparty"));

@@ -387,7 +387,9 @@ export async function handleVoiciSend(deps: VoiciMailboxDeps, bodyText: string):
     direct: body.direct,
     pushed: push,
     storedAt: now,
-  });
+  }, request ? { awaitingCap: VOICI_AWAITING_REPLY_CAP } : {});
+  // The insert holds the awaiting-reply cap too, so parallel sends can't all pass the count above.
+  if (!stored.ok && stored.awaiting) return voiciRefusal(429, "awaiting-reply");
   if (!stored.ok) return accepted(env.msgId, null);
   if (push && deps.push) await deps.push.message(page.username, request ? "message-request" : "message");
   return accepted(env.msgId, now);
