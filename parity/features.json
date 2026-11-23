@@ -3440,7 +3440,7 @@
     },
     {
       "id": "security-notices",
-      "title": "Security notices (docs/security-notices.md): a maintainer-signed notice from one anonymous GET /api/notices: a dismissible maintenance or update banner, and the full-screen Update required lock for a security reason (fails open; the key backup and Sign out stay reachable; nothing is sent while locked)",
+      "title": "Security notices (docs/security-notices.md): a maintainer-signed notice from one anonymous GET /api/notices: a dismissible maintenance, update or privacy policy change banner (policy-update: each app's own translated sentence and its own link to the policy), and the full-screen Update required lock for a security reason (fails open; the key backup and Sign out stay reachable; nothing is sent while locked)",
       "ref": "web",
       "surfaces": {
         "web": {
@@ -3461,6 +3461,10 @@
             [
               "apps/web/public/webapp/lib/comFetch.js",
               "isUpdateLocked"
+            ],
+            [
+              "apps/web/public/webapp/lib/noticeUi.js",
+              "PRIVACY_POLICY_URL"
             ]
           ]
         },
@@ -3486,6 +3490,10 @@
             [
               "apps/mobile/ios/App/UITests/GymNoticeTests.swift",
               "test_verifiedUpdateRequiredNoticeLocksTheAppUntilItIsUpdated"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift",
+              "PrivacyPolicyLink"
             ]
           ]
         },
@@ -3507,6 +3515,10 @@
             [
               "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpClientFactory.kt",
               "UpdateLockInterceptor"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/components/NoticeBanner.kt",
+              "openPrivacyPolicy"
             ]
           ]
         }

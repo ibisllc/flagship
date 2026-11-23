@@ -52,10 +52,6 @@ over once "let's start 0.5" is said.
      stores and the law: the owner can delete a comment on their own post and block its author (Messages' block),
      visitors can report a comment, and `.com` honours takedowns (DMCA, abuse).
 
-- **A "privacy policy updated" notice** (owner, 2026-11-23): Flagship has no email addresses, so privacy §10 now
-  promises an in-app notice before any change that reduces privacy takes effect. Add that notice type to the signed
-  security-notice system (`docs/security-notices.md`: one maintainer-signed notice, a dismissible banner in every app).
-
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in

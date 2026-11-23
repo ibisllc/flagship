@@ -8,9 +8,12 @@ ports from the spec in "Client behaviour" below, built on `main` 2026-10-18
 `Notices/NoticeViews.swift`, gym `GymNoticeTests`; the lock is its own window
 above every sheet, so the backup runs in a sheet of that window, and a
 build that cannot read its `CFBundleVersion` never locks by build). Nothing is
-deployed or signed yet: the committed notice is `null`.
+deployed or signed yet: the committed notice is `null`. Release 0.4 adds the
+kind `policy-update` (2026-11-23, all four clients): the in-app notice the
+privacy policy (§10) promises before a change that reduces privacy, since
+Flagship has no email address to write to.
 
-Two features ride one signed document.
+Three features ride one signed document.
 
 - **A. Broadcast.** "Attention, we will update on Wednesday 21 October. Your
   servers keep running, but flagshipserver.com may be briefly unavailable."
@@ -20,6 +23,9 @@ Two features ride one signed document.
   required" with the store link. Only when the security protocol changes in a
   breaking way, and only for a security reason that is named in the signed
   bytes.
+- **C. Privacy policy change.** "Our privacy policy changes on 9 December
+  2026." with "Read the policy". The notice carries only the date; each app
+  shows its own translated sentence and its own link (section 6.4).
 
 ## 1. What changed from the first design, and why
 
@@ -132,7 +138,7 @@ Checked in this order; the first broken rule is the error code in the vectors.
 |---|---|
 | `signedBy` is 64 lower-hex | `bad-signer` |
 | `seq` is an integer of 1 or more | `bad-seq` |
-| `kind` is `none`, `maintenance`, `update-advisory` or `update-required` | `bad-kind` |
+| `kind` is `none`, `maintenance`, `update-advisory`, `update-required` or `policy-update` | `bad-kind` |
 | `validFrom` and `validUntil` are safe integers (epoch ms) | `bad-time` |
 | `validUntil` is after `validFrom` | `window-order` |
 | `validUntil - validFrom` is at most 30 days (2,592,000,000 ms) | `window-too-long` |
@@ -146,17 +152,21 @@ Checked in this order; the first broken rule is the error code in the vectors.
 
 Then per kind:
 
-| | `none` | `maintenance` | `update-advisory` | `update-required` |
-|---|---|---|---|---|
-| message | empty | required | required | required |
-| platforms | none | optional (none = everyone; a bare name limits it), minimums 0 | required, every entry has a `minBuild` or `minProtocol` above 0 | same as advisory |
-| `advisoryId` | empty | empty | optional | **required** (`advisory-required`) |
-| `reason` | empty | empty | optional | **required** (`reason-required`) |
-| `lockFrom` | 0 | 0 | 0 | in `[validFrom, validUntil)` (`bad-lock-from`) |
-| `deprecatesProtocol` | 0 | 0 | 0 | 0, or below every listed `minProtocol` (`deprecates-not-enforced`) |
+| | `none` | `maintenance` | `update-advisory` | `update-required` | `policy-update` |
+|---|---|---|---|---|---|
+| message | empty | required | required | required | **empty** (`message-not-allowed`): the apps write their own sentence |
+| `eventAt` | 0 | optional | optional | optional | **required** (`event-required`): the day the new policy takes effect |
+| platforms | none | optional (none = everyone; a bare name limits it), minimums 0 | required, every entry has a `minBuild` or `minProtocol` above 0 | same as advisory | as maintenance |
+| `advisoryId` | empty | empty | optional | **required** (`advisory-required`) | empty |
+| `reason` | empty | empty | optional | **required** (`reason-required`) | empty |
+| `lockFrom` | 0 | 0 | 0 | in `[validFrom, validUntil)` (`bad-lock-from`) | 0 |
+| `deprecatesProtocol` | 0 | 0 | 0 | 0, or below every listed `minProtocol` (`deprecates-not-enforced`) | 0 |
+
+`policy-update` checks `event-required` and then `message-not-allowed` where
+the other kinds check the message, then the shared rules in the order above.
 
 Error codes for a kind's own rules: `platforms-not-allowed`,
-`message-not-allowed`, `message-required`, `platforms-required`,
+`message-not-allowed`, `message-required`, `event-required`, `platforms-required`,
 `minimum-required`, `minimum-not-allowed`, `lock-from-not-allowed`,
 `deprecates-not-allowed`, `advisory-not-allowed`, `reason-not-allowed`.
 
@@ -184,6 +194,8 @@ Error codes for a kind's own rules: `platforms-not-allowed`,
    - Before `validFrom` or from `validUntil` on: nothing. **A lock is never
      shown past `validUntil`, however stale the cache.**
    - `maintenance`: a banner, when `platforms` is empty or lists this platform.
+   - `policy-update`: the same, a banner of style `policy` (never a lock,
+     whatever the build).
    - `update-advisory`: nothing if this platform is not listed or the build
      and protocol are at or above the minimums, else the update banner.
    - `update-required`: the same test, then the update banner before
@@ -279,7 +291,24 @@ Above the main content, below the status bar, one at a time. Strings
 | Dismiss button | `Dismiss` |
 | Update button (update banner only) | web: `Reload to update`; **native: `Update`** (opens the store listing) |
 
-Visibility: `maintenance` stays dismissed for that `seq`. `update-advisory`
+**Privacy policy banner** (`policy-update`). The notice's own text is never
+shown (there is none, and text in signed bytes could only be English). Each
+app shows its own sentence through its i18n catalog, the date being `eventAt`
+as a day in the device's locale and zone (no time of day):
+
+| What | Text |
+|---|---|
+| Body, before `eventAt` | `Our privacy policy changes on {date}.` |
+| Body, from `eventAt` until `validUntil` | `Our privacy policy changed on {date}.` |
+| Link button | `Read the policy`: opens `https://flagshipserver.com/privacy`, the app's own constant (webapp `PRIVACY_POLICY_URL` in `noticeUi.js`, iOS `PrivacyPolicyLink`, Android `SecurityNoticeCopy.PRIVACY_URL`) |
+| Dismiss button | `Dismiss` |
+
+Style as maintenance (teal rule). Builds from before 0.4 do not know the
+kind: their parser refuses it as `bad-kind`, so the fetch counts as malformed
+and changes nothing (the store, its `highestSeq` and anything already shown
+stay as they were). The vectors pin this (`an unknown kind`).
+
+Visibility: `maintenance` and `policy-update` stay dismissed for that `seq`. `update-advisory`
 returns 24 hours after it was dismissed. The grace window of an
 `update-required` (before `lockFrom`) reappears on every launch (dismissal
 lasts the launch). A new `seq` shows again. Style: a card with a teal left
@@ -491,6 +520,27 @@ Kinds, in order of weight:
 - `clear`: a signed all clear that supersedes the notice in force. It is how
   a lock is retracted. Replacing a lock with anything weaker needs
   `--supersede-lock`.
+- `policy`: the privacy policy change notice. `--event-at <YYYY-MM-DD>` is the
+  day the new policy takes effect (taken at 12:00 UTC, the same calendar day
+  from UTC-11 to UTC+11). It takes no `--message`, `--advisory` or reason;
+  `--platform` takes bare names only. `--from` defaults to now and `--until`
+  to 14 days after the change (at most 30 days after `--from`), so people who
+  open the app late still read "changed on". The sign step needs the typed
+  phrase `NOTICE`, as maintenance does.
+
+**When to send a policy notice.** For every change to the privacy policy
+that reduces privacy, sign and deploy it **at least 14 days before** the
+change takes effect (the tool warns under 14 days and refuses a date before
+the notice starts, or more than 30 days after it). Publish the new policy
+text first, with its "Last updated" date, so "Read the policy" shows what
+changes; mention the change in the release notes as well. A change that does
+not reduce privacy needs no notice. Remember the one-notice rule: a policy
+notice replaces whatever was in force (section 9).
+
+```sh
+node scripts/security-notice.mjs policy --event-at 2026-12-09          # preview
+node scripts/security-notice.mjs policy --event-at 2026-12-09 --sign   # NOTICE, then the YubiKey
+```
 
 `seq` is chosen above everything ever signed (the tool reads
 `history/`). Do not reuse a lower one: apps ignore it as a rollback.
@@ -541,6 +591,6 @@ same path.
 | The maintainers' tool | `scripts/security-notice.mjs` (tests: `scripts/security-notice.test.ts`) |
 | The signed notice and its history | `.maintainers/notices/current.json` (`null` for none), `.maintainers/notices/history/` |
 | `.com` route | `apps/com/src/securityNotices.ts`, wired in `route.ts` before the rate limiter |
-| Webapp | `lib/securityNotice.js`, `lib/noticeUi.js`, `lib/updateLock.js`, `lib/buildInfo.js`, `lib/comFetch.js` (the lock's network gate) |
+| Webapp | `lib/securityNotice.js`, `lib/noticeUi.js` (banner, lock, the policy sentence), `lib/updateLock.js`, `lib/buildInfo.js`, `lib/comFetch.js` (the lock's network gate) |
 | Webapp tests and gym | `apps/web/tests/webappSecurityNotice*.test.ts`, `apps/web/e2e/gym/gym-notices.spec.ts`, `tools/gym/src/suites/webNotices.ts` |
 | Parity | `parity/features.json` row `security-notices` |
