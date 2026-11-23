@@ -2008,7 +2008,7 @@
   "code_protection_isnt_available_on_this": "このサーバーでは、コード保護はまだ利用できません。後でもう一度お試しください。",
   "couldnt_start_enrollment": "登録を開始できませんでした：%1$s",
   "enter_the_6_digit_code_from": "認証アプリの 6 桁コードを入力してください。",
-  "confirm_2fa_code": "2FA コードを確認",
+  "confirm_2fa_code": "コードを確認",
   "couldnt_sign_enroll_confirm": "enroll-confirm に署名できませんでした：%1$s",
   "that_code_didnt_match_try_again": "そのコードは一致しませんでした。認証アプリの新しいコードでもう一度お試しください。",
   "couldnt_confirm": "確認できませんでした：%1$s",

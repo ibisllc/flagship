@@ -225,3 +225,37 @@ live secrets needed).
    browser console showed a CORS error or a status: that would settle cause 1 vs 2.
 5. The one production account with a staged, unconfirmed secret: leave it (it is a working recovery
    code factor for that account) or clear it with the server fix?
+
+## Resolution (2026-11-23, branch `0.4/totp-fix`)
+
+Owner decisions: (1) turning code protection on or off needs the admin key; (2) no Workers Logs, our own hourly
+D1 counters instead; (3) the feature is "Code protection" on every surface.
+
+- **`.com` never answers without CORS** (`apps/com/src/route.ts` `route()`): a throw becomes `500 {error:
+  "internal-error", code: "internal-error", requestId}` with the CORS and security headers; one log line with the
+  method, the first two path segments, the error class and the request id (Cloudflare's ray id when present).
+- **A begin never touches a live secret** (migration **0160**): `enroll-begin` stages the secret in
+  `usernames.totp_pending_secret_encrypted` / `totp_pending_at` for an hour (`TOTP_PENDING_TTL_MS`); only
+  `enroll-confirm` moves it into `totp_secret_encrypted` (one write, compare-and-set on the pending value). Begin
+  and confirm on an enrolled account answer 409 `totp-already-enrolled`: a new authenticator means turning code
+  protection off first, which needs a live code or a recovery code as before, plus the admin key. There is no
+  admin-only override for a lost authenticator and lost recovery codes: the code factor only gates recovery, and an
+  admin who can sign but has neither code keeps code protection on (owner may want a support path later). Cancel on
+  a client does not call `.com`; the pending secret simply expires and never counts meanwhile.
+- **Re-pair and verify read only a confirmed secret** (`rePair.ts`, `handleTotpVerify`: `totpEnrolledAt` must be
+  set). The migration clears every secret with no `totp_enrolled_at` (the one production account noted above);
+  confirmed rows are untouched.
+- **Admin-only**: begin, confirm and disable go through `authorizeSensitiveComOp` (`authorizeTotpOrder`, listed
+  in `scripts/admin-authority-guard.sh`): an account that pins an admin root takes only the admin root or an
+  admin-granted device (403 `totp-admin-only`, "Only an admin device of this account can change code
+  protection."); an account with none (legacy, demo) keeps the IRK, unchanged.
+- **Stable codes**: `totp-not-configured`, `malformed`, `username-mismatch`, `stale-request`,
+  `account-not-found`, `invalid-signature`, `totp-admin-only`, `totp-already-enrolled`, `totp-no-pending`,
+  `totp-pending-expired`, `invalid-totp-code`, `totp-not-enrolled`, `totp-other-devices`, `internal-error`.
+- **Counters**: D1 `totp_outcome_log` (hour, endpoint, outcome, count; nothing about the caller), written for
+  begin, confirm and disable; `GET /api/admin/totp-outcomes?days=N` (x-admin-secret) and `npm run totp-outcomes`;
+  pruned after 90 days by the 6-hourly cron.
+- **Clients**: the webapp (shell v251) words offline, unreachable-while-online, server failure, unsupported
+  browser, closed passkey prompt, account not loaded and every refusal code separately, and `humanError` no longer
+  reads every `TypeError` as offline; iOS and Android word the refusal codes (`CodeProtectionText`) and sign with
+  the admin key; all three show the setting read-only on a non-admin device.

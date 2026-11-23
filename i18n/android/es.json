@@ -2008,7 +2008,7 @@
   "code_protection_isnt_available_on_this": "La protección con código aún no está disponible en este servidor. Inténtalo más tarde.",
   "couldnt_start_enrollment": "No se pudo iniciar el registro: %1$s",
   "enter_the_6_digit_code_from": "Introduce el código de 6 dígitos de tu app de autenticación.",
-  "confirm_2fa_code": "Confirmar código 2FA",
+  "confirm_2fa_code": "Confirma tu código",
   "couldnt_sign_enroll_confirm": "No se pudo firmar enroll-confirm: %1$s",
   "that_code_didnt_match_try_again": "Ese código no coincidió. Inténtalo de nuevo con un código nuevo de tu autenticador.",
   "couldnt_confirm": "No se pudo confirmar: %1$s",

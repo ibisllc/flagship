@@ -2010,7 +2010,7 @@
     <string name="code_protection_isnt_available_on_this">La protección con código aún no está disponible en este servidor. Inténtalo más tarde.</string>
     <string name="couldnt_start_enrollment">No se pudo iniciar el registro: %1$s</string>
     <string name="enter_the_6_digit_code_from">Introduce el código de 6 dígitos de tu app de autenticación.</string>
-    <string name="confirm_2fa_code">Confirmar código 2FA</string>
+    <string name="confirm_2fa_code">Confirma tu código</string>
     <string name="couldnt_sign_enroll_confirm">No se pudo firmar enroll-confirm: %1$s</string>
     <string name="that_code_didnt_match_try_again">Ese código no coincidió. Inténtalo de nuevo con un código nuevo de tu autenticador.</string>
     <string name="couldnt_confirm">No se pudo confirmar: %1$s</string>

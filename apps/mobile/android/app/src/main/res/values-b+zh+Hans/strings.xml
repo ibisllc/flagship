@@ -2010,7 +2010,7 @@
     <string name="code_protection_isnt_available_on_this">此服务器暂不支持代码保护。请稍后再试。</string>
     <string name="couldnt_start_enrollment">无法开始注册：%1$s</string>
     <string name="enter_the_6_digit_code_from">输入验证器应用中的 6 位代码。</string>
-    <string name="confirm_2fa_code">确认 2FA 代码</string>
+    <string name="confirm_2fa_code">确认你的代码</string>
     <string name="couldnt_sign_enroll_confirm">无法为 enroll-confirm 签名：%1$s</string>
     <string name="that_code_didnt_match_try_again">该代码不匹配。请用验证器中的新代码重试。</string>
     <string name="couldnt_confirm">无法确认：%1$s</string>

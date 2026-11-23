@@ -2010,7 +2010,7 @@
     <string name="code_protection_isnt_available_on_this">Der Codeschutz ist auf diesem Server noch nicht verfügbar. Versuche es später erneut.</string>
     <string name="couldnt_start_enrollment">Die Registrierung konnte nicht gestartet werden: %1$s</string>
     <string name="enter_the_6_digit_code_from">Gib den 6-stelligen Code aus deiner Authenticator-App ein.</string>
-    <string name="confirm_2fa_code">2FA-Code bestätigen</string>
+    <string name="confirm_2fa_code">Bestätige deinen Code</string>
     <string name="couldnt_sign_enroll_confirm">enroll-confirm konnte nicht signiert werden: %1$s</string>
     <string name="that_code_didnt_match_try_again">Dieser Code hat nicht gepasst. Versuche es erneut mit einem frischen Code aus deinem Authenticator.</string>
     <string name="couldnt_confirm">Bestätigung nicht möglich: %1$s</string>

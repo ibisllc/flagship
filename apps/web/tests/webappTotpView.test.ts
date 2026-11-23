@@ -182,6 +182,11 @@ describe("webapp code protection errors (F2)", () => {
       { fetch: answer(401, { error: "invalid TOTP code", code: "invalid-totp-code" }), sign },
     ).catch((x) => x);
     expect(wrong.code).toBe("invalid-totp-code");
+    const legacy = await totpEnrollConfirm(
+      { username: "alice", umk, code: "123456" },
+      { fetch: answer(401, { error: "code mismatch" }), sign },
+    ).catch((x) => x);
+    expect(legacy.userMessage).toBe(TOTP_COPY.wrongCode);
     const others = await totpDisable(
       { username: "alice", umk, code: "123456" },
       { fetch: answer(409, { error: "x", code: "totp-other-devices" }), sign },

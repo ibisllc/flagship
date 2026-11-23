@@ -471,12 +471,12 @@ test.describe("gym webapp account", () => {
 
     // Disable: confirm, then the live code.
     await page.click("#account-security-disable");
-    await expect(page.locator(".modal-title")).toHaveText("Disable multi-device + 2FA?");
+    await expect(page.locator(".modal-title")).toHaveText("Turn off code protection?");
     await page.click("[data-modal-ok]");
-    await expect(page.locator(".modal-title")).toHaveText("Confirm with your 2FA code");
+    await expect(page.locator(".modal-title")).toHaveText("Confirm with your code");
     await page.fill(".modal-input", "654321");
     await page.click("[data-modal-ok]");
-    await sawToast(page, "Two-factor disabled.");
+    await sawToast(page, "Code protection is off.");
     expect(m.last("/totp/disable")!.body.code).toBe("654321");
     await expect(content.locator('[data-account-security-badge="single"]')).toBeVisible({ timeout: 10_000 });
   });

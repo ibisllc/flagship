@@ -447,7 +447,7 @@ function bindHandlers() {
       state.staged = null;
     } catch (e) {
       console.error("totp enroll-confirm failed", e);
-      state.failureMessage = e?.code === "invalid-totp-code"
+      state.failureMessage = e?.code === "invalid-totp-code" || e?.status === 401
         ? tr("That code didn't match. Try again with a fresh code from your authenticator.")
         : totpErrorText(e);
       // The setup is gone (expired, or code protection is on already): back to the start.

@@ -90,6 +90,8 @@ export function totpRefusalText(status, code, reason) {
       break;
   }
   if (status === 503) return TOTP_COPY.notAvailable;
+  // The three calls answer 401 only for a code that didn't match (an older `.com` sent no code).
+  if (status === 401) return TOTP_COPY.wrongCode;
   if (status >= 500) return TOTP_COPY.server;
   return knownReasonText(reason) ?? humanError(status);
 }

@@ -2013,7 +2013,7 @@
     <string name="code_protection_isnt_available_on_this">Code protection isn\'t available on this server yet. Try again later.</string>
     <string name="couldnt_start_enrollment">Couldn\'t start enrollment: %1$s</string>
     <string name="enter_the_6_digit_code_from">Enter the 6-digit code from your authenticator app.</string>
-    <string name="confirm_2fa_code">Confirm 2FA code</string>
+    <string name="confirm_2fa_code">Confirm your code</string>
     <string name="couldnt_sign_enroll_confirm">Couldn\'t sign enroll-confirm: %1$s</string>
     <string name="that_code_didnt_match_try_again">That code didn\'t match. Try again with a fresh code from your authenticator.</string>
     <string name="couldnt_confirm">Couldn\'t confirm: %1$s</string>

@@ -8365,7 +8365,7 @@
     "ctx": "viewmodels/AccountSecurityViewModel.kt:128 (prose)"
   },
   "confirm_2fa_code": {
-    "en": "Confirm 2FA code",
+    "en": "Confirm your code",
     "ctx": "viewmodels/AccountSecurityViewModel.kt:140 (prose)"
   },
   "couldnt_sign_enroll_confirm": {
