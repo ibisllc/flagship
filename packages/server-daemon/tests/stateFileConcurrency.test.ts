@@ -234,7 +234,7 @@ describe("stores survive twenty overlapping writes", () => {
       username: "alice",
       currentIrkPubHex: "aa".repeat(32),
       comBaseUrl: "https://flagshipserver.com",
-      fetchImpl,
+      readToken: { fetch: fetchImpl },
       statePath,
       now: () => 5,
       pollIntervalMs: 60_000,

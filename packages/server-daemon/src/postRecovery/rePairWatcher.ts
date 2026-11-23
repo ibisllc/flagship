@@ -12,7 +12,8 @@
  *      the pending row.
  *
  * The daemon learns about the swap by polling
- * `GET /api/users/:username/re-pair`. Transitions observed:
+ * `GET /api/users/:username/re-pair` with its own account read token (the
+ * GET is an account read since security report F3). Transitions observed:
  *
  *   - `pending: null` → `pending: { ... objectedAt: null }`
  *     A re-pair just got initiated; nothing for the daemon to do yet —
@@ -68,6 +69,7 @@ import { join } from "node:path";
 import { verifyRePairInitiate, type RePairInitiate } from "@flagship/protocol";
 import { writeFileDurable } from "../durableFile.js";
 import type { AlertInbox } from "../alertInbox.js";
+import type { BoxReadToken } from "../boxReadToken.js";
 import type { ReissuanceAlert } from "../phoneAlerts.js";
 import type { ReissuanceReport, ReissuerDeps } from "./stableIdReissuer.js";
 import { reissueStableIds } from "./stableIdReissuer.js";
@@ -185,8 +187,13 @@ export interface RePairWatcherDeps {
   currentIrkPubHex: string;
   /** .com base URL — typically `https://flagshipserver.com`. */
   comBaseUrl: string;
-  /** node fetch (or a stub in tests). */
-  fetchImpl: typeof fetch;
+  /**
+   * The box's own account read token (`BoxReadToken`, STK-minted): `.com` answers the
+   * re-pair GET only to the account's devices and servers (security report F3). A 401
+   * (no token yet, an old `.com` key, an unregistered box) is an error like any other:
+   * nothing is applied, the last row seen is kept, and the next poll tries again.
+   */
+  readToken: Pick<BoxReadToken, "fetch">;
   /**
    * Persistence path. The watcher reads + writes
    * `<dataDir>/repair-watcher.json` atomically.
@@ -396,7 +403,7 @@ export class RePairWatcher {
 
   private async fetchPending(): Promise<RePairPendingRow | null> {
     const url = `${this.deps.comBaseUrl.replace(/\/$/, "")}/api/users/${encodeURIComponent(this.deps.username)}/re-pair`;
-    const r = await this.deps.fetchImpl(url, { method: "GET" });
+    const r = await this.deps.readToken.fetch(url, { method: "GET" });
     if (!r.ok) throw new Error(`re-pair GET ${url} → ${r.status}`);
     const body = (await r.json()) as { pending?: RePairPendingRow | null };
     return body.pending ?? null;

@@ -5528,7 +5528,26 @@ async function wireRuntimeSurfaces(deps: {
       username: cfg.userId,
       currentIrkPubHex: irkHexFromCfg,
       comBaseUrl: env.controlPlaneBaseUrl,
-      fetchImpl: fetch,
+      // The re-pair GET is an account read (security report F3): the box's STK token.
+      // When no token can be minted the read goes without one, as ownDepositFetch does:
+      // a demo account is let in, a real one gets its 401 and nothing is applied.
+      readToken: ((reader: BoxReadToken) => ({
+        fetch: async (url: string, init: RequestInit = {}) => {
+          try {
+            return await reader.fetch(url, init);
+          } catch {
+            return await fetch(url, init);
+          }
+        },
+      }))(
+        new BoxReadToken({
+          comBaseUrl: env.controlPlaneBaseUrl,
+          username: cfg.userId,
+          serverFqdn: env.serverFqdn,
+          boxPublicKey: () => identityKeypair.publicKey,
+          signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+        }),
+      ),
       statePath: defaultRePairWatcherPath(dataDir),
       pollIntervalMs: 5 * 60_000,
       clearPairedSessions: () => pairedSessions.removeAll(),

@@ -6,6 +6,8 @@ import { InMemoryAlertInbox } from "../src/alertInbox.js";
 import type { ReissuanceAlert } from "../src/phoneAlerts.js";
 import { ed, signRePairInitiate, type Keypair } from "@flagship/protocol";
 import { RePairWatcher, verifyRePairSwap, type RePairPendingRow } from "../src/postRecovery/rePairWatcher.js";
+import { BoxReadToken } from "../src/boxReadToken.js";
+import { AccountGoneGate } from "../src/accountGone.js";
 import {
   InMemoryJournalStore,
   type ReissuerDeps,
@@ -61,7 +63,7 @@ function makeWatcher(opts: {
     username: USERNAME,
     currentIrkPubHex: OLD_HEX,
     comBaseUrl: "https://flagshipserver.com",
-    fetchImpl: fetched.fetchImpl,
+    readToken: { fetch: fetched.fetchImpl },
     statePath,
     now: () => now,
     pollIntervalMs: 60_000,
@@ -206,7 +208,7 @@ describe("RePairWatcher", () => {
       username: odd,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com/",
-      fetchImpl,
+      readToken: { fetch: fetchImpl },
       statePath: join(dir, "repair-watcher.json"),
       now: () => 0,
       pollIntervalMs: 60_000,
@@ -236,7 +238,7 @@ describe("RePairWatcher", () => {
       username: USERNAME,
       currentIrkPubHex: PROBE,
       comBaseUrl: "https://flagshipserver.com",
-      fetchImpl: makeFetchSequence([{ pending: null }]).fetchImpl,
+      readToken: { fetch: makeFetchSequence([{ pending: null }]).fetchImpl },
       statePath,
       now: () => 999,
       pollIntervalMs: 60_000,
@@ -324,7 +326,7 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
       username: USERNAME,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com",
-      fetchImpl,
+      readToken: { fetch: fetchImpl },
       statePath: join(dir, "watcher.json"),
       now: () => 1_000,
       pollIntervalMs: 60_000,
@@ -370,7 +372,7 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
       username: USERNAME,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com",
-      fetchImpl,
+      readToken: { fetch: fetchImpl },
       statePath: join(dir, "watcher.json"),
       now: () => 1_000,
       pollIntervalMs: 60_000,
@@ -420,7 +422,7 @@ describe("RePairWatcher integration with paired sessions + reissuer", () => {
       username: USERNAME,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com",
-      fetchImpl,
+      readToken: { fetch: fetchImpl },
       statePath: join(dir, "watcher.json"),
       now: () => 1_000,
       pollIntervalMs: 60_000,
@@ -461,7 +463,7 @@ describe("RePairWatcher integration with paired sessions + reissuer", () => {
       username: USERNAME,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com",
-      fetchImpl: fetched.fetchImpl,
+      readToken: { fetch: fetched.fetchImpl },
       statePath: join(dir, "watcher.json"),
       now: () => 5,
       pollIntervalMs: 60_000,
@@ -511,7 +513,7 @@ describe("RePairWatcher does not take .com's word for a completed re-pair", () =
       username: USERNAME,
       currentIrkPubHex: oldHex,
       comBaseUrl: "https://flagshipserver.com",
-      fetchImpl: makeFetchSequence(payloads).fetchImpl,
+      readToken: { fetch: makeFetchSequence(payloads).fetchImpl },
       statePath: join(mkdtempSync(join(tmpdir(), "repair-watcher-")), "repair-watcher.json"),
       now: () => INITIATED + 3 * 86_400_000,
       pollIntervalMs: 60_000,
@@ -602,5 +604,108 @@ describe("RePairWatcher does not take .com's word for a completed re-pair", () =
     expect(await verifyRePairSwap({ row: r, username: USERNAME, currentIrkPubHex: hexOf(o.publicKey) })).toBeNull();
     expect(await verifyRePairSwap({ row: row(o, n), username: "someone-else", currentIrkPubHex: hexOf(o.publicKey) })).toBeNull();
     expect(await verifyRePairSwap({ row: row(o, n), username: USERNAME, currentIrkPubHex: hexOf(o.publicKey) })).toBe("proof");
+  });
+});
+
+describe("RePairWatcher reads with the box's read token (security report F3)", () => {
+  const key = (): Keypair => {
+    const privateKey = ed.utils.randomPrivateKey();
+    return { privateKey, publicKey: ed.getPublicKey(privateKey) };
+  };
+  const hexOf = (b: Uint8Array) => Buffer.from(b).toString("hex");
+  const STK = key();
+  const FQDN = "home.alice.flagship.services";
+  const BASE = "https://flagshipserver.com";
+
+  function provenRow(o: Keypair, n: Keypair): RePairPendingRow {
+    const claim = { username: USERNAME, newIrkPub: n.publicKey, oldIrkPub: o.publicKey, issuedAt: 5_000 };
+    return {
+      newIrkPub: hexOf(n.publicKey), oldIrkPub: hexOf(o.publicKey), initiatedAt: 5_000, completesAt: 6_000, objectedAt: null,
+      proof: { issuedAt: 5_000, newIrkSignature: hexOf(signRePairInitiate(claim, n)), oldIrkSignature: hexOf(signRePairInitiate(claim, o)) },
+    };
+  }
+
+  /** A `.com` that mints the box a token and answers the re-pair GET only with it. */
+  function com(answers: Array<{ pending: RePairPendingRow | null } | "unauthorized">) {
+    const seen: Array<{ url: string; auth: string | null }> = [];
+    let i = 0;
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const auth = new Headers(init?.headers).get("authorization");
+      seen.push({ url, auth });
+      if (url.endsWith("/read-token")) {
+        const body = JSON.parse(String(init?.body)) as { box: { serverDomain: string } };
+        expect(body.box.serverDomain).toBe(FQDN);
+        return new Response(JSON.stringify({ token: "box-token", expiresAt: Date.now() + 86_400_000 }), { status: 200 });
+      }
+      const next = answers[Math.min(i++, answers.length - 1)]!;
+      if (next === "unauthorized" || auth !== "Bearer box-token") {
+        return new Response(JSON.stringify({ error: "an account read token is required" }), { status: 401 });
+      }
+      return new Response(JSON.stringify(next), { status: 200 });
+    }) as unknown as typeof fetch;
+    return { fetchImpl, seen };
+  }
+
+  function watcher(currentIrkPubHex: string, fetchImpl: typeof fetch, swaps: { n: number }) {
+    return new RePairWatcher({
+      username: USERNAME,
+      currentIrkPubHex,
+      comBaseUrl: BASE,
+      readToken: new BoxReadToken({
+        comBaseUrl: BASE,
+        username: USERNAME,
+        serverFqdn: FQDN,
+        boxPublicKey: () => STK.publicKey,
+        signAsBox: (m) => ed.sign(m, STK.privateKey),
+        fetchImpl,
+        gate: new AccountGoneGate(),
+      }),
+      statePath: join(mkdtempSync(join(tmpdir(), "repair-watcher-")), "repair-watcher.json"),
+      now: () => 10_000,
+      clearPairedSessions: async () => 0,
+      reissuerDeps: null,
+      onIrkSwapped: () => { swaps.n++; },
+    });
+  }
+
+  it("sends the box's STK-minted token on the GET and applies a proven swap", async () => {
+    const o = key(), n = key();
+    const { fetchImpl, seen } = com([{ pending: provenRow(o, n) }, { pending: null }]);
+    const swaps = { n: 0 };
+    const w = watcher(hexOf(o.publicKey), fetchImpl, swaps);
+    expect(await w.pollOnce()).toBe("initiated");
+    expect(await w.pollOnce()).toBe("completed");
+    expect(w.currentIrkPubHex).toBe(hexOf(n.publicKey));
+    const gets = seen.filter((s) => s.url.endsWith(`/api/users/${USERNAME}/re-pair`));
+    expect(gets).toHaveLength(2);
+    for (const g of gets) expect(g.auth).toBe("Bearer box-token");
+    expect(swaps.n).toBe(1);
+  });
+
+  it("fails safe while .com refuses the read: nothing applied, the last row kept, applied once the read works", async () => {
+    const o = key(), n = key();
+    const { fetchImpl } = com([{ pending: provenRow(o, n) }, "unauthorized", "unauthorized", { pending: null }]);
+    const swaps = { n: 0 };
+    const w = watcher(hexOf(o.publicKey), fetchImpl, swaps);
+    expect(await w.pollOnce()).toBe("initiated");
+    expect(await w.pollOnce()).toBe("none");
+    expect(w.state.lastError).toMatch(/401/);
+    expect(w.state.lastSeen?.newIrkPub).toBe(hexOf(n.publicKey));
+    expect(w.currentIrkPubHex).toBe(hexOf(o.publicKey));
+    expect(swaps.n).toBe(0);
+    expect(await w.pollOnce()).toBe("completed");
+    expect(w.currentIrkPubHex).toBe(hexOf(n.publicKey));
+  });
+
+  it("a box that is never let in never swaps", async () => {
+    const o = key();
+    const { fetchImpl } = com(["unauthorized"]);
+    const swaps = { n: 0 };
+    const w = watcher(hexOf(o.publicKey), fetchImpl, swaps);
+    for (let k = 0; k < 3; k++) expect(await w.pollOnce()).toBe("none");
+    expect(w.state.lastSeen).toBeNull();
+    expect(w.state.unverified ?? null).toBeNull();
+    expect(swaps.n).toBe(0);
   });
 });
