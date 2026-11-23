@@ -124,6 +124,32 @@ describe("reservedForDotComHolder", () => {
     const { fetch } = net({ failDns: true });
     expect(await reservedForDotComHolder({ window: WINDOW, fetch, now: () => NOW }, "acme")).toBe(true);
   });
+
+  // Live test 2026-11-23: yopri.com is registered but its delegation is lame, and DoH answered SERVFAIL, which read
+  // as "free". Only NOERROR and NXDOMAIN are answers; any other status is a failure and holds the name.
+  it("fails closed on SERVFAIL and REFUSED, not only on a transport error", async () => {
+    for (const Status of [2, 5]) {
+      const fetch: DibsFetch = async () => ({ ok: true, status: 200, text: async () => "", json: async () => ({ Status }) });
+      expect(await reservedForDotComHolder({ window: WINDOW, fetch, now: () => NOW }, "acme")).toBe(true);
+    }
+  });
+
+  it("holds a name whose .com differs only by hyphens (clou-dflare stands for cloudflare.com)", async () => {
+    const { fetch } = net({ registered: ["cloudflare.com"] });
+    expect(await reservedForDotComHolder({ window: WINDOW, fetch, now: () => NOW }, "clou-dflare")).toBe(true);
+    expect(await reservedForDotComHolder({ window: WINDOW, fetch, now: () => NOW }, "free-name")).toBe(false);
+  });
+
+  it("gives every lookup a timeout, so a resolver that never answers can't hang the request", async () => {
+    const signals: (AbortSignal | undefined)[] = [];
+    const fetch: DibsFetch = async (_url, init) => {
+      signals.push(init?.signal);
+      return { ok: true, status: 200, text: async () => "", json: async () => ({ Status: 3 }) };
+    };
+    await reservedForDotComHolder({ window: WINDOW, fetch, now: () => NOW }, "acme");
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((s) => s instanceof AbortSignal)).toBe(true);
+  });
 });
 
 describe("POST /api/name-dibs/initiate", () => {

@@ -120,6 +120,8 @@ function defaultNonce(): string {
 
 // ── `.com` lookups (DNS-over-HTTPS) ─────────────────────────────────────────
 
+const DOH_TIMEOUT_MS = 5_000;
+
 interface DohResponse {
   Status?: number;
   Answer?: Array<{ type?: number; data?: string }>;
@@ -127,7 +129,8 @@ interface DohResponse {
 
 async function doh(fetchImpl: DibsFetch, name: string, type: "NS" | "TXT"): Promise<DohResponse> {
   const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`;
-  const res = await fetchImpl(url, { headers: { accept: "application/dns-json" } });
+  // A lookup that never answers would hang the request: give up after 5 s (the caller fails closed).
+  const res = await fetchImpl(url, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(DOH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`DoH ${type} ${name}: HTTP ${res.status}`);
   const body = (await res.json()) as DohResponse;
   if (typeof body?.Status !== "number") throw new Error(`DoH ${type} ${name}: malformed`);
@@ -138,7 +141,17 @@ async function doh(fetchImpl: DibsFetch, name: string, type: "NS" | "TXT"): Prom
  *  lookup failure — callers decide which way to fail. */
 export async function dotComRegistered(name: string, fetchImpl: DibsFetch): Promise<boolean> {
   const body = await doh(fetchImpl, `${name.toLowerCase()}.com`, "NS");
+  // Only NOERROR and NXDOMAIN are answers. SERVFAIL, REFUSED and the rest mean the resolver could not tell (a
+  // registered domain with a lame delegation answers SERVFAIL): a failure, so a brand's name is never handed out
+  // because its DNS was briefly broken.
+  if (body.Status !== 0 && body.Status !== 3) throw new Error(`DoH NS ${name}.com: status ${body.Status}`);
   return body.Status === 0 && Array.isArray(body.Answer) && body.Answer.length > 0;
+}
+
+/** The `.com` names an account name stands for: as typed, and without hyphens (`clou-dflare` is cloudflare.com's). */
+export function dotComLabels(name: string): string[] {
+  const n = name.toLowerCase();
+  return [...new Set([n, n.replace(/-/g, "")])].filter((l) => l.length > 0);
 }
 
 /**
@@ -151,11 +164,14 @@ export async function reservedForDotComHolder(
   name: string,
 ): Promise<boolean> {
   if (!dibsWindowState(deps.window, nowOf(deps)).open) return false;
-  try {
-    return await dotComRegistered(name, deps.fetch);
-  } catch {
-    return true;
+  for (const label of dotComLabels(name)) {
+    try {
+      if (await dotComRegistered(label, deps.fetch)) return true;
+    } catch {
+      return true;
+    }
   }
+  return false;
 }
 
 /** Join a DoH TXT answer's quoted segments (`"abc" "def"` → `abcdef`). */
