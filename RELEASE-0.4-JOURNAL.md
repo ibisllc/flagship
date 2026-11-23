@@ -1886,3 +1886,9 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   In progress: 0.4/callback-ux (pop-up without "voi.ci/" + ⓘ explainer on iOS/Android/voi.ci site; Call back on
   visitor Calls rows). Next: security reports from the owner, one agent each. RESUME POINT: merge callback-ux; iPhone
   Debug build with cb202787e (now 2261896c4) to retest an app-placed call; iOS ring needs TestFlight; Android build 14.
+- 2026-11-23: owner approved the privacy §2.12 wording (ring code, ring tag key, names on a locked phone; Last updated
+  2026-11-23; English-only page). D1 **0158** applied and stamped on prod; `.com` deployed from main 4e74bb2f4 (webapp
+  69c6511e; voi.ci site build f0cadcd2ed063a90 with the call-back pop-up + "About call-backs"); health, voi.ci, webapp
+  200. Merged 0.4/callback-ux (pop-up without "voi.ci/" + explainer on iOS/Android/site; Call back on a visitor Calls
+  row, the call record now keeps the caller's thread key). The material-change notice in privacy §10 (dashboard note,
+  email affected account-holders) is the owner's call. Next: security reports, one agent each.
