@@ -4385,6 +4385,7 @@
   "our_privacy_policy_changes_on": "Nuestra política de privacidad cambia el %1$s.",
   "our_privacy_policy_changed_on": "Nuestra política de privacidad cambió el %1$s.",
   "read_the_policy": "Leer la política",
+  "account_address_hint": "La dirección de tu página, si la activas.",
   "choose_name_action": "Elegir tu propio nombre de cuenta",
   "choose_name_field": "Nombre de cuenta",
   "choose_name_price": "Un nombre de cuenta propio cuesta 10 $.",

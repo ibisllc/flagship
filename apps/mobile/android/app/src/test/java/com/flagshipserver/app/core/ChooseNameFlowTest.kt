@@ -282,4 +282,14 @@ class ChooseNameFlowTest {
         f.submit("bob", NameChoicePayment.Granted)
         assertEquals(NameChoiceNotice.GrantInvalid, f.notice.value)
     }
+
+    @Test
+    fun aPastedAddressKeepsOnlyTheName() {
+        assertEquals("john", VoiciName.stripAddressPrefix("voi.ci/john"))
+        assertEquals("john", VoiciName.stripAddressPrefix("https://voi.ci/john"))
+        assertEquals("john", VoiciName.stripAddressPrefix("  HTTP://Voi.Ci/john"))
+        assertEquals("john", VoiciName.stripAddressPrefix("john"))
+        assertEquals("https://example.com/john", VoiciName.stripAddressPrefix("https://example.com/john"))
+        assertEquals("voici", VoiciName.stripAddressPrefix("voici"))
+    }
 }

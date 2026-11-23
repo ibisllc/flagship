@@ -4394,6 +4394,7 @@
     <string name="our_privacy_policy_changes_on">Our privacy policy changes on %1$s.</string>
     <string name="our_privacy_policy_changed_on">Our privacy policy changed on %1$s.</string>
     <string name="read_the_policy">Read the policy</string>
+    <string name="account_address_hint">Your page address, if you turn it on.</string>
     <string name="choose_name_action">Choose your own account name</string>
     <string name="choose_name_field">Account name</string>
     <string name="choose_name_price">Your own account name costs $10.</string>

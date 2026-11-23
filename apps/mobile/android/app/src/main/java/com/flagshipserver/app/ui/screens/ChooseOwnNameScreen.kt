@@ -108,11 +108,12 @@ fun ChooseOwnNameScreen(
         }
         FSField(
             value = name,
-            onValueChange = { name = it.lowercase() },
+            onValueChange = { name = VoiciName.stripAddressPrefix(it).lowercase() },
             label = stringResource(R.string.choose_name_field),
             error = flow.problem(name)?.let(VoiciName::problemText),
             enabled = !working,
             fieldTag = "choose-name-field",
+            prefix = VoiciName.ADDRESS_PREFIX,
         )
         val canSubmit = !working && name.isNotBlank() && flow.problem(name) == null
         if (freeGrant) {

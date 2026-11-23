@@ -4387,6 +4387,7 @@
     <string name="our_privacy_policy_changes_on">Nuestra política de privacidad cambia el %1$s.</string>
     <string name="our_privacy_policy_changed_on">Nuestra política de privacidad cambió el %1$s.</string>
     <string name="read_the_policy">Leer la política</string>
+    <string name="account_address_hint">La dirección de tu página, si la activas.</string>
     <string name="choose_name_action">Elegir tu propio nombre de cuenta</string>
     <string name="choose_name_field">Nombre de cuenta</string>
     <string name="choose_name_price">Un nombre de cuenta propio cuesta 10 $.</string>

@@ -4386,6 +4386,7 @@
     <string name="our_privacy_policy_changes_on">プライバシーポリシーは%1$sに変更されます。</string>
     <string name="our_privacy_policy_changed_on">プライバシーポリシーは%1$sに変更されました。</string>
     <string name="read_the_policy">ポリシーを読む</string>
+    <string name="account_address_hint">ページをオンにしたときのアドレスです。</string>
     <string name="choose_name_action">自分でアカウント名を選ぶ</string>
     <string name="choose_name_field">アカウント名</string>
     <string name="choose_name_price">自分で選ぶアカウント名は 10 ドルです。</string>

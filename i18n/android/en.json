@@ -17990,6 +17990,10 @@
     "en": "Read the policy",
     "ctx": "core/SecurityNoticeCopy.kt (prose)"
   },
+  "account_address_hint": {
+    "en": "Your page address, if you turn it on.",
+    "ctx": "ui/screens/SuggestUsernameScreen.kt (under voi.ci/<name> at sign-up; the voi.ci page is opt-in on the next screen)"
+  },
   "choose_name_action": {
     "en": "Choose your own account name",
     "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"

@@ -4384,6 +4384,7 @@
   "our_privacy_policy_changes_on": "プライバシーポリシーは%1$sに変更されます。",
   "our_privacy_policy_changed_on": "プライバシーポリシーは%1$sに変更されました。",
   "read_the_policy": "ポリシーを読む",
+  "account_address_hint": "ページをオンにしたときのアドレスです。",
   "choose_name_action": "自分でアカウント名を選ぶ",
   "choose_name_field": "アカウント名",
   "choose_name_price": "自分で選ぶアカウント名は 10 ドルです。",

@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -215,12 +216,27 @@ fun FSField(
     // Optional testTag applied to the editable text field itself (where the
     // RequestFocus / SetText semantics live). Inert in release.
     fieldTag: String? = null,
+    // Fixed text before the input (a URL prefix such as `voi.ci/`): always shown, never edited, never in the value.
+    // The field then reads left to right; at large font scales the prefix sits above the field instead.
+    prefix: String? = null,
 ) {
     val sub = error ?: helper
+    val prefixAbove = prefix != null && androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.5f
+    val direction = if (prefix != null) androidx.compose.ui.unit.LayoutDirection.Ltr
+        else androidx.compose.ui.platform.LocalLayoutDirection.current
     // The caller's modifier (and any testTag on it) sits on a wrapper, so
     // the editable node is its descendant, as gym tests expect.
-    Box(modifier.fillMaxWidth()) {
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides direction) {
+    Column(modifier.fillMaxWidth()) {
+    if (prefixAbove && prefix != null) {
+        Text(prefix, color = FS.colors.textMuted, style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(bottom = 4.dp).clearAndSetSemantics {})
+    }
     OutlinedTextField(
+        leadingIcon = if (prefix != null && !prefixAbove) ({
+            Text(prefix, color = FS.colors.textMuted, style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(start = 16.dp).clearAndSetSemantics {})
+        }) else null,
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
@@ -243,6 +259,38 @@ fun FSField(
             .fillMaxWidth()
             .then(if (fieldTag != null) Modifier.testTag(fieldTag) else Modifier),
     )
+    }
+    }
+}
+
+/**
+ * An account's public address, `voi.ci/<name>`: the prefix muted, the name in the text colour, always left to right,
+ * never selectable. When both don't fit on one line (large text, a narrow phone) the name moves under the prefix
+ * instead of being cut.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun FSAccountAddress(name: String, modifier: Modifier = Modifier) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr,
+    ) {
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                com.flagshipserver.app.core.VoiciName.ADDRESS_PREFIX,
+                color = FS.colors.textMuted,
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.alignByBaseline(),
+            )
+            Text(
+                name,
+                color = FS.colors.text,
+                style = MaterialTheme.typography.headlineLarge.copy(textAlign = TextAlign.Center),
+                modifier = Modifier.alignByBaseline().testTag("account-address-name"),
+            )
+        }
     }
 }
 
@@ -395,6 +443,7 @@ fun OutlinedTextField(
     minLines: Int = 1,
     shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.small,
     colors: androidx.compose.material3.TextFieldColors = fsFieldColors(),
+    leadingIcon: (@Composable () -> Unit)? = null,
 ) = androidx.compose.material3.OutlinedTextField(
     value = value,
     onValueChange = onValueChange,
@@ -414,6 +463,7 @@ fun OutlinedTextField(
     minLines = minLines,
     shape = shape,
     colors = colors,
+    leadingIcon = leadingIcon,
 )
 
 @Composable

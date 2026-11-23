@@ -4387,6 +4387,7 @@
     <string name="our_privacy_policy_changes_on">Unsere Datenschutzerklärung ändert sich am %1$s.</string>
     <string name="our_privacy_policy_changed_on">Unsere Datenschutzerklärung hat sich am %1$s geändert.</string>
     <string name="read_the_policy">Datenschutzerklärung lesen</string>
+    <string name="account_address_hint">Die Adresse deiner Seite, wenn du sie einschaltest.</string>
     <string name="choose_name_action">Eigenen Kontonamen wählen</string>
     <string name="choose_name_field">Kontoname</string>
     <string name="choose_name_price">Ein eigener Kontoname kostet 10 $.</string>

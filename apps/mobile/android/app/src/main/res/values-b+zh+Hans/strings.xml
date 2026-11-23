@@ -4386,6 +4386,7 @@
     <string name="our_privacy_policy_changes_on">我们的隐私政策将于%1$s更改。</string>
     <string name="our_privacy_policy_changed_on">我们的隐私政策已于%1$s更改。</string>
     <string name="read_the_policy">阅读政策</string>
+    <string name="account_address_hint">开启页面后，这就是你的页面地址。</string>
     <string name="choose_name_action">自选账户名</string>
     <string name="choose_name_field">账户名</string>
     <string name="choose_name_price">自选账户名需 10 美元。</string>

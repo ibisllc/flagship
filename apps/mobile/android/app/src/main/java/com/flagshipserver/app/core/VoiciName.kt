@@ -20,6 +20,20 @@ object VoiciName {
     const val MIN = 3
     const val MAX = 30
 
+    /** The account's public address before its name. A domain: never translated. */
+    const val ADDRESS_PREFIX = "voi.ci/"
+
+    /** What the owner typed or pasted, without a leading `https://voi.ci/` (scheme optional, any case). */
+    fun stripAddressPrefix(typed: String): String {
+        var rest = typed.trimStart()
+        for (scheme in listOf("https://", "http://")) {
+            if (rest.startsWith(scheme, ignoreCase = true) && rest.substring(scheme.length).startsWith(ADDRESS_PREFIX, ignoreCase = true)) {
+                rest = rest.substring(scheme.length)
+            }
+        }
+        return if (rest.startsWith(ADDRESS_PREFIX, ignoreCase = true)) rest.substring(ADDRESS_PREFIX.length) else typed
+    }
+
     /** Wire names: too-short, too-long, characters, hyphens. */
     enum class Problem(val wire: String) { TooShort("too-short"), TooLong("too-long"), Characters("characters"), Hyphens("hyphens");
         companion object { fun of(wire: String?): Problem? = entries.firstOrNull { it.wire == wire } }

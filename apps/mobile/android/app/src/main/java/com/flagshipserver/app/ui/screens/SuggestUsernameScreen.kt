@@ -83,14 +83,20 @@ fun SuggestUsernameScreen(
             style = MaterialTheme.typography.bodyLarge,
         )
 
-        Text(
-            text = current ?: " ",
-            color = FS.colors.text,
-            style = MaterialTheme.typography.headlineLarge.copy(textAlign = TextAlign.Center),
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = FS.space.s4),
-        )
+            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(FS.space.s2),
+        ) {
+            com.flagshipserver.app.ui.components.FSAccountAddress(name = current ?: " ")
+            Text(
+                text = stringResource(R.string.account_address_hint),
+                color = FS.colors.textMuted,
+                style = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center),
+            )
+        }
 
         FSSecondaryButton(
             label = if (cooldown > 0) fsString(R.string.try_again_in_s, cooldown) else stringResource(R.string.try_another),
