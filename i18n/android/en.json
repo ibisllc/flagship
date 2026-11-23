@@ -17979,5 +17979,9 @@
   "re_pair_refused_stale": {
     "en": "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.",
     "ctx": "viewmodels/RePairRefusalText.kt"
+  },
+  "someone_joined_an_app_through_an_invite": {
+    "en": "Someone joined an app through an invite",
+    "ctx": "core/BoxEventLabels.kt (prose)"
   }
 }

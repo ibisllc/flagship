@@ -155,15 +155,14 @@ class ServiceAccessViewModelTest {
         assertEquals("Alex", ServiceInvite.openBundle(req["encryptedBundle"]!!.jsonPrimitive.content, household, inviteId).name)
     }
 
-    @Test fun addPerson_manual_setsApprovalMode() = runTest {
+    /** Approve-first invites are gone (security report F4): a person's invite is always auto. */
+    @Test fun addPerson_neverAsksForManualApproval() = runTest {
         val t = FakeTransport()
         val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 }, screens = boxWithSelf("manager"))
         vm.refreshMembers()
-        val link = vm.addPerson("Sam", null, InviteTier.PERSONAL_MANUAL)
+        vm.addPerson("Sam", null, InviteTier.PERSONAL_AUTO)
         val req = t.lastBodyJson()!!["request"]!!.jsonObject
-        assertEquals("manual", req["approvalMode"]!!.jsonPrimitive.content)
-        assertNull(req["maxRedemptions"])
-        assertEquals(req["inviteId"]!!.jsonPrimitive.content, InviteLink.inviteIdFromLink(link!!))
+        assertEquals("auto", req["approvalMode"]!!.jsonPrimitive.content)
     }
 
     @Test fun addPerson_group_commitsMaxNAndExpiryInSignedBytes() = runTest {
@@ -266,33 +265,6 @@ class ServiceAccessViewModelTest {
         val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t))
         assertFalse(vm.removeGroupMember("c4".repeat(32)))
         assertTrue(t.posts.isEmpty())
-    }
-
-    @Test fun finalizeAcceptance_submitsOnlyTheAcceptance() = runTest {
-        val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
-        val accept: JsonObject = buildJsonObject {
-            put("inviteId", JsonPrimitive(iid))
-            put("serviceRef", JsonPrimitive(serviceRef))
-            put("contactAID", JsonPrimitive("c".repeat(64)))
-            put("acceptedAt", JsonPrimitive(1700L))
-        }
-        val reply = InviteLink.buildAcceptReply("home.alice.flagship.services", accept, "a".repeat(128))
-        val t = FakeTransport(postBody = """{"bound":true,"serviceRef":"$serviceRef","boundAID":"${"c".repeat(64)}"}""")
-        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
-        assertTrue(vm.finalizeAcceptance(reply))
-        val submitted = t.bodyJsonFor("/api/service-access/accept")!!
-        assertEquals(iid, submitted["accept"]!!.jsonObject["inviteId"]!!.jsonPrimitive.content)
-        assertEquals("a".repeat(128), submitted["acceptSig"]!!.jsonPrimitive.content)
-        assertNull(submitted["create"])
-        assertNull(submitted["createSig"])
-    }
-
-    @Test fun finalizeAcceptance_malformed_failsBeforeNetwork() = runTest {
-        val t = FakeTransport()
-        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t))
-        assertFalse(vm.finalizeAcceptance("not-an-acceptance"))
-        assertNull(t.bodyJsonFor("/api/service-access/accept"))
-        assertTrue(vm.phase.value is ServiceAccessPhase.Failed)
     }
 
     @Test fun setMode_keepsTheMembersList() = runTest {

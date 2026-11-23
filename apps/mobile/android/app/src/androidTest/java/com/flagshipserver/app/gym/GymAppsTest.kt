@@ -263,7 +263,6 @@ class GymAppsTest : GymBase() {
         openAccessControl()
         tap("service-access-add-person")
         type("service-access-name-field", "Gym friend")
-        tap("service-access-approve-toggle")
         tap("service-access-create-invite")
         val role = firstTagWith("service-access-role-")
         val inviteId = role.removePrefix("service-access-role-")

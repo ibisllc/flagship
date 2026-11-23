@@ -6,13 +6,12 @@
 //     never touching the members list,
 //   - read the account members (this account's devices and the co-managing
 //     accounts), each person's grants and every rank from the box,
-//   - allow-list: ADD a person across THREE tiers (personal auto-approve /
-//     personal manual-approve / group multi-use) -> seal {name,photo?} under the
+//   - allow-list: ADD a person (personal, or a group multi-use link; approve-first
+//     invites are gone until an author-signed finalize exists, security report F4) -> seal {name,photo?} under the
 //     household key -> sign the create -> POST .com -> return the share-link,
 //   - LIST (owner-signed; decrypt bundle locally; a group is ONE "label — k/N"
 //     entry, with "Invited by <device>"), WITHDRAW (.com revoke + the same
-//     signed revoke to the box, which removes who joined through it),
-//   - FINALIZE a manual-approve acceptance the friend replied back.
+//     signed revoke to the box, which removes who joined through it).
 //
 // Who may do what (owner, 2026-10-15; the box enforces it): an admin device
 // (it holds the admin root) signs every order with it: mode, removals, ranks
@@ -64,13 +63,10 @@ sealed interface ServiceAccessPhase {
     data class Failed(val message: String) : ServiceAccessPhase
 }
 
-/** The three invite tiers, chosen at create time (docs §v2 Phase 3). */
+/** The invite tiers, chosen at create time (docs §v2 Phase 3). */
 enum class InviteTier {
     /** First-bind, auto-approve — the casual fast path (default). */
     PERSONAL_AUTO,
-    /** Sensitive: redeem → pending → friend replies an acceptance → author
-     *  finalizes. Closes the link-theft race without disclosing the friend. */
-    PERSONAL_MANUAL,
     /** One link, up to maxRedemptions (0 = unlimited), auto-approve, lower-trust. */
     GROUP,
 }
@@ -166,9 +162,6 @@ class ServiceAccessViewModel(
     val busyMode: StateFlow<Boolean> = _busyMode.asStateFlow()
     private val _busyAdd = MutableStateFlow(false)
     val busyAdd: StateFlow<Boolean> = _busyAdd.asStateFlow()
-    private val _busyFinalize = MutableStateFlow(false)
-    val busyFinalize: StateFlow<Boolean> = _busyFinalize.asStateFlow()
-
     /** The box's account members, people, grants and ranks; null until read (or when it can't be). */
     private val _members = MutableStateFlow<AppMembersResponse?>(null)
     val members: StateFlow<AppMembersResponse?> = _members.asStateFlow()
@@ -591,7 +584,7 @@ class ServiceAccessViewModel(
             val ts = now()
             val groupCap = if (tier == InviteTier.GROUP) maxRedemptions else null
             val groupExp = if (tier == InviteTier.GROUP) expiresAt else null
-            val approvalMode = if (tier == InviteTier.PERSONAL_MANUAL) "manual" else "auto"
+            val approvalMode = "auto"
             val bytes = ServiceInvite.canonicalCreate(
                 inviteId, aid, serviceRef, secretHash, encryptedBundle, ts, groupCap, groupExp,
             )
@@ -609,10 +602,7 @@ class ServiceAccessViewModel(
                 ownDeviceId?.let { put("deviceId", JsonPrimitive(it)) }
             }
             client.createInvite(username, request, HexUtil.encode(sig))
-            // Carry the inviteId (&i=) ONLY for a manual-approve invite — the
-            // friend signs the acceptance over it. Auto/group links stay bare.
-            val linkInviteId = if (tier == InviteTier.PERSONAL_MANUAL) inviteId else null
-            val link = InviteLink.shareLink(domain, HexUtil.encode(secret), HexUtil.encode(aid), linkInviteId, serviceRef)
+            val link = InviteLink.shareLink(domain, HexUtil.encode(secret), HexUtil.encode(aid), null, serviceRef)
             _lastLink.value = link
             _roleNotice.value = null
             val s = box
@@ -631,35 +621,6 @@ class ServiceAccessViewModel(
             null
         } finally {
             _busyAdd.value = false
-        }
-    }
-
-    /**
-     * MANUAL-approve finalize (v2 Phase 3 tier 2). The author pastes/scans the
-     * acceptance their friend replied through the private channel; we submit it
-     * to the AUTHOR's OWN box, which fetches the signed create from .com,
-     * verifies both, then binds the friend. Returns true on a bind.
-     */
-    suspend fun finalizeAcceptance(rawReply: String): Boolean {
-        if (_busyFinalize.value) return false
-        val parsed = InviteLink.decodeAcceptance(rawReply) ?: run {
-            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.that_acceptance_reply_is_malformed_ask))
-            return false
-        }
-        _busyFinalize.value = true
-        return try {
-            client.acceptInvite(
-                domain,
-                accept = parsed.accept,
-                acceptSigHex = parsed.acceptSigHex,
-            )
-            refreshPeople()
-            true
-        } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.couldnt_confirm_them_make_sure_the))
-            false
-        } finally {
-            _busyFinalize.value = false
         }
     }
 

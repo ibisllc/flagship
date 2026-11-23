@@ -4392,4 +4392,5 @@
     <string name="re_pair_refused_replay">This recovery request was already used. Start the recovery again.</string>
     <string name="re_pair_refused_credential_used">That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.</string>
     <string name="re_pair_refused_stale">This device\'s clock doesn\'t match Flagship\'s. Set the date and time to automatic, then try again.</string>
+    <string name="someone_joined_an_app_through_an_invite">Someone joined an app through an invite</string>
 </resources>

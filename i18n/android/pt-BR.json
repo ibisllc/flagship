@@ -4382,5 +4382,6 @@
   "re_pair_refused_vetoed_recently": "Um administrador desta conta recusou uma recuperação com este dispositivo há menos de um dia. Você pode tentar de novo depois de um dia ou falar com o administrador.",
   "re_pair_refused_replay": "Esta solicitação de recuperação já foi usada. Inicie a recuperação novamente.",
   "re_pair_refused_credential_used": "Esse código já foi usado em uma recuperação. Aguarde um código novo, ou repita a etapa de recuperação, e tente de novo.",
-  "re_pair_refused_stale": "O relógio deste dispositivo não corresponde ao do Flagship. Defina a data e a hora como automáticas e tente de novo."
+  "re_pair_refused_stale": "O relógio deste dispositivo não corresponde ao do Flagship. Defina a data e a hora como automáticas e tente de novo.",
+  "someone_joined_an_app_through_an_invite": "Alguém entrou em um app por um convite"
 }

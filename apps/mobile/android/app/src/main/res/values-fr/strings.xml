@@ -4385,4 +4385,5 @@
     <string name="re_pair_refused_replay">Cette demande de récupération a déjà été utilisée. Recommencez la récupération.</string>
     <string name="re_pair_refused_credential_used">Ce code a déjà servi pour une récupération. Attendez un nouveau code, ou refaites l’étape de récupération, puis réessayez.</string>
     <string name="re_pair_refused_stale">L’horloge de cet appareil ne correspond pas à celle de Flagship. Réglez la date et l’heure sur automatique, puis réessayez.</string>
+    <string name="someone_joined_an_app_through_an_invite">Quelqu’un a rejoint une app grâce à une invitation</string>
 </resources>

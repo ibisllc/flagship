@@ -215,7 +215,6 @@ internal fun ServiceAccessContent(
     val lastLink by vm.lastInviteLink.collectAsState()
     val busyMode by vm.busyMode.collectAsState()
     val busyAdd by vm.busyAdd.collectAsState()
-    val busyFinalize by vm.busyFinalize.collectAsState()
     val deviceNames by vm.deviceNamesState.collectAsState()
     val listScope by vm.listScope.collectAsState()
     val busyScope by vm.busyScope.collectAsState()
@@ -226,7 +225,6 @@ internal fun ServiceAccessContent(
     var adding by remember { mutableStateOf<InviteTier?>(null) }
     var name by remember { mutableStateOf("") }
     var newRole by remember { mutableStateOf(AppMemberRole.MEMBER) }
-    var approveFirst by remember { mutableStateOf(false) }
     var photoDataUri by remember { mutableStateOf<String?>(null) }
     var maxRedemptionsText by remember { mutableStateOf("10") }
     var expiryDaysText by remember { mutableStateOf("7") }
@@ -234,7 +232,6 @@ internal fun ServiceAccessContent(
     var confirmRemove by remember { mutableStateOf<AccessPerson?>(null) }
     var confirmMembersOnly by remember { mutableStateOf(false) }
     var confirmScope by remember { mutableStateOf<Boolean?>(null) }
-    var replyText by remember { mutableStateOf("") }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -394,7 +391,7 @@ internal fun ServiceAccessContent(
             FSSecondaryButton(
                 label = stringResource(R.string.add_person),
                 onClick = {
-                    adding = InviteTier.PERSONAL_AUTO; vm.clearLink(); name = ""; approveFirst = false; photoDataUri = null
+                    adding = InviteTier.PERSONAL_AUTO; vm.clearLink(); name = ""; photoDataUri = null
                     newRole = AppMemberRole.fromWire(members?.defaultRole) ?: AppMemberRole.MEMBER
                 },
                 modifier = Modifier.weight(1f).semantics { testTag = "service-access-add-person" },
@@ -501,14 +498,6 @@ internal fun ServiceAccessContent(
                             )
                             if (photoDataUri != null) TextButtonClear { photoDataUri = null }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(R.string.i_approve_them_before_they_get), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                            Switch(
-                                checked = approveFirst,
-                                onCheckedChange = { approveFirst = it },
-                                modifier = Modifier.semantics { testTag = "service-access-approve-toggle" },
-                            )
-                        }
                     }
                     FSPrimaryButton(
                         label = if (busyAdd) stringResource(R.string.creating) else stringResource(R.string.create_invite_link),
@@ -517,7 +506,7 @@ internal fun ServiceAccessContent(
                         large = true,
                         onClick = {
                             scope.launch {
-                                val tier = if (isGroup) InviteTier.GROUP else if (approveFirst) InviteTier.PERSONAL_MANUAL else InviteTier.PERSONAL_AUTO
+                                val tier = if (isGroup) InviteTier.GROUP else InviteTier.PERSONAL_AUTO
                                 val maxN = maxRedemptionsText.toIntOrNull() ?: 0
                                 val expiresAt = expiryDaysText.toLongOrNull()?.takeIf { it > 0 }
                                     ?.let { System.currentTimeMillis() + it * 86_400_000L }
@@ -567,41 +556,6 @@ internal fun ServiceAccessContent(
                             else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
                         }
                     },
-                )
-            }
-        }
-
-        // confirm a manual-approve reply (the author finalizes the loop)
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Text(stringResource(R.string.confirm_someone_you_approve), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.for_a_person_you_approve_first),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                OutlinedTextField(
-                    value = replyText,
-                    onValueChange = { replyText = it },
-                    label = { Text(stringResource(R.string.paste_the_confirmation_reply)) },
-                    singleLine = false,
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { testTag = "service-access-accept-reply-field" },
-                )
-                FSPrimaryButton(
-                    label = if (busyFinalize) stringResource(R.string.confirming) else stringResource(R.string.confirm_access),
-                    enabled = !busyFinalize && replyText.trim().isNotEmpty(),
-                    block = true,
-                    onClick = {
-                        scope.launch {
-                            val ok = vm.finalizeAcceptance(replyText.trim())
-                            if (ok) { toasts.success(FSStrings.get(R.string.access_confirmed)); replyText = "" }
-                            else toasts.error(FSStrings.get(R.string.couldnt_confirm_them_check_the_reply))
-                        }
-                    },
-                    modifier = Modifier.semantics { testTag = "service-access-accept-finalize" },
                 )
             }
         }

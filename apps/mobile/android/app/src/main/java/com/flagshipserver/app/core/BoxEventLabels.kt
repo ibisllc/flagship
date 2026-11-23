@@ -51,6 +51,7 @@ object BoxEventLabels {
         "app.access.edit" to FSStrings.get(R.string.changed_an_apps_internet_access),
         "app.access.dismiss" to FSStrings.get(R.string.dismissed_an_apps_access_request),
         "app.invite.create" to FSStrings.get(R.string.invited_someone_to_an_app),
+        "app.member.joined" to FSStrings.get(R.string.someone_joined_an_app_through_an_invite),
         "app.invite.withdraw" to FSStrings.get(R.string.withdrew_an_invite),
         "app.update.accept" to FSStrings.get(R.string.accepted_an_app_update),
         "app.storage.full" to FSStrings.get(R.string.an_app_ran_out_of_space),

@@ -4301,5 +4301,6 @@
   "re_pair_refused_vetoed_recently": "b47bbddf5852",
   "re_pair_refused_replay": "0f2a82b48a5c",
   "re_pair_refused_credential_used": "163a0577575e",
-  "re_pair_refused_stale": "81289097ae16"
+  "re_pair_refused_stale": "81289097ae16",
+  "someone_joined_an_app_through_an_invite": "5f387cd74f3b"
 }

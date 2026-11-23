@@ -4385,4 +4385,5 @@
     <string name="re_pair_refused_replay">Diese Wiederherstellungsanfrage wurde bereits verwendet. Starte die Wiederherstellung erneut.</string>
     <string name="re_pair_refused_credential_used">Dieser Code wurde bereits für eine Wiederherstellung verwendet. Warte auf einen neuen Code oder wiederhole den Wiederherstellungsschritt und versuche es erneut.</string>
     <string name="re_pair_refused_stale">Die Uhr dieses Geräts stimmt nicht mit der von Flagship überein. Stelle Datum und Uhrzeit auf automatisch und versuche es dann erneut.</string>
+    <string name="someone_joined_an_app_through_an_invite">Jemand ist einer App über eine Einladung beigetreten</string>
 </resources>
