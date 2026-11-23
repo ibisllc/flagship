@@ -250,3 +250,86 @@ These are already atomic: `boxClaims.ts:79-92` (the pattern to copy), voucher re
 4. Should admins get a push or Activity entry when someone joins an app?
 5. Credit: the researcher found (a)-(c). (d) and (e) came out of this investigation. Should they count
    toward the report's bounty, as part of F4?
+
+## Resolution (branch `0.4/invite-fix`, 2026-11-23)
+
+Owner decisions: fix every finding; breaking 0.3 apps and boxes is acceptable; manual approval off until an
+author-signed finalize exists; a deterministic first N on every server; an Activity entry when someone joins.
+No D1 migration. Deploy order and what breaks meanwhile: `docs/runbooks/0.4-deploy-sheet.md`, "Security report
+F4". The semantics as built: `docs/service-access-gating.md`, "Invite caps" and "Manual approval".
+
+**(a) `.com` race: fixed.** `D1ServiceInviteStorage.redeem` binds with one conditional
+`INSERT OR IGNORE … SELECT … WHERE not revoked AND not expired AND (binds so far) < cap` (NULL = 1, 0 =
+unlimited, as before), in one `db.batch` with the `bound_aid`/`redemptions` update; nothing bound means the same
+AID won (idempotent) or the invite was revoked, expired or full in the meantime. `POST
+/api/service-invites/redeem` has its own per-address budget (`service-invite-redeem`: 30/min, 300/h, 2000/day).
+Tests: `serviceInviteStorage.test.ts` runs 8 parallel redeems over the D1 adapter on node:sqlite for single-use,
+max 1 and max 3 (8 of 8 bound on the old code, the cap now) and parallel same-AID re-redeems;
+`control-plane/tests/serviceInvites.test.ts` does the same through the handler.
+
+**(d) first binder's AID: fixed on both sides.** `.com` answers `boundAID` = the redeemer's own AID. The box
+refuses (502, nothing bound, no cookie) unless `.com` names the visitor, binds and journals the visitor and issues
+the session only for them. `packages/server-daemon/tests/inviteCapRace.test.ts` (adapted from `repro.mts` and
+`box.mts`) runs the real `.com` handler over the real D1 adapter with the real box: a group invite of 3 lets in 3,
+each with a session as themselves, the 4th gets 409; 8 parallel redeems of single-use, max-1 and max-3 invites let
+in exactly the cap.
+
+**(e) unauthenticated finalize: closed.** `POST /api/service-access/accept` answers every request with 410
+`{ code: "manual-approval-unavailable" }`; every box (TypeScript and the Rust access authority) refuses `accept`
+journal entries from other servers; `.com` refuses a manual-approve create with the same code. The webapp (shell
+v252), iOS and Android no longer offer "I approve them first" or the finalize card (no new strings: removing an
+option that always fails needed no note). The box's create fetch from `.com` now also reports `revokedAt`,
+`expiresAt`, `approvalMode` and the binds so far, for the author-signed finalize. **Future work:** that finalize
+(the admin root or the invite's creator key signing the acceptance it admits, checked by every box with the cap
+and expiry); until then legacy `pending` redeems and the iOS/Android "invite-accept" deep link stay in the code
+but cannot complete (no manual invite exists in production, none can be created).
+
+**(b) box cap and (c) refused joins: fixed, deterministically.** `bindJoin` holds the cap for every join, local
+redeem or handed over, under one lock per invite, through one store step `admitRedemption` (TypeScript
+`ServiceAccessStore`, Rust `Store::admit_redemption`, held to `test-vectors/access-writes.json`). The cap counts
+**redemptions, not current members**: `roles.redeemed` keeps `<inviteId>/<aid>` → `<at>:<entry hash>`, and a
+removal frees no slot on that invite. Every server admits the same first N by (`redeemedAt`, entry hash): an
+earlier join takes the place of the last one admitted (that person loses this grant), a later one is refused and
+stays refused on every reconcile. People bound before the ledger count first and are never displaced. Tests in
+`inviteCapRace.test.ts`: two servers converge whatever the arrival order, equal times break on the hash, a removal
+readmits nobody, legacy members fill the cap; the box caps parallel redeems behind an over-binding `.com`.
+
+**Owner notice.** A new person on an app is an Activity entry `app.member.joined` ("Someone joined an app through
+an invite"; webapp, iOS, Android, six languages) on the server they joined through; other servers take the join
+quietly. No push sentence was added.
+
+**§6, the other counted caps.** Each now inserts only while under its cap, in one statement, with a
+parallel test over the D1 adapter: `serverShares.putPush` (`SHARE_PUSH_CAP`), `inboxPut` (`SHARE_INBOX_CAP`), the
+voi.ci name plan limit (`claim(rec, { maxLive })`), voi.ci drafts (`putDraft(rec, VOICI_MAX_PENDING_DRAFTS)`), org
+open proposals (`putOpenProposal`, `json_extract` on the stored decision), and the awaiting-reply cap
+(`insertMessage(rec, { awaitingCap })`). **Left read-then-write, on purpose:** the voi.ci per-service change limit
+(1 a week, 3 in 30 days), the per-account claim budget and the 10-a-day brake (each needs a signed, nonce-checked
+order from the account's own admin device, and a few over is harmless), and the per-conversation hourly and daily
+send limits (rate limits behind the now-atomic awaiting-reply cap and the per-address budgets).
+
+**Production clean-up (owner's call; nothing was run).** The over-cap invites still live, read-only:
+
+```sh
+cd apps/com && npx wrangler d1 execute flagship-state --remote --command "
+SELECT i.invite_id, i.author_aid, i.service_ref, i.max_redemptions, COUNT(b.aid) AS binds, i.created_at
+  FROM service_invites i JOIN service_invite_bindings b ON b.invite_id = i.invite_id
+ WHERE i.revoked_at IS NULL
+ GROUP BY i.invite_id
+HAVING COUNT(b.aid) > CASE WHEN i.max_redemptions IS NULL THEN 1
+                           WHEN i.max_redemptions = 0 THEN 9007199254740991
+                           ELSE i.max_redemptions END"
+```
+
+Drop `WHERE i.revoked_at IS NULL` to see all 8. A revoke is the account owner's signed order; the owner decides
+whether to ask the account holder or leave them.
+
+**Not run:** the Playwright gym spec changed in `gym-members.spec.ts`, the iOS UI tests (`GymLiveTests`,
+`GymSweepAppTests`; not compiled), any live gym, a real box or device. Run: `npx tsc -b`; vitest over
+`packages/storage`, `packages/control-plane`, `packages/server-daemon`, `apps/com`, `apps/web/tests`,
+`tools/gym`; `cargo test -p flagship-access` and `-p flagship-core --test access_entry_vectors`, clippy and fmt
+for `flagship-access`; `npm run i18n`; `npm run parity`; iOS `ServiceAccessViewModelTests`,
+`ActivityViewModelTests`, `InviteAcceptViewModelTests`, `InviteRedeemViewModelTests`, `CoManagerInviteFlowTests`;
+Android `ServiceAccessViewModelTest`, `ServiceAccessComposeTest`, `BoxEventLabelsTest`, `InviteAcceptViewModelTest`,
+`InviteRedeemViewModelTest`, `:app:compileDebugKotlin`, `:app:compileDebugAndroidTestKotlin`.
+
+**Open for the owner:** the bounty question above (5); whether to revoke the three live over-cap invites (1).

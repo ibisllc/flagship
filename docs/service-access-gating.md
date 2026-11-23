@@ -77,8 +77,12 @@ Key usage (the owner's asymmetry):
   integer `allowCount` is exposed, NEVER the allow-listed AIDs (those are the friend graph). Lets
   iOS/Android/webapp render the TRUE toggle without a signature on a plain refresh.
 - `POST /api/service-invites/redeem` — friend AID-signed redeem → `.com` binding → allow-list add.
-  On success, **also issues a `Flagship-App-Session` cookie** bound to the redeemer's AID + this
-  service (when the cookie seam is enabled).
+  `.com` must answer with the redeemer's own AID (`boundAID === visitorAID`, else 502 and nothing is
+  bound); the box then binds and journals the visitor and, on success, **issues a
+  `Flagship-App-Session` cookie** bound to the redeemer's AID + this service (when the cookie seam is
+  enabled). See "Invite caps" below.
+- `POST /api/service-access/accept` — refused on every request (410, code
+  `manual-approval-unavailable`); see "Manual approval" below.
 - `POST /api/service-access/establish-session` — a friend who already redeemed presents the SAME
   AID-signed `ServiceVisitProof` the `x-flagship-visit` header carries (base64 body); the box mints
   the cookie. 401 if the AID isn't allow-listed for that (restricted) service; 403 on a bad proof.
@@ -92,6 +96,40 @@ Key usage (the owner's asymmetry):
   `open` is unchanged (decide short-circuits before reading any cookie). Client follow-up: the
   friend's webapp should call `establish-session` (browser-driven, signed from the in-page UMK→AID)
   so the `Set-Cookie` lands in that browser.
+
+## Invite caps (security report F4, 2026-11-23)
+
+`docs/security/F4-invite-cap-race-investigation.md` has the findings. What holds now:
+
+- **`.com` binds atomically.** One conditional `INSERT OR IGNORE … SELECT … WHERE not revoked AND not
+  expired AND (binds so far) < cap`, batched with the counter update (a D1 batch is a transaction):
+  parallel redeems can never bind more AIDs than the cap. A personal invite (`maxRedemptions` NULL) binds
+  one, a group link its N, 0 is unlimited. The redeem answers with the **redeemer's** AID, never the
+  invite's first bind. `POST /api/service-invites/redeem` has a per-address budget
+  (`service-invite-redeem`: 30 a minute, 300 an hour, 2000 a day; a box relays its visitors' redeems).
+- **Every box holds the cap too**, for joins redeemed on it and joins handed over by the app's other
+  servers, under one lock per invite. The cap counts **redemptions, not current members**: the box keeps
+  `roles.redeemed` (`<inviteId>/<aid>` → `<at>:<entry hash>`) and removing someone frees no slot for
+  anyone else on that invite (the person needs a new invite). People bound before the ledger existed
+  count first and are never displaced.
+- **Every server keeps the same first N.** When more joins than the cap reach the app's servers, each
+  admits the first N by (`redeemedAt`, entry hash): a join that sorts before the last one admitted takes
+  its place (that person loses the grant through this invite), anything later is refused, and stays
+  refused on every reconcile. After `.com`'s atomic bind this can only come from entries made before it.
+- **The owner hears of it.** A new person on an app is an Activity entry (`app.member.joined`, "Someone
+  joined an app through an invite") on the server they joined through; the app's other servers take the
+  join quietly, so one join is one entry.
+
+## Manual approval (off since security report F4)
+
+The approve-first ("manual") invite let the author finalize a friend's acceptance on their box
+(`POST /api/service-access/accept`). The finalize checked only the friend's own signature, so anyone
+with the link (inviteId + serviceRef) could add any number of fresh keys, past the cap, the expiry and
+a first use. Until an **author-signed finalize** exists (the admin root or the invite's creator key
+signing the acceptance it lets in, checked by every box, with the cap and expiry), manual approval is
+off: `.com` refuses a manual-approve create and every box refuses the finalize and any `accept` journal
+entry, all with the code `manual-approval-unavailable`. The webapp, iOS and Android no longer offer the
+option. Production had no manual invite when this landed.
 
 ## Open mode + members (owner, 2026-10-13)
 
@@ -552,8 +590,8 @@ each carrying its own proof:
 | entry | proof every box re-checks |
 |---|---|
 | `mode`, `remove`, `rank` | the admin-only key (`flagship/service-access-mode/v2`, `flagship/service-allow-remove/v2`, `flagship/app-rank/v1`) |
-| `join` | the signed create (admin root, a device in the box's own book, or a co-manager's member key the box knows for the app) and the joiner's redeem signature over the create's secret hash; the invite's cap (a personal invite binds one person), its expiry, the creator still manager-class (a co-manager: still sharing at Can manage), no later removal of that person, no withdraw of the invite |
-| `accept` | the signed create and the joiner's acceptance signature (manual approve) |
+| `join` | the signed create (admin root, a device in the box's own book, or a co-manager's member key the box knows for the app) and the joiner's redeem signature over the create's secret hash; the invite's cap (a personal invite binds one person; the same first N by time and entry hash on every server, see "Invite caps"), its expiry, the creator still manager-class (a co-manager: still sharing at Can manage), no later removal of that person, no withdraw of the invite |
+| `accept` | refused on every server (manual approval is off, see "Manual approval") |
 | `withdraw` | an admin's revoke, or the creating device's (or co-manager's) while it is still manager-class there |
 | `share` | the owner's share grant under the admin-only key, and its end (the owner's revoke under that key, or the co-manager's leave under the grant's member key); see "Co-manager invites" |
 
