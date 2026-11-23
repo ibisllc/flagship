@@ -390,6 +390,14 @@ extension VoiciOutgoingCall {
         case "locked": return String(localized: "Unlock Flagship and try again.")
         case "browser": return String(localized: "Couldn't hand the call to your browser. Try again.")
         case "callback-only": return String(localized: "This page takes calls only from people who let it call them back.")
+        // A first call to a page is a first contact: `.com`'s attestation refusals, in Messages' words (as Android).
+        case "first-contact-limit":
+            let when = String(localized: "tomorrow")
+            return String(localized: "You've started as many new conversations as you can today. Try again \(when).")
+        case "device-limit": return String(localized: "This device already set up Messages for another account this month.")
+        case "banned": return String(localized: "Your account can't send messages. If you think this is a mistake, tell us.")
+        case "unattested-too-new": return String(localized: "New accounts can start conversations from the web after 7 days.")
+        case "bad-attestation": return String(localized: "Flagship's answer couldn't be checked. Try again.")
         default: return String(localized: "The call couldn't connect. Check your connection and try again.")
         }
     }
