@@ -57,7 +57,7 @@ check_reach() {
 check_symbols() {
   local aab=$1
   [ -f "$aab" ] || return 0
-  if unzip -l "$aab" | grep -q 'BUNDLE-METADATA/com.android.tools.build.debugsymbols/'; then
+  if unzip -l "$aab" | grep 'BUNDLE-METADATA/com.android.tools.build.debugsymbols/' >/dev/null; then
     echo "ok app: native debug symbols in the AAB"
   else
     echo "FAIL app: no native debug symbols in $aab. Install the NDK AGP 8.9 defaults to (sdkmanager \"ndk;27.0.12077973\", about 1.5 GB) and rebuild :app:bundleRelease"
