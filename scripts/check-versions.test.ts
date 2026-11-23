@@ -42,8 +42,8 @@ describe("release/version.json", () => {
     expect(v.product).toBe("0.4");
     expect(v.label).toBe("Beta");
     expect(v.iosVersion).toBe("1.3");
-    expect(v.iosBuild).toBe(9);
-    expect(v.androidVersionCode).toBe(13);
+    expect(v.iosBuild).toBe(10);
+    expect(v.androidVersionCode).toBe(14);
     expect(v.studio).toBe("0.4.0");
     expect(v.marketplace).toBe(false);
   });
@@ -57,7 +57,7 @@ describe("release/version.json", () => {
   it("puts the Wear OS app one million above the phone's version code", () => {
     const kts = readFileSync(join(ROOT, "apps/mobile/android/wear/build.gradle.kts"), "utf8");
     expect(kts).toMatch(/versionCode = 1_000_000 \+ \(releaseVersion\["androidVersionCode"\] as Number\)\.toInt\(\)/);
-    expect(1_000_000 + V.androidVersionCode).toBe(1_000_013);
+    expect(1_000_000 + V.androidVersionCode).toBe(1_000_014);
   });
 
   it("keeps the iOS version above the approved 1.0 (4) and Android above Play's 8", () => {
