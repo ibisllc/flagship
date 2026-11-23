@@ -1983,12 +1983,10 @@
     <string name="quick_approve_from_watch">Approve from watch</string>
     <string name="approve_a_server_boot_from_your">Approve a server\'s start-up from your Wear OS watch while Flagship is unlocked on this phone, or, for the servers you turn on below, while this phone is locked. Other actions (revoke server, wipe &amp; restart, replace device) always need your phone. Off by default.</string>
     <string name="active_renews_by">Active — renews by %1$s</string>
-    <string name="your_stuff_on">Your stuff,\non\u0020</string>
-    <string name="your_hardware">your hardware.</string>
+    <string name="your_apps_live_where_you_live">Your apps live\nwhere you live.</string>
     <string name="a_personal_cloud_you_actually_own">A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.</string>
     <string name="create_your_account">Create your account</string>
     <string name="connect_to_an_existing_account_sign">Connect to an existing account. Sign in with your account name, or join with a pairing code.</string>
-    <string name="your_phone_and_your_server_connected">Your phone and your server, connected.</string>
     <string name="flagship_is_locked">Flagship is locked</string>
     <string name="unlock_with_biometrics_to_continue">Unlock with biometrics to continue.</string>
     <string name="authenticating">Authenticating…</string>

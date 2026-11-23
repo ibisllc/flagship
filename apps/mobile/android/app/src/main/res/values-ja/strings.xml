@@ -1980,12 +1980,10 @@
     <string name="quick_approve_from_watch">ウォッチで承認</string>
     <string name="approve_a_server_boot_from_your">このスマートフォンで Flagship のロックが解除されている間、または下でオンにしたサーバーについてはこのスマートフォンがロック中でも、Wear OS ウォッチからサーバーの起動を承認できます。その他の操作（サーバーの取り消し、消去して再開、デバイスの置き換え）には常にスマートフォンが必要です。デフォルトはオフです。</string>
     <string name="active_renews_by">有効 — %1$s までに更新</string>
-    <string name="your_stuff_on">あなたのデータを、\n</string>
-    <string name="your_hardware">あなたのハードウェアで。</string>
+    <string name="your_apps_live_where_you_live">あなたのアプリは、\nあなたの暮らす場所に。</string>
     <string name="a_personal_cloud_you_actually_own">本当に自分のものと言えるパーソナルクラウド。作成も承認もすべてスマートフォンから。アプリはサーバーが動かします。</string>
     <string name="create_your_account">アカウントを作成</string>
     <string name="connect_to_an_existing_account_sign">既存のアカウントに接続します。アカウント名でサインインするか、ペアリングコードで参加します。</string>
-    <string name="your_phone_and_your_server_connected">スマートフォンとサーバーがつながりました。</string>
     <string name="flagship_is_locked">Flagship はロックされています</string>
     <string name="unlock_with_biometrics_to_continue">続行するには、生体認証でロックを解除してください。</string>
     <string name="authenticating">認証中…</string>

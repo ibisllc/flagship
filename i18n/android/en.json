@@ -8242,13 +8242,9 @@
     "ctx": "ui/screens/WatchQuickApproveCard.kt:87 (arg of Text)",
     "args": 1
   },
-  "your_stuff_on": {
-    "en": "Your stuff,\non ",
-    "ctx": "ui/screens/WelcomeScreen.kt:80 (prose)"
-  },
-  "your_hardware": {
-    "en": "your hardware.",
-    "ctx": "ui/screens/WelcomeScreen.kt:81 (fragment)"
+  "your_apps_live_where_you_live": {
+    "en": "Your apps live\nwhere you live.",
+    "ctx": "ui/screens/WelcomeScreen.kt:65 (prose)"
   },
   "a_personal_cloud_you_actually_own": {
     "en": "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.",
@@ -8261,10 +8257,6 @@
   "connect_to_an_existing_account_sign": {
     "en": "Connect to an existing account. Sign in with your account name, or join with a pairing code.",
     "ctx": "ui/screens/WelcomeScreen.kt:104 (prose)"
-  },
-  "your_phone_and_your_server_connected": {
-    "en": "Your phone and your server, connected.",
-    "ctx": "ui/screens/WelcomeScreen.kt:139 (contentDescription=)"
   },
   "flagship_is_locked": {
     "en": "Flagship is locked",
