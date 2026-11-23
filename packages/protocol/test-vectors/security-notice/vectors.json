@@ -1,5 +1,5 @@
 {
-  "about": "flagship/security-notice/v1 (docs/security-notices.md). canonical: the exact signed string. positive: notices that parse and verify under keys.authorityPubHex. reject: notices that must not be accepted, with the reason (malformed = fails the rules before any signature check; signature-invalid; unauthorized-signer). unsignable: bodies that break a rule, so no canonical string exists (code = the first rule broken, checked in the order the spec lists). outcomes: what a verified notice shows for a client at a clock (none/banner/lock). accept: how a stored state absorbs a fetched candidate (anti-rollback, fail open); expect.seq is the seq of the notice kept, or null. Seeds are raw Ed25519 seeds. All times are epoch ms; T0 = 1792000000000.",
+  "about": "flagship/security-notice/v1 (docs/security-notices.md). canonical: the exact signed string. positive: notices that parse and verify under keys.authorityPubHex. reject: notices that must not be accepted, with the reason (malformed = fails the rules before any signature check; signature-invalid; unauthorized-signer). unsignable: bodies that break a rule, so no canonical string exists (code = the first rule broken, checked in the order the spec lists). outcomes: what a verified notice shows for a client at a clock (none/banner/lock; a banner's style is maintenance, update or policy). accept: how a stored state absorbs a fetched candidate (anti-rollback, fail open); expect.seq is the seq of the notice kept, or null. Seeds are raw Ed25519 seeds. All times are epoch ms; T0 = 1792000000000.",
   "keys": {
     "authoritySeedHex": "7777777777777777777777777777777777777777777777777777777777777777",
     "authorityPubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
@@ -147,6 +147,53 @@
         "signature": "304f617d94b2a8dcc4ac7af2162f8ed2387867b306f82676fc552be52787781225d936df5c61978b090e736bf47477fb789ab7f7e4034d413de151c1e2fb6803"
       },
       "canonical": "flagship/security-notice/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|5|none|1792000000000|1792691200000|0|0|||0||"
+    },
+    {
+      "name": "policy-update",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "canonical": "flagship/security-notice/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|6|policy-update|1792000000000|1794419200000|1793209600000|0|||0||"
+    },
+    {
+      "name": "policy-update for one platform",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 7,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {
+          "web": {
+            "minBuild": 0,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "14051e3a92bdc1a643c2c1127714273852336ebc5d55aad026ac4de26108f67236ab943fd1ce9a30a3d7fa759606ca8cb2810e2ec84f7d5142aff16c0e539304"
+      },
+      "canonical": "flagship/security-notice/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|7|policy-update|1792000000000|1794419200000|1793209600000|0|web:0:0||0||"
     }
   ],
   "reject": [
@@ -445,6 +492,69 @@
         "message": "You must update Flagship by {date}. Older versions will stop working.",
         "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
         "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "an unknown kind (how a build from before a new kind sees it)",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-later",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "a policy-update with a moved date",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793296000000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "expect": "signature-invalid"
+    },
+    {
+      "name": "a policy-update with a message added",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "Read the new policy.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
       },
       "expect": "malformed"
     }
@@ -873,6 +983,147 @@
         "message": "We will update on {date}. Flagship may be briefly unavailable."
       },
       "code": "bad-time"
+    },
+    {
+      "name": "a policy-update without a date",
+      "body": {
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": ""
+      },
+      "code": "event-required"
+    },
+    {
+      "name": "a policy-update whose date is outside the window",
+      "body": {
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1794505600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": ""
+      },
+      "code": "bad-event-at"
+    },
+    {
+      "name": "a policy-update with a message",
+      "body": {
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "Our privacy policy changes on {date}."
+      },
+      "code": "message-not-allowed"
+    },
+    {
+      "name": "a policy-update with a minimum",
+      "body": {
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {
+          "ios": {
+            "minBuild": 5,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": ""
+      },
+      "code": "minimum-not-allowed"
+    },
+    {
+      "name": "a policy-update with a lock",
+      "body": {
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1792086400000,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": ""
+      },
+      "code": "lock-from-not-allowed"
+    },
+    {
+      "name": "a policy-update that deprecates a protocol",
+      "body": {
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 1,
+        "reason": "",
+        "message": ""
+      },
+      "code": "deprecates-not-allowed"
+    },
+    {
+      "name": "a policy-update with an advisory id",
+      "body": {
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": ""
+      },
+      "code": "advisory-not-allowed"
+    },
+    {
+      "name": "a policy-update with a reason",
+      "body": {
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "Because.",
+        "message": ""
+      },
+      "code": "reason-not-allowed"
     }
   ],
   "outcomes": [
@@ -1560,6 +1811,226 @@
         "action": "none",
         "why": "kind-none"
       }
+    },
+    {
+      "name": "policy-update shows before its date",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "banner",
+        "style": "policy"
+      }
+    },
+    {
+      "name": "policy-update still shows after its date",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "client": {
+        "platform": "android",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1793728000000,
+      "expect": {
+        "action": "banner",
+        "style": "policy"
+      }
+    },
+    {
+      "name": "policy-update shows to every build, however new",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "client": {
+        "platform": "web",
+        "build": 100000,
+        "protocol": 9
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "banner",
+        "style": "policy"
+      }
+    },
+    {
+      "name": "policy-update is not yet valid",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1791999999999,
+      "expect": {
+        "action": "none",
+        "why": "not-yet"
+      }
+    },
+    {
+      "name": "policy-update has expired at validUntil",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1794419200000,
+      "expect": {
+        "action": "none",
+        "why": "expired"
+      }
+    },
+    {
+      "name": "policy-update for one platform shows there",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 7,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {
+          "web": {
+            "minBuild": 0,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "14051e3a92bdc1a643c2c1127714273852336ebc5d55aad026ac4de26108f67236ab943fd1ce9a30a3d7fa759606ca8cb2810e2ec84f7d5142aff16c0e539304"
+      },
+      "client": {
+        "platform": "web",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "banner",
+        "style": "policy"
+      }
+    },
+    {
+      "name": "policy-update for one platform is silent elsewhere",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 7,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {
+          "web": {
+            "minBuild": 0,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "14051e3a92bdc1a643c2c1127714273852336ebc5d55aad026ac4de26108f67236ab943fd1ce9a30a3d7fa759606ca8cb2810e2ec84f7d5142aff16c0e539304"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "none",
+        "why": "other-platform"
+      }
     }
   ],
   "accept": [
@@ -2027,6 +2498,102 @@
         "highestSeq": 0,
         "seq": null,
         "refused": "signature-invalid"
+      }
+    },
+    {
+      "name": "a policy-update replaces a stored maintenance notice",
+      "store": {
+        "highestSeq": 1,
+        "notice": {
+          "type": "SecurityNotice",
+          "version": 1,
+          "seq": 1,
+          "kind": "maintenance",
+          "validFrom": 1792000000000,
+          "validUntil": 1792691200000,
+          "eventAt": 1792604800000,
+          "lockFrom": 0,
+          "platforms": {},
+          "advisoryId": "",
+          "deprecatesProtocol": 0,
+          "reason": "",
+          "message": "We will update on {date}. Flagship may be briefly unavailable.",
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "053e8101986411f8d992a2e02b1821eb87a706ea37eb6f3aa1e0054c1d006e6391d95de613d95891341ca064147dcaa2eb0e002b42343d7440643f42c4c42e01"
+        }
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-update",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 6,
+        "seq": 6,
+        "refused": null
+      }
+    },
+    {
+      "name": "an unknown kind changes nothing",
+      "store": {
+        "highestSeq": 1,
+        "notice": {
+          "type": "SecurityNotice",
+          "version": 1,
+          "seq": 1,
+          "kind": "maintenance",
+          "validFrom": 1792000000000,
+          "validUntil": 1792691200000,
+          "eventAt": 1792604800000,
+          "lockFrom": 0,
+          "platforms": {},
+          "advisoryId": "",
+          "deprecatesProtocol": 0,
+          "reason": "",
+          "message": "We will update on {date}. Flagship may be briefly unavailable.",
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "053e8101986411f8d992a2e02b1821eb87a706ea37eb6f3aa1e0054c1d006e6391d95de613d95891341ca064147dcaa2eb0e002b42343d7440643f42c4c42e01"
+        }
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 6,
+        "kind": "policy-later",
+        "validFrom": 1792000000000,
+        "validUntil": 1794419200000,
+        "eventAt": 1793209600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "3ca751eddfe9abb3c5d6ccb25a2f78c57756b24dd1a32a5c55b0c32a18d6de091c77268d2dc83e552d7e94e55b5a410d901ad0fc8df3fb7bec11fe070578f608"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 1,
+        "seq": 1,
+        "refused": "malformed"
       }
     }
   ]

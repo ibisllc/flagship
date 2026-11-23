@@ -71,6 +71,9 @@ const required = (over: Partial<SecurityNoticeBody> = {}): SecurityNoticeBody =>
     ...over,
   });
 
+const policyBody = (over: Partial<SecurityNoticeBody> = {}): SecurityNoticeBody =>
+  base({ seq: 6, kind: "policy-update", validFrom: T0, validUntil: T0 + 28 * DAY, eventAt: T0 + 14 * DAY, message: "", ...over });
+
 const sign = (b: SecurityNoticeBody): SecurityNotice => signSecurityNotice(b, authority);
 const json = (n: unknown) => JSON.parse(JSON.stringify(n)) as Record<string, unknown>;
 
@@ -89,6 +92,8 @@ export function buildSecurityNoticeVectors(): unknown {
   const lock = sign(required());
   const immediate = sign(required({ seq: 4, lockFrom: T0, eventAt: 0, message: "You must update Flagship now. Older versions will stop working." }));
   const clear = sign(base({ seq: 5, kind: "none", eventAt: 0, message: "" }));
+  const policy = sign(policyBody());
+  const policyWeb = sign(policyBody({ seq: 7, platforms: { web: { minBuild: 0, minProtocol: 0 } } }));
 
   const positive = [
     { name: "maintenance", notice: json(maintenance), canonical: text(canonicalSecurityNotice(maintenance, maintenance.signedBy)) },
@@ -96,6 +101,8 @@ export function buildSecurityNoticeVectors(): unknown {
     { name: "update-required with a grace window", notice: json(lock), canonical: text(canonicalSecurityNotice(lock, lock.signedBy)) },
     { name: "update-required with no window", notice: json(immediate), canonical: text(canonicalSecurityNotice(immediate, immediate.signedBy)) },
     { name: "none (all clear)", notice: json(clear), canonical: text(canonicalSecurityNotice(clear, clear.signedBy)) },
+    { name: "policy-update", notice: json(policy), canonical: text(canonicalSecurityNotice(policy, policy.signedBy)) },
+    { name: "policy-update for one platform", notice: json(policyWeb), canonical: text(canonicalSecurityNotice(policyWeb, policyWeb.signedBy)) },
   ];
 
   const tamper = (n: SecurityNotice, patch: Record<string, unknown>) => ({ ...json(n), ...patch });
@@ -110,6 +117,9 @@ export function buildSecurityNoticeVectors(): unknown {
     { name: "signed by a key that is not the authority", notice: json(forged), expect: "unauthorized-signer" },
     { name: "a wrong envelope version", notice: tamper(lock, { version: 2 }), expect: "malformed" },
     { name: "an unknown platform", notice: tamper(lock, { platforms: { desktop: { minBuild: 1, minProtocol: 0 } } }), expect: "malformed" },
+    { name: "an unknown kind (how a build from before a new kind sees it)", notice: tamper(policy, { kind: "policy-later" }), expect: "malformed" },
+    { name: "a policy-update with a moved date", notice: tamper(policy, { eventAt: T0 + 15 * DAY }), expect: "signature-invalid" },
+    { name: "a policy-update with a message added", notice: tamper(policy, { message: "Read the new policy." }), expect: "malformed" },
   ];
 
   const unsignable: { name: string; body: SecurityNoticeBody; code: string }[] = [
@@ -132,6 +142,14 @@ export function buildSecurityNoticeVectors(): unknown {
     { name: "an empty message", body: base({ message: "" }), code: "message-required" },
     { name: "seq 0", body: base({ seq: 0 }), code: "bad-seq" },
     { name: "an unsafe integer", body: base({ validFrom: 2 ** 60, validUntil: 2 ** 60 + 1 }), code: "bad-time" },
+    { name: "a policy-update without a date", body: policyBody({ eventAt: 0 }), code: "event-required" },
+    { name: "a policy-update whose date is outside the window", body: policyBody({ eventAt: T0 + 29 * DAY }), code: "bad-event-at" },
+    { name: "a policy-update with a message", body: policyBody({ message: "Our privacy policy changes on {date}." }), code: "message-not-allowed" },
+    { name: "a policy-update with a minimum", body: policyBody({ platforms: { ios: { minBuild: 5, minProtocol: 0 } } }), code: "minimum-not-allowed" },
+    { name: "a policy-update with a lock", body: policyBody({ lockFrom: T0 + DAY }), code: "lock-from-not-allowed" },
+    { name: "a policy-update that deprecates a protocol", body: policyBody({ deprecatesProtocol: 1 }), code: "deprecates-not-allowed" },
+    { name: "a policy-update with an advisory id", body: policyBody({ advisoryId: "FSA-2026-001" }), code: "advisory-not-allowed" },
+    { name: "a policy-update with a reason", body: policyBody({ reason: "Because." }), code: "reason-not-allowed" },
   ];
 
   const ios = (build: number, protocol = 1): SecurityNoticeClient => ({ platform: "ios", build, protocol });
@@ -167,6 +185,13 @@ export function buildSecurityNoticeVectors(): unknown {
     o("update-required with no window locks at once", immediate, ios(11, 1), T0 + 1),
     o("update-required is not yet valid", lock, ios(11, 1), T0 - 1),
     o("none shows nothing", clear, ios(1), T0 + DAY),
+    o("policy-update shows before its date", policy, ios(1), T0 + DAY),
+    o("policy-update still shows after its date", policy, android(1), T0 + 20 * DAY),
+    o("policy-update shows to every build, however new", policy, web(100000, 9), T0 + DAY),
+    o("policy-update is not yet valid", policy, ios(1), T0 - 1),
+    o("policy-update has expired at validUntil", policy, ios(1), T0 + 28 * DAY),
+    o("policy-update for one platform shows there", policyWeb, web(1), T0 + DAY),
+    o("policy-update for one platform is silent elsewhere", policyWeb, ios(1), T0 + DAY),
   ];
 
   const store = (highestSeq: number, notice: SecurityNotice | null): SecurityNoticeStore => ({ highestSeq, notice });
@@ -190,6 +215,8 @@ export function buildSecurityNoticeVectors(): unknown {
     acc("an empty response changes nothing", store(3, lock), null, [authorityPub]),
     acc("garbage changes nothing", store(3, lock), { type: "SecurityNotice" }, [authorityPub]),
     acc("a tampered notice is refused", store(0, null), tamper(lock, { reason: "x" }), [authorityPub]),
+    acc("a policy-update replaces a stored maintenance notice", store(1, maintenance), policy, [authorityPub]),
+    acc("an unknown kind changes nothing", store(1, maintenance), tamper(policy, { kind: "policy-later" }), [authorityPub]),
   ];
 
   // The canonical problem codes must agree with what parse enforces.
@@ -204,7 +231,7 @@ export function buildSecurityNoticeVectors(): unknown {
 
   return {
     about:
-      "flagship/security-notice/v1 (docs/security-notices.md). canonical: the exact signed string. positive: notices that parse and verify under keys.authorityPubHex. reject: notices that must not be accepted, with the reason (malformed = fails the rules before any signature check; signature-invalid; unauthorized-signer). unsignable: bodies that break a rule, so no canonical string exists (code = the first rule broken, checked in the order the spec lists). outcomes: what a verified notice shows for a client at a clock (none/banner/lock). accept: how a stored state absorbs a fetched candidate (anti-rollback, fail open); expect.seq is the seq of the notice kept, or null. Seeds are raw Ed25519 seeds. All times are epoch ms; T0 = 1792000000000.",
+      "flagship/security-notice/v1 (docs/security-notices.md). canonical: the exact signed string. positive: notices that parse and verify under keys.authorityPubHex. reject: notices that must not be accepted, with the reason (malformed = fails the rules before any signature check; signature-invalid; unauthorized-signer). unsignable: bodies that break a rule, so no canonical string exists (code = the first rule broken, checked in the order the spec lists). outcomes: what a verified notice shows for a client at a clock (none/banner/lock; a banner's style is maintenance, update or policy). accept: how a stored state absorbs a fetched candidate (anti-rollback, fail open); expect.seq is the seq of the notice kept, or null. Seeds are raw Ed25519 seeds. All times are epoch ms; T0 = 1792000000000.",
     keys: {
       authoritySeedHex: bytesToHex(authoritySeed),
       authorityPubHex: authorityPub,

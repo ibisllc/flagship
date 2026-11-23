@@ -62,6 +62,15 @@ const bytes = canonicalSecurityNotice(classical, classical.signedBy);
 const pqSig = (k: typeof K) => hex(hybridSign(k.secretKey, TAG_SECURITY_NOTICE, bytes, { deterministic: true }));
 const hybrid: SecurityNotice = { ...classical, pq: { binding: K.binding, signature: pqSig(K) } };
 
+const policyClassical = signSecurityNotice(
+  { seq: 8, kind: "policy-update", validFrom: T0, validUntil: T0 + 28 * 86_400_000, eventAt: T0 + 14 * 86_400_000, lockFrom: 0, platforms: {}, advisoryId: "", deprecatesProtocol: 0, reason: "", message: "" },
+  authority,
+);
+const policyHybrid: SecurityNotice = {
+  ...policyClassical,
+  pq: { binding: K.binding, signature: hex(hybridSign(K.secretKey, TAG_SECURITY_NOTICE, canonicalSecurityNotice(policyClassical, policyClassical.signedBy), { deterministic: true })) },
+};
+
 const cases: { name: string; notice: unknown }[] = [
   { name: "classical-only", notice: classical },
   { name: "hybrid", notice: hybrid },
@@ -76,6 +85,9 @@ const cases: { name: string; notice: unknown }[] = [
   { name: "pq-binding-substituted-mldsa", notice: { ...hybrid, pq: { binding: { ...K.binding, mldsaPubHex: OTHER.binding.mldsaPubHex }, signature: pqSig(K) } } },
   { name: "pq-classical-length", notice: { ...hybrid, pq: { ...hybrid.pq!, signature: classical.signature } } },
   { name: "pq-extra-field", notice: { ...hybrid, pq: { ...hybrid.pq!, extra: 1 } } },
+  { name: "policy-update-classical-only", notice: policyClassical },
+  { name: "policy-update-hybrid", notice: policyHybrid },
+  { name: "policy-update-pq-over-moved-date", notice: { ...policyHybrid, eventAt: T0 + 15 * 86_400_000 } },
 ];
 
 const pinned = [K.keyId];

@@ -98,6 +98,34 @@ describe("security-notice body", () => {
     expect(body.message).toBe("");
   });
 
+  it("policy: a dated, messageless banner the protocol accepts", () => {
+    const { body, errors, warnings } = sn.buildBody(args("policy", "--event-at", "2026-11-05"), { now: NOW, root });
+    expect(errors).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(body.kind).toBe("policy-update");
+    expect(body.eventAt).toBe(Date.parse("2026-11-05T12:00:00Z"));
+    expect(body.message).toBe("");
+    expect(body.validFrom).toBe(NOW);
+    expect(body.validUntil).toBe(Math.min(body.eventAt + 14 * DAY, NOW + 30 * DAY));
+    expect(() => sn.canonicalOrExplain(body, "ab".repeat(32))).not.toThrow();
+    expect(securityNoticeOutcome({ ...body, type: "SecurityNotice", version: 1, signedBy: "ab".repeat(32), signature: "" }, { platform: "android", build: 1, protocol: 1 }, NOW).action).toBe("banner");
+    const web = sn.buildBody(args("policy", "--event-at", "2026-11-05", "--platform", "web"), { now: NOW, root });
+    expect(web.errors).toEqual([]);
+    expect(web.body.platforms).toEqual({ web: { minBuild: 0, minProtocol: 0 } });
+  });
+
+  it("policy: needs --event-at, takes no message, and wants 14 days' notice", () => {
+    expect(() => sn.buildBody(args("policy"), { now: NOW, root })).toThrow(/--event-at/);
+    expect(() => sn.buildBody(args("policy", "--event-at", "2026-11-05", "--message", "Hi."), { now: NOW, root })).toThrow(/no --message/);
+    expect(() => sn.buildBody(args("policy", "--event-at", "2026-11-05", "--lock-at", "now"), { now: NOW, root })).toThrow(/--lock-at only goes with required/);
+    expect(() => sn.buildBody(args("maintenance", "--event-at", "2026-11-05", "--message", "Hi."), { now: NOW, root })).toThrow(/--event-at only goes with policy/);
+    expect(sn.buildBody(args("policy", "--event-at", "2026-10-25"), { now: NOW, root }).warnings.join(" ")).toMatch(/at least 14 days/);
+    expect(sn.buildBody(args("policy", "--event-at", "2026-10-01"), { now: NOW, root }).errors.join(" ")).toMatch(/before the notice starts/);
+    expect(sn.buildBody(args("policy", "--event-at", "2026-12-31"), { now: NOW, root }).errors.join(" ")).toMatch(/more than 30 days/);
+    const { body } = sn.buildBody(args("policy", "--event-at", "2026-11-05", "--platform", "ios:12"), { now: NOW, root });
+    expect(() => sn.canonicalOrExplain(body, "ab".repeat(32))).toThrow(/bare platform names/);
+  });
+
   it("keeps seq above everything ever signed and refuses a lower one", () => {
     const r = tmpRoot();
     fs.mkdirSync(path.join(r, "notices", "history"), { recursive: true });
@@ -218,6 +246,16 @@ describe("security-notice command line", () => {
     expect(r.status, r.stdout + r.stderr).toBe(0);
     expect(r.stdout).toMatch(/DRY RUN: nothing signed, nothing written/);
     expect(r.stdout).toMatch(/flagship\/security-notice\/v1\|/);
+    expect(fs.existsSync(path.join(root, "notices"))).toBe(false);
+  });
+
+  it("previews a policy notice with the apps' own sentence", () => {
+    const root = tmpRoot();
+    const r = run(["policy", "--event-at", "+20d", "--path", root, "--signing-key", "file:/nonexistent"]);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toMatch(/kind: +policy-update/);
+    expect(r.stdout).toMatch(/Our privacy policy changes on \{date\}/);
+    expect(r.stdout).toMatch(/\|policy-update\|/);
     expect(fs.existsSync(path.join(root, "notices"))).toBe(false);
   });
 

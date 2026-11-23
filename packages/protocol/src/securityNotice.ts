@@ -19,6 +19,11 @@
  *   update-required  the banner, then from `lockFrom` the lock; only for a
  *                    security reason, so `advisoryId` and `reason` are
  *                    mandatory and cannot be left out of the signed bytes
+ *   policy-update    a dismissible banner: the privacy policy changes on
+ *                    `eventAt` (required). It carries no message: each app
+ *                    shows its own translated sentence and its own link to
+ *                    the policy. Builds from before this kind refuse it as
+ *                    malformed and show nothing (fail open).
  *
  * The notice carries no URL: the store link comes from the app itself.
  */
@@ -45,7 +50,7 @@ export const SECURITY_NOTICE_MAX_REASON = 160;
  */
 export const CLIENT_PROTOCOL_LEVEL = 1;
 
-export const SECURITY_NOTICE_KINDS = ["none", "maintenance", "update-advisory", "update-required"] as const;
+export const SECURITY_NOTICE_KINDS = ["none", "maintenance", "update-advisory", "update-required", "policy-update"] as const;
 export type SecurityNoticeKind = (typeof SECURITY_NOTICE_KINDS)[number];
 
 export const SECURITY_NOTICE_PLATFORMS = ["android", "ios", "web"] as const;
@@ -65,11 +70,11 @@ export interface SecurityNoticeBody {
   validFrom: number;
   /** ... to here (exclusive), at most 30 days later. */
   validUntil: number;
-  /** epoch ms the message's `{date}` stands for, or 0. */
+  /** epoch ms the message's `{date}` stands for, or 0; policy-update: when the new policy takes effect (required). */
   eventAt: number;
   /** update-required only: epoch ms the lock starts, in [validFrom, validUntil). */
   lockFrom: number;
-  /** Who it is about. Empty only for none and maintenance (= everyone). */
+  /** Who it is about. Empty only for none, maintenance and policy-update (= everyone). */
   platforms: Partial<Record<SecurityNoticePlatform, SecurityNoticeMinimum>>;
   /** The security advisory this answers; required for update-required. */
   advisoryId: string;
@@ -179,6 +184,9 @@ export function canonicalSecurityNotice(b: SecurityNoticeBody, signedBy: string)
     if (entries.length) throw new SecurityNoticeError("platforms-not-allowed");
     if (b.message !== "") throw new SecurityNoticeError("message-not-allowed");
     if (b.eventAt !== 0) throw new SecurityNoticeError("bad-event-at");
+  } else if (b.kind === "policy-update") {
+    if (b.eventAt === 0) throw new SecurityNoticeError("event-required");
+    if (b.message !== "") throw new SecurityNoticeError("message-not-allowed");
   } else if (b.message === "") {
     throw new SecurityNoticeError("message-required");
   }
@@ -401,7 +409,7 @@ export type SecurityNoticeWhy = "kind-none" | "not-yet" | "expired" | "other-pla
 
 export type SecurityNoticeOutcome =
   | { action: "none"; why: SecurityNoticeWhy }
-  | { action: "banner"; style: "maintenance" | "update"; notice: SecurityNotice }
+  | { action: "banner"; style: "maintenance" | "update" | "policy"; notice: SecurityNotice }
   | { action: "lock"; notice: SecurityNotice };
 
 /** Is this client below the notice's minimum for its platform? (false when the platform isn't listed.) */
@@ -420,11 +428,11 @@ export function securityNoticeOutcome(n: SecurityNotice, c: SecurityNoticeClient
   if (n.kind === "none") return { action: "none", why: "kind-none" };
   if (now < n.validFrom) return { action: "none", why: "not-yet" };
   if (now >= n.validUntil) return { action: "none", why: "expired" };
-  if (n.kind === "maintenance") {
+  if (n.kind === "maintenance" || n.kind === "policy-update") {
     if (Object.keys(n.platforms).length > 0 && !n.platforms[c.platform]) {
       return { action: "none", why: "other-platform" };
     }
-    return { action: "banner", style: "maintenance", notice: n };
+    return { action: "banner", style: n.kind === "maintenance" ? "maintenance" : "policy", notice: n };
   }
   if (!n.platforms[c.platform]) return { action: "none", why: "other-platform" };
   if (!clientBelowMinimum(n, c)) return { action: "none", why: "up-to-date" };
@@ -479,6 +487,14 @@ export function storedSecurityNoticeOutcome(
   if (!n) return { action: "none", why: "kind-none" };
   if (!verifySecurityNotice(n, authorityKeys, pqKeyIds).ok) return { action: "none", why: "kind-none" };
   return securityNoticeOutcome(n, client, now);
+}
+
+/**
+ * Has a policy-update's date passed at `now`? The apps say "changes on" before
+ * it and "changed on" from it on.
+ */
+export function policyChangeInEffect(n: SecurityNoticeBody, now: number): boolean {
+  return n.kind === "policy-update" && now >= n.eventAt;
 }
 
 /** Replace `{date}` with the caller's rendering of eventAt. */

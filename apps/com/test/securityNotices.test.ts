@@ -74,6 +74,14 @@ describe("GET /api/notices", () => {
     expect(b.headers.get("set-cookie")).toBeNull();
   });
 
+  it("serves a privacy policy notice like any other kind", async () => {
+    const policy = signSecurityNotice({ ...body, seq: 2, kind: "policy-update", validUntil: T0 + 28 * DAY, eventAt: T0 + 14 * DAY, message: "" }, authority);
+    const res = await handleSecurityNotices(get(), {}, undefined, { notice: policy, mandates: caTrustChainPublicMaterial().mandates });
+    expect(res.status).toBe(200);
+    const doc = (await res.json()) as { notice: unknown };
+    expect(parseSecurityNotice(doc.notice)).toMatchObject({ kind: "policy-update", eventAt: T0 + 14 * DAY, message: "" });
+  });
+
   it("answers a conditional request with 304 and no body", async () => {
     const deps = { notice };
     const first = await handleSecurityNotices(get(), {}, undefined, deps);

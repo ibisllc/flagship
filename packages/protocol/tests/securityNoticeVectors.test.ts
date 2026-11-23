@@ -6,6 +6,7 @@ import {
   canonicalSecurityNotice,
   clientBelowMinimum,
   parseSecurityNotice,
+  policyChangeInEffect,
   securityNoticeOutcome,
   securityNoticeProblem,
   securityNoticeText,
@@ -175,5 +176,15 @@ describe("security notice rules", () => {
       authority,
     );
     expect(securityNoticeText(n, () => "Tue 21 Oct")).toBe("We update on Tue 21 Oct, Tue 21 Oct.");
+  });
+
+  it("a policy-update says 'changes' before its date and 'changed' from it", () => {
+    const n = signSecurityNotice(
+      body({ kind: "policy-update", lockFrom: 0, advisoryId: "", reason: "", platforms: {}, deprecatesProtocol: 0, eventAt: T0 + 7 * DAY, message: "" }),
+      authority,
+    );
+    expect(policyChangeInEffect(n, T0 + 7 * DAY - 1)).toBe(false);
+    expect(policyChangeInEffect(n, T0 + 7 * DAY)).toBe(true);
+    expect(policyChangeInEffect({ ...n, kind: "maintenance" }, T0 + 8 * DAY)).toBe(false);
   });
 });

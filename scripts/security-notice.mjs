@@ -20,15 +20,21 @@
 //   node scripts/security-notice.mjs required    --message "You must update Flagship by {date}." --event 2026-11-01T00:00:00Z --lock-at 2026-11-01T00:00:00Z \
 //        --platform ios:12 --platform android:40 --platform web:150 --deprecate-protocol 1 \
 //        --advisory FSA-2026-001 --security-reason "A flaw in how a signed message is checked lets an attacker act as you."
+//   node scripts/security-notice.mjs policy      --event-at 2026-12-09 [--from ...] [--until ...] [--platform web]
+//        (the privacy policy changes on that day; each app shows its own translated sentence and link)
 //   node scripts/security-notice.mjs clear       (a signed all clear: supersedes the current notice)
 //
 //   --message <text>          shown to people; "{date}" becomes the local rendering of --event
 //   --event <time>            the date the message talks about
+//   --event-at <date>         policy: the day the new privacy policy takes effect (a date is taken at
+//                             12:00 UTC, so it is the same day nearly everywhere); send it at least
+//                             14 days before
 //   --from <time>             first moment it is shown (default: now)
 //   --until <time>            last moment (exclusive); at most 30 days after --from.
-//                             default: maintenance = event + 1 day; others = from + 30 days
+//                             default: maintenance = event + 1 day; policy = event + 14 days (capped
+//                             at 30 days after --from); others = from + 30 days
 //   --platform <name>[:<minBuild>[:<minProtocol>]]   repeatable; ios | android | web.
-//                             maintenance: a bare name limits it to that platform.
+//                             maintenance, policy: a bare name limits it to that platform.
 //   --lock-at <time|now>      required: when the lock starts ("now" = no grace window)
 //   --deprecate-protocol <N>  required: boxes and .com stop accepting protocol N and lower at --lock-at
 //                             (a platform given without a minProtocol then gets N+1)
@@ -84,14 +90,18 @@ export const KIND_BY_VERB = {
   advisory: "update-advisory",
   required: "update-required",
   clear: "none",
+  policy: "policy-update",
 };
+
+/** How long before a policy change the notice should start (docs/security-notices.md §8). */
+export const POLICY_NOTICE_LEAD_MS = 14 * DAY;
 
 export class UsageError extends Error {}
 
 // ---- argument parsing ------------------------------------------------------
 
 const VALUE_FLAGS = new Set([
-  "message", "event", "from", "until", "platform", "lock-at", "deprecate-protocol",
+  "message", "event", "event-at", "from", "until", "platform", "lock-at", "deprecate-protocol",
   "advisory", "security-reason", "seq", "signing-key", "path", "key-file", "identity", "fake-yubikey",
 ]);
 const BOOL_FLAGS = new Set(["sign", "supersede-lock", "allow-unshipped", "help", "no-pq"]);
@@ -128,6 +138,16 @@ export function parseArgs(argv) {
     }
   }
   return out;
+}
+
+/** policy --event-at: a date is taken at 12:00 UTC (the same calendar day from UTC-11 to UTC+11); a full instant as given. */
+export function parsePolicyDay(raw, now) {
+  const s = String(raw ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const t = Date.parse(`${s}T12:00:00Z`);
+    if (Number.isFinite(t)) return t;
+  }
+  return parseTime(s, now, "--event-at");
 }
 
 /** "now", "+6h", an ISO instant or a date → epoch ms. */
@@ -258,7 +278,22 @@ export function buildBody(args, { now, root }) {
   const warnings = [];
 
   const validFrom = args.from ? parseTime(args.from, now, "--from") : now;
-  const eventAt = args.event ? parseTime(args.event, now, "--event") : 0;
+  if (kind === "policy-update") {
+    if (!args.eventAt) throw new UsageError("policy needs --event-at <YYYY-MM-DD>: the day the new privacy policy takes effect.");
+    if (args.event) throw new UsageError("policy takes --event-at, not --event");
+    if (args.message !== undefined) {
+      throw new UsageError("policy takes no --message: each app shows its own sentence in the person's language, and its own link to the policy.");
+    }
+    if (args.advisory) throw new UsageError("--advisory only goes with advisory or required");
+  } else if (args.eventAt) {
+    throw new UsageError("--event-at only goes with policy (the other kinds take --event)");
+  }
+  const eventAt =
+    kind === "policy-update"
+      ? parsePolicyDay(args.eventAt, now)
+      : args.event
+        ? parseTime(args.event, now, "--event")
+        : 0;
 
   if (kind === "update-required") {
     if (!args.advisory) {
@@ -283,6 +318,7 @@ export function buildBody(args, { now, root }) {
   let validUntil;
   if (args.until) validUntil = parseTime(args.until, now, "--until");
   else if (kind === "maintenance" && eventAt) validUntil = eventAt + DAY;
+  else if (kind === "policy-update") validUntil = Math.min(eventAt + POLICY_NOTICE_LEAD_MS, validFrom + SECURITY_NOTICE_MAX_WINDOW_MS);
   else if (kind === "maintenance" || kind === "none") validUntil = validFrom + 7 * DAY;
   else validUntil = validFrom + SECURITY_NOTICE_MAX_WINDOW_MS;
 
@@ -292,7 +328,7 @@ export function buildBody(args, { now, root }) {
   }
   const platforms = parsePlatforms(args.platform, kind, deprecatesProtocol);
   const lockFrom = kind === "update-required" ? parseTime(args.lockAt, now, "--lock-at") : 0;
-  const message = kind === "none" ? "" : String(args.message ?? "");
+  const message = kind === "none" || kind === "policy-update" ? "" : String(args.message ?? "");
   const reason = kind === "update-required" || kind === "update-advisory" ? String(args.securityReason ?? "") : "";
 
   const seq = args.seq !== undefined ? Number(args.seq) : highestSignedSeq(root) + 1;
@@ -300,7 +336,19 @@ export function buildBody(args, { now, root }) {
   const highest = highestSignedSeq(root);
   if (seq <= highest) errors.push(`seq ${seq} is not above ${highest}, the highest ever signed: apps ignore it as a rollback`);
 
-  for (const [text, label] of [[message, "message"], [reason, "security reason"]]) {
+  if (kind === "policy-update") {
+    if (eventAt < validFrom) {
+      errors.push("--event-at is before the notice starts: send a policy notice before the change, not after it");
+    } else if (eventAt > validFrom + SECURITY_NOTICE_MAX_WINDOW_MS) {
+      errors.push("--event-at is more than 30 days after the notice starts (a notice lasts at most 30 days): send it later, or set --from");
+    } else if (eventAt - validFrom < POLICY_NOTICE_LEAD_MS) {
+      warnings.push(
+        `the policy changes ${Math.floor((eventAt - validFrom) / DAY)} days after the notice starts; the privacy policy promises people are told before a change that reduces their privacy, so give at least 14 days`,
+      );
+    }
+  }
+
+  for (const [text, label] of kind === "policy-update" ? [] : [[message, "message"], [reason, "security reason"]]) {
     const l = lintText(text, label);
     errors.push(...l.errors);
     warnings.push(...l.warnings);
@@ -371,7 +419,7 @@ const RULE_TEXT = {
   "reason-required": "update-required needs --security-reason",
   "platforms-required": "advisory and required need at least one --platform name:minBuild[:minProtocol]",
   "minimum-required": "every --platform on advisory and required needs a minBuild or a minProtocol above 0",
-  "minimum-not-allowed": "maintenance takes bare platform names, no minimums",
+  "minimum-not-allowed": "maintenance and policy take bare platform names, no minimums",
   "bad-lock-from": "--lock-at must be inside the window: not before --from and before --until",
   "deprecates-not-enforced": "every platform's minProtocol must be above --deprecate-protocol, or old clients would not lock",
   "message-has-link": "no links in a notice; the apps supply their own store link",
@@ -379,6 +427,7 @@ const RULE_TEXT = {
   "message-required": "give --message",
   "date-token-needs-event": "the message has {date} but there is no --event",
   "bad-event-at": "--event must be inside the window",
+  "event-required": "policy needs --event-at",
 };
 
 // ---- preview -------------------------------------------------------------------------
@@ -394,6 +443,13 @@ export function describeImpact(body, now) {
       break;
     case "maintenance":
       lines.push(`${who}: a dismissible banner from ${fmt(body.validFrom)} until ${fmt(body.validUntil)}.`);
+      break;
+    case "policy-update":
+      lines.push(
+        `${who}: a dismissible banner from ${fmt(body.validFrom)} until ${fmt(body.validUntil)}, in each app's own words and language: ` +
+          `"Our privacy policy changes on {date}." until ${fmt(body.eventAt)}, then "Our privacy policy changed on {date}.", with "Read the policy".`,
+      );
+      lines.push("Old builds that do not know this kind show nothing (they refuse it as malformed and keep what they had).");
       break;
     case "update-advisory":
       for (const [p, m] of Object.entries(body.platforms)) {
@@ -522,7 +578,7 @@ async function main() {
   out(`  kind:             ${body.kind}`);
   out(`  seq:              ${body.seq}`);
   out(`  shown:            ${fmt(body.validFrom)}  to  ${fmt(body.validUntil)} (exclusive)`);
-  if (body.eventAt) out(`  date in message:  ${fmt(body.eventAt)}`);
+  if (body.eventAt) out(`  ${body.kind === "policy-update" ? "policy changes:  " : "date in message: "} ${fmt(body.eventAt)}`);
   if (body.lockFrom) out(`  lock starts:      ${fmt(body.lockFrom)}${body.lockFrom <= now ? "  (already: no grace window)" : ""}`);
   if (body.advisoryId) out(`  advisory:         ${body.advisoryId}`);
   if (body.reason) out(`  security reason:  ${body.reason}`);
