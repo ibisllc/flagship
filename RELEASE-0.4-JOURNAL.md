@@ -1902,3 +1902,19 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   status-0 guard); found worse: re-begin overwrites a live TOTP secret from any device, an unconfirmed secret counts
   for re-pair. Owner: admin-only on/off, D1 hourly counters (no Workers Logs), "Code protection" everywhere, fix all;
   agent building on 0.4/totp-fix (migration likely 0160). Reporter asked for browser/console details.
+- 2026-11-23 security, continued. **F2** merged and deployed (D1 **0160**; webapp shell v251; `.com` catch-all JSON 500
+  with CORS; code protection admin-only, staged, counted; "Code protection" everywhere). My slip: 0160 was stamped
+  in the ledger ~1 min before the file ran (a failed merge in a chained command); applied at once, no effect.
+  **F3** (Aldi) merged and deployed (D1 **0161**; shell v252): re-pair GET behind the account read token (401
+  otherwise), single-use initiates and credentials, replay refusals, 24 h block after an admin veto. Needs an
+  ENDORSED BOX RELEASE (watcher reads with the box read token; old boxes fail safe: no re-pair applied until updated).
+  **F4** (Aldi) merged and deployed (no migration; shell v253): atomic invite cap on `.com`, the redeemer's own AID,
+  redeem rate limit, the other count-then-insert caps made atomic, manual approval removed (accept refused), box:
+  per-invite cap in bindJoin, same first N on every box, join Activity entry (also in Rust flagship-access). Our
+  own finds (d) shared identity for later group redeemers, (e) unauthenticated accept: no credit to the reporter
+  (owner). Box side needs the ENDORSED BOX RELEASE too. Aldi's 3 live over-cap test invites revoked (owner OK).
+  **F5** = duplicate of F1. Privacy §10 now promises no email: release notes + an in-app notice before a change
+  that reduces privacy (0.5 list item); 0.4 release notes and blog mention the §2.12 addition. Found while merging:
+  Android AccountSecurityFlowTest still ran as a non-admin device after F2 (fixed). RESUME POINT: owner endorses a
+  box release from main (F3 + F4 box changes, daemon + Rust flagship-access in one artifact); send the reporter
+  emails (drafts in session); iPhone Debug build to retest an app-placed call; Android build 14.
