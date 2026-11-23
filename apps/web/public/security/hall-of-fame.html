@@ -93,33 +93,6 @@
         records in it, instead of patching it.
       </p>
 
-      <h2>Turning on code protection in the webapp failed with a misleading &ldquo;Network error&rdquo;</h2>
-      <p class="hof-meta">
-        Low &middot; reported and fixed November 2026 &middot; fix
-        <a href="https://github.com/ibisllc/flagship/commit/321bc1de">321bc1de</a>
-        and
-        <a href="https://github.com/ibisllc/flagship/commit/9dc6ffed">9dc6ffed</a>
-        &middot; credit pending the reporter&rsquo;s preference
-      </p>
-      <p>
-        Turning on code protection (a second factor for account recovery)
-        from the webapp could fail with &ldquo;Network error, check your
-        connection&rdquo; while the connection was fine. When our server
-        failed on a request, its answer lacked the header that lets the
-        webapp read it, so the browser reported a network failure, and the
-        webapp called many other failures a network error too. Nothing was
-        exposed, but a user could not turn the protection on from the browser
-        and was not told why.
-      </p>
-      <p>
-        Our server now answers every failure in a form the webapp can read,
-        and the webapp names each cause separately. Looking at this flow, we
-        also tightened it: starting the setup again no longer replaces a
-        working authenticator, a setup that was never finished no longer
-        counts as a second factor, and only an admin device can turn code
-        protection on or off.
-      </p>
-
       <h2>Account recovery state was public, and a cancelled recovery could be restarted by replaying it</h2>
       <p class="hof-meta">
         Low &middot; reported and fixed November 2026 &middot; fix
