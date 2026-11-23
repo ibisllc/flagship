@@ -3991,5 +3991,9 @@
   "Turn off code protection?": "Désactiver la protection par code ?",
   "Confirm with your code": "Confirmez avec votre code",
   "Enter a live 6-digit code from your authenticator (or a recovery code) to turn code protection off.": "Saisissez un code à 6 chiffres actuel de votre authentificateur (ou un code de récupération) pour désactiver la protection par code.",
-  "Code protection is off.": "La protection par code est désactivée."
+  "Code protection is off.": "La protection par code est désactivée.",
+  "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.": "Un administrateur de ce compte a refusé une récupération avec cet appareil il y a moins d’un jour. Vous pourrez réessayer après un jour, ou demandez à l’administrateur.",
+  "This recovery request was already used. Start the recovery again.": "Cette demande de récupération a déjà été utilisée. Recommencez la récupération.",
+  "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "Ce code a déjà servi pour une récupération. Attendez un nouveau code, ou refaites l’étape de récupération, puis réessayez.",
+  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "L’horloge de cet appareil ne correspond pas à celle de Flagship. Réglez la date et l’heure sur automatique, puis réessayez."
 }

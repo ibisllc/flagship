@@ -231,6 +231,25 @@ describe("P10 — error mapping", () => {
     ).rejects.toMatchObject({ code: "409" });
   });
 
+  it("words the re-pair refusals that carry a code (security report F3)", async () => {
+    const cases: Array<[number, string, RegExp]> = [
+      [409, "re-pair-vetoed-recently", /rejected a recovery with this device less than a day ago/],
+      [409, "re-pair-replay", /already used\. Start the recovery again/],
+      [409, "re-pair-cancelled-replay", /already used\. Start the recovery again/],
+      [409, "re-pair-credential-used", /That code was already used/],
+      [403, "re-pair-stale", /clock doesn't match/],
+    ];
+    for (const [status, code, sentence] of cases) {
+      const fakeFetch = mockFetchOnce(status, { error: "x", code });
+      const err = await runReplaceDeviceCeremony(
+        { username: USERNAME, umk: FIXED_UMK, ifMatch: null },
+        { fetch: fakeFetch as any },
+      ).catch((e) => e);
+      expect(err.message, code).toMatch(sentence);
+      expect(err.refusalCode).toBe(code);
+    }
+  });
+
   it("maps 401 to a TOTP-required surface", async () => {
     const fakeFetch = mockFetchOnce(401, { error: "totpProof required" });
     await expect(
@@ -567,6 +586,28 @@ describe("P10 — fetchPendingRePair", () => {
     );
     expect(out.pending).toBeNull();
     expect(out.unavailable).toBeUndefined();
+  });
+
+  it("reads through the account read token door, as /pods (security report F3)", async () => {
+    const door = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ pending: null }),
+      text: async () => "",
+    }));
+    const out = await fetchPendingRePair(
+      { username: USERNAME },
+      { accountReadFetch: door as any, origin: "https://flagshipserver.com" },
+    );
+    expect(out.pending).toBeNull();
+    expect(door).toHaveBeenCalledTimes(1);
+    expect((door.mock.calls[0] as any)[0]).toBe("https://flagshipserver.com/api/users/harry/re-pair");
+  });
+
+  it("hides the banner when the read is refused (401), as /pods pauses", async () => {
+    const fakeFetch = vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}), text: async () => "" }));
+    const out = await fetchPendingRePair({ username: USERNAME }, { fetch: fakeFetch as any });
+    expect(out).toEqual({ pending: null, unavailable: true, unauthorized: true });
   });
 
   it("returns { pending: null, unavailable: true } on a 404/405 (older Worker)", async () => {

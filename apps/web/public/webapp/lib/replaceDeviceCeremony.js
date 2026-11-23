@@ -34,6 +34,8 @@
 // All network state lives in arguments; dependency injection lets the
 // vitest suite drive the helpers without browser globals.
 
+import { accountReadFetch } from "./accountRead.js";
+import { rePairRefusalTextOf } from "./rePairRefusal.js";
 import {
   deriveIrkFromSeed,
   deriveIrkVersioned,
@@ -216,6 +218,10 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
       { currentEtag: parsed?.currentEtag ?? null },
     );
   }
+  const refusal = rePairRefusalTextOf(text);
+  if (refusal) {
+    throw makeError(refusal, String(resp.status), { refusalCode: JSON.parse(text).code });
+  }
   if (resp.status === 409) {
     throw makeError(tr("A device replacement is already pending on this account."), "409");
   }
@@ -363,17 +369,25 @@ export async function fetchPendingRePair(args, deps = {}) {
   if (!username) throw makeError("username required", "400");
   const f = deps.fetch || fetch;
   const origin = deps.origin || APEX;
+  // An account read since security report F3: the read token goes with it, as on /pods.
+  const read = deps.accountReadFetch || accountReadFetch;
   let resp;
   try {
-    resp = await f(
+    resp = await read(
       `${origin}/api/users/${encodeURIComponent(username)}/re-pair`,
       { method: "GET", cache: "no-store" },
+      { fetch: f },
     );
   } catch (e) {
     throw makeError(`network: ${e?.message ?? e}`, "network");
   }
   if (resp.status === 404 || resp.status === 405) {
     return { pending: null, unavailable: true };
+  }
+  // No token could be minted (the account is locked in this tab): like /pods,
+  // the read pauses; the banner hides until the next unlock.
+  if (resp.status === 401 || resp.status === 403) {
+    return { pending: null, unavailable: true, unauthorized: true };
   }
   if (resp.status !== 200) {
     const text = await resp.text().catch(() => "");

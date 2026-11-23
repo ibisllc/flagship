@@ -51,6 +51,9 @@ describe("accountReadFetch", () => {
     expect(accountReadUsername(`https://com.test/api/users/${U}/allowance`)).toBe(U);
     expect(accountReadUsername(`https://com.test/api/users/${U}/apps/${U}--family/rename`)).toBeNull();
     expect(accountReadUsername(`https://com.test/api/users/${U}/pubkey-cert`)).toBeNull();
+    // The pending re-pair is an account read (security report F3); its POSTs are not reads.
+    expect(accountReadUsername(`https://com.test/api/users/${U}/re-pair`)).toBe(U);
+    expect(accountReadUsername(`https://com.test/api/users/${U}/re-pair/veto`)).toBeNull();
   });
 
   it("mints with the device key, then reads with the token", async () => {

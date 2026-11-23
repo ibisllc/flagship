@@ -3991,5 +3991,9 @@
   "Turn off code protection?": "コード保護をオフにしますか？",
   "Confirm with your code": "コードで確認",
   "Enter a live 6-digit code from your authenticator (or a recovery code) to turn code protection off.": "コード保護をオフにするには、認証アプリの現在の 6 桁コード（またはリカバリーコード）を入力してください。",
-  "Code protection is off.": "コード保護はオフになりました。"
+  "Code protection is off.": "コード保護はオフになりました。",
+  "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.": "このアカウントの管理者が、1 日以内にこのデバイスでのリカバリーを拒否しました。1 日たってからもう一度お試しいただくか、管理者にお問い合わせください。",
+  "This recovery request was already used. Start the recovery again.": "このリカバリーのリクエストはすでに使用されています。リカバリーをもう一度始めてください。",
+  "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "そのコードはすでにリカバリーに使用されています。新しいコードを待つか、リカバリーの手順をやり直してから、もう一度お試しください。",
+  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "このデバイスの時計が Flagship の時計と一致しません。日付と時刻を自動設定にしてから、もう一度お試しください。"
 }

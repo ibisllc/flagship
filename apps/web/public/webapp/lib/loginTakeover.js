@@ -41,6 +41,7 @@
 // unit-testable without IndexedDB / the DOM / the network / a real
 // passkey.
 
+import { rePairRefusalText } from "./rePairRefusal.js";
 import { controlApex } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 
@@ -213,6 +214,12 @@ export async function initiateRePair(args) {
       err.body = JSON.parse(txt);
     } catch {
       err.body = undefined;
+    }
+    // A refusal with a stable code (security report F3) is worded for the person.
+    const refusal = rePairRefusalText(err.body);
+    if (refusal) {
+      err.message = refusal;
+      err.refusalCode = err.body.code;
     }
     throw err;
   }

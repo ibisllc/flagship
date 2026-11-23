@@ -571,7 +571,10 @@
 //  v251: code protection (security report F2): one name on every surface, signed with the admin key (read-only on
 //       other devices), and a sentence per failure (offline, blocked, server, browser, refusal codes) instead of
 //       "Network error" for all of them; humanError no longer reads every TypeError as offline.
-const SHELL_VERSION = "v251";
+//  v252: the pending re-pair read carries the account read token (security report F3: `.com` answers it only to the
+//       account's devices and servers), and the re-pair refusals with a code (a used request or code, a veto in the
+//       last day, a wrong clock) are worded; precaches lib/rePairRefusal.js.
+const SHELL_VERSION = "v252";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -636,6 +639,7 @@ const OPTIONAL_SHELL = [
   "/lib/freshUnlock.js",
   "/lib/boxProxy.js",
   "/lib/totp.js",
+  "/lib/rePairRefusal.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
   "/lib/boxKeyPins.js",

@@ -1,8 +1,8 @@
 // Account read tokens (docs/account-read-token.md).
 //
 // `.com` answers an account's server inventory (`/pods`, `/stream`), device
-// history (`/audit`) and app names (`/apps/aliases`, `/apps/<id>/links`) only
-// to a bearer of a read token for that account. `accountReadFetch` is the one
+// history (`/audit`), app names (`/apps/aliases`, `/apps/<id>/links`) and the
+// pending re-pair (`/re-pair`) only to a bearer of a read token for that account. `accountReadFetch` is the one
 // door for those reads: it attaches the token, mints one silently while the
 // account is unlocked in this tab, re-mints once on a 401, and otherwise keeps
 // going without one. It never prompts. Tokens live in memory only, per
@@ -28,7 +28,7 @@ export const ACCOUNT_READ_TOKEN_LABEL = "account-read-token";
 const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
 /** Re-mint a token this long before `.com` would stop accepting it. */
 const REFRESH_MARGIN_MS = 10 * 60_000;
-const GATED_PATH = /\/api\/users\/([^/?#]+)\/(?:pods|stream|audit|abuse-notices|allowance|purchases|apps\/aliases|apps\/[^/?#]+\/links)(?:[?#]|$)/;
+const GATED_PATH = /\/api\/users\/([^/?#]+)\/(?:pods|stream|audit|re-pair|abuse-notices|allowance|purchases|apps\/aliases|apps\/[^/?#]+\/links)(?:[?#]|$)/;
 
 /** @type {Map<string, { token: string, expiresAt: number }>} */
 const tokens = new Map();

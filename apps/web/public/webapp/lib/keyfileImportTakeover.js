@@ -166,6 +166,7 @@ export async function runKeyfileImportTakeover(args) {
   } catch (err) {
     if (isCredentialRequiredError(err)) throw new SecondFactorRequiredError();
     if (err?.rateLimited) throw err;
+    if (err?.refusalCode) throw new KeyfileImportRefusedError(err.refusalCode, err.message);
     throw keyfileImportRefusal("initiate-failed", username);
   }
 
