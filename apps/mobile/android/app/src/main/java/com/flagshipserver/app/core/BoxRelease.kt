@@ -4,6 +4,6 @@ package com.flagshipserver.app.core
 
 /** The box release new servers install: the default `installerGitRef` is this exact commit. */
 object BoxRelease {
-    const val COMMIT = "5c74756b5fc9923edfe5e0ec2a7dfc1b6f1c4003"
-    const val SEQUENCE = 3
+    const val COMMIT = "3079462b5e9d8a2a1768e774279db12bb3ee5bc8"
+    const val SEQUENCE = 4
 }
