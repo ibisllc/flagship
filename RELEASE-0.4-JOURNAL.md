@@ -1892,3 +1892,13 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   200. Merged 0.4/callback-ux (pop-up without "voi.ci/" + explainer on iOS/Android/site; Call back on a visitor Calls
   row, the call record now keeps the caller's thread key). The material-change notice in privacy §10 (dashboard note,
   email affected account-holders) is the owner's call. Next: security reports, one agent each.
+- 2026-11-23 security reports (owner hands them over one by one; one investigation agent each, write-ups in
+  docs/security/). **F1** /api/user-identity took any self-named signer (anyone could create/overwrite/freeze a row;
+  anonymous 256 KiB writes could fill D1): unused since the account directory replaced it, so REMOVED (caf3ce88d),
+  D1 **0159** drops the table (applied before the push, 5 researcher test rows gone), `POST /api/share-inbox` metered
+  per address (0ca4de157), 0158/0159 in KNOWN_MIGRATIONS (9f83d2121); `.com` deployed (405b8491), both routes 404.
+  Reply drafted for the reporter (bounty/HoF line left to the owner). **F2** "Enable multi-device + 2FA" shows
+  "Network error" on the webapp: misleading error (no top-level catch in route(), every TypeError = network, a
+  status-0 guard); found worse: re-begin overwrites a live TOTP secret from any device, an unconfirmed secret counts
+  for re-pair. Owner: admin-only on/off, D1 hourly counters (no Workers Logs), "Code protection" everywhere, fix all;
+  agent building on 0.4/totp-fix (migration likely 0160). Reporter asked for browser/console details.
