@@ -19,7 +19,11 @@ plugins {
 // One product version for every Flagship surface lives in release/version.json
 // (scripts/check-versions.mjs fails on drift). The store's versionCode only
 // ever climbs; versionName is the product version, About adds the label.
-val releaseVersion = (groovy.json.JsonSlurper().parse(rootProject.file("../../../release/version.json")) as Map<*, *>)
+// Read through providers.fileContents so the configuration cache tracks the file: a plain parse() is not an input,
+// and a cached configuration once built Android 15 with versionCode 14 (2026-11-23).
+val releaseVersion = (groovy.json.JsonSlurper().parseText(
+    providers.fileContents(rootProject.layout.projectDirectory.file("../../../release/version.json")).asText.get()
+) as Map<*, *>)
 
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore/keystore.properties")
@@ -43,7 +47,7 @@ android {
     // Languages come from i18n/locales.json: English plus every language marked "ga" (see app/build.gradle.kts).
     androidResources {
         localeFilters += run {
-            val all = groovy.json.JsonSlurper().parse(rootProject.file("../../../i18n/locales.json")) as Map<*, *>
+            val all = groovy.json.JsonSlurper().parseText(providers.fileContents(rootProject.layout.projectDirectory.file("../../../i18n/locales.json")).asText.get()) as Map<*, *>
             (all["locales"] as List<*>).map { it as Map<*, *> }
                 .filter { it["code"] == all["source"] || it["status"] == "ga" }
                 .map { (it["androidId"] ?: it["code"]) as String }
