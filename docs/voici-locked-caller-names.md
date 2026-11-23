@@ -1,6 +1,7 @@
 # Names on a locked phone: nicknames and ring-back pages (design, 2026-11-22)
 
-Status: **design only**, nothing built. Branch `0.4/android-calls` at `5fbacd74a`. Builds on `docs/voici-calls.md`
+Status: **built** on `0.4/locked-names` (owner agreed D1-D7 as recommended, 2026-11-22); as built and where it
+differs: `docs/voici-calls.md` "As built: names on a locked phone". Designed on `0.4/android-calls` at `5fbacd74a`. Builds on `docs/voici-calls.md`
 ("As built: answering while locked", "Ring-back") and `docs/voici-and-messages.md` (pseudonyms, the sealed Messages
 state). Owner-agreed direction: a small table outside the app lock, OS-encrypted and readable after the first unlock
 since boot (like Contacts), so a locked phone can show (a) the nicknames of visitors the owner has really had calls

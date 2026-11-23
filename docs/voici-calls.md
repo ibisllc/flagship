@@ -467,8 +467,10 @@ Owner decision 2026-11-15, built as designed above. Off by default; on the Socia
   the Keychain `AfterFirstUnlockThisDeviceOnly`, no user presence. Android `calls/VoiciCallKey.kt`: Keystore EC P-256
   without user authentication, StrongBox where the phone has it. Beside the key: account, device, page, the
   ownerSignPub and the binding (public). A VoIP push / call push with the account locked uses only the call key: the
-  caller shows as "Someone on voi.ci" (the inbox key that opens the name is locked) and no local block list is
-  checked (`.com` refuses blocked callers before ringing). After an inbox-key rotation the next unlocked refresh
+  push's sealed caller can't be opened (the inbox key is locked), so the ring shows the visitor name from the room's
+  signed request ("Visitor 4F3A", "Anonymous caller" for a browser key; since `5fbacd74a`), or the owner's nickname
+  when "Show names while locked" is on (next section), and no local block list is checked (`.com` refuses blocked
+  callers before ringing). After an inbox-key rotation the next unlocked refresh
   binds the same key again. Turning the setting off sends an owner-signed revocation; sign-out / removal
   (`Keystore.onWipe`) sends a self-signed one, then deletes the key.
 - **Tests:** protocol vectors (TS replay, flagship-web, Swift `testCallKey`, Kotlin `callKey`), control-plane
@@ -479,6 +481,36 @@ Owner decision 2026-11-15, built as designed above. Off by default; on the Socia
   `onWipe` runs skips the self-revocation (same effect). The answer is still classical-only (P-256), as the owner
   answer is Ed25519-only today.
 
+
+## As built: names on a locked phone (2026-11-22, branch `0.4/locked-names`)
+
+Design and owner decisions D1-D7: `docs/voici-locked-caller-names.md` (all as recommended). Off by default.
+
+- **Settings** (Social, Calls): "Show names while locked" under "Answer calls while Flagship is locked" (shown while
+  that is on; a one-time "Show names on the lock screen?" question when it goes on), or on its own, for ring-back
+  names only, on a device where the answer switch isn't offered (D1). Turning the answer switch off turns names off.
+- **The table** (iOS `Calls/VoiciLockedNames.swift`, Keychain `com.flagship.voici.locked-names`,
+  `AfterFirstUnlockThisDeviceOnly`, no access group; Android `calls/VoiciLockedNames.kt`,
+  `filesDir/voici-locked-names/`, AES-GCM under Keystore `flagship.voici.lockedNames`, excluded in
+  `res/xml/data_extraction_rules.xml`): at most 50 nicknames of visitors with a non-failed call (missed included) in
+  the last 90 days, keyed by `flagship/voici-locked-name/v1` (a hash of the pseudonym), only while the answer switch is
+  on for a page that takes calls; at most 50 ring-back pages keyed by their ring tag key. Rebuilt whole from the
+  unlocked account (iOS: never before the state blob was read this session); erased with either switch, sign-out,
+  Remove this device, account gone and wipe. Never synced, logged or sent.
+- **Ring tag** (`flagship/voici-ring-tag/v1`, vectors `test-vectors/voici/ring-tag.json`): the app sends
+  `ringTagKey` = HKDF(messagesSecret, tag|pageId) beside its pseudonym-signed attach (unsigned, D4); `.com` keeps it in
+  `voici_ring_backs.ring_tag_key` (migration **0158**, apply-once; an attach without one keeps the stored key, like
+  the account) and adds `tag` = first 16 bytes of HMAC(key, ringId) to the ring push (`kind, ringId, hint, room, tag`).
+- **Ring-back while locked**: named "voi.ci/<page> is calling back" when the tag matches (constant time), else
+  "Someone you wrote to is calling back". iOS Answer now asks for the unlock and dials only if the opened hint names
+  the page the table did (`ring-back-tag-mismatch` otherwise; D5 keeps "unlock to call back"); Android's ring opens
+  the app as before.
+- **Where the rings come from**: iOS, this device's own calls to the page (each call to a call-back page attached the
+  channel) minus a "Stop call-backs" made after the last one; Android, its call-back pages. A device that never called
+  the page learns it at its first call to it, not before (no synced record of attached channels exists).
+- **Tests**: protocol vectors (TS, Swift, Kotlin), storage (both adapters), control-plane (`voiciCallModes.test.ts`:
+  stored key, exact push keys, refusals), iOS `VoiciLockedNamesTests`, Android `VoiciLockedNamesTest`. Not run on a
+  device; the Android Keystore file store is not exercised by the JVM tests.
 
 ## Owner decisions, 2026-11-15 (second round)
 
