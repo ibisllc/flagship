@@ -1380,7 +1380,7 @@
     },
     {
       "id": "devices",
-      "title": "Add a device, replace a device, trusted devices, paired sessions",
+      "title": "Add a device, replace a device (coded re-pair refusals), trusted devices, paired sessions",
       "ref": "ios",
       "surfaces": {
         "ios": {
@@ -1402,6 +1402,10 @@
             [
               "apps/mobile/shared/Sources/FlagshipCore/PairingRelay.swift",
               "addDeviceUnavailable"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RePairRefusalText.swift",
+              "\"re-pair-vetoed-recently\""
             ]
           ]
         },
@@ -1420,6 +1424,10 @@
             [
               "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TrustedDevicesScreen.kt",
               "fun "
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/RePairRefusalText.kt",
+              "\"re-pair-vetoed-recently\""
             ]
           ]
         },
@@ -1437,6 +1445,10 @@
             [
               "apps/web/public/webapp/views/trusted-devices.js",
               "export"
+            ],
+            [
+              "apps/web/public/webapp/lib/rePairRefusal.js",
+              "\"re-pair-vetoed-recently\""
             ]
           ]
         }
@@ -1714,7 +1726,7 @@
     },
     {
       "id": "account-read-tokens",
-      "title": "Account read tokens for /pods, /stream, /audit",
+      "title": "Account read tokens for /pods, /stream, /audit, /re-pair",
       "ref": "ios",
       "surfaces": {
         "ios": {
@@ -1723,6 +1735,10 @@
             [
               "apps/mobile/shared/Sources/FlagshipCore/AccountReadTokenProvider.swift",
               "read"
+            ],
+            [
+              "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift",
+              "api/users/\\\\\\(encoded\\)/re-pair\"\\)\\)"
             ]
           ]
         },
@@ -1732,6 +1748,10 @@
             [
               "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountReadTokens.kt",
               "read-token"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/FlagshipServerClient.kt",
+              "return PendingRePairSnapshot\\(pending = null, unavailable = true\\)"
             ]
           ]
         },
@@ -1741,6 +1761,10 @@
             [
               "apps/web/public/webapp/lib/accountRead.js",
               "read-token"
+            ],
+            [
+              "apps/web/public/webapp/lib/accountRead.js",
+              "audit\\|re-pair\\|"
             ]
           ]
         }

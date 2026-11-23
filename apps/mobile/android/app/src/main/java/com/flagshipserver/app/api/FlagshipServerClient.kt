@@ -1928,11 +1928,22 @@ class LiveFlagshipServerClient(
         // accept 404/405 so an older Worker (no GET wired) is surfaced as
         // `unavailable` rather than thrown — the caller just hides the
         // banner. Mirrors the webapp's `unavailable` fallback.
-        val resp = transport.execute(
-            method = "GET",
-            url = "$base/api/users/$encoded/re-pair",
-            accept = setOf(200, 404, 405),
-        )
+        // An account read since security report F3: the read token goes with
+        // it, as on /pods. No token to be had (401/403): the banner hides, as
+        // a paused /pods read does.
+        val resp = try {
+            AccountReadTokens.authorize(username) { auth ->
+                transport.execute(
+                    method = "GET",
+                    url = "$base/api/users/$encoded/re-pair",
+                    extraHeaders = auth,
+                    accept = setOf(200, 404, 405),
+                )
+            }
+        } catch (e: HttpException) {
+            if (e.status == 401 || e.status == 403) return PendingRePairSnapshot(pending = null, unavailable = true)
+            throw e
+        }
         if (resp.status == 404 || resp.status == 405) {
             return PendingRePairSnapshot(pending = null, unavailable = true)
         }

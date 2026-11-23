@@ -526,7 +526,7 @@ class LoginViewModel(
                 _phase.value = LoginPhase.AwaitingSecondFactor
                 return
             }
-            _phase.value = LoginPhase.Failed(humanizedError(t))
+            _phase.value = LoginPhase.Failed(RePairRefusalText.refusal(t) ?: humanizedError(t))
         }
     }
 

@@ -4,13 +4,17 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.AccountReadTokenResponse
+import com.flagshipserver.app.core.AccountReadTokens
 import com.flagshipserver.app.core.HttpException
+import com.flagshipserver.app.core.ReadTokenStore
 import com.flagshipserver.app.core.OkHttpJsonTransport
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -161,5 +165,42 @@ class LiveFlagshipServerClientTest {
             assertEquals(500, e.status)
             assertEquals("oops", e.body)
         }
+    }
+
+    // ── Security report F3: the pending re-pair is an account read ──────
+
+    @Test fun fetchPendingRePair_sendsTheAccountReadToken() = runTest {
+        val store = object : ReadTokenStore {
+            override fun get(username: String) = AccountReadTokenResponse("art1.held", System.currentTimeMillis() + 86_400_000L)
+            override fun put(username: String, token: AccountReadTokenResponse) {}
+            override fun remove(username: String) {}
+            override fun clear() {}
+        }
+        val before = AccountReadTokens.shared
+        AccountReadTokens.shared = AccountReadTokens(
+            transport = OkHttpJsonTransport(),
+            store = store,
+            signers = { emptyList() },
+            isDemo = { false },
+            baseUrl = server.url("/").toString().trimEnd('/'),
+        )
+        try {
+            server.enqueue(MockResponse().setResponseCode(200).setBody("""{"pending":null}"""))
+            val snap = client.fetchPendingRePair("harry")
+            assertNull(snap.pending)
+            assertEquals(false, snap.unavailable)
+            val rec = server.takeRequest()
+            assertEquals("/api/users/harry/re-pair", rec.path)
+            assertEquals("Bearer art1.held", rec.getHeader("authorization"))
+        } finally {
+            AccountReadTokens.shared = before
+        }
+    }
+
+    @Test fun fetchPendingRePair_401_hidesTheBanner() = runTest {
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"an account read token is required"}"""))
+        val snap = client.fetchPendingRePair("harry")
+        assertNull(snap.pending)
+        assertTrue(snap.unavailable)
     }
 }

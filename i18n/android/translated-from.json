@@ -4297,5 +4297,9 @@
   "code_protection_already_on": "12d98c4b2595",
   "code_protection_already_off": "e25a5de61120",
   "code_protection_setup_expired": "2f5736972f88",
-  "code_protection_account_not_found": "1909ab21ff27"
+  "code_protection_account_not_found": "1909ab21ff27",
+  "re_pair_refused_vetoed_recently": "b47bbddf5852",
+  "re_pair_refused_replay": "0f2a82b48a5c",
+  "re_pair_refused_credential_used": "163a0577575e",
+  "re_pair_refused_stale": "81289097ae16"
 }

@@ -4380,4 +4380,8 @@
     <string name="code_protection_already_off">此账户的代码保护已经关闭。</string>
     <string name="code_protection_setup_expired">此设置已过期。请重新开始以获取新密钥。</string>
     <string name="code_protection_account_not_found">Flagship 找不到此账户。</string>
+    <string name="re_pair_refused_vetoed_recently">此账户的管理员在不到一天前拒绝了用此设备进行的恢复。你可以一天后再试，或询问管理员。</string>
+    <string name="re_pair_refused_replay">此恢复请求已被使用。请重新开始恢复。</string>
+    <string name="re_pair_refused_credential_used">该代码已用于一次恢复。请等待新代码，或重做恢复步骤，然后再试。</string>
+    <string name="re_pair_refused_stale">此设备的时钟与 Flagship 的不一致。请将日期和时间设为自动，然后再试。</string>
 </resources>

@@ -4388,4 +4388,8 @@
     <string name="code_protection_already_off">Code protection is already off for this account.</string>
     <string name="code_protection_setup_expired">This setup expired. Start again to get a new key.</string>
     <string name="code_protection_account_not_found">Flagship couldn\'t find this account.</string>
+    <string name="re_pair_refused_vetoed_recently">An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.</string>
+    <string name="re_pair_refused_replay">This recovery request was already used. Start the recovery again.</string>
+    <string name="re_pair_refused_credential_used">That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.</string>
+    <string name="re_pair_refused_stale">This device\'s clock doesn\'t match Flagship\'s. Set the date and time to automatic, then try again.</string>
 </resources>

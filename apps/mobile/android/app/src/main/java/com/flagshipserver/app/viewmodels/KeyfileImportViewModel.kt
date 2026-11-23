@@ -176,7 +176,7 @@ class KeyfileImportViewModel(
             _phase.value = KeyfileImportPhase.Grace(username = username, completesAt = resp.completesAt)
         } catch (t: Throwable) {
             _phase.value = KeyfileImportPhase.Failed(
-                RateLimitedException.messageOf(t) ?: if (t is HttpException && t.status == 401 && t.body.contains("totpProof"))
+                RateLimitedException.messageOf(t) ?: RePairRefusalText.refusal(t) ?: if (t is HttpException && t.status == 401 && t.body.contains("totpProof"))
                     // #52 — the account has a second factor enrolled, which
                     // the Worker now requires at initiate even for single-
                     // device accounts. The keyfile sheet has no second-

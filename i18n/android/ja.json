@@ -4377,5 +4377,9 @@
   "code_protection_already_on": "このアカウントのコード保護はすでにオンです。新しい認証アプリを設定するには、まずオフにしてください。",
   "code_protection_already_off": "このアカウントのコード保護はすでにオフです。",
   "code_protection_setup_expired": "この設定は期限切れになりました。最初からやり直して新しいキーを取得してください。",
-  "code_protection_account_not_found": "Flagship でこのアカウントが見つかりませんでした。"
+  "code_protection_account_not_found": "Flagship でこのアカウントが見つかりませんでした。",
+  "re_pair_refused_vetoed_recently": "このアカウントの管理者が、1 日以内にこのデバイスでのリカバリーを拒否しました。1 日たってからもう一度お試しいただくか、管理者にお問い合わせください。",
+  "re_pair_refused_replay": "このリカバリーのリクエストはすでに使用されています。リカバリーをもう一度始めてください。",
+  "re_pair_refused_credential_used": "そのコードはすでにリカバリーに使用されています。新しいコードを待つか、リカバリーの手順をやり直してから、もう一度お試しください。",
+  "re_pair_refused_stale": "このデバイスの時計が Flagship の時計と一致しません。日付と時刻を自動設定にしてから、もう一度お試しください。"
 }

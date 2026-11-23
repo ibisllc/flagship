@@ -4378,5 +4378,9 @@
   "code_protection_already_on": "La protección con código ya está activada en esta cuenta. Desactívala primero para configurar un autenticador nuevo.",
   "code_protection_already_off": "La protección con código ya está desactivada en esta cuenta.",
   "code_protection_setup_expired": "Esta configuración ha caducado. Empieza de nuevo para obtener una clave nueva.",
-  "code_protection_account_not_found": "Flagship no encontró esta cuenta."
+  "code_protection_account_not_found": "Flagship no encontró esta cuenta.",
+  "re_pair_refused_vetoed_recently": "Un administrador de esta cuenta rechazó una recuperación con este dispositivo hace menos de un día. Puedes volver a intentarlo pasado un día o pedírselo al administrador.",
+  "re_pair_refused_replay": "Esta solicitud de recuperación ya se usó. Vuelve a iniciar la recuperación.",
+  "re_pair_refused_credential_used": "Ese código ya se usó para una recuperación. Espera a un código nuevo, o repite el paso de recuperación, y vuelve a intentarlo.",
+  "re_pair_refused_stale": "El reloj de este dispositivo no coincide con el de Flagship. Configura la fecha y la hora como automáticas y vuelve a intentarlo."
 }

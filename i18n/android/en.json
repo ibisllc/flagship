@@ -17963,5 +17963,21 @@
   "code_protection_account_not_found": {
     "en": "Flagship couldn't find this account.",
     "ctx": "viewmodels/AccountSecurityViewModel.kt CodeProtectionText (security report F2)"
+  },
+  "re_pair_refused_vetoed_recently": {
+    "en": "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.",
+    "ctx": "viewmodels/RePairRefusalText.kt"
+  },
+  "re_pair_refused_replay": {
+    "en": "This recovery request was already used. Start the recovery again.",
+    "ctx": "viewmodels/RePairRefusalText.kt"
+  },
+  "re_pair_refused_credential_used": {
+    "en": "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.",
+    "ctx": "viewmodels/RePairRefusalText.kt"
+  },
+  "re_pair_refused_stale": {
+    "en": "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.",
+    "ctx": "viewmodels/RePairRefusalText.kt"
   }
 }

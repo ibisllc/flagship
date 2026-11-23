@@ -147,6 +147,8 @@ class ReplaceDeviceViewModel(
             val rateLimit = RateLimitedException.messageOf(e)
             val friendly = when {
                 rateLimit != null -> rateLimit
+                // A refusal with a code (security report F3): a used request, a veto in the last day, a clock off.
+                RePairRefusalText.refusal(e) != null -> RePairRefusalText.refusal(e)!!
                 msg.contains("412") -> FSStrings.get(R.string.your_device_list_changed_in_the)
                 msg.contains("409") -> FSStrings.get(R.string.a_device_replacement_is_already_pending)
                 else -> FSStrings.get(R.string.couldnt_reach_the_server, msg)

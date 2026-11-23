@@ -4380,4 +4380,8 @@
     <string name="code_protection_already_off">このアカウントのコード保護はすでにオフです。</string>
     <string name="code_protection_setup_expired">この設定は期限切れになりました。最初からやり直して新しいキーを取得してください。</string>
     <string name="code_protection_account_not_found">Flagship でこのアカウントが見つかりませんでした。</string>
+    <string name="re_pair_refused_vetoed_recently">このアカウントの管理者が、1 日以内にこのデバイスでのリカバリーを拒否しました。1 日たってからもう一度お試しいただくか、管理者にお問い合わせください。</string>
+    <string name="re_pair_refused_replay">このリカバリーのリクエストはすでに使用されています。リカバリーをもう一度始めてください。</string>
+    <string name="re_pair_refused_credential_used">そのコードはすでにリカバリーに使用されています。新しいコードを待つか、リカバリーの手順をやり直してから、もう一度お試しください。</string>
+    <string name="re_pair_refused_stale">このデバイスの時計が Flagship の時計と一致しません。日付と時刻を自動設定にしてから、もう一度お試しください。</string>
 </resources>

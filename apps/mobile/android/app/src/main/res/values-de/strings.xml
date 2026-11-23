@@ -4381,4 +4381,8 @@
     <string name="code_protection_already_off">Der Codeschutz ist für dieses Konto bereits ausgeschaltet.</string>
     <string name="code_protection_setup_expired">Diese Einrichtung ist abgelaufen. Beginne von vorn, um einen neuen Schlüssel zu erhalten.</string>
     <string name="code_protection_account_not_found">Flagship konnte dieses Konto nicht finden.</string>
+    <string name="re_pair_refused_vetoed_recently">Ein Admin dieses Kontos hat vor weniger als einem Tag eine Wiederherstellung mit diesem Gerät abgelehnt. Du kannst es nach einem Tag erneut versuchen oder den Admin fragen.</string>
+    <string name="re_pair_refused_replay">Diese Wiederherstellungsanfrage wurde bereits verwendet. Starte die Wiederherstellung erneut.</string>
+    <string name="re_pair_refused_credential_used">Dieser Code wurde bereits für eine Wiederherstellung verwendet. Warte auf einen neuen Code oder wiederhole den Wiederherstellungsschritt und versuche es erneut.</string>
+    <string name="re_pair_refused_stale">Die Uhr dieses Geräts stimmt nicht mit der von Flagship überein. Stelle Datum und Uhrzeit auf automatisch und versuche es dann erneut.</string>
 </resources>

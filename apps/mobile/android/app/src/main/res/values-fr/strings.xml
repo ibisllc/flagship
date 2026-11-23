@@ -4381,4 +4381,8 @@
     <string name="code_protection_already_off">La protection par code est déjà désactivée pour ce compte.</string>
     <string name="code_protection_setup_expired">Cette configuration a expiré. Recommencez pour obtenir une nouvelle clé.</string>
     <string name="code_protection_account_not_found">Flagship n’a pas trouvé ce compte.</string>
+    <string name="re_pair_refused_vetoed_recently">Un administrateur de ce compte a refusé une récupération avec cet appareil il y a moins d’un jour. Vous pourrez réessayer après un jour, ou demandez à l’administrateur.</string>
+    <string name="re_pair_refused_replay">Cette demande de récupération a déjà été utilisée. Recommencez la récupération.</string>
+    <string name="re_pair_refused_credential_used">Ce code a déjà servi pour une récupération. Attendez un nouveau code, ou refaites l’étape de récupération, puis réessayez.</string>
+    <string name="re_pair_refused_stale">L’horloge de cet appareil ne correspond pas à celle de Flagship. Réglez la date et l’heure sur automatique, puis réessayez.</string>
 </resources>
