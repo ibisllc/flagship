@@ -160,6 +160,58 @@ object Keystore {
         activeProfileId = prefs?.getString(KEY_ACTIVE_PROFILE, null)?.let { normalizeProfileId(it) }
     }
 
+    /**
+     * "Choose your own account name": the account was just renamed at `.com` from [from] to [to],
+     * so every slot of that profile moves to the new name. Sealed seeds are opened under their old
+     * slot and sealed again under the new one (the slot is in their AAD), so the session must be
+     * open. Read tokens (minted for the old name) and the profile's unbound PQ keys are dropped;
+     * the next read and the next PQ upgrade make them again for the new name. Idempotent: with
+     * nothing left under [from] it changes nothing. Throws while the session is locked.
+     */
+    fun moveProfile(from: String, to: String) {
+        val old = requireNotNull(normalizeProfileId(from))
+        val new = requireNotNull(normalizeProfileId(to))
+        if (old == new) return
+        val p = requirePrefs()
+        val entries = p.all.mapNotNull { (k, v) ->
+            val parts = k.split('.')
+            if (old in parts) Triple(k, parts.joinToString(".") { if (it == old) new else it }, v) else null
+        }
+        if (entries.isNotEmpty()) {
+            val kek = PqSessionKek.current()
+            try {
+                val e = p.edit()
+                for ((key, moved, value) in entries) {
+                    e.remove(key)
+                    if (key.startsWith(KEY_READ_TOKEN)) continue
+                    if (key.startsWith(SeedVault.SEALED_PREFIX)) {
+                        if (kek == null) throw lockedException()
+                        val opened = SeedVault.open((value as? String)?.let(HexUtil::decode), key.removePrefix(SeedVault.SEALED_PREFIX), kek)
+                            ?: throw AccountKeyUnreadableException()
+                        e.putString(moved, HexUtil.encode(SeedVault.seal(opened, moved.removePrefix(SeedVault.SEALED_PREFIX), kek)))
+                        opened.fill(0)
+                        continue
+                    }
+                    when (value) {
+                        is String -> e.putString(moved, value)
+                        is Int -> e.putInt(moved, value)
+                        is Long -> e.putLong(moved, value)
+                        is Boolean -> e.putBoolean(moved, value)
+                        is Float -> e.putFloat(moved, value)
+                        is Set<*> -> e.putStringSet(moved, value.filterIsInstance<String>().toSet())
+                    }
+                }
+                check(e.commit()) { "keystore move failed" }
+            } finally {
+                kek?.fill(0)
+            }
+        }
+        val oldTag = old.replace(Regex("[^a-z0-9-]"), "_")
+        irkSeeds.keys.filter { it.startsWith("$oldTag|") }.forEach { irkSeeds.remove(it)?.fill(0) }
+        wipePq(old)
+        if (activeProfileId == old) setActiveProfile(new)
+    }
+
     /** The active profileId, or null for the default/legacy profile. */
     fun activeProfile(): String? = activeProfileId
 

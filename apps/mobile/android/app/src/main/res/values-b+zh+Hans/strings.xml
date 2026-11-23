@@ -4388,4 +4388,26 @@
     <string name="our_privacy_policy_changes_on">我们的隐私政策将于%1$s更改。</string>
     <string name="our_privacy_policy_changed_on">我们的隐私政策已于%1$s更改。</string>
     <string name="read_the_policy">阅读政策</string>
+    <string name="choose_name_action">自选账户名</string>
+    <string name="choose_name_field">账户名</string>
+    <string name="choose_name_price">自选账户名需 10 美元。</string>
+    <string name="choose_name_pay">支付 10 美元</string>
+    <string name="choose_name_use_voucher">使用代金券</string>
+    <string name="choose_name_voucher_code">代金券代码</string>
+    <string name="choose_name_use_voucher_button">使用代金券</string>
+    <string name="choose_name_held">此名称为 %1$s.com 的所有者保留，直至 %2$s。</string>
+    <string name="choose_name_working">正在设置你的账户名…</string>
+    <string name="choose_name_done">你的账户现在是 %1$s。</string>
+    <string name="choose_name_keep">保留 %1$s</string>
+    <string name="choose_name_payment_cancelled">付款已取消。你的账户仍使用名称 %1$s。</string>
+    <string name="choose_name_payment_failed">付款未成功。你的账户仍使用名称 %1$s。</string>
+    <string name="choose_name_code_invalid">该代金券代码不能用于账户名。</string>
+    <string name="choose_name_code_used">该代金券代码已被使用。</string>
+    <string name="choose_name_failed_vouchers">名称更改未成功。你的账户仍使用名称 %1$s，你的 10 美元以代金券形式保留在账户中。</string>
+    <string name="choose_name_failed_code">名称更改未成功。你的账户仍使用名称 %1$s，你的代金券代码仍然有效。</string>
+    <string name="choose_name_finishing">正在完成你的账户名设置…</string>
+    <string name="choose_name_set_aside">此名称已为你保留。</string>
+    <string name="choose_name_open_when_creating">请在创建账户时打开此链接。</string>
+    <string name="choose_name_grant_expired">此链接已过期。请索取新链接。</string>
+    <string name="choose_name_grant_invalid">此链接已失效。请索取新链接。</string>
 </resources>

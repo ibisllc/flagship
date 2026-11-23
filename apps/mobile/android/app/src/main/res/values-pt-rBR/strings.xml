@@ -4389,4 +4389,26 @@
     <string name="our_privacy_policy_changes_on">Nossa política de privacidade muda em %1$s.</string>
     <string name="our_privacy_policy_changed_on">Nossa política de privacidade mudou em %1$s.</string>
     <string name="read_the_policy">Ler a política</string>
+    <string name="choose_name_action">Escolher seu próprio nome de conta</string>
+    <string name="choose_name_field">Nome de conta</string>
+    <string name="choose_name_price">Um nome de conta próprio custa US$ 10.</string>
+    <string name="choose_name_pay">Pagar US$ 10</string>
+    <string name="choose_name_use_voucher">Usar um vale</string>
+    <string name="choose_name_voucher_code">Código do vale</string>
+    <string name="choose_name_use_voucher_button">Usar vale</string>
+    <string name="choose_name_held">Este nome está reservado para o titular de %1$s.com até %2$s.</string>
+    <string name="choose_name_working">Configurando seu nome de conta…</string>
+    <string name="choose_name_done">Sua conta agora é %1$s.</string>
+    <string name="choose_name_keep">Ficar com %1$s</string>
+    <string name="choose_name_payment_cancelled">Pagamento cancelado. Sua conta mantém o nome %1$s.</string>
+    <string name="choose_name_payment_failed">O pagamento não foi concluído. Sua conta mantém o nome %1$s.</string>
+    <string name="choose_name_code_invalid">Esse código de vale não vale para um nome de conta.</string>
+    <string name="choose_name_code_used">Esse código de vale já foi usado.</string>
+    <string name="choose_name_failed_vouchers">A troca de nome não foi concluída. Sua conta mantém o nome %1$s, e seus US$ 10 ficam na sua conta como vales.</string>
+    <string name="choose_name_failed_code">A troca de nome não foi concluída. Sua conta mantém o nome %1$s, e seu código de vale continua valendo.</string>
+    <string name="choose_name_finishing">Concluindo seu nome de conta…</string>
+    <string name="choose_name_set_aside">Este nome foi reservado para você.</string>
+    <string name="choose_name_open_when_creating">Abra este link quando criar sua conta.</string>
+    <string name="choose_name_grant_expired">Este link expirou. Peça um novo.</string>
+    <string name="choose_name_grant_invalid">Este link não funciona mais. Peça um novo.</string>
 </resources>

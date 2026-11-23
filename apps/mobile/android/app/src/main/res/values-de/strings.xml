@@ -4389,4 +4389,26 @@
     <string name="our_privacy_policy_changes_on">Unsere Datenschutzerklärung ändert sich am %1$s.</string>
     <string name="our_privacy_policy_changed_on">Unsere Datenschutzerklärung hat sich am %1$s geändert.</string>
     <string name="read_the_policy">Datenschutzerklärung lesen</string>
+    <string name="choose_name_action">Eigenen Kontonamen wählen</string>
+    <string name="choose_name_field">Kontoname</string>
+    <string name="choose_name_price">Ein eigener Kontoname kostet 10 $.</string>
+    <string name="choose_name_pay">10 $ bezahlen</string>
+    <string name="choose_name_use_voucher">Gutschein verwenden</string>
+    <string name="choose_name_voucher_code">Gutscheincode</string>
+    <string name="choose_name_use_voucher_button">Gutschein einlösen</string>
+    <string name="choose_name_held">Dieser Name ist bis %2$s für den Inhaber von %1$s.com reserviert.</string>
+    <string name="choose_name_working">Dein Kontoname wird eingerichtet …</string>
+    <string name="choose_name_done">Dein Konto heißt jetzt %1$s.</string>
+    <string name="choose_name_keep">%1$s behalten</string>
+    <string name="choose_name_payment_cancelled">Zahlung abgebrochen. Dein Konto behält den Namen %1$s.</string>
+    <string name="choose_name_payment_failed">Die Zahlung ist nicht durchgegangen. Dein Konto behält den Namen %1$s.</string>
+    <string name="choose_name_code_invalid">Dieser Gutscheincode gilt nicht für einen Kontonamen.</string>
+    <string name="choose_name_code_used">Dieser Gutscheincode wurde bereits verwendet.</string>
+    <string name="choose_name_failed_vouchers">Die Namensänderung ist nicht durchgegangen. Dein Konto behält den Namen %1$s, und deine 10 $ bleiben als Gutscheine in deinem Konto.</string>
+    <string name="choose_name_failed_code">Die Namensänderung ist nicht durchgegangen. Dein Konto behält den Namen %1$s, und dein Gutscheincode gilt weiterhin.</string>
+    <string name="choose_name_finishing">Dein Kontoname wird fertiggestellt …</string>
+    <string name="choose_name_set_aside">Dieser Name wurde für dich reserviert.</string>
+    <string name="choose_name_open_when_creating">Öffne diesen Link, wenn du dein Konto erstellst.</string>
+    <string name="choose_name_grant_expired">Dieser Link ist abgelaufen. Bitte um einen neuen.</string>
+    <string name="choose_name_grant_invalid">Dieser Link funktioniert nicht mehr. Bitte um einen neuen.</string>
 </resources>

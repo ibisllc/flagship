@@ -33,11 +33,17 @@ import kotlinx.coroutines.launch
 /**
  * CREATE path — hands the user one random handle. The ONLY affordances are
  * regenerate (rate-limited, with a live "Try again in Ns" countdown) and
- * Continue (the next step claims the shown name). No typed field — a custom name
- * is the future paid name-change. See docs/username-suggestion-queue.md.
+ * Continue (the next step claims the shown name). No typed field: a name of one's
+ * own is the paid "Choose your own account name" ([onChooseOwn], with the shown
+ * name as the one the account opens under). See docs/username-suggestion-queue.md.
+ * A name-grant link waiting ([autoChoose]) goes straight there once a name is shown.
  */
 @Composable
-fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
+fun SuggestUsernameScreen(
+    onContinue: (String) -> Unit,
+    onChooseOwn: ((String) -> Unit)? = null,
+    autoChoose: Boolean = false,
+) {
     val flagshipServer = LocalFlagshipServerClient.current
     val scope = rememberCoroutineScope()
     val vm = remember {
@@ -48,6 +54,10 @@ fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
     val error by vm.error.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
+    LaunchedEffect(current, autoChoose) {
+        val shown = current
+        if (autoChoose && shown != null && onChooseOwn != null) onChooseOwn(shown)
+    }
     // Drive the 1-Hz countdown while a cooldown is active.
     LaunchedEffect(cooldown) {
         if (cooldown > 0) {
@@ -88,6 +98,15 @@ fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
             block = true,
             enabled = vm.canRegenerate(),
         )
+
+        if (onChooseOwn != null) {
+            com.flagshipserver.app.ui.components.FSGhostButton(
+                label = stringResource(R.string.choose_name_action),
+                onClick = { current?.let(onChooseOwn) },
+                block = true,
+                enabled = vm.canContinue(),
+            )
+        }
 
         error?.let {
             Text(text = it, color = FS.colors.danger, style = MaterialTheme.typography.bodySmall)

@@ -85,6 +85,8 @@ object AccountGone {
         if (status != 404) return false
         val name = accountNameInPath(path) ?: return false
         if (!isOwn(name)) return false
+        // "Choose your own account name" mid-way: the old name was just released, the account lives on.
+        if (AccountNameChoice.pendingFor(name)) return false
         if (!bodyIsAccountGone(body())) return false
         markGone(name)
         return true

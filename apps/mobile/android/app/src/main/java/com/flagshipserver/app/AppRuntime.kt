@@ -139,10 +139,12 @@ object AppRuntime {
             transport = com.flagshipserver.app.core.OkHttpJsonTransport(okHttp),
             store = com.flagshipserver.app.keystore.KeystoreReadTokenStore(),
             signers = { username ->
+                // The account made on "Choose your own account name" reads (its wallet) before it is onboarded.
+                val signUp = com.flagshipserver.app.core.AccountNameChoice.signUp
                 com.flagshipserver.app.keystore.KeystoreReadTokenSigners.resolve(
                     username = username,
-                    currentUser = appState.currentUser.value,
-                    profile = appState.activeProfile,
+                    currentUser = signUp?.username ?: appState.currentUser.value,
+                    profile = signUp?.let { com.flagshipserver.app.core.Profile(cloudName = it.username, deviceId = it.deviceId) } ?: appState.activeProfile,
                 )
             },
             isDemo = { AppState.isDemoAccount(appState.activeProfile, appState.pods.value) },

@@ -17997,5 +17997,100 @@
   "read_the_policy": {
     "en": "Read the policy",
     "ctx": "core/SecurityNoticeCopy.kt (prose)"
+  },
+  "choose_name_action": {
+    "en": "Choose your own account name",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_field": {
+    "en": "Account name",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_price": {
+    "en": "Your own account name costs $10.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_pay": {
+    "en": "Pay $10",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_use_voucher": {
+    "en": "Use a voucher",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_voucher_code": {
+    "en": "Voucher code",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_use_voucher_button": {
+    "en": "Use voucher",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_held": {
+    "en": "This name is held for the owner of %1$s.com until %2$s.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)",
+    "args": 2
+  },
+  "choose_name_working": {
+    "en": "Setting up your account name…",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_done": {
+    "en": "Your account is now %1$s.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)",
+    "args": 1
+  },
+  "choose_name_keep": {
+    "en": "Keep %1$s",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)",
+    "args": 1
+  },
+  "choose_name_payment_cancelled": {
+    "en": "Payment cancelled. Your account keeps the name %1$s.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)",
+    "args": 1
+  },
+  "choose_name_payment_failed": {
+    "en": "The payment didn't go through. Your account keeps the name %1$s.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)",
+    "args": 1
+  },
+  "choose_name_code_invalid": {
+    "en": "That voucher code isn't valid for an account name.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_code_used": {
+    "en": "That voucher code was already used.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_failed_vouchers": {
+    "en": "The name change didn't go through. Your account keeps the name %1$s, and your $10 stays in your account as vouchers.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)",
+    "args": 1
+  },
+  "choose_name_failed_code": {
+    "en": "The name change didn't go through. Your account keeps the name %1$s, and your voucher code still works.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)",
+    "args": 1
+  },
+  "choose_name_finishing": {
+    "en": "Finishing your account name…",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_set_aside": {
+    "en": "This name has been set aside for you.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_open_when_creating": {
+    "en": "Open this link when you create your account.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_grant_expired": {
+    "en": "This link has expired. Ask for a new one.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "choose_name_grant_invalid": {
+    "en": "This link doesn't work any more. Ask for a new one.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
   }
 }

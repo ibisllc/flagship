@@ -107,6 +107,12 @@ fun RootShell(
             voucherLink = link.rawLink
             return@LaunchedEffect
         }
+        if (link is com.flagshipserver.app.core.DeepLink.ChooseName) {
+            // A name set aside for a friend works at sign-up only: this phone already has an account.
+            deepLinker.consume()
+            shellToasts.info(com.flagshipserver.app.core.FSStrings.get(R.string.choose_name_open_when_creating), 8.seconds)
+            return@LaunchedEffect
+        }
         if (link is com.flagshipserver.app.core.DeepLink.VoiciSignIn) {
             // A voi.ci tab asking this account to sign it in: approve over this phone's own keys.
             deepLinker.consume()
@@ -161,6 +167,7 @@ fun RootShell(
             is com.flagshipserver.app.core.DeepLink.Messages -> RootDestination.MESSAGES
             com.flagshipserver.app.core.DeepLink.PageEditor -> RootDestination.MESSAGES
             is com.flagshipserver.app.core.DeepLink.VoucherLink -> selected
+            is com.flagshipserver.app.core.DeepLink.ChooseName -> selected
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so

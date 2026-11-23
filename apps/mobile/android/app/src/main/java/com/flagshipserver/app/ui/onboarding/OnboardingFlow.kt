@@ -30,6 +30,7 @@ import com.flagshipserver.app.core.Base64URL
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -61,6 +62,13 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     // Carry the raw sid + pk into the join screen route.
     LaunchedEffect(pending) {
         val link = pending
+        if (link is DeepLink.ChooseName) {
+            // A name set aside for this person: kept in memory until the account exists, then the choose screen.
+            deepLinker.consume()
+            com.flagshipserver.app.core.AccountNameChoice.grant = link.grant
+            nav.navigate("username")
+            return@LaunchedEffect
+        }
         if (link is DeepLink.JoinDevice) {
             deepLinker.consume()
             nav.navigate(
@@ -90,11 +98,39 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             // server. No separate "lock it to your device" step (owner,
             // 2026-11-21): open-account selects the profile's key slot and
             // asks for the biometric itself when it mints the account key.
+            val chooseOps = com.flagshipserver.app.core.AccountNameChoice.ops
+            var grantWaiting by androidx.compose.runtime.saveable.rememberSaveable {
+                androidx.compose.runtime.mutableStateOf(com.flagshipserver.app.core.AccountNameChoice.grant != null)
+            }
             SuggestUsernameScreen(
                 onContinue = { username ->
                     nav.navigate("open-account/" + URLEncoder.encode(username, "UTF-8"))
                 },
+                onChooseOwn = if (chooseOps == null) null else { username ->
+                    grantWaiting = false
+                    nav.navigate("choose-name/" + URLEncoder.encode(username, "UTF-8"))
+                },
+                autoChoose = grantWaiting,
             )
+        }
+        composable(
+            route = "choose-name/{username}",
+            arguments = listOf(navArgument("username") { type = NavType.StringType }),
+        ) { entry ->
+            val suggested = URLDecoder.decode(entry.arguments?.getString("username") ?: "", "UTF-8")
+            val ops = androidx.compose.runtime.remember { com.flagshipserver.app.core.AccountNameChoice.ops?.invoke() }
+            if (ops != null) {
+                com.flagshipserver.app.ui.screens.ChooseOwnNameScreen(
+                    suggested = suggested,
+                    ops = ops,
+                    grant = com.flagshipserver.app.core.AccountNameChoice.grant,
+                    onOpened = {
+                        com.flagshipserver.app.core.AccountNameChoice.grant = null
+                        onFinished()
+                    },
+                    onBack = { nav.popBackStack() },
+                )
+            }
         }
         composable(
             route = "open-account/{username}",
