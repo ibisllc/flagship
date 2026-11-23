@@ -1864,3 +1864,25 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   owner question: should call traffic count toward the data allowance (today only phone→caller bytes are metered via
   the phone tunnel, per code reading)? Follow-up: Android NameDibsScreen has no back button.
 - Disk: removed 5 merged clean worktrees (ios-calls, no-experimental, photo-picker, posts-cap, server-refine); 4.7 GB.
+- 2026-11-22/23 phone calls session (iPhone 14 Pro Debug, account zippy-fern; S948U1 release builds over Tailscale adb,
+  brisk-quartz). Deployed to `.com` (main): App Attest assertions from a real iPhone accepted (67aa5b62d, 25d903c7f:
+  flag 0x40 with no attested data; `.com` 06594cd1), the unattested-reason log, the sandbox APNs retry (4e9cd7446;
+  useless while the APNs key is production-only: BadEnvironmentKeyInToken; ring testing needs TestFlight 1.3 (9)),
+  D1 0157. Android Play Integrity project number set (af10bfabf, rides build 14).
+  Merged to release/0.4 + main (362a69b26, rebased linear; gates: tsc, i18n, parity, vitest 3,426 voi.ci/protocol/
+  storage, Android unit all 477 files, iOS unit 2,362): 0.4/android-calls (killed-app answer, FSI fix; the ringer:
+  self-managed Telecom never rang, CallRinger plays the phone's ringtone + vibration per ringer/DND, silent channel
+  `flagship.calls.ring`; caller visitor name on a locked phone from the room's signed request, iOS + Android; the
+  name refreshed after unlock; Android ring-backs ring; Calls rows open their conversation (Android blank page, iOS no
+  tap); calls placed from the app never connected: libwebrtc's built-in roots lack Let's Encrypt (phone certs YE2 →
+  Root YE → ISRG X2 → X1), now a system-trust certificate verifier on both apps (iOS SecTrust fetches intermediates;
+  Android AIA fetch + platform trust manager, cleartext only for i.lencr.org) — verified on macOS with brisk-quartz's
+  real leaf, NOT yet in a live app-to-phone call), and 0.4/locked-names (design docs/voici-locked-caller-names.md,
+  owner agreed D1-D7: opt-in "Show names while locked", nicknames + ring-back page names outside the app lock,
+  ring push `tag` = HMAC(tagKey, ringId), **D1 0158** (voici_ring_backs.ring_tag_key; deploy sheet + release.sh
+  updated), iOS Calls list moved out of UserDefaults). Browser → Android calls connect with the new build, ring with
+  the ringtone, show "Anonymous caller". OPEN: privacy §2.12 additions for locked names await owner approval before
+  the `.com` deploy that carries 0158; a second device names a ring-back page only after its own call there (0.5).
+  In progress: 0.4/callback-ux (pop-up without "voi.ci/" + ⓘ explainer on iOS/Android/voi.ci site; Call back on
+  visitor Calls rows). Next: security reports from the owner, one agent each. RESUME POINT: merge callback-ux; iPhone
+  Debug build with cb202787e (now 2261896c4) to retest an app-placed call; iOS ring needs TestFlight; Android build 14.
