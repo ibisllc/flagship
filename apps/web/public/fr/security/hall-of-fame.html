@@ -57,6 +57,11 @@
       <p class="muted">Les chercheurs qui nous ont signalé une vulnérabilité, avec les commits qui l’ont corrigée. Chacun est crédité sous la forme qu’il demande : nom, pseudonyme ou anonymat, avec un lien s’il le souhaite. Ils figurent sans attribution tant qu’ils ne nous ont pas indiqué leur préférence ; nous ne publions jamais un nom qu’on ne nous a pas donné.</p>
   
       <div>
+      <h2>Un endpoint d’identité inutilisé faisait confiance aux signataires nommés par chaque requête</h2>
+      <p class="hof-meta">Moyenne · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · crédit : rakimans</p>
+      <p>Un endpoint datant des débuts du développement stockait un enregistrement signé sous un hachage du nom d’un compte. Il ne vérifiait la signature de l’enregistrement qu’avec les clés que la même requête anonyme déclarait comme signataires autorisés, et ce hachage se calcule à partir de n’importe quel nom public. N’importe qui pouvait créer un enregistrement pour n’importe quel nom, le remplacer ou le verrouiller avec un numéro de version très élevé.</p>
+      <p>Aucune app n’a jamais lu ni écrit ces enregistrements : l’annuaire du compte, chiffré et signé par les appareils du compte, contient ce qu’ils devaient contenir. Aucune donnée ni clé de compte n’a été exposée. Comme rien n’utilisait cet endpoint, nous l’avons supprimé, avec son stockage et les enregistrements qu’il contenait, plutôt que de le corriger.</p>
+
       <h2>Notes de revue : une référence d’installation modifiable, la falsification du démarrage et le navigateur des apps</h2>
       <p class="hof-meta">Revue de conception · octobre 2026 · traité dans la version 0.3 · crédit : Jay</p>
       <p>Jay nous a envoyé trois observations issues de la lecture du code. Aucune n’était accompagnée d’un exploit fonctionnel, mais chacune pointait une vraie faille, et deux d’entre elles ont changé ce que livre la version 0.3.</p>

@@ -57,6 +57,11 @@
       <p class="muted">Pesquisadores que nos relataram uma vulnerabilidade, com os commits que a corrigiram. Cada um recebe o crédito da forma que pedir: nome, apelido ou anônimo, com um link se quiser. Aparecem sem atribuição até nos dizerem sua preferência; nunca publicamos um nome que não recebemos.</p>
   
       <div>
+      <h2>Um endpoint de identidade sem uso confiava nos signatários que cada requisição indicava</h2>
+      <p class="hof-meta">Média · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · crédito: rakimans</p>
+      <p>Um endpoint do início do desenvolvimento guardava um registro assinado sob um hash do nome de uma conta. Ele verificava a assinatura do registro apenas com as chaves que a própria requisição anônima indicava como signatários permitidos, e esse hash pode ser calculado a partir de qualquer nome público. Qualquer pessoa podia criar um registro para qualquer nome, substituí-lo ou travá-lo com um número de versão muito alto.</p>
+      <p>Nenhum app jamais leu ou gravou esses registros: o diretório da conta, criptografado e assinado pelos dispositivos da conta, guarda o que eles deveriam guardar. Nenhum dado ou chave de conta foi exposto. Como nada usava o endpoint, nós o removemos, junto com seu armazenamento e os registros nele, em vez de corrigi-lo.</p>
+
       <h2>Notas de revisão: uma referência de instalação mutável, adulteração da inicialização e o navegador dos apps</h2>
       <p class="hof-meta">Revisão de design · outubro de 2026 · resolvido na versão 0.3 · crédito: Jay</p>
       <p>Jay nos enviou três observações a partir da leitura do código. Nenhuma veio com um exploit funcional, mas cada uma apontava uma falha real, e duas delas mudaram o que a versão 0.3 entrega.</p>

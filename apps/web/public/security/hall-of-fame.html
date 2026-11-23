@@ -71,6 +71,28 @@
       </p>
   
       <div>
+      <h2>An unused identity-record endpoint trusted the signers each request named</h2>
+      <p class="hof-meta">
+        Medium &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a>
+        &middot; credit: rakimans
+      </p>
+      <p>
+        An endpoint from early development stored a signed record under a
+        hash of an account name. It checked the record&rsquo;s signature only
+        against the keys the same anonymous request listed as allowed signers,
+        and that hash can be computed from any public name. Anyone could
+        create a record for any name, replace one, or lock it with a very
+        high version number.
+      </p>
+      <p>
+        No app ever read or wrote these records: the account directory, which
+        is encrypted and signed by the account&rsquo;s devices, holds what
+        they were meant to hold. No account data or keys were exposed. Because
+        nothing used the endpoint, we removed it, with its storage and the
+        records in it, instead of patching it.
+      </p>
+
       <h2>Review notes: a mutable install ref, boot tampering, and the app browser</h2>
       <p class="hof-meta">
         Design review &middot; October 2026 &middot; addressed in release 0.3

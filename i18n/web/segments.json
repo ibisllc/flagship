@@ -6746,6 +6746,38 @@
       "security/hall-of-fame.html"
     ]
   },
+  "s038b3ca4aa": {
+    "en": "An unused identity-record endpoint trusted the signers each request named",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "see83b16ede": {
+    "en": "Medium · reported and fixed November 2026 · fix <1>caf3ce88</1> · credit: rakimans",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s438c5b2bfa": {
+    "en": "An endpoint from early development stored a signed record under a hash of an account name. It checked the record’s signature only against the keys the same anonymous request listed as allowed signers, and that hash can be computed from any public name. Anyone could create a record for any name, replace one, or lock it with a very high version number.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sc930e5c5a3": {
+    "en": "No app ever read or wrote these records: the account directory, which is encrypted and signed by the account’s devices, holds what they were meant to hold. No account data or keys were exposed. Because nothing used the endpoint, we removed it, with its storage and the records in it, instead of patching it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
   "sb032726b26": {
     "en": "Review notes: a mutable install ref, boot tampering, and the app browser",
     "kind": "text",

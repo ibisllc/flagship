@@ -57,6 +57,11 @@
       <p class="muted">Forschende, die uns eine Sicherheitslücke gemeldet haben, mit den Commits, die sie geschlossen haben. Genannt in der Form, die sich jede meldende Person wünscht: Name, Handle oder anonym, auf Wunsch mit Link. Ohne Namensnennung aufgeführt, bis sie uns ihre Wahl mitgeteilt haben; wir veröffentlichen nie einen Namen, den wir nicht bekommen haben.</p>
   
       <div>
+      <h2>Ein ungenutzter Identitäts-Endpoint vertraute den Signierern, die jede Anfrage selbst nannte</h2>
+      <p class="hof-meta">Mittel · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · Dank an: rakimans</p>
+      <p>Ein Endpoint aus der frühen Entwicklung speicherte einen signierten Eintrag unter einem Hash eines Kontonamens. Er prüfte die Signatur des Eintrags nur gegen die Schlüssel, die dieselbe anonyme Anfrage als erlaubte Signierer angab, und dieser Hash lässt sich aus jedem öffentlichen Namen berechnen. Jeder konnte für jeden Namen einen Eintrag anlegen, ihn ersetzen oder mit einer sehr hohen Versionsnummer sperren.</p>
+      <p>Keine App hat diese Einträge je gelesen oder geschrieben: Das Kontoverzeichnis, verschlüsselt und von den Geräten des Kontos signiert, enthält, was sie enthalten sollten. Keine Kontodaten und keine Schlüssel lagen offen. Da nichts den Endpoint nutzte, haben wir ihn samt Speicher und den darin liegenden Einträgen entfernt, statt ihn zu flicken.</p>
+
       <h2>Review-Notizen: eine veränderliche Installationsreferenz, Manipulation beim Start und der App-Browser</h2>
       <p class="hof-meta">Design-Review · Oktober 2026 · behoben in Version 0.3 · Dank an: Jay</p>
       <p>Jay hat uns drei Beobachtungen aus dem Lesen des Codes geschickt. Keine kam mit einem funktionierenden Exploit, aber jede zeigte auf eine echte Lücke, und zwei davon haben verändert, was Version 0.3 ausliefert.</p>
