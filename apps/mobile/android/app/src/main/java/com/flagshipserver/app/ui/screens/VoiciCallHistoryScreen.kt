@@ -193,7 +193,14 @@ fun VoiciCallHistoryScreen(nav: NavController) {
         } else {
             FSGroup {
                 history.forEachIndexed { i, r ->
-                    CallHistoryRow(r, nicknames, anonBlocked, onOpenThread = { conv -> nav.navigate("thread/$conv") }) { conv, block ->
+                    // A row opens its conversation: on the page this account called, or the caller's thread on this
+                    // account's page when one exists (a caller who never wrote has none, so the row doesn't open).
+                    val open: (() -> Unit)? = when {
+                        r.direction == "out" && r.callable -> ({ nav.navigate("visitor/${r.peerUsername}/${r.peerPageId}") })
+                        r.direction != "out" && r.conv != null && messages.conversations.any { it.conv == r.conv } -> ({ nav.navigate("thread/${r.conv}") })
+                        else -> null
+                    }
+                    CallHistoryRow(r, nicknames, anonBlocked, onOpen = open) { conv, block ->
                         scope.launch { center.blockAnonymous(conv, block)?.let { toasts.error(VoiciCopy.sendError(it)) } }
                     }
                     if (i < history.size - 1) FSDivider(0.dp)
@@ -295,7 +302,7 @@ private fun WhoToCall(center: com.flagshipserver.app.core.voici.VoiciCenter) {
 }
 
 @Composable
-private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, anonBlocked: Set<String>, onOpenThread: (String) -> Unit, onBlockAnonymous: (String, Boolean) -> Unit) {
+private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, anonBlocked: Set<String>, onOpen: (() -> Unit)?, onBlockAnonymous: (String, Boolean) -> Unit) {
     // An anonymous caller (an "anyone" page) has no thread: its row offers Block / Unblock instead.
     val anonConv = r.conv?.takeIf { r.pseudonymPub != null && r.pseudonymPub.length != 64 }
     val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(r.at))
@@ -309,7 +316,7 @@ private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, a
             r.direction == "out" -> Icons.Outlined.CallMade
             else -> Icons.Outlined.CallReceived
         },
-        onClick = if (anonConv == null) r.conv?.let { c -> { onOpenThread(c) } } else null,
+        onClick = if (anonConv == null) onOpen else null,
         trailing = when {
             r.callable -> ({ VoiciCallButtons(VoiciCallTarget(r.peerUsername!!, r.peerPageId!!), "calls-row") })
             anonConv != null -> ({

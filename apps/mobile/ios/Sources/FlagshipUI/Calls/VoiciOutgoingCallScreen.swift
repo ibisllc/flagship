@@ -83,6 +83,14 @@ struct VoiciCallsScreen: View {
     @State private var resolving = false
     @State private var resolved: VoiciCallee?
     @State private var resolvedVideo = false
+    @State private var opened: Opened?
+
+    /// What a tapped row opens: the caller's thread on this account's page, or this account's conversation on the
+    /// page it called.
+    enum Opened: Hashable {
+        case thread(conv: String)
+        case page(username: String, pageId: String, title: String)
+    }
 
     var body: some View {
         let entries = history.entries(missed: store.missedCalls)
@@ -105,6 +113,15 @@ struct VoiciCallsScreen: View {
         .navigationTitle(Text("Calls"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("voici-calls-list")
+        .navigationDestination(item: $opened) { o in
+            switch o {
+            case .thread(let conv): ThreadScreen(conv: conv)
+            case .page(let u, let p, let title):
+                if let client {
+                    VisitorConversationScreen(model: .live(callee: VoiciCallee(username: u, pageId: p), displayName: title, client: client))
+                }
+            }
+        }
         .fullScreenCover(item: $calling) { c in VoiciOutgoingCallScreen(call: c) { calling = nil } }
         .confirmationDialog(Text(verbatim: String(localized: "Let voi.ci/\(resolved?.username ?? "") call you back?")),
                             isPresented: Binding(get: { resolved != nil }, set: { if !$0 { resolved = nil } }), titleVisibility: .visible) {
@@ -212,7 +229,19 @@ struct VoiciCallsScreen: View {
                 .accessibilityIdentifier("voici-calls-block")
             }
         }
+        .contentShape(Rectangle())
+        // The row's own Call / Block buttons keep their taps; the rest of the row opens the conversation.
+        .onTapGesture { if let o = Self.opens(r, hasThread: { store.conversation($0) != nil }, title: name(r)) { opened = o } }
         .accessibilityIdentifier("voici-calls-row")
+    }
+
+    /// Nil when there is nothing to open: an anonymous caller, or a caller who never wrote (no thread here).
+    static func opens(_ r: VoiciCallRecord, hasThread: (String) -> Bool, title: String) -> Opened? {
+        switch r.peer {
+        case .page(let u, let p): return .page(username: u, pageId: p, title: title)
+        case .visitor(let conv, let pseudonym):
+            return !pseudonym.isEmpty && hasThread(conv) ? .thread(conv: conv) : nil
+        }
     }
 
     private func name(_ r: VoiciCallRecord) -> String {

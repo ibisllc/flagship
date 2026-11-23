@@ -56,5 +56,10 @@ fun ActivityTab() {
             com.flagshipserver.app.ui.screens.ThreadScreen(nav, e.arguments?.getString("conv").orEmpty())
         }
         composable("calls") { com.flagshipserver.app.ui.screens.VoiciCallHistoryScreen(nav) }
+        // A call this account made opens its conversation on the page it called.
+        composable(
+            "visitor/{user}/{page}",
+            arguments = listOf(androidx.navigation.navArgument("user") { type = androidx.navigation.NavType.StringType }, androidx.navigation.navArgument("page") { type = androidx.navigation.NavType.StringType }),
+        ) { e -> com.flagshipserver.app.ui.screens.VisitorThreadScreen(nav, e.arguments?.getString("user").orEmpty(), e.arguments?.getString("page").orEmpty()) }
     }
 }
