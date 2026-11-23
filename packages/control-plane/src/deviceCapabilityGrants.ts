@@ -229,6 +229,18 @@ export async function handleMintDeviceGrant(
     if (!bound.ok) return conflict(bound.reason);
   }
 
+  // The admin root replacing a device's grant for the SAME device key retires the old one first: an account rename
+  // moves the active grant to the new name, where its signed bytes still name the old one, and the apps then mint a
+  // replacement before revoking it. Without this, one-active-grant-per-device (idx_dcg_username_device_active)
+  // refuses the replacement (live gym, choose-name, 2026-11-23). Only the admin root, only the same key: a member
+  // grant for a device that already has one is still refused, and a different key never gets this far.
+  if (signerRoot === "admin-root") {
+    const prior = await deps.storage.getActiveForUserDevice(usernameNorm, grant.deviceId);
+    if (prior && prior.grantId !== grant.grantId && prior.devicePubHex.toLowerCase() === devicePubHex) {
+      await deps.storage.revoke(prior.grantId, now);
+    }
+  }
+
   const putResult = await deps.storage.put({
     grantId: grant.grantId,
     username: usernameNorm,

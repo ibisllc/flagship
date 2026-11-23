@@ -208,6 +208,24 @@ describe("handleMintDeviceGrant", () => {
     const r = await handleMintDeviceGrant(h.deps, b.body);
     expect(r.status).toBe(403);
   });
+
+  // Live gym 2026-11-23 (choose-name): after a rename the device's admin grant sits under the new name with bytes
+  // that name the old one; the apps mint a replacement for the same key, then revoke the old one.
+  it("lets the admin root replace a device's grant for the same key; a member grant still can't double up", async () => {
+    const h = await mkHarness();
+    const adminRoot = makeKey();
+    await h.deps.usernames.put({ username: USER, irkPubHex: hex(h.userIrk.publicKey), claimedAt: 1, adminRootPubHex: hex(adminRoot.publicKey) } as never);
+    const deviceKey = makeKey().publicKey;
+    const first = mintGrant({ userIrk: adminRoot, devicePub: deviceKey, scopes: ["admin", "browse"], grantId: "0a-1" });
+    expect((await handleMintDeviceGrant(h.deps, first.body)).status).toBe(200);
+    const second = mintGrant({ userIrk: adminRoot, devicePub: deviceKey, scopes: ["admin", "browse"], grantId: "0a-2" });
+    expect((await handleMintDeviceGrant(h.deps, second.body)).status).toBe(200);
+    expect((await h.deps.storage.get("0a-1"))!.revokedAt).not.toBeNull();
+    expect((await h.deps.storage.get("0a-2"))!.revokedAt).toBeNull();
+    const member = mintGrant({ userIrk: h.userIrk, devicePub: deviceKey, grantId: "0a-3" });
+    expect((await handleMintDeviceGrant(h.deps, member.body)).status).toBe(409);
+    expect((await h.deps.storage.get("0a-2"))!.revokedAt).toBeNull();
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────
