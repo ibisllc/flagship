@@ -50,4 +50,35 @@ class VoiciCallHistoryTest {
         assertEquals(VoiciCallHistory.MAX_RECORDS, list.size)
         assertEquals("failed", list.first().outcome)
     }
+
+    private val pseudonym = "aa".repeat(32)
+    private val thread = "bb".repeat(32)
+    private fun visitorCall(threadPub: String? = thread, pseudonymPub: String = pseudonym, direction: String = "in") =
+        VoiciCallRecord(id = "v-$direction", callId = "v", direction = direction, outcome = "missed", conv = "cv", pseudonymPub = pseudonymPub, at = 1, threadPub = threadPub)
+
+    @Test fun aCallerWhoNeverWroteGetsCallBackWhileAllowed() {
+        assertTrue(visitorCall().offersCallBack(hasThread = false, ringBackOff = emptySet(), blocked = emptySet(), callsOn = true))
+    }
+
+    @Test fun noCallBackWhenRefusedBlockedThreadedAnonymousOrWithoutThreadKey() {
+        val r = visitorCall()
+        assertFalse("`.com` refused a ring to it", r.offersCallBack(false, setOf("cv"), emptySet(), true))
+        assertFalse("blocked", r.offersCallBack(false, emptySet(), setOf(pseudonym), true))
+        assertFalse("calls off", r.offersCallBack(false, emptySet(), emptySet(), false))
+        assertFalse("a thread exists: its Call rings back", r.offersCallBack(true, emptySet(), emptySet(), true))
+        assertFalse("anonymous (a browser key)", visitorCall(pseudonymPub = "04" + "11".repeat(64)).offersCallBack(false, emptySet(), emptySet(), true))
+        assertFalse("an older build's record", visitorCall(threadPub = null).offersCallBack(false, emptySet(), emptySet(), true))
+        assertFalse("outgoing", visitorCall(direction = "out").offersCallBack(false, emptySet(), emptySet(), true))
+    }
+
+    @Test fun aMissedCallKeepsTheCallersThreadKey() {
+        val out = VoiciCallHistory.merge(emptyList(), listOf(VoiciMissedCallRow("m1", "cv", pseudonym, "no-answer", 5, false, thread), VoiciMissedCallRow("m2", "cv2", "pp", "no-answer", 4, false)))
+        assertEquals(thread, out[0].threadPub)
+        assertNull(out[1].threadPub)
+    }
+
+    @Test fun aRecordFromAnOlderBuildDecodesWithoutAThreadKey() {
+        val r = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString(VoiciCallRecord.serializer(), """{"id":"c-in","callId":"c","direction":"in","outcome":"missed","at":1}""")
+        assertNull(r.threadPub)
+    }
 }

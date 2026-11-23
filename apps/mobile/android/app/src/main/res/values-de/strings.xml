@@ -4138,7 +4138,13 @@
     <string name="voici_calls_from_callback">Leute, die dir Rückrufe erlauben</string>
     <string name="voici_calls_from_callback_note">Anrufende melden sich mit Flagship an und erlauben dir, sie in dieser Unterhaltung zurückzurufen. Du erfährst nie, wer sie sind. Deine Admin-Geräte klingeln.</string>
     <string name="voici_call_back_prompt_title">Darf %1$s dich zurückrufen?</string>
-    <string name="voici_call_back_prompt_body">%1$s erfährt nicht, wer du bist. Flagship weiß, dass dieses Gespräch dein Telefon klingeln lassen kann.</string>
+    <string name="voici_call_back_prompt_body">%1$s erfährt nicht, wer du bist.</string>
+    <string name="voici_call_back_about_title">Über Rückrufe</string>
+    <string name="voici_call_back_about_name">%1$s sieht nur deinen Besuchernamen, %2$s (oder einen Spitznamen, den man dir gegeben hat), nie dein Konto.</string>
+    <string name="voici_call_back_about_name_unknown">%1$s sieht nur einen Besuchernamen (oder einen Spitznamen, den man dir gegeben hat), nie dein Konto.</string>
+    <string name="voici_call_back_about_note">Flagship speichert eine Notiz, die diese Unterhaltung mit deinem Flagship-Konto verknüpft, damit es dein Telefon klingeln lassen kann. Deine Nachrichten sieht und deine Anrufe hört es nie.</string>
+    <string name="voici_call_back_about_deleted">Die Notiz wird gelöscht, wenn du auf „Rückrufe beenden“ tippst, wenn %1$s dich blockiert oder die Seite entfernt, oder 90 Tage nach deinem letzten Anruf mit erlaubtem Rückruf.</string>
+    <string name="voici_call_back_about_without">Ein Anruf ohne Rückruf hinterlässt keine Notiz, und %1$s kann dich nicht zurückrufen, außer du hast es bei einem früheren Anruf erlaubt.</string>
     <string name="voici_call_and_allow_back">Anrufen und Rückruf erlauben</string>
     <string name="voici_call_without_back">Ohne Rückruf anrufen</string>
     <string name="voici_call_ring_back_required">Diese Seite nimmt nur Anrufe von Personen an, die einen Rückruf erlauben.</string>

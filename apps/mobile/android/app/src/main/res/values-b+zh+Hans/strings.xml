@@ -4138,7 +4138,13 @@
     <string name="voici_calls_from_callback">允许你回拨的人</string>
     <string name="voici_calls_from_callback_note">呼叫者使用 Flagship 登录，并允许你在该对话中回拨。你永远不会知道他们是谁。你的管理员设备会响铃。</string>
     <string name="voici_call_back_prompt_title">允许 %1$s 回拨给你吗？</string>
-    <string name="voici_call_back_prompt_body">%1$s 不会知道你是谁。Flagship 会知道此对话可以让你的手机响铃。</string>
+    <string name="voici_call_back_prompt_body">%1$s 不会知道你是谁。</string>
+    <string name="voici_call_back_about_title">关于回拨</string>
+    <string name="voici_call_back_about_name">%1$s 只能看到你的访客名 %2$s（或对方给你起的昵称），绝不会看到你的账户。</string>
+    <string name="voici_call_back_about_name_unknown">%1$s 只能看到一个访客名（或对方给你起的昵称），绝不会看到你的账户。</string>
+    <string name="voici_call_back_about_note">Flagship 会保存一条备注，把此对话与你的 Flagship 账户关联起来，以便让你的手机响铃。它从不查看你的消息，也从不收听你的通话。</string>
+    <string name="voici_call_back_about_deleted">当你轻点“停止回拨”、%1$s 屏蔽你或删除页面时，或在你最后一次允许回拨的呼叫 90 天后，这条备注就会被删除。</string>
+    <string name="voici_call_back_about_without">不允许回拨的呼叫不会留下备注，%1$s 也无法回拨你，除非你在之前的呼叫中允许过。</string>
     <string name="voici_call_and_allow_back">呼叫并允许回拨</string>
     <string name="voici_call_without_back">呼叫但不允许回拨</string>
     <string name="voici_call_ring_back_required">此页面只接听允许回拨的人的通话。</string>

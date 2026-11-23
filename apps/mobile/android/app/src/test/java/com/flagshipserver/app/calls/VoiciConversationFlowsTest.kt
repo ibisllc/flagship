@@ -121,6 +121,28 @@ class VoiciConversationFlowsTest {
         assertNull(w.alice.openRingHint(VoiciJs.str(ring["ringId"])!!, VoiciJs.str(ring["hint"])!!))
     }
 
+    @Test fun aCallerWhoNeverWroteIsRungBackWithTheThreadKeyFromTheirCall() = runBlocking {
+        val w = world()
+        // carol called alice's page with call-back on, but never wrote: alice has no conversation with her.
+        val carolUmk = ByteArray(32) { 5 }
+        val carol = com.flagshipserver.app.core.voici.VoiciVisitorKeys.derive(carolUmk, w.pageId)
+        val conv = com.flagshipserver.app.core.voici.VoiciMessages.voiciConv(w.pageId, carol.pseudonymPub)
+        assertTrue(w.alice.messages.value.conversations.none { it.conv == conv })
+        // Without the thread key there is nothing to seal the hint to.
+        assertEquals(CallVisitorOutcome.Failed("not-found"), w.alice.callVisitor(conv))
+        // No channel at `.com`: refused, and Call back goes off for that conversation.
+        assertEquals(CallVisitorOutcome.NoCallBack, w.alice.callVisitor(conv, threadPub = carol.threadPub))
+        assertTrue(conv in w.alice.ringBackOff())
+        // With the channel the ring goes out, sealed to carol's thread key.
+        w.mock.ringBacks += conv
+        assertTrue(w.alice.callVisitor(conv, video = false, threadPub = carol.threadPub) is CallVisitorOutcome.Ringing)
+        val ring = w.mock.rings.last()
+        assertEquals(conv, VoiciJs.str(ring["conv"]))
+        val carolCenter = center(w.mock, K("carol", carolUmk, ByteArray(32) { 6 }, ByteArray(32) { 4 }))
+        carolCenter.recordSignIn(w.pageId, "alice", "04" + "11".repeat(64), JsonObject(emptyMap()))
+        assertNotNull(carolCenter.openRingHint(VoiciJs.str(ring["ringId"])!!, VoiciJs.str(ring["hint"])!!))
+    }
+
     @Test fun deleteForgetsTheConversationOnBothSides() = runBlocking {
         val w = world()
         var asked = 0

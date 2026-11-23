@@ -127,6 +127,8 @@ data class VoiciMissedCallRow(
     val reason: String,
     val ringingAt: Long,
     val video: Boolean,
+    /** The caller's thread key from the call's signed request (empty for an anonymous caller). */
+    val threadPub: String = "",
 )
 
 object VoiciMissedCalls {
@@ -138,7 +140,7 @@ object VoiciMissedCalls {
             val sealed = com.flagshipserver.app.core.voici.WebEnvelopes.b64Decode(item.sealed) ?: continue
             for (seed in seeds) {
                 val m = VoiciCalls.openMissedCall(seed, item.callId, sealed, pageId, origin, caKeys) ?: continue
-                out[item.callId] = VoiciMissedCallRow(item.callId, m.request.conv, m.request.from, m.reason, m.ringingAt, m.request.hasVideo)
+                out[item.callId] = VoiciMissedCallRow(item.callId, m.request.conv, m.request.from, m.reason, m.ringingAt, m.request.hasVideo, m.request.threadPub)
                 break
             }
         }

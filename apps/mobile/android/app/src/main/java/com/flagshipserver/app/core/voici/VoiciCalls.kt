@@ -43,6 +43,11 @@ data class VoiciCallRequest(
     val json: JsonObject,
     /** What the caller is able to send: "audio" or "audio,video" (voici-calls-v2.md §1.1; absent on the wire = audio). */
     val media: String = VoiciCalls.MEDIA_AUDIO,
+    /**
+     * The caller's thread key for this conversation, from the request's checked thread statement (empty for an
+     * anonymous caller): the owner's ring-back hint is sealed to it, so a caller who never wrote can be rung back.
+     */
+    val threadPub: String = "",
 ) {
     val hasVideo: Boolean get() = media == VoiciCalls.MEDIA_VIDEO
 }
@@ -286,7 +291,7 @@ object VoiciCalls {
         if (!WebEnvelopes.p256VerifyP1363(f.sig, f.bytes(), del.delegatePub)) return no("bad-signature")
         if (!ctx.skipFresh && Math.abs(f.at - ctx.now) > SKEW_MS) return no("stale")
         if (ctx.allowed != null && !ctx.allowed.invoke(f.o)) return no("not-allowed")
-        return VoiciOutcome.Ok(VoiciCallRequest(f.pageId, f.conv, f.callId, f.from, f.xpub, f.sdp, f.at, del.delegatePub, f.o, f.media ?: MEDIA_AUDIO))
+        return VoiciOutcome.Ok(VoiciCallRequest(f.pageId, f.conv, f.callId, f.from, f.xpub, f.sdp, f.at, del.delegatePub, f.o, f.media ?: MEDIA_AUDIO, ts.threadPub))
     }
 
     // ── per-call keys ──

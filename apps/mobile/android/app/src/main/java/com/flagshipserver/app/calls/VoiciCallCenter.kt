@@ -520,6 +520,7 @@ object VoiciCallCenter {
         val rec = VoiciCallRecord(
             id = r.callId + "-in", callId = r.callId, direction = "in", outcome = outcome, conv = r.conv, pseudonymPub = r.from,
             media = r.media, at = started ?: r.issuedAt, durationMs = started?.let { now - it } ?: 0,
+            threadPub = r.threadPub.ifEmpty { null },
         )
         scope.launch { runCatching { VoiciCenter.shared?.recordCall(rec) } }
     }

@@ -4143,7 +4143,13 @@
     <string name="voici_calls_from_callback">People who let you call them back</string>
     <string name="voici_calls_from_callback_note">Callers sign in with Flagship and let you call them back in that conversation. You never learn who they are. Your admin devices ring.</string>
     <string name="voici_call_back_prompt_title">Let %1$s call you back?</string>
-    <string name="voici_call_back_prompt_body">%1$s won\'t learn who you are. Flagship will know this conversation can ring your phone.</string>
+    <string name="voici_call_back_prompt_body">%1$s won\'t learn who you are.</string>
+    <string name="voici_call_back_about_title">About call-backs</string>
+    <string name="voici_call_back_about_name">%1$s sees only your visitor name, %2$s (or a nickname they gave you), never your account.</string>
+    <string name="voici_call_back_about_name_unknown">%1$s sees only a visitor name (or a nickname they gave you), never your account.</string>
+    <string name="voici_call_back_about_note">Flagship keeps a note linking this conversation to your Flagship account, so it can ring your phone. It never sees your messages or hears your calls.</string>
+    <string name="voici_call_back_about_deleted">The note is deleted when you tap “Stop call-backs”, when %1$s blocks you or removes the page, or 90 days after you last called them with call-back on.</string>
+    <string name="voici_call_back_about_without">Calling without call-back leaves no note, and %1$s can\'t call you back, unless you allowed it on an earlier call.</string>
     <string name="voici_call_and_allow_back">Call and allow call-back</string>
     <string name="voici_call_without_back">Call without call-back</string>
     <string name="voici_call_ring_back_required">This page takes calls only from people who allow a call-back.</string>

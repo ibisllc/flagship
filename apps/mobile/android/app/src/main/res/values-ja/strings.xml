@@ -4138,7 +4138,13 @@
     <string name="voici_calls_from_callback">折り返しを許可してくれる人</string>
     <string name="voici_calls_from_callback_note">発信者は Flagship でサインインし、その会話での折り返しを許可します。発信者が誰かはわかりません。管理者デバイスが鳴ります。</string>
     <string name="voici_call_back_prompt_title">%1$s からの折り返しを許可しますか？</string>
-    <string name="voici_call_back_prompt_body">%1$s にはあなたが誰か分かりません。Flagship は、この会話であなたの電話を鳴らせることを把握します。</string>
+    <string name="voici_call_back_prompt_body">%1$s にはあなたが誰かわかりません。</string>
+    <string name="voici_call_back_about_title">折り返しについて</string>
+    <string name="voici_call_back_about_name">%1$s に見えるのはあなたの訪問者名 %2$s（または相手が付けたニックネーム）だけで、アカウントは見えません。</string>
+    <string name="voici_call_back_about_name_unknown">%1$s に見えるのは訪問者名（または相手が付けたニックネーム）だけで、アカウントは見えません。</string>
+    <string name="voici_call_back_about_note">Flagship は、あなたの電話を鳴らせるように、この会話とあなたの Flagship アカウントを結び付けるメモを保存します。メッセージを見たり通話を聞いたりすることはありません。</string>
+    <string name="voici_call_back_about_deleted">このメモは、あなたが「折り返しを止める」をタップしたとき、%1$s があなたをブロックしたかページを削除したとき、または折り返しを許可して最後に発信してから 90 日後に削除されます。</string>
+    <string name="voici_call_back_about_without">折り返しなしで発信するとメモは残らず、%1$s はあなたに折り返せません。ただし、以前の通話で折り返しを許可した場合は別です。</string>
     <string name="voici_call_and_allow_back">発信して折り返しを許可</string>
     <string name="voici_call_without_back">折り返しなしで発信</string>
     <string name="voici_call_ring_back_required">このページは折り返しを許可する人からの通話だけを受けます。</string>

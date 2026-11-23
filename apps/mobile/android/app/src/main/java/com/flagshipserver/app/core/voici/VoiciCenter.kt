@@ -1718,6 +1718,20 @@ class VoiciCenter(
      */
     fun ringBackOff(): Set<String> = withLocal { _, _, l -> l.ringBackOff.keys } ?: emptySet()
 
+    /** Pseudonyms this page blocked (its own list and `.com`'s from the last inbox read). */
+    fun blockedPseudonyms(): Set<String> = (withLocal { _, _, l -> l.inboxBlocks } ?: emptyList()).toSet() + _messages.value.state.blocks
+
+    /**
+     * This account's visitor name on [pageId] ("Visitor 4F3A", for the call-back explainer) when the account key is
+     * open without a prompt; null otherwise.
+     */
+    fun ownVisitorName(pageId: String): String? {
+        val umk = keyring.umk() ?: return null
+        return runCatching {
+            VoiciCopy.visitorName(VoiciJs.hex(VoiciMessages.deriveMessagesPseudonymKey(VoiciMessages.deriveMessagesSecret(umk), pageId).publicKey))
+        }.getOrNull()
+    }
+
     /**
      * Ring a visitor of this account's page back (owner decision 2026-11-15: through the conversation's ring-back
      * channel when the caller chose "Call and allow call-back", disabled otherwise). Signs a `flagship/voici-ring/v1`
@@ -1725,18 +1739,20 @@ class VoiciCenter(
      * the caller's devices, and their app dials out to this page, so the call then rings here as any call does. The
      * caller stays a pseudonym: no username or bare name of theirs is ever used.
      */
-    suspend fun callVisitor(conv: String, video: Boolean = false): CallVisitorOutcome {
+    suspend fun callVisitor(conv: String, video: Boolean = false, threadPub: String? = null): CallVisitorOutcome {
         val u = user() ?: return CallVisitorOutcome.Failed("locked")
         val umk = keyring.umk() ?: return CallVisitorOutcome.Failed("locked")
         val local = withLocal { _, _, l -> l } ?: return CallVisitorOutcome.Failed("locked")
         val keys = ownerKeys(local, umk) ?: return CallVisitorOutcome.Failed("not-found")
-        val c = local.conversations.firstOrNull { it.conv == conv } ?: return CallVisitorOutcome.Failed("not-found")
+        // A caller who never wrote has no conversation here: their call's signed request gave [threadPub] instead.
+        val callerThreadPub = local.conversations.firstOrNull { it.conv == conv }?.threadPub ?: threadPub?.takeIf { it.isNotEmpty() }
+            ?: return CallVisitorOutcome.Failed("not-found")
         val t = now()
         val ringId = VoiciOwner.randomHex(16)
         val media = if (video) VoiciCalls.MEDIA_VIDEO else VoiciCalls.MEDIA_AUDIO
         val hint = try {
             val eseed = ByteArray(com.flagshipserver.app.core.pq.PqHybrid.HYBRID_SEAL_RANDOMNESS_LEN).also { java.security.SecureRandom().nextBytes(it) }
-            WebEnvelopes.b64Encode(VoiciRings.sealHint(WebEnvelopes.hexToBytes(c.threadPub), keys.pageId, u, conv, ringId, media, t, eseed))
+            WebEnvelopes.b64Encode(VoiciRings.sealHint(WebEnvelopes.hexToBytes(callerThreadPub), keys.pageId, u, conv, ringId, media, t, eseed))
         } catch (e: Exception) {
             return CallVisitorOutcome.Failed("failed")
         }

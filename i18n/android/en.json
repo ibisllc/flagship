@@ -17019,11 +17019,35 @@
   },
   "voici_call_back_prompt_title": {
     "en": "Let %1$s call you back?",
-    "ctx": "voi.ci calls: pop-up before a call; %1$s is the page"
+    "ctx": "voi.ci calls: pop-up before a call; %1$s is the page's username"
   },
   "voici_call_back_prompt_body": {
-    "en": "%1$s won't learn who you are. Flagship will know this conversation can ring your phone.",
-    "ctx": "voi.ci calls: pop-up before a call"
+    "en": "%1$s won't learn who you are.",
+    "ctx": "voi.ci calls: pop-up before a call, followed by an info button; %1$s is the page's username"
+  },
+  "voici_call_back_about_title": {
+    "en": "About call-backs",
+    "ctx": "voi.ci calls: explainer behind the pop-up's info button (also the button's label)"
+  },
+  "voici_call_back_about_name": {
+    "en": "%1$s sees only your visitor name, %2$s (or a nickname they gave you), never your account.",
+    "ctx": "voi.ci calls: About call-backs; %1$s the page's username, %2$s the caller's visitor name like Visitor 4F3A"
+  },
+  "voici_call_back_about_name_unknown": {
+    "en": "%1$s sees only a visitor name (or a nickname they gave you), never your account.",
+    "ctx": "voi.ci calls: About call-backs; %1$s the page's username"
+  },
+  "voici_call_back_about_note": {
+    "en": "Flagship keeps a note linking this conversation to your Flagship account, so it can ring your phone. It never sees your messages or hears your calls.",
+    "ctx": "voi.ci calls: About call-backs"
+  },
+  "voici_call_back_about_deleted": {
+    "en": "The note is deleted when you tap “Stop call-backs”, when %1$s blocks you or removes the page, or 90 days after you last called them with call-back on.",
+    "ctx": "voi.ci calls: About call-backs; “Stop call-backs” is the thread's button (voici_call_backs_stop); %1$s the page's username"
+  },
+  "voici_call_back_about_without": {
+    "en": "Calling without call-back leaves no note, and %1$s can't call you back, unless you allowed it on an earlier call.",
+    "ctx": "voi.ci calls: About call-backs; %1$s the page's username"
   },
   "voici_call_and_allow_back": {
     "en": "Call and allow call-back",

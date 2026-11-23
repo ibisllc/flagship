@@ -4138,7 +4138,13 @@
     <string name="voici_calls_from_callback">Les personnes qui vous laissent les rappeler</string>
     <string name="voici_calls_from_callback_note">Les appelants se connectent avec Flagship et vous laissent les rappeler dans cette conversation. Vous ne savez jamais qui ils sont. Vos appareils administrateurs sonnent.</string>
     <string name="voici_call_back_prompt_title">Laisser %1$s vous rappeler ?</string>
-    <string name="voici_call_back_prompt_body">%1$s ne saura pas qui vous êtes. Flagship saura que cette conversation peut faire sonner votre téléphone.</string>
+    <string name="voici_call_back_prompt_body">%1$s ne saura pas qui vous êtes.</string>
+    <string name="voici_call_back_about_title">À propos des rappels</string>
+    <string name="voici_call_back_about_name">%1$s ne voit que votre nom de visiteur, %2$s (ou le surnom qu\'on vous a donné), jamais votre compte.</string>
+    <string name="voici_call_back_about_name_unknown">%1$s ne voit qu\'un nom de visiteur (ou le surnom qu\'on vous a donné), jamais votre compte.</string>
+    <string name="voici_call_back_about_note">Flagship conserve une note qui relie cette conversation à votre compte Flagship, pour pouvoir faire sonner votre téléphone. Flagship ne voit jamais vos messages et n\'entend jamais vos appels.</string>
+    <string name="voici_call_back_about_deleted">La note est supprimée quand vous touchez « Arrêter les rappels », quand %1$s vous bloque ou supprime la page, ou 90 jours après votre dernier appel avec rappel autorisé.</string>
+    <string name="voici_call_back_about_without">Appeler sans rappel ne laisse aucune note, et %1$s ne peut pas vous rappeler, sauf si vous l\'avez autorisé lors d\'un appel précédent.</string>
     <string name="voici_call_and_allow_back">Appeler et autoriser le rappel</string>
     <string name="voici_call_without_back">Appeler sans rappel</string>
     <string name="voici_call_ring_back_required">Cette page n\'accepte que les appels de personnes qui autorisent le rappel.</string>

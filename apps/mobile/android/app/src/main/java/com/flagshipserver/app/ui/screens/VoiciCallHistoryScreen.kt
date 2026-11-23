@@ -2,7 +2,8 @@
 // docs/social-tabs.md): "Who to call" on top, then the call history (incoming, outgoing and missed, newest
 // first, kept on this device; missed calls from `.com`), Call / Video call on every page this account can call, and
 // the call this app is placing. A visitor of this account's own page is rung back from their thread (tapping the
-// row opens it), only through the conversation's ring-back channel (VoiciCenter.callVisitor).
+// row opens it), or with the row's Call back when they never wrote, only through the conversation's ring-back
+// channel (VoiciCenter.callVisitor).
 
 package com.flagshipserver.app.ui.screens
 
@@ -19,6 +20,9 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CallMade
 import androidx.compose.material.icons.outlined.CallMissed
 import androidx.compose.material.icons.outlined.CallReceived
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -47,6 +52,8 @@ import com.flagshipserver.app.calls.VoiciCallTarget
 import com.flagshipserver.app.calls.VoiciOutgoingCall
 import com.flagshipserver.app.calls.VoiciOutgoingCalls
 import com.flagshipserver.app.calls.VoiciOutgoingState
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.core.voici.CallVisitorOutcome
 import com.flagshipserver.app.core.voici.SocialActivity
 import com.flagshipserver.app.core.voici.VoiciCopy
 import com.flagshipserver.app.ui.components.FSCard
@@ -65,9 +72,8 @@ import java.text.DateFormat
 import java.util.Date
 
 /**
- * Call / Video call for a page this account can call. Before the call, the call-back pop-up (docs/voici-calls.md,
- * owner additions): "Call and allow call-back" attaches this conversation's ring-back channel, "Call without
- * call-back" doesn't. The microphone is asked for on the tap; a refusal still calls (the browser asks its own).
+ * Call / Video call for a page this account can call. Before the call, the call-back pop-up (CallBackPrompt). The
+ * microphone is asked for on the tap; a refusal still calls (the browser asks its own).
  */
 @Composable
 fun VoiciCallButtons(target: VoiciCallTarget, tagPrefix: String = "call") {
@@ -84,19 +90,64 @@ fun VoiciCallButtons(target: VoiciCallTarget, tagPrefix: String = "call") {
         FSGhostButton(stringResource(R.string.voici_call_video_action), { asking = true }, modifier = Modifier.testTag("$tagPrefix-video"))
     }
     asking?.let { video ->
-        val name = stringResource(R.string.voici_calls_peer_page, target.username)
-        val go = { allow: Boolean ->
+        CallBackPrompt(target, tagPrefix, onDismiss = { asking = null }) { allow ->
             asking = null
             allowBack = allow
             pendingVideo = video
             mic.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+}
+
+/**
+ * The call-back question before a call (docs/voici-calls.md, owner wording 2026-11-23): "Let brisk-quartz call you
+ * back?", "brisk-quartz won't learn who you are." with an info button that opens "About call-backs", then "Call and
+ * allow call-back" (attaches this conversation's ring-back channel) or "Call without call-back".
+ */
+@Composable
+private fun CallBackPrompt(target: VoiciCallTarget, tagPrefix: String, onDismiss: () -> Unit, onChoose: (Boolean) -> Unit) {
+    val center = LocalVoiciCenter.current
+    var about by remember { mutableStateOf(false) }
+    val name = target.username
+    if (about) {
+        // This account's visitor name on the page when the account key is open (no prompt just to show it).
+        val visitor = remember(target.pageId) { center?.ownVisitorName(target.pageId) }
+        val points = listOf(
+            if (visitor != null) stringResource(R.string.voici_call_back_about_name, name, visitor)
+            else stringResource(R.string.voici_call_back_about_name_unknown, name),
+            stringResource(R.string.voici_call_back_about_note),
+            stringResource(R.string.voici_call_back_about_deleted, name),
+            stringResource(R.string.voici_call_back_about_without, name),
+        )
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { asking = null },
+            onDismissRequest = { about = false },
+            title = { Text(stringResource(R.string.voici_call_back_about_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("$tagPrefix-about-text")) {
+                    points.forEach { p ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                            Text("\u2022")
+                            Text(p)
+                        }
+                    }
+                }
+            },
+            confirmButton = { FSGhostButton(stringResource(R.string.back), { about = false }, modifier = Modifier.testTag("$tagPrefix-about-back")) },
+        )
+    } else {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onDismiss,
             title = { Text(stringResource(R.string.voici_call_back_prompt_title, name)) },
-            text = { Text(stringResource(R.string.voici_call_back_prompt_body, name)) },
-            confirmButton = { FSPrimaryButton(stringResource(R.string.voici_call_and_allow_back), { go(true) }, modifier = Modifier.testTag("$tagPrefix-allow-back")) },
-            dismissButton = { FSGhostButton(stringResource(R.string.voici_call_without_back), { go(false) }, modifier = Modifier.testTag("$tagPrefix-no-back")) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.voici_call_back_prompt_body, name), modifier = Modifier.weight(1f, fill = false))
+                    IconButton(onClick = { about = true }, modifier = Modifier.testTag("$tagPrefix-about")) {
+                        Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.voici_call_back_about_title))
+                    }
+                }
+            },
+            confirmButton = { FSPrimaryButton(stringResource(R.string.voici_call_and_allow_back), { onChoose(true) }, modifier = Modifier.testTag("$tagPrefix-allow-back")) },
+            dismissButton = { FSGhostButton(stringResource(R.string.voici_call_without_back), { onChoose(false) }, modifier = Modifier.testTag("$tagPrefix-no-back")) },
         )
     }
 }
@@ -181,6 +232,9 @@ fun VoiciCallHistoryScreen(nav: NavController) {
     val history = remember(version, messages.missedCalls) { center.callHistory() }
     val nicknames = messages.state.nicknames.mapValues { it.value.name }
     val anonBlocked = remember(version) { center.anonBlocks() }
+    val ringBackOff = remember(version) { center.ringBackOff() }
+    val blocked = remember(version, messages) { center.blockedPseudonyms() }
+    val callsOn = center.page.collectAsState().value.callsOn
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val toasts = com.flagshipserver.app.core.LocalToastCenter.current
     // Every missed call so far counts as seen once this page is open (the Social call button's count).
@@ -200,7 +254,18 @@ fun VoiciCallHistoryScreen(nav: NavController) {
                         r.direction != "out" && r.conv != null && messages.conversations.any { it.conv == r.conv } -> ({ nav.navigate("thread/${r.conv}") })
                         else -> null
                     }
-                    CallHistoryRow(r, nicknames, anonBlocked, onOpen = open) { conv, block ->
+                    // A caller who never wrote (nothing to open) is rung back from the row while their conversation still
+                    // allows call-backs: the thread's ring-back path, with its sentences (ThreadScreen).
+                    val callBack: (() -> Unit)? = if (open == null && r.offersCallBack(false, ringBackOff, blocked, callsOn)) ({
+                        scope.launch {
+                            when (val o = center.callVisitor(r.conv!!, r.video, r.threadPub)) {
+                                is CallVisitorOutcome.Ringing -> toasts.success(FSStrings.get(R.string.voici_call_back_ringing))
+                                CallVisitorOutcome.NoCallBack -> toasts.error(FSStrings.get(R.string.voici_call_back_off))
+                                is CallVisitorOutcome.Failed -> toasts.error(VoiciCopy.callFailure(o.code))
+                            }
+                        }
+                    }) else null
+                    CallHistoryRow(r, nicknames, anonBlocked, onOpen = open, onCallBack = callBack) { conv, block ->
                         scope.launch { center.blockAnonymous(conv, block)?.let { toasts.error(VoiciCopy.sendError(it)) } }
                     }
                     if (i < history.size - 1) FSDivider(0.dp)
@@ -285,24 +350,23 @@ private fun WhoToCall(center: com.flagshipserver.app.core.voici.VoiciCenter) {
         }
     }
     asking?.let { (target, video) ->
-        val name = stringResource(R.string.voici_calls_peer_page, target.username)
-        val go = { allow: Boolean ->
+        CallBackPrompt(target, "calls-target", onDismiss = { asking = null }) { allow ->
             asking = null
             pending = Triple(target, video, allow)
             mic.launch(Manifest.permission.RECORD_AUDIO)
         }
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { asking = null },
-            title = { Text(stringResource(R.string.voici_call_back_prompt_title, name)) },
-            text = { Text(stringResource(R.string.voici_call_back_prompt_body, name)) },
-            confirmButton = { FSPrimaryButton(stringResource(R.string.voici_call_and_allow_back), { go(true) }, modifier = Modifier.testTag("calls-target-allow-back")) },
-            dismissButton = { FSGhostButton(stringResource(R.string.voici_call_without_back), { go(false) }, modifier = Modifier.testTag("calls-target-no-back")) },
-        )
     }
 }
 
 @Composable
-private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, anonBlocked: Set<String>, onOpen: (() -> Unit)?, onBlockAnonymous: (String, Boolean) -> Unit) {
+private fun CallHistoryRow(
+    r: VoiciCallRecord,
+    nicknames: Map<String, String>,
+    anonBlocked: Set<String>,
+    onOpen: (() -> Unit)?,
+    onCallBack: (() -> Unit)?,
+    onBlockAnonymous: (String, Boolean) -> Unit,
+) {
     // An anonymous caller (an "anyone" page) has no thread: its row offers Block / Unblock instead.
     val anonConv = r.conv?.takeIf { r.pseudonymPub != null && r.pseudonymPub.length != 64 }
     val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(r.at))
@@ -319,6 +383,7 @@ private fun CallHistoryRow(r: VoiciCallRecord, nicknames: Map<String, String>, a
         onClick = if (anonConv == null) onOpen else null,
         trailing = when {
             r.callable -> ({ VoiciCallButtons(VoiciCallTarget(r.peerUsername!!, r.peerPageId!!), "calls-row") })
+            onCallBack != null -> ({ FSGhostButton(stringResource(R.string.voici_call_back), onCallBack, modifier = Modifier.testTag("calls-row-call-back")) })
             anonConv != null -> ({
                 val blocked = anonConv in anonBlocked
                 FSGhostButton(stringResource(if (blocked) R.string.voici_menu_unblock else R.string.voici_menu_block), { onBlockAnonymous(anonConv, !blocked) }, modifier = Modifier.testTag("calls-row-anon-block"))

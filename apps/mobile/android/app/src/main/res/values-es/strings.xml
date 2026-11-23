@@ -4138,7 +4138,13 @@
     <string name="voici_calls_from_callback">Personas que te dejan devolverles la llamada</string>
     <string name="voici_calls_from_callback_note">Quien llama inicia sesión con Flagship y te deja devolverle la llamada en esa conversación. Nunca sabrás quién es. Suenan tus dispositivos de administrador.</string>
     <string name="voici_call_back_prompt_title">¿Dejar que %1$s te devuelva la llamada?</string>
-    <string name="voici_call_back_prompt_body">%1$s no sabrá quién eres. Flagship sabrá que esta conversación puede hacer sonar tu teléfono.</string>
+    <string name="voici_call_back_prompt_body">%1$s no sabrá quién eres.</string>
+    <string name="voici_call_back_about_title">Sobre las devoluciones de llamada</string>
+    <string name="voici_call_back_about_name">%1$s solo ve tu nombre de visitante, %2$s (o un apodo que te haya puesto), nunca tu cuenta.</string>
+    <string name="voici_call_back_about_name_unknown">%1$s solo ve un nombre de visitante (o un apodo que te haya puesto), nunca tu cuenta.</string>
+    <string name="voici_call_back_about_note">Flagship guarda una nota que vincula esta conversación con tu cuenta de Flagship, para poder hacer sonar tu teléfono. Nunca ve tus mensajes ni escucha tus llamadas.</string>
+    <string name="voici_call_back_about_deleted">La nota se borra cuando tocas «Dejar de permitir devoluciones de llamada», cuando %1$s te bloquea o elimina la página, o 90 días después de la última vez que llamaste con la devolución de llamada permitida.</string>
+    <string name="voici_call_back_about_without">Llamar sin devolución de llamada no deja ninguna nota, y %1$s no puede devolverte la llamada, salvo que lo hayas permitido en una llamada anterior.</string>
     <string name="voici_call_and_allow_back">Llamar y permitir que me devuelvan la llamada</string>
     <string name="voici_call_without_back">Llamar sin devolución de llamada</string>
     <string name="voici_call_ring_back_required">Esta página solo acepta llamadas de personas que permiten que se les devuelva la llamada.</string>

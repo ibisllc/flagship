@@ -24,10 +24,24 @@ data class VoiciCallRecord(
     val media: String = "audio",
     val at: Long,
     val durationMs: Long = 0,
+    /**
+     * A visitor's thread key for this conversation, from the call's signed request: lets the history ring back a
+     * caller who never wrote (no thread here). Null for pages, anonymous callers and records from older builds.
+     */
+    val threadPub: String? = null,
 ) {
     val video: Boolean get() = media == "audio,video"
-    /** A page this account can call again from the history (a visitor is rung back from their thread instead). */
+    /** A page this account can call again from the history (a visitor is rung back from their thread, or with Call back). */
     val callable: Boolean get() = peerUsername != null && peerPageId != null
+
+    /**
+     * Whether this row offers Call back: an incoming call from a visitor (not anonymous: a pseudonym, 64 hex) who has
+     * no thread here, whose call left their thread key, while their conversation still allows call-backs (not in
+     * [ringBackOff], not [blocked], calls on).
+     */
+    fun offersCallBack(hasThread: Boolean, ringBackOff: Set<String>, blocked: Set<String>, callsOn: Boolean): Boolean =
+        direction == "in" && conv != null && pseudonymPub != null && pseudonymPub.length == 64 && !hasThread &&
+            !threadPub.isNullOrEmpty() && callsOn && conv !in ringBackOff && pseudonymPub !in blocked
 }
 
 object VoiciCallHistory {
@@ -67,6 +81,7 @@ object VoiciCallHistory {
             VoiciCallRecord(
                 id = "missed-${it.callId}", callId = it.callId, direction = "in", outcome = "missed",
                 conv = it.conv, pseudonymPub = it.pseudonymPub, media = if (it.video) "audio,video" else "audio", at = it.ringingAt,
+                threadPub = it.threadPub.ifEmpty { null },
             )
         }
         return (local + fromServer).sortedWith(compareByDescending<VoiciCallRecord> { it.at }.thenBy { it.id })

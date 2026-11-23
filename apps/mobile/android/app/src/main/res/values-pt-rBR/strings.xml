@@ -4138,7 +4138,13 @@
     <string name="voici_calls_from_callback">Pessoas que deixam você retornar a ligação</string>
     <string name="voici_calls_from_callback_note">Quem liga entra com o Flagship e deixa você retornar a ligação nessa conversa. Você nunca sabe quem é. Seus dispositivos de administrador tocam.</string>
     <string name="voici_call_back_prompt_title">Deixar %1$s ligar de volta para você?</string>
-    <string name="voici_call_back_prompt_body">%1$s não vai saber quem você é. O Flagship vai saber que esta conversa pode tocar seu telefone.</string>
+    <string name="voici_call_back_prompt_body">%1$s não vai saber quem você é.</string>
+    <string name="voici_call_back_about_title">Sobre ligações de volta</string>
+    <string name="voici_call_back_about_name">%1$s vê só seu nome de visitante, %2$s (ou um apelido que deram a você), nunca sua conta.</string>
+    <string name="voici_call_back_about_name_unknown">%1$s vê só um nome de visitante (ou um apelido que deram a você), nunca sua conta.</string>
+    <string name="voici_call_back_about_note">O Flagship guarda uma nota que liga esta conversa à sua conta Flagship, para poder fazer seu telefone tocar. Ele nunca vê suas mensagens nem ouve suas ligações.</string>
+    <string name="voici_call_back_about_deleted">A nota é apagada quando você toca em “Parar ligações de volta”, quando %1$s bloqueia você ou remove a página, ou 90 dias depois da última vez que você ligou com a ligação de volta permitida.</string>
+    <string name="voici_call_back_about_without">Ligar sem ligação de volta não deixa nenhuma nota, e %1$s não pode ligar de volta para você, a menos que você tenha permitido em uma ligação anterior.</string>
     <string name="voici_call_and_allow_back">Ligar e permitir ligação de volta</string>
     <string name="voici_call_without_back">Ligar sem ligação de volta</string>
     <string name="voici_call_ring_back_required">Esta página só aceita chamadas de quem permite ligação de volta.</string>
