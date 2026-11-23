@@ -17231,5 +17231,21 @@
   "Flagship couldn't find this account.": {
     "en": "Flagship couldn't find this account.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AccountSecurityViewModel.swift CodeProtectionText"
+  },
+  "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.": {
+    "en": "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RePairRefusalText.swift"
+  },
+  "This recovery request was already used. Start the recovery again.": {
+    "en": "This recovery request was already used. Start the recovery again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RePairRefusalText.swift"
+  },
+  "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": {
+    "en": "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RePairRefusalText.swift"
+  },
+  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": {
+    "en": "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RePairRefusalText.swift"
   }
 }

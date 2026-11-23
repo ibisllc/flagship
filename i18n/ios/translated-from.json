@@ -4039,5 +4039,9 @@
   "Code protection is already on for this account. Turn it off first to set up a new authenticator.": "12d98c4b2595",
   "Code protection is already off for this account.": "e25a5de61120",
   "This setup expired. Start again to get a new key.": "2f5736972f88",
-  "Flagship couldn't find this account.": "1909ab21ff27"
+  "Flagship couldn't find this account.": "1909ab21ff27",
+  "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.": "b47bbddf5852",
+  "This recovery request was already used. Start the recovery again.": "0f2a82b48a5c",
+  "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "163a0577575e",
+  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "81289097ae16"
 }

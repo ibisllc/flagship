@@ -279,6 +279,8 @@ public final class RealAccountLoginViewModel {
                 recoveryProofToken: recoveryVM.recoveryProofToken
             )
             phase = .completed(username: username, completesAt: resp.completesAt)
+        } catch let e where RePairRefusalText.refusal(e) != nil {
+            phase = .failed(RePairRefusalText.refusal(e)!)
         } catch ScreensClientError.http(let status, _) where status == 401 {
             // #52 — we sent NO proof, so a 401 here is the cloud saying
             // "this account has a second factor enrolled; prove it".
@@ -322,6 +324,13 @@ public final class RealAccountLoginViewModel {
             )
             pendingRotatedRePair = nil
             phase = .completed(username: pending.username, completesAt: resp.completesAt)
+        } catch let e where RePairRefusalText.refusal(e) != nil {
+            // A code already spent can be corrected in place; the others end the attempt.
+            if RePairRefusalText.refusal(e) == RePairRefusalText.credentialUsed {
+                phase = .needsSecondFactor(error: RePairRefusalText.credentialUsed)
+            } else {
+                phase = .failed(RePairRefusalText.refusal(e)!)
+            }
         } catch ScreensClientError.http(let status, _) where status == 401 {
             phase = .needsSecondFactor(error: String(localized: "That recovery code or authenticator code wasn't accepted. Check it and try again."))
         } catch {
@@ -422,6 +431,8 @@ public final class RealAccountLoginViewModel {
                 ifMatch: ifMatch
             )
             phase = .completed(username: username, completesAt: resp.completesAt)
+        } catch let e where RePairRefusalText.refusal(e) != nil {
+            phase = .failed(RePairRefusalText.refusal(e)!)
         } catch ScreensClientError.http(let status, _) where status == 401 {
             phase = .failed(String(localized: "That recovery code or authenticator code wasn't accepted. Check it and try again."))
         } catch {

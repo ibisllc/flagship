@@ -161,6 +161,9 @@ public final class ReplaceDeviceViewModel {
                 // warning rather than throwing the whole ceremony.
             }
             phase = .pending(completesAt: resp.completesAt)
+        } catch let e where RePairRefusalText.refusal(e) != nil {
+            // A refusal with a code (security report F3): a used request, a veto in the last day, a clock off.
+            phase = .failed(RePairRefusalText.refusal(e)!)
         } catch ScreensClientError.http(let status, _) where status == 412 {
             phase = .failed(String(localized: "Your device list changed in the background. Refresh and try again."))
         } catch ScreensClientError.http(let status, _) where status == 409 {

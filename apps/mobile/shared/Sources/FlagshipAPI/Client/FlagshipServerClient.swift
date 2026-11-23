@@ -3288,6 +3288,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         case staleEtag(currentEtag: String) // 412 → throws as http(412)
         case alreadyPending            // 409
         case rateLimited(body: String) // 429 with `.com`'s rate-limit body
+        /// A refusal with a stable code (security report F3: `re-pair-replay`, `re-pair-vetoed-recently`, …).
+        case refused(status: Int, code: String)
     }
     public var rePairBehavior: RePairBehavior = .ok
     /// Captures the last initiate call so tests can assert on the
@@ -3369,6 +3371,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: 409, message: String(localized: "already pending"))
         case .rateLimited(let body):
             throw ScreensClientError.http(status: 429, message: body)
+        case .refused(let status, let code):
+            throw ScreensClientError.http(status: status, message: #"{"error":"refused","code":"\#(code)"}"#)
         case .ok:
             return RePairInitiateResponse(ok: true, completesAt: Int64(Date().timeIntervalSince1970 * 1000) + 24 * 3600 * 1000, graceMs: 24 * 3600 * 1000)
         }
@@ -4469,12 +4473,16 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/re-pair"))
         req.httpMethod = "GET"
-        let (data, resp) = try await send(req)
-        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        // An account read since security report F3: the read token goes with it, as on /pods.
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await send($0)
+        }
         // 404/405 = an older Worker that doesn't wire the GET; treat it
         // the same as "no pending row" but flag it so the caller hides
         // the banner gracefully (mirrors the webapp's `unavailable`).
-        if status == 404 || status == 405 {
+        // 401/403 = no read token could be had: the banner hides, as a
+        // paused /pods read does.
+        if status == 404 || status == 405 || status == 401 || status == 403 {
             return PendingRePairSnapshot(pending: nil, unavailable: true)
         }
         guard (200..<300).contains(status) else {

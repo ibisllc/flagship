@@ -4045,5 +4045,9 @@
   "Code protection is already on for this account. Turn it off first to set up a new authenticator.": "La protection par code est déjà activée pour ce compte. Désactivez-la d’abord pour configurer un nouvel authentificateur.",
   "Code protection is already off for this account.": "La protection par code est déjà désactivée pour ce compte.",
   "This setup expired. Start again to get a new key.": "Cette configuration a expiré. Recommencez pour obtenir une nouvelle clé.",
-  "Flagship couldn't find this account.": "Flagship n’a pas trouvé ce compte."
+  "Flagship couldn't find this account.": "Flagship n’a pas trouvé ce compte.",
+  "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.": "Un administrateur de ce compte a refusé une récupération avec cet appareil il y a moins d’un jour. Vous pourrez réessayer après un jour, ou demandez à l’administrateur.",
+  "This recovery request was already used. Start the recovery again.": "Cette demande de récupération a déjà été utilisée. Recommencez la récupération.",
+  "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "Ce code a déjà servi pour une récupération. Attendez un nouveau code, ou refaites l’étape de récupération, puis réessayez.",
+  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "L’horloge de cet appareil ne correspond pas à celle de Flagship. Réglez la date et l’heure sur automatique, puis réessayez."
 }

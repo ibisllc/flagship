@@ -359,6 +359,45 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertFalse(snap.unavailable)
     }
 
+    /// Security report F3: the GET is an account read; the client sends its token, as on /pods.
+    func test_liveClient_fetchPendingRePair_sendsAccountReadToken() async throws {
+        StubURLProtocol.handler = { req in
+            XCTAssertEqual(req.url?.path, "/api/users/harry/re-pair")
+            let auth = req.value(forHTTPHeaderField: "authorization")
+            let ok = auth == "Bearer read-token-1"
+            let resp = HTTPURLResponse(url: req.url!, statusCode: ok ? 200 : 401, httpVersion: "HTTP/2", headerFields: nil)!
+            return (resp, (ok ? "{\"pending\":null}" : "{\"error\":\"an account read token is required\"}").data(using: .utf8)!)
+        }
+        defer { StubURLProtocol.handler = nil }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        let client = LiveFlagshipServerClient(
+            urlSession: URLSession(configuration: cfg),
+            baseUrl: URL(string: "https://flagshipserver.com")!,
+            readTokens: FixedRePairReadToken(token: "read-token-1")
+        )
+        let snap = try await client.fetchPendingRePair(username: "harry")
+        XCTAssertNil(snap.pending)
+        XCTAssertFalse(snap.unavailable)
+    }
+
+    func test_liveClient_fetchPendingRePair_401_hidesTheBanner() async throws {
+        StubURLProtocol.handler = { req in
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 401, httpVersion: "HTTP/2", headerFields: nil)!
+            return (resp, "{\"error\":\"an account read token is required\"}".data(using: .utf8)!)
+        }
+        defer { StubURLProtocol.handler = nil }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        let client = LiveFlagshipServerClient(
+            urlSession: URLSession(configuration: cfg),
+            baseUrl: URL(string: "https://flagshipserver.com")!
+        )
+        let snap = try await client.fetchPendingRePair(username: "harry")
+        XCTAssertNil(snap.pending)
+        XCTAssertTrue(snap.unavailable)
+    }
+
     func test_liveClient_fetchPendingRePair_404_isUnavailableNotError() async throws {
         StubURLProtocol.handler = { req in
             let resp = HTTPURLResponse(
@@ -377,6 +416,13 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertNil(snap.pending)
         XCTAssertTrue(snap.unavailable)
     }
+}
+
+/// A read-token source that always answers the same token.
+private struct FixedRePairReadToken: AccountReadTokenSource {
+    let token: String
+    func token(for username: String) async -> String? { token }
+    func tokenAfterRejection(for username: String) async -> String? { nil }
 }
 
 // MARK: - URLProtocol stub

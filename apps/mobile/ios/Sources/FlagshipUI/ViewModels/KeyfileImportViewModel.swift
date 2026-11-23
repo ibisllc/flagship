@@ -144,6 +144,8 @@ public final class KeyfileImportViewModel {
             // put them back so this device can reach and save its servers even with `.com` gone.
             await restoreAccount(account)
             phase = .completed(username: username, completesAt: resp.completesAt)
+        } catch let e where RePairRefusalText.refusal(e) != nil {
+            phase = .failed(RePairRefusalText.refusal(e)!)
         } catch ScreensClientError.http(let status, let message) where status == 401 && message.contains("totpProof") {
             // #52 — the account has a second factor enrolled, which the
             // cloud now requires at initiate even for single-device

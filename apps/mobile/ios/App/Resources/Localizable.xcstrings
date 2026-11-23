@@ -165873,6 +165873,170 @@
           }
         }
       }
+    },
+    "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un administrador de esta cuenta rechazó una recuperación con este dispositivo hace menos de un día. Puedes volver a intentarlo pasado un día o pedírselo al administrador."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un administrateur de ce compte a refusé une récupération avec cet appareil il y a moins d’un jour. Vous pourrez réessayer après un jour, ou demandez à l’administrateur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Admin dieses Kontos hat vor weniger als einem Tag eine Wiederherstellung mit diesem Gerät abgelehnt. Du kannst es nach einem Tag erneut versuchen oder den Admin fragen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um administrador desta conta recusou uma recuperação com este dispositivo há menos de um dia. Você pode tentar de novo depois de um dia ou falar com o administrador."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアカウントの管理者が、1 日以内にこのデバイスでのリカバリーを拒否しました。1 日たってからもう一度お試しいただくか、管理者にお問い合わせください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此账户的管理员在不到一天前拒绝了用此设备进行的恢复。你可以一天后再试，或询问管理员。"
+          }
+        }
+      }
+    },
+    "This recovery request was already used. Start the recovery again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta solicitud de recuperación ya se usó. Vuelve a iniciar la recuperación."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette demande de récupération a déjà été utilisée. Recommencez la récupération."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Wiederherstellungsanfrage wurde bereits verwendet. Starte die Wiederherstellung erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta solicitação de recuperação já foi usada. Inicie a recuperação novamente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このリカバリーのリクエストはすでに使用されています。リカバリーをもう一度始めてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此恢复请求已被使用。请重新开始恢复。"
+          }
+        }
+      }
+    },
+    "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ese código ya se usó para una recuperación. Espera a un código nuevo, o repite el paso de recuperación, y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce code a déjà servi pour une récupération. Attendez un nouveau code, ou refaites l’étape de récupération, puis réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Code wurde bereits für eine Wiederherstellung verwendet. Warte auf einen neuen Code oder wiederhole den Wiederherstellungsschritt und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esse código já foi usado em uma recuperação. Aguarde um código novo, ou repita a etapa de recuperação, e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "そのコードはすでにリカバリーに使用されています。新しいコードを待つか、リカバリーの手順をやり直してから、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该代码已用于一次恢复。请等待新代码，或重做恢复步骤，然后再试。"
+          }
+        }
+      }
+    },
+    "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El reloj de este dispositivo no coincide con el de Flagship. Configura la fecha y la hora como automáticas y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’horloge de cet appareil ne correspond pas à celle de Flagship. Réglez la date et l’heure sur automatique, puis réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Uhr dieses Geräts stimmt nicht mit der von Flagship überein. Stelle Datum und Uhrzeit auf automatisch und versuche es dann erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O relógio deste dispositivo não corresponde ao do Flagship. Defina a data e a hora como automáticas e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスの時計が Flagship の時計と一致しません。日付と時刻を自動設定にしてから、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备的时钟与 Flagship 的不一致。请将日期和时间设为自动，然后再试。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

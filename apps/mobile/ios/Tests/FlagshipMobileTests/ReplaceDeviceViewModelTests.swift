@@ -119,6 +119,29 @@ final class ReplaceDeviceViewModelTests: XCTestCase {
         }
     }
 
+    /// Security report F3: `.com`'s coded re-pair refusals each get their sentence, not "already pending".
+    func test_initiate_codedRefusals_areWorded() async throws {
+        try await makeUMK()
+        let cases: [(Int, String, String)] = [
+            (409, "re-pair-vetoed-recently", RePairRefusalText.vetoedRecently),
+            (409, "re-pair-replay", RePairRefusalText.replay),
+            (409, "re-pair-cancelled-replay", RePairRefusalText.replay),
+            (409, "re-pair-credential-used", RePairRefusalText.credentialUsed),
+            (403, "re-pair-stale", RePairRefusalText.stale),
+        ]
+        for (status, code, sentence) in cases {
+            let server = MockFlagshipServerClient()
+            server.simulatedLatency = 0
+            server.rePairBehavior = .refused(status: status, code: code)
+            let vm = ReplaceDeviceViewModel(server: server, username: { "alice" })
+            await vm.initiate(currentEtag: nil)
+            XCTAssertEqual(vm.phase, .failed(sentence), code)
+            XCTAssertNil(Keystore.pendingIrkRotationVersion())
+        }
+        XCTAssertTrue(RePairRefusalText.vetoedRecently.contains("less than a day ago"))
+        XCTAssertNil(RePairRefusalText.text(code: "something-else"))
+    }
+
     func test_initiate_rateLimited_saysWhenToTryAgain() async throws {
         try await makeUMK()
         let server = MockFlagshipServerClient()
