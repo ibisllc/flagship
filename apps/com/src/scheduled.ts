@@ -46,6 +46,7 @@ import type { ServiceInferenceEnv } from "./serviceInference.js";
 import { runRelayDirectoryCron, type RelayDirectoryEnv } from "./relayDirectory.js";
 import { cronPlan, SUGGESTION_ATTEMPTS_PER_TICK, type CronJobId, type CronPlan } from "./cronPlan.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
+import { pruneTotpOutcomeLog } from "./totpOutcomeLog.js";
 import { pruneOutboundDaily } from "./outboundHosts.js";
 import { protectedAccountsFrom } from "./prodReap.js";
 import { runRelayProbeCron, type OhttpEnv } from "./ohttpRoutes.js";
@@ -144,7 +145,9 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
     case "ca-lease-warning":
       return runCaLeaseWarning(env, now);
     case "prune-rate-limit-log":
-      return env.DB ? Promise.all([pruneRateLimitLog(env.DB, now), pruneOutboundDaily(env.DB, now)]) : null;
+      return env.DB
+        ? Promise.all([pruneRateLimitLog(env.DB, now), pruneOutboundDaily(env.DB, now), pruneTotpOutcomeLog(env.DB, now)])
+        : null;
     case "demo":
       return runDemoCron(env, now);
     case "ct-scan":

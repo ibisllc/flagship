@@ -16,7 +16,7 @@
  *     memory, until something writes. The cache lives and dies with the
  *     request (one wrapper per request), so nothing outlives a revoke or a
  *     rotation: the next request reads the database again. Any write other
- *     than to a leaf table (replay nonces, rate-limit log) empties it, and a
+ *     than to a leaf table (replay nonces, rate-limit and TOTP outcome logs) empties it, and a
  *     read that was in flight across a write is not kept.
  *
  * Handlers do not change: they still call the same storage methods, in the
@@ -27,7 +27,7 @@
 import type { D1Database, D1Meta, D1PreparedStatement, D1Result } from "./d1.js";
 
 /** Tables whose writes never change what a SELECT elsewhere returns. */
-const LEAF_TABLES: ReadonlySet<string> = new Set(["boot_nonces", "rate_limit_log"]);
+const LEAF_TABLES: ReadonlySet<string> = new Set(["boot_nonces", "rate_limit_log", "totp_outcome_log"]);
 
 /** Most statements sent in one batch(). */
 const MAX_BATCH = 25;

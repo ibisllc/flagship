@@ -373,6 +373,7 @@ import { protectedAccountsFrom } from "./prodReap.js";
 import { SERVING_ACCOUNT_ROUTES, servingForBox, tryServingRoute, type ServingEnv } from "./servingAuthority.js";
 import { PHONE_ROUTE_PREFIX, tryPhoneRouteRoute } from "./phoneRoute.js";
 import { tryIssuanceRoute } from "./certificateIssuance.js";
+import { outcomeOf, recordTotpOutcome, type TotpOutcomeEndpoint } from "./totpOutcomeLog.js";
 import { directAccessDeps, fetchProber, publishPendingNow, type DirectNamesEnv } from "./directNames.js";
 
 export interface ControlPlaneEnv extends DirectNamesEnv {
@@ -3418,30 +3419,36 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.TOTP_ENROLL_BEGIN))) {
-    return finishPlain(
-      await handleTotpEnrollBegin(
+    const name = decodeURIComponent(m[1]!);
+    const body = await readJson(request);
+    return totpOutcome(rawDb, options, "enroll-begin", () =>
+      handleTotpEnrollBegin(
         {
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
           ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
         },
-        decodeURIComponent(m[1]!),
-        await readJson(request),
+        name,
+        body,
       ),
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.TOTP_ENROLL_CONFIRM))) {
-    return finishPlain(
-      await handleTotpEnrollConfirm(
+    const name = decodeURIComponent(m[1]!);
+    const body = await readJson(request);
+    return totpOutcome(rawDb, options, "enroll-confirm", () =>
+      handleTotpEnrollConfirm(
         {
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
           // v1.2 Phase 5 — appends `account-type-changed-…` +
           // `totp-enrolled` rows on success so the Activity feed shows
           // the upgrade.
           auditEvents: storage.auditEvents,
           ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
         },
-        decodeURIComponent(m[1]!),
-        await readJson(request),
+        name,
+        body,
       ),
     );
   }
@@ -3466,18 +3473,21 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.TOTP_DISABLE))) {
-    return finishPlain(
-      await handleTotpDisable(
+    const name = decodeURIComponent(m[1]!);
+    const body = await readJson(request);
+    return totpOutcome(rawDb, options, "disable", () =>
+      handleTotpDisable(
         {
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
           pushTokens: storage.pushTokens,
           // v1.2 Phase 5 — appends `account-type-changed-…` +
           // `totp-disabled` rows on success.
           auditEvents: storage.auditEvents,
           ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
         },
-        decodeURIComponent(m[1]!),
-        await readJson(request),
+        name,
+        body,
       ),
     );
   }
@@ -4906,6 +4916,33 @@ function finish(r: HandlerResponseWithHeaders): Response {
   const headers = new Headers({ "content-type": "application/json" });
   if (r.headers) for (const [k, v] of Object.entries(r.headers)) headers.set(k, v);
   return new Response(JSON.stringify(r.body), { status: r.status, headers });
+}
+
+/**
+ * Runs one code protection call and counts how it ended (totpOutcomeLog.ts):
+ * `ok`, the refusal's `code`, or `internal-error` for a throw, which is then
+ * rethrown for route()'s catch to answer.
+ */
+async function totpOutcome(
+  db: D1Database,
+  options: ControlPlaneOptions,
+  endpoint: TotpOutcomeEndpoint,
+  run: () => Promise<HandlerResponse>,
+): Promise<Response> {
+  const note = async (outcome: string): Promise<void> => {
+    const p = recordTotpOutcome(db, endpoint, outcome);
+    if (options.waitUntil) options.waitUntil(p);
+    else await p;
+  };
+  let r: HandlerResponse;
+  try {
+    r = await run();
+  } catch (err) {
+    await note("internal-error");
+    throw err;
+  }
+  await note(outcomeOf(r.status, r.body));
+  return finishPlain(r);
 }
 
 function finishPlain(r: HandlerResponse): Response {

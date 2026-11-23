@@ -99,10 +99,12 @@ describe("TOTP enroll-begin", () => {
     expect(b.otpauthUrl).toMatch(/secret=/);
     // QR PNG was generated (non-empty base64).
     expect(b.qrPngBase64.length).toBeGreaterThan(64);
-    // Stored encrypted secret on the row.
+    // Stored encrypted secret waits in the PENDING column (F2); the live
+    // column, the one re-pair reads, stays empty until confirm.
     const stored = await storage.usernames.get(USERNAME);
-    expect(stored?.totpSecretEncrypted).toBeTypeOf("string");
-    expect(stored?.totpSecretEncrypted!.length).toBeGreaterThan(20);
+    expect(stored?.totpPendingSecretEncrypted).toBeTypeOf("string");
+    expect(stored?.totpPendingSecretEncrypted!.length).toBeGreaterThan(20);
+    expect(stored?.totpSecretEncrypted).toBeUndefined();
     // Account stays SINGLE-device until enroll-confirm — this is the
     // anti-mid-enrollment-lockout invariant.
     expect(stored?.accountType).toBe("single");

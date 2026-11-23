@@ -4,14 +4,24 @@
  * See docs/v1.2-security-cascade.md §"Phase 3 — TOTP enrollment +
  * verification". Four endpoints:
  *
- *   POST /api/users/:u/totp/enroll-begin    IRK-signed
- *     - Mints a fresh TOTP secret, encrypts at rest with the
- *       Worker-side KEK, stages it on the user row. The account
- *       stays single-device until enroll-confirm.
+ * "Code protection" in every app. Turning it on or off is an admin order
+ * (owner, 2026-11-23): begin, confirm and disable go through
+ * `authorizeSensitiveComOp`, so on an account that pins an admin root only
+ * the admin root or an admin-granted device signs them (403
+ * `totp-admin-only`); an account with no admin root (legacy, demo) keeps
+ * the IRK. Every refusal carries a stable `code` beside `error`.
  *
- *   POST /api/users/:u/totp/enroll-confirm  IRK-signed + sample code
- *     - Verifies the supplied 6-digit code against the staged
- *       secret. On success: flips `account_type = 'multi'`, stamps
+ *   POST /api/users/:u/totp/enroll-begin    admin-signed
+ *     - Refused (409 `totp-already-enrolled`) while code protection is on:
+ *       a new authenticator means turning it off first (a live code), so a
+ *       begin can never replace a working secret. Otherwise mints a fresh
+ *       secret, encrypts it with the Worker-side KEK and stages it in the
+ *       PENDING columns (migration 0160) for an hour. Re-pair and verify
+ *       never read the pending secret.
+ *
+ *   POST /api/users/:u/totp/enroll-confirm  admin-signed + sample code
+ *     - Verifies the supplied 6-digit code against the pending
+ *       secret. On success: moves it into the live column, flips `account_type = 'multi'`, stamps
  *       `totp_enrolled_at`, generates 10 fresh recovery codes,
  *       writes their argon2id-hashed JSON array atomically, and
  *       returns the plaintext codes ONCE (the only time they leave
@@ -22,7 +32,7 @@
  *       valid TOTP or a valid recovery code, WITHOUT consuming the
  *       recovery code. Rate-limited (5 / 15 min / username).
  *
- *   POST /api/users/:u/totp/disable         IRK-signed + sample code
+ *   POST /api/users/:u/totp/disable         admin-signed + a live code or recovery code
  *     - Drops the TOTP secret + recovery codes; flips account_type
  *       back to 'single'. Only allowed when no sibling paired
  *       sessions exist (single-device state must reflect actual
@@ -59,14 +69,17 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
+  DeviceCapabilityGrantStorage,
   PushTokenStorage,
+  UsernameRecord,
   UsernameStorage,
 } from "@flagship/storage";
 import { argon2id } from "@noble/hashes/argon2";
 import * as OTPAuth from "otpauth";
 import { recordAuditEvent } from "./auditEvents.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { hexToBytes } from "./hex.js";
-import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
+import type { HandlerResponse } from "./types.js";
 import { appRouteLink } from "./appLink.js";
 
 export interface TotpDeps {
@@ -84,6 +97,12 @@ export interface TotpDeps {
    * + dev paths that don't care about audit) leave this unset.
    */
   auditEvents?: AuditEventStorage;
+  /**
+   * The account's device grants, so a device holding an admin-root-signed
+   * `admin` grant may turn code protection on or off
+   * (`authorizeSensitiveComOp`). Absent: only the bare admin root.
+   */
+  grants?: DeviceCapabilityGrantStorage;
   /** 32-byte hex KEK. Required for any side-effect path; absent ⇒ 503. */
   kekHex?: string;
   /** TOTP issuer label used in the otpauth:// URI. Default "Flagship". */
@@ -102,6 +121,92 @@ export interface TotpDeps {
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
+/** How long a begun enrolment waits for its confirm. */
+export const TOTP_PENDING_TTL_MS = 60 * 60_000;
+
+/** The sentence every app shows a non-admin device (and `.com`'s 403 carries). */
+export const TOTP_ADMIN_ONLY = "Only an admin device of this account can change code protection.";
+
+/**
+ * The stable `code` of every answer the three enrolment calls give, for the
+ * apps (which show their own sentence per code) and the hourly outcome log.
+ */
+export type TotpRefusalCode =
+  | "totp-not-configured"
+  | "malformed"
+  | "username-mismatch"
+  | "stale-request"
+  | "account-not-found"
+  | "invalid-signature"
+  | "totp-admin-only"
+  | "totp-already-enrolled"
+  | "totp-no-pending"
+  | "totp-pending-expired"
+  | "invalid-totp-code"
+  | "totp-not-enrolled"
+  | "totp-other-devices"
+  | "internal-error";
+
+function refuse(status: number, code: TotpRefusalCode, error: string, extra: Record<string, unknown> = {}): HandlerResponse {
+  return { status, body: { error, code, ...extra } };
+}
+
+const notConfigured = (): HandlerResponse => refuse(503, "totp-not-configured", "TOTP not configured");
+
+/**
+ * The admin gate for begin / confirm / disable: the order verifies under the
+ * admin root or an admin device's grant when the account pins a root, else
+ * under the IRK (legacy and demo accounts, unchanged).
+ */
+export async function authorizeTotpOrder(
+  deps: TotpDeps,
+  userRec: UsernameRecord,
+  verify: (pub: Uint8Array) => boolean,
+  now: number,
+): Promise<HandlerResponse | null> {
+  const authz = await authorizeSensitiveComOp(
+    { ...(deps.grants ? { grants: deps.grants } : {}), now: () => now },
+    {
+      username: userRec.username,
+      userRec,
+      verifyWith: (pubHex) => verify(hexToBytes(pubHex)),
+      now,
+    },
+  );
+  if (authz.ok) return null;
+  if (userRec.adminRootPubHex) return refuse(403, "totp-admin-only", TOTP_ADMIN_ONLY);
+  return refuse(403, "invalid-signature", "invalid signature");
+}
+
+/** Shape, URL name and freshness checks the three signed calls share. */
+function checkSignedShape(
+  r: { username?: unknown; issuedAt?: unknown },
+  signature: unknown,
+  username: string,
+  now: number,
+  maxAgeMs: number,
+): HandlerResponse | { username: string; issuedAt: number; sig: Uint8Array } {
+  if (typeof r.username !== "string" || typeof r.issuedAt !== "number" || typeof signature !== "string") {
+    return refuse(400, "malformed", "malformed body");
+  }
+  if (r.username.toLowerCase() !== username.toLowerCase()) {
+    return refuse(403, "username-mismatch", "username / url mismatch");
+  }
+  if (Math.abs(now - r.issuedAt) > maxAgeMs) {
+    return refuse(403, "stale-request", "stale request");
+  }
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(signature);
+  } catch {
+    return refuse(400, "malformed", "invalid hex");
+  }
+  return { username: r.username, issuedAt: r.issuedAt, sig };
+}
+
+const isRefusal = (x: unknown): x is HandlerResponse =>
+  typeof x === "object" && x !== null && "status" in x && "body" in x;
+
 const DEFAULT_ISSUER = "Flagship";
 
 /** TOTP window — RFC 6238 ±1 period (30s either side), so codes
@@ -722,51 +827,25 @@ export async function handleTotpEnrollBegin(
   username: string,
   body: unknown,
 ): Promise<HandlerResponse> {
-  if (!deps.kekHex) {
-    return { status: 503, body: { error: "TOTP not configured" } };
-  }
+  if (!deps.kekHex) return notConfigured();
   const now = deps.now ?? (() => Date.now());
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
   const rand = deps.randomBytes ?? defaultRandomBytes;
   const issuer = deps.issuer ?? DEFAULT_ISSUER;
 
   const b = body as EnrollBeginBody;
-  const r = b?.request ?? {};
-  if (
-    typeof r.username !== "string" ||
-    typeof r.issuedAt !== "number" ||
-    typeof b?.signature !== "string"
-  ) {
-    return malformed("malformed body");
-  }
-  if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return forbidden("username / url mismatch");
-  }
-  if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return forbidden("stale request");
-  }
+  const shaped = checkSignedShape(b?.request ?? {}, b?.signature, username, now(), maxAgeMs);
+  if (isRefusal(shaped)) return shaped;
+  const r = { username: shaped.username, issuedAt: shaped.issuedAt };
 
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return notFound("unknown username");
+  if (!userRec) return refuse(404, "account-not-found", "unknown username");
 
-  let sig: Uint8Array;
-  try {
-    sig = hexToBytes(b.signature);
-  } catch {
-    return malformed("invalid hex");
-  }
-  const claim: TotpEnrollBegin = {
-    username: r.username,
-    issuedAt: r.issuedAt,
-  };
-  let irkPub: Uint8Array;
-  try {
-    irkPub = hexToBytes(userRec.irkPubHex);
-  } catch {
-    return { status: 500, body: { error: "stored IRK pubkey is malformed" } };
-  }
-  if (!verifyTotpEnrollBegin(claim, sig, irkPub)) {
-    return forbidden("invalid signature");
+  const claim: TotpEnrollBegin = { username: r.username, issuedAt: r.issuedAt };
+  const denied = await authorizeTotpOrder(deps, userRec, (pub) => verifyTotpEnrollBegin(claim, shaped.sig, pub), now());
+  if (denied) return denied;
+  if (userRec.totpEnrolledAt != null) {
+    return refuse(409, "totp-already-enrolled", "code protection is already on; turn it off first");
   }
 
   // Mint a fresh 20-byte (160-bit) secret. RFC 6238 strongly
@@ -780,8 +859,13 @@ export async function handleTotpEnrollBegin(
     ),
   });
   const encrypted = await encryptTotpSecret(secretBytes, deps.kekHex);
-  const ok = await deps.usernames.setTotpSecretEncrypted(r.username, encrypted);
-  if (!ok) return notFound("unknown username");
+  const ok = await deps.usernames.setTotpPendingSecret(r.username, encrypted, now());
+  if (!ok) {
+    // Enrolled between our read and the write, or the row went away.
+    const again = await deps.usernames.get(r.username);
+    if (!again) return refuse(404, "account-not-found", "unknown username");
+    return refuse(409, "totp-already-enrolled", "code protection is already on; turn it off first");
+  }
 
   const totp = new OTPAuth.TOTP({
     issuer,
@@ -811,6 +895,7 @@ export async function handleTotpEnrollBegin(
       otpauthUrl,
       qrPngBase64,
       issuer,
+      expiresAt: now() + TOTP_PENDING_TTL_MS,
     },
   };
 }
@@ -830,64 +915,42 @@ export async function handleTotpEnrollConfirm(
   username: string,
   body: unknown,
 ): Promise<HandlerResponse> {
-  if (!deps.kekHex) {
-    return { status: 503, body: { error: "TOTP not configured" } };
-  }
+  if (!deps.kekHex) return notConfigured();
   const now = deps.now ?? (() => Date.now());
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
   const rand = deps.randomBytes ?? defaultRandomBytes;
   const fastHash = deps.fastHash ?? false;
 
   const b = body as EnrollConfirmBody;
-  const r = b?.request ?? {};
-  if (
-    typeof r.username !== "string" ||
-    typeof r.issuedAt !== "number" ||
-    typeof b?.signature !== "string" ||
-    typeof b?.code !== "string" ||
-    b.code.length === 0
-  ) {
-    return malformed("malformed body");
-  }
-  if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return forbidden("username / url mismatch");
-  }
-  if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return forbidden("stale request");
-  }
+  if (typeof b?.code !== "string" || b.code.length === 0) return refuse(400, "malformed", "malformed body");
+  const shaped = checkSignedShape(b?.request ?? {}, b?.signature, username, now(), maxAgeMs);
+  if (isRefusal(shaped)) return shaped;
+  const r = { username: shaped.username, issuedAt: shaped.issuedAt };
 
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return notFound("unknown username");
-  if (!userRec.totpSecretEncrypted) {
-    return conflict("no staged TOTP secret; call enroll-begin first");
+  if (!userRec) return refuse(404, "account-not-found", "unknown username");
+
+  const claim: TotpEnrollConfirm = { username: r.username, issuedAt: r.issuedAt };
+  const denied = await authorizeTotpOrder(deps, userRec, (pub) => verifyTotpEnrollConfirm(claim, shaped.sig, pub), now());
+  if (denied) return denied;
+  if (userRec.totpEnrolledAt != null) {
+    return refuse(409, "totp-already-enrolled", "code protection is already on; turn it off first");
+  }
+  const pending = userRec.totpPendingSecretEncrypted;
+  if (!pending) {
+    return refuse(409, "totp-no-pending", "no staged TOTP secret; call enroll-begin first");
+  }
+  if (userRec.totpPendingAt == null || now() - userRec.totpPendingAt > TOTP_PENDING_TTL_MS) {
+    await deps.usernames.clearTotpPending(r.username);
+    return refuse(409, "totp-pending-expired", "this setup expired; call enroll-begin again");
   }
 
-  let sig: Uint8Array;
-  try {
-    sig = hexToBytes(b.signature);
-  } catch {
-    return malformed("invalid hex");
-  }
-  const claim: TotpEnrollConfirm = {
-    username: r.username,
-    issuedAt: r.issuedAt,
-  };
-  let irkPub: Uint8Array;
-  try {
-    irkPub = hexToBytes(userRec.irkPubHex);
-  } catch {
-    return { status: 500, body: { error: "stored IRK pubkey is malformed" } };
-  }
-  if (!verifyTotpEnrollConfirm(claim, sig, irkPub)) {
-    return forbidden("invalid signature");
-  }
-
-  // Verify the sample code against the staged secret.
+  // Verify the sample code against the pending secret.
   let secret: Uint8Array;
   try {
-    secret = await decryptTotpSecret(userRec.totpSecretEncrypted, deps.kekHex);
+    secret = await decryptTotpSecret(pending, deps.kekHex);
   } catch {
-    return { status: 500, body: { error: "stored TOTP secret is corrupted" } };
+    return refuse(500, "internal-error", "stored TOTP secret is corrupted");
   }
   const totp = new OTPAuth.TOTP({
     algorithm: "SHA1",
@@ -901,7 +964,7 @@ export async function handleTotpEnrollConfirm(
     window: TOTP_WINDOW,
   });
   if (delta === null) {
-    return { status: 401, body: { error: "invalid TOTP code" } };
+    return refuse(401, "invalid-totp-code", "invalid TOTP code");
   }
 
   // Generate 10 recovery codes + their argon2id hashes, write
@@ -911,8 +974,17 @@ export async function handleTotpEnrollConfirm(
     r.username,
     now(),
     hashesJson,
+    pending,
   );
-  if (!ok) return notFound("unknown username");
+  if (!ok) {
+    // Another begin replaced the pending secret, or a confirm already won.
+    const again = await deps.usernames.get(r.username);
+    if (!again) return refuse(404, "account-not-found", "unknown username");
+    if (again.totpEnrolledAt != null) {
+      return refuse(409, "totp-already-enrolled", "code protection is already on; turn it off first");
+    }
+    return refuse(409, "totp-no-pending", "no staged TOTP secret; call enroll-begin first");
+  }
 
   // v1.2 Plan B Phase 5 — audit emission. Two rows on a successful
   // enroll-confirm:
@@ -931,7 +1003,7 @@ export async function handleTotpEnrollConfirm(
       {
         username: r.username.toLowerCase(),
         eventKind: "account-type-changed-single-to-multi",
-        detail: "Account upgraded to multi-device + 2FA",
+        detail: "Code protection turned on",
         devicePrefix: "",
         postedAt: now(),
         accountTypeAtEvent: "multi",
@@ -942,7 +1014,7 @@ export async function handleTotpEnrollConfirm(
       {
         username: r.username.toLowerCase(),
         eventKind: "totp-enrolled",
-        detail: "TOTP 2FA enrolled (10 recovery codes issued)",
+        detail: "Code protection turned on (10 recovery codes issued)",
         devicePrefix: "",
         postedAt: now(),
         accountTypeAtEvent: "multi",
@@ -1063,9 +1135,7 @@ export async function handleTotpVerify(
   body: unknown,
   pushFanout?: V12PushFanout,
 ): Promise<HandlerResponse> {
-  if (!deps.kekHex) {
-    return { status: 503, body: { error: "TOTP not configured" } };
-  }
+  if (!deps.kekHex) return notConfigured();
   const now = deps.now ?? (() => Date.now());
   const t = now();
   const peek = peekVerifyAttempts(username, t);
@@ -1087,14 +1157,15 @@ export async function handleTotpVerify(
   if (typeof b?.code !== "string" || b.code.length === 0) {
     // Don't burn an attempt on a malformed request — those are
     // client bugs, not guessing.
-    return malformed("malformed body");
+    return refuse(400, "malformed", "malformed body");
   }
   const userRec = await deps.usernames.get(username);
-  if (!userRec) return notFound("unknown username");
+  if (!userRec) return refuse(404, "account-not-found", "unknown username");
 
   const verdict = await validateTotpCode({
     code: b.code,
-    totpSecretEncrypted: userRec.totpSecretEncrypted,
+    // Only a confirmed secret is a credential.
+    totpSecretEncrypted: userRec.totpEnrolledAt != null ? userRec.totpSecretEncrypted : undefined,
     recoveryCodesHashesJson: userRec.recoveryCodesHashesJson,
     kekHex: deps.kekHex,
     now: t,
@@ -1135,50 +1206,23 @@ export async function handleTotpDisable(
   username: string,
   body: unknown,
 ): Promise<HandlerResponse> {
-  if (!deps.kekHex) {
-    return { status: 503, body: { error: "TOTP not configured" } };
-  }
+  if (!deps.kekHex) return notConfigured();
   const now = deps.now ?? (() => Date.now());
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
 
   const b = body as DisableBody;
-  const r = b?.request ?? {};
-  if (
-    typeof r.username !== "string" ||
-    typeof r.issuedAt !== "number" ||
-    typeof b?.signature !== "string" ||
-    typeof b?.code !== "string" ||
-    b.code.length === 0
-  ) {
-    return malformed("malformed body");
-  }
-  if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return forbidden("username / url mismatch");
-  }
-  if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return forbidden("stale request");
-  }
+  if (typeof b?.code !== "string" || b.code.length === 0) return refuse(400, "malformed", "malformed body");
+  const shaped = checkSignedShape(b?.request ?? {}, b?.signature, username, now(), maxAgeMs);
+  if (isRefusal(shaped)) return shaped;
+  const r = { username: shaped.username, issuedAt: shaped.issuedAt };
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return notFound("unknown username");
-  if (!userRec.totpEnrolledAt || !userRec.totpSecretEncrypted) {
-    return conflict("TOTP not enrolled");
-  }
+  if (!userRec) return refuse(404, "account-not-found", "unknown username");
 
-  let sig: Uint8Array;
-  try {
-    sig = hexToBytes(b.signature);
-  } catch {
-    return malformed("invalid hex");
-  }
   const claim: TotpDisable = { username: r.username, issuedAt: r.issuedAt };
-  let irkPub: Uint8Array;
-  try {
-    irkPub = hexToBytes(userRec.irkPubHex);
-  } catch {
-    return { status: 500, body: { error: "stored IRK pubkey is malformed" } };
-  }
-  if (!verifyTotpDisable(claim, sig, irkPub)) {
-    return forbidden("invalid signature");
+  const denied = await authorizeTotpOrder(deps, userRec, (pub) => verifyTotpDisable(claim, shaped.sig, pub), now());
+  if (denied) return denied;
+  if (!userRec.totpEnrolledAt || !userRec.totpSecretEncrypted) {
+    return refuse(409, "totp-not-enrolled", "TOTP not enrolled");
   }
 
   const verdict = await validateTotpCode({
@@ -1189,7 +1233,7 @@ export async function handleTotpDisable(
     now: now(),
   });
   if (!verdict.valid) {
-    return { status: 401, body: { error: "invalid TOTP code" } };
+    return refuse(401, "invalid-totp-code", "invalid TOTP code");
   }
 
   // The plan doc spells this out: disabling multi-device TOTP is
@@ -1201,19 +1245,17 @@ export async function handleTotpDisable(
   if (deps.pushTokens) {
     const rows = await deps.pushTokens.listByUser(r.username);
     if (rows.length > 1) {
-      return {
-        status: 409,
-        body: {
-          error:
-            "remove other paired devices before disabling TOTP — single-device account requires single-device state",
-          pairedDevices: rows.length,
-        },
-      };
+      return refuse(
+        409,
+        "totp-other-devices",
+        "remove other paired devices before disabling TOTP — single-device account requires single-device state",
+        { pairedDevices: rows.length },
+      );
     }
   }
 
   const ok = await deps.usernames.clearTotp(r.username);
-  if (!ok) return notFound("unknown username");
+  if (!ok) return refuse(404, "account-not-found", "unknown username");
 
   // v1.2 Plan B Phase 5 — audit emission. The "AT_EVENT" snapshot
   // captures the OLD state ('multi') because the user WAS multi-
@@ -1238,7 +1280,7 @@ export async function handleTotpDisable(
       {
         username: r.username.toLowerCase(),
         eventKind: "totp-disabled",
-        detail: "TOTP 2FA disabled",
+        detail: "Code protection turned off",
         devicePrefix: "",
         postedAt: now(),
         accountTypeAtEvent: "multi",

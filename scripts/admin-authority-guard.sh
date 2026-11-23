@@ -67,6 +67,7 @@ SENSITIVE_HANDLERS=(
   "packages/control-plane/src/routing.ts|handleRegisterRck"
   "packages/control-plane/src/authCode.ts|handleAuthCodeIssue"
   "packages/control-plane/src/directAccess.ts|authorizeDirectOrder"
+  "packages/control-plane/src/totp.ts|authorizeTotpOrder"
 )
 
 # DEVICE-KEY EXCEPTIONS — owner decision 2026-10-15 (docs/service-access-

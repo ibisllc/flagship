@@ -140,10 +140,13 @@ export function adaptRegistryToStorage(
     // live exclusively on .com (Worker). The legacy Fastify
     // UsernameRegistry has no TOTP columns and no Fastify route calls
     // these; required only to satisfy the UsernameStorage interface.
-    async setTotpSecretEncrypted() {
+    async setTotpPendingSecret() {
       return false;
     },
     async finalizeTotpEnrollment() {
+      return false;
+    },
+    async clearTotpPending() {
       return false;
     },
     async clearTotp() {

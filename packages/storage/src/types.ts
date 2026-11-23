@@ -90,6 +90,14 @@ export interface UsernameRecord {
   /** v1.2 — wall-clock ms of the successful enroll-confirm. Null until enrolled. */
   totpEnrolledAt?: number;
   /**
+   * A secret `enroll-begin` staged and `enroll-confirm` has not taken yet
+   * (migration 0160). Never a credential: re-pair and verify read only
+   * `totpSecretEncrypted`, which confirm fills from this. Stale after an hour.
+   */
+  totpPendingSecretEncrypted?: string;
+  /** Wall-clock ms the pending secret was staged. */
+  totpPendingAt?: number;
+  /**
    * v2.1 — per-cloud recovery-wipe policy. Defaults to `'graceful'`
    * at the handler boundary so pre-migration rows behave gracefully.
    * Stored as TEXT in D1; the storage adapter narrows it to
@@ -254,32 +262,36 @@ export interface UsernameStorage {
    */
   setDemo(username: string, isDemo: boolean): Promise<boolean>;
   /**
-   * v1.2 Phase 3 — stage a TOTP secret during enroll-begin. Writes
-   * `totp_secret_encrypted` only; the row stays single-device until
-   * `finalizeTotpEnrollment` lands. Returns false on unknown username.
-   * Repeated calls overwrite (a user mid-enrollment can restart).
+   * Code protection enroll-begin: stage a new secret in the PENDING columns
+   * (migration 0160), replacing any earlier pending one. The live secret is
+   * never touched, and an account that is already enrolled is left alone
+   * (returns false, as for an unknown username).
    */
-  setTotpSecretEncrypted(
+  setTotpPendingSecret(
     username: string,
     encrypted: string,
+    at: number,
   ): Promise<boolean>;
   /**
-   * v1.2 Phase 3 — atomic finalize on enroll-confirm. Sets
-   * `totp_enrolled_at = at`, flips `account_type = 'multi'`, and
-   * writes the freshly-generated recovery-code-hashes JSON. All
-   * three fields update in ONE write so a partial-failure mid-call
-   * can't leave the row in a half-enrolled state. Returns false on
-   * unknown username.
+   * Code protection enroll-confirm, ONE write: moves the pending secret into
+   * `totp_secret_encrypted`, sets `totp_enrolled_at = at`, flips
+   * `account_type = 'multi'`, writes the fresh recovery-code hashes and
+   * clears the pending columns. Applies only while the account is not
+   * enrolled and its pending secret is still `pendingSecretEncrypted` (a
+   * second begin in between makes this return false).
    */
   finalizeTotpEnrollment(
     username: string,
     at: number,
     recoveryCodesHashesJson: string,
+    pendingSecretEncrypted: string,
   ): Promise<boolean>;
+  /** Drops a pending secret (expired, or begun again). */
+  clearTotpPending(username: string): Promise<boolean>;
   /**
    * v1.2 Phase 3 — disable: drops `totp_secret_encrypted`,
-   * `recovery_codes_hashes_json`, `totp_enrolled_at`, and flips
-   * `account_type` back to `'single'`. ONE write. Returns false on
+   * `recovery_codes_hashes_json`, `totp_enrolled_at`, any pending secret,
+   * and flips `account_type` back to `'single'`. ONE write. Returns false on
    * unknown username.
    */
   clearTotp(username: string): Promise<boolean>;

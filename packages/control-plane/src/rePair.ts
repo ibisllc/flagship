@@ -463,7 +463,11 @@ export async function handleInitiateRePair(
   //     only, so a grace-only initiate had no owner-side brake at all.
   //     A name whose credentials are all lost stays reserved and
   //     unusable by design — it does not become takeable.
-  const hasTotpSecret = !!userRec.totpSecretEncrypted;
+  // Only a CONFIRMED secret is a credential: a begun enrolment waits in the
+  // pending columns (migration 0160) and never reaches this one, and a row
+  // with no `totpEnrolledAt` is not counted either (security report F2).
+  const confirmedTotpSecret = userRec.totpEnrolledAt != null ? userRec.totpSecretEncrypted : undefined;
+  const hasTotpSecret = !!confirmedTotpSecret;
   // Mirrors totp.ts parseRecoveryCodesJson (which stays module-
   // internal): an unparsable / empty column means "nothing enrolled".
   let hasRecoveryCodes = false;
@@ -695,7 +699,7 @@ export async function handleInitiateRePair(
       }
       const verdict = await validateTotpCode({
         code,
-        totpSecretEncrypted: userRec.totpSecretEncrypted,
+        totpSecretEncrypted: confirmedTotpSecret,
         recoveryCodesHashesJson: userRec.recoveryCodesHashesJson,
         kekHex: deps.totpKekHex,
         now: now(),

@@ -105,7 +105,8 @@ describe("D1 ↔ InMemory parity", () => {
     it("benign re-claim updates claimed_at but preserves accountType", async () => {
       const r = await bothAdapters(async (s) => {
         await s.usernames.put({ username: "carol", irkPubHex: "ff", claimedAt: 1 });
-        await s.usernames.finalizeTotpEnrollment("carol", 5, "[]");
+        await s.usernames.setTotpPendingSecret("carol", "sealed", 4);
+        await s.usernames.finalizeTotpEnrollment("carol", 5, "[]", "sealed");
         // re-put WITHOUT accountType — must not kick multi → single
         await s.usernames.put({ username: "carol", irkPubHex: "ff", claimedAt: 9 });
         return s.usernames.get("carol");
@@ -171,19 +172,28 @@ describe("D1 ↔ InMemory parity", () => {
     it("TOTP lifecycle: enroll → clear round-trips identically", async () => {
       const r = await bothAdapters(async (s) => {
         await s.usernames.put({ username: "erin", irkPubHex: "aa", claimedAt: 1 });
-        await s.usernames.setTotpSecretEncrypted("erin", "sealed");
-        await s.usernames.finalizeTotpEnrollment("erin", 10, '["h1","h2"]');
+        await s.usernames.setTotpPendingSecret("erin", "sealed", 9);
+        const pending = await s.usernames.get("erin");
+        const wrongPending = await s.usernames.finalizeTotpEnrollment("erin", 10, '["h1","h2"]', "other");
+        await s.usernames.finalizeTotpEnrollment("erin", 10, '["h1","h2"]', "sealed");
         const enrolled = await s.usernames.get("erin");
+        const beginOnEnrolled = await s.usernames.setTotpPendingSecret("erin", "again", 11);
         await s.usernames.clearTotp("erin");
         const cleared = await s.usernames.get("erin");
-        return { enrolled, cleared };
+        return { pending, wrongPending, enrolled, beginOnEnrolled, cleared };
       });
       expectParity(r);
+      expect(r.d1.pending).toMatchObject({ accountType: "single", totpPendingSecretEncrypted: "sealed", totpPendingAt: 9 });
+      expect(r.d1.pending?.totpSecretEncrypted).toBeUndefined();
+      expect(r.d1.wrongPending).toBe(false);
+      expect(r.d1.beginOnEnrolled).toBe(false);
       expect(r.d1.enrolled).toMatchObject({
         accountType: "multi",
         totpEnrolledAt: 10,
+        totpSecretEncrypted: "sealed",
         recoveryCodesHashesJson: '["h1","h2"]',
       });
+      expect(r.d1.enrolled?.totpPendingSecretEncrypted).toBeUndefined();
       expect(r.d1.cleared).toMatchObject({ accountType: "single" });
       // After clear, the TOTP artifacts must be gone (undefined) in both.
       expect(r.d1.cleared?.totpEnrolledAt).toBeUndefined();

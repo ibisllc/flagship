@@ -177,6 +177,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0158",
   // Drops the removed user-identity store (security report F1).
   "0159",
+  // Code protection: a begun secret waits apart until confirmed; hourly enrolment outcome counts (security report F2).
+  "0160",
 ];
 
 export interface SchemaStatusDeps {

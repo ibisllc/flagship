@@ -963,6 +963,11 @@ async function enrollMultiDevice(
   ownerIrk: Keypair,
   fixedNow: number,
 ): Promise<{ secretBase32: string; recoveryCodes: string[] }> {
+  // A begin is refused while code protection is on (F2): start from off so
+  // the test knows the live secret.
+  if ((await storage.usernames.get(USERNAME))?.totpEnrolledAt != null) {
+    await storage.usernames.clearTotp(USERNAME);
+  }
   const begin = await handleTotpEnrollBegin(
     { usernames: storage.usernames, kekHex: TEST_KEK_HEX, now: () => fixedNow },
     USERNAME,
@@ -2298,6 +2303,30 @@ describe("#52 — credential required on single-device initiate", () => {
     expect(audit).toBeTruthy();
     expect(audit?.recoveryMethod).toBe("none");
     expect(audit?.accountTypeAtEvent).toBe("single");
+  });
+
+  it("a begun but unconfirmed code protection secret is not a credential (F2)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single", credential: "none" });
+    const begin = await handleTotpEnrollBegin(
+      { usernames: storage.usernames, kekHex: TEST_KEK_HEX, now: () => T0 },
+      USERNAME,
+      {
+        request: { username: USERNAME, issuedAt: T0 },
+        signature: bytesToHex(signTotpEnrollBegin({ username: USERNAME, issuedAt: T0 }, oldIrk)),
+      },
+    );
+    expect(begin.status).toBe(200);
+    const secret = (begin.body as { secret: string }).secret;
+    const res = await handleInitiateRePair(
+      depsAtT0(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: { code: codeAt(secret, T0), method: "totp" } }),
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { reason: string }).reason).toBe("no-credential");
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
   });
 
   it("a credential-less account can't be taken over by COMPLETING either", async () => {

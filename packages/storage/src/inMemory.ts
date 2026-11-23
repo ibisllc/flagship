@@ -241,27 +241,38 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     this.byName.set(norm, { ...r, isDemo });
     return true;
   }
-  async setTotpSecretEncrypted(username: string, encrypted: string) {
+  async setTotpPendingSecret(username: string, encrypted: string, at: number) {
     const norm = username.toLowerCase();
     const r = this.byName.get(norm);
-    if (!r) return false;
-    this.byName.set(norm, { ...r, totpSecretEncrypted: encrypted });
+    if (!r || r.totpEnrolledAt != null) return false;
+    this.byName.set(norm, { ...r, totpPendingSecretEncrypted: encrypted, totpPendingAt: at });
     return true;
   }
   async finalizeTotpEnrollment(
     username: string,
     at: number,
     recoveryCodesHashesJson: string,
+    pendingSecretEncrypted: string,
   ) {
     const norm = username.toLowerCase();
     const r = this.byName.get(norm);
-    if (!r) return false;
+    if (!r || r.totpEnrolledAt != null || r.totpPendingSecretEncrypted !== pendingSecretEncrypted) return false;
+    const { totpPendingSecretEncrypted: _p, totpPendingAt: _a, ...rest } = r;
     this.byName.set(norm, {
-      ...r,
+      ...rest,
       accountType: "multi",
+      totpSecretEncrypted: pendingSecretEncrypted,
       totpEnrolledAt: at,
       recoveryCodesHashesJson,
     });
+    return true;
+  }
+  async clearTotpPending(username: string) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    const { totpPendingSecretEncrypted: _p, totpPendingAt: _a, ...rest } = r;
+    this.byName.set(norm, rest);
     return true;
   }
   async clearTotp(username: string) {

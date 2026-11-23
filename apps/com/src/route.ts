@@ -49,6 +49,7 @@ import { handleSecurityNotices, isSecurityNoticesPath } from "./securityNotices.
 import { handleRuntimeManifest, isRuntimeManifestPath, isRuntimePagePath, redirectToRuntimePage } from "./runtimeManifest.js";
 import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
+import { handleTotpOutcomeReport, TOTP_OUTCOMES_PATH } from "./totpOutcomeLog.js";
 import { CANARY_REPORT_PATH, UPDATE_RECEIPT_PATH, handleCanaryReport, handleUpdateReceipt } from "./updateReceipts.js";
 import { handleVoiciAbuseRoute, isVoiciAbusePath } from "./voiciAbuseRoutes.js";
 import { handleOutboundHosts, isOutboundHostsPath } from "./outboundHosts.js";
@@ -796,6 +797,10 @@ async function routeImpl(
   // Public, cacheable, keyed to nobody; the admin view checks its secret.
   if (url.pathname === RATE_LIMIT_REPORT_PATH) {
     return handleRateLimitReport(request, env);
+  }
+  // How code protection enrolments end, hourly (x-admin-secret; totpOutcomeLog.ts, npm run totp-outcomes).
+  if (url.pathname === TOTP_OUTCOMES_PATH) {
+    return handleTotpOutcomeReport(request, env);
   }
   // Canary update receipts, the operator's view (x-admin-secret; updateReceipts.ts, npm run canary).
   if (url.pathname === CANARY_REPORT_PATH) {

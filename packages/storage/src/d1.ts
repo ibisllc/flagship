@@ -216,6 +216,9 @@ interface UsernameRow {
   totp_secret_encrypted?: string | null;
   recovery_codes_hashes_json?: string | null;
   totp_enrolled_at?: number | null;
+  // Code protection (migration 0160): a begun, unconfirmed secret.
+  totp_pending_secret_encrypted?: string | null;
+  totp_pending_at?: number | null;
   // v2.1 — recovery-wipe policy column (migration 0032). Nullable for
   // pre-migration safety; the rowTo* helper defaults to 'graceful'.
   recovery_wipe_policy?: string | null;
@@ -281,6 +284,10 @@ function rowToUsername(r: UsernameRow): UsernameRecord {
       ? { recoveryCodesHashesJson: r.recovery_codes_hashes_json }
       : {}),
     ...(r.totp_enrolled_at != null ? { totpEnrolledAt: r.totp_enrolled_at } : {}),
+    ...(r.totp_pending_secret_encrypted != null
+      ? { totpPendingSecretEncrypted: r.totp_pending_secret_encrypted }
+      : {}),
+    ...(r.totp_pending_at != null ? { totpPendingAt: r.totp_pending_at } : {}),
     ...(r.aid_pub_hex != null ? { aidPubHex: r.aid_pub_hex } : {}),
     ...(r.last_active != null ? { lastActive: r.last_active } : {}),
     ...(r.admin_root_pub_hex != null
@@ -414,12 +421,13 @@ export class D1UsernameStorage implements UsernameStorage {
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
-  async setTotpSecretEncrypted(username: string, encrypted: string) {
+  async setTotpPendingSecret(username: string, encrypted: string, at: number) {
     const r = await this.db
       .prepare(
-        "UPDATE usernames SET totp_secret_encrypted = ? WHERE username = ?",
+        "UPDATE usernames SET totp_pending_secret_encrypted = ?, totp_pending_at = ? " +
+          "WHERE username = ? AND totp_enrolled_at IS NULL",
       )
-      .bind(encrypted, username.toLowerCase())
+      .bind(encrypted, at, username.toLowerCase())
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
@@ -428,14 +436,25 @@ export class D1UsernameStorage implements UsernameStorage {
     username: string,
     at: number,
     recoveryCodesHashesJson: string,
+    pendingSecretEncrypted: string,
   ) {
     const r = await this.db
       .prepare(
         "UPDATE usernames SET account_type = 'multi', " +
-          "totp_enrolled_at = ?, recovery_codes_hashes_json = ? " +
-          "WHERE username = ?",
+          "totp_secret_encrypted = totp_pending_secret_encrypted, " +
+          "totp_enrolled_at = ?, recovery_codes_hashes_json = ?, " +
+          "totp_pending_secret_encrypted = NULL, totp_pending_at = NULL " +
+          "WHERE username = ? AND totp_enrolled_at IS NULL AND totp_pending_secret_encrypted = ?",
       )
-      .bind(at, recoveryCodesHashesJson, username.toLowerCase())
+      .bind(at, recoveryCodesHashesJson, username.toLowerCase(), pendingSecretEncrypted)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async clearTotpPending(username: string) {
+    const r = await this.db
+      .prepare("UPDATE usernames SET totp_pending_secret_encrypted = NULL, totp_pending_at = NULL WHERE username = ?")
+      .bind(username.toLowerCase())
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
@@ -445,7 +464,7 @@ export class D1UsernameStorage implements UsernameStorage {
       .prepare(
         "UPDATE usernames SET account_type = 'single', " +
           "totp_secret_encrypted = NULL, recovery_codes_hashes_json = NULL, " +
-          "totp_enrolled_at = NULL WHERE username = ?",
+          "totp_enrolled_at = NULL, totp_pending_secret_encrypted = NULL, totp_pending_at = NULL WHERE username = ?",
       )
       .bind(username.toLowerCase())
       .run();

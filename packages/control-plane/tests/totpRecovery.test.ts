@@ -228,6 +228,8 @@ describe("TOTP recovery code consumption", () => {
     }
 
     const first = await fullEnroll();
+    // Code protection must be off before a new enrolment (F2).
+    await storage.usernames.clearTotp(USERNAME);
     const second = await fullEnroll();
     // Every code is freshly minted — no overlap.
     expect(first).toHaveLength(10);
