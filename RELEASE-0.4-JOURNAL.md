@@ -1918,3 +1918,14 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   Android AccountSecurityFlowTest still ran as a non-admin device after F2 (fixed). RESUME POINT: owner endorses a
   box release from main (F3 + F4 box changes, daemon + Rust flagship-access in one artifact); send the reporter
   emails (drafts in session); iPhone Debug build to retest an app-placed call; Android build 14.
+- 2026-11-23 final round (owner away from the Mac, Chromebook + both YubiKeys): hall of fame entries for F1
+  (credit "rakimans", the reporter's choice), F3, F4 (credit pending); F2 dropped (a bug, not a vulnerability).
+  The privacy-policy notice moved from the 0.5 list into 0.4: signed notice kind `policy-update` (eventAt required,
+  no message; each app shows its own translated sentence and "Read the policy"), webapp shell v254, iOS, Android,
+  vectors, `security-notice.mjs policy`. Fixed three CI failures left by F2-F4 (accessSync same-millisecond tie,
+  keyd create-fetch tag now unwired, locked-names tags classified). Store builds bumped: iOS 1.3 (10), Android 14
+  (owner: all final builds and submissions now; no Android device left to test on). Plan and Chromebook setup:
+  docs/runbooks/0.4-chromebook-yubikey-handover.md (Chromebook: release.sh --only 6, 7, 10 + Claude in Chrome for
+  TestFlight / App Store / Play; Mac: store builds, catalog step 8 from the owner's drive, .com deploys, gym, canary).
+  RESUME POINT: iOS 1.3 (10) upload, Android 14 AABs to the owner, .com deploy; then wait for "Chromebook steps 6, 7,
+  10 done", run step 8 with the catalog drive, redeploy .com, gym groups invites/gating/one-list/update/canary.
