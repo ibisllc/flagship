@@ -52,6 +52,14 @@ over once "let's start 0.5" is said.
      stores and the law: the owner can delete a comment on their own post and block its author (Messages' block),
      visitors can report a comment, and `.com` honours takedowns (DMCA, abuse).
 
+- **Rename an account that has servers, pages or Messages** (owner, 2026-11-23). In 0.4 a rename (paid, a friend's name
+  grant, or choosing a name at sign-up) only works before the account has a server, a voi.ci page, Messages or a
+  quantum-safe key, so the dibs page no longer says "your servers move to the new name with you". Build the re-home in
+  docs/naming-recovery-and-name-change.md (every server to `<server>.<new>`, new certificates, the phone re-signs each
+  box's entitlement, app links, voi.ci named links, fshp.app names, access lists, offline boxes on their next check-in),
+  re-sign pages and Messages records, keep the quantum-safe binding, and teach every client that its account was
+  renamed (today a renamed account looks deleted to its other devices). Then put the promise back on the dibs page.
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in

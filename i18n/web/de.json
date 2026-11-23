@@ -619,7 +619,6 @@
   "sb0e2258910": "einen DNS-<1>TXT</1>-Eintrag unter <2>_flagship-claim.acme.com</2> oder",
   "s9707196b94": "eine Textdatei unter <1>https://acme.com/.well-known/flagship-claim</1>.",
   "se7c7857480": "<1>Der erste Nachweis gewinnt.</1> Weisen zwei Konten dieselbe Domain nach, bekommt der zuerst bestätigte Anspruch den Namen. Einen Einspruch gibt es nicht.",
-  "s70cf8933b6": "<1>20 $, einmalig.</1> Einen reservierten Namen zu sichern kostet 20 $ (eine normale Namensänderung kostet 10 $). Deine Server ziehen mit dir auf den neuen Namen um.",
   "sdfdf549dbc": "Für alle anderen",
   "sc5b4238d69": "Du kannst jederzeit jeden freien Namen kaufen, der nicht für einen <1>.com</1>-Inhaber reserviert ist – auch während des Fensters. Wenn das Jahr endet, stehen reservierte Namen allen offen, wer zuerst kommt, mahlt zuerst.",
   "s36026106a3": "Warum",
@@ -960,5 +959,6 @@
   "sef0fd5b0ca": "Eine Einladung zu einer App kann auf eine Person oder eine feste Anzahl begrenzt sein. Unser Server zählte die bereits Aufgenommenen und fügte dann die neue Person hinzu, in zwei getrennten Schritten; viele gleichzeitig gesendete Einlösungen desselben Links konnten daher alle die Zählung passieren. Auch die Server, auf denen die App läuft, hielten das Limit nicht selbst ein, und läuft eine App auf mehreren Servern, wurden Personen, die ein Server abgelehnt hatte, später auf einem anderen aufgenommen.",
   "s52f632bc3e": "Jeder Weg brauchte den Einladungslink selbst. Zählen und Hinzufügen sind jetzt ein Schritt, das Einlösen von Einladungen ist in der Rate begrenzt, und jeder Server hält das Limit einer Einladung ein und nimmt dieselben ersten Personen auf wie die anderen Server der App, ab dem nächsten Update des jeweiligen Servers. Testeinladungen, die in der Produktion über ihrem Limit lagen, wurden widerrufen.",
   "sa90a6e7e3a": "Ein Kontoname, für dich reserviert",
-  "s9b3ba30249": "Hol dir die Flagship-App und öffne diesen Link erneut, wenn du dein Konto erstellst, oder erstelle es in der Web-App."
+  "s9b3ba30249": "Hol dir die Flagship-App und öffne diesen Link erneut, wenn du dein Konto erstellst, oder erstelle es in der Web-App.",
+  "s9c4573bd77": "<1>20 $, einmalig.</1> Einen reservierten Namen zu sichern kostet 20 $ (eine normale Namensänderung kostet 10 $)."
 }

@@ -619,7 +619,6 @@
   "sb0e2258910": "un registro DNS <1>TXT</1> en <2>_flagship-claim.acme.com</2>, o",
   "s9707196b94": "un archivo de texto en <1>https://acme.com/.well-known/flagship-claim</1>.",
   "se7c7857480": "<1>Gana la primera prueba.</1> Si dos cuentas demuestran el mismo dominio, la primera reclamación verificada se queda con el nombre. No hay proceso de apelación.",
-  "s70cf8933b6": "<1>20 $, una sola vez.</1> Reclamar un nombre reservado cuesta 20 $ (un cambio de nombre normal cuesta 10 $). Tus servidores pasan al nuevo nombre contigo.",
   "sdfdf549dbc": "Para todos los demás",
   "sc5b4238d69": "Puedes comprar cualquier nombre que esté libre y no esté reservado para quien tiene un <1>.com</1>, en cualquier momento, también durante la ventana. Cuando termine el año, los nombres reservados quedan abiertos a todos, por orden de llegada.",
   "s36026106a3": "Por qué",
@@ -960,5 +959,6 @@
   "sef0fd5b0ca": "Una invitación a una app puede limitarse a una persona o a un número fijo. Nuestro servidor contaba a las personas que ya habían entrado y luego añadía a la nueva en dos pasos separados, así que muchos canjes del mismo enlace enviados a la vez podían superar el recuento. Los servidores que ejecutan la app tampoco aplicaban el límite por su cuenta, y cuando una app se ejecuta en varios servidores, personas que un servidor había rechazado entraban más tarde en otro.",
   "s52f632bc3e": "Todas las vías necesitaban el propio enlace de invitación. El recuento y la incorporación son ahora un solo paso, el canje de invitaciones tiene límite de frecuencia, y cada servidor aplica el límite de la invitación y admite a las mismas primeras personas que los demás servidores de la app, a partir de la próxima actualización de cada servidor. Se revocaron las invitaciones de prueba que quedaban en producción por encima de su límite.",
   "sa90a6e7e3a": "Un nombre de cuenta reservado para ti",
-  "s9b3ba30249": "Descarga la app Flagship y vuelve a abrir este enlace cuando crees tu cuenta, o créala en la app web."
+  "s9b3ba30249": "Descarga la app Flagship y vuelve a abrir este enlace cuando crees tu cuenta, o créala en la app web.",
+  "s9c4573bd77": "<1>20 $, una sola vez.</1> Reclamar un nombre reservado cuesta 20 $ (un cambio de nombre normal cuesta 10 $)."
 }

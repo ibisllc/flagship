@@ -619,7 +619,6 @@
   "sb0e2258910": "um registro DNS <1>TXT</1> em <2>_flagship-claim.acme.com</2>, ou",
   "s9707196b94": "um arquivo de texto em <1>https://acme.com/.well-known/flagship-claim</1>.",
   "se7c7857480": "<1>Vence a primeira prova.</1> Se duas contas comprovarem o mesmo domínio, a primeira reivindicação verificada fica com o nome. Não há processo de recurso.",
-  "s70cf8933b6": "<1>US$ 20, uma única vez.</1> Reivindicar um nome reservado custa US$ 20 (uma troca de nome comum custa US$ 10). Seus servidores passam para o novo nome com você.",
   "sdfdf549dbc": "Para todos os outros",
   "sc5b4238d69": "Você pode comprar qualquer nome livre que não esteja reservado para quem tem um <1>.com</1>, a qualquer momento, inclusive durante a janela. Quando o ano terminar, os nomes reservados ficam abertos a todos, por ordem de chegada.",
   "s36026106a3": "Por quê",
@@ -960,5 +959,6 @@
   "sef0fd5b0ca": "Um convite para um app pode ser limitado a uma pessoa ou a um número definido. Nosso servidor contava as pessoas que já tinham entrado e depois adicionava a nova, em duas etapas separadas, então muitos resgates do mesmo link enviados ao mesmo tempo podiam passar todos pela contagem. Os servidores que rodam o app também não aplicavam o limite por conta própria, e quando um app roda em vários servidores, pessoas recusadas por um servidor entravam depois em outro.",
   "s52f632bc3e": "Todos os caminhos exigiam o próprio link do convite. A contagem e a adição agora são uma única etapa, o resgate de convites tem limite de frequência, e cada servidor aplica o limite do convite e admite as mesmas primeiras pessoas que os outros servidores do app, a partir da próxima atualização de cada servidor. Os convites de teste que estavam acima do limite em produção foram revogados.",
   "sa90a6e7e3a": "Um nome de conta reservado para você",
-  "s9b3ba30249": "Baixe o app Flagship e abra este link de novo ao criar sua conta, ou crie-a no app web."
+  "s9b3ba30249": "Baixe o app Flagship e abra este link de novo ao criar sua conta, ou crie-a no app web.",
+  "s9c4573bd77": "<1>US$ 20, uma única vez.</1> Reivindicar um nome reservado custa US$ 20 (uma troca de nome comum custa US$ 10)."
 }
