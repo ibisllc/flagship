@@ -565,7 +565,10 @@ export async function handleRedeemServiceInvite(
     inviteId: res.record.inviteId,
     serviceRef: res.record.serviceRef,
     authorAID: res.record.authorAID,
-    boundAID: res.record.boundAID,
+    // The REDEEMER's own AID (F4 d): the row's `boundAID` is the invite's
+    // FIRST bind, and handing that to later redeemers made the box issue them
+    // a session as the first person.
+    boundAID: b.visitorAID.toLowerCase(),
     encryptedBundle: res.record.encryptedBundle,
     create: carrier,
     createSig: res.record.createSig,
@@ -950,5 +953,15 @@ export async function handleFetchServiceInviteCreate(
   // the box falls back (the author can re-issue). The signed create is REQUIRED.
   if (!existing.createSig) return notFound("invite has no signed create");
 
-  return ok({ create: createCarrier(existing), createSig: existing.createSig, creatorPubHex: existing.creatorPubHex });
+  // The invite's live state rides along so the box decides on it, not on the
+  // signed create alone (F4 e): revoked, expiry, approval mode and binds so far.
+  return ok({
+    create: createCarrier(existing),
+    createSig: existing.createSig,
+    creatorPubHex: existing.creatorPubHex,
+    revokedAt: existing.revokedAt,
+    expiresAt: existing.expiresAt,
+    approvalMode: existing.approvalMode,
+    redemptions: existing.boundAIDs.length,
+  });
 }

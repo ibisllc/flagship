@@ -289,6 +289,42 @@ describe("handleRedeemServiceInvite", () => {
     expect(b.createSig).toBe(body.signature);
   });
 
+  it("a GROUP invite hands each redeemer its OWN AID, never the first binder's (F4 d)", async () => {
+    const deps = await freshDeps();
+    await handleCreateServiceInvite(deps, "alice", createEnvelope({ maxRedemptions: 3 }).body);
+    const first = await handleRedeemServiceInvite(deps, redeemBody());
+    const other = deriveAccountId({ seed: new Uint8Array(32).fill(34) });
+    const second = await handleRedeemServiceInvite(deps, redeemBody(other, other));
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect((first.body as { boundAID: string }).boundAID).toBe(hex(friendAid.publicKey));
+    expect((second.body as { boundAID: string }).boundAID).toBe(hex(other.publicKey));
+  });
+
+  it("parallel redeems over the real D1 adapter bind at most the cap (F4 a)", async () => {
+    const { D1Storage } = await import("@flagship/storage");
+    const { createSqliteD1 } = await import("../../storage/tests/support/sqliteD1.js");
+    const sqlite = createSqliteD1();
+    try {
+      const storage = new D1Storage(sqlite);
+      await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
+      const deps = { invites: storage.serviceInvites, usernames: storage.usernames, now: () => NOW };
+      await handleCreateServiceInvite(deps, "alice", createEnvelope({ maxRedemptions: 2 }).body);
+      const visitors = Array.from({ length: 8 }, (_, i) => deriveAccountId({ seed: new Uint8Array(32).fill(40 + i) }));
+      const res = await Promise.all(visitors.map((v) => handleRedeemServiceInvite(deps, redeemBody(v, v))));
+      const won = res.filter((r) => r.status === 200);
+      expect(won).toHaveLength(2);
+      expect(res.filter((r) => r.status === 409)).toHaveLength(6);
+      // Each winner is told its own AID.
+      const got = new Set(won.map((r) => (r.body as { boundAID: string }).boundAID));
+      expect(got.size).toBe(2);
+      const inviteId = (won[0]!.body as { inviteId: string }).inviteId;
+      expect((await storage.serviceInvites.get(inviteId))!.boundAIDs.sort()).toEqual([...got].sort());
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("re-redeem by the SAME AID is idempotent (firstBind:false)", async () => {
     const deps = await freshDeps();
     await handleCreateServiceInvite(deps, "alice", createEnvelope().body);
@@ -617,6 +653,16 @@ describe("handleFetchServiceInviteCreate (box STK-signed, any-device finalize)",
     expect(body.create.secretHash).toBe(SECRET_HASH);
     expect(body.create.issuedAt).toBe(NOW);
     expect(body.createSig).toMatch(/^[0-9a-f]{128}$/);
+  });
+
+  it("carries the invite's live state (revoked, expiry, mode, binds) for the box to decide on", async () => {
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(202) });
+    const deps = await depsWithServerAndInvite(stk);
+    const before = (await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk))).body as Record<string, unknown>;
+    expect(before).toMatchObject({ revokedAt: null, expiresAt: null, approvalMode: "manual", redemptions: 0 });
+    await deps.invites.revoke(INVITE_ID, NOW);
+    const after = (await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk))).body as Record<string, unknown>;
+    expect(after.revokedAt).toBe(NOW);
   });
 
   it("the returned create + createSig verify as the owner's signed CreateServiceInvite", async () => {

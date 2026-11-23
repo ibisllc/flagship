@@ -6077,46 +6077,47 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
     if (current.boundAIDs.includes(aid)) {
       return { ok: true, firstBind: false, record: current };
     }
-    // A NEW AID — enforce the cap before binding. Single-use (max NULL) with
-    // an existing bind ⇒ already bound to someone else; group ⇒ count < cap.
-    if (current.maxRedemptions === null) {
-      if (current.boundAIDs.length > 0) return { ok: false, reason: "already bound" };
-    } else if (
-      current.maxRedemptions > 0 &&
-      current.boundAIDs.length >= current.maxRedemptions
-    ) {
-      return { ok: false, reason: "max redemptions reached" };
-    }
-    // Atomic bind: INSERT OR IGNORE into the ledger; meta.changes>0 ⇒ we won.
-    const ins = await this.db
-      .prepare(
-        `INSERT OR IGNORE INTO service_invite_bindings (invite_id, aid, bound_at)
-         VALUES (?1, ?2, ?3)`,
-      )
-      .bind(current.inviteId, aid, now)
-      .run();
-    if ((ins.meta.changes ?? 0) === 0) {
-      // Lost the race to another concurrent redeem of the SAME AID — idempotent.
-      const after = await this.get(current.inviteId);
-      return after
-        ? { ok: true, firstBind: false, record: after }
-        : { ok: false, reason: "unknown secret" };
-    }
-    // Set bound_aid/bound_at to the FIRST bind (only when still unset), and
-    // keep the redemptions counter in step with the ledger size.
-    const count = (await this.boundAIDsFor(current.inviteId)).length;
-    await this.db
-      .prepare(
-        `UPDATE service_invites
-           SET bound_aid = COALESCE(bound_aid, ?2),
-               bound_at  = COALESCE(bound_at, ?3),
-               redemptions = ?4
-         WHERE invite_id = ?1`,
-      )
-      .bind(current.inviteId, aid, now, count)
-      .run();
-    const rec = await this.get(current.inviteId);
-    return { ok: true, firstBind: true, record: rec! };
+    // A NEW AID. The cap, revoke and expiry are checked by the INSERT itself,
+    // so concurrent redeems can never bind more AIDs than the cap (F4: a
+    // read-then-insert raced). NULL max = single-use (1); 0 = unlimited. A D1
+    // batch is one transaction, so the counter UPDATE lands with the bind.
+    const [ins] = await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT OR IGNORE INTO service_invite_bindings (invite_id, aid, bound_at)
+           SELECT i.invite_id, ?2, ?3 FROM service_invites i
+            WHERE i.invite_id = ?1 AND i.revoked_at IS NULL
+              AND (i.expires_at IS NULL OR ?3 <= i.expires_at)
+              AND (SELECT COUNT(*) FROM service_invite_bindings b WHERE b.invite_id = ?1)
+                  < CASE WHEN i.max_redemptions IS NULL THEN 1
+                         WHEN i.max_redemptions = 0 THEN 9007199254740991
+                         ELSE i.max_redemptions END`,
+        )
+        .bind(current.inviteId, aid, now),
+      this.db
+        .prepare(
+          `UPDATE service_invites
+             SET bound_aid = COALESCE(bound_aid,
+                   (SELECT aid FROM service_invite_bindings WHERE invite_id = ?1 AND aid = ?2)),
+                 bound_at = COALESCE(bound_at,
+                   (SELECT bound_at FROM service_invite_bindings WHERE invite_id = ?1 AND aid = ?2)),
+                 redemptions = (SELECT COUNT(*) FROM service_invite_bindings WHERE invite_id = ?1)
+           WHERE invite_id = ?1`,
+        )
+        .bind(current.inviteId, aid),
+    ]);
+    const after = await this.get(current.inviteId);
+    if (!after) return { ok: false, reason: "unknown secret" };
+    if ((ins?.meta.changes ?? 0) > 0) return { ok: true, firstBind: true, record: after };
+    // Nothing bound: the same AID won a concurrent redeem (idempotent), or the
+    // invite was revoked, expired or filled in the meantime.
+    if (after.boundAIDs.includes(aid)) return { ok: true, firstBind: false, record: after };
+    if (after.revokedAt !== null) return { ok: false, reason: "revoked" };
+    if (after.expiresAt !== null && now > after.expiresAt) return { ok: false, reason: "expired" };
+    return {
+      ok: false,
+      reason: after.maxRedemptions === null ? "already bound" : "max redemptions reached",
+    };
   }
 
   async revoke(inviteId: string, now: number, proof?: ServiceInviteRevokeProof): Promise<boolean> {

@@ -199,6 +199,10 @@ export type RateLimitEndpoint =
   // "Shared with me" inbox: list, add, delete under a key .com can't tie to an account (by design), so the address is
   // the only axis; each add stores up to 8 KiB, so a flood must not fill D1 (security report F1, 2026-11-23).
   | "share-inbox"
+  // Invite redeem (POST /api/service-invites/redeem): anonymous apart from the visitor's own signature, and each call
+  // writes a bind. The box relays its visitors' redeems (it has its own per-visitor limit), so a box's address carries
+  // a party's worth of joins; a caller hammering `.com` directly is fenced (security report F4, 2026-11-23).
+  | "service-invite-redeem"
   // Architecture v2 signed time (POST /api/time, signedTime.ts): anonymous, one Ed25519
   // signature each; a box asks at boot and every few hours.
   | "signed-time"
@@ -529,6 +533,11 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "ip", limit: 300, windowSec: 3600 },
     { axis: "ip", limit: 1000, windowSec: 86400 },
+  ],
+  "service-invite-redeem": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 300, windowSec: 3600 },
+    { axis: "ip", limit: 2000, windowSec: 86400 },
   ],
   "signed-time": [{ axis: "ip", limit: 30, windowSec: 60 }],
   "demo-example-page": [
@@ -998,6 +1007,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   if (m === "POST" && pathname === "/api/share-inbox") {
     return "share-inbox";
+  }
+  if (m === "POST" && pathname === "/api/service-invites/redeem") {
+    return "service-invite-redeem";
   }
   // Phase 3b — vouched cross-device admit.
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {

@@ -261,6 +261,47 @@ describe("ServiceInviteStorage parity", () => {
           expect((await store.get("id1"))!.boundAIDs).toEqual([FRIEND, OTHER]);
         }));
 
+      // F4 (docs/security/F4-invite-cap-race-investigation.md): parallel
+      // redeems by distinct AIDs used to all pass a stale count on D1 and bind
+      // 8 of 8. The cap is now enforced inside the INSERT.
+      for (const [label, max, cap] of [
+        ["single-use (max null)", undefined, 1],
+        ["max 1", 1, 1],
+        ["max 3", 3, 3],
+      ] as const) {
+        it(`parallel redeems never bind past the cap: ${label}`, () =>
+          run(async (store) => {
+            await store.create({ ...mk(), ...(max !== undefined ? { maxRedemptions: max } : {}) });
+            const aids = Array.from({ length: 8 }, (_, i) => (i + 16).toString(16).repeat(32));
+            const res = await Promise.all(aids.map((a) => store.redeem("11".repeat(32), a, 1000)));
+            const won = res.filter((r) => r.ok && r.firstBind);
+            expect(won).toHaveLength(cap);
+            const lost = res.filter((r) => !r.ok);
+            expect(lost).toHaveLength(8 - cap);
+            for (const r of lost) {
+              expect(r).toEqual({
+                ok: false,
+                reason: max === undefined ? "already bound" : "max redemptions reached",
+              });
+            }
+            const got = (await store.get("id1"))!;
+            expect(got.boundAIDs).toHaveLength(cap);
+            expect(got.redemptions).toBe(cap);
+            expect(got.boundAID).toBe(got.boundAIDs[0]);
+          }));
+      }
+
+      it("parallel re-redeems by the SAME AID bind once", () =>
+        run(async (store) => {
+          await store.create({ ...mk(), maxRedemptions: 3 });
+          const res = await Promise.all(
+            Array.from({ length: 6 }, () => store.redeem("11".repeat(32), FRIEND, 1000)),
+          );
+          expect(res.every((r) => r.ok)).toBe(true);
+          expect(res.filter((r) => r.ok && r.firstBind)).toHaveLength(1);
+          expect((await store.get("id1"))!.boundAIDs).toEqual([FRIEND]);
+        }));
+
       it("maxRedemptions:0 is unlimited", () =>
         run(async (store) => {
           await store.create({ ...mk(), maxRedemptions: 0 });
