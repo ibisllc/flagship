@@ -1758,6 +1758,7 @@ body.no-tabs .tab-bar { display: none; }
   flex-wrap: wrap;
   justify-content: center;
   align-items: baseline;
+  column-gap: 0.5em;
   margin: 8px 0 4px;
   font-family: var(--font-mono);
   direction: ltr;
@@ -1769,6 +1770,7 @@ body.no-tabs .tab-bar { display: none; }
 }
 .modal-suggest-address .address-prefix { font-size: 18px; }
 .modal-suggest-hint { text-align: center; margin: 0 0 14px; }
+button.linklike.modal-suggest-regen { display: block; margin: 4px auto 0; min-height: 44px; padding: 0 12px; text-align: center; }
 .modal-suggest-name {
   font-family: var(--font-mono);
   font-size: 24px;
@@ -1787,6 +1789,7 @@ body.no-tabs .tab-bar { display: none; }
   border-radius: var(--radius-sm);
   min-height: 44px;
   padding-left: 14px;
+  column-gap: 0.5em;
   font-size: var(--body-size);
   transition: border-color var(--motion-state), box-shadow var(--motion-state), background var(--motion-state);
 }
@@ -1804,10 +1807,6 @@ body.no-tabs .tab-bar { display: none; }
   outline: none !important;
   color: var(--ink);
   font-weight: 500;
-}
-.modal-suggest-note {
-  text-align: center;
-  margin-top: 10px;
 }
 .modal-error {
   margin: 8px 0 0;

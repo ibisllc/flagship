@@ -2564,7 +2564,7 @@
   "Moved on %@.": "已于 %@ 迁移。",
   "The move was undone: %@": "迁移已撤销：%@",
   "Your handle": "你的用户名",
-  "Here's a free, random username. You can change it later.": "这是一个可用的随机用户名。你以后可以更改。",
+  "Here's a free, random username.": "这是一个可用的随机用户名。",
   "Try again in %lld min": "%lld 分钟后重试",
   "Try again in %llds": "%lld 秒后重试",
   "Couldn't get a handle. Try again.": "无法获取用户名。请重试。",

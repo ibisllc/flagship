@@ -2564,7 +2564,7 @@
   "Moved on %@.": "%@に移行しました。",
   "The move was undone: %@": "移行は取り消されました: %@",
   "Your handle": "あなたのハンドル",
-  "Here's a free, random username. You can change it later.": "空いているランダムなユーザー名です。後から変更できます。",
+  "Here's a free, random username.": "空いているランダムなユーザー名です。",
   "Try again in %lld min": "%lld 分後にもう一度お試しください",
   "Try again in %llds": "%lld 秒後にもう一度お試しください",
   "Couldn't get a handle. Try again.": "ハンドルを取得できませんでした。もう一度お試しください。",

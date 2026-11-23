@@ -1849,7 +1849,7 @@
   "waiting_for_the_owner_to_confirm_2": "Warte darauf, dass der Eigentümer diese Freigabe bestätigt.",
   "couldnt_open_this_app": "Diese App konnte nicht geöffnet werden.",
   "your_handle": "Dein Benutzername",
-  "heres_a_free_random_username_you": "Hier ist ein freier, zufälliger Benutzername. Du kannst ihn später ändern.",
+  "heres_a_free_random_username_you": "Hier ist ein freier, zufälliger Benutzername.",
   "try_again_in_s": "Versuche es in %1$s Sek. erneut",
   "try_another": "Anderen versuchen",
   "have_the_new_owner_scan_this": "Lass den neuen Eigentümer das hier scannen",

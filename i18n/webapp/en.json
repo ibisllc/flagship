@@ -1911,10 +1911,6 @@
     "en": "Your page address, if you turn it on.",
     "ctx": "webapp/lib/modal.js:321 (under voi.ci/<name> at sign-up; the voi.ci page is opt-in on the next screen)"
   },
-  "You can change your username later.": {
-    "en": "You can change your username later.",
-    "ctx": "webapp/lib/modal.js:261"
-  },
   "Try again in {0}s": {
     "en": "Try again in {0}s",
     "ctx": "webapp/lib/modal.js:294"

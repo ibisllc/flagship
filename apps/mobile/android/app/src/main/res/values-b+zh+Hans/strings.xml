@@ -1851,7 +1851,7 @@
     <string name="waiting_for_the_owner_to_confirm_2">正在等待所有者确认此共享。</string>
     <string name="couldnt_open_this_app">无法打开此应用。</string>
     <string name="your_handle">你的用户名</string>
-    <string name="heres_a_free_random_username_you">这是一个可用的随机用户名。你以后可以更改。</string>
+    <string name="heres_a_free_random_username_you">这是一个可用的随机用户名。</string>
     <string name="try_again_in_s">%1$s 秒后重试</string>
     <string name="try_another">换一个</string>
     <string name="have_the_new_owner_scan_this">请新所有者扫描此代码</string>

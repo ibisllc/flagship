@@ -214,11 +214,14 @@ public struct FSAccountAddress: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
+        // The gap is spacing, not a space: VoiceOver and anything copied read one address, voi.ci/<name>.
         let prefix = Text(verbatim: VoiciAddress.prefix).font(FS.font.h2()).foregroundStyle(c.textMuted)
+            .accessibilityHidden(true)
         let handle = Text(verbatim: name).font(FS.font.h1()).foregroundColor(c.text)
+            .accessibilityLabel(Text(verbatim: VoiciAddress.prefix + name))
             .accessibilityIdentifier(nameIdentifier)
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 0) { prefix; handle }
+            HStack(alignment: .firstTextBaseline, spacing: FS.space.s2) { prefix; handle }
                 .fixedSize(horizontal: true, vertical: false)
             VStack(spacing: FS.space.s1) {
                 prefix
@@ -281,7 +284,7 @@ public struct FSField: View {
                     .environment(\.layoutDirection, .leftToRight)
                     .accessibilityHidden(true)
             }
-            HStack(spacing: 0) {
+            HStack(spacing: prefix != nil && !prefixAbove ? FS.space.s2 : 0) {
                 if !prefixAbove, let prefix {
                     Text(verbatim: prefix).foregroundStyle(c.textMuted)
                         .fixedSize()

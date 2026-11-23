@@ -298,7 +298,7 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("inlineSuggestUsername");
     expect(r.body).toContain("Try again in"); // the escalating-cooldown countdown
     expect(r.body).toContain("data-suggest-regen"); // the regenerate button
-    expect(r.body).toContain("change your username later"); // the subtext
+    expect(r.body).not.toContain("change your username later"); // no promise 0.4 cannot keep (owner, 2026-11-23)
   });
 
   it("/webapp/keystore.js exposes bootstrapFromExistingSeed for the recovery flow", async () => {

@@ -2566,7 +2566,7 @@
   "Moved on %@.": "Changé le %@.",
   "The move was undone: %@": "Le changement a été annulé : %@",
   "Your handle": "Votre pseudo",
-  "Here's a free, random username. You can change it later.": "Voici un nom d’utilisateur aléatoire et libre. Vous pourrez le modifier plus tard.",
+  "Here's a free, random username.": "Voici un nom d’utilisateur aléatoire et libre.",
   "Try again in %lld min": "Réessayez dans %lld min",
   "Try again in %llds": "Réessayez dans %lld s",
   "Couldn't get a handle. Try again.": "Impossible d’obtenir un pseudo. Réessayez.",

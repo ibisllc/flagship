@@ -1851,7 +1851,7 @@
     <string name="waiting_for_the_owner_to_confirm_2">Esperando a que el propietario confirme este acceso compartido.</string>
     <string name="couldnt_open_this_app">No se pudo abrir esta app.</string>
     <string name="your_handle">Tu alias</string>
-    <string name="heres_a_free_random_username_you">Aquí tienes un nombre de usuario aleatorio y libre. Puedes cambiarlo más tarde.</string>
+    <string name="heres_a_free_random_username_you">Aquí tienes un nombre de usuario aleatorio y libre.</string>
     <string name="try_again_in_s">Inténtalo de nuevo en %1$s s</string>
     <string name="try_another">Probar otro</string>
     <string name="have_the_new_owner_scan_this">Pide al nuevo propietario que escanee esto</string>

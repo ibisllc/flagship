@@ -31,7 +31,7 @@ public struct SuggestUsernameScreen: View {
                 Spacer().frame(height: FS.space.s12)
                 Text("Your handle").font(FS.font.h2())
                 FSColorReader { c in
-                    Text("Here's a free, random username. You can change it later.")
+                    Text("Here's a free, random username.")
                         .font(FS.font.body()).foregroundColor(c.textMuted)
                 }
                 FSColorReader { c in
@@ -45,16 +45,17 @@ public struct SuggestUsernameScreen: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, FS.space.s4)
                 }
-                FSSecondaryButton(regenLabel, block: true) {
-                    Task { await vm?.regenerate() }
-                }
-                .disabled(!(vm?.canRegenerate ?? false))
-                .accessibilityIdentifier("suggest-regenerate")
-                FSGhostButton(String(localized: "Choose your own account name"), block: true) {
+                // The paid choice gets the bordered button; another free suggestion is the plain action.
+                FSSecondaryButton(String(localized: "Choose your own account name"), block: true) {
                     if let name = vm?.current { onChooseOwn(name) }
                 }
                 .disabled(!(vm?.canContinue ?? false))
                 .accessibilityIdentifier("suggest-choose-own")
+                FSGhostButton(regenLabel, block: true) {
+                    Task { await vm?.regenerate() }
+                }
+                .disabled(!(vm?.canRegenerate ?? false))
+                .accessibilityIdentifier("suggest-regenerate")
                 if let err = vm?.errorText {
                     FSColorReader { c in
                         Text(err).font(FS.font.caption()).foregroundColor(c.danger)

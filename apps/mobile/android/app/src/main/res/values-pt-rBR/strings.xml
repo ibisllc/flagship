@@ -1851,7 +1851,7 @@
     <string name="waiting_for_the_owner_to_confirm_2">Aguardando o proprietário confirmar este compartilhamento.</string>
     <string name="couldnt_open_this_app">Não foi possível abrir este app.</string>
     <string name="your_handle">Seu identificador</string>
-    <string name="heres_a_free_random_username_you">Aqui está um nome de usuário aleatório e livre. Você pode mudar depois.</string>
+    <string name="heres_a_free_random_username_you">Aqui está um nome de usuário aleatório e livre.</string>
     <string name="try_again_in_s">Tente de novo em %1$s s</string>
     <string name="try_another">Tentar outro</string>
     <string name="have_the_new_owner_scan_this">Peça ao novo proprietário que escaneie isto</string>

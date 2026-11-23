@@ -248,7 +248,9 @@ describe("the voi.ci/ prefix", () => {
   it("shows voi.ci/ before the suggested name and inside the choose field, outside the value", async () => {
     const fs = await import("node:fs");
     const modal = fs.readFileSync(new URL("../public/webapp/lib/modal.js", import.meta.url), "utf8");
-    expect(modal).toContain('<span class="address-prefix">${ADDRESS_PREFIX}</span><span class="modal-suggest-name" data-suggest-name></span>');
+    expect(modal).toContain('<span class="address-prefix" aria-hidden="true">${ADDRESS_PREFIX}</span><span class="visually-hidden" data-suggest-address></span><span class="modal-suggest-name" aria-hidden="true" data-suggest-name></span>');
+    expect(modal).not.toContain("You can change your username later.");
+    expect(modal.indexOf("data-suggest-own")).toBeLessThan(modal.indexOf('class="linklike modal-suggest-regen" data-suggest-regen'));
     expect(modal).toContain('tr("Your page address, if you turn it on.")');
     const view = fs.readFileSync(new URL("../public/webapp/views/choose-name.js", import.meta.url), "utf8");
     expect(view).toMatch(/<span class="input-prefix" aria-hidden="true">\$\{ADDRESS_PREFIX\}<\/span>\s*<input id="choose-name-input"/);

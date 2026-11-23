@@ -318,12 +318,11 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
     overlay.innerHTML = `
       <div class="modal-card" role="document">
         <h3 class="modal-title">${tr("Your handle")}</h3>
-        <p class="modal-suggest-address" dir="ltr"><span class="address-prefix">${ADDRESS_PREFIX}</span><span class="modal-suggest-name" data-suggest-name></span></p>
+        <p class="modal-suggest-address" dir="ltr"><span class="address-prefix" aria-hidden="true">${ADDRESS_PREFIX}</span><span class="visually-hidden" data-suggest-address></span><span class="modal-suggest-name" aria-hidden="true" data-suggest-name></span></p>
         <p class="note modal-suggest-hint">${tr("Your page address, if you turn it on.")}</p>
-        <button class="secondary full-width" data-suggest-regen>${tr("↻ Try another")}</button>
+        ${allowChooseOwn ? `<button class="secondary full-width" data-suggest-own>${tr("Choose your own account name")}</button>` : ""}
+        <button class="linklike modal-suggest-regen" data-suggest-regen>${tr("↻ Try another")}</button>
         <p class="warn-text mt-2" data-suggest-error role="alert" hidden></p>
-        <p class="note modal-suggest-note">${tr("You can change your username later.")}</p>
-        ${allowChooseOwn ? `<button class="linklike mt-2" data-suggest-own>${tr("Choose your own account name")}</button>` : ""}
         <div class="row-2 mt-3">
           <button class="secondary" data-modal-cancel>${tr("Cancel")}</button>
           <button data-modal-ok>${tr("Continue")}</button>
@@ -336,6 +335,8 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
     let current = initialName;
     let timer = null;
     const nameEl = overlay.querySelector("[data-suggest-name]");
+    // Screen readers get one address, voi.ci/<name>; the gap on screen is spacing, not a space.
+    const addressEl = overlay.querySelector("[data-suggest-address]");
     const regenBtn = overlay.querySelector("[data-suggest-regen]");
     const okBtn = overlay.querySelector("[data-modal-ok]");
     const cancelBtn = overlay.querySelector("[data-modal-cancel]");
@@ -387,6 +388,7 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
       if (res && res.name && !res.throttled) {
         current = res.name;
         nameEl.textContent = current;
+        addressEl.textContent = ADDRESS_PREFIX + current;
       }
       armCooldown(res ? res.retryAfterMs : 2000);
     });
@@ -398,6 +400,7 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
     document.addEventListener("keydown", onKey);
 
     nameEl.textContent = current;
+    addressEl.textContent = ADDRESS_PREFIX + current;
     armCooldown(retryAfterMs);
   });
 }

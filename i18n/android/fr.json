@@ -1849,7 +1849,7 @@
   "waiting_for_the_owner_to_confirm_2": "En attente de la confirmation de ce partage par le propriétaire.",
   "couldnt_open_this_app": "Impossible d’ouvrir cette app.",
   "your_handle": "Votre pseudo",
-  "heres_a_free_random_username_you": "Voici un nom d’utilisateur aléatoire et libre. Vous pourrez le modifier plus tard.",
+  "heres_a_free_random_username_you": "Voici un nom d’utilisateur aléatoire et libre.",
   "try_again_in_s": "Réessayez dans %1$s s",
   "try_another": "Essayer un autre",
   "have_the_new_owner_scan_this": "Faites scanner ceci par le nouveau propriétaire",

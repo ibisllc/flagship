@@ -105194,43 +105194,43 @@
         }
       }
     },
-    "Here's a free, random username. You can change it later.": {
+    "Here's a free, random username.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aquí tienes un nombre de usuario aleatorio y libre. Puedes cambiarlo más tarde."
+            "value": "Aquí tienes un nombre de usuario aleatorio y libre."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Voici un nom d’utilisateur aléatoire et libre. Vous pourrez le modifier plus tard."
+            "value": "Voici un nom d’utilisateur aléatoire et libre."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hier ist ein freier, zufälliger Benutzername. Du kannst ihn später ändern."
+            "value": "Hier ist ein freier, zufälliger Benutzername."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aqui está um nome de usuário aleatório e livre. Você pode mudar depois."
+            "value": "Aqui está um nome de usuário aleatório e livre."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "空いているランダムなユーザー名です。後から変更できます。"
+            "value": "空いているランダムなユーザー名です。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这是一个可用的随机用户名。你以后可以更改。"
+            "value": "这是一个可用的随机用户名。"
           }
         }
       }

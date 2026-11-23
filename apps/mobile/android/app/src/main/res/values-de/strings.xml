@@ -1851,7 +1851,7 @@
     <string name="waiting_for_the_owner_to_confirm_2">Warte darauf, dass der Eigentümer diese Freigabe bestätigt.</string>
     <string name="couldnt_open_this_app">Diese App konnte nicht geöffnet werden.</string>
     <string name="your_handle">Dein Benutzername</string>
-    <string name="heres_a_free_random_username_you">Hier ist ein freier, zufälliger Benutzername. Du kannst ihn später ändern.</string>
+    <string name="heres_a_free_random_username_you">Hier ist ein freier, zufälliger Benutzername.</string>
     <string name="try_again_in_s">Versuche es in %1$s Sek. erneut</string>
     <string name="try_another">Anderen versuchen</string>
     <string name="have_the_new_owner_scan_this">Lass den neuen Eigentümer das hier scannen</string>

@@ -7712,7 +7712,7 @@
     "ctx": "ui/screens/SuggestUsernameScreen.kt:63 (text=)"
   },
   "heres_a_free_random_username_you": {
-    "en": "Here's a free, random username. You can change it later.",
+    "en": "Here's a free, random username.",
     "ctx": "ui/screens/SuggestUsernameScreen.kt:68 (text=)"
   },
   "try_again_in_s": {

@@ -1849,7 +1849,7 @@
   "waiting_for_the_owner_to_confirm_2": "所有者がこの共有を確認するのを待っています。",
   "couldnt_open_this_app": "このアプリを開けませんでした。",
   "your_handle": "あなたのハンドル",
-  "heres_a_free_random_username_you": "空いているランダムなユーザー名です。後から変更できます。",
+  "heres_a_free_random_username_you": "空いているランダムなユーザー名です。",
   "try_again_in_s": "%1$s 秒後にもう一度お試しください",
   "try_another": "別のを試す",
   "have_the_new_owner_scan_this": "新しい所有者にこれをスキャンしてもらってください",

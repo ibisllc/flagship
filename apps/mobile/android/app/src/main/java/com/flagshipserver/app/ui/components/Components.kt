@@ -29,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -235,7 +237,7 @@ fun FSField(
     OutlinedTextField(
         leadingIcon = if (prefix != null && !prefixAbove) ({
             Text(prefix, color = FS.colors.textMuted, style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(start = 16.dp).clearAndSetSemantics {})
+                modifier = Modifier.padding(start = 16.dp, end = 8.dp).clearAndSetSemantics {})
         }) else null,
         value = value,
         onValueChange = onValueChange,
@@ -276,19 +278,22 @@ fun FSAccountAddress(name: String, modifier: Modifier = Modifier) {
     ) {
         androidx.compose.foundation.layout.FlowRow(
             modifier = modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
+            // The gap is spacing, not a space: TalkBack and anything copied read one address, voi.ci/<name>.
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         ) {
             Text(
                 com.flagshipserver.app.core.VoiciName.ADDRESS_PREFIX,
                 color = FS.colors.textMuted,
                 style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.alignByBaseline(),
+                modifier = Modifier.alignByBaseline().clearAndSetSemantics {},
             )
             Text(
                 name,
                 color = FS.colors.text,
                 style = MaterialTheme.typography.headlineLarge.copy(textAlign = TextAlign.Center),
-                modifier = Modifier.alignByBaseline().testTag("account-address-name"),
+                modifier = Modifier.alignByBaseline().testTag("account-address-name").semantics {
+                    contentDescription = com.flagshipserver.app.core.VoiciName.ADDRESS_PREFIX + name
+                },
             )
         }
     }

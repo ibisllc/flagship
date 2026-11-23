@@ -98,21 +98,22 @@ fun SuggestUsernameScreen(
             )
         }
 
-        FSSecondaryButton(
-            label = if (cooldown > 0) fsString(R.string.try_again_in_s, cooldown) else stringResource(R.string.try_another),
-            onClick = { scope.launch { vm.regenerate() } },
-            block = true,
-            enabled = vm.canRegenerate(),
-        )
-
+        // The paid choice gets the bordered button; another free suggestion is the plain action.
         if (onChooseOwn != null) {
-            com.flagshipserver.app.ui.components.FSGhostButton(
+            FSSecondaryButton(
                 label = stringResource(R.string.choose_name_action),
                 onClick = { current?.let(onChooseOwn) },
                 block = true,
                 enabled = vm.canContinue(),
             )
         }
+
+        com.flagshipserver.app.ui.components.FSGhostButton(
+            label = if (cooldown > 0) fsString(R.string.try_again_in_s, cooldown) else stringResource(R.string.try_another),
+            onClick = { scope.launch { vm.regenerate() } },
+            block = true,
+            enabled = vm.canRegenerate(),
+        )
 
         error?.let {
             Text(text = it, color = FS.colors.danger, style = MaterialTheme.typography.bodySmall)

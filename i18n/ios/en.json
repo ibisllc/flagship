@@ -10483,8 +10483,8 @@
     "en": "Your handle",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SuggestUsernameScreen.swift:24"
   },
-  "Here's a free, random username. You can change it later.": {
-    "en": "Here's a free, random username. You can change it later.",
+  "Here's a free, random username.": {
+    "en": "Here's a free, random username.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SuggestUsernameScreen.swift:26"
   },
   "Try again in %lld min": {
