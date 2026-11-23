@@ -1022,6 +1022,28 @@ body.has-sheet {
   line-height: 1.5;
   color: var(--ink-muted);
 }
+.notes-plain {
+  padding-top: 0;
+  border-top: none;
+  list-style: disc;
+  padding-left: 18px;
+  gap: 10px;
+}
+.notes-plain li {
+  display: list-item;
+  font-size: 14px;
+  color: var(--ink);
+}
+.with-info {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.icon-btn-inline {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}
 .notes .icon {
   margin-top: 2px;
   color: var(--graphic);

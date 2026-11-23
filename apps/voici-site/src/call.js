@@ -14,7 +14,7 @@ import { h, replace } from "./dom.js";
 import { icon } from "./icons.js";
 import { t } from "./i18n.js";
 import { closeSheet, openSheet } from "./sheet.js";
-import { openMessages } from "./messages.js";
+import { openMessages, visitorName } from "./messages.js";
 import { avatarEl } from "./page.js";
 
 /** The sentence for a call refusal or failure code (never shown raw). */
@@ -220,24 +220,48 @@ export async function openCall(ctx) {
 
 /**
  * The pop-up before a call on a page that takes calls from anyone or rings callers back (docs/voici-calls.md, owner
- * additions 2026-11-15): "Call anonymously" (no account, no ring-back) and "Call and allow call-back" (signed in; the
- * conversation's ring-back channel is attached first). A callback-only page shows only the second, with the reason.
+ * additions 2026-11-15, wording 2026-11-23): "Call anonymously" (no account, no ring-back) and "Call and allow
+ * call-back" (signed in; the conversation's ring-back channel is attached first). A callback-only page shows only the
+ * second, with the reason. The info button beside "won't learn who you are." opens "About call-backs" in the same sheet.
  */
 function showCallChoice(ctx, mode) {
   const { doc, lib, cfg, page } = ctx;
   const name = page.profile.displayName;
+  const title = t("Let {0} call you back?", name);
   const note = h(doc, "p", { class: "call-status", role: "status", hidden: true });
   const anon = h(doc, "button", { class: "btn btn-secondary btn-wide", type: "button" }, t("Call anonymously"));
   const allow = h(doc, "button", { class: "btn btn-primary btn-wide", type: "button" }, icon(doc, "call"), h(doc, "span", {}, t("Call and allow call-back")));
-  const sheet = openSheet(doc, { title: t("Let {0} call you back?", name) });
-  replace(
-    sheet.body,
-    mode === "callback" ? h(doc, "p", { class: "lede" }, t("{0} takes calls only from people they can call back.", name)) : null,
-    h(doc, "p", { class: "fine" }, t("{0} won't learn who you are. Flagship will know this conversation can ring your phone.", name)),
-    allow,
-    mode === "anyone" ? anon : null,
-    note,
-  );
+  const sheet = openSheet(doc, { title });
+  const info = h(doc, "button", { class: "icon-btn icon-btn-inline", type: "button", "aria-label": t("About call-backs") }, icon(doc, "info", "icon icon-sm"));
+  const choice = () => {
+    sheet.setTitle(title);
+    replace(
+      sheet.body,
+      mode === "callback" ? h(doc, "p", { class: "lede" }, t("{0} takes calls only from people they can call back.", name)) : null,
+      h(doc, "p", { class: "fine with-info" }, h(doc, "span", {}, t("{0} won't learn who you are.", name)), info),
+      allow,
+      mode === "anyone" ? anon : null,
+      note,
+    );
+  };
+  info.addEventListener("click", async () => {
+    // This visitor's name on the page, when this browser is already signed in to it (nothing is asked for here).
+    let session = null;
+    try {
+      session = await lib.loadVoiciSession(ctx.store, page.index.pageId, { origin: cfg.origin });
+    } catch {
+      /* the explainer says "a visitor name" */
+    }
+    const back = h(doc, "button", { class: "btn btn-secondary btn-wide", type: "button", on: { click: choice } }, t("Back"));
+    sheet.setTitle(t("About call-backs"));
+    replace(
+      sheet.body,
+      h(doc, "ul", { class: "notes notes-plain" }, ...callBackPoints(name, session ? visitorName(lib, session.pseudonymPub) : null, mode).map((p) => h(doc, "li", {}, p))),
+      back,
+    );
+    back.focus();
+  });
+  choice();
   anon.addEventListener("click", async () => {
     const key = await lib.anonKey(ctx.store, page.index.pageId);
     closeSheet();
@@ -260,6 +284,22 @@ function showCallChoice(ctx, mode) {
     watchRings(ctx, session);
     startCall(ctx, session);
   });
+}
+
+/**
+ * "About call-backs" (owner wording 2026-11-23, adapted to the site): a browser's call-back note names no account
+ * (`.com` keeps the account only when the visitor's app attached it), so the site says so; "Call anonymously" is
+ * explained only where it is offered.
+ */
+export function callBackPoints(name, visitor, mode) {
+  return [
+    visitor
+      ? t("{0} sees only your visitor name, {1} (or a nickname they gave you), never your account.", name, visitor)
+      : t("{0} sees only a visitor name (or a nickname they gave you), never your account.", name),
+    t("Flagship keeps a note that this conversation can ring you back here while this page is open. The note doesn't name your Flagship account. Flagship never sees your messages or hears your calls."),
+    t("The note is deleted when you tap “Stop call-backs”, when {0} blocks you or removes the page, or 90 days after you last called them with call-back on.", name),
+    ...(mode === "anyone" ? [t("Call anonymously leaves no note, and {0} can't call you back.", name)] : []),
+  ];
 }
 
 let watching = null;

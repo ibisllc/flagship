@@ -167,149 +167,177 @@
     "en": "Call",
     "ctx": "voici-site/call.js:210"
   },
+  "Let {0} call you back?": {
+    "en": "Let {0} call you back?",
+    "ctx": "voici-site/call.js:230"
+  },
   "Call anonymously": {
     "en": "Call anonymously",
-    "ctx": "voici-site/call.js:230"
+    "ctx": "voici-site/call.js:232"
   },
   "Call and allow call-back": {
     "en": "Call and allow call-back",
-    "ctx": "voici-site/call.js:231"
+    "ctx": "voici-site/call.js:233"
   },
-  "Let {0} call you back?": {
-    "en": "Let {0} call you back?",
-    "ctx": "voici-site/call.js:232"
+  "About call-backs": {
+    "en": "About call-backs",
+    "ctx": "voici-site/call.js:235"
   },
   "{0} takes calls only from people they can call back.": {
     "en": "{0} takes calls only from people they can call back.",
-    "ctx": "voici-site/call.js:235"
+    "ctx": "voici-site/call.js:240"
   },
-  "{0} won't learn who you are. Flagship will know this conversation can ring your phone.": {
-    "en": "{0} won't learn who you are. Flagship will know this conversation can ring your phone.",
-    "ctx": "voici-site/call.js:236"
+  "{0} won't learn who you are.": {
+    "en": "{0} won't learn who you are.",
+    "ctx": "voici-site/call.js:241"
+  },
+  "Back": {
+    "en": "Back",
+    "ctx": "voici-site/call.js:255"
+  },
+  "{0} sees only your visitor name, {1} (or a nickname they gave you), never your account.": {
+    "en": "{0} sees only your visitor name, {1} (or a nickname they gave you), never your account.",
+    "ctx": "voici-site/call.js:297"
+  },
+  "{0} sees only a visitor name (or a nickname they gave you), never your account.": {
+    "en": "{0} sees only a visitor name (or a nickname they gave you), never your account.",
+    "ctx": "voici-site/call.js:298"
+  },
+  "Flagship keeps a note that this conversation can ring you back here while this page is open. The note doesn't name your Flagship account. Flagship never sees your messages or hears your calls.": {
+    "en": "Flagship keeps a note that this conversation can ring you back here while this page is open. The note doesn't name your Flagship account. Flagship never sees your messages or hears your calls.",
+    "ctx": "voici-site/call.js:299"
+  },
+  "The note is deleted when you tap “Stop call-backs”, when {0} blocks you or removes the page, or 90 days after you last called them with call-back on.": {
+    "en": "The note is deleted when you tap “Stop call-backs”, when {0} blocks you or removes the page, or 90 days after you last called them with call-back on.",
+    "ctx": "voici-site/call.js:300"
+  },
+  "Call anonymously leaves no note, and {0} can't call you back.": {
+    "en": "Call anonymously leaves no note, and {0} can't call you back.",
+    "ctx": "voici-site/call.js:301"
   },
   "Decline": {
     "en": "Decline",
-    "ctx": "voici-site/call.js:307"
+    "ctx": "voici-site/call.js:347"
   },
   "Answer": {
     "en": "Answer",
-    "ctx": "voici-site/call.js:308"
+    "ctx": "voici-site/call.js:348"
   },
   "{0} is calling you back.": {
     "en": "{0} is calling you back.",
-    "ctx": "voici-site/call.js:317"
+    "ctx": "voici-site/call.js:357"
   },
   "End-to-end encrypted · quantum-safe": {
     "en": "End-to-end encrypted · quantum-safe",
-    "ctx": "voici-site/call.js:318"
+    "ctx": "voici-site/call.js:358"
   },
   "Securing the line (quantum-safe)…": {
     "en": "Securing the line (quantum-safe)…",
-    "ctx": "voici-site/call.js:330"
+    "ctx": "voici-site/call.js:370"
   },
   "Reaching their phone…": {
     "en": "Reaching their phone…",
-    "ctx": "voici-site/call.js:332"
+    "ctx": "voici-site/call.js:372"
   },
   "Opening a direct path…": {
     "en": "Opening a direct path…",
-    "ctx": "voici-site/call.js:334"
+    "ctx": "voici-site/call.js:374"
   },
   "Starting audio…": {
     "en": "Starting audio…",
-    "ctx": "voici-site/call.js:336"
+    "ctx": "voici-site/call.js:376"
   },
   "Connecting…": {
     "en": "Connecting…",
-    "ctx": "voici-site/call.js:338"
+    "ctx": "voici-site/call.js:378"
   },
   "Calling {0}…": {
     "en": "Calling {0}…",
-    "ctx": "voici-site/call.js:348"
+    "ctx": "voici-site/call.js:388"
   },
   "This is taking longer than usual": {
     "en": "This is taking longer than usual",
-    "ctx": "voici-site/call.js:349"
+    "ctx": "voici-site/call.js:389"
   },
   "Camera paused": {
     "en": "Camera paused",
-    "ctx": "voici-site/call.js:352"
+    "ctx": "voici-site/call.js:392"
   },
   "Their camera": {
     "en": "Their camera",
-    "ctx": "voici-site/call.js:355"
+    "ctx": "voici-site/call.js:395"
   },
   "Your camera": {
     "en": "Your camera",
-    "ctx": "voici-site/call.js:356"
+    "ctx": "voici-site/call.js:396"
   },
   "Mute": {
     "en": "Mute",
-    "ctx": "voici-site/call.js:362"
+    "ctx": "voici-site/call.js:402"
   },
   "Unmute": {
     "en": "Unmute",
-    "ctx": "voici-site/call.js:366"
+    "ctx": "voici-site/call.js:406"
   },
   "Camera": {
     "en": "Camera",
-    "ctx": "voici-site/call.js:369"
+    "ctx": "voici-site/call.js:409"
   },
   "Flip": {
     "en": "Flip",
-    "ctx": "voici-site/call.js:370"
+    "ctx": "voici-site/call.js:410"
   },
   "End": {
     "en": "End",
-    "ctx": "voici-site/call.js:371"
+    "ctx": "voici-site/call.js:411"
   },
   "Full screen": {
     "en": "Full screen",
-    "ctx": "voici-site/call.js:377"
+    "ctx": "voici-site/call.js:417"
   },
   "Picture in picture": {
     "en": "Picture in picture",
-    "ctx": "voici-site/call.js:383"
+    "ctx": "voici-site/call.js:423"
   },
   "Exit full screen": {
     "en": "Exit full screen",
-    "ctx": "voici-site/call.js:395"
+    "ctx": "voici-site/call.js:435"
   },
   "Quantum-safe call": {
     "en": "Quantum-safe call",
-    "ctx": "voici-site/call.js:400"
+    "ctx": "voici-site/call.js:440"
   },
   "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.": {
     "en": "The call goes straight to their phone. Every sound is sealed with keys that a future quantum computer can't break, and Flagship can't hear it.",
-    "ctx": "voici-site/call.js:400"
+    "ctx": "voici-site/call.js:440"
   },
   "Camera off": {
     "en": "Camera off",
-    "ctx": "voici-site/call.js:553"
+    "ctx": "voici-site/call.js:593"
   },
   "Close": {
     "en": "Close",
-    "ctx": "voici-site/call.js:612"
+    "ctx": "voici-site/call.js:652"
   },
   "Call again": {
     "en": "Call again",
-    "ctx": "voici-site/call.js:613"
+    "ctx": "voici-site/call.js:653"
   },
   "Getting ready to call…": {
     "en": "Getting ready to call…",
-    "ctx": "voici-site/call.js:646"
+    "ctx": "voici-site/call.js:686"
   },
   "Ringing…": {
     "en": "Ringing…",
-    "ctx": "voici-site/call.js:647"
+    "ctx": "voici-site/call.js:687"
   },
   "Audio": {
     "en": "Audio",
-    "ctx": "voici-site/call.js:684"
+    "ctx": "voici-site/call.js:724"
   },
   "Audio output {0}": {
     "en": "Audio output {0}",
-    "ctx": "voici-site/call.js:701"
+    "ctx": "voici-site/call.js:741"
   },
   "iPhone and iPad": {
     "en": "iPhone and iPad",
