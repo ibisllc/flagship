@@ -583,7 +583,10 @@
 //  v256: "Choose your own account name" at sign-up (lib/chooseName.js, views/choose-name.js): the account opens
 //       under the suggested name and is renamed at once, paid by a code or ten $1 vouchers; a name the owner set
 //       aside opens the same screen (/app/choose-name). (v255 is the welcome-art branch's.)
-const SHELL_VERSION = "v256";
+//  v257: sign-up shows the account name as its public address: a muted, unselectable voi.ci/ before the suggested
+//       name with "Your page address, if you turn it on." under it, and a fixed voi.ci/ inside the choose field (a
+//       pasted voi.ci/ or https://voi.ci/ address keeps only the name).
+const SHELL_VERSION = "v257";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

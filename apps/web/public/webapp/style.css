@@ -1752,14 +1752,58 @@ body.no-tabs .tab-bar { display: none; }
   width: 100%;
   margin-top: 4px;
 }
+/* voi.ci/<name>: the prefix muted and out of any selection; it wraps above the name rather than cutting it. */
+.modal-suggest-address {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  margin: 8px 0 4px;
+  font-family: var(--font-mono);
+  direction: ltr;
+}
+.address-prefix, .input-prefix {
+  color: var(--muted);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.modal-suggest-address .address-prefix { font-size: 18px; }
+.modal-suggest-hint { text-align: center; margin: 0 0 14px; }
 .modal-suggest-name {
   font-family: var(--font-mono);
   font-size: 24px;
   font-weight: 500;
   text-align: center;
   letter-spacing: 0.01em;
-  margin: 8px 0 14px;
   word-break: break-all;
+  min-width: 0;
+}
+.input-prefixed {
+  display: flex;
+  align-items: center;
+  direction: ltr;
+  background: var(--canvas-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  min-height: 44px;
+  padding-left: 14px;
+  font-size: var(--body-size);
+  transition: border-color var(--motion-state), box-shadow var(--motion-state), background var(--motion-state);
+}
+.input-prefixed:focus-within { border-color: var(--teal); box-shadow: 0 0 0 2px var(--focus-inner), 0 0 0 4px var(--accent-graphic); background: var(--canvas); }
+.input-prefixed .input-prefix { flex: 0 0 auto; font-family: var(--font-sans); line-height: 1.4; }
+.input-prefixed input {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px !important;
+  padding: 10px 14px 10px 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: var(--ink);
+  font-weight: 500;
 }
 .modal-suggest-note {
   text-align: center;

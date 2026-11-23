@@ -130,6 +130,20 @@ const grantWire = (g) => (g ? { nameGrant: { code: g.code, expiresAt: g.expiresA
 
 // ── sentences ───────────────────────────────────────────────────────────────
 
+/** The account's public address before its name. A domain: never translated. */
+export const ADDRESS_PREFIX = "voi.ci/";
+
+/** What the person typed or pasted, without a leading `https://voi.ci/` (scheme optional, any case). */
+export function stripAddressPrefix(typed) {
+  const raw = String(typed ?? "");
+  let rest = raw.replace(/^\s+/, "");
+  const lower = (s) => s.toLowerCase();
+  for (const scheme of ["https://", "http://"]) {
+    if (lower(rest).startsWith(scheme) && lower(rest.slice(scheme.length)).startsWith(ADDRESS_PREFIX)) rest = rest.slice(scheme.length);
+  }
+  return lower(rest).startsWith(ADDRESS_PREFIX) ? rest.slice(ADDRESS_PREFIX.length) : raw;
+}
+
 /** The sentence for a typed name that can't be one, or null (the local check; `.com` has the last word). */
 export function localNameProblem(raw) {
   const p = voiciNameProblem(String(raw ?? "").trim());

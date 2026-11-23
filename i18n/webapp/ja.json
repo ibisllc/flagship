@@ -461,6 +461,7 @@
   "Restored.": "復元しました。",
   "Your handle": "あなたのハンドル",
   "↻ Try another": "↻ 別のを試す",
+  "Your page address, if you turn it on.": "ページをオンにしたときのアドレスです。",
   "You can change your username later.": "ユーザー名は後から変更できます。",
   "Try again in {0}s": "{0} 秒後にもう一度お試しください",
   "Older messages will be summarised to fit this model.": "古いメッセージは、このモデルに収まるよう要約されます。",

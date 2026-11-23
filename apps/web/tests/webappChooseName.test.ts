@@ -12,6 +12,7 @@ import {
   parseNameGrantLink,
   resumeNameChoice,
   saveNameChoice,
+  stripAddressPrefix,
 } from "../public/webapp/lib/chooseName.js";
 
 function memStorage() {
@@ -231,5 +232,25 @@ describe("a name the owner set aside", () => {
     );
     expect(nameChoiceRefusalText({ code: "rename-unavailable" }, { kept: "x", existing: true })).toBe("Open this link when you create your account.");
     expect(nameChoiceRefusalText({ code: "grant-used" })).toBe("This link doesn't work any more. Ask for a new one.");
+  });
+});
+
+describe("the voi.ci/ prefix", () => {
+  it("keeps only the name from a pasted address", () => {
+    expect(stripAddressPrefix("voi.ci/john")).toBe("john");
+    expect(stripAddressPrefix("https://voi.ci/john")).toBe("john");
+    expect(stripAddressPrefix("  HTTP://Voi.Ci/john")).toBe("john");
+    expect(stripAddressPrefix("john")).toBe("john");
+    expect(stripAddressPrefix("https://example.com/john")).toBe("https://example.com/john");
+    expect(stripAddressPrefix("voici")).toBe("voici");
+  });
+
+  it("shows voi.ci/ before the suggested name and inside the choose field, outside the value", async () => {
+    const fs = await import("node:fs");
+    const modal = fs.readFileSync(new URL("../public/webapp/lib/modal.js", import.meta.url), "utf8");
+    expect(modal).toContain('<span class="address-prefix">${ADDRESS_PREFIX}</span><span class="modal-suggest-name" data-suggest-name></span>');
+    expect(modal).toContain('tr("Your page address, if you turn it on.")');
+    const view = fs.readFileSync(new URL("../public/webapp/views/choose-name.js", import.meta.url), "utf8");
+    expect(view).toMatch(/<span class="input-prefix" aria-hidden="true">\$\{ADDRESS_PREFIX\}<\/span>\s*<input id="choose-name-input"/);
   });
 });

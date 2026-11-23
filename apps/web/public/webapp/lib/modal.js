@@ -12,6 +12,7 @@
 // DOM if the user is mid-IME composition (composition events are
 // passed through).
 import { tr } from "./i18n.js";
+import { ADDRESS_PREFIX } from "./chooseName.js";
 
 const HOST_ID = "flagship-modal-host";
 
@@ -317,7 +318,8 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
     overlay.innerHTML = `
       <div class="modal-card" role="document">
         <h3 class="modal-title">${tr("Your handle")}</h3>
-        <p class="modal-suggest-name" data-suggest-name></p>
+        <p class="modal-suggest-address" dir="ltr"><span class="address-prefix">${ADDRESS_PREFIX}</span><span class="modal-suggest-name" data-suggest-name></span></p>
+        <p class="note modal-suggest-hint">${tr("Your page address, if you turn it on.")}</p>
         <button class="secondary full-width" data-suggest-regen>${tr("↻ Try another")}</button>
         <p class="warn-text mt-2" data-suggest-error role="alert" hidden></p>
         <p class="note modal-suggest-note">${tr("You can change your username later.")}</p>

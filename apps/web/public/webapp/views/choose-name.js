@@ -19,10 +19,12 @@ import {
   clearNameChoice,
   forgetNameGrant,
   loadNameChoice,
+  ADDRESS_PREFIX,
   localNameProblem,
   nameChoiceRefusalText,
   resumeNameChoice,
   saveNameChoice,
+  stripAddressPrefix,
 } from "../lib/chooseName.js";
 import { toast } from "../lib/toast.js";
 import { isAdminRootKey, isLockedKey } from "../lib/keyCustody.js";
@@ -47,7 +49,10 @@ export function inlineChooseOwnName({ initialName = "", error = "", keepName = "
       <div class="modal-card" role="document">
         <h3 class="modal-title">${tr("Choose your own account name")}</h3>
         <label class="label" for="choose-name-input">${tr("Account name")}</label>
-        <input id="choose-name-input" data-choose-name autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" value="${escapeHtml(initialName)}" ${free ? "readonly" : ""} />
+        <div class="input-prefixed" dir="ltr">
+          <span class="input-prefix" aria-hidden="true">${ADDRESS_PREFIX}</span>
+          <input id="choose-name-input" type="text" data-choose-name autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" value="${escapeHtml(initialName)}" ${free ? "readonly" : ""} />
+        </div>
         ${setAside ? `<p class="note mt-2">${tr("This name has been set aside for you.")}</p>` : ""}
         <p class="warn-text mt-2" data-choose-problem role="alert" ${error ? "" : "hidden"}>${escapeHtml(error)}</p>
         ${free
@@ -91,7 +96,25 @@ export function inlineChooseOwnName({ initialName = "", error = "", keepName = "
       problemEl.hidden = !p;
       return !p && !!name();
     };
-    nameEl.addEventListener("input", check);
+    // A pasted address keeps only the name (the prefix is shown, never typed). maxlength would cut a long paste
+    // before this sees it, so a paste is read whole.
+    const setName = (v) => {
+      const bare = stripAddressPrefix(v);
+      if (bare !== nameEl.value) nameEl.value = bare.slice(0, 30);
+    };
+    nameEl.addEventListener("paste", (ev) => {
+      const text = ev.clipboardData?.getData("text");
+      if (text == null) return;
+      ev.preventDefault();
+      const start = nameEl.selectionStart ?? nameEl.value.length;
+      const end = nameEl.selectionEnd ?? start;
+      setName(nameEl.value.slice(0, start) + stripAddressPrefix(text.trim()) + nameEl.value.slice(end));
+      check();
+    });
+    nameEl.addEventListener("input", () => {
+      setName(nameEl.value);
+      check();
+    });
     overlay.querySelector("[data-choose-free]")?.addEventListener("click", () => {
       if (check()) close({ name: name(), method: "grant" });
     });
