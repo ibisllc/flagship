@@ -2,8 +2,8 @@
   "product": "0.4",
   "label": "Beta",
   "iosVersion": "1.3",
-  "iosBuild": 11,
-  "androidVersionCode": 15,
+  "iosBuild": 12,
+  "androidVersionCode": 16,
   "studio": "0.4.0",
   "marketplace": false
 }
