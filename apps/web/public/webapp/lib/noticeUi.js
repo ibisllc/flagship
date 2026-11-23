@@ -1,5 +1,5 @@
 // The security notice's screens (docs/security-notices.md): a dismissible
-// banner above the header for a maintenance or update notice, and the
+// banner above the header for a maintenance, update or privacy policy notice, and the
 // full-screen "Update required" lock for a verified update-required notice.
 //
 // The lock is an overlay, not a view: it sits above whichever view is on
@@ -14,6 +14,7 @@ import {
   bannerVisible,
   dismissNotice,
   formatNoticeDate,
+  formatNoticeDay,
   loadStore,
   securityNoticeText,
   securityNotices,
@@ -40,7 +41,13 @@ export const NOTICE_COPY = Object.freeze({
   signOut: tr("Sign out"),
   signedBy: tr("Signed by the Flagship maintainers"),
   advisory: (id) => tr("Advisory {0}", id),
+  policyChanges: (date) => tr("Our privacy policy changes on {0}.", date),
+  policyChanged: (date) => tr("Our privacy policy changed on {0}.", date),
+  policyRead: tr("Read the policy"),
 });
+
+/** The privacy policy, the app's own link: a notice never carries a URL. */
+export const PRIVACY_POLICY_URL = "https://flagshipserver.com/privacy";
 
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -66,10 +73,24 @@ function ensureBanner() {
   return bannerEl;
 }
 
-/** The banner's contents for an outcome: pure, so a test can read the exact strings. */
-export function bannerModel(outcome, formatDate = formatNoticeDate) {
+/**
+ * The banner's contents for an outcome: pure, so a test can read the exact strings.
+ * A policy notice carries no text: the sentence is the app's own, in the person's language.
+ */
+export function bannerModel(outcome, formatDate = formatNoticeDate, { now = Date.now(), formatDay = formatNoticeDay } = {}) {
   if (outcome.action !== "banner") return null;
   const n = outcome.notice;
+  if (outcome.style === "policy") {
+    const day = formatDay(n.eventAt);
+    return {
+      style: "policy",
+      text: now >= n.eventAt ? NOTICE_COPY.policyChanged(day) : NOTICE_COPY.policyChanges(day),
+      update: false,
+      dismiss: NOTICE_COPY.bannerDismiss,
+      action: null,
+      link: { label: NOTICE_COPY.policyRead, href: PRIVACY_POLICY_URL },
+    };
+  }
   return {
     style: outcome.style,
     text: securityNoticeText(n, formatDate),
@@ -94,6 +115,7 @@ function renderBanner(outcome) {
     <p class="notice-banner-text" data-testid="notice-banner-text">${esc(model.text)}</p>
     <div class="notice-banner-actions">
       ${model.action ? `<button type="button" class="notice-banner-update" data-testid="notice-banner-update">${esc(model.action)}</button>` : ""}
+      ${model.link ? `<a class="primary notice-banner-link" data-testid="notice-banner-link" href="${esc(model.link.href)}" target="_blank" rel="noopener noreferrer">${esc(model.link.label)}</a>` : ""}
       <button type="button" class="secondary notice-banner-dismiss" data-testid="notice-banner-dismiss">${esc(model.dismiss)}</button>
     </div>`;
   el.querySelector(".notice-banner-dismiss")?.addEventListener("click", () => {

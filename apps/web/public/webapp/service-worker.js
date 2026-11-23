@@ -576,7 +576,9 @@
 //       last day, a wrong clock) are worded; precaches lib/rePairRefusal.js.
 //  v253: invites (security report F4): no approve-first option or "Finalize an acceptance" card (no box finalizes one
 //       any more), and an Activity row when someone joins an app through an invite.
-const SHELL_VERSION = "v253";
+//  v254: the privacy policy notice (docs/security-notices.md, kind policy-update): a dismissible banner, in the
+//       person's language, saying the policy changes (or changed) on a date, with a link to read it.
+const SHELL_VERSION = "v254";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

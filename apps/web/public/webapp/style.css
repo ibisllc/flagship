@@ -3020,8 +3020,8 @@ section h2.fs-hero-title::before { content: none; }
 
 
 /* ── Security notices (docs/security-notices.md) ──
- * A banner above the header for a maintenance or update notice, and the
- * full-screen "Update required" lock. The lock sits under the toast (100) and
+ * A banner above the header for a maintenance, update or privacy policy notice,
+ * and the full-screen "Update required" lock. The lock sits under the toast (100) and
  * every dialog (200), so a toast or the key-backup ceremony shows above it. */
 .notice-banner {
   display: flex;
@@ -3045,6 +3045,7 @@ section h2.fs-hero-title::before { content: none; }
 .notice-banner-text { flex: 1 1 240px; margin: 0; }
 .notice-banner-actions { display: flex; gap: var(--space-2); }
 .notice-banner-actions button { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+.notice-banner-actions a.primary { min-height: 36px; padding: 6px 12px; }
 
 /* ── Security sliver (N14): every row shows; nothing is merged or cut off. ── */
 .sliver { margin: 8px 24px 0; max-height: 45vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-2); }

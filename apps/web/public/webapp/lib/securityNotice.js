@@ -28,7 +28,7 @@ export const SECURITY_NOTICE_MAX_REASON = 160;
 export const SECURITY_NOTICE_PATH = "/api/notices";
 export const STORE_KEY = "flagship.securityNotice.v1";
 
-const KINDS = ["none", "maintenance", "update-advisory", "update-required"];
+const KINDS = ["none", "maintenance", "update-advisory", "update-required", "policy-update"];
 const PLATFORMS = ["android", "ios", "web"];
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
@@ -97,6 +97,9 @@ export function canonicalSecurityNotice(b, signedBy) {
     if (entries.length) throw new SecurityNoticeError("platforms-not-allowed");
     if (b.message !== "") throw new SecurityNoticeError("message-not-allowed");
     if (b.eventAt !== 0) throw new SecurityNoticeError("bad-event-at");
+  } else if (b.kind === "policy-update") {
+    if (b.eventAt === 0) throw new SecurityNoticeError("event-required");
+    if (b.message !== "") throw new SecurityNoticeError("message-not-allowed");
   } else if (b.message === "") {
     throw new SecurityNoticeError("message-required");
   }
@@ -261,15 +264,15 @@ export function clientBelowMinimum(n, c) {
  * What to show for an already VERIFIED notice. Fail open: outside
  * [validFrom, validUntil) nothing; only update-required, from lockFrom, for a
  * client below the minimum, locks.
- * @returns {{action:"none", why:string}|{action:"banner", style:"maintenance"|"update", notice:object}|{action:"lock", notice:object}}
+ * @returns {{action:"none", why:string}|{action:"banner", style:"maintenance"|"update"|"policy", notice:object}|{action:"lock", notice:object}}
  */
 export function securityNoticeOutcome(n, c, now) {
   if (n.kind === "none") return { action: "none", why: "kind-none" };
   if (now < n.validFrom) return { action: "none", why: "not-yet" };
   if (now >= n.validUntil) return { action: "none", why: "expired" };
-  if (n.kind === "maintenance") {
+  if (n.kind === "maintenance" || n.kind === "policy-update") {
     if (Object.keys(n.platforms).length > 0 && !n.platforms[c.platform]) return { action: "none", why: "other-platform" };
-    return { action: "banner", style: "maintenance", notice: n };
+    return { action: "banner", style: n.kind === "maintenance" ? "maintenance" : "policy", notice: n };
   }
   if (!n.platforms[c.platform]) return { action: "none", why: "other-platform" };
   if (!clientBelowMinimum(n, c)) return { action: "none", why: "up-to-date" };
@@ -303,6 +306,15 @@ export async function storedSecurityNoticeOutcome(store, authorityKeys, client, 
 /** `{date}` replaced by the caller's rendering of eventAt. */
 export function securityNoticeText(n, formatDate) {
   return n.eventAt === 0 ? n.message : n.message.split("{date}").join(formatDate(n.eventAt));
+}
+
+/** A day for a person (a policy's effective date), in their own locale and zone. */
+export function formatNoticeDay(ms) {
+  try {
+    return new Date(ms).toLocaleDateString(dateLocale(), { day: "numeric", month: "long", year: "numeric" });
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
 }
 
 /** A date for a person, in their own locale and zone, never sent anywhere. */
@@ -493,7 +505,7 @@ export function dismissNotice(notice, { now = Date.now(), storage = safeStorage(
 const ADVISORY_REAPPEAR_MS = 24 * 3600_000;
 
 /**
- * Should this banner show? A maintenance banner stays dismissed for its seq.
+ * Should this banner show? A maintenance or policy banner stays dismissed for its seq.
  * An update banner returns after a day; one that is the grace window of an
  * update-required comes back on every launch (`sessionDismissed` is the
  * in-page memory of this launch).
@@ -505,7 +517,7 @@ export function bannerVisible(outcome, store, { now = Date.now(), sessionDismiss
   if (n.kind === "update-required") return true;
   const d = store.dismissed;
   if (!d || d.seq !== n.seq) return true;
-  if (outcome.style === "maintenance") return false;
+  if (outcome.style === "maintenance" || outcome.style === "policy") return false;
   return now - d.at >= ADVISORY_REAPPEAR_MS;
 }
 

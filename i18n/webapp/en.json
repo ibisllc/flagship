@@ -16285,5 +16285,17 @@
   "Someone joined an app through an invite": {
     "en": "Someone joined an app through an invite",
     "ctx": "webapp/lib/activityFeed.js:30"
+  },
+  "Our privacy policy changes on {0}.": {
+    "en": "Our privacy policy changes on {0}.",
+    "ctx": "webapp/lib/noticeUi.js:44"
+  },
+  "Our privacy policy changed on {0}.": {
+    "en": "Our privacy policy changed on {0}.",
+    "ctx": "webapp/lib/noticeUi.js:45"
+  },
+  "Read the policy": {
+    "en": "Read the policy",
+    "ctx": "webapp/lib/noticeUi.js:46"
   }
 }

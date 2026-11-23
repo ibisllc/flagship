@@ -394,6 +394,13 @@ describe("banners", () => {
     expect(sn.bannerVisible(banner("update-required", "update"), store, { now: NOW + 1000 })).toBe(true);
     expect(sn.bannerVisible(banner("update-required", "update"), store, { now: NOW + 1000, sessionDismissed: true })).toBe(false);
   });
+
+  it("a privacy policy banner stays dismissed for its seq, like maintenance", async () => {
+    const sn = await imp("securityNotice.js");
+    const store = { highestSeq: 1, doc: null, tip: 0, dismissed: { seq: 1, at: NOW } };
+    expect(sn.bannerVisible(banner("policy-update", "policy"), store, { now: NOW + 20 * DAY })).toBe(false);
+    expect(sn.bannerVisible(banner("policy-update", "policy", 2), store, { now: NOW })).toBe(true);
+  });
 });
 
 describe("the screens' exact strings", () => {
@@ -436,6 +443,30 @@ describe("the screens' exact strings", () => {
     const upd = ui.bannerModel({ action: "banner", style: "update", notice: maint }, () => "x");
     expect(upd.action).toBe("Reload to update");
     expect(ui.bannerModel({ action: "none", why: "expired" })).toBeNull();
+  });
+
+  it("the privacy policy banner: the app's own sentence and link, never the notice's text", async () => {
+    const ui = await imp("noticeUi.js");
+    const sn = await imp("securityNotice.js");
+    const c = chain(20);
+    const eventAt = NOW + 7 * DAY;
+    const policy = sn.parseSecurityNotice(
+      JSON.parse(JSON.stringify(c.sign(lockBody({ kind: "policy-update", lockFrom: 0, platforms: {}, advisoryId: "", reason: "", deprecatesProtocol: 0, eventAt, message: "" })))),
+    );
+    expect(policy).not.toBeNull();
+    const day = () => "December 9, 2026";
+    const before = ui.bannerModel({ action: "banner", style: "policy", notice: policy }, undefined, { now: eventAt - 1, formatDay: day });
+    expect(before).toEqual({
+      style: "policy",
+      text: "Our privacy policy changes on December 9, 2026.",
+      update: false,
+      dismiss: "Dismiss",
+      action: null,
+      link: { label: "Read the policy", href: "https://flagshipserver.com/privacy" },
+    });
+    const after = ui.bannerModel({ action: "banner", style: "policy", notice: policy }, undefined, { now: eventAt, formatDay: day });
+    expect(after.text).toBe("Our privacy policy changed on December 9, 2026.");
+    expect(sn.securityNoticeOutcome(policy, { platform: "web", build: 1, protocol: 1 }, NOW + DAY)).toMatchObject({ action: "banner", style: "policy" });
   });
 
   it("no em dash, en dash or emoji in any string the screens show", async () => {

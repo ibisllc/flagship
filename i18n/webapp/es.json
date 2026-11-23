@@ -3996,5 +3996,8 @@
   "This recovery request was already used. Start the recovery again.": "Esta solicitud de recuperación ya se usó. Vuelve a iniciar la recuperación.",
   "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "Ese código ya se usó para una recuperación. Espera a un código nuevo, o repite el paso de recuperación, y vuelve a intentarlo.",
   "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "El reloj de este dispositivo no coincide con el de Flagship. Configura la fecha y la hora como automáticas y vuelve a intentarlo.",
-  "Someone joined an app through an invite": "Alguien se unió a una app con una invitación"
+  "Someone joined an app through an invite": "Alguien se unió a una app con una invitación",
+  "Our privacy policy changes on {0}.": "Nuestra política de privacidad cambia el {0}.",
+  "Our privacy policy changed on {0}.": "Nuestra política de privacidad cambió el {0}.",
+  "Read the policy": "Leer la política"
 }
