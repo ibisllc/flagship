@@ -64,7 +64,10 @@ object VoiciCallCenter {
         val slow: Boolean = false,
     )
 
-    const val CHANNEL_ID = "flagship.calls"
+    // The ring itself is CallRinger (the phone's ringtone, looping); this channel only shows the call, silently.
+    // A new id because a channel's sound can't change after it exists; the old one is deleted.
+    const val CHANNEL_ID = "flagship.calls.ring"
+    private const val OLD_CHANNEL_ID = "flagship.calls"
     const val QUIET_CHANNEL_ID = "flagship.calls.quiet"
     const val NOTIF_ID = 7301
     const val EXTRA_CALL_ID = "voiciCallId"
@@ -97,6 +100,10 @@ object VoiciCallCenter {
 
     private fun update(f: (Ui) -> Ui) {
         _ui.value = f(_ui.value)
+        // The ring sounds exactly while the call is ringing here, whatever ended it (answer, decline, the caller, the
+        // ring time, another device answering).
+        val ringing = _ui.value.phase == Phase.Ringing || _ui.value.phase == Phase.NeedsUnlock
+        if (ringing && ::app.isInitialized) CallRinger.start(app) else CallRinger.stop()
     }
 
     // ── ringing ──
@@ -149,7 +156,14 @@ object VoiciCallCenter {
         if (session != null || pendingPush !== push) return false
         val sealed = runCatching { android.util.Base64.decode(push.sealed, android.util.Base64.DEFAULT) }.getOrNull()
         val who = sealed?.let { keys.openPush(push.callId, it) }
-        if (who != null) update { it.copy(name = keys.nicknames[who.third] ?: VoiciCopy.visitorName(who.third)) }
+        if (who != null) {
+            val name = keys.nicknames[who.third] ?: VoiciCopy.visitorName(who.third)
+            update { it.copy(name = name) }
+            // The ring was shown as "Someone on voi.ci" before the unlock: the notification and Telecom learn the name.
+            connection?.setCallerDisplayName(name, TelecomManager.PRESENTATION_ALLOWED)
+            val p = _ui.value.phase
+            if (::app.isInitialized && (p == Phase.Ringing || p == Phase.NeedsUnlock)) runCatching { showIncoming(app) }
+        }
         val m = mediaFactory()
         media = m
         // The caller's media arrives only through this phone's bare name: hold it while the call rings and runs, even
@@ -204,15 +218,18 @@ object VoiciCallCenter {
 
     /**
      * The calls channel never bypasses Do Not Disturb (no setBypassDnd), and every ring is a CATEGORY_CALL notification
-     * on it: while the phone is in Do Not Disturb, Android lets it sound and go full screen only when the user's
-     * Do Not Disturb allows calls. The self-managed Telecom connection does not ring by itself; its incoming UI is this
-     * notification (VoiciConnection.onShowIncomingCallUi).
+     * on it: while the phone is in Do Not Disturb, Android shows it full screen only when the user's Do Not Disturb
+     * allows calls. The self-managed Telecom connection does not ring by itself; its incoming UI is this notification
+     * (VoiciConnection.onShowIncomingCallUi) and its sound is CallRinger, which stays quiet in Do Not Disturb.
      */
     fun ensureChannel(context: Context) {
         val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (mgr.getNotificationChannel(OLD_CHANNEL_ID) != null) mgr.deleteNotificationChannel(OLD_CHANNEL_ID)
         mgr.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, FSStrings.get(R.string.voici_call_channel), NotificationManager.IMPORTANCE_HIGH).apply {
                 description = FSStrings.get(R.string.voici_call_channel_desc)
+                setSound(null, null)
+                enableVibration(false)
             },
         )
         // The call in progress, and a ring while the call screen is already in front: no heads-up over the call screen.
