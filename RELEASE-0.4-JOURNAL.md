@@ -1929,3 +1929,17 @@ Android TV; bundle size warning; new iOS screenshots; canUseFullScreenIntent (if
   TestFlight / App Store / Play; Mac: store builds, catalog step 8 from the owner's drive, .com deploys, gym, canary).
   RESUME POINT: iOS 1.3 (10) upload, Android 14 AABs to the owner, .com deploy; then wait for "Chromebook steps 6, 7,
   10 done", run step 8 with the catalog drive, redeploy .com, gym groups invites/gating/one-list/update/canary.
+- 2026-11-23 evening, final round SHIPPED to .com (owner: release today). Merged 0.4/welcome-art (owner's day/night
+  art, headline "Your apps live where you live.", day art's paper set to #F7F6F2; color-to-alpha tried and reverted),
+  0.4/choose-name ("Choose your own account name" at sign-up on all clients: create under the suggested name, pay $10
+  by 10 blind vouchers or a code, rename, re-mint grant/profiles; names registry moves with a rename; owner's
+  `scripts/name-grant.mjs` friend link lifts dibs for one name), dibs fixes from a live test (SERVFAIL/REFUSED fail
+  closed, 5 s DoH timeout, hyphen-free names checked), dibs window one year to 2027-11-05, no "servers move" promise
+  (0.5 list). Chromebook (penguin, YubiKey): steps 6 (endorse 4272f928), 7 (box release 3079462b, sequence 4), 10
+  (shell v256). Mac: catalog v3 (3079462b, security version 3, 100% at once, owner: few users, no canary) from the
+  FlagshipKeys volume; .com deployed (v256 + signature live, health 200). Gym: gating 21, invites 16, update 9, one-list
+  6, fleet 12 green; choose-name found grant re-mint 409 (one active grant per device) -> server fix 34352c0a6, rerun
+  5/5 green. Stores: iOS 1.3 (11) uploaded; Android 15 AABs (versionCode 15/1000015; a Gradle config-cache stamped 14
+  first, fixed ab83488d7) with the owner. RESUME POINT: Claude in Chrome submits iOS 1.3 (11) with the China reply and
+  Android 15 (managed publishing); owner releases after approval; then the old-app update notice, reporter emails,
+  repo convergence (everything on main on every machine), AGENTS.md status.
