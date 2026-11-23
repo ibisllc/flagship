@@ -1,3 +1,4 @@
+if (process.env.FLAGSHIP_ROLLBACK_DRILL !== "off") process.exit(97); // gym rollback drill (scripts/gym-update-target.sh --flavor broken)
 import { languageFor } from "./i18n/index.js";
 import { existsSync, readFileSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
