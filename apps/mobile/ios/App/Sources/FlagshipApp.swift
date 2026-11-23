@@ -96,6 +96,8 @@ struct FlagshipApp: App {
         self.liveVoiciCom = voiciCom
         self.livePayments = LivePaymentsComClient(readTokens: readTokens)
         ServerShareServices.readTokens.set(readTokens)
+        // "Choose your own account name": while a rename is under way its 404s don't mean the account was removed.
+        AccountGoneRegistry.shared.setRenameGuard { AccountRenameResume.isRenaming($0) }
         var pqLive = true
         #if DEBUG
         pqLive = !GymLaunch.usesMocks
@@ -236,7 +238,10 @@ struct FlagshipApp: App {
                 AccountReadCredentials.keystore.keepDeviceKey(umk: umk, username: user, deviceId: deviceId)
                 // Architecture v2: bind this session's identities' ML-DSA keys on `.com`
                 // (accounts made before PQ keys upgrade here), never prompting.
-                PqIdentityBindingService.upgradeAtUnlock(username: user, deviceId: deviceId)
+                // Not while a rename is under way: `.com` refuses a rename once the account holds a PQ binding.
+                if !AccountRenameResume.isRenaming(user) {
+                    PqIdentityBindingService.upgradeAtUnlock(username: user, deviceId: deviceId)
+                }
                 // Milestone 4: requests to servers this device holds as strict go over the PQ channel.
                 QuantumSafetyService.activate(username: user, deviceId: deviceId)
             }
@@ -964,6 +969,19 @@ struct FlagshipApp: App {
                 #endif
                 // voi.ci calls (docs/voici-calls.md §8): the app's own call screen above everything.
                 .overlay { VoiciCallScreen() }
+                .overlay {
+                    if AccountRenameResume.shared.isFinishing {
+                        ZStack {
+                            Color.black.opacity(0.35).ignoresSafeArea()
+                            VStack(spacing: 12) {
+                                ProgressView()
+                                Text("Finishing your account name…")
+                            }
+                            .padding(24)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                        }
+                    }
+                }
                 // Messages (docs/voici-and-messages.md): the store follows the account, so the admin phone takes
                 // direct deliveries (and Home knows about the page) even before the tab is opened.
                 .task(id: "\(appState.currentUser ?? "")|\(appState.isUnlocked)") {
@@ -974,6 +992,10 @@ struct FlagshipApp: App {
                     PaymentsCenter.shared.configure(client: activePayments, username: appState.isUnlocked ? appState.currentUser : nil,
                                                     deviceId: appState.activeProfile?.deviceId)
                     if appState.isUnlocked {
+                        // A rename interrupted by a restart: finish it (grant, profiles, wallet) before anything else.
+                        await AccountRenameResume.shared.finishIfNeeded(
+                            client: LiveAccountNameChangeClient(), server: activeServerClient,
+                            wallet: PaymentsCenterNameChangeWallet(client: activePayments))
                         // A call waiting for this unlock joins first (when Messages already holds the page); the
                         // second call below covers a page that loads with the refresh. Only one joins.
                         VoiciCallCenter.shared.unlocked()
@@ -1076,7 +1098,8 @@ struct FlagshipApp: App {
             if !privacy.requirePassphraseAtLaunch,
                Keystore.hasWrappedUMK,
                Keystore.activeProfileId != Keystore.defaultProfileId {
-                let username = Keystore.activeProfileId
+                // A rename that landed before a restart: the session restores as the new name.
+                let username = await AccountRenameResume.shared.atLaunch(slot: Keystore.activeProfileId, client: LiveAccountNameChangeClient())
                 if privacy.requireBiometricAtLaunch {
                     appState.isUnlocked = false
                 }

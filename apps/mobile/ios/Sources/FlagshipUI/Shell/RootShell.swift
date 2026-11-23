@@ -61,6 +61,8 @@ public struct RootShell: View {
     @State private var pendingOrgJoin: OrgJoinTarget?
     /// A "Load into Flagship" voucher link (docs/anonymous-vouchers.md "Voucher links").
     @State private var pendingVoucherLink: VoucherLinkTarget?
+    /// A name-grant link opened on a phone that already has an account: it is for a new account only.
+    @State private var nameGrantRefused = false
     @Environment(\.voiciComClient) private var voiciCom
     @Environment(\.qrRelayClient) private var qrRelay
 
@@ -242,6 +244,9 @@ public struct RootShell: View {
             NavigationStack {
                 OrgJoinScreen(vm: OrgJoinViewModel(orgId: t.orgId, seatId: t.seatId, keyHex: t.keyHex), onDone: { pendingOrgJoin = nil })
             }
+        }
+        .alert(NameGrantText.existingAccount, isPresented: $nameGrantRefused) {
+            Button("OK", role: .cancel) {}
         }
         .fullScreenCover(item: $pendingVoucherLink) { t in
             NavigationStack {
@@ -438,6 +443,14 @@ public struct RootShell: View {
             pendingVoucherLink = VoucherLinkTarget(link: raw)
             return
         }
+        if case .nameGrant = link {
+            // Without an account the onboarding flow takes it to "Choose your own account name". Renaming an account
+            // other devices (and PQ bindings) already signed under its name would break them, so here it only explains.
+            guard app.isPaired else { return }
+            _ = linker.consume()
+            nameGrantRefused = true
+            return
+        }
         if case let .voiciSignIn(raw) = link {
             // Signs with this account's keys (one Face ID): wait for unlock, like an invite.
             guard app.isUnlocked else { return }
@@ -489,7 +502,7 @@ public struct RootShell: View {
              .accountSecurity, .accountDevices: return .settings
         case .transferOffer, .shareServer, .builderPair, .sharedWithMe: return .home
         case .messages, .pageEditor: return .messages
-        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload, .voiciSignIn, .orgJoin, .voucherLink: return selected
+        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload, .voiciSignIn, .orgJoin, .voucherLink, .nameGrant: return selected
         }
     }
 }

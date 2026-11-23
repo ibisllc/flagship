@@ -312,6 +312,23 @@ public final class VoucherWalletEngine {
         return await save(VoucherWalletSync.add(w, vouchers))
     }
 
+    // MARK: paying something else (the account rename)
+
+    /// `n` vouchers to pay with, still in the wallet until `markSpent` (nil when the wallet holds fewer).
+    public func takeVouchers(_ n: Int) -> [Voucher]? {
+        guard let w = wallet, w.balance >= n else { return nil }
+        return VoucherWalletSync.take(w, n)
+    }
+
+    /// Drop spent vouchers and save.
+    @discardableResult
+    public func markSpent(_ nullifiers: [String]) async -> Bool {
+        guard !nullifiers.isEmpty else { return true }
+        if wallet == nil { await loadWallet() }
+        guard let w = wallet else { return false }
+        return await save(VoucherWalletSync.markSpent(w, nullifiers))
+    }
+
     // MARK: vouchers from a link (docs/anonymous-vouchers.md "Voucher links")
 
     /// The keys a voucher link is checked against: the ones served now and every one remembered from earlier answers.

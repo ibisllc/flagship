@@ -281,6 +281,9 @@ public enum OnboardingRoute: Hashable, Sendable {
     /// (HomeRoute.provisionServer), so onboarding no longer carries a
     /// server-mint route.
     case openAccount(username: String)
+    /// "Choose your own account name": the account is opened under `suggested`, then renamed to the name the
+    /// person pays for (or a name-grant link set aside for them).
+    case chooseOwnName(suggested: String, grant: NameGrant?)
     /// "Connect to an existing account": one page with both ways in.
     /// Sign in by account name — on submit a single preflight
     /// (`/api/account/resolve`, 200 always) branches: demo attaches a

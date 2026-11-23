@@ -4,17 +4,25 @@ import FlagshipCore
 
 /// CREATE path — hands the user one random handle. The ONLY affordances are
 /// regenerate (rate-limited, with a live "Try again in Ns" countdown) and
-/// Continue (claims the shown name in the next step). No typed field — a custom
-/// name is the future paid name-change. See docs/username-suggestion-queue.md.
+/// Continue (claims the shown name in the next step). No typed field: a name of
+/// one's own is the paid "Choose your own account name" (ChooseAccountNameScreen).
+/// See docs/username-suggestion-queue.md.
 public struct SuggestUsernameScreen: View {
     @Environment(\.flagshipServerClient) private var server
     @State private var vm: SuggestUsernameViewModel?
 
     /// Continuation — called with the chosen handle when Continue is tapped.
     var onContinue: (String) -> Void
+    /// "Choose your own account name", with the suggested name (the account is opened under it first).
+    var onChooseOwn: (String) -> Void
+    /// A name-grant link is waiting: go on to "Choose your own account name" as soon as a name is suggested.
+    var autoChooseOwn: Bool
 
-    public init(onContinue: @escaping (String) -> Void = { _ in }) {
+    public init(onContinue: @escaping (String) -> Void = { _ in }, onChooseOwn: @escaping (String) -> Void = { _ in },
+                autoChooseOwn: Bool = false) {
         self.onContinue = onContinue
+        self.onChooseOwn = onChooseOwn
+        self.autoChooseOwn = autoChooseOwn
     }
 
     public var body: some View {
@@ -39,6 +47,11 @@ public struct SuggestUsernameScreen: View {
                 }
                 .disabled(!(vm?.canRegenerate ?? false))
                 .accessibilityIdentifier("suggest-regenerate")
+                FSGhostButton(String(localized: "Choose your own account name"), block: true) {
+                    if let name = vm?.current { onChooseOwn(name) }
+                }
+                .disabled(!(vm?.canContinue ?? false))
+                .accessibilityIdentifier("suggest-choose-own")
                 if let err = vm?.errorText {
                     FSColorReader { c in
                         Text(err).font(FS.font.caption()).foregroundColor(c.danger)
@@ -64,6 +77,7 @@ public struct SuggestUsernameScreen: View {
                 )
             }
             await vm?.load()
+            if autoChooseOwn, let name = vm?.current { onChooseOwn(name) }
         }
     }
 

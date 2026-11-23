@@ -1310,6 +1310,69 @@ public struct Keystore {
         CertPinRegistry.shared.clear()
     }
 
+    // MARK: - Account rename
+
+    /// "Choose your own account name": the profile slot is named after the account, so a rename moves every
+    /// per-profile item (wrapped UMK, admin root, device id, IRK version, PQ records, …) from `old`'s slot to
+    /// `new`'s, re-tags the Secure Enclave wrapping key, and carries the active pointer and this session's UMK
+    /// across. Idempotent: run again after a crash, it moves whatever is still under `old` (writes first, deletes
+    /// after). Never used on the default slot.
+    public static func moveProfileSlot(from old: String, to new: String) {
+        let o = normalizeProfileId(old), n = normalizeProfileId(new)
+        guard o != n, o != defaultProfileId, n != defaultProfileId else { return }
+        let suffix = "." + o
+        var found: [String: KeychainSyncClass] = [:]
+        let q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+        var result: CFTypeRef?
+        if SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess, let rows = result as? [[String: Any]] {
+            for row in rows {
+                guard let acct = row[kSecAttrAccount as String] as? String else { continue }
+                let synced = (row[kSecAttrSynchronizable as String] as? NSNumber)?.boolValue ?? false
+                found[acct] = synced ? .cloudRoot : .deviceLocal
+            }
+        }
+        for acct in InMemoryStore.shared.accounts(prefix: "com.flagship.") where found[acct] == nil {
+            found[acct] = InMemoryStore.shared.syncClass(account: acct) ?? .deviceLocal
+        }
+        let mine = found.filter { $0.key.hasPrefix("com.flagship.") && $0.key.hasSuffix(suffix) }
+        for (acct, sync) in mine {
+            guard let data = keychainRead(account: acct) else { continue }
+            try? keychainWrite(account: String(acct.dropLast(suffix.count)) + "." + n, data: data, sync: sync)
+        }
+        for acct in mine.keys { keychainDelete(account: acct) }
+        #if !targetEnvironment(simulator)
+        // The tag moved with the slot unless the old slot already pointed elsewhere (an earlier rename's fallback).
+        if keychainRead(account: account(KCKey.seKeyTagOverride, profile: n)) == nil {
+            let status = SecItemUpdate([
+                kSecClass as String: kSecClassKey,
+                kSecAttrApplicationTag as String: Data(account(KCKey.seKeyTag, profile: o).utf8),
+            ] as CFDictionary, [
+                kSecAttrApplicationTag as String: Data(account(KCKey.seKeyTag, profile: n).utf8),
+            ] as CFDictionary)
+            // A key the Keychain won't re-tag stays where it is and the new slot names it.
+            if status != errSecSuccess && status != errSecItemNotFound {
+                try? keychainWrite(account: account(KCKey.seKeyTagOverride, profile: n),
+                                   data: Data(account(KCKey.seKeyTag, profile: o).utf8), sync: .deviceLocal)
+            }
+        }
+        #endif
+        sessionUmkLock.lock()
+        if let umk = _sessionUmk.removeValue(forKey: o) { _sessionUmk[n] = umk }
+        sessionUmkLock.unlock()
+        if activeProfileId == o {
+            activeProfileLock.lock()
+            _activeProfileId = n
+            _activeProfileHydrated = true
+            activeProfileLock.unlock()
+            try? keychainWrite(account: activeProfilePointerAccount, data: Data(n.utf8))
+        }
+    }
+
     // MARK: - Internals
 
     private static func unwrappedUMK(reason: String) async throws -> SymmetricKey {
@@ -1485,6 +1548,8 @@ public struct Keystore {
         static let ephemeralPub        = "com.flagship.umk.ephemeralpub"
         static let simWrapPriv         = "com.flagship.umk.simwrap"
         static let seKeyTag            = "com.flagship.umk.se"
+        /// After an account rename whose Secure Enclave key could not be re-tagged: the tag the slot's key keeps.
+        static let seKeyTagOverride    = "com.flagship.umk.se-tag"
         static let pushX25519Priv      = "com.flagship.push.x25519priv"
         static let pushTokenId         = "com.flagship.push.tokenid"
         /// B7/E2 — HKDF version counter for IRK derivation. Absent → v1. */
@@ -1542,7 +1607,9 @@ public struct Keystore {
     /// legacy). Non-default profiles suffix the tag so each profile's
     /// wrapping key is distinct.
     fileprivate static func profileScopedSEKeyTag(profile: String? = nil) -> String {
-        account(KCKey.seKeyTag, profile: profile ?? activeProfileId)
+        let p = profile ?? activeProfileId
+        if let d = keychainRead(account: account(KCKey.seKeyTagOverride, profile: p)), let tag = String(data: d, encoding: .utf8) { return tag }
+        return account(KCKey.seKeyTag, profile: p)
     }
 
     fileprivate static func keychainWrite(account: String, data: Data) throws {
