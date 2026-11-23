@@ -200,8 +200,55 @@ public struct FSCard<Content: View>: View {
     }
 }
 
+/// An account's public address, `voi.ci/<name>`: the prefix muted, the name in the text colour, always left to right.
+/// When both don't fit on one line (large text, a narrow phone) the prefix sits above the name instead of truncating it.
+public struct FSAccountAddress: View {
+    @Environment(\.colorScheme) private var scheme
+    let name: String
+    var nameIdentifier: String
+
+    public init(name: String, nameIdentifier: String = "account-address-name") {
+        self.name = name
+        self.nameIdentifier = nameIdentifier
+    }
+
+    public var body: some View {
+        let c = FSColors.scheme(scheme)
+        let prefix = Text(verbatim: VoiciAddress.prefix).font(FS.font.h2()).foregroundStyle(c.textMuted)
+        let handle = Text(verbatim: name).font(FS.font.h1()).foregroundColor(c.text)
+            .accessibilityIdentifier(nameIdentifier)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 0) { prefix; handle }
+                .fixedSize(horizontal: true, vertical: false)
+            VStack(spacing: FS.space.s1) {
+                prefix
+                handle.multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .environment(\.layoutDirection, .leftToRight)
+    }
+}
+
+/// The account's public address on voi.ci. The prefix is a domain, never translated.
+public enum VoiciAddress {
+    public static let prefix = "voi.ci/"
+
+    /// What the owner typed or pasted, without a leading `https://voi.ci/` (scheme optional, any case).
+    public static func stripPrefix(_ typed: String) -> String {
+        var rest = Substring(typed.drop(while: { $0.isWhitespace }))
+        for scheme in ["https://", "http://"] where rest.lowercased().hasPrefix(scheme) {
+            let after = rest.dropFirst(scheme.count)
+            if after.lowercased().hasPrefix(prefix) { rest = after }
+        }
+        if rest.lowercased().hasPrefix(prefix) { return String(rest.dropFirst(prefix.count)) }
+        return typed
+    }
+}
+
 public struct FSField: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.layoutDirection) private var direction
     @Binding var value: String
     let label: String
     var placeholder: String = ""
@@ -209,9 +256,11 @@ public struct FSField: View {
     var error: String? = nil
     var secure: Bool = false
     var keyboard: UIKeyboardType = .default
+    /// Fixed text before the input (a URL prefix): shown, never edited, never part of the value.
+    var prefix: String? = nil
     @FocusState private var focused: Bool
 
-    public init(value: Binding<String>, label: String, placeholder: String = "", helper: String? = nil, error: String? = nil, secure: Bool = false, keyboard: UIKeyboardType = .default) {
+    public init(value: Binding<String>, label: String, placeholder: String = "", helper: String? = nil, error: String? = nil, secure: Bool = false, keyboard: UIKeyboardType = .default, prefix: String? = nil) {
         self._value = value
         self.label = label
         self.placeholder = placeholder
@@ -219,21 +268,39 @@ public struct FSField: View {
         self.error = error
         self.secure = secure
         self.keyboard = keyboard
+        self.prefix = prefix
     }
     public var body: some View {
         let c = FSColors.scheme(scheme)
+        // At accessibility sizes the prefix moves above the box, so the typed name keeps the whole width.
+        let prefixAbove = prefix != nil && typeSize.isAccessibilitySize
         VStack(alignment: .leading, spacing: FS.space.s2) {
             Text(label).font(FS.font.scaled(13, weight: .medium)).foregroundColor(c.text)
-            Group {
+            if prefixAbove, let prefix {
+                Text(verbatim: prefix).font(.system(.body)).foregroundStyle(c.textMuted)
+                    .environment(\.layoutDirection, .leftToRight)
+                    .accessibilityHidden(true)
+            }
+            HStack(spacing: 0) {
+                if !prefixAbove, let prefix {
+                    Text(verbatim: prefix).foregroundStyle(c.textMuted)
+                        .fixedSize()
+                        .accessibilityHidden(true)
+                }
                 if secure {
                     SecureField(placeholder, text: $value)
+                        .focused($focused)
                 } else {
                     TextField(placeholder, text: $value)
                         .keyboardType(keyboard)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                        .foregroundStyle(c.text)
+                        .fontWeight(prefix != nil ? .medium : nil)
+                        .focused($focused)
                 }
             }
+            .environment(\.layoutDirection, prefix != nil ? .leftToRight : direction)
             .font(.system(.body))
             .padding(.horizontal, 14)
             .frame(minHeight: 44)
@@ -254,7 +321,6 @@ public struct FSField: View {
                         .allowsHitTesting(false)
                 }
             }
-            .focused($focused)
 
             if let sub = error ?? helper {
                 Text(sub)

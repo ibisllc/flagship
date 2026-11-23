@@ -17268,6 +17268,10 @@
     "en": "Choose your own account name",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChooseAccountNameScreen.swift:29"
   },
+  "Your page address, if you turn it on.": {
+    "en": "Your page address, if you turn it on.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SuggestUsernameScreen.swift:40 (under voi.ci/<name> at sign-up; the voi.ci page is opt-in on the next screen)"
+  },
   "Your own account name costs $10.": {
     "en": "Your own account name costs $10.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChooseAccountNameScreen.swift:96"

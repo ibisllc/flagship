@@ -27,6 +27,8 @@ public struct ChooseAccountNameScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 Spacer().frame(height: FS.space.s8)
                 Text("Choose your own account name").font(FS.font.h2())
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let vm { content(vm) }
                 Spacer()
             }
@@ -82,11 +84,18 @@ public struct ChooseAccountNameScreen: View {
                     FSField(
                         value: Binding(get: { vm.name }, set: { vm.name = $0 }),
                         label: String(localized: "Account name"),
-                        error: vm.nameProblem
+                        error: vm.nameProblem,
+                        prefix: VoiciAddress.prefix
                     )
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
                     .accessibilityIdentifier("choose-name-field")
+                    // A pasted address keeps only the name. Stripped after the edit lands: a binding setter that
+                    // changes the text it was given leaves the field showing the old text.
+                    .onChange(of: vm.name) { _, typed in
+                        let bare = VoiciAddress.stripPrefix(typed)
+                        if bare != typed { vm.name = bare }
+                    }
                     if vm.isFreeGrant {
                         FSPrimaryButton(String(localized: "Continue"), enabled: vm.canPay, block: true, large: true) {
                             Task { await vm.continueWithGrant() }

@@ -35,12 +35,15 @@ public struct SuggestUsernameScreen: View {
                         .font(FS.font.body()).foregroundColor(c.textMuted)
                 }
                 FSColorReader { c in
-                    Text(vm?.current ?? " ")
-                        .font(FS.font.h1())
-                        .foregroundColor(c.text)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, FS.space.s4)
-                        .accessibilityIdentifier("suggest-username-name")
+                    VStack(spacing: FS.space.s2) {
+                        FSAccountAddress(name: vm?.current ?? " ", nameIdentifier: "suggest-username-name")
+                        Text("Your page address, if you turn it on.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, FS.space.s4)
                 }
                 FSSecondaryButton(regenLabel, block: true) {
                     Task { await vm?.regenerate() }

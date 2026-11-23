@@ -425,4 +425,14 @@ final class ChooseAccountNameViewModelTests: XCTestCase {
         XCTAssertEqual(Keystore.accountDeviceId(accountId: "slot-new"), deviceId)
         KeystoreTestSupport.wipeInMemory(account: "com.flagship.umk.wrapped.slot-new")
     }
+
+    /// The field shows a fixed `voi.ci/` prefix; a pasted address keeps only the name.
+    func testPastedAddressKeepsOnlyTheName() {
+        XCTAssertEqual(VoiciAddress.stripPrefix("voi.ci/john"), "john")
+        XCTAssertEqual(VoiciAddress.stripPrefix("https://voi.ci/john"), "john")
+        XCTAssertEqual(VoiciAddress.stripPrefix("  HTTP://Voi.Ci/john"), "john")
+        XCTAssertEqual(VoiciAddress.stripPrefix("john"), "john")
+        XCTAssertEqual(VoiciAddress.stripPrefix("https://example.com/john"), "https://example.com/john")
+        XCTAssertEqual(VoiciAddress.stripPrefix("voici"), "voici")
+    }
 }

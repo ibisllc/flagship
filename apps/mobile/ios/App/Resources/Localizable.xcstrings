@@ -166243,6 +166243,47 @@
         }
       }
     },
+    "Your page address, if you turn it on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La dirección de tu página, si la activas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'adresse de votre page, si vous l'activez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Adresse deiner Seite, wenn du sie einschaltest."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O endereço da sua página, se você ativá-la."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ページをオンにしたときのアドレスです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启页面后，这就是你的页面地址。"
+          }
+        }
+      }
+    },
     "Your own account name costs $10.": {
       "extractionState": "manual",
       "localizations": {
