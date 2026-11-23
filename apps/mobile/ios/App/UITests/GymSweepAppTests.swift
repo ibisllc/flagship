@@ -421,8 +421,8 @@ final class GymSweepAppTests: GymSweepCase {
         XCTAssertTrue(manager.waitForExistence(timeout: 10))
         manager.tap()
         wait(role, "label CONTAINS 'Manager'")
-        let approve = app.switches["service-access-approve-toggle"]
-        XCTAssertTrue(reveal(app, approve))
+        // No approve-first option (security report F4).
+        XCTAssertFalse(app.switches["service-access-approve-toggle"].exists)
         let create = app.buttons["service-access-create-invite"]
         XCTAssertTrue(reveal(app, create))
         create.tap()

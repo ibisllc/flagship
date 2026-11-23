@@ -47,7 +47,6 @@ public struct ServiceAccessScreen: View {
     @State private var adding: AddKind?
     @State private var name = ""
     @State private var newRole: AppMemberRole = .member
-    @State private var approveFirst = false
     @State private var photoItem: PhotosPickerItem?
     @State private var photoDataUri: String?
     @State private var confirmRemove: ServiceAccessViewModel.Person?
@@ -457,11 +456,6 @@ public struct ServiceAccessScreen: View {
                     groupFields(c: c)
                 } else {
                     photoRow(c: c)
-                    Toggle(isOn: $approveFirst) {
-                        Text("I approve them before they get in").foregroundColor(c.text)
-                    }
-                    .tint(c.accent)
-                    .accessibilityIdentifier("service-access-approve-toggle")
                 }
                 FSPrimaryButton(vm?.busyAdd == true ? String(localized: "Creating…") : String(localized: "Create invite link"), block: true, large: true) {
                     Task { await add(kind) }
@@ -574,8 +568,6 @@ public struct ServiceAccessScreen: View {
     /// Guidance shown under the freshly-created link.
     private var shareSubtitle: String {
         switch vm?.lastInviteTier {
-        case .some(.personalManual):
-            return String(localized: "They'll accept, then send a reply back to you — open it to approve them.")
         case .some(.group):
             return String(localized: "Anyone with this link (up to the limit) joins. Share it carefully.")
         default:
@@ -793,7 +785,6 @@ public struct ServiceAccessScreen: View {
         adding = kind
         vm?.clearLink()
         name = ""
-        approveFirst = false
         photoDataUri = nil
         photoItem = nil
         newRole = vm?.isAdminDevice == false ? .member : AppMemberRole(wire: vm?.members?.defaultRole) ?? .member
@@ -811,7 +802,7 @@ public struct ServiceAccessScreen: View {
                 : nil
             tier = .group(maxRedemptions: maxN, expiresAt: expiresAt)
         case .person:
-            tier = approveFirst ? .personalManual : .personalAuto
+            tier = .personalAuto
         }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let link = await vm.addPerson(name: trimmed, photo: kind == .group ? nil : photoDataUri, tier: tier, role: newRole)

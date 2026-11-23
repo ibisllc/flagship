@@ -174,6 +174,7 @@ public enum BoxEventLabels {
         "server.restore.waiting": String(localized: "Waiting for its backup"),
         "app.updated": String(localized: "App redeployed"),
         "app.removed": String(localized: "App removed"),
+        "app.member.joined": String(localized: "Someone joined an app through an invite"),
         "share.granted": String(localized: "Shared this server"),
         "share.changed": String(localized: "Changed a share"),
         "share.revoked": String(localized: "Ended a share"),

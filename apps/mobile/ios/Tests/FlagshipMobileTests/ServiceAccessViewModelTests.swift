@@ -397,16 +397,14 @@ final class ServiceAccessViewModelTests: XCTestCase {
         XCTAssertEqual(call.request["inviteId"]?.count, 64)
     }
 
-    func testAddManualInviteSetsApprovalModeAndInviteIdInLink() async {
+    /// Approve-first invites are gone (security report F4): a person's invite never asks for manual approval.
+    func testAddPersonInviteNeverAsksForManualApproval() async {
         let mock = MockServiceAccessClient()
         let vm = makeVM(mock)
         await vm.load()
-        let link = await vm.addPerson(name: "Sam", photo: nil, tier: .personalManual)
+        let link = await vm.addPerson(name: "Sam", photo: nil, tier: .personalAuto)
         XCTAssertNotNil(link)
-        let call = mock.createCalls[0]
-        XCTAssertEqual(call.request["approvalMode"], "manual")
-        let inviteId = call.request["inviteId"]!
-        XCTAssertTrue(link!.contains("&i=\(inviteId)"))
+        XCTAssertNil(mock.createCalls[0].request["approvalMode"])
     }
 
     func testAddGroupInviteSetsCapsAndExpiry() async {

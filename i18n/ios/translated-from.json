@@ -4043,5 +4043,6 @@
   "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.": "b47bbddf5852",
   "This recovery request was already used. Start the recovery again.": "0f2a82b48a5c",
   "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "163a0577575e",
-  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "81289097ae16"
+  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "81289097ae16",
+  "Someone joined an app through an invite": "5f387cd74f3b"
 }

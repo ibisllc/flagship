@@ -44,20 +44,16 @@ public final class ServiceAccessViewModel {
         case failed(String)
     }
 
-    /// The three invite tiers the create picker offers (docs §v2 Phase 3).
+    /// The invite tiers the create picker offers (docs §v2 Phase 3). Approve-first
+    /// invites are gone until an author-signed finalize exists (security report F4).
     public enum InviteTier: Equatable, Sendable {
         /// Personal, auto-approve — first-bind (the casual-leak window, default).
         case personalAuto
-        /// Personal, manual-approve (sensitive) — the friend's redeem returns
-        /// {pending}; the friend replies an AID-signed acceptance the AUTHOR
-        /// finalizes. `approvalMode:"manual"` on `.com`.
-        case personalManual
         /// Group / multi-use — one link, `maxRedemptions` (0 = unlimited) +
         /// optional `expiresAt`. Auto-approve, lower-trust by construction.
         case group(maxRedemptions: Int, expiresAt: Int64?)
 
         public var isGroup: Bool { if case .group = self { return true }; return false }
-        public var isManual: Bool { self == .personalManual }
     }
 
     public struct Person: Equatable, Sendable, Identifiable {
@@ -642,15 +638,13 @@ public final class ServiceAccessViewModel {
             ]
             if let maxN { request["maxRedemptions"] = maxN }
             if let expiresAt { request["expiresAt"] = expiresAt }
-            // approvalMode is a `.com`-side policy field (NOT in the signed bytes).
-            if tier.isManual { request["approvalMode"] = "manual" }
             if let deviceId { request["deviceId"] = deviceId }
             try await client.createInvite(controlBase: controlBase, username: username, request: request, signatureHex: HexUtil.encode(sig))
 
             let link = ServiceInviteLinks.inviteLink(
                 serverDomain: shownServer, secretHex: HexUtil.encode(secret),
                 authorAidHex: HexUtil.encode(aidPub),
-                inviteId: tier.isManual ? inviteId : nil,
+                inviteId: nil,
                 serviceRef: serviceRef)
             lastInviteLink = link
             lastInviteTier = tier

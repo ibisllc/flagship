@@ -264,18 +264,6 @@ final class GymLiveTests: XCTestCase {
         )
         gymShot(app, "personal-auto-link")
 
-        // ── A person you approve first. ──
-        if revealBySwipe(app, addPerson, tries: 3) { addPerson.tap() }
-        let approve = app.switches["service-access-approve-toggle"]
-        if nameField.waitForExistence(timeout: 10) {
-            nameField.tap()
-            nameField.typeText("Gym Manual")
-            if revealBySwipe(app, approve, tries: 3) { approve.tap() }
-            if createBtn.isEnabled { createBtn.tap() }
-            _ = app.staticTexts["service-access-share-url"].waitForExistence(timeout: 25)
-            gymShot(app, "personal-manual-link")
-        }
-
         // ── A group link with a cap. ──
         if revealBySwipe(app, addGroup, tries: 3) { addGroup.tap() }
         if nameField.waitForExistence(timeout: 10) {

@@ -17247,5 +17247,9 @@
   "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": {
     "en": "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RePairRefusalText.swift"
+  },
+  "Someone joined an app through an invite": {
+    "en": "Someone joined an app through an invite",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift"
   }
 }
