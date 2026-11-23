@@ -39,6 +39,8 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
   ["name_dibs_claims", "username"],
   ["name_dibs_starts", "username"],
   ["pending_re_pairs", "username"],
+  // An admin's veto holds its day against the rejected key under the new name too (security report F3).
+  ["re_pair_vetoed_keys", "username"],
   ["push_tokens", "username"],
   ["recovery_shards", "username"],
   ["tier_subscriptions", "username"],

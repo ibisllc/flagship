@@ -147,11 +147,12 @@ describe("account-not-found", () => {
       expect(ok!.status).toBe(200);
       const { token } = (await ok!.json()) as { token: string };
       const auth = { authorization: `Bearer ${token}` };
-      for (const p of ["pods", "stream", "audit", "device-grants"]) {
+      for (const p of ["pods", "stream", "audit", "device-grants", "re-pair"]) {
         const r = await call(env, "GET", `/api/users/alice/${p}`, auth);
         expect(r!.status, p).toBe(200);
       }
-      expect((await call(env, "GET", "/api/users/alice/re-pair"))!.status).toBe(200);
+      // An account read since security report F3.
+      expect((await call(env, "GET", "/api/users/alice/re-pair"))!.status).toBe(401);
       expect((await call(env, "GET", "/api/users/alice/trust-exceptions"))!.status).toBe(200);
     } finally {
       close();

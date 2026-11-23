@@ -3170,6 +3170,35 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
       .first<{ alerts_fired_bitmap: number | null }>();
     return after?.alerts_fired_bitmap ?? 0;
   }
+
+  async claimInitiate(digestHex: string, expiresAt: number, now: number): Promise<boolean> {
+    await this.db.prepare("DELETE FROM re_pair_initiates_used WHERE expires_at < ?").bind(now).run();
+    const r = await this.db
+      .prepare("INSERT OR IGNORE INTO re_pair_initiates_used (digest_hex, expires_at) VALUES (?, ?)")
+      .bind(digestHex.toLowerCase(), expiresAt)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return (meta?.changes ?? 0) > 0;
+  }
+
+  async blockVetoedKey(username: string, newIrkPubHex: string, until: number): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO re_pair_vetoed_keys (username, new_irk_pub_hex, until) VALUES (?, ?, ?)
+         ON CONFLICT (username, new_irk_pub_hex) DO UPDATE SET until = excluded.until`,
+      )
+      .bind(username.toLowerCase(), newIrkPubHex.toLowerCase(), until)
+      .run();
+  }
+
+  async vetoedKeyBlockedUntil(username: string, newIrkPubHex: string, now: number): Promise<number | undefined> {
+    await this.db.prepare("DELETE FROM re_pair_vetoed_keys WHERE until <= ?").bind(now).run();
+    const r = await this.db
+      .prepare("SELECT until FROM re_pair_vetoed_keys WHERE username = ? AND new_irk_pub_hex = ?")
+      .bind(username.toLowerCase(), newIrkPubHex.toLowerCase())
+      .first<{ until: number }>();
+    return r?.until ?? undefined;
+  }
 }
 
 interface RawPendingRePairRow {

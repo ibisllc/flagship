@@ -4,6 +4,7 @@ import {
   verifyRePairInitiate,
   verifyRePairObject,
   verifyRePairVeto,
+  rePairInitiateBytes,
   type RePairVeto,
   type DeviceCapabilityGrant,
   type DeviceScope,
@@ -25,7 +26,8 @@ import type {
 import { recordAuditEvent } from "./auditEvents.js";
 import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { dropVoiciCallKeysOfRevokedDevices } from "./voiciCallKeyCleanup.js";
-import { hexToBytes } from "./hex.js";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex, hexToBytes } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 import { computeDevicesEtag } from "./deviceDirectoryEtag.js";
 import {
@@ -256,6 +258,43 @@ export interface RePairDeps {
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
+/**
+ * How far ahead of `.com`'s clock an initiate may be dated (security report F3). The past
+ * side stays `maxAgeMs`; a client whose clock runs more than this ahead is refused
+ * `re-pair-stale` and retries once its clock is right.
+ */
+export const RE_PAIR_FUTURE_SKEW_MS = 60_000;
+/**
+ * After an admin veto, the vetoed new key may not start another recovery for this long
+ * (owner decision 2026-11-23, security report F3). A self-cancel by the recoverer does not
+ * start it: that is their own key.
+ */
+export const RE_PAIR_VETO_BLOCK_MS = 24 * 60 * 60_000;
+/** Kept a little past the freshness window so a digest outlives every initiate it can match. */
+const USED_MARGIN_MS = 60_000;
+/** A TOTP code passes for about ±1 period (90 s); its use is remembered a little longer. */
+const TOTP_USED_MS = 3 * 60_000;
+
+/** The stable codes of the replay and veto refusals (security report F3). */
+export type RePairRefusalCode =
+  | "re-pair-stale"
+  | "re-pair-cancelled-replay"
+  | "re-pair-replay"
+  | "re-pair-credential-used"
+  | "re-pair-vetoed-recently";
+
+function rePairRefusal(
+  status: number,
+  code: RePairRefusalCode,
+  error: string,
+  extra: Record<string, unknown> = {},
+): HandlerResponse {
+  return { status, body: { error, code, ...extra } };
+}
+
+function digestHex(text: string | Uint8Array): string {
+  return bytesToHex(sha256(typeof text === "string" ? new TextEncoder().encode(text) : text));
+}
 
 export async function handleInitiateRePair(
   deps: RePairDeps,
@@ -326,8 +365,8 @@ export async function handleInitiateRePair(
   if (r.username.toLowerCase() !== username.toLowerCase()) {
     return forbidden("username / url mismatch");
   }
-  if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return forbidden("stale request");
+  if (now() - r.issuedAt > maxAgeMs || r.issuedAt - now() > Math.min(maxAgeMs, RE_PAIR_FUTURE_SKEW_MS)) {
+    return rePairRefusal(403, "re-pair-stale", "stale request");
   }
 
   // Optional ETag fence: only fires when the client opted in AND
@@ -422,6 +461,44 @@ export async function handleInitiateRePair(
   // escrow reads and writes no audit row.
   if (!verifyRePairInitiate(claim, sig, newIrkPub)) {
     return forbidden("invalid signature");
+  }
+
+  // ── Replay and veto (security report F3). ──
+  // Checked before any credential is looked at, so a refused replay spends no recovery
+  // code and no TOTP attempt. Every initiate an honest client sends is freshly signed,
+  // so none of these refuse it.
+  const completeWindowMs = deps.completeWindowMs ?? RE_PAIR_COMPLETE_WINDOW_MS;
+  const existing = await deps.pendingRePairs.get(r.username);
+  const sameNewKey = existing?.newIrkPubHex.toLowerCase() === r.newIrkPub.toLowerCase();
+  // A dead row: cancelled, vetoed, or past its completion window. A live one holds the
+  // account's one-row lock and answers "re-pair already pending" further down.
+  const existingDead =
+    !!existing &&
+    (typeof existing.objectedAt === "number" || existing.completesAt + completeWindowMs <= now());
+  // (b1) A cancelled or vetoed attempt cannot be revived by anything its key signed before
+  // it was cancelled: the cancel is the newer word. (Another key's initiate is not a replay
+  // of this row; the single-use claim below covers every envelope ever accepted.)
+  if (existing && sameNewKey && typeof existing.objectedAt === "number" && r.issuedAt <= existing.objectedAt) {
+    return rePairRefusal(409, "re-pair-cancelled-replay", "this recovery request was signed before the attempt was cancelled");
+  }
+  // (b1) The very envelope a dead row was started with, while the row is still there.
+  if (existingDead && sameNewKey && existing?.proof?.issuedAt === r.issuedAt) {
+    return rePairRefusal(409, "re-pair-replay", "this recovery request was already used");
+  }
+  // An admin's veto holds for a day against the key it rejected (not against a self-cancel).
+  const vetoBlockUntil = Math.max(
+    (await deps.pendingRePairs.vetoedKeyBlockedUntil(r.username, r.newIrkPub, now())) ?? 0,
+    existing && sameNewKey && existing.vetoedByHex && typeof existing.objectedAt === "number"
+      ? existing.objectedAt + RE_PAIR_VETO_BLOCK_MS
+      : 0,
+  );
+  if (vetoBlockUntil > now()) {
+    return rePairRefusal(
+      409,
+      "re-pair-vetoed-recently",
+      "an admin of this account rejected a recovery with this key less than a day ago",
+      { until: vetoBlockUntil, retryAfterSec: Math.ceil((vetoBlockUntil - now()) / 1000) },
+    );
   }
 
 
@@ -612,6 +689,8 @@ export async function handleInitiateRePair(
   // `FLAGSHIP_TOTP_KEK` is set in production, the structural fallback
   // never fires.
   let totpProofConsumed = false;
+  /** The credential this initiate spent, remembered so it is used once (security report F3). */
+  let credentialUse: { digestHex: string; expiresAt: number } | null = null;
   let recoveryMethodUsed: "totp" | "recovery-code" | "recovery-credential" | "registered-key" =
     registeredKeyProven ? "registered-key" : "totp";
   if (registeredKeyProven) {
@@ -677,6 +756,10 @@ export async function handleInitiateRePair(
       }
       totpProofConsumed = true;
       recoveryMethodUsed = "recovery-credential";
+      credentialUse = {
+        digestHex: digestHex(`flagship/re-pair-credential-used/v1|recovery-proof|${r.username.toLowerCase()}|${recoveryToken as string}`),
+        expiresAt: now() + maxAgeMs + USED_MARGIN_MS,
+      };
     } else if (deps.totpKekHex) {
       // ── TOTP / recovery-code path. ──
       // `structuralCodeProof` already established the shape; re-read
@@ -754,6 +837,13 @@ export async function handleInitiateRePair(
       }
       totpProofConsumed = true;
       recoveryMethodUsed = verdict.method === "recovery" ? "recovery-code" : "totp";
+      // A recovery code is already spent above; a TOTP code would pass again for about a minute.
+      if (verdict.method === "totp") {
+        credentialUse = {
+          digestHex: digestHex(`flagship/re-pair-credential-used/v1|totp|${r.username.toLowerCase()}|${code}`),
+          expiresAt: now() + TOTP_USED_MS,
+        };
+      }
     } else {
       // No KEK ⇒ the stored TOTP secret cannot be decrypted, so the
       // presented code cannot be checked against anything. This used
@@ -792,21 +882,27 @@ export async function handleInitiateRePair(
   // let a second initiate evict a recovery that's about to land. This
   // matches handleCompleteRePair's acceptance window exactly: a row is
   // either completable (lock held, 409 on initiate) or dead (swept).
-  const completeWindowMs = deps.completeWindowMs ?? RE_PAIR_COMPLETE_WINDOW_MS;
-  const existing = await deps.pendingRePairs.get(r.username);
-  if (existing) {
-    // objectedAt is `number | undefined` (PendingRePairRecord), NOT
-    // `number | null`. A vetoed row has a numeric objectedAt; a live
-    // row has it unset. Treat unset as "no veto."
-    const vetoed = typeof existing.objectedAt === "number";
-    const pastCompletionWindow =
-      existing.completesAt + completeWindowMs <= now() && !vetoed;
-    if (vetoed || pastCompletionWindow) {
-      await deps.pendingRePairs.delete(r.username);
-    }
-    // else: live dispute / live completable recovery → fall through;
-    // the storage layer's PK collision below returns the proper 409
-    // "re-pair already pending".
+  // A live dispute / live completable recovery holds the lock: refuse before the
+  // single-use claim below, so a client that retries later can send the same envelope.
+  if (existing && !existingDead) return conflict("re-pair already pending");
+
+  // (b2) Single use: this envelope, and the credential it spent, are accepted once. A
+  // stranger who saw the envelope cannot send it again after the recoverer cancels, an
+  // admin vetoes or the row ends some other way.
+  const envelopeFresh = await deps.pendingRePairs.claimInitiate(
+    digestHex(rePairInitiateBytes(claim)),
+    r.issuedAt + maxAgeMs + USED_MARGIN_MS,
+    now(),
+  );
+  if (!envelopeFresh) {
+    return rePairRefusal(409, "re-pair-replay", "this recovery request was already used");
+  }
+  if (credentialUse && !(await deps.pendingRePairs.claimInitiate(credentialUse.digestHex, credentialUse.expiresAt, now()))) {
+    return rePairRefusal(409, "re-pair-credential-used", "this code or recovery step was already used for a recovery request");
+  }
+
+  if (existing && existingDead) {
+    await deps.pendingRePairs.delete(r.username);
   }
 
   const insert = await deps.pendingRePairs.initiate({
@@ -927,7 +1023,9 @@ export async function handleInitiateRePair(
  * POST /api/users/:u/re-pair/veto — an active admin rejects a pending recovery
  * (SECURITY-HARDENING-PLAN.md 10.6 / N04). Signed by the account's pinned admin root; the
  * phone asks for a biometric before signing and shows the attempt first. The veto cancels
- * this attempt only: a retry starts a fresh full wait, and recovery is never disabled.
+ * this attempt, and the vetoed new key may not start another for a day
+ * (`RE_PAIR_VETO_BLOCK_MS`, security report F3); a retry after that, or with another key,
+ * starts a fresh full wait, and recovery is never disabled.
  * The pending device cannot veto its own attempt this way, cannot shorten the wait and
  * gets no authority from it: the veto is accepted only from the pinned admin key.
  */
@@ -985,6 +1083,13 @@ export async function handleVetoRePair(
   // ledger decides by the atomic claim, not by the clock.
   if (!(await deps.pendingRePairs.veto(username, now(), r.vetoerPub.toLowerCase(), b.signature))) {
     return conflict("this recovery was already cancelled or completed");
+  }
+  // The vetoed key may not start again for a day (security report F3). The vetoed row
+  // carries the same rule while it exists; this keeps it after the row is replaced.
+  try {
+    await deps.pendingRePairs.blockVetoedKey(username, pending.newIrkPubHex, now() + RE_PAIR_VETO_BLOCK_MS);
+  } catch {
+    /* the veto itself landed; the row still blocks the key until it is replaced */
   }
   if (deps.auditEvents) {
     await recordAuditEvent(

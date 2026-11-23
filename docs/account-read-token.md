@@ -46,6 +46,13 @@ no-store`):
 - `GET /api/users/<u>/pods` and `GET /api/users/<u>/stream`
 - `GET /api/users/<u>/audit`
 - `GET /api/users/<u>/apps/aliases` and `GET /api/users/<u>/apps/<id>/links`
+- `GET /api/users/<u>/re-pair`, the pending recovery with the initiate's
+  signatures (security report F3): the account's devices show the banner and
+  the admin veto from it, its servers verify a completed re-pair with it
+  (the box's STK token). An anonymous caller gets the 401 and nothing of the
+  row; 0.3 store builds lose the pending-recovery banner until they update,
+  and a box without the endorsed release that sends its token holds the old
+  key until it updates.
 - `GET /api/server/<d>/sealed-luks-key`, the disk key sealed to the account
   IRK: only a token minted by a device of the server's account or its IRK
   (a server's own token is refused). It is classical ciphertext, so anyone

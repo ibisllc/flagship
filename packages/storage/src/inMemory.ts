@@ -425,6 +425,22 @@ export class InMemoryPendingRePairStorage implements PendingRePairStorage {
     r.alertsFiredBitmap = (r.alertsFiredBitmap ?? 0) | bit;
     return r.alertsFiredBitmap;
   }
+  private usedInitiates = new Map<string, number>();
+  async claimInitiate(digestHex: string, expiresAt: number, now: number): Promise<boolean> {
+    for (const [d, at] of this.usedInitiates) if (at < now) this.usedInitiates.delete(d);
+    const key = digestHex.toLowerCase();
+    if (this.usedInitiates.has(key)) return false;
+    this.usedInitiates.set(key, expiresAt);
+    return true;
+  }
+  private vetoedKeys = new Map<string, number>();
+  async blockVetoedKey(username: string, newIrkPubHex: string, until: number): Promise<void> {
+    this.vetoedKeys.set(`${username.toLowerCase()}|${newIrkPubHex.toLowerCase()}`, until);
+  }
+  async vetoedKeyBlockedUntil(username: string, newIrkPubHex: string, now: number): Promise<number | undefined> {
+    for (const [k, at] of this.vetoedKeys) if (at <= now) this.vetoedKeys.delete(k);
+    return this.vetoedKeys.get(`${username.toLowerCase()}|${newIrkPubHex.toLowerCase()}`);
+  }
 }
 
 export class InMemoryAuthCodeStorage implements AuthCodeStorage {

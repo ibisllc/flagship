@@ -866,6 +866,20 @@ export interface PendingRePairStorage {
    * value) if the bit was already set.
    */
   orInAlertsFiredBit(username: string, bit: number): Promise<number>;
+  /**
+   * Single use for an accepted initiate (security report F3): records `digestHex` (the
+   * SHA-256 of the initiate's canonical bytes, or of a credential it spent) until
+   * `expiresAt`. Returns false when it was already recorded. Rows past their expiry are
+   * swept on each call. Table `re_pair_initiates_used` (migration 0161).
+   */
+  claimInitiate(digestHex: string, expiresAt: number, now: number): Promise<boolean>;
+  /**
+   * After an admin veto, refuse that new key until `until` (security report F3). Table
+   * `re_pair_vetoed_keys` (migration 0161); a later veto of the same key moves `until`.
+   */
+  blockVetoedKey(username: string, newIrkPubHex: string, until: number): Promise<void>;
+  /** When the veto block on this account's new key ends, if it is still in force at `now`. */
+  vetoedKeyBlockedUntil(username: string, newIrkPubHex: string, now: number): Promise<number | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

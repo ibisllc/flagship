@@ -179,6 +179,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0159",
   // Code protection: a begun secret waits apart until confirmed; hourly enrolment outcome counts (security report F2).
   "0160",
+  // Re-pair initiates single use; an admin veto refuses that key for a day (security report F3).
+  "0161",
 ];
 
 export interface SchemaStatusDeps {

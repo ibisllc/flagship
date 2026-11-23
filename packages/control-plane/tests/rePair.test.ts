@@ -528,8 +528,13 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
 
     // 3. New initiate from a DIFFERENT new-IRK must succeed.
     //    Lock released because the existing row is dead (vetoed).
+    //    (A recovery code: the first attempt's TOTP code is spent, security report F3.)
     const secondNew = makeKey();
-    const r = await handleInitiateRePair(deps, USERNAME, initBody({ newIrk: secondNew, oldIrk }));
+    const r = await handleInitiateRePair(
+      deps,
+      USERNAME,
+      initBody({ newIrk: secondNew, oldIrk, totpProof: { code: aRecoveryCode(storage), method: "recovery" } }),
+    );
     expect(r.status).toBe(200);
   });
 

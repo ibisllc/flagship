@@ -3492,7 +3492,12 @@ export async function tryControlPlane(
     );
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.RE_PAIR_GET))) {
-    return finishPlain(
+    // The pending row carries the initiate's signatures (for the account's boxes to
+    // verify) and the admin root: only the account's own devices and servers read it
+    // (security report F3, docs/account-read-token.md).
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
       await handleGetRePair(
         { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
         decodeURIComponent(m[1]!),

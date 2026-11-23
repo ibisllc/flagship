@@ -105,6 +105,11 @@ function canonicalRePairObject(r: RePairObject): Bytes {
   );
 }
 
+/** The canonical bytes both initiate signatures cover; `.com` keeps their digest so one initiate is used once. */
+export function rePairInitiateBytes(r: RePairInitiate): Bytes {
+  return canonicalRePairInitiate(r);
+}
+
 export function signRePairInitiate(r: RePairInitiate, newIrk: Keypair): Bytes {
   return ed.sign(canonicalRePairInitiate(r), newIrk.privateKey);
 }
