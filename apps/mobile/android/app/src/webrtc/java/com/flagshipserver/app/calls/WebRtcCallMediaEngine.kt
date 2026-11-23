@@ -135,6 +135,9 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
         return pc.localDescription?.description ?: throw CallMediaUnavailable()
     }
 
+    /** Placing a call: the check for the callee phone's TURN certificate. */
+    private val turnCert = TurnCertVerifier()
+
     private fun build(video: Boolean, placing: Boolean = false): PeerConnection? {
         if (stopped) return null
         caller = placing
@@ -163,7 +166,12 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
             tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
         }
-        val pc = f.createPeerConnection(config, observer) ?: return null
+        // Placing a call, WebRTC's own TLS check (its built-in roots: no Let's Encrypt) would refuse the callee phone's
+        // certificate; the system's check replaces it (TurnCertCheck).
+        val pc = (
+            if (placing) f.createPeerConnection(config, org.webrtc.PeerConnectionDependencies.builder(observer).setSSLCertificateVerifier(turnCert).createPeerConnectionDependencies())
+            else f.createPeerConnection(config, observer)
+        ) ?: return null
         this.pc = pc
         audioSource = f.createAudioSource(MediaConstraints())
         audioTrack = f.createAudioTrack("a", audioSource)
@@ -235,6 +243,7 @@ class WebRtcCallMediaEngine(private val context: Context) : CallMediaEngine {
     override suspend fun applyAnswer(sdp: String, iceServer: CallerIceServer) {
         val pc = synchronized(lock) { pc } ?: throw CallMediaUnavailable()
         val offer = synchronized(lock) { rawOffer } ?: throw CallMediaUnavailable()
+        turnCert.expect(iceServer.url)
         val turn = PeerConnection.IceServer.builder(iceServer.url).setUsername(iceServer.username).setPassword(iceServer.credential).createIceServer()
         val config = PeerConnection.RTCConfiguration(listOf(turn)).apply {
             iceTransportsType = PeerConnection.IceTransportsType.RELAY

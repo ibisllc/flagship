@@ -48,6 +48,8 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     private var connectedOnce = false
     /// This engine places the call (calling from the app): relay only, through the callee's TURN, candidates trickle.
     private var caller = false
+    /// Placing a call: the check for the callee phone's TURN certificate (TurnCertVerifier).
+    private let turnCert = TurnCertVerifier()
     /// The offer this engine made, applied (munged, exactly as signed) once the answer brings the TURN credential.
     private var offerSdp: String?
     /// No CallKit call owns the audio session (an in-app call): this engine activated it and gives it back on stop.
@@ -131,7 +133,12 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
             // Placing a call: the callee's phone is the only ICE server (set with its one-time credential once the
             // answer arrives), relay candidates only, as a voi.ci browser does (docs/voici-calls.md §0.1).
             if caller { config.iceTransportPolicy = .relay }
-            guard let pc = f.peerConnection(with: config, constraints: Self.noConstraints, delegate: self) else { return nil }
+            // Placing a call, WebRTC's own TLS check (its built-in roots: no Let's Encrypt) would refuse the callee
+            // phone's certificate; the system's check replaces it.
+            let made = caller
+                ? f.peerConnection(with: config, constraints: Self.noConstraints, certificateVerifier: turnCert, delegate: self)
+                : f.peerConnection(with: config, constraints: Self.noConstraints, delegate: self)
+            guard let pc = made else { return nil }
             factory = f
             self.pc = pc
             audioTrack = f.audioTrack(with: f.audioSource(with: Self.noConstraints), trackId: "a")
@@ -240,6 +247,7 @@ public final class WebRTCCallMediaEngine: NSObject, CallMediaEngine, @unchecked 
     public func applyAnswer(sdp: String, iceServer: CallerIceServer) async throws {
         guard let pc = lock.withLock({ self.pc }), let raw = lock.withLock({ offerSdp }) else { throw CallMediaUnavailable() }
         let config = pc.configuration
+        turnCert.expect(turnUrl: iceServer.url)
         config.iceServers = [RTCIceServer(urlStrings: [iceServer.url], username: iceServer.username, credential: iceServer.credential)]
         config.iceTransportPolicy = .relay
         guard pc.setConfiguration(config) else { throw CallMediaUnavailable() }

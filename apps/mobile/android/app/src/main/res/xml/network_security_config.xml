@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The defaults (system roots only, no plain HTTP), with one exception: Let's Encrypt's intermediate certificates,
+     which it publishes over plain HTTP at the address each certificate names. A call's caller fetches them to check the
+     callee phone's TURN certificate (calls/TurnCertCheck.kt); they are signed, and the system's check decides. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">i.lencr.org</domain>
+    </domain-config>
+</network-security-config>
