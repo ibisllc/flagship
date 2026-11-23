@@ -499,6 +499,9 @@ describe("rateLimit — wired into route()", () => {
     expect(endpointFor("POST", "/api/users/alice/share-key-attestation")).toBe("share-key-attestation");
     expect(endpointFor("GET", "/api/users/alice/share-key-attestation")).toBeNull();
     expect(extractUsernameHash("/api/users/Alice/share-key-attestation")).toBe("alice");
+    // The "Shared with me" inbox is metered per address (security report F1: anonymous writes must not fill D1).
+    expect(endpointFor("POST", "/api/share-inbox")).toBe("share-inbox");
+    expect(LIMITS["share-inbox"].every((r) => r.axis === "ip")).toBe(true);
     expect(LIMITS["share-key-attestation"]?.map((a) => a.axis).sort()).toEqual(["ip", "ip", "usernameHash"]);
     const { ns, calls } = makeCounters((key) => !key.startsWith("share-key-attestation|usernameHash|"));
     const env = makeEnv(ns);

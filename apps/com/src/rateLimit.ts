@@ -196,6 +196,9 @@ export type RateLimitEndpoint =
   // CA-signed in return. An honest device asks once per share it accepts; per source and per account
   // (the path names it), so a flood is bounded in signature work and can't be aimed at one account.
   | "share-key-attestation"
+  // "Shared with me" inbox: list, add, delete under a key .com can't tie to an account (by design), so the address is
+  // the only axis; each add stores up to 8 KiB, so a flood must not fill D1 (security report F1, 2026-11-23).
+  | "share-inbox"
   // Architecture v2 signed time (POST /api/time, signedTime.ts): anonymous, one Ed25519
   // signature each; a box asks at boot and every few hours.
   | "signed-time"
@@ -521,6 +524,11 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "ip", limit: 60, windowSec: 3600 },
     { axis: "usernameHash", limit: 30, windowSec: 3600 },
+  ],
+  "share-inbox": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 300, windowSec: 3600 },
+    { axis: "ip", limit: 1000, windowSec: 86400 },
   ],
   "signed-time": [{ axis: "ip", limit: 30, windowSec: 60 }],
   "demo-example-page": [
@@ -987,6 +995,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   if (m === "POST" && /^\/api\/users\/[^/]+\/share-key-attestation$/.test(pathname)) {
     return "share-key-attestation";
+  }
+  if (m === "POST" && pathname === "/api/share-inbox") {
+    return "share-inbox";
   }
   // Phase 3b — vouched cross-device admit.
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {
