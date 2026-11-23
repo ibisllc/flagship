@@ -8,6 +8,7 @@ export * from "./randomUsername.js";
 export * from "./nameDibs.js";
 export * from "./voiciNames.js";
 export * from "./nameChange.js";
+export * from "./nameGrant.js";
 export * from "./usersCheck.js";
 export * from "./authCode.js";
 export * from "./serverRegister.js";

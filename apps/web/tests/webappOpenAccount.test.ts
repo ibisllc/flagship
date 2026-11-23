@@ -93,7 +93,7 @@ describe("webapp account bootstrap", () => {
     expect(JSON.stringify(local.profile)).not.toContain("Johnson Family");
     expect(JSON.stringify(local.profile)).not.toContain("This browser");
     expect(local.dispatched).toBe(true);
-    expect(out).toEqual({ username: "jolly-ranger", alreadyClaimed: false, deviceId });
+    expect(out).toEqual({ username: "jolly-ranger", alreadyClaimed: false, deviceId, grantId: "550e8400-e29b-41d4-a716-446655440000" });
   });
 
   it("treats an exact server-side replay as idempotent", async () => {

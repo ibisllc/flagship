@@ -1915,6 +1915,9 @@ export interface NameChangeRecord {
   oldUsername: string;
   newUsername: string;
   at: number;
+  /** How long the names registry holds the old name (redirecting to the new one); 0 releases it at once. Default:
+   *  `NAME_HOLD_MS` (30 days). Not stored in the history. */
+  oldNameHoldMs?: number;
 }
 
 export interface NameChangeStorage {
@@ -2623,7 +2626,9 @@ export type { MeterBatchEntry, MeterBatchResult };
  *  only the SHA-256 of the normalized code (`codeHash`). Single-use. */
 /** What a voucher buys: a Pro tier (the original kind), or a single-use name
  *  change / dibs claim (migration 0093). */
-export type VoucherKind = "tier" | "name-change" | "dibs-claim";
+/** `name-grant` / `name-grant-paid`: the owner set a name aside for a friend (control-plane nameGrant.ts); the second
+ *  also pays for the rename. Bound to the name inside the code hash; deleted once used. */
+export type VoucherKind = "tier" | "name-change" | "dibs-claim" | "name-grant" | "name-grant-paid";
 
 export interface VoucherRecord {
   codeHash: string;
@@ -2736,6 +2741,8 @@ export interface VoucherStorage {
   /** Undo a redemption made by `username` (the allocation it paid for failed).
    *  True only when that redemption existed and was reverted. */
   release(codeHash: string, username: string): Promise<boolean>;
+  /** Remove the row (a used name grant leaves nothing that names the account). True when a row went. */
+  delete(codeHash: string): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

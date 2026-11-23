@@ -29,12 +29,15 @@ object PqIdentityUpgrade {
     @Volatile var sessionUnlocked: () -> Boolean = { SessionIrkAccess.isSessionUnlocked() }
     @Volatile var scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** A name choice not finished yet: a binding under the suggested name makes `.com` refuse the rename. */
+    @Volatile var choosingName: () -> Boolean = { com.flagshipserver.app.core.AccountNameChoice.pending() }
+
     private val running = AtomicBoolean(false)
     private val DEVICE_ID = Regex("^[0-9a-f]{32}$")
 
     /** Fire-and-forget; safe to call from any thread, any number of times. */
     fun trigger() {
-        if (binder == null || !sessionUnlocked()) return
+        if (binder == null || !sessionUnlocked() || choosingName()) return
         scope.launch { runOnce() }
     }
 
@@ -42,7 +45,7 @@ object PqIdentityUpgrade {
     suspend fun runOnce(): Map<String, PqIdentityBinder.Outcome>? {
         val b = binder ?: return null
         val a = account?.invoke() ?: return null
-        if (a.isDemo || !sessionUnlocked()) return null
+        if (a.isDemo || !sessionUnlocked() || choosingName()) return null
         if (!running.compareAndSet(false, true)) return null
         return try {
             b.bindAll(a.username, identities(a))

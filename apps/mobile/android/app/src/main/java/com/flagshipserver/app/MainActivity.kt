@@ -221,6 +221,8 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.RelayAddressCenter.install(applicationContext).start()
         // Which names are this device's own account, for the account-removed screen. A gym run on mocks has no
         // `.com` account: a stray live call's 404 for the fixture account must not cover every screen (CI F11).
+        // "Choose your own account name": its crash record outlives the process (before anything reads it).
+        com.flagshipserver.app.core.AccountNameChoice.store = com.flagshipserver.app.core.PrefsPendingNameChoiceStore(applicationContext)
         if (useLive) {
             com.flagshipserver.app.core.AccountGone.ownNames = {
                 listOfNotNull(appState.currentUser.value, appState.activeCloudName.value)
@@ -267,6 +269,17 @@ class MainActivity : FragmentActivity() {
         val liveFlagshipServer = LiveFlagshipServerClient(
             TrustGatedTransport(OkHttpJsonTransport(okHttp)) { trustCenter.isServerTrusted },
         )
+
+        com.flagshipserver.app.core.AccountNameChoice.ops = if (!useLive) null else {
+            {
+                com.flagshipserver.app.core.LiveNameChoiceOps(
+                    app = appState,
+                    server = liveFlagshipServer,
+                    transport = OkHttpJsonTransport(okHttp),
+                    deviceModel = { com.flagshipserver.app.core.DeviceDisplayName.suggested(applicationContext) },
+                )
+            }
+        }
 
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
         // #91 — drains the box's phone-pollable AlertInbox (GET /api/phone/alerts)
@@ -372,9 +385,17 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.payments.PaymentsCenter.shared = com.flagshipserver.app.core.payments.PaymentsCenter(
             client = mocks?.payments ?: com.flagshipserver.app.api.LivePaymentsClient(OkHttpJsonTransport(okHttp)),
             keyring = object : com.flagshipserver.app.core.payments.PaymentsKeyring {
-                override fun username() = paymentsKeys.username()
+                // The account made on "Choose your own account name" pays before it is onboarded.
+                override fun username() = com.flagshipserver.app.core.AccountNameChoice.signUp?.username ?: paymentsKeys.username()
                 override fun umk() = paymentsKeys.umk()
-                override fun device() = paymentsKeys.device()
+                override fun device() = com.flagshipserver.app.core.AccountNameChoice.signUp?.let { s ->
+                    val umk = paymentsKeys.umk() ?: return@let null
+                    com.flagshipserver.app.api.VoiciDeviceSigner(
+                        s.deviceId,
+                        com.flagshipserver.app.core.HexUtil.encode(Keystore.accountDevicePublicKey(umk, s.username, s.deviceId)),
+                        Keystore.accountDeviceSigner(umk, s.username, s.deviceId),
+                    )
+                } ?: paymentsKeys.device()
                 override fun isAdmin() = com.flagshipserver.app.core.Variant.forceAdminRoot || com.flagshipserver.app.keystore.Keystore.hasAdminRoot()
                 override suspend fun confirm(reason: String) = paymentsKeys.confirm(reason)
             },
@@ -473,6 +494,10 @@ class MainActivity : FragmentActivity() {
             // A call that rang while Flagship was locked joins its room now ("Open Flagship and unlock it to answer").
             com.flagshipserver.app.calls.VoiciCallCenter.onUnlocked()
             com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
+            // A name choice a crash left behind: finished (or dropped) now that the keys are open.
+            if (com.flagshipserver.app.core.AccountNameChoice.pending() && appState.isPaired.value) {
+                lifecycleScope.launch { com.flagshipserver.app.core.AccountNameChoice.resumeIfPending() }
+            }
             com.flagshipserver.app.keystore.QuantumSafetyService.activate(appState.currentUser.value, appState.activeProfile?.deviceId)
             if (mocks == null) lifecycleScope.launch { repairDeviceId(liveFlagshipServer) }
         }
@@ -1386,6 +1411,8 @@ private fun AppRoot(
         if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone && suspendedShowing) {
             com.flagshipserver.app.ui.components.AbuseSuspendedScreen()
         }
+        val finishingName by com.flagshipserver.app.core.AccountNameChoice.finishing.collectAsState()
+        if (isPaired && finishingName) com.flagshipserver.app.ui.screens.NameChoiceFinishingScreen()
         if (showAccountGone && !showUpdateLock) {
             val gone = goneName
             if (gone != null) com.flagshipserver.app.ui.shell.AccountGoneScreen(gone)

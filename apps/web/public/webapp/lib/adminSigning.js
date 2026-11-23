@@ -14,6 +14,7 @@ import { bytesToHex, signWithAdminRoot } from "../keystore.js";
 import { controlApex } from "./apex.js";
 import { getSession } from "./state.js";
 import { isAdminRootKey, setCustodyBindHook, withAdminRoot } from "./keyCustody.js";
+import { nameChoicePendingFor } from "./chooseName.js";
 import { SENSITIVE_TAGS, canonicalTag, sensitiveSigner } from "./adminRoot.js";
 import { hybridEnvelope, signPqKeyBinding } from "./pqSign.js";
 
@@ -61,6 +62,9 @@ export function signedParts(r) {
 export async function bindAdminRootPq({ edSeed, mldsaSeed }, deps = {}) {
   const username = (deps.username ?? getSession()?.username ?? "").toLowerCase();
   if (!username) return null;
+  // Not while "Choose your own account name" is unfinished: `.com` refuses to rename an account whose admin root
+  // has a quantum-safe binding (it signs the name). Null leaves the record unbound, so the next use binds it.
+  if (nameChoicePendingFor(username, deps.storage)) return null;
   const f = deps.fetch ?? fetch;
   const wire = await signPqKeyBinding({ role: "admin-root", subjectId: username, issuedAt: (deps.now ?? Date.now)() }, edSeed, mldsaSeed);
   const res = await f(`${deps.apex ?? controlApex()}/api/accounts/${encodeURIComponent(username)}/pq-key-bindings`, {

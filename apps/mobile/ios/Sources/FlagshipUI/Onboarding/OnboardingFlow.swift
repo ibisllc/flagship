@@ -35,6 +35,8 @@ public struct OnboardingFlow: View {
     @Environment(\.pairingRelayClient) private var pairingRelay
     @Environment(\.flagshipServerClient) private var server
     @State private var path: [OnboardingRoute] = []
+    /// A name-grant link opened before the account exists: kept until "Choose your own account name" takes it.
+    @State private var pendingGrant: NameGrant?
 
     public init() {}
 
@@ -65,6 +67,20 @@ public struct OnboardingFlow: View {
                     SuggestUsernameScreen(
                         onContinue: { username in
                             path.append(.openAccount(username: username))
+                        },
+                        onChooseOwn: { suggested in
+                            let grant = pendingGrant
+                            pendingGrant = nil
+                            path.append(.chooseOwnName(suggested: suggested, grant: grant))
+                        },
+                        autoChooseOwn: pendingGrant != nil
+                    )
+                case .chooseOwnName(let suggested, let grant):
+                    ChooseAccountNameScreen(
+                        suggested: suggested,
+                        grant: grant,
+                        onOpened: { username, accountName, deviceName, deviceId in
+                            completeNewAccount(username: username, accountName: accountName, deviceName: deviceName, deviceId: deviceId)
                         }
                     )
                 case .openAccount(let username):
@@ -77,24 +93,7 @@ public struct OnboardingFlow: View {
                     OpenAccountScreen(
                         username: username,
                         onOpened: { accountName, deviceName, deviceId in
-                            app.addProfile(Profile(
-                                cloudName: username,
-                                cloudRootPubHex: "",
-                                accountId: username,
-                                deviceId: deviceId,
-                                accountDisplayName: accountName,
-                                deviceDisplayName: deviceName,
-                                deviceCapability: nil,
-                                demoServer: nil,
-                                createdAt: Date()
-                            ), setActive: false)
-                            // completeOnboarding activates the profile and
-                            // lands on Home. No backup page (owner,
-                            // 2026-11-21): Home reminds about cloud recovery
-                            // and a backup file instead. A new account only:
-                            // the shell offers its voi.ci page once (VoiciIntro).
-                            app.completeOnboarding(username: username, pods: [])
-                            VoiciIntro.arm(app, username: username)
+                            completeNewAccount(username: username, accountName: accountName, deviceName: deviceName, deviceId: deviceId)
                         }
                     )
                 case .connectAccount:
@@ -154,6 +153,13 @@ public struct OnboardingFlow: View {
     /// Observe the linker for a Phase-3b `.joinAccount` deeplink while
     /// UNPAIRED and push the incoming join flow.
     private func consumePairingLink(_ link: DeepLink?) {
+        if case .nameGrant(let grant) = link {
+            // Before the account exists: suggest a name to open it under, then "Choose your own account name".
+            _ = linker.consume()
+            pendingGrant = grant
+            path = [.chooseUsername]
+            return
+        }
         guard case .joinAccount(let sid, let pk) = link else { return }
         let joinUrl = "https://\(Endpoints.controlHost)/join?sid=\(sid)&pk=\(pk)"
         if path.last != .joinByPairing(joinUrl: joinUrl) {
@@ -163,6 +169,27 @@ public struct OnboardingFlow: View {
     }
 
     // MARK: - State writes
+
+    /// A new account (as suggested, or under its chosen name) is open: record it and land on Home.
+    fileprivate func completeNewAccount(username: String, accountName: String, deviceName: String, deviceId: String) {
+        app.addProfile(Profile(
+            cloudName: username,
+            cloudRootPubHex: "",
+            accountId: username,
+            deviceId: deviceId,
+            accountDisplayName: accountName,
+            deviceDisplayName: deviceName,
+            deviceCapability: nil,
+            demoServer: nil,
+            createdAt: Date()
+        ), setActive: false)
+        // completeOnboarding activates the profile and lands on Home. No backup
+        // page (owner, 2026-11-21): Home reminds about cloud recovery and a backup
+        // file instead. A new account only: the shell offers its voi.ci page once
+        // (VoiciIntro).
+        app.completeOnboarding(username: username, pods: [])
+        VoiciIntro.arm(app, username: username)
+    }
 
     /// Phase 3 — completion of the real single/multi takeover. By the
     /// time we're here `RealAccountLoginViewModel` has ALREADY:

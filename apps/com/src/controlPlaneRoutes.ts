@@ -231,6 +231,7 @@ import {
   handlePaymentsConfig,
   handleVoucherIssue,
   handleVoucherRedeem,
+  handleIssueNameGrant,
   handleVoucherExchange,
   handleOrgPlanGet,
   handleOrgPlanAttestation,
@@ -1016,6 +1017,7 @@ const ROUTE_RE = {
   ACCOUNT_SELF_DELETE: /^\/api\/account\/self-delete$/,
   ADMIN_TIER_GRANT: /^\/api\/admin\/tier-grant$/,
   ADMIN_VOUCHER_ISSUE: /^\/api\/admin\/voucher\/issue$/,
+  ADMIN_NAME_GRANT: /^\/api\/admin\/name-grant$/,
   VOUCHER_REDEEM: /^\/api\/voucher\/redeem$/,
   PAYMENTS_CONFIG: /^\/api\/payments\/config$/,
   VOUCHERS_REDEEM: /^\/api\/vouchers\/redeem$/,
@@ -1483,6 +1485,13 @@ export async function tryControlPlane(
       servers: storage.servers,
       offers: storage.usernameOffers,
       aliases: storage.usernameAliases,
+      names: storage.names,
+      // Blind $1 vouchers pay too, through the redeem route's nullifier store (nameChange.ts header).
+      blind: {
+        keys: voucherSigningKeysFromEnv(env.VOUCHER_SIGNING_KEYS),
+        config: paymentsConfigFromEnv(env.PAYMENTS_CONFIG),
+        store: new D1BlindVoucherStorage(env.DB),
+      },
       grants: storage.deviceCapabilityGrants,
       auditEvents: storage.auditEvents,
       window: parseDibsWindow(env.DIBS_WINDOW_START, env.DIBS_WINDOW_END),
@@ -3807,6 +3816,15 @@ export async function tryControlPlane(
         await readJson(request),
       ),
     );
+  }
+  // POST /api/admin/name-grant (admin) — set one name aside for a friend (nameGrant.ts); the code is returned ONCE.
+  if (method === "POST" && ROUTE_RE.ADMIN_NAME_GRANT.test(path)) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(await handleIssueNameGrant({ vouchers: new D1VoucherStorage(env.DB) }, await readJson(request)));
   }
   // POST /api/voucher/redeem (PUBLIC) — the code is the bearer secret.
   if (method === "POST" && ROUTE_RE.VOUCHER_REDEEM.test(path)) {

@@ -76,7 +76,7 @@ describe("home recovery reminders wiring", () => {
 
   it("creating an account goes straight to Home, not the wizard's backup step", () => {
     expect(BOOTSTRAP_JS).not.toContain('enterWizard({ step: "secure-account" })');
-    expect(BOOTSTRAP_JS).toMatch(/markVoiciIntroPending\(chosen\);\s+try \{\s+const \{ enterHome \} = await import\("\.\/home\.js"\);/);
+    expect(BOOTSTRAP_JS).toMatch(/markVoiciIntroPending\(finalName\);\s+try \{\s+const \{ enterHome \} = await import\("\.\/home\.js"\);/);
   });
 
   it("Recovery says what cloud recovery is: a copy locked by a passkey, so no password", () => {

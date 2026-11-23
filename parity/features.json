@@ -6796,6 +6796,52 @@
           "anchors": []
         }
       }
+    },
+    {
+      "id": "choose-own-account-name",
+      "title": "Choose your own account name at sign-up: the account opens under the suggested name and is renamed at once (paid by a name code or the 10-voucher pack), the device signs its grant and profiles again under the new name, keeps its device key, moves its local copy, and binds quantum-safe keys only afterwards; a name the owner set aside (/app/choose-name#n=&g=&e=) opens the same screen",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift",
+              "public final class AccountRenameFinisher"
+            ],
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/AccountNameChange.swift",
+              "public struct NameGrant"
+            ]
+          ]
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountNameChoice.kt",
+              "class ChooseNameFlow\\("
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountNameChoice.kt",
+              "data class NameGrant\\("
+            ]
+          ]
+        },
+        "web": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/web/public/webapp/lib/chooseName.js",
+              "export async function claimChosenName"
+            ],
+            [
+              "apps/web/public/webapp/lib/chooseName.js",
+              "export function parseNameGrantLink"
+            ]
+          ]
+        }
+      }
     }
   ]
 }

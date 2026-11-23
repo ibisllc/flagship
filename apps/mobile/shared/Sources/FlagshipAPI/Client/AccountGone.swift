@@ -18,8 +18,17 @@ public final class AccountGoneRegistry: @unchecked Sendable {
     private var gone: String?
     private var own: Set<String> = []
     private var listener: (@Sendable (String?) -> Void)?
+    private var renaming: (@Sendable (String) -> Bool)?
 
     public init() {}
+
+    /// A name this device is moving away from or to ("Choose your own account name"): its 404s mean the rename is
+    /// under way, not that the account was removed.
+    public func setRenameGuard(_ fn: (@Sendable (String) -> Bool)?) {
+        mutex.lock()
+        renaming = fn
+        mutex.unlock()
+    }
 
     public var goneName: String? {
         mutex.lock()
@@ -80,8 +89,9 @@ public final class AccountGoneRegistry: @unchecked Sendable {
         guard status == 404, let name = Self.accountName(in: url) else { return false }
         mutex.lock()
         let isOwn = own.contains(name)
+        let isRenaming = renaming?(name) ?? false
         mutex.unlock()
-        guard isOwn,
+        guard isOwn, !isRenaming,
               let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               (json["code"] as? String) == Self.code else { return false }
         mutex.lock()

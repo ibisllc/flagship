@@ -86,18 +86,14 @@ class OpenAccountViewModel(
     }
 
     /**
-     * Ensure the UMK, run the STANDALONE username claim, record the
-     * device name, then complete onboarding with an EMPTY pod set.
-     *
-     * Idempotent on retry: claimUsername is idempotent for the same
-     * (username, irkPub); calling it twice from the same device key is a
-     * no-op server-side, so a tapped-twice / retried open is safe.
+     * Mint the account keys and create the account at `.com` under [username]: everything
+     * [openAccount] does before onboarding. "Choose your own account name" creates the account this
+     * way and onboards only after its rename, so neither the PQ binding nor the voi.ci intro starts
+     * under the suggested name. Safe to retry (the same device id and grant id are reused).
      */
-    suspend fun openAccount(deviceName: String, accountName: String = defaultAccountName()) {
-        if (_phase.value == OpenAccountPhase.Working || _phase.value == OpenAccountPhase.Opened) return
-        _phase.value = OpenAccountPhase.Working
+    suspend fun createAccount(deviceName: String, accountName: String = defaultAccountName()): CreatedAccount {
         val label = deviceName.trim().ifEmpty { defaultDeviceName(null) }
-        try {
+        run {
             // 0. Multi-profile keying (W3) — point the Keystore at THIS
             //    cloud's per-profile device-key slot BEFORE any key gen,
             //    so opening a SECOND account mints a fresh UMK in its own
@@ -165,10 +161,7 @@ class OpenAccountViewModel(
             val deviceSignature = HexUtil.encode(deviceKey.sign(AccountMetadata.canonicalDeviceSelfProfile(
                 username, deviceId, 1, 1, deviceCiphertext, issuedAt, devicePubHex,
             )))
-            val scopes = listOf(
-                "browse", "install-service", "vibe-code", "add-device", "manage-services",
-                "revoke-others", "admin", "view-directory",
-            )
+            val scopes = SIGNUP_SCOPES
             val grantId = identity.second
             val expiresAt = issuedAt + 90L * 24 * 3_600_000
             val grantBytes = listOf(
@@ -200,25 +193,24 @@ class OpenAccountViewModel(
                 ),
             ))
 
-            // 3. Open the account with ZERO servers → Home empty-state.
-            //    No backup step after creating (owner, 2026-11-21): the voi.ci
-            //    intro is the one onboarding step; backup is offered on Home.
-            app.armVoiciIntro(username)
-            app.completeOnboarding(username = username, pods = emptyList())
-            // 4. Name this device. completeOnboarding upserts the profile
-            //    with the (absent) device-capability label; re-upsert with
-            //    the human-readable name so Settings / multi-profile read
-            //    it back.
-            val active = app.activeProfile
-            if (active != null) app.addProfile(
-                active.copy(
-                    deviceId = deviceId,
-                    accountDisplayName = normalizedAccountName,
-                    deviceDisplayName = normalizedDeviceName,
-                ),
-                setActive = true,
-            )
+            return CreatedAccount(username, deviceId, grantId, normalizedAccountName, normalizedDeviceName)
+        }
+    }
 
+    /**
+     * Ensure the UMK, run the STANDALONE username claim, record the
+     * device name, then complete onboarding with an EMPTY pod set.
+     *
+     * Idempotent on retry: claimUsername is idempotent for the same
+     * (username, irkPub); calling it twice from the same device key is a
+     * no-op server-side, so a tapped-twice / retried open is safe.
+     */
+    suspend fun openAccount(deviceName: String, accountName: String = defaultAccountName()) {
+        if (_phase.value == OpenAccountPhase.Working || _phase.value == OpenAccountPhase.Opened) return
+        _phase.value = OpenAccountPhase.Working
+        try {
+            val created = createAccount(deviceName, accountName)
+            finishOnboarding(app, created)
             // Bind the new IRK, admin root and device key to ML-DSA-65 keys, in the background.
             com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
             _phase.value = OpenAccountPhase.Opened
@@ -226,4 +218,42 @@ class OpenAccountViewModel(
             _phase.value = OpenAccountPhase.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_open_your_account_try_again)))
         }
     }
+
+    companion object {
+        /** The founding device's grant scopes, in the order they are signed. */
+        val SIGNUP_SCOPES = listOf(
+            "browse", "install-service", "vibe-code", "add-device", "manage-services",
+            "revoke-others", "admin", "view-directory",
+        )
+
+        /**
+         * Open the account with ZERO servers (Home's empty state) and name this device. No backup
+         * step after creating (owner, 2026-11-21): the voi.ci intro is the one onboarding step;
+         * backup is offered on Home.
+         */
+        fun finishOnboarding(app: AppState, created: CreatedAccount) {
+            app.armVoiciIntro(created.username)
+            app.completeOnboarding(username = created.username, pods = emptyList())
+            // completeOnboarding upserts the profile with the (absent) device-capability label;
+            // re-upsert with the human-readable names so Settings / multi-profile read them back.
+            val active = app.activeProfile
+            if (active != null) app.addProfile(
+                active.copy(
+                    deviceId = created.deviceId,
+                    accountDisplayName = created.accountDisplayName,
+                    deviceDisplayName = created.deviceDisplayName,
+                ),
+                setActive = true,
+            )
+        }
+    }
 }
+
+/** An account [OpenAccountViewModel.createAccount] made: this device's id and its first grant's id. */
+data class CreatedAccount(
+    val username: String,
+    val deviceId: String,
+    val grantId: String,
+    val accountDisplayName: String,
+    val deviceDisplayName: String,
+)

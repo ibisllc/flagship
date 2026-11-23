@@ -67,7 +67,8 @@ export type VoucherRefusal =
   | "not-found"
   | "org-not-found"
   | "org-seats"
-  | "org-seats-below-live";
+  | "org-seats-below-live"
+  | "wrong-amount";
 
 function refuse(status: number, code: VoucherRefusal, extra: Record<string, unknown> = {}): HandlerResponseWithHeaders {
   return { status, body: { error: code, code, ...extra }, headers: { "cache-control": "no-store" } };
@@ -284,6 +285,37 @@ function verifiedVouchers(deps: Pick<VoucherRedeemDeps, "keys" | "config">, raw:
     out.push(v);
   }
   return out;
+}
+
+/**
+ * Spend exactly `units` blind vouchers for something `.com` sells outside plan time (a name change: nameChange.ts),
+ * through the same nullifier store as `POST /api/vouchers/redeem`. All or nothing: a wrong count, a bad voucher or
+ * one already spent spends none (the spent ones are listed, so the wallet can drop them). The caller puts them back
+ * with {@link unspendVouchers} if what they paid for fails.
+ */
+export async function spendVouchersExactly(
+  deps: Pick<VoucherRedeemDeps, "keys" | "config" | "store" | "now">,
+  raw: unknown[],
+  units: number,
+): Promise<{ ok: true; nullifiers: string[] } | { ok: false; response: HandlerResponseWithHeaders }> {
+  const now = (deps.now ?? Date.now)();
+  if (raw.length !== units) return { ok: false, response: refuse(400, "wrong-amount", { units }) };
+  const vouchers = verifiedVouchers(deps, raw, now);
+  if (!Array.isArray(vouchers)) return { ok: false, response: vouchers };
+  const items = vouchers.map((v) => ({ nullifier: voucherNullifier(v), keyId: v.k }));
+  const won = await deps.store.spend(items, utcDay(now));
+  const fresh = items.filter((_, i) => won[i]).map((i) => i.nullifier);
+  const spent = items.filter((_, i) => !won[i]).map((i) => i.nullifier);
+  if (spent.length > 0) {
+    await deps.store.unspend(fresh);
+    return { ok: false, response: refuse(409, "voucher-spent", { spent }) };
+  }
+  return { ok: true, nullifiers: fresh };
+}
+
+/** Put back vouchers {@link spendVouchersExactly} spent, when what they paid for failed. */
+export async function unspendVouchers(store: Pick<BlindVoucherStorage, "unspend">, nullifiers: string[]): Promise<void> {
+  if (nullifiers.length > 0) await store.unspend(nullifiers);
 }
 
 /**

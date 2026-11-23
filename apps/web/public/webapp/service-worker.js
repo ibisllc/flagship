@@ -580,7 +580,10 @@
 //       person's language, saying the policy changes (or changed) on a date, with a link to read it.
 //  v255: the owner's welcome art (a day and a night painting, picked by prefers-color-scheme) replaces the drawn
 //       phone-and-server card on the first screen; precaches /welcome-day.png and /welcome-night.png.
-const SHELL_VERSION = "v255";
+//  v256: "Choose your own account name" at sign-up (lib/chooseName.js, views/choose-name.js): the account opens
+//       under the suggested name and is renamed at once, paid by a code or ten $1 vouchers; a name the owner set
+//       aside opens the same screen (/app/choose-name). (v255 is the welcome-art branch's.)
+const SHELL_VERSION = "v256";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -612,6 +615,7 @@ const ESSENTIAL_PATHS = [
 const OPTIONAL_SHELL = [
   "/welcome-day.png",
   "/welcome-night.png",
+  "/lib/nameChange.js",
   "/lib/i18n.js",
   "/lib/i18nLocales.js",
   "/providers.js",
@@ -801,6 +805,8 @@ const OPTIONAL_SHELL = [
   "/lib/vouchers.js",
   "/lib/plan.js",
   "/lib/voucherLink.js",
+  "/lib/chooseName.js",
+  "/views/choose-name.js",
   "/lib/ohttp.js",
   "/views/messages.js",
   "/views/thread.js",

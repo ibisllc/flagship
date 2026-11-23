@@ -310,7 +310,7 @@ export function inlineAlert({ title, message, okLabel = tr("OK") } = {}) {
  * or rejects (a RateLimitedError's sentence is shown and the button waits it
  * out). Resolves to the chosen name, or null on cancel.
  */
-export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext } = {}) {
+export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext, allowChooseOwn = false } = {}) {
   return new Promise((resolve) => {
     const host = ensureHost();
     const overlay = buildOverlay();
@@ -321,6 +321,7 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
         <button class="secondary full-width" data-suggest-regen>${tr("↻ Try another")}</button>
         <p class="warn-text mt-2" data-suggest-error role="alert" hidden></p>
         <p class="note modal-suggest-note">${tr("You can change your username later.")}</p>
+        ${allowChooseOwn ? `<button class="linklike mt-2" data-suggest-own>${tr("Choose your own account name")}</button>` : ""}
         <div class="row-2 mt-3">
           <button class="secondary" data-modal-cancel>${tr("Cancel")}</button>
           <button data-modal-ok>${tr("Continue")}</button>
@@ -388,6 +389,8 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
       armCooldown(res ? res.retryAfterMs : 2000);
     });
     okBtn.addEventListener("click", () => close(current));
+    // "Choose your own account name" (views/choose-name.js): the suggestion still opens the account.
+    overlay.querySelector("[data-suggest-own]")?.addEventListener("click", () => close({ suggested: current, chooseOwn: true }));
     cancelBtn.addEventListener("click", () => close(null));
     overlay.addEventListener("click", (ev) => { if (ev.target === overlay) close(null); });
     document.addEventListener("keydown", onKey);

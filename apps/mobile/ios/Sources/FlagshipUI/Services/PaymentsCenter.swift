@@ -130,6 +130,13 @@ public final class PaymentsCenter {
         return ok
     }
 
+    /// `n` vouchers from the wallet to pay something with (the account rename); nil when it holds fewer.
+    public func takeVouchers(_ n: Int) -> [Voucher]? { fresh()?.takeVouchers(n) }
+
+    /// Drop vouchers a payment spent and save the wallet.
+    @discardableResult
+    public func markSpent(_ nullifiers: [String]) async -> Bool { await run { await $0.markSpent(nullifiers) } }
+
     private func run(_ f: (VoucherWalletEngine) async -> Bool) async -> Bool {
         guard let e = fresh() else { return false }
         isWorking = true

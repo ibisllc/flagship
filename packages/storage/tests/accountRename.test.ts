@@ -42,7 +42,7 @@ describe("account rename — schema coverage", () => {
       ...RENAMED_ACCOUNT_COLUMNS.map(([t, c]) => `${t}.${c}`),
       ...NOT_RENAMED_ACCOUNT_COLUMNS.map(([t, c]) => `${t}.${c}`),
     ]);
-    const looksLikeAnAccount = /(^|_)(username|account_id|user_id|creator|account|redeemed_by|username_hash|giver_username|acquirer_username)$/;
+    const looksLikeAnAccount = /(^|_)(username|account_id|user_id|creator|account|owner|redeemed_by|username_hash|giver_username|acquirer_username)$/;
     const unclassified: string[] = [];
     const existing = new Set<string>();
     for (const { name } of tables) {
@@ -148,6 +148,65 @@ describe("D1NameChangeStorage.renameAccount", () => {
       });
       expect(await s.history(AID)).toEqual([]);
     }
+  });
+
+  describe("the names registry moves in the same batch", () => {
+    const claimName = (d: SqliteD1, name: string) =>
+      d.raw.exec(
+        `INSERT INTO names (name, safety_key, kind, status, owner, warned, created_at, status_changed_at) VALUES ('${name}', '${name.replace(/-/g, "").replace(/0/g, "o").replace(/1/g, "l")}', 'username', 'active', '${name}', 0, 1, 1)`,
+      );
+    const rows = (d: SqliteD1) =>
+      d.raw.prepare("SELECT name, status, owner, held_until FROM names WHERE kind = 'username' ORDER BY id").all();
+
+    it("holds the old name for 30 days, redirecting to the new owner, and claims the new one", async () => {
+      db = createSqliteD1();
+      seed(db, "fresh-poppy");
+      claimName(db, "fresh-poppy");
+      expect((await new D1NameChangeStorage(db).renameAccount({ aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "acme", at: 9 })).ok).toBe(true);
+      expect(rows(db)).toEqual([
+        { name: "fresh-poppy", status: "held", owner: "acme", held_until: 9 + 30 * 86_400_000 },
+        { name: "acme", status: "active", owner: "acme", held_until: null },
+      ]);
+    });
+
+    it("releases the old name at once when asked (a sign-up's suggested name), so its look-alike is free", async () => {
+      db = createSqliteD1();
+      seed(db, "fresh-poppy");
+      claimName(db, "fresh-poppy");
+      const r = await new D1NameChangeStorage(db).renameAccount({ aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "freshpoppy", at: 9, oldNameHoldMs: 0 });
+      expect(r.ok).toBe(true);
+      expect(rows(db)).toEqual([
+        { name: "fresh-poppy", status: "released", owner: "freshpoppy", held_until: null },
+        { name: "freshpoppy", status: "active", owner: "freshpoppy", held_until: null },
+      ]);
+    });
+
+    it("a held old name still blocks its own look-alike", async () => {
+      db = createSqliteD1();
+      seed(db, "fresh-poppy");
+      claimName(db, "fresh-poppy");
+      expect((await new D1NameChangeStorage(db).renameAccount({ aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "freshpoppy", at: 9 })).ok).toBe(false);
+      expect(rows(db)).toEqual([{ name: "fresh-poppy", status: "active", owner: "fresh-poppy", held_until: null }]);
+    });
+
+    it("refuses a look-alike of another account's name, changing nothing", async () => {
+      db = createSqliteD1();
+      seed(db, "fresh-poppy");
+      claimName(db, "fresh-poppy");
+      claimName(db, "acme-tools");
+      const s = new D1NameChangeStorage(db);
+      expect(await s.renameAccount({ aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "acmetoo1s", at: 9, oldNameHoldMs: 0 })).toEqual({
+        ok: false,
+        reason: "name already taken",
+      });
+      const one = (sql: string) => db!.raw.prepare(sql).get() as Record<string, unknown> | undefined;
+      expect(one("SELECT account_id FROM device_identities")).toEqual({ account_id: "fresh-poppy" });
+      expect(rows(db)).toEqual([
+        { name: "fresh-poppy", status: "active", owner: "fresh-poppy", held_until: null },
+        { name: "acme-tools", status: "active", owner: "acme-tools", held_until: null },
+      ]);
+      expect(await s.history(AID)).toEqual([]);
+    });
   });
 
   it("refuses an unknown account", async () => {

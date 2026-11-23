@@ -513,6 +513,33 @@ class PaymentsCenter(
     }
 
     /**
+     * Pay something `.com` sells outside the plan (a name change) with exactly [n] vouchers: [pay] gets them as wire
+     * objects, and they are marked spent once it returns. A refusal is rethrown after the wallet learns from it
+     * (`voucher-spent` drops the listed ones, `bad-voucher` the named one); any other failure leaves the wallet as it
+     * was, since `.com` puts the vouchers back when the thing they paid for fails. Null when the wallet can't pay.
+     */
+    suspend fun <T> spendExactly(n: Int, pay: suspend (List<JsonObject>) -> T): T? = mutex.withLock {
+        if (!_state.value.canSpend) return null
+        val w = _state.value.wallet ?: return null
+        val vouchers = VoucherWallets.take(w, n)
+        if (n <= 0 || vouchers.size < n) return null
+        val out = try {
+            pay(vouchers.map { it.toJson() })
+        } catch (e: PaymentsHttpError) {
+            when (e.code) {
+                "voucher-spent" -> {
+                    val listed = (e.body["spent"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                    if (listed.isNotEmpty()) write { VoucherWallets.markSpent(it, listed) }
+                }
+                "bad-voucher" -> (e.body["nullifier"] as? JsonPrimitive)?.contentOrNull?.let { nf -> write { VoucherWallets.markSpent(it, listOf(nf)) } }
+            }
+            throw e
+        }
+        write { VoucherWallets.markSpent(it, vouchers.map { v -> v.nullifier }) }
+        out
+    }
+
+    /**
      * A voucher link opened on this phone (docs/anonymous-vouchers.md "Voucher links"): parsed and checked here alone,
      * against the voucher keys this phone holds, with no network call. Only an admin device with the account key adds.
      */

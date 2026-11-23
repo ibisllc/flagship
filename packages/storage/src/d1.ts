@@ -18,6 +18,8 @@ import { D1PqTrustStorage, type PqTrustStorage } from "./pqTrust.js";
 import {
   accountGoneStatements,
   claimNameStatement,
+  NAME_HOLD_MS,
+  renameOwnerStatements,
   claimUsernameStatement,
   D1NameRegistryStorage,
   demoGoneStatements,
@@ -4205,7 +4207,10 @@ export class D1VoucherStorage implements VoucherStorage {
     return r
       ? {
           codeHash: r.code_hash,
-          kind: r.kind === "name-change" || r.kind === "dibs-claim" ? r.kind : "tier",
+          kind:
+            r.kind === "name-change" || r.kind === "dibs-claim" || r.kind === "name-grant" || r.kind === "name-grant-paid"
+              ? r.kind
+              : "tier",
           tier: r.tier as VoucherRecord["tier"],
           durationDays: r.duration_days,
           createdAt: r.created_at,
@@ -4234,6 +4239,11 @@ export class D1VoucherStorage implements VoucherStorage {
       )
       .bind(codeHash, username)
       .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+
+  async delete(codeHash: string): Promise<boolean> {
+    const r = await this.db.prepare(`DELETE FROM vouchers WHERE code_hash = ?`).bind(codeHash).run();
     return (r.meta?.changes ?? 0) > 0;
   }
 }
@@ -5688,6 +5698,10 @@ export class D1NameChangeStorage implements NameChangeStorage {
     for (const [t, c] of present) {
       stmts.push(this.db.prepare(`UPDATE ${t} SET ${c} = ?1 WHERE ${c} = ?2`).bind(newName, oldName));
     }
+    // The names registry (migration 0127) moves in the same batch: the old name is held (or released, for a name
+    // nobody but its owner saw) and the new one claimed under its look-alike key, so a taken or too-similar new name
+    // rolls the whole rename back.
+    if (tables.has("names")) stmts.push(...renameOwnerStatements(this.db, oldName, newName, rec.at, rec.oldNameHoldMs ?? NAME_HOLD_MS));
     stmts.push(this.db.prepare("DELETE FROM usernames WHERE username = ?1").bind(oldName));
     stmts.push(
       this.db

@@ -72,6 +72,9 @@ export const NOT_RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string,
   ["voici_call_key_revocations", "username", "a revocation the call key signed itself, keyed by the call key; the name is the signer's at the time"],
   ["voici_call_key_account_revocations", "username", "an owner-signed revocation, signed over the old name; the old name's bindings are dropped too, so the device binds again under the new name"],
   ["usernames", "username", "the row itself — moved by insert-then-delete, not an UPDATE"],
+  // The names registry moves in the same batch by its own rule (names.ts renameOwnerStatements): the old username is
+  // held or released, never deleted, and a previous holder's retired links must keep blocking, so no blanket clear.
+  ["names", "owner", "moved by renameOwnerStatements in the rename batch (hold or release the old name, claim the new)"],
   ["usernames_aliases", "old_username", "history of the removed #93 rename route"],
   ["usernames_aliases", "new_username", "history of the removed #93 rename route"],
   ["name_changes", "old_username", "the rename history this transaction appends to"],

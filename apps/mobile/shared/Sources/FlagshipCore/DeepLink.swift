@@ -176,6 +176,10 @@ public enum DeepLink: Equatable, Sendable {
     /// link still opens the screen that says so.
     case voucherLink(link: String)
 
+    /// A name the owner set aside for a friend: `https://<apex>/app/choose-name#n=&g=&e=[&f=1]` opens
+    /// "Choose your own account name" with it (all in the fragment).
+    case nameGrant(NameGrant)
+
     /// The link the install Live Activity opens: `install-progress` naming
     /// the install it tracks (`installProgress(key:serverFqdn:)`).
     public static func installProgressURL(key: String, serverFqdn: String?) -> URL {
@@ -357,6 +361,8 @@ public enum DeepLink: Equatable, Sendable {
             return nil
         case "vouchers":
             return .voucherLink(link: url.absoluteString)
+        case "choose-name":
+            return NameGrant.from(fragmentParams(url)).map { .nameGrant($0) }
         case "backup-download":
             let f = fragmentParams(url)
             guard let s = f["s"]?.lowercased(), s.hasSuffix(".\(Endpoints.dataApex)"),

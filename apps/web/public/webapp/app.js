@@ -124,6 +124,7 @@ import { fetchDibsWindow } from "./lib/nameDibs.js";
 import { initPlanView, enterPlan } from "./views/plan.js";
 import { takeShopReturn } from "./lib/plan.js";
 import { stashVoucherLinkFromLocation } from "./lib/voucherLink.js";
+import { stashNameGrantFromLocation } from "./lib/chooseName.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initDeveloperView, enterDeveloper } from "./views/developer.js";
 import { initVibeCodeView, enterVibeCode, openVibeCodeSessionById } from "./views/vibe-code.js";
@@ -561,6 +562,8 @@ async function boot() {
   try { shopBack = takeShopReturn(); } catch { /* best-effort */ }
   // A "Load into Flagship" voucher link (/app/vouchers#v=…): kept for after the unlock, off the address bar.
   try { stashVoucherLinkFromLocation(); } catch { /* best-effort */ }
+  // A name the owner set aside (/app/choose-name#n=&g=&e=, lib/chooseName.js): kept for the sign-up or the unlock.
+  try { stashNameGrantFromLocation(); } catch { /* best-effort */ }
   // P12 — auto-migrate legacy single-profile localStorage into the new
   // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
   try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }

@@ -32,6 +32,12 @@ import FlagshipCore
 @Observable
 @MainActor
 public final class OpenAccountViewModel {
+    /// The founding device's scopes, as sent at sign-up (and again when a rename mints its grant anew).
+    public nonisolated static let foundingScopes = [
+        "browse", "install-service", "vibe-code", "add-device", "manage-services",
+        "revoke-others", "admin", "view-directory",
+    ]
+
     public enum Phase: Equatable, Sendable {
         case naming
         case opening
@@ -47,6 +53,12 @@ public final class OpenAccountViewModel {
     public var deviceName: String
     public var accountName: String
     public private(set) var createdDeviceId: String?
+    /// What the account was opened with, held in memory for a rename that follows at once ("Choose your own
+    /// account name"): nothing here is persisted.
+    public private(set) var opened: OpenedAccountKeys?
+    /// Leave the PQ identity binding to the caller (`OpenedAccountKeys.bindPq`): a binding made before a rename makes
+    /// `.com` refuse the rename.
+    public let deferPqBinding: Bool
 
     /// The device id and grant id this sign-up presents, minted once and reused
     /// on every retry. `.com` treats a bootstrap repeated under the same keys,
@@ -61,10 +73,12 @@ public final class OpenAccountViewModel {
     public init(
         username: String,
         server: any FlagshipServerClient,
-        defaultDeviceName: String? = nil
+        defaultDeviceName: String? = nil,
+        deferPqBinding: Bool = false
     ) {
         self.username = username
         self.server = server
+        self.deferPqBinding = deferPqBinding
         self.accountName = username.split(separator: "-")
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined(separator: " ")
@@ -213,10 +227,7 @@ public final class OpenAccountViewModel {
                 accountId: username, deviceId: deviceId, revision: 1, keyVersion: 1,
                 ciphertext: deviceCiphertext, issuedAt: now, signerPubHex: devicePubHex
             ))
-            let scopes = [
-                "browse", "install-service", "vibe-code", "add-device", "manage-services",
-                "revoke-others", "admin", "view-directory",
-            ]
+            let scopes = Self.foundingScopes
             let grant = DeviceCapabilityGrantEnvelope(
                 grantId: identity.grantId, username: username, deviceId: deviceId,
                 devicePubKeyHex: devicePubHex, scopes: scopes, issuedAt: now,
@@ -249,15 +260,40 @@ public final class OpenAccountViewModel {
                 )
             ))
 
-            PqIdentityBindingService.bindInBackground(username: username, identities: [
-                PqIdentity(role: .accountIrk, subjectId: username, edKey: irk),
-                PqIdentity(role: .adminRoot, subjectId: username, edKey: adminRoot),
-                PqIdentity(role: .device, subjectId: deviceId, edKey: deviceKey),
-            ])
+            let keys = OpenedAccountKeys(username: username, deviceId: deviceId, grantId: identity.grantId, scopes: scopes,
+                                         irk: irk, adminRoot: adminRoot, deviceKey: deviceKey, umk: umk,
+                                         accountDisplayName: effectiveAccountName, deviceDisplayName: effectiveDeviceName)
+            opened = keys
+            if !deferPqBinding { keys.bindPq() }
             createdDeviceId = deviceId
             phase = .opened(deviceName: effectiveDeviceName)
         } catch {
             phase = .failed(NameRuleText.refusal(error) ?? UserErrorText.of(error))
         }
+    }
+}
+
+/// The keys and ids a just-opened account was made with (`OpenAccountViewModel.opened`).
+public struct OpenedAccountKeys: Sendable {
+    public let username: String
+    public let deviceId: String
+    public let grantId: String
+    public let scopes: [String]
+    public let irk: Curve25519.Signing.PrivateKey
+    public let adminRoot: Curve25519.Signing.PrivateKey
+    /// Derived from (UMK, the name the account was opened under, deviceId): `.com` keeps it across a rename.
+    public let deviceKey: Curve25519.Signing.PrivateKey
+    public let umk: Data
+    public let accountDisplayName: String
+    public let deviceDisplayName: String
+
+    /// Bind the identities' ML-DSA keys under `name` (the account's name once any rename is done).
+    public func bindPq(as name: String? = nil) {
+        let u = (name ?? username).lowercased()
+        PqIdentityBindingService.bindInBackground(username: u, identities: [
+            PqIdentity(role: .accountIrk, subjectId: u, edKey: irk),
+            PqIdentity(role: .adminRoot, subjectId: u, edKey: adminRoot),
+            PqIdentity(role: .device, subjectId: deviceId, edKey: deviceKey),
+        ])
     }
 }

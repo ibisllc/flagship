@@ -4394,4 +4394,26 @@
     <string name="our_privacy_policy_changes_on">Our privacy policy changes on %1$s.</string>
     <string name="our_privacy_policy_changed_on">Our privacy policy changed on %1$s.</string>
     <string name="read_the_policy">Read the policy</string>
+    <string name="choose_name_action">Choose your own account name</string>
+    <string name="choose_name_field">Account name</string>
+    <string name="choose_name_price">Your own account name costs $10.</string>
+    <string name="choose_name_pay">Pay $10</string>
+    <string name="choose_name_use_voucher">Use a voucher</string>
+    <string name="choose_name_voucher_code">Voucher code</string>
+    <string name="choose_name_use_voucher_button">Use voucher</string>
+    <string name="choose_name_held">This name is held for the owner of %1$s.com until %2$s.</string>
+    <string name="choose_name_working">Setting up your account name…</string>
+    <string name="choose_name_done">Your account is now %1$s.</string>
+    <string name="choose_name_keep">Keep %1$s</string>
+    <string name="choose_name_payment_cancelled">Payment cancelled. Your account keeps the name %1$s.</string>
+    <string name="choose_name_payment_failed">The payment didn\'t go through. Your account keeps the name %1$s.</string>
+    <string name="choose_name_code_invalid">That voucher code isn\'t valid for an account name.</string>
+    <string name="choose_name_code_used">That voucher code was already used.</string>
+    <string name="choose_name_failed_vouchers">The name change didn\'t go through. Your account keeps the name %1$s, and your $10 stays in your account as vouchers.</string>
+    <string name="choose_name_failed_code">The name change didn\'t go through. Your account keeps the name %1$s, and your voucher code still works.</string>
+    <string name="choose_name_finishing">Finishing your account name…</string>
+    <string name="choose_name_set_aside">This name has been set aside for you.</string>
+    <string name="choose_name_open_when_creating">Open this link when you create your account.</string>
+    <string name="choose_name_grant_expired">This link has expired. Ask for a new one.</string>
+    <string name="choose_name_grant_invalid">This link doesn\'t work any more. Ask for a new one.</string>
 </resources>

@@ -376,6 +376,41 @@ path.
 - **Recovery DNS fix** (`recovery.flagshipserver.com`) is a prerequisite for the
   passkey path to actually work in prod.
 
+### Choosing a name at sign-up (0.4, owner 2026-11-23)
+
+The apps' sign-up offers "Choose your own account name" under the suggested name. `.com` has no free choice of
+name at sign-up, so the app opens the account under the suggested name and at once runs the paid rename above
+(`POST /api/account/name-change`), paid with a name-change code or with ten $1 vouchers (the 10-voucher pack, bought
+on the platform's rail). A first rename within an hour of the account's claim releases the suggested name at once
+(no 30-day hold: nobody but the owner saw it). The app then signs again what `.com` can't move (the device grant,
+the two profiles), keeps its device key, moves its local copy to the new name, and only then binds the quantum-safe
+keys. Client details: `apps/web/public/webapp/lib/chooseName.js` and its iOS and Android twins.
+
+### Giving a friend a name
+
+A friend asks for a name that is held for its `.com` holder (the dibs window), or you want to give one as a present.
+
+1. On your laptop, with the production admin secret:
+   ```sh
+   FLAGSHIP_ADMIN_SECRET=… node scripts/name-grant.mjs <name>            # they still pay $10 (or a code)
+   FLAGSHIP_ADMIN_SECRET=… node scripts/name-grant.mjs <name> --free     # you pay: the link covers the price
+   FLAGSHIP_ADMIN_SECRET=… node scripts/name-grant.mjs <name> --hours 24 # shorter (default 72 h, at most 30 days)
+   ```
+   It prints one link, `https://flagshipserver.com/app/choose-name#n=<name>&g=<code>&e=<end>[&f=1]`. Nothing is kept
+   on your laptop; `.com` keeps only a hash of the code bound to the name and the end time.
+2. Send the link to the friend. They install the app, then open the link: "Choose your own account name" opens with
+   the name filled in and "This name has been set aside for you." When they create their account it becomes theirs.
+   On an account they already have it works only while that account has one device and nothing that blocks a rename
+   (a voi.ci page, a server, quantum-safe keys); otherwise the app says to open the link when they create their account.
+3. What the link does: it lifts only the dibs hold on exactly that name until it ends. Every other rule stays (a taken
+   or look-alike name, a reserved word, the registry). It works once: a rename that fails puts it back, one that
+   succeeds deletes it, so nothing on `.com` marks their account afterwards (the audit line is the same as any
+   rename's). Anyone else holding the link can only take that one name, before the friend does.
+4. A link that expired or was lost: run the command again (the old one simply stops working when it ends).
+
+Code: `packages/control-plane/src/nameGrant.ts` (`POST /api/admin/name-grant`, stored as a `name-grant` /
+`name-grant-paid` row of the vouchers table, no migration), `nameChange.ts` (`nameGrant` in the quote and the rename).
+
 ## 16. Open decisions
 
 DECIDED (2026-10-09, owner) — these supersede §7's window rule and items 3–5 + 8

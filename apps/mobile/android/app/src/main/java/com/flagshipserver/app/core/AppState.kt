@@ -522,6 +522,17 @@ class AppState(
         ))
     }
 
+    /** "Choose your own account name" finished after the app had reopened the account as [old]: it is [new] now. */
+    fun renameAccount(old: String, new: String, accountDisplayName: String) {
+        val p = _profiles.value.firstOrNull { it.cloudName.equals(old, ignoreCase = true) } ?: return
+        val renamed = p.copy(cloudName = new, accountId = new, accountDisplayName = accountDisplayName)
+        _profiles.value = _profiles.value.filterNot { it.cloudName == p.cloudName || it.cloudName == new } + renamed
+        presentationNames?.put(new, accountDisplayName, renamed.deviceDisplayName)
+        if (_activeCloudName.value == p.cloudName) _activeCloudName.value = new
+        if (_currentUser.value.equals(old, ignoreCase = true)) _currentUser.value = new
+        AccountReadTokens.shared?.profileChanged()
+    }
+
     fun addPod(pod: PodInfo) {
         setPods(_pods.value + pod)
         // A new box ranks after every server the order lists and after older

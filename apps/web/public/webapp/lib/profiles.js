@@ -137,6 +137,27 @@ export function removeProfile(cloudName, storage = globalThis.localStorage) {
   return next;
 }
 
+/** The account was renamed (lib/chooseName.js): its row takes the new name, and stays active if it was.
+ *  @param {string} fromCloudName
+ *  @param {string} toCloudName
+ *  @param {Storage} [storage]
+ *  @returns {ProfilesState}
+ */
+export function renameProfile(fromCloudName, toCloudName, storage = globalThis.localStorage) {
+  const state = loadProfiles(storage);
+  state.profiles = state.profiles.map((p) =>
+    p.cloudName === fromCloudName
+      ? { ...p, cloudName: toCloudName, ...(p.accountId === fromCloudName ? { accountId: toCloudName } : {}) }
+      : p,
+  );
+  if (state.activeCloudName === fromCloudName) {
+    state.activeCloudName = toCloudName;
+    setActiveKeystoreProfile(toCloudName);
+  }
+  saveProfiles(state, storage);
+  return state;
+}
+
 /** Switch the active profile. No-op if `cloudName` isn't in storage.
  *  @param {string} cloudName
  *  @param {Storage} [storage]

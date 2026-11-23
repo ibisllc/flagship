@@ -4,7 +4,7 @@ import { InMemoryServerBootKeyStorage } from "./serverBootKeys.js";
 import { InMemoryPqTrustStorage } from "./pqTrust.js";
 import { InMemoryVoiciStorage } from "./voici.js";
 import { InMemoryDirectAccessStorage } from "./directAccess.js";
-import { InMemoryNameRegistryStorage, type NameRecord } from "./names.js";
+import { InMemoryNameRegistryStorage, NAME_HOLD_MS, type NameRecord } from "./names.js";
 import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
 import { InMemoryRelayHealthStorage } from "./relayHealth.js";
 import { InMemoryBoxProxyLaneStorage } from "./boxProxyLane.js";
@@ -324,6 +324,23 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     this.names.accountGone(u, at);
     await this.demos?.delete(u);
     return this.byName.delete(u);
+  }
+  /** A rename (InMemoryNameChangeStorage): the registry moves the names, then the record changes key. */
+  async rename(oldName: string, newName: string, at: number, holdMs = NAME_HOLD_MS): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const o = oldName.toLowerCase();
+    const n = newName.toLowerCase();
+    const rec = this.byName.get(o);
+    if (!rec) return { ok: false, reason: "account not found" };
+    if (this.byName.has(n)) return { ok: false, reason: "name already taken" };
+    if (this.names.rows.some((r) => r.kind === "username" && r.owner === o && r.status === "active")) {
+      const moved = await this.names.renameUsername(o, n, at, holdMs);
+      if (!moved.ok) return { ok: false, reason: "name already taken" };
+    } else if (!this.names.claim({ name: n, kind: "username", owner: n, at }).ok) {
+      return { ok: false, reason: "name already taken" };
+    }
+    this.byName.delete(o);
+    this.byName.set(n, { ...rec, username: n });
+    return { ok: true };
   }
   /** Demo teardown (an operator's, not a person's): the name is released at once. */
   demoGone(username: string, at = Date.now()) {
@@ -2919,13 +2936,19 @@ export class InMemoryNameChangeStorage implements NameChangeStorage {
   async renameAccount(rec: NameChangeRecord): Promise<{ ok: true } | { ok: false; reason: string }> {
     const oldName = rec.oldUsername.toLowerCase();
     const newName = rec.newUsername.toLowerCase();
-    const prev = await this.usernames.get(oldName);
-    if (!prev) return { ok: false, reason: "account not found" };
-    if (await this.usernames.get(newName)) return { ok: false, reason: "name already taken" };
-    const put = await this.usernames.put({ ...prev, username: newName });
-    if (!put.ok) return { ok: false, reason: put.reason };
-    await this.usernames.delete(oldName);
-    this.rows.push({ ...rec, oldUsername: oldName, newUsername: newName });
+    if (this.usernames instanceof InMemoryUsernameStorage) {
+      const r = await this.usernames.rename(oldName, newName, rec.at, rec.oldNameHoldMs ?? NAME_HOLD_MS);
+      if (!r.ok) return r;
+    } else {
+      const prev = await this.usernames.get(oldName);
+      if (!prev) return { ok: false, reason: "account not found" };
+      if (await this.usernames.get(newName)) return { ok: false, reason: "name already taken" };
+      const put = await this.usernames.put({ ...prev, username: newName });
+      if (!put.ok) return { ok: false, reason: put.reason };
+      await this.usernames.delete(oldName);
+    }
+    const { oldNameHoldMs: _hold, ...kept } = rec;
+    this.rows.push({ ...kept, oldUsername: oldName, newUsername: newName });
     return { ok: true };
   }
   async countSince(aidPubHex: string, since: number): Promise<number> {
@@ -2962,6 +2985,9 @@ export class InMemoryVoucherStorage implements VoucherStorage {
     delete r.redeemedAt;
     delete r.redeemedBy;
     return true;
+  }
+  async delete(codeHash: string): Promise<boolean> {
+    return this.rows.delete(codeHash);
   }
 }
 

@@ -1081,6 +1081,31 @@ export async function adoptProfileKeys(cloudName) {
   return profileId;
 }
 
+/**
+ * The account was renamed ("Choose your own account name", lib/chooseName.js): carry every key record this browser
+ * keeps for the old profile to the new one (the wrapped device key, the admin-root record, the serving renewal key,
+ * a PIN wrap), then drop the old copies. The records are copied as they are: none of them is bound to the name.
+ * Returns the new profileId.
+ */
+export async function moveProfileKeys(fromCloudName, toCloudName) {
+  const fromId = profileIdFromCloudName(fromCloudName);
+  const toId = profileIdFromCloudName(toCloudName);
+  if (fromId === toId) return toId;
+  const pairs = [
+    [wrappedUmkRecordKey(fromId), wrappedUmkRecordKey(toId)],
+    [adminRootRecordKey(fromId), adminRootRecordKey(toId)],
+    [servingRenewalKeyRecordKey(fromId), servingRenewalKeyRecordKey(toId)],
+    [`pinWrap.${fromId}`, `pinWrap.${toId}`],
+    [`pinAttempts.${fromId}`, `pinAttempts.${toId}`],
+  ];
+  for (const [from, to] of pairs) {
+    const v = await dbGet(from);
+    if (v !== undefined && v !== null) await dbPut(to, v);
+  }
+  for (const [from] of pairs) await dbDel(from);
+  return toId;
+}
+
 export const _internal = {
   PBKDF2_ITERS,
   pkcs8FromSeed,

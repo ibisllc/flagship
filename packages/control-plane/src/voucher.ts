@@ -98,21 +98,18 @@ export type NameVoucherKind = Extract<VoucherKind, "name-change" | "dibs-claim">
 export async function consumeNameVoucher(
   deps: Pick<VoucherDeps, "vouchers" | "now">,
   args: { code: string; kind: NameVoucherKind; username: string },
-): Promise<{ ok: true; codeHash: string } | { ok: false; reason: string }> {
+): Promise<{ ok: true; codeHash: string } | { ok: false; reason: string; code: string }> {
   const codeHash = await sha256Hex(normalizeVoucherCode(args.code));
   const v = await deps.vouchers.get(codeHash);
-  if (!v) return { ok: false, reason: "invalid voucher code" };
+  if (!v) return { ok: false, reason: "invalid voucher code", code: "code-invalid" };
   if ((v.kind ?? "tier") !== args.kind) {
-    return {
-      ok: false,
-      reason: args.kind === "dibs-claim"
-        ? "this name is held for its .com holder — it needs a dibs claim voucher"
-        : "this voucher isn't a name-change voucher",
-    };
+    return args.kind === "dibs-claim"
+      ? { ok: false, reason: "this name is held for its .com holder — it needs a dibs claim voucher", code: "code-needs-dibs" }
+      : { ok: false, reason: "this voucher isn't a name-change voucher", code: "code-wrong-kind" };
   }
-  if (v.redeemedAt !== undefined) return { ok: false, reason: "voucher already redeemed" };
+  if (v.redeemedAt !== undefined) return { ok: false, reason: "voucher already redeemed", code: "code-used" };
   const won = await deps.vouchers.redeem(codeHash, args.username.toLowerCase(), nowMs(deps));
-  return won ? { ok: true, codeHash } : { ok: false, reason: "voucher already redeemed" };
+  return won ? { ok: true, codeHash } : { ok: false, reason: "voucher already redeemed", code: "code-used" };
 }
 
 /** Put a consumed name entitlement back (the rename it paid for failed). */

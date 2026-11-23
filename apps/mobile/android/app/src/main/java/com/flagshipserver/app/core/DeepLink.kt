@@ -177,6 +177,12 @@ sealed interface DeepLink {
         override fun toString(): String = "VoucherLink"
     }
 
+    /** A name the owner set aside for this person (`/app/choose-name#n=…&g=…&e=…`): "Choose your own account name"
+     *  at sign-up, filled in. [grant] is null when the fragment is damaged. The code is a bearer secret. */
+    data class ChooseName(val grant: NameGrant?) : DeepLink {
+        override fun toString(): String = "ChooseName"
+    }
+
     companion object {
         /// Parse a `flagship://...` URI, its `https://<control host>/app/...`
         /// twin, a control-host App Link (/join, /remote, …) OR a box
@@ -282,6 +288,7 @@ sealed interface DeepLink {
                 // Off in 0.4 (release/version.json "marketplace"): the link does nothing.
                 "marketplace" -> Marketplace.takeIf { com.flagshipserver.app.BuildConfig.MARKETPLACE }
                 "create-server" -> CreateServer
+                "choose-name" -> ChooseName(NameGrant.parseFragment(uri.encodedFragment))
                 "share" -> ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 "backup-download" -> {
                     val s = (params["s"] ?: "").lowercase()

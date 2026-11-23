@@ -63,7 +63,7 @@ describe("the voi.ci intro shows once, after creating an account", () => {
     const marks = [...boot.matchAll(/markVoiciIntroPending\(/g)];
     expect(marks.length).toBe(1);
     const create = boot.slice(boot.indexOf("async function createAccount()"), boot.indexOf("function showAccessOptions("));
-    expect(create).toContain("markVoiciIntroPending(chosen)");
+    expect(create).toContain("markVoiciIntroPending(finalName)");
     for (const f of ["views/join.js", "views/recovery.js", "views/restore-merge.js", "views/post-recovery.js", "lib/accountAccess.js"]) {
       expect(read(f)).not.toContain("markVoiciIntroPending");
     }

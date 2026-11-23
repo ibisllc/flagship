@@ -958,5 +958,7 @@
   "s3e35828888": "Resgates em paralelo deixavam um convite de uso único admitir mais pessoas do que o permitido",
   "se88c7ca78a": "Média · relatada e corrigida em novembro de 2026 · correção <1>14329ad6</1> e <2>91b992f4</2> · crédito aguardando a preferência de quem relatou",
   "sef0fd5b0ca": "Um convite para um app pode ser limitado a uma pessoa ou a um número definido. Nosso servidor contava as pessoas que já tinham entrado e depois adicionava a nova, em duas etapas separadas, então muitos resgates do mesmo link enviados ao mesmo tempo podiam passar todos pela contagem. Os servidores que rodam o app também não aplicavam o limite por conta própria, e quando um app roda em vários servidores, pessoas recusadas por um servidor entravam depois em outro.",
-  "s52f632bc3e": "Todos os caminhos exigiam o próprio link do convite. A contagem e a adição agora são uma única etapa, o resgate de convites tem limite de frequência, e cada servidor aplica o limite do convite e admite as mesmas primeiras pessoas que os outros servidores do app, a partir da próxima atualização de cada servidor. Os convites de teste que estavam acima do limite em produção foram revogados."
+  "s52f632bc3e": "Todos os caminhos exigiam o próprio link do convite. A contagem e a adição agora são uma única etapa, o resgate de convites tem limite de frequência, e cada servidor aplica o limite do convite e admite as mesmas primeiras pessoas que os outros servidores do app, a partir da próxima atualização de cada servidor. Os convites de teste que estavam acima do limite em produção foram revogados.",
+  "sa90a6e7e3a": "Um nome de conta reservado para você",
+  "s9b3ba30249": "Baixe o app Flagship e abra este link de novo ao criar sua conta, ou crie-a no app web."
 }

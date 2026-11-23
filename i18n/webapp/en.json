@@ -16297,5 +16297,89 @@
   "Read the policy": {
     "en": "Read the policy",
     "ctx": "webapp/lib/noticeUi.js:46"
+  },
+  "Open this link when you create your account.": {
+    "en": "Open this link when you create your account.",
+    "ctx": "webapp/lib/chooseName.js:154"
+  },
+  "This link has expired. Ask for a new one.": {
+    "en": "This link has expired. Ask for a new one.",
+    "ctx": "webapp/lib/chooseName.js:158"
+  },
+  "This link doesn't work any more. Ask for a new one.": {
+    "en": "This link doesn't work any more. Ask for a new one.",
+    "ctx": "webapp/lib/chooseName.js:161"
+  },
+  "This name is held for the owner of {0}.com until {1}.": {
+    "en": "This name is held for the owner of {0}.com until {1}.",
+    "ctx": "webapp/lib/chooseName.js:171"
+  },
+  "That voucher code isn't valid for an account name.": {
+    "en": "That voucher code isn't valid for an account name.",
+    "ctx": "webapp/lib/chooseName.js:176"
+  },
+  "That voucher code was already used.": {
+    "en": "That voucher code was already used.",
+    "ctx": "webapp/lib/chooseName.js:178"
+  },
+  "Payment cancelled. Your account keeps the name {0}.": {
+    "en": "Payment cancelled. Your account keeps the name {0}.",
+    "ctx": "webapp/lib/chooseName.js:180"
+  },
+  "The payment didn't go through. Your account keeps the name {0}.": {
+    "en": "The payment didn't go through. Your account keeps the name {0}.",
+    "ctx": "webapp/lib/chooseName.js:182"
+  },
+  "The name change didn't go through. Your account keeps the name {0}, and your $10 stays in your account as vouchers.": {
+    "en": "The name change didn't go through. Your account keeps the name {0}, and your $10 stays in your account as vouchers.",
+    "ctx": "webapp/lib/chooseName.js:185"
+  },
+  "The name change didn't go through. Your account keeps the name {0}, and your voucher code still works.": {
+    "en": "The name change didn't go through. Your account keeps the name {0}, and your voucher code still works.",
+    "ctx": "webapp/lib/chooseName.js:186"
+  },
+  "Choose your own account name": {
+    "en": "Choose your own account name",
+    "ctx": "webapp/lib/modal.js:324"
+  },
+  "This name has been set aside for you.": {
+    "en": "This name has been set aside for you.",
+    "ctx": "webapp/views/choose-name.js:51"
+  },
+  "Your own account name costs $10.": {
+    "en": "Your own account name costs $10.",
+    "ctx": "webapp/views/choose-name.js:55"
+  },
+  "Pay $10": {
+    "en": "Pay $10",
+    "ctx": "webapp/views/choose-name.js:57"
+  },
+  "Use a voucher": {
+    "en": "Use a voucher",
+    "ctx": "webapp/views/choose-name.js:58"
+  },
+  "Voucher code": {
+    "en": "Voucher code",
+    "ctx": "webapp/views/choose-name.js:61"
+  },
+  "Use voucher": {
+    "en": "Use voucher",
+    "ctx": "webapp/views/choose-name.js:63"
+  },
+  "Keep {0}": {
+    "en": "Keep {0}",
+    "ctx": "webapp/views/choose-name.js:67"
+  },
+  "Setting up your account name…": {
+    "en": "Setting up your account name…",
+    "ctx": "webapp/views/choose-name.js:243"
+  },
+  "Finishing your account name…": {
+    "en": "Finishing your account name…",
+    "ctx": "webapp/views/choose-name.js:252"
+  },
+  "Your account is now {0}.": {
+    "en": "Your account is now {0}.",
+    "ctx": "webapp/views/choose-name.js:255"
   }
 }
