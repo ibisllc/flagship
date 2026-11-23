@@ -144,10 +144,10 @@ function parseAuthData(a: Uint8Array, opts: { assertion?: boolean } = {}): AuthD
   let p = 37;
   let aaguid: Uint8Array | null = null;
   let credentialId: Uint8Array | null = null;
-  // An assertion carries no credential data, but recent iOS sets the attested-data flag anyway and puts the
-  // extension map straight after the 37-byte header (flags 0xC0): a CBOR map there is the extensions, not a credential.
-  const extensionsNext = opts.assertion && a.length > p && (a[p]! & 0xe0) === 0xa0;
-  if (flags & 0x40 && !extensionsNext) {
+  // An assertion never carries credential data, but iOS sets the attested-data flag on it anyway, with nothing or
+  // only an extension map after the 37-byte header (seen live: flags with 0x40 and no bytes after the header).
+  const extensionsNext = !!opts.assertion && a.length > p && (a[p]! & 0xe0) === 0xa0;
+  if (flags & 0x40 && !opts.assertion) {
     if (a.length < p + 18) throw new Error("attested data truncated");
     aaguid = a.slice(p, p + 16);
     const len = (a[p + 16]! << 8) | a[p + 17]!;
@@ -158,7 +158,7 @@ function parseAuthData(a: Uint8Array, opts: { assertion?: boolean } = {}): AuthD
     p = cborDecode(a, p).next;
   }
   let category: number | null = null;
-  if (flags & 0x80 || extensionsNext) {
+  if ((flags & 0x80 && a.length > p) || extensionsNext) {
     const ext = cborDecode(a, p);
     p = ext.next;
     if (ext.value instanceof Map) {

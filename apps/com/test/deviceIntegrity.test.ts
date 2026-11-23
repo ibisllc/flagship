@@ -127,9 +127,11 @@ async function appAttest(o: { aaguid?: Uint8Array; counter?: number; category?: 
   const leafDer = await cert({ subject: "leaf", issuer: "Test App Attest CA", key: leaf, signer: inter, exts: [nonceExt] });
   const attestation = cbor(new Map<C, C>([["fmt", "apple-appattest"], ["attStmt", new Map<C, C>([["x5c", [leafDer, interDer]], ["receipt", new Uint8Array([1])]])], ["authData", authData]]));
   const policy: AppAttestPolicy = { appId: APP_ID, environment: "production", rootDer };
-  async function assertion(data: Uint8Array, ctr: number, o: { ios27?: number; signRaw?: boolean } = {}): Promise<Uint8Array> {
+  async function assertion(data: Uint8Array, ctr: number, o: { ios27?: number; signRaw?: boolean; flags?: number } = {}): Promise<Uint8Array> {
     const ad =
-      o.ios27 !== undefined
+      o.flags !== undefined
+        ? cat(sha(utf8(APP_ID)), new Uint8Array([o.flags, 0, 0, 0, ctr]))
+        : o.ios27 !== undefined
         ? cat(sha(utf8(APP_ID)), new Uint8Array([0xc0, 0, 0, 0, ctr]), cbor(new Map<C, C>([["apple_validation_category_01", o.ios27]])))
         : cat(sha(utf8(APP_ID)), new Uint8Array([0, 0, 0, 0, ctr]));
     const n = o.signRaw ? cat(ad, sha(data)) : sha(ad, sha(data));
@@ -190,6 +192,14 @@ describe("App Attest", () => {
     expect(await verifyAppAttestAssertion(a, w.clientData, w.pubRaw, 0, w.policy)).toEqual({ ok: true, counter: 1 });
     const dev = await w.assertion(w.clientData, 2, { ios27: DEV_CATEGORY });
     expect(await verifyAppAttestAssertion(dev, w.clientData, w.pubRaw, 1, w.policy)).toEqual({ ok: false, why: "validation category" });
+  });
+
+  it("takes an assertion whose flags claim attested data or extensions it doesn't carry (seen on a live iPhone)", async () => {
+    const w = await appAttest();
+    for (const [i, flags] of [0x40, 0x80, 0xc0, 0x41].entries()) {
+      const a = await w.assertion(w.clientData, i + 1, { flags });
+      expect(await verifyAppAttestAssertion(a, w.clientData, w.pubRaw, i, w.policy)).toEqual({ ok: true, counter: i + 1 });
+    }
   });
 
   it("takes a signature over authenticatorData || clientDataHash itself", async () => {
