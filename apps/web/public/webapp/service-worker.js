@@ -574,7 +574,9 @@
 //  v252: the pending re-pair read carries the account read token (security report F3: `.com` answers it only to the
 //       account's devices and servers), and the re-pair refusals with a code (a used request or code, a veto in the
 //       last day, a wrong clock) are worded; precaches lib/rePairRefusal.js.
-const SHELL_VERSION = "v252";
+//  v253: invites (security report F4): no approve-first option or "Finalize an acceptance" card (no box finalizes one
+//       any more), and an Activity row when someone joins an app through an invite.
+const SHELL_VERSION = "v253";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

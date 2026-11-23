@@ -86,6 +86,9 @@ import {
 
 const HEX_RE = /^[0-9a-f]*$/i;
 
+/** The refusal code for a manual-approve invite or finalize (security report F4 e); the box answers the same. */
+export const MANUAL_APPROVAL_UNAVAILABLE = "manual-approval-unavailable";
+
 export interface ServiceInviteDeps {
   invites: ServiceInviteStorage;
   usernames: UsernameStorage;
@@ -312,6 +315,11 @@ export async function handleCreateServiceInvite(
   }
   const approvalMode = parseApprovalMode(r.approvalMode);
   if (typeof approvalMode === "object") return malformed(approvalMode.error);
+  // No box finalizes a manual-approve acceptance any more (security report F4 e), so such an invite could never
+  // let anyone in: refuse it up front. An author-signed finalize is future work (docs/service-access-gating.md).
+  if (approvalMode === "manual") {
+    return { status: 410, body: { error: "manual approval is unavailable", code: MANUAL_APPROVAL_UNAVAILABLE } };
+  }
   if (r.deviceId !== undefined && (typeof r.deviceId !== "string" || !DEVICE_ID_RE.test(r.deviceId))) {
     return malformed("deviceId must be 32 lowercase hex");
   }

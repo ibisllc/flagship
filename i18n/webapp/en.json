@@ -16281,5 +16281,9 @@
   "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": {
     "en": "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.",
     "ctx": "webapp/lib/rePairRefusal.js:18"
+  },
+  "Someone joined an app through an invite": {
+    "en": "Someone joined an app through an invite",
+    "ctx": "webapp/lib/activityFeed.js:30"
   }
 }

@@ -3995,5 +3995,6 @@
   "An admin of this account rejected a recovery with this device less than a day ago. You can try again after a day, or ask the admin.": "Un administrador de esta cuenta rechazó una recuperación con este dispositivo hace menos de un día. Puedes volver a intentarlo pasado un día o pedírselo al administrador.",
   "This recovery request was already used. Start the recovery again.": "Esta solicitud de recuperación ya se usó. Vuelve a iniciar la recuperación.",
   "That code was already used for a recovery. Wait for a new code, or repeat the recovery step, and try again.": "Ese código ya se usó para una recuperación. Espera a un código nuevo, o repite el paso de recuperación, y vuelve a intentarlo.",
-  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "El reloj de este dispositivo no coincide con el de Flagship. Configura la fecha y la hora como automáticas y vuelve a intentarlo."
+  "This device's clock doesn't match Flagship's. Set the date and time to automatic, then try again.": "El reloj de este dispositivo no coincide con el de Flagship. Configura la fecha y la hora como automáticas y vuelve a intentarlo.",
+  "Someone joined an app through an invite": "Alguien se unió a una app con una invitación"
 }

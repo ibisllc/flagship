@@ -79,20 +79,16 @@ export const WEB_APPS: readonly Scenario[] = [
     },
   ),
   webTotal(
-    "web-total-members-approve-first-finalize",
-    "An approve-first invite is sent with approvalMode manual and shows its hint; Finalize refuses an empty or junk paste without asking the box, and a real acceptance (signed with the invitee's per-app id) posts only {accept, acceptSig} to the box and says it's granted.",
-    "gym members an approve-first invite shows its hint and Finalize grants a pasted acceptance",
+    "web-total-members-no-approve-first",
+    "A person's invite offers no approve-first option and the page has no Finalize card (security report F4: no box finalizes a manual-approve acceptance); the create goes out with approvalMode auto.",
+    "gym members a person's invite has no approve-first option and there is no Finalize card",
     {
       steps: [
-        { kind: "tap", describe: "I approve them first; Create.", handle: "#sa-approve" },
-        { kind: "type", describe: "Paste junk, then a real reply.", handle: "#sa-accept-input" },
-        { kind: "tap", describe: "Finalize & grant access.", handle: "#sa-accept-go" },
+        { kind: "tap", describe: "Add person.", handle: "#sa-add-person" },
+        { kind: "tap", describe: "Create.", handle: "#sa-add-go" },
       ],
-      assertions: [
-        { describe: "Hint", handle: "#sa-manual-hint", expect: "present" },
-        { describe: "Granted", handle: "#sa-accept-status", expect: "text", text: "Granted — they can open it now." },
-      ],
-      screenshots: [shot("approve-first-invite", "The approve-first row."), shot("finalize-granted", "Granted.")],
+      assertions: [{ describe: "Created", handle: "#sa-add-status", expect: "text", text: "Invite for Kim created." }],
+      screenshots: [shot("no-approve-first", "The add-person card without the approve-first option.")],
       dimension: "D4",
     },
   ),

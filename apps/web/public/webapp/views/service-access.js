@@ -6,9 +6,9 @@
 // device, and the co-managing accounts, under the owner's label), each with
 // its rank; and the invited people and groups with theirs (member < manager <
 // master, set by signed orders the box verifies; apps enforce them). The toggle
-// never changes the list. Add a person (or one you approve first: the friend
-// replies an acceptance the author finalizes here) or a group link (maxN,
-// optional expiry), each with its rank; names and photos are sealed under the
+// never changes the list. Add a person or a group link (maxN, optional
+// expiry), each with its rank (approve-first invites are off until an
+// author-signed finalize exists: security report F4); names and photos are sealed under the
 // household key (.com stores ciphertext). Remove = revoke on .com AND withdraw
 // on the box (it prunes who joined through it).
 //
@@ -64,8 +64,6 @@ import {
   removeServiceAllow,
   revokeInvite,
   setServiceAccessMode,
-  submitAccept,
-  parseAcceptReply,
   withdrawInviteOnBox,
 } from "../lib/serviceInvite.js";
 import { crownIcon, monitorIcon, usersIcon } from "../lib/icons.js";
@@ -291,7 +289,6 @@ export async function renderServiceAccess(service) {
         <label class="mt-2">${tr("Photo")} <span class="faint-sm">${tr("(optional)")}</span></label>
         <input id="sa-photo" type="file" accept="image/*" />
         <div id="sa-photo-preview" class="mt-2"></div>
-        <label class="inline-check mt-2"><input type="checkbox" id="sa-approve" /> ${tr("I approve them before they get in (most secure)")}</label>
       </div>
       <div id="sa-group-opts" class="hidden mt-2">
         <p class="note">${tr("Anyone the link reaches (up to the limit) joins with this rank. Set a limit and an expiry.")}</p>
@@ -310,22 +307,9 @@ export async function renderServiceAccess(service) {
           <button id="sa-share" class="secondary">${tr("Share…")}</button>
           <button id="sa-copy" class="secondary">${tr("Copy link")}</button>
         </div>
-        <p id="sa-manual-hint" class="note mt-2 hidden">
-          ${tr("You approve this one. After they open the link, they'll send you back an acceptance code — paste it under &ldquo;Finalize an acceptance&rdquo; below to let them in.")}
-        </p>
       </div>
     </div>
     <div id="sa-people" class="mt-2"><div class="card placeholder">${tr("loading…")}</div></div>
-
-    <h2 class="mt-4">${tr("Finalize an acceptance")}</h2>
-    <div class="card">
-      <p class="note">
-        ${tr("For an invite you approve: paste the acceptance code (or link) your friend sent back. It never reveals who they are — you're just confirming it really came from them.")}
-      </p>
-      <textarea id="sa-accept-input" rows="2" placeholder="https://flagshipserver.com/invite-accept?…" class="mt-1"></textarea>
-      <button id="sa-accept-go" class="full-width mt-2">${tr("Finalize &amp; grant access")}</button>
-      <div id="sa-accept-status" class="mt-2 text-sm"></div>
-    </div>
   `;
 
   void loadRestoredCard(serviceRef, admin);
@@ -344,9 +328,6 @@ export async function renderServiceAccess(service) {
   $("sa-photo")?.addEventListener("change", onPhotoPicked);
   $("sa-add-go")?.addEventListener("click", () => {
     onAdd(serviceRef).catch((e) => { console.error(e); toast(humanError(e), "err"); });
-  });
-  $("sa-accept-go")?.addEventListener("click", () => {
-    onFinalizeAccept(serviceRef).catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   $("sa-scope-toggle")?.addEventListener("change", (ev) => {
     onScopeToggle(service, ev.currentTarget.checked).catch((e) => { console.error(e); toast(humanError(e), "err"); });
@@ -642,7 +623,6 @@ async function onAdd(serviceRef) {
       expiresAt = Date.now() + Math.round(days) * 86_400_000;
     }
   }
-  const manual = !isGroup && !!$("sa-approve")?.checked;
   // An admin's invite is signed with the admin root: one fresh unlock for it
   // and its rank (owner rule: one biometric per invite).
   if (admin) {
@@ -679,7 +659,8 @@ async function onAdd(serviceRef) {
       serviceRef,
       bundle,
       householdKey,
-      approvalMode: manual ? "manual" : "auto",
+      // Manual approval is off until an author-signed finalize exists (security report F4).
+      approvalMode: "auto",
       ...(maxRedemptions !== undefined ? { maxRedemptions } : {}),
       ...(expiresAt !== undefined ? { expiresAt } : {}),
       deviceId: thisDeviceId(),
@@ -709,7 +690,6 @@ async function onAdd(serviceRef) {
     const linkEl = $("sa-link");
     if (result) result.classList.remove("hidden");
     if (linkEl) linkEl.value = r.link;
-    $("sa-manual-hint")?.classList.toggle("hidden", !manual);
     await renderQrInto($("sa-qr"), r.link);
     // One handler each, for the newest link: a second invite must not also
     // hand over the first one's link.
@@ -719,7 +699,6 @@ async function onAdd(serviceRef) {
     if (copy) copy.onclick = () => copyIt(r.link);
     if ($("sa-name")) $("sa-name").value = "";
     if ($("sa-photo")) $("sa-photo").value = "";
-    if ($("sa-approve")) $("sa-approve").checked = false;
     pickedPhotoDataUri = null;
     if ($("sa-photo-preview")) $("sa-photo-preview").innerHTML = "";
     await renderPeople(serviceRef);
@@ -734,53 +713,6 @@ async function onAdd(serviceRef) {
       goBtn.disabled = false;
       goBtn.textContent = tr("Create invite link");
     }
-  }
-}
-
-/**
- * MANUAL-approve finalize CORE — DOM-free + dependency-injected (mirrors
- * runRemovePerson). Parses the friend's acceptance reply and submits ONLY
- * `{accept, acceptSig}` to the AUTHOR's box; the box fetches the owner's signed
- * create from `.com` by inviteId (so finalize works from ANY device — no local
- * create cache). Throws a tagged error when the reply is junk (`bad-accept`).
- */
-export async function runFinalizeAccept(
-  { raw },
-  { podBaseUrl, parseAcceptReply, submitAccept },
-) {
-  const parsed = parseAcceptReply(raw);
-  if (!parsed) throw err(tr("That doesn't look like an acceptance code. Paste the whole thing."), "bad-accept");
-  const r = await submitAccept({
-    baseUrl: podBaseUrl(),
-    accept: parsed.accept,
-    acceptSig: parsed.acceptSig,
-  });
-  return { ok: true, serviceRef: r.serviceRef, boundAID: r.boundAID };
-}
-
-async function onFinalizeAccept(serviceRef) {
-  const status = $("sa-accept-status");
-  const btn = $("sa-accept-go");
-  if (btn?.disabled) return;
-  const raw = ($("sa-accept-input")?.value || "").trim();
-  if (!raw) {
-    if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = tr("Paste the acceptance code first."); }
-    return;
-  }
-  if (status) { status.className = "mt-2 text-sm"; status.textContent = tr("finalizing…"); }
-  if (btn) { btn.disabled = true; btn.textContent = tr("Finalizing…"); }
-  try {
-    await runFinalizeAccept({ raw }, { podBaseUrl, parseAcceptReply, submitAccept });
-    if (status) { status.className = "mt-2 text-sm ok-text"; status.textContent = tr("Granted — they can open it now."); }
-    if ($("sa-accept-input")) $("sa-accept-input").value = "";
-    await renderPeople(serviceRef);
-  } catch (e) {
-    // A pasted reply that isn't an acceptance code says so; anything else is the box's.
-    const text = e?.code === "bad-accept" ? e.message : humanError(e);
-    if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = text; }
-    throw e;
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = tr("Finalize & grant access"); }
   }
 }
 

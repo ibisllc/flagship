@@ -27,6 +27,7 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "app.installed": { label: tr("App installed"), icon: "➕" },
   "app.updated": { label: tr("App redeployed"), icon: "🔁" },
   "app.removed": { label: tr("App removed"), icon: "➖" },
+  "app.member.joined": { label: tr("Someone joined an app through an invite"), icon: "🙋" },
   "share.granted": { label: tr("Shared this server"), icon: "🤝" },
   "share.changed": { label: tr("Changed a share"), icon: "🤝" },
   "share.revoked": { label: tr("Ended a share"), icon: "🤝" },

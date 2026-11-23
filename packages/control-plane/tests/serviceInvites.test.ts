@@ -466,7 +466,7 @@ describe("v2 — create persists caps + redeem enforces them", () => {
   it("create persists the signature + maxN/expiry/approvalMode", async () => {
     const deps = await freshDeps();
     const { body, create } = createEnvelope({ maxRedemptions: 3, expiresAt: NOW + 60_000 }, {
-      approvalMode: "manual",
+      approvalMode: "auto",
     });
     const res = await handleCreateServiceInvite(deps, "alice", body);
     expect(res.status).toBe(200);
@@ -475,7 +475,16 @@ describe("v2 — create persists caps + redeem enforces them", () => {
     expect(rec.createIssuedAt).toBe(NOW);
     expect(rec.maxRedemptions).toBe(3);
     expect(rec.expiresAt).toBe(NOW + 60_000);
-    expect(rec.approvalMode).toBe("manual");
+    expect(rec.approvalMode).toBe("auto");
+  });
+
+  it("refuses a manual-approve create with a stable code (security report F4 e)", async () => {
+    const deps = await freshDeps();
+    const { body, create } = createEnvelope({}, { approvalMode: "manual" });
+    const res = await handleCreateServiceInvite(deps, "alice", body);
+    expect(res.status).toBe(410);
+    expect(res.body).toMatchObject({ code: "manual-approval-unavailable" });
+    expect(await deps.invites.get(create.inviteId)).toBeUndefined();
   });
 
   it("a GROUP invite binds multiple AIDs up to maxN then 409s 'invite is full'", async () => {
@@ -498,10 +507,21 @@ describe("v2 — create persists caps + redeem enforces them", () => {
     expect(res.status).toBe(410);
   });
 
-  it("MANUAL-approve redeem returns {pending} with NO bind", async () => {
+  it("MANUAL-approve redeem of an older manual invite returns {pending} with NO bind", async () => {
     const deps = await freshDeps();
-    const { body, create } = createEnvelope({}, { approvalMode: "manual" });
-    await handleCreateServiceInvite(deps, "alice", body);
+    const { body, create } = createEnvelope();
+    // Created before manual approval was refused (security report F4 e).
+    await deps.invites.create({
+      inviteId: create.inviteId,
+      authorAID: hex(create.authorAID),
+      serviceRef: create.serviceRef,
+      encryptedBundle: create.encryptedBundle,
+      secretHash: create.secretHash,
+      createdAt: NOW,
+      createSig: body.signature,
+      createIssuedAt: NOW,
+      approvalMode: "manual",
+    });
     const res = await handleRedeemServiceInvite(deps, redeemBody());
     expect(res.status).toBe(200);
     const b = res.body as { pending: boolean; approvalMode: string; createSig: string };
@@ -609,7 +629,7 @@ describe("handleFetchServiceInviteCreate (box STK-signed, any-device finalize)",
   const SERVER_DOMAIN = "home.alice.flagship.services";
   const INVITE_ID = serviceInviteId(authorAid.publicKey, authorDevice.publicKey, 0);
 
-  /** alice + a registered server (STK identity) + one manual invite created. */
+  /** alice + a registered server (STK identity) + one invite created. */
   async function depsWithServerAndInvite(stk: Keypair) {
     const storage = new InMemoryStorage();
     await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
@@ -620,7 +640,7 @@ describe("handleFetchServiceInviteCreate (box STK-signed, any-device finalize)",
       registeredAt: 1,
     });
     const deps = { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers, now: () => NOW };
-    await handleCreateServiceInvite(deps, "alice", createEnvelope({}, { approvalMode: "manual" }).body);
+    await handleCreateServiceInvite(deps, "alice", createEnvelope().body);
     return deps;
   }
 
@@ -659,7 +679,7 @@ describe("handleFetchServiceInviteCreate (box STK-signed, any-device finalize)",
     const stk = deriveIRK({ seed: new Uint8Array(32).fill(202) });
     const deps = await depsWithServerAndInvite(stk);
     const before = (await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk))).body as Record<string, unknown>;
-    expect(before).toMatchObject({ revokedAt: null, expiresAt: null, approvalMode: "manual", redemptions: 0 });
+    expect(before).toMatchObject({ revokedAt: null, expiresAt: null, approvalMode: "auto", redemptions: 0 });
     await deps.invites.revoke(INVITE_ID, NOW);
     const after = (await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk))).body as Record<string, unknown>;
     expect(after.revokedAt).toBe(NOW);
@@ -697,7 +717,7 @@ describe("handleFetchServiceInviteCreate (box STK-signed, any-device finalize)",
     const stk = deriveIRK({ seed: new Uint8Array(32).fill(204) });
     await storage.servers.put({ serverDomain: "home.bob.flagship.services", username: "bob", identityPubKeyHex: hex(stk.publicKey), registeredAt: 1 });
     const deps = { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers, now: () => NOW };
-    await handleCreateServiceInvite(deps, "alice", createEnvelope({}, { approvalMode: "manual" }).body);
+    await handleCreateServiceInvite(deps, "alice", createEnvelope().body);
     const res = await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk, { serverDomain: "home.bob.flagship.services" }));
     expect(res.status).toBe(403);
   });
@@ -722,7 +742,7 @@ describe("handleFetchServiceInviteCreate (box STK-signed, any-device finalize)",
     const storage = new InMemoryStorage();
     await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
     const deps = { invites: storage.serviceInvites, usernames: storage.usernames, now: () => NOW };
-    await handleCreateServiceInvite(deps, "alice", createEnvelope({}, { approvalMode: "manual" }).body);
+    await handleCreateServiceInvite(deps, "alice", createEnvelope().body);
     const stk = deriveIRK({ seed: new Uint8Array(32).fill(207) });
     const res = await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk));
     expect(res.status).toBe(403);

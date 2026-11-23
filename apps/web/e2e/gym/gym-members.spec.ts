@@ -2,7 +2,7 @@
  * The Services list and an app's pages, the controls gym-apps doesn't press:
  * the list's search, filters, refresh, copy and card; Access control's switch
  * back to Open, invites at Manager and Master with their link, QR, Copy and
- * Share, group and approve-first invites, Finalize, Remove and the Cancel
+ * Share and group invites (no approve-first or Finalize: security report F4), Remove and the Cancel
  * paths; the invitee's redeem screen; internet access Ignore / Dismiss / View
  * list, the three global access-alert sheets and an older box's egress card;
  * API keys' scope, Enter, Copy and Cancel; the Database's paging, CSV export
@@ -491,57 +491,24 @@ test.describe("gym webapp members and app pages", () => {
     expect(st.invites).toHaveLength(1);
   });
 
-  test("gym members an approve-first invite shows its hint and Finalize grants a pasted acceptance", async ({ page }, testInfo) => {
+  test("gym members a person's invite has no approve-first option and there is no Finalize card", async ({ page }, testInfo) => {
+    // Security report F4: no box finalizes a manual-approve acceptance any more, so the webapp offers neither.
     const keys = await reachHome(page, { kind: "admin" });
     const myPub = await thisDevicePub(page);
     const m = base(await mock(page));
     accessControl(page, m, keys, { myPub });
-    m.post(onHome("/api/service-access/accept"), (c) => ({ json: { bound: true, serviceRef: c.body.accept.serviceRef, boundAID: c.body.accept.contactAID } }));
     await openAccessControl(page);
 
     await page.click("#sa-add-person");
+    await expect(page.locator("#sa-approve")).toHaveCount(0);
+    await expect(page.locator("#sa-accept-go")).toHaveCount(0);
     await page.fill("#sa-name", "Kim");
-    await page.check("#sa-approve");
     await page.click("#sa-add-go");
     await freshUnlock(page, "Invite Kim?");
     await expect(page.locator("#sa-add-status")).toHaveText("Invite for Kim created.", { timeout: 10_000 });
-    await expect(page.locator("#sa-manual-hint")).toBeVisible();
     const req = m.last((u) => u.pathname === "/api/users/smoketest/service-invites")!.body.request;
-    expect(req.approvalMode).toBe("manual");
-    await expect(page.locator("#sa-people .card", { hasText: "Kim" })).toContainText("you approve — waiting for their acceptance", { timeout: 10_000 });
-    await shot(page, testInfo, "approve-first-invite");
-
-    // Nothing pasted, then junk: the box is never asked.
-    await page.click("#sa-accept-go");
-    await expect(page.locator("#sa-accept-status")).toHaveText("Paste the acceptance code first.");
-    await page.fill("#sa-accept-input", "hello there");
-    await page.click("#sa-accept-go");
-    await expect(page.locator("#sa-accept-status")).toHaveText("That doesn't look like an acceptance code. Paste the whole thing.");
-    await expect(page.locator("#sa-accept-status")).toHaveClass(/err-text/);
-    await expect(page.locator("#sa-accept-go")).toBeEnabled();
-    expect(m.sent("/api/service-access/accept")).toHaveLength(0);
-
-    // Kim's real reply, signed with Kim's id for this app.
-    const reply = await page.evaluate(
-      async ({ inviteId, serviceRef, host }) => {
-        const ks = await import("/keystore.js");
-        const si = await import("/lib/serviceInvite.js");
-        const kimUmk = crypto.getRandomValues(new Uint8Array(32));
-        const app = await ks.deriveAppAccountIdFromSeed(kimUmk, serviceRef);
-        const acceptedAt = Date.now();
-        const sig = await si.signAcceptServiceInvite({ inviteId, serviceRef, contactAID: app.publicKey, acceptedAt, umk: kimUmk }, ks.signWithAppAccountId);
-        return si.buildAcceptReply(host, { inviteId, serviceRef, contactAID: ks.bytesToHex(app.publicKey), acceptedAt }, ks.bytesToHex(sig));
-      },
-      { inviteId: req.inviteId, serviceRef: SERVICE_ID, host: HOME },
-    );
-    await page.fill("#sa-accept-input", `  ${reply}  `);
-    await page.click("#sa-accept-go");
-    await expect(page.locator("#sa-accept-status")).toHaveText("Granted — they can open it now.", { timeout: 10_000 });
-    await expect(page.locator("#sa-accept-input")).toHaveValue("");
-    const sent = m.last(onHome("/api/service-access/accept"))!;
-    expect(Object.keys(sent.body).sort()).toEqual(["accept", "acceptSig"]);
-    expect(sent.body.accept).toMatchObject({ inviteId: req.inviteId, serviceRef: SERVICE_ID });
-    await shot(page, testInfo, "finalize-granted");
+    expect(req.approvalMode).toBe("auto");
+    await shot(page, testInfo, "no-approve-first");
   });
 
   test("gym members an admin removes a member, and the box prunes them under the admin root", async ({ page }, testInfo) => {

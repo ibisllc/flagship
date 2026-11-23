@@ -69,13 +69,17 @@ describe("service-access admin view", () => {
     expect(r.body).toContain("renderQrSvg");
   });
 
-  it("/views/service-access.js adds a person (or one you approve) or a group, each with a role, + the manual accept loop", async () => {
+  it("/views/service-access.js adds a person or a group, each with a role; no approve-first option (security report F4)", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/service-access.js" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain("+ Add person");
     expect(r.body).toContain("+ Add group");
-    expect(r.body).toContain('id="sa-approve"');
+    // Approve-first invites and their finalize are off until an author-signed finalize exists.
+    expect(r.body).not.toContain('id="sa-approve"');
+    expect(r.body).not.toContain("sa-accept-go");
+    expect(r.body).not.toContain("runFinalizeAccept");
+    expect(r.body).not.toContain('approvalMode: manual');
     expect(r.body).toContain('id="sa-new-role"');
     expect(r.body).toContain("inviteTarget(r.inviteId)");
     // Group caps surfaced + threaded onto the create.
@@ -83,10 +87,6 @@ describe("service-access admin view", () => {
     expect(r.body).toContain("maxRedemptions");
     expect(r.body).toContain("expiresAt");
     expect(r.body).toContain("approvalMode");
-    // The manual-approve finalize (author submits the friend's acceptance).
-    expect(r.body).toContain("submitAccept");
-    expect(r.body).toContain("parseAcceptReply");
-    expect(r.body).toContain("runFinalizeAccept");
     // The group entry shows one "k of N joined" line with a revoke.
     expect(r.body).toContain("{0} of {1} joined");
     expect(r.body).toContain('isGroup ? tr("Revoke") : tr("Remove")');
@@ -366,55 +366,3 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────
-// runFinalizeAccept — the MANUAL-approve author finalize core (no DOM).
-// The author parses the friend's acceptance reply and submits ONLY {accept,
-// acceptSig} to the box's accept endpoint; the box fetches the owner's create
-// from .com by inviteId (any-device finalize — NO local create cache).
-// ──────────────────────────────────────────────────────────────────────
-describe("service-access — runFinalizeAccept (manual-approve finalize)", () => {
-  const SERVICE = "alice-notes";
-  const INVITE = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890";
-  const CONTACT = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a";
-  const parsedReply = {
-    serverDomain: "home.alice.flagship.services",
-    accept: { inviteId: INVITE, serviceRef: SERVICE, contactAID: CONTACT, acceptedAt: 1700006000000 },
-    acceptSig: "11".repeat(64),
-  };
-
-  it("parses the reply and submits ONLY {accept, acceptSig} (no create)", async () => {
-    const mod = await loadServiceAccessModule();
-    const submitAccept = vi.fn(async () => ({ bound: true, serviceRef: SERVICE, boundAID: CONTACT }));
-    const out = await mod.runFinalizeAccept(
-      { raw: ` flagship://invite-accept?server=home.alice.flagship.services&iid=${INVITE} ` },
-      {
-        podBaseUrl: () => "https://home.alice.flagship.services",
-        parseAcceptReply: () => parsedReply,
-        submitAccept,
-      },
-    );
-    expect(out).toEqual({ ok: true, serviceRef: SERVICE, boundAID: CONTACT });
-    expect(submitAccept).toHaveBeenCalledTimes(1);
-    const arg = submitAccept.mock.calls[0]![0] as {
-      baseUrl: string; accept: { inviteId: string }; acceptSig: string; create?: unknown; createSig?: string;
-    };
-    expect(arg.baseUrl).toBe("https://home.alice.flagship.services");
-    expect(arg.accept.inviteId).toBe(INVITE);
-    expect(arg.acceptSig).toBe(parsedReply.acceptSig);
-    // No create / createSig — the box fetches the signed create from .com.
-    expect(arg.create).toBeUndefined();
-    expect(arg.createSig).toBeUndefined();
-  });
-
-  it("a junk reply → a tagged bad-accept error (no submit)", async () => {
-    const mod = await loadServiceAccessModule();
-    const submitAccept = vi.fn();
-    await expect(
-      mod.runFinalizeAccept(
-        { raw: "garbage" },
-        { podBaseUrl: () => "https://x", parseAcceptReply: () => null, submitAccept },
-      ),
-    ).rejects.toMatchObject({ code: "bad-accept" });
-    expect(submitAccept).not.toHaveBeenCalled();
-  });
-});
