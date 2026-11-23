@@ -172,6 +172,9 @@ final class VisitorConversationModel {
         do {
             let order = try VoiciRings.signedRingBack(pageId: callee.pageId, conv: keys.conv, op: "stop", issuedAt: deps.now(), pseudonymSeed: keys.p.seed)
             try await deps.client.ringBack(order: order, account: deps.account, device: device)
+            // A locked phone stops naming this page's call-backs (docs/voici-locked-caller-names.md §3.1).
+            VoiciLockedNamesSettings.noteStopped(deps.account, pageId: callee.pageId, at: deps.now())
+            MessagesStore.shared.rebuildLockedNames()
             note = String(localized: "They can't ring you back in this conversation any more.")
         } catch {
             note = MessagesStore.sentence(error)

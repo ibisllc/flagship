@@ -66,6 +66,11 @@ public final class MessagesStore {
     public private(set) var missedCalls: [VoiciMissedCallRow] = []
     /// "Answer calls while Flagship is locked" is on here: this device holds a bound call key.
     public private(set) var answersWhileLocked = false
+    /// "Show names while locked" is on here (docs/voici-locked-caller-names.md): this device keeps the locked-names table.
+    public private(set) var showsNamesWhileLocked = false
+    /// The synced state blob was read this session (or `.com` holds none): only then is the locked-names table rebuilt,
+    /// so a cold start before the unlock never writes an empty one over a good one.
+    @ObservationIgnored private var stateLoaded = false
     /// A calls change being published (`setCalls`); nil: every publish carries the index's own calls setting.
     @ObservationIgnored private var pendingCalls: (on: Bool, from: String)?
     /// "Show in search engines" while its own publish is signed (nil: carry the published index's value).
@@ -109,7 +114,10 @@ public final class MessagesStore {
         state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
         reveals = [:]; ringBackFlags = [:]; noRingBack = []; callSettings = nil; callSettingsVersion = 0
         local = Local()
+        stateLoaded = false
         VoiciCallHistory.shared.configure(username: u.isEmpty ? nil : u)
+        VoiciCallHistory.shared.onChange = { [weak self] in self?.rebuildLockedNames() }
+        showsNamesWhileLocked = VoiciLockedNamesSettings.isOn(u)
         guard !u.isEmpty else { return }
         VoiciCallKeyStore.rememberAccount(u)
         answersWhileLocked = VoiciCallKeyStore.load(username: u) != nil
@@ -127,6 +135,9 @@ public final class MessagesStore {
         state = MessagesState(); phase = .idle; publishError = nil; lastError = nil; isRemoved = false; missedCalls = []
         reveals = [:]; ringBackFlags = [:]; noRingBack = []; callSettings = nil; callSettingsVersion = 0
         local = Local()
+        stateLoaded = false
+        showsNamesWhileLocked = false
+        answersWhileLocked = false
         VoiciCallHistory.shared.forgetInMemory()
     }
 
@@ -306,6 +317,7 @@ public final class MessagesStore {
             phase = .ready
             lastError = nil
             updatePhoneInbox()
+            rebuildLockedNames()
         } catch {
             lastError = Self.sentence(error)
             phase = conversations.isEmpty && index == nil ? .failed(lastError ?? "") : .ready
@@ -417,11 +429,18 @@ public final class MessagesStore {
     }
 
     private func loadState(_ client: any VoiciComClient) async {
-        guard let umk = Keystore.messagesUMKIfCached(), let blob = try? await client.messagesState(username: username) else { return }
+        guard let umk = Keystore.messagesUMKIfCached() else { return }
+        let read: JSONValue?
+        do { read = try await client.messagesState(username: username) } catch { return }
+        guard let blob = read else {
+            stateLoaded = true
+            return
+        }
         let key = VoiciMessages.deriveMessagesStateKey(umk: Array(umk))
         guard let remote = VoiciMessages.openMessagesState(stateKey: key, username: username, blob: blob) else { return }
         local.stateVersion = blob["version"]?.time ?? local.stateVersion
         state = VoiciMessages.mergeMessagesState(local: state, remote: remote, now: now())
+        stateLoaded = true
         applyForgotten()
         save()
     }
@@ -834,6 +853,7 @@ public final class MessagesStore {
             if let old = VoiciCallKeyStore.load(username: username), old.pubHex != g.pubHex { await revoke(old, client: client) }
             try VoiciCallKeyStore.save(key)
             answersWhileLocked = true
+            rebuildLockedNames()
             return nil
         } catch {
             return Self.sentence(error)
@@ -842,11 +862,61 @@ public final class MessagesStore {
 
     /// Off, sign-out or removal: a revocation signed by the owner key when this device holds it, else by the call key.
     func revokeCallKey() async {
+        // "Show names while locked" sits under this switch and goes with it (D2): the table is erased at once.
+        setShowNamesWhileLocked(false)
         guard let k = VoiciCallKeyStore.load(username: username) else { answersWhileLocked = false; return }
         if let client { await revoke(k, client: client) }
         VoiciCallKeyStore.delete(username: username)
         answersWhileLocked = false
     }
+
+    // MARK: names on a locked phone (docs/voici-locked-caller-names.md)
+
+    /// "Answer calls while Flagship is locked" can be offered here: an admin device of a page that takes calls.
+    public var answerWhileLockedAvailable: Bool { isAdmin && callsOn }
+    /// Where "Show names while locked" shows: under the answer switch while it is on, or on its own (ring-back names
+    /// only) on a device that can't answer while locked (D1).
+    public var namesWhileLockedVisible: Bool { !answerWhileLockedAvailable || answersWhileLocked }
+
+    /// The switch. On: the table is built now (if the account's state is here) and at every later change. Off: erased.
+    public func setShowNamesWhileLocked(_ on: Bool) {
+        guard !username.isEmpty else { return }
+        VoiciLockedNamesSettings.setOn(username, on)
+        showsNamesWhileLocked = on
+        if on { rebuildLockedNames() } else { VoiciLockedNamesStore.delete(username: username) }
+    }
+
+    /// The one-time "Show names on the lock screen?" sheet after "Answer calls while Flagship is locked" goes on.
+    public var shouldOfferNamesSheet: Bool { answersWhileLocked && !showsNamesWhileLocked && !VoiciLockedNamesSettings.sheetShown(username) }
+    public func namesSheetAnswered(show: Bool) {
+        VoiciLockedNamesSettings.markSheetShown(username)
+        if show { setShowNamesWhileLocked(true) }
+    }
+
+    /// Rebuilds the whole table from the unlocked account (§3.4). Nothing happens while locked, before the state blob
+    /// was read, or with the setting off; a switch the owner can no longer see (the answer switch is available but off)
+    /// turns off and erases.
+    func rebuildLockedNames() {
+        guard hasAccount, showsNamesWhileLocked else { return }
+        guard stateLoaded, let umk = Keystore.messagesUMKIfCached() else { return }
+        guard namesWhileLockedVisible else { setShowNamesWhileLocked(false); return }
+        let includeNames = answersWhileLocked && answerWhileLockedAvailable && VoiciCallKeyStore.load(username: username) != nil
+        let records = VoiciCallHistory.shared.records
+        let pages = records.compactMap { r -> VoiciLockedNames.RingPage? in
+            guard r.direction == .outgoing, case .page(let u, let p) = r.peer else { return nil }
+            return VoiciLockedNames.RingPage(username: u, pageId: p, last: r.at)
+        }
+        let table = VoiciLockedNames.build(
+            account: username, now: now(), includeNames: includeNames, nicknames: state.nicknames.mapValues(\.name),
+            blocked: Set(state.blocks + local.blocks), forgotten: VoiciMessages.liveForgotten(state, now: now()), records: records,
+            missed: missedCalls, ringPages: pages, stoppedAt: VoiciLockedNamesSettings.stops(username),
+            messagesSecret: VoiciMessages.deriveMessagesSecret(umk: Array(umk)))
+        try? VoiciLockedNamesStore.save(table)
+    }
+
+    /// The call center's view: whether the unlocked state is here, so a ring-back hint that still doesn't open is
+    /// final rather than early.
+    var stateReadThisSession: Bool { stateLoaded }
 
     private func revoke(_ k: VoiciCallKey, client: any VoiciComClient) async {
         let at = now()
@@ -1143,10 +1213,10 @@ public final class MessagesStore {
 
     /// A ring-back push to this account as a caller: the hint opens under this account's thread key for one of the
     /// pages it signed in to (nil while the account is locked, or when none opens).
-    func openRing(_ push: VoiciRingPush) -> VoiciRingHint? {
+    func openRing(_ push: VoiciRingPush, alsoPages: [String] = []) -> VoiciRingHint? {
         guard let umk = Keystore.messagesUMKIfCached(), let sealed = CanonicalJson.b64Decode(push.hint) else { return nil }
         let secret = VoiciMessages.deriveMessagesSecret(umk: Array(umk))
-        for pageId in Set(state.signedInSites.map(\.pageId)).sorted() {
+        for pageId in Set(state.signedInSites.map(\.pageId) + alsoPages).sorted() {
             guard let p = try? VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: secret, pageId: pageId),
                   let t = try? VoiciMessages.deriveMessagesThreadKey(messagesSecret: secret, pageId: pageId),
                   let conv = try? VoiciMessages.voiciConv(pageId: pageId, pseudonymPub: CanonicalJson.hex(p.publicKey)),
@@ -1164,7 +1234,9 @@ public final class MessagesStore {
         let secret = VoiciMessages.deriveMessagesSecret(umk: umk)
         let p = try VoiciMessages.deriveMessagesPseudonymKey(messagesSecret: secret, pageId: pageId)
         let conv = try VoiciMessages.voiciConv(pageId: pageId, pseudonymPub: CanonicalJson.hex(p.publicKey))
-        let order = try VoiciRings.signedRingBack(pageId: pageId, conv: conv, op: "attach", issuedAt: now(), pseudonymSeed: p.seed)
+        // The page's ring tag key rides along, so a ring-back can be named on this account's locked phones.
+        let tagKey = try? VoiciRings.deriveRingTagKey(messagesSecret: secret, pageId: pageId)
+        let order = try VoiciRings.signedRingBack(pageId: pageId, conv: conv, op: "attach", issuedAt: now(), pseudonymSeed: p.seed, ringTagKey: tagKey)
         try await client.ringBack(order: order, account: username, device: signer)
     }
 
@@ -1328,6 +1400,7 @@ public final class MessagesStore {
         change(&state)
         applyForgotten()
         save()
+        rebuildLockedNames()
         guard let client, let umk = Keystore.messagesUMKIfCached(), let device else { return }
         let key = VoiciMessages.deriveMessagesStateKey(umk: Array(umk))
         for _ in 0..<3 {
@@ -1568,6 +1641,9 @@ public final class MessagesStore {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(u).json"))
         }
         VoiciCallHistory.forget(username: username?.lowercased(), allProfiles: allProfiles)
+        // The locked-names table and its switch go with the account (sign out, remove this device, account gone, wipe).
+        if allProfiles { VoiciLockedNamesStore.deleteAll() } else if let u = username, !u.isEmpty { VoiciLockedNamesStore.delete(username: u) }
+        VoiciLockedNamesSettings.forget(username: username?.lowercased(), allProfiles: allProfiles)
         SocialBadges.forget(username: username?.lowercased(), allProfiles: allProfiles)
         CallSettingsStore.setOwnerHours(nil)
     }

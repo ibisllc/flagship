@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Ringing a caller back (docs/voici-calls.md "Who may call a page, and ringing a caller back"): the page owner's
 /// signed ring into a conversation whose caller chose "Call and allow call-back", and the hint sealed to the caller's
@@ -76,6 +77,41 @@ public enum VoiciRings {
         return CanonicalJson.ed25519VerifyHex(signature, bytes, ownerSignPub)
     }
 
+    // MARK: names on a locked phone (docs/voici-locked-caller-names.md; vectors test-vectors/voici/ring-tag.json)
+
+    public static let tagRingTag = "flagship/voici-ring-tag/v1"
+    public static let tagLockedName = "flagship/voici-locked-name/v1"
+
+    /// The caller's per-page ring tag key: HKDF-SHA256 of the Messages secret, info `flagship/voici-ring-tag/v1|<pageId>`.
+    /// Every device of the account derives the same key; the app sends it with an attach so `.com` can tag each ring.
+    public static func deriveRingTagKey(messagesSecret: [UInt8], pageId: String) throws -> [UInt8] {
+        guard VoiciCalls.isPageId(pageId) else { throw CanonicalJsonError("\(tagRingTag): bad pageId") }
+        return VoiciMessages.kdf(messagesSecret, "\(tagRingTag)|\(pageId)")
+    }
+
+    /// The ring push's `tag`: the first 16 bytes (hex) of HMAC-SHA256(tagKey, ringId).
+    public static func ringTag(tagKey: [UInt8], ringId: String) -> String? {
+        guard tagKey.count == 32, CanonicalJson.isLowerHex(ringId, bytes: 16) else { return nil }
+        let mac = HMAC<SHA256>.authenticationCode(for: Array(ringId.utf8), using: SymmetricKey(data: tagKey))
+        return String(CanonicalJson.hex(Array(mac)).prefix(32))
+    }
+
+    /// Whether a push's tag was made for this ring under `tagKey`. Constant time over the whole tag.
+    public static func ringTagMatches(tagKey: [UInt8], ringId: String, tag: String) -> Bool {
+        guard let want = ringTag(tagKey: tagKey, ringId: ringId) else { return false }
+        let a = Array(want.utf8), b = Array(tag.utf8)
+        guard a.count == b.count else { return false }
+        var diff: UInt8 = 0
+        for i in 0..<a.count { diff |= a[i] ^ b[i] }
+        return diff == 0
+    }
+
+    /// Where a locked page owner's phone keeps a caller's nickname: 16 bytes (hex) of
+    /// SHA-256("flagship/voici-locked-name/v1|<pseudonymPub>"), never the pub itself.
+    public static func lockedNameKey(pseudonymPub: String) -> String {
+        String(CanonicalJson.sha256Hex(Array("\(tagLockedName)|\(pseudonymPub)".utf8)).prefix(32))
+    }
+
     // MARK: the ring-back channel (the caller's side)
 
     public static let tagRingBack = "flagship/voici-ring-back/v1"
@@ -88,10 +124,14 @@ public enum VoiciRings {
 
     /// The visitor's app attaches (or stops) the conversation's ring-back channel, signed by its pseudonym P:
     /// `{order, signer:"pseudonym", from, sig}` for `POST /api/voici/web/ring-back` with device headers.
-    public static func signedRingBack(pageId: String, conv: String, op: String, issuedAt: Int64, pseudonymSeed: [UInt8]) throws -> JSONValue {
+    /// `ringTagKey` (an attach from the app only): the page's ring tag key, unsigned beside the order.
+    public static func signedRingBack(pageId: String, conv: String, op: String, issuedAt: Int64, pseudonymSeed: [UInt8],
+                                      ringTagKey: [UInt8]? = nil) throws -> JSONValue {
         let from = CanonicalJson.hex(try CanonicalJson.ed25519PublicKey(seed: pseudonymSeed))
         let sig = try CanonicalJson.ed25519SignHex(try canonicalRingBack(pageId: pageId, conv: conv, op: op, issuedAt: issuedAt), seed: pseudonymSeed)
-        return ["order": ["pageId": .string(pageId), "conv": .string(conv), "op": .string(op), "issuedAt": .number(Double(issuedAt))],
-                "signer": "pseudonym", "from": .string(from), "sig": .string(sig)]
+        var body: [String: JSONValue] = ["order": ["pageId": .string(pageId), "conv": .string(conv), "op": .string(op), "issuedAt": .number(Double(issuedAt))],
+                                         "signer": "pseudonym", "from": .string(from), "sig": .string(sig)]
+        if let k = ringTagKey, k.count == 32, op == "attach" { body["ringTagKey"] = .string(CanonicalJson.hex(k)) }
+        return .object(body)
     }
 }

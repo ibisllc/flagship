@@ -100,6 +100,9 @@ public final class VoiciCallCenter: NSObject {
     /// device dial out to that page; the pseudonymous side never hosts.
     private(set) var ringBack: VoiciOutgoingCall?
     @ObservationIgnored private var ringing: (id: UUID, hint: VoiciRingHint?)?
+    /// The ring-back that rang while locked: its push (the hint is opened after the unlock), the page the locked-names
+    /// table named for it, and whether Answer was pressed (then the unlock dials).
+    @ObservationIgnored private var lockedRing: (push: VoiciRingPush, cached: (username: String, pageId: String)?, answered: Bool)?
     @ObservationIgnored private var incomingPeer: VoiciCallRecord.Peer?
     @ObservationIgnored private var connectedAt: Int64?
     /// When the call connected, for the call screen's timer (set with the phase change that redraws it).
@@ -314,6 +317,7 @@ public final class VoiciCallCenter: NSObject {
     /// only one joins (a second room socket would win nothing, end this device's ring and leave `.com` thinking it is
     /// on another call).
     public func unlocked() {
+        ringBackAfterUnlock()
         guard phase == .needsUnlock, let call = push, !joiningAfterUnlock else { return }
         joiningAfterUnlock = true
         Task {
@@ -325,6 +329,39 @@ public final class VoiciCallCenter: NSObject {
             phase = .ringing
             join(call, keys)
             updateCallKit()
+        }
+    }
+
+    /// A ring-back answered while locked: once the account is open, its hint is opened (the page the table named is
+    /// tried too, so no state read is needed) and must name that same page; then this device dials out. A hint that
+    /// doesn't open, or names another page, ends the ring (`ring-back-tag-mismatch`). Before the state blob is read a
+    /// hint that doesn't open may still belong to a signed-in page: wait for the next unlock signal.
+    private func ringBackAfterUnlock() {
+        guard let locked = lockedRing, locked.answered, let r = ringing, r.hint == nil, Keystore.messagesUMKIfCached() != nil else { return }
+        let hint = MessagesStore.shared.openRing(locked.push, alsoPages: locked.cached.map { [$0.pageId] } ?? [])
+        if hint == nil, locked.cached == nil, !MessagesStore.shared.stateReadThisSession { return }
+        guard let hint, locked.cached.map({ $0.pageId == hint.pageId && $0.username == hint.username }) ?? true else {
+            voiciCallLog.notice("ring-back ended: ring-back-tag-mismatch")
+            lockedRing = nil
+            ringing = nil
+            provider?.reportCall(with: r.id, endedAt: nil, reason: .failed)
+            return
+        }
+        lockedRing = nil
+        ringing = (r.id, hint)
+        answerRing()
+    }
+
+    /// Face ID for a locked ring-back's Answer, in the foreground only (as `openKeysToAnswer`); a locked app's own lock
+    /// screen reaches the ring through `unlocked()` instead.
+    private func openKeysForRing() {
+        guard lockedRing?.answered == true, !openingKeys, mayAskForKeys(), UIApplication.shared.applicationState == .active,
+              Keystore.messagesUMKIfCached() == nil else { return }
+        openingKeys = true
+        Task {
+            defer { openingKeys = false }
+            guard (try? await Keystore.messagesUMK(reason: String(localized: "Unlock Flagship"))) != nil else { return }
+            unlocked()
         }
     }
 
@@ -507,6 +544,21 @@ public final class VoiciCallCenter: NSObject {
         return n
     }
 
+    /// "Show names while locked": the owner's nickname for a caller they have had calls with, from the locked-names
+    /// table of the account whose call key answers (docs/voici-locked-caller-names.md). Nil when off or unknown.
+    static func lockedNickname(from: String, now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> String? {
+        guard let account = VoiciCallKeyStore.currentAccountKey?.username else { return nil }
+        return VoiciLockedNames.name(for: from, in: VoiciLockedNamesStore.load(username: account), account: account, now: now)
+    }
+
+    /// The name a ring-back shows: the page while the account is unlocked (the hint opened), else the page the
+    /// locked-names table matched by the push's tag, else the generic line.
+    nonisolated static func ringName(hint: VoiciRingHint?, cached: (username: String, pageId: String)?) -> String {
+        if let hint { return "voi.ci/\(hint.username)" }
+        if let cached { return String(localized: "voi.ci/\(cached.username) is calling back") }
+        return String(localized: "Someone you wrote to is calling back")
+    }
+
     private func onSession(_ e: VoiciCallSession.Event) {
         switch e {
         case .request(let r):
@@ -514,7 +566,7 @@ public final class VoiciCallCenter: NSObject {
             // A locked phone (the call key answers) can't open the push's sealed caller, but the room's signed request
             // names the caller's key for this conversation: show its visitor name instead of "Someone on voi.ci".
             if incomingPeer == nil {
-                callerName = Self.lockedCallerName(from: r.from)
+                callerName = Self.lockedNickname(from: r.from) ?? Self.lockedCallerName(from: r.from)
                 updateCallKit()
             }
             maybeAnswerAfterUnlock(r.callId)
@@ -540,10 +592,14 @@ public final class VoiciCallCenter: NSObject {
     /// account's thread key for one of its pages opens the hint, else "Someone on voi.ci" (the account is locked).
     private func incomingRing(_ ring: VoiciRingPush, completion: @escaping () -> Void) {
         let hint = MessagesStore.shared.openRing(ring)
+        // Locked: the locked-names table may name the page by the push's tag (docs/voici-locked-caller-names.md §4).
+        let cached = hint == nil ? VoiciCallKeyStore.lastAccount.flatMap { u in
+            VoiciLockedNames.ringPage(for: ring, in: VoiciLockedNamesStore.load(username: u), now: Int64(Date().timeIntervalSince1970 * 1000))
+        } : nil
         let id = UUID()
         let u = CXCallUpdate()
         u.remoteHandle = CXHandle(type: .generic, value: "voi.ci")
-        u.localizedCallerName = hint.map { "voi.ci/\($0.username)" } ?? String(localized: "Someone on voi.ci")
+        u.localizedCallerName = Self.ringName(hint: hint, cached: cached)
         u.hasVideo = hint?.media == VoiciCalls.mediaVideo
         u.supportsHolding = false
         u.supportsDTMF = false
@@ -559,9 +615,14 @@ public final class VoiciCallCenter: NSObject {
             return
         }
         ringing = (id, hint)
+        if hint == nil {
+            lockedRing = (push: ring, cached: cached, answered: false)
+        } else {
+            lockedRing = nil
+        }
         provider.reportNewIncomingCall(with: id, update: u) { error in
             Task { @MainActor in
-                if error != nil { self.ringing = nil }
+                if error != nil { self.ringing = nil; self.lockedRing = nil }
                 completion()
             }
         }
@@ -569,6 +630,7 @@ public final class VoiciCallCenter: NSObject {
             try? await Task.sleep(nanoseconds: UInt64(VoiciRings.ttlMs) * 1_000_000)
             if let r = self.ringing, r.id == id, self.ringBack == nil {
                 self.ringing = nil
+                self.lockedRing = nil
                 voiciCallLog.notice("ring-back ended: unanswered")
                 provider.reportCall(with: id, endedAt: nil, reason: .unanswered)
             }
@@ -577,14 +639,27 @@ public final class VoiciCallCenter: NSObject {
 
     /// Answer on a ring-back: dial out to the page that rang (in the app's engine, else through the browser).
     private func answerRing() {
-        guard let r = ringing, let client = MessagesStore.shared.client else { return }
+        guard let r = ringing else { return }
         guard let hint = r.hint else {
-            // Locked when the push came: no page to dial. The owner's ring still shows in the conversation on voi.ci.
-            voiciCallLog.notice("ring-back ended: locked-no-page")
-            ringing = nil
-            provider?.reportCall(with: r.id, endedAt: nil, reason: .failed)
+            // Locked when the push came: a ring-back dials out as this account's pseudonym, which the call key can't
+            // do (D5). Answer means "unlock, then call back": the hint is opened after the unlock, within the ring time.
+            guard var locked = lockedRing else {
+                voiciCallLog.notice("ring-back ended: locked-no-page")
+                ringing = nil
+                provider?.reportCall(with: r.id, endedAt: nil, reason: .failed)
+                return
+            }
+            locked.answered = true
+            lockedRing = locked
+            voiciCallLog.notice("ring-back waits: needs-unlock")
+            let u = CXCallUpdate()
+            u.localizedCallerName = String(localized: "Unlock Flagship to call back")
+            provider?.reportCall(with: r.id, updated: u)
+            openKeysForRing()
+            unlocked()
             return
         }
+        guard let client = MessagesStore.shared.client else { return }
         // The ring came through this conversation's channel, so the call keeps it (attaching again renews it).
         let call = VoiciOutgoingCall.live(callee: VoiciCallee(username: hint.username, pageId: hint.pageId), video: hint.media == VoiciCalls.mediaVideo,
                                           allowCallBack: true, client: client)
@@ -783,6 +858,7 @@ extension VoiciCallCenter: CXProviderDelegate {
         Task { @MainActor in
             if let r = self.ringing, r.id == action.callUUID {
                 self.ringing = nil
+                self.lockedRing = nil
                 self.ringBack?.hangUp()
                 return action.fulfill()
             }

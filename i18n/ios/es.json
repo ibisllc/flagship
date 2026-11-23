@@ -3723,7 +3723,6 @@
   "Disk key of %@": "Clave del disco de %@",
   "A disk key changes when its server is re-keyed, which isn't available yet.": "La clave de un disco cambia cuando su servidor se vuelve a cifrar, algo que aún no está disponible.",
   "Answer calls while Flagship is locked": "Contestar llamadas con Flagship bloqueado",
-  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "Este dispositivo guarda una clave que solo sirve para contestar llamadas, así puedes contestar desde la pantalla de bloqueo. Quien llama aparece como “Alguien en voi.ci” hasta que desbloquees.",
   "Name hidden (%@)": "Nombre oculto (%@)",
   "Show the names in this organization": "Mostrar los nombres de esta organización",
   "Invitation made. Share the link with them.": "Invitación creada. Comparte el enlace con esa persona.",
@@ -4023,5 +4022,17 @@
   "All data your account sent through Flagship's relays this month.": "Todos los datos que tu cuenta envió este mes a través de los relés de Flagship.",
   "Data usage can't be read right now. Try again later.": "Ahora no se puede leer el uso de datos. Inténtalo más tarde.",
   "1 app has a separate access list on each server. When Pro ends it will use %@'s list.": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de %@.",
-  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de su servidor principal."
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de su servidor principal.",
+  "Show names while locked": "Mostrar nombres con el bloqueo",
+  "Your names for people you've talked to, and the pages that call you back, can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.": "Los nombres que diste a las personas con las que hablaste y las páginas que te devuelven la llamada pueden aparecer en la pantalla de bloqueo, en un reloj vinculado o en el coche. Cualquiera que tenga este teléfono puede verlos cuando entra una llamada. Se quedan en este teléfono y se actualizan cada vez que desbloqueas.",
+  "While Flagship is locked, callers show as “Visitor 4F3A” and call-backs as “Someone you wrote to”.": "Mientras Flagship está bloqueado, quien llama aparece como «Visitante 4F3A» y las devoluciones de llamada como «Alguien a quien escribiste».",
+  "The pages that call you back can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.": "Las páginas que te devuelven la llamada pueden aparecer en la pantalla de bloqueo, en un reloj vinculado o en el coche. Cualquiera que tenga este teléfono puede verlas cuando entra una llamada. Se quedan en este teléfono y se actualizan cada vez que desbloqueas.",
+  "While Flagship is locked, call-backs show as “Someone you wrote to”.": "Mientras Flagship está bloqueado, las devoluciones de llamada aparecen como «Alguien a quien escribiste».",
+  "This phone keeps a key that can answer calls and nothing else, so you can answer from the lock screen. Your messages stay locked.": "Este teléfono guarda una llave que solo puede contestar llamadas, para que puedas contestar desde la pantalla de bloqueo. Tus mensajes siguen bloqueados.",
+  "Show names on the lock screen?": "¿Mostrar nombres en la pantalla de bloqueo?",
+  "When someone you've talked to calls, this phone can show the name you gave them, even while Flagship is locked. Anyone holding the phone will see it too.": "Cuando te llama alguien con quien hablaste, este teléfono puede mostrar el nombre que le diste, aunque Flagship esté bloqueado. Cualquiera que tenga el teléfono también lo verá.",
+  "Show names": "Mostrar nombres",
+  "Someone you wrote to is calling back": "Te devuelve la llamada alguien a quien escribiste",
+  "voi.ci/%@ is calling back": "voi.ci/%@ te devuelve la llamada",
+  "Unlock Flagship to call back": "Desbloquea Flagship para devolver la llamada"
 }

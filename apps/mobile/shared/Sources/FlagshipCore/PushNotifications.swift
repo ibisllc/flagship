@@ -361,13 +361,17 @@ public struct VoiciCallPush: Equatable, Sendable {
 public struct VoiciRingPush: Equatable, Sendable {
     public let ringId: String
     public let hint: String
+    /// HMAC of `ringId` under the caller's ring tag key for the page that rings (docs/voici-locked-caller-names.md):
+    /// lets a locked phone name the page. Absent from channels attached without a key.
+    public let tag: String?
 
-    public init(ringId: String, hint: String) { self.ringId = ringId; self.hint = hint }
+    public init(ringId: String, hint: String, tag: String? = nil) { self.ringId = ringId; self.hint = hint; self.tag = tag }
 
     public static func parse(_ d: [AnyHashable: Any]) -> VoiciRingPush? {
         guard let id = d["ringId"] as? String, CanonicalJson.isLowerHex(id, bytes: 16), let hint = d["hint"] as? String,
               !hint.isEmpty, hint.count <= 8192, CanonicalJson.b64Decode(hint) != nil else { return nil }
-        return VoiciRingPush(ringId: id, hint: hint)
+        let tag = (d["tag"] as? String).flatMap { CanonicalJson.isLowerHex($0, bytes: 16) ? $0 : nil }
+        return VoiciRingPush(ringId: id, hint: hint, tag: tag)
     }
 }
 

@@ -15914,9 +15914,53 @@
     "en": "Answer calls while Flagship is locked",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (answering while locked)"
   },
-  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": {
-    "en": "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (answering while locked)"
+  "Show names while locked": {
+    "en": "Show names while locked",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "Your names for people you've talked to, and the pages that call you back, can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.": {
+    "en": "Your names for people you've talked to, and the pages that call you back, can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "While Flagship is locked, callers show as “Visitor 4F3A” and call-backs as “Someone you wrote to”.": {
+    "en": "While Flagship is locked, callers show as “Visitor 4F3A” and call-backs as “Someone you wrote to”.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "The pages that call you back can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.": {
+    "en": "The pages that call you back can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "While Flagship is locked, call-backs show as “Someone you wrote to”.": {
+    "en": "While Flagship is locked, call-backs show as “Someone you wrote to”.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "This phone keeps a key that can answer calls and nothing else, so you can answer from the lock screen. Your messages stay locked.": {
+    "en": "This phone keeps a key that can answer calls and nothing else, so you can answer from the lock screen. Your messages stay locked.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "Show names on the lock screen?": {
+    "en": "Show names on the lock screen?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "When someone you've talked to calls, this phone can show the name you gave them, even while Flagship is locked. Anyone holding the phone will see it too.": {
+    "en": "When someone you've talked to calls, this phone can show the name you gave them, even while Flagship is locked. Anyone holding the phone will see it too.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "Show names": {
+    "en": "Show names",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "Someone you wrote to is calling back": {
+    "en": "Someone you wrote to is calling back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "voi.ci/%@ is calling back": {
+    "en": "voi.ci/%@ is calling back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
+  },
+  "Unlock Flagship to call back": {
+    "en": "Unlock Flagship to call back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Calls (names on a locked phone)"
   },
   "Name hidden (%@)": {
     "en": "Name hidden (%@)",

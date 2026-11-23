@@ -3723,7 +3723,6 @@
   "Disk key of %@": "Clé du disque de %@",
   "A disk key changes when its server is re-keyed, which isn't available yet.": "Une clé de disque change quand son serveur est rechiffré, ce qui n'est pas encore disponible.",
   "Answer calls while Flagship is locked": "Répondre aux appels quand Flagship est verrouillé",
-  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "Cet appareil garde une clé qui ne sert qu'à répondre aux appels : vous pouvez ainsi répondre depuis l'écran verrouillé. L'appelant s'affiche comme « Quelqu'un sur voi.ci » jusqu'au déverrouillage.",
   "Name hidden (%@)": "Nom masqué (%@)",
   "Show the names in this organization": "Afficher les noms de cette organisation",
   "Invitation made. Share the link with them.": "Invitation créée. Partagez le lien avec la personne.",
@@ -4023,5 +4022,17 @@
   "All data your account sent through Flagship's relays this month.": "Toutes les données que votre compte a envoyées ce mois-ci via les relais de Flagship.",
   "Data usage can't be read right now. Try again later.": "Impossible de lire l'utilisation des données pour le moment. Réessayez plus tard.",
   "1 app has a separate access list on each server. When Pro ends it will use %@'s list.": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de %@.",
-  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de son serveur principal."
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de son serveur principal.",
+  "Show names while locked": "Afficher les noms verrouillé",
+  "Your names for people you've talked to, and the pages that call you back, can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.": "Les noms que vous avez donnés aux personnes avec qui vous avez parlé, et les pages qui vous rappellent, peuvent s'afficher sur l'écran verrouillé, une montre jumelée ou une voiture. Toute personne qui tient ce téléphone peut les voir quand un appel arrive. Ils restent sur ce téléphone et sont mis à jour à chaque déverrouillage.",
+  "While Flagship is locked, callers show as “Visitor 4F3A” and call-backs as “Someone you wrote to”.": "Tant que Flagship est verrouillé, les appelants s'affichent comme « Visiteur 4F3A » et les rappels comme « Quelqu'un à qui vous avez écrit ».",
+  "The pages that call you back can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.": "Les pages qui vous rappellent peuvent s'afficher sur l'écran verrouillé, une montre jumelée ou une voiture. Toute personne qui tient ce téléphone peut les voir quand un appel arrive. Elles restent sur ce téléphone et sont mises à jour à chaque déverrouillage.",
+  "While Flagship is locked, call-backs show as “Someone you wrote to”.": "Tant que Flagship est verrouillé, les rappels s'affichent comme « Quelqu'un à qui vous avez écrit ».",
+  "This phone keeps a key that can answer calls and nothing else, so you can answer from the lock screen. Your messages stay locked.": "Ce téléphone garde une clé qui ne peut que répondre aux appels, pour que vous puissiez répondre depuis l'écran verrouillé. Vos messages restent verrouillés.",
+  "Show names on the lock screen?": "Afficher les noms sur l'écran verrouillé ?",
+  "When someone you've talked to calls, this phone can show the name you gave them, even while Flagship is locked. Anyone holding the phone will see it too.": "Quand quelqu'un avec qui vous avez parlé appelle, ce téléphone peut afficher le nom que vous lui avez donné, même quand Flagship est verrouillé. Toute personne qui tient le téléphone le verra aussi.",
+  "Show names": "Afficher les noms",
+  "Someone you wrote to is calling back": "Quelqu'un à qui vous avez écrit vous rappelle",
+  "voi.ci/%@ is calling back": "voi.ci/%@ vous rappelle",
+  "Unlock Flagship to call back": "Déverrouillez Flagship pour rappeler"
 }

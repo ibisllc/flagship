@@ -47,6 +47,8 @@ public final class VoiciCallHistory {
     public private(set) var records: [VoiciCallRecord] = []
     @ObservationIgnored private var username: String?
     @ObservationIgnored private let defaults: UserDefaults
+    /// A record was added or forgotten (the locked-names table follows the calls, docs/voici-locked-caller-names.md).
+    @ObservationIgnored public var onChange: (() -> Void)?
 
     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
@@ -66,6 +68,7 @@ public final class VoiciCallHistory {
         if records.count > Self.maxRecords { records.removeLast(records.count - Self.maxRecords) }
         guard let u = username, let data = try? JSONEncoder().encode(records) else { return }
         defaults.set(data, forKey: Self.key(u))
+        onChange?()
     }
 
     /// Drops the records a deleted conversation covers (docs/voici-and-messages.md §10.1.1).
@@ -74,6 +77,7 @@ public final class VoiciCallHistory {
         records.removeAll(where: drop)
         guard records.count != before, let u = username, let data = try? JSONEncoder().encode(records) else { return }
         defaults.set(data, forKey: Self.key(u))
+        onChange?()
     }
 
     /// The list as shown: this device's records and the page's missed calls, newest first. A missed call this device
@@ -104,6 +108,7 @@ public final class VoiciCallHistory {
     func forgetInMemory() {
         records = []
         username = nil
+        onChange = nil
     }
 }
 

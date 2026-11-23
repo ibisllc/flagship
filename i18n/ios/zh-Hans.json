@@ -3721,7 +3721,6 @@
   "Disk key of %@": "%@ 的磁盘密钥",
   "A disk key changes when its server is re-keyed, which isn't available yet.": "磁盘密钥会在其服务器重新加密时更换，此功能尚不可用。",
   "Answer calls while Flagship is locked": "在 Flagship 锁定时接听来电",
-  "This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.": "此设备保存一个只能用于接听来电的密钥，因此可以在锁定屏幕上接听。在你解锁之前，来电者显示为“voi.ci 上的某人”。",
   "Name hidden (%@)": "名称已隐藏 (%@)",
   "Show the names in this organization": "显示此组织中的名称",
   "Invitation made. Share the link with them.": "邀请已创建。请把链接分享给对方。",
@@ -4021,5 +4020,17 @@
   "All data your account sent through Flagship's relays this month.": "本月你的账户通过 Flagship 中继发送的全部数据。",
   "Data usage can't be read right now. Try again later.": "暂时无法读取数据用量，请稍后再试。",
   "1 app has a separate access list on each server. When Pro ends it will use %@'s list.": "1 个应用在每台服务器上有单独的访问名单。Pro 结束后将使用 %@ 的名单。",
-  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 个应用在每台服务器上有单独的访问名单。Pro 结束后将使用其主导服务器的名单。"
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 个应用在每台服务器上有单独的访问名单。Pro 结束后将使用其主导服务器的名单。",
+  "Show names while locked": "锁定时显示名字",
+  "Your names for people you've talked to, and the pages that call you back, can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.": "你给通话过的人起的名字，以及会回电给你的页面，可能显示在锁屏、配对的手表或汽车上。来电时，拿着这部手机的任何人都能看到。它们只保存在这部手机上，每次解锁时更新。",
+  "While Flagship is locked, callers show as “Visitor 4F3A” and call-backs as “Someone you wrote to”.": "Flagship 锁定时，来电者显示为“访客 4F3A”，回电显示为“你写过信的人”。",
+  "The pages that call you back can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.": "会回电给你的页面可能显示在锁屏、配对的手表或汽车上。来电时，拿着这部手机的任何人都能看到。它们只保存在这部手机上，每次解锁时更新。",
+  "While Flagship is locked, call-backs show as “Someone you wrote to”.": "Flagship 锁定时，回电显示为“你写过信的人”。",
+  "This phone keeps a key that can answer calls and nothing else, so you can answer from the lock screen. Your messages stay locked.": "这部手机保存一把只能接听来电的密钥，因此你可以在锁屏上接听。你的消息仍保持锁定。",
+  "Show names on the lock screen?": "在锁屏上显示名字？",
+  "When someone you've talked to calls, this phone can show the name you gave them, even while Flagship is locked. Anyone holding the phone will see it too.": "当通话过的人来电时，即使 Flagship 已锁定，这部手机也能显示你给对方起的名字。拿着手机的任何人也会看到。",
+  "Show names": "显示名字",
+  "Someone you wrote to is calling back": "你写过信的人正在回电",
+  "voi.ci/%@ is calling back": "voi.ci/%@ 正在回电",
+  "Unlock Flagship to call back": "解锁 Flagship 后即可回电"
 }

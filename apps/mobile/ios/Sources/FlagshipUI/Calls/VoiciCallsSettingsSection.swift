@@ -10,6 +10,7 @@ struct VoiciCallsSettingsSection: View {
     @State private var center = VoiciCallCenter.shared
     @State private var busy = false
     @State private var lockedNote: String?
+    @State private var namesSheet = false
 
     var body: some View {
         let v = VoiciCallSettings.viewState(isAdmin: store.isAdmin, isPublic: store.isPublic, callsOn: store.callsOn, noRingMode: center.noRingMode)
@@ -91,17 +92,53 @@ struct VoiciCallsSettingsSection: View {
                     Task {
                         lockedNote = await store.setAnswerWhileLocked(on)
                         busy = false
+                        if on, lockedNote == nil, store.shouldOfferNamesSheet { namesSheet = true }
                     }
                 }))
                 .disabled(busy)
                 .accessibilityIdentifier("calls-answer-locked")
+                .sheet(isPresented: $namesSheet) {
+                    VoiciLockedNamesSheet { show in
+                        store.namesSheetAnswered(show: show)
+                        namesSheet = false
+                    }
+                }
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("This device keeps a key that can answer calls and nothing else, so a call can be answered from the lock screen. The caller shows as “Someone on voi.ci” until you unlock.")
+                    Text("This phone keeps a key that can answer calls and nothing else, so you can answer from the lock screen. Your messages stay locked.")
                     if let lockedNote { Text(verbatim: lockedNote) }
                 }
             }
+            if store.answersWhileLocked {
+                Section {
+                    namesToggle
+                } footer: {
+                    if store.showsNamesWhileLocked {
+                        Text("Your names for people you've talked to, and the pages that call you back, can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.")
+                    } else {
+                        Text("While Flagship is locked, callers show as “Visitor 4F3A” and call-backs as “Someone you wrote to”.")
+                    }
+                }
+            }
+        } else if store.hasAccount {
+            // A device that can't answer while locked (no page that takes calls, or not an admin device) still gets
+            // ring-backs from the pages this account calls (D1): the switch stands alone and names only those.
+            Section {
+                namesToggle
+            } footer: {
+                if store.showsNamesWhileLocked {
+                    Text("The pages that call you back can show on the lock screen, a paired watch or a car. Anyone holding this phone can see them when a call comes in. They stay on this phone and are updated each time you unlock.")
+                } else {
+                    Text("While Flagship is locked, call-backs show as “Someone you wrote to”.")
+                }
+            }
         }
+    }
+
+    /// "Show names while locked" (docs/voici-locked-caller-names.md §5.1).
+    private var namesToggle: some View {
+        Toggle("Show names while locked", isOn: Binding(get: { store.showsNamesWhileLocked }, set: { store.setShowNamesWhileLocked($0) }))
+            .accessibilityIdentifier("calls-names-locked")
     }
 
     private func change(on: Bool, from: String) {
@@ -143,6 +180,28 @@ struct VoiciCallsSettingsSection: View {
         let f = DateFormatter()
         f.locale = .current
         return f.veryShortStandaloneWeekdaySymbols[(d + 1) % 7]
+    }
+}
+/// The one-time question after "Answer calls while Flagship is locked" goes on (§5.2). "Not now" leaves the switch off
+/// and is not asked again; the switch stays in settings.
+struct VoiciLockedNamesSheet: View {
+    let answer: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Show names on the lock screen?").font(.title2.bold())
+            Text("When someone you've talked to calls, this phone can show the name you gave them, even while Flagship is locked. Anyone holding the phone will see it too.")
+            Spacer()
+            Button { answer(true) } label: { Text("Show names").frame(maxWidth: .infinity) }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("calls-names-sheet-show")
+            Button { answer(false) } label: { Text("Not now").frame(maxWidth: .infinity) }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("calls-names-sheet-not-now")
+        }
+        .padding(24)
+        .presentationDetents([.medium])
+        .interactiveDismissDisabled()
     }
 }
 #endif

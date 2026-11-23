@@ -135,6 +135,8 @@ public enum VoiciCallKeyStore {
     public static func rememberAccount(_ username: String?) {
         if let username, !username.isEmpty { UserDefaults.standard.set(username.lowercased(), forKey: lastAccountKey) }
     }
+    /// The account last used on this device (any device of it: ring-backs reach non-admin devices too).
+    public static var lastAccount: String? { UserDefaults.standard.string(forKey: lastAccountKey) }
     public static var currentAccountKey: VoiciCallKey? {
         UserDefaults.standard.string(forKey: lastAccountKey).flatMap { load(username: $0) }
     }
