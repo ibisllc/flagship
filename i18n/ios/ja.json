@@ -4038,5 +4038,10 @@
   "All data your account sent through Flagship's relays this month.": "今月、あなたのアカウントが Flagship のリレー経由で送信したすべてのデータです。",
   "Data usage can't be read right now. Try again later.": "現在データ使用量を読み込めません。後でもう一度お試しください。",
   "1 app has a separate access list on each server. When Pro ends it will use %@'s list.": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、%@ のリストを使います。",
-  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、そのリードサーバーのリストを使います。"
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、そのリードサーバーのリストを使います。",
+  "Only an admin device of this account can change code protection.": "コード保護を変更できるのは、このアカウントの管理者デバイスだけです。",
+  "Code protection is already on for this account. Turn it off first to set up a new authenticator.": "このアカウントのコード保護はすでにオンです。新しい認証アプリを設定するには、まずオフにしてください。",
+  "Code protection is already off for this account.": "このアカウントのコード保護はすでにオフです。",
+  "This setup expired. Start again to get a new key.": "この設定は期限切れになりました。最初からやり直して新しいキーを取得してください。",
+  "Flagship couldn't find this account.": "Flagship でこのアカウントが見つかりませんでした。"
 }

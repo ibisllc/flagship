@@ -904,7 +904,8 @@ struct AccountSecurityContainer: View {
             if vm == nil {
                 vm = AccountSecurityViewModel(
                     server: server,
-                    username: { [app] in app.currentUser }
+                    username: { [app] in app.currentUser },
+                    canChange: { [app] in AdminOrderGate.allows(app) }
                 )
             }
         }

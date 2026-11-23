@@ -17211,5 +17211,25 @@
   "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": {
     "en": "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SeparateListsWarningViewModel.swift"
+  },
+  "Only an admin device of this account can change code protection.": {
+    "en": "Only an admin device of this account can change code protection.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AccountSecurityViewModel.swift CodeProtectionText"
+  },
+  "Code protection is already on for this account. Turn it off first to set up a new authenticator.": {
+    "en": "Code protection is already on for this account. Turn it off first to set up a new authenticator.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AccountSecurityViewModel.swift CodeProtectionText"
+  },
+  "Code protection is already off for this account.": {
+    "en": "Code protection is already off for this account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AccountSecurityViewModel.swift CodeProtectionText"
+  },
+  "This setup expired. Start again to get a new key.": {
+    "en": "This setup expired. Start again to get a new key.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AccountSecurityViewModel.swift CodeProtectionText"
+  },
+  "Flagship couldn't find this account.": {
+    "en": "Flagship couldn't find this account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AccountSecurityViewModel.swift CodeProtectionText"
   }
 }

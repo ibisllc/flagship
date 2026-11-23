@@ -4040,5 +4040,10 @@
   "All data your account sent through Flagship's relays this month.": "Todos los datos que tu cuenta envió este mes a través de los relés de Flagship.",
   "Data usage can't be read right now. Try again later.": "Ahora no se puede leer el uso de datos. Inténtalo más tarde.",
   "1 app has a separate access list on each server. When Pro ends it will use %@'s list.": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de %@.",
-  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de su servidor principal."
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de su servidor principal.",
+  "Only an admin device of this account can change code protection.": "Solo un dispositivo administrador de esta cuenta puede cambiar la protección con código.",
+  "Code protection is already on for this account. Turn it off first to set up a new authenticator.": "La protección con código ya está activada en esta cuenta. Desactívala primero para configurar un autenticador nuevo.",
+  "Code protection is already off for this account.": "La protección con código ya está desactivada en esta cuenta.",
+  "This setup expired. Start again to get a new key.": "Esta configuración ha caducado. Empieza de nuevo para obtener una clave nueva.",
+  "Flagship couldn't find this account.": "Flagship no encontró esta cuenta."
 }

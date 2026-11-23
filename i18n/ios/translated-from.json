@@ -4034,5 +4034,10 @@
   "All data your account sent through Flagship's relays this month.": "f42a5c828e93",
   "Data usage can't be read right now. Try again later.": "470f01368f9c",
   "1 app has a separate access list on each server. When Pro ends it will use %@'s list.": "0872a99aac2f",
-  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "e5a23f44939d"
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "e5a23f44939d",
+  "Only an admin device of this account can change code protection.": "c8b48f4fe606",
+  "Code protection is already on for this account. Turn it off first to set up a new authenticator.": "12d98c4b2595",
+  "Code protection is already off for this account.": "e25a5de61120",
+  "This setup expired. Start again to get a new key.": "2f5736972f88",
+  "Flagship couldn't find this account.": "1909ab21ff27"
 }

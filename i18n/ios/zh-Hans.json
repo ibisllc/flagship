@@ -4038,5 +4038,10 @@
   "All data your account sent through Flagship's relays this month.": "本月你的账户通过 Flagship 中继发送的全部数据。",
   "Data usage can't be read right now. Try again later.": "暂时无法读取数据用量，请稍后再试。",
   "1 app has a separate access list on each server. When Pro ends it will use %@'s list.": "1 个应用在每台服务器上有单独的访问名单。Pro 结束后将使用 %@ 的名单。",
-  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 个应用在每台服务器上有单独的访问名单。Pro 结束后将使用其主导服务器的名单。"
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": "1 个应用在每台服务器上有单独的访问名单。Pro 结束后将使用其主导服务器的名单。",
+  "Only an admin device of this account can change code protection.": "只有此账户的管理员设备才能更改代码保护。",
+  "Code protection is already on for this account. Turn it off first to set up a new authenticator.": "此账户已开启代码保护。要设置新的验证器，请先关闭它。",
+  "Code protection is already off for this account.": "此账户的代码保护已经关闭。",
+  "This setup expired. Start again to get a new key.": "此设置已过期。请重新开始以获取新密钥。",
+  "Flagship couldn't find this account.": "Flagship 找不到此账户。"
 }

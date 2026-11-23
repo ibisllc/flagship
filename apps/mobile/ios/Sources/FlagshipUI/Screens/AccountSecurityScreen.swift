@@ -4,7 +4,7 @@ import FlagshipAPI
 import FlagshipCore
 
 /// v1.2 Phase 4 — Settings → Account security. Surfaces the
-/// account-type badge ("Single-device" vs "Multi-device + 2FA") +
+/// account-type badge ("Single-device account" vs "Code protection is on") +
 /// the entry point into the four-step enrollment sheet.
 ///
 /// The screen is intentionally lightweight. The heavy lifting lives
@@ -20,8 +20,9 @@ public struct AccountSecurityScreen: View {
     @State private var showRotateConfirm = false
     @State private var reEscrowPassphrase = ""
     @Bindable var viewModel: AccountSecurityViewModel
-    /// The Watch delegate grant is an admin-only order (`.com` checks it
-    /// under the admin root); a non-admin device sees it read-only.
+    /// The Watch delegate grant and code protection are admin-only orders
+    /// (`.com` checks them under the admin root); a non-admin device sees
+    /// them read-only.
     var canSignAdminOrders: Bool = true
 
     public init(viewModel: AccountSecurityViewModel, canSignAdminOrders: Bool = true) {
@@ -141,12 +142,22 @@ public struct AccountSecurityScreen: View {
                 FSDangerButton(String(localized: "Turn off code protection"), block: true) {
                     showDisableSheet = true
                 }
+                .disabled(!canSignAdminOrders)
                 .accessibilityIdentifier("account-security-disable-btn")
             } else {
                 FSPrimaryButton(String(localized: "Turn on code protection"), block: true, large: true) {
                     showEnableSheet = true
                 }
+                .disabled(!canSignAdminOrders)
                 .accessibilityIdentifier("account-security-enable-btn")
+            }
+            if !canSignAdminOrders {
+                // Turning code protection on or off is an admin order (`.com`
+                // refuses any other key with `totp-admin-only`).
+                Text(CodeProtectionText.adminOnly)
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+                    .accessibilityIdentifier("account-security-admin-only")
             }
             if case .failed(let msg) = viewModel.phase {
                 Text(msg)

@@ -3248,6 +3248,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     /// Thrown by `totpEnrollBegin` while set (e.g. `.com`'s 429).
     public var totpEnrollBeginError: Error?
+    /// Thrown by `totpEnrollConfirm` / `totpDisable` while set (a refusal with its `code`).
+    public var totpEnrollConfirmError: Error?
+    public var totpDisableError: Error?
 
     /// Scripted audit log per username. Tests configure the array
     /// to drive ActivityViewModel renders without hitting the
@@ -3741,6 +3744,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         body: TotpEnrollConfirmRequest
     ) async throws -> TotpEnrollConfirmResponse {
         try await tick()
+        if let totpEnrollConfirmError { throw totpEnrollConfirmError }
         let u = username.lowercased()
         guard totpSecretByUser[u] != nil else {
             throw ScreensClientError.http(status: 409, message: String(localized: "no staged TOTP secret; call enroll-begin first"))
@@ -3765,6 +3769,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         body: TotpDisableRequest
     ) async throws -> TotpDisableResponse {
         try await tick()
+        if let totpDisableError { throw totpDisableError }
         let u = username.lowercased()
         guard body.code == totpExpectedConfirmCode else {
             throw ScreensClientError.http(status: 401, message: String(localized: "invalid TOTP code"))

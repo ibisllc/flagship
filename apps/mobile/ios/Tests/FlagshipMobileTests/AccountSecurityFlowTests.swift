@@ -35,10 +35,21 @@ final class AccountSecurityFlowTests: XCTestCase {
         return s
     }
 
+    /// An admin device: code protection is an admin order (F2). With no
+    /// admin root in the test Keychain the signer falls back to the IRK, as
+    /// on an account that pins none.
+    private func adminVM(_ server: MockFlagshipServerClient) -> AccountSecurityViewModel {
+        AccountSecurityViewModel(server: server, username: { "alice" }, canChange: { true })
+    }
+
+    private func refusal(_ status: Int, _ code: String) -> Error {
+        ScreensClientError.http(status: status, message: #"{"error":"refused","code":"\#(code)"}"#)
+    }
+
     func test_load_returnsSingleDeviceByDefault() async throws {
         try await makeUMK()
         let server = try await freshMock()
-        let vm = AccountSecurityViewModel(server: server, username: { "alice" })
+        let vm = adminVM(server)
 
         await vm.load()
 
@@ -52,7 +63,7 @@ final class AccountSecurityFlowTests: XCTestCase {
         let server = try await freshMock()
         server.accountTypeByUser["alice"] = "multi"
         server.totpEnrolledAtByUser["alice"] = 1_700_000_000_000
-        let vm = AccountSecurityViewModel(server: server, username: { "alice" })
+        let vm = adminVM(server)
 
         await vm.load()
 
@@ -67,7 +78,7 @@ final class AccountSecurityFlowTests: XCTestCase {
         server.totpExpectedConfirmCode = "654321"
         let issuedCodes = (1...10).map { "RC-\($0)" }
         server.totpRecoveryCodesToIssue = issuedCodes
-        let vm = AccountSecurityViewModel(server: server, username: { "alice" })
+        let vm = adminVM(server)
 
         await vm.beginEnrollment()
         guard case .staged(let staged) = vm.phase else {
@@ -98,7 +109,7 @@ final class AccountSecurityFlowTests: XCTestCase {
         try await makeUMK()
         let server = try await freshMock()
         server.totpExpectedConfirmCode = "111111"
-        let vm = AccountSecurityViewModel(server: server, username: { "alice" })
+        let vm = adminVM(server)
 
         await vm.beginEnrollment()
         await vm.confirmEnrollment(sampleCode: "999999")
@@ -114,7 +125,7 @@ final class AccountSecurityFlowTests: XCTestCase {
     func test_emptyCode_failsImmediately() async throws {
         try await makeUMK()
         let server = try await freshMock()
-        let vm = AccountSecurityViewModel(server: server, username: { "alice" })
+        let vm = adminVM(server)
         await vm.beginEnrollment()
 
         await vm.confirmEnrollment(sampleCode: "   ")
@@ -128,7 +139,7 @@ final class AccountSecurityFlowTests: XCTestCase {
     func test_recoveryCodesDisplayGate_dismissEnrollmentScrubsCodes() async throws {
         try await makeUMK()
         let server = try await freshMock()
-        let vm = AccountSecurityViewModel(server: server, username: { "alice" })
+        let vm = adminVM(server)
 
         await vm.beginEnrollment()
         await vm.confirmEnrollment(sampleCode: "123456")
@@ -154,7 +165,7 @@ final class AccountSecurityFlowTests: XCTestCase {
         server.totpEnrolledAtByUser["alice"] = 1_700_000_000_000
         server.totpSecretByUser["alice"] = "STAGED"
         server.recoveryCodesByUser["alice"] = ["abc"]
-        let vm = AccountSecurityViewModel(server: server, username: { "alice" })
+        let vm = adminVM(server)
 
         await vm.disableEnrollment(code: "424242")
 
@@ -173,7 +184,7 @@ final class AccountSecurityFlowTests: XCTestCase {
         let server = try await freshMock()
         server.accountTypeByUser["alice"] = "multi"
         server.totpExpectedConfirmCode = "111111"
-        let vm = AccountSecurityViewModel(server: server, username: { "alice" })
+        let vm = adminVM(server)
 
         await vm.disableEnrollment(code: "999999")
 
@@ -187,13 +198,92 @@ final class AccountSecurityFlowTests: XCTestCase {
     func test_withoutUsername_beginFailsCleanly() async throws {
         try await makeUMK()
         let server = try await freshMock()
-        let vm = AccountSecurityViewModel(server: server, username: { nil })
+        let vm = AccountSecurityViewModel(server: server, username: { nil }, canChange: { true })
 
         await vm.beginEnrollment()
 
         if case .failed = vm.phase {} else {
             XCTFail("expected .failed when no username, got \(vm.phase)")
         }
+    }
+
+    // MARK: - Security report F2
+
+    func test_nonAdminDevice_isToldWhy_andNothingIsSent() async throws {
+        try await makeUMK()
+        let server = try await freshMock()
+        let vm = AccountSecurityViewModel(server: server, username: { "alice" }, canChange: { false })
+
+        await vm.beginEnrollment()
+        XCTAssertEqual(vm.phase, .failed(CodeProtectionText.adminOnly))
+        XCTAssertNil(server.totpSecretByUser["alice"])
+
+        await vm.disableEnrollment(code: "123456")
+        XCTAssertEqual(vm.phase, .failed(CodeProtectionText.adminOnly))
+    }
+
+    func test_alreadyEnrolled_isItsOwnSentence() async throws {
+        try await makeUMK()
+        let server = try await freshMock()
+        server.totpEnrollBeginError = refusal(409, "totp-already-enrolled")
+        let vm = adminVM(server)
+
+        await vm.beginEnrollment()
+        XCTAssertEqual(vm.phase, .failed(CodeProtectionText.alreadyOn))
+    }
+
+    func test_serverAdminOnlyRefusal_isTheAdminSentence() async throws {
+        try await makeUMK()
+        let server = try await freshMock()
+        server.totpEnrollBeginError = refusal(403, "totp-admin-only")
+        let vm = adminVM(server)
+
+        await vm.beginEnrollment()
+        XCTAssertEqual(vm.phase, .failed(CodeProtectionText.adminOnly))
+    }
+
+    func test_internalError_isAServerProblem_notANetworkError() async throws {
+        try await makeUMK()
+        let server = try await freshMock()
+        server.totpEnrollBeginError = refusal(500, "internal-error")
+        let vm = adminVM(server)
+
+        await vm.beginEnrollment()
+        XCTAssertEqual(vm.phase, .failed(UserErrorText.serverProblem))
+    }
+
+    func test_expiredSetup_asksToStartAgain() async throws {
+        try await makeUMK()
+        let server = try await freshMock()
+        let vm = adminVM(server)
+        await vm.beginEnrollment()
+        server.totpEnrollConfirmError = refusal(409, "totp-pending-expired")
+
+        await vm.confirmEnrollment(sampleCode: "123456")
+        XCTAssertEqual(vm.phase, .failed(CodeProtectionText.expired))
+    }
+
+    func test_disable_alreadyOff_flipsTheBadge() async throws {
+        try await makeUMK()
+        let server = try await freshMock()
+        server.accountTypeByUser["alice"] = "multi"
+        let vm = adminVM(server)
+        await vm.load()
+        server.totpDisableError = refusal(409, "totp-not-enrolled")
+
+        await vm.disableEnrollment(code: "123456")
+        XCTAssertEqual(vm.phase, .failed(CodeProtectionText.alreadyOff))
+        XCTAssertFalse(vm.isMultiDevice)
+    }
+
+    func test_disable_otherDevices_keepsItsSentence() async throws {
+        try await makeUMK()
+        let server = try await freshMock()
+        server.totpDisableError = refusal(409, "totp-other-devices")
+        let vm = adminVM(server)
+
+        await vm.disableEnrollment(code: "123456")
+        XCTAssertEqual(vm.phase, .failed(CodeProtectionText.otherDevices))
     }
 
     func test_canonicalBytes_matchProtocolSpec() {

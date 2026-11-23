@@ -4,7 +4,7 @@ import Flagship
 import FlagshipAPI
 import FlagshipCore
 
-/// v1.2 Phase 4 — drives the Settings → Multi-device + 2FA flow:
+/// v1.2 Phase 4 — drives Settings → Account security → Code protection:
 ///
 ///   1. Load the account-type badge state from
 ///      `GET /api/users/:u` (single vs multi-device).
@@ -13,9 +13,13 @@ import FlagshipCore
 ///   3. Optionally disable an existing enrollment (Phase 3 endpoint;
 ///      gated by the Worker on single-device-count).
 ///
-/// The IRK signature for enroll-begin / enroll-confirm / disable is
-/// produced by Keystore.deriveIRK at the current IRK version — same
-/// shape as ReplaceDeviceViewModel.
+/// Turning code protection on or off is an admin order (owner, 2026-11-23;
+/// security report F2): enroll-begin / enroll-confirm / disable are signed
+/// with the admin root (`Keystore.sensitiveOrderSigningKey`, the IRK only on
+/// an account with no admin root), `.com` refuses anything else with
+/// `totp-admin-only`, and a device that isn't an admin sees the setting
+/// read-only (`canChange`). `.com`'s refusals carry a `code`, which
+/// `CodeProtectionText` turns into a sentence.
 ///
 /// Recovery codes (the ten plaintext strings returned ONCE on
 /// enroll-confirm) are kept only in this view-model's `.confirmed`
@@ -70,10 +74,21 @@ public final class AccountSecurityViewModel {
 
     private let server: FlagshipServerClient
     private let username: @MainActor () -> String?
+    private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    /// Whether this device may turn code protection on or off: an admin
+    /// device (or a demo account's), `AdminOrderGate.allows`.
+    public let canChange: @MainActor () -> Bool
 
-    public init(server: FlagshipServerClient, username: @MainActor @escaping () -> String?) {
+    public init(
+        server: FlagshipServerClient,
+        username: @MainActor @escaping () -> String?,
+        canChange: @MainActor @escaping () -> Bool = { Keystore.hasAdminRoot },
+        signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil
+    ) {
         self.server = server
         self.username = username
+        self.canChange = canChange
+        self.signer = signer ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
     }
 
     /// Build the watch-delegate ("Approve from watch") toggle VM
@@ -127,14 +142,15 @@ public final class AccountSecurityViewModel {
             phase = .failed(String(localized: "No active account on this device."))
             return
         }
+        guard canChange() else {
+            phase = .failed(CodeProtectionText.adminOnly)
+            return
+        }
         phase = .beginning
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await Keystore.deriveIRK(
-                reason: String(localized: "Turn on code protection"),
-                version: Keystore.currentIrkVersion()
-            )
+            irk = try await signer(String(localized: "Turn on code protection"))
         } catch {
             phase = .failed(String(localized: "Couldn't access your account keys: \(UserErrorText.of(error))"))
             return
@@ -161,10 +177,13 @@ public final class AccountSecurityViewModel {
                 qrPngBase64: resp.qrPngBase64,
                 issuer: resp.issuer
             ))
-        } catch ScreensClientError.http(let status, _) where status == 503 {
-            phase = .failed(String(localized: "Code protection isn't available on this server yet. Try again later."))
         } catch {
-            phase = .failed(String(localized: "Couldn't start enrollment: \(UserErrorText.of(error))"))
+            if let sentence = CodeProtectionText.refusal(error) {
+                phase = .failed(sentence)
+                if CodeProtectionText.code(of: error) == "totp-already-enrolled" { await load() }
+            } else {
+                phase = .failed(String(localized: "Couldn't start enrollment: \(UserErrorText.of(error))"))
+            }
         }
     }
 
@@ -187,15 +206,16 @@ public final class AccountSecurityViewModel {
             if case .staged(let s) = phase { return s }
             return nil
         }()
+        guard canChange() else {
+            phase = .failed(CodeProtectionText.adminOnly)
+            return
+        }
         phase = .confirming
 
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await Keystore.deriveIRK(
-                reason: String(localized: "Confirm your code"),
-                version: Keystore.currentIrkVersion()
-            )
+            irk = try await signer(String(localized: "Confirm your code"))
         } catch {
             phase = .failed(String(localized: "Couldn't access your account keys: \(UserErrorText.of(error))"))
             return
@@ -223,7 +243,8 @@ public final class AccountSecurityViewModel {
                 totpEnrolledAt: resp.totpEnrolledAt,
                 recoveryCodes: resp.recoveryCodes
             ))
-        } catch ScreensClientError.http(let status, _) where status == 401 {
+        } catch ScreensClientError.http(let status, let body)
+            where status == 401 && (CodeProtectionText.code(body) ?? "invalid-totp-code") == "invalid-totp-code" {
             // Bounce back to .staged so the user can retry without
             // restarting the whole flow.
             if let staged = priorStaged {
@@ -234,7 +255,12 @@ public final class AccountSecurityViewModel {
             // the input.
             phase = .failed(String(localized: "That code didn't match. Try again with a fresh code from your authenticator."))
         } catch {
-            phase = .failed(String(localized: "Couldn't confirm: \(UserErrorText.of(error))"))
+            if let sentence = CodeProtectionText.refusal(error) {
+                phase = .failed(sentence)
+                if CodeProtectionText.code(of: error) == "totp-already-enrolled" { await load() }
+            } else {
+                phase = .failed(String(localized: "Couldn't confirm: \(UserErrorText.of(error))"))
+            }
         }
     }
 
@@ -257,14 +283,15 @@ public final class AccountSecurityViewModel {
             phase = .failed(String(localized: "No active account on this device."))
             return
         }
+        guard canChange() else {
+            phase = .failed(CodeProtectionText.adminOnly)
+            return
+        }
         phase = .disabling
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await Keystore.deriveIRK(
-                reason: String(localized: "Turn off code protection"),
-                version: Keystore.currentIrkVersion()
-            )
+            irk = try await signer(String(localized: "Turn off code protection"))
         } catch {
             phase = .failed(String(localized: "Couldn't access your account keys: \(UserErrorText.of(error))"))
             return
@@ -289,12 +316,18 @@ public final class AccountSecurityViewModel {
             accountType = resp.accountType
             totpEnrolledAt = nil
             phase = .disabled
-        } catch ScreensClientError.http(let status, _) where status == 401 {
-            phase = .failed(String(localized: "That code didn't match. Try a fresh code from your authenticator."))
-        } catch ScreensClientError.http(let status, _) where status == 409 {
-            phase = .failed(String(localized: "Disable refused — other devices are still trusted on this account. Disconnect them first."))
         } catch {
-            phase = .failed(String(localized: "Couldn't disable: \(UserErrorText.of(error))"))
+            if let sentence = CodeProtectionText.refusal(error) {
+                phase = .failed(sentence)
+                if CodeProtectionText.code(of: error) == "totp-not-enrolled" {
+                    accountType = "single"
+                    totpEnrolledAt = nil
+                }
+            } else if case ScreensClientError.http(409, _) = error {
+                phase = .failed(CodeProtectionText.otherDevices)
+            } else {
+                phase = .failed(String(localized: "Couldn't disable: \(UserErrorText.of(error))"))
+            }
         }
     }
 }
@@ -302,6 +335,53 @@ public final class AccountSecurityViewModel {
 #if canImport(CryptoKit)
 import CryptoKit
 #endif
+
+/// `.com`'s code protection refusals (packages/control-plane/src/totp.ts
+/// `TotpRefusalCode`) as sentences. Mirrors the webapp's lib/totp.js
+/// `totpRefusalText` and Android's `CodeProtectionText`.
+public enum CodeProtectionText {
+    public static let adminOnly = String(localized: "Only an admin device of this account can change code protection.")
+    public static let alreadyOn = String(localized: "Code protection is already on for this account. Turn it off first to set up a new authenticator.")
+    public static let alreadyOff = String(localized: "Code protection is already off for this account.")
+    public static let notAvailable = String(localized: "Code protection isn't available on this server yet. Try again later.")
+    public static let expired = String(localized: "This setup expired. Start again to get a new key.")
+    public static let wrongCode = String(localized: "That code didn't match. Try a fresh code from your authenticator.")
+    public static let otherDevices = String(localized: "Disable refused — other devices are still trusted on this account. Disconnect them first.")
+    public static let accountNotFound = String(localized: "Flagship couldn't find this account.")
+
+    /// The `code` of a refusal body, if it has one.
+    public static func code(_ body: String) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any] else { return nil }
+        return obj["code"] as? String
+    }
+
+    public static func code(of error: Error) -> String? {
+        guard case ScreensClientError.http(_, let body) = error else { return nil }
+        return code(body)
+    }
+
+    /// The sentence for one of `.com`'s refusals, or nil when the error is
+    /// something else (transport, decoding), which `UserErrorText` words.
+    public static func refusal(_ error: Error) -> String? {
+        guard case ScreensClientError.http(let status, let body) = error else { return nil }
+        if let r = RateLimitedRefusal.from(status: status, body: body) { return r.message }
+        switch code(body) {
+        case "totp-admin-only": return adminOnly
+        case "totp-already-enrolled": return alreadyOn
+        case "totp-not-enrolled": return alreadyOff
+        case "totp-not-configured": return notAvailable
+        case "totp-pending-expired", "totp-no-pending": return expired
+        case "invalid-totp-code": return wrongCode
+        case "totp-other-devices": return otherDevices
+        case "account-not-found": return accountNotFound
+        case "internal-error": return UserErrorText.serverProblem
+        default: break
+        }
+        if status == 503 { return notAvailable }
+        if status == 401 { return wrongCode }
+        return nil
+    }
+}
 
 /// Canonical-bytes helpers — mirror @flagship/protocol's
 /// `canonicalTotpEnrollBegin` / `canonicalTotpEnrollConfirm` /

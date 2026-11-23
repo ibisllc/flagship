@@ -165668,6 +165668,211 @@
           }
         }
       }
+    },
+    "Only an admin device of this account can change code protection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo administrador de esta cuenta puede cambiar la protección con código."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur de ce compte peut modifier la protection par code."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät dieses Kontos kann den Codeschutz ändern."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente um dispositivo administrador desta conta pode alterar a proteção por código."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コード保護を変更できるのは、このアカウントの管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有此账户的管理员设备才能更改代码保护。"
+          }
+        }
+      }
+    },
+    "Code protection is already on for this account. Turn it off first to set up a new authenticator.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La protección con código ya está activada en esta cuenta. Desactívala primero para configurar un autenticador nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La protection par code est déjà activée pour ce compte. Désactivez-la d’abord pour configurer un nouvel authentificateur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Codeschutz ist für dieses Konto bereits aktiviert. Schalte ihn zuerst aus, um einen neuen Authenticator einzurichten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A proteção por código já está ativada nesta conta. Desative-a primeiro para configurar um novo autenticador."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアカウントのコード保護はすでにオンです。新しい認証アプリを設定するには、まずオフにしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此账户已开启代码保护。要设置新的验证器，请先关闭它。"
+          }
+        }
+      }
+    },
+    "Code protection is already off for this account.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La protección con código ya está desactivada en esta cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La protection par code est déjà désactivée pour ce compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Codeschutz ist für dieses Konto bereits ausgeschaltet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A proteção por código já está desativada nesta conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアカウントのコード保護はすでにオフです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此账户的代码保护已经关闭。"
+          }
+        }
+      }
+    },
+    "This setup expired. Start again to get a new key.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta configuración ha caducado. Empieza de nuevo para obtener una clave nueva."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette configuration a expiré. Recommencez pour obtenir une nouvelle clé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Einrichtung ist abgelaufen. Beginne von vorn, um einen neuen Schlüssel zu erhalten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta configuração expirou. Comece de novo para obter uma nova chave."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この設定は期限切れになりました。最初からやり直して新しいキーを取得してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设置已过期。请重新开始以获取新密钥。"
+          }
+        }
+      }
+    },
+    "Flagship couldn't find this account.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship no encontró esta cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship n’a pas trouvé ce compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship konnte dieses Konto nicht finden."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship não encontrou esta conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship でこのアカウントが見つかりませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 找不到此账户。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
