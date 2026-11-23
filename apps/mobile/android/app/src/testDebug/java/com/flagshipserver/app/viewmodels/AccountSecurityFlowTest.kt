@@ -66,7 +66,7 @@ class AccountSecurityFlowTest {
     @Test
     fun load_returnsSingleDeviceByDefault() = runTest(dispatcher) {
         val server = primedMock()
-        val vm = AccountSecurityViewModel(server = server, username = { "alice" })
+        val vm = AccountSecurityViewModel(server = server, username = { "alice" }, canChange = { true })
         vm.load()
         advanceUntilIdle()
         assertEquals("single", vm.accountType.value)
@@ -79,7 +79,7 @@ class AccountSecurityFlowTest {
         val server = primedMock()
         server.accountTypeByUser["alice"] = "multi"
         server.totpEnrolledAtByUser["alice"] = 1_700_000_000_000L
-        val vm = AccountSecurityViewModel(server = server, username = { "alice" })
+        val vm = AccountSecurityViewModel(server = server, username = { "alice" }, canChange = { true })
         vm.load()
         advanceUntilIdle()
         assertEquals("multi", vm.accountType.value)
@@ -93,7 +93,7 @@ class AccountSecurityFlowTest {
         server.totpExpectedConfirmCode = "654321"
         val issued = (1..10).map { "RC-$it" }
         server.totpRecoveryCodesToIssue = issued
-        val vm = AccountSecurityViewModel(server = server, username = { "alice" })
+        val vm = AccountSecurityViewModel(server = server, username = { "alice" }, canChange = { true })
 
         vm.beginEnrollment()
         advanceUntilIdle()
@@ -122,7 +122,7 @@ class AccountSecurityFlowTest {
     fun codeMismatch_bouncesToFailed_andDoesNotEnroll() = runTest(dispatcher) {
         val server = primedMock()
         server.totpExpectedConfirmCode = "111111"
-        val vm = AccountSecurityViewModel(server = server, username = { "alice" })
+        val vm = AccountSecurityViewModel(server = server, username = { "alice" }, canChange = { true })
 
         vm.beginEnrollment(); advanceUntilIdle()
         vm.confirmEnrollment("999999"); advanceUntilIdle()
@@ -138,7 +138,7 @@ class AccountSecurityFlowTest {
     @Test
     fun emptyCode_failsImmediately() = runTest(dispatcher) {
         val server = primedMock()
-        val vm = AccountSecurityViewModel(server = server, username = { "alice" })
+        val vm = AccountSecurityViewModel(server = server, username = { "alice" }, canChange = { true })
         vm.beginEnrollment(); advanceUntilIdle()
         vm.confirmEnrollment("   "); advanceUntilIdle()
         val phase = vm.phase.value
@@ -149,7 +149,7 @@ class AccountSecurityFlowTest {
     @Test
     fun recoveryCodesDisplayGate_dismissScrubsCodes() = runTest(dispatcher) {
         val server = primedMock()
-        val vm = AccountSecurityViewModel(server = server, username = { "alice" })
+        val vm = AccountSecurityViewModel(server = server, username = { "alice" }, canChange = { true })
 
         vm.beginEnrollment(); advanceUntilIdle()
         vm.confirmEnrollment("123456"); advanceUntilIdle()
@@ -170,7 +170,7 @@ class AccountSecurityFlowTest {
         server.totpEnrolledAtByUser["alice"] = 1_700_000_000_000L
         server.totpSecretByUser["alice"] = "STAGED"
         server.recoveryCodesByUser["alice"] = listOf("abc")
-        val vm = AccountSecurityViewModel(server = server, username = { "alice" })
+        val vm = AccountSecurityViewModel(server = server, username = { "alice" }, canChange = { true })
 
         vm.disableEnrollment("424242"); advanceUntilIdle()
 
@@ -186,7 +186,7 @@ class AccountSecurityFlowTest {
         val server = primedMock()
         server.accountTypeByUser["alice"] = "multi"
         server.totpExpectedConfirmCode = "111111"
-        val vm = AccountSecurityViewModel(server = server, username = { "alice" })
+        val vm = AccountSecurityViewModel(server = server, username = { "alice" }, canChange = { true })
 
         vm.disableEnrollment("999999"); advanceUntilIdle()
 
