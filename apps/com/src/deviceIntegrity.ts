@@ -130,14 +130,24 @@ interface AuthData {
 }
 
 /** WebAuthn authenticator data (rpIdHash 32, flags 1, counter 4, [aaguid 16, credIdLen 2, credId, COSE key], [extensions]). */
-function parseAuthData(a: Uint8Array): AuthData {
+function cat2(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const o = new Uint8Array(a.length + b.length);
+  o.set(a, 0);
+  o.set(b, a.length);
+  return o;
+}
+
+function parseAuthData(a: Uint8Array, opts: { assertion?: boolean } = {}): AuthData {
   if (a.length < 37) throw new Error("authData too short");
   const flags = a[32]!;
   const counter = ((a[33]! << 24) >>> 0) + (a[34]! << 16) + (a[35]! << 8) + a[36]!;
   let p = 37;
   let aaguid: Uint8Array | null = null;
   let credentialId: Uint8Array | null = null;
-  if (flags & 0x40) {
+  // An assertion carries no credential data, but recent iOS sets the attested-data flag anyway and puts the
+  // extension map straight after the 37-byte header (flags 0xC0): a CBOR map there is the extensions, not a credential.
+  const extensionsNext = opts.assertion && a.length > p && (a[p]! & 0xe0) === 0xa0;
+  if (flags & 0x40 && !extensionsNext) {
     if (a.length < p + 18) throw new Error("attested data truncated");
     aaguid = a.slice(p, p + 16);
     const len = (a[p + 16]! << 8) | a[p + 17]!;
@@ -148,7 +158,7 @@ function parseAuthData(a: Uint8Array): AuthData {
     p = cborDecode(a, p).next;
   }
   let category: number | null = null;
-  if (flags & 0x80) {
+  if (flags & 0x80 || extensionsNext) {
     const ext = cborDecode(a, p);
     p = ext.next;
     if (ext.value instanceof Map) {
@@ -258,12 +268,18 @@ export async function verifyAppAttestAssertion(
     const sig = top.value.get("signature");
     const authData = top.value.get("authenticatorData");
     if (!(sig instanceof Uint8Array) || !(authData instanceof Uint8Array)) return { ok: false, why: "assertion shape" };
-    const nonce = await sha256(authData, await sha256(clientData));
+    const clientDataHash = await sha256(clientData);
+    const nonce = await sha256(authData, clientDataHash);
     const raw = derSigToRaw(sig);
     if (!raw) return { ok: false, why: "signature encoding" };
     const key = await crypto.subtle.importKey("raw", publicKey, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
-    if (!(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, raw, nonce))) return { ok: false, why: "signature" };
-    const ad = parseAuthData(authData);
+    // Apple's guide reads as ECDSA-SHA256 over the nonce (the signed digest is SHA256(nonce)); developers report both
+    // that and a signature over authenticatorData || clientDataHash itself. Both bind the same bytes under the attested key.
+    const verified =
+      (await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, raw, nonce)) ||
+      (await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, raw, cat2(authData, clientDataHash)));
+    if (!verified) return { ok: false, why: "signature" };
+    const ad = parseAuthData(authData, { assertion: true });
     if (!sameBytes(ad.rpIdHash, await sha256(new TextEncoder().encode(policy.appId)))) return { ok: false, why: "rp id" };
     if (ad.counter <= previousCounter) return { ok: false, why: "counter" };
     if (!categoryOk(ad.category, policy.environment)) return { ok: false, why: "validation category" };

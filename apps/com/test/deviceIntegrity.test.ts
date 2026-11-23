@@ -23,6 +23,8 @@ const subtle = webcrypto.subtle as unknown as SubtleCrypto;
 const NOW = Date.UTC(2026, 10, 2, 12);
 const sha = (...parts: Uint8Array[]) => new Uint8Array(createHash("sha256").update(Buffer.concat(parts)).digest());
 const cat = (...parts: Uint8Array[]) => new Uint8Array(Buffer.concat(parts));
+const PROD_CATEGORY = 2;
+const DEV_CATEGORY = 3;
 const utf8 = (s: string) => new TextEncoder().encode(s);
 const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64");
 
@@ -125,9 +127,12 @@ async function appAttest(o: { aaguid?: Uint8Array; counter?: number; category?: 
   const leafDer = await cert({ subject: "leaf", issuer: "Test App Attest CA", key: leaf, signer: inter, exts: [nonceExt] });
   const attestation = cbor(new Map<C, C>([["fmt", "apple-appattest"], ["attStmt", new Map<C, C>([["x5c", [leafDer, interDer]], ["receipt", new Uint8Array([1])]])], ["authData", authData]]));
   const policy: AppAttestPolicy = { appId: APP_ID, environment: "production", rootDer };
-  async function assertion(data: Uint8Array, ctr: number): Promise<Uint8Array> {
-    const ad = cat(sha(utf8(APP_ID)), new Uint8Array([0, 0, 0, 0, ctr]));
-    const n = sha(ad, sha(data));
+  async function assertion(data: Uint8Array, ctr: number, o: { ios27?: number; signRaw?: boolean } = {}): Promise<Uint8Array> {
+    const ad =
+      o.ios27 !== undefined
+        ? cat(sha(utf8(APP_ID)), new Uint8Array([0xc0, 0, 0, 0, ctr]), cbor(new Map<C, C>([["apple_validation_category_01", o.ios27]])))
+        : cat(sha(utf8(APP_ID)), new Uint8Array([0, 0, 0, 0, ctr]));
+    const n = o.signRaw ? cat(ad, sha(data)) : sha(ad, sha(data));
     const raw = new Uint8Array(await subtle.sign({ name: "ECDSA", hash: "SHA-256" }, leaf.pair.privateKey, n));
     return cbor(new Map<C, C>([["signature", rawToDer(raw)], ["authenticatorData", ad]]));
   }
@@ -177,6 +182,21 @@ describe("App Attest", () => {
     expect(await verifyAppAttestAssertion(a1, w.clientData, w.pubRaw, 0, w.policy)).toEqual({ ok: true, counter: 1 });
     expect(await verifyAppAttestAssertion(a1, w.clientData, w.pubRaw, 1, w.policy)).toEqual({ ok: false, why: "counter" });
     expect(await verifyAppAttestAssertion(a1, utf8("other request"), w.pubRaw, 0, w.policy)).toEqual({ ok: false, why: "signature" });
+  });
+
+  it("takes recent iOS's assertion layout: flags 0xC0, the extension map straight after the header", async () => {
+    const w = await appAttest();
+    const a = await w.assertion(w.clientData, 1, { ios27: PROD_CATEGORY });
+    expect(await verifyAppAttestAssertion(a, w.clientData, w.pubRaw, 0, w.policy)).toEqual({ ok: true, counter: 1 });
+    const dev = await w.assertion(w.clientData, 2, { ios27: DEV_CATEGORY });
+    expect(await verifyAppAttestAssertion(dev, w.clientData, w.pubRaw, 1, w.policy)).toEqual({ ok: false, why: "validation category" });
+  });
+
+  it("takes a signature over authenticatorData || clientDataHash itself", async () => {
+    const w = await appAttest();
+    const a = await w.assertion(w.clientData, 1, { signRaw: true });
+    expect(await verifyAppAttestAssertion(a, w.clientData, w.pubRaw, 0, w.policy)).toEqual({ ok: true, counter: 1 });
+    expect(await verifyAppAttestAssertion(a, utf8("other request"), w.pubRaw, 0, w.policy)).toEqual({ ok: false, why: "signature" });
   });
 });
 
