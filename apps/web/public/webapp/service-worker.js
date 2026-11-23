@@ -578,7 +578,10 @@
 //       any more), and an Activity row when someone joins an app through an invite.
 //  v254: the privacy policy notice (docs/security-notices.md, kind policy-update): a dismissible banner, in the
 //       person's language, saying the policy changes (or changed) on a date, with a link to read it.
-const SHELL_VERSION = "v254";
+//  v256: "Choose your own account name" at sign-up (lib/chooseName.js, views/choose-name.js): the account opens
+//       under the suggested name and is renamed at once, paid by a code or ten $1 vouchers; a name the owner set
+//       aside opens the same screen (/app/choose-name). (v255 is the welcome-art branch's.)
+const SHELL_VERSION = "v256";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -608,6 +611,7 @@ const ESSENTIAL_PATHS = [
 // network (and then cache whatever it gets). Keeps the webapp's
 // offline launch path resilient while a deploy rolls forward.
 const OPTIONAL_SHELL = [
+  "/lib/nameChange.js",
   "/lib/i18n.js",
   "/lib/i18nLocales.js",
   "/providers.js",
@@ -797,6 +801,8 @@ const OPTIONAL_SHELL = [
   "/lib/vouchers.js",
   "/lib/plan.js",
   "/lib/voucherLink.js",
+  "/lib/chooseName.js",
+  "/views/choose-name.js",
   "/lib/ohttp.js",
   "/views/messages.js",
   "/views/thread.js",

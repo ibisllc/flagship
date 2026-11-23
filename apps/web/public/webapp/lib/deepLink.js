@@ -114,6 +114,22 @@ export async function dispatchInitialView() {
     }
   }
 
+  // A name the owner set aside, opened while signed in (lib/chooseName.js; the sign-up takes it otherwise).
+  try {
+    const { peekNameGrant } = await import("./chooseName.js");
+    const grant = peekNameGrant();
+    if (grant) {
+      const { enterHome } = await import("../views/home.js");
+      await enterHome();
+      const { enterNameGrantForAccount } = await import("../views/choose-name.js");
+      await enterNameGrantForAccount(grant);
+      return;
+    }
+  } catch (e) {
+    console.error(e);
+    toast(humanError(e), "err");
+  }
+
   // Service-access friend deep-link: if this load was a /invite#<secret>
   // landing that detoured through bootstrap/unlock/PIN/recovery to get the
   // friend's key, resume the redeem now instead of the normal dispatch

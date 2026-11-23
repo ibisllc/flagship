@@ -36,12 +36,14 @@ import { set as profileSet } from "../lib/profilesStore.js";
 
 import { tr } from "../lib/i18n.js";
 import { isValidName, nameProblemText, voiciNameProblem } from "../lib/nameRules.js";
+import { forgetNameGrant, peekNameGrant, saveNameChoice } from "../lib/chooseName.js";
+import { finishChosenName, inlineChooseOwnName } from "./choose-name.js";
 registerView("view-bootstrap");
 
 
-// Sign-up no longer takes a chosen name — naming is random-by-default
+// Sign-up no longer takes a typed name — naming is random-by-default
 // (docs/naming-recovery-and-name-change.md §4): a custom name is a paid change,
-// later. So the cover has TWO actions: "Create your account" (→ random handle)
+// offered right at sign-up as "Choose your own account name" (views/choose-name.js). So the cover has TWO actions: "Create your account" (→ random handle)
 // and "Connect to an existing account", one page holding both ways back in:
 // the account name (sign in) and a pairing code (join), as on iOS and Android.
 
@@ -245,19 +247,39 @@ async function createAccount() {
   } catch (e) {
     return toast(failureText(e), "err");
   }
-  const chosen = await inlineSuggestUsername({
-    initialName: first.name,
-    retryAfterMs: first.retryAfterMs,
-    fetchNext: () => fetchSuggestion(deviceKey),
-  });
-  if (!chosen) return abandonNewKey(); // cancelled
+  // Or "Choose your own account name" (views/choose-name.js): the account still opens under the suggestion, and is
+  // renamed to the chosen name right after (lib/chooseName.js).
+  let chosen = first.name;
+  let wanted = null;
+  let retryAfterMs = first.retryAfterMs;
+  // Opened from a link where the owner set a name aside (lib/chooseName.js parseNameGrantLink): that name first.
+  const grant = peekNameGrant();
+  if (grant) wanted = await inlineChooseOwnName({ initialName: grant.name, setAside: true, free: grant.paid });
+  while (!wanted) {
+    const pick = await inlineSuggestUsername({
+      initialName: chosen,
+      retryAfterMs,
+      fetchNext: () => fetchSuggestion(deviceKey),
+      allowChooseOwn: true,
+    });
+    if (!pick) return abandonNewKey(); // cancelled
+    if (typeof pick === "string") {
+      chosen = pick;
+      wanted = null;
+      break;
+    }
+    chosen = pick.suggested;
+    retryAfterMs = 0;
+    wanted = await inlineChooseOwnName({ initialName: "" });
+  }
+  const shownName = wanted?.name ?? chosen;
 
-  const suggestedAccountName = chosen.split("-")
+  const suggestedAccountName = shownName.split("-")
     .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
     .join(" ");
   const accountDisplayName = await inlinePrompt({
     title: tr("Name this account"),
-    message: tr("This private name appears above @{0} and is never used in links.", chosen),
+    message: tr("This private name appears above @{0} and is never used in links.", shownName),
     placeholder: tr("Account name"),
     initial: suggestedAccountName,
     validate: (v) => (!v?.trim() ? tr("Enter an account name") : null),
@@ -276,7 +298,10 @@ async function createAccount() {
   // free custom name is impossible — that's the paid name-change.
   try {
     const session = getSession();
-    await openAccount(chosen, {
+    // Before the account exists: nothing may bind its keys to the suggested name meanwhile (lib/adminSigning.js).
+    const grantNow = grant && wanted?.name === grant.name ? grant : null;
+    if (wanted) saveNameChoice({ suggested: chosen, wanted: wanted.name, method: wanted.method, grant: grantNow, stage: "quote" });
+    const opened = await openAccount(chosen, {
       session,
       signWithIrk,
       bytesToHex,
@@ -292,9 +317,21 @@ async function createAccount() {
       accountDisplayName,
       deviceDisplayName,
     });
-    toast(tr("Account created — {0}", chosen), "ok");
+    let finalName = chosen;
+    if (wanted) {
+      const done = await finishChosenName({
+        suggested: chosen, wanted: wanted.name, method: wanted.method, code: wanted.code, grant: grantNow,
+        stage: "quote", deviceId: opened.deviceId, oldGrantId: opened.grantId,
+      });
+      if (done.redirected) return; // off to the card payment; the choice resumes after the unlock
+      finalName = done.name;
+    } else {
+      toast(tr("Account created — {0}", chosen), "ok");
+    }
+    // A set-aside name is offered once, at this sign-up (taken or not).
+    if (grant) forgetNameGrant();
     // A new account only: Home shows the voi.ci intro once, right away.
-    markVoiciIntroPending(chosen);
+    markVoiciIntroPending(finalName);
     try {
       const { enterHome } = await import("./home.js");
       await enterHome();

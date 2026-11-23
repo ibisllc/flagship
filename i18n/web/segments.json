@@ -7274,6 +7274,22 @@
       "open/index.html"
     ]
   },
+  "sa90a6e7e3a": {
+    "en": "An account name set aside for you",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
+  "s9b3ba30249": {
+    "en": "Get the Flagship app, then open this link again when you create your account, or create it in the web app.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open/index.html"
+    ]
+  },
   "s5e3791de5b": {
     "en": "Someone accepted your invite",
     "kind": "text",

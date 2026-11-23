@@ -311,7 +311,7 @@ export async function openAccount(username, deps) {
     await deps.dispatchInitialView();
   }
 
-  return { username, alreadyClaimed: created.created === false, deviceId };
+  return { username, alreadyClaimed: created.created === false, deviceId, grantId: identity.grantId };
 }
 
 // `.com` answers a bootstrap repeated under the same keys, device and grant as

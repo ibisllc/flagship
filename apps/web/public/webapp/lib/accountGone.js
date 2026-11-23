@@ -105,11 +105,23 @@ export async function noteAccountGoneResponse(url, response) {
   if (!response || response.status !== 404) return false;
   const name = accountNameInUrl(url);
   if (!name || !isOwn(name)) return false;
+  // Mid "Choose your own account name": `.com` already knows the account by its new name (lib/chooseName.js).
+  if (nameChoicePending(name)) return false;
   let body = null;
   try { body = await response.clone().json(); } catch { return false; }
   if (body?.code !== ACCOUNT_NOT_FOUND_CODE) return false;
   markAccountGone(name);
   return true;
+}
+
+/** lib/chooseName.js `nameChoicePendingFor`, read here without an import (see the header). */
+function nameChoicePending(name) {
+  try {
+    const p = JSON.parse(globalThis.localStorage?.getItem("flagship.nameChoice.v1") ?? "null");
+    return !!p && (p.suggested === name || p.wanted === name);
+  } catch {
+    return false;
+  }
 }
 
 /** Test seam. */

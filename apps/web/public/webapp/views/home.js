@@ -17,7 +17,9 @@ import { tickRenewals } from "../lib/leases.js";
 import { activeOperations } from "../lib/activeOperations.js";
 import { $, registerView, show, setSubtitle, currentViewId } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
-import { maybeShowVoiciIntro } from "../lib/voiciIntro.js";
+import { markVoiciIntroPending, maybeShowVoiciIntro } from "../lib/voiciIntro.js";
+import { loadNameChoice } from "../lib/chooseName.js";
+import { resumeChosenName } from "./choose-name.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
@@ -2159,6 +2161,13 @@ export async function renderActiveProviderChip() {
 export async function enterHome() {
   show("view-home");
   decorateHomeGrid(document);
+  // An unfinished "Choose your own account name" (back from the card payment, or cut off): finish or drop it first.
+  if (loadNameChoice()) {
+    const resumed = await resumeChosenName().catch(() => null);
+    if (resumed?.ok) toast(tr("Your account is now {0}.", resumed.name), "ok");
+    else if (resumed?.refusal) toast(resumed.refusal, "err");
+    if (resumed && !resumed.pending) markVoiciIntroPending(getSession()?.username);
+  }
   await renderHome();
   await renderActiveProviderChip();
   planTickSoon();

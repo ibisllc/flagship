@@ -253,6 +253,40 @@ export function removeProfileRecord(cloudName, storage = defaultStorage()) {
   return state;
 }
 
+/** The account was renamed (lib/chooseName.js): its slot record moves to the new name with its `username` slot
+ *  set to it, and the active pointer follows. */
+export function renameProfileRecord(fromCloudName, toCloudName, storage = defaultStorage()) {
+  if (!isStorage(storage) || !fromCloudName || !toCloudName) return null;
+  const state = readState(storage);
+  const rec = state.profiles[fromCloudName];
+  if (rec) {
+    delete state.profiles[fromCloudName];
+    state.profiles[toCloudName] = { ...rec, username: toCloudName };
+  }
+  if (state.activeCloudName === fromCloudName) state.activeCloudName = toCloudName;
+  writeState(state, storage);
+  for (const prefix of ACCOUNT_COPY_PREFIXES) {
+    try {
+      const v = storage.getItem(prefix + fromCloudName.toLowerCase());
+      if (v !== null) {
+        storage.setItem(prefix + toCloudName.toLowerCase(), v);
+        storage.removeItem(prefix + fromCloudName.toLowerCase());
+      }
+    } catch {
+      /* storage can be blocked */
+    }
+  }
+  if (state.activeCloudName === toCloudName) {
+    mirrorActiveToLegacy(toCloudName, storage);
+    try {
+      storage.setItem("flagship.username", toCloudName);
+    } catch {
+      /* storage can be blocked */
+    }
+  }
+  return state;
+}
+
 /** Switch the active profile. Mirrors into the legacy `flagship.profiles.v1`
  *  pointer so the keystore + lib/profiles.js see the same active cloud.
  *  No-op if `cloudName` isn't in the store. */
