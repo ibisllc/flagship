@@ -1,41 +1,22 @@
 package com.flagshipserver.app.ui.screens
 
-import com.flagshipserver.app.core.FSStrings
 import androidx.compose.ui.res.stringResource
 import com.flagshipserver.app.R
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import com.flagshipserver.app.ui.theme.DarkColors
 import com.flagshipserver.app.ui.components.FSActionFooter
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
@@ -44,7 +25,7 @@ import com.flagshipserver.app.ui.theme.FSLayout
  * D.2.1 — WelcomeScreen.
  *
  * Two CTAs: "Create your account" / "Connect to an existing account".
- * Subtle pulsing illustration of the box. Single primary action.
+ * The owner's welcome art above the headline. Single primary action.
  */
 @Composable
 fun WelcomeScreen(nav: NavController) {
@@ -56,6 +37,7 @@ fun WelcomeScreen(nav: NavController) {
       // Reading column — clamp + center on expanded panes; a no-op on phones. At the
       // largest text sizes it scrolls instead of clipping.
       BoxWithConstraints(Modifier.widthIn(max = FSLayout.readingMaxWidth).fillMaxWidth().fillMaxHeight()) {
+      val artMax = maxHeight * 0.4f
       Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -64,25 +46,24 @@ fun WelcomeScreen(nav: NavController) {
             .padding(horizontal = FS.space.s6),
         verticalArrangement = Arrangement.SpaceBetween,
       ) {
-        Spacer(Modifier.height(FS.space.s16))
+        Spacer(Modifier.height(FS.space.s6))
 
-        // Illustration
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            BoxIllustration()
-        }
-
-        // Headline + lede
+        // The picture, then the headline a fixed step under it; the leftover height goes between the top, this group
+        // and the buttons. Square, the reading column's width, at most 40 % of the screen's height so a short phone
+        // keeps its buttons on screen. At the largest text sizes (as iOS) the picture steps aside for the text.
         Column {
+            if (LocalDensity.current.fontScale < 1.5f) {
+                WelcomeArt(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = artMax)
+                        .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                        .align(Alignment.CenterHorizontally),
+                )
+                Spacer(Modifier.height(FS.space.s12))
+            }
             Text(
-                text = androidx.compose.ui.text.buildAnnotatedString {
-                    append(stringResource(R.string.your_stuff_on))
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = FS.colors.accent)) { append(stringResource(R.string.your_hardware)) }
-                },
+                text = stringResource(R.string.your_apps_live_where_you_live),
                 color = FS.colors.text,
                 style = MaterialTheme.typography.displaySmall.copy(fontSize = 40.sp, lineHeight = 48.sp),
             )
@@ -111,90 +92,19 @@ fun WelcomeScreen(nav: NavController) {
     }
 }
 
-/** The glyph colour on the teal badge: near-black, as iOS's onPrimary on its teal. */
-private val FS_ON_TEAL = Color(0xFF0A0A09)
-
 /**
- * The product in one picture: your phone (the key badge), a dashed line across
- * the internet (a globe), and your server (two drive bays with live LEDs). A dot travels the
- * line; the server's LEDs breathe. Drawn, not an icon, so it scales with the
- * screen and follows both themes.
+ * The owner's welcome art (0.4): the house at the end of the path with the server glowing inside and the phone in
+ * front, as on iOS (WelcomeArt). A day and a night painting whose edges fade to transparent, so they bleed into the
+ * screen: no card, border or shadow. Picked by the app's own theme (Settings can pin light or dark), not the system's,
+ * so a drawable-night folder would choose wrong. Decorative: no content description.
  */
 @Composable
-private fun BoxIllustration() {
-    val transition = rememberInfiniteTransition(label = "welcome")
-    val travel by transition.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2600, easing = androidx.compose.animation.core.FastOutSlowInEasing), RepeatMode.Restart),
-        label = "travel",
+private fun WelcomeArt(modifier: Modifier = Modifier) {
+    val dark = FS.colors == DarkColors
+    Image(
+        painter = painterResource(if (dark) R.drawable.welcome_night else R.drawable.welcome_day),
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = modifier,
     )
-    val led by transition.animateFloat(
-        initialValue = 0.45f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "led",
-    )
-    val teal = FS.colors.fill
-    val ink = FS.colors.text
-    val line = FS.colors.border
-    val card = FS.colors.surface
-    val ok = FS.colors.success
-    androidx.compose.foundation.Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp)
-            .semantics { contentDescription = FSStrings.get(R.string.your_phone_and_your_server_connected) },
-    ) {
-        val w = size.width
-        val h = size.height
-        val cy = h / 2f
-        // Glow behind the pair
-        drawCircle(
-            brush = Brush.radialGradient(listOf(teal.copy(alpha = 0.20f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(w / 2f, cy), radius = w * 0.46f),
-            radius = w * 0.46f,
-            center = androidx.compose.ui.geometry.Offset(w / 2f, cy),
-        )
-        // Phone
-        val pw = 78.dp.toPx(); val ph = 140.dp.toPx()
-        val px = w * 0.16f; val py = cy - ph / 2f
-        drawRoundRect(card, androidx.compose.ui.geometry.Offset(px, py), androidx.compose.ui.geometry.Size(pw, ph), androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()))
-        drawRoundRect(ink.copy(alpha = 0.85f), androidx.compose.ui.geometry.Offset(px, py), androidx.compose.ui.geometry.Size(pw, ph), androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
-        drawRoundRect(ink.copy(alpha = 0.5f), androidx.compose.ui.geometry.Offset(px + pw / 2f - 9.dp.toPx(), py + 8.dp.toPx()), androidx.compose.ui.geometry.Size(18.dp.toPx(), 3.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
-        // The key badge on the phone's corner, as on iOS (key.fill) and the webapp: a filled key on a teal disc,
-        // ringed in the card colour.
-        val bc = androidx.compose.ui.geometry.Offset(px + pw - 4.dp.toPx(), py + ph - 4.dp.toPx())
-        drawCircle(card, radius = 19.dp.toPx(), center = bc)
-        drawCircle(teal, radius = 16.dp.toPx(), center = bc)
-        val onTeal = FS_ON_TEAL
-        val bow = androidx.compose.ui.geometry.Offset(bc.x, bc.y - 5.dp.toPx())
-        drawCircle(onTeal, radius = 5.5.dp.toPx(), center = bow)
-        drawCircle(teal, radius = 1.8.dp.toPx(), center = androidx.compose.ui.geometry.Offset(bow.x, bow.y - 1.dp.toPx()))
-        drawLine(onTeal, androidx.compose.ui.geometry.Offset(bc.x, bow.y + 4.dp.toPx()), androidx.compose.ui.geometry.Offset(bc.x, bc.y + 10.dp.toPx()), strokeWidth = 3.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-        drawLine(onTeal, androidx.compose.ui.geometry.Offset(bc.x, bc.y + 5.dp.toPx()), androidx.compose.ui.geometry.Offset(bc.x + 4.dp.toPx(), bc.y + 5.dp.toPx()), strokeWidth = 2.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-        // Server: two bays
-        val sw = 104.dp.toPx(); val bay = 52.dp.toPx(); val gap = 8.dp.toPx()
-        val sx = w * 0.84f - sw; val sy = cy - (bay * 2 + gap) / 2f
-        for (i in 0..1) {
-            val y = sy + i * (bay + gap)
-            drawRoundRect(card, androidx.compose.ui.geometry.Offset(sx, y), androidx.compose.ui.geometry.Size(sw, bay), androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
-            drawRoundRect(ink, androidx.compose.ui.geometry.Offset(sx, y), androidx.compose.ui.geometry.Size(sw, bay), androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
-            for (k in 0..2) drawLine(line, androidx.compose.ui.geometry.Offset(sx + 14.dp.toPx(), y + (16 + k * 9).dp.toPx()), androidx.compose.ui.geometry.Offset(sx + sw - 38.dp.toPx(), y + (16 + k * 9).dp.toPx()), strokeWidth = 2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-            drawCircle(ok.copy(alpha = if (i == 0) led else 1f), radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(sx + sw - 18.dp.toPx(), y + bay / 2f))
-        }
-        // Dashed line phone -> server, a dot travelling along it
-        val x0 = px + pw + 10.dp.toPx(); val x1 = sx - 10.dp.toPx()
-        drawLine(teal.copy(alpha = 0.55f), androidx.compose.ui.geometry.Offset(x0, cy), androidx.compose.ui.geometry.Offset(x1, cy), strokeWidth = 2.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 6.dp.toPx())))
-        drawCircle(teal, radius = 5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x0 + (x1 - x0) * travel, cy))
-        // The internet in the middle: a globe outline in the same 2 dp stroke as the phone and the server
-        val gc = androidx.compose.ui.geometry.Offset((x0 + x1) / 2f, cy)
-        val gr = 13.dp.toPx()
-        val globe = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-        drawCircle(card, radius = gr + 4.dp.toPx(), center = gc)
-        drawCircle(teal, radius = gr, center = gc, style = globe)
-        drawOval(teal, androidx.compose.ui.geometry.Offset(gc.x - gr * 0.45f, gc.y - gr), androidx.compose.ui.geometry.Size(gr * 0.9f, gr * 2f), style = globe)
-        drawLine(teal, androidx.compose.ui.geometry.Offset(gc.x - gr, gc.y), androidx.compose.ui.geometry.Offset(gc.x + gr, gc.y), strokeWidth = 2.dp.toPx())
-        val lat = gr * 0.5f
-        val half = kotlin.math.sqrt(gr * gr - lat * lat)
-        drawLine(teal, androidx.compose.ui.geometry.Offset(gc.x - half, gc.y - lat), androidx.compose.ui.geometry.Offset(gc.x + half, gc.y - lat), strokeWidth = 2.dp.toPx())
-        drawLine(teal, androidx.compose.ui.geometry.Offset(gc.x - half, gc.y + lat), androidx.compose.ui.geometry.Offset(gc.x + half, gc.y + lat), strokeWidth = 2.dp.toPx())
-    }
 }

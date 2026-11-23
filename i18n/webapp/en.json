@@ -16090,8 +16090,8 @@
     "en": "Let people message and call you, and share your updates. Everything is protected against quantum computers. Your page will be at voi.ci/{0}.",
     "ctx": "webapp/lib/voiciIntro.js"
   },
-  "Your stuff,<br>on your hardware.": {
-    "en": "Your stuff,<br>on your hardware.",
+  "Your apps live<br>where you live.": {
+    "en": "Your apps live<br>where you live.",
     "ctx": "webapp/index.html"
   },
   "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": {

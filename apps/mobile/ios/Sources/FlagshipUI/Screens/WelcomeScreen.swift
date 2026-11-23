@@ -22,8 +22,7 @@ public struct WelcomeScreen: View {
                             // height goes above the buttons (design audit 2026-11-20).
                             Spacer(minLength: FS.space.s6)
                                 .frame(maxHeight: FS.space.s16 + FS.space.s8)
-                            PhoneAndServerIllustration()
-                                .frame(maxWidth: .infinity)
+                            WelcomeArt(maxHeight: geo.size.height * 0.4)
                                 .accessibilityHidden(true)
                         }
                         // The headline sits a fixed step under the picture (the leftover height goes above the
@@ -34,9 +33,9 @@ public struct WelcomeScreen: View {
                             Color.clear.frame(height: FS.space.s12)
                         }
                         VStack(alignment: .leading, spacing: FS.space.s3) {
-                            // Never squeezed to "Your stuff,…": both lines at any width and text size (the
+                            // Never squeezed to "Your apps live…": both lines at any width and text size (the
                             // ScrollView proposes a short height while the footer is pinned to the bottom).
-                            Text("Your stuff,\non your hardware.")
+                            Text("Your apps live\nwhere you live.")
                                 .font(FS.font.h1())
                                 .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityAddTraits(.isHeader)
@@ -72,76 +71,18 @@ public struct WelcomeScreen: View {
     }
 }
 
-/// A phone that holds the keys, a line across the internet to the server
-/// that runs the services: the product in one picture, drawn with system symbols so it
-/// follows the text size and both appearances.
-private struct PhoneAndServerIllustration: View {
-    @Environment(\.colorScheme) private var scheme
-    @State private var pulse = false
-    @ScaledMetric(relativeTo: .largeTitle) private var tile: CGFloat = 96
+/// The owner's welcome art (0.4): the house at the end of the path with the server glowing inside and the phone in
+/// front. A day and a night painting in the app's asset catalog (WelcomeArt, Any and Dark appearances), whose edges
+/// fade to transparent so they bleed into the screen: no card, border or shadow. Square, the reading column's width,
+/// and at most 40 % of the screen's height, so a short phone (iPhone SE) keeps its buttons on screen.
+private struct WelcomeArt: View {
+    var maxHeight: CGFloat
 
     var body: some View {
-        let c = FSColors.scheme(scheme)
-        HStack(spacing: 0) {
-            node(symbol: "iphone", badge: "key.fill", tint: c.primary, c: c)
-            link(c: c)
-            node(symbol: "server.rack", badge: nil, tint: c.text, c: c)
-                .overlay(alignment: .topTrailing) {
-                    Circle()
-                        .fill(c.success)
-                        .frame(width: 12, height: 12)
-                        .overlay(Circle().stroke(c.surface, lineWidth: 3))
-                        .scaleEffect(pulse ? 1.15 : 0.9)
-                        .offset(x: 4, y: -4)
-                }
-        }
-        .padding(.vertical, FS.space.s6)
-        .padding(.horizontal, FS.space.s4)
-        .background(
-            RoundedRectangle(cornerRadius: FS.radius.lg + 8, style: .continuous)
-                .fill(LinearGradient(colors: [c.primary.opacity(0.10), c.surfaceSunken.opacity(0.6)],
-                                     startPoint: .topTrailing, endPoint: .bottomLeading))
-        )
-        .overlay(RoundedRectangle(cornerRadius: FS.radius.lg + 8, style: .continuous).stroke(c.border, lineWidth: 1))
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { pulse = true }
-        }
-    }
-
-    private func node(symbol: String, badge: String?, tint: Color, c: FSColors) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            Image(systemName: symbol)
-                .font(.system(size: tile * 0.46, weight: .regular))
-                .foregroundColor(tint)
-                .frame(width: tile, height: tile)
-                .background(c.surface, in: RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous).stroke(c.border, lineWidth: 1))
-            if let badge {
-                Image(systemName: badge)
-                    .font(.system(size: tile * 0.2, weight: .semibold))
-                    .foregroundColor(c.onPrimary)
-                    .frame(width: tile * 0.34, height: tile * 0.34)
-                    .background(c.primaryFill, in: Circle())
-                    .overlay(Circle().stroke(c.surface, lineWidth: 3))
-                    .offset(x: 6, y: 6)
-            }
-        }
-    }
-
-    private func link(c: FSColors) -> some View {
-        HStack(spacing: 5) {
-            ForEach(0..<4, id: \.self) { _ in
-                Circle().fill(c.accent.opacity(0.5)).frame(width: 4, height: 4)
-            }
-            // The internet between them (owner, 2026-11-20: a globe, not a lock). Semibold at this size gives a
-            // ~2 pt stroke, like the phone and the server; the teal dots run the protected path through it.
-            Image(systemName: "globe")
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundColor(c.accent)
-            ForEach(0..<4, id: \.self) { _ in
-                Circle().fill(c.accent.opacity(0.5)).frame(width: 4, height: 4)
-            }
-        }
-        .padding(.horizontal, FS.space.s2)
+        Image("WelcomeArt", bundle: .main)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(maxWidth: .infinity, maxHeight: max(maxHeight, 0))
     }
 }
