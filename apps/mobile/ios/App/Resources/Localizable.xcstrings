@@ -113927,43 +113927,43 @@
         }
       }
     },
-    "Your stuff,\non your hardware.": {
+    "Your apps live\nwhere you live.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tus cosas,\nen tu hardware."
+            "value": "Tus apps viven\ndonde vives tú."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vos affaires,\nsur votre matériel."
+            "value": "Vos apps vivent\nlà où vous vivez."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deine Sachen,\nauf deiner Hardware."
+            "value": "Deine Apps leben\ndort, wo du lebst."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Suas coisas,\nno seu hardware."
+            "value": "Seus apps moram\nonde você mora."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "あなたのデータを、\nあなたのハードウェアで。"
+            "value": "あなたのアプリは、\nあなたの暮らす場所に。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "你的东西，\n运行在你的硬件上。"
+            "value": "你的应用，\n住在你住的地方。"
           }
         }
       }

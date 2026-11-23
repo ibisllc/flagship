@@ -11350,9 +11350,9 @@
     "en": "Sign in with your account name, or join with a pairing code.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift:47"
   },
-  "Your stuff,\non your hardware.": {
-    "en": "Your stuff,\non your hardware.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift:28"
+  "Your apps live\nwhere you live.": {
+    "en": "Your apps live\nwhere you live.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift:38"
   },
   "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.": {
     "en": "A personal cloud you actually own. You build and approve everything from your phone; your server runs your apps.",
