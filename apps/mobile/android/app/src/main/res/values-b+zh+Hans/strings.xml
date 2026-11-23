@@ -4375,4 +4375,9 @@
     <string name="payments_usage_gb">%1$s GB</string>
     <string name="app_has_a_separate_access_list">1 个应用在每台服务器上有单独的访问名单。Pro 结束后将使用 %1$s 的名单。</string>
     <string name="app_has_a_separate_access_list_2">1 个应用在每台服务器上有单独的访问名单。Pro 结束后将使用其主导服务器的名单。</string>
+    <string name="only_an_admin_device_can_change_code_protection">只有此账户的管理员设备才能更改代码保护。</string>
+    <string name="code_protection_already_on">此账户已开启代码保护。要设置新的验证器，请先关闭它。</string>
+    <string name="code_protection_already_off">此账户的代码保护已经关闭。</string>
+    <string name="code_protection_setup_expired">此设置已过期。请重新开始以获取新密钥。</string>
+    <string name="code_protection_account_not_found">Flagship 找不到此账户。</string>
 </resources>

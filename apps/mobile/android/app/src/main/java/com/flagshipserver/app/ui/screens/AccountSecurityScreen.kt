@@ -88,10 +88,14 @@ fun AccountSecurityScreen(nav: NavController) {
                 AccountSecurityViewModel(
                     server = server,
                     username = { app.currentUser.value },
+                    canChange = { com.flagshipserver.app.core.AddServerGate.allows(app) },
                 )
             }
         },
     )
+    // Code protection is an admin order (`.com` refuses any other key with
+    // `totp-admin-only`): any other device sees it read-only, with the line.
+    val canChange = vm.canChange()
     val phase = vm.phase.collectAsState().value
     val accountType = vm.accountType.collectAsState().value
     val totpEnrolledAt = vm.totpEnrolledAt.collectAsState().value
@@ -151,6 +155,7 @@ fun AccountSecurityScreen(nav: NavController) {
                 FSDangerButton(
                     label = stringResource(R.string.turn_off_code_protection),
                     onClick = { showDisableDialog = true },
+                    enabled = canChange,
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "account-security-disable-btn" },
                 )
@@ -158,9 +163,18 @@ fun AccountSecurityScreen(nav: NavController) {
                 FSPrimaryButton(
                     label = stringResource(R.string.turn_on_code_protection),
                     onClick = { showEnableSheet = true },
+                    enabled = canChange,
                     block = true,
                     large = true,
                     modifier = Modifier.semantics { contentDescription = "account-security-enable-btn" },
+                )
+            }
+            if (!canChange) {
+                Text(
+                    stringResource(R.string.only_an_admin_device_can_change_code_protection),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.semantics { contentDescription = "account-security-admin-only" },
                 )
             }
             if (phase is AccountSecurityPhase.Failed) {

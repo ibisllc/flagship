@@ -1536,7 +1536,7 @@
     },
     {
       "id": "account-security",
-      "title": "TOTP two-factor, audit log, peer backup",
+      "title": "Code protection (TOTP, admin-only on/off, refusals by code), audit log, peer backup",
       "ref": "ios",
       "surfaces": {
         "ios": {
@@ -1544,7 +1544,11 @@
           "anchors": [
             [
               "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift",
-              "TOTP|[Tt]wo-factor"
+              "CodeProtectionText\\.adminOnly"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AccountSecurityViewModel.swift",
+              "\"totp-already-enrolled\""
             ],
             [
               "apps/mobile/ios/Sources/FlagshipUI/Screens/AuditLogScreen.swift",
@@ -1564,6 +1568,14 @@
               "R\\.string\\.totp_qr_code\\b"
             ],
             [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccountSecurityScreen.kt",
+              "R\\.string\\.only_an_admin_device_can_change_code_protection\\b"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/AccountSecurityViewModel.kt",
+              "\"totp-already-enrolled\""
+            ],
+            [
               "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AuditLogScreen.kt",
               "fun "
             ],
@@ -1578,7 +1590,11 @@
           "anchors": [
             [
               "apps/web/public/webapp/lib/totp.js",
-              "export"
+              "\"totp-already-enrolled\""
+            ],
+            [
+              "apps/web/public/webapp/views/account-security.js",
+              "TOTP_COPY\\.adminOnly"
             ],
             [
               "apps/web/public/webapp/views/audit-log.js",

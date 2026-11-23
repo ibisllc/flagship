@@ -1,5 +1,5 @@
-// v1.2 Phase 4 — Settings → Multi-device + 2FA. Kotlin mirror of the
-// iOS AccountSecurityViewModel. Drives:
+// v1.2 Phase 4 — Settings → Account security → Code protection. Kotlin
+// mirror of the iOS AccountSecurityViewModel. Drives:
 //
 //   1. Load the account-type badge (single vs multi-device).
 //   2. Four-step enrollment (explainer → QR → sample code → recovery
@@ -7,9 +7,12 @@
 //   3. Disable an existing enrollment (Phase 3 endpoint; refused by
 //      the Worker when other paired sessions still exist).
 //
-// IRK signatures for enroll-begin / enroll-confirm / disable are
-// produced from the current Keystore IRK seed — same primitive
-// ReplaceDeviceViewModel uses.
+// Turning code protection on or off is an admin order (owner, 2026-11-23;
+// security report F2): enroll-begin / enroll-confirm / disable are signed with
+// the admin root (Keystore.adminSigningKey, the IRK only on an account with
+// no admin root), `.com` refuses anything else with `totp-admin-only`, and a
+// device that isn't an admin sees the setting read-only ([canChange]).
+// `.com`'s refusals carry a `code`, which [CodeProtectionText] words.
 
 package com.flagshipserver.app.viewmodels
 
@@ -22,7 +25,13 @@ import com.flagshipserver.app.api.TotpDisableRequest
 import com.flagshipserver.app.api.TotpEnrollBeginRequest
 import com.flagshipserver.app.api.TotpEnrollConfirmRequest
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.HttpException
+import com.flagshipserver.app.core.RateLimitedException
+import com.flagshipserver.app.core.Variant
 import com.flagshipserver.app.keystore.Keystore
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,6 +58,12 @@ sealed interface AccountSecurityPhase {
 class AccountSecurityViewModel(
     private val server: FlagshipServerClient,
     private val username: () -> String?,
+    /** Whether this device may turn code protection on or off: an admin
+     *  device (or a demo account's), `AddServerGate.allows`. */
+    val canChange: () -> Boolean = { Variant.forceAdminRoot || Keystore.hasAdminRoot() },
+    private val sign: suspend (reason: String, bytes: ByteArray) -> ByteArray = { reason, bytes ->
+        Keystore.adminSigningKey(reason).sign(bytes)
+    },
 ) : ViewModel() {
 
     private val _phase = MutableStateFlow<AccountSecurityPhase>(AccountSecurityPhase.Idle)
@@ -88,12 +103,15 @@ class AccountSecurityViewModel(
             _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
+        if (!canChange()) {
+            _phase.value = AccountSecurityPhase.Failed(CodeProtectionText.adminOnly)
+            return
+        }
         _phase.value = AccountSecurityPhase.Beginning
 
         val issuedAt = System.currentTimeMillis()
         val signature = try {
-            val signer = Keystore.deriveIRK(FSStrings.get(R.string.turn_on_code_protection), Keystore.currentIrkVersion())
-            signer.sign(canonicalEnrollBegin(user, issuedAt))
+            sign(FSStrings.get(R.string.turn_on_code_protection), canonicalEnrollBegin(user, issuedAt))
         } catch (e: Throwable) {
             _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.couldnt_sign_enroll_begin, UserErrorText.reason(e)))
             return
@@ -114,13 +132,11 @@ class AccountSecurityViewModel(
                 issuer = resp.issuer,
             )
         } catch (e: Throwable) {
-            val msg = e.message.orEmpty()
-            val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: if (msg.contains("503")) {
-                FSStrings.get(R.string.code_protection_isnt_available_on_this)
-            } else {
-                FSStrings.get(R.string.couldnt_start_enrollment, msg)
-            }
-            _phase.value = AccountSecurityPhase.Failed(friendly)
+            _phase.value = AccountSecurityPhase.Failed(
+                CodeProtectionText.refusal(e)
+                    ?: FSStrings.get(R.string.couldnt_start_enrollment, UserErrorText.of(e, where = "totp-enroll-begin")),
+            )
+            if (CodeProtectionText.codeOf(e) == "totp-already-enrolled") load()
         }
     }
 
@@ -135,12 +151,15 @@ class AccountSecurityViewModel(
             _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
+        if (!canChange()) {
+            _phase.value = AccountSecurityPhase.Failed(CodeProtectionText.adminOnly)
+            return
+        }
         _phase.value = AccountSecurityPhase.Confirming
 
         val issuedAt = System.currentTimeMillis()
         val signature = try {
-            val signer = Keystore.deriveIRK(FSStrings.get(R.string.confirm_2fa_code), Keystore.currentIrkVersion())
-            signer.sign(canonicalEnrollConfirm(user, issuedAt))
+            sign(FSStrings.get(R.string.confirm_2fa_code), canonicalEnrollConfirm(user, issuedAt))
         } catch (e: Throwable) {
             _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.couldnt_sign_enroll_confirm, UserErrorText.reason(e)))
             return
@@ -162,14 +181,17 @@ class AccountSecurityViewModel(
                 recoveryCodes = resp.recoveryCodes,
             )
         } catch (e: Throwable) {
-            val msg = e.message.orEmpty()
-            // A refused 429 says when to try again in `.com`'s own words.
-            val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: if (msg.contains("401")) {
-                FSStrings.get(R.string.that_code_didnt_match_try_again)
-            } else {
-                FSStrings.get(R.string.couldnt_confirm, msg)
-            }
-            _phase.value = AccountSecurityPhase.Failed(friendly)
+            val code = CodeProtectionText.codeOf(e)
+            val wrongCode = (e as? HttpException)?.status == 401 && (code == null || code == "invalid-totp-code")
+            _phase.value = AccountSecurityPhase.Failed(
+                if (wrongCode) {
+                    FSStrings.get(R.string.that_code_didnt_match_try_again)
+                } else {
+                    CodeProtectionText.refusal(e)
+                        ?: FSStrings.get(R.string.couldnt_confirm, UserErrorText.of(e, where = "totp-enroll-confirm"))
+                },
+            )
+            if (code == "totp-already-enrolled") load()
         }
     }
 
@@ -191,11 +213,14 @@ class AccountSecurityViewModel(
             _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
+        if (!canChange()) {
+            _phase.value = AccountSecurityPhase.Failed(CodeProtectionText.adminOnly)
+            return
+        }
         _phase.value = AccountSecurityPhase.Disabling
         val issuedAt = System.currentTimeMillis()
         val signature = try {
-            val signer = Keystore.deriveIRK(FSStrings.get(R.string.turn_off_code_protection), Keystore.currentIrkVersion())
-            signer.sign(canonicalDisable(user, issuedAt))
+            sign(FSStrings.get(R.string.turn_off_code_protection), canonicalDisable(user, issuedAt))
         } catch (e: Throwable) {
             _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.couldnt_sign_disable, UserErrorText.reason(e)))
             return
@@ -213,13 +238,19 @@ class AccountSecurityViewModel(
             _totpEnrolledAt.value = null
             _phase.value = AccountSecurityPhase.Disabled
         } catch (e: Throwable) {
-            val msg = e.message.orEmpty()
-            val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: when {
-                msg.contains("401") -> FSStrings.get(R.string.that_code_didnt_match_try_a)
-                msg.contains("409") -> FSStrings.get(R.string.disable_refused_other_devices_are_still)
-                else -> FSStrings.get(R.string.couldnt_disable, msg)
+            val code = CodeProtectionText.codeOf(e)
+            _phase.value = AccountSecurityPhase.Failed(
+                CodeProtectionText.refusal(e)
+                    ?: if ((e as? HttpException)?.status == 409) {
+                        FSStrings.get(R.string.disable_refused_other_devices_are_still)
+                    } else {
+                        FSStrings.get(R.string.couldnt_disable, UserErrorText.of(e, where = "totp-disable"))
+                    },
+            )
+            if (code == "totp-not-enrolled") {
+                _accountType.value = "single"
+                _totpEnrolledAt.value = null
             }
-            _phase.value = AccountSecurityPhase.Failed(friendly)
         }
     }
 
@@ -233,5 +264,52 @@ class AccountSecurityViewModel(
 
         fun canonicalDisable(username: String, issuedAt: Long): ByteArray =
             "flagship/totp-disable/v1|$username|$issuedAt".toByteArray(Charsets.UTF_8)
+    }
+}
+
+/** `.com`'s code protection refusals (packages/control-plane/src/totp.ts
+ *  `TotpRefusalCode`) as sentences, read from the status and the body's
+ *  `code`, never from the exception's text. Mirrors iOS `CodeProtectionText`
+ *  and the webapp's lib/totp.js `totpRefusalText`. */
+object CodeProtectionText {
+    val adminOnly get() = FSStrings.get(R.string.only_an_admin_device_can_change_code_protection)
+    val alreadyOn get() = FSStrings.get(R.string.code_protection_already_on)
+    val alreadyOff get() = FSStrings.get(R.string.code_protection_already_off)
+    val notAvailable get() = FSStrings.get(R.string.code_protection_isnt_available_on_this)
+    val expired get() = FSStrings.get(R.string.code_protection_setup_expired)
+    val wrongCode get() = FSStrings.get(R.string.that_code_didnt_match_try_a)
+    val otherDevices get() = FSStrings.get(R.string.disable_refused_other_devices_are_still)
+    val accountNotFound get() = FSStrings.get(R.string.code_protection_account_not_found)
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    /** The `code` of a refused call's JSON body, if it has one. */
+    fun codeOf(t: Throwable): String? {
+        val body = (t as? HttpException)?.body ?: return null
+        val obj = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return null
+        return (obj["code"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    }
+
+    /** The sentence for one of `.com`'s refusals, or null for anything else
+     *  (transport, decoding), which [UserErrorText] words. */
+    fun refusal(t: Throwable): String? {
+        RateLimitedException.messageOf(t)?.let { return it }
+        val status = (t as? HttpException)?.status ?: return null
+        return when (codeOf(t)) {
+            "totp-admin-only" -> adminOnly
+            "totp-already-enrolled" -> alreadyOn
+            "totp-not-enrolled" -> alreadyOff
+            "totp-not-configured" -> notAvailable
+            "totp-pending-expired", "totp-no-pending" -> expired
+            "invalid-totp-code" -> wrongCode
+            "totp-other-devices" -> otherDevices
+            "account-not-found" -> accountNotFound
+            "internal-error" -> UserErrorText.SERVER_PROBLEM
+            else -> when (status) {
+                503 -> notAvailable
+                401 -> wrongCode
+                else -> null
+            }
+        }
     }
 }

@@ -4372,5 +4372,10 @@
   "payments_usage_mb": "%1$s MB",
   "payments_usage_gb": "%1$s GB",
   "app_has_a_separate_access_list": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、%1$s のリストを使います。",
-  "app_has_a_separate_access_list_2": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、そのリードサーバーのリストを使います。"
+  "app_has_a_separate_access_list_2": "1 個のアプリがサーバーごとに別のアクセスリストを持っています。Pro が終了すると、そのリードサーバーのリストを使います。",
+  "only_an_admin_device_can_change_code_protection": "コード保護を変更できるのは、このアカウントの管理者デバイスだけです。",
+  "code_protection_already_on": "このアカウントのコード保護はすでにオンです。新しい認証アプリを設定するには、まずオフにしてください。",
+  "code_protection_already_off": "このアカウントのコード保護はすでにオフです。",
+  "code_protection_setup_expired": "この設定は期限切れになりました。最初からやり直して新しいキーを取得してください。",
+  "code_protection_account_not_found": "Flagship でこのアカウントが見つかりませんでした。"
 }

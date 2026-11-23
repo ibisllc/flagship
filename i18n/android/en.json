@@ -2808,7 +2808,7 @@
     "ctx": "ui/screens/AccountSecurityScreen.kt:135 (prose)"
   },
   "why_enable_this": {
-    "en": "Why enable this?",
+    "en": "Why turn it on?",
     "ctx": "ui/screens/AccountSecurityScreen.kt:135 (prose)"
   },
   "your_totp_secret_was_generated_on": {
@@ -17943,5 +17943,25 @@
   "app_has_a_separate_access_list_2": {
     "en": "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.",
     "ctx": "core/AppListScope.kt (plan page warning)"
+  },
+  "only_an_admin_device_can_change_code_protection": {
+    "en": "Only an admin device of this account can change code protection.",
+    "ctx": "viewmodels/AccountSecurityViewModel.kt CodeProtectionText (security report F2)"
+  },
+  "code_protection_already_on": {
+    "en": "Code protection is already on for this account. Turn it off first to set up a new authenticator.",
+    "ctx": "viewmodels/AccountSecurityViewModel.kt CodeProtectionText (security report F2)"
+  },
+  "code_protection_already_off": {
+    "en": "Code protection is already off for this account.",
+    "ctx": "viewmodels/AccountSecurityViewModel.kt CodeProtectionText (security report F2)"
+  },
+  "code_protection_setup_expired": {
+    "en": "This setup expired. Start again to get a new key.",
+    "ctx": "viewmodels/AccountSecurityViewModel.kt CodeProtectionText (security report F2)"
+  },
+  "code_protection_account_not_found": {
+    "en": "Flagship couldn't find this account.",
+    "ctx": "viewmodels/AccountSecurityViewModel.kt CodeProtectionText (security report F2)"
   }
 }

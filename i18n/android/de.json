@@ -666,7 +666,7 @@
   "recovery_needs_your_6_digit_code": "Für die Wiederherstellung brauchst du einen 6-stelligen Authenticator-Code (oder einen Wiederherstellungscode) und 24 Stunden Wartezeit.",
   "recovery_needs_a_recovery_credential_and": "Für die Wiederherstellung brauchst du einen Wiederherstellungsnachweis, danach 3 Tage Wartezeit. Deine anderen Geräte werden benachrichtigt, können sie aber nicht abbrechen.",
   "currently_enabled": "Derzeit aktiviert",
-  "why_enable_this": "Warum aktivieren?",
+  "why_enable_this": "Warum einschalten?",
   "your_totp_secret_was_generated_on": "Auf diesem Gerät eingerichtet am %1$s. Bewahre deine Wiederherstellungscodes sicher auf: Sie sind der einzige Weg zurück, wenn du deine Authenticator-App verlierst.",
   "a_second_factor_outside_googles_account": "Eine Prüfung außerhalb der Google-Kontowiederherstellung: Wer dein Google-Passwort stiehlt, braucht trotzdem einen aktuellen Code aus deiner Authenticator-App, um dein Konto zu übernehmen.",
   "turn_off_code_protection": "Codeschutz ausschalten",
@@ -4373,5 +4373,10 @@
   "payments_usage_mb": "%1$s MB",
   "payments_usage_gb": "%1$s GB",
   "app_has_a_separate_access_list": "1 App hat auf jedem Server eine eigene Zugangsliste. Wenn Pro endet, gilt für sie die Liste von %1$s.",
-  "app_has_a_separate_access_list_2": "1 App hat auf jedem Server eine eigene Zugangsliste. Wenn Pro endet, gilt für sie die Liste ihres Leit-Servers."
+  "app_has_a_separate_access_list_2": "1 App hat auf jedem Server eine eigene Zugangsliste. Wenn Pro endet, gilt für sie die Liste ihres Leit-Servers.",
+  "only_an_admin_device_can_change_code_protection": "Nur ein Admin-Gerät dieses Kontos kann den Codeschutz ändern.",
+  "code_protection_already_on": "Der Codeschutz ist für dieses Konto bereits aktiviert. Schalte ihn zuerst aus, um einen neuen Authenticator einzurichten.",
+  "code_protection_already_off": "Der Codeschutz ist für dieses Konto bereits ausgeschaltet.",
+  "code_protection_setup_expired": "Diese Einrichtung ist abgelaufen. Beginne von vorn, um einen neuen Schlüssel zu erhalten.",
+  "code_protection_account_not_found": "Flagship konnte dieses Konto nicht finden."
 }

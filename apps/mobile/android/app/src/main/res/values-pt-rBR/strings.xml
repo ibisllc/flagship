@@ -4376,4 +4376,9 @@
     <string name="payments_usage_gb">%1$s GB</string>
     <string name="app_has_a_separate_access_list">1 app tem uma lista de acesso separada em cada servidor. Quando o Pro acabar, usará a lista de %1$s.</string>
     <string name="app_has_a_separate_access_list_2">1 app tem uma lista de acesso separada em cada servidor. Quando o Pro acabar, usará a lista do seu servidor líder.</string>
+    <string name="only_an_admin_device_can_change_code_protection">Somente um dispositivo administrador desta conta pode alterar a proteção por código.</string>
+    <string name="code_protection_already_on">A proteção por código já está ativada nesta conta. Desative-a primeiro para configurar um novo autenticador.</string>
+    <string name="code_protection_already_off">A proteção por código já está desativada nesta conta.</string>
+    <string name="code_protection_setup_expired">Esta configuração expirou. Comece de novo para obter uma nova chave.</string>
+    <string name="code_protection_account_not_found">O Flagship não encontrou esta conta.</string>
 </resources>

@@ -666,7 +666,7 @@
   "recovery_needs_your_6_digit_code": "270b39248feb",
   "recovery_needs_a_recovery_credential_and": "51b33fd94559",
   "currently_enabled": "b276021b38eb",
-  "why_enable_this": "6165d46713d5",
+  "why_enable_this": "c8601816e025",
   "your_totp_secret_was_generated_on": "cc60dcb71ea9",
   "a_second_factor_outside_googles_account": "c72c01744bcc",
   "turn_off_code_protection": "422b920bd4c8",
@@ -4292,5 +4292,10 @@
   "payments_usage_mb": "d5b0d6f3e702",
   "payments_usage_gb": "bd07db444f77",
   "app_has_a_separate_access_list": "2eb0fbf52ebf",
-  "app_has_a_separate_access_list_2": "e5a23f44939d"
+  "app_has_a_separate_access_list_2": "e5a23f44939d",
+  "only_an_admin_device_can_change_code_protection": "c8b48f4fe606",
+  "code_protection_already_on": "12d98c4b2595",
+  "code_protection_already_off": "e25a5de61120",
+  "code_protection_setup_expired": "2f5736972f88",
+  "code_protection_account_not_found": "1909ab21ff27"
 }

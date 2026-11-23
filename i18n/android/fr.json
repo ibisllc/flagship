@@ -4373,5 +4373,10 @@
   "payments_usage_mb": "%1$s Mo",
   "payments_usage_gb": "%1$s Go",
   "app_has_a_separate_access_list": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de %1$s.",
-  "app_has_a_separate_access_list_2": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de son serveur principal."
+  "app_has_a_separate_access_list_2": "1 app a une liste d'accès distincte sur chaque serveur. À la fin de Pro, elle utilisera la liste de son serveur principal.",
+  "only_an_admin_device_can_change_code_protection": "Seul un appareil administrateur de ce compte peut modifier la protection par code.",
+  "code_protection_already_on": "La protection par code est déjà activée pour ce compte. Désactivez-la d’abord pour configurer un nouvel authentificateur.",
+  "code_protection_already_off": "La protection par code est déjà désactivée pour ce compte.",
+  "code_protection_setup_expired": "Cette configuration a expiré. Recommencez pour obtenir une nouvelle clé.",
+  "code_protection_account_not_found": "Flagship n’a pas trouvé ce compte."
 }

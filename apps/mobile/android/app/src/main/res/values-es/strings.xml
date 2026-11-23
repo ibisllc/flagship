@@ -668,7 +668,7 @@
     <string name="recovery_needs_your_6_digit_code">La recuperación requiere un código de 6 dígitos del autenticador (o un código de recuperación) y una espera de 24 horas.</string>
     <string name="recovery_needs_a_recovery_credential_and">La recuperación requiere una credencial de recuperación y luego una espera de 3 días. Tus otros dispositivos reciben un aviso, pero no pueden cancelarla.</string>
     <string name="currently_enabled">Activado actualmente</string>
-    <string name="why_enable_this">¿Por qué activarla?</string>
+    <string name="why_enable_this">¿Por qué activarlo?</string>
     <string name="your_totp_secret_was_generated_on">Configurado en este dispositivo el %1$s. Guarda bien tus códigos de recuperación: son la única forma de volver a entrar si pierdes tu app de autenticación.</string>
     <string name="a_second_factor_outside_googles_account">Una comprobación fuera de la recuperación de cuenta de Google: quien robe tu contraseña de Google aún necesitará un código vigente de tu app de autenticación para hacerse con tu cuenta.</string>
     <string name="turn_off_code_protection">Desactivar la protección con código</string>
@@ -4376,4 +4376,9 @@
     <string name="payments_usage_gb">%1$s GB</string>
     <string name="app_has_a_separate_access_list">1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de %1$s.</string>
     <string name="app_has_a_separate_access_list_2">1 app tiene una lista de acceso aparte en cada servidor. Cuando termine Pro usará la lista de su servidor principal.</string>
+    <string name="only_an_admin_device_can_change_code_protection">Solo un dispositivo administrador de esta cuenta puede cambiar la protección con código.</string>
+    <string name="code_protection_already_on">La protección con código ya está activada en esta cuenta. Desactívala primero para configurar un autenticador nuevo.</string>
+    <string name="code_protection_already_off">La protección con código ya está desactivada en esta cuenta.</string>
+    <string name="code_protection_setup_expired">Esta configuración ha caducado. Empieza de nuevo para obtener una clave nueva.</string>
+    <string name="code_protection_account_not_found">Flagship no encontró esta cuenta.</string>
 </resources>
