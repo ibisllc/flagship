@@ -537,7 +537,63 @@ function isWebappShellPath(pathname: string): boolean {
   return false;
 }
 
+/**
+ * The Worker's entry. No exception leaves it: a throw anywhere below becomes a
+ * JSON 500 that still carries the CORS and security headers, so a browser on
+ * the webapp origin reads a server failure instead of a CORS-blocked "network
+ * error" (docs/security/F2-2fa-enrolment-investigation.md). The log line names
+ * the method, the first two path segments, the error class and the request id:
+ * nothing about the caller, the account or the body.
+ */
 export async function route(
+  request: Request,
+  env: RouteEnv,
+  ctx?: WaitUntilLike,
+): Promise<Response> {
+  try {
+    return await routeUnguarded(request, env, ctx);
+  } catch (err) {
+    return internalErrorResponse(request, env, err);
+  }
+}
+
+/** The request id an internal-error answer and its log line share: Cloudflare's ray id, else a fresh one. */
+function requestIdOf(request: Request): string {
+  const ray = request.headers.get("cf-ray");
+  if (ray && /^[A-Za-z0-9-]{1,64}$/.test(ray)) return ray;
+  return crypto.randomUUID();
+}
+
+/** `/api/users/…/3`: the first two path segments and how many follow, so no name or id is logged. */
+export function coarsePath(pathname: string): string {
+  const parts = pathname.split("/").filter(Boolean);
+  const head = parts.slice(0, 2).map((p) => (/^[a-z][a-z0-9-]{0,31}$/.test(p) ? p : "…"));
+  const rest = parts.length - head.length;
+  return "/" + head.join("/") + (rest > 0 ? `/…/${rest}` : "");
+}
+
+function internalErrorResponse(request: Request, env: RouteEnv, err: unknown): Response {
+  const requestId = requestIdOf(request);
+  let url: URL;
+  try {
+    url = new URL(request.url);
+  } catch {
+    url = new URL(`https://${apexHost(env)}/`);
+  }
+  const kind = err instanceof Error ? err.name : typeof err;
+  console.error(`internal-error ${request.method} ${coarsePath(url.pathname)} ${kind} ${requestId}`);
+  const res = new Response(JSON.stringify({ error: "internal-error", code: "internal-error", requestId }), {
+    status: 500,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+  try {
+    return withSecurityHeaders(applyCors(request, url, res, env), url, env);
+  } catch {
+    return res;
+  }
+}
+
+async function routeUnguarded(
   request: Request,
   env: RouteEnv,
   ctx?: WaitUntilLike,
