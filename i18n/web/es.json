@@ -945,5 +945,6 @@
   "s6f98f794bd": "Añade vales en la app de Flagship",
   "s963b6904c1": "Este enlace añade vales prepago a tu cuenta de Flagship. Descarga la app y vuelve a abrir el enlace, o añádelos en la app web.",
   "s3656cdddcd": "¿Puede Flagship escuchar mis llamadas?",
-  "s272ff29bb8": "No. Las llamadas en voi.ci tienen cifrado de extremo a extremo, con cifrado poscuántico, entre quien llama y el dispositivo que contesta, y no las grabamos. Vemos a qué página se llamó, cuándo, cuánto duró y la dirección IP de quien llama, nunca lo que se dice o se muestra. Apple o Google saben que una llamada hizo sonar tu teléfono, no quién llamó. La <1>política de privacidad</1> tiene la lista completa."
+  "s272ff29bb8": "No. Las llamadas en voi.ci tienen cifrado de extremo a extremo, con cifrado poscuántico, entre quien llama y el dispositivo que contesta, y no las grabamos. Vemos a qué página se llamó, cuándo, cuánto duró y la dirección IP de quien llama, nunca lo que se dice o se muestra. Apple o Google saben que una llamada hizo sonar tu teléfono, no quién llamó. La <1>política de privacidad</1> tiene la lista completa.",
+  "sae3210841d": "<1>Nombres en un teléfono bloqueado, si los quieres.</1> Activa «Mostrar nombres con el bloqueo» y una llamada entrante puede mostrar el apodo que le diste a quien llama, o la página que te devuelve la llamada, mientras Flagship está bloqueado. Esos nombres se quedan en ese teléfono. Nuestra <2>política de privacidad</2> ya lo dice."
 }

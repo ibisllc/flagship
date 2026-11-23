@@ -5856,6 +5856,14 @@
       "blog/flagship-0-4.html"
     ]
   },
+  "sae3210841d": {
+    "en": "<1>Names on a locked phone, if you want them.</1> Turn on “Show names while locked” and a ringing call can show the nickname you gave the caller, or the page calling you back, while Flagship is locked. These names stay on that phone. Our <2>privacy policy</2> now says so.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-4.html"
+    ]
+  },
   "s06d32304a0": {
     "en": "Social, the new home of your page",
     "kind": "text",

@@ -945,5 +945,6 @@
   "s6f98f794bd": "Ajoutez des bons dans l'app Flagship",
   "s963b6904c1": "Ce lien ajoute des bons prépayés à votre compte Flagship. Installez l'app, puis rouvrez le lien, ou ajoutez-les dans l'app web.",
   "s3656cdddcd": "Flagship peut-il écouter mes appels ?",
-  "s272ff29bb8": "Non. Les appels sur voi.ci sont chiffrés de bout en bout, avec un chiffrement post-quantique, entre l’appelant et l’appareil qui répond, et nous ne les enregistrons pas. Nous voyons quelle page a été appelée, quand, combien de temps, et l’adresse IP de l’appelant, jamais ce qui est dit ou montré. Apple ou Google apprennent qu’un appel a fait sonner votre téléphone, pas qui a appelé. La <1>politique de confidentialité</1> donne la liste complète."
+  "s272ff29bb8": "Non. Les appels sur voi.ci sont chiffrés de bout en bout, avec un chiffrement post-quantique, entre l’appelant et l’appareil qui répond, et nous ne les enregistrons pas. Nous voyons quelle page a été appelée, quand, combien de temps, et l’adresse IP de l’appelant, jamais ce qui est dit ou montré. Apple ou Google apprennent qu’un appel a fait sonner votre téléphone, pas qui a appelé. La <1>politique de confidentialité</1> donne la liste complète.",
+  "sae3210841d": "<1>Des noms sur un téléphone verrouillé, si vous le souhaitez.</1> Activez « Afficher les noms verrouillé » et un appel entrant peut montrer le surnom que vous avez donné à l’appelant, ou la page qui vous rappelle, pendant que Flagship est verrouillé. Ces noms restent sur ce téléphone. Notre <2>politique de confidentialité</2> le dit désormais."
 }
