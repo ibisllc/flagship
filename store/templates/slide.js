@@ -127,8 +127,8 @@ function hero(spec, root) {
     const s = w / W;
     Object.assign(dev.box.style, { left: px((spec.w - W) / 2), top: px(top), transformOrigin: "top center", transform: s < 1 ? `scale(${s})` : "" });
     if (spec.first) {
-      const d = Math.max(spec.w, spec.h) * (spec.w > spec.h ? 0.62 : 1.16);
-      const sun = el("div", "sun", root, { width: px(d), height: px(d), left: px(spec.w / 2 - d / 2), top: px(top + Math.min(dev.H * s, spec.h - top) * 0.45 - d / 2) });
+      const d = spec.w > spec.h ? spec.h * 0.9 : spec.w * 1.16; // never behind the caption
+      const sun = el("div", "sun", root, { width: px(d), height: px(d), left: px(spec.w / 2 - d / 2), top: px(Math.max(top + Math.min(dev.H * s, spec.h - top) * 0.45, head.bottom + d / 2) - d / 2) });
     }
   };
   return dev;
