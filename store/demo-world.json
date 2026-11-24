@@ -8,11 +8,11 @@
   ],
   "unlockRequest": { "server": "cabin", "askedMinutesAgo": 1 },
   "apps": [
-    { "slug": "notes",      "name": "Notes",      "summary": "Shared notes for the house",        "server": "home",  "access": "members" },
-    { "slug": "photos",     "name": "Photos",     "summary": "Family photos, full resolution",     "server": "home",  "access": "members" },
-    { "slug": "recipes",    "name": "Recipes",    "summary": "What we cook, and how",              "server": "home",  "access": "open" },
-    { "slug": "chess-club", "name": "Chess Club", "summary": "Games and a ladder for the club",    "server": "cabin", "access": "members" },
-    { "slug": "budget",     "name": "Budget",     "summary": "Monthly spending, by category",      "server": "home",  "access": "members" }
+    { "slug": "notes",      "name": "Notes",      "summary": "Shared notes for the house", "summaryByLang": {"es": "Notas compartidas de la casa", "fr": "Notes partagées de la maison", "de": "Gemeinsame Notizen fürs Haus", "pt-BR": "Notas compartilhadas da casa", "ja": "家族で共有するメモ", "zh-Hans": "全家共享的笔记"},        "server": "home",  "access": "members" },
+    { "slug": "photos",     "name": "Photos",     "summary": "Family photos, full resolution", "summaryByLang": {"es": "Fotos de familia, a resolución completa", "fr": "Photos de famille, en pleine résolution", "de": "Familienfotos in voller Auflösung", "pt-BR": "Fotos da família, em resolução total", "ja": "家族の写真をフル解像度で", "zh-Hans": "家庭照片，原图画质"},     "server": "home",  "access": "members" },
+    { "slug": "recipes",    "name": "Recipes",    "summary": "What we cook, and how", "summaryByLang": {"es": "Lo que cocinamos y cómo", "fr": "Ce qu’on cuisine, et comment", "de": "Was wir kochen und wie", "pt-BR": "O que cozinhamos e como", "ja": "わが家の料理と作り方", "zh-Hans": "我们做什么菜，怎么做"},              "server": "home",  "access": "open" },
+    { "slug": "chess-club", "name": "Chess Club", "summary": "Games and a ladder for the club", "summaryByLang": {"es": "Partidas y clasificación del club", "fr": "Parties et classement du club", "de": "Partien und Rangliste des Clubs", "pt-BR": "Partidas e ranking do clube", "ja": "クラブの対局とランキング", "zh-Hans": "俱乐部的对局和排名"},    "server": "cabin", "access": "members" },
+    { "slug": "budget",     "name": "Budget",     "summary": "Monthly spending, by category", "summaryByLang": {"es": "Gastos del mes, por categoría", "fr": "Dépenses du mois, par catégorie", "de": "Monatliche Ausgaben nach Kategorie", "pt-BR": "Gastos do mês, por categoria", "ja": "毎月の支出をカテゴリ別に", "zh-Hans": "每月支出，按类别"},      "server": "home",  "access": "members" }
   ],
   "membersApp": "chess-club",
   "members": [
