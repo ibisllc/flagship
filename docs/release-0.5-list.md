@@ -87,6 +87,26 @@ over once "let's start 0.5" is said.
      exploitable today: `D1UsernameStorage.put` writes both only on the first insert, and swapping them would need the
      victim's own request body (TLS) replayed with other keys inside its 5-minute window.
 
+- **Shrink the phone apps** (owner, 2026-11-24). 0.4 added about 6 MB to each app's download: our libwebrtc build
+  (`libwebrtc-157-44099203173` carries every video codec; Android arm64 `libjingle_peerconnection_so.so` 12.8 MB
+  installed / 6.1 MB gzipped, iOS arm64 `WebRTC.framework` 10.5 / 5.1 MB) and 1.5 MB of welcome-art PNGs. Calls only
+  ever negotiate Opus + VP8 (`checkVoiciCallSdp` / `VoiciCalls.checkSdp` refuse anything else, and the frame crypto's
+  clear-header rule is VP8's), so VP9 and AV1 are dead weight. Branch `claude/friendly-goldberg-f0jbky` (`e7be6196e`):
+  `tools/libwebrtc/gn-args.txt` drops VP9, libaom and dav1d (H.264 hardware stays); `apply-overlay.py` gains a
+  NO_AV1 path for Android's AV1 JNI/jar targets; Android welcome art as WebP (1.49 to 0.14 MB); iOS `WelcomeArt`
+  lossy compression. CI run `45414303796`: webrtc-android green, webrtc-ios cancelled (re-dispatch).
+  1. Size: `tools/libwebrtc/use-artifacts.sh <green run>`, release builds of both apps, per-ABI `.so` / framework
+     size installed and download (App Thinning report, `bundletool get-size`) against 0.4. Under ~1.5 MB of download
+     saved per platform: ask the owner whether to keep VP9.
+  2. Calls on real devices, audio and video, both directions: iOS and Android each with Chrome and Safari, and iOS
+     with Android; audio-only then camera on mid-call, camera flip, an app-placed call and a ring-back; stats show
+     VP8 + Opus. Android: `check-aar` passes, no crash at `PeerConnectionFactory` init or reading the codec lists.
+  3. All green: `tools/libwebrtc/pin-release.sh <run>`, merge the branch with the new pin, store builds with 0.5.
+  4. Webapp: `/welcome-day.png` and `/welcome-night.png` (1.5 MB precached per install; `index.html` `<picture>` and
+     the service worker's list) as WebP, PNG fallback optional, in the next signed shell.
+  5. Later (not 0.5): VP9 compresses ~30-40 % better than VP8. Using it is a protocol change (the SDP check on three
+     platforms, a VP9 clear-header rule in the frame crypto, vectors, VP8 kept for old apps) plus the build flag.
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in
