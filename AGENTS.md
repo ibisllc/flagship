@@ -228,7 +228,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-11-17**.
+> Last updated **2026-11-24**.
 
 ### ⚠ Post 0.4 / pre 0.5 / next release: do the store listing runbook first
 
@@ -236,20 +236,40 @@ When the owner says "post 0.4", "pre 0.5", "next release" or "start 0.5", or bot
 `docs/runbooks/post-0.4-store-listing.md` before anything else (API keys for direct upload, the screenshot fixes, the
 listing texts, the upload). `scripts/check-carryover.mjs` fails the 0.5 release preflight and vitest while it is OPEN.
 
-### Release 0.4 (in progress, 2026-11-17)
+### Release 0.4 (shipped to `.com`, in store review, 2026-11-24)
 
-Branch **`release/0.4`** (worktree `~/flagship-0.4`; not on `main`, nothing deployed). Plan, Log and resume point:
-`RELEASE-0.4-JOURNAL.md` on that branch ("resume 0.4" = read it). Product version **0.4 Beta**: iOS 1.3 (9), Android
-13 (Wear 1000013; 12 was uploaded, never published), Studio 0.4.0. It launches what was parked on branches (marketplace fold: Pro / Pro Max with $1
-blind-signed vouchers sold through Stripe, App Store and Play; custom domains and names; the outbound proxy with OHTTP),
-plus voi.ci calls (audio/video, own libwebrtc build), the Social tab, Activity for calls and messages, direct access on
-`fshp.app`, restore into a running server, UnifiedPush, the Firefox extension, webapp custody and the responsive webapp,
-retail box setup (software), organizations and quantum-safe stage 1. Live gym green on both stacks (R1, R2 groups).
-Ship with `docs/runbooks/0.4-deploy-sheet.md` (order, D1 0090-0094 and 0132-0155, secrets, DNS clean-up, stores) and
-`scripts/release.sh` (32 steps since 2026-11-21: one-time setup is a read-only check, step 10 signs the webapp shell); every web console step is in
-`docs/runbooks/0.4-browser-tasks.md` for a browser session. Release notes: `docs/release-notes/0.4.md`, the blog post
-`blog/flagship-0-4.html`, `store/listings/*.json` (machine drafts for review). `main` holds two commits `release/0.4`
-lacks as ancestors (terms text, gym relays off): the deploy sheet §1 says how to make the fast-forward possible.
+**0.4 is on `main`** (`release/0.4` is an ancestor; `main` then gained only store-art commits). Product version
+**0.4 Beta**: iOS **1.3 (12)**, Android versionCode **16** (Wear 1000016), Studio 0.4.0, marketplace off
+(`release/version.json`). Builds 9 to 11 / 13 to 15 are burned (Apple rejected 1.3 (9) on Guideline 5: CallKit must be
+off in the China storefront, fixed fail-closed in 1.3 (10)). History, decisions and the last resume point:
+`RELEASE-0.4-JOURNAL.md` (on `main`).
+
+Live since 2026-11-23: `.com` with webapp shell **v257** (signed), D1 up to **0161**, box release `3079462b`
+endorsed (sequence 4) and release catalog v3 (`3079462b` at security version 3, 100% at once, no canary). Gym
+before shipping: gating 21, invites 16, update 9, one-list 6, fleet 12, choose-name 5/5 green. Store builds iOS 1.3 (12)
+and Android 16 submitted 2026-11-23 (owner); the owner releases them by hand after approval (managed publishing on
+Play). Steps and console tasks: `docs/runbooks/0.4-deploy-sheet.md`, `docs/runbooks/0.4-browser-tasks.md`
+(B6/B7 App Store version + in-app purchases; Play products C2 unlock once versionCode 16 is on a testing track),
+`scripts/release.sh` (32 steps). Release notes `docs/release-notes/0.4.md`, blog `apps/web/public/blog/flagship-0-4.html`.
+
+Open after 0.4 (journal resume point and 2026-11-21/23 entries):
+- Store approval, then the owner releases; then the old-app update notice (signed `security-notice.mjs`), and the
+  0.3 leftovers: runtime manifest re-sign before ~2026-12-20, the demo server (journal P items).
+- Reporter emails for security reports F1, F3, F4 (drafts were in the session; F4's hall-of-fame credit pending).
+- Not yet live-verified: an app-placed call through the new system-trust certificate verifier (iOS and Android),
+  iOS ringing from a TestFlight/App Store build, the photo picker and onboarding on real devices.
+- Switched off on purpose at launch: `STRIPE_BANK_TRANSFER` (Business batches by bank transfer; sandbox test first),
+  marketplace (`MARKETPLACE = "off"`, 0.5). Delete the retired prod secret `ADAPTER_REVIEW_ANTHROPIC_KEY`.
+- Owner question: should call traffic count toward the data allowance (today only phone-to-caller bytes are metered)?
+- Repo convergence: every machine's checkout on `main`; retire merged `0.4/*` branches and worktrees; `gym-0.4`
+  replaces `gym`.
+- 0.5 scope: `docs/release-0.5-list.md`.
+- 2026-11-24, low-order Ed25519 keys (external report, Low), phase 1 live: `8fd77a2b7`, `.com` deployed with webapp
+  shell **v258** (signed). `edSync` refuses small-order and non-canonical keys before any verify, `.com` refuses them
+  at intake (400 `bad-public-key`), the box refuses them as a share member key (needs the next endorsed box release).
+  Phase 2 (clients) is in the 0.5 list.
+- Shrink the phone apps (0.5 list): branch `claude/friendly-goldberg-f0jbky` (VP8-only libwebrtc, Android WebP
+  welcome art; Android download -3.0 MB on arm64). Waits for the iOS libwebrtc build, device calls, the owner's go.
 
 0.3 shipped: App Store 1.2 (8) and Play 11 / Wear 1000011 approved 2026-11-08 (Play then rejected Wear 1000011 on its
 listing; the fixed listing is in review). Its open owner steps (the 0.2 update notice, the runtime manifest re-sign
@@ -1661,16 +1681,16 @@ published (not CI) appliance, the Android fixes landed after `eb08dcdc4`.
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
-**0.4 state (2026-11-17, F13):** `feat/marketplace`, `feat/custom-names`, `feat/custom-domains` and
-`feat/outbound-proxy` are folded into `release/0.4` and retire when it lands. **The marketplace is in the code but
+**0.4 state (2026-11-24):** `feat/marketplace`, `feat/custom-names`, `feat/custom-domains` and
+`feat/outbound-proxy` were folded into `release/0.4`, now on `main`, and are retired. **The marketplace is in the code but
 switched off until 0.5** (owner, 2026-11-19): `"marketplace": false` in `release/version.json` (carried by
 `check-versions.mjs --write` to the webapp, iOS and Android, which hide every entry point) and `MARKETPLACE = "off"` on
 `.com` (its public routes answer 404 `marketplace-off`); the website has no marketplace page. Turning it on is in
 `docs/release-0.5-list.md`; `feat/browser-extension` (a design doc)
 is superseded by the Firefox extension built on `release/0.4`; `gym-0.4` (= `release/0.4` + the gym seams) replaces
-`gym` once 0.4 is on `main`. Not rebased, each conflicts with `release/0.4`: `feat/other-os-installers` (18 files, the
+`gym` now that 0.4 is on `main`. Not rebased, each conflicts with `release/0.4`: `feat/other-os-installers` (18 files, the
 preseed engine and its vectors), `alpine` (31), `feat/retail` (39; mostly superseded by the 0.4 retail build). Rebase
-them onto `main` after 0.4 lands, smallest first, one per session.
+them onto `main` (0.4 has landed), smallest first, one per session.
 
 All rebased onto `main` 2026-10-16 (the earlier tips are kept as
 `backup/<slug>-pre-rebase-<date>`; `main` has moved since, so they are behind again). `scripts/rebase-features.sh` reports
