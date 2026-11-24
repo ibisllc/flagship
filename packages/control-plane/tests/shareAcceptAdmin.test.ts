@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // .com's half of "only an admin device of the joining account accepts a
 // share" (docs/share-a-server.md §5.1): the CA attestation of a per-share admin
 // key an account's sensitive key asked for, and the demo account's signer.
@@ -83,6 +84,19 @@ describe("POST /api/users/:u/share-key-attestation", () => {
     expect((await handleShareKeyAttestation(d, "bob", { request: signed("bob", admin).request, signature: "ab" })).status).toBe(400);
     expect((await handleShareKeyAttestation(d, "bob", undefined)).status).toBe(400);
     expect((await handleShareKeyAttestation(d, "nobody", signed("nobody", admin))).status).toBe(404);
+  });
+
+  it("never attests a small-order or non-canonical key, even for an admin (test-vectors/ed25519-low-order)", async () => {
+    const s = await usernames();
+    const d = { ca, usernames: s.usernames, now: () => NOW };
+    const v = JSON.parse(
+      readFileSync(new URL("../../protocol/test-vectors/ed25519-low-order/vectors.json", import.meta.url), "utf8"),
+    ) as { rejectPublicKeysHex: string[] };
+    for (const k of v.rejectPublicKeysHex) {
+      const r = await handleShareKeyAttestation(d, "bob", signed("bob", admin, { keyPubHex: k }));
+      expect(r.status, k).toBe(400);
+      expect((r.body as { code?: string }).code, k).toBe("bad-public-key");
+    }
   });
 });
 

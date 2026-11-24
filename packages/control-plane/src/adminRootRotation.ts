@@ -50,6 +50,7 @@ import {
   ok,
   type HandlerResponseWithHeaders,
 } from "./types.js";
+import { badEd25519Key } from "./edKey.js";
 
 export interface AdminRootRotationDeps {
   usernames: UsernameStorage;
@@ -138,6 +139,8 @@ export async function handleApplyAdminRootRotation(
   ) {
     return malformed("malformed body");
   }
+  const badNewRoot = badEd25519Key(newHex);
+  if (badNewRoot) return badNewRoot;
 
   const usernameNorm = usernameFromPath.toLowerCase();
   // The signed proof carries its own username (signature-covered); it must name

@@ -4,31 +4,46 @@ import { opaqueOps } from "./opaqueKey.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => sha512(ed.etc.concatBytes(...m));
 
-// ── Low-order / non-canonical public-key blocklist ─────────────────────
-// Plain Ed25519 verification ACCEPTS low-order public keys — most
-// dangerously the all-zero key (0x00…00), for which a zero signature
-// verifies against ANY message. Left unguarded this is a forgery vector:
-// any envelope whose verifier pubkey comes from untrusted input (a
-// username claim's IRK, a redeem AID, …) could be satisfied with the zero
-// key, letting an attacker forge a "valid" signature for a key nobody
-// controls (e.g. squat any username). We reject the canonical small-order
-// + non-canonical encodings (the libsodium blocklist) at the single `ed`
-// chokepoint so every verify() in the protocol is covered at once. These
-// keys are never legitimate signing keys, so rejecting them is always safe.
-// Hex, lowercase, little-endian point encodings.
-const LOW_ORDER_PUBKEYS: ReadonlySet<string> = new Set([
-  "0100000000000000000000000000000000000000000000000000000000000000",
-  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-  "0000000000000000000000000000000000000000000000000000000000000000",
-  "0000000000000000000000000000000000000000000000000000000000000080",
-  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
-  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
-  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
-  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
-  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-]);
+// ── Low-order / non-canonical public-key refusal ───────────────────────
+// Plain Ed25519 verification ACCEPTS low-order public keys: with the identity
+// key (0x01 00…00) the signature R = identity, S = 0 verifies against ANY
+// message, under noble's ZIP-215 rules and under WebCrypto's cofactorless
+// check alike. Any envelope whose verifier key comes from untrusted input (a
+// username claim's IRK, a redeem AID, …) could then be "signed" by anyone. So
+// before any verify, the key must decode under RFC 8032's canonical rules
+// (y < p, no x = 0 with the sign bit) and must not be of small order. A hand-
+// typed blocklist missed three such encodings; this is the structural rule.
+// Honest keys are a·B: always canonical and of prime order, so nothing
+// legitimate is refused. The verdict is remembered per key (bounded), so a
+// key's point decode is paid once per isolate, not once per request.
+const KEY_VERDICT = new Map<string, boolean>();
+const KEY_VERDICT_MAX = 512;
+
+/** True when `pub` is 32 bytes, canonically encoded and not of small order. */
+export function isAcceptableEd25519PublicKey(pub: Uint8Array | string): boolean {
+  let bytes: Uint8Array;
+  try {
+    bytes = typeof pub === "string" ? ed.etc.hexToBytes(pub) : pub;
+  } catch {
+    return false;
+  }
+  if (bytes.length !== 32) return false;
+  const id = ed.etc.bytesToHex(bytes);
+  const known = KEY_VERDICT.get(id);
+  if (known !== undefined) return known;
+  let ok: boolean;
+  try {
+    ok = !ed.Point.fromBytes(bytes, false).isSmallOrder();
+  } catch {
+    ok = false;
+  }
+  if (KEY_VERDICT.size >= KEY_VERDICT_MAX) {
+    const oldest = KEY_VERDICT.keys().next().value;
+    if (oldest !== undefined) KEY_VERDICT.delete(oldest);
+  }
+  KEY_VERDICT.set(id, ok);
+  return ok;
+}
 
 function pubBytesOf(pub: Uint8Array | string): Uint8Array {
   return typeof pub === "string" ? ed.etc.hexToBytes(pub) : pub;
@@ -92,8 +107,7 @@ function safeVerify(
 ): boolean {
   try {
     const pubBytes = pubBytesOf(pub);
-    if (pubBytes.length !== 32) return false;
-    if (LOW_ORDER_PUBKEYS.has(ed.etc.bytesToHex(pubBytes))) return false;
+    if (!isAcceptableEd25519PublicKey(pubBytes)) return false;
     if (opts !== undefined) return ed.verify(sig, msg, pub, opts);
     const key = tripleKey(asBytes(sig), asBytes(msg), pubBytes);
     if (VERIFIED.has(key)) return true;
@@ -141,8 +155,8 @@ async function verifyFast(
     const pubBytes = pubBytesOf(pub);
     const sigBytes = asBytes(sig);
     const msgBytes = asBytes(msg);
-    if (pubBytes.length !== 32 || sigBytes.length !== 64) return safeVerify(sig, msg, pub);
-    if (LOW_ORDER_PUBKEYS.has(ed.etc.bytesToHex(pubBytes))) return false;
+    if (!isAcceptableEd25519PublicKey(pubBytes)) return false;
+    if (sigBytes.length !== 64) return safeVerify(sig, msg, pub);
     const key = tripleKey(sigBytes, msgBytes, pubBytes);
     if (VERIFIED.has(key)) return true;
     if (!nativeBroken && typeof crypto !== "undefined" && crypto.subtle) {
@@ -178,6 +192,10 @@ function opaqueSign(msg: Uint8Array | string, priv: Uint8Array | string): Uint8A
 const edHardened = new Proxy(ed, {
   get(target, prop, receiver) {
     if (prop === "verify") return safeVerify;
+    if (prop === "verifyAsync") {
+      return async (sig: Uint8Array | string, msg: Uint8Array | string, pub: Uint8Array | string, opts?: Parameters<typeof ed.verify>[3]) =>
+        safeVerify(sig, msg, pub, opts);
+    }
     if (prop === "sign") return opaqueSign;
     if (prop === "signAsync") return async (msg: Uint8Array | string, priv: Uint8Array | string) => opaqueSign(msg, priv);
     if (prop === "getPublicKey") {

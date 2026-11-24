@@ -64,6 +64,26 @@ over once "let's start 0.5" is said.
   re-sign pages and Messages records, keep the quantum-safe binding, and teach every client that its account was
   renamed (today a renamed account looks deleted to its other devices). Then put the promise back on the dibs page.
 
+- **Low-order Ed25519 keys, phase 2** (owner, 2026-11-24; external report, severity Low, defence in depth). Phase 1
+  (backend, non-breaking) is on `main`: `edSync` refuses any key that is not canonical or is of small order
+  (`isAcceptableEd25519PublicKey`) before the memo and the native path; `.com` never attests such a share key; the box
+  refuses it as a share member key; shared vectors `packages/protocol/test-vectors/ed25519-low-order/` (TS, Rust).
+  Lenient verifiers remain on the clients: CryptoKit (iOS) accepts 10 of the 14 vector keys, the identity key for every
+  message; Tink 1.13 (Android) and the webapp's noble/WebCrypto do too. With 0.5:
+  1. iOS: one classical Ed25519 helper that refuses these keys before CryptoKit; voi.ci (`CanonicalJson.swift` verify)
+     on the strict `PqHybrid` verifier, as Android already is; refuse them at first-sight box-key pins
+     (`SecretRequestCoordinator`).
+  2. Android: guard every Tink `Ed25519Verify` (or move to BouncyCastle `ed25519VerifyStrict`); refuse at `FirstContact`.
+  3. Webapp and voi.ci site: the same rule in both `voiciCore.js` copies, `rescue.js` and every WebCrypto-only Ed25519
+     check (`keystore.js`, `serverShare(s).js`, `bootApproval.js`, `boxKeyPins.js`, `maintainerTrust.js`, the Firefox
+     extension's `daemonStatus.js`); new shell number, signed shell.
+  4. Go boot helper (`installer/unseal-helper`, `lease.go` and `v2.go` verifies): the same guard. Keys there are pinned,
+     so it is consistency only; it rides the initramfs, so test a real unlock first.
+  5. Swift, Kotlin and Go run the shared vectors.
+  6. Decide: full strict verify in `edSync` (noble `zip215: false`: canonical R, cofactorless; honest signatures pass),
+     and proof of possession for the share-key attestation (low value: the request already needs the account's admin
+     signature and the attestation names no account).
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in

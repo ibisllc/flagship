@@ -2,6 +2,7 @@ import { BootUnlockV2Error, bootKeyBindingFromWire, bootKeyBindingToWire, verifi
 import type { PqTrustStorage, ServerBootKeyStorage, ServerStorage } from "@flagship/storage";
 import { installationPolicy, verifiedStoredStkBinding } from "./pqKeyBindings.js";
 import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
+import { badEd25519Key } from "./edKey.js";
 
 /**
  * The boot key a box keeps on /boot for the jobs before its disk is open
@@ -43,6 +44,8 @@ export async function handlePutBootKey(deps: BootKeyDeps, host: string, body: un
   if (reg.revokedAt) return forbidden("server is revoked");
   const bootKeyPubHex = verifiedBootKey(body, { serverDomain: host, stkPubHex: reg.identityPubKeyHex });
   if (!bootKeyPubHex) return forbidden("the binding is not signed by this server's key");
+  const badBootKey = badEd25519Key(bootKeyPubHex);
+  if (badBootKey) return badBootKey;
   let hybridSignatureHex: string | null = null;
   if (deps.pqTrust) {
     const pq = await deps.pqTrust.forServer(host);

@@ -1242,19 +1242,32 @@ function opaqueOps(key) {
 
 // packages/protocol/src/edSync.ts
 etc.sha512Sync = (...m) => sha5122(etc.concatBytes(...m));
-var LOW_ORDER_PUBKEYS = /* @__PURE__ */ new Set([
-  "0100000000000000000000000000000000000000000000000000000000000000",
-  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-  "0000000000000000000000000000000000000000000000000000000000000000",
-  "0000000000000000000000000000000000000000000000000000000000000080",
-  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
-  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
-  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
-  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
-  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
-]);
+var KEY_VERDICT = /* @__PURE__ */ new Map();
+var KEY_VERDICT_MAX = 512;
+function isAcceptableEd25519PublicKey(pub) {
+  let bytes;
+  try {
+    bytes = typeof pub === "string" ? etc.hexToBytes(pub) : pub;
+  } catch {
+    return false;
+  }
+  if (bytes.length !== 32) return false;
+  const id2 = etc.bytesToHex(bytes);
+  const known = KEY_VERDICT.get(id2);
+  if (known !== void 0) return known;
+  let ok;
+  try {
+    ok = !Point.fromBytes(bytes, false).isSmallOrder();
+  } catch {
+    ok = false;
+  }
+  if (KEY_VERDICT.size >= KEY_VERDICT_MAX) {
+    const oldest = KEY_VERDICT.keys().next().value;
+    if (oldest !== void 0) KEY_VERDICT.delete(oldest);
+  }
+  KEY_VERDICT.set(id2, ok);
+  return ok;
+}
 function pubBytesOf(pub) {
   return typeof pub === "string" ? etc.hexToBytes(pub) : pub;
 }
@@ -1290,8 +1303,7 @@ function rememberRejected(key) {
 function safeVerify(sig, msg, pub, opts2) {
   try {
     const pubBytes = pubBytesOf(pub);
-    if (pubBytes.length !== 32) return false;
-    if (LOW_ORDER_PUBKEYS.has(etc.bytesToHex(pubBytes))) return false;
+    if (!isAcceptableEd25519PublicKey(pubBytes)) return false;
     if (opts2 !== void 0) return verify(sig, msg, pub, opts2);
     const key = tripleKey(asBytes(sig), asBytes(msg), pubBytes);
     if (VERIFIED.has(key)) return true;
@@ -1312,6 +1324,9 @@ function opaqueSign(msg, priv) {
 var edHardened = new Proxy(ed25519_exports, {
   get(target, prop, receiver) {
     if (prop === "verify") return safeVerify;
+    if (prop === "verifyAsync") {
+      return async (sig, msg, pub, opts2) => safeVerify(sig, msg, pub, opts2);
+    }
     if (prop === "sign") return opaqueSign;
     if (prop === "signAsync") return async (msg, priv) => opaqueSign(msg, priv);
     if (prop === "getPublicKey") {

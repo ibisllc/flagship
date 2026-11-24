@@ -55,6 +55,7 @@ import {
   ok,
   type HandlerResponseWithHeaders,
 } from "./types.js";
+import { badEd25519Key } from "./edKey.js";
 
 export interface WatchDelegatesDeps {
   storage: WatchDelegateStorage;
@@ -150,6 +151,8 @@ export async function handleMintWatchDelegate(
   ) {
     return malformed("malformed body");
   }
+  const badDelegate = badEd25519Key(g.delegatePubKey);
+  if (badDelegate) return badDelegate;
 
   const scopes = parseDelegateScopes(g.scopes);
   if (!scopes) return malformed("invalid scopes");

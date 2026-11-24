@@ -14,6 +14,7 @@ import {
   type ShareKeyAttestationRequest,
   type Keypair,
   type UserPubKeyBinding,
+  isAcceptableEd25519PublicKey,
 } from "@flagship/protocol";
 import type { UsernameStorage } from "@flagship/storage";
 import { hexToBytes, bytesToHex } from "./hex.js";
@@ -188,6 +189,10 @@ export async function handleShareKeyAttestation(
     return malformed((e as Error).message);
   }
   if (request.username.toLowerCase() !== username.toLowerCase()) return malformed("request names another account");
+  // The CA never vouches for a small-order or non-canonical key: anyone could sign under it.
+  if (!isAcceptableEd25519PublicKey(request.keyPubHex)) {
+    return { status: 400, body: { error: "keyPubHex is not a usable Ed25519 public key", code: "bad-public-key" } };
+  }
   if (Math.abs(now - request.issuedAt) > SHARE_KEY_ATTESTATION_REQUEST_SKEW_MS) return forbidden("stale request");
   const u = await deps.usernames.get(username.toLowerCase());
   if (!u) return notFound("username not registered");

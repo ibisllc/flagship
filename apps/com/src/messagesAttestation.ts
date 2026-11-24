@@ -45,6 +45,7 @@ import { currentAbuseKey } from "./abuseKeys.js";
 import { parseIntegrityEvidence, type DeviceIntegrity, type DeviceIntegrityEnv, type IntegrityResult } from "./deviceIntegrity.js";
 import { checkRateLimit, clientIp, type RateLimitEnv } from "./rateLimit.js";
 import { isAccountBanned, json, type WaitUntil } from "./voiciAbuse.js";
+import { isAcceptableEd25519PublicKey } from "@flagship/protocol";
 
 export const MESSAGES_ATTESTATION_PATH = /^\/api\/accounts\/([^/]+)\/messages-attestation$/;
 
@@ -149,6 +150,8 @@ export async function handleMessagesAttestation(
     return json({ error: "malformed", code: "malformed" }, 400);
   }
   if (req.username !== account) return json({ error: "request names another account", code: "malformed" }, 400);
+  // The CA never attests a pseudonym anyone could sign under (test-vectors/ed25519-low-order).
+  if (!isAcceptableEd25519PublicKey(req.pseudonymPub)) return json({ error: "not a usable Ed25519 public key", code: "bad-public-key" }, 400);
   if (!DEVICE_CHECK_REFS.includes(req.deviceCheckRef)) return json({ error: "malformed", code: "malformed" }, 400);
   const evidence = req.deviceCheckRef === "none" ? null : parseIntegrityEvidence(body.integrity, req.deviceCheckRef);
   if (req.deviceCheckRef !== "none" && !evidence) return json({ error: "integrity evidence malformed", code: "malformed" }, 400);

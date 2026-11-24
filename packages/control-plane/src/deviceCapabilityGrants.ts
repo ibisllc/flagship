@@ -57,6 +57,7 @@ import {
   ok,
   type HandlerResponseWithHeaders,
 } from "./types.js";
+import { badEd25519Key } from "./edKey.js";
 
 export interface DeviceCapabilityGrantsDeps {
   storage: DeviceCapabilityGrantStorage;
@@ -150,6 +151,8 @@ export async function handleMintDeviceGrant(
   ) {
     return malformed("malformed body");
   }
+  const badDeviceKey = badEd25519Key(g.devicePubKey);
+  if (badDeviceKey) return badDeviceKey;
   // The relay log carries a revocation only for an id of this shape (hex digits and dashes, as the apps' UUIDs): a
   // grant it could not carry would never be revoked on the relays (security review 2026-11-02).
   if (!RELAY_LOG_GRANT_ID.test(g.grantId.toLowerCase())) {

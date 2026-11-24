@@ -20,6 +20,7 @@ import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { isReservedName } from "./labels.js";
 import { conflict, forbidden, malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
 import { USERNAME_TAKEN, orgHoldsName } from "./usernameClaim.js";
+import { badEd25519Key } from "./edKey.js";
 
 const DEVICE_ID = /^[0-9a-f]{32}$/;
 const PLATFORM_CLASSES = new Set(["ios", "android", "web", "macos", "windows", "linux", "other"]);
@@ -65,6 +66,8 @@ export async function handleAccountBootstrap(
       typeof body.adminRootPub !== "string" || !HEX64.test(body.adminRootPub)) {
     return malformed("malformed account bootstrap");
   }
+  const badKey = badEd25519Key(request.irkPub, body.aidPub, body.adminRootPub);
+  if (badKey) return badKey;
   // The format (D12) answers with the specific problem; a taken name, a look-alike of one or a reserved word with the
   // one generic refusal. The registry insert inside provisioning.initialize is the collision check.
   const problem = voiciNameProblem(request.username);

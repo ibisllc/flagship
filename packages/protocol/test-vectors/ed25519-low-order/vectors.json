@@ -1,0 +1,53 @@
+{
+  "description": "Ed25519 public keys a verifier must refuse before checking any signature: small-order points and non-canonical encodings (y >= p, or x = 0 with the sign bit). With forgedSignatureHex (R = identity, S = 0) lenient verifiers accept some or all messages under these keys. Every key in rejectPublicKeysHex must be refused for every message; the honest key must verify its signatures.",
+  "forgedSignatureHex": "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "messagesHex": [
+    "6d73672d30",
+    "6d73672d31",
+    "6d73672d32",
+    "6d73672d33",
+    "666c6167736869702f616e792f76317c666f72676564"
+  ],
+  "rejectPublicKeysHex": [
+    "0100000000000000000000000000000000000000000000000000000000000000",
+    "0100000000000000000000000000000000000000000000000000000000000080",
+    "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "0000000000000000000000000000000000000000000000000000000000000000",
+    "0000000000000000000000000000000000000000000000000000000000000080",
+    "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+    "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+    "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+    "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"
+  ],
+  "honest": {
+    "seedHex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "publicKeyHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+    "signatures": [
+      {
+        "messageHex": "6d73672d30",
+        "signatureHex": "9ea71b05dda3bcfca7c177da12dc8aaac6a0fffc2eac9851659d961f33d73759251d78be61792c1907606116075bad0cd3f43c38963cb9f000d015208370e70f"
+      },
+      {
+        "messageHex": "6d73672d31",
+        "signatureHex": "6100eb6520efa5226063adf4c2f4fa6493080bc9f0a9efdd0f4af3c4f5bea177ae893eb1943dfcfef49267e10af42350638d91968c76816fdbc4e3f09492e107"
+      },
+      {
+        "messageHex": "6d73672d32",
+        "signatureHex": "22264600c60b656c29269fec538ce06abe7d582cb050b0853e39d12e047441011d4714117a4006cdc42823a9db728324c932cfa464c31a7badfd60648a0a6001"
+      },
+      {
+        "messageHex": "6d73672d33",
+        "signatureHex": "43e3a94c1f918e581570493cef325444f6a91d464a07314a09a9bcdc7b69d9be7a38e3cc8524a2cd6542001876b9fcfb8f215c030c78dafcc43c389df673c905"
+      },
+      {
+        "messageHex": "666c6167736869702f616e792f76317c666f72676564",
+        "signatureHex": "de0c3109fc398057be72daf75b03b547498e202a7d8712c70c72794881f2e55bb98a95b36f34df0b828220d0a9852cb533b24f215f18ba5846777c02d735e105"
+      }
+    ]
+  }
+}

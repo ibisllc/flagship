@@ -15,6 +15,7 @@ import {
   conflict, forbidden, malformed, notFound, ok,
   type HandlerResponseWithHeaders,
 } from "./types.js";
+import { badEd25519Key } from "./edKey.js";
 
 export interface AuthCodeDeps {
   storage: AuthCodeStorage;
@@ -101,6 +102,8 @@ export async function handleAuthCodeIssue(
   ) {
     return malformed("malformed body");
   }
+  const badDelegated = badEd25519Key(c.delegatedPubKey, c.userPubKey);
+  if (badDelegated) return badDelegated;
 
   const apex = deps.apex ?? "flagship.services";
   const userV = validateUserLabel(c.username);

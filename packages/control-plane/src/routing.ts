@@ -16,6 +16,7 @@ import {
   conflict, forbidden, malformed, notFound, ok,
   type HandlerResponseWithHeaders,
 } from "./types.js";
+import { badEd25519Key } from "./edKey.js";
 
 // M6 (Thread G): ring-buffer of recently-seen (subdomain, nonce) pairs
 // for SetRoutingTarget replay defense. The freshness window already
@@ -114,6 +115,8 @@ export async function handleRegisterRck(
   ) {
     return malformed("malformed body");
   }
+  const badRck = badEd25519Key(r.rckPubKey);
+  if (badRck) return badRck;
   if (Math.abs(now - r.issuedAt) > freshnessMs) return malformed("stale request");
 
   const userRec = await deps.usernames.get(r.username);
@@ -223,6 +226,8 @@ export async function handleSetRoutingTarget(
   ) {
     return malformed("malformed body");
   }
+  const badTarget = badEd25519Key(r.newTargetIdentityPubKey);
+  if (badTarget) return badTarget;
   if (Math.abs(now - r.issuedAt) > freshnessMs) return malformed("stale request");
 
   const route = await deps.routing.get(r.subdomain);

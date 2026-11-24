@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { keepCorruptAside, writeFileDurable } from "../durableFile.js";
 import { join } from "node:path";
 import {
+  isAcceptableEd25519PublicKey,
   parseServerShareAccept,
   parseServerShareGrant,
   parseShareAcceptAdminProof,
@@ -186,6 +187,8 @@ export class ShareStore {
     acceptAdmin?: ShareAcceptAdminProof,
   ): Promise<PutShareResult> {
     if (grant.serverDomain !== this.opts.serverDomain) return { ok: false, status: 403, error: "grant is for a different server" };
+    // A small-order or non-canonical key would let anyone sign as this co-manager.
+    if (!isAcceptableEd25519PublicKey(grant.memberPubHex)) return { ok: false, status: 400, error: "unusable member key", code: "bad-public-key" };
     if (this.ended.has(grant.shareId)) return { ok: false, status: 410, error: "share-ended" };
     const held = this.active.get(grant.shareId);
     let a = accept;

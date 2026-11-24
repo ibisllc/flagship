@@ -45,6 +45,7 @@ import { requireAccountRead, ACCOUNT_KEY_HOLDERS_ONLY, ACCOUNT_READ_HEADERS, typ
 import { authorizeActiveDevice, type AccountDirectoryDeps, type DirectoryAuthorization } from "./accountDirectory.js";
 import { hexToBytes } from "./hex.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
+import { isAcceptableEd25519PublicKey } from "@flagship/protocol";
 
 const DAY = 86_400_000;
 /** Bytes of pieces one account may upload in any 24 hours (§9.4). */
@@ -208,6 +209,8 @@ export async function handleVoiciPublish(deps: VoiciPagesDeps, username: string,
   if (raw && typeof raw === "object" && !Array.isArray(raw) && "index" in raw) raw = (raw as { index: unknown }).index;
   const parsed = parseVoiciPageIndex(raw);
   if (!parsed || parsed.username !== u) return voiciRefusal(400, "malformed");
+  // Rings, call modes and conversation orders verify under ownerSignPub: never store one anyone could sign under.
+  if (!isAcceptableEd25519PublicKey(parsed.ownerSignPub)) return voiciRefusal(400, "bad-public-key");
   const [user, stored, banned] = await Promise.all([deps.usernames.get(u), deps.voici.getPage(u), deps.isAccountBanned?.(u) ?? false]);
   if (!user) return voiciRefusal(404, "not-found");
   if (banned) return voiciRefusal(403, "banned");

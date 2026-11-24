@@ -4,6 +4,7 @@ import { HEX128, HEX64, hexToBytes, bytesToHex } from "./hex.js";
 import { isReservedName } from "./labels.js";
 import { forbidden, malformed, notFound, ok } from "./types.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
+import { badEd25519Key } from "./edKey.js";
 
 /**
  * The claim refusals (docs/voici-namespace-spec.md, Validation). The apps write the sentence from `code`:
@@ -137,6 +138,8 @@ export async function handleUsernameClaim(
     typeof body.adminRootPub === "string" && HEX64.test(body.adminRootPub)
       ? body.adminRootPub.toLowerCase()
       : undefined;
+  const badKey = badEd25519Key(aidPubHex, adminRootPubHex);
+  if (badKey) return badKey;
 
   const out = await deps.storage.put({
     username: v.label,

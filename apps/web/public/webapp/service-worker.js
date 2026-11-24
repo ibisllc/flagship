@@ -586,7 +586,9 @@
 //  v257: sign-up shows the account name as its public address: a muted, unselectable voi.ci/ before the suggested
 //       name with "Your page address, if you turn it on." under it, and a fixed voi.ci/ inside the choose field (a
 //       pasted voi.ci/ or https://voi.ci/ address keeps only the name).
-const SHELL_VERSION = "v257";
+//  v258: the bundled org protocol (vendor/flagship-org/org.js) refuses small-order and non-canonical Ed25519 keys
+//       before verifying (edSync, test-vectors/ed25519-low-order).
+const SHELL_VERSION = "v258";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
