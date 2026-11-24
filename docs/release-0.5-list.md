@@ -83,6 +83,9 @@ over once "let's start 0.5" is said.
   6. Decide: full strict verify in `edSync` (noble `zip215: false`: canonical R, cofactorless; honest signatures pass),
      and proof of possession for the share-key attestation (low value: the request already needs the account's admin
      signature and the attestation names no account).
+  7. Hygiene: bind `aidPub` and `adminRootPub` into a v2 `ClaimUsername` signature (`usernameClaim.ts`). Not
+     exploitable today: `D1UsernameStorage.put` writes both only on the first insert, and swapping them would need the
+     victim's own request body (TLS) replayed with other keys inside its 5-minute window.
 
 ## Carried over from 0.4
 
