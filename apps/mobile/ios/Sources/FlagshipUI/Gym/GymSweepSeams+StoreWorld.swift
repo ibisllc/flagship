@@ -12,7 +12,12 @@ import FlagshipCore
 struct StoreWorld: Decodable {
     struct Server: Decodable { let name: String; let fqdn: String; let leader: Bool; let uptimeHours: Int }
     struct Waiting: Decodable { let server: String; let askedMinutesAgo: Int }
-    struct App: Decodable { let slug: String; let name: String; let summary: String; let server: String; let access: String }
+    struct App: Decodable {
+        let slug: String; let name: String; let summary: String; let server: String; let access: String
+        /// The summary in other languages (lang code -> text); English is `summary`.
+        let summaryByLang: [String: String]?
+        var localizedSummary: String { GymSweepSeams.localized((summaryByLang ?? [:]).merging(["en": summary]) { a, _ in a }) }
+    }
     struct Member: Decodable { let name: String; let rank: String }
     struct Backups: Decodable {
         let server: String; let keep: Int; let policy: String; let lastHoursAgo: Int; let sizeGiB: Double
@@ -107,7 +112,7 @@ extension GymSweepSeams {
             box.appsListFixture = decode(["apps": world.apps.filter { $0.server == s.name }.map { a in
                 [
                     "serviceId": "\(world.account)--\(a.slug)", "creator": world.account, "slug": a.slug, "urlLabel": a.slug,
-                    "summary": a.summary, "url": "https://\(a.slug).\(s.fqdn)/", "status": "running", "version": "1.0.0",
+                    "summary": a.localizedSummary, "url": "https://\(a.slug).\(s.fqdn)/", "status": "running", "version": "1.0.0",
                     "installedAt": now - 30 * 24 * hour, "name": a.name,
                     "accessMode": a.access == "members" ? "members-only" : "open",
                 ] as [String: Any]
