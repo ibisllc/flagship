@@ -128,6 +128,7 @@ internal fun restoreMergeViewModel(serverDomain: String, client: com.flagshipser
     )
 
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 internal fun ServerBackupsContent(
     vm: ServerBackupsViewModel,
     copies: PhoneBackupCopies?,
@@ -273,7 +274,8 @@ internal fun ServerBackupsContent(
                         val progress = vm.downloading[b.archiveId]
                         if (progress != null) LinearProgressIndicator(progress = { progress.toFloat() }, modifier = Modifier.fillMaxWidth())
                         val file = downloaded[b.archiveId]
-                        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
+                        // Wraps: with Restore, a long language's three actions don't fit one line.
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
                             if (file == null) {
                                 TextButton(
                                     onClick = {
