@@ -113,7 +113,9 @@ object Variant : AppVariant {
 
         val store = StoreWorld.parse(cfg.storeWorld)
         val now = System.currentTimeMillis()
-        val storeBoxes = store?.boxes(cfg.storeWaiting, now)
+        val storeLang = context.getSystemService(android.app.LocaleManager::class.java).applicationLocales.get(0)?.toLanguageTag()
+            ?: context.resources.configuration.locales.get(0).toLanguageTag()
+        val storeBoxes = store?.boxes(cfg.storeWaiting, now, storeLang)
         val screens = if (store != null && storeBoxes != null) storeBoxes.getValue(store.servers.first { it.leader }.name) else MockScreensClient()
         // The access dialogs ask about each waiting host in turn: give Plants a
         // second one so Allow and Deny can both be answered (iOS has two).
@@ -180,12 +182,7 @@ object Variant : AppVariant {
         GymProbe.boxDirect = boxDirect
         PodDirect.transport = { boxDirect }
         GymVoici.reset(appState.currentUser.value ?: cfg.username, appState.activeProfile?.deviceId)
-        store?.seedMessages(
-            GymVoici.client,
-            context.getSystemService(android.app.LocaleManager::class.java).applicationLocales.get(0)?.toLanguageTag()
-                ?: context.resources.configuration.locales.get(0).toLanguageTag(),
-            now,
-        )
+        store?.seedMessages(GymVoici.client, storeLang, now)
         val payments = com.flagshipserver.app.api.MockPaymentsClient()
         val orgWorld = GymSeams.orgPlan?.let { com.flagshipserver.app.core.payments.MockOrgPlan.world(it, payments) }
         return GymLaunch(

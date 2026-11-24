@@ -121,12 +121,9 @@ class StoreCaptureTest : GymBase() {
     @Test
     fun storeCaptures() {
         assumeTrue("storeWorld not given: not a store capture run", world != null)
-        val apps = org.json.JSONObject(world!!).getJSONArray("apps")
-        val summary = { slug: String ->
-            (0 until apps.length()).map { apps.getJSONObject(it) }.first { it.getString("slug") == slug }.getString("summary")
-        }
-
         val store = com.flagshipserver.app.core.StoreWorld.parse(world)!!
+        // The apps' summaries as the capture language shows them (the world's summaryByLang).
+        val summary = { slug: String -> store.apps.first { it.slug == slug }.summary(lang) }
 
         // 01 Sam calling from voi.ci (video offered): the full-screen incoming-call screen, Decline and Answer. The
         // call center holds a ringing call from the world; nothing rings, no network (VoiciCallCenter's state is
@@ -179,20 +176,46 @@ class StoreCaptureTest : GymBase() {
         waitText(summary("chess-club"), 20_000)
         shot("04")
 
-        // 05 Chess Club's Access control: Members only, its three members and their ranks. On the phone the page
-        // (with 0.4's per-server list row) is taller than the screen at the run's density: this one slide draws a
-        // little smaller, so Lea's row fits under Ana's and Kenji's.
-        val phone = ctx.resources.configuration.smallestScreenWidthDp < 600
+        // 05 Chess Club's Access control: the Members only switch (at least in part) and all three members with their
+        // ranks. 0.4's per-server list row makes the page taller than the screen at the run's density: scroll as far
+        // as the switch allows, and where that is not enough draw this one slide a little smaller (a lower density).
         val density = shell("wm density").let { Regex("""Override density: (\d+)""").find(it)?.groupValues?.get(1) }
-        if (phone) { shell("wm density 330"); Thread.sleep(2_000); demoStatusBar() }
-        launchStore("apps", dark = false)
-        tapText(summary("chess-club"), 20_000)
-        tap("service-detail-access-row", 20_000)
-        waitUntilExists("service-access-members-title", 15_000)
-        waitText("Lea", 15_000, substring = false)
-        bring("service-access-restrict-toggle", 0.105f)
+        var dpi = density?.toIntOrNull() ?: ctx.resources.displayMetrics.densityDpi
+        var changed = false
+        for (attempt in 0..7) {
+            launchStore("apps", dark = false)
+            tapText(summary("chess-club"), 20_000)
+            tap("service-detail-access-row", 20_000)
+            waitUntilExists("service-access-members-title", 15_000)
+            waitText("Lea", 15_000, substring = false)
+            bring("service-access-restrict-toggle", 0.105f)
+            val h = composeRule.onRoot().fetchSemanticsNode().size.height.toFloat()
+            val toggle = composeRule.onNode(hasTestTag("service-access-restrict-toggle")).fetchSemanticsNode().boundsInRoot
+            // Unclipped: boundsInRoot is empty for a node scrolled out of view.
+            val leaNode = composeRule.onNode(hasTestTag("service-access-remove-inv-lea")).fetchSemanticsNode()
+            val leaBottom = leaNode.positionInRoot.y + leaNode.size.height
+            // The bottom navigation bar on a phone; the gesture bar's strip beside a rail.
+            val tab = composeRule.onAllNodes(hasTestTag("tab-apps")).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            val visibleBottom = if (tab != null && tab.top > h / 2) tab.top else h * 0.96f
+            val overflow = leaBottom + h * 0.025f - visibleBottom
+            val allowed = toggle.height * 0.5f
+            if (overflow <= allowed || attempt == 7) {
+                if (overflow > 0) {
+                    // Never past half the switch: it stays in the shot.
+                    composeRule.onAllNodes(hasScrollAction()).onFirst()
+                        .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, minOf(overflow, allowed)) }
+                    composeRule.waitForIdle()
+                }
+                break
+            }
+            dpi = (dpi * 0.9f).toInt()
+            shell("wm density $dpi")
+            changed = true
+            Thread.sleep(2_000)
+            demoStatusBar()
+        }
         shot("05")
-        if (phone) { shell(if (density != null) "wm density $density" else "wm density reset"); Thread.sleep(2_000); demoStatusBar() }
+        if (changed) { shell(if (density != null) "wm density $density" else "wm density reset"); Thread.sleep(2_000); demoStatusBar() }
 
         // 06 home's server page at Backups, each backup offering Restore into this server.
         launchStore("home", dark = true)

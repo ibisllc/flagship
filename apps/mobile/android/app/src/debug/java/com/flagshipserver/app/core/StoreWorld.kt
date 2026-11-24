@@ -43,7 +43,13 @@ data class StoreWorld(
 ) {
     @Serializable data class Server(val name: String, val fqdn: String, val leader: Boolean, val uptimeHours: Long)
     @Serializable data class Waiting(val server: String, val askedMinutesAgo: Long)
-    @Serializable data class App(val slug: String, val name: String, val summary: String, val server: String, val access: String)
+    @Serializable data class App(
+        val slug: String, val name: String, val summary: String, val server: String, val access: String,
+        /** The summary in each capture language (`en` is [summary]). */
+        val summaryByLang: Map<String, String> = emptyMap(),
+    ) {
+        fun summary(lang: String) = summaryByLang[lang] ?: summaryByLang[lang.substringBefore('-')] ?: summary
+    }
     @Serializable data class Member(val name: String, val rank: String)
     @Serializable data class Backups(val server: String, val keep: Int, val policy: String, val lastHoursAgo: Long, val sizeGiB: Double)
     /** Slide 06: one conversation from the account's voi.ci page, its texts per language. */
@@ -93,7 +99,7 @@ data class StoreWorld(
         }
 
     /** One mock box per server (by its first label), each answering only for itself. */
-    fun boxes(waiting: Boolean, now: Long): Map<String, MockScreensClient> {
+    fun boxes(waiting: Boolean, now: Long, lang: String = "en"): Map<String, MockScreensClient> {
         val gib = 1024.0 * 1024 * 1024
         val ref = serviceId(membersApp)
         val aid = { i: Int -> (i + 6).toString().repeat(64) }
@@ -122,7 +128,7 @@ data class StoreWorld(
         val lists = servers.associate { s ->
             s.name to AppsListResponse(apps.filter { it.server == s.name }.map { a ->
                 AppSummary(
-                    serviceId = serviceId(a.slug), creator = account, slug = a.slug, urlLabel = a.slug, summary = a.summary,
+                    serviceId = serviceId(a.slug), creator = account, slug = a.slug, urlLabel = a.slug, summary = a.summary(lang),
                     url = "https://${a.slug}.${s.fqdn}/", status = "running", version = "1.0.0", installedAt = now - 30 * 24 * hour,
                     accessMode = if (a.access == "members") "members-only" else "open", name = a.name,
                 )
