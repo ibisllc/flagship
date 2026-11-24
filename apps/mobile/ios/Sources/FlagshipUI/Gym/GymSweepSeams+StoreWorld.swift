@@ -24,6 +24,15 @@ struct StoreWorld: Decodable {
         let nickname: [String: String]
         let thread: [Line]
     }
+    /// Slides 01 and 02 (0.4): the call ringing, and this device's call list ("nickname" = the thread's visitor).
+    struct Calls: Decodable {
+        struct Ringing: Decodable { let from: String?; let video: Bool }
+        struct Entry: Decodable {
+            let from: String?; let direction: String; let outcome: String; let video: Bool; let minutesAgo: Int; let durationSec: Int?
+        }
+        let ringing: Ringing
+        let history: [Entry]
+    }
     let account: String
     let servers: [Server]
     let unlockRequest: Waiting
@@ -32,6 +41,13 @@ struct StoreWorld: Decodable {
     let members: [Member]
     let backups: Backups
     let messages: Messages?
+    let calls: Calls?
+
+    /// The caller's name on the ringing screen: the owner's nickname for the thread's visitor, in the capture's language.
+    var ringingName: String? {
+        guard let m = messages, calls?.ringing.from == "nickname" else { return nil }
+        return GymSweepSeams.localized(m.nickname)
+    }
 
     static func load() -> StoreWorld? {
         guard let json = ProcessInfo.processInfo.environment["FLAGSHIP_STORE_WORLD"] else { return nil }
@@ -188,7 +204,7 @@ extension GymSweepSeams {
     }
 
     /// The capture's language (`-AppleLanguages`), picked from a per-language text: exact, then the language alone, then English.
-    private static func localized(_ texts: [String: String]) -> String {
+    nonisolated static func localized(_ texts: [String: String]) -> String {
         let lang = Bundle.main.preferredLocalizations.first ?? "en"
         return texts[lang] ?? texts[String(lang.prefix(while: { $0 != "-" }))] ?? texts["en"] ?? ""
     }
@@ -231,6 +247,7 @@ extension GymSweepSeams {
             }
         }
         m.mailbox[user] = items
+        storeCalls(world, user: user, conv: conv, sam: visitor.pseudonymPub, now: now)
         var state = MessagesState()
         state.nicknames[visitor.pseudonymPub] = MessagesState.Nickname(name: localized(w.nickname), at: now - 3_000_000)
         state.accepted = [conv]
@@ -238,6 +255,22 @@ extension GymSweepSeams {
                                                             version: 1, state: state) {
             m.states[user] = sealed.json
         }
+    }
+
+    /// Slide 02: this device's call list (kept on the device only), newest first, Sam's calls under his conversation;
+    /// an unnamed visitor's under a pseudonym with no thread. Calls not seen yet, so the call button shows the missed one.
+    static func storeCalls(_ world: StoreWorld, user: String, conv: String, sam: String, now: Int64) {
+        guard let calls = world.calls else { return }
+        let stranger = String(repeating: "7c", count: 32)
+        let records = calls.history.enumerated().map { i, e in
+            VoiciCallRecord(callId: String(format: "%032x", 0xca11 + i), direction: e.direction == "outgoing" ? .outgoing : .incoming,
+                            outcome: VoiciCallRecord.Outcome(rawValue: e.outcome) ?? .answered,
+                            peer: e.from == "nickname" ? .visitor(conv: conv, pseudonymPub: sam)
+                                : .visitor(conv: String(repeating: "c7", count: 16), pseudonymPub: stranger),
+                            video: e.video, at: now - Int64(e.minutesAgo) * 60_000, durationMs: Int64(e.durationSec ?? 0) * 1000)
+        }
+        if let data = try? JSONEncoder().encode(records) { FileCallHistoryStore.standard.write(user, data) }
+        UserDefaults.standard.removeObject(forKey: SocialBadges.callsSeenKey(user))
     }
 
     private static func decode<T: Decodable>(_ object: [String: Any]) -> T? {

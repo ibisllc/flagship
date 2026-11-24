@@ -116,6 +116,7 @@ struct VoiciRingingStage: View {
             }
             .padding(.top, geo.size.height * 0.1)
             .padding(.horizontal, 24)
+            .frame(width: geo.size.width)
             }
         }
         .preferredColorScheme(.dark)

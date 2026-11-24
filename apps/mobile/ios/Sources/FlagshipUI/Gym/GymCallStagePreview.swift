@@ -15,7 +15,7 @@ public struct GymCallStagePreview: View {
 
     public var body: some View {
         if kind == "ringing" {
-            VoiciRingingStage(name: "Anna Lindqvist", status: VoiciCallScreenModel.status(.ringing), canAnswer: true,
+            VoiciRingingStage(name: StoreWorld.load()?.ringingName ?? "Anna Lindqvist", status: VoiciCallScreenModel.status(.ringing), canAnswer: true,
                               decline: {}, answer: {})
         } else {
             VoiciCallStage(state: state, actions: VoiciCallStageActions(toggleMute: {}, toggleCamera: {}, flipCamera: {}, hangUp: {}, close: {}))

@@ -2,7 +2,7 @@ import XCTest
 
 /// Store screenshots (docs/store-assets/capture-plan.md): the real app over the made-up world in
 /// store/demo-world.json (`-smoke-store-world`), one language per run, light and dark by the slide's place
-/// in the strip, written as `<id>.png` (01-06; the watch's 07/07b come from capture-ios.sh). Opt-in (skipped
+/// in the strip, written as `<id>.png` (01-06 in the 0.4 order: call, Social, Home, apps, access, backups; the watch's 07/07b come from capture-ios.sh). Opt-in (skipped
 /// unless `STORE_OUT` is set); run it through
 /// scripts/store-assets/capture-ios.sh, which passes:
 ///
@@ -103,29 +103,50 @@ final class StoreCaptureTests: XCTestCase {
                    thenHoldForDuration: 0.6)
     }
 
+    /// The caller's name: the owner's nickname for Sam in the capture's language (the world's `messages.nickname`).
+    private var nickname: String {
+        let json = (try? JSONSerialization.jsonObject(with: Data(world.utf8))) as? [String: Any]
+        let names = (json?["messages"] as? [String: Any])?["nickname"] as? [String: String] ?? [:]
+        return names[lang] ?? names["en"] ?? ""
+    }
+
     func test_storeCaptures() throws {
-        // 01 Home: both servers online, home the leader.
-        var app = launch("home", dark: false)
-        XCTAssertTrue(serverRow(app, "cabin.river-otter").waitForExistence(timeout: 20))
+        // 01 An incoming voi.ci call from Sam, ringing: the app's own ringing stage (CallKit's can't be captured). The
+        // stage is always dark, so the device is too: a light device draws a dark status bar on it.
+        var app = launch("home", dark: true, ["-smoke-call-stage", "ringing"])
+        XCTAssertTrue(app.staticTexts[nickname].waitForExistence(timeout: 20))
         try shot(app, "01")
 
-        // 02 The start-up request cabin sent, in Activity's Server approvals.
-        app = launch("activity", dark: true, ["-smoke-store-waiting"])
-        let approvals = app.buttons["activity-section-approvals"]
-        XCTAssertTrue(approvals.waitForExistence(timeout: 20))
-        sleep(2)
-        approvals.tap()
-        XCTAssertTrue(any(app, "approvals-panel").waitForExistence(timeout: 15))
+        // 02 The Social tab: the voi.ci page's header, Inbox with Sam's conversation, the call button with the missed
+        // call. iPad: Sam's conversation open beside the sidebar.
+        app = launch("messages", dark: true)
+        let inbox = app.buttons["social-tab-inbox"]
+        XCTAssertTrue(inbox.waitForExistence(timeout: 20))
+        inbox.tap()
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'messages-row-'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20))
+        XCTAssertTrue(any(app, "social-call-button").waitForExistence(timeout: 10))
+        if isPad {
+            row.tap()
+            XCTAssertTrue(any(app, "thread-compose").waitForExistence(timeout: 15))
+            XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "bubble-visitor").count, 3)
+        }
         try shot(app, "02")
 
-        // 03 Every app on both servers.
-        app = launch("apps", dark: false)
-        XCTAssertTrue(any(app, "app-row-status-river-otter--budget").waitForExistence(timeout: 20))
-        XCTAssertTrue(any(app, "app-row-status-river-otter--chess-club").waitForExistence(timeout: 20))
+        // 03 Home: both servers online, home the leader, no marketplace card (0.4).
+        app = launch("home", dark: false)
+        XCTAssertTrue(serverRow(app, "cabin.river-otter").waitForExistence(timeout: 20))
+        XCTAssertFalse(any(app, "quick-action-install-service").exists)
         try shot(app, "03")
 
-        // 04 Chess Club's Access control: Members only, its three members and their ranks.
+        // 04 Every app on both servers.
         app = launch("apps", dark: true)
+        XCTAssertTrue(any(app, "app-row-status-river-otter--budget").waitForExistence(timeout: 20))
+        XCTAssertTrue(any(app, "app-row-status-river-otter--chess-club").waitForExistence(timeout: 20))
+        try shot(app, "04")
+
+        // 05 Chess Club's Access control: Members only, its three members and their ranks.
+        app = launch("apps", dark: false)
         let chess = any(app, "app-row-status-river-otter--chess-club")
         XCTAssertTrue(chess.waitForExistence(timeout: 20))
         chess.tap()
@@ -140,10 +161,10 @@ final class StoreCaptureTests: XCTestCase {
         // to clear the tab bar in a language whose rows wrap.
         if isPad { bring(app, any(app, "service-access-restrict-toggle"), toY: 0.16) }
         else { lift(app, any(app, "service-access-revoke-inv-lea"), clearOf: app.tabBars.firstMatch) }
-        try shot(app, "04")
+        try shot(app, "05")
 
-        // 05 home's server page at Backups.
-        app = launch("home", dark: false)
+        // 06 home's server page at Backups, each backup's "Restore into this server" in view.
+        app = launch("home", dark: true)
         let home = serverRow(app, "home.river-otter")
         XCTAssertTrue(home.waitForExistence(timeout: 20))
         home.tap()
@@ -153,16 +174,8 @@ final class StoreCaptureTests: XCTestCase {
         // The card's top edge meets the navigation bar's bottom: what scrolls under the bar is the section's
         // gap and label, not the Diagnostics card's text overlapping the title.
         bring(app, any(app, "sd-backups-policy"), toY: isPad ? 0.10 : 0.15)
-        try shot(app, "05")
-
-        // 06 Messages: the conversation someone started from voi.ci/river-otter, under the owner's nickname for them.
-        app = launch("messages", dark: true)
-        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'messages-row-'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 20))
-        row.tap()
-        XCTAssertTrue(any(app, "thread-compose").waitForExistence(timeout: 15))
-        XCTAssertTrue(any(app, "thread-receipt").waitForExistence(timeout: 15))
-        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "bubble-visitor").count, 3)
+        let restore = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'sd-backup-restore-'")).firstMatch
+        XCTAssertTrue(restore.waitForExistence(timeout: 10))
         try shot(app, "06")
     }
 }
