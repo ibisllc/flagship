@@ -230,6 +230,12 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > anything below. Keep this section short: it loads into every agent session.
 > Last updated **2026-11-17**.
 
+### ⚠ Post 0.4 / pre 0.5 / next release: do the store listing runbook first
+
+When the owner says "post 0.4", "pre 0.5", "next release" or "start 0.5", or both stores have accepted 0.4: open
+`docs/runbooks/post-0.4-store-listing.md` before anything else (API keys for direct upload, the screenshot fixes, the
+listing texts, the upload). `scripts/check-carryover.mjs` fails the 0.5 release preflight and vitest while it is OPEN.
+
 ### Release 0.4 (in progress, 2026-11-17)
 
 Branch **`release/0.4`** (worktree `~/flagship-0.4`; not on `main`, nothing deployed). Plan, Log and resume point:

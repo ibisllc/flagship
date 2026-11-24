@@ -1076,6 +1076,7 @@ run_preflight() {
   ensure_wt
   hdr "Gates on the pinned commit"
   WX node scripts/check-versions.mjs
+  WX node scripts/check-carryover.mjs
   WX npm run parity
   WX npm run i18n
   XA "$WT" env RELEASE=1 bash scripts/release-guard.sh
