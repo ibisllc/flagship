@@ -67,5 +67,14 @@
         "ja": "ありがとうございます。木曜日にお会いしましょう！",
         "zh-Hans": "谢谢，周四见！" } }
     ]
+  },
+  "calls": {
+    "_about": "Slides 01 and 02 (0.4): Sam, the person from the messages thread (shown by messages.nickname in the capture's language), calls the owner from voi.ci/river-otter. ringing: slide 01, the phone ringing with video offered (iOS the ringing call stage, Android the full-screen incoming-call screen). history: the Social tab's calls on slide 02, newest first; from 'nickname' means Sam, null an unnamed voi.ci visitor.",
+    "ringing": { "from": "nickname", "video": true },
+    "history": [
+      { "from": "nickname", "direction": "incoming", "outcome": "answered", "video": true, "minutesAgo": 30, "durationSec": 272 },
+      { "from": "nickname", "direction": "incoming", "outcome": "missed", "video": false, "minutesAgo": 1500 },
+      { "from": null, "direction": "incoming", "outcome": "answered", "video": false, "minutesAgo": 2900, "durationSec": 95 }
+    ]
   }
 }
