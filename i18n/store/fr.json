@@ -1,18 +1,19 @@
 {
   "slide1_theme": "Votre serveur",
   "slide1_caption": "Votre propre cloud, chez vous.",
-  "slide2_theme": "Votre téléphone",
-  "slide2_caption": "Votre accord, puis il démarre.",
   "slide3_theme": "Vos apps",
   "slide3_caption": "Vos apps, sur votre serveur.",
   "slide4_theme": "Vos proches",
   "slide4_caption": "Invitez vos proches. Gardez les clés.",
   "slide5_theme": "Vos sauvegardes",
   "slide5_caption": "Vous seul ouvrez vos sauvegardes.",
-  "messages_theme": "Vos messages",
-  "messages_caption": "Vos messages, lus par vous seul.",
   "slide6_theme": "En un coup d’œil",
   "slide6_caption": "L’état, à votre poignet.",
-  "closing_caption": "Flagship. Votre cloud, vos clés.",
-  "feature_caption": "Votre cloud, vos clés."
+  "closing_caption": "Flagship : voi.ci et cloud",
+  "feature_caption": "Appels, messages\nsur voi.ci.",
+  "call_theme": "voi.ci",
+  "call_caption": "Appels, messages\nsur voi.ci.",
+  "social_theme": "Social",
+  "social_caption": "Messages, appels :\nun seul onglet.",
+  "feature_sub": "Votre cloud, vos clés."
 }

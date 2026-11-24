@@ -79,7 +79,8 @@ export function plan(lang) {
       const needsCapture = !["closing", "feature", "icon"].includes(template);
       jobs.push({
         lang, store: cls.store, storeLang: cls.neutral ? null : storeLang(loc, cls.store), cls: cls.class, id, theme: slide.theme, template, tone, device,
-        w: cls.w, h: cls.h, file, isWatch, first: i === 0 && id === "01",
+        w: cls.w, h: cls.h, file, isWatch, first: i === 0 && id === "01", deviceW: cls.deviceW, fit: slide.fit,
+        sub: template === "feature" && slide.strings ? s[`${slide.strings}_sub`] ?? null : null,
         eyebrow: slide.strings && !slide.closing && template !== "feature" && template !== "watch" ? { num: id, theme: s[`${slide.strings}_theme`] } : null,
         caption: template === "watch" || !slide.strings ? null : s[`${slide.strings}_caption`],
         capture: needsCapture ? findCapture(lang, capFrom, id, isWatch ? null : cls.standIn) : null,
@@ -103,6 +104,7 @@ function specOf(job) {
   const c = job.capture;
   return {
     w: job.w, h: job.h, lang: job.lang, tone: job.tone, device: job.device, watch: job.isWatch, first: job.first,
+    deviceW: job.deviceW, fit: job.fit, sub: job.sub,
     eyebrow: job.eyebrow, caption: job.caption,
     captionScale: job.template === "feature" ? 0.13 : 0.05, captionFloor: job.template === "feature" ? 0.1 : 0.045,
     maxLines: job.template === "closing" ? 3 : 2, // the closing card has no device under it

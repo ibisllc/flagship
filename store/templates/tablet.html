@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Store template: a tablet screen (or the watch, slide 6) under its caption, standing on the shelf.
+<!-- Store template: a tablet screen (or the watch, slide 07) under its caption: big, running off the bottom edge.
      docs/store-assets/store-assets-brief.md; drawn by scripts/store-assets/render.mjs. -->
 <html lang="en"><head><meta charset="utf-8"><title>Flagship store art: tablet</title>
 <link rel="stylesheet" href="store.css"></head>
@@ -8,11 +8,11 @@
 <script>
 window.layout = (spec, k) => {
   k.head(spec, document.body);
-  const st = k.stage(document.body);
-  const box = spec.watch ? k.watch(spec, st) : k.device(spec, st);
-  if (spec.first) {
-    const d = Math.max(spec.w * 1.04, box.h * 0.9);
-    k.el("div", "sun", document.body, { width: k.px(d), height: k.px(d), left: k.px(box.x + box.w / 2 - d / 2), top: k.px(box.y + box.h * 0.42 - d / 2) });
+  if (spec.watch) {
+    const st = k.stage(document.body);
+    k.watch(spec, st);
+  } else {
+    k.hero(spec, document.body);
   }
   k.shelf(spec, document.body);
 };

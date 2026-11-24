@@ -72,41 +72,79 @@ function screenContent(spec, screen, screenW, { round = false, statusBar = 0 } =
   return null;
 }
 
-/** A phone or tablet outline holding the capture, standing on the stage floor. Returns its box. */
-function device(spec, st) {
+/** A phone or tablet outline holding the capture. Returns { box, W, H }; the caller places it. */
+function deviceBox(spec, parent, W) {
   const d = DEVICES[spec.device];
   const aspect = spec.capture ? spec.capture.w / spec.capture.h : spec.captureAspect;
-  const k = (1 - 2 * d.bezel) / aspect + 2 * d.bezel; // device height / device width
-  const W = Math.min(st.w * d.maxW, st.h / k);
-  const H = W * k;
-  const box = el("div", "device", st.el, { width: px(W), height: px(H), borderRadius: px(W * d.radius) });
+  const H = W * deviceK(spec);
+  const box = el("div", "device", parent, { width: px(W), height: px(H), borderRadius: px(W * d.radius) });
   const b = W * d.bezel;
   const screenW = W - 2 * b;
   const screen = el("div", "screen", box, { left: px(b), top: px(b), width: px(screenW), height: px(H - 2 * b), borderRadius: px(Math.max(0, W * d.radius - b)) });
   screenContent(spec, screen, screenW, { statusBar: d.statusBar * screenW });
   if (d.island) el("div", "island", box, { width: px(screenW * d.island.w), height: px(screenW * d.island.h), left: px(b + screenW * (1 - d.island.w) / 2), top: px(b + screenW * d.island.top) });
   if (d.hole) el("div", "island", box, { width: px(screenW * d.hole.d), height: px(screenW * d.hole.d), left: px(b + screenW * (1 - d.hole.d) / 2), top: px(b + screenW * d.hole.top) });
-  // side buttons: a hint of hardware, no more
   if (spec.device === "iphone" || spec.device === "android-phone") {
     const bw = Math.max(2, W * 0.012);
     el("div", "button", box, { right: px(-bw), top: px(H * 0.22), width: px(bw), height: px(H * 0.1), borderRadius: px(bw) });
     if (spec.device === "iphone") el("div", "button", box, { left: px(-bw), top: px(H * 0.2), width: px(bw), height: px(H * 0.06), borderRadius: px(bw) });
   }
+  return { box, W, H };
+}
+
+/** device height / device width for this capture */
+function deviceK(spec) {
+  const d = DEVICES[spec.device];
+  const aspect = spec.capture ? spec.capture.w / spec.capture.h : spec.captureAspect;
+  return (1 - 2 * d.bezel) / aspect + 2 * d.bezel;
+}
+
+/** The legacy fitted device, standing on the stage floor (kept for templates that want the whole device). */
+function device(spec, st) {
+  const d = DEVICES[spec.device];
+  const W = Math.min(st.w * d.maxW, st.h / deviceK(spec));
+  const { box } = deviceBox(spec, st.el, W);
   const r = box.getBoundingClientRect();
   return { x: r.left, y: r.top, w: r.width, h: r.height };
+}
+
+/** The big device (store review: the app screen at least ~65 % of the image width, legible as a thumbnail): as wide
+ *  as spec.deviceW of the canvas, under the caption, running off the bottom edge. spec.fit === "whole" keeps the whole
+ *  device above the shelf instead (a slide whose point is at the bottom of the screen). Placed after the caption
+ *  is fitted (window.place), so a one-line caption gives the device more room. */
+function hero(spec, root) {
+  const W = spec.w * (spec.deviceW ?? 0.84);
+  const dev = deviceBox(spec, root, W);
+  dev.box.classList.add("hero");
+  window.place = () => {
+    const head = document.querySelector(".head").getBoundingClientRect();
+    const top = head.bottom + spec.h * 0.028;
+    let w = W;
+    if (spec.fit === "whole") {
+      const room = spec.h * 0.95 - top - spec.h * 0.012;
+      w = Math.min(W, room / deviceK(spec));
+    }
+    const s = w / W;
+    Object.assign(dev.box.style, { left: px((spec.w - W) / 2), top: px(top), transformOrigin: "top center", transform: s < 1 ? `scale(${s})` : "" });
+    if (spec.first) {
+      const d = Math.max(spec.w, spec.h) * (spec.w > spec.h ? 0.62 : 1.16);
+      const sun = el("div", "sun", root, { width: px(d), height: px(d), left: px(spec.w / 2 - d / 2), top: px(top + Math.min(dev.H * s, spec.h - top) * 0.45 - d / 2) });
+    }
+  };
+  return dev;
 }
 
 /** A watch: round for Wear OS, a rounded rectangle for Apple Watch; straps cut short so it stands on the floor. */
 function watch(spec, st) {
   const round = spec.device === "wear-os";
   const screenAspect = round ? 1 : 422 / 514;
-  const caseW = Math.min(st.w * 0.8, (st.h / 1.7) * (round ? 1 : 0.86));
+  const caseW = Math.min(spec.w * 0.96, (st.h / 1.25) * (round ? 1 : 0.86));
   const inset = caseW * (round ? 0.075 : 0.07);
   const screenW = caseW - 2 * inset;
   const caseH = screenW / screenAspect + 2 * inset;
-  const strapH = (st.h - caseH) / 2; // the straps run off the top of the stage and down to the floor
+  const strapH = caseH * 0.14; // short strap stubs: the watch face fills the slide (store review: less empty space)
   const totalH = caseH + 2 * strapH;
-  const w = el("div", "watch", st.el, { width: px(caseW), height: px(totalH) });
+  const w = el("div", "watch", st.el, { width: px(caseW), height: px(totalH), alignSelf: "center" });
   const sr = round ? px(caseW * 0.08) : px(caseW * 0.05);
   el("div", "strap", w, { top: 0, height: px(strapH + caseH * 0.2), borderRadius: `${sr} ${sr} 0 0` });
   el("div", "strap", w, { bottom: 0, height: px(strapH + caseH * 0.2), borderRadius: `0 0 ${sr} ${sr}` });
@@ -158,10 +196,12 @@ window.renderSlide = async (spec) => {
   root.style.setProperty("--H", spec.h);
   document.body.className = spec.tone;
   document.body.innerHTML = "";
-  window.layout(spec, { el, px, head, shelf, stage, device, watch, screenContent });
+  window.place = null;
+  window.layout(spec, { el, px, head, shelf, stage, device, hero, watch, screenContent });
   await document.fonts.ready;
   await Promise.all([...document.images].map((i) => (i.complete ? i.decode().catch(() => {}) : new Promise((ok) => { i.onload = i.onerror = ok; }))));
   const fit = fitCaption(spec);
+  if (window.place) window.place();
   const broken = [...document.images].filter((i) => !i.naturalWidth).map((i) => i.src);
   const fonts = [...document.fonts].filter((f) => f.status === "error").map((f) => f.family);
   return { fit, broken, fonts };

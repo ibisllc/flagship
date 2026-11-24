@@ -9,8 +9,8 @@
 window.layout = (spec, k) => {
   k.head(spec, document.body);
   const st = k.stage(document.body);
-  const s = st.h * 0.74; // wider than the slide: the mark is cropped by the right edge
-  const m = k.el("div", "mark", document.body, { width: k.px(s), height: k.px(s), left: k.px(st.left), top: k.px(st.top + st.h - s) });
+  const s = Math.min(st.w * 0.62, st.h * 0.62); // centred and whole (store review: it ran off the right edge)
+  const m = k.el("div", "mark", document.body, { width: k.px(s), height: k.px(s), left: k.px(spec.w / 2 - s / 2), top: k.px(st.top + (st.h - s) / 2) });
   for (const c of ["frame", "ring", "core"]) k.el("div", c, m);
   k.shelf({ ...spec, foot: { ...spec.foot, left: "flagshipserver.com" } }, document.body);
 };

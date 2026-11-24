@@ -41,7 +41,7 @@ describe("store art plan", () => {
 
   it("shows the translated caption, and never puts a caption on a bare watch screen", () => {
     const ja = plan("ja");
-    expect(ja.find((j: { cls: string; id: string }) => j.cls === "phone" && j.id === "01")?.caption).toBe(strings("ja").slide1_caption);
+    expect(ja.find((j: { cls: string; id: string }) => j.cls === "phone" && j.id === "01")?.caption).toBe(strings("ja").call_caption);
     for (const j of ja.filter((x: { template: string }) => x.template === "watch")) expect(j.caption).toBeNull();
   });
 
