@@ -39,6 +39,7 @@ data class StoreWorld(
     val members: List<Member>,
     val backups: Backups,
     val messages: Messages? = null,
+    val calls: Calls? = null,
 ) {
     @Serializable data class Server(val name: String, val fqdn: String, val leader: Boolean, val uptimeHours: Long)
     @Serializable data class Waiting(val server: String, val askedMinutesAgo: Long)
@@ -48,6 +49,22 @@ data class StoreWorld(
     /** Slide 06: one conversation from the account's voi.ci page, its texts per language. */
     @Serializable data class Messages(val displayName: String, val nickname: Map<String, String>, val thread: List<Line>) {
         @Serializable data class Line(val from: String, val minutesAgo: Long, val text: Map<String, String>)
+    }
+    /** Slides 01 and 02 (0.4): Sam calling (ringing), and the calls on the Social page (history). */
+    @Serializable data class Calls(val ringing: Ringing? = null, val history: List<Call> = emptyList()) {
+        @Serializable data class Ringing(val from: String? = null, val video: Boolean = false)
+        @Serializable data class Call(
+            val from: String? = null, val direction: String, val outcome: String, val video: Boolean = false,
+            val minutesAgo: Long, val durationSec: Long = 0,
+        )
+    }
+
+    private fun pickLang(t: Map<String, String>, lang: String) = t[lang] ?: t[lang.substringBefore('-')] ?: t["en"].orEmpty()
+
+    /** The caller's name on slide 01: the owner's nickname for Sam in [lang]. */
+    fun ringingName(lang: String): String? {
+        val r = calls?.ringing ?: return null
+        return if (r.from == "nickname") messages?.nickname?.let { pickLang(it, lang) } else null
     }
 
     private val hour get() = 3_600_000L
@@ -198,7 +215,7 @@ data class StoreWorld(
      */
     fun seedMessages(c: com.flagshipserver.app.api.MockVoiciClient, lang: String, now: Long) {
         val m = messages ?: return
-        val pick = { t: Map<String, String> -> t[lang] ?: t[lang.substringBefore('-')] ?: t["en"].orEmpty() }
+        val pick = { t: Map<String, String> -> pickLang(t, lang) }
         val umk = com.flagshipserver.app.keystore.Keystore.loadOrCreateUmkSeed()
         val pageId = "5a".repeat(16)
         val profile = com.flagshipserver.app.core.voici.VoiciOwner.defaultProfile(m.displayName)
@@ -241,6 +258,27 @@ data class StoreWorld(
             }
         } finally {
             c.now = clock
+        }
+    }
+
+    /**
+     * Slide 02: the calls in the world's history, recorded on this device as answered or missed calls are. Sam's are
+     * on the conversation [seedMessages] made (so the nickname names them); a `null` caller is an unnamed visitor.
+     */
+    suspend fun seedCalls(center: com.flagshipserver.app.core.voici.VoiciCenter, now: Long) {
+        val history = calls?.history ?: return
+        val pageId = "5a".repeat(16)
+        val v = com.flagshipserver.app.core.voici.VoiciVisitorKeys.derive(ByteArray(32) { 0x5E }, pageId)
+        val conv = com.flagshipserver.app.core.voici.VoiciMessages.voiciConv(pageId, v.pseudonymPub)
+        history.forEachIndexed { i, c ->
+            val sam = c.from == "nickname"
+            center.recordCall(
+                com.flagshipserver.app.calls.VoiciCallRecord(
+                    id = "store-call-$i", callId = "%064x".format(i + 1), direction = if (c.direction == "outgoing") "out" else "in",
+                    outcome = c.outcome, conv = if (sam) conv else null, pseudonymPub = if (sam) v.pseudonymPub else null,
+                    media = if (c.video) "audio,video" else "audio", at = now - c.minutesAgo * 60_000, durationMs = c.durationSec * 1000,
+                ),
+            )
         }
     }
 

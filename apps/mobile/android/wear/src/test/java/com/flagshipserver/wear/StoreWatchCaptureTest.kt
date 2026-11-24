@@ -44,6 +44,10 @@ class StoreWatchCaptureTest(private val lang: String, private val waiting: Boole
         val now = System.currentTimeMillis()
         val waitingFor = servers.filter { waiting && it.getString("name") == asking.getString("server") }
 
+        // The watch's clock reads 09:41, as the phone captures' status bar does: a zone whose offset puts now there.
+        val minutesNow = Math.floorMod(now / 60_000, 24L * 60)
+        val shift = Math.floorMod(9L * 60 + 41 - minutesNow, 24L * 60).let { if (it > 12 * 60) it - 24 * 60 else it }
+        java.util.TimeZone.setDefault(java.util.SimpleTimeZone((shift * 60_000).toInt(), "store"))
         RuntimeEnvironment.setQualifiers("+" + resourceQualifier(lang))
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         WatchStore.write(
@@ -77,6 +81,9 @@ class StoreWatchCaptureTest(private val lang: String, private val waiting: Boole
         // Past the app's title, so the servers (and the waiting one) fill the round face.
         compose.onNode(androidx.compose.ui.test.hasScrollAction())
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { it(0f, 120f) }
+        compose.waitForIdle()
+        // The scroll's position indicator fades once the list rests: a still screen shows none.
+        compose.mainClock.advanceTimeBy(5_000)
         compose.waitForIdle()
         val out = File(root, "store/captures/android/$lang/wear").also { it.mkdirs() }
         // captureToImage waits for a hardware frame Robolectric never draws: draw the window ourselves.
