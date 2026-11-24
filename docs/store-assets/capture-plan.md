@@ -27,7 +27,7 @@ them, and the next render picks the files up with no other change.
   `adb shell cmd locale set-app-locales com.flagshipserver.app --locales <androidId>` (Wear the same on the watch AVD),
   or `AppCompatDelegate.setApplicationLocales` in the test.
 * **Appearance** follows the slide's place in the strip: `01` light, `02` dark, `03` light, `04` dark, `05` light,
-  `06` dark (Messages), `07`/`07b` (watch) dark. iOS `XCUIDevice`/`-AppleInterfaceStyle Dark`; Android `adb shell cmd uimode night yes|no`.
+  `06` dark (backups); the call screen (`01`) is always dark, whatever the device setting, `07`/`07b` (watch) dark. iOS `XCUIDevice`/`-AppleInterfaceStyle Dark`; Android `adb shell cmd uimode night yes|no`.
 * **Clean status bar:** iOS `xcrun simctl status_bar <udid> override --time 2026-10-21T09:41:00.000<host offset>` (an ISO time with
   fractional seconds also fixes the date the iPad's status bar shows; capture-ios.sh computes it) `--batteryState charged
   --batteryLevel 100 --cellularBars 4 --wifiBars 3`; Android demo mode (`adb shell settings put global

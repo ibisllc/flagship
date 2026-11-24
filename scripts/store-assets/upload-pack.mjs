@@ -44,13 +44,14 @@ for (const f of files) {
 
 const { chromium } = await import("playwright");
 const b = await chromium.launch();
-const page = await b.newPage({ viewport: { width: 1600, height: 1000 } });
+const page = await b.newPage({ viewport: { width: 1800, height: 1000 } });
 fs.mkdirSync(path.join(dir, "contact-sheets"), { recursive: true });
 for (const lang of new Set(files.map((f) => f.lang))) {
   const review = path.join(ROOT, "store/out/review", `${lang}.html`);
   if (!fs.existsSync(review)) continue;
   await page.goto(pathToFileURL(review).href);
   await page.waitForLoadState("networkidle");
+  await page.addStyleTag({ content: ".row { flex-wrap: wrap; overflow: visible; }" }); // every slide on the sheet, no sideways scroll
   await page.screenshot({ path: path.join(dir, "contact-sheets", `${lang}.png`), fullPage: true });
 }
 await b.close();
