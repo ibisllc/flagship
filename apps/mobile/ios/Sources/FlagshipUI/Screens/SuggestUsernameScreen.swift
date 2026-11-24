@@ -29,9 +29,9 @@ public struct SuggestUsernameScreen: View {
         FSScreen {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 Spacer().frame(height: FS.space.s12)
-                Text("Your handle").font(FS.font.h2())
+                Text("Your account name").font(FS.font.h2())
                 FSColorReader { c in
-                    Text("Here's a free, random username.")
+                    Text("Here's a free, random name.")
                         .font(FS.font.body()).foregroundColor(c.textMuted)
                 }
                 FSColorReader { c in
@@ -45,17 +45,17 @@ public struct SuggestUsernameScreen: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, FS.space.s4)
                 }
-                // The paid choice gets the bordered button; another free suggestion is the plain action.
-                FSSecondaryButton(String(localized: "Choose your own account name"), block: true) {
-                    if let name = vm?.current { onChooseOwn(name) }
-                }
-                .disabled(!(vm?.canContinue ?? false))
-                .accessibilityIdentifier("suggest-choose-own")
+                // "Try another" sits right under the name it replaces; the paid choice gets the bordered button.
                 FSGhostButton(regenLabel, block: true) {
                     Task { await vm?.regenerate() }
                 }
                 .disabled(!(vm?.canRegenerate ?? false))
                 .accessibilityIdentifier("suggest-regenerate")
+                FSSecondaryButton(String(localized: "Choose your own account name"), block: true) {
+                    if let name = vm?.current { onChooseOwn(name) }
+                }
+                .disabled(!(vm?.canContinue ?? false))
+                .accessibilityIdentifier("suggest-choose-own")
                 if let err = vm?.errorText {
                     FSColorReader { c in
                         Text(err).font(FS.font.caption()).foregroundColor(c.danger)

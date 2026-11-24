@@ -317,12 +317,12 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
     const overlay = buildOverlay();
     overlay.innerHTML = `
       <div class="modal-card" role="document">
-        <h3 class="modal-title">${tr("Your handle")}</h3>
+        <h3 class="modal-title">${tr("Your account name")}</h3>
         <p class="modal-suggest-address" dir="ltr"><span class="address-prefix" aria-hidden="true">${ADDRESS_PREFIX}</span><span class="visually-hidden" data-suggest-address></span><span class="modal-suggest-name" aria-hidden="true" data-suggest-name></span></p>
         <p class="note modal-suggest-hint">${tr("Your page address, if you turn it on.")}</p>
-        ${allowChooseOwn ? `<button class="secondary full-width" data-suggest-own>${tr("Choose your own account name")}</button>` : ""}
         <button class="linklike modal-suggest-regen" data-suggest-regen>${tr("↻ Try another")}</button>
         <p class="warn-text mt-2" data-suggest-error role="alert" hidden></p>
+        ${allowChooseOwn ? `<button class="secondary full-width mt-2" data-suggest-own>${tr("Choose your own account name")}</button>` : ""}
         <div class="row-2 mt-3">
           <button class="secondary" data-modal-cancel>${tr("Cancel")}</button>
           <button data-modal-ok>${tr("Continue")}</button>

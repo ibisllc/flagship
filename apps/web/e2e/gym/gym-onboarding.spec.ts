@@ -59,7 +59,7 @@ async function passphrases(page: Page): Promise<void> {
 async function openNewAccount(page: Page, testInfo?: TestInfo): Promise<void> {
   await passphrases(page);
   const sheet = page.locator(".modal-card", { has: page.locator("[data-suggest-name]") });
-  await expect(sheet.locator(".modal-title")).toHaveText("Your handle", { timeout: 30_000 });
+  await expect(sheet.locator(".modal-title")).toHaveText("Your account name", { timeout: 30_000 });
   await expect(sheet.locator("[data-suggest-name]")).toHaveText(FIRST);
   await sheet.locator("[data-suggest-regen]").click();
   await expect(sheet.locator("[data-suggest-name]")).toHaveText(SECOND);

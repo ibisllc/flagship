@@ -10479,12 +10479,12 @@
     "en": "The move was undone: %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift:42"
   },
-  "Your handle": {
-    "en": "Your handle",
+  "Your account name": {
+    "en": "Your account name",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SuggestUsernameScreen.swift:24"
   },
-  "Here's a free, random username.": {
-    "en": "Here's a free, random username.",
+  "Here's a free, random name.": {
+    "en": "Here's a free, random name.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SuggestUsernameScreen.swift:26"
   },
   "Try again in %lld min": {

@@ -105153,84 +105153,84 @@
         }
       }
     },
-    "Your handle": {
+    "Your account name": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tu alias"
+            "value": "Tu nombre de cuenta"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre pseudo"
+            "value": "Votre nom de compte"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dein Benutzername"
+            "value": "Dein Kontoname"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Seu identificador"
+            "value": "Seu nome de conta"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "あなたのハンドル"
+            "value": "あなたのアカウント名"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "你的用户名"
+            "value": "你的账户名"
           }
         }
       }
     },
-    "Here's a free, random username.": {
+    "Here's a free, random name.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aquí tienes un nombre de usuario aleatorio y libre."
+            "value": "Aquí tienes un nombre aleatorio y libre."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Voici un nom d’utilisateur aléatoire et libre."
+            "value": "Voici un nom aléatoire et libre."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hier ist ein freier, zufälliger Benutzername."
+            "value": "Hier ist ein freier, zufälliger Name."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aqui está um nome de usuário aleatório e livre."
+            "value": "Aqui está um nome aleatório e livre."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "空いているランダムなユーザー名です。"
+            "value": "空いているランダムな名前です。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这是一个可用的随机用户名。"
+            "value": "这是一个可用的随机名称。"
           }
         }
       }

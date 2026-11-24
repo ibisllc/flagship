@@ -1850,8 +1850,8 @@
     <string name="disk">Disque</string>
     <string name="waiting_for_the_owner_to_confirm_2">En attente de la confirmation de ce partage par le propriétaire.</string>
     <string name="couldnt_open_this_app">Impossible d’ouvrir cette app.</string>
-    <string name="your_handle">Votre pseudo</string>
-    <string name="heres_a_free_random_username_you">Voici un nom d’utilisateur aléatoire et libre.</string>
+    <string name="your_handle">Votre nom de compte</string>
+    <string name="heres_a_free_random_username_you">Voici un nom aléatoire et libre.</string>
     <string name="try_again_in_s">Réessayez dans %1$s s</string>
     <string name="try_another">Essayer un autre</string>
     <string name="have_the_new_owner_scan_this">Faites scanner ceci par le nouveau propriétaire</string>

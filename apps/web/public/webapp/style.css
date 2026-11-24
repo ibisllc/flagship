@@ -1770,7 +1770,7 @@ body.no-tabs .tab-bar { display: none; }
 }
 .modal-suggest-address .address-prefix { font-size: 18px; }
 .modal-suggest-hint { text-align: center; margin: 0 0 14px; }
-button.linklike.modal-suggest-regen { display: block; margin: 4px auto 0; min-height: 44px; padding: 0 12px; text-align: center; }
+button.linklike.modal-suggest-regen { display: block; margin: 0 auto; min-height: 44px; padding: 0 12px; text-align: center; }
 .modal-suggest-name {
   font-family: var(--font-mono);
   font-size: 24px;

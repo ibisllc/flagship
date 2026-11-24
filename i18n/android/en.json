@@ -7708,11 +7708,11 @@
     "ctx": "ui/screens/SharedAppScreen.kt:156 (prose)"
   },
   "your_handle": {
-    "en": "Your handle",
+    "en": "Your account name",
     "ctx": "ui/screens/SuggestUsernameScreen.kt:63 (text=)"
   },
   "heres_a_free_random_username_you": {
-    "en": "Here's a free, random username.",
+    "en": "Here's a free, random name.",
     "ctx": "ui/screens/SuggestUsernameScreen.kt:68 (text=)"
   },
   "try_again_in_s": {

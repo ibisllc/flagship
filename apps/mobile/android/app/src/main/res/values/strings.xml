@@ -1853,8 +1853,8 @@
     <string name="disk">Disk</string>
     <string name="waiting_for_the_owner_to_confirm_2">Waiting for the owner to confirm this share.</string>
     <string name="couldnt_open_this_app">Couldn\'t open this app.</string>
-    <string name="your_handle">Your handle</string>
-    <string name="heres_a_free_random_username_you">Here\'s a free, random username.</string>
+    <string name="your_handle">Your account name</string>
+    <string name="heres_a_free_random_username_you">Here\'s a free, random name.</string>
     <string name="try_again_in_s">Try again in %1$ss</string>
     <string name="try_another">Try another</string>
     <string name="have_the_new_owner_scan_this">Have the new owner scan this</string>

@@ -114,7 +114,7 @@ class GymAccountGoneTest : GymBase() {
         waitUntilExists("account-gone-warning-text")
         assertEquals(AdminKeyWarning.REMOVE_MESSAGE, textOfTag("account-gone-warning-text"))
         tap("account-gone-remove-anyway")
-        waitText("Your handle", 20_000)
+        waitText("Your account name", 20_000)
         assertEquals(0, tagCount("account-gone"))
         gymShot("create-after-gone")
     }

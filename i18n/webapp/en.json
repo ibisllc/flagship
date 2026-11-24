@@ -1899,8 +1899,8 @@
     "en": "Restored.",
     "ctx": "webapp/lib/migrateArchive.js:114"
   },
-  "Your handle": {
-    "en": "Your handle",
+  "Your account name": {
+    "en": "Your account name",
     "ctx": "webapp/lib/modal.js:261"
   },
   "↻ Try another": {

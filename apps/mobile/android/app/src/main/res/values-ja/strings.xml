@@ -1850,8 +1850,8 @@
     <string name="disk">ディスク</string>
     <string name="waiting_for_the_owner_to_confirm_2">所有者がこの共有を確認するのを待っています。</string>
     <string name="couldnt_open_this_app">このアプリを開けませんでした。</string>
-    <string name="your_handle">あなたのハンドル</string>
-    <string name="heres_a_free_random_username_you">空いているランダムなユーザー名です。</string>
+    <string name="your_handle">あなたのアカウント名</string>
+    <string name="heres_a_free_random_username_you">空いているランダムな名前です。</string>
     <string name="try_again_in_s">%1$s 秒後にもう一度お試しください</string>
     <string name="try_another">別のを試す</string>
     <string name="have_the_new_owner_scan_this">新しい所有者にこれをスキャンしてもらってください</string>
