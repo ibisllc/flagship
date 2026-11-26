@@ -107,6 +107,16 @@ over once "let's start 0.5" is said.
   5. Later (not 0.5): VP9 compresses ~30-40 % better than VP8. Using it is a protocol change (the SDP check on three
      platforms, a VP9 clear-header rule in the frame crypto, vectors, VP8 kept for old apps) plus the build flag.
 
+- **Android join registers an empty FCM token** (found 2026-11-26 in the device call test). `JoinDeviceViewModel`'s
+  `providerToken` defaults to `""` and `JoinDeviceScreen` never passes one, so every Android join's admit stores a
+  `push_tokens` row with platform `fcm` and an empty token, and every push to that account then costs one FCM 400
+  ("not a valid FCM registration token"). A build without Firebase (or a phone without Play services) then has only
+  that row and never rings. Fix both sides: the join sends the real token of the phone's transport (FCM, or the
+  UnifiedPush endpoint with platform `unifiedpush`) or no push registration at all, and `.com`'s admit refuses an
+  empty provider token like `serverShares.ts` does (`providerToken required`); delete existing empty rows (one on
+  2026-11-26). Same release: `push voip failed` (`pushBridge.ts`) logs which APNs host refused, so a sandbox token
+  (Xcode build, 403 `BadEnvironmentKeyInToken` after the sandbox retry) is told apart from a production failure.
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in
