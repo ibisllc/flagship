@@ -1,13 +1,7 @@
 {
   "_about": "App Store and Google Play listing texts for Flagship 0.4, English source. Translations are store/listings/<lang>.json with the same keys. Check: node scripts/store-assets/listings.mjs counts. Source of the What's New texts: docs/release-notes/0.4.md. Plain text only; the stores take no HTML. Bullets are the character •.",
   "_todo": [
-    "OWNER (store name): appstore.name / playstore.title now include voi.ci (\"Flagship: voi.ci & Cloud\" or its translation) so the app shows up in searches for voici / voi.ci; the owner must confirm the new name and set it in App Store Connect and the Play Console.",
-    "calls: the Calls lines ship with the 0.4 store builds (calls have no server switch since 2026-11-21).",
-    "plans: the store texts name only that store's in-app purchase (App Store 3.1.1, Play payments policy). Never mention the web shop, Stripe or crypto here. If no rail is live at release, replace the plans paragraph with the 0.3 line \"Flagship is free. There is nothing to buy.\" in every language.",
-    "direct access: ships only once the direct-zone secrets are on production and the old *.fshp.app / www records are deleted (0.4 deploy sheet).",
-    "UnifiedPush (Play only): ships only once WEBPUSH_VAPID_* are on production. Never in the App Store texts.",
-    "Firefox extension: not in the store texts until it is on addons.mozilla.org.",
-    "business: the Business lines ship only if the owner launches orgs in 0.4 (docs/plans-and-backup-offer.md \"As built\"). The store texts never mention the invoiced batch or the web shop. Remove the Business bullets in every language if orgs stay off."
+    "Firefox extension: not in the store texts until it is on addons.mozilla.org."
   ],
   "lang": "en",
   "review": "source",

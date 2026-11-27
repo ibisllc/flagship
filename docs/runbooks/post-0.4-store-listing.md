@@ -44,7 +44,7 @@ listings or screenshots).
    ~/.config/flagship/play-service-account.json && chmod 600 ~/.config/flagship/play-service-account.json`.
 6. In Play Console → Publishing overview, confirm **Managed publishing** is on.
 
-**Then Claude** writes `scripts/store-assets/store-upload.mjs` (not built yet): App Store Connect API with an ES256
+**Then Claude** writes `scripts/store-assets/store-upload.mjs` (Play part built 2026-11-25; App Store part not yet): App Store Connect API with an ES256
 JWT from the `.p8` (app info localizations, version localizations, screenshot sets), and the Android Publisher API
 v3 edits (listings, images: `deleteall` then `upload` per type and language, commit with
 `changesNotSentForReview=true`). It reads the pack from `upload-pack.mjs`, has `--dry-run` (prints every change
@@ -115,3 +115,11 @@ counts`.
 ## Log
 
 (dated lines: what was uploaded where, which items the owner dropped, then `Status: DONE <date>` above)
+
+- 2026-11-25/26: Play service account in place (Chromebook). `store-upload.mjs play` staged the 0.4 texts
+  (title "Flagship: voi.ci & Cloud", short and full descriptions; en-US, es-ES, es-419, fr-FR, de-DE, pt-BR, ja-JP,
+  zh-CN) and the final 0.4 art pack from the Mac (`flagship-play-art-0.4.zip`, sha256 c306f437…: phone, 7", 10" 8
+  each, Wear 3, feature graphic; es-419 takes es-ES). Play had still shown the 0.3 texts and screenshots. Staged
+  under managed publishing; the owner sends for review. The listing files' `_todo` gates are settled (plans, direct
+  access, UnifiedPush, Business shipped); only the Firefox note stays. Open: §2 improved set (owner answers on 01/02),
+  §3.3 native review, App Store key and upload.

@@ -1,11 +1,6 @@
 {
   "_about": "Ficha de App Store y Google Play de Flagship 0.3 en español, traducida de en.json.",
-  "_todo": [
-    "OWNER (store name): appstore.name / playstore.title now include voi.ci (\"Flagship: voi.ci & Cloud\" or its translation) so the app shows up in searches for voici / voi.ci; the owner must confirm the new name and set it in App Store Connect and the Play Console.",
-    "OWNER CHECK (usb-burn): the ISO/USB install path is proven live in the gym (2026-11-03); the phone OTG write to a real stick + metal boot is act 4 of docs/runbooks/0.3-hardware-acceptance.md, still open. If that act fails or the seed is not published at release step 21, remove the phone USB-burn clause (the end of the first 'What you can do' bullet) from playstore.fullDescription and the USB-burn line from playstore.whatsNew in every language. Android only; never in the App Store texts.",
-    "local-ai and graphics cards: true as written (CPU path runs; GPU apps wait for qualification). Keep 'wait for your approval'; never claim GPU apps run today.",
-    "voici: the voi.ci page and Messages sentences in appstore.description, appstore.whatsNew, playstore.fullDescription and playstore.whatsNew ship only if VOICI_ENABLED is on in production at the release (journal H11). Remove them in every language if it stays off."
-  ],
+  "_todo": [],
   "lang": "es",
   "review": "machine draft: needs native review",
   "appstore": {
