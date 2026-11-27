@@ -315,6 +315,17 @@ interface AdmitBody {
 
 const DEVICE_PUB_HEX_RE = /^[0-9a-f]{64}$/;
 
+/** The device platform a push service implies, for the Trusted devices lists (which know ios, android, web). */
+export function platformClassForPush(pushPlatform: unknown): string | null {
+  switch (pushPlatform) {
+    case "apns": return "ios";
+    case "fcm":
+    case "unifiedpush": return "android";
+    case "webpush": return "web";
+    default: return null;
+  }
+}
+
 export async function handleVouchedDeviceAdmit(
   deps: PushDeps,
   username: string,
@@ -429,7 +440,7 @@ export async function handleVouchedDeviceAdmit(
     accountId: a.username,
     deviceId,
     devicePubHex: newDevicePubHex,
-    platformClass: body.request?.platform ?? null,
+    platformClass: platformClassForPush(body.request?.platform),
     createdAt: now,
     lastSeenAt: now,
     revokedAt: null,
