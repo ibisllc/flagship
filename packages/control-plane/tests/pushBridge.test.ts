@@ -111,6 +111,10 @@ describe("buildPushForwarder — APNs", () => {
     expect(apnsLocalizedAlertFor("app-access")["loc-key"]).toBe("One of your apps wants to reach the internet.");
     expect(apnsAlertFor("some-future-category")).toEqual({ title: "Flagship", body: "Open Flagship to see what's new." });
     expect(apnsAlertFor("secret-request")).toEqual({ title: "Flagship", body: "A server is waiting for your approval." });
+    expect(apnsAlertFor("account-key-rotated")).toEqual({
+      title: "Flagship",
+      body: "Your account key was changed. Open Flagship to keep using this device.",
+    });
     expect(apnsAlertFor("secret-request", "share-start-up")).toEqual({
       title: "Flagship",
       body: "A server shared with you is asking you to unlock it.",

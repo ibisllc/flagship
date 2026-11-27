@@ -17443,5 +17443,10 @@
     "en": "This device was removed from your Flagship account.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Your account key was changed. Open Flagship to keep using this device.": {
+    "en": "Your account key was changed. Open Flagship to keep using this device.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
   }
 }

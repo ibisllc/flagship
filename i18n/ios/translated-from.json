@@ -4088,5 +4088,6 @@
   "Done. Your account has new keys. Pair your servers and other devices again.": "1cf1fe227f17",
   "You can reset the account keys once an hour. Try again later.": "e1e1e5c9fe65",
   "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "bce03610a492",
-  "This device was removed from your Flagship account.": "6cac1b8db221"
+  "This device was removed from your Flagship account.": "6cac1b8db221",
+  "Your account key was changed. Open Flagship to keep using this device.": "3cb06b11a417"
 }

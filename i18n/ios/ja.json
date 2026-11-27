@@ -4092,5 +4092,6 @@
   "Done. Your account has new keys. Pair your servers and other devices again.": "完了しました。アカウントに新しい鍵が設定されました。サーバーとほかのデバイスをもう一度ペアリングしてください。",
   "You can reset the account keys once an hour. Try again later.": "アカウントの鍵のリセットは 1 時間に 1 回までです。しばらくしてからもう一度お試しください。",
   "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "このアカウントの別のデバイスがアカウントの鍵を変更しました。リカバリーパスキーでもう一度サインインしてください。",
-  "This device was removed from your Flagship account.": "このデバイスは Flagship アカウントから削除されました。"
+  "This device was removed from your Flagship account.": "このデバイスは Flagship アカウントから削除されました。",
+  "Your account key was changed. Open Flagship to keep using this device.": "アカウントのキーが変更されました。このデバイスを引き続き使うには Flagship を開いてください。"
 }

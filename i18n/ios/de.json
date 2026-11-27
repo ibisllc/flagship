@@ -4094,5 +4094,6 @@
   "Done. Your account has new keys. Pair your servers and other devices again.": "Fertig. Dein Konto hat neue Schlüssel. Kopple deine Server und deine anderen Geräte erneut.",
   "You can reset the account keys once an hour. Try again later.": "Du kannst die Kontoschlüssel einmal pro Stunde zurücksetzen. Versuche es später erneut.",
   "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "Ein anderes Gerät dieses Kontos hat die Kontoschlüssel geändert. Melde dich mit deinem Wiederherstellungs-Passkey erneut an, um wieder hineinzukommen.",
-  "This device was removed from your Flagship account.": "Dieses Gerät wurde aus deinem Flagship-Konto entfernt."
+  "This device was removed from your Flagship account.": "Dieses Gerät wurde aus deinem Flagship-Konto entfernt.",
+  "Your account key was changed. Open Flagship to keep using this device.": "Der Schlüssel deines Kontos wurde geändert. Öffne Flagship, um dieses Gerät weiter zu nutzen."
 }

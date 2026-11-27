@@ -167882,6 +167882,47 @@
           }
         }
       }
+    },
+    "Your account key was changed. Open Flagship to keep using this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se cambió la clave de tu cuenta. Abre Flagship para seguir usando este dispositivo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clé de votre compte a été changée. Ouvrez Flagship pour continuer à utiliser cet appareil."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Schlüssel deines Kontos wurde geändert. Öffne Flagship, um dieses Gerät weiter zu nutzen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A chave da sua conta foi trocada. Abra o Flagship para continuar usando este dispositivo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントのキーが変更されました。このデバイスを引き続き使うには Flagship を開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的账户密钥已更改。打开 Flagship 以继续使用此设备。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -4092,5 +4092,6 @@
   "Done. Your account has new keys. Pair your servers and other devices again.": "完成。你的账户已有新的密钥。请重新配对你的服务器和其他设备。",
   "You can reset the account keys once an hour. Try again later.": "账户密钥每小时只能重置一次。请稍后再试。",
   "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "此账户中的另一台设备更改了账户的密钥。请使用恢复通行密钥重新登录。",
-  "This device was removed from your Flagship account.": "此设备已从你的 Flagship 账户中移除。"
+  "This device was removed from your Flagship account.": "此设备已从你的 Flagship 账户中移除。",
+  "Your account key was changed. Open Flagship to keep using this device.": "你的账户密钥已更改。打开 Flagship 以继续使用此设备。"
 }

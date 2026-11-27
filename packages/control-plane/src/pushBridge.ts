@@ -311,6 +311,9 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   // Another device removed this one from the account (docs/revocation-ui.md). The app checks with `.com` before
   // it erases anything; the push itself proves nothing.
   "device-removed": { title: "Flagship", body: "This device was removed from your Flagship account." },
+  // An admin device changed the account key (docs/account-key-rotation.md); this device fetches and checks its
+  // new key itself. Names no device and no account.
+  "account-key-rotated": { title: "Flagship", body: "Your account key was changed. Open Flagship to keep using this device." },
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 
@@ -350,8 +353,7 @@ export const DEVICE_REMOVED_CATEGORY = "device-removed";
 
 /**
  * The push a kept device gets when an admin device changed the account key (docs/account-key-rotation.md):
- * it fetches its delivery from `.com` and verifies it itself. Shows the default alert sentence until the
- * apps carry their own.
+ * it fetches its delivery from `.com` and verifies it itself.
  */
 export const ACCOUNT_KEY_ROTATED_CATEGORY = "account-key-rotated";
 
