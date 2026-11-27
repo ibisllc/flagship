@@ -21,7 +21,10 @@ npm run store-assets:release-check   # also fails on any missing native capture 
 
 * **Inputs.** Screens: `store/captures/<ios|android>/<lang>/<device>/<id>.png` from the native tests
   (`capture-plan.md`; none exist yet), else a webapp stand-in from `store/captures/webapp/<lang>/<phone|tablet>/`,
-  else a red "CAPTURE MISSING" frame naming the file and the gym state that should produce it. Captions:
+  else a red "CAPTURE MISSING" frame naming the file and the gym state that should produce it. Slide 01 also draws the
+  caller's browser on voi.ci/river-otter over the ringing phone: `store/captures/voici/<lang>/browser/01.png`, from
+  `node scripts/store-assets/capture-voici.mjs` (the real voi.ci site on its dev server). The Play feature graphic
+  crops that language's Android `01`. Captions:
   `i18n/store/<lang>.json`. Sizes, slides and which template draws what: `store/store.json`. Templates:
   `store/templates/*.html` (phone, tablet, watch, closing, feature, icon) with `store.css` and `slide.js`. Fonts are
   vendored in `store/fonts` with their OFL licences; never fetched.

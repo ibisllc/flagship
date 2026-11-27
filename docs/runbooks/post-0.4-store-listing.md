@@ -129,3 +129,12 @@ counts`.
   it (§2). App Store key set up (Chromebook, encrypted to the YubiKey): with 1.3 live and no editable version, only
   promotional text changed (es-ES, fr-FR, pt-BR). Play: the corrected texts wait until the batch in review is
   published. Next: create 1.3.1 in App Store Connect for names, texts and screenshots; upload the re-rendered pack.
+- 2026-11-27: §2 re-rendered on the Mac (not uploaded). New order 01 call (with the caller's voi.ci page in a browser
+  frame, caption "Anyone can call you. No number needed."), 02 Home, 03 Social's Calls page, 04 apps (own voi.ci link
+  each), 05 access, 06 backups, 07 watch, 08 build chat; Play feature graphic with the ringing phone and a two-part
+  line. Done from §2: #2 (Calls page), #3 (Android tablet 05 shows the members at the run's density), #4 (shorter app
+  summaries), #5 (iPad date in the simulator's language), #8 (watch clock 9:41; the screen is still titled "Security":
+  the watch app has no servers-only screen), #9 ("My phone" per language). Still open: #1 video mark, #6 "GB", #7
+  chips (app changes; the first is in docs/release-0.5-list.md with teal Wear chips and wide tablet layouts), and the
+  iOS build chat's English title (release-0.5-list). Pack `flagship-store-art-0.4.zip` (309 images, appstore/ and
+  playstore/), sha256 f1756b65…c07cc204.

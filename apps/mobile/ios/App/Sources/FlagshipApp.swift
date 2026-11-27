@@ -966,6 +966,7 @@ struct FlagshipApp: App {
                 .task { startNotices() }
                 #if DEBUG
                 .task { await openGymVoucherLinks() }
+                .task { await openStoreChat() }
                 #endif
                 // voi.ci calls (docs/voici-calls.md §8): the app's own call screen above everything.
                 .overlay { VoiciCallScreen() }
@@ -1058,6 +1059,19 @@ struct FlagshipApp: App {
         for _ in 0..<100 where PaymentsCenter.shared.info == nil { try? await Task.sleep(nanoseconds: 100_000_000) }
         GymSeams.voucherLinkQueue = [link, String(link.dropLast(40))]
         linker.enqueue(.voucherLink(link: link))
+    }
+    #endif
+
+    #if DEBUG
+    /// Store screenshots (`-smoke-store-chat <sessionId>`, docs/store-assets/capture-plan.md slide 08): open the store
+    /// world's build chat once the Services tab is up, as its push link would.
+    @MainActor
+    private func openStoreChat() async {
+        let args = ProcessInfo.processInfo.arguments
+        guard GymLaunch.usesMocks, let i = args.firstIndex(of: "-smoke-store-chat"), i + 1 < args.count else { return }
+        let id = args[i + 1]
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        linker.enqueue(.vibeCodeChat(sessionId: id))
     }
     #endif
 

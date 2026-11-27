@@ -9,11 +9,11 @@
   "slide5_caption": "Des sauvegardes rien qu’à vous.",
   "slide6_theme": "En un coup d’œil",
   "slide6_caption": "Vos serveurs au poignet.",
-  "closing_caption": "Flagship : voi.ci et cloud",
-  "feature_caption": "Appels, messages\nsur voi.ci.",
   "call_theme": "voi.ci",
-  "call_caption": "Appels, messages\nsur voi.ci.",
   "social_theme": "Social",
   "social_caption": "Messages, appels :\nun seul onglet.",
-  "feature_sub": "Votre cloud, vos clés."
+  "call_anyone_caption": "Tout le monde peut vous appeler. Sans numéro.",
+  "build_theme": "Créer avec l’IA",
+  "build_caption": "Décrivez une app. L’IA la crée.",
+  "feature_headline": "Appels sur voi.ci. Votre cloud chez vous."
 }

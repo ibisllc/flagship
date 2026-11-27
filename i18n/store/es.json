@@ -9,11 +9,11 @@
   "slide5_caption": "Copias que solo tú puedes abrir.",
   "slide6_theme": "De un vistazo",
   "slide6_caption": "El estado, en tu muñeca.",
-  "closing_caption": "Flagship: voi.ci y nube",
-  "feature_caption": "Llamadas y mensajes en voi.ci.",
   "call_theme": "voi.ci",
-  "call_caption": "Llamadas y mensajes en voi.ci.",
   "social_theme": "Social",
   "social_caption": "Mensajes y\nllamadas, juntos.",
-  "feature_sub": "Tu nube, tus claves."
+  "call_anyone_caption": "Cualquiera puede llamarte. Sin número.",
+  "build_theme": "Crea con IA",
+  "build_caption": "Describe una app. La IA la crea.",
+  "feature_headline": "Llamadas en voi.ci. Tu nube en casa."
 }

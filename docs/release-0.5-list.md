@@ -117,6 +117,21 @@ over once "let's start 0.5" is said.
   2026-11-26). Same release: `push voip failed` (`pushBridge.ts`) logs which APNs host refused, so a sandbox token
   (Xcode build, 403 `BadEnvironmentKeyInToken` after the sandbox retry) is told apart from a production failure.
 
+- **Store art: three changes that need an app build** (owner, 2026-11-27, from the store-art review; the 0.5 art was
+  rendered without them). (1) A "video offered" mark on the ringing screen (iOS `VoiciRingingStage`, Android
+  `VoiciCallActivity`; a new i18n string), so slide 01 says the caller offers video. (2) Teal chips on Wear OS (the
+  servers list and the tile use the system's grey chips; the brand accent there would match the phone). (3) Wide
+  layouts on tablets: a two-pane Social (the list beside the open conversation or the Calls page, iPad and Android
+  tablets) and Access control in two columns on a wide screen; the 0.5 art draws both a size larger instead
+  (`docs/store-assets/capture-plan.md`, slides 03 and 05). Recapture with `scripts/store-assets/capture-*.sh` after.
+
+- **iOS build chat: English on every language's screen** (found 2026-11-27 rendering the store art). The chat's title
+  (`VibeCodeSessionScreen.title`: "Ready to deploy", "Your turn", "Building", "Live", "Failed" …; only "Deploying"
+  and "Vibe code" go through `String(localized:)`, though `i18n/ios` already translates them) and the per-reply
+  "used N credits" (`ModelMenuText.creditsUsed`, a plain interpolation) are hard-coded English. Wrap both (the
+  credits line with a plural), then recapture slide 08 (`capture-ios.sh --only 08`): the 0.5 art shows the English
+  title on iPhone and iPad in every language, and its chat has no credits line for that reason.
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in

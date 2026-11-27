@@ -14,9 +14,12 @@ describe("store art plan", () => {
     for (const c of config.classes) for (const id of c.slides) expect(ids.has(id), `${c.class} ${id}`).toBe(true);
     for (const s of config.slides) {
       if (!s.strings) continue;
-      expect(en[`${s.strings}_caption`], s.id).toBeTruthy();
+      expect(en[s.caption ?? `${s.strings}_caption`], s.id).toBeTruthy();
       if (!s.closing && s.id !== "feature") expect(en[`${s.strings}_theme`], s.id).toBeTruthy();
     }
+    const used = new Set(config.slides.flatMap((s: { strings?: string; caption?: string; id: string }) =>
+      s.strings ? [s.caption ?? `${s.strings}_caption`, `${s.strings}_theme`] : []));
+    for (const k of Object.keys(en)) expect(used.has(k), `i18n/store/en.json ${k} is on no slide`).toBe(true);
   });
 
   it("plans one image per class and slide in every shipped language, plus one icon", () => {
@@ -41,8 +44,15 @@ describe("store art plan", () => {
 
   it("shows the translated caption, and never puts a caption on a bare watch screen", () => {
     const ja = plan("ja");
-    expect(ja.find((j: { cls: string; id: string }) => j.cls === "phone" && j.id === "01")?.caption).toBe(strings("ja").call_caption);
+    expect(ja.find((j: { cls: string; id: string }) => j.cls === "phone" && j.id === "01")?.caption).toBe(strings("ja").call_anyone_caption);
     for (const j of ja.filter((x: { template: string }) => x.template === "watch")) expect(j.caption).toBeNull();
+  });
+
+  it("draws the caller's browser over slide 01 only, and crops the call into the feature graphic", () => {
+    const de = plan("de");
+    for (const j of de) expect(!!j.inset, `${j.cls} ${j.id}`).toBe(j.id === "01" && !["wear", "watch-ultra"].includes(j.cls));
+    expect(de.find((j: { id: string }) => j.id === "01")?.inset?.wanted).toMatch(/store\/captures\/voici\/de\/browser\/01\.png$/);
+    expect(de.find((j: { id: string }) => j.id === "feature")?.capture?.wanted).toMatch(/store\/captures\/android\/de\/phone\/01\.png$/);
   });
 
   it("reads a PNG's size from its header", () => {

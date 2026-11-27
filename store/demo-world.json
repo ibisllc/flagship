@@ -3,78 +3,334 @@
   "account": "river-otter",
   "apex": "flagship.services",
   "servers": [
-    { "name": "home",  "fqdn": "home.river-otter.flagship.services",  "leader": true,  "liveness": "live", "uptimeHours": 312 },
+    { "name": "home", "fqdn": "home.river-otter.flagship.services", "leader": true, "liveness": "live", "uptimeHours": 312 },
     { "name": "cabin", "fqdn": "cabin.river-otter.flagship.services", "leader": false, "liveness": "live", "uptimeHours": 46 }
   ],
   "unlockRequest": { "server": "cabin", "askedMinutesAgo": 1 },
   "apps": [
-    { "slug": "notes",      "name": "Notes",      "summary": "Shared notes for the house", "summaryByLang": {"es": "Notas compartidas de la casa", "fr": "Notes partagées de la maison", "de": "Gemeinsame Notizen fürs Haus", "pt-BR": "Notas compartilhadas da casa", "ja": "家族で共有するメモ", "zh-Hans": "全家共享的笔记"},        "server": "home",  "access": "members" },
-    { "slug": "photos",     "name": "Photos",     "summary": "Family photos, full resolution", "summaryByLang": {"es": "Fotos de familia, a resolución completa", "fr": "Photos de famille, en pleine résolution", "de": "Familienfotos in voller Auflösung", "pt-BR": "Fotos da família, em resolução total", "ja": "家族の写真をフル解像度で", "zh-Hans": "家庭照片，原图画质"},     "server": "home",  "access": "members" },
-    { "slug": "recipes",    "name": "Recipes",    "summary": "What we cook, and how", "summaryByLang": {"es": "Lo que cocinamos y cómo", "fr": "Ce qu’on cuisine, et comment", "de": "Was wir kochen und wie", "pt-BR": "O que cozinhamos e como", "ja": "わが家の料理と作り方", "zh-Hans": "我们做什么菜，怎么做"},              "server": "home",  "access": "open" },
-    { "slug": "chess-club", "name": "Chess Club", "summary": "Games and a ladder for the club", "summaryByLang": {"es": "Partidas y clasificación del club", "fr": "Parties et classement du club", "de": "Partien und Rangliste des Clubs", "pt-BR": "Partidas e ranking do clube", "ja": "クラブの対局とランキング", "zh-Hans": "俱乐部的对局和排名"},    "server": "cabin", "access": "members" },
-    { "slug": "budget",     "name": "Budget",     "summary": "Monthly spending, by category", "summaryByLang": {"es": "Gastos del mes, por categoría", "fr": "Dépenses du mois, par catégorie", "de": "Monatliche Ausgaben nach Kategorie", "pt-BR": "Gastos do mês, por categoria", "ja": "毎月の支出をカテゴリ別に", "zh-Hans": "每月支出，按类别"},      "server": "home",  "access": "members" }
+    { "slug": "notes", "name": "Notes", "summary": "Notes for the house", "summaryByLang": { "es": "Notas de la casa", "fr": "Notes de la maison", "de": "Notizen fürs Haus", "pt-BR": "Notas da casa", "ja": "家族で共有するメモ", "zh-Hans": "全家共享的笔记" }, "server": "home", "access": "members", "link": "otter-notes" },
+    { "slug": "photos", "name": "Photos", "summary": "Family photos", "summaryByLang": { "es": "Fotos de familia", "fr": "Photos de famille", "de": "Familienfotos", "pt-BR": "Fotos da família", "ja": "家族の写真", "zh-Hans": "家庭照片" }, "server": "home", "access": "members", "link": "p4t8vn" },
+    { "slug": "recipes", "name": "Recipes", "summary": "What we cook, and how", "summaryByLang": { "es": "Lo que cocinamos", "fr": "Nos recettes", "de": "Was wir kochen", "pt-BR": "O que cozinhamos", "ja": "わが家の料理", "zh-Hans": "我们的家常菜" }, "server": "home", "access": "open", "link": "otter-kitchen" },
+    { "slug": "chess-club", "name": "Chess Club", "summary": "Games and club ladder", "summaryByLang": { "es": "Partidas del club", "fr": "Parties du club", "de": "Partien des Clubs", "pt-BR": "Partidas do clube", "ja": "クラブの対局", "zh-Hans": "俱乐部对局" }, "server": "cabin", "access": "members", "link": "river-chess" },
+    { "slug": "budget", "name": "Budget", "summary": "Spending by category", "summaryByLang": { "es": "Gastos por categoría", "fr": "Dépenses par catégorie", "de": "Ausgaben je Kategorie", "pt-BR": "Gastos por categoria", "ja": "カテゴリ別の支出", "zh-Hans": "按类别记支出" }, "server": "home", "access": "members", "link": "b9w3re" }
   ],
   "membersApp": "chess-club",
   "members": [
-    { "name": "Ana",   "rank": "manager" },
+    { "name": "Ana", "rank": "manager" },
     { "name": "Kenji", "rank": "member" },
-    { "name": "Lea",   "rank": "member" }
+    { "name": "Lea", "rank": "member" }
   ],
   "backups": { "server": "home", "schedule": "nightly", "keep": 7, "policy": "phone", "lastHoursAgo": 6, "sizeGiB": 3.4 },
   "messages": {
-    "_about": "Slide 06: one conversation someone started from voi.ci/river-otter, which the owner answered and renamed (the nickname is the owner's own, local name). The only per-language content in the world: a thread in English on a Japanese screen would read as a mistake.",
+    "_about": "Slide 03: conversations people started from voi.ci/river-otter. The first (nickname + thread) is Sam's, who also rings on slide 01; `others` are more people, each with a fixed visitor key (`seed`, one byte repeated) and the owner's own nickname for them. Texts are per language: a thread in English on a Japanese screen would read as a mistake.",
     "displayName": "River Otter",
-    "nickname": { "en": "Sam from chess", "es": "Sam del ajedrez", "fr": "Sam des échecs", "de": "Sam vom Schach", "pt-BR": "Sam do xadrez", "ja": "Sam（チェス）", "zh-Hans": "Sam（国际象棋）" },
+    "nickname": {
+      "en": "Sam from chess",
+      "es": "Sam del ajedrez",
+      "fr": "Sam des échecs",
+      "de": "Sam vom Schach",
+      "pt-BR": "Sam do xadrez",
+      "ja": "Sam（チェス）",
+      "zh-Hans": "Sam（国际象棋）"
+    },
     "thread": [
-      { "from": "visitor", "minutesAgo": 52, "text": {
-        "en": "Hi! I found your page. Is the chess club open to new players?",
-        "es": "¡Hola! Vi tu página. ¿El club de ajedrez acepta jugadores nuevos?",
-        "fr": "Bonjour ! J’ai vu votre page. Le club d’échecs accepte-t-il de nouveaux joueurs ?",
-        "de": "Hallo! Ich habe deine Seite gefunden. Nimmt der Schachclub neue Spieler auf?",
-        "pt-BR": "Oi! Vi sua página. O clube de xadrez aceita novos jogadores?",
-        "ja": "こんにちは！ページを見ました。チェスクラブは新しいメンバーを募集していますか？",
-        "zh-Hans": "你好！我看到了你的主页。国际象棋俱乐部还招新成员吗？" } },
-      { "from": "owner", "minutesAgo": 40, "text": {
-        "en": "Yes! We play on Thursday evenings.",
-        "es": "¡Sí! Jugamos los jueves por la tarde.",
-        "fr": "Oui ! On joue le jeudi soir.",
-        "de": "Ja! Wir spielen donnerstagabends.",
-        "pt-BR": "Sim! Jogamos às quintas à noite.",
-        "ja": "はい！毎週木曜の夜に集まっています。",
-        "zh-Hans": "招的！我们每周四晚上下棋。" } },
-      { "from": "visitor", "minutesAgo": 31, "text": {
-        "en": "Great. Can I come this week?",
-        "es": "Genial. ¿Puedo ir esta semana?",
-        "fr": "Super. Je peux venir cette semaine ?",
-        "de": "Super. Kann ich diese Woche kommen?",
-        "pt-BR": "Ótimo. Posso ir esta semana?",
-        "ja": "よかった。今週から参加できますか？",
-        "zh-Hans": "太好了。我这周可以来吗？" } },
-      { "from": "owner", "minutesAgo": 24, "text": {
-        "en": "Of course. I’ll send you an invite to Chess Club.",
-        "es": "Claro. Te envío una invitación a Chess Club.",
-        "fr": "Bien sûr. Je vous envoie une invitation à Chess Club.",
-        "de": "Klar. Ich schicke dir eine Einladung zu Chess Club.",
-        "pt-BR": "Claro. Vou te mandar um convite para o Chess Club.",
-        "ja": "もちろん。Chess Club への招待を送りますね。",
-        "zh-Hans": "当然可以。我给你发一个 Chess Club 的邀请。" } },
-      { "from": "visitor", "minutesAgo": 9, "text": {
-        "en": "Thank you, see you Thursday!",
-        "es": "¡Gracias, nos vemos el jueves!",
-        "fr": "Merci, à jeudi !",
-        "de": "Danke, bis Donnerstag!",
-        "pt-BR": "Obrigado, até quinta!",
-        "ja": "ありがとうございます。木曜日にお会いしましょう！",
-        "zh-Hans": "谢谢，周四见！" } }
+      {
+        "from": "visitor",
+        "minutesAgo": 52,
+        "text": {
+          "en": "Hi! I found your page. Is the chess club open to new players?",
+          "es": "¡Hola! Vi tu página. ¿El club de ajedrez acepta jugadores nuevos?",
+          "fr": "Bonjour ! J’ai vu votre page. Le club d’échecs accepte-t-il de nouveaux joueurs ?",
+          "de": "Hallo! Ich habe deine Seite gefunden. Nimmt der Schachclub neue Spieler auf?",
+          "pt-BR": "Oi! Vi sua página. O clube de xadrez aceita novos jogadores?",
+          "ja": "こんにちは！ページを見ました。チェスクラブは新しいメンバーを募集していますか？",
+          "zh-Hans": "你好！我看到了你的主页。国际象棋俱乐部还招新成员吗？"
+        }
+      },
+      {
+        "from": "owner",
+        "minutesAgo": 40,
+        "text": {
+          "en": "Yes! We play on Thursday evenings.",
+          "es": "¡Sí! Jugamos los jueves por la tarde.",
+          "fr": "Oui ! On joue le jeudi soir.",
+          "de": "Ja! Wir spielen donnerstagabends.",
+          "pt-BR": "Sim! Jogamos às quintas à noite.",
+          "ja": "はい！毎週木曜の夜に集まっています。",
+          "zh-Hans": "招的！我们每周四晚上下棋。"
+        }
+      },
+      {
+        "from": "visitor",
+        "minutesAgo": 31,
+        "text": {
+          "en": "Great. Can I come this week?",
+          "es": "Genial. ¿Puedo ir esta semana?",
+          "fr": "Super. Je peux venir cette semaine ?",
+          "de": "Super. Kann ich diese Woche kommen?",
+          "pt-BR": "Ótimo. Posso ir esta semana?",
+          "ja": "よかった。今週から参加できますか？",
+          "zh-Hans": "太好了。我这周可以来吗？"
+        }
+      },
+      {
+        "from": "owner",
+        "minutesAgo": 24,
+        "text": {
+          "en": "Of course. I’ll send you an invite to Chess Club.",
+          "es": "Claro. Te envío una invitación a Chess Club.",
+          "fr": "Bien sûr. Je vous envoie une invitation à Chess Club.",
+          "de": "Klar. Ich schicke dir eine Einladung zu Chess Club.",
+          "pt-BR": "Claro. Vou te mandar um convite para o Chess Club.",
+          "ja": "もちろん。Chess Club への招待を送りますね。",
+          "zh-Hans": "当然可以。我给你发一个 Chess Club 的邀请。"
+        }
+      },
+      {
+        "from": "visitor",
+        "minutesAgo": 9,
+        "text": {
+          "en": "Thank you, see you Thursday!",
+          "es": "¡Gracias, nos vemos el jueves!",
+          "fr": "Merci, à jeudi !",
+          "de": "Danke, bis Donnerstag!",
+          "pt-BR": "Obrigado, até quinta!",
+          "ja": "ありがとうございます。木曜日にお会いしましょう！",
+          "zh-Hans": "谢谢，周四见！"
+        }
+      }
+    ],
+    "others": [
+      {
+        "id": "mia",
+        "seed": 97,
+        "nickname": {
+          "en": "Mia next door",
+          "es": "Mia, la vecina",
+          "fr": "Mia, la voisine",
+          "de": "Mia von nebenan",
+          "pt-BR": "Mia, a vizinha",
+          "ja": "Mia（お隣さん）",
+          "zh-Hans": "Mia（邻居）"
+        },
+        "thread": [
+          {
+            "from": "visitor",
+            "minutesAgo": 75,
+            "text": {
+              "en": "A parcel for you came to our door. I’ll drop it by tonight.",
+              "es": "Llegó un paquete tuyo a nuestra puerta. Te lo llevo esta noche.",
+              "fr": "Un colis pour toi est arrivé chez nous. Je te l’apporte ce soir.",
+              "de": "Bei uns kam ein Paket für dich an. Ich bringe es heute Abend vorbei.",
+              "pt-BR": "Chegou uma encomenda sua aqui em casa. Levo hoje à noite.",
+              "ja": "荷物がうちに届いていました。今夜お持ちしますね。",
+              "zh-Hans": "你的包裹送到我们家了，我今晚给你送过去。"
+            }
+          },
+          {
+            "from": "owner",
+            "minutesAgo": 70,
+            "text": {
+              "en": "Thank you, Mia.",
+              "es": "Gracias, Mia.",
+              "fr": "Merci, Mia.",
+              "de": "Danke, Mia.",
+              "pt-BR": "Obrigado, Mia.",
+              "ja": "ありがとう、Miaさん。",
+              "zh-Hans": "谢谢你，Mia。"
+            }
+          }
+        ]
+      },
+      {
+        "id": "ines",
+        "seed": 99,
+        "nickname": {
+          "en": "Ines at the bakery",
+          "es": "Ines de la panadería",
+          "fr": "Ines de la boulangerie",
+          "de": "Ines von der Bäckerei",
+          "pt-BR": "Ines da padaria",
+          "ja": "Ines（パン屋）",
+          "zh-Hans": "Ines（面包店）"
+        },
+        "thread": [
+          {
+            "from": "visitor",
+            "minutesAgo": 610,
+            "text": {
+              "en": "Your bread order is ready to pick up.",
+              "es": "Tu pedido de pan está listo para recoger.",
+              "fr": "Votre commande de pain est prête.",
+              "de": "Deine Brotbestellung liegt zum Abholen bereit.",
+              "pt-BR": "Seu pedido de pão está pronto para retirar.",
+              "ja": "ご注文のパンが焼き上がりました。",
+              "zh-Hans": "你订的面包可以来取了。"
+            }
+          },
+          {
+            "from": "owner",
+            "minutesAgo": 600,
+            "text": {
+              "en": "Thanks, I’ll come by at five.",
+              "es": "Gracias, paso a las cinco.",
+              "fr": "Merci, je passe à 17 h.",
+              "de": "Danke, ich komme um fünf vorbei.",
+              "pt-BR": "Obrigado, passo aí às cinco.",
+              "ja": "ありがとう、5時に行きます。",
+              "zh-Hans": "谢谢，我五点过去。"
+            }
+          }
+        ]
+      },
+      {
+        "id": "leo",
+        "seed": 98,
+        "nickname": {
+          "en": "Cousin Leo",
+          "es": "Primo Leo",
+          "fr": "Cousin Leo",
+          "de": "Cousin Leo",
+          "pt-BR": "Primo Leo",
+          "ja": "いとこのLeo",
+          "zh-Hans": "表哥 Leo"
+        },
+        "thread": [
+          {
+            "from": "visitor",
+            "minutesAgo": 1500,
+            "text": {
+              "en": "Still on for Sunday lunch?",
+              "es": "¿Sigue en pie la comida del domingo?",
+              "fr": "Toujours d’accord pour le déjeuner de dimanche ?",
+              "de": "Bleibt es beim Mittagessen am Sonntag?",
+              "pt-BR": "O almoço de domingo continua de pé?",
+              "ja": "日曜のランチ、予定どおり？",
+              "zh-Hans": "周日午饭还照常吗？"
+            }
+          },
+          {
+            "from": "owner",
+            "minutesAgo": 1480,
+            "text": {
+              "en": "Yes, one o’clock at ours.",
+              "es": "Sí, a la una en casa.",
+              "fr": "Oui, à 13 h chez nous.",
+              "de": "Ja, um eins bei uns.",
+              "pt-BR": "Sim, à uma hora aqui em casa.",
+              "ja": "うん、1時にうちで。",
+              "zh-Hans": "照常，一点在我们家。"
+            }
+          }
+        ]
+      }
     ]
   },
   "calls": {
-    "_about": "Slides 01 and 02 (0.4): Sam, the person from the messages thread (shown by messages.nickname in the capture's language), calls the owner from voi.ci/river-otter. ringing: slide 01, the phone ringing with video offered (iOS the ringing call stage, Android the full-screen incoming-call screen). history: the Social tab's calls on slide 02, newest first; from 'nickname' means Sam, null an unnamed voi.ci visitor.",
+    "_about": "Slides 01 and 02: Sam (messages.nickname in the capture's language) calls the owner from voi.ci/river-otter. ringing: slide 01, the phone ringing with video offered (iOS the ringing call stage, Android the full-screen incoming-call screen). history: this device's call list on slide 02, newest first; `from` is 'nickname' (Sam), an `others` id, or null for an unnamed voi.ci visitor.",
     "ringing": { "from": "nickname", "video": true },
     "history": [
       { "from": "nickname", "direction": "incoming", "outcome": "answered", "video": true, "minutesAgo": 30, "durationSec": 272 },
+      { "from": "mia", "direction": "incoming", "outcome": "missed", "video": false, "minutesAgo": 95 },
+      { "from": "leo", "direction": "outgoing", "outcome": "answered", "video": false, "minutesAgo": 1470, "durationSec": 754 },
       { "from": "nickname", "direction": "incoming", "outcome": "missed", "video": false, "minutesAgo": 1500 },
-      { "from": null, "direction": "incoming", "outcome": "answered", "video": false, "minutesAgo": 2900, "durationSec": 95 }
+      { "from": null, "direction": "incoming", "outcome": "answered", "video": true, "minutesAgo": 2900, "durationSec": 95 }
+    ]
+  },
+  "deviceName": {
+    "_about": "Android's name for this phone (Access control's account members, an invite's 'Invited by'): neutral, in the capture's language, never a real model name. iOS shows the system's own 'iPhone' / 'iPad'.",
+    "en": "My phone",
+    "es": "Mi teléfono",
+    "fr": "Mon téléphone",
+    "de": "Mein Telefon",
+    "pt-BR": "Meu celular",
+    "ja": "自分のスマホ",
+    "zh-Hans": "我的手机"
+  },
+  "build": {
+    "_about": "Slide 08: a build chat on home, ready to deploy (Flagship Inference; no credits line, the app writes it in English only). The owner describes an app, the AI builds it on the server; texts per language.",
+    "sessionId": "book-club",
+    "name": "book-club",
+    "server": "home",
+    "messages": [
+      {
+        "role": "user",
+        "minutesAgo": 15,
+        "text": {
+          "en": "A book club app: what we’re reading, who hosts next, and a vote for the next book.",
+          "es": "Una app para el club de lectura: qué leemos, quién organiza la próxima y una votación para el siguiente libro.",
+          "fr": "Une app pour le club de lecture : ce qu’on lit, qui reçoit la prochaine fois, et un vote pour le prochain livre.",
+          "de": "Eine App für den Buchclub: was wir lesen, wer als Nächstes einlädt und eine Abstimmung über das nächste Buch.",
+          "pt-BR": "Um app para o clube do livro: o que estamos lendo, quem recebe a próxima vez e uma votação para o próximo livro.",
+          "ja": "読書会のアプリを作って。今読んでいる本、次の会の担当、次の本の投票。",
+          "zh-Hans": "做一个读书会应用：我们在读什么、下次谁来主持，以及下一本书的投票。"
+        }
+      },
+      {
+        "role": "assistant",
+        "minutesAgo": 13,
+        "text": {
+          "en": "Should anyone be able to open it, or only members?",
+          "es": "¿Puede abrirla cualquiera o solo los miembros?",
+          "fr": "Tout le monde peut l’ouvrir, ou seulement les membres ?",
+          "de": "Soll sie jeder öffnen können oder nur Mitglieder?",
+          "pt-BR": "Qualquer pessoa pode abrir ou só os membros?",
+          "ja": "誰でも開けるようにしますか？それともメンバーだけ？",
+          "zh-Hans": "所有人都能打开，还是只限成员？"
+        }
+      },
+      {
+        "role": "user",
+        "minutesAgo": 12,
+        "text": {
+          "en": "Members only, please.",
+          "es": "Solo miembros, por favor.",
+          "fr": "Seulement les membres, s’il te plaît.",
+          "de": "Nur Mitglieder, bitte.",
+          "pt-BR": "Só membros, por favor.",
+          "ja": "メンバーだけにして。",
+          "zh-Hans": "只限成员。"
+        }
+      },
+      {
+        "role": "assistant",
+        "minutesAgo": 9,
+        "text": {
+          "en": "Here it is: the reading list, a hosting rota and a vote. Only members can open it. Try it with the sample data.",
+          "es": "Aquí la tienes: la lista de lecturas, los turnos de anfitrión y una votación. Solo los miembros pueden abrirla. Pruébala con los datos de ejemplo.",
+          "fr": "La voici : la liste de lecture, le planning des hôtes et un vote. Seuls les membres peuvent l’ouvrir. Essayez-la avec les données d’exemple.",
+          "de": "Fertig: die Leseliste, ein Gastgeber-Plan und eine Abstimmung. Nur Mitglieder können sie öffnen. Probier sie mit den Beispieldaten aus.",
+          "pt-BR": "Aqui está: a lista de leitura, o rodízio de anfitriões e uma votação. Só membros podem abrir. Teste com os dados de exemplo.",
+          "ja": "できました。読書リスト、担当の順番、投票があります。開けるのはメンバーだけです。サンプルデータで試してください。",
+          "zh-Hans": "做好了：阅读清单、主持轮值表和投票。只有成员能打开。可以先用示例数据试试。"
+        }
+      },
+      {
+        "role": "user",
+        "minutesAgo": 5,
+        "text": {
+          "en": "Add a page for meeting notes.",
+          "es": "Añade una página para las notas de cada reunión.",
+          "fr": "Ajoute une page pour les notes de réunion.",
+          "de": "Füg eine Seite für die Notizen der Treffen hinzu.",
+          "pt-BR": "Adicione uma página para as notas dos encontros.",
+          "ja": "会のメモを書くページを追加して。",
+          "zh-Hans": "加一个记录聚会笔记的页面。"
+        }
+      },
+      {
+        "role": "assistant",
+        "minutesAgo": 2,
+        "text": {
+          "en": "Done: each meeting now has its own notes page. Ready to deploy on home.",
+          "es": "Hecho: cada reunión tiene ahora su página de notas. Lista para desplegar en home.",
+          "fr": "C’est fait : chaque réunion a maintenant sa page de notes. Prête à déployer sur home.",
+          "de": "Erledigt: Jedes Treffen hat jetzt seine eigene Notizseite. Bereit zum Bereitstellen auf home.",
+          "pt-BR": "Pronto: cada encontro agora tem sua página de notas. Pronto para implantar em home.",
+          "ja": "完了しました。各回にメモのページがあります。home にデプロイできます。",
+          "zh-Hans": "完成：每次聚会都有自己的笔记页了。可以部署到 home。"
+        }
+      }
     ]
   }
 }

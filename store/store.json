@@ -1,24 +1,24 @@
 {
-  "_about": "What the store art is made of (docs/store-assets/store-assets-brief.md). `slides` is the story; `classes` is every image size a store asks for, with the template that draws it and where its screen captures come from. scripts/store-assets/render.mjs reads this; check the sizes against the stores' own pages before a release (brief §7). Light and dark alternate by a slide's position in its class.",
+  "_about": "What the store art is made of (docs/store-assets/store-assets-brief.md). `slides` is the story (`caption` names a caption key other than `<strings>_caption`; `lines` allows a third caption line, each sentence starting its own; `inset` a second, smaller capture drawn over the device; the feature graphic's `phone` the capture it crops; a class's `fit` keeps a slide's whole device in view, where its canvas would cut the screen's point off); `classes` is every image size a store asks for, with the template that draws it and where its screen captures come from. scripts/store-assets/render.mjs reads this; check the sizes against the stores' own pages before a release (brief §7). Light and dark alternate by a slide's position in its class.",
   "slides": [
-    { "id": "01", "theme": "call",    "strings": "call",   "state": "call-ringing",     "screen": "An incoming voi.ci call ringing: Sam (the world's nickname) calling, video offered, Answer and Decline", "fit": "whole" },
-    { "id": "02", "theme": "social",  "strings": "social", "state": "social",           "screen": "The Social tab: the voi.ci page, Sam's conversation and the calls; tablets two-pane with the conversation open" },
-    { "id": "03", "theme": "server",  "strings": "slide1", "state": "home-two-servers", "screen": "Home: servers home and cabin online, home is the leader, no marketplace card" },
-    { "id": "04", "theme": "apps",    "strings": "slide3", "state": "apps",             "screen": "The apps list: Notes, Photos, Recipes, Chess Club, Budget" },
+    { "id": "01", "theme": "call",    "strings": "call",   "caption": "call_anyone_caption", "lines": 3, "state": "call-ringing", "screen": "An incoming voi.ci call ringing: Sam (the world's nickname) calling, Answer and Decline", "fit": "whole", "inset": { "platform": "voici", "device": "browser", "screen": "The caller's browser on voi.ci/river-otter, Call pressed (scripts/store-assets/capture-voici.mjs)" } },
+    { "id": "02", "theme": "server",  "strings": "slide1", "state": "home-two-servers", "screen": "Home: servers home and cabin online, home is the leader, no marketplace card" },
+    { "id": "03", "theme": "social",  "strings": "social", "state": "social-calls",     "screen": "Social's Calls page: missed, video and audio calls from the people who wrote from voi.ci/river-otter" },
+    { "id": "04", "theme": "apps",    "strings": "slide3", "state": "apps",             "screen": "The apps list: Notes, Photos, Recipes, Chess Club, Budget, each with its own voi.ci link" },
     { "id": "05", "theme": "people",  "strings": "slide4", "state": "members",          "screen": "Chess Club's access control: Members only, Ana, Kenji and Lea with ranks" },
     { "id": "06", "theme": "backups", "strings": "slide5", "state": "backups",          "screen": "home's Backups: nightly, kept on this phone, last backup today, restore into this server" },
     { "id": "07", "theme": "glance",  "strings": "slide6", "state": "home-two-servers", "screen": "Watch / Wear OS: two servers online, nothing waiting", "watch": true },
     { "id": "07b", "theme": "glance", "strings": null,     "state": "unlock-request",   "screen": "Watch / Wear OS: cabin waiting for approval", "watch": true, "rawOnly": true },
     { "id": "07c", "theme": "glance", "strings": null,     "state": "home-two-servers", "screen": "Wear OS tile (not the app): two servers up, home the leader", "watch": true, "rawOnly": true },
-    { "id": "08", "theme": "closing", "strings": "closing", "closing": true },
-    { "id": "feature", "theme": "feature", "strings": "feature" },
+    { "id": "08", "theme": "build",   "strings": "build",  "state": "build-chat",       "screen": "A build chat on home: the owner described a book club app, the AI built it, ready to deploy" },
+    { "id": "feature", "theme": "feature", "strings": "feature", "caption": "feature_headline", "phone": { "platform": "android", "device": "phone", "id": "01" } },
     { "id": "icon", "theme": "icon", "strings": null, "neutral": true }
   ],
   "classes": [
     { "store": "appstore",  "class": "iphone-6.9",  "w": 1320, "h": 2868, "deviceW": 0.86, "template": "phone",   "device": "iphone", "captures": { "platform": "ios", "device": "iphone-6.9" }, "standIn": "phone", "slides": ["01", "02", "03", "04", "05", "06", "08"] },
     { "store": "appstore",  "class": "ipad-13",     "w": 2752, "h": 2064, "deviceW": 0.88, "template": "tablet",  "device": "ipad",   "captures": { "platform": "ios", "device": "ipad-13" }, "standIn": "tablet", "slides": ["01", "02", "03", "04", "05", "06", "08"] },
     { "store": "appstore",  "class": "watch-ultra", "w": 422,  "h": 514,  "template": "watch",   "device": "apple-watch", "captures": { "platform": "ios", "device": "watch-ultra" }, "slides": ["07", "07b"] },
-    { "store": "playstore", "class": "phone",       "w": 1080, "h": 1920, "deviceW": 0.8, "template": "phone",   "device": "android-phone", "captures": { "platform": "android", "device": "phone" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "phone", "slides": ["01", "02", "03", "04", "05", "06", "07", "08"] },
+    { "store": "playstore", "class": "phone",       "w": 1080, "h": 1920, "deviceW": 0.8, "template": "phone",   "device": "android-phone", "captures": { "platform": "android", "device": "phone" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "phone", "fit": { "05": "whole" }, "slides": ["01", "02", "03", "04", "05", "06", "07", "08"] },
     { "store": "playstore", "class": "tablet-7",    "w": 1920, "h": 1200, "deviceW": 0.88, "template": "tablet",  "device": "android-tablet", "captures": { "platform": "android", "device": "tablet-7" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "tablet", "slides": ["01", "02", "03", "04", "05", "06", "07", "08"] },
     { "store": "playstore", "class": "tablet-10",   "w": 2560, "h": 1600, "deviceW": 0.88, "template": "tablet",  "device": "android-tablet", "captures": { "platform": "android", "device": "tablet-10" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "tablet", "slides": ["01", "02", "03", "04", "05", "06", "07", "08"] },
     { "store": "playstore", "class": "wear",        "w": 384,  "h": 384,  "template": "watch",   "device": "wear-os", "captures": { "platform": "android", "device": "wear" }, "slides": ["07", "07b", "07c"] },
@@ -35,6 +35,7 @@
     "android/tablet-10": [2560, 1600],
     "android/wear": [384, 384],
     "webapp/phone": [1290, 2796],
-    "webapp/tablet": [2048, 2732]
+    "webapp/tablet": [2048, 2732],
+    "voici/browser": [1170, 1230]
   }
 }

@@ -3487,6 +3487,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// Bound external domains, keyed [user][serviceId]. A Replace never
     /// clears this — it's deliberately a separate store from aliases.
     public var customDomainByUser: [String: [String: String]] = [:]
+    /// Store screenshots: a fixed voi.ci link per service (serviceId -> code or custom name) instead of the synthesised code.
+    public var storeShortCodes: [String: String] = [:]
     /// Server-side rate limit mirror: [user][serviceId] → last change.
     public var customDomainLastChangedByUser: [String: [String: Date]] = [:]
     /// Min seconds between custom-domain changes (server-enforced).
@@ -3553,7 +3555,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // deterministic 6-char hex prefix of serviceId so the same app
         // surfaces the same link across calls (so a copy-paste in
         // demo mode is stable + previews stay snapshot-friendly).
-        let shortCode = synthesizeMockShortCode(forServiceId: serviceId, label: label)
+        let shortCode = storeShortCodes[serviceId] ?? synthesizeMockShortCode(forServiceId: serviceId, label: label)
         let lastChanged = customDomainLastChangedByUser[username.lowercased()]?[serviceId]
         // Demo: .com "confirms" the CNAME customDomainConfirmDelay
         // seconds after the request (a real server pushes the outcome).

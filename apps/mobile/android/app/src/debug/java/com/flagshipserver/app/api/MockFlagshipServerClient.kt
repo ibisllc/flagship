@@ -715,6 +715,8 @@ class MockFlagshipServerClient(
     /** #79A — bound external domains, keyed [user][appId]. A Replace
      *  never clears this — deliberately separate from aliases. */
     var customDomainByUser: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
+    /** Store screenshots: a fixed voi.ci link per service (serviceId to code or custom name) instead of [MOCK_SHORT_CODE]. */
+    var storeShortCodes: Map<String, String> = emptyMap()
     /** Server-side rate-limit mirror: [user][appId] → last-change ms. */
     var customDomainLastChangedByUser: MutableMap<String, MutableMap<String, Long>> = mutableMapOf()
     /** Min ms between custom-domain changes (server-enforced; the
@@ -791,8 +793,8 @@ class MockFlagshipServerClient(
             instances = listOf(
                 AppLinkInstance(serverDomain = host, url = canonical),
             ),
-            shortUrl = "https://voi.ci/$MOCK_SHORT_CODE",
-            shortCode = MOCK_SHORT_CODE,
+            shortUrl = "https://voi.ci/${storeShortCodes[serviceId] ?: MOCK_SHORT_CODE}",
+            shortCode = storeShortCodes[serviceId] ?: MOCK_SHORT_CODE,
             link = AppLinkState(name = null, held = 0, limit = 5, changesLeft = 3),
             customDomain = customDomainByUser[u]?.get(serviceId),
             customDomainConfirmed = confirmed,
