@@ -18,8 +18,9 @@
  *
  *   GATE OPEN — `userRec.adminRootPubHex` is PRESENT (a fresh clean-slate burn
  *     pinned an admin master root): the sensitive order MUST be signed by the
- *     admin master root, OR by a device holding a valid, non-revoked,
- *     non-expired, ADMIN-ROOT-signed `admin` DeviceCapabilityGrant. The
+ *     admin master root (or, for the callers that pass `acceptAdminDeviceKey`,
+ *     by a device holding a valid, non-revoked, non-expired, ADMIN-ROOT-signed
+ *     `admin` DeviceCapabilityGrant). The
  *     membership IRK — even though it is the account's registered key — can NO
  *     LONGER authorize a sensitive op (that is the whole authority split).
  *
@@ -156,6 +157,14 @@ export async function authorizeSensitiveComOp(
     userRec: UsernameRecord;
     verifyWith: (candidatePubHex: string) => boolean;
     alsoAcceptAid?: boolean;
+    /**
+     * Gate OPEN only: also accept a device key holding an admin-root-signed
+     * `admin` grant. Off unless a caller asks: every app signs a sensitive
+     * order with the admin root itself, so only the callers that authorize a
+     * device-signed request (the account directory, the PQ policy chain) pass
+     * true.
+     */
+    acceptAdminDeviceKey?: boolean;
     now?: number;
   },
 ): Promise<SensitiveAuthorization> {
@@ -182,6 +191,8 @@ export async function authorizeSensitiveComOp(
   if (safeVerify(verifyWith, adminRoot)) {
     return { ok: true, gated: true, signerPubHex: adminRoot };
   }
+
+  if (!args.acceptAdminDeviceKey) return { ok: false, reason: "sensitive op requires master-admin authority" };
 
   // 2. A device holding a valid admin-root-signed `admin` grant. We find the
   //    grant whose device pubkey the order signature verifies under, then let

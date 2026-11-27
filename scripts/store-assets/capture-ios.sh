@@ -3,8 +3,8 @@
 # simulators, and the Watch app's 07/07b on an Apple Watch Ultra 3 (launched straight into the store world: there is
 # no watch UI-test target), every ga language, into store/captures/ios/<lang>/<device>/<id>.png.
 #
-#   bash scripts/store-assets/capture-ios.sh [--lang ja,de] [--device iphone-6.9,ipad-13,watch-ultra] [--keep-build]
-#   (--keep-build also keeps the simulators)
+#   bash scripts/store-assets/capture-ios.sh [--lang ja,de] [--device iphone-6.9,ipad-13,watch-ultra] [--only 03,08] [--keep-build]
+#   (--keep-build also keeps the simulators; --only retakes just those slides and keeps the others)
 #
 # Builds once (build-for-testing into a throwaway DerivedData that is deleted at the end unless --keep-build), then
 # runs the one test per device and language. Simulators: an iPhone 17 Pro Max and an iPad Pro 13-inch are created
@@ -17,11 +17,13 @@ DD="${STORE_DERIVED_DATA:-$ROOT/../flagship-store-dd}"
 LANGS="$(node -e 'const l=require(process.argv[1]);console.log(l.locales.filter(x=>x.status==="ga").map(x=>x.code).join(","))' "$ROOT/i18n/locales.json")"
 DEVICES="iphone-6.9,ipad-13,watch-ultra"
 KEEP=0
+ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --lang) LANGS="$2"; shift 2 ;;
     --device) DEVICES="$2"; shift 2 ;;
     --keep-build) KEEP=1; shift ;;
+    --only) ONLY="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -54,9 +56,13 @@ simtype() {
 STATUS_TIME="$(date -j -f "%Y-%m-%d %H:%M:%S" "2026-10-21 09:41:00" "+%Y-%m-%dT%H:%M:%S.000%z" | sed -E 's/([+-][0-9]{2})([0-9]{2})$/\1:\2/')"
 
 PROJECT="$ROOT/apps/mobile/ios/App/FlagshipApp.xcodeproj"
-echo "building for testing into $DD"
-xcodebuild build-for-testing -project "$PROJECT" -scheme FlagshipApp -destination "generic/platform=iOS Simulator" \
-  -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO -quiet
+# STORE_SKIP_BUILD=1 reuses the products a --keep-build run left (another device or language on a tight disk: its
+# intermediates may then be deleted, only Build/Products is read).
+if [ "${STORE_SKIP_BUILD:-0}" != 1 ]; then
+  echo "building for testing into $DD"
+  xcodebuild build-for-testing -project "$PROJECT" -scheme FlagshipApp -destination "generic/platform=iOS Simulator" \
+    -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO -quiet
+fi
 XCTESTRUN="$(ls "$DD"/Build/Products/*.xctestrun | head -1)"
 
 IFS=, read -ra devs <<< "$DEVICES"
@@ -65,6 +71,7 @@ watch() { # <udid>: the Watch app on the store world, both states, every languag
   local udid=$1 lang out id
   xcrun simctl install "$udid" "$DD/Build/Products/Debug-watchsimulator/FlagshipWatchApp.app"
   for lang in "${langs[@]}"; do
+    sim_language "$udid" "$lang"
     out="$ROOT/store/captures/ios/$lang/watch-ultra"
     echo "== watch-ultra $lang -> ${out#$ROOT/}"
     mkdir -p "$out"
@@ -74,8 +81,25 @@ watch() { # <udid>: the Watch app on the store world, both states, every languag
         $([ "$id" = 07b ] && echo -watch-store-waiting) >/dev/null
       sleep 6
       xcrun simctl io "$udid" screenshot "$out/$id.png" >/dev/null 2>&1
+      # watchOS takes no status-bar override: set the clock to 9:41 in the picture (scripts/store-assets/watch-clock.mjs)
+      node "$ROOT/scripts/store-assets/watch-clock.mjs" "$out/$id.png" "$(status_time ipad-13 "$lang")"
     done
   done
+}
+# The simulator's own language and region (its status bar, the iPad's date): the global preferences, then a restart,
+# since SpringBoard reads them only at boot (store review: the iPad's status-bar date was English in every language).
+sim_language() { # <udid> <lang>
+  xcrun simctl spawn "$1" defaults write -g AppleLanguages -array "$2"
+  xcrun simctl spawn "$1" defaults write -g AppleLocale -string "$(locale_of "$2")"
+  xcrun simctl shutdown "$1" >/dev/null 2>&1 || true
+  xcrun simctl boot "$1"
+  xcrun simctl bootstatus "$1" -b >/dev/null
+}
+status_time() { # <device> <lang>: the clock as the status bar shows it
+  case "$1" in
+    ipad-13) case "$2" in en|ja|zh-Hans) echo "9:41" ;; *) echo "09:41" ;; esac ;;
+    *) echo "$STATUS_TIME" ;;
+  esac
 }
 locale_of() { case "$1" in en) echo en_US ;; ja) echo ja_JP ;; zh-Hans) echo zh_CN ;; pt-BR) echo pt_BR ;; *) echo "$1_$(echo "$1" | tr a-z A-Z)" ;; esac; }
 
@@ -84,30 +108,33 @@ for dev in "${devs[@]}"; do
   udid="$(sim "$(simname "$dev")" "$(simtype "$dev")" "$platform")"
   xcrun simctl boot "$udid" 2>/dev/null || true
   xcrun simctl bootstatus "$udid" -b >/dev/null
-  # The watch has no status bar to override. An ISO time also fixes the date the iPad's status bar shows: 9:41 on
-  # the webapp captures' day, in this Mac's zone for that day (the simulator shows it in the host's zone).
-  [ "$dev" = watch-ultra ] || xcrun simctl status_bar "$udid" override --time "$STATUS_TIME" --batteryState charged --batteryLevel 100 \
-    --cellularMode active --cellularBars 4 --wifiBars 3 --operatorName ""
   if [ "$dev" = watch-ultra ]; then watch "$udid"; fi
   for lang in "${langs[@]}"; do
     [ "$dev" = watch-ultra ] && break
     out="$ROOT/store/captures/ios/$lang/$dev"
     echo "== $dev $lang -> ${out#$ROOT/}"
-    rm -f "$out"/0*.png
-    TEST_RUNNER_STORE_LANG="$lang" TEST_RUNNER_STORE_OUT="$out" TEST_RUNNER_STORE_WORLD="$ROOT/store/demo-world.json" \
+    if [ -n "$ONLY" ]; then for id in ${ONLY//,/ }; do rm -f "$out/$id.png"; done; else rm -f "$out"/0*.png "$out"/x*.png; fi
+    last="${ONLY##*,}"; last="${last:-08}"
+    sim_language "$udid" "$lang"
+    # Set again after each restart. The iPad shows a date beside the time: an ISO --time fixes it, but simctl then
+    # writes it in English whatever the language, so the iPad gets the time as plain text and SpringBoard writes the
+    # (capture day's) date in the simulator's language.
+    xcrun simctl status_bar "$udid" override --time "$(status_time "$dev" "$lang")" --batteryState charged --batteryLevel 100 \
+      --cellularMode active --cellularBars 4 --wifiBars 3 --operatorName ""
+    TEST_RUNNER_STORE_LANG="$lang" TEST_RUNNER_STORE_OUT="$out" TEST_RUNNER_STORE_WORLD="$ROOT/store/demo-world.json" TEST_RUNNER_STORE_ONLY="$ONLY" \
       xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination "platform=iOS Simulator,id=$udid" \
       -only-testing:FlagshipAppUITests/StoreCaptureTests -quiet > "$DD/test-$dev-$lang.log" 2>&1 &
     pid=$!
     # xcodebuild sometimes never returns after the test has finished on an iPad: stop waiting a minute after the last shot.
     while kill -0 "$pid" 2>/dev/null; do
-      if [ -f "$out/06.png" ] && [ $(( $(date +%s) - $(stat -f %m "$out/06.png") )) -gt 60 ]; then kill "$pid"; break; fi
+      if [ -f "$out/$last.png" ] && [ $(( $(date +%s) - $(stat -f %m "$out/$last.png") )) -gt 60 ]; then kill "$pid"; break; fi
       sleep 5
     done
     wait "$pid" 2>/dev/null || true
     n=$(ls "$out"/0*.png 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$n" != 6 ]; then echo "  only $n of 6 captures; log: $DD/test-$dev-$lang.log" >&2; failed=1; fi
+    if [ "$n" != 7 ]; then echo "  only $n of 7 captures; log: $DD/test-$dev-$lang.log" >&2; failed=1; fi
   done
-  [ "$dev" = watch-ultra ] || xcrun simctl status_bar "$udid" clear
+  xcrun simctl status_bar "$udid" clear 2>/dev/null || true
   xcrun simctl shutdown "$udid"
   # The store simulators hold gigabytes once booted; recreate them next time.
   [ "$KEEP" = 1 ] || xcrun simctl delete "$udid"

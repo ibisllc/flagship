@@ -40,6 +40,9 @@ data class StoreWorld(
     val backups: Backups,
     val messages: Messages? = null,
     val calls: Calls? = null,
+    /** This phone's name per language (Access control's account members, "Invited by"). */
+    val deviceName: Map<String, String> = emptyMap(),
+    val build: Build? = null,
 ) {
     @Serializable data class Server(val name: String, val fqdn: String, val leader: Boolean, val uptimeHours: Long)
     @Serializable data class Waiting(val server: String, val askedMinutesAgo: Long)
@@ -47,14 +50,26 @@ data class StoreWorld(
         val slug: String, val name: String, val summary: String, val server: String, val access: String,
         /** The summary in each capture language (`en` is [summary]). */
         val summaryByLang: Map<String, String> = emptyMap(),
+        /** The app's voi.ci link: a random code or a custom name, its own for every app. */
+        val link: String? = null,
     ) {
         fun summary(lang: String) = summaryByLang[lang] ?: summaryByLang[lang.substringBefore('-')] ?: summary
     }
     @Serializable data class Member(val name: String, val rank: String)
     @Serializable data class Backups(val server: String, val keep: Int, val policy: String, val lastHoursAgo: Long, val sizeGiB: Double)
-    /** Slide 06: one conversation from the account's voi.ci page, its texts per language. */
-    @Serializable data class Messages(val displayName: String, val nickname: Map<String, String>, val thread: List<Line>) {
+    /** Slide 03: the conversations from the account's voi.ci page (Sam's, then [others]), texts per language. */
+    @Serializable data class Messages(
+        val displayName: String, val nickname: Map<String, String>, val thread: List<Line>, val others: List<Other> = emptyList(),
+    ) {
         @Serializable data class Line(val from: String, val minutesAgo: Long, val text: Map<String, String>)
+        /** Another person who wrote: a fixed visitor key ([seed], one byte repeated) and the owner's nickname for them. */
+        @Serializable data class Other(val id: String, val seed: Int, val nickname: Map<String, String>, val thread: List<Line>)
+    }
+    /** Slide 08: a build chat on [server], ready to deploy. */
+    @Serializable data class Build(
+        val sessionId: String, val name: String, val server: String, val credits: Double? = null, val messages: List<Message>,
+    ) {
+        @Serializable data class Message(val role: String, val minutesAgo: Long, val text: Map<String, String>)
     }
     /** Slides 01 and 02 (0.4): Sam calling (ringing), and the calls on the Social page (history). */
     @Serializable data class Calls(val ringing: Ringing? = null, val history: List<Call> = emptyList()) {
@@ -66,6 +81,27 @@ data class StoreWorld(
     }
 
     private fun pickLang(t: Map<String, String>, lang: String) = t[lang] ?: t[lang.substringBefore('-')] ?: t["en"].orEmpty()
+
+    /** This phone's name in [lang]. */
+    fun deviceName(lang: String): String? = deviceName.takeIf { it.isNotEmpty() }?.let { pickLang(it, lang) }
+
+    /** Each app's voi.ci link, by service id. */
+    fun shortCodes(): Map<String, String> = apps.mapNotNull { a -> a.link?.let { serviceId(a.slug) to it } }.toMap()
+
+    /** Slide 08's chat in [lang], as the box serves it. */
+    fun chat(lang: String, now: Long): com.flagshipserver.app.api.VibeCodeSessionPublicState? {
+        val b = build ?: return null
+        return com.flagshipserver.app.api.VibeCodeSessionPublicState(
+            id = b.sessionId, status = "ready-to-deploy",
+            messages = b.messages.mapIndexed { i, m ->
+                com.flagshipserver.app.api.VibeCodeSessionMessage(
+                    role = m.role, text = pickLang(m.text, lang), timestamp = now - m.minutesAgo * 60_000,
+                    credits = if (m.role == "assistant" && i == b.messages.lastIndex) b.credits else null,
+                )
+            },
+            model = "medium", canContinue = true, provider = "flagship", conversationTokens = 24_000,
+        )
+    }
 
     /** The caller's name on slide 01: the owner's nickname for Sam in [lang]. */
     fun ringingName(lang: String): String? {
@@ -148,6 +184,7 @@ data class StoreWorld(
             box.postRecoveryReported = false
             box.boxActivityFixture = emptyList()
             box.membersFixture[ref] = members
+            if (build?.server == s.name) box.storeChat = chat(lang, now)
             if (waiting) box.unreachablePodContexts += unlockRequest.server
             if (s.name == backups.server) {
                 val b = backups
@@ -216,7 +253,7 @@ data class StoreWorld(
     }
 
     /**
-     * Slide 06: [account]'s published voi.ci page and one conversation on it (in [lang], a BCP 47 tag), answered by the
+     * Slide 03: [account]'s published voi.ci page and its conversations on it (in [lang], a BCP 47 tag), answered by the
      * owner and renamed with the owner's nickname, so the thread opens accepted and titled by the nickname.
      */
     fun seedMessages(c: com.flagshipserver.app.api.MockVoiciClient, lang: String, now: Long) {
@@ -255,10 +292,30 @@ data class StoreWorld(
                         c.send(c.visitorMessage(account, visitorUmk, pick(line.text), seq = visitorSeq))
                     }
                 }
-                val state = com.flagshipserver.app.core.voici.MessagesState(
-                    nicknames = sortedMapOf(v.pseudonymPub to com.flagshipserver.app.core.voici.MessagesNickname(pick(m.nickname), now - 3_000_000)),
-                    accepted = listOf(convId),
-                )
+                val nicknames = sortedMapOf(v.pseudonymPub to com.flagshipserver.app.core.voici.MessagesNickname(pick(m.nickname), now - 3_000_000))
+                val accepted = mutableListOf(convId)
+                for (o in m.others) {
+                    val ou = ByteArray(32) { o.seed.toByte() }
+                    val ov = com.flagshipserver.app.core.voici.VoiciVisitorKeys.derive(ou, pageId)
+                    val oc = com.flagshipserver.app.core.voici.VoiciMessages.voiciConv(pageId, ov.pseudonymPub)
+                    var oconv = com.flagshipserver.app.core.voici.StoredVoiciConversation(oc, pageId, ov.pseudonymPub, ov.threadPub)
+                    var oSeq = 0L
+                    for (line in o.thread) {
+                        val at = now - line.minutesAgo * 60_000
+                        c.now = { at }
+                        if (line.from == "owner") {
+                            val env = com.flagshipserver.app.core.voici.VoiciOwner.reply(keys, oconv, pick(line.text), null, 1, at)
+                            c.send(env.toJson())
+                            oconv = oconv.copy(messages = oconv.messages + com.flagshipserver.app.core.voici.StoredVoiciMessage(env.msgId, env.from, env.seq, at, pick(line.text), mine = true))
+                        } else {
+                            oSeq += 1
+                            c.send(c.visitorMessage(account, ou, pick(line.text), seq = oSeq))
+                        }
+                    }
+                    nicknames[ov.pseudonymPub] = com.flagshipserver.app.core.voici.MessagesNickname(pick(o.nickname), now - 3_000_000)
+                    accepted += oc
+                }
+                val state = com.flagshipserver.app.core.voici.MessagesState(nicknames = nicknames, accepted = accepted)
                 val key = com.flagshipserver.app.core.voici.VoiciMessages.deriveMessagesStateKey(umk)
                 c.states[account] = com.flagshipserver.app.core.voici.VoiciMessages.sealMessagesState(key, account, 1, state).toJson()
             }
@@ -268,20 +325,23 @@ data class StoreWorld(
     }
 
     /**
-     * Slide 02: the calls in the world's history, recorded on this device as answered or missed calls are. Sam's are
-     * on the conversation [seedMessages] made (so the nickname names them); a `null` caller is an unnamed visitor.
+     * Slide 03: the calls in the world's history, recorded on this device as answered or missed calls are. Sam's are
+     * on the conversations [seedMessages] made (so the nicknames name them); a `null` caller is an unnamed visitor.
      */
     suspend fun seedCalls(center: com.flagshipserver.app.core.voici.VoiciCenter, now: Long) {
         val history = calls?.history ?: return
         val pageId = "5a".repeat(16)
-        val v = com.flagshipserver.app.core.voici.VoiciVisitorKeys.derive(ByteArray(32) { 0x5E }, pageId)
-        val conv = com.flagshipserver.app.core.voici.VoiciMessages.voiciConv(pageId, v.pseudonymPub)
+        val seeds = mapOf("nickname" to 0x5E) + messages?.others.orEmpty().associate { it.id to it.seed }
+        val people = seeds.mapValues { (_, seed) ->
+            val v = com.flagshipserver.app.core.voici.VoiciVisitorKeys.derive(ByteArray(32) { seed.toByte() }, pageId)
+            com.flagshipserver.app.core.voici.VoiciMessages.voiciConv(pageId, v.pseudonymPub) to v.pseudonymPub
+        }
         history.forEachIndexed { i, c ->
-            val sam = c.from == "nickname"
+            val who = c.from?.let { people[it] }
             center.recordCall(
                 com.flagshipserver.app.calls.VoiciCallRecord(
                     id = "store-call-$i", callId = "%064x".format(i + 1), direction = if (c.direction == "outgoing") "out" else "in",
-                    outcome = c.outcome, conv = if (sam) conv else null, pseudonymPub = if (sam) v.pseudonymPub else null,
+                    outcome = c.outcome, conv = who?.first, pseudonymPub = who?.second,
                     media = if (c.video) "audio,video" else "audio", at = now - c.minutesAgo * 60_000, durationMs = c.durationSec * 1000,
                 ),
             )

@@ -234,3 +234,98 @@ describe("handlePushRelay app-access", () => {
     expect(bad.status).toBe(400);
   });
 });
+
+describe("device admit on an account that pins an admin root", () => {
+  const MEMBER = ["browse", "install-service", "vibe-code", "view-directory"] as const;
+
+  async function pinned(extra: { isDemo?: boolean } = {}) {
+    const storage = new InMemoryStorage();
+    const irk = keypair(2);
+    const adminRoot = keypair(9);
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(irk.publicKey), adminRootPubHex: hex(adminRoot.publicKey), claimedAt: 1 });
+    if (extra.isDemo) await storage.usernames.setDemo("alice", true);
+    return { storage, irk, adminRoot };
+  }
+
+  function admitBody(irk: Keypair, signer: Keypair, signerRoot: string, scopes: readonly string[], fill = 8) {
+    const joinedDeviceId = fill.toString(16).padStart(2, "0").repeat(16);
+    const joined = keypair(fill);
+    const issuedAt = 100;
+    const admit = { username: "alice", deviceId: joinedDeviceId, newDevicePubHex: hex(joined.publicKey), issuedAt };
+    const grant = {
+      grantId: `grant-${fill}`,
+      username: "alice",
+      deviceId: joinedDeviceId,
+      devicePubKey: joined.publicKey,
+      scopes: [...scopes] as never[],
+      issuedAt,
+      expiresAt: issuedAt + 86_400_000,
+    };
+    const encrypted = encryptDeviceProfile("Phone", deriveDeviceDirectoryKey(new Uint8Array(32).fill(4)), {
+      accountId: "alice", deviceId: joinedDeviceId, revision: 1, keyVersion: 1, nonce: new Uint8Array(12).fill(5),
+    });
+    const unsignedProfile = { ...encrypted, deviceId: joinedDeviceId, issuedAt, signerPubHex: hex(joined.publicKey) };
+    const pushClaim = {
+      username: "alice", deviceId: joinedDeviceId, platform: "apns" as const, providerToken: `token-${fill}`, pushX25519Pub: pushPublicKey, issuedAt,
+    };
+    return {
+      admit,
+      admitSig: hex(signDeviceAdmit(admit, irk)),
+      grant: {
+        grantId: grant.grantId, username: "alice", deviceId: joinedDeviceId, devicePubHex: hex(joined.publicKey),
+        scopes: [...scopes], issuedAt, expiresAt: grant.expiresAt, signerRoot,
+      },
+      grantSignature: hex(signDeviceCapabilityGrant(grant, signer)),
+      profile: { ...unsignedProfile, signatureHex: signDeviceSelfProfile(unsignedProfile, joined) },
+      request: { ...pushClaim, pushX25519Pub: hex(pushPublicKey) },
+      signature: hex(signPushTokenRegister(pushClaim, joined)),
+    };
+  }
+
+  function admitDeps(storage: InMemoryStorage) {
+    return {
+      pushTokens: storage.pushTokens,
+      deviceIdentities: storage.deviceIdentities,
+      deviceCapabilityGrants: storage.deviceCapabilityGrants,
+      deviceSelfProfiles: storage.deviceSelfProfiles,
+      usernames: storage.usernames,
+      now: () => 100,
+    };
+  }
+
+  it("takes the member grant every app's Add a device signs with the account key", async () => {
+    const { storage, irk } = await pinned();
+    const r = await handleVouchedDeviceAdmit(admitDeps(storage), "alice", admitBody(irk, irk, "membership", MEMBER));
+    expect(r.status).toBe(200);
+  });
+
+  it("takes a promoted device's grant signed by the admin root", async () => {
+    const { storage, irk, adminRoot } = await pinned();
+    const all = ["browse", "install-service", "vibe-code", "add-device", "manage-services", "revoke-others", "admin", "view-directory"];
+    const r = await handleVouchedDeviceAdmit(admitDeps(storage), "alice", admitBody(irk, adminRoot, "admin-root", all));
+    expect(r.status).toBe(200);
+  });
+
+  for (const extra of ["revoke-others", "add-device", "manage-services", "admin"]) {
+    it(`refuses an account-key grant that also carries ${extra}, and stores nothing`, async () => {
+      const { storage, irk } = await pinned();
+      const r = await handleVouchedDeviceAdmit(admitDeps(storage), "alice", admitBody(irk, irk, "membership", [...MEMBER, extra]));
+      expect(r.status).toBe(403);
+      expect((r.body as { code?: string }).code).toBe("admin-key-required");
+      expect(await storage.deviceIdentities.listForAccount("alice")).toHaveLength(0);
+      expect(await storage.deviceCapabilityGrants.listForUser("alice")).toHaveLength(0);
+    });
+  }
+
+  it("refuses a grant naming an unknown signer", async () => {
+    const { storage, irk } = await pinned();
+    const r = await handleVouchedDeviceAdmit(admitDeps(storage), "alice", admitBody(irk, irk, "irk", MEMBER));
+    expect(r.status).toBe(403);
+  });
+
+  it("a demo account keeps the old rule", async () => {
+    const { storage, irk } = await pinned({ isDemo: true });
+    const r = await handleVouchedDeviceAdmit(admitDeps(storage), "alice", admitBody(irk, irk, "membership", [...MEMBER, "revoke-others"]));
+    expect(r.status).toBe(200);
+  });
+});

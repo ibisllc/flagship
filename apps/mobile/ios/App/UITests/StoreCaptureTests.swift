@@ -2,7 +2,7 @@ import XCTest
 
 /// Store screenshots (docs/store-assets/capture-plan.md): the real app over the made-up world in
 /// store/demo-world.json (`-smoke-store-world`), one language per run, light and dark by the slide's place
-/// in the strip, written as `<id>.png` (01-06 in the 0.4 order: call, Social, Home, apps, access, backups; the watch's 07/07b come from capture-ios.sh). Opt-in (skipped
+/// in the strip, written as `<id>.png` (01-06 and 08: call, Home, Social's calls, apps, access, backups, build chat; the watch's 07/07b come from capture-ios.sh). Opt-in (skipped
 /// unless `STORE_OUT` is set); run it through
 /// scripts/store-assets/capture-ios.sh, which passes:
 ///
@@ -16,6 +16,8 @@ final class StoreCaptureTests: XCTestCase {
     private var outDir: URL!
     private var lang = "en"
     private var world = ""
+    /// `TEST_RUNNER_STORE_ONLY=03,08`: only these slides (a retake after a change to one screen).
+    private var only: Set<String>?
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     override func setUpWithError() throws {
@@ -28,6 +30,7 @@ final class StoreCaptureTests: XCTestCase {
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         world = try String(contentsOfFile: worldPath, encoding: .utf8)
         lang = env["STORE_LANG"] ?? "en"
+        only = env["STORE_ONLY"].flatMap { $0.isEmpty ? nil : Set($0.split(separator: ",").map(String.init)) }
         if isPad { XCUIDevice.shared.orientation = .landscapeLeft }
     }
 
@@ -55,7 +58,11 @@ final class StoreCaptureTests: XCTestCase {
 
     private func shot(_ app: XCUIApplication, _ id: String) throws {
         sleep(2)
-        let image = XCUIScreen.main.screenshot()
+        try write(XCUIScreen.main.screenshot(), id)
+        app.terminate()
+    }
+
+    private func write(_ image: XCUIScreenshot, _ id: String) throws {
         let a = XCTAttachment(screenshot: image)
         a.name = "\(lang)-\(id)"
         a.lifetime = .keepAlways
@@ -67,7 +74,6 @@ final class StoreCaptureTests: XCTestCase {
         format.opaque = true
         let png = UIGraphicsImageRenderer(size: ui.size, format: format).pngData { _ in ui.draw(at: .zero) }
         try png.write(to: outDir.appendingPathComponent("\(id).png"))
-        app.terminate()
     }
 
     private func any(_ app: XCUIApplication, _ id: String) -> XCUIElement {
@@ -110,73 +116,98 @@ final class StoreCaptureTests: XCTestCase {
         return names[lang] ?? names["en"] ?? ""
     }
 
+    /// The tablet slides whose page is a narrow column (Social, Access control) draw a size larger, so the column
+    /// fills more of the wide screen (store review: "a narrow centred column, small text").
+    private var tabletType: [String] { isPad ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXL"] : [] }
+
+    private func want(_ id: String) -> Bool { only?.contains(id) ?? true }
+
     func test_storeCaptures() throws {
-        // 01 An incoming voi.ci call from Sam, ringing: the app's own ringing stage (CallKit's can't be captured). The
-        // stage is always dark, so the device is too: a light device draws a dark status bar on it.
-        var app = launch("home", dark: true, ["-smoke-call-stage", "ringing"])
-        XCTAssertTrue(app.staticTexts[nickname].waitForExistence(timeout: 20))
-        try shot(app, "01")
-
-        // 02 The Social tab: the voi.ci page's header, Inbox with Sam's conversation, the call button with the missed
-        // call. iPad: Sam's conversation open beside the sidebar.
-        app = launch("messages", dark: true)
-        let inbox = app.buttons["social-tab-inbox"]
-        XCTAssertTrue(inbox.waitForExistence(timeout: 20))
-        inbox.tap()
-        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'messages-row-'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 20))
-        XCTAssertTrue(any(app, "social-call-button").waitForExistence(timeout: 10))
-        if isPad {
-            row.tap()
-            XCTAssertTrue(any(app, "thread-compose").waitForExistence(timeout: 15))
-            XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "bubble-visitor").count, 3)
+        if want("01") {
+            // 01 An incoming voi.ci call from Sam, ringing: the app's own ringing stage (CallKit's can't be captured). The
+            // stage is always dark, so the device is too: a light device draws a dark status bar on it.
+            let app = launch("home", dark: true, ["-smoke-call-stage", "ringing"])
+            XCTAssertTrue(app.staticTexts[nickname].waitForExistence(timeout: 20))
+            try shot(app, "01")
         }
-        try shot(app, "02")
+        if want("02") {
+            // 02 Home: both servers online, home the leader, no marketplace card (0.4).
+            let app = launch("home", dark: true)
+            XCTAssertTrue(serverRow(app, "cabin.river-otter").waitForExistence(timeout: 20))
+            XCTAssertFalse(any(app, "quick-action-install-service").exists)
+            try shot(app, "02")
+        }
+        if want("03") {
+            // 03 Social: the Inbox with every conversation and the call button with its missed calls (kept as
+            // x03-inbox.png), then the call button's Calls page: missed, video and audio calls, named by the owner's
+            // nicknames (03.png).
+            let app = launch("messages", dark: false, tabletType)
+            let inbox = app.buttons["social-tab-inbox"]
+            XCTAssertTrue(inbox.waitForExistence(timeout: 20))
+            inbox.tap()
+            let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'messages-row-'")).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 20))
+            let callButton = any(app, "social-call-button")
+            XCTAssertTrue(callButton.waitForExistence(timeout: 10))
+            sleep(2)
+            try write(XCUIScreen.main.screenshot(), "x03-inbox")
+            callButton.tap()
+            XCTAssertTrue(any(app, "voici-calls-list").waitForExistence(timeout: 15))
+            try shot(app, "03")
+        }
+        if want("04") {
+            // 04 Every app on both servers, each with its own voi.ci link.
+            let app = launch("apps", dark: true)
+            XCTAssertTrue(any(app, "app-row-status-river-otter--budget").waitForExistence(timeout: 20))
+            XCTAssertTrue(any(app, "app-row-status-river-otter--chess-club").waitForExistence(timeout: 20))
+            try shot(app, "04")
+        }
+        if want("05") {
+            // 05 Chess Club's Access control: Members only, its three members and their ranks.
+            let app = launch("apps", dark: false, tabletType)
+            let chess = any(app, "app-row-status-river-otter--chess-club")
+            XCTAssertTrue(chess.waitForExistence(timeout: 20))
+            chess.tap()
+            let access = app.buttons["service-detail-open-access"]
+            for _ in 0..<8 where !(access.exists && access.isHittable) { app.swipeUp(velocity: .slow) }
+            XCTAssertTrue(access.waitForExistence(timeout: 10))
+            access.tap()
+            let members = any(app, "service-access-members-title")
+            XCTAssertTrue(members.waitForExistence(timeout: 15))
+            XCTAssertTrue(any(app, "service-access-role-inv-lea").waitForExistence(timeout: 15))
+            // iPhone: the top of the page (the app's header card below the bar), scrolled only as far as Lea's row needs
+            // to clear the tab bar in a language whose rows wrap. iPad: the page's top.
+            if !isPad { lift(app, any(app, "service-access-revoke-inv-lea"), clearOf: app.tabBars.firstMatch) }
+            try shot(app, "05")
+        }
+        if want("06") {
+            // 06 home's server page at Backups, each backup's "Restore into this server" in view.
+            let app = launch("home", dark: true)
+            let home = serverRow(app, "home.river-otter")
+            XCTAssertTrue(home.waitForExistence(timeout: 20))
+            home.tap()
+            let backups = any(app, "sd-backups-section")
+            for _ in 0..<12 where !(backups.exists && backups.isHittable) { app.swipeUp(velocity: .slow) }
+            XCTAssertTrue(any(app, "sd-backups-policy").waitForExistence(timeout: 15))
+            // The card's top edge meets the navigation bar's bottom: what scrolls under the bar is the section's
+            // gap and label, not the Diagnostics card's text overlapping the title.
+            bring(app, any(app, "sd-backups-policy"), toY: isPad ? 0.10 : 0.15)
+            let restore = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'sd-backup-restore-'")).firstMatch
+            XCTAssertTrue(restore.waitForExistence(timeout: 10))
+            try shot(app, "06")
+        }
+        if want("08") {
+            // 08 The build chat: the owner described an app, the AI built it on home; ready to deploy.
+            let app = launch("apps", dark: true, ["-smoke-store-chat", storeChatId])
+            XCTAssertTrue(any(app, "vibecode-reply-field").waitForExistence(timeout: 30))
+            try shot(app, "08")
+        }
+    }
 
-        // 03 Home: both servers online, home the leader, no marketplace card (0.4).
-        app = launch("home", dark: false)
-        XCTAssertTrue(serverRow(app, "cabin.river-otter").waitForExistence(timeout: 20))
-        XCTAssertFalse(any(app, "quick-action-install-service").exists)
-        try shot(app, "03")
-
-        // 04 Every app on both servers.
-        app = launch("apps", dark: true)
-        XCTAssertTrue(any(app, "app-row-status-river-otter--budget").waitForExistence(timeout: 20))
-        XCTAssertTrue(any(app, "app-row-status-river-otter--chess-club").waitForExistence(timeout: 20))
-        try shot(app, "04")
-
-        // 05 Chess Club's Access control: Members only, its three members and their ranks.
-        app = launch("apps", dark: false)
-        let chess = any(app, "app-row-status-river-otter--chess-club")
-        XCTAssertTrue(chess.waitForExistence(timeout: 20))
-        chess.tap()
-        let access = app.buttons["service-detail-open-access"]
-        for _ in 0..<8 where !(access.exists && access.isHittable) { app.swipeUp(velocity: .slow) }
-        XCTAssertTrue(access.waitForExistence(timeout: 10))
-        access.tap()
-        let members = any(app, "service-access-members-title")
-        XCTAssertTrue(members.waitForExistence(timeout: 15))
-        XCTAssertTrue(any(app, "service-access-role-inv-lea").waitForExistence(timeout: 15))
-        // iPhone: the top of the page (the app's header card below the bar), scrolled only as far as Lea's row needs
-        // to clear the tab bar in a language whose rows wrap.
-        if isPad { bring(app, any(app, "service-access-restrict-toggle"), toY: 0.16) }
-        else { lift(app, any(app, "service-access-revoke-inv-lea"), clearOf: app.tabBars.firstMatch) }
-        try shot(app, "05")
-
-        // 06 home's server page at Backups, each backup's "Restore into this server" in view.
-        app = launch("home", dark: true)
-        let home = serverRow(app, "home.river-otter")
-        XCTAssertTrue(home.waitForExistence(timeout: 20))
-        home.tap()
-        let backups = any(app, "sd-backups-section")
-        for _ in 0..<12 where !(backups.exists && backups.isHittable) { app.swipeUp(velocity: .slow) }
-        XCTAssertTrue(any(app, "sd-backups-policy").waitForExistence(timeout: 15))
-        // The card's top edge meets the navigation bar's bottom: what scrolls under the bar is the section's
-        // gap and label, not the Diagnostics card's text overlapping the title.
-        bring(app, any(app, "sd-backups-policy"), toY: isPad ? 0.10 : 0.15)
-        let restore = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'sd-backup-restore-'")).firstMatch
-        XCTAssertTrue(restore.waitForExistence(timeout: 10))
-        try shot(app, "06")
+    /// The world's build chat (`build.sessionId`).
+    private var storeChatId: String {
+        let json = (try? JSONSerialization.jsonObject(with: Data(world.utf8))) as? [String: Any]
+        return (json?["build"] as? [String: Any])?["sessionId"] as? String ?? "store-chat"
     }
 }
 

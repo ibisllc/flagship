@@ -34,6 +34,7 @@ let n = 0;
 for (const f of files) {
   if (!wanted.has(`${f.store}/${f.class}/${f.slide}`)) continue; // an image an older slide order left behind
   if (f.capture && f.capture.kind !== "native") throw new Error(`${f.path}: capture is ${f.capture.kind}, never uploaded`);
+  if (f.inset && f.inset.kind !== "native") throw new Error(`${f.path}: its second capture is ${f.inset.kind}, never uploaded`);
   const to = f.slide === "icon"
     ? path.join(dir, f.store, "icon.png")
     : path.join(dir, f.store, f.class, f.storeLanguage, `${f.slide}.png`);

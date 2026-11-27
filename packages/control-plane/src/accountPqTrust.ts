@@ -219,7 +219,7 @@ async function adminBound(deps: AccountPqTrustDeps, userRec: UsernameRecord, now
   if (!root) return false;
   if (await verifiedBinding(deps, "admin-root", userRec.username, root, now)) return true;
   for (const [deviceId, pub] of await liveDevices(deps, userRec.username)) {
-    const authz = await authorizeSensitiveComOp({ grants: deps.grants, now: () => now }, { username: userRec.username, userRec, verifyWith: (p) => p === pub, now });
+    const authz = await authorizeSensitiveComOp({ grants: deps.grants, now: () => now }, { username: userRec.username, userRec, verifyWith: (p) => p === pub, acceptAdminDeviceKey: true, now });
     if (authz.ok && (await verifiedBinding(deps, "device", deviceId, pub, now))) return true;
   }
   return false;
@@ -318,7 +318,7 @@ async function policySigner(deps: AccountPqTrustDeps, userRec: UsernameRecord, c
   if (c.signerKind !== "admin-device") return { ok: false, code: "not-owner-authority" };
   const dev = await deps.identities.getByPub(userRec.username, key);
   if (!dev || dev.revokedAt !== null) return { ok: false, code: "signer-not-active" };
-  const authz = await authorizeSensitiveComOp({ grants: deps.grants, now: () => now }, { username: userRec.username, userRec, verifyWith: (p) => p === key, now });
+  const authz = await authorizeSensitiveComOp({ grants: deps.grants, now: () => now }, { username: userRec.username, userRec, verifyWith: (p) => p === key, acceptAdminDeviceKey: true, now });
   if (!authz.ok || authz.signerPubHex !== key) return { ok: false, code: "signer-not-active" };
   return { ok: true, ed: key, binding: await verifiedBinding(deps, "device", dev.deviceId, key, now) };
 }

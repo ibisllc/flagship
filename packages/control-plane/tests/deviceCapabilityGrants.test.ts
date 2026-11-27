@@ -532,3 +532,89 @@ describe("requireDeviceScope production consumers (grant-authorization pin)", ()
     );
   });
 });
+
+describe("account-key grants on an account that pins an admin root", () => {
+  async function pinned(extra: { isDemo?: boolean } = {}) {
+    const h = await mkHarness();
+    const adminRoot = makeKey();
+    await h.deps.usernames.put({ username: USER, irkPubHex: hex(h.userIrk.publicKey), adminRootPubHex: hex(adminRoot.publicKey), claimedAt: 1 });
+    if (extra.isDemo) await h.deps.usernames.setDemo(USER, true);
+    return { ...h, adminRoot };
+  }
+
+  it("the account key mints a member's scopes and nothing more", async () => {
+    const h = await pinned();
+    const member = mintGrant({ userIrk: h.userIrk, scopes: ["browse", "install-service", "vibe-code", "view-directory"] });
+    expect((await handleMintDeviceGrant(h.deps, member.body)).status).toBe(200);
+    for (const extra of ["revoke-others", "add-device", "manage-services", "demo-provision"] as const) {
+      const m = mintGrant({ userIrk: h.userIrk, scopes: ["browse", extra], deviceId: "ab".repeat(16), grantId: `0b-${["revoke-others", "add-device", "manage-services", "demo-provision"].indexOf(extra)}` });
+      const r = await handleMintDeviceGrant(h.deps, m.body);
+      expect(r.status).toBe(403);
+      expect((r.body as { code?: string }).code).toBe("admin-key-required");
+    }
+  });
+
+  it("the admin root still mints an admin grant", async () => {
+    const h = await pinned();
+    const m = mintGrant({ userIrk: h.adminRoot, scopes: ["revoke-others", "admin"] });
+    expect((await handleMintDeviceGrant(h.deps, m.body)).status).toBe(200);
+  });
+
+  it("a stored account-key grant gives no scope beyond a member's", async () => {
+    const h = await pinned();
+    const device = makeKey();
+    const m = mintGrant({ userIrk: h.userIrk, devicePub: device.publicKey, scopes: ["browse", "revoke-others", "view-directory"] });
+    // Written before this rule (or by a demo provision): only the read side applies.
+    await h.deps.storage.put({
+      grantId: m.grant.grantId, username: USER, deviceId: DEVICE_A, devicePubHex: hex(device.publicKey),
+      scopesJson: JSON.stringify(m.grant.scopes), issuedAt: m.grant.issuedAt, expiresAt: m.grant.expiresAt,
+      signatureHex: hex(m.signature), revokedAt: null, signerRoot: "membership",
+    });
+    await h.deps.identities.put({ accountId: USER, deviceId: DEVICE_A, devicePubHex: hex(device.publicKey), platformClass: null, createdAt: 1, lastSeenAt: 1, revokedAt: null });
+    expect((await requireDeviceScope(h.deps, hex(device.publicKey), USER, "view-directory")).ok).toBe(true);
+    expect((await requireDeviceScope(h.deps, hex(device.publicKey), USER, "revoke-others")).ok).toBe(false);
+    await h.deps.usernames.setDemo(USER, true);
+    expect((await requireDeviceScope(h.deps, hex(device.publicKey), USER, "revoke-others")).ok).toBe(true);
+  });
+
+  it("the account key can't revoke an admin grant, but the rename's revoke after the admin root's replacement passes", async () => {
+    const h = await pinned();
+    const device = makeKey();
+    const first = mintGrant({ userIrk: h.adminRoot, devicePub: device.publicKey, scopes: ["admin"], grantId: "0c-1" });
+    expect((await handleMintDeviceGrant(h.deps, first.body)).status).toBe(200);
+    const refused = await handleRevokeDeviceGrant(h.deps, revokeBody({ userIrk: h.userIrk, grantId: "0c-1" }));
+    expect(refused.status).toBe(403);
+    expect((refused.body as { code?: string }).code).toBe("admin-key-required");
+    expect((await h.deps.storage.get("0c-1"))?.revokedAt).toBeNull();
+    // Another key is refused outright.
+    expect((await handleRevokeDeviceGrant(h.deps, revokeBody({ userIrk: makeKey(), grantId: "0c-1" }))).status).toBe(403);
+
+    // The apps' rename: the admin root mints the replacement for the same key (which retires the old grant), then
+    // the account key revokes the old one.
+    const second = mintGrant({ userIrk: h.adminRoot, devicePub: device.publicKey, scopes: ["admin"], grantId: "0c-2", issuedAt: 1_000_001 });
+    expect((await handleMintDeviceGrant(h.deps, second.body)).status).toBe(200);
+    expect((await handleRevokeDeviceGrant(h.deps, revokeBody({ userIrk: h.userIrk, grantId: "0c-1", reason: "replaced" }))).status).toBe(200);
+    expect((await h.deps.storage.get("0c-2"))?.revokedAt).toBeNull();
+  });
+
+  it("the admin root revokes an admin grant", async () => {
+    const h = await pinned();
+    const m = mintGrant({ userIrk: h.adminRoot, scopes: ["admin"], grantId: "0e-1" });
+    expect((await handleMintDeviceGrant(h.deps, m.body)).status).toBe(200);
+    expect((await handleRevokeDeviceGrant(h.deps, revokeBody({ userIrk: h.adminRoot, grantId: "0e-1" }))).status).toBe(200);
+    expect((await h.deps.storage.get("0e-1"))?.revokedAt).not.toBeNull();
+  });
+
+  it("the account key still revokes a member grant", async () => {
+    const h = await pinned();
+    const m = mintGrant({ userIrk: h.userIrk, grantId: "0d-1", scopes: ["browse", "view-directory"] });
+    expect((await handleMintDeviceGrant(h.deps, m.body)).status).toBe(200);
+    expect((await handleRevokeDeviceGrant(h.deps, revokeBody({ userIrk: h.userIrk, grantId: "0d-1" }))).status).toBe(200);
+  });
+
+  it("a demo account keeps the old rules", async () => {
+    const h = await pinned({ isDemo: true });
+    const m = mintGrant({ userIrk: h.userIrk, scopes: ["browse", "revoke-others"] });
+    expect((await handleMintDeviceGrant(h.deps, m.body)).status).toBe(200);
+  });
+});

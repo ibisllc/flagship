@@ -510,7 +510,7 @@ export async function handleInitiateRePair(
   // restrictive recovery mode, not less).
   const accountType = userRec.accountType ?? "single";
   const isMultiDevice = accountType === "multi";
-  const graceMs = isMultiDevice ? multiGraceMs : singleGraceMs;
+  let graceMs = isMultiDevice ? multiGraceMs : singleGraceMs;
   const totpRequired = isMultiDevice;
 
   // Recovery is CREDENTIAL-ONLY (docs/naming-recovery-and-name-change.md
@@ -617,6 +617,22 @@ export async function handleInitiateRePair(
       };
     }
     registeredKeyProven = true;
+    // Every device of the account can derive the registered key, so on an account that pins an admin root it
+    // proves membership, not ownership. It never buys the shorter multi-device window there, and after an admin
+    // rejected a recovery it starts none for a day, whatever new key it names: the admin's veto stays the brake.
+    if (userRec.adminRootPubHex && !userRec.isDemo) {
+      graceMs = Math.max(graceMs, singleGraceMs);
+      const vetoedUntil =
+        existing?.vetoedByHex && typeof existing.objectedAt === "number" ? existing.objectedAt + RE_PAIR_VETO_BLOCK_MS : 0;
+      if (vetoedUntil > now()) {
+        return rePairRefusal(
+          409,
+          "re-pair-vetoed-recently",
+          "an admin of this account rejected a recovery less than a day ago",
+          { until: vetoedUntil, retryAfterSec: Math.ceil((vetoedUntil - now()) / 1000) },
+        );
+      }
+    }
   }
 
   const enrolledMethods: Array<

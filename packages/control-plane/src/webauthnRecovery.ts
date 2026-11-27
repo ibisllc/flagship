@@ -9,6 +9,7 @@ import {
   type StoredRecoveryState,
 } from "@flagship/protocol";
 import type {
+  AuditEventStorage,
   DeviceIdentityStorage,
   PqTrustStorage,
   ServerStorage,
@@ -17,6 +18,7 @@ import type {
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { policyStateOf } from "./accountPqTrust.js";
+import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
 import { mintRecoveryProof } from "./recoveryProof.js";
 import {
@@ -87,6 +89,41 @@ export interface WebauthnRecoveryDeps {
    * neither released nor written. Absent ⇒ not strict.
    */
   accountUnderStrict?: (username: string) => Promise<boolean>;
+  /**
+   * Every write and delete of the record lands in the account's Activity. The account key that signs them is
+   * one every device of the account can derive, so the owner sees each change to how the account is recovered.
+   */
+  auditEvents?: AuditEventStorage;
+}
+
+async function auditRecoveryChange(
+  deps: WebauthnRecoveryDeps,
+  username: string,
+  change: "set-up" | "changed" | "removed",
+  credentialIdHex: string,
+): Promise<void> {
+  if (!deps.auditEvents) return;
+  // Two kinds every app already labels; the detail says which change it was.
+  const eventKind = change === "set-up" ? "recovery-set-up" : "recovery-rotated";
+  const detail = {
+    "set-up": "Cloud recovery was set up",
+    changed: "Cloud recovery was changed",
+    removed: "Cloud recovery was turned off",
+  }[change];
+  try {
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: username.toLowerCase(),
+        eventKind,
+        detail,
+        devicePrefix: credentialIdHex.slice(0, 8),
+        postedAt: (deps.now ?? (() => Date.now()))(),
+      },
+    );
+  } catch {
+    // The record is written; the Activity line is a notice, not a gate.
+  }
 }
 
 /**
@@ -370,6 +407,7 @@ export async function handleUploadWebauthnRecovery(
     claim.priorDigestHex,
   );
   if (!stored) return conflict(EVOLUTION_REFUSALS["stale-prior"]!);
+  await auditRecoveryChange(deps, claim.username, existing ? "changed" : "set-up", claim.credentialIdHex);
   return { status: 200, body: { ok: true, updated: !!existing, generation: claim.generation, digestHex: recoveryRecordDigest(claim), passkeyChecked: !!passkey } };
 }
 
@@ -606,5 +644,6 @@ export async function handleDeleteWebauthnRecovery(
   if (!(await deps.webauthnRecovery.deleteIfDigest(claim.username, claim.priorDigestHex))) {
     return conflict(EVOLUTION_REFUSALS["stale-prior"]!);
   }
+  await auditRecoveryChange(deps, claim.username, "removed", existing.credentialIdHex);
   return { status: 200, body: { ok: true } };
 }

@@ -77,13 +77,17 @@ export function plan(lang) {
         ? path.join(OUT, cls.store, `${cls.class}.png`)
         : path.join(OUT, cls.store, lang, cls.class, id === slide.theme ? `${id}.png` : `${id}-${slide.theme}.png`);
       const needsCapture = !["closing", "feature", "icon"].includes(template);
+      // the feature graphic crops a phone capture (slide.phone); slide 01 draws a second capture over its device
+      const capture = needsCapture ? findCapture(lang, capFrom, id, isWatch ? null : cls.standIn)
+        : template === "feature" && slide.phone ? findCapture(lang, slide.phone, slide.phone.id, null) : null;
+      const inset = slide.inset && needsCapture && !isWatch ? findCapture(lang, slide.inset, id, null) : null;
       jobs.push({
         lang, store: cls.store, storeLang: cls.neutral ? null : storeLang(loc, cls.store), cls: cls.class, id, theme: slide.theme, template, tone, device,
-        w: cls.w, h: cls.h, file, isWatch, first: i === 0 && id === "01", deviceW: cls.deviceW, fit: slide.fit,
+        w: cls.w, h: cls.h, file, isWatch, first: i === 0 && id === "01", deviceW: cls.deviceW, fit: cls.fit?.[id] ?? slide.fit, lines: slide.lines,
         sub: template === "feature" && slide.strings ? s[`${slide.strings}_sub`] ?? null : null,
         eyebrow: slide.strings && !slide.closing && template !== "feature" && template !== "watch" ? { num: id, theme: s[`${slide.strings}_theme`] } : null,
-        caption: template === "watch" || !slide.strings ? null : s[`${slide.strings}_caption`],
-        capture: needsCapture ? findCapture(lang, capFrom, id, isWatch ? null : cls.standIn) : null,
+        caption: template === "watch" || !slide.strings ? null : s[slide.caption ?? `${slide.strings}_caption`],
+        capture, inset,
         state: slide.state, screen: slide.screen,
       });
     });
@@ -100,15 +104,25 @@ function findCapture(lang, from, id, standIn) {
   return { kind: "missing", file: null, size: nominal, nominal, wanted: native };
 }
 
+/** A capture for the page: its file URL and size, and what its sidecar JSON says (the voi.ci frame's tap point). */
+function imageOf(c) {
+  if (!c?.file) return null;
+  const side = c.file.replace(/\.png$/, ".json");
+  const extra = fs.existsSync(side) ? JSON.parse(fs.readFileSync(side, "utf8")) : {};
+  return { src: pathToFileURL(c.file).href, w: c.size[0], h: c.size[1], kind: c.kind, ...extra };
+}
+
 function specOf(job) {
   const c = job.capture;
   return {
     w: job.w, h: job.h, lang: job.lang, tone: job.tone, device: job.device, watch: job.isWatch, first: job.first,
     deviceW: job.deviceW, fit: job.fit, sub: job.sub,
     eyebrow: job.eyebrow, caption: job.caption,
-    captionScale: job.template === "feature" ? 0.13 : 0.05, captionFloor: job.template === "feature" ? 0.1 : 0.045,
-    maxLines: job.template === "closing" ? 3 : 2, // the closing card has no device under it
-    capture: c?.file ? { src: pathToFileURL(c.file).href, w: c.size[0], h: c.size[1], kind: c.kind } : null,
+    captionScale: job.template === "feature" ? 0.088 : 0.05, captionFloor: job.template === "feature" ? 0.065 : 0.045,
+    maxLines: job.template === "closing" ? 3 : (job.lines ?? 2), // the closing card has no device under it
+    splitSentences: (job.lines ?? 2) > 2,
+    capture: imageOf(c),
+    inset: job.inset ? { ...(imageOf(job.inset) ?? { missing: rel(job.inset.wanted) }), aspect: job.inset.size[0] / job.inset.size[1] } : null,
     captureAspect: c ? c.size[0] / c.size[1] : 1,
     missing: c && c.kind === "missing" ? { path: rel(c.wanted), state: job.state ? `world=${job.state}` : null, screen: job.screen } : null,
     foot: { left: "", standIn: c?.kind === "stand-in" },
@@ -170,7 +184,8 @@ async function render() {
       path: rel(job.file), store: job.store, storeLanguage: job.storeLang, lang: job.lang, class: job.cls, slide: job.id, theme: job.theme,
       tone: job.tone, width: w, height: h, sha256: sha256(fs.readFileSync(job.file)),
       caption: job.caption, captionLines: fit.lines ?? 0, captionScale: fit.scale ?? null, captionOverflow: !!fit.overflow,
-      capture: job.capture ? { kind: job.capture.kind, path: job.capture.file ? rel(job.capture.file) : null, wanted: rel(job.capture.wanted), sha256: job.capture.file ? sha256(fs.readFileSync(job.capture.file)) : null } : null,
+      capture: captureRecord(job.capture),
+      ...(job.inset ? { inset: captureRecord(job.inset) } : {}),
     };
   });
   const byPath = new Map(old.map((f) => [f.path, f]));
@@ -184,6 +199,10 @@ async function render() {
   console.log(`rendered ${fresh.length} images in ${((Date.now() - t0) / 1000).toFixed(1)} s (captures: ${Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(", ")})`);
   console.log(`review: ${rel(path.join(OUT, "review/index.html"))}`);
   if (problems.length) { console.error(problems.join("\n")); process.exitCode = 1; }
+}
+
+function captureRecord(c) {
+  return c ? { kind: c.kind, path: c.file ? rel(c.file) : null, wanted: rel(c.wanted), sha256: c.file ? sha256(fs.readFileSync(c.file)) : null } : null;
 }
 
 // ---- review sheets ---------------------------------------------------------------------------------------------
@@ -276,6 +295,11 @@ export function checkOutputs({ release = false } = {}) {
       if (sha256(fs.readFileSync(job.file)) !== f.sha256) problems.push(`${p}: hash differs from the manifest (edited by hand?)`);
       if ((f.caption ?? null) !== (job.caption ?? null)) problems.push(`${p}: caption changed since it was rendered: run npm run store-assets`);
       if (f.captionOverflow) problems.push(`${p}: caption overflows its box`);
+      const ins = job.inset;
+      if (ins) {
+        if (ins.kind !== f.inset?.kind || (ins.file && sha256(fs.readFileSync(ins.file)) !== f.inset.sha256)) problems.push(`${p}: its capture changed since it was rendered: run npm run store-assets`);
+        if (ins.kind !== "native") missingCaptures.add(rel(ins.wanted));
+      }
       const c = job.capture;
       if (c) {
         const was = f.capture?.kind;

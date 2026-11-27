@@ -159,6 +159,7 @@ async function isAdministrator(
       username: device.accountId,
       userRec: user,
       verifyWith: (candidate) => candidate.toLowerCase() === device.signerPubHex,
+      acceptAdminDeviceKey: true,
     },
   );
   return decision.ok;

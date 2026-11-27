@@ -184,12 +184,15 @@ describe("invite create — two tiers on an admin-pinned account", () => {
     expect(await s.auditEvents.list(USER, 0, 50)).toHaveLength(0);
   });
 
-  it("an admin-granted device creates an ADMIN invite", async () => {
+  it("an admin-granted device's own key makes a MEMBER invite: only the admin root makes an admin one", async () => {
     const { deps, s } = await seed();
     const { inviteId, body } = createBody(adminDevice, { deviceId: ADMIN_DEVICE_ID });
     const r = await handleCreateServiceInvite(deps, USER, body);
     expect(r.status).toBe(200);
-    expect((await s.serviceInvites.get(inviteId))?.creatorTier).toBe("admin");
+    expect((await s.serviceInvites.get(inviteId))?.creatorTier).toBe("member");
+    const root = createBody(adminRoot);
+    expect((await handleCreateServiceInvite(deps, USER, root.body)).status).toBe(200);
+    expect((await s.serviceInvites.get(root.inviteId))?.creatorTier).toBe("admin");
   });
 
   for (const [name, signer] of [["IRK", irk], ["AID", aid]] as const) {
@@ -300,7 +303,8 @@ describe("invite revoke — admin, or the key that created that invite", () => {
     await handleCreateServiceInvite(deps, USER, body);
     expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, irk))).status).toBe(403);
     expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, aid))).status).toBe(403);
-    expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, adminDevice))).status).toBe(200);
+    expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, adminDevice))).status).toBe(403);
+    expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, adminRoot))).status).toBe(200);
   });
 
   it("the creator key stops counting once its device is revoked", async () => {

@@ -116,6 +116,7 @@ object Variant : AppVariant {
         val storeLang = context.getSystemService(android.app.LocaleManager::class.java).applicationLocales.get(0)?.toLanguageTag()
             ?: context.resources.configuration.locales.get(0).toLanguageTag()
         val storeBoxes = store?.boxes(cfg.storeWaiting, now, storeLang)
+        MockScreensClient.storeSelfName = store?.deviceName(storeLang)
         val screens = if (store != null && storeBoxes != null) storeBoxes.getValue(store.servers.first { it.leader }.name) else MockScreensClient()
         // The access dialogs ask about each waiting host in turn: give Plants a
         // second one so Allow and Deny can both be answered (iOS has two).
@@ -150,7 +151,10 @@ object Variant : AppVariant {
         }
         val flagshipServer = MockFlagshipServerClient()
         // The store world's account has cloud recovery, so Home shows no setup nudge.
-        if (store != null) flagshipServer.cloudRecoveryByUser = mapOf(store.account to true)
+        if (store != null) {
+            flagshipServer.cloudRecoveryByUser = mapOf(store.account to true)
+            flagshipServer.storeShortCodes = store.shortCodes()
+        }
         val relay = MockQrRelayClient()
         val transfer = MockServerTransferClient()
         val mailbox = MockSecretMailboxClient()

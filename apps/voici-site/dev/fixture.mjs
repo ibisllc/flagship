@@ -68,6 +68,17 @@ const SAMPLES = {
     links: [{ url: "https://dora.example/bread", label: "The bread log", site: null }],
     posts: Array.from({ length: 26 }, (_, i) => ({ text: i === 0 ? "Day 1. First loaf from the new oven. Flat, but it's a start." : `Day ${i + 1}. Loaf number ${i + 1}.`, links: [] })),
   },
+  // The store art's account (store/demo-world.json): the page a caller opens to ring river-otter (slide 01).
+  "river-otter": {
+    theme: "classic",
+    pageId: "4d5e6f708192a3b4c5d6e7f801920314",
+    accepts: 1,
+    calls: 1,
+    displayName: "River Otter",
+    bio: "",
+    links: [],
+    posts: [],
+  },
   cora: {
     theme: "sea",
     pageId: "2b3c4d5e6f708192a3b4c5d6e7f80192",

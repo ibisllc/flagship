@@ -44,6 +44,8 @@ import type {
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
 import { recordAuditEvent } from "./auditEvents.js";
+import { appUpdateRequired } from "./clientUpdate.js";
+import { ADMIN_KEY_REQUIRED_CODE } from "./deviceCapabilityGrants.js";
 import { computeDevicesEtag } from "./deviceDirectoryEtag.js";
 import { recoveryPasskeyPolicy, type PasskeyPolicy } from "./passkeyAssertion.js";
 import { passkeyFromAttestation } from "./webauthnRecovery.js";
@@ -267,6 +269,22 @@ export async function handleWipeRestart(
   };
   if (!verifyWipeRestart(claim, sig, oldIrkPub)) {
     return forbidden("invalid signature");
+  }
+  // Every device of the account can derive the old IRK, so on an account that
+  // pins an admin root it does not authorize replacing the account key on its
+  // own: the admin root signs the same request too (`adminRootSignature`). A
+  // demo account keeps the old check.
+  if (userRec.adminRootPubHex && !userRec.isDemo) {
+    const adminSig = (b as { adminRootSignature?: unknown }).adminRootSignature;
+    let adminOk = false;
+    if (typeof adminSig === "string" && /^[0-9a-fA-F]{128}$/.test(adminSig)) {
+      try {
+        adminOk = verifyWipeRestart(claim, hexToBytes(adminSig), hexToBytes(userRec.adminRootPubHex));
+      } catch {
+        adminOk = false;
+      }
+    }
+    if (!adminOk) return appUpdateRequired(403, "wipeRestart", ADMIN_KEY_REQUIRED_CODE);
   }
   // SEC-REPAIR-001: the new passkey's public key rides beside the signed request, bound to it by the
   // credential id the old IRK signed, so the new record keeps `.com`'s passkey check.

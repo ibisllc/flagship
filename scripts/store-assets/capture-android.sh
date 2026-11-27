@@ -5,7 +5,8 @@
 # build, which shares the phone's applicationId) and its tile, 07c (StoreTileCaptureTest, the Tiles renderer), into
 # store/captures/android/<lang>/wear/.
 #
-#   bash scripts/store-assets/capture-android.sh [--lang ja,de] [--device phone,tablet-7,tablet-10,wear] [--avd flagship_api35]
+#   bash scripts/store-assets/capture-android.sh [--lang ja,de] [--device phone,tablet-7,tablet-10,wear] [--only 05,08] [--avd flagship_api35]
+#   (--only retakes just those slides and keeps the others)
 #
 # Builds the debug app and its test APK, boots the AVD headless without saving a snapshot, puts the status bar in
 # demo mode (09:41, full battery, no notifications), runs the test once per device size and language, and pulls
@@ -18,11 +19,13 @@ SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 AVD="flagship_api35"
 LANGS="$(node -e 'const l=require(process.argv[1]);console.log(l.locales.filter(x=>x.status==="ga").map(x=>x.code).join(","))' "$ROOT/i18n/locales.json")"
 DEVICES="phone,tablet-7,tablet-10,wear"
+ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --lang) LANGS="$2"; shift 2 ;;
     --device) DEVICES="$2"; shift 2 ;;
     --avd) AVD="$2"; shift 2 ;;
+    --only) ONLY="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -89,10 +92,14 @@ fi
 set_clock() { if [ "${clock_set:-0}" = 1 ]; then $ADB shell "date $(date +%m%d)0941$(date +%Y).00" >/dev/null; fi; }
 $ADB shell settings put global sysui_demo_allowed 1
 demo() { $ADB shell am broadcast -a com.android.systemui.demo -e command "$@" >/dev/null; }
+demo exit; sleep 1  # a demo mode left from an earlier run would add a second set of icons
 demo enter
 demo clock -e hhmm 0941
 demo battery -e level 100 -e plugged false
-demo network -e wifi show -e level 4 -e mobile hide
+# Wi-Fi at full strength, fully = connected with internet (without it the icon carries the "!" of a network with
+# none); no cell icon (the emulator's shows "3G", and twice, one per SIM slot).
+demo network -e airplane hide -e nosim hide -e mobile hide
+demo network -e wifi show -e level 4 -e fully true
 demo notifications -e visible false
 
 IFS=, read -ra devs <<< "$DEVICES"
@@ -112,19 +119,20 @@ for dev in "${devs[@]}"; do
   for lang in "${langs[@]}"; do
     out="$ROOT/store/captures/android/$lang/$dev"
     echo "== $dev $lang -> ${out#$ROOT/}"
-    rm -rf "$out"; mkdir -p "$out"
+    if [ -n "$ONLY" ]; then for id in ${ONLY//,/ }; do rm -f "$out/$id.png"; done; else rm -rf "$out"; fi
+    mkdir -p "$out"
     # One retry: a cold emulator now and then misses a 20 s wait on the first run of a language.
     for attempt in 1 2; do
       $ADB shell input keyevent KEYCODE_WAKEUP
       set_clock
-      $ADB shell am instrument -w -e class "$PKG.gym.StoreCaptureTest" -e storeLang "$lang" -e storeWorld "$WORLD" "$RUNNER" \
+      $ADB shell am instrument -w -e class "$PKG.gym.StoreCaptureTest" -e storeLang "$lang" -e storeWorld "$WORLD" ${ONLY:+-e storeOnly "$ONLY"} "$RUNNER" \
         | grep -E "OK \(|FAILURES|Error|Exception" | head -5 || true
       $ADB exec-out run-as "$PKG" tar c -C files store 2>/dev/null | tar x -C "$out" --strip-components 1 2>/dev/null || true
       n=$(ls "$out"/0*.png 2>/dev/null | wc -l | tr -d ' ')
-      [ "$n" = 6 ] && break
-      [ "$attempt" = 1 ] && { echo "  $n of 6 captures, retrying once" >&2; rm -f "$out"/0*.png; }
+      [ "$n" = 7 ] && break
+      [ "$attempt" = 1 ] && [ -z "$ONLY" ] && { echo "  $n of 7 captures, retrying once" >&2; rm -f "$out"/0*.png "$out"/x*.png; }
     done
-    if [ "$n" != 6 ]; then echo "  only $n of 6 captures" >&2; failed=1; fi
+    if [ "$n" != 7 ]; then echo "  only $n of 7 captures" >&2; failed=1; fi
   done
 done
 $ADB shell cmd locale set-app-locales "$PKG" --locales "" >/dev/null 2>&1 || true

@@ -16,6 +16,7 @@ export const UPDATE_APP_SENTENCES = {
   recoverySave: "Cloud recovery needs the newest version of Flagship. Update the app, then turn cloud recovery on again.",
   recoveryPasskey: "This account's recovery needs its passkey, which only the newest version of Flagship can use. Update the app, then try again.",
   startUp: "Approving a server's start-up needs the newest version of Flagship. Update the app, then try again.",
+  wipeRestart: "Wipe and restart needs a newer version of Flagship. Update the app when one is available, then try again.",
 } as const;
 
 export type UpdateAppSentence = keyof typeof UPDATE_APP_SENTENCES;

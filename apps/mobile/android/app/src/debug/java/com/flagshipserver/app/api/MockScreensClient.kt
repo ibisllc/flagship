@@ -1442,8 +1442,12 @@ class MockScreensClient(
     /** Chats the owner deployed from the chat. */
     val chatDeploys: MutableList<String> = mutableListOf()
 
+    /** Store screenshots: the store world's build chat (StoreWorld.build), served as it is, with no stream. */
+    var storeChat: VibeCodeSessionPublicState? = null
+
     override suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState {
         tick()
+        storeChat?.takeIf { it.id == sessionId }?.let { return it }
         val n = now()
         val continued = chatReplies.any { it.first == sessionId && it.second.envVarStatus == null }
         if (chatVariant != "env" || continued) {
@@ -1695,6 +1699,7 @@ class MockScreensClient(
     }
 
     override fun vibeCodeStream(sessionId: String): Flow<VibeCodeFrame> = flow {
+        if (storeChat?.id == sessionId) return@flow
         val tokens = listOf(
             "Sketching ", "schema. ", "Two tables: ", "habits, ", "check_ins.\n",
             "Building manifest…\n",
@@ -2386,7 +2391,10 @@ class MockScreensClient(
         const val GYM_SEPARATE_APP = "bright-maple--plants"
 
         /** The names the account directory would give them (decrypted on the phone). */
-        val DEVICE_NAMES = mapOf(SELF_DEVICE_ID to "Pixel 9", OTHER_DEVICE_ID to "Kitchen iPad")
+        val DEVICE_NAMES get() = mapOf(SELF_DEVICE_ID to (storeSelfName ?: "Pixel 9"), OTHER_DEVICE_ID to "Kitchen iPad")
+        /** Store screenshots: this phone's name in the capture's language (StoreWorld.deviceName), never a model name. */
+        @Volatile
+        var storeSelfName: String? = null
     }
 
     // ---- Container stack (packages/server-daemon/src/archV2Switch.ts) --------------------------

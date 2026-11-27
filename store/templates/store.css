@@ -75,7 +75,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); -webk
 
 /* the watch: case, crown and two strap stubs, flat */
 .watch { position: relative; flex: none; }
-.watch .strap { position: absolute; left: 18%; right: 18%; background: var(--bg-2); box-shadow: inset 0 0 0 max(1px, calc(var(--u) * 0.06)) var(--rule-strong); }
+.watch .strap { position: absolute; left: 22%; right: 22%; background: var(--body); box-shadow: 0 0 0 max(1px, calc(var(--u) * 0.06)) var(--body-edge); }
 .watch .case { position: absolute; background: var(--body); box-shadow: 0 0 0 max(1px, calc(var(--u) * 0.06)) var(--body-edge); }
 .watch .screen { position: absolute; overflow: hidden; background: #000; }
 .watch .screen img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -93,6 +93,16 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); -webk
 .missing b { color: #B91C1C; font-weight: 600; letter-spacing: 0.14em; font-size: 1.25em; }
 .missing span { background: var(--bg-2); padding: 0.1em 0.3em; overflow-wrap: anywhere; }
 .missing.round { border-radius: 50%; padding: 18%; text-align: center; align-items: center; }
+
+/* ---- slide 1: the caller's browser, over the ringing phone -------------------------------- */
+
+.browser { position: absolute; z-index: 3; overflow: hidden; background: #F7F6F2; box-shadow: 0 0 0 var(--ring) var(--bg), 0 0 0 calc(var(--ring) + max(1px, calc(var(--u) * 0.06))) var(--rule-strong); }
+.browser .bar { position: absolute; left: 0; right: 0; top: 0; background: #ECEAE3; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #DCD9D0; }
+.browser .addr { display: flex; align-items: center; gap: 0.5em; padding: 0 1.2em; width: 78%; justify-content: center; background: #FFFFFF; color: #3F3C35; font-family: var(--mono); font-weight: 500; letter-spacing: 0.01em; }
+.browser .addr svg { color: #6B675E; flex: none; }
+.browser .page { position: absolute; left: 0; right: 0; overflow: hidden; }
+.browser .page img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: top center; }
+.browser .tap { position: absolute; border-radius: 50%; background: rgba(20, 184, 166, 0.22); box-shadow: 0 0 0 max(2px, calc(var(--u) * 0.12)) rgba(15, 118, 110, 0.55); }
 
 /* ---- slide 1: the app icon's circle, huge, behind the phone ------------------------------- */
 

@@ -16,18 +16,29 @@ struct StoreWorld: Decodable {
         let slug: String; let name: String; let summary: String; let server: String; let access: String
         /// The summary in other languages (lang code -> text); English is `summary`.
         let summaryByLang: [String: String]?
+        /// The app's voi.ci link (a random code or a custom name), so every row shows its own.
+        let link: String?
         var localizedSummary: String { GymSweepSeams.localized((summaryByLang ?? [:]).merging(["en": summary]) { a, _ in a }) }
     }
     struct Member: Decodable { let name: String; let rank: String }
     struct Backups: Decodable {
         let server: String; let keep: Int; let policy: String; let lastHoursAgo: Int; let sizeGiB: Double
     }
-    /// Slide 06: one conversation from the account's voi.ci page, in the capture's language.
+    /// Slide 03: the conversations from the account's voi.ci page, in the capture's language: Sam's, then `others`.
     struct Messages: Decodable {
         struct Line: Decodable { let from: String; let minutesAgo: Int; let text: [String: String] }
+        /// Another person who wrote: a fixed visitor key (`seed`, one byte repeated) and the owner's nickname.
+        struct Other: Decodable { let id: String; let seed: UInt8; let nickname: [String: String]; let thread: [Line] }
         let displayName: String
         let nickname: [String: String]
         let thread: [Line]
+        let others: [Other]?
+    }
+    /// Slide 08: a build chat, ready to deploy.
+    struct Build: Decodable {
+        struct Message: Decodable { let role: String; let minutesAgo: Int; let text: [String: String] }
+        let sessionId: String; let name: String; let server: String; let credits: Double?
+        let messages: [Message]
     }
     /// Slides 01 and 02 (0.4): the call ringing, and this device's call list ("nickname" = the thread's visitor).
     struct Calls: Decodable {
@@ -47,6 +58,7 @@ struct StoreWorld: Decodable {
     let backups: Backups
     let messages: Messages?
     let calls: Calls?
+    let build: Build?
 
     /// The caller's name on the ringing screen: the owner's nickname for the thread's visitor, in the capture's language.
     var ringingName: String? {
@@ -97,6 +109,9 @@ extension GymSweepSeams {
                 identityPubKeyHex: HexUtil.encode(stk(s.fqdn).publicKey.rawRepresentation))
         })
         app.hasCloudRecovery = true
+        mocks.server?.storeShortCodes = Dictionary(uniqueKeysWithValues: world.apps.compactMap { a in
+            a.link.map { ("\(world.account)--\(a.slug)", $0) }
+        })
 
         podClients = [:]
         var boxes: [String: MockScreensClient] = [:]
@@ -130,6 +145,7 @@ extension GymSweepSeams {
             podClients[s.name] = box
         }
         for box in boxes.values { box.unreachablePodIds = waiting ? ["store-\(world.unlockRequest.server)"] : [] }
+        if let b = world.build, let box = boxes[b.server] { storeChat(b, on: box) }
 
         if let home = boxes[world.backups.server] {
             let b = world.backups
@@ -251,31 +267,81 @@ extension GymSweepSeams {
                 }
             }
         }
-        m.mailbox[user] = items
-        storeCalls(world, user: user, conv: conv, sam: visitor.pseudonymPub, now: now)
+        var people: [String: (conv: String, pseudonymPub: String)] = ["nickname": (conv, visitor.pseudonymPub)]
         var state = MessagesState()
         state.nicknames[visitor.pseudonymPub] = MessagesState.Nickname(name: localized(w.nickname), at: now - 3_000_000)
         state.accepted = [conv]
+        for o in w.others ?? [] {
+            guard let v = try? MockVoiciVisitor(secret: [UInt8](repeating: o.seed, count: 32), pageId: gymPageId, origin: Endpoints.voiciOrigin, now: now),
+                  let oc = try? VoiciMessages.voiciConv(pageId: gymPageId, pseudonymPub: v.pseudonymPub) else { continue }
+            let conversation = VoiciConversation(conv: oc, pseudonymPub: v.pseudonymPub, threadPub: CanonicalJson.hex(v.thread.publicKey),
+                                                 messages: [], hasGap: false)
+            var vSeq: Int64 = 0
+            var oSeq: Int64 = 0
+            for line in o.thread {
+                let at = now - Int64(line.minutesAgo) * 60_000
+                if line.from == "owner" {
+                    oSeq += 1
+                    if let r = try? VoiciOwner.reply(text: localized(line.text), replyTo: nil, conversation: conversation, pageId: gymPageId, pageSeq: 1,
+                                                     ownerSign: (sign.seed, idx.ownerSignPub), inboxPub: inboxPub, seq: oSeq, now: at) {
+                        items.append(VoiciInboxItem(envelope: r.json, storedAt: at, fetchedAt: at + 60_000))
+                    }
+                } else {
+                    vSeq += 1
+                    if let e = try? v.message(localized(line.text), inboxPub: inboxPub, seq: vSeq, sentAt: at) {
+                        items.append(VoiciInboxItem(envelope: e, storedAt: at))
+                    }
+                }
+            }
+            people[o.id] = (oc, v.pseudonymPub)
+            state.nicknames[v.pseudonymPub] = MessagesState.Nickname(name: localized(o.nickname), at: now - 3_000_000)
+            state.accepted.append(oc)
+        }
+        m.mailbox[user] = items.sorted { $0.storedAt < $1.storedAt }
+        storeCalls(world, user: user, people: people)
         if let sealed = try? VoiciMessages.sealMessagesState(stateKey: VoiciMessages.deriveMessagesStateKey(umk: umk), username: user,
                                                             version: 1, state: state) {
             m.states[user] = sealed.json
         }
     }
 
-    /// Slide 02: this device's call list (kept on the device only), newest first, Sam's calls under his conversation;
-    /// an unnamed visitor's under a pseudonym with no thread. Calls not seen yet, so the call button shows the missed one.
-    static func storeCalls(_ world: StoreWorld, user: String, conv: String, sam: String, now: Int64) {
+    /// Slide 03: this device's call list (kept on the device only), newest first. A call `from` "nickname" is Sam's, an
+    /// `others` id that person's (named by the owner's nickname for their conversation), null an unnamed visitor's.
+    /// Not seen yet, so the call button shows the missed ones.
+    static func storeCalls(_ world: StoreWorld, user: String, people: [String: (conv: String, pseudonymPub: String)]) {
         guard let calls = world.calls else { return }
+        // The list shows each call's clock time: count back from 9:41 today, the status bar's time (the simulator's
+        // clock can't be set), so a call "30 minutes ago" reads 9:11.
+        var anchor = Calendar.current.date(bySettingHour: 9, minute: 41, second: 0, of: Date()) ?? Date()
+        if anchor > Date() { anchor = Date() }
+        let now = Int64(anchor.timeIntervalSince1970 * 1000)
         let stranger = String(repeating: "7c", count: 32)
         let records = calls.history.enumerated().map { i, e in
-            VoiciCallRecord(callId: String(format: "%032x", 0xca11 + i), direction: e.direction == "outgoing" ? .outgoing : .incoming,
-                            outcome: VoiciCallRecord.Outcome(rawValue: e.outcome) ?? .answered,
-                            peer: e.from == "nickname" ? .visitor(conv: conv, pseudonymPub: sam)
-                                : .visitor(conv: String(repeating: "c7", count: 16), pseudonymPub: stranger),
-                            video: e.video, at: now - Int64(e.minutesAgo) * 60_000, durationMs: Int64(e.durationSec ?? 0) * 1000)
+            let who = e.from.flatMap { people[$0] } ?? (conv: String(repeating: "c7", count: 16), pseudonymPub: stranger)
+            return VoiciCallRecord(callId: String(format: "%032x", 0xca11 + i), direction: e.direction == "outgoing" ? .outgoing : .incoming,
+                                   outcome: VoiciCallRecord.Outcome(rawValue: e.outcome) ?? .answered,
+                                   peer: .visitor(conv: who.conv, pseudonymPub: who.pseudonymPub),
+                                   video: e.video, at: now - Int64(e.minutesAgo) * 60_000, durationMs: Int64(e.durationSec ?? 0) * 1000)
         }
         if let data = try? JSONEncoder().encode(records) { FileCallHistoryStore.standard.write(user, data) }
         UserDefaults.standard.removeObject(forKey: SocialBadges.callsSeenKey(user))
+    }
+
+    /// Slide 08: the world's build chat on its server's box, ready to deploy, in the capture's language.
+    static func storeChat(_ b: StoreWorld.Build, on box: MockScreensClient) {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let messages = b.messages.enumerated().map { i, m in
+            VibeCodeSessionMessage(role: m.role, text: localized(m.text), timestamp: now - Int64(m.minutesAgo) * 60_000,
+                                   credits: m.role == "assistant" && i == b.messages.count - 1 ? b.credits : nil)
+        }
+        box.vibeCodeSessionsFixture = [
+            VibeCodeSessionMeta(sessionId: b.sessionId, startedAt: now - Int64(b.messages.first?.minutesAgo ?? 15) * 60_000,
+                                status: "ready-to-deploy", name: b.name, updatedAt: now - 60_000),
+        ]
+        box.vibeCodeQuietStreams = [b.sessionId]
+        box.vibeCodeSessionStateFixtures[b.sessionId] = VibeCodeSessionPublicState(
+            id: b.sessionId, appId: nil, status: "ready-to-deploy", messages: messages, pendingRequest: nil, model: "medium",
+            summarised: false, canContinue: true, provider: "flagship", conversationTokens: 24_000)
     }
 
     private static func decode<T: Decodable>(_ object: [String: Any]) -> T? {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Store listings by API (docs/runbooks/post-0.4-store-listing.md §1, §4). Google Play part.
+// Store listings by API (docs/runbooks/post-0.4-store-listing.md §1, §4). Google Play here; App Store in
+// appstore-upload.mjs (`store-upload.mjs appstore ...`).
 //
 //   node scripts/store-assets/store-upload.mjs play [--apply] [--images <pack-dir>]
 //
@@ -28,7 +29,12 @@ const PACK_DIR_FOR = { "es-419": "es-ES" }; // the pack has no es-419 folder: it
 const [store, ...rest] = process.argv.slice(2);
 const apply = rest.includes("--apply");
 const imagesAt = rest.includes("--images") ? rest[rest.indexOf("--images") + 1] : null;
-if (store !== "play") { console.error("usage: store-upload.mjs play [--apply] [--images <pack-dir>]"); process.exit(2); }
+if (store === "appstore") {
+  const { appstore } = await import("./appstore-upload.mjs");
+  await appstore({ root: ROOT, apply, imagesAt });
+  process.exit(0);
+}
+if (store !== "play") { console.error("usage: store-upload.mjs play|appstore [--apply] [--images <pack-dir>]"); process.exit(2); }
 
 if (imagesAt) { // a pack missing any class or language is refused whole, before anything on Play is touched
   const missing = Object.keys(IMAGE_TYPE).flatMap((cls) => Object.values(PLAY_LOCALE).map((loc) => path.join(imagesAt, "playstore", cls, loc)))
