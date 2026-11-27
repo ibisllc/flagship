@@ -185,6 +185,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0162",
   // Paired devices stored their push service as their platform ("fcm" showed as "Device"): mapped to the platform.
   "0163",
+  // Account master-key rotation: the lane of signed hops, sealed deliveries, device receive keys, the key epoch.
+  "0164",
 ];
 
 export interface SchemaStatusDeps {

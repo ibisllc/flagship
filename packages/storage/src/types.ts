@@ -136,6 +136,11 @@ export interface UsernameRecord {
    * "no admin root" and deny sensitive ops. See docs/device-admin-tier-spec.md.
    */
   adminRootPubHex?: string;
+  /**
+   * The account's key epoch (migration 0164): 0 until the first account master-key rotation, then the
+   * `toEpoch` of the last hop applied (docs/account-key-rotation.md). Absent on pre-0164 reads means 0.
+   */
+  keyEpoch?: number;
 }
 
 export type AuthCodeStatus = "active" | "used" | "revoked";
@@ -555,7 +560,10 @@ export type AuditEventKind =
   // Who can invite (docs/service-access-gating.md): a non-admin device of the
   // account invited someone to an app (at Member). Content-free: no app,
   // person or device name.
-  | "invite-created";
+  | "invite-created"
+  // The account's master key was changed by an admin device: the lane moved one epoch; removed and
+  // not-kept devices were revoked in the same step. Content-free (no device names).
+  | "account-key-rotated";
 
 /**
  * Plan B Phase 5 — recovery-method tag stored next to a re-pair
@@ -1563,6 +1571,113 @@ export interface AdminRootRotationStorage {
   list(username: string): Promise<AdminRootRotationRecord[]>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Account master-key rotation (migration 0164, docs/account-key-rotation.md)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface AccountKeyRotationRecord {
+  username: string;
+  fromEpoch: number;
+  toEpoch: number;
+  /** SHA-256 of the hop's canonical bytes: its idempotency key. */
+  rotationDigestHex: string;
+  /** The admin root that signed the hop (places it on the lane after that root's own rotation). */
+  adminRootPubHex: string;
+  oldIrkPubHex: string;
+  newIrkPubHex: string;
+  /** `{ rotation, signatures, pq? }` exactly as accepted, relayed to boxes and devices unread. */
+  hopJson: string;
+  /** `[{ deviceId, devicePubHex }]`: the kept devices the hop's digest covers. */
+  keptJson: string;
+  appliedAt: number;
+}
+
+export interface UmkRotationDeliveryRecord {
+  username: string;
+  toEpoch: number;
+  deviceId: string;
+  devicePubHex: string;
+  sealKind: "xwing" | "ed25519";
+  sealedHex: string;
+  /** The admin-root-signed `UmkRotationDelivery` fields as JSON. */
+  deliveryJson: string;
+  signatureHex: string;
+  createdAt: number;
+  expiresAt: number;
+  ackedAt: number | null;
+}
+
+export interface DeviceReceiveKeyRecord {
+  accountId: string;
+  deviceId: string;
+  devicePubHex: string;
+  xwingPubHex: string;
+  issuedAt: number;
+  signatureHex: string;
+  updatedAt: number;
+}
+
+/** What happens to the cloud-recovery record in the same step. */
+export type AccountKeyRotationRecovery =
+  | { kind: "replace"; record: WebauthnRecoveryRecord; expectedPriorDigest: string }
+  | { kind: "delete"; expectedDigest: string }
+  | { kind: "absent" };
+
+/**
+ * One rotation, applied all or nothing. The swap is a compare-and-set on the account's IRK, key epoch and
+ * admin root; every other write is conditioned on it, and a precondition that no longer holds at commit
+ * (the recovery record or a kept device changed) fails the whole step.
+ *
+ * `expectedPriorDigest` / `expectedDigest`: a record's digest, `legacy` (a row without one) or `genesis`
+ * (no row).
+ */
+export interface AccountKeyRotationApply {
+  rotation: AccountKeyRotationRecord;
+  expectedAdminRootPubHex: string;
+  newAidPubHex: string;
+  /** Kept devices: every other active identity of the account is revoked, with its grants and push tokens. */
+  kept: { deviceId: string; devicePubHex: string }[];
+  /** Active membership-signed grants of kept devices are revoked; these replace them (and any grant of the same device). */
+  newGrants: DeviceCapabilityGrantRecord[];
+  recovery: AccountKeyRotationRecovery;
+  /** The re-encrypted account profile, or null to drop the old one. Self profiles and directory key grants are dropped. */
+  accountProfile: AccountProfileRecord | null;
+  /** Re-encrypted managed profiles of kept devices; every other managed profile is dropped. */
+  managedProfiles: DeviceManagedProfileRecord[];
+  deliveries: UmkRotationDeliveryRecord[];
+  audit: Omit<AuditEventRecord, "seq">;
+  at: number;
+}
+
+export interface AccountKeyRotationStorage {
+  /** Applies the rotation. `{ ok: false }` when the compare-and-set or a precondition failed (nothing changed). */
+  apply(plan: AccountKeyRotationApply): Promise<{ ok: true } | { ok: false; reason: "conflict" }>;
+  /** The account's hops, epoch ascending. */
+  list(username: string): Promise<AccountKeyRotationRecord[]>;
+  getByDigest(rotationDigestHex: string): Promise<AccountKeyRotationRecord | undefined>;
+  /** Deliveries for this device not yet acknowledged and not expired, epoch ascending. */
+  listPendingDeliveries(username: string, deviceId: string, now: number): Promise<UmkRotationDeliveryRecord[]>;
+  /** Marks the device's deliveries up to `toEpoch` acknowledged. Returns how many changed. */
+  ackDeliveries(username: string, deviceId: string, toEpoch: number, at: number): Promise<number>;
+  putReceiveKey(rec: DeviceReceiveKeyRecord): Promise<void>;
+  getReceiveKey(accountId: string, deviceId: string): Promise<DeviceReceiveKeyRecord | undefined>;
+  listReceiveKeys(accountId: string): Promise<DeviceReceiveKeyRecord[]>;
+  /**
+   * Replaces an active device's key (device-key-rotate) while it is still `oldDevicePubHex`, marks it
+   * `random`, drops its receive key (signed by the old key) and swaps its grant: `revokeGrantIds` are
+   * revoked and `newGrant` stored, in one step. False when the device or its key changed.
+   */
+  rotateDeviceKey(args: {
+    accountId: string;
+    deviceId: string;
+    oldDevicePubHex: string;
+    newDevicePubHex: string;
+    revokeGrantIds: string[];
+    newGrant: DeviceCapabilityGrantRecord | null;
+    at: number;
+  }): Promise<boolean>;
+}
+
 export interface DaemonStatusRecord {
   serverDomain: string;
   certSha256: string | null;
@@ -1957,6 +2072,8 @@ export interface Storage {
   serverEvictions: ServerEvictionStorage;
   serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
+  /** Account master-key rotation: the lane of hops, deliveries, receive keys (migration 0164). */
+  accountKeyRotations: AccountKeyRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   watchBootKeys: WatchBootKeyStorage;
   bootSuspensions: BootSuspensionStorage;
@@ -3041,6 +3158,8 @@ export interface DeviceIdentityRecord {
   createdAt: number;
   lastSeenAt: number;
   revokedAt: number | null;
+  /** How the key was made, when known (migration 0164): `random` once it was replaced by a key rotate. */
+  keyOrigin?: string | null;
 }
 
 export interface DeviceIdentityStorage {

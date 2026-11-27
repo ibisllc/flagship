@@ -8,6 +8,7 @@ import { InMemoryNameRegistryStorage, NAME_HOLD_MS, type NameRecord } from "./na
 import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
 import { InMemoryRelayHealthStorage } from "./relayHealth.js";
 import { InMemoryBoxProxyLaneStorage } from "./boxProxyLane.js";
+import { InMemoryAccountKeyRotationStorage } from "./accountKeyRotations.js";
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
@@ -199,8 +200,15 @@ export class InMemoryUsernameStorage implements UsernameStorage {
       // Slice D (0064) — the pinned admin master root survives a benign
       // re-put, mirroring the AID (a recovery-flow re-claim must not drop it).
       adminRootPubHex: rec.adminRootPubHex ?? existing?.adminRootPubHex,
+      ...(rec.keyEpoch ?? existing?.keyEpoch ? { keyEpoch: rec.keyEpoch ?? existing?.keyEpoch } : {}),
     });
     return { ok: true as const };
+  }
+  /** Account key rotation (InMemoryAccountKeyRotationStorage): the swap after its checks passed. */
+  setAccountKeys(username: string, irkPubHex: string, aidPubHex: string, keyEpoch: number): void {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (r) this.byName.set(norm, { ...r, irkPubHex, aidPubHex, keyEpoch });
   }
   async get(username: string) {
     const r = this.byName.get(username.toLowerCase());
@@ -839,6 +847,14 @@ export class InMemoryPushTokenStorage implements PushTokenStorage {
 export class InMemoryDeviceIdentityStorage implements DeviceIdentityStorage {
   private rows = new Map<string, DeviceIdentityRecord>();
   private key(accountId: string, deviceId: string) { return `${accountId.toLowerCase()}|${deviceId}`; }
+  /** Device key rotate (InMemoryAccountKeyRotationStorage): false unless the device is active on `oldPub`. */
+  rekey(accountId: string, deviceId: string, oldPub: string, newPub: string): boolean {
+    const row = this.rows.get(this.key(accountId, deviceId.toLowerCase()));
+    if (!row || row.revokedAt !== null || row.devicePubHex !== oldPub.toLowerCase()) return false;
+    row.devicePubHex = newPub.toLowerCase();
+    row.keyOrigin = "random";
+    return true;
+  }
   async put(rec: DeviceIdentityRecord) {
     const accountId = rec.accountId.toLowerCase();
     const deviceId = rec.deviceId.toLowerCase();
@@ -2694,6 +2710,19 @@ export class InMemoryStorage implements Storage {
   relayHealth = new InMemoryRelayHealthStorage();
   boxProxyLane = new InMemoryBoxProxyLaneStorage();
   directAccess = new InMemoryDirectAccessStorage();
+  accountKeyRotations = new InMemoryAccountKeyRotationStorage({
+    usernames: this.usernames,
+    identities: this.deviceIdentities,
+    grants: this.deviceCapabilityGrants,
+    pushTokens: this.pushTokens,
+    pendingRePairs: this.pendingRePairs,
+    webauthnRecovery: this.webauthnRecovery,
+    accountProfiles: this.accountProfiles,
+    selfProfiles: this.deviceSelfProfiles,
+    managedProfiles: this.deviceManagedProfiles,
+    directoryKeyGrants: this.accountDirectoryKeyGrants,
+    auditEvents: this.auditEvents,
+  });
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,
     this.deviceIdentities,

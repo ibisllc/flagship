@@ -15,6 +15,11 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
   ["abuse_notices", "account"],
   ["account_suspensions", "account"],
   ["admin_root_rotations", "username"],
+  // The account key lane, its pending deliveries and the devices' receive keys belong to the account. A hop's
+  // signed bytes keep the name it was made under; boxes and devices replay only the hops after their own place.
+  ["account_key_rotations", "username"],
+  ["umk_rotation_deliveries", "username"],
+  ["device_receive_keys", "account_id"],
   ["app_purchases", "username"],
   ["app_sales", "buyer_account"],
   ["audit_events", "username"],

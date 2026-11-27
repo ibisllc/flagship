@@ -11,6 +11,7 @@ import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js
 import { D1DirectAccessStorage, type DirectAccessStorage } from "./directAccess.js";
 import { D1VoiciStorage, type VoiciStorage } from "./voici.js";
 import { D1VoiciCallStorage, type VoiciCallStorage } from "./voiciCalls.js";
+import { D1AccountKeyRotationStorage } from "./accountKeyRotations.js";
 import { D1ServerBootKeyStorage, type ServerBootKeyStorage } from "./serverBootKeys.js";
 import { D1BoxClaimStorage, type BoxClaimStorage } from "./boxClaims.js";
 import { D1OrgStorage, type OrgStorage } from "./orgs.js";
@@ -51,6 +52,7 @@ import type {
   ServerMigrationStorage,
   AdminRootRotationRecord,
   AdminRootRotationStorage,
+  AccountKeyRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   WatchBootKeyRecord,
@@ -208,6 +210,8 @@ interface UsernameRow {
   username: string;
   irk_pub_hex: string;
   claimed_at: number;
+  /** Account master-key rotation (migration 0164); nullable for a pre-migration read. */
+  key_epoch?: number | null;
   /** 0/1; nullable so a pre-migration row (no column) decodes safely. */
   is_demo?: number | null;
   // v1.2 — security-cascade columns (migration 0028). All four are
@@ -296,6 +300,7 @@ function rowToUsername(r: UsernameRow): UsernameRecord {
     ...(r.admin_root_pub_hex != null
       ? { adminRootPubHex: r.admin_root_pub_hex }
       : {}),
+    ...(r.key_epoch != null && r.key_epoch > 0 ? { keyEpoch: r.key_epoch } : {}),
   };
 }
 function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
@@ -3725,6 +3730,7 @@ interface DeviceIdentityRow {
   created_at: number;
   last_seen_at: number;
   revoked_at: number | null;
+  key_origin?: string | null;
 }
 
 function rowToDeviceIdentity(row: DeviceIdentityRow): DeviceIdentityRecord {
@@ -3736,6 +3742,7 @@ function rowToDeviceIdentity(row: DeviceIdentityRow): DeviceIdentityRecord {
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
     revokedAt: row.revoked_at,
+    ...(row.key_origin != null ? { keyOrigin: row.key_origin } : {}),
   };
 }
 
@@ -5367,6 +5374,7 @@ export class D1Storage implements Storage {
   serverEvictions: ServerEvictionStorage;
   serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
+  accountKeyRotations: AccountKeyRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   watchBootKeys: WatchBootKeyStorage;
   bootSuspensions: BootSuspensionStorage;
@@ -5440,6 +5448,7 @@ export class D1Storage implements Storage {
     this.serverEvictions = new D1ServerEvictionStorage(db);
     this.serverMigrations = new D1ServerMigrationStorage(db);
     this.adminRootRotations = new D1AdminRootRotationStorage(db);
+    this.accountKeyRotations = new D1AccountKeyRotationStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.watchBootKeys = new D1WatchBootKeyStorage(db);
     this.bootSuspensions = new D1BootSuspensionStorage(db);
