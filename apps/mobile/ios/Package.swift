@@ -8,7 +8,7 @@ import PackageDescription
 // tools/libwebrtc/artifacts.sha256; never edit it by hand). For development, tools/libwebrtc/use-artifacts.sh unpacks
 // a CI run (checked against the same pin) into Vendor/WebRTC (git-ignored), which wins. With neither, FlagshipUI builds
 // with StubCallMediaEngine: calls ring but never connect (`#if canImport(WebRTC)` in WebRTCCallMediaEngine.swift).
-let webrtcRelease: (base: String, webrtc: String, turn: String)? = ("https://github.com/ibisllc/flagship/releases/download/libwebrtc-157-44099203173", "056732acec00349711d95f0630af70e3e2bdd7b403a690b6752448817f3b85ae", "00019a3b32e7de779027686d0a6bc631b083405cd22d0d0d2519d0c246fffdee")
+let webrtcRelease: (base: String, webrtc: String, turn: String)? = ("https://github.com/ibisllc/flagship/releases/download/libwebrtc-157-45414303796", "6b6cbae806b4af70ce15ad1d5a3bd13c162acfd6a0bf3fd58ec5d1636bb09324", "4d4ff7aed1738f8e7e39b05c80475f040e03414c8adffbbd8133375464fa0543")
 let vendorWebRTC = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/WebRTC")
 let webrtcLocal = ["WebRTC.xcframework", "FlagshipTurn.xcframework"].allSatisfy {
     FileManager.default.fileExists(atPath: vendorWebRTC.appendingPathComponent($0).path)

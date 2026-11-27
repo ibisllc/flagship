@@ -275,9 +275,9 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   security-reports` (YubiKey; `--triage`). Resend notices go to security@ from `mail.flagshipserver.com`.
   Owner steps left (deploy sheet 3c): Turnstile widget, optional triage key.
 - Shrink the phone apps (0.5 list): merged into `release/0.5` 2026-11-27 (VP8-only libwebrtc build config, Android
-  WebP welcome art). The new libwebrtc is NOT pinned yet: the apps still use the old build until
-  `docs/runbooks/pre-0.5-call-codec-tests.md` is done (device call matrix, then the pin). The 0.5 release gate refuses
-  to ship while it is OPEN.
+  WebP welcome art), pinned there to `libwebrtc-157-45414303796` (main keeps the old one). Before 0.5 ships, the
+  device call matrix in `docs/runbooks/pre-0.5-call-codec-tests.md` must pass: the release gate refuses 0.5 while it is
+  OPEN.
 
 0.3 shipped: App Store 1.2 (8) and Play 11 / Wear 1000011 approved 2026-11-08 (Play then rejected Wear 1000011 on its
 listing; the fixed listing is in review). Its open owner steps (the 0.2 update notice, the runtime manifest re-sign

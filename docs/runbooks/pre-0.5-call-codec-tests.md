@@ -12,24 +12,22 @@ real call, so the full device matrix below must pass **before** this build is pi
 `scripts/check-carryover.mjs` fails the 0.5 release preflight and vitest while this file is OPEN. Close it with
 `Status: DONE <date>` and a Log line, never to get past the gate.
 
-**State (2026-11-27).** Merged into `release/0.5`; **not pinned**: `tools/libwebrtc/release.env` and the
-`webrtcRelease` line of `apps/mobile/ios/Package.swift` still point at `libwebrtc-157-44099203173`, so builds of
-`release/0.5` still ship the old, full libwebrtc until step 3. The new libraries are CI run **45414303796**
-(`.github/workflows/libwebrtc.yml`, branch `claude/friendly-goldberg-f0jbky`); its `libwebrtc` artifact is kept until
-**2027-02-23** (rerun the workflow on `release/0.5` if it has expired, then use the new run id below). Its
-`SHA256SUMS`: `WebRTC.xcframework.zip 6b6cbae8…09324`, `libwebrtc.aar d7e040a1…f403`,
-`FlagshipTurn.xcframework.zip 4d4ff7ae…0543`, `flagship-turn-android.zip 8eb2998f…6804`.
+**State (2026-11-27).** Pinned on `release/0.5` (owner: its builds must carry the smaller stack, so the tests catch
+what breaks): `tools/libwebrtc/release.env`, the `webrtcRelease` line of `apps/mobile/ios/Package.swift` and
+`artifacts.sha256` point at the pre-release **`libwebrtc-157-45414303796`** (CI run 45414303796 from `e7be6196e`).
+`main` stays on `libwebrtc-157-44099203173` until 0.5 lands. Its `SHA256SUMS`: `WebRTC.xcframework.zip 6b6cbae8…09324`,
+`libwebrtc.aar d7e040a1…f403`, `FlagshipTurn.xcframework.zip 4d4ff7ae…0543`, `flagship-turn-android.zip 8eb2998f…6804`.
 
-## 1. Test builds with the new libraries (Claude, on the Mac)
+## 1. Test builds (Claude, on the Mac)
 
-`tools/libwebrtc/use-artifacts.sh 45414303796 --record` unpacks the libraries into the git-ignored vendor folders
-(which win over the pinned release) and writes the pin to `tools/libwebrtc/artifacts.sha256`. Then:
+Any build of `release/0.5` uses the pinned smaller stack (no vendor folders needed: an `apps/mobile/ios/Vendor/WebRTC` or
+`apps/mobile/android/vendor/webrtc` left over from earlier testing wins over the pin, so delete those first).
 - **iOS:** an ad-hoc export (`method release-testing`; a development build gets a sandbox VoIP token and never rings),
   installed with `xcrun devicectl device install app`. Override the version on the command line
   (`MARKETING_VERSION=… CURRENT_PROJECT_VERSION=…`) with a build number above every burned one.
 - **Android:** a debug build with a separate application id suffix (a "calltest" app beside the store app), installed
   over adb on the owner's phone.
-Disk rule: `use-artifacts.sh --clean` and delete DerivedData when done. Never build WebRTC on the Mac.
+Disk rule: delete DerivedData when done. Never build WebRTC on the Mac.
 
 ## 2. The call matrix (owner with Claude)
 
@@ -47,15 +45,15 @@ Each call: rings, both sides hear each other, video on both ways, hang-up from e
 | 7 | A call placed from the app (not the browser), and ringing back a missed call | |
 | 8 | Firefox → iPhone and → Android | |
 
-## 3. Pin (Claude, after the owner's go)
+## 3. If a row fails
 
-1. Publish the run's output as a GitHub release (as `libwebrtc-157-44099203173` was: a pre-release holding exactly the
-   four files and `SHA256SUMS`), tag `libwebrtc-157-45414303796`.
-2. `tools/libwebrtc/pin-release.sh libwebrtc-157-45414303796` (it checks the release's `SHA256SUMS` against the pin),
-   commit `release.env`, `Package.swift`, `artifacts.sha256` on `release/0.5`.
-3. A clean build of both apps from the pin (no vendor folders), one call from the matrix again, then the size check
-   (`strings` for dav1d / libaom must find nothing).
+Fix it on `release/0.5`. A fix inside libwebrtc means a new run of `.github/workflows/libwebrtc.yml` on `release/0.5`,
+then a pre-release of its output (the four files, `manifest.json`, `SHA256SUMS`), `artifacts.sha256` from its
+`SHA256SUMS`, `tools/libwebrtc/pin-release.sh <tag>`, and the whole matrix again. When every row passes, the size check
+(`strings` on the built app finds no dav1d / libaom), then close this runbook.
 
 ## Log
 
-- 2026-11-27: merged into `release/0.5` unpinned (owner: keep the repo lean, test before release). Matrix row 1 passed.
+- 2026-11-27: merged into `release/0.5` (owner: keep the repo lean, test before release); branch
+  `claude/friendly-goldberg-f0jbky` deleted. Pinned to `libwebrtc-157-45414303796` the same day. Matrix row 1 passed
+  (on an ad-hoc build with the same libraries from the vendor folders).
