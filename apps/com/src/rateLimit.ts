@@ -31,6 +31,10 @@ import { recordRateLimitEvents, type RateLimitEvent } from "./rateLimitLog.js";
 
 export type { WindowRule } from "./rateLimitCounter.js";
 
+/** Every form report counts against one budget: the "subject" of its daily cap. */
+export const SECURITY_REPORT_SUBJECT = "all";
+export const SECURITY_REPORTS_PER_DAY = 200;
+
 /** The slice of a Durable Object namespace the limiter uses. */
 export interface RateLimitNamespace {
   idFromName(name: string): unknown;
@@ -232,6 +236,9 @@ export type RateLimitEndpoint =
   | "abuse-report"
   | "abuse-notices"
   | "abuse-notice-done"
+  // Vulnerability reports from the website form (securityReports.ts): anonymous, the address counted here and never
+  // stored; one shared daily cap so a flood from many addresses cannot fill D1 (the page keeps the email fallback).
+  | "security-report"
   // voi.ci pages and the Messages mailbox (voiciRoutes.ts; §9.4). Charged by voiciRoutes itself, not endpointFor:
   // sends per address (owner replies included); new conversations into one page (subject = pageId); publishes and
   // piece uploads per address and per account (subject = username; the 50 MiB a day is counted in D1); a browser's
@@ -598,6 +605,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "abuse-report": [{ axis: "ip", limit: 10, windowSec: 3600 }],
   "abuse-notices": [{ axis: "ip", limit: 600, windowSec: 3600 }],
   "abuse-notice-done": [{ axis: "ip", limit: 30, windowSec: 3600 }],
+  "security-report": [
+    { axis: "ip", limit: 5, windowSec: 3600 },
+    { axis: "subject", limit: SECURITY_REPORTS_PER_DAY, windowSec: 86_400 },
+  ],
   // Voucher redeem — flood fence over an already-unguessable 100-bit code.
   "voucher-redeem": [
     { axis: "ip", limit: 10, windowSec: 60 },
@@ -861,6 +872,7 @@ export function retryAfterPhrase(sec: number): string {
  */
 /** The server or account a PQ binding or policy write (or a re-pair veto) is about (its rate-limit subject). */
 export function bindingSubject(endpoint: RateLimitEndpoint, pathname: string): string | undefined {
+  if (endpoint === "security-report") return SECURITY_REPORT_SUBJECT;
   if (endpoint === "re-pair-veto") {
     const v = /^\/api\/users\/([^/]+)\/re-pair\/veto$/.exec(pathname);
     if (!v) return undefined;
@@ -898,6 +910,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/messages-attestation$/.test(pathname)) return "messages-attest";
   if (m === "POST" && pathname === "/api/voici/reports") return "voici-report";
   if (m === "POST" && pathname === "/api/abuse/reports") return "abuse-report";
+  if (m === "POST" && pathname === "/api/security/report") return "security-report";
   if (m === "GET" && /^\/api\/users\/[^/]+\/abuse-notices$/.test(pathname)) return "abuse-notices";
   if (m === "POST" && /^\/api\/users\/[^/]+\/abuse-notices\/[0-9a-f]{32}\/done$/.test(pathname)) return "abuse-notice-done";
   if (m === "POST" && (pathname === "/api/account/name-change" || pathname === "/api/account/name-change/quote")) return "name-dibs";

@@ -960,5 +960,18 @@
   "s52f632bc3e": "Jeder Weg brauchte den Einladungslink selbst. Zählen und Hinzufügen sind jetzt ein Schritt, das Einlösen von Einladungen ist in der Rate begrenzt, und jeder Server hält das Limit einer Einladung ein und nimmt dieselben ersten Personen auf wie die anderen Server der App, ab dem nächsten Update des jeweiligen Servers. Testeinladungen, die in der Produktion über ihrem Limit lagen, wurden widerrufen.",
   "sa90a6e7e3a": "Ein Kontoname, für dich reserviert",
   "s9b3ba30249": "Hol dir die Flagship-App und öffne diesen Link erneut, wenn du dein Konto erstellst, oder erstelle es in der Web-App.",
-  "s9c4573bd77": "<1>20 $, einmalig.</1> Einen reservierten Namen zu sichern kostet 20 $ (eine normale Namensänderung kostet 10 $)."
+  "s9c4573bd77": "<1>20 $, einmalig.</1> Einen reservierten Namen zu sichern kostet 20 $ (eine normale Namensänderung kostet 10 $).",
+  "sdef8a04b8d": "Meldungen über das Formular werden mit diesem Schlüssel verschlüsselt, sobald sie unseren Server erreichen, sodass nur die Inhaber des Schlüssels sie lesen können.",
+  "s26bb75c451": "<1>Lass dieses Feld leer</1> <2/>",
+  "s7846696ce9": "Wähle einen Schweregrad.",
+  "s0874b9cda5": "Schreib eine einzeilige Zusammenfassung mit höchstens 200 Zeichen.",
+  "s4e0c58a1b1": "Schreib die Details, höchstens 20.000 Zeichen.",
+  "s965c8a711f": "Wähle eine Komponente aus der Liste.",
+  "s4131f4228f": "Prüf deine E-Mail-Adresse oder lass das Feld leer.",
+  "s76b5a23384": "Die Meldung ist zu lang. Bitte kürze sie oder schick sie per E-Mail an security@flagshipserver.com.",
+  "s5ae7532efa": "Zu viele Meldungen aus deinem Netzwerk. Versuch es in einer Stunde erneut oder schreib an security@flagshipserver.com.",
+  "s6b476ee344": "Das Formular erhält gerade zu viele Meldungen. Bitte schreib an security@flagshipserver.com.",
+  "s24fdeba475": "Die Spam-Prüfung ist fehlgeschlagen. Versuch es erneut oder schreib an security@flagshipserver.com.",
+  "s4db18cc55e": "Warte, bis die Spam-Prüfung oben fertig ist, und sende dann erneut.",
+  "s117cf82be8": "Das Formular ist gerade nicht verfügbar. Bitte schreib an security@flagshipserver.com."
 }

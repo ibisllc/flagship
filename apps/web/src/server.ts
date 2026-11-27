@@ -5,7 +5,6 @@ import fastifyStatic from "@fastify/static";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerBuildImage } from "./routes/buildImage.js";
-import { registerSecurityReport } from "./routes/securityReport.js";
 import { registerMigration, type MigrationOptions } from "./routes/migration.js";
 import {
   registerServerRegistry,
@@ -234,7 +233,6 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
 
   if (isCom) {
     registerBuildImage(app);
-    registerSecurityReport(app);
     if (opts.migration) registerMigration(app, opts.migration);
   }
 

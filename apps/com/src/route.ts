@@ -51,6 +51,7 @@ import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetwo
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
 import { handleTotpOutcomeReport, TOTP_OUTCOMES_PATH } from "./totpOutcomeLog.js";
 import { CANARY_REPORT_PATH, UPDATE_RECEIPT_PATH, handleCanaryReport, handleUpdateReceipt } from "./updateReceipts.js";
+import { SECURITY_REPORTS_ADMIN_PATH, handleSecurityReportRoute, isSecurityReportPath } from "./securityReports.js";
 import { handleVoiciAbuseRoute, isVoiciAbusePath } from "./voiciAbuseRoutes.js";
 import { handleOutboundHosts, isOutboundHostsPath } from "./outboundHosts.js";
 import { handleReapRoute, REAP_PATH_PREFIX } from "./prodReap.js";
@@ -394,6 +395,17 @@ export interface RouteEnv extends OhttpEnv {
   RELAY_MESH_KEY_SEED?: string;
   /** R2 bucket served on feed.<controlApex> (flagship-relay-feed; gym: flagship-relay-feed-gym). */
   RELAY_FEED?: RelayFeedBucket;
+  /** Worker secret: Resend's API key for the security-report notification (securityReports.ts). Unset = no email. */
+  RESEND_API_KEY?: string;
+  /** [vars]: who gets the notification (comma-separated) and the sender Resend has verified. */
+  SECURITY_REPORT_NOTIFY_TO?: string;
+  SECURITY_REPORT_NOTIFY_FROM?: string;
+  /** [vars] Turnstile site key + Worker secret TURNSTILE_SECRET_KEY: the form's spam check while both are set. */
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string;
+  /** [vars] optional AI-triage recipient (armored public key) and the fingerprint that pins it. */
+  SECURITY_REPORT_TRIAGE_KEY?: string;
+  SECURITY_REPORT_TRIAGE_FINGERPRINT?: string;
 }
 
 export interface BuildRelayNamespaceLike {
@@ -802,6 +814,10 @@ async function routeImpl(
   if (url.pathname === TOTP_OUTCOMES_PATH) {
     return handleTotpOutcomeReport(request, env);
   }
+  // Vulnerability reports, stored encrypted (x-admin-secret; securityReports.ts, npm run security-reports).
+  if (url.pathname === SECURITY_REPORTS_ADMIN_PATH) {
+    return handleSecurityReportRoute(request, env);
+  }
   // Canary update receipts, the operator's view (x-admin-secret; updateReceipts.ts, npm run canary).
   if (url.pathname === CANARY_REPORT_PATH) {
     return handleCanaryReport(request, env);
@@ -1064,6 +1080,11 @@ async function routeImpl(
   // voi.ci pages and Messages (voiciRoutes.ts): their own budgets, 404 until VOICI_ENABLED is "on".
   if (isVoiciApiPath(url.pathname)) {
     return handleVoiciApi(buffered, env as VoiciEnv, ctx);
+  }
+
+  // The website's vulnerability report form (securityReports.ts): metered above, encrypted before it is stored.
+  if (isSecurityReportPath(url.pathname)) {
+    return handleSecurityReportRoute(buffered, env, ctx ? { waitUntil: (p) => ctx.waitUntil(p) } : {});
   }
 
   // A box's content-free update receipt (updateReceipts.ts): metered above, stored as counts only.

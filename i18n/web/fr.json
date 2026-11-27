@@ -960,5 +960,18 @@
   "s52f632bc3e": "Chaque voie nécessitait le lien d’invitation lui-même. Le décompte et l’ajout ne font plus qu’une étape, l’utilisation des invitations est limitée en fréquence, et chaque serveur applique la limite d’une invitation et admet les mêmes premières personnes que les autres serveurs de l’app, à partir de la prochaine mise à jour de chaque serveur. Les invitations de test restées en production au-delà de leur limite ont été révoquées.",
   "sa90a6e7e3a": "Un nom de compte réservé pour vous",
   "s9b3ba30249": "Installez l'app Flagship, puis rouvrez ce lien quand vous créez votre compte, ou créez-le dans l'app web.",
-  "s9c4573bd77": "<1>20 $, une seule fois.</1> Réclamer un nom réservé coûte 20 $ (un changement de nom ordinaire coûte 10 $)."
+  "s9c4573bd77": "<1>20 $, une seule fois.</1> Réclamer un nom réservé coûte 20 $ (un changement de nom ordinaire coûte 10 $).",
+  "sdef8a04b8d": "Les signalements envoyés avec le formulaire sont chiffrés avec cette clé dès leur arrivée sur notre serveur : seuls les détenteurs de la clé peuvent les lire.",
+  "s26bb75c451": "<1>Laissez ce champ vide</1> <2/>",
+  "s7846696ce9": "Choisissez une gravité.",
+  "s0874b9cda5": "Rédigez un résumé d'une ligne, de 200 caractères au maximum.",
+  "s4e0c58a1b1": "Rédigez les détails, jusqu'à 20 000 caractères.",
+  "s965c8a711f": "Choisissez un composant dans la liste.",
+  "s4131f4228f": "Vérifiez votre adresse e-mail, ou laissez le champ vide.",
+  "s76b5a23384": "Le signalement est trop long. Raccourcissez-le, ou envoyez-le par e-mail à security@flagshipserver.com.",
+  "s5ae7532efa": "Trop de signalements depuis votre réseau. Réessayez dans une heure, ou écrivez à security@flagshipserver.com.",
+  "s6b476ee344": "Le formulaire reçoit trop de signalements en ce moment. Écrivez à security@flagshipserver.com.",
+  "s24fdeba475": "La vérification antispam a échoué. Réessayez, ou écrivez à security@flagshipserver.com.",
+  "s4db18cc55e": "Attendez la fin de la vérification antispam ci-dessus, puis envoyez de nouveau.",
+  "s117cf82be8": "Le formulaire est indisponible pour le moment. Écrivez à security@flagshipserver.com."
 }

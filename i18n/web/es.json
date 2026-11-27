@@ -960,5 +960,18 @@
   "s52f632bc3e": "Todas las vías necesitaban el propio enlace de invitación. El recuento y la incorporación son ahora un solo paso, el canje de invitaciones tiene límite de frecuencia, y cada servidor aplica el límite de la invitación y admite a las mismas primeras personas que los demás servidores de la app, a partir de la próxima actualización de cada servidor. Se revocaron las invitaciones de prueba que quedaban en producción por encima de su límite.",
   "sa90a6e7e3a": "Un nombre de cuenta reservado para ti",
   "s9b3ba30249": "Descarga la app Flagship y vuelve a abrir este enlace cuando crees tu cuenta, o créala en la app web.",
-  "s9c4573bd77": "<1>20 $, una sola vez.</1> Reclamar un nombre reservado cuesta 20 $ (un cambio de nombre normal cuesta 10 $)."
+  "s9c4573bd77": "<1>20 $, una sola vez.</1> Reclamar un nombre reservado cuesta 20 $ (un cambio de nombre normal cuesta 10 $).",
+  "sdef8a04b8d": "Los informes enviados con el formulario se cifran con esta clave en cuanto llegan a nuestro servidor, así que solo quienes tienen la clave pueden leerlos.",
+  "s26bb75c451": "<1>Deja este campo vacío</1> <2/>",
+  "s7846696ce9": "Elige una gravedad.",
+  "s0874b9cda5": "Escribe un resumen de una línea de hasta 200 caracteres.",
+  "s4e0c58a1b1": "Escribe los detalles, hasta 20.000 caracteres.",
+  "s965c8a711f": "Elige un componente de la lista.",
+  "s4131f4228f": "Revisa tu dirección de correo o déjala vacía.",
+  "s76b5a23384": "El informe es demasiado largo. Acórtalo o envíalo por correo a security@flagshipserver.com.",
+  "s5ae7532efa": "Demasiados informes desde tu red. Vuelve a intentarlo dentro de una hora o escribe a security@flagshipserver.com.",
+  "s6b476ee344": "El formulario está recibiendo demasiados informes en este momento. Escribe a security@flagshipserver.com.",
+  "s24fdeba475": "La comprobación antispam no se superó. Vuelve a intentarlo o escribe a security@flagshipserver.com.",
+  "s4db18cc55e": "Espera a que termine la comprobación antispam de arriba y vuelve a enviar.",
+  "s117cf82be8": "El formulario no está disponible en este momento. Escribe a security@flagshipserver.com."
 }

@@ -181,6 +181,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0160",
   // Re-pair initiates single use; an admin veto refuses that key for a day (security report F3).
   "0161",
+  // Vulnerability reports from the website form, encrypted on intake to the security key.
+  "0162",
 ];
 
 export interface SchemaStatusDeps {

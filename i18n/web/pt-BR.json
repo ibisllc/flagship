@@ -960,5 +960,18 @@
   "s52f632bc3e": "Todos os caminhos exigiam o próprio link do convite. A contagem e a adição agora são uma única etapa, o resgate de convites tem limite de frequência, e cada servidor aplica o limite do convite e admite as mesmas primeiras pessoas que os outros servidores do app, a partir da próxima atualização de cada servidor. Os convites de teste que estavam acima do limite em produção foram revogados.",
   "sa90a6e7e3a": "Um nome de conta reservado para você",
   "s9b3ba30249": "Baixe o app Flagship e abra este link de novo ao criar sua conta, ou crie-a no app web.",
-  "s9c4573bd77": "<1>US$ 20, uma única vez.</1> Reivindicar um nome reservado custa US$ 20 (uma troca de nome comum custa US$ 10)."
+  "s9c4573bd77": "<1>US$ 20, uma única vez.</1> Reivindicar um nome reservado custa US$ 20 (uma troca de nome comum custa US$ 10).",
+  "sdef8a04b8d": "Os relatos enviados pelo formulário são criptografados com esta chave assim que chegam ao nosso servidor, e só quem tem a chave pode lê-los.",
+  "s26bb75c451": "<1>Deixe este campo vazio</1> <2/>",
+  "s7846696ce9": "Escolha uma gravidade.",
+  "s0874b9cda5": "Escreva um resumo de uma linha com até 200 caracteres.",
+  "s4e0c58a1b1": "Escreva os detalhes, até 20.000 caracteres.",
+  "s965c8a711f": "Escolha um componente da lista.",
+  "s4131f4228f": "Confira seu endereço de e-mail ou deixe-o vazio.",
+  "s76b5a23384": "O relato é longo demais. Encurte-o ou envie-o por e-mail para security@flagshipserver.com.",
+  "s5ae7532efa": "Relatos demais vindos da sua rede. Tente de novo daqui a uma hora ou escreva para security@flagshipserver.com.",
+  "s6b476ee344": "O formulário está recebendo relatos demais agora. Escreva para security@flagshipserver.com.",
+  "s24fdeba475": "A verificação contra spam não passou. Tente de novo ou escreva para security@flagshipserver.com.",
+  "s4db18cc55e": "Aguarde a verificação contra spam acima terminar e envie de novo.",
+  "s117cf82be8": "O formulário está indisponível no momento. Escreva para security@flagshipserver.com."
 }

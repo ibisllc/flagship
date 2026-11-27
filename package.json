@@ -38,6 +38,7 @@
     "build-eval": "npm --workspace=@flagship/build-eval run eval --",
     "parity": "node scripts/parity-check.mjs",
     "rate-limits": "node scripts/rate-limit-report.mjs",
+    "security-reports": "node scripts/security-reports.mjs",
     "totp-outcomes": "node scripts/totp-outcome-report.mjs",
     "canary": "tsx scripts/canary.ts",
     "outbound-hosts": "node scripts/outbound-hosts.mjs",

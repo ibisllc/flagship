@@ -268,6 +268,11 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   shell **v258** (signed). `edSync` refuses small-order and non-canonical keys before any verify, `.com` refuses them
   at intake (400 `bad-public-key`), the box refuses them as a share member key (needs the next endorsed box release).
   Phase 2 (clients) is in the 0.5 list.
+- 2026-11-27, security report form (reported by Huzaifa Jawaid, Low): `/api/security/report` had no `.com` route, so
+  every form report was lost. Built on branch `fix/security-report-intake`, not merged or deployed: `.com` route
+  (`apps/com/src/securityReports.ts`), reports OpenPGP-encrypted on intake to the security key (optional AI-triage
+  second recipient), D1 **0162**, Resend notice (id/severity/time only), Turnstile + honeypot, `npm run
+  security-reports` (YubiKey; `--triage`). Owner steps: deploy sheet 3c.
 - Shrink the phone apps (0.5 list): branch `claude/friendly-goldberg-f0jbky` (VP8-only libwebrtc, Android WebP
   welcome art; Android download -3.0 MB on arm64). Waits for the iOS libwebrtc build, device calls, the owner's go.
 

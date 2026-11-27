@@ -3433,6 +3433,14 @@
       "security.html"
     ]
   },
+  "sdef8a04b8d": {
+    "en": "Reports sent with the form are encrypted to this key as soon as they reach our server, so only the key's holders can read them.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
   "s4544d04a82": {
     "en": "Please include:",
     "kind": "text",
@@ -3650,6 +3658,14 @@
       "security.html"
     ]
   },
+  "s26bb75c451": {
+    "en": "<1>Leave this field empty</1> <2/>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "security.html"
+    ]
+  },
   "s59cbf0de23": {
     "en": "Submitting…",
     "kind": "text",
@@ -3676,6 +3692,94 @@
   },
   "s815751ccfa": {
     "en": "Network error. Please email security@flagshipserver.com directly.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s7846696ce9": {
+    "en": "Pick a severity.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s0874b9cda5": {
+    "en": "Write a one-line summary of up to 200 characters.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4e0c58a1b1": {
+    "en": "Write the details, up to 20,000 characters.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s965c8a711f": {
+    "en": "Pick a component from the list.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4131f4228f": {
+    "en": "Check your email address, or leave it empty.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s76b5a23384": {
+    "en": "The report is too long. Please shorten it, or email it to security@flagshipserver.com.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s5ae7532efa": {
+    "en": "Too many reports from your network. Please try again in an hour, or email security@flagshipserver.com.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6b476ee344": {
+    "en": "The form is receiving too many reports right now. Please email security@flagshipserver.com.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s24fdeba475": {
+    "en": "The spam check did not pass. Please try again, or email security@flagshipserver.com.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4db18cc55e": {
+    "en": "Please wait for the spam check above to finish, then submit again.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s117cf82be8": {
+    "en": "The form is unavailable right now. Please email security@flagshipserver.com.",
     "kind": "text",
     "ctx": "p",
     "pages": [

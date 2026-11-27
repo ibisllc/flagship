@@ -20,6 +20,12 @@ and `node scripts/i18n-<surface>.mjs build` (`pwa`, `box`, `android`, `ios`, `we
 
 **Do not** translate: brand and protocol names, code, file names, domains, keyboard shortcuts, the contents of `<1>…</1>` that wrap code.
 
+**Security report form (`i18n/web`, 2026-11-27, drafted by an agent, needs native review).** 13 segments of
+`security.html`: the line saying form reports are encrypted to the PGP key on arrival, the hidden honeypot label ("Leave
+this field empty", read only by screen-reader-less bots), and the form's refusal and status lines (severity, summary
+and details lengths, email, too long, rate limited, form busy, spam check failed or pending, form unavailable). Keep
+`security@flagshipserver.com` exactly; "spam check" is Cloudflare's challenge, not a review of the report.
+
 **voi.ci site (`i18n/voici-site`, 2026-11-02, drafted by an agent, needs native review).** 85 strings of the public
 page at voi.ci/<username> (sign-in sheet, thread, report sheet, error states). Keyed by the English sentence like the
 webapp; rebuild with `node apps/voici-site/i18n.mjs build` and check with `node apps/voici-site/i18n.mjs check`.

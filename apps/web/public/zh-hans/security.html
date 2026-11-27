@@ -36,6 +36,8 @@
       .out:empty { display: none; }
       .out.ok { background: var(--ok-soft); border: 1px solid var(--accent-graphic); }
       .out.err { background: var(--err-soft); border: 1px solid var(--err); color: var(--err); }
+      .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+      #ts-widget:not(:empty) { margin-top: 1.5rem; }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -204,6 +206,7 @@
         <ul class="bullets">
           <li><a href="/.well-known/pgp-key.txt">下载公钥</a>，或让你的邮件客户端为 <code>security@flagshipserver.com</code> 自动查找（已通过 Web Key Directory 发布）。</li>
           <li>指纹：<code class="fpr">D96D 675D B03E 3F3B BC88&nbsp; 7030 2308 936D 2154 96D0</code></li>
+          <li>通过表单提交的报告一到达我们的服务器就会用此密钥加密，只有密钥持有者才能读取。</li>
         </ul>
         <p>请包含：</p>
         <ul class="bullets">
@@ -231,7 +234,10 @@
             <option value="Control plane (flagshipserver.com)">控制平面（flagshipserver.com）</option>
             <option value="Tunnel / public ingress">隧道／公共入口</option>
             <option value="Other">其他</option>
-          </select><label for="summary">摘要 <span class="req">*</span></label> <input id="summary" name="summary" type="text" required="" maxlength="200" placeholder="一句话描述"> <label for="details">详情、复现步骤、影响 <span class="req">*</span></label><textarea id="details" name="details" required="" maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea><button class="cta" type="submit" style="margin-top: 1.5rem;">提交报告</button></form>
+          </select><label for="summary">摘要 <span class="req">*</span></label> <input id="summary" name="summary" type="text" required="" maxlength="200" placeholder="一句话描述"> <label for="details">详情、复现步骤、影响 <span class="req">*</span></label><textarea id="details" name="details" required="" maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea>
+
+          <div class="hp" aria-hidden="true"><label for="website">请将此字段留空</label> <input id="website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+          <div id="ts-widget"></div><button class="cta" type="submit" style="margin-top: 1.5rem;">提交报告</button></form>
 
         <div id="out" class="out" role="status" aria-live="polite"></div>
         <!-- The form's own lines, here so scripts/i18n-web.mjs translates them; the script picks one. -->
@@ -240,6 +246,17 @@
           <p data-msg="ok">谢谢。编号：<span data-arg=""></span>。我们会与你联系。</p>
           <p data-msg="failed">提交失败（HTTP <span data-arg=""></span>）。</p>
           <p data-msg="network">网络错误。请直接发送邮件至 security@flagshipserver.com。</p>
+          <p data-msg="bad-severity">请选择严重程度。</p>
+          <p data-msg="summary-length">请写一行摘要，不超过 200 个字符。</p>
+          <p data-msg="details-length">请填写详细信息，不超过 20,000 个字符。</p>
+          <p data-msg="component-length">请从列表中选择一个组件。</p>
+          <p data-msg="bad-email">请检查您的电子邮件地址，或将其留空。</p>
+          <p data-msg="too-large">报告太长。请缩短内容，或通过邮件发送至 security@flagshipserver.com。</p>
+          <p data-msg="rate-limited">来自您网络的报告过多。请一小时后再试，或发送邮件至 security@flagshipserver.com。</p>
+          <p data-msg="busy">表单目前收到的报告过多。请发送邮件至 security@flagshipserver.com。</p>
+          <p data-msg="challenge">垃圾信息检查未通过。请重试，或发送邮件至 security@flagshipserver.com。</p>
+          <p data-msg="challenge-pending">请等待上方的垃圾信息检查完成，然后重新提交。</p>
+          <p data-msg="unavailable">表单目前不可用。请发送邮件至 security@flagshipserver.com。</p>
         </div>
       </section>
     </main>
@@ -291,29 +308,73 @@
         if (slot) slot.textContent = String(arg ?? "");
         return c.textContent.replace(/\s+/g, " ").trim();
       };
+      const KNOWN = new Set(["bad-severity", "summary-length", "details-length", "component-length", "bad-email", "too-large", "unavailable"]);
+      const refusal = (status, body) => {
+        const code = body && typeof body.code === "string" ? body.code : "";
+        if (status === 429) return msg(body && body.limit === "subject" ? "busy" : "rate-limited");
+        if (code === "challenge-failed") return msg("challenge");
+        if (code === "challenge-unavailable") return msg("unavailable");
+        if (KNOWN.has(code)) return msg(code);
+        return msg("failed", status);
+      };
+
+      // Cloudflare Turnstile, only when the server has it switched on (it then checks every token).
+      let turnstile = null;
+      let widgetId = null;
+      (async () => {
+        try {
+          const r = await fetch("/api/security/report-config");
+          const { turnstileSiteKey } = await r.json();
+          if (typeof turnstileSiteKey !== "string" || !turnstileSiteKey) return;
+          const s = document.createElement("script");
+          s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+          s.async = true;
+          s.onload = () => {
+            turnstile = window.turnstile;
+            widgetId = turnstile.render("#ts-widget", { sitekey: turnstileSiteKey, action: "security-report" });
+          };
+          document.head.appendChild(s);
+        } catch {}
+      })();
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        if (turnstile && widgetId !== null) {
+          const token = turnstile.getResponse(widgetId);
+          if (!token) {
+            out.className = "out err";
+            out.textContent = msg("challenge-pending");
+            return;
+          }
+          data.turnstileToken = token;
+        }
         out.className = "out";
         out.textContent = msg("sending");
-        const data = Object.fromEntries(new FormData(form).entries());
         try {
           const r = await fetch("/api/security/report", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(data),
           });
-          const body = await r.json();
-          if (r.ok) {
+          let body = null;
+          try {
+            body = await r.json();
+          } catch {}
+          if (r.ok && body && typeof body.reportId === "string") {
             out.className = "out ok";
             out.textContent = msg("ok", body.reportId);
             form.reset();
           } else {
             out.className = "out err";
-            out.textContent = body.error ?? msg("failed", r.status);
+            out.textContent = refusal(r.status, body);
           }
         } catch (err) {
           out.className = "out err";
           out.textContent = msg("network");
+        } finally {
+          // A Turnstile token is good for one check.
+          if (turnstile && widgetId !== null) turnstile.reset(widgetId);
         }
       });
 

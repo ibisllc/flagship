@@ -36,6 +36,8 @@
       .out:empty { display: none; }
       .out.ok { background: var(--ok-soft); border: 1px solid var(--accent-graphic); }
       .out.err { background: var(--err-soft); border: 1px solid var(--err); color: var(--err); }
+      .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+      #ts-widget:not(:empty) { margin-top: 1.5rem; }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -204,6 +206,7 @@
         <ul class="bullets">
           <li><a href="/.well-known/pgp-key.txt">Baixe a chave pública</a>, ou deixe seu cliente de e-mail encontrá-la para <code>security@flagshipserver.com</code> (publicada via Web Key Directory).</li>
           <li>Impressão digital: <code class="fpr">D96D 675D B03E 3F3B BC88&nbsp; 7030 2308 936D 2154 96D0</code></li>
+          <li>Os relatos enviados pelo formulário são criptografados com esta chave assim que chegam ao nosso servidor, e só quem tem a chave pode lê-los.</li>
         </ul>
         <p>Inclua, por favor:</p>
         <ul class="bullets">
@@ -231,7 +234,10 @@
             <option value="Control plane (flagshipserver.com)">Plano de controle (flagshipserver.com)</option>
             <option value="Tunnel / public ingress">Túnel / entrada pública</option>
             <option value="Other">Outro</option>
-          </select><label for="summary">Resumo <span class="req">*</span></label> <input id="summary" name="summary" type="text" required="" maxlength="200" placeholder="Descrição em uma linha"> <label for="details">Detalhes, passos para reproduzir, impacto <span class="req">*</span></label><textarea id="details" name="details" required="" maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea><button class="cta" type="submit" style="margin-top: 1.5rem;">Enviar relato</button></form>
+          </select><label for="summary">Resumo <span class="req">*</span></label> <input id="summary" name="summary" type="text" required="" maxlength="200" placeholder="Descrição em uma linha"> <label for="details">Detalhes, passos para reproduzir, impacto <span class="req">*</span></label><textarea id="details" name="details" required="" maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea>
+
+          <div class="hp" aria-hidden="true"><label for="website">Deixe este campo vazio</label> <input id="website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+          <div id="ts-widget"></div><button class="cta" type="submit" style="margin-top: 1.5rem;">Enviar relato</button></form>
 
         <div id="out" class="out" role="status" aria-live="polite"></div>
         <!-- The form's own lines, here so scripts/i18n-web.mjs translates them; the script picks one. -->
@@ -240,6 +246,17 @@
           <p data-msg="ok">Obrigado. Referência: <span data-arg=""></span>. Entraremos em contato.</p>
           <p data-msg="failed">Não foi possível enviar (HTTP <span data-arg=""></span>).</p>
           <p data-msg="network">Erro de rede. Escreva diretamente para security@flagshipserver.com.</p>
+          <p data-msg="bad-severity">Escolha uma gravidade.</p>
+          <p data-msg="summary-length">Escreva um resumo de uma linha com até 200 caracteres.</p>
+          <p data-msg="details-length">Escreva os detalhes, até 20.000 caracteres.</p>
+          <p data-msg="component-length">Escolha um componente da lista.</p>
+          <p data-msg="bad-email">Confira seu endereço de e-mail ou deixe-o vazio.</p>
+          <p data-msg="too-large">O relato é longo demais. Encurte-o ou envie-o por e-mail para security@flagshipserver.com.</p>
+          <p data-msg="rate-limited">Relatos demais vindos da sua rede. Tente de novo daqui a uma hora ou escreva para security@flagshipserver.com.</p>
+          <p data-msg="busy">O formulário está recebendo relatos demais agora. Escreva para security@flagshipserver.com.</p>
+          <p data-msg="challenge">A verificação contra spam não passou. Tente de novo ou escreva para security@flagshipserver.com.</p>
+          <p data-msg="challenge-pending">Aguarde a verificação contra spam acima terminar e envie de novo.</p>
+          <p data-msg="unavailable">O formulário está indisponível no momento. Escreva para security@flagshipserver.com.</p>
         </div>
       </section>
     </main>
@@ -291,29 +308,73 @@
         if (slot) slot.textContent = String(arg ?? "");
         return c.textContent.replace(/\s+/g, " ").trim();
       };
+      const KNOWN = new Set(["bad-severity", "summary-length", "details-length", "component-length", "bad-email", "too-large", "unavailable"]);
+      const refusal = (status, body) => {
+        const code = body && typeof body.code === "string" ? body.code : "";
+        if (status === 429) return msg(body && body.limit === "subject" ? "busy" : "rate-limited");
+        if (code === "challenge-failed") return msg("challenge");
+        if (code === "challenge-unavailable") return msg("unavailable");
+        if (KNOWN.has(code)) return msg(code);
+        return msg("failed", status);
+      };
+
+      // Cloudflare Turnstile, only when the server has it switched on (it then checks every token).
+      let turnstile = null;
+      let widgetId = null;
+      (async () => {
+        try {
+          const r = await fetch("/api/security/report-config");
+          const { turnstileSiteKey } = await r.json();
+          if (typeof turnstileSiteKey !== "string" || !turnstileSiteKey) return;
+          const s = document.createElement("script");
+          s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+          s.async = true;
+          s.onload = () => {
+            turnstile = window.turnstile;
+            widgetId = turnstile.render("#ts-widget", { sitekey: turnstileSiteKey, action: "security-report" });
+          };
+          document.head.appendChild(s);
+        } catch {}
+      })();
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        if (turnstile && widgetId !== null) {
+          const token = turnstile.getResponse(widgetId);
+          if (!token) {
+            out.className = "out err";
+            out.textContent = msg("challenge-pending");
+            return;
+          }
+          data.turnstileToken = token;
+        }
         out.className = "out";
         out.textContent = msg("sending");
-        const data = Object.fromEntries(new FormData(form).entries());
         try {
           const r = await fetch("/api/security/report", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(data),
           });
-          const body = await r.json();
-          if (r.ok) {
+          let body = null;
+          try {
+            body = await r.json();
+          } catch {}
+          if (r.ok && body && typeof body.reportId === "string") {
             out.className = "out ok";
             out.textContent = msg("ok", body.reportId);
             form.reset();
           } else {
             out.className = "out err";
-            out.textContent = body.error ?? msg("failed", r.status);
+            out.textContent = refusal(r.status, body);
           }
         } catch (err) {
           out.className = "out err";
           out.textContent = msg("network");
+        } finally {
+          // A Turnstile token is good for one check.
+          if (turnstile && widgetId !== null) turnstile.reset(widgetId);
         }
       });
 

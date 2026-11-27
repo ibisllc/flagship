@@ -38,6 +38,8 @@
       .out:empty { display: none; }
       .out.ok { background: var(--ok-soft); border: 1px solid var(--accent-graphic); }
       .out.err { background: var(--err-soft); border: 1px solid var(--err); color: var(--err); }
+      .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+      #ts-widget:not(:empty) { margin-top: 1.5rem; }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -291,6 +293,7 @@
         <ul class="bullets">
           <li><a href="/.well-known/pgp-key.txt">Download the public key</a>, or let your mail client find it for <code>security@flagshipserver.com</code> (published via Web Key Directory).</li>
           <li>Fingerprint: <code class="fpr">D96D 675D B03E 3F3B BC88&nbsp; 7030 2308 936D 2154 96D0</code></li>
+          <li>Reports sent with the form are encrypted to this key as soon as they reach our server, so only the key's holders can read them.</li>
         </ul>
         <p>Please include:</p>
         <ul class="bullets">
@@ -334,6 +337,12 @@
           <label for="details">Details, repro steps, impact <span class="req">*</span></label>
           <textarea id="details" name="details" required maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea>
 
+          <div class="hp" aria-hidden="true">
+            <label for="website">Leave this field empty</label>
+            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+          </div>
+          <div id="ts-widget"></div>
+
           <button class="cta" type="submit" style="margin-top: 1.5rem;">Submit report</button>
         </form>
 
@@ -344,6 +353,17 @@
           <p data-msg="ok">Thank you. Reference: <span data-arg></span>. We'll be in touch.</p>
           <p data-msg="failed">Submission failed (HTTP <span data-arg></span>).</p>
           <p data-msg="network">Network error. Please email security@flagshipserver.com directly.</p>
+          <p data-msg="bad-severity">Pick a severity.</p>
+          <p data-msg="summary-length">Write a one-line summary of up to 200 characters.</p>
+          <p data-msg="details-length">Write the details, up to 20,000 characters.</p>
+          <p data-msg="component-length">Pick a component from the list.</p>
+          <p data-msg="bad-email">Check your email address, or leave it empty.</p>
+          <p data-msg="too-large">The report is too long. Please shorten it, or email it to security@flagshipserver.com.</p>
+          <p data-msg="rate-limited">Too many reports from your network. Please try again in an hour, or email security@flagshipserver.com.</p>
+          <p data-msg="busy">The form is receiving too many reports right now. Please email security@flagshipserver.com.</p>
+          <p data-msg="challenge">The spam check did not pass. Please try again, or email security@flagshipserver.com.</p>
+          <p data-msg="challenge-pending">Please wait for the spam check above to finish, then submit again.</p>
+          <p data-msg="unavailable">The form is unavailable right now. Please email security@flagshipserver.com.</p>
         </div>
       </section>
     </main>
@@ -398,29 +418,73 @@
         if (slot) slot.textContent = String(arg ?? "");
         return c.textContent.replace(/\s+/g, " ").trim();
       };
+      const KNOWN = new Set(["bad-severity", "summary-length", "details-length", "component-length", "bad-email", "too-large", "unavailable"]);
+      const refusal = (status, body) => {
+        const code = body && typeof body.code === "string" ? body.code : "";
+        if (status === 429) return msg(body && body.limit === "subject" ? "busy" : "rate-limited");
+        if (code === "challenge-failed") return msg("challenge");
+        if (code === "challenge-unavailable") return msg("unavailable");
+        if (KNOWN.has(code)) return msg(code);
+        return msg("failed", status);
+      };
+
+      // Cloudflare Turnstile, only when the server has it switched on (it then checks every token).
+      let turnstile = null;
+      let widgetId = null;
+      (async () => {
+        try {
+          const r = await fetch("/api/security/report-config");
+          const { turnstileSiteKey } = await r.json();
+          if (typeof turnstileSiteKey !== "string" || !turnstileSiteKey) return;
+          const s = document.createElement("script");
+          s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+          s.async = true;
+          s.onload = () => {
+            turnstile = window.turnstile;
+            widgetId = turnstile.render("#ts-widget", { sitekey: turnstileSiteKey, action: "security-report" });
+          };
+          document.head.appendChild(s);
+        } catch {}
+      })();
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        if (turnstile && widgetId !== null) {
+          const token = turnstile.getResponse(widgetId);
+          if (!token) {
+            out.className = "out err";
+            out.textContent = msg("challenge-pending");
+            return;
+          }
+          data.turnstileToken = token;
+        }
         out.className = "out";
         out.textContent = msg("sending");
-        const data = Object.fromEntries(new FormData(form).entries());
         try {
           const r = await fetch("/api/security/report", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(data),
           });
-          const body = await r.json();
-          if (r.ok) {
+          let body = null;
+          try {
+            body = await r.json();
+          } catch {}
+          if (r.ok && body && typeof body.reportId === "string") {
             out.className = "out ok";
             out.textContent = msg("ok", body.reportId);
             form.reset();
           } else {
             out.className = "out err";
-            out.textContent = body.error ?? msg("failed", r.status);
+            out.textContent = refusal(r.status, body);
           }
         } catch (err) {
           out.className = "out err";
           out.textContent = msg("network");
+        } finally {
+          // A Turnstile token is good for one check.
+          if (turnstile && widgetId !== null) turnstile.reset(widgetId);
         }
       });
 
