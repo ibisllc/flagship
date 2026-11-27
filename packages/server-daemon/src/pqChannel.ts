@@ -94,6 +94,19 @@ export class PqChannelServer {
     this.pending.clear();
   }
 
+  /** A device removed from the account: its open sessions end at once, and a new one fails its handshake. */
+  closeForDevice(deviceId: string): number {
+    let n = 0;
+    for (const [k, s] of this.sessions) {
+      if (s.peer.role === "device" && s.peerSubject === deviceId) {
+        s.close();
+        this.sessions.delete(k);
+        n++;
+      }
+    }
+    return n;
+  }
+
   async handle(req: HttpRequest): Promise<HttpResponse | null> {
     const path = req.path.split("?")[0]!;
     if (!path.startsWith("/api/pq-session/")) return null;

@@ -5971,6 +5971,14 @@ async function wireOwnerHandlers(deps: {
   await sessionStore.load();
   deps.appRemovedHooks.push(async (id) => void (await sessionStore.closeAllForService(id)));
   deps.appRemovedHooks.push(async (id) => void (await runtime.appApiKeyStore.dropService(id)));
+  // A device removed from the account (docs/revocation-ui.md): its app sign-ins and quantum-safe sessions end here.
+  deviceBook.onDropped(async (dropped) => {
+    for (const d of dropped) {
+      const apps = await sessionStore.closeAllForAid(d.pub);
+      const pq = pqServer.closeForDevice(d.deviceId);
+      console.log(`[device-book] device ${d.deviceId.slice(0, 8)} left the account: ended ${apps} app sign-in(s), ${pq} quantum-safe session(s)`);
+    }
+  });
   const householdHex =
     process.env.FLAGSHIP_HOUSEHOLD_KEY_HEX ??
     (await tryReadFile("/var/flagship/household-key.hex"));

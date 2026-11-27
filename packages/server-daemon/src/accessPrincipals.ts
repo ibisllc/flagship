@@ -104,6 +104,12 @@ interface BookDevice {
   pqGranted: boolean;
 }
 
+/** A device that left the account's device book: its account device key and device id. */
+export interface DroppedDevice {
+  pub: string;
+  deviceId: string;
+}
+
 export interface AccountDeviceBookOptions {
   /** Cache file (re-verified on load). */
   path: string;
@@ -145,6 +151,7 @@ export class AccountDeviceBook {
   private refreshing: Promise<void> | null = null;
   private refreshingLive = false;
   private readonly now: () => number;
+  private readonly droppedListeners: Array<(dropped: DroppedDevice[]) => void | Promise<void>> = [];
 
   constructor(private readonly opts: AccountDeviceBookOptions) {
     this.now = opts.now ?? trustedNow;
@@ -181,8 +188,10 @@ export class AccountDeviceBook {
           }
         }
         if (!body || !Array.isArray(body.grants)) return;
+        const before = new Map(this.byPub);
         this.adopt(body.grants, body.pqKeyBindings);
         await this.persist();
+        await this.announceDropped(before);
       } catch (e) {
         this.opts.log?.(`[device-book] refresh failed: ${String((e as Error)?.message ?? e)}`);
       }
@@ -205,6 +214,7 @@ export class AccountDeviceBook {
 
   /** Drop a device now (its grant was revoked): no refresh needed, none can bring it back. */
   async dropGrant(grantId: string): Promise<void> {
+    const before = new Map(this.byPub);
     let changed = false;
     for (const [pub, d] of this.byPub) {
       if (d.grant.grantId === grantId) {
@@ -213,6 +223,29 @@ export class AccountDeviceBook {
       }
     }
     if (changed) await this.persist().catch(() => {});
+    await this.announceDropped(before);
+  }
+
+  /**
+   * Told whenever a device leaves the book (its grant was revoked on `.com`, or the admin root revoked it here),
+   * so the box ends what that device had open: its app sign-ins and its quantum-safe sessions. Loading the book
+   * from disk at start-up never reports a drop.
+   */
+  onDropped(fn: (dropped: DroppedDevice[]) => void | Promise<void>): void {
+    this.droppedListeners.push(fn);
+  }
+
+  private async announceDropped(before: Map<string, BookDevice>): Promise<void> {
+    const dropped: DroppedDevice[] = [];
+    for (const [pub, d] of before) if (!this.byPub.has(pub)) dropped.push({ pub, deviceId: d.deviceId });
+    if (dropped.length === 0) return;
+    for (const fn of this.droppedListeners) {
+      try {
+        await fn(dropped);
+      } catch (e) {
+        this.opts.log?.(`[device-book] ending a removed device's sessions failed: ${String((e as Error)?.message ?? e)}`);
+      }
+    }
   }
 
   /** The grant (id, device id, when it was issued) behind a device key, for the admin gate and the rescue log. */

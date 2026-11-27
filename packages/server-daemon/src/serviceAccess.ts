@@ -1441,6 +1441,20 @@ export class ServiceSessionStore {
     return n;
   }
 
+  /** A device removed from the account: every app sign-in its key made on this box ends. */
+  async closeAllForAid(aidHex: string): Promise<number> {
+    const aid = aidHex.toLowerCase();
+    let n = 0;
+    for (const [tok, e] of [...this.byToken]) {
+      if (e.aid === aid) {
+        this.drop(tok);
+        n++;
+      }
+    }
+    if (n > 0) await this.persist();
+    return n;
+  }
+
   private drop(token: string): void {
     const e = this.byToken.get(token);
     this.byToken.delete(token);

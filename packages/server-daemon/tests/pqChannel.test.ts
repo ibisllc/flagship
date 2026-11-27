@@ -6,6 +6,8 @@ import {
   canonicalPqKeyBinding,
   hybridSigKeygen,
   hybridSign,
+  startPqSession,
+  finishPqSession,
   verifyPqKeyBinding,
   type PqKeyBindingWire,
   type PqSessionIdentity,
@@ -177,5 +179,34 @@ describe("a sibling the account vouches for (server order, pq-suites.md §16)", 
     expect(await pins.bindingFor(SIB, sib.stk)).toBeNull();
     const fresh = new SiblingPqPins({ path: join(dir, "fresh.json"), fetchBinding: async () => sib.wire, chain: () => "not-in-server-order" });
     expect(await fresh.bindingFor(SIB, sib.stk)).toBeNull();
+  });
+});
+
+describe("a device removed from the account", () => {
+  it("loses its open quantum-safe sessions and cannot open a new one", async () => {
+    const phone = party("device", "d".repeat(32), 0x30);
+    let inBook = true;
+    const server = new PqChannelServer({
+      self: () => box.identity,
+      lookup: (role, subject, kid) => (inBook && role === "device" && subject === "d".repeat(32) && kid === phone.binding.keyIdHex ? phone.binding : null),
+      dispatch: async () => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }),
+    });
+    const post = async (path: string, body: unknown) => {
+      const out = await server.handle(req("POST", path, body));
+      return { status: out!.status, body: JSON.parse(String(out!.body)) as Record<string, unknown> };
+    };
+    const open = async () => {
+      const st = startPqSession({ responder: BOX, responderBinding: box.binding, initiatorRole: "device", identity: phone.identity, now: Date.now() });
+      const h = await post("/api/pq-session/hello", { hello: st.hello });
+      if (h.status !== 200) return h.status;
+      const { finish } = await finishPqSession(st, h.body.accept, Date.now());
+      return (await post("/api/pq-session/finish", { handshake: h.body.handshake, finish })).status;
+    };
+    expect(await open()).toBe(200);
+    expect(server.closeForDevice("e".repeat(32))).toBe(0);
+    inBook = false;
+    expect(server.closeForDevice("d".repeat(32))).toBe(1);
+    expect(server.closeForDevice("d".repeat(32))).toBe(0);
+    expect(await open()).toBe(403);
   });
 });
