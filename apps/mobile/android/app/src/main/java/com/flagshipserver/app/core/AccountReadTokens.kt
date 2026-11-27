@@ -112,6 +112,24 @@ class AccountReadTokens(
         }
     }
 
+    /**
+     * Ask `.com` with this device's own key whether it is still on [username]'s account (a `device-removed`
+     * push): a fresh device-path mint, past any cached token and the backoff. A removed device hears
+     * `403 device-removed`, which [AccountGoneInterceptor] acts on; a device that is still on the account just
+     * keeps the fresh token. Never prompts, never uses the IRK (`.com` cannot tell which device an IRK is).
+     * Returns false when no device key is at hand without a prompt (the next open's reads ask instead).
+     */
+    suspend fun recheck(username: String): Boolean {
+        if (isDemo(username)) return false
+        val u = username.lowercase()
+        val device = runCatching { signers(u) }.getOrDefault(emptyList()).filterIsInstance<ReadTokenSigner.Device>().firstOrNull()
+            ?: return false
+        mutex.withLock {
+            runCatching { mintWithDevice(u, device) }.onSuccess { store.put(u, it) }
+        }
+        return true
+    }
+
     /** Drop every token of this profile (sign-out, wipe, profile switch). */
     fun clear() {
         store.clear()

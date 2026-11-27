@@ -247,4 +247,27 @@ class AccountReadTokensTest {
         )
         assertTrue(other.isEmpty())
     }
+
+    @Test fun aRecheckMintsWithTheDeviceKeyPastTheCachedTokenAndTheBackoff() = runBlocking {
+        val t = MintTransport()
+        val store = MemoryStore()
+        val p = tokens(t, store, signers = listOf(deviceSigner, irkSigner))
+        p.authorized(user) { }
+        assertEquals(1, t.deviceMints)
+        assertTrue(p.recheck(user))
+        assertEquals("a device-removed push asks .com again with the device key", 2, t.deviceMints)
+        assertEquals(0, t.irkMints)
+        assertEquals("art1.t2", store.get(user)?.token)
+        // A refused recheck (a removed device hears 403 device-removed) never falls back to the IRK.
+        t.refuse = true
+        assertTrue(p.recheck(user))
+        assertEquals(0, t.irkMints)
+    }
+
+    @Test fun aRecheckWithoutADeviceKeyOrOnADemoAccountAsksNothing() = runBlocking {
+        val t = MintTransport()
+        assertFalse(tokens(t, signers = listOf(irkSigner)).recheck(user))
+        assertFalse(tokens(t, demo = true).recheck(user))
+        assertEquals(0, t.deviceMints + t.irkMints)
+    }
 }

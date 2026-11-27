@@ -227,8 +227,20 @@ class MainActivity : FragmentActivity() {
             com.flagshipserver.app.core.AccountGone.ownNames = {
                 listOfNotNull(appState.currentUser.value, appState.activeCloudName.value)
             }
+            // docs/revocation-ui.md: `.com` said this device was removed. Erase the account's keys now, without a
+            // prompt (the account already removed it); the removed screen then takes over.
+            val appContext = applicationContext
+            com.flagshipserver.app.core.AccountGone.onDeviceRemoved = { name ->
+                com.flagshipserver.app.ui.shell.eraseAccountKeysFromDevice(appContext, name, sessionStore)
+            }
+            // A `device-removed` push asks `.com` again with this device's own key; only its answer erases.
+            com.flagshipserver.app.core.DeviceRemovedCheck.check = {
+                appState.currentUser.value?.let { com.flagshipserver.app.core.AccountReadTokens.shared?.recheck(it) }
+            }
         } else {
             com.flagshipserver.app.core.AccountGone.ownNames = { emptyList() }
+            com.flagshipserver.app.core.AccountGone.onDeviceRemoved = null
+            com.flagshipserver.app.core.DeviceRemovedCheck.check = null
             com.flagshipserver.app.core.AccountGone.clear()
         }
 
@@ -1230,7 +1242,10 @@ private fun AppRoot(
     // An unlock found the sealed account key unreadable (the screen lock was removed): the same
     // full-screen treatment, leading to the account's recovery (AccountKeyLostScreen).
     val keyLost by com.flagshipserver.app.keystore.SeedVault.lost.collectAsState()
-    val showAccountGone = (goneName != null || keyLost) && isPaired && isUnlocked
+    val goneReason by com.flagshipserver.app.core.AccountGone.reason.collectAsState()
+    val deviceRemoved = goneName != null && goneReason == com.flagshipserver.app.core.AccountGone.Reason.DEVICE_REMOVED
+    // A removed device's keys are already erased, so it shows over the lock screen too (nothing is left to unlock).
+    val showAccountGone = (goneName != null || keyLost) && isPaired && (isUnlocked || deviceRemoved)
     val suspendedShowing = com.flagshipserver.app.ui.components.abuseSuspendedShowing()
 
     // Keep the global operations sliver's deploy feeder in sync with the pod
@@ -1415,7 +1430,8 @@ private fun AppRoot(
         if (isPaired && finishingName) com.flagshipserver.app.ui.screens.NameChoiceFinishingScreen()
         if (showAccountGone && !showUpdateLock) {
             val gone = goneName
-            if (gone != null) com.flagshipserver.app.ui.shell.AccountGoneScreen(gone)
+            if (gone != null && deviceRemoved) com.flagshipserver.app.ui.shell.DeviceRemovedScreen(gone)
+            else if (gone != null) com.flagshipserver.app.ui.shell.AccountGoneScreen(gone)
             else com.flagshipserver.app.ui.shell.AccountKeyLostScreen()
         }
         if (showUpdateLock && updateLock != null) {

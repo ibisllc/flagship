@@ -42,6 +42,8 @@ class AccountGoneTest {
     }
 
     @After fun tearDown() {
+        AccountGone.onDeviceRemoved = null
+        AccountGone.joinNext = false
         AccountGone.clear()
         AccountGone.ownNames = { emptyList() }
         AccountGone.createNext = false
@@ -157,5 +159,76 @@ class AccountGoneTest {
         assertNull(AdminKeyWarning.signOut(isAdminDevice = false, keyFileWritten = true))
         assertEquals(AdminKeyWarning.SignOutWarning.NotBackedUp, AdminKeyWarning.signOut(true, false))
         assertEquals(AdminKeyWarning.SignOutWarning.BackedUp, AdminKeyWarning.signOut(true, true))
+    }
+
+    // docs/revocation-ui.md: `.com` says this device was removed.
+    private val removedBody = """{"error":"device-removed","code":"device-removed"}"""
+
+    @Test fun theOwnAccountsDeviceRemovedErasesOnceAndShowsTheRemovedScreen() {
+        val erased = ArrayList<String>()
+        AccountGone.onDeviceRemoved = { erased.add(it) }
+        status = 403
+        body = removedBody
+        get("https://flagshipserver.com/api/accounts/Alice/read-token").close()
+        assertEquals("alice", AccountGone.gone.value)
+        assertEquals(AccountGone.Reason.DEVICE_REMOVED, AccountGone.reason.value)
+        assertTrue(AccountGone.isDeviceRemoved)
+        assertEquals(listOf("alice"), erased)
+        // Further calls naming the account stay on the phone, and nothing erases twice.
+        sent.clear()
+        get("https://flagshipserver.com/api/users/alice/pods").close()
+        assertEquals(0, sent.size)
+        AccountGone.markDeviceRemoved("alice")
+        assertEquals(listOf("alice"), erased)
+        // A later account-gone answer for the same account does not turn the removed screen into the other one.
+        AccountGone.markGone("alice")
+        assertEquals(AccountGone.Reason.DEVICE_REMOVED, AccountGone.reason.value)
+    }
+
+    @Test fun aDeviceRemovedFromABoxAnotherAccountOrWithoutTheCodeChangesNothing() {
+        val erased = ArrayList<String>()
+        AccountGone.onDeviceRemoved = { erased.add(it) }
+        status = 403
+        body = removedBody
+        get("https://home.alice.flagship.services/api/users/alice/pods").close()
+        get("https://flagshipserver.com/api/users/bob/pods").close()
+        get("https://flagshipserver.com/api/health").close()
+        body = """{"error":"not authorized"}"""
+        get("https://flagshipserver.com/api/users/alice/pods").close()
+        for (s in listOf(401, 404, 200)) {
+            status = s
+            body = removedBody
+            get("https://flagshipserver.com/api/users/alice/pods").close()
+        }
+        assertFalse(AccountGone.isDeviceRemoved)
+        assertEquals(emptyList<String>(), erased)
+    }
+
+    @Test fun signingOutClearsTheRemovedState() {
+        AccountGone.markDeviceRemoved("alice")
+        assertTrue(AccountGone.isGone)
+        AppState().signOut()
+        assertFalse(AccountGone.isGone)
+        assertEquals(AccountGone.Reason.ACCOUNT_GONE, AccountGone.reason.value)
+    }
+
+    @Test fun aDeviceRemovedPushOnlyAsksDotComAgain() {
+        val asked = java.util.concurrent.CountDownLatch(1)
+        val erased = ArrayList<String>()
+        AccountGone.onDeviceRemoved = { erased.add(it) }
+        DeviceRemovedCheck.check = { asked.countDown() }
+        try {
+            assertTrue(DeviceRemovedCheck.matches(mapOf("category" to "device-removed", "kind" to "device-removed")))
+            assertTrue(DeviceRemovedCheck.matches(mapOf("kind" to "device-removed")))
+            assertFalse(DeviceRemovedCheck.matches(mapOf("category" to "secret-request")))
+            assertTrue(DeviceRemovedCheck.request())
+            assertTrue(asked.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            assertFalse("the push itself erases nothing", AccountGone.isGone)
+            assertEquals(emptyList<String>(), erased)
+            DeviceRemovedCheck.check = null
+            assertFalse("no check wired (cold start): nothing to do until the next open", DeviceRemovedCheck.request())
+        } finally {
+            DeviceRemovedCheck.check = null
+        }
     }
 }

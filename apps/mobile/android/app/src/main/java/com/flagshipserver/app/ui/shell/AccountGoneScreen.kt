@@ -57,6 +57,7 @@ import com.flagshipserver.app.api.SessionStoring
 import com.flagshipserver.app.core.AccountGone
 import com.flagshipserver.app.core.AccountGoneCopy
 import com.flagshipserver.app.core.AdminKeyWarning
+import com.flagshipserver.app.core.DeviceRemovedCopy
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalSessionStore
@@ -71,15 +72,26 @@ import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import com.flagshipserver.app.ui.theme.FS
 
-/** Forget this device's copy of the gone account. Talks to no server. */
-fun removeGoneAccountFromDevice(context: android.content.Context, app: AppState, sessions: SessionStoring) {
-    com.flagshipserver.app.core.KeyBackupStore.forget(context, app.currentUser.value)
+/**
+ * Erase this device's copy of the account's keys: the UMK, the IRK, the account device key, the admin root, the PQ
+ * seeds, read tokens, server sessions and pins ([Keystore.wipe]). No prompt and no server call: used when `.com`
+ * has said this device was removed (docs/revocation-ui.md), and by the removals below. Leaves the signed-in state,
+ * so the removed screen can still say which account it was.
+ */
+fun eraseAccountKeysFromDevice(context: android.content.Context, username: String?, sessions: SessionStoring) {
+    runCatching { com.flagshipserver.app.core.KeyBackupStore.forget(context, username) }
     runCatching { Keystore.wipe() }
     runCatching { Keystore.setPushTokenId(null) }
+    runCatching { com.flagshipserver.app.core.AccountReadTokens.shared?.clear() }
     runCatching {
         sessions.podTokenIds().forEach { sessions.setSessionToken(null, forPodId = it) }
         sessions.clear()
     }
+}
+
+/** Forget this device's copy of the gone account. Talks to no server. */
+fun removeGoneAccountFromDevice(context: android.content.Context, app: AppState, sessions: SessionStoring) {
+    eraseAccountKeysFromDevice(context, app.currentUser.value, sessions)
     app.signOut()
 }
 
@@ -214,6 +226,75 @@ private fun GoneCard(name: String, nav: NavController) {
                     modifier = Modifier.testTag("account-gone-remove-anyway"),
                 )
             }
+        }
+    }
+}
+
+/**
+ * "This device was removed from your account" (docs/revocation-ui.md). The account's keys are already erased (on
+ * `.com`'s `403 device-removed`, before this shows); both ways out only drop what is left of the signed-in state.
+ * Unlike the account-gone screen there is no rescue: the account still exists and another device removed this one.
+ */
+@Composable
+fun DeviceRemovedScreen(name: String) {
+    val ctx = LocalContext.current
+    val app = LocalAppState.current
+    val sessions = LocalSessionStore.current
+    BackHandler(enabled = true) { (ctx as? Activity)?.moveTaskToBack(true) }
+    fun leave(thenJoin: Boolean) {
+        AccountGone.joinNext = thenJoin
+        removeGoneAccountFromDevice(ctx, app, sessions)
+    }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(FS.colors.bg)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .pointerInput(Unit) { detectTapGestures { } }
+            .semantics { paneTitle = DeviceRemovedCopy.TITLE }
+            .testTag("device-removed"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .padding(horizontal = FS.space.s6)
+                .widthIn(max = 440.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = FS.space.s6),
+            verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+        ) {
+            Text(
+                DeviceRemovedCopy.TITLE,
+                color = FS.colors.text,
+                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp, fontWeight = FontWeight.Medium),
+                modifier = Modifier.semantics { heading() }.testTag("device-removed-title"),
+            )
+            Text(
+                DeviceRemovedCopy.BODY,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
+                modifier = Modifier.testTag("device-removed-body"),
+            )
+            Text(
+                AccountGoneCopy.account(name),
+                color = FS.colors.textMuted,
+                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                modifier = Modifier.testTag("device-removed-name"),
+            )
+            FSPrimaryButton(
+                label = DeviceRemovedCopy.JOIN,
+                onClick = { leave(true) },
+                block = true,
+                large = true,
+                modifier = Modifier.testTag("device-removed-join"),
+            )
+            FSGhostButton(
+                label = DeviceRemovedCopy.REMOVE,
+                onClick = { leave(false) },
+                block = true,
+                modifier = Modifier.testTag("device-removed-remove"),
+            )
         }
     }
 }

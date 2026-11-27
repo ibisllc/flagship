@@ -24,6 +24,12 @@ object PushMessageHandler {
         fallbackTitle: String? = null,
         fallbackBody: String? = null,
     ) {
+        // Another device removed this one (docs/revocation-ui.md): ask `.com` with this device's own key. Only its
+        // `403 device-removed` answer erases the account's keys; the push itself shows and erases nothing.
+        if (com.flagshipserver.app.core.DeviceRemovedCheck.matches(data)) {
+            com.flagshipserver.app.core.DeviceRemovedCheck.request()
+            return
+        }
 
         // Provisioning observability — a canonical `provision-status` push
         // (category=="provision-status") is WAKE-ONLY: the foregrounded

@@ -55,6 +55,8 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     // "Create a new account" on the account-removed screen lands on the create step.
     LaunchedEffect(Unit) {
         if (com.flagshipserver.app.core.AccountGone.consumeCreateNext()) nav.navigate("username")
+        // "Join an account" on the device-removed screen lands on "Connect to an existing account".
+        else if (com.flagshipserver.app.core.AccountGone.consumeJoinNext()) nav.navigate("connect")
     }
     val pending by deepLinker.pending.collectAsState()
     // Phase 3b — a JoinDevice deeplink (the collaborator followed the

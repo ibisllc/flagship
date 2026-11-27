@@ -8,11 +8,20 @@
 // (ui/shell/AccountGoneScreen.kt) takes over, and from then on every call that
 // names that account is answered here with the same 404 without touching the
 // network, so no poller keeps asking and no error toast repeats.
+//
+// The same state carries "This device was removed from your account"
+// (docs/revocation-ui.md): `.com` answers `403 { code: "device-removed" }` to a
+// removed device's own signed request or read token, and only to it. On that
+// answer (from the control host, naming this device's own account) the app
+// erases the account's keys at once through [AccountGone.onDeviceRemoved] and
+// shows the removed screen. A push alone never erases anything: it only asks
+// `.com` again ([DeviceRemovedCheck]).
 
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.R
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -22,8 +31,22 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 
 object AccountGone {
     const val CODE = "account-not-found"
+    const val DEVICE_REMOVED_CODE = "device-removed"
+
+    /** Why the account is no longer on this device. */
+    enum class Reason { ACCOUNT_GONE, DEVICE_REMOVED }
 
     private val state = MutableStateFlow<String?>(null)
+    private val reasonState = MutableStateFlow(Reason.ACCOUNT_GONE)
+
+    /** What [gone] means: the account no longer exists, or this device was removed from it. */
+    val reason: StateFlow<Reason> get() = reasonState
+
+    /**
+     * Erases this account's keys from the device when `.com` says this device was removed. Set by MainActivity;
+     * called once per removal, on the thread that saw the answer, before the screen shows.
+     */
+    @Volatile var onDeviceRemoved: ((String) -> Unit)? = null
 
     /** The lowercase name of this device's own account once `.com` has said it is gone, else null. */
     val gone: StateFlow<String?> get() = state
@@ -33,6 +56,11 @@ object AccountGone {
     @Volatile var createNext: Boolean = false
 
     fun consumeCreateNext(): Boolean = createNext.also { createNext = false }
+
+    /** Set by the device-removed screen's "Join an account": the welcome flow opens at connect once. */
+    @Volatile var joinNext: Boolean = false
+
+    fun consumeJoinNext(): Boolean = joinNext.also { joinNext = false }
 
     /** Which names are this device's own account (its username and its cloud name). */
     @Volatile var ownNames: () -> List<String> = { emptyList() }
@@ -59,21 +87,41 @@ object AccountGone {
     /** The body `.com` sends, also used for calls answered locally. */
     fun responseBody(): String = """{"error":"$CODE","code":"$CODE"}"""
 
-    fun bodyIsAccountGone(body: String): Boolean = try {
+    fun bodyIsAccountGone(body: String): Boolean = codeOf(body) == CODE
+
+    fun bodyIsDeviceRemoved(body: String): Boolean = codeOf(body) == DEVICE_REMOVED_CODE
+
+    private fun codeOf(body: String): String? = try {
         (SecurityNoticeProtocol.json.parseToJsonElement(body) as? kotlinx.serialization.json.JsonObject)
-            ?.get("code")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content } == CODE
+            ?.get("code")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content }
     } catch (_: Throwable) {
-        false
+        null
     }
 
     /** Mark the account gone (idempotent). */
     fun markGone(name: String) {
+        if (state.value == name.lowercase() && reasonState.value == Reason.DEVICE_REMOVED) return
+        reasonState.value = Reason.ACCOUNT_GONE
         state.value = name.lowercase()
     }
+
+    /** Mark this device removed from [name]: erase its keys (once), then show the removed screen. */
+    fun markDeviceRemoved(name: String) {
+        val n = name.lowercase()
+        synchronized(this) {
+            if (state.value == n && reasonState.value == Reason.DEVICE_REMOVED) return
+            runCatching { onDeviceRemoved?.invoke(n) }
+            reasonState.value = Reason.DEVICE_REMOVED
+            state.value = n
+        }
+    }
+
+    val isDeviceRemoved: Boolean get() = state.value != null && reasonState.value == Reason.DEVICE_REMOVED
 
     /** The person removed it from this device (or signed out). */
     fun clear() {
         state.value = null
+        reasonState.value = Reason.ACCOUNT_GONE
     }
 
     /**
@@ -89,6 +137,20 @@ object AccountGone {
         if (AccountNameChoice.pendingFor(name)) return false
         if (!bodyIsAccountGone(body())) return false
         markGone(name)
+        return true
+    }
+
+    /**
+     * Look at a control-apex `403`. When it is `device-removed` for this device's own account, `.com` has said
+     * (to this device's own key or read token, over TLS) that this device was removed: erase and show the screen.
+     * Another account's name, any other 403 and any other status change nothing.
+     */
+    fun noteDeviceRemoved(path: String, status: Int, body: () -> String): Boolean {
+        if (status != 403) return false
+        val name = accountNameInPath(path) ?: return false
+        if (!isOwn(name)) return false
+        if (!bodyIsDeviceRemoved(body())) return false
+        markDeviceRemoved(name)
         return true
     }
 
@@ -115,6 +177,9 @@ class AccountGoneInterceptor : Interceptor {
         if (onApex && res.code == 404) {
             AccountGone.note(req.url.encodedPath, res.code) { res.peekBody(4096).string() }
         }
+        if (onApex && res.code == 403) {
+            AccountGone.noteDeviceRemoved(req.url.encodedPath, res.code) { res.peekBody(4096).string() }
+        }
         return res
     }
 }
@@ -127,6 +192,34 @@ object AccountGoneCopy {
     val CREATE get() = FSStrings.get(R.string.create_a_new_account)
     val REMOVE get() = FSStrings.get(R.string.remove_it_from_this_device)
     fun account(name: String) = "Account: $name"
+}
+
+/** "This device was removed from your account" (docs/revocation-ui.md); the same words on iOS and the webapp. */
+object DeviceRemovedCopy {
+    val TITLE get() = FSStrings.get(R.string.device_removed_title)
+    val BODY get() = FSStrings.get(R.string.device_removed_body)
+    val JOIN get() = FSStrings.get(R.string.join_an_account)
+    val REMOVE get() = FSStrings.get(R.string.remove_it_from_this_device)
+}
+
+/**
+ * A `device-removed` push (docs/revocation-ui.md) proves nothing by itself: it asks `.com` again with this device's
+ * own key, and only `.com`'s `403 device-removed` answer (seen by [AccountGoneInterceptor]) erases anything.
+ */
+object DeviceRemovedCheck {
+    const val CATEGORY = "device-removed"
+
+    /** Asks `.com` with this device's own key for the signed-in account. Set by MainActivity; null until then. */
+    @Volatile var check: (suspend () -> Unit)? = null
+
+    fun matches(data: Map<String, String>): Boolean = data["category"] == CATEGORY || data["kind"] == CATEGORY
+
+    /** Run the check in the background; true when one was started. */
+    fun request(scope: kotlinx.coroutines.CoroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)): Boolean {
+        val c = check ?: return false
+        scope.launch { runCatching { c() } }
+        return true
+    }
 }
 
 /**
