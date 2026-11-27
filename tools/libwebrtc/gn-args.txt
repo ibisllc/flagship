@@ -3,3 +3,6 @@
 rtc_build_examples=false
 rtc_enable_protobuf=false
 treat_warnings_as_errors=false
+rtc_libvpx_build_vp9=false
+enable_libaom=false
+rtc_include_dav1d_in_internal_decoder_factory=false

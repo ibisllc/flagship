@@ -274,8 +274,10 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   second recipient), D1 **0162**, Resend notice (id/severity/time only), Turnstile + honeypot, `npm run
   security-reports` (YubiKey; `--triage`). Resend notices go to security@ from `mail.flagshipserver.com`.
   Owner steps left (deploy sheet 3c): Turnstile widget, optional triage key.
-- Shrink the phone apps (0.5 list): branch `claude/friendly-goldberg-f0jbky` (VP8-only libwebrtc, Android WebP
-  welcome art; Android download -3.0 MB on arm64). Waits for the iOS libwebrtc build, device calls, the owner's go.
+- Shrink the phone apps (0.5 list): merged into `release/0.5` 2026-11-27 (VP8-only libwebrtc build config, Android
+  WebP welcome art). The new libwebrtc is NOT pinned yet: the apps still use the old build until
+  `docs/runbooks/pre-0.5-call-codec-tests.md` is done (device call matrix, then the pin). The 0.5 release gate refuses
+  to ship while it is OPEN.
 
 0.3 shipped: App Store 1.2 (8) and Play 11 / Wear 1000011 approved 2026-11-08 (Play then rejected Wear 1000011 on its
 listing; the fixed listing is in review). Its open owner steps (the 0.2 update notice, the runtime manifest re-sign

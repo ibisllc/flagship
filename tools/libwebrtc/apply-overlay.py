@@ -13,6 +13,11 @@ here = pathlib.Path(__file__).resolve().parent
 src = pathlib.Path(sys.argv[1]).resolve()
 overlay = here / "overlay"
 
+# Calls send Opus and VP8 only (checkVoiciCallSdp refuses anything else), so gn-args.txt can turn AV1 off. Then the
+# AAR must not carry AV1's Java halves either: check-aar.py refuses a native method with no symbol.
+gn_args = {l.strip() for l in (here / "gn-args.txt").read_text().splitlines() if l.strip() and not l.startswith("#")}
+NO_AV1 = "enable_libaom=false" in gn_args and "rtc_include_dav1d_in_internal_decoder_factory=false" in gn_args
+
 for f in overlay.rglob("*"):
     if f.is_file():
         dest = src / f.relative_to(overlay)
@@ -29,11 +34,11 @@ EDITS = [
      ['"api/org/webrtc/FlagshipFrameCrypto.java",'], 2),
     ("sdk/android/BUILD.gn", '"src/jni/pc/rtp_sender.cc",',
      ['"src/jni/pc/flagship_frame_crypto.cc",'], 1),
+]
+if not NO_AV1:
     # The jar carries LibaomAv1Encoder (libaom_av1_encoder_java); upstream never linked its native half into the
     # library, so its one native method had no symbol (check-aar.py).
-    ("sdk/android/BUILD.gn", '":dav1d_av1_jni",',
-     ['":libaom_av1_encoder_jni",'], 1),
-]
+    EDITS.append(("sdk/android/BUILD.gn", '":dav1d_av1_jni",', ['":libaom_av1_encoder_jni",'], 1))
 
 for path, anchor, add, minimum in EDITS:
     gn = src / path
@@ -98,8 +103,9 @@ assert(!jni_zero_per_file_natives ||
     text = gn.read_text()
     if "flagship: JNI bridges" not in text:
         names = []
+        av1_bridges = {"generated_libaom_av1_encoder_jni", "generated_dav1d_jni"}
         for m in re.finditer(r'^(\s*)generate_jni\("([^"]+)"\) \{\n(.*?)^\1\}', text, re.M | re.S):
-            if "testonly = true" not in m.group(3):
+            if "testonly = true" not in m.group(3) and not (NO_AV1 and m.group(2) in av1_bridges):
                 names.append(m.group(2))
         if "generated_peerconnection_jni" not in names:
             sys.exit("apply-overlay: sdk/android/BUILD.gn: no generate_jni targets found")
@@ -108,10 +114,11 @@ assert(!jni_zero_per_file_natives ||
         at = text.find(anchor_dep, start)
         if start < 0 or at < 0:
             sys.exit("apply-overlay: sdk/android/BUILD.gn: dist_jar libwebrtc anchor moved")
-        deps = ["      # flagship: JNI bridges\n"] + [f'      ":{n}_java",\n' for n in names] + [
+        deps = ["      # flagship: JNI bridges\n"] + [f'      ":{n}_java",\n' for n in names] + (
             # Upstream packs Dav1dDecoderJni's user only through swcodecs_java, which the jar holds as a direct
             # dep alone.
-            '      ":dav1d_java",\n',
+            [] if NO_AV1 else ['      ":dav1d_java",\n']
+        ) + [
             '      "../../rtc_base:base_java_jni_java",\n',
             '      "//third_party/jni_zero:generate_jni_java",\n',
         ]
@@ -119,6 +126,27 @@ assert(!jni_zero_per_file_natives ||
         text = text[:at] + "".join(deps) + text[at:]
         gn.write_text(text)
         print(f"apply-overlay: sdk/android/BUILD.gn: {len(deps) - 1} libraries added to libwebrtc.jar")
+
+    # Without AV1: the jar loses LibaomAv1Encoder and the library loses the dav1d bridge (and with it dav1d itself).
+    # Each line must be found, so a pin that moved one fails here rather than as a refused AAR.
+    if NO_AV1 and "flagship: no AV1" not in text:
+        text = gn.read_text()
+        drops = [
+            ('dist_jar("libwebrtc") {', '      ":libaom_av1_encoder_java",\n'),
+            (None, '      ":dav1d_av1_jni",\n'),
+        ]
+        for scope, line in drops:
+            start = text.find(scope) if scope else 0
+            at = text.find(line, max(start, 0))
+            if start < 0 or at < 0:
+                sys.exit(f"apply-overlay: sdk/android/BUILD.gn: {line.strip()} not found")
+            text = text[:at] + text[at + len(line):]
+            if line.strip() == '":dav1d_av1_jni",':
+                while (at := text.find(line)) >= 0:
+                    text = text[:at] + text[at + len(line):]
+        text = text.replace('dist_jar("libwebrtc") {', 'dist_jar("libwebrtc") {\n    # flagship: no AV1', 1)
+        gn.write_text(text)
+        print("apply-overlay: sdk/android/BUILD.gn: AV1 (libaom, dav1d) left out")
 
 # Chromium compiles Java with `--release 25` (class files 69), which the app's Android Gradle Plugin cannot dex. The
 # app targets Java 17, so the AAR's classes do too. Two upstream lines; a pin that moved them fails here.
