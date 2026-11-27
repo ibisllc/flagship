@@ -7845,14 +7845,6 @@
     "en": "Couldn't remove the managed name.",
     "ctx": "ui/screens/TrustedDevicesScreen.kt:322 (prose)"
   },
-  "replace_device": {
-    "en": "Replace device",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:344 (title=)"
-  },
-  "wipe_restart": {
-    "en": "Wipe & restart",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:357 (title=)"
-  },
   "managed_device_name": {
     "en": "Managed device name",
     "ctx": "ui/screens/TrustedDevicesScreen.kt:379 (prose)"
@@ -7873,37 +7865,9 @@
     "en": "Couldn't save the encrypted name. Check the name and try again.",
     "ctx": "ui/screens/TrustedDevicesScreen.kt:415 (prose)"
   },
-  "this_revokes_the_devices_account_access": {
-    "en": "This revokes the device's account access. Its presentation name is never stored by Flagship's control plane in plaintext.",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:430 (arg of Text)"
-  },
-  "couldnt_disconnect_check_your_connection_and": {
-    "en": "Couldn't disconnect — check your connection and try again.",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:436 (prose)"
-  },
-  "wipe_and_start_over": {
-    "en": "Wipe and start over?",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:452 (arg of Text)"
-  },
-  "your_account_keeps_the_same_username": {
-    "en": "Your account keeps the same username and your servers keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:455 (arg of Text)"
-  },
   "done_all_other_devices_are_now": {
     "en": "Done. All other devices are now disconnected. Re-pair them on next open.",
     "ctx": "ui/screens/TrustedDevicesScreen.kt:469 (prose)"
-  },
-  "wipe_and_start_over_2": {
-    "en": "Wipe and start over",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:479 (arg of Text)"
-  },
-  "replace_this_device": {
-    "en": "Replace this device?",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:492 (arg of Text)"
-  },
-  "rotates_your_accounts_identity_key_other": {
-    "en": "Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app. Servers stay running, apps stay installed. Takes effect after a 24-hour grace window. Your other devices are notified, and only this device can cancel it.",
-    "ctx": "ui/screens/TrustedDevicesScreen.kt:495 (arg of Text)"
   },
   "loading_devices": {
     "en": "Loading devices…",
@@ -18088,5 +18052,50 @@
   "choose_name_grant_invalid": {
     "en": "This link doesn't work any more. Ask for a new one.",
     "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
+  },
+  "remove_from_account": {
+    "en": "Remove from account",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt (device menu row, dialog confirm)"
+  },
+  "remove_device_from_account_title": {
+    "en": "Remove %1$s from your account?",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt (dialog title; arg: device name)",
+    "args": 1
+  },
+  "remove_device_from_account_message": {
+    "en": "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt (dialog message)"
+  },
+  "couldnt_remove_the_device": {
+    "en": "Couldn't remove the device",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt (failure dialog title)"
+  },
+  "check_your_connection_and_try_again": {
+    "en": "Check your connection and try again.",
+    "ctx": "viewmodels/TrustedDevicesViewModel.kt (fallback failure reason)"
+  },
+  "reset_account_keys": {
+    "en": "Reset account keys",
+    "ctx": "ui/screens/AccountSecurityScreen.kt (section, button, dialog confirm)"
+  },
+  "reset_account_keys_explanation": {
+    "en": "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.",
+    "ctx": "ui/screens/AccountSecurityScreen.kt (explanation)"
+  },
+  "reset_your_account_keys": {
+    "en": "Reset your account keys?",
+    "ctx": "ui/screens/AccountSecurityScreen.kt (dialog title)"
+  },
+  "device_removed_title": {
+    "en": "This device was removed from your account",
+    "ctx": "ui/shell/AccountGoneScreen.kt (DeviceRemovedScreen title)"
+  },
+  "device_removed_body": {
+    "en": "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.",
+    "ctx": "ui/shell/AccountGoneScreen.kt (DeviceRemovedScreen body)"
+  },
+  "reset_account_keys_confirm_message": {
+    "en": "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.",
+    "ctx": "ui/screens/AccountSecurityScreen.kt (dialog message)"
   }
 }

@@ -1883,21 +1883,12 @@
     <string name="set_managed_name">Definir nome gerenciado</string>
     <string name="remove_managed_name">Remover nome gerenciado</string>
     <string name="couldnt_remove_the_managed_name">Não foi possível remover o nome gerenciado.</string>
-    <string name="replace_device">Substituir dispositivo</string>
-    <string name="wipe_restart">Apagar e reiniciar</string>
     <string name="managed_device_name">Nome de dispositivo gerenciado</string>
     <string name="display_name">Nome de exibição</string>
     <string name="lock_managed_name">Bloquear nome gerenciado</string>
     <string name="names_are_encrypted_and_apply_only">Os nomes são criptografados e valem apenas dentro desta conta Flagship.</string>
     <string name="couldnt_save_the_encrypted_name_check">Não foi possível salvar o nome criptografado. Verifique o nome e tente de novo.</string>
-    <string name="this_revokes_the_devices_account_access">Isso revoga o acesso do dispositivo à conta. O nome de exibição dele nunca é armazenado em texto simples pelo plano de controle do Flagship.</string>
-    <string name="couldnt_disconnect_check_your_connection_and">Não foi possível desconectar — verifique sua conexão e tente de novo.</string>
-    <string name="wipe_and_start_over">Apagar e recomeçar?</string>
-    <string name="your_account_keeps_the_same_username">Sua conta mantém o mesmo nome de usuário e seus servidores mantêm os dados. Todos os dispositivos que estão nesta conta agora serão desconectados — inclusive este celular, que se torna a nova raiz de confiança. Você vai parear cada um do zero.\n\nIsso não pode ser desfeito a partir de outro dispositivo.</string>
     <string name="done_all_other_devices_are_now">Pronto. Todos os outros dispositivos agora estão desconectados. Pareie-os de novo na próxima vez que abrir.</string>
-    <string name="wipe_and_start_over_2">Apagar e recomeçar</string>
-    <string name="replace_this_device">Substituir este dispositivo?</string>
-    <string name="rotates_your_accounts_identity_key_other">Gira a chave de identidade da sua conta. Os outros dispositivos da conta precisarão parear de novo na próxima vez que abrirem o app. Os servidores continuam rodando e os apps continuam instalados. Entra em vigor após um período de carência de 24 horas. Seus outros dispositivos são avisados e só este dispositivo pode cancelar.</string>
     <string name="loading_devices">Carregando dispositivos…</string>
     <string name="just_this_device">Somente este dispositivo</string>
     <string name="sign_in_on_another_phone_or">Entre em outro celular ou tablet para adicionar um dispositivo confiável.</string>
@@ -4410,4 +4401,15 @@
     <string name="choose_name_open_when_creating">Abra este link quando criar sua conta.</string>
     <string name="choose_name_grant_expired">Este link expirou. Peça um novo.</string>
     <string name="choose_name_grant_invalid">Este link não funciona mais. Peça um novo.</string>
+    <string name="remove_from_account">Remover da conta</string>
+    <string name="remove_device_from_account_title">Remover %1$s da sua conta?</string>
+    <string name="remove_device_from_account_message">Ele perde o acesso à sua conta e aos seus servidores. Na próxima vez que ficar online, o Flagship apaga dele as chaves da sua conta.</string>
+    <string name="couldnt_remove_the_device">Não foi possível remover o dispositivo</string>
+    <string name="check_your_connection_and_try_again">Verifique sua conexão e tente novamente.</string>
+    <string name="reset_account_keys">Redefinir as chaves da conta</string>
+    <string name="reset_account_keys_explanation">Cria novas chaves para a sua conta. Todos os outros dispositivos são removidos e precisam entrar de novo, e cada servidor precisa ser pareado de novo. Seus servidores mantêm os dados, e a conta continua neste dispositivo.</string>
+    <string name="reset_your_account_keys">Redefinir as chaves da sua conta?</string>
+    <string name="device_removed_title">Este dispositivo foi removido da sua conta</string>
+    <string name="device_removed_body">Outro dispositivo da conta o removeu, então o Flagship apagou deste dispositivo as chaves da conta. A conta e os servidores dela não mudam.</string>
+    <string name="reset_account_keys_confirm_message">Cria novas chaves para a sua conta. Todos os outros dispositivos são removidos e precisam entrar de novo, e cada servidor precisa ser pareado de novo. Seus servidores mantêm os dados, e a conta continua neste dispositivo. Isso não pode ser desfeito.</string>
 </resources>

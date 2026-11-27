@@ -1886,21 +1886,12 @@
     <string name="set_managed_name">Set managed name</string>
     <string name="remove_managed_name">Remove managed name</string>
     <string name="couldnt_remove_the_managed_name">Couldn\'t remove the managed name.</string>
-    <string name="replace_device">Replace device</string>
-    <string name="wipe_restart">Wipe &amp; restart</string>
     <string name="managed_device_name">Managed device name</string>
     <string name="display_name">Display name</string>
     <string name="lock_managed_name">Lock managed name</string>
     <string name="names_are_encrypted_and_apply_only">Names are encrypted and apply only inside this Flagship account.</string>
     <string name="couldnt_save_the_encrypted_name_check">Couldn\'t save the encrypted name. Check the name and try again.</string>
-    <string name="this_revokes_the_devices_account_access">This revokes the device\'s account access. Its presentation name is never stored by Flagship\'s control plane in plaintext.</string>
-    <string name="couldnt_disconnect_check_your_connection_and">Couldn\'t disconnect — check your connection and try again.</string>
-    <string name="wipe_and_start_over">Wipe and start over?</string>
-    <string name="your_account_keeps_the_same_username">Your account keeps the same username and your servers keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You\'ll re-pair each one fresh.\n\nThis can\'t be undone from another device.</string>
     <string name="done_all_other_devices_are_now">Done. All other devices are now disconnected. Re-pair them on next open.</string>
-    <string name="wipe_and_start_over_2">Wipe and start over</string>
-    <string name="replace_this_device">Replace this device?</string>
-    <string name="rotates_your_accounts_identity_key_other">Rotates your account\'s identity key. Other devices on this account will need to re-pair the next time they open the app. Servers stay running, apps stay installed. Takes effect after a 24-hour grace window. Your other devices are notified, and only this device can cancel it.</string>
     <string name="loading_devices">Loading devices…</string>
     <string name="just_this_device">Just this device</string>
     <string name="sign_in_on_another_phone_or">Sign in on another phone or tablet to add a trusted device.</string>
@@ -4417,4 +4408,15 @@
     <string name="choose_name_open_when_creating">Open this link when you create your account.</string>
     <string name="choose_name_grant_expired">This link has expired. Ask for a new one.</string>
     <string name="choose_name_grant_invalid">This link doesn\'t work any more. Ask for a new one.</string>
+    <string name="remove_from_account">Remove from account</string>
+    <string name="remove_device_from_account_title">Remove %1$s from your account?</string>
+    <string name="remove_device_from_account_message">It loses access to your account and your servers. The next time it goes online, Flagship erases your account\'s keys from it.</string>
+    <string name="couldnt_remove_the_device">Couldn\'t remove the device</string>
+    <string name="check_your_connection_and_try_again">Check your connection and try again.</string>
+    <string name="reset_account_keys">Reset account keys</string>
+    <string name="reset_account_keys_explanation">Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.</string>
+    <string name="reset_your_account_keys">Reset your account keys?</string>
+    <string name="device_removed_title">This device was removed from your account</string>
+    <string name="device_removed_body">Another device on the account removed it, so Flagship erased the account\'s keys from this device. The account and its servers are not changed.</string>
+    <string name="reset_account_keys_confirm_message">Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can\'t be undone.</string>
 </resources>

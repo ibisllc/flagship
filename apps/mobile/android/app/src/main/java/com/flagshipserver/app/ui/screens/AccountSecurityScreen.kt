@@ -194,6 +194,8 @@ fun AccountSecurityScreen(nav: NavController) {
         if (Variant.forceAdminRoot || Keystore.hasAdminRoot()) {
             AdminRootRotateCard(server = server, username = app.currentUser.value ?: "")
         }
+
+        ResetAccountKeysCard(server = server, app = app)
     }
 
     if (showEnableSheet) {
@@ -688,3 +690,89 @@ private fun formatDate(ms: Long?): String {
     return FlagshipDateFormat.format(ms)
 }
 
+
+/**
+ * "Reset account keys" (docs/wipe-restart.md, docs/revocation-ui.md): the account-wide Wipe & restart ceremony, moved
+ * here from each device's menu because it changes the whole account, not one device. New UMK, IRK and recovery
+ * passkey; every other device and server must pair again; servers keep their data; this device keeps the account.
+ */
+@Composable
+private fun ResetAccountKeysCard(
+    server: com.flagshipserver.app.api.FlagshipServerClient,
+    app: com.flagshipserver.app.core.AppState,
+) {
+    val ctx = LocalContext.current
+    val toasts = com.flagshipserver.app.core.LocalToastCenter.current
+    // The ceremony rotates the recovery passkey, so it runs the REAL CredentialManager provider: under the mock the
+    // new UMK would be sealed to a passkey that does not exist and the account could not be recovered.
+    val passkeys = remember(ctx) { PasskeyRecoveryManager(ctx.applicationContext) }
+    val wipeVm: com.flagshipserver.app.viewmodels.WipeRestartViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                com.flagshipserver.app.viewmodels.WipeRestartViewModel(
+                    server = server,
+                    webAuthn = com.flagshipserver.app.keystore.PlatformWebAuthnProvider(
+                        activity = { ctx as? Activity },
+                        username = { app.currentUser.value },
+                        manager = passkeys,
+                    ),
+                    username = { app.currentUser.value },
+                )
+            }
+        },
+    )
+    val scope = rememberCoroutineScope()
+    var confirm by remember { mutableStateOf(false) }
+    var failure by remember { mutableStateOf<String?>(null) }
+    var running by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        FSSectionHeader(stringResource(R.string.reset_account_keys))
+        Text(
+            stringResource(R.string.reset_account_keys_explanation),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = FS.space.s4).semantics { contentDescription = "account-security-reset-keys-text" },
+        )
+        FSDangerButton(
+            label = stringResource(R.string.reset_account_keys),
+            onClick = { failure = null; confirm = true },
+            enabled = !running,
+            block = true,
+            modifier = Modifier.semantics { contentDescription = "account-security-reset-keys" },
+        )
+        failure?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.reset_your_account_keys)) },
+            text = { Text(stringResource(R.string.reset_account_keys_confirm_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    running = true
+                    scope.launch {
+                        // The devices-list ETag fence is optional: the rate limit and the signature gate still apply.
+                        wipeVm.run(currentEtag = null)
+                        running = false
+                        when (val phase = wipeVm.phase.value) {
+                            com.flagshipserver.app.viewmodels.WipeRestartPhase.Completed -> {
+                                toasts.success(FSStrings.get(R.string.done_all_other_devices_are_now))
+                                // The account's identity just rotated: the in-memory session is stale.
+                                app.signOut()
+                            }
+                            is com.flagshipserver.app.viewmodels.WipeRestartPhase.Failed -> failure = phase.message
+                            else -> Unit
+                        }
+                    }
+                }) {
+                    Text(stringResource(R.string.reset_account_keys), color = FS.colors.danger)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}

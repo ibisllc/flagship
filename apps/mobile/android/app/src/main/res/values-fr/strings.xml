@@ -1883,21 +1883,12 @@
     <string name="set_managed_name">Définir le nom géré</string>
     <string name="remove_managed_name">Supprimer le nom géré</string>
     <string name="couldnt_remove_the_managed_name">Impossible de supprimer le nom géré.</string>
-    <string name="replace_device">Remplacer l’appareil</string>
-    <string name="wipe_restart">Effacer et redémarrer</string>
     <string name="managed_device_name">Nom d’appareil géré</string>
     <string name="display_name">Nom d’affichage</string>
     <string name="lock_managed_name">Verrouiller le nom géré</string>
     <string name="names_are_encrypted_and_apply_only">Les noms sont chiffrés et ne s’appliquent qu’au sein de ce compte Flagship.</string>
     <string name="couldnt_save_the_encrypted_name_check">Impossible d’enregistrer le nom chiffré. Vérifiez le nom et réessayez.</string>
-    <string name="this_revokes_the_devices_account_access">Cela révoque l’accès de l’appareil au compte. Son nom d’affichage n’est jamais stocké en clair par le plan de contrôle de Flagship.</string>
-    <string name="couldnt_disconnect_check_your_connection_and">Impossible de déconnecter — vérifiez votre connexion et réessayez.</string>
-    <string name="wipe_and_start_over">Effacer et recommencer ?</string>
-    <string name="your_account_keeps_the_same_username">Votre compte conserve le même nom d’utilisateur et vos serveurs conservent leurs données. Tous les appareils actuellement sur ce compte seront déconnectés — y compris ce téléphone, qui devient la nouvelle racine de confiance. Vous réassocierez chacun d’eux à neuf.\n\nCette action ne peut pas être annulée depuis un autre appareil.</string>
     <string name="done_all_other_devices_are_now">Terminé. Tous les autres appareils sont maintenant déconnectés. Réassociez-les à leur prochaine ouverture.</string>
-    <string name="wipe_and_start_over_2">Effacer et recommencer</string>
-    <string name="replace_this_device">Remplacer cet appareil ?</string>
-    <string name="rotates_your_accounts_identity_key_other">Renouvelle la clé d’identité de votre compte. Les autres appareils du compte devront se réassocier à leur prochaine ouverture de l’app. Les serveurs continuent de fonctionner, les apps restent installées. Prend effet après un délai de grâce de 24 heures. Vos autres appareils sont alertés, et seul cet appareil peut l’annuler.</string>
     <string name="loading_devices">Chargement des appareils…</string>
     <string name="just_this_device">Seulement cet appareil</string>
     <string name="sign_in_on_another_phone_or">Connectez-vous sur un autre téléphone ou une autre tablette pour ajouter un appareil de confiance.</string>
@@ -4410,4 +4401,15 @@
     <string name="choose_name_open_when_creating">Ouvrez ce lien quand vous créez votre compte.</string>
     <string name="choose_name_grant_expired">Ce lien a expiré. Demandez-en un nouveau.</string>
     <string name="choose_name_grant_invalid">Ce lien ne fonctionne plus. Demandez-en un nouveau.</string>
+    <string name="remove_from_account">Retirer du compte</string>
+    <string name="remove_device_from_account_title">Retirer %1$s de votre compte ?</string>
+    <string name="remove_device_from_account_message">Il perd l\'accès à votre compte et à vos serveurs. La prochaine fois qu\'il se connecte, Flagship efface de cet appareil les clés de votre compte.</string>
+    <string name="couldnt_remove_the_device">Impossible de retirer l\'appareil</string>
+    <string name="check_your_connection_and_try_again">Vérifiez votre connexion et réessayez.</string>
+    <string name="reset_account_keys">Réinitialiser les clés du compte</string>
+    <string name="reset_account_keys_explanation">Crée de nouvelles clés pour votre compte. Tous les autres appareils sont retirés et doivent rejoindre le compte à nouveau, et chaque serveur doit être associé à nouveau. Vos serveurs gardent leurs données et le compte reste sur cet appareil.</string>
+    <string name="reset_your_account_keys">Réinitialiser les clés de votre compte ?</string>
+    <string name="device_removed_title">Cet appareil a été retiré de votre compte</string>
+    <string name="device_removed_body">Un autre appareil du compte l\'a retiré, donc Flagship a effacé de cet appareil les clés du compte. Le compte et ses serveurs ne changent pas.</string>
+    <string name="reset_account_keys_confirm_message">Crée de nouvelles clés pour votre compte. Tous les autres appareils sont retirés et doivent rejoindre le compte à nouveau, et chaque serveur doit être associé à nouveau. Vos serveurs gardent leurs données et le compte reste sur cet appareil. Cette action est irréversible.</string>
 </resources>

@@ -217,16 +217,41 @@ class TrustedDevicesViewModel(
         }
     }
 
-    suspend fun disconnect(device: DirectoryDevice): Boolean {
-        val user = username() ?: return false
-        if (device.isCurrent) return false
+    /** What "Remove from account" ended in (docs/revocation-ui.md). A later "Could someone else unlock this
+     *  device?" step slots in before [removeFromAccount] without changing its callers. */
+    sealed interface RemoveOutcome {
+        data object Removed : RemoveOutcome
+
+        /** [reason] is the sentence a person reads (UserErrorText), never a transport string. */
+        data class Failed(val reason: String) : RemoveOutcome
+    }
+
+    /**
+     * Remove another device from the account: `.com` revokes its identity, grants and push tokens and wakes it to
+     * erase its keys. Never this device (Settings' "Remove this device" is that).
+     */
+    suspend fun removeFromAccount(device: DirectoryDevice): RemoveOutcome {
+        val fallback = FSStrings.get(R.string.check_your_connection_and_try_again)
+        val user = username() ?: return RemoveOutcome.Failed(fallback)
+        if (device.isCurrent) return RemoveOutcome.Failed(fallback)
         val path = "/api/accounts/${user.lowercase()}/devices/${device.deviceId}"
-        return runCatching {
+        return removing(fallback) {
             val context = directoryContext("DELETE", path)
             server.revokeAccountDevice(user, device.deviceId, context.authorization)
-            load()
-            true
-        }.getOrDefault(false)
+            runCatching { load() }
+        }
+    }
+
+    companion object {
+        /** Run a removal; a failure becomes the sentence a person reads, falling back to [fallback]. */
+        internal suspend fun removing(fallback: String, call: suspend () -> Unit): RemoveOutcome = try {
+            call()
+            RemoveOutcome.Removed
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            RemoveOutcome.Failed(UserErrorText.of(t, fallback, where = "remove-device"))
+        }
     }
 
     suspend fun renameAccount(displayName: String): Boolean {

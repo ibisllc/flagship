@@ -217,9 +217,9 @@ class GymSettingsTest : GymBase() {
             composeRule.onNode(hasContentDescription(desc)).scrollIfNeeded().performClick()
         }
         gymShot("device-menu")
-        if (descCount("trusted-device-disconnect") > 0) {
-            tapDesc("trusted-device-disconnect")
-            waitText("Revoke")
+        if (descCount("trusted-device-remove") > 0) {
+            tapDesc("trusted-device-remove")
+            waitText("Remove from account")
             tapText("Cancel")
         }
     }

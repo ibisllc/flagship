@@ -11,7 +11,6 @@ import com.flagshipserver.app.core.FSStrings
 import androidx.compose.ui.res.stringResource
 import com.flagshipserver.app.core.fsString
 import com.flagshipserver.app.R
-import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.LockOpen
@@ -71,7 +69,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -85,9 +82,7 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.api.PendingRePairSnapshot
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
-import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.keystore.Keystore
-import com.flagshipserver.app.keystore.PlatformWebAuthnProvider
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSBarAction
 import com.flagshipserver.app.ui.components.FSDivider
@@ -112,12 +107,6 @@ import java.util.Locale
 fun TrustedDevicesScreen(nav: NavController) {
     val app = LocalAppState.current
     val server = LocalFlagshipServerClient.current
-    // E5 — the Wipe ceremony rotates the recovery passkey. It must run the
-    // REAL CredentialManager provider (same one Recovery/Secure-account use),
-    // not the Mock — otherwise the new UMK is sealed under a passkey that
-    // doesn't exist and the account is unrecoverable after the wipe.
-    val ctx = LocalContext.current
-    val passkeys = remember(ctx) { PasskeyRecoveryManager(ctx.applicationContext) }
     val vm: TrustedDevicesViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -140,44 +129,14 @@ fun TrustedDevicesScreen(nav: NavController) {
     var confirmReject by remember { mutableStateOf(false) }
     var rejectMessage by remember { mutableStateOf<String?>(null) }
     var sheetTarget by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
-    var confirmDisconnect by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
-    var confirmReplace by remember { mutableStateOf(false) }
-    var confirmWipe by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
+    var removeFailure by remember { mutableStateOf<String?>(null) }
     var snackbarMsg by remember { mutableStateOf<String?>(null) }
     var nameEditMode by remember { mutableStateOf<String?>(null) }
     var nameEditTarget by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
     var nameDraft by remember { mutableStateOf("") }
     var nameLocked by remember { mutableStateOf(false) }
     val canManageNames = Keystore.hasAdminRoot()
-    val replaceVm: com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel = viewModel(
-        factory = viewModelFactory {
-            initializer {
-                com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel(
-                    server = server,
-                    username = { app.currentUser.value },
-                )
-            }
-        },
-    )
-    val wipeVm: com.flagshipserver.app.viewmodels.WipeRestartViewModel = viewModel(
-        factory = viewModelFactory {
-            initializer {
-                com.flagshipserver.app.viewmodels.WipeRestartViewModel(
-                    server = server,
-                    // Real passkey provider — see note at the top of this
-                    // composable. `ctx as? Activity` is resolved lazily at
-                    // ceremony time so the CredentialManager UI has a host.
-                    webAuthn = PlatformWebAuthnProvider(
-                        activity = { ctx as? Activity },
-                        username = { app.currentUser.value },
-                        manager = passkeys,
-                    ),
-                    username = { app.currentUser.value },
-                )
-            }
-        },
-    )
-
     LaunchedEffect(Unit) { vm.load() }
 
     FSScreen(
@@ -280,10 +239,8 @@ fun TrustedDevicesScreen(nav: NavController) {
     // "tap a row, see options" — feels more native than an iOS-style
     // contextual menu.
     //
-    // v1.2 Phase 4 — Disconnect / Replace / Wipe entries are DISABLED
-    // when the row is in quarantine (the 14-day freshly-admitted
-    // window). Tapping a disabled entry posts a toast explaining the
-    // window so users aren't confused by silent failure.
+    // Each device: its name items and "Remove from account" (docs/revocation-ui.md). Resetting the account's
+    // keys is account-wide and lives in Account security; this device leaves through Settings' "Remove this device".
     sheetTarget?.let { target ->
         ModalBottomSheet(onDismissRequest = { sheetTarget = null }) {
             Column(Modifier.padding(bottom = FS.space.s6)) {
@@ -339,45 +296,19 @@ fun TrustedDevicesScreen(nav: NavController) {
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
-                FSRow(
-                    title = stringResource(R.string.revoke_2),
-                    icon = Icons.Outlined.PhonelinkErase,
-                    iconTint = MaterialTheme.colorScheme.error,
-                    titleColor = MaterialTheme.colorScheme.error,
-                    enabled = !target.isCurrent,
-                    onClick = {
-                        confirmDisconnect = target
-                        sheetTarget = null
-                    },
-                    modifier = Modifier.semantics { contentDescription = "trusted-device-disconnect" },
-                )
-                // C7 — Replace device. Tap opens the scare dialog;
-                // confirmation drives the ReplaceDeviceViewModel.
-                FSRow(
-                    title = stringResource(R.string.replace_device),
-                    icon = Icons.Outlined.Sync,
-                    iconTint = MaterialTheme.colorScheme.error,
-                    titleColor = MaterialTheme.colorScheme.error,
-                    enabled = !target.isCurrent,
-                    onClick = {
-                        confirmReplace = true
-                        sheetTarget = null
-                    },
-                    modifier = Modifier.semantics { contentDescription = "trusted-device-replace" },
-                )
-                // E5 — Wipe & restart. Live ceremony.
-                FSRow(
-                    title = stringResource(R.string.wipe_restart),
-                    icon = Icons.Outlined.DeleteForever,
-                    iconTint = MaterialTheme.colorScheme.error,
-                    titleColor = MaterialTheme.colorScheme.error,
-                    enabled = !target.isCurrent,
-                    onClick = {
-                        confirmWipe = true
-                        sheetTarget = null
-                    },
-                    modifier = Modifier.semantics { contentDescription = "trusted-device-wipe" },
-                )
+                if (!target.isCurrent) {
+                    FSRow(
+                        title = stringResource(R.string.remove_from_account),
+                        icon = Icons.Outlined.PhonelinkErase,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        titleColor = MaterialTheme.colorScheme.error,
+                        onClick = {
+                            confirmRemove = target
+                            sheetTarget = null
+                        },
+                        modifier = Modifier.semantics { contentDescription = "trusted-device-remove" },
+                    )
+                }
             }
         }
     }
@@ -455,101 +386,37 @@ fun TrustedDevicesScreen(nav: NavController) {
         )
     }
 
-    // Scare-warning confirmation. "We'll stop sending alerts to <label>.
-    // It can sign back in with your passkey."
-    confirmDisconnect?.let { target ->
+    confirmRemove?.let { target ->
         AlertDialog(
-            onDismissRequest = { confirmDisconnect = null },
-            title = { Text(fsString(R.string.revoke, target.displayName)) },
-            text = { Text(stringResource(R.string.this_revokes_the_devices_account_access)) },
+            onDismissRequest = { confirmRemove = null },
+            title = { Text(fsString(R.string.remove_device_from_account_title, target.displayName)) },
+            text = { Text(stringResource(R.string.remove_device_from_account_message)) },
             confirmButton = {
-                TextButton(onClick = {
-                    confirmDisconnect = null
-                    scope.launch {
-                        val ok = vm.disconnect(target)
-                        if (!ok) snackbarMsg = FSStrings.get(R.string.couldnt_disconnect_check_your_connection_and)
-                    }
-                }) {
-                    Text(stringResource(R.string.revoke_2), color = MaterialTheme.colorScheme.error)
+                TextButton(
+                    onClick = {
+                        confirmRemove = null
+                        scope.launch {
+                            val outcome = vm.removeFromAccount(target)
+                            if (outcome is TrustedDevicesViewModel.RemoveOutcome.Failed) removeFailure = outcome.reason
+                        }
+                    },
+                    modifier = Modifier.testTag("trusted-device-remove-confirm"),
+                ) {
+                    Text(stringResource(R.string.remove_from_account), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDisconnect = null }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { confirmRemove = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
 
-    // E5 — Wipe & restart scare dialog.
-    if (confirmWipe) {
+    removeFailure?.let { reason ->
         AlertDialog(
-            onDismissRequest = { confirmWipe = false },
-            title = { Text(stringResource(R.string.wipe_and_start_over)) },
-            text = {
-                Text(
-                    stringResource(R.string.your_account_keeps_the_same_username),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmWipe = false
-                    scope.launch {
-                        wipeVm.run(currentEtag = vm.etag.value)
-                        when (val phase = wipeVm.phase.value) {
-                            com.flagshipserver.app.viewmodels.WipeRestartPhase.Completed -> {
-                                snackbarMsg = FSStrings.get(R.string.done_all_other_devices_are_now)
-                                // Drop to Welcome — current session is stale.
-                                app.signOut()
-                            }
-                            is com.flagshipserver.app.viewmodels.WipeRestartPhase.Failed ->
-                                snackbarMsg = phase.message
-                            else -> Unit
-                        }
-                    }
-                }) {
-                    Text(stringResource(R.string.wipe_and_start_over_2), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmWipe = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-
-    // C7 — Replace device scare dialog. Same UX shape as iOS B7.
-    if (confirmReplace) {
-        AlertDialog(
-            onDismissRequest = { confirmReplace = false },
-            title = { Text(stringResource(R.string.replace_this_device)) },
-            text = {
-                Text(
-                    stringResource(R.string.rotates_your_accounts_identity_key_other),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmReplace = false
-                    scope.launch {
-                        replaceVm.initiate(currentEtag = vm.etag.value)
-                        when (val phase = replaceVm.phase.value) {
-                            is com.flagshipserver.app.viewmodels.ReplaceDevicePhase.Pending -> {
-                                // H5 — push the dedicated FINALIZE screen (24h
-                                // grace countdown + Complete) instead of leaving
-                                // the ceremony at a transient snackbar. Carries
-                                // the server-reported deadline on the route.
-                                nav.navigate("replace-finalize/${phase.completesAt}")
-                            }
-                            is com.flagshipserver.app.viewmodels.ReplaceDevicePhase.Failed ->
-                                snackbarMsg = phase.message
-                            else -> Unit
-                        }
-                    }
-                }) {
-                    Text(stringResource(R.string.replace_device), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmReplace = false }) { Text(stringResource(R.string.cancel)) }
-            },
+            onDismissRequest = { removeFailure = null },
+            title = { Text(stringResource(R.string.couldnt_remove_the_device)) },
+            text = { Text(reason, modifier = Modifier.testTag("trusted-device-remove-failure")) },
+            confirmButton = { TextButton(onClick = { removeFailure = null }) { Text(stringResource(R.string.done)) } },
         )
     }
 }
