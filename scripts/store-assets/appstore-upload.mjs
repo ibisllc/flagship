@@ -43,8 +43,13 @@ export async function appstore({ root, apply, imagesAt }) {
   const jwt = `${unsigned}.${crypto.sign("sha256", Buffer.from(unsigned), { key: pem, dsaEncoding: "ieee-p1363" }).toString("base64url")}`;
 
   async function call(method, p, body) {
-    const r = await fetch(p.startsWith("http") ? p : API + p, { method, headers: { authorization: `Bearer ${jwt}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
-    const text = await r.text();
+    let r, text;
+    for (let attempt = 0; ; attempt++) { // retry only reads and idempotent writes: a repeated POST would reserve twice
+      r = await fetch(p.startsWith("http") ? p : API + p, { method, headers: { authorization: `Bearer ${jwt}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      text = await r.text();
+      if (method === "POST" || (r.status !== 429 && r.status < 500) || attempt === 4) break;
+      await new Promise((ok) => setTimeout(ok, 2000 * 2 ** attempt));
+    }
     if (!r.ok) throw new Error(`${method} ${p}: ${r.status} ${text.slice(0, 600)}`);
     return text ? JSON.parse(text) : {};
   }

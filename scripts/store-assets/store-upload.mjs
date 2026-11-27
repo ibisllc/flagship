@@ -58,8 +58,13 @@ async function token() {
 
 const auth = await token();
 async function call(method, url, body, type = "application/json") {
-  const r = await fetch(url, { method, headers: { authorization: `Bearer ${auth}`, ...(body !== undefined ? { "content-type": type } : {}) }, body: body === undefined ? undefined : type === "application/json" ? JSON.stringify(body) : body });
-  const text = await r.text();
+  let r, text;
+  for (let attempt = 0; ; attempt++) { // Play answers 429/5xx now and then; a repeated POST could upload an image twice
+    r = await fetch(url, { method, headers: { authorization: `Bearer ${auth}`, ...(body !== undefined ? { "content-type": type } : {}) }, body: body === undefined ? undefined : type === "application/json" ? JSON.stringify(body) : body });
+    text = await r.text();
+    if (method === "POST" || (r.status !== 429 && r.status < 500) || attempt === 4) break;
+    await new Promise((ok) => setTimeout(ok, 2000 * 2 ** attempt));
+  }
   if (!r.ok) { const e = new Error(`${method} ${url.replace(API, "").replace(UPLOAD, "")}: ${r.status} ${text}`); e.status = r.status; e.body = text; throw e; }
   return text ? JSON.parse(text) : {};
 }
