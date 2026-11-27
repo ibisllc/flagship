@@ -88,6 +88,12 @@ export interface OrdersHandlerOptions {
   username?: string;
   /** Slice D — box-local active admin grants (`[]` box-side today). */
   activeGrants?: readonly AdminGrantView[];
+  /**
+   * Account master-key rotation: true while this box's account-key epoch is unknown or behind what
+   * `.com` reports. Orders signed with the account key (pairing a browser, …) are refused meanwhile;
+   * admin-root-signed ones are not affected.
+   */
+  ownerKeyHeld?: () => boolean;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -153,6 +159,9 @@ export function buildOrdersHandler(opts: OrdersHandlerOptions) {
       sig = hexToBytes(envelope.signature);
     } catch {
       return { status: 400, body: JSON.stringify({ error: "invalid signature hex" }), headers: H };
+    }
+    if (!SENSITIVE_ORDER_TYPES.has(order.type) && opts.ownerKeyHeld?.()) {
+      return { status: 409, body: JSON.stringify({ error: "account-key-changing", code: "account-key-changing" }), headers: H };
     }
     const authorized = SENSITIVE_ORDER_TYPES.has(order.type)
       ? authorizeSensitiveOrder({

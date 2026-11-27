@@ -1046,7 +1046,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (keydPool) {
       // The account keys go to keyd; this process keeps only which archives they are for.
       if (fresh.length > 0) await keydPool.poolAdd(fresh.map((k) => ({ archiveId: k.archiveId, kekHex: k.kekHex })));
-      keyPool = (await keydPool.poolIds()).map((archiveId) => ({ archiveId }));
+      const used = new Set(s.usedIds);
+      keyPool = (await keydPool.poolIds()).filter((id) => !used.has(id)).map((archiveId) => ({ archiveId }));
     } else {
       keyPool = [...keyPool, ...fresh].slice(0, KEY_POOL_MAX);
       await store!.saveKeys(heldKeys());
@@ -1589,7 +1590,27 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           }
           keyPool = (await keydPool.poolIds()).map((archiveId) => ({ archiveId }));
         }
+        // Keys discarded after an account key change stay in keyd's pool but are never used here.
+        const used = new Set(savedState.usedIds);
+        keyPool = keyPool.filter((k) => !used.has(k.archiveId));
       }
+    },
+    /**
+     * Account master-key rotation: the pre-deposited account keys were made under the old account
+     * key, so a backup sealed with one stays openable by whoever kept that key. Drops them (counted
+     * as used, so keyd's copies are never taken either); an admin device deposits a new batch.
+     * Returns how many were dropped.
+     */
+    async discardUnusedKeys(): Promise<number> {
+      if (!store) return 0;
+      const s = await state();
+      const n = keyPool.length;
+      if (n === 0) return 0;
+      s.usedIds.push(...keyPool.map((k) => k.archiveId));
+      keyPool = [];
+      if (!keydPool) await store.saveKeys([]);
+      await store.saveState(s);
+      return n;
     },
     /** One look at the schedule (the daemon calls it every few minutes). */
     tick,

@@ -415,6 +415,8 @@ export interface ScreensHttpDeps {
    * daemon since boot.
    */
   postRecoveryStatus?: (() => unknown | null) | null;
+  /** Account master-key rotation: the epoch this box verified, the hint, re-keys due, its capability. */
+  accountKeyStatus?: (() => unknown | null) | null;
   /**
    * Resolver for the update-pack lineage-break auto-pause. Powers
    * `GET + POST /api/screens/lineage-resolve`. When unset, the GET
@@ -1643,6 +1645,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     // recovery binds. Returns 200 + `{ report: null }` when no recovery
     // has run on this daemon since boot — the view treats that as "all
     // done, nothing to show."
+    // Account master-key rotation (docs/account-key-rotation.md): what this box verified itself. Clients
+    // read it here, from the box, to offer the rotation only on boxes that can follow it and to show
+    // progress after one.
+    if (path === "/api/screens/account-key/status" && method === "GET") {
+      return jok({ status: deps.accountKeyStatus ? deps.accountKeyStatus() : null });
+    }
     if (path === "/api/screens/post-recovery/status" && method === "GET") {
       const report = deps.postRecoveryStatus ? deps.postRecoveryStatus() : null;
       return jok({ report: report ?? null });

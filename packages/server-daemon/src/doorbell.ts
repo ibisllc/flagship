@@ -40,12 +40,14 @@ export type DoorbellLane =
   | "migration"
   | "decommission";
 
-type StampKey = "aliases" | "rotations" | "grants";
+type StampKey = "aliases" | "rotations" | "grants" | "keyRotations";
 
 interface Rung {
   receivedAt: number;
   lanes: ReadonlySet<string>;
   stamps: Readonly<Record<StampKey, string>>;
+  /** The account's key epoch as `.com` reports it (a hint: accountKeyRotationConsumer.ts). */
+  keyEpoch?: number;
 }
 
 export interface DoorbellOptions {
@@ -80,18 +82,21 @@ const STAMP_PATHS: [string, StampKey][] = [
   ["apps/aliases", "aliases"],
   ["device-grants", "grants"],
   ["admin-root-rotations", "rotations"],
+  ["account-key-rotations", "keyRotations"],
 ];
 
 function parseRung(raw: unknown, now: number): Rung | null {
   if (typeof raw !== "object" || raw === null) return null;
-  const r = raw as { v?: unknown; lanes?: unknown; stamps?: unknown };
+  const r = raw as { v?: unknown; lanes?: unknown; stamps?: unknown; keyEpoch?: unknown };
   if (r.v !== 1 || !Array.isArray(r.lanes) || r.lanes.some((l) => typeof l !== "string")) return null;
   const s = r.stamps as Partial<Record<StampKey, unknown>> | null | undefined;
   if (!s || typeof s.aliases !== "string" || typeof s.rotations !== "string" || typeof s.grants !== "string") return null;
   return {
     receivedAt: now,
     lanes: new Set(r.lanes as string[]),
-    stamps: { aliases: s.aliases, rotations: s.rotations, grants: s.grants },
+    // An older `.com` sends no key-rotation stamp: the lane is then polled for real every time.
+    stamps: { aliases: s.aliases, rotations: s.rotations, grants: s.grants, keyRotations: typeof s.keyRotations === "string" ? s.keyRotations : "" },
+    ...(typeof r.keyEpoch === "number" && Number.isSafeInteger(r.keyEpoch) && r.keyEpoch >= 0 ? { keyEpoch: r.keyEpoch } : {}),
   };
 }
 
@@ -129,7 +134,16 @@ export class Doorbell {
     this.rung = next;
     const rang: string[] = [];
     for (const lane of next.lanes) if (!before || !before.lanes.has(lane)) rang.push(lane);
-    for (const key of ["aliases", "rotations", "grants"] as const) {
+    if (next.keyEpoch !== undefined) {
+      for (const fn of this.epochListeners) {
+        try {
+          fn(next.keyEpoch);
+        } catch {
+          /* a listener must never break the heartbeat */
+        }
+      }
+    }
+    for (const key of ["aliases", "rotations", "grants", "keyRotations"] as const) {
       if (before && before.stamps[key] !== next.stamps[key]) rang.push(key);
     }
     for (const name of rang) {
@@ -141,6 +155,13 @@ export class Doorbell {
         }
       }
     }
+  }
+
+  private readonly epochListeners = new Set<(epoch: number) => void>();
+
+  /** Tell `fn` the account key epoch each doorbell reports. */
+  onKeyEpoch(fn: (epoch: number) => void): void {
+    this.epochListeners.add(fn);
   }
 
   /** Tell `fn` the moment a lane starts holding something, or a list changes. */
@@ -217,7 +238,7 @@ export class Doorbell {
       if (key) {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         const held = this.replay.get(url);
-        if (held && held.stamp === rung.stamps[key] && !this.safetyDue(key)) {
+        if (held && rung.stamps[key] !== "" && held.stamp === rung.stamps[key] && !this.safetyDue(key)) {
           this.skippedTotal++;
           return new Response(held.body, {
             status: 200,

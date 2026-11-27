@@ -180,6 +180,7 @@ import {
   defaultRePairWatcherPath,
   RePairWatcher,
 } from "./postRecovery/rePairWatcher.js";
+import { reissueStableIds } from "./postRecovery/stableIdReissuer.js";
 import {
   defaultJournalPath,
   FileJournalStore,
@@ -406,6 +407,13 @@ import { bootPqPaths, ensureBootPqMaterial, syncBootUnlockFiles } from "./bootPq
 import { ensureStkPqBinding } from "./pqKeyBinding.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
+import {
+  AccountKeyEpochGate,
+  buildAccountKeyRotationPoller,
+  defaultAccountKeyPinPath,
+  fileAccountKeyPinStore,
+  resolvePinnedAccountKeys,
+} from "./accountKeyRotationConsumer.js";
 import { installHostComponents } from "./hostComponents.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
@@ -444,10 +452,14 @@ const connectorGateRef: { current: ((connectorId: string) => string | null) | nu
  * loaded (wireOwnerHandlers): while strict, only servers the account's hybrid-signed order lists.
  */
 const siblingAdmitRef: { current: ((stkHex: string) => string | null) | null } = { current: null };
+/** Account master-key rotation: the epoch this box verified, and whether it holds the account key back. */
+const accountKeyGate = new AccountKeyEpochGate();
+/** The recipe's admin root (the seed the account-key lane is placed from), set at boot. */
+const accountKeySeedRef: { adminRootSeedHex: string | null } = { adminRootSeedHex: null };
 const bellFetch = (): { fetchImpl?: typeof fetch } =>
   doorbellRef.current ? { fetchImpl: doorbellRef.current.fetch } : {};
 /** Poll a consumer the moment its lane starts to ring. */
-const onRing = (lane: DoorbellLane | "aliases" | "rotations" | "grants", poll: () => Promise<unknown>): void =>
+const onRing = (lane: DoorbellLane | "aliases" | "rotations" | "grants" | "keyRotations", poll: () => Promise<unknown>): void =>
   doorbellRef.current?.onRing(lane, () => void poll().catch(() => {}));
 
 
@@ -1154,6 +1166,28 @@ async function main(): Promise<void> {
     }
   }
 
+  // ---- Account master-key rotation (docs/account-key-rotation.md) ----
+  // The account key the box verified itself (its pin) overrides the config's, before anything that
+  // checks the account key is wired. A lost pin holds the account key back until the lane is replayed.
+  if (cfg?.adminRootPub && adminRootSeedHex && env.controlPlaneBaseUrl) {
+    accountKeySeedRef.adminRootSeedHex = adminRootSeedHex;
+    accountKeyGate.arm();
+    const pinned = await resolvePinnedAccountKeys(fileAccountKeyPinStore(defaultAccountKeyPinPath(dataDir)));
+    if (pinned === "lost") {
+      accountKeyGate.setTrusted(null);
+      console.error("[daemon] account-key pin was lost; requests signed with the account key wait until the lane is replayed");
+    } else if (pinned) {
+      accountKeyGate.setTrusted(pinned.epoch, pinned.rekeyDue);
+      const irkHex = bytesToHexLocal(cfg.irkPublicKey);
+      if (pinned.irkPubHex !== irkHex || (pinned.aidPubHex && (!cfg.ownerAidPub || bytesToHexLocal(cfg.ownerAidPub) !== pinned.aidPubHex))) {
+        cfg = { ...cfg, irkPublicKey: hexToBytes(pinned.irkPubHex), ...(pinned.aidPubHex ? { ownerAidPub: hexToBytes(pinned.aidPubHex) } : {}) };
+        console.log(`[daemon] account key from box-local state: epoch ${pinned.epoch}, ${pinned.irkPubHex.slice(0, 12)}`);
+      }
+    } else {
+      accountKeyGate.setTrusted(0);
+    }
+  }
+
   // ---- Outbound proxy (docs/outbound-proxy.md) ----
   // Before the first network call (endpoint discovery, right below): a box
   // whose recipe or owner set a proxy never reaches anything directly.
@@ -1581,6 +1615,7 @@ async function main(): Promise<void> {
   const depositReads = (): { fetchImpl: typeof fetch } => bellFetch().fetchImpl ? { fetchImpl: bellFetch().fetchImpl! } : { fetchImpl: depositFetch };
   if (cfg && env.controlPlaneBaseUrl && env.serverFqdn) {
     doorbellRef.current = new Doorbell({ serverDomain: env.serverFqdn, username: cfg.userId, fetchImpl: depositFetch });
+    doorbellRef.current.onKeyEpoch((epoch) => accountKeyGate.hint(epoch));
   }
   // ---- Authenticated time (pq-suites.md §17) ----
   // Expiry checks read the box's authenticated clock: `.com`'s CA-signed time over a fresh nonce,
@@ -1617,7 +1652,8 @@ async function main(): Promise<void> {
       persistSwk: (hex) => persistSwkHex(swkHexFilePath, hex),
       restart: () => restarts.request("SWK provisioned via deposit; restarting to enable the service platform"),
       markerStore: fileSwkMarkerStore(`${dataDir}/swk-claimed.json`),
-      guard: restarts.guard,
+      // The delivery is checked under the account key: not while that key may have been replaced.
+      guard: (claim) => restarts.guard(() => accountKeyGate.guard(claim)),
       onLog: (m) => console.log(m),
     });
     swkPoller.start();
@@ -1652,7 +1688,7 @@ async function main(): Promise<void> {
       persistCgk: (hex) => persistCgkHex(cgkHexFilePath, hex),
       restart: () => restarts.request("CGK provisioned via deposit; restarting to enable gossip"),
       markerStore: fileCgkMarkerStore(`${dataDir}/cgk-claimed.json`),
-      guard: restarts.guard,
+      guard: (claim) => restarts.guard(() => accountKeyGate.guard(claim)),
       onLog: (m) => console.log(m),
     });
     cgkPoller.start();
@@ -1923,6 +1959,7 @@ async function main(): Promise<void> {
         // destructive order types on this endpoint (absent ⇒ legacy).
         ...(cfg?.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
         ...(cfg ? { username: cfg.userId } : {}),
+        ownerKeyHeld: () => accountKeyGate.ownerKeyHeld(),
         executor: defaultExecutor({
           backupLoop,
           identity: identityKeypair,
@@ -2595,7 +2632,7 @@ async function main(): Promise<void> {
           onVerified: async (json) => {
               await adoptPairingSiblings(json);
             },
-          guard: restarts.guard,
+          guard: (claim) => restarts.guard(() => accountKeyGate.guard(claim)),
           onLog: (m) => console.log(m),
         });
         pairingPoller.start();
@@ -5443,6 +5480,7 @@ async function wireRuntimeSurfaces(deps: {
           : null,
     },
     postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
+    accountKeyStatus: () => accountKeyGate.status(),
     installEventLog: {
       recent: () =>
         deps.activityLog
@@ -5560,6 +5598,13 @@ async function wireRuntimeSurfaces(deps: {
               const pin = await fileAdminRootPinStore(`${dataDir}/admin-root-pin.json`).read();
               return !!pin && pin.seq > 0 && pin.updatedAt >= sinceMs;
             },
+            // On an admin-pinned box the old-IRK + new-IRK proof is no evidence (both are account keys);
+            // an account-key hop the box verified under its admin root to that same key is.
+            acceptOldIrkProof: false,
+            accountKeyHopTo: async (newIrkHex: string) => {
+              const pin = await fileAccountKeyPinStore(defaultAccountKeyPinPath(dataDir)).read();
+              return !!pin && pin.epoch > 0 && pin.irkPubHex === newIrkHex;
+            },
           }
         : {}),
       reissuerDeps: runtime.servicePlatform
@@ -5594,6 +5639,70 @@ async function wireRuntimeSurfaces(deps: {
     await watcher.load();
     watcher.start();
     rePairWatcherRef.current = watcher;
+
+    // ---- Account master-key rotation (docs/account-key-rotation.md) ----
+    // Armed on a box that pins an admin root: replays the account's lane under the root it pins and,
+    // on a verified hop, adopts the new account key without a re-pair, then restarts under it.
+    if (cfg.adminRootPub && accountKeySeedRef.adminRootSeedHex && env.controlPlaneBaseUrl && env.serverFqdn) {
+      const laneReader = new BoxReadToken({
+        comBaseUrl: env.controlPlaneBaseUrl,
+        username: cfg.userId,
+        serverFqdn: env.serverFqdn,
+        boxPublicKey: () => identityKeypair.publicKey,
+        signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+      });
+      const laneFetch: typeof fetch = async (url, init) => {
+        try {
+          return await laneReader.fetch(String(url instanceof Request ? url.url : url), init ?? {});
+        } catch {
+          return await fetch(url, init);
+        }
+      };
+      const keyPoller = buildAccountKeyRotationPoller({
+        username: cfg.userId,
+        configIrkPubHex: irkHexFromCfg,
+        configAidPubHex: cfg.ownerAidPub ? bytesToHexStr(cfg.ownerAidPub) : null,
+        adminRootSeedHex: accountKeySeedRef.adminRootSeedHex,
+        controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+        fetchImpl: laneFetch,
+        pinStore: fileAccountKeyPinStore(defaultAccountKeyPinPath(dataDir)),
+        gate: accountKeyGate,
+        pq: () => {
+          const p = rotationPq();
+          return p ? { policy: p.policy, bindingFor: p.bindingFor, now: p.now } : null;
+        },
+        hooks: {
+          reissueStableIds: async (oldHex, newHex) =>
+            runtime.servicePlatform
+              ? (await reissueStableIds({
+                  deps: { servicePlatform: runtime.servicePlatform, swk: reissuerJournalSwk, journal: journalStore },
+                  oldIrkPubHex: oldHex,
+                  newIrkPubHex: newHex,
+                })).totalRewritten
+              : 0,
+          persistIrk: async (newHex) => {
+            await syncOwnerKeyFile(newHex).catch((e) => console.warn(`[daemon] owner key on /boot not updated: ${(e as Error).message}`));
+            const configPath = process.env.FLAGSHIP_CONFIG;
+            if (configPath) await persistRotatedIrk(configPath, newHex);
+          },
+          // The sessions' parent is the account itself (parentOf), so a removed device's own cannot be
+          // picked out: every owner and companion session ends and browsers approve again.
+          clearOwnerSessions: () => pairedSessions.removeAll(),
+          discardArchiveKeys: async () => (serverArchiveService ? await serverArchiveService.discardUnusedKeys() : 0),
+          note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok }),
+          restart: (reason) => restarts.request(reason),
+        },
+        log: (m) => console.log(m),
+      });
+      keyPoller.start();
+      onRing("keyRotations", () => keyPoller.pollOnce());
+      doorbellRef.current?.onKeyEpoch(() => {
+        if (accountKeyGate.ownerKeyHeld()) void keyPoller.pollOnce();
+      });
+      process.once("SIGTERM", () => keyPoller.stop());
+      process.once("SIGINT", () => keyPoller.stop());
+      console.log("[daemon] account-key-rotation consumer armed (replays the lane under the pinned admin root)");
+    }
     // N14: a recovery under way, or one `.com` reported that this box could not verify.
     const feedRecovery = () => void applySliverPlan(deps.securitySliver, recoverySliverPlan(cfg.userId, watcher.state, Date.now())).catch(() => {});
     feedRecovery();

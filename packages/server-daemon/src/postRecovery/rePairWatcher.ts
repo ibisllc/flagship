@@ -44,7 +44,9 @@
  *
  *   - proof: the row carries a `proof` with two signatures over the same
  *     `RePairInitiate` bytes, one by the new IRK and one by the IRK this box
- *     currently trusts (the key-file / device-pair recovery routes make it); or
+ *     currently trusts (the key-file / device-pair recovery routes make it).
+ *     Not on a box that pins an admin root: both keys come from account keys;
+ *   - an account-key hop to that same IRK the box verified under its admin root; or
  *   - rotation: the box pins an admin root and its rotation consumer has
  *     re-pinned at or after the re-pair began (a recovery that re-mints the
  *     admin root signs old-root -> new-root, which the box verified itself).
@@ -114,12 +116,27 @@ export async function verifyRePairSwap(opts: {
   currentIrkPubHex: string;
   /** True when the box's pinned admin root was re-pinned (by a chain it verified) at or after `sinceMs`. */
   rotationAppliedSince?: (sinceMs: number) => Promise<boolean>;
+  /**
+   * False on a box that pins an admin root: there the old-IRK + new-IRK proof is not evidence (both keys
+   * come from account keys a recovery or a lost device may hold), only admin-root-signed changes are.
+   */
+  acceptOldIrkProof?: boolean;
+  /** True when this box itself verified an admin-root-signed account-key hop to `newIrkPubHex`. */
+  accountKeyHopTo?: (newIrkPubHex: string) => Promise<boolean>;
 }): Promise<"proof" | "rotation" | null> {
   const { row } = opts;
   const oldHex = row.oldIrkPub.toLowerCase();
   const newHex = row.newIrkPub.toLowerCase();
   const proof = row.proof;
+  if (opts.accountKeyHopTo && HEX(64).test(newHex)) {
+    try {
+      if (await opts.accountKeyHopTo(newHex)) return "rotation";
+    } catch {
+      /* unreadable pin: no evidence */
+    }
+  }
   if (
+    opts.acceptOldIrkProof !== false &&
     proof &&
     HEX(64).test(oldHex) &&
     HEX(64).test(newHex) &&
@@ -239,6 +256,10 @@ export interface RePairWatcherDeps {
    * no admin root: then only a signed proof can authorize a swap.
    */
   rotationAppliedSince?: (sinceMs: number) => Promise<boolean>;
+  /** See {@link verifyRePairSwap}: false on admin-pinned boxes. */
+  acceptOldIrkProof?: boolean;
+  /** See {@link verifyRePairSwap}: the account-key consumer's verified hop to this IRK. */
+  accountKeyHopTo?: (newIrkPubHex: string) => Promise<boolean>;
 }
 
 const FIVE_MIN_MS = 5 * 60_000;
@@ -397,6 +418,8 @@ export class RePairWatcher {
         username: this.deps.username,
         currentIrkPubHex: this._currentIrkPubHex,
         ...(this.deps.rotationAppliedSince ? { rotationAppliedSince: this.deps.rotationAppliedSince } : {}),
+        ...(this.deps.acceptOldIrkProof !== undefined ? { acceptOldIrkProof: this.deps.acceptOldIrkProof } : {}),
+        ...(this.deps.accountKeyHopTo ? { accountKeyHopTo: this.deps.accountKeyHopTo } : {}),
       })) !== null
     );
   }
