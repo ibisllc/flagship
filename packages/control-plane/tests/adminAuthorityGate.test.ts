@@ -21,6 +21,7 @@ import {
   type Keypair,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
+import { authorizeSensitiveComOp } from "../src/adminAuthorityGate.js";
 import { handleSetCustomDomain } from "../src/customDomain.js";
 import { handleServerReleaseName } from "../src/serverRevoke.js";
 
@@ -114,7 +115,7 @@ describe("Slice D gate — set-custom-domain (§2 row 20)", () => {
     expect(accepted.status).toBe(200);
   });
 
-  it("GATE OPEN: a device with an admin-root-signed `admin` grant is accepted", async () => {
+  it("GATE OPEN: a device key with an admin-root-signed `admin` grant is not the admin root (refused)", async () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     const adminRoot = makeKey();
@@ -157,7 +158,7 @@ describe("Slice D gate — set-custom-domain (§2 row 20)", () => {
       APP,
       customDomainBody(device, "shop.example.com", NOW),
     );
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(403);
   });
 
   it("GATE OPEN: a MEMBERSHIP-signed `admin` grant does NOT satisfy the gate", async () => {
@@ -251,5 +252,61 @@ describe("Slice D gate — release-server-name (§2 row 30)", () => {
 
     const accepted = await handleServerReleaseName(deps(s), releaseBody(adminRoot, NOW));
     expect(accepted.status).toBe(200);
+  });
+});
+
+describe("authorizeSensitiveComOp — device keys only where a caller asks", () => {
+  async function withAdminGrant() {
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    const adminRoot = makeKey();
+    const device = makeKey();
+    await seedAccount(s, irk, adminRoot);
+    const grant: DeviceCapabilityGrant = {
+      grantId: "g-admin-gate",
+      username: USER,
+      deviceId: "03".repeat(16),
+      devicePubKey: device.publicKey,
+      scopes: ["admin"],
+      issuedAt: 1,
+      expiresAt: Date.now() + 10_000_000,
+    };
+    await s.deviceCapabilityGrants.put({
+      grantId: grant.grantId,
+      username: USER,
+      deviceId: grant.deviceId,
+      devicePubHex: hex(device.publicKey),
+      scopesJson: JSON.stringify(grant.scopes),
+      issuedAt: grant.issuedAt,
+      expiresAt: grant.expiresAt,
+      signatureHex: hex(signDeviceCapabilityGrant(grant, adminRoot)),
+      revokedAt: null,
+      signerRoot: "admin-root",
+    });
+    const userRec = (await s.usernames.get(USER))!;
+    return { s, irk, adminRoot, device, userRec };
+  }
+
+  it("by default only the admin root signs on a pinned account", async () => {
+    const { s, irk, adminRoot, device, userRec } = await withAdminGrant();
+    const as = (k: Keypair, accept?: boolean) =>
+      authorizeSensitiveComOp(
+        { grants: s.deviceCapabilityGrants },
+        { username: USER, userRec, verifyWith: (p) => p === hex(k.publicKey), ...(accept ? { acceptAdminDeviceKey: true } : {}) },
+      );
+    expect((await as(adminRoot)).ok).toBe(true);
+    expect((await as(device)).ok).toBe(false);
+    expect((await as(irk)).ok).toBe(false);
+    expect((await as(device, true)).ok).toBe(true);
+    expect((await as(irk, true)).ok).toBe(false);
+  });
+
+  it("an account with no admin root keeps the account key", async () => {
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    await seedAccount(s, irk);
+    const userRec = (await s.usernames.get(USER))!;
+    const r = await authorizeSensitiveComOp({ grants: s.deviceCapabilityGrants }, { username: USER, userRec, verifyWith: (p) => p === hex(irk.publicKey) });
+    expect(r).toMatchObject({ ok: true, gated: false });
   });
 });
