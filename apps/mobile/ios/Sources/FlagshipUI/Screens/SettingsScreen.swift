@@ -24,8 +24,9 @@ public struct SettingsScreen: View {
     /// Appearance choice (Light / Dark / Auto) — read + written by the
     /// APPEARANCE segmented control; applied app-wide by RootShell.
     @Environment(PrivacySettings.self) private var privacy
-    @State private var disconnectTarget: SettingsViewModel.DirectoryDevice?
-    @State private var disconnectMessage: String?
+    /// "Remove from account" awaiting its confirmation, then the reason it failed.
+    @State private var removeTarget: SettingsViewModel.DirectoryDevice?
+    @State private var removeFailure: String?
     /// Current alternate app-icon name — nil = the primary "classic" icon,
     /// "AppIcon-Legacy" = the original hexagon. Read from UIApplication in
     /// onAppear (App-icon segmented control).
@@ -39,13 +40,6 @@ public struct SettingsScreen: View {
     /// button calls onRemoveFromAccount. Sheet copy adapts based on
     /// whether the user has cloud recovery enrolled.
     @State private var showRemoveConfirm = false
-    /// B7 — drives the Replace device confirmation sheet. nil → not
-    /// asking; non-nil → ask the user to confirm rotating the IRK.
-    /// The container observes this and routes the action through
-    /// ReplaceDeviceViewModel.
-    @State private var replaceConfirm: Bool = false
-    /// E3 — drives the Wipe & restart confirmation dialog.
-    @State private var wipeConfirm: Bool = false
     /// Tier 2 — drives the key-wipe Sign-out confirmation dialog. Copy +
     /// severity adapt on `hasCloudRecovery` (a wipe without recovery is
     /// permanent account loss, so it gets the danger-zone framing).
@@ -75,7 +69,8 @@ public struct SettingsScreen: View {
     var onRejectRecovery: () async -> SettingsViewModel.RecoveryVetoOutcome = { .alreadyOver }
     @State private var confirmReject = false
     @State private var rejectMessage: String? = nil
-    var onDisconnectTrustedDevice: (SettingsViewModel.DirectoryDevice) async -> Bool = { _ in false }
+    /// Remove another device from the account: nil once removed, else the sentence to show ("" says nothing).
+    var onRemoveTrustedDevice: (SettingsViewModel.DirectoryDevice) async -> String? = { _ in UserErrorText.refused }
     var canManageNames: Bool = false
     var onRenameAccount: (String) async -> Bool = { _ in false }
     var onRenameCurrentDevice: (String) async -> Bool = { _ in false }
@@ -151,19 +146,12 @@ public struct SettingsScreen: View {
     /// .com, wipe local Keystore, and call AppState.signOut so the
     /// user drops back to Welcome.
     var onRemoveFromAccount: () async -> Void = {}
-    /// B7 — fired after the user confirms the Replace device scare
-    /// sheet. The container drives ReplaceDeviceViewModel.initiate
-    /// with the captured devices ETag.
-    var onReplaceDevice: () async -> Void = {}
     /// M4 — fired when "Finalize now" on the pending-re-pair banner is
     /// tapped (the grace has elapsed). Carries the snapshot's
     /// `completesAt` so the container can push the finalize screen with
-    /// the right deadline. Complements onReplaceDevice: this finishes a
-    /// replace that may have been started on ANOTHER device.
+    /// the right deadline. This finishes a replace started on another
+    /// device (a recovery's re-pair).
     var onFinalizeReplace: (Int64) -> Void = { _ in }
-    /// E2/E3 — fired after the user confirms the Wipe scare sheet.
-    /// The container runs WipeRestartViewModel.run.
-    var onWipeRestart: () async -> Void = {}
     /// Whether the user has cloud recovery enrolled — read by the
     /// Remove confirmation sheet to surface a STRONGER warning when
     /// not enrolled (no enrolment = removing this device permanently
@@ -217,7 +205,7 @@ public struct SettingsScreen: View {
         onAddDevice: @escaping () -> Void = {},
         onScanPairingCode: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
-        onDisconnectTrustedDevice: @escaping (SettingsViewModel.DirectoryDevice) async -> Bool = { _ in false },
+        onRemoveTrustedDevice: @escaping (SettingsViewModel.DirectoryDevice) async -> String? = { _ in UserErrorText.refused },
         canManageNames: Bool = false,
         onRenameAccount: @escaping (String) async -> Bool = { _ in false },
         onRenameCurrentDevice: @escaping (String) async -> Bool = { _ in false },
@@ -249,9 +237,7 @@ public struct SettingsScreen: View {
         trustedDevicesNeedUnlock: Bool = false,
         onLoadTrustedDevices: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
-        onReplaceDevice: @escaping () async -> Void = {},
         onFinalizeReplace: @escaping (Int64) -> Void = { _ in },
-        onWipeRestart: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true,
         signOutPolicy: SignOutPolicy = .allowed,
         onRecoveryRequired: @escaping () -> Void = {},
@@ -273,7 +259,7 @@ public struct SettingsScreen: View {
         self.pendingRePair = pendingRePair
         self.canRejectRecovery = canRejectRecovery
         self.onRejectRecovery = onRejectRecovery
-        self.onDisconnectTrustedDevice = onDisconnectTrustedDevice
+        self.onRemoveTrustedDevice = onRemoveTrustedDevice
         self.canManageNames = canManageNames
         self.onRenameAccount = onRenameAccount
         self.onRenameCurrentDevice = onRenameCurrentDevice
@@ -310,9 +296,7 @@ public struct SettingsScreen: View {
         self.trustedDevicesNeedUnlock = trustedDevicesNeedUnlock
         self.onLoadTrustedDevices = onLoadTrustedDevices
         self.onRemoveFromAccount = onRemoveFromAccount
-        self.onReplaceDevice = onReplaceDevice
         self.onFinalizeReplace = onFinalizeReplace
-        self.onWipeRestart = onWipeRestart
         self.hasCloudRecovery = hasCloudRecovery
         self.signOutPolicy = signOutPolicy
         self.onRecoveryRequired = onRecoveryRequired
@@ -389,31 +373,31 @@ public struct SettingsScreen: View {
     private func earlyDialogs(_ content: some View) -> some View {
         content
         .confirmationDialog(
-            disconnectTarget.map { String(localized: "Revoke \($0.displayName)?") } ?? String(localized: "Revoke device?"),
+            removeTarget.map { RemoveDeviceCopy.title($0.displayName) } ?? "",
             isPresented: Binding(
-                get: { disconnectTarget != nil },
-                set: { if !$0 { disconnectTarget = nil } }
+                get: { removeTarget != nil },
+                set: { if !$0 { removeTarget = nil } }
             ),
             titleVisibility: .visible,
-            presenting: disconnectTarget
+            presenting: removeTarget
         ) { target in
-            Button("Revoke \(target.displayName)", role: .destructive) {
-                disconnect(target)
+            Button(RemoveDeviceCopy.confirm, role: .destructive) {
+                remove(target)
             }
-            Button("Cancel", role: .cancel) { disconnectTarget = nil }
-        } message: { target in
-            Text("This revokes the device's account access. Its presentation name is never sent to Flagship's control plane in plaintext.")
+            Button("Cancel", role: .cancel) { removeTarget = nil }
+        } message: { _ in
+            Text(RemoveDeviceCopy.message)
         }
         .alert(
-            "Disconnect failed",
+            RemoveDeviceCopy.failedTitle,
             isPresented: Binding(
-                get: { disconnectMessage != nil },
-                set: { if !$0 { disconnectMessage = nil } }
+                get: { removeFailure != nil },
+                set: { if !$0 { removeFailure = nil } }
             )
         ) {
-            Button("OK") { disconnectMessage = nil }
+            Button("OK") { removeFailure = nil }
         } message: {
-            Text(disconnectMessage ?? "")
+            Text(removeFailure ?? "")
         }
         .sheet(item: $nameEditor) { editor in
             DeviceNameEditor(
@@ -464,30 +448,6 @@ public struct SettingsScreen: View {
             Text("Session \(target.tokenPrefix) loses access to this account.")
         }
         .confirmationDialog(
-            "Replace this device?",
-            isPresented: $replaceConfirm,
-            titleVisibility: .visible,
-        ) {
-            Button("Replace device", role: .destructive) {
-                Task { await onReplaceDevice() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, services stay installed. The change takes effect after a 24-hour grace window; your other devices are notified, and only this phone can cancel it.")
-        }
-        .confirmationDialog(
-            "Wipe and start over?",
-            isPresented: $wipeConfirm,
-            titleVisibility: .visible,
-        ) {
-            Button("Wipe and start over", role: .destructive) {
-                Task { await onWipeRestart() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your account keeps the same username and your servers keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.")
-        }
-        .confirmationDialog(
             "Sign out?",
             isPresented: $signOutConfirm,
             titleVisibility: .visible
@@ -529,13 +489,14 @@ public struct SettingsScreen: View {
         }
     }
 
-    private func disconnect(_ target: SettingsViewModel.DirectoryDevice) {
+    /// Remove from account, after its confirmation. The one step today; a later "Could someone else unlock this
+    /// device?" question (new account keys) goes between the confirmation and this call.
+    private func remove(_ target: SettingsViewModel.DirectoryDevice) {
+        removeTarget = nil
         Task {
-            let success = await onDisconnectTrustedDevice(target)
-            if !success {
-                disconnectMessage = String(localized: "Couldn't disconnect — check your connection and try again.")
+            if let failure = await onRemoveTrustedDevice(target), !failure.isEmpty {
+                removeFailure = failure
             }
-            disconnectTarget = nil
         }
     }
 
@@ -792,9 +753,8 @@ public struct SettingsScreen: View {
         }
     }
 
-    /// One row per peer device. Carries the Disconnect / Replace
-    /// (B7) actions via a contextual Menu on iOS — feels native
-    /// versus a button stack and keeps the row visually clean.
+    /// One row per device. Its menu: the rename items and, for another
+    /// device, Remove from account (docs/revocation-ui.md).
     ///
     /// v1.2 Phase 4 — when the row is quarantined (the 14-day
     /// freshly-admitted window), surface a clock icon + tooltip and
@@ -868,31 +828,14 @@ public struct SettingsScreen: View {
                         }
                         Divider()
                     }
-                    Button(role: .destructive) {
-                        disconnectTarget = d
-                    } label: {
-                        Label("Disconnect", systemImage: "wifi.slash")
+                    if !d.isCurrent {
+                        Button(role: .destructive) {
+                            removeTarget = d
+                        } label: {
+                            Label(RemoveDeviceCopy.confirm, systemImage: "person.crop.circle.badge.minus")
+                        }
+                        .accessibilityIdentifier("trusted-device-remove-\(d.deviceId)")
                     }
-                    .disabled(d.isCurrent)
-                    // B7 — Replace device. Tap opens a two-stage scare
-                    // sheet; the container drives the actual IRK
-                    // rotation ceremony through ReplaceDeviceViewModel.
-                    Button(role: .destructive) {
-                        replaceConfirm = true
-                    } label: {
-                        Label("Replace device", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    .disabled(d.isCurrent)
-                    Divider()
-                    // E2/E3 — Wipe & restart. Live ceremony. The
-                    // container observes onWipeRestart and routes
-                    // through WipeRestartViewModel.
-                    Button(role: .destructive) {
-                        wipeConfirm = true
-                    } label: {
-                        Label("Wipe & restart…", systemImage: "trash")
-                    }
-                    .disabled(d.isCurrent)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundColor(c.textMuted)
@@ -1243,4 +1186,12 @@ private struct DeviceNameEditor: View {
         }
         .presentationDetents([.medium])
     }
+}
+
+/// The words of Trusted devices → Remove from account (docs/revocation-ui.md).
+public enum RemoveDeviceCopy {
+    public static let confirm = String(localized: "Remove from account")
+    public static func title(_ name: String) -> String { String(localized: "Remove \(name) from your account?") }
+    public static let message = String(localized: "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.")
+    public static let failedTitle = String(localized: "Couldn't remove the device")
 }

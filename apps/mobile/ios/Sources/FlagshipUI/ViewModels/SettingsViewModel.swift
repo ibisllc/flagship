@@ -296,20 +296,23 @@ public final class SettingsViewModel {
     }
 
     @discardableResult
-    public func disconnect(_ device: DirectoryDevice) async -> Bool {
-        guard let username = currentUsername(), !device.isCurrent else { return false }
+    /// "Remove from account" (docs/revocation-ui.md): revoke another device's identity, grants and push tokens on
+    /// `.com`. Returns nil once removed, else the sentence to show; a declined unlock shows nothing ("").
+    public func removeFromAccount(_ device: DirectoryDevice) async -> String? {
+        guard let username = currentUsername(), !device.isCurrent else { return UserErrorText.refused }
         let path = "/api/accounts/\(username.lowercased())/devices/\(device.deviceId)"
         do {
-            let context = try await directoryContext(method: "DELETE", path: path, reason: String(localized: "Revoke this device"))
+            let context = try await directoryContext(method: "DELETE", path: path, reason: String(localized: "Remove a device from your account"))
             try await server.revokeAccountDevice(
                 accountId: username,
                 deviceId: device.deviceId,
                 authorization: context.authorization
             )
             await loadTrustedDevices()
-            return true
+            return nil
         } catch {
-            return false
+            if BiometricGate.GateError.from(error).isSilent { return "" }
+            return UserErrorText.of(error, fallback: String(localized: "Check your connection and try again."))
         }
     }
 

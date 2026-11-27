@@ -479,7 +479,7 @@ final class GymSweepSettingsTests: GymSweepCase {
     }
 
     /// An admin device renames the account, this device and another's
-    /// managed name, and disconnects another device.
+    /// managed name, and removes another device from the account.
     func test_trustedDevicesAdminRenamesAndDisconnects() throws {
         let app = launch(tab: "settings", ["-smoke-trusted-devices"])
         settings(app)
@@ -526,17 +526,20 @@ final class GymSweepSettingsTests: GymSweepCase {
         app.navigationBars["Set managed name"].buttons["Save"].tap()
         expectProbe(app, "put managed profile \(otherDevice)")
 
-        // Disconnect: Cancel keeps it, Revoke drops it.
+        // Remove from account: Cancel keeps it, Remove drops it. Only rename items and Remove are offered.
         theirs.tap()
-        button(app, "Disconnect").tap()
-        let revoke = button(app, "Revoke Android · Device BBBB-2222")
-        XCTAssertTrue(revoke.waitForExistence(timeout: 5))
+        XCTAssertFalse(button(app, "Replace device").exists, "Replace device is gone from the device menu.")
+        XCTAssertFalse(button(app, "Wipe & restart…").exists, "Reset account keys lives in Account security.")
+        button(app, "Remove from account").tap()
+        XCTAssertTrue(text(app, containing: "Remove Android · Device BBBB-2222 from your account?").waitForExistence(timeout: 5))
+        XCTAssertTrue(text(app, containing: "erases your account's keys from it").exists)
         cancelDialog(app)
         expectNoProbe(app, "revoked account device")
         theirs.tap()
-        button(app, "Disconnect").tap()
-        XCTAssertTrue(revoke.waitForExistence(timeout: 5))
-        revoke.tap()
+        button(app, "Remove from account").tap()
+        let remove = dialogButton(app, "Remove from account", notId: "trusted-device-remove-\(otherDevice)")
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
         expectProbe(app, "revoked account device \(otherDevice)")
         waitGone(android)
         shot(app, "trusted-devices-disconnected")
@@ -550,45 +553,27 @@ final class GymSweepSettingsTests: GymSweepCase {
         let theirs = menu(app, other: true)
         XCTAssertTrue(find(app, theirs))
         theirs.tap()
-        XCTAssertTrue(button(app, "Disconnect").waitForExistence(timeout: 5))
+        XCTAssertTrue(button(app, "Remove from account").waitForExistence(timeout: 5))
         XCTAssertFalse(button(app, "Set managed name").exists, "Only an admin device sets managed names.")
         app.swipeDown()
-        if button(app, "Disconnect").exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap() }
+        if button(app, "Remove from account").exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap() }
         let name = app.buttons["settings-edit-account-name"]
         XCTAssertTrue(find(app, name))
         name.tap()
         XCTAssertFalse(app.navigationBars["Edit account name"].waitForExistence(timeout: 3))
     }
 
-    /// Replace device asks first; `.com`'s 429 shows its own sentence. Wipe
-    /// & restart asks first and Cancel does nothing.
-    func test_replaceDeviceRateLimitedAndWipeCancel() throws {
-        let app = launch(tab: "settings", ["-smoke-trusted-devices", "-smoke-rate-limited", "re-pair"])
+    /// Reset account keys asks first (Account security) and Cancel does nothing.
+    func test_resetAccountKeysAsksFirst() throws {
+        let app = launch(tab: "settings", ["-smoke-trusted-devices"])
         settings(app)
-        let theirs = menu(app, other: true)
-        XCTAssertTrue(find(app, theirs))
-        theirs.tap()
-        button(app, "Replace device").tap()
-        XCTAssertTrue(text(app, containing: "Rotates your account's identity key").waitForExistence(timeout: 5))
+        open(app, row: "Account security", screen: "Account security")
+        let reset = app.buttons["reset-account-keys"]
+        XCTAssertTrue(find(app, reset))
+        reset.tap()
+        XCTAssertTrue(text(app, containing: "Every other device is removed and has to join again").waitForExistence(timeout: 5))
         cancelDialog(app)
-        theirs.tap()
-        button(app, "Replace device").tap()
-        let confirm = button(app, "Replace device")
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        confirm.tap()
-        let alert = app.alerts["Replace device"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 15))
-        XCTAssertTrue(alert.staticTexts[rateLimited].exists || alert.label.contains(rateLimited)
-                      || app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", rateLimited)).firstMatch.exists,
-                      "A rate-limited replace shows .com's sentence.")
-        shot(app, "replace-rate-limited")
-        alert.buttons["OK"].tap()
-
-        theirs.tap()
-        button(app, "Wipe & restart…").tap()
-        XCTAssertTrue(text(app, containing: "Every device currently on this account will be disconnected").waitForExistence(timeout: 5))
-        cancelDialog(app)
-        settings(app)
+        expectNoProbe(app, "wipe-restart")
     }
 
     /// A replacement whose grace has passed: the banner's Finalize opens the

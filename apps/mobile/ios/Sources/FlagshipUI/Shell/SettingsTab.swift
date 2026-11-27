@@ -20,11 +20,8 @@ public struct SettingsTab: View {
     @State private var pqLabels: [String: String] = [:]
     @State private var vm: SettingsViewModel?
     @State private var replaceVm: ReplaceDeviceViewModel?
-    @State private var replaceToast: String?
-    @State private var wipeVm: WipeRestartViewModel?
     /// SEC-REPAIR-001: "Update account recovery" from the quiet Settings row.
     @State private var recoveryUpdate: RecoveryUpdateViewModel?
-    @State private var wipeToast: String?
     @State private var showDemoDeleteNotice = false
     @State private var companionRequestsVm: CompanionRequestsViewModel?
     @State private var pendingCompanionCount: Int = 0
@@ -143,7 +140,7 @@ public struct SettingsTab: View {
                     },
                     onScanPairingCode: { path.append(.scanPairingCode) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
-                    onDisconnectTrustedDevice: { device in await vm.disconnect(device) },
+                    onRemoveTrustedDevice: { device in await vm.removeFromAccount(device) },
                     canManageNames: Keystore.hasAdminRoot,
                     onRenameAccount: { name in await vm.renameAccount(name) },
                     onRenameCurrentDevice: { name in await vm.renameCurrentDevice(name) },
@@ -236,32 +233,6 @@ public struct SettingsTab: View {
                             app.signOut()
                         }
                     },
-                    onReplaceDevice: {
-                        // B7 — fire the ReplaceDeviceViewModel. We
-                        // lazily construct the VM here (rather than
-                        // .task above) so the SettingsTab init stays
-                        // cheap.
-                        if replaceVm == nil {
-                            replaceVm = ReplaceDeviceViewModel(
-                                server: server,
-                                username: { [app] in app.currentUser }
-                            )
-                        }
-                        // Reuse the most recent ETag we captured from
-                        // the trusted-devices fetch (vm.devicesEtag).
-                        await replaceVm?.initiate(currentEtag: vm.devicesEtag)
-                        // On a successful initiate, push the dedicated
-                        // FINALIZE screen (24h grace countdown + Complete).
-                        // A failure stays inline as a toast.
-                        switch replaceVm?.phase {
-                        case .pending(let completesAt):
-                            path.append(.replaceDeviceFinalize(completesAt: completesAt))
-                        case .failed(let msg):
-                            replaceToast = msg
-                        default:
-                            replaceToast = nil
-                        }
-                    },
                     onFinalizeReplace: { completesAt in
                         // M4 — "Finalize now" on the pending-re-pair banner.
                         // Routes into the SAME finalize screen as a freshly-
@@ -271,37 +242,6 @@ public struct SettingsTab: View {
                         // been started here OR on another device. The
                         // container reconstructs replaceVm on cold entry.
                         path.append(.replaceDeviceFinalize(completesAt: completesAt))
-                    },
-                    onWipeRestart: {
-                        // E2/E3 — drive the wipe ceremony. The new UMK is
-                        // wrapped under a REAL platform passkey: a mock PRF
-                        // would upload an envelope cloud recovery can never
-                        // unwrap. The mock gym keeps the mock.
-                        if wipeVm == nil {
-                            #if DEBUG
-                            let webAuthn: WebAuthnProvider = GymLaunch.usesMocks ? MockWebAuthnProvider() : PlatformWebAuthnProvider()
-                            #else
-                            let webAuthn: WebAuthnProvider = PlatformWebAuthnProvider()
-                            #endif
-                            wipeVm = WipeRestartViewModel(
-                                server: server,
-                                webAuthn: webAuthn,
-                                username: { [app] in app.currentUser }
-                            )
-                        }
-                        await wipeVm?.run(currentEtag: vm.devicesEtag)
-                        switch wipeVm?.phase {
-                        case .completed:
-                            wipeToast = String(localized: "Done. All other devices are now disconnected. Re-pair them on next open.")
-                            // Drop to Welcome — the user just rotated
-                            // identity; the in-memory session is stale.
-                            await pushRegistrar?.revoke()
-                            app.signOut()
-                        case .failed(let msg):
-                            wipeToast = msg
-                        default:
-                            wipeToast = nil
-                        }
                     },
                     hasCloudRecovery: app.hasCloudRecovery,
                     signOutPolicy: SignOutPolicy.evaluate(
@@ -343,17 +283,6 @@ public struct SettingsTab: View {
                         }
                     }
                 }
-                .alert(
-                    "Replace device",
-                    isPresented: Binding(
-                        get: { replaceToast != nil },
-                        set: { if !$0 { replaceToast = nil } }
-                    )
-                ) {
-                    Button("OK") { replaceToast = nil }
-                } message: {
-                    Text(replaceToast ?? "")
-                }
                 .alert("Demo account", isPresented: $showDemoDeleteNotice) {
                     Button("Remove from this device", role: .destructive) {
                         QuantumSafetyService.forget(username: app.currentUser)
@@ -363,17 +292,6 @@ public struct SettingsTab: View {
                     Button("Cancel", role: .cancel) {}
                 } message: {
                     Text("This demo account is managed by Flagship, so it can't be deleted from the app — you can remove it from this device instead. Accounts you create yourself are permanently deleted from here.")
-                }
-                .alert(
-                    "Wipe & restart",
-                    isPresented: Binding(
-                        get: { wipeToast != nil },
-                        set: { if !$0 { wipeToast = nil } }
-                    )
-                ) {
-                    Button("OK") { wipeToast = nil }
-                } message: {
-                    Text(wipeToast ?? "")
                 }
             } else {
                 ProgressView()
@@ -526,10 +444,8 @@ public struct SettingsTab: View {
                 }
             )
         case .replaceDeviceFinalize(let completesAt):
-            // B7 — the finalize surface (24h grace countdown + Complete).
-            // Reuses the VM built by onReplaceDevice when present; the
-            // container reconstructs it if we arrived cold (e.g. a future
-            // deep link) so the screen always has a driver.
+            // B7 — the finalize surface (24h grace countdown + Complete) for a
+            // re-pair started elsewhere (a recovery); the container builds the VM.
             ReplaceDeviceFinalizeContainer(
                 vm: $replaceVm,
                 completesAt: completesAt,
@@ -684,9 +600,8 @@ struct CompanionRequestsContainer: View {
     }
 }
 
-/// B7 — owns the ReplaceDeviceViewModel for the finalize screen. Reuses
-/// the VM already built by `onReplaceDevice` (passed through the binding)
-/// or constructs one on cold entry. Built as a container so the VM is
+/// B7 — owns the ReplaceDeviceViewModel for the finalize screen, built on
+/// entry (the per-device Replace device action is gone: docs/revocation-ui.md). Built as a container so the VM is
 /// created in `.task` (never during view-body evaluation), mirroring
 /// `CompanionRequestsContainer`.
 struct ReplaceDeviceFinalizeContainer: View {
@@ -903,14 +818,21 @@ struct RecoveryContainer: View {
 /// is built ONCE in `.task`, not re-created on each body evaluation.
 struct AccountSecurityContainer: View {
     @Environment(\.flagshipServerClient) private var server
+    @Environment(\.pushRegistrar) private var pushRegistrar
     @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
     @State private var vm: AccountSecurityViewModel?
+    @State private var wipeVm: WipeRestartViewModel?
 
     var body: some View {
         ZStack {
             FSColors.scheme(.light).bg.ignoresSafeArea()
             if let vm {
-                AccountSecurityScreen(viewModel: vm, canSignAdminOrders: AdminOrderGate.allows(app))
+                AccountSecurityScreen(
+                    viewModel: vm,
+                    canSignAdminOrders: AdminOrderGate.allows(app),
+                    onResetAccountKeys: app.isDemoAccount ? nil : { await resetAccountKeys() }
+                )
             } else { ProgressView() }
         }
         .task {
@@ -921,6 +843,36 @@ struct AccountSecurityContainer: View {
                     canChange: { [app] in AdminOrderGate.allows(app) }
                 )
             }
+        }
+    }
+}
+
+extension AccountSecurityContainer {
+    /// Reset account keys: the Wipe & restart ceremony (docs/wipe-restart.md), as it ran from a trusted device's
+    /// menu before. The new account key is wrapped under a REAL platform passkey: a mock PRF would upload an
+    /// envelope cloud recovery can never unwrap. The mock gym keeps the mock.
+    @MainActor
+    fileprivate func resetAccountKeys() async -> String? {
+        if wipeVm == nil {
+            #if DEBUG
+            let webAuthn: WebAuthnProvider = GymLaunch.usesMocks ? MockWebAuthnProvider() : PlatformWebAuthnProvider()
+            #else
+            let webAuthn: WebAuthnProvider = PlatformWebAuthnProvider()
+            #endif
+            wipeVm = WipeRestartViewModel(server: server, webAuthn: webAuthn, username: { [app] in app.currentUser })
+        }
+        await wipeVm?.run(currentEtag: nil)
+        switch wipeVm?.phase {
+        case .completed:
+            toasts.success(ResetAccountKeysCopy.done)
+            // The account key just changed: the in-memory session is stale, so drop to Welcome as before.
+            await pushRegistrar?.revoke()
+            app.signOut()
+            return nil
+        case .failed(let msg):
+            return msg
+        default:
+            return ""
         }
     }
 }

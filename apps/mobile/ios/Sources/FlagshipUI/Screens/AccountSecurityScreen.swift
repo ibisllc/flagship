@@ -24,10 +24,18 @@ public struct AccountSecurityScreen: View {
     /// (`.com` checks them under the admin root); a non-admin device sees
     /// them read-only.
     var canSignAdminOrders: Bool = true
+    /// "Reset account keys" (the account-wide Wipe & restart ceremony): nil once done, else the sentence to show
+    /// ("" says nothing). Nil hides the section.
+    var onResetAccountKeys: (() async -> String?)?
+    @State private var showResetConfirm = false
+    @State private var resetting = false
+    @State private var resetFailure: String?
 
-    public init(viewModel: AccountSecurityViewModel, canSignAdminOrders: Bool = true) {
+    public init(viewModel: AccountSecurityViewModel, canSignAdminOrders: Bool = true,
+                onResetAccountKeys: (() async -> String?)? = nil) {
         self.viewModel = viewModel
         self.canSignAdminOrders = canSignAdminOrders
+        self.onResetAccountKeys = onResetAccountKeys
     }
 
     public var body: some View {
@@ -45,6 +53,10 @@ public struct AccountSecurityScreen: View {
 
                 if let rotateVM, rotateVM.canRotate {
                     rotateAdminSection(c: c, vm: rotateVM)
+                }
+
+                if onResetAccountKeys != nil {
+                    resetKeysSection(c: c)
                 }
 
                 Spacer().frame(height: FS.space.s12)
@@ -70,6 +82,14 @@ public struct AccountSecurityScreen: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Only if a device may be lost or stolen. Every other device loses admin and must recover to get it back. This can't be undone.")
+        }
+        .alert(ResetAccountKeysCopy.confirmTitle, isPresented: $showResetConfirm) {
+            Button(ResetAccountKeysCopy.action, role: .destructive) {
+                Task { await reset() }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(ResetAccountKeysCopy.confirmMessage)
         }
         .sheet(isPresented: $showEnableSheet) {
             AccountSecurityEnableSheet(viewModel: viewModel) {
@@ -98,6 +118,49 @@ public struct AccountSecurityScreen: View {
         } message: {
             Text("Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist.")
         }
+    }
+
+    /// Reset account keys: new account keys, every other device removed and every server paired again
+    /// (docs/wipe-restart.md). Moved here from each trusted device's menu: it is about the account, not a device.
+    private func resetKeysSection(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                HStack(spacing: FS.space.s2) {
+                    Image(systemName: "arrow.triangle.2.circlepath").foregroundColor(c.danger)
+                    Text(ResetAccountKeysCopy.action)
+                        .font(FS.font.scaled(16, weight: .semibold))
+                        .foregroundColor(c.text)
+                }
+                Text(ResetAccountKeysCopy.explanation)
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if resetting {
+                    HStack(spacing: FS.space.s2) {
+                        ProgressView()
+                        Text(ResetAccountKeysCopy.working).font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                } else {
+                    if let resetFailure {
+                        Text(resetFailure)
+                            .font(FS.font.caption())
+                            .foregroundColor(c.danger)
+                            .accessibilityIdentifier("reset-account-keys-failed")
+                    }
+                    FSDangerButton(ResetAccountKeysCopy.action, block: true) { showResetConfirm = true }
+                        .accessibilityIdentifier("reset-account-keys")
+                }
+            }
+        }
+    }
+
+    private func reset() async {
+        guard let onResetAccountKeys else { return }
+        resetFailure = nil
+        resetting = true
+        let failure = await onResetAccountKeys()
+        resetting = false
+        if let failure, !failure.isEmpty { resetFailure = failure }
     }
 
     @ViewBuilder
@@ -593,4 +656,14 @@ enum QrPngDecoder {
         cache.setObject(image, forKey: key)
         return image
     }
+}
+
+/// The words of Account security → Reset account keys (docs/revocation-ui.md, docs/wipe-restart.md).
+public enum ResetAccountKeysCopy {
+    public static let action = String(localized: "Reset account keys")
+    public static let explanation = String(localized: "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.")
+    public static let confirmTitle = String(localized: "Reset your account keys?")
+    public static let confirmMessage = String(localized: "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.")
+    public static let working = String(localized: "Making new keys…")
+    public static let done = String(localized: "Done. Your account has new keys. Pair your servers and other devices again.")
 }

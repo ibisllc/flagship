@@ -80,7 +80,7 @@ public final class WipeRestartViewModel {
         // wrapping key from the fresh PRF secret.
         phase = .preparingKeys
         do {
-            _ = try await Keystore.currentUMK(reason: String(localized: "Wipe & restart"))
+            _ = try await Keystore.currentUMK(reason: String(localized: "Reset account keys"))
         } catch {
             phase = .failed(String(localized: "Couldn't access your current account key: \(UserErrorText.of(error))"))
             return
@@ -134,7 +134,7 @@ public final class WipeRestartViewModel {
         let newIrkPubHex: String
         do {
             oldIrk = try await Keystore.deriveIRK(
-                reason: String(localized: "Authorize wipe"),
+                reason: String(localized: "Reset account keys"),
                 version: Keystore.currentIrkVersion()
             )
             // The NEW IRK derives from the NEW UMK at v1. We don't
@@ -197,7 +197,7 @@ public final class WipeRestartViewModel {
             phase = .failed(String(localized: "Your device list changed in the background. Refresh and try again."))
             return
         } catch ScreensClientError.http(let status, _) where status == 429 {
-            phase = .failed(String(localized: "Wipe rate-limited (1 per hour). Try again later."))
+            phase = .failed(String(localized: "You can reset the account keys once an hour. Try again later."))
             return
         } catch ScreensClientError.http(let status, _) where status == 409 {
             phase = .failed(String(localized: "Another rotation completed first. Your account is fine — refresh and check Activity for the audit trail."))

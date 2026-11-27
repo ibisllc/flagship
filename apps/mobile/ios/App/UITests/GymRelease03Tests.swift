@@ -130,18 +130,21 @@ final class GymRelease03Tests: GymSweepCase {
         shot(app, "recovery-update-not-repeated")
     }
 
-    // MARK: - Wipe & restart
+    // MARK: - Reset account keys (was Wipe & restart)
 
-    /// Wipe & restart carries the new passkey's attestation beside the old key's signature.
+    /// Reset account keys (Account security) carries the new passkey's attestation beside the old key's signature.
     func test_wipeRestartAttestsTheNewPasskey() throws {
         let app = launch(tab: "settings", ["-smoke-trusted-devices"])
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 20))
-        let menu = box(app, "trusted-device-menu-\(otherDevice)")
-        XCTAssertTrue(reveal(app, menu, tries: 12))
-        bringToMiddle(app, menu)
-        menu.tap()
-        button(app, "Wipe & restart…").tap()
-        let go = button(app, "Wipe and start over")
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Account security")).firstMatch
+        XCTAssertTrue(reveal(app, row, tries: 12))
+        bringToMiddle(app, row)
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Account security"].waitForExistence(timeout: 15))
+        let reset = app.buttons["reset-account-keys"]
+        XCTAssertTrue(reveal(app, reset, tries: 8))
+        reset.tap()
+        let go = app.alerts["Reset your account keys?"].buttons["Reset account keys"]
         XCTAssertTrue(go.waitForExistence(timeout: 5))
         go.tap()
         expectProbe(app, "wipe-restart new passkey attested", timeout: 30)

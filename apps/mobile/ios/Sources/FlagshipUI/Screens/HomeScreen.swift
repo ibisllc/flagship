@@ -412,7 +412,7 @@ public struct HomeScreen: View {
             FSAnnouncementCard(
                 icon: "exclamationmark.shield.fill",
                 title: String(localized: "This device was removed from your account"),
-                message: String(localized: "Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in."),
+                message: String(localized: "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in."),
                 ctaLabel: String(localized: "Sign in again"),
                 tint: c.danger,
                 onCta: onSignInAgain
