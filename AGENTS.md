@@ -284,6 +284,14 @@ before ~2026-12-20, the demo server) are the journal's P items. Never edit `scri
 
 ### fshp.tech mirror domain; fshp.app is the direct domain (0.4)
 
+**Re-evaluate fshp.tech by 2027-09-01 (owner, 2026-11-27).** Registered at InterNetX until **2027-11-08**. It was
+kept for the .tech contest: renew only if that paid off (or if the owner wants it held so no one else can take it).
+If it lapses, no app, box or key trusts it (only blocklists name it: `customDomainEntitlement.ts` `OWN_ZONES`,
+`pushEndpointGuard.ts`), but whoever registers it next can pose as Flagship to anyone holding old links (a fake
+report form or sign-in page). So before letting it go: stop linking it, 308 every name to `flagshipserver.com` for the
+last months, then drop it from the Turnstile widget, `mirrorDomains.ts`, `theme.js` and the `wrangler.toml` routes.
+The apex needs a proxied `AAAA @ 100::` record in the fshp.tech zone (found missing 2026-11-27; `www.` 308s to it).
+
 `apps/com/src/mirrorDomains.ts`: the bare `fshp.tech` serves the apex site with visible
 `flagshipserver.com` / `flagship.services` mentions in HTML rewritten to the mirror (scripts, styles, JS, API bodies
 and email addresses untouched); `www.` → bare mirror; `webapp./remote./recovery./boot.` → their `flagshipserver.com`
