@@ -391,6 +391,7 @@ require_done() { :; }; ensure_wt() { :; }; need_admin_secret() { ADMIN_SECRET=x;
 confirm() { echo "confirm: $1" >> ${log}; case "$1" in *"Treat the step"*) return 1 ;; esac; return 0; }
 XA() { shift; echo "XA $*" >> ${log}; }
 with_secret() { echo "with_secret $*" >> ${log}; }
+mirror_dns_check() { echo "mirror-dns" >> ${log}; }
 eval "\${XA_OVERRIDE:-:}"
 run_reap`;
     const secrets = join(env.dir, "gym-secrets.env");

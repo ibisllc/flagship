@@ -595,7 +595,7 @@ meta_final() {
   OUTWARD=0
   WHAT="Re-probes everything that is live, compares the endorsed release with box-code changes on main, and prints the sha, versions, URLs and what is still manual."
   read -r -d '' CMDS <<'EOF' || true
-curl health: .com, .services, status page, shell version, notices, downloads, zone-health, schema-status (admin secret)
+curl health: .com, .services, status page, shell version, notices, downloads, mirror-dns, zone-health, schema-status (admin secret)
 npm run rate-limits -- --days 30                 (read-only, admin secret: the weekly budget check, AGENTS.md)
 npm run release-manifest
 git diff --stat <endorsed>..<PIN> -- packages/server-daemon installer packages/boot-core
@@ -661,6 +661,7 @@ ask_word() { # ask_word "prompt" -> echoes the reply
 
 http_code() { curl -s -o /dev/null -m 25 -w '%{http_code}' "$1" 2>/dev/null || echo 000; }
 
+mirror_dns_check() { ( cd "$WT" && node scripts/mirror-dns-check.mjs ); } # read-only: public DNS + HTTPS
 probe_code() { # label url expected [tries]
   local label=$1 url=$2 want=$3 tries=${4:-4} i code=""
   for ((i = 1; i <= tries; i++)); do
@@ -1006,6 +1007,8 @@ com_checks() {
     ok "framing and HSTS headers present"
   else err "framing / HSTS headers missing on $COM_URL/"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
   info_code "status page" "$COM_URL/status/"
+  # fshp.tech / fshp.app proxied records: no tool writes them and a clean-up once deleted the fshp.tech apex.
+  mirror_dns_check || { err "mirror-dns: a proxied fshp.tech / fshp.app record is missing (AGENTS.md \"fshp.tech mirror domain\"): put it back, never delete it"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
   if [ "${1:-}" = zone ]; then
     if need_admin_secret; then
       say "  zone-health (the wildcard and CAA lines must be OK; legacy per-account records are still listed until the reap):"
@@ -2185,6 +2188,7 @@ run_reap() {
   hdr "Verify"
   with_secret bash -c "cd '$WT' && node scripts/reap-orphans.mjs --show --out '$after'" || fail "the second dry run failed: the left-on-purpose review needs it; rerun the step"
   with_secret bash -c "cd '$WT' && npm run -s zone-health" || { PROBE_FAILS=$((PROBE_FAILS + 1)); err "zone-health is not OK"; }
+  mirror_dns_check || { PROBE_FAILS=$((PROBE_FAILS + 1)); err "mirror-dns: a proxied fshp.tech / fshp.app record is missing: put it back"; }
   hdr "Left on purpose (from the second dry run)"
   printf '%s+ node scripts/reap-orphans.mjs --review --plan %s%s\n' "$C_D" "$after" "$C_0"
   ( cd "$WT" && node scripts/reap-orphans.mjs --review --plan "$after" ) || { PROBE_FAILS=$((PROBE_FAILS + 1)); err "the second dry run still lists records or servers to delete"; }

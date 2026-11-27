@@ -51,6 +51,7 @@
     "release-manifest": "node scripts/release-manifest.mjs",
     "reap-orphans": "node scripts/reap-orphans.mjs",
     "zone-health": "node scripts/dns-zone-health.mjs",
+    "mirror-dns": "node scripts/mirror-dns-check.mjs",
     "inference-settings": "node scripts/inference-settings.mjs",
     "ready": "node scripts/release-readiness.mjs",
     "i18n": "node scripts/i18n-check.mjs",

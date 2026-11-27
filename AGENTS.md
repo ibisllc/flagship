@@ -290,7 +290,8 @@ If it lapses, no app, box or key trusts it (only blocklists name it: `customDoma
 `pushEndpointGuard.ts`), but whoever registers it next can pose as Flagship to anyone holding old links (a fake
 report form or sign-in page). So before letting it go: stop linking it, 308 every name to `flagshipserver.com` for the
 last months, then drop it from the Turnstile widget, `mirrorDomains.ts`, `theme.js` and the `wrangler.toml` routes.
-The apex needs a proxied `AAAA @ 100::` record in the fshp.tech zone (found missing 2026-11-27; `www.` 308s to it).
+**Never delete in a DNS clean-up:** fshp.tech proxied `AAAA` `@`, `*`, `www` = `100::`, and fshp.app's proxied `@`
+(fshp.tech's apex was found deleted 2026-11-27). `npm run mirror-dns` checks them; release.sh runs it after each `.com` deploy.
 
 `apps/com/src/mirrorDomains.ts`: the bare `fshp.tech` serves the apex site with visible
 `flagshipserver.com` / `flagship.services` mentions in HTML rewritten to the mirror (scripts, styles, JS, API bodies
