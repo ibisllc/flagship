@@ -973,5 +973,9 @@
   "s6b476ee344": "El formulario está recibiendo demasiados informes en este momento. Escribe a security@flagshipserver.com.",
   "s24fdeba475": "La comprobación antispam no se superó. Vuelve a intentarlo o escribe a security@flagshipserver.com.",
   "s4db18cc55e": "Espera a que termine la comprobación antispam de arriba y vuelve a enviar.",
-  "s117cf82be8": "El formulario no está disponible en este momento. Escribe a security@flagshipserver.com."
+  "s117cf82be8": "El formulario no está disponible en este momento. Escribe a security@flagshipserver.com.",
+  "s0cea2d9a29": "Los informes enviados con el formulario de vulnerabilidades se perdían",
+  "s71756127cd": "Baja · reportada y corregida en noviembre de 2026 · corrección <1>65d31058</1> · crédito: Huzaifa Jawaid",
+  "s2293352f37": "El formulario de informes de nuestra página de seguridad enviaba cada informe a una dirección a la que nuestro servidor ya no respondía, así que todos los informes enviados con el formulario se perdían y quien informaba veía un error. Los informes enviados por correo no se vieron afectados y no se expuso nada.",
+  "sfb41f9b094": "El formulario vuelve a funcionar. Cada informe se cifra con nuestra clave de seguridad en cuanto llega, así que nuestro servidor solo lo guarda en una forma que pueden leer quienes tienen la clave, y quien informa recibe una referencia. Se nos avisa de cada informe nuevo, y la página conserva la dirección de correo y la clave como alternativa."
 }

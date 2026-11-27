@@ -57,6 +57,11 @@
       <p class="muted">Les chercheurs qui nous ont signalé une vulnérabilité, avec les commits qui l’ont corrigée. Chacun est crédité sous la forme qu’il demande : nom, pseudonyme ou anonymat, avec un lien s’il le souhaite. Ils figurent sans attribution tant qu’ils ne nous ont pas indiqué leur préférence ; nous ne publions jamais un nom qu’on ne nous a pas donné.</p>
   
       <div>
+      <h2>Les signalements envoyés avec le formulaire de vulnérabilités étaient perdus</h2>
+      <p class="hof-meta">Faible · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/65d31058">65d31058</a> · crédit : Huzaifa Jawaid</p>
+      <p>Le formulaire de signalement de notre page sécurité envoyait chaque signalement à une adresse à laquelle notre serveur ne répondait plus : tous les signalements envoyés avec le formulaire étaient perdus et la personne qui signalait voyait une erreur. Les signalements envoyés par e-mail n'étaient pas concernés, et rien n'a été exposé.</p>
+      <p>Le formulaire fonctionne de nouveau. Chaque signalement est chiffré avec notre clé de sécurité dès son arrivée : notre serveur ne le conserve que sous une forme lisible par les seuls détenteurs de la clé, et la personne qui signale reçoit une référence. Nous sommes avertis de chaque nouveau signalement, et la page garde l'adresse e-mail et la clé en solution de repli.</p>
+
       <h2>Un endpoint d’identité inutilisé faisait confiance aux signataires nommés par chaque requête</h2>
       <p class="hof-meta">Moyenne · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · crédit : rakimans</p>
       <p>Un endpoint datant des débuts du développement stockait un enregistrement signé sous un hachage du nom d’un compte. Il ne vérifiait la signature de l’enregistrement qu’avec les clés que la même requête anonyme déclarait comme signataires autorisés, et ce hachage se calcule à partir de n’importe quel nom public. N’importe qui pouvait créer un enregistrement pour n’importe quel nom, le remplacer ou le verrouiller avec un numéro de version très élevé.</p>

@@ -973,5 +973,9 @@
   "s6b476ee344": "O formulário está recebendo relatos demais agora. Escreva para security@flagshipserver.com.",
   "s24fdeba475": "A verificação contra spam não passou. Tente de novo ou escreva para security@flagshipserver.com.",
   "s4db18cc55e": "Aguarde a verificação contra spam acima terminar e envie de novo.",
-  "s117cf82be8": "O formulário está indisponível no momento. Escreva para security@flagshipserver.com."
+  "s117cf82be8": "O formulário está indisponível no momento. Escreva para security@flagshipserver.com.",
+  "s0cea2d9a29": "Os relatos enviados pelo formulário de vulnerabilidades se perdiam",
+  "s71756127cd": "Baixa · relatada e corrigida em novembro de 2026 · correção <1>65d31058</1> · crédito: Huzaifa Jawaid",
+  "s2293352f37": "O formulário de relatos da nossa página de segurança enviava cada relato para um endereço que nosso servidor não respondia mais, então todos os relatos enviados pelo formulário se perdiam e quem relatava via um erro. Os relatos enviados por e-mail não foram afetados, e nada foi exposto.",
+  "sfb41f9b094": "O formulário voltou a funcionar. Cada relato é criptografado com nossa chave de segurança assim que chega, então nosso servidor só o guarda numa forma que apenas quem tem a chave pode ler, e quem relata recebe uma referência. Somos avisados de cada relato novo, e a página mantém o endereço de e-mail e a chave como alternativa."
 }

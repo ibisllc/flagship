@@ -973,5 +973,9 @@
   "s6b476ee344": "Das Formular erhält gerade zu viele Meldungen. Bitte schreib an security@flagshipserver.com.",
   "s24fdeba475": "Die Spam-Prüfung ist fehlgeschlagen. Versuch es erneut oder schreib an security@flagshipserver.com.",
   "s4db18cc55e": "Warte, bis die Spam-Prüfung oben fertig ist, und sende dann erneut.",
-  "s117cf82be8": "Das Formular ist gerade nicht verfügbar. Bitte schreib an security@flagshipserver.com."
+  "s117cf82be8": "Das Formular ist gerade nicht verfügbar. Bitte schreib an security@flagshipserver.com.",
+  "s0cea2d9a29": "Über das Schwachstellen-Formular gesendete Meldungen gingen verloren",
+  "s71756127cd": "Niedrig · gemeldet und behoben im November 2026 · Fix <1>65d31058</1> · Dank an: Huzaifa Jawaid",
+  "s2293352f37": "Das Meldeformular auf unserer Sicherheitsseite schickte jede Meldung an eine Adresse, auf die unser Server nicht mehr antwortete. Alle über das Formular gesendeten Meldungen gingen verloren, und die meldende Person sah einen Fehler. Meldungen per E-Mail waren nicht betroffen, und nichts wurde offengelegt.",
+  "sfb41f9b094": "Das Formular funktioniert wieder. Jede Meldung wird beim Eingang mit unserem Sicherheitsschlüssel verschlüsselt, sodass unser Server sie nur in einer Form speichert, die allein die Inhaber des Schlüssels lesen können, und die meldende Person erhält eine Referenz. Wir werden über jede neue Meldung benachrichtigt, und die Seite behält die E-Mail-Adresse und den Schlüssel als Ausweichweg."
 }

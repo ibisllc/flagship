@@ -71,6 +71,26 @@
       </p>
   
       <div>
+      <h2>Reports sent with the vulnerability form were lost</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/65d31058">65d31058</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        The report form on our security page sent each report to an address
+        our server no longer answered, so every report sent with the form was
+        lost and the reporter saw an error. Reports sent by email were not
+        affected, and nothing was exposed.
+      </p>
+      <p>
+        The form works again. Each report is encrypted to our security key as
+        soon as it arrives, so our server keeps it only in a form the
+        key&rsquo;s holders can read, and the reporter gets a reference. We
+        are notified of each new report, and the page keeps the email address
+        and key as a fallback.
+      </p>
+
       <h2>An unused identity-record endpoint trusted the signers each request named</h2>
       <p class="hof-meta">
         Medium &middot; reported and fixed November 2026 &middot; fix

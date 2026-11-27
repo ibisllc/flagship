@@ -973,5 +973,9 @@
   "s6b476ee344": "Le formulaire reçoit trop de signalements en ce moment. Écrivez à security@flagshipserver.com.",
   "s24fdeba475": "La vérification antispam a échoué. Réessayez, ou écrivez à security@flagshipserver.com.",
   "s4db18cc55e": "Attendez la fin de la vérification antispam ci-dessus, puis envoyez de nouveau.",
-  "s117cf82be8": "Le formulaire est indisponible pour le moment. Écrivez à security@flagshipserver.com."
+  "s117cf82be8": "Le formulaire est indisponible pour le moment. Écrivez à security@flagshipserver.com.",
+  "s0cea2d9a29": "Les signalements envoyés avec le formulaire de vulnérabilités étaient perdus",
+  "s71756127cd": "Faible · signalé et corrigé en novembre 2026 · correctif <1>65d31058</1> · crédit : Huzaifa Jawaid",
+  "s2293352f37": "Le formulaire de signalement de notre page sécurité envoyait chaque signalement à une adresse à laquelle notre serveur ne répondait plus : tous les signalements envoyés avec le formulaire étaient perdus et la personne qui signalait voyait une erreur. Les signalements envoyés par e-mail n'étaient pas concernés, et rien n'a été exposé.",
+  "sfb41f9b094": "Le formulaire fonctionne de nouveau. Chaque signalement est chiffré avec notre clé de sécurité dès son arrivée : notre serveur ne le conserve que sous une forme lisible par les seuls détenteurs de la clé, et la personne qui signale reçoit une référence. Nous sommes avertis de chaque nouveau signalement, et la page garde l'adresse e-mail et la clé en solution de repli."
 }

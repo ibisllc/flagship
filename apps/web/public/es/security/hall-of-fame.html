@@ -57,6 +57,11 @@
       <p class="muted">Investigadores que nos informaron de una vulnerabilidad, con los commits que la cerraron. Se les reconoce de la forma que cada uno pida: nombre, alias o anónimo, con un enlace si lo desean. Aparecen sin atribución hasta que nos indiquen su preferencia; nunca publicamos un nombre que no nos hayan dado.</p>
   
       <div>
+      <h2>Los informes enviados con el formulario de vulnerabilidades se perdían</h2>
+      <p class="hof-meta">Baja · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/65d31058">65d31058</a> · crédito: Huzaifa Jawaid</p>
+      <p>El formulario de informes de nuestra página de seguridad enviaba cada informe a una dirección a la que nuestro servidor ya no respondía, así que todos los informes enviados con el formulario se perdían y quien informaba veía un error. Los informes enviados por correo no se vieron afectados y no se expuso nada.</p>
+      <p>El formulario vuelve a funcionar. Cada informe se cifra con nuestra clave de seguridad en cuanto llega, así que nuestro servidor solo lo guarda en una forma que pueden leer quienes tienen la clave, y quien informa recibe una referencia. Se nos avisa de cada informe nuevo, y la página conserva la dirección de correo y la clave como alternativa.</p>
+
       <h2>Un endpoint de identidad sin uso confiaba en los firmantes que nombraba cada solicitud</h2>
       <p class="hof-meta">Media · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · crédito: rakimans</p>
       <p>Un endpoint de las primeras fases de desarrollo guardaba un registro firmado bajo un hash del nombre de una cuenta. Solo comprobaba la firma del registro con las claves que la misma solicitud anónima indicaba como firmantes permitidos, y ese hash se puede calcular a partir de cualquier nombre público. Cualquiera podía crear un registro para cualquier nombre, reemplazarlo o bloquearlo con un número de versión muy alto.</p>

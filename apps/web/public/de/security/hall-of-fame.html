@@ -57,6 +57,11 @@
       <p class="muted">Forschende, die uns eine Sicherheitslücke gemeldet haben, mit den Commits, die sie geschlossen haben. Genannt in der Form, die sich jede meldende Person wünscht: Name, Handle oder anonym, auf Wunsch mit Link. Ohne Namensnennung aufgeführt, bis sie uns ihre Wahl mitgeteilt haben; wir veröffentlichen nie einen Namen, den wir nicht bekommen haben.</p>
   
       <div>
+      <h2>Über das Schwachstellen-Formular gesendete Meldungen gingen verloren</h2>
+      <p class="hof-meta">Niedrig · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/65d31058">65d31058</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Das Meldeformular auf unserer Sicherheitsseite schickte jede Meldung an eine Adresse, auf die unser Server nicht mehr antwortete. Alle über das Formular gesendeten Meldungen gingen verloren, und die meldende Person sah einen Fehler. Meldungen per E-Mail waren nicht betroffen, und nichts wurde offengelegt.</p>
+      <p>Das Formular funktioniert wieder. Jede Meldung wird beim Eingang mit unserem Sicherheitsschlüssel verschlüsselt, sodass unser Server sie nur in einer Form speichert, die allein die Inhaber des Schlüssels lesen können, und die meldende Person erhält eine Referenz. Wir werden über jede neue Meldung benachrichtigt, und die Seite behält die E-Mail-Adresse und den Schlüssel als Ausweichweg.</p>
+
       <h2>Ein ungenutzter Identitäts-Endpoint vertraute den Signierern, die jede Anfrage selbst nannte</h2>
       <p class="hof-meta">Mittel · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · Dank an: rakimans</p>
       <p>Ein Endpoint aus der frühen Entwicklung speicherte einen signierten Eintrag unter einem Hash eines Kontonamens. Er prüfte die Signatur des Eintrags nur gegen die Schlüssel, die dieselbe anonyme Anfrage als erlaubte Signierer angab, und dieser Hash lässt sich aus jedem öffentlichen Namen berechnen. Jeder konnte für jeden Namen einen Eintrag anlegen, ihn ersetzen oder mit einer sehr hohen Versionsnummer sperren.</p>
