@@ -31,6 +31,8 @@ import type {
 } from "@flagship/storage";
 import {
   authorizeActiveDevice,
+  deviceRefusal,
+  deviceRemoved,
   type DirectoryAuthorization,
   type DirectoryNonceStore,
 } from "./accountDirectory.js";
@@ -90,7 +92,13 @@ export async function handleMintAccountReadToken(
   const u = username.toLowerCase();
   const now = (deps.now ?? (() => Date.now()))();
   const signer = await authorizeSigner(deps, u, input, now);
-  if (!signer) return forbidden("not authorized");
+  if (!signer) {
+    if (!input.device) return forbidden("not authorized");
+    const refused = await deviceRefusal({ identities: deps.identities, now: () => now }, input.device, {
+      accountId: u, method: "POST", path: accountReadTokenPath(u),
+    });
+    return { ...refused, headers: { ...READ_HEADERS } };
+  }
   const claims: AccountReadTokenClaims = { u, sub: signer.sub, k: signer.key, iat: now, exp: now + signer.ttlMs };
   const token = await encode(claims, deps.secret);
   return ok({ token, expiresAt: claims.exp }, { ...READ_HEADERS });
@@ -242,7 +250,16 @@ export async function requireAccountRead(
   const now = (deps.now ?? (() => Date.now()))();
   if (!claims || claims.u !== u || now >= claims.exp) return denied;
   if (opts.allow && !opts.allow(claims.sub)) return denied;
-  if (!(await signerStillCurrent(deps, claims))) return denied;
+  if (!(await signerStillCurrent(deps, claims))) {
+    // A token minted for a device that was removed since: only that device ever held it, so it hears why.
+    if (claims.sub.startsWith("d:")) {
+      const device = await deps.identities.get(claims.u, claims.sub.slice(2));
+      if (device && device.revokedAt !== null && device.devicePubHex.toLowerCase() === claims.k) {
+        return { ok: false, response: { ...deviceRemoved(), headers: { ...READ_HEADERS } } };
+      }
+    }
+    return denied;
+  }
   return { ok: true, demo: false };
 }
 

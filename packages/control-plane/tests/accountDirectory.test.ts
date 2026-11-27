@@ -550,4 +550,69 @@ describe("private account directory — authorization matrix", () => {
       deps, accountId, auth(profilePath, "PUT", otherDeviceId, other), { profile, expectedRevision: 0 },
     )).status).toBe(403);
   });
+
+  it("tells a removed device, and only it, that it was removed", async () => {
+    const { deps, device, other } = await harness();
+    await deps.identities.revoke(accountId, otherDeviceId, now);
+    const dirPath = `/api/accounts/${accountId}/directory`;
+    const removed = await handleGetAccountDirectory(deps, accountId, auth(dirPath, "GET", otherDeviceId, other));
+    expect(removed.status).toBe(403);
+    expect(removed.body).toEqual({ error: "device-removed", code: "device-removed" });
+    const profilePath = `/api/accounts/${accountId}/profile`;
+    expect((await handleGetAccountProfile(deps, accountId, auth(profilePath, "GET", otherDeviceId, other))).body)
+      .toMatchObject({ code: "device-removed" });
+
+    // Someone else naming the removed device (another key, a stale or misdirected request) hears the generic refusal.
+    const forged = auth(dirPath, "GET", otherDeviceId, device);
+    expect((await handleGetAccountDirectory(deps, accountId, forged)).body).toEqual({ error: "not authorized" });
+    const elsewhere = auth(profilePath, "GET", otherDeviceId, other);
+    expect((await handleGetAccountDirectory(deps, accountId, elsewhere)).body).toEqual({ error: "not authorized" });
+    const stale = { ...auth(dirPath, "GET", otherDeviceId, other) };
+    const staleRequest = { ...stale.request!, issuedAt: now - 10 * 60_000 } as AccountDirectoryRequest;
+    expect((await handleGetAccountDirectory(
+      deps, accountId, { request: staleRequest, signature: signAccountDirectoryRequest(staleRequest, other) },
+    )).body).toEqual({ error: "not authorized" });
+    // A working device is unaffected.
+    expect((await handleGetAccountDirectory(deps, accountId, auth(dirPath, "GET", deviceId, device))).status).toBe(200);
+  });
+
+  it("wakes the removed device on its own push tokens before dropping them; never on self-removal", async () => {
+    const { deps, device, other } = await harness();
+    const token = (tokenId: string, id: string) => ({
+      tokenId, username: accountId, deviceId: id,
+      platform: "apns" as const, providerToken: `provider-${tokenId}`,
+      pushX25519PubHex: "22".repeat(32), registrationSignatureHex: "33".repeat(64),
+      registeredAt: now, lastSeenAt: now,
+    });
+    await deps.pushTokens.put(token("11".repeat(16), otherDeviceId));
+    await deps.pushTokens.put(token("44".repeat(16), deviceId));
+    const woken: string[][] = [];
+    const notifying: AccountDirectoryDeps = {
+      ...deps,
+      notifyDeviceRemoved: async (targets) => {
+        // The tokens are still there while the push goes out.
+        expect((await deps.pushTokens.listByUser(accountId)).map((t) => t.tokenId)).toContain(targets[0]!.tokenId);
+        woken.push(targets.map((t) => t.providerToken));
+      },
+    };
+    const path = `/api/accounts/${accountId}/devices/${otherDeviceId}`;
+    expect((await handleRevokeAccountDevice(notifying, accountId, otherDeviceId, auth(path, "DELETE", deviceId, device))).status).toBe(200);
+    expect(woken).toEqual([[`provider-${"11".repeat(16)}`]]);
+    expect((await deps.pushTokens.listByUser(accountId)).map((t) => t.deviceId)).toEqual([deviceId]);
+
+    // A push that fails does not stop the removal.
+    const { deps: d2, device: dev2 } = await harness();
+    await d2.pushTokens.put(token("55".repeat(16), otherDeviceId));
+    const failing: AccountDirectoryDeps = { ...d2, notifyDeviceRemoved: async () => { throw new Error("apns down"); } };
+    expect((await handleRevokeAccountDevice(failing, accountId, otherDeviceId, auth(path, "DELETE", deviceId, dev2))).status).toBe(200);
+    expect(await d2.pushTokens.listByUser(accountId)).toHaveLength(0);
+
+    // A device removing itself erases its own keys; it is not pushed.
+    const { deps: d3 } = await harness();
+    await d3.pushTokens.put(token("66".repeat(16), otherDeviceId));
+    const self: string[] = [];
+    const selfDeps: AccountDirectoryDeps = { ...d3, notifyDeviceRemoved: async (t) => void self.push(t[0]!.tokenId) };
+    expect((await handleRevokeAccountDevice(selfDeps, accountId, otherDeviceId, auth(path, "DELETE", otherDeviceId, other))).status).toBe(200);
+    expect(self).toEqual([]);
+  });
 });

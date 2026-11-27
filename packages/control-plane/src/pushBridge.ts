@@ -308,6 +308,9 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   "voici-call": { title: "Flagship", body: "Someone is calling you. Open Flagship to answer." },
   // A page owner ringing a caller back (docs/voici-calls.md): the caller's own app dials out. Names no one.
   "voici-ring": { title: "Flagship", body: "Someone is calling you. Open Flagship to answer." },
+  // Another device removed this one from the account (docs/revocation-ui.md). The app checks with `.com` before
+  // it erases anything; the push itself proves nothing.
+  "device-removed": { title: "Flagship", body: "This device was removed from your Flagship account." },
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 
@@ -340,6 +343,35 @@ export function apnsLocalizedAlertFor(category: string, kind?: string): { title:
  */
 export function secretRequestDisplayData(apex = "flagshipserver.com"): Record<string, string> {
   return { kind: "secret-request", deepLink: appRouteLink("secret-requests", {}, apex) };
+}
+
+/** The push a device gets when another device removes it from the account (docs/revocation-ui.md). */
+export const DEVICE_REMOVED_CATEGORY = "device-removed";
+
+/**
+ * Categories whose APNs push also asks iOS to wake the app in the background (`content-available`), so it can
+ * ask `.com` at once rather than when the person next opens it. The alert stays: iOS may not wake a closed app.
+ */
+const APNS_BACKGROUND_WAKE = new Set([DEVICE_REMOVED_CATEGORY]);
+
+/**
+ * Wake a removed device on its own push tokens. Content-free: the fixed `kind` only (Web Push gets the same
+ * two fields as its payload). The device never acts on the push: it asks `.com`, which answers
+ * `403 device-removed` to that device's own signed request or read token, and erases on that answer.
+ */
+export function buildDeviceRemovedNotifier(
+  forwarder: ReturnType<typeof buildPushForwarder>,
+): (targets: PushTarget[]) => Promise<void> {
+  return async (targets) => {
+    if (targets.length === 0) return;
+    await forwarder({
+      targets: targets.map((t) => ({ tokenId: t.tokenId, platform: t.platform, providerToken: t.providerToken })),
+      category: DEVICE_REMOVED_CATEGORY,
+      sealedPayloadHex: "",
+      webpushPayloadBytes: new TextEncoder().encode(JSON.stringify({ category: DEVICE_REMOVED_CATEGORY, kind: DEVICE_REMOVED_CATEGORY })),
+      displayData: { kind: DEVICE_REMOVED_CATEGORY },
+    });
+  };
 }
 
 const APNS_PRODUCTION_HOST = "api.push.apple.com";
@@ -382,6 +414,7 @@ async function sendApns(args: {
     category: args.category,
     "thread-id": args.category,
   };
+  if (APNS_BACKGROUND_WAKE.has(args.category)) apsBody["content-available"] = 1;
   // Non-secret display fields (e.g. provision-phase) ride at the top
   // level of the APNs payload so they land in `userInfo` for the
   // device's notification handler. iOS reads `info["phase"]` etc.

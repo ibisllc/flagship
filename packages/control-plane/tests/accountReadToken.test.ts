@@ -197,6 +197,36 @@ describe("reading with an account read token", () => {
   });
 });
 
+describe("a device that was removed from the account", () => {
+  it("is told so when it mints, and when it reads with a token it still holds", async () => {
+    const h = await harness();
+    const held = (await mint(h.deps, { device: deviceAuth(h.device) })).token!;
+    await h.storage.deviceIdentities.revoke(U, DEVICE_ID, NOW);
+    const minted = await handleMintAccountReadToken(h.deps, U, { device: deviceAuth(h.device, "b1".repeat(16)) });
+    expect(minted.status).toBe(403);
+    expect(minted.body).toEqual({ error: "device-removed", code: "device-removed" });
+    expect(minted.headers?.["cache-control"]).toBe("private, no-store");
+    const r = await read(h.deps, held);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.response.status).toBe(403);
+      expect(r.response.body).toEqual({ error: "device-removed", code: "device-removed" });
+    }
+  });
+
+  it("is not named by another key, a stale request, the IRK path, or a token for a device that was replaced", async () => {
+    const h = await harness();
+    await h.storage.deviceIdentities.revoke(U, DEVICE_ID, NOW);
+    const other = await handleMintAccountReadToken(h.deps, U, { device: deviceAuth(key(41), "b2".repeat(16)) });
+    expect(other.body).toEqual({ error: "not authorized" });
+    h.advance(10 * 60_000);
+    const stale = await handleMintAccountReadToken(h.deps, U, { device: deviceAuth(h.device, "b3".repeat(16)) });
+    expect(stale.body).toEqual({ error: "not authorized" });
+    const irk = await handleMintAccountReadToken(h.deps, U, { body: irkBody(key(9), ACCOUNT_READ_TOKEN_LABEL, 9) });
+    expect(irk.body).toEqual({ error: "not authorized" });
+  });
+});
+
 describe("a read token whose MAC was already checked", () => {
   it("is still refused the moment its signer is revoked, rotated away or expired", async () => {
     const h = await harness();

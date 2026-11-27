@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apnsAlertFor, apnsLocalizedAlertFor, buildPushForwarder, buildVoipPushSender, secretRequestDisplayData } from "../src/pushBridge.js";
+import { apnsAlertFor, apnsLocalizedAlertFor, buildDeviceRemovedNotifier, buildPushForwarder, buildVoipPushSender, secretRequestDisplayData } from "../src/pushBridge.js";
 
 interface Captured {
   url: string;
@@ -76,6 +76,33 @@ describe("buildPushForwarder — APNs", () => {
     expect(body["flagship-sealed"]).toBe("deadbeef");
     // iOS shows nothing for a closed app without aps.alert.
     expect(body.aps.alert).toEqual({ title: "Flagship", body: "One of your servers needs your attention.", "loc-key": "One of your servers needs your attention." });
+  });
+
+  it("wakes a removed device content-free: a fixed alert, a background wake on APNs, a data-only FCM message", async () => {
+    const { f, calls } = fakeFetch([{ status: 200, body: "" }, { status: 200, body: JSON.stringify({ access_token: "t", expires_in: 3600 }) }, { status: 200, body: "{}" }]);
+    const forward = buildPushForwarder({
+      apns: { keyId: "ABC1234567", teamId: "TEAM123456", privateKeyPem: APNS_TEST_KEY, bundleId: "com.flagship.app" },
+      fetchImpl: f,
+      now: () => 1_700_000_000_000,
+    });
+    await buildDeviceRemovedNotifier(forward)([{ tokenId: "tok1", platform: "apns", providerToken: "ABCDEF1234" }]);
+    const body = JSON.parse(calls[0]!.body);
+    expect(body.aps.category).toBe("device-removed");
+    expect(body.aps["content-available"]).toBe(1);
+    expect(body.aps.alert).toEqual({
+      title: "Flagship",
+      body: "This device was removed from your Flagship account.",
+      "loc-key": "This device was removed from your Flagship account.",
+    });
+    expect(body.kind).toBe("device-removed");
+    expect(body["flagship-sealed"]).toBe("");
+    // Other categories are not background wakes.
+    const plain = fakeFetch([{ status: 200, body: "" }]);
+    await buildPushForwarder({
+      apns: { keyId: "ABC1234567", teamId: "TEAM123456", privateKeyPem: APNS_TEST_KEY, bundleId: "com.flagship.app" },
+      fetchImpl: plain.f,
+    })({ targets: [{ tokenId: "t", platform: "apns", providerToken: "X" }], category: "cert-alert", sealedPayloadHex: "" });
+    expect(JSON.parse(plain.calls[0]!.body).aps["content-available"]).toBeUndefined();
   });
 
   it("gives every category a fixed alert that names no server, app or host", () => {

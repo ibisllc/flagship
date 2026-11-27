@@ -208,6 +208,7 @@ import {
   handleMarketplaceScanResult,
   handleMarketplaceScanQueue,
   buildPushForwarder,
+  buildDeviceRemovedNotifier,
   wrapForwarderAsV12Fanout,
   handleGetEntitlementRevocations,
   handleListRevocations,
@@ -3143,8 +3144,9 @@ export async function tryControlPlane(
   }
   if (method === "DELETE" && (m = path.match(ROUTE_RE.ACCOUNT_DEVICE))) {
     const accountId = decodeURIComponent(m[1]!);
+    const forwarder = buildOptionalPushForwarder(env);
     return finish(await handleRevokeAccountDevice(
-      accountDirectoryDeps(storage, env.DB),
+      { ...accountDirectoryDeps(storage, env.DB), ...(forwarder ? { notifyDeviceRemoved: buildDeviceRemovedNotifier(forwarder) } : {}) },
       accountId,
       decodeURIComponent(m[2]!),
       directoryAuthorization(request, accountId, path),
