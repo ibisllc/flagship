@@ -1249,8 +1249,8 @@ test.describe("gym ux recovery update", () => {
     m.post("/api/users/smoketest/wipe-restart", { ok: true, auditSeq: 7, newIrkPub: "cc".repeat(32), revokedGrantIds: [] });
     await standInRecoveryWindow(page, { enroll: enrollAnswer("beef0000".repeat(4)) });
     await page.click('[data-tab-target="settings"]');
-    await page.click("#settings-tab-trusted-devices");
-    await page.click("#wipe-restart-btn");
+    await page.click("#settings-tab-account-security");
+    await page.click("#account-security-reset-keys");
     await page.locator("dialog.ceremony-dialog [data-primary]").click();
     await page.fill(".modal-input", "a brand new browser passphrase");
     await page.click("[data-modal-ok]");

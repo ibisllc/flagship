@@ -33,6 +33,7 @@ import { canSignAdminOrders } from "../lib/addServerGate.js";
 import { humanError } from "../lib/humanError.js";
 import { runRotateAdminRoot } from "../lib/adminRootRotation.js";
 import { setupCloudRecovery, hasCloudRecovery } from "../lib/recovery.js";
+import { RESET_KEYS_COPY, runResetAccountKeys } from "../lib/resetAccountKeysUi.js";
 
 import { tr } from "../lib/i18n.js";
 import { adminKeyCustody, custodyErrorText, isLockedKey, withAdminRoot } from "../lib/keyCustody.js";
@@ -290,6 +291,18 @@ export function renderAdminKeyCustody(custody = state.custody) {
 
 export const CUSTODY_LABEL = tr("Browser: software key, unlocked with a passkey");
 
+/** "Reset account keys" (docs/revocation-ui.md): the account-wide reset, moved here from each Trusted devices row. */
+function renderResetAccountKeys() {
+  return `
+    <div class="card mt-3" data-account-security-reset-keys>
+      <h3>${escapeHtml(RESET_KEYS_COPY.heading)}</h3>
+      <p class="note small">${escapeHtml(RESET_KEYS_COPY.explain)}</p>
+      <p class="note small hidden" id="account-security-reset-status" aria-live="polite"></p>
+      <button class="danger" id="account-security-reset-keys" ${state.busy ? "disabled" : ""}>${escapeHtml(RESET_KEYS_COPY.confirm)}</button>
+    </div>
+  `;
+}
+
 function renderFailure() {
   const message = state.failureMessage ?? state.loadError;
   if (!message) return "";
@@ -315,6 +328,7 @@ async function renderAccountSecurity() {
       renderActions(),
       renderAdminKeyCustody(),
       renderRotateAdminRoot(),
+      renderResetAccountKeys(),
       renderFailure(),
     ].join("");
     bindHandlers();
@@ -333,6 +347,32 @@ export function preflight(session = getSession()) {
 }
 
 function bindHandlers() {
+  document.getElementById("account-security-reset-keys")?.addEventListener("click", async () => {
+    if (state.busy) return;
+    const status = document.getElementById("account-security-reset-status");
+    const progress = (text) => {
+      if (!status) return;
+      status.textContent = text;
+      status.classList.remove("hidden");
+    };
+    state.busy = true;
+    state.failureMessage = null;
+    try {
+      const out = await runResetAccountKeys({ progress });
+      if (out.localFailed) {
+        state.failureMessage = out.localFailed;
+        toast(tr("Server wiped — re-open the app to finish on this browser."), "err");
+      } else if (out.done) {
+        toast(tr("Done. Your account has new keys."), "ok");
+      }
+    } catch (e) {
+      console.error("reset account keys failed", e);
+      state.failureMessage = e?.message === RESET_KEYS_COPY.locked ? e.message : humanError(e);
+    } finally {
+      state.busy = false;
+      await renderAccountSecurity();
+    }
+  });
   document.getElementById("account-security-protect-key")?.addEventListener("click", async () => {
     const key = getSession().adminRootSeed;
     if (!isLockedKey(key)) return;

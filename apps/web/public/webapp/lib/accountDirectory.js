@@ -202,6 +202,23 @@ export async function removeManagedDeviceDisplayName(deviceId, current, deps = {
   return response.json();
 }
 
+/**
+ * "Remove from account" (docs/revocation-ui.md): `.com` revokes the device's identity, grants, push tokens and
+ * call key, wakes it so it erases the account's keys, and the account's servers end its sessions. Not for this
+ * browser itself (Settings, Remove this device). Throws an error with `.status` and `.body` on refusal.
+ */
+export async function removeAccountDevice(deviceId, deps = {}) {
+  const session = deps.session ?? getSession();
+  const profile = deps.profile ?? getActiveProfile();
+  const id = String(deviceId ?? "").toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(id)) throw new Error("bad device id");
+  if (id === profile?.deviceId) throw new Error("use Remove this device for this browser");
+  const path = `/api/accounts/${encodeURIComponent(profile.accountId)}/devices/${id}`;
+  const response = await signedDirectoryFetch(path, { method: "DELETE" }, { ...deps, session, profile });
+  if (!response.ok) throw await directoryError(response);
+  return response.json();
+}
+
 /** `.com`'s refusal in its own words (the apps show the server's sentence). */
 async function directoryError(response) {
   let reason = null;

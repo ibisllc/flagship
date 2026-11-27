@@ -538,7 +538,7 @@ test.describe("gym webapp account", () => {
     await expect(content).toContainText("No secured sessions.");
   });
 
-  test("gym account Trusted devices: Replace device counts down and Cancel stops it, Add device opens pairing", async ({ page }, testInfo) => {
+  test("gym account Trusted devices: no Replace or Wipe on the list, Reset account keys counts down in Account security and Cancel stops it, Add device opens pairing", async ({ page }, testInfo) => {
     await noSockets(page);
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
@@ -547,26 +547,23 @@ test.describe("gym webapp account", () => {
     await page.click("#settings-tab-trusted-devices");
     const list = page.locator("#trusted-devices-list");
     await expect(list).toContainText("Just this device", { timeout: 10_000 });
-    await page.click("#replace-device-btn");
-    const sheet = page.locator("dialog.ceremony-dialog");
-    await expect(sheet.locator(".modal-title")).toHaveText("Replace this device?");
-    await sheet.locator("[data-primary]").click();
-    await expect(sheet.locator("[data-countdown-line]")).toContainText("Replacing in");
-    await expect(sheet.locator("[data-primary]")).toBeDisabled();
-    await shot(page, testInfo, "replace-countdown");
-    await sheet.locator("[data-cancel]").click();
-    await expect(sheet).toHaveCount(0);
-    const posts = m.calls.filter((c) => c.method !== "GET");
-    expect(posts).toEqual([]);
-
-    // Wipe & restart opens the same countdown; Cancel before it starts.
-    await page.click("#wipe-restart-btn");
-    await expect(page.locator("dialog.ceremony-dialog [data-primary]")).toBeEnabled();
-    await page.locator("dialog.ceremony-dialog [data-cancel]").click();
-    await expect(page.locator("dialog.ceremony-dialog")).toHaveCount(0);
+    await expect(page.locator("#replace-device-btn, #wipe-restart-btn")).toHaveCount(0);
 
     await page.click("#trusted-devices-add");
     await expect(page.locator("#view-add-device")).toBeVisible({ timeout: 10_000 });
+
+    await openSettings(page);
+    await page.click("#settings-tab-account-security");
+    await page.click("#account-security-reset-keys");
+    const sheet = page.locator("dialog.ceremony-dialog");
+    await expect(sheet.locator(".modal-title")).toHaveText("Reset your account keys?");
+    await sheet.locator("[data-primary]").click();
+    await expect(sheet.locator("[data-countdown-line]")).toContainText("Resetting in");
+    await expect(sheet.locator("[data-primary]")).toBeDisabled();
+    await shot(page, testInfo, "reset-keys-countdown");
+    await sheet.locator("[data-cancel]").click();
+    await expect(sheet).toHaveCount(0);
+    expect(m.calls.filter((c) => c.method !== "GET" && c.url.pathname.includes("wipe-restart"))).toEqual([]);
   });
 
   test("gym account AI keys: Cancel, add a key with its options, the relay switch, use it and remove it", async ({ page }, testInfo) => {
