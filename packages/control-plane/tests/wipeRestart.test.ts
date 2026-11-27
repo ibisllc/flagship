@@ -535,3 +535,79 @@ describe("handleWipeRestart — the new recovery passkey's key", () => {
     expect((await s.usernames.get(USERNAME))?.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
   });
 });
+
+describe("handleWipeRestart — accounts that pin an admin root", () => {
+  async function pinned(oldIrk: Keypair, adminRoot: Keypair, extra: { isDemo?: boolean } = {}) {
+    const s = await setup(oldIrk);
+    await s.usernames.put({
+      username: USERNAME,
+      irkPubHex: bytesToHex(oldIrk.publicKey),
+      claimedAt: 1,
+      adminRootPubHex: bytesToHex(adminRoot.publicKey),
+    });
+    if (extra.isDemo) await s.usernames.setDemo(USERNAME, true);
+    return s;
+  }
+  function withAdmin(body: Awaited<ReturnType<typeof makeBody>>, signer: Keypair, wrapped: Uint8Array) {
+    return sha256Hex(wrapped).then((h) => ({
+      ...body,
+      adminRootSignature: bytesToHex(
+        signWipeRestart(
+          {
+            username: USERNAME,
+            oldIrkPub: Buffer.from(body.request.oldIrkPub, "hex"),
+            newIrkPub: Buffer.from(body.request.newIrkPub, "hex"),
+            newCredentialIdHex: body.request.newCredentialId,
+            newWrappedUmkHashHex: h,
+            issuedAt: body.request.issuedAt,
+          },
+          signer,
+        ),
+      ),
+    }));
+  }
+
+  it("refuses the old account key alone, and changes nothing", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const adminRoot = makeKey();
+    const s = await pinned(oldIrk, adminRoot);
+    const res = await handleWipeRestart(deps(s), USERNAME, await makeBody({ oldIrk, newIrk }));
+    expect(res.status).toBe(403);
+    expect((res.body as { code: string }).code).toBe("admin-key-required");
+    expect((res.body as { error: string }).error).toMatch(/^Wipe and restart needs a newer version of Flagship\./);
+    expect((await s.usernames.get(USERNAME))!.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
+    expect((await s.webauthnRecovery.get(USERNAME))!.credentialIdHex).toBe("deadbeefdeadbeef");
+    expect(await s.auditEvents.list(USERNAME, 0, 10)).toHaveLength(0);
+  });
+
+  it("refuses an admin signature from another key", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await pinned(oldIrk, makeKey());
+    const wrapped = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const body = await withAdmin(await makeBody({ oldIrk, newIrk, newWrappedUmk: wrapped }), makeKey(), wrapped);
+    expect((await handleWipeRestart(deps(s), USERNAME, body)).status).toBe(403);
+    expect((await s.usernames.get(USERNAME))!.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
+  });
+
+  it("applies when the admin root signs the same request", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const adminRoot = makeKey();
+    const s = await pinned(oldIrk, adminRoot);
+    const wrapped = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const body = await withAdmin(await makeBody({ oldIrk, newIrk, newWrappedUmk: wrapped }), adminRoot, wrapped);
+    const res = await handleWipeRestart(deps(s), USERNAME, body);
+    expect(res.status).toBe(200);
+    expect((await s.usernames.get(USERNAME))!.irkPubHex).toBe(bytesToHex(newIrk.publicKey));
+  });
+
+  it("a demo account keeps the old account-key check", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await pinned(oldIrk, makeKey(), { isDemo: true });
+    const res = await handleWipeRestart(deps(s), USERNAME, await makeBody({ oldIrk, newIrk }));
+    expect(res.status).toBe(200);
+  });
+});
