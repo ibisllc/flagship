@@ -3665,6 +3665,67 @@
       }
     },
     {
+      "id": "account-key-rotation",
+      "title": "Change the account key (account master-key rotation): one admin-root-signed hop flagship/account-key-rotation/v1 (hybrid companion /v2) moves the account to a new UMK; kept devices get it in flagship/umk-rotation-delivery/v1, sealed with X-Wing to their flagship/device-receive-key/v1 or to their Ed25519 identity key; follow-ups device-key-rotate, cgk-rekey, swk-rekey, luks-rekey-confirm",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "partial",
+          "reason": "Protocol only (Phase 1): canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation. The rotator and receiver screens are Phase 4.",
+          "anchors": [
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/AccountKeyRotation.swift",
+              "flagship/account-key-rotation/v1"
+            ],
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/AccountKeyRotation.swift",
+              "public static func open\\("
+            ],
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/AccountKeyRotation.swift",
+              "public static func verifyPq\\("
+            ]
+          ]
+        },
+        "android": {
+          "status": "partial",
+          "reason": "Protocol only (Phase 1): canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation. The rotator and receiver screens are Phase 4.",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountKeyRotation.kt",
+              "flagship/account-key-rotation/v1"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountKeyRotation.kt",
+              "fun open\\("
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountKeyRotation.kt",
+              "fun verifyPq\\("
+            ]
+          ]
+        },
+        "web": {
+          "status": "partial",
+          "reason": "Protocol only (Phase 1): canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation. The rotator and receiver screens are Phase 4. The browser verifies the hybrid companion but never signs one (keyless-web rule).",
+          "anchors": [
+            [
+              "apps/web/public/webapp/lib/accountKeyRotation.js",
+              "flagship/account-key-rotation/v1"
+            ],
+            [
+              "apps/web/public/webapp/lib/accountKeyRotation.js",
+              "export function openUmkRotationDelivery"
+            ],
+            [
+              "apps/web/public/webapp/lib/accountKeyRotation.js",
+              "export function verifyAccountKeyRotationPq"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "id": "pending-order-keeps-routing-key",
       "title": "A retry of a pending server order registers the same routing key (RCK) for 24 hours, forgotten on cancel or when the server registers; .com also lets the same admin replace the key while no box has activated the name",
       "ref": "web",
