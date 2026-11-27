@@ -104,7 +104,12 @@ fun JoinDeviceScreen(
 
     var link by remember { mutableStateOf(initialLink) }
     var scanError by remember { mutableStateOf<String?>(null) }
-    var deviceName by remember { mutableStateOf(FSStrings.get(R.string.this_android_device)) }
+    // The phone's name from Android Settings ("Harry's Galaxy S26"), else its model, as when creating an account;
+    // the generic phrase only when neither exists (it is what the other devices list would show).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var deviceName by remember {
+        mutableStateOf(com.flagshipserver.app.core.DeviceDisplayName.suggested(context) ?: FSStrings.get(R.string.this_android_device))
+    }
 
     if (link == null) {
         ScannerEntry(

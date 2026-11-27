@@ -143,6 +143,9 @@ public struct SettingsScreen: View {
     /// "Your page": opens the page in the Social tab (nil for a sample account, which has none).
     var onOpenYourPage: (() -> Void)?
     var onRefresh: () async -> Void = {}
+    /// The trusted-devices list waits for Face ID (the system could not show the prompt when it loaded).
+    var trustedDevicesNeedUnlock: Bool = false
+    var onLoadTrustedDevices: () async -> Void = {}
     /// B6a — fired after the user confirms in the Remove sheet. The
     /// container is expected to: revoke this device's push token on
     /// .com, wipe local Keystore, and call AppState.signOut so the
@@ -243,6 +246,8 @@ public struct SettingsScreen: View {
         onOpenPrivacy: @escaping () -> Void = {},
         onOpenYourPage: (() -> Void)? = nil,
         onRefresh: @escaping () async -> Void = {},
+        trustedDevicesNeedUnlock: Bool = false,
+        onLoadTrustedDevices: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
         onReplaceDevice: @escaping () async -> Void = {},
         onFinalizeReplace: @escaping (Int64) -> Void = { _ in },
@@ -302,6 +307,8 @@ public struct SettingsScreen: View {
         self.onOpenPrivacy = onOpenPrivacy
         self.onOpenYourPage = onOpenYourPage
         self.onRefresh = onRefresh
+        self.trustedDevicesNeedUnlock = trustedDevicesNeedUnlock
+        self.onLoadTrustedDevices = onLoadTrustedDevices
         self.onRemoveFromAccount = onRemoveFromAccount
         self.onReplaceDevice = onReplaceDevice
         self.onFinalizeReplace = onFinalizeReplace
@@ -613,11 +620,25 @@ public struct SettingsScreen: View {
                 pendingRePairBanner(c: c)
                 Text("Phones and tablets that hold your account keys.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    // In a List row a multi-line caption keeps the height it had when the row was first
+                    // measured (an error card), and is cut off once the list replaces it.
+                    .fixedSize(horizontal: false, vertical: true)
                 switch trustedDevices {
                 case .idle, .loading:
                     ServerCardSkeleton()
+                case .failed(let msg) where trustedDevicesNeedUnlock:
+                    FSCard {
+                        VStack(alignment: .leading, spacing: FS.space.s2) {
+                            Text(msg).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            FSSecondaryButton(String(localized: "Show trusted devices"), block: true) {
+                                Task { await onLoadTrustedDevices() }
+                            }
+                            .accessibilityIdentifier("settings-trusted-devices-unlock")
+                        }
+                    }
                 case .failed(let msg):
-                    ErrorCard(message: msg)
+                    ErrorCard(message: msg, retry: onLoadTrustedDevices)
                 case .loaded(let devices):
                     if devices.isEmpty {
                         FSCard {

@@ -17355,5 +17355,13 @@
   "Open this link when you create your account.": {
     "en": "Open this link when you create your account.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Unlock with Face ID or your passcode to see your trusted devices.": {
+    "en": "Unlock with Face ID or your passcode to see your trusted devices.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SettingsViewModel.swift:30"
+  },
+  "Show trusted devices": {
+    "en": "Show trusted devices",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:630"
   }
 }

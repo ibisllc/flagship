@@ -10,7 +10,7 @@ import {
   type Keypair,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
-import { handlePushRegister, handleVouchedDeviceAdmit, QUARANTINE_MS } from "../src/push.js";
+import { handlePushRegister, handleVouchedDeviceAdmit, platformClassForPush, QUARANTINE_MS } from "../src/push.js";
 
 const deviceId = "01".repeat(16);
 const pushPublicKey = new Uint8Array(32).fill(7);
@@ -202,6 +202,17 @@ describe("account-scoped push registration", () => {
     expect((await storage.deviceIdentities.listForAccount("alice")).filter((row) => row.deviceId === joinedDeviceId)).toHaveLength(1);
     expect(await storage.deviceSelfProfiles.get("alice", joinedDeviceId)).toMatchObject({ revision: 1 });
     expect((await storage.pushTokens.listByUser("alice")).filter((row) => row.deviceId === joinedDeviceId)).toHaveLength(1);
+    // The device's platform, not its push service: an "apns" join is an iPhone or iPad in the lists.
+    expect((await storage.deviceIdentities.get("alice", joinedDeviceId))?.platformClass).toBe("ios");
+  });
+
+  it("maps each push service to the device platform the Trusted devices lists know", () => {
+    expect(platformClassForPush("apns")).toBe("ios");
+    expect(platformClassForPush("fcm")).toBe("android");
+    expect(platformClassForPush("unifiedpush")).toBe("android");
+    expect(platformClassForPush("webpush")).toBe("web");
+    expect(platformClassForPush(undefined)).toBeNull();
+    expect(platformClassForPush("carrier-pigeon")).toBeNull();
   });
 });
 

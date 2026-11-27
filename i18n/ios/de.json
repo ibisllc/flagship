@@ -4076,5 +4076,7 @@
   "This name has been set aside for you.": "Dieser Name wurde für dich reserviert.",
   "This link has expired. Ask for a new one.": "Dieser Link ist abgelaufen. Bitte um einen neuen.",
   "This link doesn't work any more. Ask for a new one.": "Dieser Link funktioniert nicht mehr. Bitte um einen neuen.",
-  "Open this link when you create your account.": "Öffne diesen Link, wenn du dein Konto erstellst."
+  "Open this link when you create your account.": "Öffne diesen Link, wenn du dein Konto erstellst.",
+  "Unlock with Face ID or your passcode to see your trusted devices.": "Entsperren Sie mit Face ID oder Ihrem Code, um Ihre vertrauenswürdigen Geräte zu sehen.",
+  "Show trusted devices": "Vertrauenswürdige Geräte anzeigen"
 }

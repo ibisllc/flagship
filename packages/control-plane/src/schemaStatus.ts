@@ -183,6 +183,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0161",
   // Vulnerability reports from the website form, encrypted on intake to the security key.
   "0162",
+  // Paired devices stored their push service as their platform ("fcm" showed as "Device"): mapped to the platform.
+  "0163",
 ];
 
 export interface SchemaStatusDeps {

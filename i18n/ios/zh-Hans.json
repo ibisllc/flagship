@@ -4074,5 +4074,7 @@
   "This name has been set aside for you.": "此名称已为你保留。",
   "This link has expired. Ask for a new one.": "此链接已过期。请索要新链接。",
   "This link doesn't work any more. Ask for a new one.": "此链接已失效。请索要新链接。",
-  "Open this link when you create your account.": "请在创建账户时打开此链接。"
+  "Open this link when you create your account.": "请在创建账户时打开此链接。",
+  "Unlock with Face ID or your passcode to see your trusted devices.": "使用 Face ID 或密码解锁，即可查看你的受信任设备。",
+  "Show trusted devices": "显示受信任设备"
 }

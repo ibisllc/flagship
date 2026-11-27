@@ -5,6 +5,7 @@ import FlagshipCore
 import FlagshipAPI
 
 public struct SettingsTab: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.podScreensClients) private var podClients
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
@@ -206,6 +207,8 @@ public struct SettingsTab: View {
                     onOpenPrivacy: { path.append(.privacy) },
                     onOpenYourPage: MessagesStore.shared.hasAccount || MessagesStore.shared.isSampleReadOnly ? { linker.pending = .pageEditor } : nil,
                     onRefresh: { await vm.load() },
+                    trustedDevicesNeedUnlock: vm.trustedDevicesNeedUnlock,
+                    onLoadTrustedDevices: { await vm.loadTrustedDevices() },
                     onRemoveFromAccount: {
                         // Recovery gate (mirrors onSignOut): removing this
                         // device wipes the local key, so without cloud
@@ -397,6 +400,16 @@ public struct SettingsTab: View {
             dibsWindowOpen = (try? await nameDibs.window().open) ?? false
         }
         .task(id: app.currentUser) { await loadPqLabels() }
+        // The list waited because Face ID could not be shown: try again once the app is frontmost, which
+        // uses this session's key when the app lock just opened it, and asks once otherwise.
+        // Not while the app lock is up: its own prompt would collide with this one.
+        .onChange(of: scenePhase) { _, _ in retryTrustedDevicesIfWaiting() }
+        .onChange(of: app.isUnlocked) { _, _ in retryTrustedDevicesIfWaiting() }
+    }
+
+    private func retryTrustedDevicesIfWaiting() {
+        guard scenePhase == .active, app.isUnlocked, vm?.trustedDevicesNeedUnlock == true else { return }
+        Task { await vm?.loadTrustedDevices() }
     }
 
     /// One-shot fetch of the pending companion-write count so the

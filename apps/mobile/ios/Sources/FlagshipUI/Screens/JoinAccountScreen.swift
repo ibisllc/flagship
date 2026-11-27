@@ -28,7 +28,8 @@ public struct JoinAccountScreen: View {
     let onJoined: (JoinAccountViewModel.AdmittedProfile) -> Void
 
     @State private var scanError: String?
-    @State private var deviceDisplayName = String(localized: "This iPhone")
+    // The system's name for this device ("iPhone", "iPad"), as when creating an account.
+    @State private var deviceDisplayName = OpenAccountScreen.osDeviceName() ?? String(localized: "This iPhone")
     @State private var deviceNameError: String?
 
     public init(

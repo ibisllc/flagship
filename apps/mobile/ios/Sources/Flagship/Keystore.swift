@@ -277,6 +277,22 @@ public struct Keystore {
     /// ceremony to surface the OLD UMK seed for hashing / comparison
     /// before installing a new one. The biometric prompt fires under
     /// the hood since UMK lives behind WrappingKeypair.
+    /// True when an unlock failed only because the system could not show its prompt now (the app was
+    /// not frontmost, or another prompt was up), not because the owner declined or the key is gone.
+    public static func isPromptUnavailable(_ error: Error) -> Bool {
+        if let la = error as? LAError {
+            return [.notInteractive, .systemCancel, .appCancel].contains(la.code)
+        }
+        let ns = error as NSError
+        if ns.domain == LAErrorDomain {
+            return [LAError.Code.notInteractive.rawValue, LAError.Code.systemCancel.rawValue, LAError.Code.appCancel.rawValue].contains(ns.code)
+        }
+        // errSecInteractionNotAllowed, errSecInteractionRequired ("User interaction required.")
+        if ns.domain == NSOSStatusErrorDomain { return ns.code == -25308 || ns.code == -25315 }
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? Error { return isPromptUnavailable(underlying) }
+        return false
+    }
+
     public static func currentUMK(reason: String) async throws -> SymmetricKey {
         return try await unwrappedUMK(reason: reason)
     }

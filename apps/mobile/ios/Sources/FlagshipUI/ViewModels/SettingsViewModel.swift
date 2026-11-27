@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 import Observation
 import CryptoKit
 import Flagship
@@ -24,6 +27,19 @@ public final class SettingsViewModel {
     }
 
     public private(set) var trustedDevices: LoadingState<[DirectoryDevice]> = .idle
+    /// The list waits for Face ID (the system could not show the prompt): the screen offers it, and
+    /// the shell retries once the app is frontmost again.
+    public private(set) var trustedDevicesNeedUnlock = false
+
+    static let unlockToShowDevices = String(localized: "Unlock with Face ID or your passcode to see your trusted devices.")
+
+    static func canPromptNow() -> Bool {
+        #if canImport(UIKit)
+        return UIApplication.shared.applicationState == .active
+        #else
+        return true
+        #endif
+    }
     public private(set) var accountDisplayName: String?
     public private(set) var devicesEtag: String?
     /// v1.2 Phase 4 — account-type badge state read from
@@ -72,6 +88,7 @@ public final class SettingsViewModel {
     public func load() async {
         browserSessions = .loading
         trustedDevices = .loading
+        trustedDevicesNeedUnlock = false
         do {
             let ss = try await screens.pairedSessionsList()
             // The box also lists the session this phone (and every other
@@ -105,6 +122,7 @@ public final class SettingsViewModel {
     /// refresh + after a Disconnect/Replace settles to pick up the
     /// new ETag.
     public func loadTrustedDevices() async {
+        trustedDevicesNeedUnlock = false
         guard let username = currentUsername(), !username.isEmpty else {
             trustedDevices = .loaded([])
             pendingRePair = nil
@@ -112,6 +130,14 @@ public final class SettingsViewModel {
         }
         guard let profile = currentProfile(), profile.deviceId.count == 32 else {
             trustedDevices = .failed(String(localized: "This device has no account-scoped identity."))
+            return
+        }
+        // The names need the account key. Outside an unlocked session that is a Face ID prompt, which the
+        // system refuses while the app is not frontmost (launch, return from the background, another prompt
+        // up): wait for the owner instead of showing that refusal as a failure.
+        if Keystore.sessionUMKIfCached() == nil, !Self.canPromptNow() {
+            trustedDevicesNeedUnlock = true
+            trustedDevices = .failed(Self.unlockToShowDevices)
             return
         }
         do {
@@ -190,6 +216,10 @@ public final class SettingsViewModel {
             // A passwordless demo session holds no account keys, so there is
             // no directory to read — that is the expected state, not a failure.
             trustedDevices = .loaded([])
+        } catch where Keystore.isPromptUnavailable(error) {
+            trustedDevicesNeedUnlock = true
+            trustedDevices = .failed(Self.unlockToShowDevices)
+            return
         } catch {
             trustedDevices = .failed(UserErrorText.of(error))
         }

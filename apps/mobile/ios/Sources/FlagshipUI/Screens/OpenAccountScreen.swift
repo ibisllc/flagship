@@ -121,7 +121,7 @@ public struct OpenAccountScreen: View {
     /// Best-effort OS device name. On the simulator/host this is often a
     /// generic value; the VM falls back to "<username>'s iPhone" when
     /// it's empty.
-    private static func osDeviceName() -> String? {
+    static func osDeviceName() -> String? {
         #if canImport(UIKit)
         let name = UIDevice.current.name
         return name.isEmpty ? nil : name
