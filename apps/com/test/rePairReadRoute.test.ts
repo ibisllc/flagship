@@ -162,7 +162,10 @@ describe("GET /api/users/<u>/re-pair is an account read (security report F3)", (
     try {
       const token = await mint(env, deviceMint());
       await storage.deviceIdentities.revoke("alice", DEVICE_ID, 5);
-      expect((await get(env, "alice", token))!.status).toBe(401);
+      // The token names the removed device, so .com tells it so (it then erases the account's keys).
+      const r = (await get(env, "alice", token))!;
+      expect(r.status).toBe(403);
+      expect(((await r.json()) as { code?: string }).code).toBe("device-removed");
     } finally {
       close();
     }
