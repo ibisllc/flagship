@@ -196,5 +196,7 @@ export async function handleUsernameLookup(
     // Slice D — serve the pinned admin master root (or null when the account
     // has none yet). Clients + boxes pin/verify authority against this.
     adminRootPub: rec.adminRootPubHex ?? null,
+    // Account master-key rotation: the epoch `.com` holds (a device or box behind it fetches the lane).
+    keyEpoch: rec.keyEpoch ?? 0,
   });
 }

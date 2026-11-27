@@ -81,6 +81,8 @@ export function computePodInventoryCursor(inv: PodInventory): string {
     pods,
     pending,
     serverOrder: inv.serverOrder?.signature ?? "",
+    // An account key rotation wakes a held stream at once (its devices then fetch their delivery).
+    ...(inv.keyEpoch ? { keyEpoch: inv.keyEpoch } : {}),
   });
 
   return bytesToHex(sha256(new TextEncoder().encode(`flagship/pod-cursor/v1|${projection}`)));

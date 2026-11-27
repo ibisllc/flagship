@@ -282,6 +282,8 @@ export interface PodInventory {
   pending: PendingPodEntry[];
   /** The owner's signed server order, or null when none (docs/server-order.md). */
   serverOrder: SignedServerOrder | null;
+  /** The account's key epoch (account master-key rotation); present when the usernames store is wired. */
+  keyEpoch?: number;
   fetchedAt: number;
 }
 
@@ -323,7 +325,10 @@ export async function buildPodInventory(
       : Promise.resolve(false);
   const proxyAlertsP: Promise<Map<string, BoxProxyAlert>> =
     deps.boxProxyLane && !light ? proxyAlertsByServer(deps.boxProxyLane, username) : Promise.resolve(new Map());
-  const [allServers, statuses, pendingReqs, outstanding, serverOrder, demo, proxyAlerts] = await Promise.all([
+  const keyEpochP: Promise<number | null> = deps.usernames
+    ? deps.usernames.get(username).then((u) => u?.keyEpoch ?? 0, () => null)
+    : Promise.resolve(null);
+  const [allServers, statuses, pendingReqs, outstanding, serverOrder, demo, proxyAlerts, keyEpoch] = await Promise.all([
     deps.servers.listForUser(username),
     deps.daemonStatus.listForUser(username),
     mailboxP,
@@ -331,6 +336,7 @@ export async function buildPodInventory(
     serverOrderP,
     demoP,
     proxyAlertsP,
+    keyEpochP,
   ]);
   // A revoked server stays listed only while the owner can un-revoke it
   // (lost / stolen / decommissioned). A deleted one (released by its owner,
@@ -576,7 +582,7 @@ export async function buildPodInventory(
   // Newest first — the phone surfaces the freshest in-flight install on top.
   pending.sort((a, b) => b.createdAt - a.createdAt);
 
-  return { username, pods, pending, serverOrder, fetchedAt: now };
+  return { username, pods, pending, serverOrder, ...(keyEpoch !== null ? { keyEpoch } : {}), fetchedAt: now };
 }
 
 export async function handleGetUserPods(

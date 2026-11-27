@@ -15,6 +15,7 @@ import {
 import type {
   AccountProfileStorage,
   AccountDirectoryKeyGrantStorage,
+  AccountKeyRotationStorage,
   DeviceCapabilityGrantStorage,
   DeviceIdentityStorage,
   DeviceManagedProfileStorage,
@@ -52,6 +53,8 @@ export interface AccountDirectoryDeps {
    * account's keys only on `.com`'s own `device-removed` answer, never on the push.
    */
   notifyDeviceRemoved?: (targets: PushTokenRecord[]) => Promise<void>;
+  /** Account key rotation: each device's X-Wing receive key, listed with the directory for the rotating admin. */
+  receiveKeys?: Pick<AccountKeyRotationStorage, "listReceiveKeys">;
   now?: () => number;
   freshnessMs?: number;
 }
@@ -246,12 +249,13 @@ export async function handleGetAccountDirectory(
   ) {
     return forbidden("not authorized");
   }
-  const [accountProfile, devices, grants, selfProfiles, managedProfiles] = await Promise.all([
+  const [accountProfile, devices, grants, selfProfiles, managedProfiles, receiveKeys] = await Promise.all([
     deps.accountProfiles.get(account),
     deps.identities.listForAccount(account),
     deps.grants.listForUser(account),
     deps.selfProfiles.listForAccount(account),
     deps.managedProfiles.listForAccount(account),
+    deps.receiveKeys ? deps.receiveKeys.listReceiveKeys(account) : Promise.resolve(null),
   ]);
   return ok(
     {
@@ -264,6 +268,7 @@ export async function handleGetAccountDirectory(
       grants: grants.filter((grant) => grant.revokedAt === null),
       selfProfiles,
       managedProfiles,
+      ...(receiveKeys ? { receiveKeys } : {}),
     },
     { "cache-control": "private, no-store" },
   );

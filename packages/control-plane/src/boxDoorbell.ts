@@ -38,9 +38,11 @@ import type {
   ServerTransferStorage,
   UserServiceAliasStorage,
   UsernameStorage,
+  AccountKeyRotationStorage,
 } from "@flagship/storage";
 import { bytesToHex } from "./hex.js";
 import { handleListAdminRootRotations } from "./adminRootRotation.js";
+import { accountKeyLaneStamp, buildAccountKeyLane } from "./accountKeyRotation.js";
 import { handleListAccountDeviceGrants } from "./deviceCapabilityGrants.js";
 import { handleListAppAliases } from "./serviceRename.js";
 import { findMigrationAssignment } from "./serverMigration.js";
@@ -51,7 +53,13 @@ export interface BoxDoorbell {
   /** Lanes with something waiting: any of `swk`, `cgk`, `pairing`, `entitlement-deposit`,
    *  `update`, `self-delete`, `rehome`, `migration`, `decommission`. */
   lanes: string[];
-  stamps: { aliases: string; grants: string; rotations: string };
+  stamps: { aliases: string; grants: string; rotations: string; keyRotations?: string };
+  /**
+   * The account's key epoch as `.com` holds it (account master-key rotation). A hint only: a box that
+   * sees it above its own refuses requests signed with the old account key until it has verified the
+   * hop itself, so a lying `.com` can delay a box, never move it.
+   */
+  keyEpoch?: number;
 }
 
 export interface BoxDoorbellDeps {
@@ -64,6 +72,8 @@ export interface BoxDoorbellDeps {
   identities: DeviceIdentityStorage;
   usernames: UsernameStorage;
   rotations: AdminRootRotationStorage;
+  /** Account master-key rotation lane; absent, the doorbell carries no key epoch or stamp. */
+  accountKeyRotations?: AccountKeyRotationStorage;
   now?: () => number;
 }
 
@@ -80,7 +90,10 @@ export async function buildBoxDoorbell(
   const now = (deps.now ?? (() => Date.now()))();
   const host = server.serverDomain.toLowerCase();
   const user = server.username.toLowerCase();
-  const [purposes, sessions, transfer, eviction, aliases, grants, rotations] = await Promise.all([
+  const keyLaneP = deps.accountKeyRotations
+    ? buildAccountKeyLane({ usernames: deps.usernames, rotations: deps.accountKeyRotations, adminRootRotations: deps.rotations }, user)
+    : Promise.resolve(null);
+  const [purposes, sessions, transfer, eviction, aliases, grants, rotations, keyLane] = await Promise.all([
     deps.secretMailbox.pendingDepositPurposes(server.serverDomain, now),
     deps.serverMigrations.listForUser(server.username),
     deps.serverTransfers.getOffer(server.serverDomain, now),
@@ -88,6 +101,7 @@ export async function buildBoxDoorbell(
     handleListAppAliases({ userServiceAliases: deps.userServiceAliases }, user),
     handleListAccountDeviceGrants({ storage: deps.grants, identities: deps.identities, usernames: deps.usernames }, user),
     handleListAdminRootRotations({ usernames: deps.usernames, rotations: deps.rotations }, user),
+    keyLaneP,
   ]);
   const lanes = new Set<string>(purposes);
   if (findMigrationAssignment(sessions, host)) lanes.add("migration");
@@ -100,6 +114,8 @@ export async function buildBoxDoorbell(
       aliases: stampOf(aliases.body),
       grants: stampOf(grants.body),
       rotations: stampOf(rotations.body),
+      ...(keyLane ? { keyRotations: accountKeyLaneStamp(keyLane.lane) } : {}),
     },
+    ...(keyLane ? { keyEpoch: keyLane.keyEpoch } : {}),
   };
 }

@@ -349,10 +349,17 @@ export function secretRequestDisplayData(apex = "flagshipserver.com"): Record<st
 export const DEVICE_REMOVED_CATEGORY = "device-removed";
 
 /**
+ * The push a kept device gets when an admin device changed the account key (docs/account-key-rotation.md):
+ * it fetches its delivery from `.com` and verifies it itself. Shows the default alert sentence until the
+ * apps carry their own.
+ */
+export const ACCOUNT_KEY_ROTATED_CATEGORY = "account-key-rotated";
+
+/**
  * Categories whose APNs push also asks iOS to wake the app in the background (`content-available`), so it can
  * ask `.com` at once rather than when the person next opens it. The alert stays: iOS may not wake a closed app.
  */
-const APNS_BACKGROUND_WAKE = new Set([DEVICE_REMOVED_CATEGORY]);
+const APNS_BACKGROUND_WAKE = new Set([DEVICE_REMOVED_CATEGORY, ACCOUNT_KEY_ROTATED_CATEGORY]);
 
 /**
  * Wake a removed device on its own push tokens. Content-free: the fixed `kind` only (Web Push gets the same
@@ -370,6 +377,22 @@ export function buildDeviceRemovedNotifier(
       sealedPayloadHex: "",
       webpushPayloadBytes: new TextEncoder().encode(JSON.stringify({ category: DEVICE_REMOVED_CATEGORY, kind: DEVICE_REMOVED_CATEGORY })),
       displayData: { kind: DEVICE_REMOVED_CATEGORY },
+    });
+  };
+}
+
+/** Wake the devices an account key rotation kept, content-free (the fixed `kind` only). */
+export function buildAccountKeyRotatedNotifier(
+  forwarder: ReturnType<typeof buildPushForwarder>,
+): (targets: PushTarget[]) => Promise<void> {
+  return async (targets) => {
+    if (targets.length === 0) return;
+    await forwarder({
+      targets: targets.map((t) => ({ tokenId: t.tokenId, platform: t.platform, providerToken: t.providerToken })),
+      category: ACCOUNT_KEY_ROTATED_CATEGORY,
+      sealedPayloadHex: "",
+      webpushPayloadBytes: new TextEncoder().encode(JSON.stringify({ category: ACCOUNT_KEY_ROTATED_CATEGORY, kind: ACCOUNT_KEY_ROTATED_CATEGORY })),
+      displayData: { kind: ACCOUNT_KEY_ROTATED_CATEGORY },
     });
   };
 }
