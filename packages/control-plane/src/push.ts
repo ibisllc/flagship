@@ -46,7 +46,7 @@ import type {
 import { recordAuditEvent } from "./auditEvents.js";
 import type { PushTargetPlatform } from "./pushBridge.js";
 import { checkWebPushSubscription, type PushEndpointPolicy } from "./pushEndpointGuard.js";
-import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
+import { ADMIN_KEY_REQUIRED_CODE, accountKeyScopesRefused, grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { hexToBytes, bytesToHex } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
 
@@ -423,6 +423,13 @@ export async function handleVouchedDeviceAdmit(
     issuedAt: g.issuedAt,
     expiresAt: g.expiresAt,
   };
+  if (g.signerRoot !== "admin-root" && g.signerRoot !== "membership") return forbidden("invalid device grant");
+  // A member grant is signed by the account key, which every device of the account can derive: on an account
+  // that pins an admin root it carries a member's scopes only (what every app's Add a device gives a device it
+  // does not promote).
+  if (g.signerRoot === "membership" && accountKeyScopesRefused(userRec, g.scopes as string[])) {
+    return { status: 403, body: { error: "these scopes need the admin root", code: ADMIN_KEY_REQUIRED_CODE } };
+  }
   const grantAuthorityHex = g.signerRoot === "admin-root" ? userRec.adminRootPubHex : userRec.irkPubHex;
   if (!grantAuthorityHex || !verifyDeviceCapabilityGrant(grant, grantSig, hexToBytes(grantAuthorityHex))) {
     return forbidden("invalid device grant");

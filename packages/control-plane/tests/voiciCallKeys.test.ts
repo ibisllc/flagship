@@ -196,7 +196,15 @@ describe("a revoked device grant drops the call-key binding (release-manager cal
     const w = await world({ irkPubHex: hex(ed.getPublicKey(irk)) });
     const request = { grantId: "g-1", username: USER, reason: "lost" as const, issuedAt: NOW };
     const signature = hex(signRevokeDeviceCapabilityGrant(request, { privateKey: irk, publicKey: ed.getPublicKey(irk) }));
-    const r = await handleRevokeDeviceGrant({ storage: w.s.deviceCapabilityGrants, identities: w.s.deviceIdentities, usernames: w.s.usernames, callKeys: w.s.voiciCalls, now: () => NOW }, { request, signature });
+    const revokeDeps = { storage: w.s.deviceCapabilityGrants, identities: w.s.deviceIdentities, usernames: w.s.usernames, callKeys: w.s.voiciCalls, now: () => NOW };
+    // The account key may not take a device's last admin grant away on an account that pins an admin root.
+    const refused = await handleRevokeDeviceGrant(revokeDeps, { request, signature });
+    expect(refused.status).toBe(403);
+    expect((refused.body as { code?: string }).code).toBe("admin-key-required");
+    expect(await w.s.voiciCalls.getCallKey(USER, C.deviceId)).not.toBeNull();
+    // A demo account keeps the old rule: the account key revokes it, and the binding goes with it.
+    await w.s.usernames.setDemo(USER, true);
+    const r = await handleRevokeDeviceGrant(revokeDeps, { request, signature });
     expect(r.status).toBe(200);
     expect(await w.s.voiciCalls.getCallKey(USER, C.deviceId)).toBeNull();
     // The device can no longer join a call with it either.

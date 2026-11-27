@@ -43,6 +43,7 @@ import type {
   DeviceCapabilityGrantStorage,
   DeviceIdentityStorage,
   PqTrustStorage,
+  UsernameRecord,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
@@ -115,6 +116,35 @@ const VALID_REVOKE_REASONS: ReadonlySet<RevokeDeviceCapabilityGrantReason> =
     "replaced",
   ]);
 
+/**
+ * What a device added by another device gets unless it is promoted to admin
+ * (packages/protocol/test-vectors/device-pairing `memberScopes`). Every app
+ * signs such a grant with the account key (IRK), which every device of the
+ * account can derive, so on an account that pins an admin root the account
+ * key may hand out these scopes and no others: anything more is the admin
+ * root's to grant.
+ */
+export const MEMBER_DEVICE_SCOPES: ReadonlySet<DeviceScope> = new Set<DeviceScope>([
+  "browse",
+  "install-service",
+  "vibe-code",
+  "view-directory",
+]);
+
+export const ADMIN_KEY_REQUIRED_CODE = "admin-key-required";
+
+/**
+ * True when an account-key-signed grant may not carry `scopes`: the account
+ * pins an admin root, is not a demo account, and a scope is beyond a member's.
+ */
+export function accountKeyScopesRefused(
+  userRec: Pick<UsernameRecord, "adminRootPubHex" | "isDemo">,
+  scopes: readonly string[],
+): boolean {
+  if (!userRec.adminRootPubHex || userRec.isDemo) return false;
+  return scopes.some((s) => !MEMBER_DEVICE_SCOPES.has(s as DeviceScope));
+}
+
 function parseScopes(raw: unknown): DeviceScope[] | null {
   if (!Array.isArray(raw)) return null;
   const out: DeviceScope[] = [];
@@ -179,6 +209,13 @@ export async function handleMintDeviceGrant(
   const useAdminRoot = wantsSensitive && userRec.adminRootPubHex != null;
   const signerRoot: "membership" | "admin-root" = useAdminRoot ? "admin-root" : "membership";
   const authorityHex = useAdminRoot ? userRec.adminRootPubHex! : userRec.irkPubHex;
+
+  if (signerRoot === "membership" && accountKeyScopesRefused(userRec, scopes)) {
+    return {
+      status: 403,
+      body: { error: "these scopes need the admin root", code: ADMIN_KEY_REQUIRED_CODE },
+    };
+  }
 
   let authorityPub: Uint8Array;
   let devicePub: Uint8Array;
@@ -332,12 +369,30 @@ export async function handleRevokeDeviceGrant(
     reason: r.reason as RevokeDeviceCapabilityGrantReason,
     issuedAt: r.issuedAt,
   };
+  // The admin root may revoke any grant; the account key, see below.
+  let byAdminRoot = false;
   if (!verifyRevokeDeviceCapabilityGrant(envelope, sig, irkPub)) {
-    return forbidden("invalid signature");
+    try {
+      byAdminRoot = !!userRec.adminRootPubHex &&
+        verifyRevokeDeviceCapabilityGrant(envelope, sig, hexToBytes(userRec.adminRootPubHex));
+    } catch {
+      byAdminRoot = false;
+    }
+    if (!byAdminRoot) return forbidden("invalid signature");
   }
 
   if (existing.revokedAt !== null) {
     return ok({ ok: true, grantId: r.grantId, revokedAt: existing.revokedAt });
+  }
+
+  // The account key signs this revoke, and every device can derive it: on an account that pins an admin root it
+  // does not take an admin-root grant away. The apps' rename revokes the old grant only after the admin root minted
+  // its replacement, which retires the old one first, so that revoke is answered above.
+  if (!byAdminRoot && existing.signerRoot === "admin-root" && userRec.adminRootPubHex && !userRec.isDemo) {
+    return {
+      status: 403,
+      body: { error: "revoking an admin grant needs the admin root", code: ADMIN_KEY_REQUIRED_CODE },
+    };
   }
 
   await deps.storage.revoke(r.grantId, now);
@@ -435,6 +490,11 @@ export async function requireDeviceScope(
 
   if (!scopes.includes(scope)) {
     return { ok: false, reason: `missing scope: ${scope}` };
+  }
+  // The grant verified under the account key: beyond a member's scopes it
+  // carries no authority on an account whose admin root grants those.
+  if (accountKeyScopesRefused(userRec, [scope])) {
+    return { ok: false, reason: `scope needs the admin root: ${scope}` };
   }
 
   return { ok: true };
