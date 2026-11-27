@@ -91,6 +91,12 @@ jobs:
         if: matrix.shard == 1
         run: npx tsx tools/pq-authority-vectors.ts --check
 
+      # Account master-key rotation (packages/protocol/src/accountKeyRotation.ts): TS, Swift, Kotlin
+      # and the webapp read this file.
+      - name: Account-key rotation vectors are fresh
+        if: matrix.shard == 1
+        run: npx tsx tools/account-key-rotation-vectors.ts --check
+
       # Restore into a running server (docs/restore-into-server.md §4): the stage, plan and undo orders.
       - name: Restore-merge vectors are fresh
         if: matrix.shard == 1

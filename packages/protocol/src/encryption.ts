@@ -95,7 +95,25 @@ export function sealForRecipient(
   if (recipientX25519Pub.length !== 32) {
     throw new Error("recipient X25519 pubkey must be 32 bytes");
   }
-  const ephPriv = x25519.utils.randomSecretKey();
+  const nonce = new Uint8Array(12);
+  crypto.getRandomValues(nonce);
+  return sealForRecipientWithRandomness(plaintext, recipientX25519Pub, x25519.utils.randomSecretKey(), nonce);
+}
+
+/**
+ * `sealForRecipient` with a caller-chosen ephemeral secret and nonce. For
+ * golden vectors only: reusing either reuses the AES key or nonce.
+ */
+export function sealForRecipientWithRandomness(
+  plaintext: Bytes,
+  recipientX25519Pub: Bytes,
+  ephPriv: Bytes,
+  nonce: Bytes,
+): Bytes {
+  if (recipientX25519Pub.length !== 32) {
+    throw new Error("recipient X25519 pubkey must be 32 bytes");
+  }
+  if (ephPriv.length !== 32 || nonce.length !== 12) throw new Error("seal randomness must be 32 + 12 bytes");
   const ephPub = x25519.getPublicKey(ephPriv);
   const shared = x25519.getSharedSecret(ephPriv, recipientX25519Pub);
   const key = hkdf(
@@ -105,8 +123,6 @@ export function sealForRecipient(
     new TextEncoder().encode(FLAGSHIP_SEAL_TAG),
     32,
   );
-  const nonce = new Uint8Array(12);
-  crypto.getRandomValues(nonce);
   const ct = gcm(key, nonce).encrypt(plaintext);
   const out = new Uint8Array(32 + 12 + ct.length);
   out.set(ephPub, 0);
