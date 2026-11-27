@@ -274,6 +274,13 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   second recipient), D1 **0162**, Resend notice (id/severity/time only), Turnstile + honeypot, `npm run
   security-reports` (YubiKey; `--triage`). Resend notices go to security@ from `mail.flagshipserver.com`.
   Owner steps left (deploy sheet 3c): Turnstile widget, optional triage key.
+- 2026-11-27, removing a device (on `release/0.5`, `docs/revocation-ui.md`): a device's menu is rename + "Remove from
+  account" on all three apps (Replace device gone; Wipe & restart is "Reset account keys" in Account security). `.com`
+  answers a removed device's own signed requests and read tokens 403 `device-removed` and wakes it with a content-free
+  `device-removed` push first; the apps erase the account's keys on `.com`'s answer only (never the push), no prompt, and
+  show "This device was removed"; boxes end its app sign-ins and PQ sessions. Needs a `.com` deploy, an endorsed box
+  release, store builds, webapp shell v259 signed. Limit: the UMK/IRK are shared (master-key rotation is designed
+  elsewhere); a removed admin device keeps its admin root until it erases itself (Rotate admin key).
 - Shrink the phone apps (0.5 list): merged into `release/0.5` 2026-11-27 (VP8-only libwebrtc build config, Android
   WebP welcome art), pinned there to `libwebrtc-157-45414303796` (main keeps the old one). Before 0.5 ships, the
   device call matrix in `docs/runbooks/pre-0.5-call-codec-tests.md` must pass: the release gate refuses 0.5 while it is

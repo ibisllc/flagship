@@ -3599,6 +3599,72 @@
       }
     },
     {
+      "id": "device-removed",
+      "title": "Remove from account (docs/revocation-ui.md): a device's menu offers only rename and Remove from account (Replace device gone, Wipe & restart is Reset account keys in Account security); a device the account removed learns it from .com's 403 device-removed (control host, own account only; a device-removed push only makes it ask), erases the account's keys without a prompt and shows This device was removed from your account",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/shared/Sources/FlagshipAPI/Client/AccountGone.swift",
+              "deviceRemovedCode = \"device-removed\""
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Notices/AccountGoneViews.swift",
+              "enum DeviceRemovedErase"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift",
+              "\"Remove from account\""
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift",
+              "\"Reset account keys\""
+            ],
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/DeviceRemovedCheck.swift",
+              "\"device-removed\""
+            ]
+          ]
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountGone.kt",
+              "device-removed"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TrustedDevicesScreen.kt",
+              "R.string.remove_from_account"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccountSecurityScreen.kt",
+              "R.string.reset_account_keys"
+            ]
+          ]
+        },
+        "web": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/web/public/webapp/lib/accountGone.js",
+              "device-removed"
+            ],
+            [
+              "apps/web/public/webapp/views/trusted-devices.js",
+              "tr\\(\"Remove from account\"\\)"
+            ],
+            [
+              "apps/web/public/webapp/lib/resetAccountKeysUi.js",
+              "tr\\(\"Reset account keys\"\\)"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "id": "pending-order-keeps-routing-key",
       "title": "A retry of a pending server order registers the same routing key (RCK) for 24 hours, forgotten on cancel or when the server registers; .com also lets the same admin replace the key while no box has activated the name",
       "ref": "web",

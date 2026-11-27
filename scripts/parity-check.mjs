@@ -497,8 +497,11 @@ const PUSH_HANDLERS = {
     "apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift",
     "apps/mobile/shared/Sources/FlagshipCore/ProvisionPhaseBridge.swift",
     "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift",
+    "apps/mobile/shared/Sources/FlagshipCore/DeviceRemovedCheck.swift",
   ],
   android: "apps/mobile/android/app/src/main/java/com/flagshipserver/app/push",
+  /** Handlers outside the push folder (the device-removed check lives with the account-gone detector). */
+  androidFiles: ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountGone.kt"],
   web: ["apps/web/public/webapp/service-worker.js"],
 };
 
@@ -573,7 +576,7 @@ function checkPushCategories(repo) {
   }
   const handlerFiles = {
     ios: PUSH_HANDLERS.ios,
-    android: repo.walk(PUSH_HANDLERS.android, [".kt"]),
+    android: [...repo.walk(PUSH_HANDLERS.android, [".kt"]), ...PUSH_HANDLERS.androidFiles],
     web: PUSH_HANDLERS.web,
   };
   const handled = {};
