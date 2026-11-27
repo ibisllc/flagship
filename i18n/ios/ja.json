@@ -4076,5 +4076,21 @@
   "This link doesn't work any more. Ask for a new one.": "このリンクはもう使えません。新しいリンクを頼んでください。",
   "Open this link when you create your account.": "このリンクはアカウントを作成するときに開いてください。",
   "Unlock with Face ID or your passcode to see your trusted devices.": "信頼済みデバイスを表示するには、Face ID またはパスコードでロックを解除してください。",
-  "Show trusted devices": "信頼済みデバイスを表示"
+  "Show trusted devices": "信頼済みデバイスを表示",
+  "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.": "アカウントの別のデバイスがこのデバイスを削除したため、Flagship はこのデバイスからアカウントの鍵を消去しました。アカウントとそのサーバーは変わりません。",
+  "Remove from account": "アカウントから削除",
+  "Remove %@ from your account?": "%@ をアカウントから削除しますか？",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "このデバイスはアカウントとサーバーにアクセスできなくなります。次にオンラインになったとき、Flagship がアカウントの鍵をそのデバイスから消去します。",
+  "Couldn't remove the device": "デバイスを削除できませんでした",
+  "Remove a device from your account": "アカウントからデバイスを削除",
+  "Check your connection and try again.": "接続を確認して、もう一度お試しください。",
+  "Reset account keys": "アカウントの鍵をリセット",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "アカウントの新しい鍵を作成します。ほかのすべてのデバイスは削除されて参加し直す必要があり、すべてのサーバーはペアリングし直す必要があります。サーバーのデータはそのまま残り、アカウントはこのデバイスに残ります。",
+  "Reset your account keys?": "アカウントの鍵をリセットしますか？",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "アカウントの新しい鍵を作成します。ほかのすべてのデバイスは削除されて参加し直す必要があり、すべてのサーバーはペアリングし直す必要があります。サーバーのデータはそのまま残り、アカウントはこのデバイスに残ります。この操作は元に戻せません。",
+  "Making new keys…": "新しい鍵を作成しています…",
+  "Done. Your account has new keys. Pair your servers and other devices again.": "完了しました。アカウントに新しい鍵が設定されました。サーバーとほかのデバイスをもう一度ペアリングしてください。",
+  "You can reset the account keys once an hour. Try again later.": "アカウントの鍵のリセットは 1 時間に 1 回までです。しばらくしてからもう一度お試しください。",
+  "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "このアカウントの別のデバイスがアカウントの鍵を変更しました。リカバリーパスキーでもう一度サインインしてください。",
+  "This device was removed from your Flagship account.": "このデバイスは Flagship アカウントから削除されました。"
 }

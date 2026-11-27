@@ -167226,6 +167226,662 @@
           }
         }
       }
+    },
+    "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otro dispositivo de la cuenta lo quitó, así que Flagship borró las claves de la cuenta de este dispositivo. La cuenta y sus servidores no cambian."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre appareil du compte l'a retiré, donc Flagship a effacé les clés du compte de cet appareil. Le compte et ses serveurs ne changent pas."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein anderes Gerät des Kontos hat es entfernt, daher hat Flagship die Schlüssel des Kontos von diesem Gerät gelöscht. Das Konto und seine Server bleiben unverändert."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outro dispositivo da conta o removeu, então o Flagship apagou as chaves da conta deste dispositivo. A conta e seus servidores não mudam."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントの別のデバイスがこのデバイスを削除したため、Flagship はこのデバイスからアカウントの鍵を消去しました。アカウントとそのサーバーは変わりません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账户中的另一台设备移除了它，因此 Flagship 已从这台设备上清除该账户的密钥。账户及其服务器不受影响。"
+          }
+        }
+      }
+    },
+    "Remove from account": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar de la cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer du compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus dem Konto entfernen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover da conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントから削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从账户中移除"
+          }
+        }
+      }
+    },
+    "Remove %@ from your account?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Quitar %@ de tu cuenta?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer %@ de votre compte ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ aus deinem Konto entfernen?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover %@ da sua conta?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ をアカウントから削除しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要从你的账户中移除 %@ 吗？"
+          }
+        }
+      }
+    },
+    "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pierde el acceso a tu cuenta y a tus servidores. La próxima vez que se conecte, Flagship borrará de él las claves de tu cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il perd l'accès à votre compte et à vos serveurs. La prochaine fois qu'il se connectera, Flagship en effacera les clés de votre compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es verliert den Zugriff auf dein Konto und deine Server. Sobald es das nächste Mal online ist, löscht Flagship die Schlüssel deines Kontos darauf."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ele perde o acesso à sua conta e aos seus servidores. Na próxima vez que ficar online, o Flagship apaga dele as chaves da sua conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスはアカウントとサーバーにアクセスできなくなります。次にオンラインになったとき、Flagship がアカウントの鍵をそのデバイスから消去します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它将无法再访问你的账户和服务器。它下次联网时，Flagship 会从中清除你账户的密钥。"
+          }
+        }
+      }
+    },
+    "Couldn't remove the device": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo quitar el dispositivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de retirer l'appareil"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Gerät konnte nicht entfernt werden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível remover o dispositivo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デバイスを削除できませんでした"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法移除该设备"
+          }
+        }
+      }
+    },
+    "Remove a device from your account": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar un dispositivo de tu cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer un appareil de votre compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Gerät aus deinem Konto entfernen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover um dispositivo da sua conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントからデバイスを削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从你的账户中移除一台设备"
+          }
+        }
+      }
+    },
+    "Check your connection and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprueba tu conexión e inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifiez votre connexion et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfe deine Verbindung und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verifique sua conexão e tente novamente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続を確認して、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请检查网络连接后重试。"
+          }
+        }
+      }
+    },
+    "Reset account keys": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restablecer las claves de la cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réinitialiser les clés du compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontoschlüssel zurücksetzen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redefinir as chaves da conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントの鍵をリセット"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置账户密钥"
+          }
+        }
+      }
+    },
+    "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea claves nuevas para tu cuenta. Todos los demás dispositivos se quitan y tienen que unirse de nuevo, y todos los servidores tienen que vincularse otra vez. Tus servidores conservan sus datos y la cuenta sigue en este dispositivo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crée de nouvelles clés pour votre compte. Tous les autres appareils sont retirés et doivent rejoindre le compte à nouveau, et chaque serveur doit être associé à nouveau. Vos serveurs gardent leurs données et le compte reste sur cet appareil."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstellt neue Schlüssel für dein Konto. Alle anderen Geräte werden entfernt und müssen erneut beitreten, und jeder Server muss erneut gekoppelt werden. Deine Server behalten ihre Daten, und das Konto bleibt auf diesem Gerät."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cria chaves novas para sua conta. Todos os outros dispositivos são removidos e precisam entrar de novo, e todos os servidores precisam ser pareados outra vez. Seus servidores mantêm os dados, e a conta continua neste dispositivo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントの新しい鍵を作成します。ほかのすべてのデバイスは削除されて参加し直す必要があり、すべてのサーバーはペアリングし直す必要があります。サーバーのデータはそのまま残り、アカウントはこのデバイスに残ります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为你的账户生成新的密钥。其他所有设备都会被移除，需要重新加入；所有服务器都需要重新配对。服务器上的数据会保留，账户仍保留在这台设备上。"
+          }
+        }
+      }
+    },
+    "Reset your account keys?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Restablecer las claves de tu cuenta?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réinitialiser les clés de votre compte ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontoschlüssel zurücksetzen?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redefinir as chaves da sua conta?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントの鍵をリセットしますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要重置你的账户密钥吗？"
+          }
+        }
+      }
+    },
+    "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea claves nuevas para tu cuenta. Todos los demás dispositivos se quitan y tienen que unirse de nuevo, y todos los servidores tienen que vincularse otra vez. Tus servidores conservan sus datos y la cuenta sigue en este dispositivo. No se puede deshacer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crée de nouvelles clés pour votre compte. Tous les autres appareils sont retirés et doivent rejoindre le compte à nouveau, et chaque serveur doit être associé à nouveau. Vos serveurs gardent leurs données et le compte reste sur cet appareil. Cette action est irréversible."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstellt neue Schlüssel für dein Konto. Alle anderen Geräte werden entfernt und müssen erneut beitreten, und jeder Server muss erneut gekoppelt werden. Deine Server behalten ihre Daten, und das Konto bleibt auf diesem Gerät. Das lässt sich nicht rückgängig machen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cria chaves novas para sua conta. Todos os outros dispositivos são removidos e precisam entrar de novo, e todos os servidores precisam ser pareados outra vez. Seus servidores mantêm os dados, e a conta continua neste dispositivo. Não é possível desfazer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントの新しい鍵を作成します。ほかのすべてのデバイスは削除されて参加し直す必要があり、すべてのサーバーはペアリングし直す必要があります。サーバーのデータはそのまま残り、アカウントはこのデバイスに残ります。この操作は元に戻せません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为你的账户生成新的密钥。其他所有设备都会被移除，需要重新加入；所有服务器都需要重新配对。服务器上的数据会保留，账户仍保留在这台设备上。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "Making new keys…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creando claves nuevas…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Création des nouvelles clés…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Schlüssel werden erstellt…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Criando chaves novas…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しい鍵を作成しています…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在生成新密钥…"
+          }
+        }
+      }
+    },
+    "Done. Your account has new keys. Pair your servers and other devices again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo. Tu cuenta tiene claves nuevas. Vuelve a vincular tus servidores y tus otros dispositivos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C'est fait. Votre compte a de nouvelles clés. Associez à nouveau vos serveurs et vos autres appareils."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig. Dein Konto hat neue Schlüssel. Kopple deine Server und deine anderen Geräte erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pronto. Sua conta tem chaves novas. Pareie seus servidores e seus outros dispositivos de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了しました。アカウントに新しい鍵が設定されました。サーバーとほかのデバイスをもう一度ペアリングしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成。你的账户已有新的密钥。请重新配对你的服务器和其他设备。"
+          }
+        }
+      }
+    },
+    "You can reset the account keys once an hour. Try again later.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puedes restablecer las claves de la cuenta una vez por hora. Inténtalo más tarde."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous pouvez réinitialiser les clés du compte une fois par heure. Réessayez plus tard."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst die Kontoschlüssel einmal pro Stunde zurücksetzen. Versuche es später erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você pode redefinir as chaves da conta uma vez por hora. Tente novamente mais tarde."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントの鍵のリセットは 1 時間に 1 回までです。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账户密钥每小时只能重置一次。请稍后再试。"
+          }
+        }
+      }
+    },
+    "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otro dispositivo de esta cuenta cambió las claves de la cuenta. Vuelve a iniciar sesión con tu llave de acceso de recuperación para entrar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre appareil de ce compte a changé les clés du compte. Reconnectez-vous avec votre clé d’accès de récupération pour y revenir."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein anderes Gerät dieses Kontos hat die Kontoschlüssel geändert. Melde dich mit deinem Wiederherstellungs-Passkey erneut an, um wieder hineinzukommen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outro dispositivo desta conta mudou as chaves da conta. Entre de novo com sua passkey de recuperação para voltar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアカウントの別のデバイスがアカウントの鍵を変更しました。リカバリーパスキーでもう一度サインインしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此账户中的另一台设备更改了账户的密钥。请使用恢复通行密钥重新登录。"
+          }
+        }
+      }
+    },
+    "This device was removed from your Flagship account.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo se quitó de tu cuenta de Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil a été retiré de votre compte Flagship."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät wurde aus deinem Flagship-Konto entfernt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo foi removido da sua conta do Flagship."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスは Flagship アカウントから削除されました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备已从你的 Flagship 账户中移除。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

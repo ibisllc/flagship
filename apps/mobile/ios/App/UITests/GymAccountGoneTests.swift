@@ -56,6 +56,28 @@ final class GymAccountGoneTests: XCTestCase {
         XCTAssertTrue(any(app, "account-gone-title").waitForExistence(timeout: 40), "This account was removed should show.")
     }
 
+    // R. the account removed this device: the keys go at once, no prompt, and the screen offers Join or Remove
+    func test_removedDeviceErasesAtOnceAndOffersJoin() throws {
+        let app = launch(["-smoke-admin-root", "-gym-account-gone", "10", "-gym-account-gone-mode", "removed", "-smoke-refuse-biometric"])
+        XCTAssertTrue(any(app, "device-removed-title").waitForExistence(timeout: 40), "This device was removed should show.")
+        XCTAssertEqual(text(any(app, "device-removed-title")), "This device was removed from your account")
+        XCTAssertFalse(app.buttons["account-gone-save"].exists, "No rescue offer on a removed device.")
+        gymShot(app, "device-removed")
+        app.buttons["device-removed-join"].tap()
+        XCTAssertTrue(gone(any(app, "device-removed-title")), "Join closes the screen.")
+        XCTAssertTrue(any(app, "connect-name-field").waitForExistence(timeout: 15),
+                      "Join an account opens Connect to an existing account.")
+    }
+
+    // R2. the same answer from a box changes nothing
+    func test_aBoxCannotSayThisDeviceWasRemoved() throws {
+        let app = launch(["-gym-account-gone", "5", "-gym-account-gone-mode", "removed-box"])
+        XCTAssertTrue(app.buttons["home-add-server"].waitForExistence(timeout: 30), "Home should render first.")
+        sleep(8)
+        XCTAssertFalse(any(app, "device-removed-title").exists)
+        XCTAssertFalse(any(app, "account-gone-title").exists)
+    }
+
     // 0. removing a key that can still save a server's data asks the owner first
     func test_removingTheKeyAsksTheOwnerFirstAndDoesNothingWithoutThem() throws {
         // Every prompt dismissed (`-smoke-refuse-biometric`): the account counts

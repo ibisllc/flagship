@@ -81,13 +81,14 @@ extension URLSession {
     /// Also the one place that sees every `.com` answer for "this account was
     /// removed" (docs/account-gone.md): a call that names the removed account
     /// is answered here, locally, and a `404 account-not-found` for this
-    /// device's own account flips the state.
+    /// device's own account flips the state (as does `.com`'s `403
+    /// device-removed`: the account removed this device).
     public func gatedData(for request: URLRequest) async throws -> (Data, URLResponse) {
         if let local = AccountGoneRegistry.shared.localAnswer(for: request) { return local }
         try UpdateLock.shared.check(request)
         let (body, response) = try await data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode == 404 {
-            AccountGoneRegistry.shared.note(url: request.url, status: 404, body: body)
+        if let http = response as? HTTPURLResponse, http.statusCode == 404 || http.statusCode == 403 {
+            AccountGoneRegistry.shared.note(url: request.url, status: http.statusCode, body: body)
         }
         return (body, response)
     }

@@ -4076,5 +4076,21 @@
   "This link doesn't work any more. Ask for a new one.": "此链接已失效。请索要新链接。",
   "Open this link when you create your account.": "请在创建账户时打开此链接。",
   "Unlock with Face ID or your passcode to see your trusted devices.": "使用 Face ID 或密码解锁，即可查看你的受信任设备。",
-  "Show trusted devices": "显示受信任设备"
+  "Show trusted devices": "显示受信任设备",
+  "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.": "账户中的另一台设备移除了它，因此 Flagship 已从这台设备上清除该账户的密钥。账户及其服务器不受影响。",
+  "Remove from account": "从账户中移除",
+  "Remove %@ from your account?": "要从你的账户中移除 %@ 吗？",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "它将无法再访问你的账户和服务器。它下次联网时，Flagship 会从中清除你账户的密钥。",
+  "Couldn't remove the device": "无法移除该设备",
+  "Remove a device from your account": "从你的账户中移除一台设备",
+  "Check your connection and try again.": "请检查网络连接后重试。",
+  "Reset account keys": "重置账户密钥",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "为你的账户生成新的密钥。其他所有设备都会被移除，需要重新加入；所有服务器都需要重新配对。服务器上的数据会保留，账户仍保留在这台设备上。",
+  "Reset your account keys?": "要重置你的账户密钥吗？",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "为你的账户生成新的密钥。其他所有设备都会被移除，需要重新加入；所有服务器都需要重新配对。服务器上的数据会保留，账户仍保留在这台设备上。此操作无法撤销。",
+  "Making new keys…": "正在生成新密钥…",
+  "Done. Your account has new keys. Pair your servers and other devices again.": "完成。你的账户已有新的密钥。请重新配对你的服务器和其他设备。",
+  "You can reset the account keys once an hour. Try again later.": "账户密钥每小时只能重置一次。请稍后再试。",
+  "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "此账户中的另一台设备更改了账户的密钥。请使用恢复通行密钥重新登录。",
+  "This device was removed from your Flagship account.": "此设备已从你的 Flagship 账户中移除。"
 }

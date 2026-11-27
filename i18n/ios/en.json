@@ -17363,5 +17363,85 @@
   "Show trusted devices": {
     "en": "Show trusted devices",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:630"
+  },
+  "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.": {
+    "en": "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/AccountGoneViews.swift DeviceRemovedCopy.body",
+    "manual": true
+  },
+  "Remove from account": {
+    "en": "Remove from account",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift RemoveDeviceCopy.confirm (Trusted devices menu item and its confirm button)",
+    "manual": true
+  },
+  "Remove %@ from your account?": {
+    "en": "Remove %@ from your account?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift RemoveDeviceCopy.title (%@ = the device's name)",
+    "manual": true
+  },
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": {
+    "en": "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift RemoveDeviceCopy.message",
+    "manual": true
+  },
+  "Couldn't remove the device": {
+    "en": "Couldn't remove the device",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift RemoveDeviceCopy.failedTitle",
+    "manual": true
+  },
+  "Remove a device from your account": {
+    "en": "Remove a device from your account",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SettingsViewModel.swift removeFromAccount (Face ID reason)",
+    "manual": true
+  },
+  "Check your connection and try again.": {
+    "en": "Check your connection and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SettingsViewModel.swift removeFromAccount fallback",
+    "manual": true
+  },
+  "Reset account keys": {
+    "en": "Reset account keys",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift ResetAccountKeysCopy.action; WipeRestartViewModel Face ID reason",
+    "manual": true
+  },
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": {
+    "en": "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift ResetAccountKeysCopy.explanation",
+    "manual": true
+  },
+  "Reset your account keys?": {
+    "en": "Reset your account keys?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift ResetAccountKeysCopy.confirmTitle",
+    "manual": true
+  },
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": {
+    "en": "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift ResetAccountKeysCopy.confirmMessage",
+    "manual": true
+  },
+  "Making new keys…": {
+    "en": "Making new keys…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift ResetAccountKeysCopy.working",
+    "manual": true
+  },
+  "Done. Your account has new keys. Pair your servers and other devices again.": {
+    "en": "Done. Your account has new keys. Pair your servers and other devices again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift ResetAccountKeysCopy.done",
+    "manual": true
+  },
+  "You can reset the account keys once an hour. Try again later.": {
+    "en": "You can reset the account keys once an hour. Try again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/WipeRestartViewModel.swift rate limit",
+    "manual": true
+  },
+  "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": {
+    "en": "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift account-reset banner",
+    "manual": true
+  },
+  "This device was removed from your Flagship account.": {
+    "en": "This device was removed from your Flagship account.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
   }
 }

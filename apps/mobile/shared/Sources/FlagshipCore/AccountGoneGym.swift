@@ -8,9 +8,11 @@ import FlagshipAPI
 ///
 ///   `-gym-account-gone <seconds>`   after this long, `.com` answers a read of
 ///        this device's own account with `404 account-not-found`
-///   `-gym-account-gone-mode own|other|nocode`   `own` (default); `other`: the
+///   `-gym-account-gone-mode own|other|nocode|removed|removed-box`   `own` (default); `other`: the
 ///        404 names another account (a shared server's owner); `nocode`: a
-///        plain 404 for this account
+///        plain 404 for this account; `removed`: `.com` answers `403
+///        device-removed` (the account removed this device); `removed-box`: the
+///        same answer from a box's host, which must change nothing
 public enum AccountGoneGym {
     @MainActor
     public static func start(args: [String], ownName: @escaping @MainActor () -> String?) {
@@ -23,6 +25,12 @@ public enum AccountGoneGym {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(after * 1_000_000_000))
             let name = mode == "other" ? "someone-else" : (ownName() ?? "smoketest")
+            if mode == "removed" || mode == "removed-box" {
+                let host = mode == "removed" ? Endpoints.controlHost : "home.\(name).\(Endpoints.dataApex)"
+                let url = URL(string: "https://\(host)/api/users/\(name)/pods")
+                AccountGoneRegistry.shared.note(url: url, status: 403, body: Data(#"{"error":"device-removed","code":"device-removed"}"#.utf8))
+                return
+            }
             let url = URL(string: "https://\(Endpoints.controlHost)/api/users/\(name)/pods")
             let body = mode == "nocode" ? Data(#"{"error":"not found"}"#.utf8) : AccountGoneRegistry.body()
             AccountGoneRegistry.shared.note(url: url, status: 404, body: body)

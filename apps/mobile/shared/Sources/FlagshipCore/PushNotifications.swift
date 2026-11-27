@@ -268,6 +268,12 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             completionHandler([.list])
             return
         }
+        // Removed from the account: ask `.com` at once (the push itself erases nothing).
+        if DeviceRemovedCheck.isPush(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
+            Task { await DeviceRemovedCheck.run() }
+            completionHandler([.list])
+            return
+        }
         // A call while the app is open rings on its own screen, not as a banner.
         if let call = Self.voiciCall(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
             Task { @MainActor in VoiciCallEvents.post(call) }
@@ -303,6 +309,11 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
                 return
             }
             if Self.isAbuseNotice(userInfo, categoryIdentifier: category) { AbuseNoticeEvents.post() }
+            if DeviceRemovedCheck.isPush(userInfo, categoryIdentifier: category) {
+                await DeviceRemovedCheck.run()
+                completionHandler()
+                return
+            }
             if let call = Self.voiciCall(userInfo, categoryIdentifier: category) {
                 VoiciCallEvents.post(call)
                 completionHandler()

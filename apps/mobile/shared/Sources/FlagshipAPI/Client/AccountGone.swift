@@ -10,12 +10,27 @@ import Foundation
 /// account the state flips once, the screen takes over, and from then on every
 /// call that names that account is answered here with the same 404, without
 /// touching the network, so no poller keeps asking and no error repeats.
+///
+/// The same state also carries "this device was removed from the account"
+/// (docs/revocation-ui.md): `.com` answers this device's own signed request or
+/// read token with `403 { code: "device-removed" }`. Only an answer from
+/// `.com` itself counts (never a box), so the app may erase the account's keys
+/// on it; `reason` says which of the two screens to show.
 public final class AccountGoneRegistry: @unchecked Sendable {
     public static let shared = AccountGoneRegistry()
     public static let code = "account-not-found"
+    public static let deviceRemovedCode = "device-removed"
+
+    public enum Reason: Sendable, Equatable {
+        /// The account no longer exists on `.com`.
+        case accountGone
+        /// The account removed this device.
+        case deviceRemoved
+    }
 
     private let mutex = NSLock()
     private var gone: String?
+    private var why: Reason = .accountGone
     private var own: Set<String> = []
     private var listener: (@Sendable (String?) -> Void)?
     private var renaming: (@Sendable (String) -> Bool)?
@@ -37,6 +52,13 @@ public final class AccountGoneRegistry: @unchecked Sendable {
     }
 
     public var isGone: Bool { goneName != nil }
+
+    /// Why the state is set (meaningful only while `isGone`).
+    public var reason: Reason {
+        mutex.lock()
+        defer { mutex.unlock() }
+        return why
+    }
 
     /// Which names are this device's own account (its account name and the
     /// active profile's). Set whenever the signed-in account changes.
@@ -86,6 +108,7 @@ public final class AccountGoneRegistry: @unchecked Sendable {
     /// 404 for our own account.
     @discardableResult
     public func note(url: URL?, status: Int, body: Data) -> Bool {
+        if status == 403 { return noteRemoved(url: url, body: body) }
         guard status == 404, let name = Self.accountName(in: url) else { return false }
         mutex.lock()
         let isOwn = own.contains(name)
@@ -94,9 +117,30 @@ public final class AccountGoneRegistry: @unchecked Sendable {
         guard isOwn, !isRenaming,
               let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               (json["code"] as? String) == Self.code else { return false }
+        return flip(name, .accountGone)
+    }
+
+    /// `403 device-removed` from `.com` itself for this device's own account:
+    /// the account removed this device. A box (any other host), another
+    /// account's name, or a 403 without the code changes nothing.
+    private func noteRemoved(url: URL?, body: Data) -> Bool {
+        guard let url, url.scheme == Endpoints.controlBaseUrl.scheme,
+              url.host?.lowercased() == Endpoints.controlHost.lowercased(),
+              let name = Self.accountName(in: url) else { return false }
         mutex.lock()
-        let changed = gone != name
+        let isOwn = own.contains(name)
+        mutex.unlock()
+        guard isOwn,
+              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              (json["code"] as? String) == Self.deviceRemovedCode else { return false }
+        return flip(name, .deviceRemoved)
+    }
+
+    private func flip(_ name: String, _ reason: Reason) -> Bool {
+        mutex.lock()
+        let changed = gone != name || why != reason
         gone = name
+        why = reason
         let fn = listener
         mutex.unlock()
         if changed { fn?(name) }
@@ -108,6 +152,7 @@ public final class AccountGoneRegistry: @unchecked Sendable {
         mutex.lock()
         let changed = gone != nil
         gone = nil
+        why = .accountGone
         let fn = listener
         mutex.unlock()
         if changed { fn?(nil) }

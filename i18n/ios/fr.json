@@ -4078,5 +4078,21 @@
   "This link doesn't work any more. Ask for a new one.": "Ce lien ne fonctionne plus. Demandez-en un nouveau.",
   "Open this link when you create your account.": "Ouvrez ce lien quand vous créez votre compte.",
   "Unlock with Face ID or your passcode to see your trusted devices.": "Déverrouillez avec Face ID ou votre code pour voir vos appareils de confiance.",
-  "Show trusted devices": "Afficher les appareils de confiance"
+  "Show trusted devices": "Afficher les appareils de confiance",
+  "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.": "Un autre appareil du compte l'a retiré, donc Flagship a effacé les clés du compte de cet appareil. Le compte et ses serveurs ne changent pas.",
+  "Remove from account": "Retirer du compte",
+  "Remove %@ from your account?": "Retirer %@ de votre compte ?",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "Il perd l'accès à votre compte et à vos serveurs. La prochaine fois qu'il se connectera, Flagship en effacera les clés de votre compte.",
+  "Couldn't remove the device": "Impossible de retirer l'appareil",
+  "Remove a device from your account": "Retirer un appareil de votre compte",
+  "Check your connection and try again.": "Vérifiez votre connexion et réessayez.",
+  "Reset account keys": "Réinitialiser les clés du compte",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "Crée de nouvelles clés pour votre compte. Tous les autres appareils sont retirés et doivent rejoindre le compte à nouveau, et chaque serveur doit être associé à nouveau. Vos serveurs gardent leurs données et le compte reste sur cet appareil.",
+  "Reset your account keys?": "Réinitialiser les clés de votre compte ?",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "Crée de nouvelles clés pour votre compte. Tous les autres appareils sont retirés et doivent rejoindre le compte à nouveau, et chaque serveur doit être associé à nouveau. Vos serveurs gardent leurs données et le compte reste sur cet appareil. Cette action est irréversible.",
+  "Making new keys…": "Création des nouvelles clés…",
+  "Done. Your account has new keys. Pair your servers and other devices again.": "C'est fait. Votre compte a de nouvelles clés. Associez à nouveau vos serveurs et vos autres appareils.",
+  "You can reset the account keys once an hour. Try again later.": "Vous pouvez réinitialiser les clés du compte une fois par heure. Réessayez plus tard.",
+  "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "Un autre appareil de ce compte a changé les clés du compte. Reconnectez-vous avec votre clé d’accès de récupération pour y revenir.",
+  "This device was removed from your Flagship account.": "Cet appareil a été retiré de votre compte Flagship."
 }

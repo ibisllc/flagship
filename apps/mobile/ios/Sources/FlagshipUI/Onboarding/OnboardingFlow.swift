@@ -53,6 +53,11 @@ public struct OnboardingFlow: View {
                 app.openCreateAccountOnWelcome = false
                 path.append(.chooseUsername)
             }
+            .task(id: app.openConnectAccountOnWelcome) {
+                guard app.openConnectAccountOnWelcome else { return }
+                app.openConnectAccountOnWelcome = false
+                path.append(.connectAccount)
+            }
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .chooseUsername:

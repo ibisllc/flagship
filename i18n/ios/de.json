@@ -4078,5 +4078,21 @@
   "This link doesn't work any more. Ask for a new one.": "Dieser Link funktioniert nicht mehr. Bitte um einen neuen.",
   "Open this link when you create your account.": "Öffne diesen Link, wenn du dein Konto erstellst.",
   "Unlock with Face ID or your passcode to see your trusted devices.": "Entsperren Sie mit Face ID oder Ihrem Code, um Ihre vertrauenswürdigen Geräte zu sehen.",
-  "Show trusted devices": "Vertrauenswürdige Geräte anzeigen"
+  "Show trusted devices": "Vertrauenswürdige Geräte anzeigen",
+  "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.": "Ein anderes Gerät des Kontos hat es entfernt, daher hat Flagship die Schlüssel des Kontos von diesem Gerät gelöscht. Das Konto und seine Server bleiben unverändert.",
+  "Remove from account": "Aus dem Konto entfernen",
+  "Remove %@ from your account?": "%@ aus deinem Konto entfernen?",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "Es verliert den Zugriff auf dein Konto und deine Server. Sobald es das nächste Mal online ist, löscht Flagship die Schlüssel deines Kontos darauf.",
+  "Couldn't remove the device": "Das Gerät konnte nicht entfernt werden",
+  "Remove a device from your account": "Ein Gerät aus deinem Konto entfernen",
+  "Check your connection and try again.": "Prüfe deine Verbindung und versuche es erneut.",
+  "Reset account keys": "Kontoschlüssel zurücksetzen",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "Erstellt neue Schlüssel für dein Konto. Alle anderen Geräte werden entfernt und müssen erneut beitreten, und jeder Server muss erneut gekoppelt werden. Deine Server behalten ihre Daten, und das Konto bleibt auf diesem Gerät.",
+  "Reset your account keys?": "Kontoschlüssel zurücksetzen?",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "Erstellt neue Schlüssel für dein Konto. Alle anderen Geräte werden entfernt und müssen erneut beitreten, und jeder Server muss erneut gekoppelt werden. Deine Server behalten ihre Daten, und das Konto bleibt auf diesem Gerät. Das lässt sich nicht rückgängig machen.",
+  "Making new keys…": "Neue Schlüssel werden erstellt…",
+  "Done. Your account has new keys. Pair your servers and other devices again.": "Fertig. Dein Konto hat neue Schlüssel. Kopple deine Server und deine anderen Geräte erneut.",
+  "You can reset the account keys once an hour. Try again later.": "Du kannst die Kontoschlüssel einmal pro Stunde zurücksetzen. Versuche es später erneut.",
+  "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "Ein anderes Gerät dieses Kontos hat die Kontoschlüssel geändert. Melde dich mit deinem Wiederherstellungs-Passkey erneut an, um wieder hineinzukommen.",
+  "This device was removed from your Flagship account.": "Dieses Gerät wurde aus deinem Flagship-Konto entfernt."
 }

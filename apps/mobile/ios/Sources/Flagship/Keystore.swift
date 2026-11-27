@@ -321,6 +321,16 @@ public struct Keystore {
         return id
     }
 
+    /// Forget this device's account device id and stored account device key for `accountId` (the account removed
+    /// this device: docs/revocation-ui.md). `wipe()` clears the active profile's slots; these two are filed under
+    /// the account id.
+    public static func forgetAccountDevice(accountId: String, deviceId: String?) {
+        if let deviceId, !deviceId.isEmpty {
+            keychainDelete(account: account("com.flagship.account-device.\(deviceId)", profile: accountId))
+        }
+        keychainDelete(account: account(KCKey.accountDeviceId, profile: accountId))
+    }
+
     /// This device's account device key when it is stored on the device
     /// (joined devices), readable without a prompt; nil when it is derived
     /// from the UMK instead.

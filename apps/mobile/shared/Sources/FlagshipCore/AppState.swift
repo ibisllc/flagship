@@ -110,6 +110,8 @@ public final class AppState {
     /// "Create a new account" on the "account was removed" screen: the
     /// device's copy is removed, then Welcome opens the create flow at once.
     public var openCreateAccountOnWelcome = false
+    /// "This device was removed from your account" → Join an account: Welcome opens Connect to an existing account.
+    public var openConnectAccountOnWelcome = false
     /// A new account's one-time voi.ci intro is waiting (its username): set by the create flow when Secure your account
     /// closes, shown once by the shell (VoiciIntro in FlagshipUI keeps the per-account record).
     public var pendingVoiciIntro: String?

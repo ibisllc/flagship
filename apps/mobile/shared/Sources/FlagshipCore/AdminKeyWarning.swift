@@ -101,17 +101,25 @@ public enum KeyBackupState {
 @Observable
 public final class AccountGoneCenter {
     public private(set) var goneName: String?
+    /// Which screen: the account is gone, or the account removed this device.
+    public private(set) var reason: AccountGoneRegistry.Reason = .accountGone
     @ObservationIgnored private let registry: AccountGoneRegistry
 
     public init(registry: AccountGoneRegistry = .shared) {
         self.registry = registry
         goneName = registry.goneName
-        registry.onChange { [weak self] name in
-            Task { @MainActor in self?.goneName = name }
+        reason = registry.reason
+        registry.onChange { [weak self, registry] name in
+            let why = registry.reason
+            Task { @MainActor in
+                self?.reason = why
+                self?.goneName = name
+            }
         }
     }
 
     public var isGone: Bool { goneName != nil }
+    public var isDeviceRemoved: Bool { goneName != nil && reason == .deviceRemoved }
 
     /// Tell the detector which names are this device's own.
     public func setOwnNames(_ names: [String?]) { registry.setOwnNames(names) }
@@ -120,5 +128,6 @@ public final class AccountGoneCenter {
     public func clear() {
         registry.clear()
         goneName = nil
+        reason = .accountGone
     }
 }

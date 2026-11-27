@@ -4072,5 +4072,21 @@
   "This link doesn't work any more. Ask for a new one.": "14fa0ab82a00",
   "Open this link when you create your account.": "f787b6205ff6",
   "Unlock with Face ID or your passcode to see your trusted devices.": "644fb75a9efb",
-  "Show trusted devices": "27f7d03d2f20"
+  "Show trusted devices": "27f7d03d2f20",
+  "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.": "89debed6d8c8",
+  "Remove from account": "0004614a0c76",
+  "Remove %@ from your account?": "26885e7bd652",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "a6c6530389bb",
+  "Couldn't remove the device": "d11592bd2484",
+  "Remove a device from your account": "ebb02b339268",
+  "Check your connection and try again.": "52b4a8b3f479",
+  "Reset account keys": "10865655df80",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "dc8393ed9128",
+  "Reset your account keys?": "5e9637828818",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "899cb3345044",
+  "Making new keys…": "467f685d6e11",
+  "Done. Your account has new keys. Pair your servers and other devices again.": "1cf1fe227f17",
+  "You can reset the account keys once an hour. Try again later.": "e1e1e5c9fe65",
+  "Another device on this account changed the account's keys. Sign in again with your recovery passkey to get back in.": "bce03610a492",
+  "This device was removed from your Flagship account.": "6cac1b8db221"
 }

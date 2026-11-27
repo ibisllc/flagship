@@ -98,6 +98,17 @@ struct FlagshipApp: App {
         ServerShareServices.readTokens.set(readTokens)
         // "Choose your own account name": while a rename is under way its 404s don't mean the account was removed.
         AccountGoneRegistry.shared.setRenameGuard { AccountRenameResume.isRenaming($0) }
+        // The `device-removed` push: ask `.com` with this device's own key now, and erase only on its answer.
+        DeviceRemovedCheck.setHandler { [readTokens] in
+            let user = await MainActor.run { state.currentUser }
+            guard let user, !user.isEmpty else { return }
+            _ = await readTokens.retryNow(for: user)
+            await MainActor.run {
+                let r = AccountGoneRegistry.shared
+                guard r.isGone, r.reason == .deviceRemoved, state.isPaired else { return }
+                DeviceRemovedErase.run(app: state, name: r.goneName ?? user.lowercased())
+            }
+        }
         var pqLive = true
         #if DEBUG
         pqLive = !GymLaunch.usesMocks
@@ -1168,6 +1179,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         Task { @MainActor in push?.setDeviceToken(nil) }
+    }
+
+    /// A background wake (`content-available`): today only `device-removed`, which asks `.com` about this device.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard DeviceRemovedCheck.isPush(userInfo) else { completionHandler(.noData); return }
+        Task {
+            await DeviceRemovedCheck.run()
+            completionHandler(.newData)
+        }
     }
 }
 

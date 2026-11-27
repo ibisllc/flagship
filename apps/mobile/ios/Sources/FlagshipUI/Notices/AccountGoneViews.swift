@@ -18,6 +18,31 @@ public enum AccountGoneCopy {
     public static let failed = String(localized: "Couldn't remove it yet. Close the app and try again.")
 }
 
+/// The words of "This device was removed from your account" (docs/revocation-ui.md): another device removed this
+/// one, `.com` said so, and the account's keys are already erased from it.
+public enum DeviceRemovedCopy {
+    public static let title = String(localized: "This device was removed from your account")
+    public static let body = String(localized: "Another device on the account removed it, so Flagship erased the account's keys from this device. The account and its servers are not changed.")
+    public static let join = String(localized: "Join an account")
+    public static let remove = AccountGoneCopy.remove
+}
+
+/// Erase this device's copy of an account that removed it: the same keys Sign out and Remove this device erase
+/// (Keychain profile, admin root, PQ seeds, read tokens, pins, through `Keystore.wipe`), plus the stored account
+/// device key, then sign out. No biometric prompt: the account already removed this device, and `.com` said so to
+/// this device's own signed request (`AccountGoneRegistry`, never a push).
+@MainActor
+public enum DeviceRemovedErase {
+    public static func run(app: AppState, name: String) {
+        let deviceId = app.activeProfile?.deviceId ?? Keystore.accountDeviceId(accountId: name)
+        QuantumSafetyService.forget(username: name)
+        Keystore.forgetAccountDevice(accountId: name, deviceId: deviceId)
+        Keystore.wipe()
+        KeyBackupState.forget(username: name)
+        app.signOut()
+    }
+}
+
 /// Where the removal warning and Settings ask "does this device hold a key
 /// that can still save a server's data?".
 @MainActor
@@ -75,8 +100,16 @@ struct AccountGoneScreen: View {
     @State private var failure: String?
 
     var body: some View {
+        if gone?.isDeviceRemoved == true {
+            DeviceRemovedScreen(name: name)
+        } else {
+            goneBody
+        }
+    }
+
+    private var goneBody: some View {
         let c = FSColors.scheme(scheme)
-        ZStack {
+        return ZStack {
             c.bg.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
@@ -233,6 +266,65 @@ struct AccountGoneScreen: View {
     }
 }
 
+/// "This device was removed from your account": the keys are already gone; join again or leave.
+struct DeviceRemovedScreen: View {
+    let name: String
+
+    @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
+    @Environment(AccountGoneCenter.self) private var gone: AccountGoneCenter?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ZStack {
+            c.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: FS.space.s4) {
+                    Text(DeviceRemovedCopy.title)
+                        .font(FS.font.scaled(28, weight: .semibold))
+                        .foregroundColor(c.text)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("device-removed-title")
+                    Text(DeviceRemovedCopy.body)
+                        .font(FS.font.scaled(17))
+                        .foregroundColor(c.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("device-removed-body")
+                    Text(AccountGoneCopy.account(name))
+                        .font(FS.font.scaled(12))
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("device-removed-name")
+                    VStack(spacing: FS.space.s3) {
+                        FSPrimaryButton(DeviceRemovedCopy.join, block: true, large: true) { leave(join: true) }
+                            .accessibilityIdentifier("device-removed-join")
+                        Button(DeviceRemovedCopy.remove) { leave(join: false) }
+                            .font(FS.font.scaled(15))
+                            .foregroundColor(c.textMuted)
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("device-removed-remove")
+                    }
+                }
+                .frame(maxWidth: 440, alignment: .leading)
+                .padding(.horizontal, FS.space.s6)
+                .padding(.vertical, FS.space.s8)
+                .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.8, alignment: .center)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityIdentifier("device-removed")
+    }
+
+    /// The keys went when `.com` said so (`DeviceRemovedErase`); this only forgets the rest and closes the screen.
+    private func leave(join: Bool) {
+        if app.isPaired { DeviceRemovedErase.run(app: app, name: name) }
+        KeyBackupState.forget(username: name)
+        gone?.clear()
+        app.openConnectAccountOnWelcome = join
+    }
+}
+
 private struct AccountGoneHost: ViewModifier {
     @Environment(AccountGoneCenter.self) private var gone: AccountGoneCenter?
     @Environment(AppState.self) private var app
@@ -247,6 +339,11 @@ private struct AccountGoneHost: ViewModifier {
                 gone?.setOwnNames([user, app.activeProfile?.cloudName, app.activeProfile?.accountId])
             }
             .onChange(of: name, initial: true) { _, next in present(next) }
+            // `.com` told this device's own signed request that the account removed it: erase now, without a prompt.
+            .onChange(of: gone?.isDeviceRemoved ?? false, initial: true) { _, removed in
+                guard removed, let name, app.isPaired else { return }
+                DeviceRemovedErase.run(app: app, name: name)
+            }
     }
 
     private func present(_ name: String?) {

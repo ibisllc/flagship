@@ -45,6 +45,35 @@ final class AccountGoneTests: XCTestCase {
         XCTAssertNil(r.goneName)
     }
 
+    func testOnlyComsDeviceRemovedForTheOwnAccountFlipsItAsRemoved() {
+        let r = AccountGoneRegistry()
+        r.setOwnNames(["smoketest"])
+        let removed = Data(#"{"error":"device-removed","code":"device-removed"}"#.utf8)
+        let box = URL(string: "https://home.smoketest.flagship.services/api/users/smoketest/pods")!
+        XCTAssertFalse(r.note(url: box, status: 403, body: removed), "a box can't say so")
+        XCTAssertFalse(r.note(url: URL(string: "http://flagshipserver.com/api/users/smoketest/pods"), status: 403, body: removed), "not over TLS")
+        XCTAssertFalse(r.note(url: url("/api/users/someone-else/pods"), status: 403, body: removed), "another account")
+        XCTAssertFalse(r.note(url: url("/api/users/smoketest/pods"), status: 403, body: Data(#"{"error":"not authorized"}"#.utf8)), "no code")
+        XCTAssertFalse(r.note(url: url("/api/users/smoketest/pods"), status: 404, body: removed), "a 404 with the code")
+        XCTAssertFalse(r.note(url: url("/api/users/smoketest/pods"), status: 403, body: AccountGoneRegistry.body()), "a 403 with the gone code")
+        XCTAssertNil(r.goneName)
+        XCTAssertTrue(r.note(url: url("/api/accounts/SmokeTest/read-token"), status: 403, body: removed))
+        XCTAssertEqual(r.goneName, "smoketest")
+        XCTAssertEqual(r.reason, .deviceRemoved)
+        r.clear()
+        XCTAssertNil(r.goneName)
+        XCTAssertEqual(r.reason, .accountGone)
+        XCTAssertTrue(r.note(url: url("/api/users/smoketest/pods"), status: 404, body: AccountGoneRegistry.body()))
+        XCTAssertEqual(r.reason, .accountGone)
+    }
+
+    func testTheDeviceRemovedPushIsRecognisedByCategoryOrKind() {
+        XCTAssertTrue(DeviceRemovedCheck.isPush([:], categoryIdentifier: "device-removed"))
+        XCTAssertTrue(DeviceRemovedCheck.isPush(["kind": "device-removed"]))
+        XCTAssertTrue(DeviceRemovedCheck.isPush(["aps": ["category": "device-removed"]]))
+        XCTAssertFalse(DeviceRemovedCheck.isPush(["kind": "secret-request"], categoryIdentifier: "secret-request"))
+    }
+
     func testASignedOutDeviceNeverFlips() {
         let r = AccountGoneRegistry()
         XCTAssertFalse(r.note(url: url("/api/users/smoketest/pods"), status: 404, body: AccountGoneRegistry.body()))
@@ -110,6 +139,19 @@ final class AccountGoneTests: XCTestCase {
         XCTAssertEqual(toasts.queue.count, 0)
         toasts.success("Saved")
         XCTAssertEqual(toasts.queue.count, 1)
+    }
+
+    @MainActor
+    func testTheCenterKnowsTheDeviceWasRemoved() async throws {
+        let center = AccountGoneCenter()
+        center.setOwnNames(["smoketest"])
+        AccountGoneRegistry.shared.note(url: url("/api/users/smoketest/pods"), status: 403,
+                                        body: Data(#"{"code":"device-removed"}"#.utf8))
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(center.isDeviceRemoved)
+        center.clear()
+        XCTAssertFalse(center.isDeviceRemoved)
+        XCTAssertEqual(center.reason, .accountGone)
     }
 
     @MainActor
