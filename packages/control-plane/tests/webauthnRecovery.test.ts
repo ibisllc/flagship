@@ -849,3 +849,29 @@ describe("webauthn recovery — recovery-session proof minted by the gated fetch
     expect(res.body).not.toHaveProperty("recoveryProof");
   });
 });
+
+describe("webauthn recovery — every change lands in the account's Activity", () => {
+  it("records set-up, change and turn-off", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const deps = { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery, auditEvents: storage.auditEvents };
+    expect((await handleUploadWebauthnRecovery(deps, await buildEnvelope({ storage, irk }))).status).toBe(200);
+    expect((await handleUploadWebauthnRecovery(deps, await buildEnvelope({ storage, irk, credentialId: "beefcafe".repeat(4) }))).status).toBe(200);
+    expect((await handleDeleteWebauthnRecovery(deps, USERNAME, await buildEnvelope({ storage, irk, op: "delete", credentialId: "beefcafe".repeat(4) }))).status).toBe(200);
+    const rows = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(rows.map((e) => `${e.eventKind}: ${e.detail}`).sort()).toEqual([
+      "recovery-rotated: Cloud recovery was changed",
+      "recovery-rotated: Cloud recovery was turned off",
+      "recovery-set-up: Cloud recovery was set up",
+    ]);
+  });
+
+  it("a refused write records nothing", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const deps = { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery, auditEvents: storage.auditEvents };
+    const env = await buildEnvelope({ storage, irk: makeKey() });
+    expect((await handleUploadWebauthnRecovery(deps, env)).status).toBe(403);
+    expect(await storage.auditEvents.list(USERNAME, 0, 10)).toHaveLength(0);
+  });
+});

@@ -2809,6 +2809,7 @@ export async function tryControlPlane(
           webauthnRecovery: storage.webauthnRecovery,
           passkeyPolicy: recoveryPasskeyPolicy(env.CONTROL_APEX),
           accountUnderStrict: recoveryStrict(storage),
+          auditEvents: storage.auditEvents,
         },
         await readJson(request),
       ),
@@ -2865,6 +2866,7 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
+          auditEvents: storage.auditEvents,
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
