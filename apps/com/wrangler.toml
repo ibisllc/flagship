@@ -376,9 +376,10 @@ VOICI_PROMO_UNTIL = ""
 MARKETPLACE = "off"
 # Vulnerability reports from the website form (src/securityReports.ts): who is emailed when one arrives (comma-separated)
 # and the sender, a Resend-verified address. The email carries only the report's id, severity and time. With either
-# empty, or no RESEND_API_KEY secret, reports are still stored (encrypted) and no email is sent. OWNER: fill both in.
-SECURITY_REPORT_NOTIFY_TO = ""
-SECURITY_REPORT_NOTIFY_FROM = ""
+# empty, or no RESEND_API_KEY secret, reports are still stored (encrypted) and no email is sent. The sender domain
+# mail.flagshipserver.com is verified in Resend (2026-11-27); the inbox itself stays on the workspace.org host.
+SECURITY_REPORT_NOTIFY_TO = "security@flagshipserver.com"
+SECURITY_REPORT_NOTIFY_FROM = "Flagship security reports <reports@mail.flagshipserver.com>"
 # Cloudflare Turnstile on the report form: the widget's site key (public). The check runs only while this AND the
 # TURNSTILE_SECRET_KEY secret are set; rate limits apply either way. OWNER: create the widget (hostnames
 # flagshipserver.com, fshp.tech) and fill this in, then `wrangler secret put TURNSTILE_SECRET_KEY`.
