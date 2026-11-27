@@ -383,7 +383,7 @@ SECURITY_REPORT_NOTIFY_FROM = "Flagship security reports <reports@mail.flagships
 # Cloudflare Turnstile on the report form: the widget's site key (public). The check runs only while this AND the
 # TURNSTILE_SECRET_KEY secret are set; rate limits apply either way. OWNER: create the widget (hostnames
 # flagshipserver.com, fshp.tech) and fill this in, then `wrangler secret put TURNSTILE_SECRET_KEY`.
-TURNSTILE_SITE_KEY = ""
+TURNSTILE_SITE_KEY = "0x4AAAAAAGWEdUA1oT1q4I-Z"
 # Optional second recipient for AI triage (`npm run security-reports -- --triage`): the armored PUBLIC key printed by
 # `node scripts/security-triage-key.mjs` (a multi-line TOML literal string) and its fingerprint, which pins it. A key that
 # does not match the pin is left out and reports go to the YubiKey key alone. Empty = no triage copy.
