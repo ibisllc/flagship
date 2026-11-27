@@ -281,6 +281,17 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   show "This device was removed"; boxes end its app sign-ins and PQ sessions. Needs a `.com` deploy, an endorsed box
   release, store builds, webapp shell v259 signed. Limit: the UMK/IRK are shared (master-key rotation is designed
   elsewhere); a removed admin device keeps its admin root until it erases itself (Rotate admin key).
+- 2026-11-27, account master-key rotation (on `release/0.5`, owner: the whole rotation ships in 0.5). Phase 1 protocol
+  (`packages/protocol/src/accountKeyRotation.ts`, all four ports, vectors). Phases 2-3 built: `.com` takes one hop
+  signed by the bare admin root (`POST /api/users/:u/account-key-rotation`, `packages/control-plane/src/
+  accountKeyRotation.ts`) and applies swap, revocations, grants, recovery record, profiles and deliveries in one D1
+  transaction (D1 **0164**); lane `GET .../account-key-rotations` (read token), device deliveries/ack, receive keys,
+  device key rotate, `keyEpoch` on `/api/username`, `/pods`, `/stream` and the box doorbell. Boxes replay the lane
+  under their pinned admin root (`accountKeyRotationConsumer.ts`, pin `account-key-pin.json`), adopt the new key
+  without a re-pair, end all owner sessions, discard unused backup keys, flag re-keys; a lost pin or a higher hinted
+  epoch holds account-key-signed traffic; admin-pinned boxes no longer take the old-IRK re-pair proof. Under strict:
+  hybrid companion and X-Wing deliveries only. Needs D1 0164, a `.com` deploy, an endorsed box release; clients and
+  per-server re-keys are Phases 4-5.
 - Shrink the phone apps (0.5 list): merged into `release/0.5` 2026-11-27 (VP8-only libwebrtc build config, Android
   WebP welcome art), pinned there to `libwebrtc-157-45414303796` (main keeps the old one). Before 0.5 ships, the
   device call matrix in `docs/runbooks/pre-0.5-call-codec-tests.md` must pass: the release gate refuses 0.5 while it is

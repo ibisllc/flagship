@@ -3671,7 +3671,7 @@
       "surfaces": {
         "ios": {
           "status": "partial",
-          "reason": "Protocol only (Phase 1): canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation. The rotator and receiver screens are Phase 4.",
+          "reason": "Protocol (Phase 1: canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation) and the server side (.com: POST /api/users/:u/account-key-rotation, the lane, deliveries, receive keys, device key rotate; box: lane replay under the pinned admin root, no re-pair, epoch gate, /api/screens/account-key/status) are built. The rotator and receiver screens are Phase 4.",
           "anchors": [
             [
               "apps/mobile/shared/Sources/FlagshipCore/AccountKeyRotation.swift",
@@ -3689,7 +3689,7 @@
         },
         "android": {
           "status": "partial",
-          "reason": "Protocol only (Phase 1): canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation. The rotator and receiver screens are Phase 4.",
+          "reason": "Protocol (Phase 1: canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation) and the server side (.com: POST /api/users/:u/account-key-rotation, the lane, deliveries, receive keys, device key rotate; box: lane replay under the pinned admin root, no re-pair, epoch gate, /api/screens/account-key/status) are built. The rotator and receiver screens are Phase 4.",
           "anchors": [
             [
               "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountKeyRotation.kt",
@@ -3707,7 +3707,7 @@
         },
         "web": {
           "status": "partial",
-          "reason": "Protocol only (Phase 1): canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation. The rotator and receiver screens are Phase 4. The browser verifies the hybrid companion but never signs one (keyless-web rule).",
+          "reason": "Protocol (Phase 1: canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation) and the server side (.com: POST /api/users/:u/account-key-rotation, the lane, deliveries, receive keys, device key rotate; box: lane replay under the pinned admin root, no re-pair, epoch gate, /api/screens/account-key/status) are built. The rotator and receiver screens are Phase 4. The browser verifies the hybrid companion but never signs one (keyless-web rule).",
           "anchors": [
             [
               "apps/web/public/webapp/lib/accountKeyRotation.js",
