@@ -13,6 +13,7 @@ import {
   handleObjectRePair,
   handleVetoRePair,
   RE_PAIR_COMPLETE_WINDOW_MS,
+  RE_PAIR_GRACE_MS,
   RE_PAIR_SINGLE_GRACE_MS,
   RE_PAIR_VETO_BLOCK_MS,
 } from "../src/rePair.js";
@@ -201,11 +202,23 @@ describe("an admin veto holds for a day against the rejected key", () => {
     const s = await setup();
     expect((await handleInitiateRePair(deps(s, T0), U, initiate(NEW, T0))).status).toBe(200);
     await adminVeto(s, T0 + 2_000);
-    expect((await handleInitiateRePair(deps(s, T0 + 3_000), U, initiate(OTHER, T0 + 3_000))).status).toBe(200);
+    const { token } = await mintRecoveryProof({ username: U, fetchTokenHashHex: FETCH_HASH }, SECRET, { now: T0 + 3_000 });
+    expect((await handleInitiateRePair(deps(s, T0 + 3_000), U, initiate(OTHER, T0 + 3_000, { recoveryProof: { token } }))).status).toBe(200);
     expect((await handleObjectRePair(deps(s, T0 + 4_000), U, selfCancel(OTHER, T0 + 4_000))).status).toBe(200);
     const blocked = await handleInitiateRePair(deps(s, T0 + 5_000), U, initiate(NEW, T0 + 5_000));
     expect(blocked.status).toBe(409);
     expect(code(blocked)).toBe("re-pair-vetoed-recently");
+  });
+
+  it("on an admin-pinned account the account key starts no recovery for a day after a veto, whatever key it names", async () => {
+    const s = await setup();
+    expect((await handleInitiateRePair(deps(s, T0), U, initiate(NEW, T0))).status).toBe(200);
+    await adminVeto(s, T0 + 2_000);
+    const blocked = await handleInitiateRePair(deps(s, T0 + 3_000), U, initiate(OTHER, T0 + 3_000));
+    expect(blocked.status).toBe(409);
+    expect(code(blocked)).toBe("re-pair-vetoed-recently");
+    const later = T0 + 2_000 + RE_PAIR_VETO_BLOCK_MS + 1;
+    expect((await handleInitiateRePair(deps(s, later), U, initiate(OTHER, later))).status).toBe(200);
   });
 
   it("a self-cancel starts no block", async () => {
@@ -213,5 +226,31 @@ describe("an admin veto holds for a day against the rejected key", () => {
     expect((await handleInitiateRePair(deps(s, T0), U, initiate(NEW, T0))).status).toBe(200);
     expect((await handleObjectRePair(deps(s, T0 + 1_000), U, selfCancel(NEW, T0 + 1_000))).status).toBe(200);
     expect(await s.pendingRePairs.vetoedKeyBlockedUntil(U, hex(NEW.publicKey), T0 + 2_000)).toBeUndefined();
+  });
+});
+
+describe("the account key as a recovery credential", () => {
+  async function multi(pinnedRoot: boolean) {
+    const s = new InMemoryStorage();
+    await s.usernames.put({
+      username: U, irkPubHex: hex(OLD.publicKey), claimedAt: 1, accountType: "multi",
+      ...(pinnedRoot ? { adminRootPubHex: hex(ADMIN.publicKey) } : {}),
+    });
+    return s;
+  }
+
+  it("never buys the 24 h multi-device window on an admin-pinned account", async () => {
+    const s = await multi(true);
+    const r = await handleInitiateRePair(deps(s, T0), U, initiate(NEW, T0));
+    expect(r.status).toBe(200);
+    expect((r.body as { completesAt: number }).completesAt).toBe(T0 + RE_PAIR_SINGLE_GRACE_MS);
+    expect((await s.pendingRePairs.get(U))!.completesAt).toBe(T0 + RE_PAIR_SINGLE_GRACE_MS);
+  });
+
+  it("an account with no admin root keeps its window", async () => {
+    const s = await multi(false);
+    const r = await handleInitiateRePair(deps(s, T0), U, initiate(NEW, T0));
+    expect(r.status).toBe(200);
+    expect((r.body as { completesAt: number }).completesAt).toBe(T0 + RE_PAIR_GRACE_MS);
   });
 });
