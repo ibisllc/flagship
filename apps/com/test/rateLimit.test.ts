@@ -547,6 +547,11 @@ describe("rateLimit — wired into route()", () => {
 
   it("rate-limits the re-pair veto per source and per (source, account), never per account alone (B2 #12)", async () => {
     expect(endpointFor("POST", "/api/users/alice/re-pair/veto")).toBe("re-pair-veto");
+    expect(endpointFor("POST", "/api/users/alice/account-key-rotation")).toBe("account-key-rotation");
+    expect(bindingSubject("account-key-rotation", "/api/users/Alice/account-key-rotation")).toBe("users:alice");
+    expect(LIMITS["account-key-rotation"]?.map((a) => a.axis).sort()).toEqual(["ip", "ip", "ipSubject"]);
+    expect(endpointFor("PUT", "/api/accounts/alice/devices/" + "a".repeat(32) + "/receive-key")).toBe("account-key-device");
+    expect(endpointFor("GET", "/api/accounts/alice/devices/" + "a".repeat(32) + "/umk-rotation")).toBe("account-key-device");
     expect(endpointFor("POST", "/api/users/alice/re-pair")).toBe("re-pair-initiate");
     expect(bindingSubject("re-pair-veto", "/api/users/Alice/re-pair/veto")).toBe("users:alice");
     // A budget counted per account alone would let anyone spend it and keep the owner from vetoing a hostile recovery.

@@ -96,6 +96,13 @@ export type RateLimitEndpoint =
   // to the account's devices. Per source and per (source, account), never per account alone: a budget anyone could
   // spend for an account would let them keep its owner from vetoing a hostile recovery.
   | "re-pair-veto"
+  // Account master-key rotation (POST /api/users/<u>/account-key-rotation): admin-root-signed, verified, and on
+  // success one transaction that revokes devices. Per source and per (source, account), never per account alone,
+  // like the veto: a budget anyone could spend for an account would let them keep its admin from rotating.
+  | "account-key-rotation"
+  // A device's key rotate, receive key and rotation delivery (/api/accounts/<u>/devices/<id>/{key,receive-key,
+  // umk-rotation[/ack]}): signed, per source.
+  | "account-key-device"
   | "qr-pipe-upgrade"
   | "builder-pipe-upgrade"
   // TOTP verify (the recovery proof carrier). Keyed per target username:
@@ -385,6 +392,15 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "re-pair-initiate": [
     { axis: "ip", limit: 10, windowSec: 3600 },
     { axis: "usernameHash", limit: 3, windowSec: 900 },
+  ],
+  "account-key-rotation": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 60, windowSec: 3600 },
+    { axis: "ipSubject", limit: 20, windowSec: 3600 },
+  ],
+  "account-key-device": [
+    { axis: "ip", limit: 60, windowSec: 60 },
+    { axis: "ip", limit: 600, windowSec: 3600 },
   ],
   "re-pair-veto": [
     { axis: "ip", limit: 10, windowSec: 60 },
@@ -873,6 +889,15 @@ export function retryAfterPhrase(sec: number): string {
 /** The server or account a PQ binding or policy write (or a re-pair veto) is about (its rate-limit subject). */
 export function bindingSubject(endpoint: RateLimitEndpoint, pathname: string): string | undefined {
   if (endpoint === "security-report") return SECURITY_REPORT_SUBJECT;
+  if (endpoint === "account-key-rotation") {
+    const v = /^\/api\/users\/([^/]+)\/account-key-rotation$/.exec(pathname);
+    if (!v) return undefined;
+    try {
+      return `users:${decodeURIComponent(v[1]!).trim().toLowerCase()}`;
+    } catch {
+      return `users:${v[1]!.toLowerCase()}`;
+    }
+  }
   if (endpoint === "re-pair-veto") {
     const v = /^\/api\/users\/([^/]+)\/re-pair\/veto$/.exec(pathname);
     if (!v) return undefined;
@@ -928,6 +953,8 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
     return "re-pair-initiate";
   }
   if (m === "POST" && /^\/api\/users\/[^/]+\/re-pair\/veto$/.test(pathname)) return "re-pair-veto";
+  if (m === "POST" && /^\/api\/users\/[^/]+\/account-key-rotation$/.test(pathname)) return "account-key-rotation";
+  if (/^\/api\/accounts\/[^/]+\/devices\/[^/]+\/(?:key|receive-key|umk-rotation(?:\/ack)?)$/.test(pathname) && m !== "OPTIONS") return "account-key-device";
   if (m === "POST" && pathname === "/api/boot/suspension/box") return "boot-suspension-box";
   if (m === "POST" && /^\/api\/users\/[^/]+\/totp\/verify$/.test(pathname)) {
     return "totp-verify";

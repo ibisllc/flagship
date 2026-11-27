@@ -749,6 +749,8 @@ export const SCENARIOS: Scenario[] = [
     { expect: [200, 204, 400, 404] })),
   http("apps-aliases", "GET /api/users/<u>/apps/aliases (read token)", "boxes, every minute", (w) =>
     authed(w, `/api/users/${ACCOUNT}/apps/aliases`)),
+  http("account-key-lane", "GET /api/users/<u>/account-key-rotations (read token)", "boxes, when the doorbell stamp moves", (w) =>
+    authed(w, `/api/users/${ACCOUNT}/account-key-rotations`)),
   http("notices", "GET /api/notices (maintainer-signed notice)", "apps, on a poll", () =>
     new Request(`${ORIGIN}/api/notices`), { via: "route", expect: [200, 204, 304] }),
   http("edge-account-resolve", "account resolve through route() (two rate-limit counter calls)", "apps, at sign-in", () =>

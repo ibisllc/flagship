@@ -55,6 +55,8 @@ const BUDGETS: Record<string, Budget> = {
   "lane-migration-assignment": { d1: 2, ratio: DEFAULT_RATIO },
   "lane-transfer-rehome": { d1: 1, ratio: DEFAULT_RATIO },
   "apps-aliases": { d1: 2, ratio: DEFAULT_RATIO },
+  // the read token, then the account row, the lane and the admin-root chain together
+  "account-key-lane": { d1: 3, ratio: DEFAULT_RATIO },
   notices: { d1: 0, ratio: DEFAULT_RATIO },
   "order-status": { d1: 5, ratio: DEFAULT_RATIO },
   "order-health": { d1: 3, ratio: DEFAULT_RATIO },

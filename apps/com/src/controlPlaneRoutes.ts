@@ -209,6 +209,13 @@ import {
   handleMarketplaceScanQueue,
   buildPushForwarder,
   buildDeviceRemovedNotifier,
+  buildAccountKeyRotatedNotifier,
+  handleApplyAccountKeyRotation,
+  handleListAccountKeyRotations,
+  handleGetUmkRotationDeliveries,
+  handleAckUmkRotationDeliveries,
+  handleRotateDeviceKey,
+  handlePutDeviceReceiveKey,
   wrapForwarderAsV12Fanout,
   handleGetEntitlementRevocations,
   handleListRevocations,
@@ -1094,6 +1101,13 @@ const ROUTE_RE = {
   // Slice D §5 — admin master-root recovery rotation.
   ADMIN_ROOT_ROTATION_APPLY: /^\/api\/users\/([^/]+)\/admin-root-rotation$/,
   ADMIN_ROOT_ROTATIONS_LIST: /^\/api\/users\/([^/]+)\/admin-root-rotations$/,
+  // Account master-key rotation (docs/account-key-rotation.md).
+  ACCOUNT_KEY_ROTATION_APPLY: /^\/api\/users\/([^/]+)\/account-key-rotation$/,
+  ACCOUNT_KEY_ROTATIONS_LIST: /^\/api\/users\/([^/]+)\/account-key-rotations$/,
+  UMK_ROTATION: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/umk-rotation$/,
+  UMK_ROTATION_ACK: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/umk-rotation\/ack$/,
+  DEVICE_KEY_ROTATE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/key$/,
+  DEVICE_RECEIVE_KEY: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/receive-key$/,
   // Watch delegate keys (Phase 2c) — opt-in quick-approve from the Watch.
   WATCH_DELEGATES_LIST: /^\/api\/users\/([^/]+)\/watch-delegates$/,
   WATCH_DELEGATES_REVOKE: /^\/api\/users\/([^/]+)\/watch-delegates\/revoke$/,
@@ -1155,6 +1169,12 @@ const ACCOUNT_GONE_ROUTES: { re: RegExp; methods?: readonly string[] }[] = [
   { re: ROUTE_RE.WATCH_DELEGATES_REVOKE },
   { re: ROUTE_RE.ACME_ACCOUNT_KEYS_LIST },
   { re: ROUTE_RE.ADMIN_ROOT_ROTATIONS_LIST },
+  { re: ROUTE_RE.ACCOUNT_KEY_ROTATION_APPLY },
+  { re: ROUTE_RE.ACCOUNT_KEY_ROTATIONS_LIST },
+  { re: ROUTE_RE.UMK_ROTATION },
+  { re: ROUTE_RE.UMK_ROTATION_ACK },
+  { re: ROUTE_RE.DEVICE_KEY_ROTATE },
+  { re: ROUTE_RE.DEVICE_RECEIVE_KEY },
   { re: ROUTE_RE.RE_PAIR_GET, methods: ["GET"] },
   { re: /^\/api\/users\/([^/]+)$/, methods: ["GET"] },
   ...SERVING_ACCOUNT_ROUTES.map((re) => ({ re })),
@@ -3218,6 +3238,51 @@ export async function tryControlPlane(
       ),
     );
   }
+  // Account master-key rotation (docs/account-key-rotation.md): the bare admin root authorises a hop; the
+  // lane is an account read (devices and the account's own boxes); deliveries are device-signed.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ACCOUNT_KEY_ROTATION_APPLY))) {
+    const forwarder = buildOptionalPushForwarder(env);
+    return finish(await handleApplyAccountKeyRotation(
+      {
+        ...accountKeyRotationDeps(storage, env.DB),
+        passkeyPolicy: recoveryPasskeyPolicy(env.CONTROL_APEX),
+        ...(forwarder
+          ? { notifyKeyRotated: buildAccountKeyRotatedNotifier(forwarder), notifyDeviceRemoved: buildDeviceRemovedNotifier(forwarder) }
+          : {}),
+      },
+      decodeURIComponent(m[1]!),
+      await readJson(request),
+    ));
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_KEY_ROTATIONS_LIST))) {
+    const username = decodeURIComponent(m[1]!).toLowerCase();
+    const refused = await gateAccountRead(storage, env, request, username);
+    if (refused) return refused;
+    return finishRead(await handleListAccountKeyRotations(accountKeyRotationDeps(storage, env.DB), username));
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.UMK_ROTATION))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handleGetUmkRotationDeliveries(
+      accountKeyRotationDeps(storage, env.DB), accountId, decodeURIComponent(m[2]!), directoryAuthorization(request, accountId, path),
+    ));
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.UMK_ROTATION_ACK))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handleAckUmkRotationDeliveries(
+      accountKeyRotationDeps(storage, env.DB), accountId, decodeURIComponent(m[2]!), directoryAuthorization(request, accountId, path), await readJson(request),
+    ));
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.DEVICE_KEY_ROTATE))) {
+    return finish(await handleRotateDeviceKey(
+      accountKeyRotationDeps(storage, env.DB), decodeURIComponent(m[1]!), decodeURIComponent(m[2]!), await readJson(request),
+    ));
+  }
+  if (method === "PUT" && (m = path.match(ROUTE_RE.DEVICE_RECEIVE_KEY))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handlePutDeviceReceiveKey(
+      accountKeyRotationDeps(storage, env.DB), accountId, decodeURIComponent(m[2]!), directoryAuthorization(request, accountId, path), await readJson(request),
+    ));
+  }
   if (method === "GET" && (m = path.match(ROUTE_RE.ADMIN_ROOT_ROTATIONS_LIST))) {
     return finish(
       await handleListAdminRootRotations(
@@ -3384,6 +3449,7 @@ export async function tryControlPlane(
                 identities: storage.deviceIdentities,
                 usernames: storage.usernames,
                 rotations: storage.adminRootRotations,
+                accountKeyRotations: storage.accountKeyRotations,
               },
               server,
             ),
@@ -5093,6 +5159,26 @@ function accountDirectoryDeps(storage: D1Storage, db: D1Database) {
     keyGrants: storage.accountDirectoryKeyGrants,
     pushTokens: storage.pushTokens,
     nonces: new D1NonceStore(db),
+    callKeys: storage.voiciCalls,
+    receiveKeys: storage.accountKeyRotations,
+  };
+}
+
+function accountKeyRotationDeps(storage: D1Storage, db: D1Database | undefined) {
+  return {
+    usernames: storage.usernames,
+    rotations: storage.accountKeyRotations,
+    adminRootRotations: storage.adminRootRotations,
+    identities: storage.deviceIdentities,
+    grants: storage.deviceCapabilityGrants,
+    pushTokens: storage.pushTokens,
+    webauthnRecovery: storage.webauthnRecovery,
+    accountProfiles: storage.accountProfiles,
+    managedProfiles: storage.deviceManagedProfiles,
+    // The Worker always binds DB; the type allows its absence for the test harnesses.
+    nonces: new D1NonceStore(db as D1Database),
+    pqTrust: storage.pqTrust,
+    servers: storage.servers,
     callKeys: storage.voiciCalls,
   };
 }
