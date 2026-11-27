@@ -4020,5 +4020,21 @@
   "Keep {0}": "Conservar {0}",
   "Setting up your account name…": "Configurando tu nombre de cuenta…",
   "Finishing your account name…": "Terminando tu nombre de cuenta…",
-  "Your account is now {0}.": "Tu cuenta ahora es {0}."
+  "Your account is now {0}.": "Tu cuenta ahora es {0}.",
+  "This browser was removed from your account": "Este navegador se quitó de tu cuenta",
+  "Another device on the account removed it, so Flagship erased the account's keys from this browser. The account and its servers are not changed.": "Otro dispositivo de la cuenta lo quitó, así que Flagship borró las claves de la cuenta de este navegador. La cuenta y sus servidores no cambian.",
+  "Reset account keys": "Restablecer las claves de la cuenta",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "Crea claves nuevas para tu cuenta. Todos los demás dispositivos se quitan y tienen que unirse de nuevo, y cada servidor tiene que emparejarse de nuevo. Tus servidores conservan sus datos y la cuenta se queda en este dispositivo.",
+  "Reset your account keys?": "¿Restablecer las claves de tu cuenta?",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "Crea claves nuevas para tu cuenta. Todos los demás dispositivos se quitan y tienen que unirse de nuevo, y cada servidor tiene que emparejarse de nuevo. Tus servidores conservan sus datos y la cuenta se queda en este dispositivo. No se puede deshacer.",
+  "Resetting in {0}…": "Restableciendo en {0}…",
+  "After the reset, this browser will unlock with a new passphrase. Use 8+ characters.": "Después del restablecimiento, este navegador se desbloqueará con una frase de contraseña nueva. Usa 8 caracteres o más.",
+  "Done. Your account has new keys.": "Listo. Tu cuenta tiene claves nuevas.",
+  "Remove from account": "Quitar de la cuenta",
+  "Remove {0} from your account?": "¿Quitar {0} de tu cuenta?",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "Pierde el acceso a tu cuenta y a tus servidores. La próxima vez que se conecte, Flagship borrará de él las claves de tu cuenta.",
+  "Couldn't remove the device": "No se pudo quitar el dispositivo",
+  "Only an admin device of this account can remove other devices.": "Solo un dispositivo administrador de esta cuenta puede quitar otros dispositivos.",
+  "Check your connection and try again.": "Comprueba tu conexión e inténtalo de nuevo.",
+  "Device removed": "Dispositivo quitado"
 }

@@ -10,15 +10,27 @@
 // that account is answered here with the same 404, without touching the
 // network, so no poller keeps asking and no error toast repeats.
 //
-// Kept free of imports so the toast and the live-sync loop can read it.
+// The same state also carries "this browser was removed from the account"
+// (docs/revocation-ui.md): another device removed it, and `.com` answers this
+// browser's own signed requests and read tokens with `403 { code:
+// "device-removed" }`. Only `.com` itself can say so (never a box), and only
+// for this browser's own account; the screen then erases the account's keys.
+//
+// Kept free of imports (apex.js aside, which has none) so the toast and the
+// live-sync loop can read it.
+
+import { controlHost } from "./apex.js";
 
 export const ACCOUNT_NOT_FOUND_CODE = "account-not-found";
+export const DEVICE_REMOVED_CODE = "device-removed";
 
 const OWN_ACCOUNT_PATH = /\/api\/(?:users|accounts)\/([^/?#]+)(?:[/?#]|$)/;
 const NOT_OWN_NAMES = new Set(["check"]);
 
 /** @type {string | null} */
 let goneName = null;
+/** Why: `account-not-found` (the account no longer exists) or `device-removed` (this browser was removed from it). */
+let goneReason = ACCOUNT_NOT_FOUND_CODE;
 /** @type {() => string[]} */
 let ownNames = () => [];
 const listeners = new Set();
@@ -46,6 +58,15 @@ export function goneAccountName() {
   return goneName;
 }
 
+/** `account-not-found` or `device-removed`; meaningful only while gone. */
+export function goneAccountReason() {
+  return goneReason;
+}
+
+export function isDeviceRemoved() {
+  return goneName !== null && goneReason === DEVICE_REMOVED_CODE;
+}
+
 export function onAccountGone(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
@@ -58,10 +79,13 @@ function notify() {
 }
 
 /** Mark the account gone (idempotent). Returns true when this call changed it. */
-export function markAccountGone(name) {
+export function markAccountGone(name, reason = ACCOUNT_NOT_FOUND_CODE) {
   const next = String(name).toLowerCase();
-  if (goneName === next) return false;
+  const why = reason === DEVICE_REMOVED_CODE ? DEVICE_REMOVED_CODE : ACCOUNT_NOT_FOUND_CODE;
+  // A removed account outranks a removed browser: the first 404 after a 403 keeps the stronger answer.
+  if (goneName === next && (goneReason === why || goneReason === ACCOUNT_NOT_FOUND_CODE)) return false;
   goneName = next;
+  goneReason = why;
   notify();
   return true;
 }
@@ -70,6 +94,7 @@ export function markAccountGone(name) {
 export function clearAccountGone() {
   if (goneName === null) return;
   goneName = null;
+  goneReason = ACCOUNT_NOT_FOUND_CODE;
   notify();
 }
 
@@ -102,16 +127,32 @@ export function answerIfAccountGone(url) {
  * the answer was that 404 for our own account.
  */
 export async function noteAccountGoneResponse(url, response) {
-  if (!response || response.status !== 404) return false;
+  if (!response || (response.status !== 404 && response.status !== 403)) return false;
   const name = accountNameInUrl(url);
   if (!name || !isOwn(name)) return false;
   // Mid "Choose your own account name": `.com` already knows the account by its new name (lib/chooseName.js).
   if (nameChoicePending(name)) return false;
+  if (response.status === 403 && !fromControlHost(url)) return false;
   let body = null;
   try { body = await response.clone().json(); } catch { return false; }
-  if (body?.code !== ACCOUNT_NOT_FOUND_CODE) return false;
-  markAccountGone(name);
-  return true;
+  if (response.status === 404 && body?.code === ACCOUNT_NOT_FOUND_CODE) {
+    markAccountGone(name);
+    return true;
+  }
+  if (response.status === 403 && body?.code === DEVICE_REMOVED_CODE) {
+    markAccountGone(name, DEVICE_REMOVED_CODE);
+    return true;
+  }
+  return false;
+}
+
+/** Only `.com` itself may say this browser was removed; a box's answer never counts. */
+function fromControlHost(url) {
+  try {
+    return new URL(String(url)).host === controlHost();
+  } catch {
+    return false;
+  }
 }
 
 /** lib/chooseName.js `nameChoicePendingFor`, read here without an import (see the header). */
@@ -127,6 +168,7 @@ function nameChoicePending(name) {
 /** Test seam. */
 export function _resetAccountGoneForTests() {
   goneName = null;
+  goneReason = ACCOUNT_NOT_FOUND_CODE;
   ownNames = () => [];
   listeners.clear();
 }

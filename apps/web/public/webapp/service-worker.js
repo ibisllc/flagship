@@ -588,7 +588,11 @@
 //       pasted voi.ci/ or https://voi.ci/ address keeps only the name).
 //  v258: the bundled org protocol (vendor/flagship-org/org.js) refuses small-order and non-canonical Ed25519 keys
 //       before verifying (edSync, test-vectors/ed25519-low-order).
-const SHELL_VERSION = "v258";
+//  v259: device removal (docs/revocation-ui.md): Trusted devices offers only rename and "Remove from account";
+//       Wipe & restart moved to Account security as "Reset account keys" (precaches lib/resetAccountKeysUi.js) and
+//       Replace device is gone from the list; a `403 device-removed` from `.com` erases the account's keys and shows
+//       "This browser was removed from your account"; a device-removed push asks open tabs to check with `.com`.
+const SHELL_VERSION = "v259";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -881,6 +885,7 @@ const OPTIONAL_SHELL = [
   "/lib/uikit.js",
   "/lib/usersCheck.js",
   "/lib/wipeRestartCeremony.js",
+  "/lib/resetAccountKeysUi.js",
   "/lib/allowance.js",
   "/lib/marketplaceLlmKey.js",
   "/lib/proBanner.js",
@@ -1323,6 +1328,27 @@ self.addEventListener("push", (event) => {
         requireInteraction: false,
         icon: "/icon.svg",
         data: { kind: "invite-created", deepLink: "/?view=account-audit" },
+      }),
+    );
+    return;
+  }
+
+  // Another device removed this browser from the account (docs/revocation-ui.md). The push proves nothing and
+  // erases nothing: open tabs ask `.com` (their own signed request), and only its `403 device-removed` answer
+  // erases the account's keys. With no tab in view a content-free notification opens the webapp, which asks too.
+  if (data && (data.category === "device-removed" || data.kind === "device-removed")) {
+    event.waitUntil(
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((cs) => {
+        cs.forEach((c) => c.postMessage({ type: "DEVICE_REMOVED_CHECK" }));
+        if (cs.some((c) => c.visibilityState === "visible")) return undefined;
+        return self.registration.showNotification("Flagship", {
+          body: "This device was removed from your Flagship account.",
+          tag: "flagship-device-removed",
+          renotify: true,
+          requireInteraction: false,
+          icon: "/icon.svg",
+          data: { kind: "device-removed", deepLink: "/" },
+        });
       }),
     );
     return;

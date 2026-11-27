@@ -91,6 +91,11 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
     // ?view= query handler in app.js picks up at boot.
     navigator.serviceWorker.addEventListener("message", (ev) => {
       const data = ev.data;
+      // A device-removed push (docs/revocation-ui.md): ask `.com`; only its answer erases anything.
+      if (data && data.type === "DEVICE_REMOVED_CHECK") {
+        void import("./accountGoneUi.js").then((m) => m.checkStillOnAccount()).catch(() => {});
+        return;
+      }
       if (!data || data.type !== "DEEP_LINK" || typeof data.target !== "string") return;
       try {
         const url = new URL(data.target, window.location.origin);

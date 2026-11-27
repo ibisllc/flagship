@@ -12,15 +12,24 @@
 // root or any server key, both first ask in plain words
 // (lib/adminKeyWarning.js): save a backup of the account key first, or remove
 // anyway.
+//
+// The same overlay says "This browser was removed from your account"
+// (docs/revocation-ui.md) when `.com` answers this browser's own request with
+// `403 device-removed`: another device removed it. Then the account's keys are
+// erased at once, with no passkey or unlock asked (the account already removed
+// this browser, and `.com`'s answer to this browser's own signature is the
+// proof), and the screen offers "Join an account" or "Remove it from this
+// browser". No rescue: the account and its servers still exist.
 
 import {
   clearAccountGone,
   goneAccountName,
   isAccountGone,
+  isDeviceRemoved,
   onAccountGone,
   setOwnAccountNames,
 } from "./accountGone.js";
-import { clearAccountReadTokens } from "./accountRead.js";
+import { clearAccountReadTokens, mintAccountReadToken } from "./accountRead.js";
 import { dismissOverlays } from "./lockSweep.js";
 import { getActiveProfile, loadProfiles, removeProfile } from "./profiles.js";
 import { remove as profileRemove, removeProfileRecord } from "./profilesStore.js";
@@ -52,6 +61,14 @@ export const ACCOUNT_GONE_COPY = Object.freeze({
   remove: tr("Remove it from this browser"),
   account: (name) => tr("Account: {0}", name),
   failed: tr("Couldn't remove it yet. Reload the page and try again."),
+});
+
+export const DEVICE_REMOVED_COPY = Object.freeze({
+  title: tr("This browser was removed from your account"),
+  body: tr("Another device on the account removed it, so Flagship erased the account's keys from this browser. The account and its servers are not changed."),
+  join: tr("Join an account"),
+  remove: tr("Remove it from this browser"),
+  account: (name) => tr("Account: {0}", name),
 });
 
 const SLOTS = ["sessionId", "sessionToken", "podBaseUrl", "username"];
@@ -92,6 +109,21 @@ export async function removeGoneAccountFromBrowser(deps = {}) {
   return othersRemain;
 }
 
+/**
+ * A device-removed push arrived: ask `.com` with this browser's own signed request (a fresh read-token mint,
+ * never the held token). The answer passes the global fetch guard, so a `403 device-removed` flips the state and
+ * the screen erases the keys; anything else changes nothing. Needs the account unlocked in this tab (the device
+ * key is derived from the account key); a locked tab asks on its next unlock. Returns whether it asked.
+ */
+export async function checkStillOnAccount(deps = {}) {
+  let session = null;
+  try { session = (deps.getSession ?? getSession)(); } catch { return false; }
+  const username = String(session?.username ?? "").toLowerCase();
+  if (!username || !(session?.umk instanceof Uint8Array)) return false;
+  await (deps.mint ?? mintAccountReadToken)(username).catch(() => null);
+  return true;
+}
+
 async function defaultStopRenewals() {
   const { stopRenewals } = await import("../views/home.js");
   return stopRenewals;
@@ -99,6 +131,17 @@ async function defaultStopRenewals() {
 
 let el = null;
 let shown = false;
+/** The removed browser's keys were erased (once per removal). */
+let erasing = null;
+
+/**
+ * Erase this browser's copy of an account that removed it: the same forgetting as the account-gone screen
+ * (keys, admin root, profile, read tokens, session), done at once and without asking, while the state (and so
+ * the screen) stays until the person picks a way out.
+ */
+export async function eraseRemovedBrowser(deps = {}) {
+  return removeGoneAccountFromBrowser({ ...deps, clearAccountGone: () => {} });
+}
 
 function ensureEl() {
   if (el) return el;
@@ -121,6 +164,59 @@ function setPageInert(on) {
     if (KEEP_LIVE.has(child.id) || child.tagName === "SCRIPT") continue;
     if (on) child.setAttribute("inert", "");
     else if (!isUpdateLocked()) child.removeAttribute("inert");
+  }
+}
+
+function paintRemoved(name) {
+  el.innerHTML = `
+    <div class="update-lock-card" data-testid="device-removed">
+      <h2 id="account-gone-title" class="update-lock-title">${esc(DEVICE_REMOVED_COPY.title)}</h2>
+      <p id="account-gone-body" class="update-lock-body" data-testid="device-removed-body">${esc(DEVICE_REMOVED_COPY.body)}</p>
+      <p class="update-lock-meta" data-testid="device-removed-name">${esc(DEVICE_REMOVED_COPY.account(name))}</p>
+      <p id="account-gone-error" class="err-text hidden" role="alert" data-testid="device-removed-error"></p>
+      <div id="account-gone-actions" class="update-lock-actions">
+        <button type="button" id="account-gone-create" class="full-width" data-testid="device-removed-join">${esc(DEVICE_REMOVED_COPY.join)}</button>
+        <button type="button" id="account-gone-remove" class="ghost full-width" data-testid="device-removed-remove">${esc(DEVICE_REMOVED_COPY.remove)}</button>
+      </div>
+    </div>`;
+  el.querySelector("#account-gone-create")?.addEventListener("click", () => void leaveRemoved(true));
+  el.querySelector("#account-gone-remove")?.addEventListener("click", () => void leaveRemoved(false));
+}
+
+function showError(text) {
+  const err = el?.querySelector("#account-gone-error");
+  if (err) {
+    err.textContent = text;
+    err.classList.remove("hidden");
+  }
+}
+
+function startErase() {
+  erasing ??= eraseRemovedBrowser().catch((e) => {
+    console.error("erasing the removed browser's keys failed", e);
+    erasing = null;
+    showError(ACCOUNT_GONE_COPY.failed);
+    throw e;
+  });
+  return erasing;
+}
+
+async function leaveRemoved(join) {
+  const buttons = el?.querySelectorAll("button") ?? [];
+  for (const b of buttons) b.disabled = true;
+  try {
+    const othersRemain = await startErase();
+    erasing = null;
+    clearAccountGone();
+    setSubtitle("");
+    if (othersRemain && !join) {
+      location.reload();
+      return;
+    }
+    show("view-bootstrap");
+    if (join) document.getElementById("bootstrap-connect")?.click();
+  } catch {
+    for (const b of buttons) b.disabled = false;
   }
 }
 
@@ -220,7 +316,12 @@ function sync() {
       // Nothing of a menu, dialog or sheet may stay open and operable behind it.
       dismissOverlays();
       shown = true;
-      paint(goneAccountName());
+      if (isDeviceRemoved()) {
+        paintRemoved(goneAccountName());
+        void startErase().catch(() => {});
+      } else {
+        paint(goneAccountName());
+      }
       el.classList.remove("hidden");
       setPageInert(true);
       queueMicrotask(() => el.querySelector("#account-gone-create")?.focus({ preventScroll: true }));
@@ -252,5 +353,6 @@ export function _resetAccountGoneUiForTests() {
   el?.remove();
   el = null;
   shown = false;
+  erasing = null;
   initAccountGoneUi._done = false;
 }

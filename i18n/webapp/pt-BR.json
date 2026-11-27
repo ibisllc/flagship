@@ -4020,5 +4020,21 @@
   "Keep {0}": "Manter {0}",
   "Setting up your account name…": "Configurando seu nome de conta…",
   "Finishing your account name…": "Concluindo seu nome de conta…",
-  "Your account is now {0}.": "Sua conta agora é {0}."
+  "Your account is now {0}.": "Sua conta agora é {0}.",
+  "This browser was removed from your account": "Este navegador foi removido da sua conta",
+  "Another device on the account removed it, so Flagship erased the account's keys from this browser. The account and its servers are not changed.": "Outro dispositivo da conta o removeu, então o Flagship apagou as chaves da conta deste navegador. A conta e os servidores dela não mudam.",
+  "Reset account keys": "Redefinir as chaves da conta",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "Cria chaves novas para sua conta. Todos os outros dispositivos são removidos e precisam entrar de novo, e cada servidor precisa ser pareado de novo. Seus servidores mantêm os dados, e a conta continua neste dispositivo.",
+  "Reset your account keys?": "Redefinir as chaves da sua conta?",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "Cria chaves novas para sua conta. Todos os outros dispositivos são removidos e precisam entrar de novo, e cada servidor precisa ser pareado de novo. Seus servidores mantêm os dados, e a conta continua neste dispositivo. Não é possível desfazer.",
+  "Resetting in {0}…": "Redefinindo em {0}…",
+  "After the reset, this browser will unlock with a new passphrase. Use 8+ characters.": "Depois da redefinição, este navegador será desbloqueado com uma frase secreta nova. Use 8 caracteres ou mais.",
+  "Done. Your account has new keys.": "Pronto. Sua conta tem chaves novas.",
+  "Remove from account": "Remover da conta",
+  "Remove {0} from your account?": "Remover {0} da sua conta?",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "Ele perde o acesso à sua conta e aos seus servidores. Na próxima vez que ficar online, o Flagship apaga dele as chaves da sua conta.",
+  "Couldn't remove the device": "Não foi possível remover o dispositivo",
+  "Only an admin device of this account can remove other devices.": "Só um dispositivo administrador desta conta pode remover outros dispositivos.",
+  "Check your connection and try again.": "Verifique sua conexão e tente de novo.",
+  "Device removed": "Dispositivo removido"
 }

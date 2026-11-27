@@ -4020,5 +4020,21 @@
   "Keep {0}": "保留 {0}",
   "Setting up your account name…": "正在设置你的账户名…",
   "Finishing your account name…": "正在完成你的账户名设置…",
-  "Your account is now {0}.": "你的账户现在是 {0}。"
+  "Your account is now {0}.": "你的账户现在是 {0}。",
+  "This browser was removed from your account": "此浏览器已从你的账户中移除",
+  "Another device on the account removed it, so Flagship erased the account's keys from this browser. The account and its servers are not changed.": "账户中的另一台设备移除了它，因此 Flagship 已从此浏览器中清除该账户的密钥。账户及其服务器没有变化。",
+  "Reset account keys": "重置账户密钥",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "为你的账户生成新密钥。其他所有设备都会被移除，需要重新加入；每台服务器都需要重新配对。你的服务器保留其数据，账户仍保留在此设备上。",
+  "Reset your account keys?": "要重置你的账户密钥吗？",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "为你的账户生成新密钥。其他所有设备都会被移除，需要重新加入；每台服务器都需要重新配对。你的服务器保留其数据，账户仍保留在此设备上。此操作无法撤销。",
+  "Resetting in {0}…": "{0} 秒后重置…",
+  "After the reset, this browser will unlock with a new passphrase. Use 8+ characters.": "重置后，此浏览器将使用新的密码短语解锁。请至少使用 8 个字符。",
+  "Done. Your account has new keys.": "完成。你的账户已有新密钥。",
+  "Remove from account": "从账户中移除",
+  "Remove {0} from your account?": "要从你的账户中移除 {0} 吗？",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "它将无法再访问你的账户和服务器。下次联网时，Flagship 会从它上面清除你的账户密钥。",
+  "Couldn't remove the device": "无法移除该设备",
+  "Only an admin device of this account can remove other devices.": "只有此账户的管理员设备才能移除其他设备。",
+  "Check your connection and try again.": "请检查网络连接后重试。",
+  "Device removed": "设备已移除"
 }

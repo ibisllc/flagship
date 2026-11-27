@@ -16381,5 +16381,69 @@
   "Your account is now {0}.": {
     "en": "Your account is now {0}.",
     "ctx": "webapp/views/choose-name.js:255"
+  },
+  "This browser was removed from your account": {
+    "en": "This browser was removed from your account",
+    "ctx": "webapp/lib/accountGoneUi.js:67"
+  },
+  "Another device on the account removed it, so Flagship erased the account's keys from this browser. The account and its servers are not changed.": {
+    "en": "Another device on the account removed it, so Flagship erased the account's keys from this browser. The account and its servers are not changed.",
+    "ctx": "webapp/lib/accountGoneUi.js:68"
+  },
+  "Reset account keys": {
+    "en": "Reset account keys",
+    "ctx": "webapp/lib/resetAccountKeysUi.js:17"
+  },
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": {
+    "en": "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.",
+    "ctx": "webapp/lib/resetAccountKeysUi.js:18"
+  },
+  "Reset your account keys?": {
+    "en": "Reset your account keys?",
+    "ctx": "webapp/lib/resetAccountKeysUi.js:19"
+  },
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": {
+    "en": "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.",
+    "ctx": "webapp/lib/resetAccountKeysUi.js:20"
+  },
+  "Resetting in {0}…": {
+    "en": "Resetting in {0}…",
+    "ctx": "webapp/lib/resetAccountKeysUi.js:22"
+  },
+  "After the reset, this browser will unlock with a new passphrase. Use 8+ characters.": {
+    "en": "After the reset, this browser will unlock with a new passphrase. Use 8+ characters.",
+    "ctx": "webapp/lib/resetAccountKeysUi.js:108"
+  },
+  "Done. Your account has new keys.": {
+    "en": "Done. Your account has new keys.",
+    "ctx": "webapp/lib/resetAccountKeysUi.js:131"
+  },
+  "Remove from account": {
+    "en": "Remove from account",
+    "ctx": "webapp/views/trusted-devices.js:163"
+  },
+  "Remove {0} from your account?": {
+    "en": "Remove {0} from your account?",
+    "ctx": "webapp/views/trusted-devices.js:302"
+  },
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": {
+    "en": "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.",
+    "ctx": "webapp/views/trusted-devices.js:303"
+  },
+  "Couldn't remove the device": {
+    "en": "Couldn't remove the device",
+    "ctx": "webapp/views/trusted-devices.js:304"
+  },
+  "Only an admin device of this account can remove other devices.": {
+    "en": "Only an admin device of this account can remove other devices.",
+    "ctx": "webapp/views/trusted-devices.js:305"
+  },
+  "Check your connection and try again.": {
+    "en": "Check your connection and try again.",
+    "ctx": "webapp/views/trusted-devices.js:306"
+  },
+  "Device removed": {
+    "en": "Device removed",
+    "ctx": "webapp/views/trusted-devices.js:307"
   }
 }

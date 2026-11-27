@@ -4020,5 +4020,21 @@
   "Keep {0}": "Garder {0}",
   "Setting up your account name…": "Configuration de votre nom de compte…",
   "Finishing your account name…": "Finalisation de votre nom de compte…",
-  "Your account is now {0}.": "Votre compte s’appelle désormais {0}."
+  "Your account is now {0}.": "Votre compte s’appelle désormais {0}.",
+  "This browser was removed from your account": "Ce navigateur a été retiré de votre compte",
+  "Another device on the account removed it, so Flagship erased the account's keys from this browser. The account and its servers are not changed.": "Un autre appareil du compte l'a retiré, donc Flagship a effacé les clés du compte de ce navigateur. Le compte et ses serveurs ne changent pas.",
+  "Reset account keys": "Réinitialiser les clés du compte",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device.": "Crée de nouvelles clés pour votre compte. Tous les autres appareils sont retirés et doivent rejoindre le compte à nouveau, et chaque serveur doit être associé à nouveau. Vos serveurs gardent leurs données, et le compte reste sur cet appareil.",
+  "Reset your account keys?": "Réinitialiser les clés de votre compte ?",
+  "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.": "Crée de nouvelles clés pour votre compte. Tous les autres appareils sont retirés et doivent rejoindre le compte à nouveau, et chaque serveur doit être associé à nouveau. Vos serveurs gardent leurs données, et le compte reste sur cet appareil. Cette action est irréversible.",
+  "Resetting in {0}…": "Réinitialisation dans {0}…",
+  "After the reset, this browser will unlock with a new passphrase. Use 8+ characters.": "Après la réinitialisation, ce navigateur se déverrouillera avec une nouvelle phrase secrète. Utilisez au moins 8 caractères.",
+  "Done. Your account has new keys.": "C'est fait. Votre compte a de nouvelles clés.",
+  "Remove from account": "Retirer du compte",
+  "Remove {0} from your account?": "Retirer {0} de votre compte ?",
+  "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.": "Il perd l'accès à votre compte et à vos serveurs. La prochaine fois qu'il se connectera, Flagship effacera les clés de votre compte qu'il contient.",
+  "Couldn't remove the device": "Impossible de retirer l'appareil",
+  "Only an admin device of this account can remove other devices.": "Seul un appareil administrateur de ce compte peut retirer d'autres appareils.",
+  "Check your connection and try again.": "Vérifiez votre connexion et réessayez.",
+  "Device removed": "Appareil retiré"
 }
