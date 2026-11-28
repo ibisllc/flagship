@@ -1262,7 +1262,7 @@
           "anchors": [
             [
               "apps/mobile/shared/Sources/FlagshipCore/ServiceInvite.swift",
-              "flagship/app-aid/v1"
+              "flagship/app-aid/v2"
             ]
           ]
         },

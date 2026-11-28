@@ -51,8 +51,11 @@ public final class KnockAuthorizeViewModel {
     public let pageId: String
     /// Visitor's global AID keypair provider (one biometric).
     private let aid: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
-    /// The visitor's id for an app, `deriveAppAccountId(UMK, serviceRef)`.
-    private let appAid: @MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
+    /// The visitor's id for an app on the box's account,
+    /// `deriveAppAccountId(UMK, accountZone, serviceRef)`.
+    private let appAid: @MainActor (_ accountZone: String, _ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
+    /// The data apex the box name must sit under (its account zone scopes the id).
+    private let dataApex: String
     /// This device's account device key; nil when the profile has none.
     private let deviceKey: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey?
     /// Servers shared with this account: box FQDN → shareId.
@@ -89,7 +92,8 @@ public final class KnockAuthorizeViewModel {
         sharedServers: [String: String] = [:],
         owners: any InviteOwnerStoring = InviteOwnerStore(),
         aid: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
-        appAid: (@MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        appAid: (@MainActor (_ accountZone: String, _ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        dataApex: String = Endpoints.dataApex,
         deviceKey: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey?)? = nil,
         shareKey: (@MainActor (_ shareId: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         isDemoAccount: Bool = false,
@@ -115,8 +119,9 @@ public final class KnockAuthorizeViewModel {
         self.refreshOwnServers = refreshOwnServers
         self.owners = owners
         self.aid = aid ?? { reason in try await Keystore.deriveAccountId(reason: reason) }
-        self.appAid = appAid ?? { serviceRef, reason in
-            try await Keystore.deriveAppAccountId(appRef: serviceRef, reason: reason)
+        self.dataApex = dataApex
+        self.appAid = appAid ?? { accountZone, serviceRef, reason in
+            try await Keystore.deriveAppAccountId(accountZone: accountZone, appRef: serviceRef, reason: reason)
         }
     }
 
@@ -143,8 +148,10 @@ public final class KnockAuthorizeViewModel {
         if let ownerHex = owners.ownerAidHex(forServer: host),
            let ownerPub = HexUtil.decode(ownerHex) {
             let global = try await aid(reason)
-            if ownerPub != global.publicKey.rawRepresentation, ServiceInvite.isAppRef(serviceRef) {
-                return try await appAid(serviceRef, reason)
+            // The zone comes from the box we post to (TLS proves it), never the link.
+            if ownerPub != global.publicKey.rawRepresentation, ServiceInvite.isAppRef(serviceRef),
+               let zone = ServiceInvite.appAccountZone(serverId: host, dataApex: dataApex) {
+                return try await appAid(zone, serviceRef, reason)
             }
         }
         if let refreshOwnServers {

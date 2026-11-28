@@ -107,9 +107,10 @@ final class ServiceInviteVectorTests: XCTestCase {
         ServiceInvite.deriveAccountId(umkSeed: authorUmk(v))!
     }
     /// The friend's id for the acceptance's app — `deriveAppAccountId(friendUmk,
-    /// serviceRef)` — the consumer's manual-approve acceptance signer.
+    /// accountZone, serviceRef)` — the consumer's manual-approve acceptance signer.
     private func friendAppAidKey(_ v: Vectors) -> Curve25519.Signing.PrivateKey {
-        ServiceInvite.deriveAppAccountId(umkSeed: friendUmk(v), appRef: v.appAid["serviceRef"] as! String)!
+        ServiceInvite.deriveAppAccountId(umkSeed: friendUmk(v), accountZone: v.appAid["accountZone"] as! String,
+                                         appRef: v.appAid["serviceRef"] as! String)!
     }
 
     // MARK: derivations
@@ -354,13 +355,16 @@ final class ServiceInviteVectorTests: XCTestCase {
     // MARK: v2 (gating Wave 3) — AID-signed create/revoke, pairwise contact AID,
     // manual-approve acceptance, group/multi-use create.
 
-    /// The visitor's id for an app: `deriveAppAccountId(friendUmk, serviceRef)`
-    /// reproduces the pinned `appAidPubHex` (the id the box binds, never the
-    /// global AID), and every case of test-vectors/app-account-id. Mirrors keys.ts.
+    /// The visitor's id for an app: `deriveAppAccountId(friendUmk, accountZone,
+    /// serviceRef)` reproduces the pinned `appAidPubHex` (the id the box binds,
+    /// never the global AID), and every case of test-vectors/app-account-id,
+    /// including each kind of box name's zone. Mirrors keys.ts.
     func testAppAccountIdMatchesFixtures() throws {
         let v = try load()
         let ref = v.appAid["serviceRef"] as! String
-        XCTAssertEqual(HexUtil.encode(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), appRef: ref)!),
+        let zone = v.appAid["accountZone"] as! String
+        XCTAssertEqual(ServiceInvite.appAccountZone(serverId: v.appAid["serverId"] as! String, dataApex: "flagship.services"), zone)
+        XCTAssertEqual(HexUtil.encode(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), accountZone: zone, appRef: ref)!),
                        v.appAid["appAidPubHex"] as! String)
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         var url: URL?
@@ -370,23 +374,34 @@ final class ServiceInviteVectorTests: XCTestCase {
             dir = dir.deletingLastPathComponent()
         }
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: XCTUnwrap(url))) as? [String: Any])
+        XCTAssertEqual(root["info"] as? String, "flagship/app-aid/v2")
         let cases = try XCTUnwrap(root["cases"] as? [[String: Any]])
         XCTAssertFalse(cases.isEmpty)
         for c in cases {
             let pub = ServiceInvite.deriveAppAccountIdPub(umkSeed: HexUtil.decode(c["umkSeedHex"] as! String)!,
+                                                          accountZone: c["accountZone"] as! String,
                                                           appRef: c["appRef"] as! String)
             XCTAssertEqual(pub.map(HexUtil.encode), c["pubHex"] as? String, c["appRef"] as? String ?? "")
         }
         // The same app gives the same id whoever invited them.
         let same = try XCTUnwrap(root["sameAppAnyInviter"] as? [String: Any])
         XCTAssertEqual(HexUtil.encode(ServiceInvite.deriveAppAccountIdPub(umkSeed: HexUtil.decode(same["umkSeedHex"] as! String)!,
+                                                                          accountZone: same["accountZone"] as! String,
                                                                           appRef: same["appRef"] as! String)!),
                        same["pubHex"] as! String)
+        for z in try XCTUnwrap(root["accountZones"] as? [[String: Any]]) {
+            let serverId = z["serverId"] as! String
+            XCTAssertEqual(ServiceInvite.appAccountZone(serverId: serverId, dataApex: z["dataApex"] as! String),
+                           z["zone"] as? String, "zone of \(serverId)")
+        }
         for bad in try XCTUnwrap(root["invalidAppRefs"] as? [String]) {
-            XCTAssertNil(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), appRef: bad), "should refuse \(bad)")
+            XCTAssertNil(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), accountZone: zone, appRef: bad), "should refuse \(bad)")
+        }
+        for bad in try XCTUnwrap(root["invalidAccountZones"] as? [String]) {
+            XCTAssertNil(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), accountZone: bad, appRef: ref), "should refuse zone \(bad)")
         }
         // Never the global AID.
-        XCTAssertNotEqual(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), appRef: ref),
+        XCTAssertNotEqual(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), accountZone: zone, appRef: ref),
                           ServiceInvite.deriveAccountIdPub(umkSeed: friendUmk(v)))
     }
 

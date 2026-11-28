@@ -32,13 +32,28 @@ final class InviteRedeemViewModelTests: XCTestCase {
         serviceRef: String? = "alice--notes",
         owners: InviteOwnerStore? = nil,
         asked: ((String) -> Void)? = nil,
+        askedZone: ((String) -> Void)? = nil,
         now: @escaping () -> Int64 = { 1700 }
     ) -> InviteRedeemViewModel {
         let k = contactAid()
         return InviteRedeemViewModel(
             client: mock, serverDomain: serverDomain ?? server, secretHex: secret ?? self.secret,
             authorAidHex: authorAidHex, inviteId: inviteId, serviceRef: serviceRef,
-            redeemAid: { ref, _ in asked?(ref); return k }, owners: owners ?? ownerStore(), now: now)
+            redeemAid: { zone, ref, _ in askedZone?(zone); asked?(ref); return k }, dataApex: "flagship.services",
+            owners: owners ?? ownerStore(), now: now)
+    }
+
+    func testRedeemScopesTheIdToTheBoxsAccount_andRefusesABoxOffTheApex() async {
+        let mock = MockServiceAccessClient()
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: true)
+        var zones: [String] = []
+        await makeVM(mock, serverDomain: "home.carol.flagship.services", askedZone: { zones.append($0) }).redeem()
+        await makeVM(mock, serverDomain: "notes.home.alice.flagship.services", askedZone: { zones.append($0) }).redeem()
+        XCTAssertEqual(zones, ["carol.flagship.services", "alice.flagship.services"])
+        let off = makeVM(mock, serverDomain: "game--john-doe.fshp.app", askedZone: { zones.append($0) })
+        await off.redeem()
+        guard case .failed = off.phase else { return XCTFail("a box off the data apex must be refused") }
+        XCTAssertEqual(zones.count, 2)
     }
 
     func testRedeemUsesTheIdForTheLinksApp_andRefusesALinkWithoutOne() async {

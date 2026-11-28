@@ -28,8 +28,9 @@ extension GymSweepSeams {
             UserDefaults.standard.set(runId, forKey: runKey)
         }
         var labels: [String: String] = [:]
-        for ref in [gymFriendApp, "bright-maple--plants"] {
-            if let pub = ServiceInvite.deriveAppAccountIdPub(umkSeed: seed, appRef: ref) {
+        // Each app's id on the account hosting it (the zone of its box).
+        for (ref, account) in [(gymFriendApp, "trent"), ("bright-maple--plants", "bright-maple")] {
+            if let pub = ServiceInvite.deriveAppAccountIdPub(umkSeed: seed, accountZone: "\(account).\(Endpoints.dataApex)", appRef: ref) {
                 labels[HexUtil.encode(pub)] = "the per-app id for \(ref)"
             }
         }

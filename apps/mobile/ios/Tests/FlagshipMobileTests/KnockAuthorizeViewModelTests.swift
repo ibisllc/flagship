@@ -48,7 +48,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             ownServers: [server],
             owners: ownerStore(),
             aid: { _ in XCTFail("a device with a device id never signs in with the AID"); return k },
-            appAid: { _, _ in XCTFail("own server must not use a per-app id"); return k },
+            appAid: { _, _, _ in XCTFail("own server must not use a per-app id"); return k },
             deviceKey: { _ in d },
             shareKey: { _, _ in XCTFail("own server must not use a share key"); return k },
             now: now)
@@ -97,7 +97,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             sharedServers: [shared: "0f1e2d3c4b5a69788796a5b4c3d2e1f0", "other.carol.flagship.services": "11"],
             owners: ownerStore(),
             aid: { _ in XCTFail("no AID on a shared server"); return member },
-            appAid: { _, _ in XCTFail("no per-app id on a shared server"); return member },
+            appAid: { _, _, _ in XCTFail("no per-app id on a shared server"); return member },
             deviceKey: { _ in XCTFail("the device key stays on our own servers"); return member },
             shareKey: { id, _ in asked.append(id); return member },
             now: { 1_700_004_000_000 })
@@ -123,7 +123,8 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             serverDomain: server, svc: svc, serviceRef: ref, pageId: page,
             owners: owners,
             aid: { _ in ServiceInvite.deriveAccountId(umkSeed: umk)! },
-            appAid: { appRef, _ in ServiceInvite.deriveAppAccountId(umkSeed: umk, appRef: appRef)! },
+            appAid: { zone, appRef, _ in ServiceInvite.deriveAppAccountId(umkSeed: umk, accountZone: zone, appRef: appRef)! },
+            dataApex: "flagship.services",
             deviceKey: { _ in XCTFail("the device key stays on our own servers"); return nil },
             now: { 1_700_004_000_000 })
         await vm.authorize()
@@ -182,7 +183,8 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             refreshOwnServers: refreshOwnServers,
             owners: owners,
             aid: { _ in ServiceInvite.deriveAccountId(umkSeed: umk)! },
-            appAid: { appRef, _ in ServiceInvite.deriveAppAccountId(umkSeed: umk, appRef: appRef)! },
+            appAid: { zone, appRef, _ in ServiceInvite.deriveAppAccountId(umkSeed: umk, accountZone: zone, appRef: appRef)! },
+            dataApex: "flagship.services",
             deviceKey: { _ in device },
             now: { 1_700_004_000_000 })
     }
@@ -194,7 +196,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
 
     /// The id an invited box sees for the knock's app.
     private func appPubHex(_ fx: Fixture) -> String {
-        HexUtil.encode(ServiceInvite.deriveAppAccountIdPub(umkSeed: fx.friendUmk, appRef: ref)!)
+        HexUtil.encode(ServiceInvite.deriveAppAccountIdPub(umkSeed: fx.friendUmk, accountZone: "alice.flagship.services", appRef: ref)!)
     }
 
     func testInvitedServerSignsWithTheIdForTheApp() async throws {
@@ -251,7 +253,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             ownServers: [server],
             owners: ownerStore(),
             aid: { _ in keyAsks += 1; return self.aid() },
-            appAid: { _, _ in keyAsks += 1; return self.aid() })
+            appAid: { _, _, _ in keyAsks += 1; return self.aid() })
         await vm.authorize()
         XCTAssertEqual(vm.phase, .failed(KnockAuthorizeViewModel.notYourServerMessage))
         XCTAssertEqual(KnockAuthorizeViewModel.notYourServerMessage,

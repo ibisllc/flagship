@@ -65,26 +65,54 @@ public enum ServiceInvite {
         ref.range(of: "^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$", options: .regularExpression) != nil
     }
 
+    private static let dnsLabel = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+
+    /// Whether `zone` is an account zone (`<account>.<data apex>`, lowercase).
+    public static func isAccountZone(_ zone: String) -> Bool {
+        zone.range(of: "^(?=.{3,253}$)\(dnsLabel)(?:\\.\(dnsLabel))+$", options: .regularExpression) != nil
+    }
+
+    /// The hosting account's zone for a box name: the label just left of
+    /// `dataApex` plus the apex (`home.alice.flagship.services` →
+    /// `alice.flagship.services`), or nil for a name outside the data apex (a
+    /// direct `fshp.app` name, a custom domain). Mirrors keys.ts `appAccountZone`.
+    public static func appAccountZone(serverId: String, dataApex: String) -> String? {
+        var host = serverId.trimmingCharacters(in: .whitespaces).lowercased()
+        if host.hasSuffix(".") { host.removeLast() }
+        var apex = dataApex.trimmingCharacters(in: .whitespaces).lowercased()
+        if apex.hasPrefix(".") { apex.removeFirst() }
+        if apex.hasSuffix(".") { apex.removeLast() }
+        guard !apex.isEmpty, host.hasSuffix(".\(apex)") else { return nil }
+        let labels = host.dropLast(apex.count + 1).split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard let account = labels.last,
+              labels.allSatisfy({ $0.range(of: "^\(dnsLabel)$", options: .regularExpression) != nil })
+        else { return nil }
+        let zone = "\(account).\(apex)"
+        return isAccountZone(zone) ? zone : nil
+    }
+
     /// App Account Id SEED (32 B) — the identity a visitor presents to ONE app
-    /// (redeem, visit, knock, acceptance): `HKDF(umkSeed, info =
-    /// "flagship/app-aid/v1|<appRef>")`, appRef = the app's service id (mirrors
-    /// keys.ts `deriveAppAccountId`). Depends on the account and the app only:
-    /// two apps see unrelated ids, and the owner's and a co-manager's invites to
-    /// one app bind the same id (docs/service-access-gating.md, "Per-app identity").
-    public static func deriveAppAccountIdSeed(umkSeed: Data, appRef: String) -> Data? {
-        guard umkSeed.count == 32, isAppRef(appRef) else { return nil }
-        return hkdfSha256(ikm: umkSeed, info: Data("flagship/app-aid/v1|\(appRef)".utf8))
+    /// on ONE hosting account (redeem, visit, knock, acceptance): `HKDF(umkSeed,
+    /// info = "flagship/app-aid/v2|<accountZone>|<appRef>")`. `accountZone` is
+    /// `appAccountZone` of the box we sign for and post to (never a link
+    /// parameter); appRef = the app's service id (mirrors keys.ts
+    /// `deriveAppAccountId`). Two apps, or one app id on two accounts, see
+    /// unrelated ids, and the owner's and a co-manager's invites to one app bind
+    /// the same id (docs/service-access-gating.md, "Per-app identity").
+    public static func deriveAppAccountIdSeed(umkSeed: Data, accountZone: String, appRef: String) -> Data? {
+        guard umkSeed.count == 32, isAccountZone(accountZone), isAppRef(appRef) else { return nil }
+        return hkdfSha256(ikm: umkSeed, info: Data("flagship/app-aid/v2|\(accountZone)|\(appRef)".utf8))
     }
 
     /// The per-app id's Ed25519 PRIVATE key.
-    public static func deriveAppAccountId(umkSeed: Data, appRef: String) -> Curve25519.Signing.PrivateKey? {
-        guard let seed = deriveAppAccountIdSeed(umkSeed: umkSeed, appRef: appRef) else { return nil }
+    public static func deriveAppAccountId(umkSeed: Data, accountZone: String, appRef: String) -> Curve25519.Signing.PrivateKey? {
+        guard let seed = deriveAppAccountIdSeed(umkSeed: umkSeed, accountZone: accountZone, appRef: appRef) else { return nil }
         return try? Curve25519.Signing.PrivateKey(rawRepresentation: seed)
     }
 
     /// The per-app id's PUBLIC key (32 B) — what the app's allow-list binds.
-    public static func deriveAppAccountIdPub(umkSeed: Data, appRef: String) -> Data? {
-        deriveAppAccountId(umkSeed: umkSeed, appRef: appRef)?.publicKey.rawRepresentation
+    public static func deriveAppAccountIdPub(umkSeed: Data, accountZone: String, appRef: String) -> Data? {
+        deriveAppAccountId(umkSeed: umkSeed, accountZone: accountZone, appRef: appRef)?.publicKey.rawRepresentation
     }
 
     /// The household symmetric AEAD key (32 B) — `HKDF(umkSeed, info =

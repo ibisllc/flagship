@@ -9,9 +9,11 @@ import FlagshipCore
 ///
 /// The owner shares `https://<server>/invite#<secret>&a=<authorAID>[&i=…]&s=<serviceRef>`.
 /// The friend opens it (deep-link → InviteRedeem screen); this VM:
-///   1. derives the friend's id for THAT app (`deriveAppAccountId(UMK,
-///      serviceRef)`, the link's `s=`): nothing it presents is shared between
-///      apps, and it is the same whoever invited them — never the global AID.
+///   1. derives the friend's id for THAT app on the box's account
+///      (`deriveAppAccountId(UMK, accountZone, serviceRef)`: the zone of the box
+///      it redeems on, never the link; the link's `s=`): nothing it presents is
+///      shared between apps or between two accounts hosting one app id, and it
+///      is the same whoever invited them — never the global AID.
 ///      A link without `s=` (made before per-app ids) is refused.
 ///   2. signs the redeem over { secretHash, visitorAID, redeemedAt } and POSTs
 ///      the raw secret to the BOX's redeem endpoint,
@@ -48,8 +50,10 @@ public final class InviteRedeemViewModel {
     private let inviteId: String?
     /// The app the invite is for (the link's `s=`): selects the friend's id.
     private let serviceRef: String?
-    /// The friend's id for an app (one biometric).
-    private let redeemAid: @MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
+    /// The friend's id for an app on the box's account (one biometric).
+    private let redeemAid: @MainActor (_ accountZone: String, _ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
+    /// The data apex the box name must sit under (its account zone scopes the id).
+    private let dataApex: String
     /// Where the box is remembered so a later knock on it can sign with the
     /// friend's id for the knock's app (KnockAuthorizeViewModel).
     private let owners: any InviteOwnerStoring
@@ -62,7 +66,8 @@ public final class InviteRedeemViewModel {
         authorAidHex: String? = nil,
         inviteId: String? = nil,
         serviceRef: String? = nil,
-        redeemAid: (@MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        redeemAid: (@MainActor (_ accountZone: String, _ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        dataApex: String = Endpoints.dataApex,
         owners: any InviteOwnerStoring = InviteOwnerStore(),
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
@@ -74,8 +79,9 @@ public final class InviteRedeemViewModel {
         self.serviceRef = serviceRef.flatMap { ServiceInvite.isAppRef($0) ? $0 : nil }
         self.owners = owners
         self.now = now
-        self.redeemAid = redeemAid ?? { serviceRef, reason in
-            try await Keystore.deriveAppAccountId(appRef: serviceRef, reason: reason)
+        self.dataApex = dataApex
+        self.redeemAid = redeemAid ?? { accountZone, serviceRef, reason in
+            try await Keystore.deriveAppAccountId(accountZone: accountZone, appRef: serviceRef, reason: reason)
         }
     }
 
@@ -94,9 +100,15 @@ public final class InviteRedeemViewModel {
             phase = .failed(Self.oldLinkMessage)
             return
         }
+        // The id is scoped to the account of the box we redeem on (TLS proves
+        // the name), never to anything the link says.
+        guard let zone = ServiceInvite.appAccountZone(serverId: serverDomain, dataApex: dataApex) else {
+            phase = .failed(String(localized: "This invite link is unknown or was withdrawn."))
+            return
+        }
         phase = .redeeming
         do {
-            let key = try await redeemAid(serviceRef, "Accept this invite")
+            let key = try await redeemAid(zone, serviceRef, "Accept this invite")
             let aidPub = key.publicKey.rawRepresentation
             guard let secret = HexUtil.decode(secretHex) else {
                 phase = .failed(String(localized: "This invite link is malformed.")); return

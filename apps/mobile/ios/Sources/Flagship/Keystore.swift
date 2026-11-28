@@ -590,16 +590,19 @@ public struct Keystore {
         return (aid, household)
     }
 
-    /// The visitor's id for ONE app (`deriveAppAccountId(UMK, serviceRef)`) —
-    /// the redeem/visit/knock/accept signer they present to that app (never the
-    /// global AID). One biometric. `appRef` is the app's service id.
+    /// The visitor's id for ONE app on the hosting account
+    /// (`deriveAppAccountId(UMK, accountZone, serviceRef)`) — the
+    /// redeem/visit/knock/accept signer they present to that app (never the
+    /// global AID). One biometric. `accountZone` is the box's
+    /// `<account>.<data apex>`; `appRef` is the app's service id.
     public static func deriveAppAccountId(
+        accountZone: String,
         appRef: String,
         reason: String
     ) async throws -> Curve25519.Signing.PrivateKey {
         let umk = try await unwrappedUMK(reason: reason)
         let umkData = umk.withUnsafeBytes { Data($0) }
-        guard let app = ServiceInvite.deriveAppAccountId(umkSeed: umkData, appRef: appRef) else {
+        guard let app = ServiceInvite.deriveAppAccountId(umkSeed: umkData, accountZone: accountZone, appRef: appRef) else {
             throw KeystoreError.derivationFailed("app account identity key")
         }
         return app

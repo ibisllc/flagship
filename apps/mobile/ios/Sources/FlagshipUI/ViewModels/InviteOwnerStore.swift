@@ -3,7 +3,7 @@ import Foundation
 /// Which owner AID each box we were invited to belongs to (docs/app-apis.md §5).
 ///
 /// Invites bind the friend's id for the app, `deriveAppAccountId(UMK,
-/// serviceRef)`, so a knock on that box signs with our id for the knock's app.
+/// accountZone, serviceRef)`, so a knock on that box signs with our id for the knock's app.
 /// We only offer one to boxes we were invited to: the box (and its owner AID,
 /// from the invite link's `a=`) is remembered here when an invite is redeemed.
 /// Mirrors the webapp's `lib/knockIdentity.js`.
