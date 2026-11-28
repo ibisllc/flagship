@@ -83,7 +83,9 @@ public struct ServiceAccessScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s4)
-            .fsReadingColumn()
+            // Cards and controls, not running text: the page takes the pane's width like Calls, not the reading
+            // column (store review: a narrow centred column on the iPad).
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Access control")
