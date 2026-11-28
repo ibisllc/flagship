@@ -2631,6 +2631,12 @@ export class InMemoryDeviceCapabilityGrantStorage
     }
     return best ? this.clone(best) : undefined;
   }
+  async setPqSignature(grantId: string, pqSignatureJson: string) {
+    const r = this.byId.get(grantId);
+    if (!r || r.pqSignatureJson) return false;
+    this.byId.set(grantId, { ...r, pqSignatureJson });
+    return true;
+  }
   async revoke(grantId: string, revokedAt: number) {
     const r = this.byId.get(grantId);
     if (!r) throw new Error("unknown grantId");

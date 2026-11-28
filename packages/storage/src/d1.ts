@@ -5335,6 +5335,13 @@ export class D1DeviceCapabilityGrantStorage
       .first<DeviceCapabilityGrantRow>();
     return r ? rowToDeviceCapabilityGrant(r) : undefined;
   }
+  async setPqSignature(grantId: string, pqSignatureJson: string) {
+    const r = await this.db
+      .prepare(`UPDATE device_capability_grants SET pq_signature_json = ?1 WHERE grant_id = ?2 AND pq_signature_json IS NULL`)
+      .bind(pqSignatureJson, grantId)
+      .run();
+    return (r.meta.changes ?? 0) > 0;
+  }
   async revoke(grantId: string, revokedAt: number) {
     const r = await this.db
       .prepare(

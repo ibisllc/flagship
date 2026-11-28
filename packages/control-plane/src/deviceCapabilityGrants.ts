@@ -145,7 +145,7 @@ export function accountKeyScopesRefused(
   return scopes.some((s) => !MEMBER_DEVICE_SCOPES.has(s as DeviceScope));
 }
 
-function parseScopes(raw: unknown): DeviceScope[] | null {
+export function parseScopes(raw: unknown): DeviceScope[] | null {
   if (!Array.isArray(raw)) return null;
   const out: DeviceScope[] = [];
   for (const s of raw) {

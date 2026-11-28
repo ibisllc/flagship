@@ -21,6 +21,7 @@ import {
   signBootKeyBindingV2,
   signDaemonStatusReport,
   signDeviceCapabilityGrant,
+  signDeviceGrantPq,
   type AssurancePolicyChange,
   type DaemonStatusReport,
   type PqBindingRole,
@@ -30,6 +31,7 @@ import {
   handleGetAccountPqKeyBindings,
   handleGetAssurancePolicy,
   handlePostAssurancePolicyChange,
+  handlePostDeviceGrantPq,
   handlePutAccountPqKeyBinding,
 } from "../src/accountPqTrust.js";
 import { handleListAccountDeviceGrants } from "../src/deviceCapabilityGrants.js";
@@ -166,6 +168,7 @@ async function prepare(w: Awaited<ReturnType<typeof world>>) {
   await w.storage.webauthnRecovery.upsert({
     username: U, credentialIdHex: "ab", wrappedUmkB64: "x", irkPubHex: irk.pub, createdAt: T, updatedAt: T,
     signed: { digestHex: "cd".repeat(32), generation: 1, signedClaimJson: "{}", signatureHex: "ef".repeat(64) },
+    passkey: { coseHex: "a5", alg: -7 },
   } as never);
 }
 
@@ -222,5 +225,47 @@ describe("owner-signed assurance policy", () => {
     expect(got.chain.map((c) => c.signature.suite)).toEqual(["hybrid-ed25519-mldsa65/v1", "hybrid-ed25519-mldsa65/v1"]);
     expect(got.evidence).toEqual({ recoveryChecked: true });
     expect((await handlePostDaemonStatus(status, { request: { ...report, nonce: "cd" }, signature: hex(signDaemonStatusReport({ ...report, nonce: "cd" }, stk.edSign)) })).status).toBe(200);
+  });
+});
+
+describe("a device grant's companion added later (pq-suites.md §21.2)", () => {
+  const GID = "11111111-1111-4111-8111-111111111111";
+  const grant = () => ({ grantId: GID, username: U, deviceId: DEVICE_ID, devicePubKey: ed.getPublicKey(seed(3)), scopes: ["admin", "browse"] as ("admin" | "browse")[], issuedAt: T - 1000, expiresAt: T + 90 * 86_400_000 });
+  const adminSk = Uint8Array.from([...seed(2), ...seed(102)]);
+
+  it("stores a companion that verifies under the signing root's binding, once", async () => {
+    const w = await world();
+    expect((await handlePutAccountPqKeyBinding(w.deps, U, binding(admin, "admin-root", U))).status).toBe(200);
+    const pq = signDeviceGrantPq(grant(), adminSk);
+    expect((await handlePostDeviceGrantPq(w.deps, U, GID, { pqSignature: pq })).status).toBe(200);
+    expect((await w.storage.deviceCapabilityGrants.get(GID))?.pqSignatureJson).toBe(JSON.stringify(pq));
+    expect((await handlePostDeviceGrantPq(w.deps, U, GID, { pqSignature: pq })).status).toBe(409);
+    const book = (await handleListAccountDeviceGrants({ storage: w.storage.deviceCapabilityGrants, usernames: w.storage.usernames, identities: w.storage.deviceIdentities, pqTrust: w.storage.pqTrust } as never, U)) as { body: unknown };
+    expect((book.body as unknown as { grants: Array<{ pqSignature?: unknown }> }).grants[0]!.pqSignature).toEqual(pq);
+  });
+
+  it("refuses a companion by another key, a missing binding, another account's grant and a bad shape", async () => {
+    const w = await world();
+    const pq = signDeviceGrantPq(grant(), adminSk);
+    expect((await handlePostDeviceGrantPq(w.deps, U, GID, { pqSignature: pq })).status).toBe(403);
+    expect((await handlePutAccountPqKeyBinding(w.deps, U, binding(admin, "admin-root", U))).status).toBe(200);
+    const forged = signDeviceGrantPq(grant(), Uint8Array.from([...seed(2), ...seed(77)]));
+    expect((await handlePostDeviceGrantPq(w.deps, U, GID, { pqSignature: forged })).status).toBe(403);
+    expect((await handlePostDeviceGrantPq(w.deps, U, GID, { pqSignature: { ...pq, signature: "zz" } })).status).toBe(400);
+    expect((await handlePostDeviceGrantPq(w.deps, "bob", GID, { pqSignature: pq })).status).toBe(404);
+    expect((await w.storage.deviceCapabilityGrants.get(GID))?.pqSignatureJson).toBeUndefined();
+  });
+});
+
+describe("strict by default needs the passkey recovery path (pq-suites.md §21.3)", () => {
+  it("a signed recovery record without the passkey's key is not ready: strict would end cloud recovery", async () => {
+    const w = await world();
+    await prepare(w);
+    await w.storage.webauthnRecovery.upsert({
+      username: U, credentialIdHex: "ab", wrappedUmkB64: "x", irkPubHex: irk.pub, createdAt: T, updatedAt: T,
+      signed: { digestHex: "cd".repeat(32), generation: 1, signedClaimJson: "{}", signatureHex: "ef".repeat(64) },
+    } as never);
+    const got = (await handleGetAssurancePolicy(w.deps, U, "installation", S)).body as { evidence: unknown };
+    expect(got.evidence).toEqual({ recoveryChecked: false });
   });
 });

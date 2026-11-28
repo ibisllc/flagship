@@ -3144,6 +3144,8 @@ export interface DeviceCapabilityGrantStorage {
   /** Stamp `revoked_at` on the matching grant. Throws Error
    *  `'unknown grantId'` if no row exists. */
   revoke(grantId: string, revokedAt: number): Promise<void>;
+  /** Stores a grant's hybrid companion when it has none yet (pq-suites.md §21.2); false when one was there. */
+  setPqSignature?(grantId: string, pqSignatureJson: string): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

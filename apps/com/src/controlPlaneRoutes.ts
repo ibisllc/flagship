@@ -131,6 +131,7 @@ import {
   handlePutAccountPqKeyBinding,
   handleGetAssurancePolicy,
   handlePostAssurancePolicyChange,
+  handlePostDeviceGrantPq,
   handlePutSealedLuksKey,
   handlePostInstallEvent,
   handlePostProvisionStatus,
@@ -872,6 +873,7 @@ const ROUTE_RE = {
   // owner-signed assurance policy chain per scope (docs/architecture-v2/pq-suites.md §11).
   ACCOUNT_PQ_KEY_BINDINGS: /^\/api\/accounts\/([^/]+)\/pq-key-bindings$/,
   ASSURANCE_POLICY: /^\/api\/accounts\/([^/]+)\/assurance-policy$/,
+  DEVICE_GRANT_PQ: /^\/api\/accounts\/([^/]+)\/device-grants\/([0-9a-zA-Z-]{8,64})\/pq-signature$/,
   ASSURANCE_POLICY_SCOPE: /^\/api\/accounts\/([^/]+)\/assurance-policy\/([a-z]+)\/([^/]+)$/,
   // Phone-as-unlock-endpoint RELAY (docs/security-phone-as-unlock-
   // endpoint.md). The box POSTs an STK-signed SecretRequest to its
@@ -1156,6 +1158,7 @@ const ACCOUNT_GONE_ROUTES: { re: RegExp; methods?: readonly string[] }[] = [
   { re: ROUTE_RE.DEVICE_GRANTS_REVOKE },
   { re: ROUTE_RE.ACCOUNT_PQ_KEY_BINDINGS },
   { re: ROUTE_RE.ASSURANCE_POLICY },
+  { re: ROUTE_RE.DEVICE_GRANT_PQ },
   { re: ROUTE_RE.ASSURANCE_POLICY_SCOPE, methods: ["GET"] },
   { re: ROUTE_RE.ACCOUNT_READ_TOKEN },
   { re: ROUTE_RE.SERVER_ORDER },
@@ -2261,6 +2264,9 @@ export async function tryControlPlane(
       const refused = await gateAccountRead(storage, env, request, username);
       if (refused) return refused;
       return finishPlain(await handleGetAccountPqKeyBindings(accountPqDeps(), username));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEVICE_GRANT_PQ))) {
+      return finishPlain(await handlePostDeviceGrantPq(accountPqDeps(), decodeURIComponent(m[1]!), m[2]!, await readJson(request)));
     }
     if (method === "POST" && (m = path.match(ROUTE_RE.ASSURANCE_POLICY))) {
       return finishPlain(await handlePostAssurancePolicyChange(accountPqDeps(), decodeURIComponent(m[1]!), await readJson(request)));

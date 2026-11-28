@@ -9,6 +9,7 @@ import {
   legacyPolicyState,
   pqKeyBindingFromWire,
   verifyCriticalSignature,
+  verifyDeviceGrantPq,
   verifyPqKeyBinding,
   POLICY_SCOPE_KINDS,
   type AssurancePolicyChange,
@@ -32,6 +33,8 @@ import type {
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
+import { grantPqSignatureJson, parseScopes } from "./deviceCapabilityGrants.js";
+import { hexToBytes } from "./hex.js";
 import { verifiedStoredStkBinding } from "./pqKeyBindings.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -245,8 +248,9 @@ export async function rolloutEvidence(deps: AccountPqTrustDeps, userRec: Usernam
     capabilityAdvertised: own,
     boundPublicKeys: own && (await adminBound(deps, userRec, now)),
     recipientsVerified: recipients,
-    // A signed (N03 v2) recovery record: the account can recover under the signed rules.
-    recoveryChecked: !!rec?.signed,
+    // A signed (N03 v2) recovery record with the passkey's key: under strict only the passkey path
+    // releases a record, so without it strict would end cloud recovery (pq-suites.md §21.3).
+    recoveryChecked: !!rec?.signed && !!rec.passkey,
   };
 }
 
@@ -398,4 +402,62 @@ export async function handleGetAssurancePolicy(deps: AccountPqTrustDeps, usernam
   const chain = rows.map((r) => ({ change: JSON.parse(r.changeJson) as AssurancePolicyChange, signature: { suite: r.suite, signature: r.signatureHex } }));
   const evidence = await rolloutEvidence(deps, userRec, scope, owned.server, now);
   return ok({ scope, state: policyStateOf(rec, scope), chain, evidence: { recoveryChecked: !!evidence.recoveryChecked } }, { "cache-control": "private, no-store" });
+}
+
+// ── a device grant's hybrid companion, added later ─────────────────────────
+
+/**
+ * `POST /api/accounts/:u/device-grants/:grantId/pq-signature` body = `{ pqSignature: { suite, signature } }`
+ * (pq-suites.md §21.2). A grant admitted before companions existed gets one afterwards, signed by
+ * the root that signed it (admin root, else the account key) with the ML-DSA key `.com` holds bound
+ * for that root. `.com` verifies it before storing (a companion that fails makes a box drop the
+ * device, so nobody may attach a bad one) and never replaces one already stored. Without it a strict
+ * server does not count the device.
+ */
+export async function handlePostDeviceGrantPq(deps: AccountPqTrustDeps, username: string, grantId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  const u = username.toLowerCase();
+  const raw = (typeof body === "object" && body !== null ? (body as { pqSignature?: unknown }).pqSignature : undefined);
+  const json = grantPqSignatureJson(raw);
+  if (!json) return malformed("pqSignature must be { suite, signature }");
+  const userRec = await deps.usernames.get(u);
+  if (!userRec) return notFound("username not registered");
+  const g = await deps.grants.get(grantId);
+  if (!g || g.username.toLowerCase() !== u || g.revokedAt !== null) return notFound("unknown grant");
+  if (g.pqSignatureJson) return conflict("already-has-companion");
+  if (!deps.grants.setPqSignature) return notFound("not available");
+  const scopes = (() => {
+    try {
+      return parseScopes(JSON.parse(g.scopesJson));
+    } catch {
+      return null;
+    }
+  })();
+  if (!scopes) return forbidden("unreadable grant");
+  const admin = g.signerRoot === "admin-root";
+  const signer = (admin ? userRec.adminRootPubHex : userRec.irkPubHex)?.toLowerCase();
+  if (!signer) return forbidden("no-binding");
+  const binding = await verifiedBinding(deps, admin ? "admin-root" : "account-irk", u, signer, now);
+  if (!binding) return forbidden("no-binding");
+  try {
+    verifyDeviceGrantPq({
+      grant: {
+        grantId: g.grantId,
+        username: g.username,
+        deviceId: g.deviceId,
+        devicePubKey: hexToBytes(g.devicePubHex.toLowerCase()),
+        scopes,
+        issuedAt: g.issuedAt,
+        expiresAt: g.expiresAt,
+      },
+      pq: JSON.parse(json),
+      signerPubHex: signer,
+      signerBinding: binding,
+      policy: legacyPolicyState({ kind: "installation", id: "device-book" }),
+    });
+  } catch (e) {
+    return forbidden(e instanceof PqTrustError ? e.code : "bad-signature");
+  }
+  if (!(await deps.grants.setPqSignature(grantId, json))) return conflict("already-has-companion");
+  return ok({ ok: true });
 }

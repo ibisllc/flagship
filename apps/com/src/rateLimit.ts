@@ -935,6 +935,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   const m = method.toUpperCase();
   if (m === "PUT" && /^\/api\/server\/[^/]+\/(?:pq-key-binding|boot-key)$/.test(pathname)) return "pq-binding-put";
   if (m === "PUT" && /^\/api\/accounts\/[^/]+\/pq-key-bindings$/.test(pathname)) return "pq-binding-put";
+  if (m === "POST" && /^\/api\/accounts\/[^/]+\/device-grants\/[^/]+\/pq-signature$/.test(pathname)) return "pq-binding-put";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/assurance-policy$/.test(pathname)) return "assurance-policy-post";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/serving-leases$/.test(pathname)) return "serving-lease";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/(?:serving-policy|renewal-delegations)$/.test(pathname)) return "serving-signed";
