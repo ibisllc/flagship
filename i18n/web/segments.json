@@ -7082,6 +7082,38 @@
       "security/hall-of-fame.html"
     ]
   },
+  "sb7cc76a988": {
+    "en": "Signature checks accepted three low-order public keys, so a forged signature could verify under them",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sf0eff11ae9": {
+    "en": "Low · reported and fixed November 2026 · fix <1>8fd77a2b</1> · credit: <2>Atharva Savji Lokhande</2>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s1eb6bffa32": {
+    "en": "Our signature checks refused most small-order Ed25519 public keys by a fixed list, but the list missed three of them, and the checks also accepted keys written in a non-canonical form. Under such a key anyone can forge a signature that verifies for any message, so a signature under it proves nothing. No app sends such a key, and a scan of our production data found none stored.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s2cb6ea1d4a": {
+    "en": "Every key is now decoded under the standard’s strict rules, and small-order and non-canonical keys are refused before any signature is checked. Our server refuses them wherever it stores or vouches for a key, and servers refuse them as share member keys.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
   "s038b3ca4aa": {
     "en": "An unused identity-record endpoint trusted the signers each request named",
     "kind": "text",

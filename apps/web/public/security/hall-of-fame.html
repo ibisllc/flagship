@@ -205,6 +205,28 @@
         <a href="https://github.com/ibisllc/flagship/commit/309516e9">309516e9</a>.
       </p>
 
+      <h2>Signature checks accepted three low-order public keys, so a forged signature could verify under them</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/8fd77a2b">8fd77a2b</a>
+        &middot; credit:
+        <a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a>
+      </p>
+      <p>
+        Our signature checks refused most small-order Ed25519 public keys by
+        a fixed list, but the list missed three of them, and the checks also
+        accepted keys written in a non-canonical form. Under such a key
+        anyone can forge a signature that verifies for any message, so a
+        signature under it proves nothing. No app sends such a key, and a
+        scan of our production data found none stored.
+      </p>
+      <p>
+        Every key is now decoded under the standard&rsquo;s strict rules, and
+        small-order and non-canonical keys are refused before any signature
+        is checked. Our server refuses them wherever it stores or vouches for
+        a key, and servers refuse them as share member keys.
+      </p>
+
       <h2>An unused identity-record endpoint trusted the signers each request named</h2>
       <p class="hof-meta">
         Medium &middot; reported and fixed November 2026 &middot; fix
