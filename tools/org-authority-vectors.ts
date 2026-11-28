@@ -28,6 +28,7 @@ import {
   canonicalOrgSeatRevoke,
   canonicalOrgSeatRoles,
   canonicalOrgVeto,
+  deriveOrgInviteKeys,
   deriveOrgSeatMemberSeeds,
   orgAuthorityHash,
   orgBylawsThreshold,
@@ -336,7 +337,9 @@ const authorize = [
 ];
 
 // ── canonical forms ──────────────────────────────────────────────────────
-const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: label, rolesHash: orgSeatRolesHash(memberRoles), oarVersion: 1, issuedAt: T0, expiresAt: T0 + 7 * DAY };
+// The invite key from a fixed link key (test-vectors/org-invite-key has the derivation and its proofs).
+const inviteKeyPub = deriveOrgInviteKeys(fill(32, 0x33)).inviteKeyPub;
+const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: label, rolesHash: orgSeatRolesHash(memberRoles), oarVersion: 1, issuedAt: T0, expiresAt: T0 + 7 * DAY, inviteKeyPub };
 const inviteSha = orgSha256Hex(canonicalOrgSeatInvite(invite));
 const accept = { orgId: ORG, seatId: MM.seatId, inviteSha256: inviteSha, memberKeyId: MM.keyId, adminKeyId: "", issuedAt: T0 + MIN };
 const approvalStatement = { orgId: ORG, oarVersion: 1, purposeTag: "flagship/server-update/v1", orderSha256: orgSha256Hex(UPDATE), seatId: B.seatId, adminKeyId: B.keyId, notAfter: AT + DAY, issuedAt: AT };

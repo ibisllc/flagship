@@ -107,6 +107,11 @@ jobs:
         if: matrix.shard == 1
         run: npx tsx tools/org-authority-vectors.ts --check
 
+      # The org invite link's keys: offer key, invite key, read and accept proofs (docs/enterprise-accounts.md §7).
+      - name: Org invite key vectors are fresh
+        if: matrix.shard == 1
+        run: npx tsx tools/org-invite-key-vectors.ts --check
+
       # The org directory, connectors, proposals, standing and members' slices (docs/org-directory.md).
       - name: Org directory vectors are fresh
         if: matrix.shard == 1

@@ -16,7 +16,7 @@
  *   flagship/org-approval/v1|<orgId>|<oarVersion>|<purposeTag>|<orderSha256>|<seatId>|<adminKeyId>|<notAfter>|<issuedAt>
  *   flagship/org-delayed-change/v1|<orgId>|<oarVersion>|<kind>|<nextRecordSha256>|<effectiveAt>|<issuedAt>
  *   flagship/org-veto/v1|<orgId>|<noticeSha256>|<issuedAt>
- *   flagship/org-seat-invite/v1|<orgId>|<seatId>|<labelSha256>|<rolesHash>|<oarVersion>|<issuedAt>|<expiresAt>
+ *   flagship/org-seat-invite/v1|<orgId>|<seatId>|<labelSha256>|<rolesHash>|<oarVersion>|<issuedAt>|<expiresAt>|<inviteKeyPub>
  *   flagship/org-seat-accept/v1|<orgId>|<seatId>|<inviteSha256>|<memberKeyId>|<adminKeyIdOrEmpty>|<issuedAt>
  *   flagship/org-seat-grant/v1|<orgId>|<seatId>|<labelSha256>|<memberKeyId>|<adminKeyIdOrEmpty>|<rolesHash>|<oarVersion>|<issuedAt>|<expiresAt>
  *   flagship/org-seat-roles/v1|<role line>;...                                    (sorted; hash domain)
@@ -24,12 +24,19 @@
  *   flagship/org-seat-freeze/v1|<orgId>|<seatId>|<untilMs>|<oarVersion>|<issuedAt>
  *   flagship/org-overturn/v1|<orgId>|<freezeSha256>|<oarVersion>|<issuedAt>
  *   flagship/org-seat-sas/v1|<inviteSha256>|<memberKeyId>|<adminKeyIdOrEmpty>       (hash domain)
+ *   flagship/org-invite-read/v1|<orgId>|<seatId>|<issuedAt>                          (signed by the invite key)
+ *   flagship/org-invite-withdraw/v1|<orgId>|<seatId>|<oarVersion>|<issuedAt>
+ *
+ * The invite link's key k (32 bytes, in the link fragment only) derives two keys: the offer key
+ * HKDF(k, "flagship/org-invite-offer/v1") seals the offer and the pseudonym (AES-256-GCM), and the
+ * invite key's 64-byte hybrid secret HKDF(k, "flagship/org-invite-key/v1"). The invite names the
+ * invite key's public half (`inviteKeyPub`), so only someone holding k can read the offer or accept.
  */
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { hex } from "./canonicalBase.js";
 import type { PolicyState } from "./assurancePolicy.js";
-import { SUITE_HYBRID_SIG_ED25519_MLDSA65_V1, hybridSigKeygen, hybridSign, pqKeyId } from "./pqHybrid.js";
+import { HYBRID_SIG_PUBLIC_KEY_LEN, SUITE_HYBRID_SIG_ED25519_MLDSA65_V1, hybridSigKeygen, hybridSign, hybridVerify, pqKeyId } from "./pqHybrid.js";
 import {
   PqTrustError,
   messagePurpose,
@@ -58,6 +65,10 @@ export const TAG_ORG_OVERTURN = "flagship/org-overturn/v1";
 export const TAG_ORG_SEAT_SAS = "flagship/org-seat-sas/v1";
 export const TAG_ORG_SEAT_MEMBER_KDF = "flagship/org-seat-member/v1";
 export const TAG_ORG_SEAT_MEMBER_PQ_KDF = "flagship/org-seat-member-pq/v1";
+export const TAG_ORG_INVITE_OFFER_KDF = "flagship/org-invite-offer/v1";
+export const TAG_ORG_INVITE_KEY_KDF = "flagship/org-invite-key/v1";
+export const TAG_ORG_INVITE_READ = "flagship/org-invite-read/v1";
+export const TAG_ORG_INVITE_WITHDRAW = "flagship/org-invite-withdraw/v1";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -139,6 +150,8 @@ export const orgSha256Hex = (b: Bytes): string => hex(sha256(b));
 
 const HEX16 = /^[0-9a-f]{32}$/;
 const HEX32 = /^[0-9a-f]{64}$/;
+const INVITE_KEY_PUB = new RegExp(`^[0-9a-f]{${2 * HYBRID_SIG_PUBLIC_KEY_LEN}}$`);
+const HYBRID_SIG_HEX = /^[0-9a-f]{6746}$/;
 const SERVER = /^[a-z0-9][a-z0-9.-]{0,252}$/;
 const SERVICE_REF = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 const REASON = /^[a-z0-9][a-z0-9-]{0,47}$/;
@@ -945,6 +958,8 @@ export interface OrgSeatInvite {
   oarVersion: number;
   issuedAt: number;
   expiresAt: number;
+  /** The invite key's hybrid public key (hex), derived from the link key; proves the link on read and accept. */
+  inviteKeyPub: string;
 }
 
 export function canonicalOrgSeatInvite(i: OrgSeatInvite): Bytes {
@@ -954,7 +969,8 @@ export function canonicalOrgSeatInvite(i: OrgSeatInvite): Bytes {
   match("rolesHash", HEX32, i.rolesHash);
   for (const [k, v] of Object.entries({ oarVersion: i.oarVersion, issuedAt: i.issuedAt, expiresAt: i.expiresAt })) uint(k, v);
   if (i.expiresAt <= i.issuedAt || i.expiresAt - i.issuedAt > ORG_INVITE_MAX_LIFETIME_MS) fail("malformed", "expiresAt");
-  return enc([TAG_ORG_SEAT_INVITE, i.orgId, i.seatId, i.labelSha256, i.rolesHash, i.oarVersion, i.issuedAt, i.expiresAt].join("|"));
+  match("inviteKeyPub", INVITE_KEY_PUB, i.inviteKeyPub);
+  return enc([TAG_ORG_SEAT_INVITE, i.orgId, i.seatId, i.labelSha256, i.rolesHash, i.oarVersion, i.issuedAt, i.expiresAt, i.inviteKeyPub].join("|"));
 }
 
 export interface OrgSeatAccept {
@@ -987,6 +1003,94 @@ export function orgSeatSas(inviteSha256: string, memberKeyId: string, adminKeyId
   const d = sha256(enc([TAG_ORG_SEAT_SAS, inviteSha256, memberKeyId, adminKeyId].join("|")));
   const n = ((d[0]! << 24) | (d[1]! << 16) | (d[2]! << 8) | d[3]!) >>> 0;
   return String(n % 1_000_000).padStart(6, "0");
+}
+
+// ── the invite link's keys ───────────────────────────────────────────────
+
+/** The two keys an invite link's key k derives: the offer key (AES-256-GCM) and the invite key (hybrid). */
+export function deriveOrgInviteKeys(linkKey: Bytes): { offerKey: Bytes; hybridSecret: Bytes; publicKey: Bytes; inviteKeyPub: string } {
+  if (!(linkKey instanceof Uint8Array) || linkKey.length !== 32) fail("malformed", "link key");
+  const offerKey = hkdf(sha256, linkKey, new Uint8Array(0), enc(TAG_ORG_INVITE_OFFER_KDF), 32);
+  const seed = hkdf(sha256, linkKey, new Uint8Array(0), enc(TAG_ORG_INVITE_KEY_KDF), 64);
+  const { publicKey, secretKey } = hybridSigKeygen(seed.subarray(0, 32), seed.subarray(32));
+  seed.fill(0);
+  return { offerKey, hybridSecret: secretKey, publicKey, inviteKeyPub: hex(publicKey) };
+}
+
+export function canonicalOrgInviteRead(orgId: string, seatId: string, issuedAt: number): Bytes {
+  match("orgId", HEX16, orgId);
+  match("seatId", HEX16, seatId);
+  uint("issuedAt", issuedAt);
+  return enc([TAG_ORG_INVITE_READ, orgId, seatId, issuedAt].join("|"));
+}
+
+/** (Not `sign*`: the envelope harness cannot drive hybrid keys; test-vectors/org-invite-key covers it.) The invite-key signature that opens `GET /api/orgs/<orgId>/invites/<seatId>` (hex). */
+export function orgInviteReadSignature(inviteSecret: Bytes, orgId: string, seatId: string, issuedAt: number, opts: { deterministic?: boolean } = {}): string {
+  return hex(hybridSign(inviteSecret, TAG_ORG_INVITE_READ, canonicalOrgInviteRead(orgId, seatId, issuedAt), opts));
+}
+
+function unhexOrNull(h: unknown, re: RegExp): Bytes | null {
+  if (typeof h !== "string" || !re.test(h)) return null;
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(2 * i, 2 * i + 2), 16);
+  return out;
+}
+
+function hybridOk(pubHex: unknown, purpose: string, payload: Bytes, sigHex: unknown): boolean {
+  const pub = unhexOrNull(pubHex, INVITE_KEY_PUB);
+  const sig = unhexOrNull(sigHex, HYBRID_SIG_HEX);
+  if (!pub || !sig) return false;
+  try {
+    hybridVerify(pub, purpose, payload, sig);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** True when `signature` is the invite key's fresh (within 5 min of `now`) read proof for this invite's seat. */
+export function verifyOrgInviteRead(invite: Pick<OrgSeatInvite, "orgId" | "seatId" | "inviteKeyPub">, issuedAt: number, signature: unknown, now: number): boolean {
+  if (!isUint(issuedAt) || Math.abs(now - issuedAt) > ORG_MAX_SKEW_MS) return false;
+  let msg: Bytes;
+  try {
+    msg = canonicalOrgInviteRead(invite.orgId, invite.seatId, issuedAt);
+  } catch {
+    return false;
+  }
+  return hybridOk(invite.inviteKeyPub, TAG_ORG_INVITE_READ, msg, signature);
+}
+
+/** The invite key's signature over the accept (hex): the joiner held the link key. */
+export function orgInviteAcceptSignature(inviteSecret: Bytes, a: OrgSeatAccept, opts: { deterministic?: boolean } = {}): string {
+  return hex(hybridSign(inviteSecret, TAG_ORG_SEAT_ACCEPT, canonicalOrgSeatAccept(a), opts));
+}
+
+/** True when the accept names `invite` and `signature` is its invite key's signature over the accept. */
+export function verifyOrgInviteAccept(invite: OrgSeatInvite, a: OrgSeatAccept, signature: unknown): boolean {
+  let msg: Bytes;
+  try {
+    if (a.orgId !== invite.orgId || a.seatId !== invite.seatId) return false;
+    if (a.inviteSha256 !== orgSha256Hex(canonicalOrgSeatInvite(invite))) return false;
+    msg = canonicalOrgSeatAccept(a);
+  } catch {
+    return false;
+  }
+  return hybridOk(invite.inviteKeyPub, TAG_ORG_SEAT_ACCEPT, msg, signature);
+}
+
+/** An admin's order withdrawing a seat invitation: `.com` deletes the invite and any accept not yet admitted. */
+export interface OrgInviteWithdraw {
+  orgId: string;
+  seatId: string;
+  oarVersion: number;
+  issuedAt: number;
+}
+
+export function canonicalOrgInviteWithdraw(w: OrgInviteWithdraw): Bytes {
+  match("orgId", HEX16, w.orgId);
+  match("seatId", HEX16, w.seatId);
+  for (const [k, x] of Object.entries({ oarVersion: w.oarVersion, issuedAt: w.issuedAt })) uint(k, x);
+  return enc([TAG_ORG_INVITE_WITHDRAW, w.orgId, w.seatId, w.oarVersion, w.issuedAt].join("|"));
 }
 
 export interface OrgSeatGrant {
