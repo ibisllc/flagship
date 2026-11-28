@@ -17448,5 +17448,154 @@
     "en": "Your account key was changed. Open Flagship to keep using this device.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Your account key was changed. Unlock to continue.": {
+    "en": "Your account key was changed. Unlock to continue.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/AccountKeyRotationBar.swift:21"
+  },
+  "This device has the new account key.": {
+    "en": "This device has the new account key.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/AccountKeyRotationBar.swift:22"
+  },
+  "Cloud recovery is off since the account key changed. Set it up again.": {
+    "en": "Cloud recovery is off since the account key changed. Set it up again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/AccountKeyRotationBar.swift:23"
+  },
+  "Account key change": {
+    "en": "Account key change",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/AccountKeyRotationBar.swift:24"
+  },
+  "Devices updated: %lld of %lld": {
+    "en": "Devices updated: %lld of %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/AccountKeyRotationBar.swift:25"
+  },
+  "Servers on the new key: %lld of %lld": {
+    "en": "Servers on the new key: %lld of %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/AccountKeyRotationBar.swift:26"
+  },
+  "Waiting for %@": {
+    "en": "Waiting for %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/AccountKeyRotationBar.swift:27"
+  },
+  "This device couldn't check the new account key. Ask an admin device to add it again.": {
+    "en": "This device couldn't check the new account key. Ask an admin device to add it again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/AccountKeyRotationService.swift:178"
+  },
+  "Get your new account key": {
+    "en": "Get your new account key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/AccountKeyRotationService.swift:197"
+  },
+  "iPhone": {
+    "en": "iPhone",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Services/AccountKeyRotationService.swift:241"
+  },
+  "Change your account key": {
+    "en": "Change your account key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:17"
+  },
+  "Your other devices keep working. They get the new key the next time they open Flagship.": {
+    "en": "Your other devices keep working. They get the new key the next time they open Flagship.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:18"
+  },
+  "Your servers switch to the new key by themselves. Nothing needs pairing again.": {
+    "en": "Your servers switch to the new key by themselves. Nothing needs pairing again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:19"
+  },
+  "These devices must be added again:": {
+    "en": "These devices must be added again:",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:20"
+  },
+  "Browsers signed in to your servers will need to be approved again.": {
+    "en": "Browsers signed in to your servers will need to be approved again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:21"
+  },
+  "Set up cloud recovery again afterwards.": {
+    "en": "Set up cloud recovery again afterwards.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:22"
+  },
+  "Old backups still open with the old key, and so do copies on the removed device.": {
+    "en": "Old backups still open with the old key, and so do copies on the removed device.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:23"
+  },
+  "Change account key": {
+    "en": "Change account key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:24"
+  },
+  "Changing the account key…": {
+    "en": "Changing the account key…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:25"
+  },
+  "Account key changed": {
+    "en": "Account key changed",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:26"
+  },
+  "•": {
+    "en": "•",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChangeAccountKeyScreen.swift:109",
+    "translatable": false
+  },
+  "The account key could not be changed. Nothing was changed. Try again.": {
+    "en": "The account key could not be changed. Nothing was changed. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift:122"
+  },
+  "Another admin device changed the account key first. Open Flagship again to get the new key.": {
+    "en": "Another admin device changed the account key first. Open Flagship again to get the new key.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift:123"
+  },
+  "Only an admin device can change the account key.": {
+    "en": "Only an admin device can change the account key.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift:124"
+  },
+  "Under quantum-safe protection, this device can't sign the change. Try again from a device that holds the admin key's quantum-safe half.": {
+    "en": "Under quantum-safe protection, this device can't sign the change. Try again from a device that holds the admin key's quantum-safe half.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift:125"
+  },
+  "Update every server first: %@ can't follow an account key change yet.": {
+    "en": "Update every server first: %@ can't follow an account key change yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift:127"
+  },
+  "%@ held the admin key, so the admin key changes first.": {
+    "en": "%@ held the admin key, so the admin key changes first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift:130"
+  },
+  "%@: its key came from the old account key": {
+    "en": "%@: its key came from the old account key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift:132"
+  },
+  "%@: it can't receive the new key safely": {
+    "en": "%@: it can't receive the new key safely",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift:133"
+  },
+  "Change the admin key too?": {
+    "en": "Change the admin key too?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1223"
+  },
+  "This device was an admin. If it was added before admins were made by grant, it may hold the admin key itself. Rotate the admin key in Account security.": {
+    "en": "This device was an admin. If it was added before admins were made by grant, it may hold the admin key itself. Rotate the admin key in Account security.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1224"
+  },
+  "Open Account security": {
+    "en": "Open Account security",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1225"
+  },
+  "Could someone else unlock this device?": {
+    "en": "Could someone else unlock this device?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1226"
+  },
+  "No: it's lost and locked, or I erased it": {
+    "en": "No: it's lost and locked, or I erased it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1227"
+  },
+  "Yes, or I'm not sure": {
+    "en": "Yes, or I'm not sure",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1228"
+  },
+  "This was a browser. Someone with the computer could try to guess its passphrase, so changing your account key is safer.": {
+    "en": "This was a browser. Someone with the computer could try to guess its passphrase, so changing your account key is safer.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:1229"
+  },
+  "account key change unavailable": {
+    "en": "account key change unavailable",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:449"
   }
 }

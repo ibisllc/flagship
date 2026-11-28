@@ -28,6 +28,22 @@ public struct SettingsTab: View {
     @Environment(\.nameDibsClient) private var nameDibs
     /// Whether the name-dibs window is open (drives the "Claim your .com name" row).
     @State private var dibsWindowOpen = false
+    /// "Change your account key" for the device being removed (docs/account-key-rotation.md).
+    @State private var changeKeyVm: RotateAccountKeyViewModel?
+
+    private func openChangeAccountKey(for device: SettingsViewModel.DirectoryDevice) {
+        guard let user = app.currentUser, let deviceId = app.activeProfile?.deviceId else { return }
+        let servers = app.placementPods.map { RotateAccountKeyViewModel.Server(name: $0.name, fqdn: $0.fqdn) }
+        let clients = podClients
+        let name = app.activeProfile?.deviceDisplayName
+        changeKeyVm = RotateAccountKeyViewModel(
+            server: server, username: user, deviceId: deviceId, removedDeviceId: device.deviceId, removedName: device.displayName,
+            servers: servers,
+            deps: .live(server: server, statusOf: { s in
+                let client = await clients.client(forFqdn: s.fqdn)
+                return try? await client.accountKeyStatus().status
+            }, selfName: { name }))
+    }
 
     public init() {}
 
@@ -141,6 +157,8 @@ public struct SettingsTab: View {
                     onScanPairingCode: { path.append(.scanPairingCode) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
                     onRemoveTrustedDevice: { device in await vm.removeFromAccount(device) },
+                    canChangeAccountKey: Keystore.hasAdminRoot && !app.isDemoAccount,
+                    onChangeAccountKey: { device in openChangeAccountKey(for: device) },
                     canManageNames: Keystore.hasAdminRoot,
                     onRenameAccount: { name in await vm.renameAccount(name) },
                     onRenameCurrentDevice: { name in await vm.renameCurrentDevice(name) },
@@ -281,6 +299,19 @@ public struct SettingsTab: View {
                             app.recoveryNeedsPasskeyUpdate = false
                             toasts.success(RecoveryUpdatePrompt.updated)
                         }
+                    }
+                }
+                .sheet(isPresented: Binding(get: { changeKeyVm != nil }, set: { if !$0 { changeKeyVm = nil } })) {
+                    if let model = changeKeyVm {
+                        ChangeAccountKeyScreen(vm: model, onClose: {
+                            changeKeyVm = nil
+                            AccountKeyRotationCenter.shared.didRotate()
+                            Task { await vm.loadTrustedDevices() }
+                        }, onSetUpRecovery: {
+                            changeKeyVm = nil
+                            AccountKeyRotationCenter.shared.didRotate()
+                            path.append(.recovery)
+                        })
                     }
                 }
                 .alert("Demo account", isPresented: $showDemoDeleteNotice) {

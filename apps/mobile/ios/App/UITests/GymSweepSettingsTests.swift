@@ -537,12 +537,35 @@ final class GymSweepSettingsTests: GymSweepCase {
         expectNoProbe(app, "revoked account device")
         theirs.tap()
         button(app, "Remove from account").tap()
-        let remove = dialogButton(app, "Remove from account", notId: "trusted-device-remove-\(otherDevice)")
+        // The question that decides whether the account key changes too (docs/account-key-rotation.md).
+        let remove = dialogButton(app, "No: it's lost and locked, or I erased it")
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         remove.tap()
         expectProbe(app, "revoked account device \(otherDevice)")
         waitGone(android)
         shot(app, "trusted-devices-disconnected")
+    }
+
+    /// Remove from account → "Yes, or I'm not sure" opens Change your account key (docs/account-key-rotation.md);
+    /// closing it removes nothing.
+    func test_trustedDevicesRemoveCouldBeUnlockedOpensChangeAccountKey() throws {
+        let app = launch(tab: "settings", ["-smoke-trusted-devices"])
+        settings(app)
+        let theirs = menu(app, other: true)
+        XCTAssertTrue(find(app, theirs))
+        theirs.tap()
+        button(app, "Remove from account").tap()
+        XCTAssertTrue(text(app, containing: "Could someone else unlock this device?").waitForExistence(timeout: 5))
+        let yes = dialogButton(app, "Yes, or I'm not sure")
+        XCTAssertTrue(yes.waitForExistence(timeout: 5))
+        yes.tap()
+        XCTAssertTrue(app.navigationBars["Change your account key"].waitForExistence(timeout: 10))
+        shot(app, "change-account-key")
+        let close = app.buttons["change-key-cancel"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        expectNoProbe(app, "revoked account device")
+        expectNoProbe(app, "account key POST")
     }
 
     /// A non-admin device: no managed names and the account name doesn't

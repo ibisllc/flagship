@@ -255,7 +255,24 @@ struct FlagshipApp: App {
                 }
                 // Milestone 4: requests to servers this device holds as strict go over the PQ channel.
                 QuantumSafetyService.activate(username: user, deviceId: deviceId)
+                // Account key rotation (docs/account-key-rotation.md): off a device key derived from the account key
+                // (admin devices), this device's receive key, a rotation this device sent or a new key waiting for it.
+                var mocked = false
+                #if DEBUG
+                mocked = GymLaunch.usesMocks
+                #endif
+                if !mocked, !AccountRenameResume.isRenaming(user) {
+                    _ = await AccountKeyRotationService.migrateDerivedDeviceKey(
+                        server: serverClient, username: user, deviceId: deviceId, umk: umk, adminRoot: Keystore.sessionAdminRoot())
+                    await AccountKeyRotationService.publishReceiveKey(server: serverClient, username: user, deviceId: deviceId)
+                    await AccountKeyRotationCenter.shared.check(server: serverClient, app: state, interactive: false)
+                }
             }
+        }
+        // The `account-key-rotated` push: look for this device's new key now (nothing is installed without the
+        // checks against the admin root this device pins).
+        AccountKeyRotationCheck.setHandler {
+            await AccountKeyRotationCenter.shared.check(server: serverClient, app: state, interactive: false)
         }
         appState.retryAccountRead = {
             guard let user = await MainActor.run(body: { state.currentUser }) else { return }
@@ -1201,6 +1218,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
+        if AccountKeyRotationCheck.isPush(userInfo) {
+            Task {
+                await AccountKeyRotationCheck.run()
+                completionHandler(.newData)
+            }
+            return
+        }
         guard DeviceRemovedCheck.isPush(userInfo) else { completionHandler(.noData); return }
         Task {
             await DeviceRemovedCheck.run()

@@ -27,6 +27,8 @@ public struct SettingsScreen: View {
     /// "Remove from account" awaiting its confirmation, then the reason it failed.
     @State private var removeTarget: SettingsViewModel.DirectoryDevice?
     @State private var removeFailure: String?
+    /// A removed device was an admin: offer to change the admin key (Account security → Rotate admin key).
+    @State private var rotateAdminSuggested = false
     /// Current alternate app-icon name — nil = the primary "classic" icon,
     /// "AppIcon-Legacy" = the original hexagon. Read from UIApplication in
     /// onAppear (App-icon segmented control).
@@ -71,6 +73,10 @@ public struct SettingsScreen: View {
     @State private var rejectMessage: String? = nil
     /// Remove another device from the account: nil once removed, else the sentence to show ("" says nothing).
     var onRemoveTrustedDevice: (SettingsViewModel.DirectoryDevice) async -> String? = { _ in UserErrorText.refused }
+    /// This device may change the account key (it holds the admin root): Remove asks whether someone else could
+    /// unlock the device, and "Yes, or I'm not sure" opens Change your account key for it.
+    var canChangeAccountKey: Bool = false
+    var onChangeAccountKey: (SettingsViewModel.DirectoryDevice) -> Void = { _ in }
     var canManageNames: Bool = false
     var onRenameAccount: (String) async -> Bool = { _ in false }
     var onRenameCurrentDevice: (String) async -> Bool = { _ in false }
@@ -206,6 +212,8 @@ public struct SettingsScreen: View {
         onScanPairingCode: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
         onRemoveTrustedDevice: @escaping (SettingsViewModel.DirectoryDevice) async -> String? = { _ in UserErrorText.refused },
+        canChangeAccountKey: Bool = false,
+        onChangeAccountKey: @escaping (SettingsViewModel.DirectoryDevice) -> Void = { _ in },
         canManageNames: Bool = false,
         onRenameAccount: @escaping (String) async -> Bool = { _ in false },
         onRenameCurrentDevice: @escaping (String) async -> Bool = { _ in false },
@@ -260,6 +268,8 @@ public struct SettingsScreen: View {
         self.canRejectRecovery = canRejectRecovery
         self.onRejectRecovery = onRejectRecovery
         self.onRemoveTrustedDevice = onRemoveTrustedDevice
+        self.canChangeAccountKey = canChangeAccountKey
+        self.onChangeAccountKey = onChangeAccountKey
         self.canManageNames = canManageNames
         self.onRenameAccount = onRenameAccount
         self.onRenameCurrentDevice = onRenameCurrentDevice
@@ -381,12 +391,26 @@ public struct SettingsScreen: View {
             titleVisibility: .visible,
             presenting: removeTarget
         ) { target in
-            Button(RemoveDeviceCopy.confirm, role: .destructive) {
+            Button(RemoveDeviceCopy.noChoice, role: .destructive) {
                 remove(target)
             }
+            .accessibilityIdentifier("remove-device-no")
+            if canChangeAccountKey {
+                Button(RemoveDeviceCopy.yesChoice) {
+                    removeTarget = nil
+                    onChangeAccountKey(target)
+                }
+                .accessibilityIdentifier("remove-device-yes")
+            }
             Button("Cancel", role: .cancel) { removeTarget = nil }
-        } message: { _ in
-            Text(RemoveDeviceCopy.message)
+        } message: { target in
+            Text(RemoveDeviceCopy.message(for: target, canChangeKey: canChangeAccountKey))
+        }
+        .alert(RemoveDeviceCopy.adminRemovedTitle, isPresented: $rotateAdminSuggested) {
+            Button(RemoveDeviceCopy.openAccountSecurity) { onOpenAccountSecurity() }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text(RemoveDeviceCopy.adminRemovedMessage)
         }
         .alert(
             RemoveDeviceCopy.failedTitle,
@@ -494,8 +518,11 @@ public struct SettingsScreen: View {
     private func remove(_ target: SettingsViewModel.DirectoryDevice) {
         removeTarget = nil
         Task {
-            if let failure = await onRemoveTrustedDevice(target), !failure.isEmpty {
-                removeFailure = failure
+            if let failure = await onRemoveTrustedDevice(target) {
+                if !failure.isEmpty { removeFailure = failure }
+            } else if target.isAdministrator, canChangeAccountKey {
+                // An admin added before admins were made by grant may hold the admin key itself.
+                rotateAdminSuggested = true
             }
         }
     }
@@ -1193,5 +1220,19 @@ public enum RemoveDeviceCopy {
     public static let confirm = String(localized: "Remove from account")
     public static func title(_ name: String) -> String { String(localized: "Remove \(name) from your account?") }
     public static let message = String(localized: "It loses access to your account and your servers. The next time it goes online, Flagship erases your account's keys from it.")
+    public static let adminRemovedTitle = String(localized: "Change the admin key too?")
+    public static let adminRemovedMessage = String(localized: "This device was an admin. If it was added before admins were made by grant, it may hold the admin key itself. Rotate the admin key in Account security.")
+    public static let openAccountSecurity = String(localized: "Open Account security")
+    public static let question = String(localized: "Could someone else unlock this device?")
+    public static let noChoice = String(localized: "No: it's lost and locked, or I erased it")
+    public static let yesChoice = String(localized: "Yes, or I'm not sure")
+    public static let browserLine = String(localized: "This was a browser. Someone with the computer could try to guess its passphrase, so changing your account key is safer.")
+
+    /// The dialog's message: what removing does, then (when this device can change the key) the question.
+    public static func message(for device: SettingsViewModel.DirectoryDevice, canChangeKey: Bool) -> String {
+        guard canChangeKey else { return message }
+        let browser = device.platformClass == "web" || device.platformClass == "browser"
+        return ([message, question] + (browser ? [browserLine] : [])).joined(separator: "\n\n")
+    }
     public static let failedTitle = String(localized: "Couldn't remove the device")
 }

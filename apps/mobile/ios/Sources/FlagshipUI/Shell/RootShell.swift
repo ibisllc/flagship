@@ -141,6 +141,7 @@ public struct RootShell: View {
                 VStack(spacing: 0) {
                     NoticeBannerView()
                     SecuritySliverBar()
+                    AccountKeyRotationBar()
                     GlobalTrustBar()
                     GlobalOperationsBar()
                 }

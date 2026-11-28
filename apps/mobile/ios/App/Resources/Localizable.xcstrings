@@ -167923,6 +167923,1482 @@
           }
         }
       }
+    },
+    "Your account key was changed. Unlock to continue.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se cambió la clave de tu cuenta. Desbloquea para continuar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clé de votre compte a été changée. Déverrouillez pour continuer."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Schlüssel deines Kontos wurde geändert. Entsperre, um fortzufahren."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A chave da sua conta foi trocada. Desbloqueie para continuar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーが変更されました。続けるにはロックを解除してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的账户密钥已更改。解锁以继续。"
+          }
+        }
+      }
+    },
+    "This device has the new account key.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo tiene la nueva clave de la cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil dispose de la nouvelle clé du compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät hat den neuen Kontoschlüssel."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo tem a nova chave da conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスは新しいアカウントキーを持っています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备已拥有新的账户密钥。"
+          }
+        }
+      }
+    },
+    "Cloud recovery is off since the account key changed. Set it up again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La recuperación en la nube está desactivada desde que cambió la clave de la cuenta. Vuelve a configurarla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La récupération dans le cloud est désactivée depuis le changement de clé du compte. Configurez-la à nouveau."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Cloud-Wiederherstellung ist aus, seit der Kontoschlüssel geändert wurde. Richte sie erneut ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recuperação na nuvem está desativada desde que a chave da conta foi trocada. Configure-a novamente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーを変更したため、クラウド復元はオフになっています。もう一度設定してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自账户密钥更改后，云端恢复已关闭。请重新设置。"
+          }
+        }
+      }
+    },
+    "Account key change": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambio de clave de la cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changement de clé du compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Änderung des Kontoschlüssels"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Troca da chave da conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーの変更"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账户密钥更改"
+          }
+        }
+      }
+    },
+    "Devices updated: %lld of %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dispositivos actualizados: %lld de %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appareils à jour : %lld sur %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisierte Geräte: %lld von %lld"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dispositivos atualizados: %lld de %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新済みのデバイス：%lld / %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已更新的设备：%lld / %lld"
+          }
+        }
+      }
+    },
+    "Servers on the new key: %lld of %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidores con la nueva clave: %lld de %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveurs avec la nouvelle clé : %lld sur %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server mit dem neuen Schlüssel: %lld von %lld"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidores na nova chave: %lld de %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいキーのサーバー：%lld / %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用新密钥的服务器：%lld / %lld"
+          }
+        }
+      }
+    },
+    "Waiting for %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esperando a %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente de %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warte auf %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aguardando %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を待っています"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等待 %@"
+          }
+        }
+      }
+    },
+    "This device couldn't check the new account key. Ask an admin device to add it again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo no pudo comprobar la nueva clave de la cuenta. Pide a un dispositivo administrador que lo vuelva a añadir."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil n'a pas pu vérifier la nouvelle clé du compte. Demandez à un appareil administrateur de l'ajouter à nouveau."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät konnte den neuen Kontoschlüssel nicht prüfen. Bitte ein Admin-Gerät, es erneut hinzuzufügen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo não conseguiu verificar a nova chave da conta. Peça a um dispositivo administrador para adicioná-lo novamente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスは新しいアカウントキーを確認できませんでした。管理者デバイスにもう一度追加してもらってください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备无法验证新的账户密钥。请让管理员设备重新添加它。"
+          }
+        }
+      }
+    },
+    "Get your new account key": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obtén la nueva clave de tu cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recevoir la nouvelle clé de votre compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuen Kontoschlüssel abrufen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receber a nova chave da sua conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいアカウントキーを受け取る"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "获取你的新账户密钥"
+          }
+        }
+      }
+    },
+    "iPhone": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone"
+          }
+        }
+      }
+    },
+    "Change your account key": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia la clave de tu cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer la clé de votre compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schlüssel deines Kontos ändern"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trocar a chave da sua conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーを変更する"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改你的账户密钥"
+          }
+        }
+      }
+    },
+    "Your other devices keep working. They get the new key the next time they open Flagship.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus otros dispositivos siguen funcionando. Recibirán la nueva clave la próxima vez que abran Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos autres appareils continuent de fonctionner. Ils reçoivent la nouvelle clé la prochaine fois qu'ils ouvrent Flagship."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine anderen Geräte funktionieren weiter. Sie erhalten den neuen Schlüssel, wenn sie Flagship das nächste Mal öffnen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus outros dispositivos continuam funcionando. Eles recebem a nova chave na próxima vez que abrirem o Flagship."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "他のデバイスはそのまま使えます。次に Flagship を開いたときに新しいキーを受け取ります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的其他设备会继续工作。它们会在下次打开 Flagship 时获得新密钥。"
+          }
+        }
+      }
+    },
+    "Your servers switch to the new key by themselves. Nothing needs pairing again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus servidores cambian a la nueva clave por sí solos. No hay que volver a emparejar nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos serveurs passent d'eux-mêmes à la nouvelle clé. Rien n'a besoin d'être réassocié."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Server wechseln von selbst zum neuen Schlüssel. Nichts muss neu gekoppelt werden."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus servidores passam para a nova chave sozinhos. Nada precisa ser pareado de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーは自動的に新しいキーに切り替わります。再ペアリングは不要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的服务器会自行切换到新密钥。无需重新配对。"
+          }
+        }
+      }
+    },
+    "These devices must be added again:": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estos dispositivos deben añadirse de nuevo:"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces appareils doivent être ajoutés à nouveau :"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Geräte müssen erneut hinzugefügt werden:"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estes dispositivos precisam ser adicionados novamente:"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これらのデバイスはもう一度追加する必要があります："
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这些设备必须重新添加："
+          }
+        }
+      }
+    },
+    "Browsers signed in to your servers will need to be approved again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los navegadores con sesión iniciada en tus servidores tendrán que aprobarse de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les navigateurs connectés à vos serveurs devront être approuvés à nouveau."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browser, die bei deinen Servern angemeldet sind, müssen erneut bestätigt werden."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os navegadores conectados aos seus servidores precisarão ser aprovados novamente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーにサインインしているブラウザは、もう一度承認が必要になります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已登录你的服务器的浏览器需要重新批准。"
+          }
+        }
+      }
+    },
+    "Set up cloud recovery again afterwards.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Después, vuelve a configurar la recuperación en la nube."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurez ensuite à nouveau la récupération dans le cloud."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Richte danach die Cloud-Wiederherstellung erneut ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depois, configure a recuperação na nuvem novamente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "その後、クラウド復元をもう一度設定してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "之后请重新设置云端恢复。"
+          }
+        }
+      }
+    },
+    "Old backups still open with the old key, and so do copies on the removed device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las copias de seguridad antiguas siguen abriéndose con la clave antigua, igual que las copias del dispositivo eliminado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les anciennes sauvegardes s'ouvrent toujours avec l'ancienne clé, tout comme les copies sur l'appareil retiré."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alte Backups lassen sich weiterhin mit dem alten Schlüssel öffnen, ebenso Kopien auf dem entfernten Gerät."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backups antigos ainda abrem com a chave antiga, assim como as cópias no dispositivo removido."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "古いバックアップは引き続き古いキーで開けます。削除したデバイス上のコピーも同様です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "旧备份仍可用旧密钥打开，被移除设备上的副本也一样。"
+          }
+        }
+      }
+    },
+    "Change account key": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiar la clave de la cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer la clé du compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontoschlüssel ändern"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trocar a chave da conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーを変更"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改账户密钥"
+          }
+        }
+      }
+    },
+    "Changing the account key…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiando la clave de la cuenta…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changement de la clé du compte…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontoschlüssel wird geändert…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trocando a chave da conta…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーを変更しています…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在更改账户密钥…"
+          }
+        }
+      }
+    },
+    "Account key changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de la cuenta cambiada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clé du compte changée"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontoschlüssel geändert"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chave da conta trocada"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーを変更しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账户密钥已更改"
+          }
+        }
+      }
+    },
+    "The account key could not be changed. Nothing was changed. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo cambiar la clave de la cuenta. No se cambió nada. Inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clé du compte n'a pas pu être changée. Rien n'a été modifié. Réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Kontoschlüssel konnte nicht geändert werden. Es wurde nichts geändert. Versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível trocar a chave da conta. Nada foi alterado. Tente novamente."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーを変更できませんでした。何も変更されていません。もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法更改账户密钥。没有做任何更改。请重试。"
+          }
+        }
+      }
+    },
+    "Another admin device changed the account key first. Open Flagship again to get the new key.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otro dispositivo administrador cambió antes la clave de la cuenta. Vuelve a abrir Flagship para obtener la nueva clave."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre appareil administrateur a changé la clé du compte en premier. Rouvrez Flagship pour obtenir la nouvelle clé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein anderes Admin-Gerät hat den Kontoschlüssel zuerst geändert. Öffne Flagship erneut, um den neuen Schlüssel zu erhalten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outro dispositivo administrador trocou a chave da conta primeiro. Abra o Flagship novamente para receber a nova chave."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別の管理者デバイスが先にアカウントキーを変更しました。新しいキーを受け取るには Flagship をもう一度開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另一台管理员设备已先更改了账户密钥。请重新打开 Flagship 以获取新密钥。"
+          }
+        }
+      }
+    },
+    "Only an admin device can change the account key.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo administrador puede cambiar la clave de la cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur peut changer la clé du compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät kann den Kontoschlüssel ändern."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente um dispositivo administrador pode trocar a chave da conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーを変更できるのは管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有管理员设备可以更改账户密钥。"
+          }
+        }
+      }
+    },
+    "Under quantum-safe protection, this device can't sign the change. Try again from a device that holds the admin key's quantum-safe half.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con la protección cuántica segura, este dispositivo no puede firmar el cambio. Inténtalo desde un dispositivo que tenga la mitad cuántica segura de la clave de administrador."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avec la protection résistante au quantique, cet appareil ne peut pas signer le changement. Réessayez depuis un appareil qui détient la moitié résistante au quantique de la clé d'administration."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit quantensicherem Schutz kann dieses Gerät die Änderung nicht signieren. Versuche es von einem Gerät aus, das die quantensichere Hälfte des Admin-Schlüssels hat."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Com a proteção à prova de computação quântica, este dispositivo não pode assinar a troca. Tente em um dispositivo que tenha a metade à prova de computação quântica da chave de administrador."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "量子安全保護の下では、このデバイスは変更に署名できません。管理者キーの量子安全な半分を持つデバイスからもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在抗量子保护下，此设备无法签署此更改。请在持有管理员密钥抗量子部分的设备上重试。"
+          }
+        }
+      }
+    },
+    "Update every server first: %@ can't follow an account key change yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primero actualiza todos los servidores: %@ aún no puede seguir un cambio de clave de la cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettez d'abord tous les serveurs à jour : %@ ne peut pas encore suivre un changement de clé du compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisiere zuerst alle Server: %@ kann einer Änderung des Kontoschlüssels noch nicht folgen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atualize todos os servidores primeiro: %@ ainda não consegue acompanhar uma troca da chave da conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まずすべてのサーバーを更新してください：%@ はまだアカウントキーの変更に対応できません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先更新所有服务器：%@ 尚不能跟随账户密钥的更改。"
+          }
+        }
+      }
+    },
+    "%@ held the admin key, so the admin key changes first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ tenía la clave de administrador, así que primero cambia la clave de administrador."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ détenait la clé d'administration : elle change donc en premier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hatte den Admin-Schlüssel, daher wird zuerst der Admin-Schlüssel geändert."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ tinha a chave de administrador, então ela é trocada primeiro."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ は管理者キーを持っていたため、先に管理者キーを変更します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 持有管理员密钥，因此会先更换管理员密钥。"
+          }
+        }
+      }
+    },
+    "%@: its key came from the old account key": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: su clave provenía de la antigua clave de la cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : sa clé provenait de l'ancienne clé du compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: Sein Schlüssel stammte vom alten Kontoschlüssel"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: a chave dele vinha da chave antiga da conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@：そのキーは古いアカウントキーから作られていました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@：其密钥来自旧的账户密钥"
+          }
+        }
+      }
+    },
+    "%@: it can't receive the new key safely": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: no puede recibir la nueva clave de forma segura"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : il ne peut pas recevoir la nouvelle clé en toute sécurité"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: Es kann den neuen Schlüssel nicht sicher empfangen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: não pode receber a nova chave com segurança"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@：新しいキーを安全に受け取れません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@：无法安全地接收新密钥"
+          }
+        }
+      }
+    },
+    "Change the admin key too?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Cambiar también la clave de administrador?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer aussi la clé d'administration ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auch den Admin-Schlüssel ändern?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trocar também a chave de administrador?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理者キーも変更しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "也要更改管理员密钥吗？"
+          }
+        }
+      }
+    },
+    "This device was an admin. If it was added before admins were made by grant, it may hold the admin key itself. Rotate the admin key in Account security.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo era administrador. Si se añadió antes de que los administradores se crearan mediante permiso, puede tener la propia clave de administrador. Cambia la clave de administrador en Seguridad de la cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet appareil était administrateur. S'il a été ajouté avant que les administrateurs soient créés par autorisation, il détient peut-être la clé d'administration elle-même. Changez la clé d'administration dans Sécurité du compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät war ein Admin. Wurde es hinzugefügt, bevor Admins per Berechtigung angelegt wurden, besitzt es möglicherweise den Admin-Schlüssel selbst. Ändere den Admin-Schlüssel unter Kontosicherheit."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este dispositivo era administrador. Se ele foi adicionado antes de os administradores serem criados por permissão, pode ter a própria chave de administrador. Troque a chave de administrador em Segurança da conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスは管理者でした。管理者が権限付与で作られるようになる前に追加された場合、管理者キーそのものを持っている可能性があります。アカウントのセキュリティで管理者キーを変更してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备曾是管理员。如果它是在管理员改为通过授权创建之前添加的，可能持有管理员密钥本身。请在账户安全中更换管理员密钥。"
+          }
+        }
+      }
+    },
+    "Open Account security": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir Seguridad de la cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir Sécurité du compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontosicherheit öffnen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir Segurança da conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントのセキュリティを開く"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开账户安全"
+          }
+        }
+      }
+    },
+    "Could someone else unlock this device?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Podría otra persona desbloquear este dispositivo?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelqu'un d'autre pourrait-il déverrouiller cet appareil ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Könnte jemand anderes dieses Gerät entsperren?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outra pessoa poderia desbloquear este dispositivo?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "他の人がこのデバイスのロックを解除できる可能性はありますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他人能解锁此设备吗？"
+          }
+        }
+      }
+    },
+    "No: it's lost and locked, or I erased it": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No: está perdido y bloqueado, o lo borré"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non : il est perdu et verrouillé, ou je l'ai effacé"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nein: Es ist verloren und gesperrt, oder ich habe es gelöscht"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não: está perdido e bloqueado, ou eu o apaguei"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "いいえ：紛失してロックされている、または消去済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不能：设备已丢失且处于锁定状态，或我已将其抹掉"
+          }
+        }
+      }
+    },
+    "Yes, or I'm not sure": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sí, o no estoy seguro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oui, ou je ne suis pas sûr"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ja, oder ich bin nicht sicher"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sim, ou não tenho certeza"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "はい、またはわからない"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "能，或者我不确定"
+          }
+        }
+      }
+    },
+    "This was a browser. Someone with the computer could try to guess its passphrase, so changing your account key is safer.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Era un navegador. Quien tenga el ordenador podría intentar adivinar su frase de contraseña, así que es más seguro cambiar la clave de tu cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C'était un navigateur. Quelqu'un qui a l'ordinateur pourrait essayer de deviner sa phrase secrète : changer la clé de votre compte est plus sûr."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das war ein Browser. Wer den Computer hat, könnte versuchen, die Passphrase zu erraten. Den Schlüssel deines Kontos zu ändern ist daher sicherer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Era um navegador. Quem estiver com o computador pode tentar adivinhar a frase secreta, então é mais seguro trocar a chave da sua conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これはブラウザでした。そのコンピュータを持つ人がパスフレーズを推測しようとするかもしれないため、アカウントキーを変更する方が安全です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这是一个浏览器。拿到这台电脑的人可能会尝试猜测其密码短语，因此更改账户密钥更安全。"
+          }
+        }
+      }
+    },
+    "account key change unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "la cambio de clave de cuenta no está disponible"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "le changement de clé de compte n'est pas disponible"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Änderung des Kontoschlüssels nicht verfügbar"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "troca da chave da conta indisponível"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントキーの変更は利用できません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法更改账户密钥"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
