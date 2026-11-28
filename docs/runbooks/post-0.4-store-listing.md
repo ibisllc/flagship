@@ -44,7 +44,7 @@ listings or screenshots).
    ~/.config/flagship/play-service-account.json && chmod 600 ~/.config/flagship/play-service-account.json`.
 6. In Play Console → Publishing overview, confirm **Managed publishing** is on.
 
-**Then Claude** writes `scripts/store-assets/store-upload.mjs` (built 2026-11-25/27: `store-upload.mjs play|appstore [--images <pack>] [--apply]`, the App Store part in `appstore-upload.mjs`; keys only on the Chromebook, the Apple `.p8` encrypted to the YubiKey): App Store Connect API with an ES256
+**Then Claude** writes `scripts/store-assets/store-upload.mjs` (built 2026-11-25/27: `store-upload.mjs play|appstore [--images <pack>] [--apply]`, the App Store part in `appstore-upload.mjs`; keys only on the Chromebook: since 2026-11-28 the Apple `.p8` is a plain owner-only file in `~/.appstoreconnect/private_keys/` (owner decision; the YubiKey-encrypted `.asc` stays as the backup and fallback), the Play JSON in `~/.config/flagship/`; if the Chromebook is lost or an install looks wrong, revoke both keys): App Store Connect API with an ES256
 JWT from the `.p8` (app info localizations, version localizations, screenshot sets), and the Android Publisher API
 v3 edits (listings, images: `deleteall` then `upload` per type and language, commit with
 `changesNotSentForReview=true`). It reads the pack from `upload-pack.mjs`, has `--dry-run` (prints every change

@@ -745,7 +745,7 @@ export const SCENARIOS: Scenario[] = [
     ["transfer-rehome", "transfer/rehome"],
   ].map(([id, tail]) =>
     http(`lane-${id}`, `GET /api/server/<d>/${tail} (box polls an empty lane)`, "every box, every 5 min", (w) =>
-      new Request(`${ORIGIN}/api/server/${w.servers[0]!.domain}/${tail}`, /-deposit$/.test(tail!) ? { headers: { authorization: `Bearer ${w.boxReadToken}` } } : {}),
+      new Request(`${ORIGIN}/api/server/${w.servers[0]!.domain}/${tail}`, /-deposit$|^update$/.test(tail!) ? { headers: { authorization: `Bearer ${w.boxReadToken}` } } : {}),
     { expect: [200, 204, 400, 404] })),
   http("apps-aliases", "GET /api/users/<u>/apps/aliases (read token)", "boxes, every minute", (w) =>
     authed(w, `/api/users/${ACCOUNT}/apps/aliases`)),
