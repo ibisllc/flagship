@@ -98,6 +98,12 @@ export interface OrgStorage {
    * holds the limit itself (security report F4, §6). False when the key exists, "full" at the limit.
    */
   putOpenProposal(orgId: string, obj: OrgObject, maxOpen: number): Promise<boolean | "full">;
+  /**
+   * Inserts a seat's grant or invite only while seat `seatId` is live or the org's live seats (seats with an
+   * unexpired grant at `now` and no revoke) number fewer than `seatLimit`, counted by the insert itself. A null
+   * limit is none. False when the key exists, "full" at the limit.
+   */
+  putSeatObject(orgId: string, obj: OrgObject, seatId: string, seatLimit: number | null, now: number): Promise<boolean | "full">;
   getObject(orgId: string, kind: OrgObjectKind, key: string): Promise<OrgObject | null>;
   listObjects(orgId: string, kind: OrgObjectKind): Promise<OrgObject[]>;
   deleteObject(orgId: string, kind: OrgObjectKind, key: string): Promise<void>;
@@ -160,6 +166,21 @@ export class InMemoryOrgStorage implements OrgStorage {
     if (m.has(obj.key)) return false;
     const open = [...m.values()].filter((o) => (JSON.parse(o.bodyJson) as { decision?: unknown }).decision == null).length;
     if (open >= maxOpen) return "full" as const;
+    m.set(obj.key, { ...obj });
+    return true;
+  }
+  async putSeatObject(orgId: string, obj: OrgObject, seatId: string, seatLimit: number | null, now: number) {
+    const m = this.bucket(orgId, obj.kind);
+    if (m.has(obj.key)) return false;
+    if (seatLimit !== null) {
+      const revoked = new Set(this.bucket(orgId, "revoke").keys());
+      const live = new Set<string>();
+      for (const o of this.bucket(orgId, "grant").values()) {
+        const g = (JSON.parse(o.bodyJson) as { grant?: { seatId?: string; expiresAt?: number } }).grant;
+        if (g?.seatId && (g.expiresAt ?? 0) > now && !revoked.has(g.seatId)) live.add(g.seatId);
+      }
+      if (!live.has(seatId) && live.size >= seatLimit) return "full" as const;
+    }
     m.set(obj.key, { ...obj });
     return true;
   }
@@ -311,6 +332,23 @@ export class D1OrgStorage implements OrgStorage {
          ON CONFLICT DO NOTHING`,
       )
       .bind(orgId, obj.kind, obj.key, obj.bodyJson, obj.issuedAt, obj.storedAt, maxOpen)
+      .run();
+    if ((r.meta.changes ?? 0) > 0) return true;
+    return (await this.getObject(orgId, obj.kind, obj.key)) ? false : ("full" as const);
+  }
+  async putSeatObject(orgId: string, obj: OrgObject, seatId: string, seatLimit: number | null, now: number) {
+    const liveGrant = `kind = 'grant' AND json_extract(body_json, '$.grant.expiresAt') > ?9
+      AND json_extract(body_json, '$.grant.seatId') NOT IN (SELECT object_key FROM org_objects WHERE org_id = ?1 AND kind = 'revoke')`;
+    const r = await this.db
+      .prepare(
+        `INSERT INTO org_objects (org_id, kind, object_key, body_json, issued_at, stored_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6
+          WHERE ?8 IS NULL
+             OR EXISTS (SELECT 1 FROM org_objects WHERE org_id = ?1 AND ${liveGrant} AND json_extract(body_json, '$.grant.seatId') = ?7)
+             OR (SELECT COUNT(DISTINCT json_extract(body_json, '$.grant.seatId')) FROM org_objects WHERE org_id = ?1 AND ${liveGrant}) < ?8
+         ON CONFLICT DO NOTHING`,
+      )
+      .bind(orgId, obj.kind, obj.key, obj.bodyJson, obj.issuedAt, obj.storedAt, seatId, seatLimit, now)
       .run();
     if ((r.meta.changes ?? 0) > 0) return true;
     return (await this.getObject(orgId, obj.kind, obj.key)) ? false : ("full" as const);
