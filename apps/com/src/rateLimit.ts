@@ -64,6 +64,8 @@ export type RateLimitEndpoint =
   // Name dibs initiate + verify: each verify makes outbound DNS/HTTPS lookups,
   // so a flood must not turn the Worker into a lookup amplifier.
   | "name-dibs"
+  // The name-change quote, also the choose-name screen's precheck as people type: up to two DNS lookups per call.
+  | "name-change-quote"
   // Custom voi.ci name check: up to two DNS lookups per call, and the field asks as people type.
   | "voici-name-check"
   // Setting or clearing an app's voi.ci name (POST /api/users/<u>/apps/<id>/voici-name): signed, verified with the
@@ -339,6 +341,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   ],
   "name-dibs": [
     { axis: "ip", limit: 30, windowSec: 900 },
+  ],
+  "name-change-quote": [
+    { axis: "ip", limit: 60, windowSec: 60 },
+    { axis: "ip", limit: 600, windowSec: 3600 },
   ],
   "voici-name-check": [
     { axis: "ip", limit: 60, windowSec: 60 },
@@ -913,7 +919,8 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/security/report") return "security-report";
   if (m === "GET" && /^\/api\/users\/[^/]+\/abuse-notices$/.test(pathname)) return "abuse-notices";
   if (m === "POST" && /^\/api\/users\/[^/]+\/abuse-notices\/[0-9a-f]{32}\/done$/.test(pathname)) return "abuse-notice-done";
-  if (m === "POST" && (pathname === "/api/account/name-change" || pathname === "/api/account/name-change/quote")) return "name-dibs";
+  if (m === "POST" && pathname === "/api/account/name-change") return "name-dibs";
+  if (m === "POST" && pathname === "/api/account/name-change/quote") return "name-change-quote";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
   if (m === "POST" && pathname === "/api/box-claim/key") return "box-claim-key";

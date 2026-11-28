@@ -62,7 +62,7 @@ import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
 import { spendVouchersExactly, unspendVouchers, type VoucherSigningKey } from "./blindVouchers.js";
 import { checkNameGrant, returnNameGrant, spendNameGrant, takeNameGrant } from "./nameGrant.js";
-import { DIBS_CLAIM_PRICE_USD, dibsWindowState, reservedForDotComHolder, type DibsFetch, type DibsWindow } from "./nameDibs.js";
+import { DIBS_CLAIM_PRICE_USD, dibsWindowState, dotComHold, type DibsFetch, type DibsWindow } from "./nameDibs.js";
 import { OFFER_TTL_MS } from "./usernameClaim.js";
 import { consumeNameVoucher, NAME_CHANGE_PRICE_USD, releaseNameVoucher } from "./voucher.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
@@ -147,15 +147,20 @@ async function assessName(
     return { ok: false, status: 409, reason: "that name was just offered to someone signing up — try again later", code: "offered" };
   }
   // A name grant from the owner (nameGrant.ts) lifts only this hold, for only its own name.
-  if (!opts.liftDibs && (await reservedForDotComHolder(deps, name))) {
+  const hold = opts.liftDibs ? null : await dotComHold(deps, name);
+  if (hold) {
     const winner = await deps.claims.winner(name);
     if (!winner || winner.username !== oldUsername) {
+      // `domain` is the .com that holds the name (maybe the de-hyphenated one); `checked: false` says its lookup
+      // failed and the name is held only until it answers. Old store builds read code + heldUntil only.
       return {
         ok: false,
         status: 409,
-        reason: `${name} is held for whoever controls ${name}.com until the dibs window closes — prove you own it in "Claim your .com name"`,
+        reason: hold.checked
+          ? `${name} is held for whoever controls ${hold.domain} until the dibs window closes — prove you own it in "Claim your .com name"`
+          : `couldn't check ${hold.domain} just now, so ${name} is held — try again in a minute`,
         code: "dibs-held",
-        extra: { heldUntil: dibsWindowState(deps.window, nowOf(deps)).end },
+        extra: { heldUntil: dibsWindowState(deps.window, nowOf(deps)).end, domain: hold.domain, ...(hold.checked ? {} : { checked: false }) },
       };
     }
     if (winner.consumedAt !== undefined) return { ok: false, status: 409, reason: "this dibs claim was already used", code: "dibs-used" };
@@ -183,16 +188,22 @@ async function liveServerCount(deps: NameChangeDeps, username: string): Promise<
 
 /** `POST /api/account/name-change/quote` — `{ username, newUsername }` →
  *  `{ available, kind, priceUsd }` or `{ available:false, reason }`. Public:
- *  it reveals only what the public username lookup and DNS already do. */
+ *  it reveals only what the public username lookup and DNS already do.
+ *
+ *  Without `username` it is the choose-name screen's precheck, asked as the
+ *  person types before any account exists: the same answer about the name
+ *  itself (format, taken, offered, the dibs hold, a name grant), without the
+ *  account's own checks (same name, live servers). */
 export async function handleNameChangeQuote(
   deps: NameChangeDeps,
   body: { username?: unknown; newUsername?: unknown; nameGrant?: unknown } | undefined,
 ): Promise<HandlerResponseWithHeaders> {
-  if (typeof body?.username !== "string" || typeof body?.newUsername !== "string") {
+  const precheck = body !== undefined && body !== null && body.username === undefined;
+  if ((!precheck && typeof body?.username !== "string") || typeof body?.newUsername !== "string") {
     return malformed("username and newUsername are required");
   }
-  const old = body.username.toLowerCase();
-  if (!(await deps.usernames.get(old))) return notFound("unknown account");
+  const old = precheck ? "" : String(body.username).toLowerCase();
+  if (!precheck && !(await deps.usernames.get(old))) return notFound("unknown account");
   // A grant is checked, never taken, here.
   let grantPaid = false;
   if (body.nameGrant !== undefined) {
@@ -202,7 +213,7 @@ export async function handleNameChangeQuote(
   }
   const a = await assessName(deps, old, body.newUsername, { liftDibs: body.nameGrant !== undefined });
   if (!a.ok) return ok({ available: false, reason: a.reason, code: a.code, ...(a.extra ?? {}) });
-  if ((await liveServerCount(deps, old)) > 0) {
+  if (!precheck && (await liveServerCount(deps, old)) > 0) {
     return ok({ available: false, reason: HAS_SERVERS, code: "has-servers" });
   }
   if (grantPaid) return ok({ available: true, kind: a.kind, priceUsd: 0, paid: true });

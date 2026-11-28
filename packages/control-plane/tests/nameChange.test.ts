@@ -398,3 +398,77 @@ describe("POST /api/account/name-change/quote", () => {
     expect((await handleNameChangeQuote(deps, { username: "fresh-poppy", newUsername: "rapid-bison" })).body).toMatchObject({ available: false, reason: "that name is taken" });
   });
 });
+
+describe("the dibs hold names its .com", () => {
+  it("a hyphenated name reports the de-hyphenated domain that holds it", async () => {
+    const { deps } = await setup({ registered: ["cloudflare.com"] });
+    expect((await handleNameChangeQuote(deps, { username: "fresh-poppy", newUsername: "clou-dflare" })).body).toEqual({
+      available: false,
+      reason: expect.stringContaining("cloudflare.com"),
+      code: "dibs-held",
+      heldUntil: WINDOW.end,
+      domain: "cloudflare.com",
+    });
+  });
+
+  it("a failed lookup still holds the name, with checked:false", async () => {
+    const { deps } = await setup();
+    const failing: NameChangeDeps = { ...deps, fetch: async () => ({ ok: false, status: 502, json: async () => ({}), text: async () => "" }) };
+    expect((await handleNameChangeQuote(failing, { username: "fresh-poppy", newUsername: "acme" })).body).toMatchObject({
+      available: false,
+      code: "dibs-held",
+      heldUntil: WINDOW.end,
+      domain: "acme.com",
+      checked: false,
+    });
+    const r = await handleNameChange(failing, rename("acme", "unused"));
+    expect(r).toMatchObject({ status: 409, body: { code: "dibs-held", domain: "acme.com", checked: false } });
+  });
+
+  it("the rename's refusal carries the domain too", async () => {
+    const { deps, voucher } = await setup({ registered: ["acme.com"] });
+    const r = await handleNameChange(deps, rename("acme", await voucher("name-change")));
+    expect(r).toMatchObject({ status: 409, body: { code: "dibs-held", heldUntil: WINDOW.end, domain: "acme.com" } });
+    expect((r.body as Record<string, unknown>).checked).toBeUndefined();
+  });
+});
+
+describe("the quote's precheck (no username)", () => {
+  it("answers about the name alone, in the same shape", async () => {
+    const { storage, deps } = await setup({ registered: ["acme.com"] });
+    await storage.usernames.put({ username: "rapid-bison", irkPubHex: hex(other.publicKey), claimedAt: 1 });
+    expect((await handleNameChangeQuote(deps, { newUsername: "acme-tools" })).body).toEqual({ available: true, kind: "name-change", priceUsd: 10, units: 10 });
+    expect((await handleNameChangeQuote(deps, { newUsername: "acme" })).body).toMatchObject({ available: false, code: "dibs-held", heldUntil: WINDOW.end, domain: "acme.com" });
+    expect((await handleNameChangeQuote(deps, { newUsername: "rapid-bison" })).body).toMatchObject({ available: false, code: "taken" });
+    expect((await handleNameChangeQuote(deps, { newUsername: "Bad--name" })).body).toMatchObject({ available: false, code: "invalid" });
+  });
+
+  it("skips the account's own checks: same name and live servers", async () => {
+    const { deps } = await setup();
+    // fresh-poppy is an existing account, so as a precheck it is simply taken (not "same-name").
+    expect((await handleNameChangeQuote(deps, { newUsername: "fresh-poppy" })).body).toMatchObject({ available: false, code: "taken" });
+    const withServers: NameChangeDeps = { ...deps, servers: { ...deps.servers, listForUser: async () => { throw new Error("precheck must not read servers"); } } };
+    expect((await handleNameChangeQuote(withServers, { newUsername: "acme-tools" })).body).toMatchObject({ available: true });
+  });
+
+  it("a name grant lifts the hold; a grant for another name is refused", async () => {
+    const { deps, vouchers } = await setup({ registered: ["acme.com", "acmy.com"] });
+    const r = await handleIssueNameGrant({ vouchers, now: () => NOW }, { name: "acme" });
+    const g = r.body as { code: string; expiresAt: number };
+    const grant = { code: g.code, expiresAt: g.expiresAt };
+    expect((await handleNameChangeQuote(deps, { newUsername: "acme", nameGrant: grant })).body).toMatchObject({ available: true, kind: "name-change", priceUsd: 10 });
+    expect((await handleNameChangeQuote(deps, { newUsername: "acme" })).body).toMatchObject({ available: false, code: "dibs-held" });
+    expect((await handleNameChangeQuote(deps, { newUsername: "acmy", nameGrant: grant })).body).toMatchObject({ available: false, code: "grant-invalid" });
+  });
+
+  it("old-shaped requests are unchanged: a username still runs the account's checks", async () => {
+    const { deps } = await setup();
+    expect((await handleNameChangeQuote(deps, { username: "fresh-poppy", newUsername: "fresh-poppy" })).body).toMatchObject({ code: "same-name" });
+    expect((await handleNameChangeQuote(deps, { username: "nobody-here", newUsername: "acme-tools" })).status).toBe(404);
+    expect((await handleNameChangeQuote(deps, { username: 7, newUsername: "acme-tools" })).status).toBe(400);
+    expect((await handleNameChangeQuote(deps, { newUsername: 7 })).status).toBe(400);
+    expect((await handleNameChangeQuote(deps, undefined)).status).toBe(400);
+    const withServers: NameChangeDeps = { ...deps, servers: { ...deps.servers, listForUser: async () => [{ revokedAt: undefined } as never] } };
+    expect((await handleNameChangeQuote(withServers, { username: "fresh-poppy", newUsername: "acme-tools" })).body).toMatchObject({ code: "has-servers" });
+  });
+});
