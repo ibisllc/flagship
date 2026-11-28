@@ -151,6 +151,16 @@ over once "let's start 0.5" is said.
   `/keys` need admin or servers-add; `.com` refuses every tokenless org read (no compatibility window, owner). Order:
   the endorsed box release that sends it, then the enforcing `.com`. Shared token vectors. Branch
   `feat/org-read-token-0.5`.
+  - **Org invite: link-key proof for read + accept, and withdraw** (found 2026-11-27). Today only the offer is
+    encrypted under the link key `k`, so an accept needs no proof that the joiner holds the link. Derive
+    `offerKey = HKDF(k, "flagship/org-invite-offer/v1")` and an invite key from `HKDF(k, "flagship/org-invite-key/v1")`
+    (Ed25519 plus an ML-DSA half, as accepts are hybrid); `inviteKeyPub` joins `OrgSeatInvite`'s canonical bytes.
+    `GET invites/<seat>` needs a fresh invite-key signature over `flagship/org-invite-read/v1|orgId|seatId|issuedAt`
+    (±5 min; missing or wrong → 404, as for no invite). The accept carries an invite-key signature over
+    `canonicalOrgSeatAccept`, stored and shown in `/seats` so admin clients and connector boxes verify it too. Keep
+    the SAS code. New admin-signed withdraw (deletes the invite and any unadmitted accept, logged). Vectors TS, Swift,
+    Kotlin, webapp (derivation, read proof, accept proof, negatives); clients webapp `orgJoin`/`orgSeat`, iOS and
+    Android `OrgClient`/join/org view models. Pending invites are re-sent after 0.5.
 - **Org founder-removal and recovery notices are observed by `.com`** (external report, 2026-11-27; main refuses
   those entries until then, `6dd5a89b0`). The notice is a ceremony keyed by its body hash, opened at least `wait`
   before the append by `.com`'s `openedAt`; the veto window is `[openedAt, openedAt + wait)`; a new `OrgChainOptions`
