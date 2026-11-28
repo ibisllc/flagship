@@ -588,7 +588,9 @@
 //       pasted voi.ci/ or https://voi.ci/ address keeps only the name).
 //  v258: the bundled org protocol (vendor/flagship-org/org.js) refuses small-order and non-canonical Ed25519 keys
 //       before verifying (edSync, test-vectors/ed25519-low-order).
-const SHELL_VERSION = "v258";
+//  v260: the companion-link boot entry is gone (a remote connects only through the QR relay); a redeem answer naming a
+//       server off the data apex is refused; expired remote profiles are retired at start-up.
+const SHELL_VERSION = "v260";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

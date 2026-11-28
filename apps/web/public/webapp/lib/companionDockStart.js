@@ -9,7 +9,7 @@
 // and the relay never sees the account, the server or the ticket.
 
 import { appLinkUrl, controlHost, dataApex } from "./apex.js";
-import { redeemCompanionAndPersist } from "./companionReceiver.js";
+import { redeemCompanionAndPersist, serverOriginOnApex } from "./companionReceiver.js";
 import { aeadOpen, deriveMaterial, freshKeypair, freshSid } from "./pairingRelay.js";
 
 import { tr } from "./i18n.js";
@@ -32,13 +32,9 @@ export function parseRemoteTicket(text, { apex = dataApex() } = {}) {
     throw new Error(tr("The phone sent an invalid ticket"));
   }
   if (!/^[a-z0-9](?:-?[a-z0-9]){0,31}$/.test(username)) throw new Error(tr("The phone sent an invalid account"));
-  let url;
-  try { url = new URL(String(obj.podBaseUrl ?? "")); } catch { url = null; }
-  if (!url || url.protocol !== "https:" || url.pathname !== "/" || url.search || url.port
-      || !url.hostname.endsWith(`.${apex}`)) {
-    throw new Error(tr("The phone named a server this page won't connect to"));
-  }
-  return { ticketId, ticketSecret, podBaseUrl: `https://${url.hostname}`, username };
+  const podBaseUrl = serverOriginOnApex(obj.podBaseUrl, apex);
+  if (!podBaseUrl) throw new Error(tr("The phone named a server this page won't connect to"));
+  return { ticketId, ticketSecret, podBaseUrl, username };
 }
 
 /**
