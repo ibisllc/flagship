@@ -4157,5 +4157,13 @@
   "The link stops working, and nobody who accepted it is let in.": "O link para de funcionar, e ninguém que o aceitou entra.",
   "%@ GB": "%@ GB",
   "%@ MB": "%@ MB",
-  "%@ KB": "%@ KB"
+  "%@ KB": "%@ KB",
+  "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.": "A proteção pós-quântica estrita faz o servidor recusar tudo o que for assinado ou enviado apenas com a criptografia clássica atual.",
+  "Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.": "Todo servidor tem proteção pós-quântica por padrão. Ele ativa a proteção estrita sozinho na próxima vez que um celular ou tablet de administrador abrir o Flagship, quando todos os dispositivos e sua recuperação estiverem prontos. Navegadores e provedores de IA continuam acessíveis como exceções indicadas, com proteção clássica.",
+  "AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.": "Os provedores de IA (Flagship Inference e suas próprias chaves) são acessados com proteção clássica, como uma exceção indicada.",
+  "%lld of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.": "%lld dos seus dispositivos ainda precisam do registro pós-quântico. Abra o Flagship em um celular ou tablet de administrador que tenha sua chave de administrador.",
+  "Turn on now": "Ativar agora",
+  "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.": "A proteção pós-quântica está ativada. Navegadores e provedores de IA continuam acessíveis com proteção clássica.",
+  "Turn on quantum-safe protection": "Ativar a proteção pós-quântica",
+  "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": "Um navegador acessa seus servidores com proteção clássica: servidores com proteção pós-quântica aceitam navegadores como uma exceção indicada. O app Flagship tem proteção pós-quântica."
 }

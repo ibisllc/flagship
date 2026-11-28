@@ -200,6 +200,19 @@ public enum PqIdentityBindingService {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var _binder: PqIdentityBinder?
     private nonisolated(unsafe) static var _client: LivePqKeyBindingClient?
+    private nonisolated(unsafe) static var _afterUpgrade: (@Sendable (String) async -> Void)?
+
+    /// Runs after each at-unlock pass, while the session is still unlocked: strict by default
+    /// (pq-suites.md §21) signs only once this device's keys are bound.
+    public static func setAfterUpgrade(_ hook: (@Sendable (String) async -> Void)?) {
+        lock.lock(); defer { lock.unlock() }
+        _afterUpgrade = hook
+    }
+
+    private static var afterUpgrade: (@Sendable (String) async -> Void)? {
+        lock.lock(); defer { lock.unlock() }
+        return _afterUpgrade
+    }
 
     /// Installed once at launch with the live `.com` client; unset (nothing runs) in the mock gym.
     public static func configure(client: LivePqKeyBindingClient) {
@@ -244,6 +257,15 @@ public enum PqIdentityBindingService {
 
     /// The at-unlock upgrade: everything this unlocked session holds.
     public static func upgradeAtUnlock(username: String, deviceId: String?) {
-        bindInBackground(username: username, identities: sessionIdentities(username: username, deviceId: deviceId))
+        let identities = PqKeyStore.shared.withoutRecoveredRoots(sessionIdentities(username: username, deviceId: deviceId), username: username)
+        guard let (binder, client) = current else { return }
+        let after = afterUpgrade
+        Task.detached(priority: .utility) {
+            if !identities.isEmpty {
+                let remote = try? await client.fetch(username: username)
+                await binder.run(username: username, identities: identities, remote: remote)
+            }
+            await after?(username)
+        }
     }
 }

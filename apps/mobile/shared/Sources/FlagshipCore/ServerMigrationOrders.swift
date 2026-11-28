@@ -321,3 +321,11 @@ public enum ServerMigrationTimeline {
         }
     }
 }
+
+extension MigrationStartBody {
+    /// The canonical bytes of the order this deposit carries (what its hybrid half signs).
+    public var canonicalOrderBytes: Data {
+        ServerMigrationOrder(serverDomain: order.serverDomain, oldStkPubHex: order.oldStkPubHex, diskDisposition: order.diskDisposition,
+                             nonce: order.nonce, issuedAt: order.issuedAt).canonicalBytes()
+    }
+}

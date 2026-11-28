@@ -116,6 +116,7 @@ public final class AccountDeletionViewModel {
                 request: .init(username: user, issuedAt: issuedAt),
                 signature: HexUtil.encode(serversSig)
             )
+            serversBundle?.pqSignature = await QuantumSafetyService.orderPqSignature(canonical: serversOrder.canonicalBytes(), edKey: irk, username: user)
         }
 
         let bundle = AccountSelfDeleteBundleRequest(

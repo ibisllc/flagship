@@ -76,6 +76,16 @@ public enum QuantumSafetyService {
         return AssurancePolicy.strictInForce(r.state)
     }
 
+    /// The hybrid half of a sensitive order deposited through `.com` (decommission, migration, an
+    /// account's self-delete) by `edKey` (the admin root, else the account key), while any server is
+    /// strict: a deposit reaches a strict box no quantum-safe way (pq-suites.md §21.1).
+    public static func orderPqSignature(canonical: Data, edKey: Curve25519.Signing.PrivateKey, username: String) async -> PqSignatureWire? {
+        guard anyStrict(username: username) else { return nil }
+        let pub = QSHex.hex([UInt8](edKey.publicKey.rawRepresentation))
+        let role: PqBindingRole = Keystore.adminRootPubHex()?.lowercased() == pub ? .adminRoot : .accountIrk
+        return await pqSignature(canonical: canonical, edKey: edKey, role: role, username: username)
+    }
+
     /// True when any server this device holds for the account is strict: sensitive orders then
     /// carry the signer's hybrid signature too.
     public static func anyStrict(username: String) -> Bool { store.anyStrict(account: username) }

@@ -447,6 +447,8 @@ public struct DecommissionDepositBody: Encodable, Equatable, Sendable {
     public let authSignature: String
     public let order: Order
     public let signature: String
+    /// The order's hybrid half while a server is strict (pq-suites.md §21.1); `.com` relays it opaque.
+    public var pqSignature: PqSignatureWire? = nil
     public init(auth: MailboxAuthEnvelope.Auth, authSignature: String, order: Order, signature: String) {
         self.auth = auth; self.authSignature = authSignature
         self.order = order; self.signature = signature

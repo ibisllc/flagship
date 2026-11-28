@@ -34,6 +34,9 @@ public struct AiKeysScreen: View {
                     Text("AI keys power app builds but stay on this phone. Your server sends them only to the provider; Flagship never sees them.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
+                    Text("AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     FlagshipInferenceEntry(
                         state: freeAi.state,

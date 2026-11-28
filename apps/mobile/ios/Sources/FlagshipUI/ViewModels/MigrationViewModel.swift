@@ -223,7 +223,7 @@ public final class MigrationViewModel {
         defer { working = false }
         do {
             let (irk, orderKey) = try await signer(String(localized: "Migrate \(serverFqdn) to a new server"))
-            let body = try ServerMigrationFlow.buildStartDeposit(
+            var body = try ServerMigrationFlow.buildStartDeposit(
                 serverFqdn: serverFqdn,
                 username: username,
                 irk: irk,
@@ -234,6 +234,7 @@ public final class MigrationViewModel {
                 nonce: randomNonce(),
                 authNonce: randomNonce()
             )
+            body.pqSignature = await QuantumSafetyService.orderPqSignature(canonical: body.canonicalOrderBytes, edKey: orderKey ?? irk, username: username)
             try await migration.startMigration(serverDomain: serverFqdn, body: body)
         } catch let e as ScreensClientError {
             errorMessage = e.errorDescription ?? String(localized: "That didn't work. Try again in a moment.")
@@ -278,7 +279,7 @@ public final class MigrationViewModel {
                 )
                 try await migration.confirmReady(serverDomain: serverFqdn, body: confirm)
             }
-            let freeze = try ServerMigrationFlow.buildFreezeDeposit(
+            var freeze = try ServerMigrationFlow.buildFreezeDeposit(
                 serverFqdn: serverFqdn,
                 username: username,
                 irk: irk,
@@ -289,6 +290,7 @@ public final class MigrationViewModel {
                 nonce: randomNonce(),
                 authNonce: randomNonce()
             )
+            freeze.pqSignature = await QuantumSafetyService.orderPqSignature(canonical: freeze.canonicalOrderBytes, edKey: orderKey ?? irk, username: username)
             try await migration.freeze(serverDomain: serverFqdn, body: freeze)
         } catch let e as ScreensClientError {
             errorMessage = e.errorDescription ?? String(localized: "That didn't work. Try again in a moment.")

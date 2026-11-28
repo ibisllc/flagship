@@ -27,6 +27,11 @@ public struct CompanionDockScreen: View {
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
+                // The browser exception of a quantum-safe server, said plainly (pq-suites.md §21).
+                Text("A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.")
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
                 pairingCard(c: c)
                 approvalCard(c: c)
                 activeList(c: c)

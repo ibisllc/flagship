@@ -4151,5 +4151,13 @@
   "The link stops working, and nobody who accepted it is let in.": "a12d1ba0cb39",
   "%@ GB": "7004a87d84a7",
   "%@ MB": "9e9af87c271d",
-  "%@ KB": "ea8442eee332"
+  "%@ KB": "ea8442eee332",
+  "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.": "034b626af344",
+  "Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.": "06965509d67a",
+  "AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.": "536d77c23a13",
+  "%lld of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.": "62aad9246196",
+  "Turn on now": "8ba1b9dc4218",
+  "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.": "cc8dc0e74852",
+  "Turn on quantum-safe protection": "7fa2d82c2a03",
+  "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": "97769040e8e0"
 }

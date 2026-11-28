@@ -534,6 +534,8 @@ public struct AccountSelfDeleteBundleRequest: Encodable, Sendable {
         }
         public let request: Inner
         public let signature: String   // hex; Ed25519 by the owner IRK
+        /// The order's hybrid half while a server is strict (pq-suites.md §21.1); `.com` relays it opaque.
+        public var pqSignature: PqSignatureWire? = nil
         public init(request: Inner, signature: String) {
             self.request = request; self.signature = signature
         }

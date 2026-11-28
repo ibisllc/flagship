@@ -68,6 +68,7 @@ public final class QuantumSafetyViewModel {
         thisDeviceCustody = deviceIdentity.flatMap { PqKeyStore.shared.custody(for: $0) }?.label
         let thisBound = deviceIdentity.flatMap { PqKeyStore.shared.status(for: $0) } == .bound
         let counts = await client.deviceBindingCounts(username: user)
+        let withoutRecord = await client.grantsWithoutRecord(username: user)?.devices ?? 0
         let bindings = try? await client.fetch(username: user)
         let root = Keystore.adminRootPubHex()?.lowercased()
         let rootBinding = root.flatMap { r in bindings?.adminRoot.flatMap { try? PqTrust.verifyPqKeyBinding($0, PqBindingExpectation(role: "admin-root", subjectId: user, ed25519PubHex: r, now: now())) } }
@@ -88,7 +89,8 @@ public final class QuantumSafetyViewModel {
                     row.replayed = r
                 }
                 row.readiness = QuantumSafety.Readiness(devicesBound: counts?.bound ?? 0, devices: counts?.devices ?? 0, thisDeviceBound: thisBound,
-                                                        thisDeviceIsAdmin: Keystore.hasAdminRoot, recoveryChecked: served.recoveryChecked, serverBound: serverBound)
+                                                        thisDeviceIsAdmin: Keystore.hasAdminRoot, recoveryChecked: served.recoveryChecked, serverBound: serverBound,
+                                                        devicesWithoutRecord: withoutRecord)
             }
             verified.recovery[host] = row.readiness?.recoveryChecked ?? false
             if row.strict, let clients { row.apps = await loadApps(host: host, clients: clients, root: root, myPub: myPub, rootBinding: rootBinding, myBinding: myBinding) }
@@ -172,6 +174,76 @@ public final class QuantumSafetyViewModel {
         } catch {
             message = (error as? QuantumSafetyRefusal)?.sentence ?? String(localized: "\(a.name) wasn't changed.")
             return false
+        }
+    }
+
+    // MARK: - Strict by default (pq-suites.md §21)
+
+    /// Gives every device grant that has none its hybrid companion (signed by the root that signed
+    /// the grant, when this device holds that root's bound PQ key), then moves each server no owner
+    /// has ever changed to strict with the browser exception, where it is ready. `interactive`
+    /// (the screen's "Turn on now") may ask for Face ID once; otherwise only keys this unlocked
+    /// session holds are used. With several servers the server order is signed again with its
+    /// hybrid half, which needs the admin root: without it at hand the quiet pass waits.
+    @discardableResult
+    public func applyDefaults(interactive: Bool = false, mailbox: (any SecretMailboxClient)? = nil) async -> Int {
+        guard let client = PqIdentityBindingService.client, !user.isEmpty, !app.isDemoAccount else { return 0 }
+        var root: Curve25519.Signing.PrivateKey? = Keystore.sessionAdminRoot()
+        if root == nil, interactive, Keystore.hasAdminRoot {
+            root = try? await ServerOrderSaver.adminOrderKey(reason: String(localized: "Turn on quantum-safe protection"))
+        }
+        await backfillGrantCompanions(client: client, root: root)
+        await load()
+        let live = app.pods.filter { !$0.isRevoked && !$0.fqdn.isEmpty }
+        let several = live.count >= 2
+        if several && root == nil { return 0 }
+        var moved = 0
+        for row in servers where row.readiness?.ready == true {
+            let scope = PolicyScope(kind: .installation, id: row.fqdn)
+            let state = row.replayed?.state ?? AssurancePolicy.legacyState(scope)
+            guard QuantumSafety.defaultStrictEligible(state), let s = await quietSigner(root: root) else { continue }
+            let pub = QSHex.hex([UInt8](s.edKey.publicKey.rawRepresentation))
+            guard let change = QuantumSafety.defaultStrictChange(account: user, scope: scope, from: state, peers: [row.fqdn],
+                                                                  signerKind: s.kind, signerKeyId: pub, now: now()) else { continue }
+            do {
+                try await signAndPost(change, s)
+                moved += 1
+            } catch {
+                // Tried again at the next unlock; the screen says what is missing.
+            }
+        }
+        guard moved > 0 else { return 0 }
+        message = String(localized: "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.")
+        await load()
+        if several, let mailbox, let root {
+            _ = await ServerOrderSaver(app: app, mailbox: mailbox, clients: clients, signer: { _ in root }).save(podIds: app.pods.map(\.podId))
+        }
+        return moved
+    }
+
+    /// The admin root when this device holds its PQ half, else this admin device's own key; never prompts.
+    private func quietSigner(root: Curve25519.Signing.PrivateKey?) async -> (kind: PolicySignerKind, edKey: Curve25519.Signing.PrivateKey, role: PqBindingRole, subject: String)? {
+        if let root, await PqKeyStore.shared.key(for: PqIdentity(role: .adminRoot, subjectId: user, edKey: root)) != nil {
+            return (.adminRoot, root, .adminRoot, user)
+        }
+        guard Keystore.hasAdminRoot, let dev = Keystore.sessionAccountDeviceKey(accountId: user, deviceId: deviceId) else { return nil }
+        return (.adminDevice, dev, .device, deviceId)
+    }
+
+    private func backfillGrantCompanions(client: LivePqKeyBindingClient, root: Curve25519.Signing.PrivateKey?) async {
+        guard let pending = await client.grantsWithoutRecord(username: user), !pending.grants.isEmpty else { return }
+        let rootHex = Keystore.adminRootPubHex()?.lowercased()
+        for g in pending.grants {
+            let key: Curve25519.Signing.PrivateKey?
+            let role: PqBindingRole
+            if g.signerRoot == "admin-root" {
+                guard let root, QSHex.hex([UInt8](root.publicKey.rawRepresentation)) == rootHex else { continue }
+                key = root; role = .adminRoot
+            } else {
+                key = Keystore.sessionIRKIfCached(); role = .accountIrk
+            }
+            guard let key, let companion = await QuantumSafetyService.grantCompanion(g.grant, rootKey: key, role: role, username: user) else { continue }
+            _ = await client.postGrantCompanion(username: user, grantId: g.grant.grantId, suite: companion.suite, signature: companion.signature)
         }
     }
 

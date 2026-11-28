@@ -191,6 +191,49 @@ public final class LivePqKeyBindingClient: PqKeyBindingClient, @unchecked Sendab
         }
     }
 
+    /// A live device grant with no hybrid companion yet (pq-suites.md §21.2), as the device-grant book lists it.
+    public struct GrantWithoutRecord: Sendable, Equatable {
+        public let grant: DeviceCapabilityGrantEnvelope
+        /// `admin-root` or `membership` (the account key).
+        public let signerRoot: String
+    }
+
+    /// The device-grant book's live grants that carry no hybrid companion, and how many devices have none.
+    public func grantsWithoutRecord(username: String) async -> (devices: Int, grants: [GrantWithoutRecord])? {
+        let u = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/device-grants"))
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        if let token = await readTokens?.token(for: username) { req.setValue("Bearer \(token)", forHTTPHeaderField: "authorization") }
+        guard let (data, resp) = try? await urlSession.gatedData(for: req), (resp as? HTTPURLResponse)?.statusCode == 200,
+              let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let grants = o["grants"] as? [[String: Any]] else { return nil }
+        var recorded: [String: Bool] = [:]
+        var out: [GrantWithoutRecord] = []
+        for g in grants {
+            guard let id = g["deviceId"] as? String else { continue }
+            let has = g["pqSignature"] is [String: Any]
+            recorded[id] = (recorded[id] ?? false) || has
+            guard !has, let gid = g["grantId"] as? String, let pub = g["devicePubHex"] as? String, let scopes = g["scopes"] as? [String],
+                  let issued = (g["issuedAt"] as? NSNumber)?.int64Value, let expires = (g["expiresAt"] as? NSNumber)?.int64Value else { continue }
+            out.append(GrantWithoutRecord(
+                grant: DeviceCapabilityGrantEnvelope(grantId: gid, username: username.lowercased(), deviceId: id, devicePubKeyHex: pub.lowercased(),
+                                                     scopes: scopes, issuedAt: issued, expiresAt: expires),
+                signerRoot: (g["signerRoot"] as? String) ?? "membership"))
+        }
+        return (recorded.values.filter { !$0 }.count, out)
+    }
+
+    /// `POST {com}/api/accounts/:u/device-grants/:grantId/pq-signature`; true when `.com` stored it.
+    public func postGrantCompanion(username: String, grantId: String, suite: String, signature: String) async -> Bool {
+        let u = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let g = grantId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? grantId
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/accounts/\(u)/device-grants/\(g)/pq-signature"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["pqSignature": ["suite": suite, "signature": signature]])
+        guard let (_, resp) = try? await urlSession.gatedData(for: req) else { return false }
+        return (resp as? HTTPURLResponse)?.statusCode == 200
+    }
+
     /// `GET {com}/api/server/:host/pq-key-binding` as JSON (verified by the caller under its pin).
     public func fetchServerBinding(serverDomain: String) async -> Any? {
         let h = serverDomain.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain

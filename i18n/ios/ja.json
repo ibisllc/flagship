@@ -4155,5 +4155,13 @@
   "The link stops working, and nobody who accepted it is let in.": "リンクは使えなくなり、承諾した人も参加できません。",
   "%@ GB": "%@ GB",
   "%@ MB": "%@ MB",
-  "%@ KB": "%@ KB"
+  "%@ KB": "%@ KB",
+  "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.": "厳格な耐量子保護をオンにすると、サーバーは現在の従来型の暗号だけで署名または送信されたものをすべて拒否します。",
+  "Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.": "すべてのサーバーは既定で耐量子保護を使います。すべてのデバイスと復旧の準備が整うと、管理者のスマートフォンまたはタブレットが次に Flagship を開いたときに、自動で厳格な保護になります。ブラウザーと AI プロバイダーは、明示された例外として従来型の保護で引き続き利用できます。",
+  "AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.": "AI プロバイダー（Flagship Inference とご自身のキー）へは、明示された例外として従来型の保護で接続します。",
+  "%lld of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.": "%lld 台のデバイスに、まだ耐量子の記録が必要です。管理者キーを持つ管理者のスマートフォンまたはタブレットで Flagship を開いてください。",
+  "Turn on now": "今すぐオンにする",
+  "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.": "耐量子保護はオンです。ブラウザーと AI プロバイダーは従来型の保護で引き続き利用できます。",
+  "Turn on quantum-safe protection": "耐量子保護をオンにする",
+  "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": "ブラウザーは従来型の保護でサーバーに接続します。耐量子のサーバーは、明示された例外としてブラウザーを許可します。Flagship アプリは耐量子です。"
 }

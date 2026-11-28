@@ -83,4 +83,38 @@ final class QuantumSafetyTests: XCTestCase {
         XCTAssertTrue(c.contains { $0.id == "push-apns" && !$0.needsChoice })
         XCTAssertEqual(QuantumSafety.affectedPeersDigest(["B", "a", "b"]), QuantumSafety.affectedPeersDigest(["a", "b"]))
     }
+
+    func testStrictByDefaultOnlyForNeverChangedScopesWithTheBrowserException() throws {
+        let k = try adminRoot()
+        let scope = PolicyScope(kind: .installation, id: server)
+        let root = PqBin.hex(k.edPub)
+        let legacy = AssurancePolicy.legacyState(scope)
+        XCTAssertTrue(QuantumSafety.defaultStrictEligible(legacy))
+        let c = try XCTUnwrap(QuantumSafety.defaultStrictChange(account: account, scope: scope, from: legacy, peers: [server],
+                                                                signerKind: .adminRoot, signerKeyId: root, now: 100))
+        XCTAssertEqual(c.acknowledgedLoss, [QuantumSafety.browserLoss])
+        XCTAssertEqual(c.generation, 1)
+        let replay = { (chain: [AssurancePolicy.SignedChange], current: PolicyState?) in
+            try QuantumSafety.replay(scope: scope, account: self.account, chain: chain, current: current, adminRootHex: root,
+                                     isAdminDevice: { _ in false }, bindingFor: { $0 == root ? k.binding : nil })
+        }
+        let on = try replay([try signed(c, k)], nil)
+        XCTAssertTrue(AssurancePolicy.strictInForce(on.state) && on.browsersAllowed)
+        XCTAssertFalse(QuantumSafety.defaultStrictEligible(on.state))
+        XCTAssertNil(QuantumSafety.defaultStrictChange(account: account, scope: scope, from: on.state, peers: [server], signerKind: .adminRoot, signerKeyId: root, now: 200))
+        // The owner left strict: the default never puts it back.
+        let off = try signed(QuantumSafety.compatibilityChange(account: account, scope: scope, from: on.state, loss: QuantumSafety.leavingStrictLoss,
+                                                               peers: [server], signerKind: .adminRoot, signerKeyId: root, now: 300), k)
+        let left = try replay([try signed(c, k), off], on.state)
+        XCTAssertFalse(QuantumSafety.defaultStrictEligible(left.state))
+    }
+
+    func testReadinessWaitsForEveryDevicesRecord() {
+        var r = QuantumSafety.Readiness(devicesBound: 2, devices: 2, thisDeviceBound: true, thisDeviceIsAdmin: true, recoveryChecked: true, serverBound: true,
+                                        devicesWithoutRecord: 1)
+        XCTAssertFalse(r.ready)
+        XCTAssertEqual(r.missing.count, 1)
+        r.devicesWithoutRecord = 0
+        XCTAssertTrue(r.ready)
+    }
 }

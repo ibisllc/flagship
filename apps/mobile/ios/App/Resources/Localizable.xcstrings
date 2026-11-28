@@ -170424,6 +170424,334 @@
           }
         }
       }
+    },
+    "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La protección poscuántica estricta hace que un servidor rechace todo lo firmado o enviado solo con la criptografía clásica actual."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La protection post-quantique stricte fait refuser à un serveur tout ce qui est signé ou envoyé avec la seule cryptographie classique actuelle."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strikter Post-Quanten-Schutz lässt einen Server alles ablehnen, was nur mit heutiger klassischer Kryptografie signiert oder gesendet wurde."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A proteção pós-quântica estrita faz o servidor recusar tudo o que for assinado ou enviado apenas com a criptografia clássica atual."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "厳格な耐量子保護をオンにすると、サーバーは現在の従来型の暗号だけで署名または送信されたものをすべて拒否します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "严格的抗量子保护会让服务器拒绝所有仅用当今传统密码学签名或发送的内容。"
+          }
+        }
+      }
+    },
+    "Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todos los servidores tienen protección poscuántica de forma predeterminada. Activan la protección estricta por sí solos la próxima vez que un teléfono o tableta de administrador abra Flagship, cuando todos los dispositivos y tu recuperación estén listos. Los navegadores y los proveedores de IA siguen accesibles como excepciones señaladas con protección clásica."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque serveur a une protection post-quantique par défaut. Il active la protection stricte de lui-même la prochaine fois qu’un téléphone ou une tablette administrateur ouvre Flagship, une fois tous les appareils et votre récupération prêts. Les navigateurs et les fournisseurs d’IA restent joignables comme exceptions signalées, avec une protection classique."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jeder Server hat standardmäßig Post-Quanten-Schutz. Er schaltet den strikten Schutz von selbst ein, sobald ein Admin-Telefon oder -Tablet Flagship das nächste Mal öffnet und alle Geräte sowie deine Wiederherstellung bereit sind. Browser und KI-Anbieter bleiben als gekennzeichnete Ausnahmen mit klassischem Schutz erreichbar."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo servidor tem proteção pós-quântica por padrão. Ele ativa a proteção estrita sozinho na próxima vez que um celular ou tablet de administrador abrir o Flagship, quando todos os dispositivos e sua recuperação estiverem prontos. Navegadores e provedores de IA continuam acessíveis como exceções indicadas, com proteção clássica."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのサーバーは既定で耐量子保護を使います。すべてのデバイスと復旧の準備が整うと、管理者のスマートフォンまたはタブレットが次に Flagship を開いたときに、自動で厳格な保護になります。ブラウザーと AI プロバイダーは、明示された例外として従来型の保護で引き続き利用できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每台服务器默认都使用抗量子保护。当所有设备和你的恢复方式都准备就绪后，管理员手机或平板电脑下次打开 Flagship 时，它会自动开启严格保护。浏览器和 AI 提供商作为已标明的例外，继续以传统保护访问。"
+          }
+        }
+      }
+    },
+    "AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los proveedores de IA (Flagship Inference y tus propias claves) se alcanzan con protección clásica, como una excepción señalada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les fournisseurs d’IA (Flagship Inference et vos propres clés) sont joints avec une protection classique, comme exception signalée."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-Anbieter (Flagship Inference und deine eigenen Schlüssel) werden mit klassischem Schutz erreicht, als gekennzeichnete Ausnahme."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os provedores de IA (Flagship Inference e suas próprias chaves) são acessados com proteção clássica, como uma exceção indicada."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI プロバイダー（Flagship Inference とご自身のキー）へは、明示された例外として従来型の保護で接続します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 提供商（Flagship Inference 和你自己的密钥）以传统保护连接，作为已标明的例外。"
+          }
+        }
+      }
+    },
+    "%lld of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld de tus dispositivos aún necesitan su registro poscuántico. Abre Flagship en un teléfono o tableta de administrador que tenga tu clave de administrador."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld de vos appareils ont encore besoin de leur enregistrement post-quantique. Ouvrez Flagship sur un téléphone ou une tablette administrateur qui détient votre clé administrateur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld deiner Geräte brauchen noch ihren Post-Quanten-Eintrag. Öffne Flagship auf einem Admin-Telefon oder -Tablet, das deinen Admin-Schlüssel hat."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld dos seus dispositivos ainda precisam do registro pós-quântico. Abra o Flagship em um celular ou tablet de administrador que tenha sua chave de administrador."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 台のデバイスに、まだ耐量子の記録が必要です。管理者キーを持つ管理者のスマートフォンまたはタブレットで Flagship を開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你有 %lld 台设备仍需要抗量子记录。请在持有管理员密钥的管理员手机或平板电脑上打开 Flagship。"
+          }
+        }
+      }
+    },
+    "Turn on now": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar ahora"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer maintenant"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt einschalten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativar agora"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今すぐオンにする"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即开启"
+          }
+        }
+      }
+    },
+    "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La protección poscuántica está activada. Los navegadores y los proveedores de IA siguen accesibles con protección clásica."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La protection post-quantique est activée. Les navigateurs et les fournisseurs d’IA restent joignables avec une protection classique."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Post-Quanten-Schutz ist an. Browser und KI-Anbieter bleiben mit klassischem Schutz erreichbar."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A proteção pós-quântica está ativada. Navegadores e provedores de IA continuam acessíveis com proteção clássica."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "耐量子保護はオンです。ブラウザーと AI プロバイダーは従来型の保護で引き続き利用できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "抗量子保护已开启。浏览器和 AI 提供商继续以传统保护访问。"
+          }
+        }
+      }
+    },
+    "Turn on quantum-safe protection": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar la protección poscuántica"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer la protection post-quantique"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post-Quanten-Schutz einschalten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativar a proteção pós-quântica"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "耐量子保護をオンにする"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启抗量子保护"
+          }
+        }
+      }
+    },
+    "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un navegador llega a tus servidores con protección clásica: los servidores con protección poscuántica admiten los navegadores como una excepción señalada. La app Flagship tiene protección poscuántica."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un navigateur atteint vos serveurs avec une protection classique : les serveurs à protection post-quantique acceptent les navigateurs comme exception signalée. L'app Flagship a une protection post-quantique."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Browser erreicht deine Server mit klassischem Schutz: Server mit Post-Quanten-Schutz lassen Browser als gekennzeichnete Ausnahme zu. Die Flagship-App hat Post-Quanten-Schutz."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um navegador acessa seus servidores com proteção clássica: servidores com proteção pós-quântica aceitam navegadores como uma exceção indicada. O app Flagship tem proteção pós-quântica."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブラウザーは従来型の保護でサーバーに接続します。耐量子のサーバーは、明示された例外としてブラウザーを許可します。Flagship アプリは耐量子です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览器以传统保护连接你的服务器：抗量子服务器将浏览器作为已标明的例外允许。Flagship 应用是抗量子的。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -57,6 +57,8 @@ public struct MigrationStartBody: Encodable, Equatable, Sendable {
     public let authSignature: String
     public let order: MigrationOrderWire
     public let signature: String   // hex (64 bytes) — admin root (or legacy IRK) over the order canonical bytes
+    /// The order's hybrid half while a server is strict (pq-suites.md §21.1); `.com` relays it opaque.
+    public var pqSignature: PqSignatureWire? = nil
     public init(auth: MailboxAuthEnvelope.Auth, authSignature: String, order: MigrationOrderWire, signature: String) {
         self.auth = auth; self.authSignature = authSignature
         self.order = order; self.signature = signature

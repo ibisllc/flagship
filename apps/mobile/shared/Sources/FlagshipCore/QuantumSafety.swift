@@ -132,6 +132,21 @@ public enum QuantumSafety {
                               signerKind: signerKind, signerKeyId: signerKeyId.lowercased(), suite: .hybrid, issuedAt: now)
     }
 
+    /// Strict by default (pq-suites.md §21): a scope no owner has ever changed (generation 0) is
+    /// moved to strict by an admin device on its own, with the browser exception signed in; AI
+    /// connectors stay allowed by never being signed strict.
+    public static func defaultStrictEligible(_ s: PolicyState) -> Bool {
+        s.generation == 0 && s.profile == .compatibility && !s.enforcedEver
+    }
+
+    /// The default strict change for a never-changed scope; nil for any scope an owner changed.
+    public static func defaultStrictChange(account: String, scope: PolicyScope, from state: PolicyState, peers: [String],
+                                           signerKind: PolicySignerKind, signerKeyId: String, now: Int64) -> AssurancePolicyChange? {
+        guard defaultStrictEligible(state) else { return nil }
+        return strictChange(account: account, scope: scope, from: state, browsersAllowed: true, peers: peers,
+                            signerKind: signerKind, signerKeyId: signerKeyId, now: now)
+    }
+
     /// The change back to compatibility, naming every loss the owner read and accepted.
     public static func compatibilityChange(account: String, scope: PolicyScope, from state: PolicyState, loss: [String],
                                            peers: [String], signerKind: PolicySignerKind, signerKeyId: String, now: Int64) -> AssurancePolicyChange {
@@ -159,13 +174,19 @@ public enum QuantumSafety {
         public var thisDeviceIsAdmin: Bool
         public var recoveryChecked: Bool
         public var serverBound: Bool
+        /// Devices whose grant carries no hybrid companion yet: a strict server would not count them (pq-suites.md §20.2).
+        public var devicesWithoutRecord: Int
 
-        public init(devicesBound: Int, devices: Int, thisDeviceBound: Bool, thisDeviceIsAdmin: Bool, recoveryChecked: Bool, serverBound: Bool) {
+        public init(devicesBound: Int, devices: Int, thisDeviceBound: Bool, thisDeviceIsAdmin: Bool, recoveryChecked: Bool, serverBound: Bool,
+                    devicesWithoutRecord: Int = 0) {
             self.devicesBound = devicesBound; self.devices = devices; self.thisDeviceBound = thisDeviceBound
             self.thisDeviceIsAdmin = thisDeviceIsAdmin; self.recoveryChecked = recoveryChecked; self.serverBound = serverBound
+            self.devicesWithoutRecord = devicesWithoutRecord
         }
 
-        public var ready: Bool { thisDeviceIsAdmin && thisDeviceBound && devicesBound == devices && devices > 0 && recoveryChecked && serverBound }
+        public var ready: Bool {
+            thisDeviceIsAdmin && thisDeviceBound && devicesBound == devices && devices > 0 && devicesWithoutRecord == 0 && recoveryChecked && serverBound
+        }
 
         /// What is still missing, one sentence each, in the order to fix them.
         public var missing: [String] {
@@ -173,6 +194,7 @@ public enum QuantumSafety {
             if !thisDeviceIsAdmin { out.append(String(localized: "Only an admin device of this account can turn this on.")) }
             if !thisDeviceBound { out.append(String(localized: "This device's post-quantum key isn't registered yet. Unlock the app once while online.")) }
             if devicesBound < devices { out.append(String(localized: "\(devices - devicesBound) of your devices have no post-quantum key yet. Open Flagship on each of them, or remove the ones you no longer use.")) }
+            if devicesWithoutRecord > 0 { out.append(String(localized: "\(devicesWithoutRecord) of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.")) }
             if !recoveryChecked { out.append(String(localized: "Save and test your account recovery first.")) }
             if !serverBound { out.append(String(localized: "This server hasn't registered its post-quantum key yet. Update it first.")) }
             return out

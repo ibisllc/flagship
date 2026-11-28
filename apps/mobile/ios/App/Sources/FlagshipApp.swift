@@ -980,6 +980,8 @@ struct FlagshipApp: App {
                     await restorePersistedIdentity()
                     // Renewal on use: opening the app on an admin device keeps its servers serving.
                     ServingRenewal.install(app: appState, mailbox: activeMailbox, clients: activePodClients)
+                    // Strict by default: an admin device turns quantum-safe protection on after each unlock.
+                    DefaultStrictSweep.install(app: appState, mailbox: activeMailbox, clients: activePodClients)
                     await ServingRenewal.appOpened()
                     // The phone's bare name (docs/architecture-v2/phone-route.md): foreground only, live clients only.
                     var phoneRouteLive = true

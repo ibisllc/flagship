@@ -4155,5 +4155,13 @@
   "The link stops working, and nobody who accepted it is let in.": "链接将失效，已接受它的人也不会被允许加入。",
   "%@ GB": "%@ GB",
   "%@ MB": "%@ MB",
-  "%@ KB": "%@ KB"
+  "%@ KB": "%@ KB",
+  "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.": "严格的抗量子保护会让服务器拒绝所有仅用当今传统密码学签名或发送的内容。",
+  "Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.": "每台服务器默认都使用抗量子保护。当所有设备和你的恢复方式都准备就绪后，管理员手机或平板电脑下次打开 Flagship 时，它会自动开启严格保护。浏览器和 AI 提供商作为已标明的例外，继续以传统保护访问。",
+  "AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.": "AI 提供商（Flagship Inference 和你自己的密钥）以传统保护连接，作为已标明的例外。",
+  "%lld of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.": "你有 %lld 台设备仍需要抗量子记录。请在持有管理员密钥的管理员手机或平板电脑上打开 Flagship。",
+  "Turn on now": "立即开启",
+  "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.": "抗量子保护已开启。浏览器和 AI 提供商继续以传统保护访问。",
+  "Turn on quantum-safe protection": "开启抗量子保护",
+  "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": "浏览器以传统保护连接你的服务器：抗量子服务器将浏览器作为已标明的例外允许。Flagship 应用是抗量子的。"
 }

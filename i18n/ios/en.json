@@ -17697,5 +17697,37 @@
   "%@ KB": {
     "en": "%@ KB",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ByteText.swift (a size: the number is already in the reader’s locale)"
+  },
+  "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.": {
+    "en": "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/QuantumSafetyScreen.swift"
+  },
+  "Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.": {
+    "en": "Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/QuantumSafetyScreen.swift"
+  },
+  "AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.": {
+    "en": "AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/QuantumSafetyScreen.swift, AiKeysScreen.swift"
+  },
+  "%lld of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.": {
+    "en": "%lld of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/FlagshipCore/QuantumSafety.swift"
+  },
+  "Turn on now": {
+    "en": "Turn on now",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/QuantumSafetyScreen.swift"
+  },
+  "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.": {
+    "en": "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/QuantumSafetyViewModel.swift"
+  },
+  "Turn on quantum-safe protection": {
+    "en": "Turn on quantum-safe protection",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/QuantumSafetyViewModel.swift (Face ID reason)"
+  },
+  "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": {
+    "en": "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/CompanionDockScreen.swift"
   }
 }

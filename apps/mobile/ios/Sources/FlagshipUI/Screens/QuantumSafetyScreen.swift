@@ -11,6 +11,7 @@ public struct QuantumSafetyScreen: View {
     @State private var browserAnswer: [String: Bool] = [:]
     @State private var connectorBlocked: [String: [String: Bool]] = [:]
     @State private var confirmLeave: String?
+    @Environment(\.secretMailboxClient) private var mailbox
 
     public init(viewModel: QuantumSafetyViewModel) { self.viewModel = viewModel }
 
@@ -18,9 +19,12 @@ public struct QuantumSafetyScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s5) {
-                Text("Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone. It is off until you turn it on, one server at a time.")
+                Text("Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.")
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
                     .padding(.top, FS.space.s4)
+                Text("Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("qs-default-note")
                 Text("These protections are new and pending an external review.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 if let custody = viewModel.thisDeviceCustody {
@@ -79,6 +83,9 @@ public struct QuantumSafetyScreen: View {
              ? String(localized: "Browsers can still reach it. A browser uses post-quantum key exchange, but the server's identity is proven with a classical certificate.")
              : String(localized: "Only the Flagship app reaches it. Browsers are refused."))
             .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
+        Text("AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.")
+            .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("qs-ai-classical-\(s.fqdn)")
         if !s.apps.isEmpty {
             Text("Apps on this server").font(FS.font.bodySm()).foregroundColor(c.text).padding(.top, FS.space.s2)
             Text("Choose for each app whether browsers may reach it. A browser's connection is quantum-safe, but the server's identity is proven with a classical certificate.")
@@ -114,6 +121,11 @@ public struct QuantumSafetyScreen: View {
                 Text("Not ready yet").font(FS.font.bodySm()).foregroundColor(c.text)
                 ForEach(r.missing, id: \.self) { m in
                     Label(m, systemImage: "circle").font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
+                }
+                if s.replayed.map({ QuantumSafety.defaultStrictEligible($0.state) }) ?? true {
+                    Button("Turn on now") { Task { await viewModel.applyDefaults(interactive: true, mailbox: mailbox) } }
+                        .disabled(viewModel.busy)
+                        .accessibilityIdentifier("qs-turn-on-now-\(s.fqdn)")
                 }
             }
         } else {

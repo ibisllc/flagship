@@ -78,3 +78,12 @@ public struct ServerDecommissionOrder: Equatable, Sendable {
         irkPub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }
+
+extension DecommissionDepositBody {
+    /// The canonical bytes of the order this deposit carries (what its hybrid half signs).
+    public var canonicalOrderBytes: Data {
+        ServerDecommissionOrder(podCanonical: order.podCanonical, retiredStkPubHex: order.retiredStkPubHex, finalBackup: order.finalBackup,
+                                diskDisposition: order.diskDisposition, backupEpoch: order.backupEpoch, nonce: order.nonce,
+                                issuedAt: order.issuedAt).canonicalBytes()
+    }
+}

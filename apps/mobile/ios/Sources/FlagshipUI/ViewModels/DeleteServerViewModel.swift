@@ -166,7 +166,7 @@ public final class DeleteServerViewModel {
     private func depositErase(username: String, keys k: Keys) async -> Bool {
         guard let irk = k.mailboxIrk else { return false }
         do {
-            let body = try ReplaceServerFlow.buildDeposit(
+            var body = try ReplaceServerFlow.buildDeposit(
                 serverFqdn: serverFqdn,
                 username: username,
                 irk: irk,
@@ -181,6 +181,7 @@ public final class DeleteServerViewModel {
                 authNonce: randomNonce(),
                 backupEpoch: 0
             )
+            body.pqSignature = await QuantumSafetyService.orderPqSignature(canonical: body.canonicalOrderBytes, edKey: k.orderKey, username: username)
             try await mailbox.depositDecommission(serverDomain: serverFqdn, body: body)
             return true
         } catch {
