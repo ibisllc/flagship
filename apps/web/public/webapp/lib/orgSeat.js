@@ -99,7 +99,15 @@ export function orgApi(deps = {}) {
 
 /** The org's chain as `GET /authority` (or the invite offer's `authority`) serves it, verified from `genesisHash`. */
 export function verifyServedChain(a, genesisHash, now = Date.now()) {
-  return org.verifyOrgAuthorityChain(a?.entries ?? [], { genesisHash, now, freezes: a?.freezes ?? [], overturns: a?.overturns ?? [], vetoes: a?.vetoes ?? [] });
+  return org.verifyOrgAuthorityChain(a?.entries ?? [], {
+    genesisHash,
+    now,
+    freezes: a?.freezes ?? [],
+    overturns: a?.overturns ?? [],
+    vetoes: a?.vetoes ?? [],
+    // When .com observed each delayed-change notice open: a founder removal or recovery counts only with it.
+    noticeOpenedAt: a?.noticeOpenedAt ?? {},
+  });
 }
 
 /** Fetches the org and verifies it from the pinned genesis: chain, seat book, ceremonies. */

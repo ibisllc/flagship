@@ -14922,6 +14922,10 @@
     "en": "Waiting for your approval",
     "ctx": "webapp/views/orgs.js:65"
   },
+  "Flagship saw this notice on {0}. Its waiting period counts from then.": {
+    "en": "Flagship saw this notice on {0}. Its waiting period counts from then.",
+    "ctx": "webapp/views/orgs.js:26"
+  },
   "Waiting to join": {
     "en": "Waiting to join",
     "ctx": "webapp/views/orgs.js:66"

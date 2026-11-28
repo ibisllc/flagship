@@ -8582,6 +8582,9 @@ function orgOverturnOf(p, before, after, issuedAt) {
   for (const a of back) if (!admins.some((x) => x.seatId === a.seatId)) admins.push(a);
   return { ...p, version: p.version + 1, prevHash: orgAuthorityHash(p), admins, issuedAt };
 }
+function orgDelayedChangeWait(kind) {
+  return kind === "founder-removal" ? ORG_FOUNDER_NOTICE_MS : ORG_RECOVERY_NOTICE_MS;
+}
 function verifyOrgAuthorityChain(entries, opts2) {
   if (!Array.isArray(entries) || entries.length === 0) fail3("malformed", "empty chain");
   const records = [];
@@ -8594,6 +8597,7 @@ function verifyOrgAuthorityChain(entries, opts2) {
     current: records[records.length - 1],
     currentHash: orgAuthorityHash(records[records.length - 1])
   });
+  let lastDelayedAt = -1;
   for (const e of entries) {
     const r = e.record;
     checkOrgAuthorityShape(r);
@@ -8613,14 +8617,15 @@ function verifyOrgAuthorityChain(entries, opts2) {
       if (r.issuedAt <= p.issuedAt) fail3("not-after-previous");
       const st = state();
       const frozen = frozenPredicate(st, opts2);
-      verifyTransition(e, p, r, st, verified2, frozen, opts2);
+      verifyTransition(e, p, r, st, verified2, frozen, opts2, lastDelayedAt);
+      if (e.via === "founder-removal" || e.via === "recovery") lastDelayedAt = r.issuedAt;
     }
     records.push(r);
     for (const [seat, b] of verified2) bindings.set(bindingKey(r.version, seat), b);
   }
   return state();
 }
-function verifyTransition(e, p, r, st, verified2, frozen, opts2) {
+function verifyTransition(e, p, r, st, verified2, frozen, opts2, lastDelayedAt) {
   const order = canonicalOrgAuthority(r);
   const prevKey = (s) => st.bindings.get(bindingKey(p.version, s));
   const kindOf = (s) => p.admins.find((a) => a.seatId === s)?.kind;
@@ -8656,37 +8661,24 @@ function verifyTransition(e, p, r, st, verified2, frozen, opts2) {
       if (removed.length !== 1) fail3("notice-invalid", "exactly one admin");
       const expected = orgFounderRemovalOf(p, removed[0], r.issuedAt);
       if (orgAuthorityHash(expected) !== orgAuthorityHash(r)) fail3("notice-invalid", "record is not the removal");
-      checkNotice(n, p, r, ORG_FOUNDER_NOTICE_MS, opts2);
+      const openedAt = checkNotice(n, p, r, ORG_FOUNDER_NOTICE_MS, opts2, lastDelayedAt);
       const signers = checkApprovals(n.approvals, { orgId: p.orgId, oarVersion: p.version, order: canonicalOrgDelayedChange(n.body), now: opts2.now }, prevKey, frozen);
       if (signers.length !== 1 || signers[0] !== p.founderSeatId) fail3("notice-invalid", "only the founder");
-      const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(n.body));
-      const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && a.seatId !== p.founderSeatId && a.seatId !== removed[0]).map((a) => a.seatId));
-      const set = new Set(orgOverturnSet(p).filter((s) => s !== removed[0]));
-      for (const v of opts2.vetoes ?? []) {
-        const count = vetoSigners(v, noticeHash, n.body, p, prevKey, frozen, opts2);
-        if (count === null) continue;
-        if (count.filter((s) => eligible.has(s)).length >= p.bylaws.vetoK) fail3("notice-vetoed");
-        if (count.filter((s) => set.has(s)).length >= orgOverturnThreshold(p)) fail3("notice-vetoed");
-      }
+      if (founderRemovalVetoed(p, removed[0], n.body, openedAt, prevKey, frozen, opts2)) fail3("notice-vetoed");
       if (e.approvals.length !== consent.length) fail3("malformed", "stray approvals");
       return;
     }
     case "recovery": {
       const n = e.notice;
       if (!n || n.body.kind !== "recovery") fail3("notice-invalid");
-      checkNotice(n, p, r, ORG_RECOVERY_NOTICE_MS, opts2);
+      const openedAt = checkNotice(n, p, r, ORG_RECOVERY_NOTICE_MS, opts2, lastDelayedAt);
       const signers = checkApprovals(n.approvals, { orgId: p.orgId, oarVersion: p.version, order: canonicalOrgDelayedChange(n.body), now: opts2.now }, prevKey, frozen);
       for (const s of signers) if (kindOf(s) !== "admin" && kindOf(s) !== "recovery") fail3("not-an-admin", s);
       if (!signers.some((s) => kindOf(s) === "recovery")) fail3("notice-invalid", "no recovery seat");
       const k = bylawsChanged || founderMoved ? orgBylawsThreshold(p) : p.kGov;
       if (signers.length < k) fail3("threshold", `${signers.length} of ${k}`);
       checkOrgQuorumCustody(p, k, signers, adminCustody(p));
-      const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(n.body));
-      const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && !signers.includes(a.seatId)).map((a) => a.seatId));
-      for (const v of opts2.vetoes ?? []) {
-        const count = vetoSigners(v, noticeHash, n.body, p, prevKey, frozen, opts2);
-        if (count !== null && count.some((s) => eligible.has(s))) fail3("notice-vetoed");
-      }
+      if (recoveryVetoed(p, signers, n.body, openedAt, prevKey, frozen, opts2)) fail3("notice-vetoed");
       if (e.approvals.length !== consent.length) fail3("malformed", "stray approvals");
       return;
     }
@@ -8721,24 +8713,83 @@ function verifyTransition(e, p, r, st, verified2, frozen, opts2) {
       fail3("malformed", "via");
   }
 }
-function checkNotice(n, p, r, wait, opts2) {
+function checkNotice(n, p, r, wait, opts2, lastDelayedAt) {
   const b = n.body;
-  canonicalOrgDelayedChange(b);
+  const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(b));
   if (b.orgId !== p.orgId || b.oarVersion !== p.version) fail3("notice-invalid", "version");
   if (r.issuedAt !== b.effectiveAt) fail3("notice-invalid", "record must be dated at effectiveAt");
   if (b.nextRecordSha256 !== orgAuthorityHash(r)) fail3("notice-invalid", "names another record");
   if (b.effectiveAt !== b.issuedAt + wait) fail3("notice-invalid", "notice period");
   if (b.issuedAt < p.issuedAt) fail3("notice-invalid", "older than the record it changes");
-  if (opts2.now < b.effectiveAt) fail3("notice-early");
+  const openedAt = opts2.noticeOpenedAt?.[noticeHash];
+  if (!isUint2(openedAt)) fail3("notice-unobserved");
+  if (openedAt < lastDelayedAt) fail3("notice-overlap", "observed before the previous delayed change took effect");
+  if (Math.abs(b.issuedAt - openedAt) > ORG_MAX_SKEW_MS) fail3("notice-backdated");
+  if (opts2.now < Math.max(b.effectiveAt, openedAt + wait)) fail3("notice-early");
+  return openedAt;
 }
-function vetoSigners(v, noticeHash, notice, p, keyOf, frozen, opts2) {
+function vetoSigners(v, noticeHash, openedAt, wait, p, keyOf, frozen, opts2) {
   try {
     if (v.body.orgId !== p.orgId || v.body.noticeSha256 !== noticeHash) return null;
-    if (v.body.issuedAt >= notice.effectiveAt || v.body.issuedAt < notice.issuedAt) return null;
+    if (v.body.issuedAt < openedAt || v.body.issuedAt >= openedAt + wait) return null;
     return checkApprovals(v.approvals, { orgId: p.orgId, oarVersion: p.version, order: canonicalOrgVeto(v.body), now: opts2.now }, keyOf, frozen);
   } catch {
     return null;
   }
+}
+function founderRemovalVetoed(p, target, notice, openedAt, keyOf, frozen, opts2) {
+  const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(notice));
+  const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && a.seatId !== p.founderSeatId && a.seatId !== target).map((a) => a.seatId));
+  const set = new Set(orgOverturnSet(p).filter((s) => s !== target));
+  for (const v of opts2.vetoes ?? []) {
+    const count = vetoSigners(v, noticeHash, openedAt, ORG_FOUNDER_NOTICE_MS, p, keyOf, frozen, opts2);
+    if (count === null) continue;
+    if (count.filter((s) => eligible.has(s)).length >= p.bylaws.vetoK) return true;
+    if (count.filter((s) => set.has(s)).length >= orgOverturnThreshold(p)) return true;
+  }
+  return false;
+}
+function recoveryVetoed(p, signers, notice, openedAt, keyOf, frozen, opts2) {
+  const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(notice));
+  const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && !signers.includes(a.seatId)).map((a) => a.seatId));
+  for (const v of opts2.vetoes ?? []) {
+    const count = vetoSigners(v, noticeHash, openedAt, ORG_RECOVERY_NOTICE_MS, p, keyOf, frozen, opts2);
+    if (count !== null && count.some((s) => eligible.has(s))) return true;
+  }
+  return false;
+}
+function orgPendingNoticeVetoed(st, notice, record, openedAt, opts2) {
+  const p = st.current;
+  if (notice.body.oarVersion !== p.version || orgAuthorityHash(record) !== notice.body.nextRecordSha256) return false;
+  const keyOf = (s) => st.bindings.get(bindingKey(p.version, s));
+  const frozen = frozenPredicate(st, opts2);
+  if (notice.body.kind === "founder-removal") {
+    const removed = p.admins.filter((a) => !record.admins.some((x) => x.seatId === a.seatId)).map((a) => a.seatId);
+    if (removed.length !== 1) return false;
+    return founderRemovalVetoed(p, removed[0], notice.body, openedAt, keyOf, frozen, opts2);
+  }
+  let signers;
+  try {
+    signers = checkApprovals(notice.approvals, { orgId: p.orgId, oarVersion: p.version, order: canonicalOrgDelayedChange(notice.body), now: opts2.now }, keyOf, frozen);
+  } catch {
+    return false;
+  }
+  return recoveryVetoed(p, signers, notice.body, openedAt, keyOf, frozen, opts2);
+}
+function orgDelayedChangeFromCanonical(text2) {
+  const parts = text2.split("|");
+  if (parts.length !== 7 || parts[0] !== TAG_ORG_DELAYED_CHANGE) fail3("malformed", "delayed change");
+  const num = (x) => /^(0|[1-9][0-9]{0,15})$/.test(x) ? Number(x) : NaN;
+  const c = {
+    orgId: parts[1],
+    oarVersion: num(parts[2]),
+    kind: parts[3],
+    nextRecordSha256: parts[4],
+    effectiveAt: num(parts[5]),
+    issuedAt: num(parts[6])
+  };
+  if (new TextDecoder().decode(canonicalOrgDelayedChange(c)) !== text2) fail3("malformed", "delayed change");
+  return c;
 }
 function verifiedOrgFreezes(st, opts2) {
   const raw = [...opts2.freezes ?? []].sort((a, b) => a.body.issuedAt - b.body.issuedAt);
@@ -9156,8 +9207,8 @@ function verifyOrgApprovers(state, book, order, approvals, now, opts2 = {}) {
     if (book.revoked.has(s)) return void 0;
     return book.seats.get(s)?.admin ?? void 0;
   };
-  const frozenNow = (s) => s !== opts2.allowFrozenSeat && book.freezes.some((f) => f.seatId === s && f.issuedAt <= now && now < f.untilMs);
-  return checkApprovals(approvals, { orgId: state.orgId, oarVersion: version, order, now }, keyOf, (s) => frozenNow(s));
+  const frozen = (s, t2) => s !== opts2.allowFrozenSeat && book.freezes.some((f) => f.seatId === s && (f.issuedAt <= t2 && t2 < f.untilMs || f.issuedAt <= now && now < f.untilMs));
+  return checkApprovals(approvals, { orgId: state.orgId, oarVersion: version, order, now }, keyOf, frozen);
 }
 function orgSeatForKey(book, ed25519PubHex, now) {
   const k = ed25519PubHex.toLowerCase();
@@ -11055,6 +11106,8 @@ export {
   orgConnectorMappingSha256,
   orgConnectorStanding,
   orgConnectorsToReapprove,
+  orgDelayedChangeFromCanonical,
+  orgDelayedChangeWait,
   orgDirectoryBucket,
   orgDirectoryEntryKey,
   orgDirectoryName,
@@ -11082,6 +11135,7 @@ export {
   orgOverturnSet,
   orgOverturnThreshold,
   orgPaidUntilAfterSpend,
+  orgPendingNoticeVetoed,
   orgPendingRotations,
   orgPlanState,
   orgProposalRecipientsHash,

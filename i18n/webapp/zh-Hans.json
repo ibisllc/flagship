@@ -3656,6 +3656,7 @@
   "This seat's admin key: {0}": "此席位的管理员密钥：{0}",
   "Admins": "管理员",
   "Waiting for your approval": "等待你的批准",
+  "Flagship saw this notice on {0}. Its waiting period counts from then.": "Flagship 于 {0} 看到了这条通知。等待期从那时开始计算。",
   "Waiting to join": "等待加入",
   "Code {0}": "代码 {0}",
   "The codes match: let them in": "代码一致：让其加入",

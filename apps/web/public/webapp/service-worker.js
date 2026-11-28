@@ -603,7 +603,8 @@
 //       offer read and the accept carry the invite key's signature; admins see only accepts it signed, can say
 //       the codes don't match, and withdraw an invitation (bundled org protocol rebuilt). Org reads carry the org read
 //       token (precaches lib/orgReadToken.js; docs/account-read-token.md "Org routes"), minted with the seat member
-//       key and minted again after a 401; the join verifies the chain the invite answer carries.
+//       key and minted again after a 401; the join verifies the chain the invite answer carries. The chain is
+//       verified with .com's observed open time of each delayed-change notice (noticeOpenedAt).
 const SHELL_VERSION = "v263";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 

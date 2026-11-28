@@ -3656,6 +3656,7 @@
   "This seat's admin key: {0}": "この席の管理者キー：{0}",
   "Admins": "管理者",
   "Waiting for your approval": "あなたの承認待ち",
+  "Flagship saw this notice on {0}. Its waiting period counts from then.": "Flagship はこの通知を {0} に確認しました。待機期間はそのときから数えます。",
   "Waiting to join": "参加待ち",
   "Code {0}": "コード {0}",
   "The codes match: let them in": "コードが一致：参加させる",

@@ -10,11 +10,21 @@ import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { inlineConfirm } from "../lib/modal.js";
 import { tr, dateLocale } from "../lib/i18n.js";
+import { formatDateTime } from "../lib/dateFormat.js";
 import * as os from "../lib/orgSeat.js";
 import * as dc from "../lib/orgDirectoryConsole.js";
 import { renderOrgPlan } from "./orgPlan.js";
 
 registerView("view-orgs", { tab: "settings" });
+
+/**
+ * A delayed change (founder removal, recovery) counts from when Flagship saw its notice, not from the date it
+ * carries: the notice's ceremony shows that observed time.
+ */
+function noticeSeenLine(c) {
+  if (!String(c.order).startsWith("flagship/org-delayed-change/") || typeof c.openedAt !== "number") return "";
+  return `<p class="note">${escapeHtml(tr("Flagship saw this notice on {0}. Its waiting period counts from then.", formatDateTime(c.openedAt)))}</p>`;
+}
 
 export const CUSTODY_BROWSER_LABEL = tr("Browser: software key, unlocked with a passkey");
 export const CUSTODY_HARDWARE_LABEL = tr("Phone: hardware key");
@@ -66,7 +76,7 @@ async function renderSeat(seat, host) {
     <p class="note">${escapeHtml(granted ? tr("You are in as {0}.", seat.pseudonym || tr("a member")) : tr("Waiting for an admin to let you in. Your code: {0}", seat.code ?? ""))}</p>
     ${seat.custody === "browser" ? `<p class="note">${escapeHtml(tr("This seat's admin key: {0}", CUSTODY_BROWSER_LABEL))}</p>` : ""}
     <p class="fs-detail-label">${escapeHtml(tr("Admins"))}</p><ul>${admins}</ul>
-    ${ceremonies.length ? `<p class="fs-detail-label">${escapeHtml(tr("Waiting for your approval"))}</p>` + ceremonies.map((c) => `<div class="stack-sm"><p class="note">${escapeHtml(c.order.split("|")[0])}</p><button data-org-approve="${escapeHtml(c.sha256)}">${escapeHtml(tr("Approve"))}</button></div>`).join("") : ""}
+    ${ceremonies.length ? `<p class="fs-detail-label">${escapeHtml(tr("Waiting for your approval"))}</p>` + ceremonies.map((c) => `<div class="stack-sm"><p class="note">${escapeHtml(c.order.split("|")[0])}</p>${noticeSeenLine(c)}<button data-org-approve="${escapeHtml(c.sha256)}">${escapeHtml(tr("Approve"))}</button></div>`).join("") : ""}
     ${joins.length ? `<p class="fs-detail-label">${escapeHtml(tr("Waiting to join"))}</p>` + joins.map((j) => `<div class="stack-sm"><p class="note">${escapeHtml(tr("Code {0}", os.joinCode(j)))}${j.custody === "browser" ? " · " + escapeHtml(CUSTODY_BROWSER_LABEL) : ""}</p><button data-org-admit="${escapeHtml(j.seatId)}">${escapeHtml(tr("The codes match: let them in"))}</button><button class="secondary" data-org-mismatch="${escapeHtml(j.seatId)}">${escapeHtml(tr("The codes don't match"))}</button></div>`).join("") : ""}
     ${invited.length ? `<p class="fs-detail-label">${escapeHtml(tr("Invited, not accepted yet"))}</p>` + invited.map((i) => `<div class="stack-sm"><p class="note">${escapeHtml(names?.get?.(i.seatId) || tr("Seat {0}", i.seatId.slice(0, 6)))}</p><button class="secondary" data-org-withdraw="${escapeHtml(i.seatId)}">${escapeHtml(tr("Withdraw invitation"))}</button></div>`).join("") : ""}
     ${isAdminSeat ? `<button class="secondary" data-org-rotate>${escapeHtml(tr("Rotate keys"))}</button>` : ""}

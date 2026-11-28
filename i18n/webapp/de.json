@@ -3656,6 +3656,7 @@
   "This seat's admin key: {0}": "Admin-Schlüssel dieses Platzes: {0}",
   "Admins": "Admins",
   "Waiting for your approval": "Wartet auf deine Zustimmung",
+  "Flagship saw this notice on {0}. Its waiting period counts from then.": "Flagship hat diese Mitteilung am {0} gesehen. Ihre Wartezeit zählt ab dann.",
   "Waiting to join": "Wartet auf Beitritt",
   "Code {0}": "Code {0}",
   "The codes match: let them in": "Die Codes stimmen überein: hereinlassen",
