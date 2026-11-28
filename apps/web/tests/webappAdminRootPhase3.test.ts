@@ -82,7 +82,9 @@ describe("Phase 3 — promote-a-device (seal-root, assurance-gated)", () => {
 
   it("promote OFF → NO wrappedAdminRoot in the bundle; parse yields adminRootSeed null", async () => {
     const { out, bundle } = await seal(false, new Uint8Array(32).fill(7));
-    expect(bundle.grant.signerRoot).toBe("membership");
+    // Member grants are signed by the admin root too; the bundle names that root.
+    expect(bundle.grant.signerRoot).toBe("admin-root");
+    expect(bundle.adminRootPubHex).toMatch(/^[0-9a-f]{64}$/);
     expect(bundle).not.toHaveProperty("wrappedAdminRoot");
     expect(out.promotedAdmin).toBe(false);
 
@@ -91,16 +93,20 @@ describe("Phase 3 — promote-a-device (seal-root, assurance-gated)", () => {
     expect(parsed.adminRootSeed).toBeNull();
   });
 
-  it("promote ON → wrappedAdminRoot rides the bundle and round-trips through parse", async () => {
+  it("promote ON → an admin grant for the device's own key; the root itself never rides the bundle", async () => {
     const adminSeed = new Uint8Array(32).fill(0x99);
     const { out, bundle } = await seal(true, adminSeed);
-    expect(bundle.wrappedAdminRoot).toBe(toHex(adminSeed));
+    expect(bundle).not.toHaveProperty("wrappedAdminRoot");
+    expect(bundle.grant.scopes).toContain("admin");
     expect(out.promotedAdmin).toBe(true);
 
     const { parseSealedBundle } = await loadPairing();
     const parsed = parseSealedBundle(JSON.stringify(bundle));
-    expect(parsed.adminRootSeed).toBeInstanceOf(Uint8Array);
-    expect(toHex(parsed.adminRootSeed)).toBe(toHex(adminSeed));
+    expect(parsed.adminRootSeed).toBeNull();
+    expect(parsed.adminRootPubHex).toBe(bundle.adminRootPubHex);
+    // An older admin's bundle with the root still parses.
+    const legacy = parseSealedBundle(JSON.stringify({ ...bundle, wrappedAdminRoot: toHex(adminSeed) }));
+    expect(toHex(legacy.adminRootSeed)).toBe(toHex(adminSeed));
   });
 
   it("promote ON with NO/short admin root → hard error (never silently drop the grant)", async () => {

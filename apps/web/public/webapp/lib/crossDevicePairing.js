@@ -43,7 +43,7 @@
 //   3. Explicit risk warning on both screens (the QR shares your account
 //      keys; anyone who scans it can join).
 
-import { exportAdminRootSeed, isAdminRootKey } from "./keyCustody.js";
+import { isAdminRootKey } from "./keyCustody.js";
 import { controlApex } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 import { isLocalPassphrase } from "./localPassphrase.js";
@@ -307,7 +307,7 @@ export function buildDeviceGrant({ admit, promoted, grantId, ttlMs = DEVICE_GRAN
     scopes: promoted ? DEVICE_SCOPE_ORDER.slice() : MEMBER_DEVICE_SCOPES.slice(),
     issuedAt: admit.issuedAt,
     expiresAt: admit.issuedAt + ttlMs,
-    signerRoot: promoted ? "admin-root" : "membership",
+    signerRoot: "admin-root",
   };
 }
 
@@ -534,12 +534,14 @@ export async function runAdminAddDevice(deps) {
   // admin root when promoting (`.com` checks it under the matching key).
   const grant = buildDeviceGrant({ admit, promoted: promoteAdmin, grantId: deps.grantId });
   const grantBytes = deviceGrantCanonicalBytes(grant);
-  // Promoting hands the admin root itself on: it is opened (one passkey prompt) only here, after
-  // the SAS was confirmed, and wiped once sealed.
-  const rawRoot = promoteAdmin ? await exportAdminRootSeed(adminRootSeed) : null;
-  const grantSig = promoteAdmin
-    ? await deps.signWithAdminRoot(rawRoot, grantBytes)
-    : await deps.signWithIrk(seed, grantBytes);
+  // Promoting signs an `admin` grant for the new device's own key with the admin root (one passkey prompt,
+  // after the SAS was confirmed). The root itself stays here: it is never sealed into the bundle any more, so
+  // a promoted device that is later lost holds no copy of it (docs/account-key-rotation.md).
+  // Member grants are signed by the admin root too (`.com` caps account-key-signed grants to member scopes,
+  // and every holder of the account key can make those).
+  const grantSig = await deps.signWithAdminRoot(adminRootSeed, grantBytes);
+  // Every bundle names the admin root: the joining device pins it (the bundle is SAS-authenticated).
+  const adminRootPubHexForBundle = await (deps.adminRootPubHexOf || ksAdminRootPubHex)(adminRootSeed);
   const irkPubHex = String(deps.irkPubHex ?? "").toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(irkPubHex)) throw new Error("runAdminAddDevice: account key unavailable");
 
@@ -556,9 +558,8 @@ export async function runAdminAddDevice(deps) {
     irkPubHex,
     grant,
     grantSignature: toHex(grantSig),
-    ...(promoteAdmin && rawRoot ? { wrappedAdminRoot: toHex(rawRoot) } : {}),
+    ...(adminRootPubHexForBundle ? { adminRootPubHex: adminRootPubHexForBundle } : {}),
   };
-  rawRoot?.fill(0);
   await relay.seal(new TextEncoder().encode(JSON.stringify(bundle)));
   relay.close?.();
   return { outcome: "sealed", admit, admitSigHex, grant, promotedAdmin: promoteAdmin };
@@ -637,6 +638,9 @@ export function parseSealedBundle(plaintext, opts = {}) {
     grantSignatureHex: parsed.grantSignature.toLowerCase(),
     grantPqSignature,
     irkPubHex: typeof parsed.irkPubHex === "string" ? parsed.irkPubHex.toLowerCase() : null,
+    adminRootPubHex: typeof parsed.adminRootPubHex === "string" && /^[0-9a-f]{64}$/i.test(parsed.adminRootPubHex)
+      ? parsed.adminRootPubHex.toLowerCase()
+      : null,
   };
 }
 
@@ -709,7 +713,7 @@ export async function runIncomingJoin(deps) {
 
   // 1 — parse the sealed bundle (carries the OPTIONAL sealed admin root when
   // the admin promoted this device, Slice D D-4).
-  const { seed, admit, admitSigHex, adminRootSeed, grant, grantSignatureHex, grantPqSignature } =
+  const { seed, admit, admitSigHex, adminRootSeed, grant, grantSignatureHex, grantPqSignature, adminRootPubHex: bundleRootHex } =
     parseSealedBundle(deps.bundlePlaintext, { hexToBytes });
   const username = admit?.username;
   if (!username) throw new Error("admit missing username");
@@ -747,7 +751,11 @@ export async function runIncomingJoin(deps) {
   let grantAuthorityHex = null;
   if (grant.signerRoot === "membership") grantAuthorityHex = irkPubHex;
   else if (grant.signerRoot === "admin-root" && adminRootSeed) {
+    // An older admin device still seals its root into the bundle.
     grantAuthorityHex = await (deps.adminRootPubHexOf || ksAdminRootPubHex)(adminRootSeed);
+  } else if (grant.signerRoot === "admin-root" && bundleRootHex) {
+    // The admin root the (SAS-authenticated) bundle names.
+    grantAuthorityHex = bundleRootHex;
   }
   let grantOk = false;
   if (grantAuthorityHex) {
@@ -832,6 +840,11 @@ export async function runIncomingJoin(deps) {
     const persistAdminRoot = deps.persistAdminRootSeed || ksPersistAdminRootSeed;
     await persistAdminRoot(seed, adminRootSeed);
   }
+  // The admin root this browser trusts for account key changes from now on (lib/accountKeyChange.js).
+  const trustedRoot = bundleRootHex ?? (adminRootSeed ? await (deps.adminRootPubHexOf || ksAdminRootPubHex)(adminRootSeed) : null);
+  if (trustedRoot) {
+    try { globalThis.localStorage?.setItem(`flagship.adminRootPin.${String(username).toLowerCase()}`, trustedRoot); } catch { /* best-effort */ }
+  }
   await deps.unlockSession(seed, username);
 
   // 6 — add the profile (set active) + surface the quarantine.
@@ -853,7 +866,7 @@ export async function runIncomingJoin(deps) {
     : now() + QUARANTINE_MS;
   const quarantine = quarantineTimeline({ quarantineUntil }, now());
 
-  return { username, quarantine, admitResponse, promotedAdmin: !!adminRootSeed };
+  return { username, quarantine, admitResponse, promotedAdmin: !!adminRootSeed || grant.scopes.includes("admin"), holdsAdminRoot: !!adminRootSeed };
 }
 
 async function safeText(resp) {

@@ -344,16 +344,18 @@ describe("crossDevicePairing — runAdminAddDevice (vouch + seal)", () => {
     expect(bundle.admit).toEqual(out.admit);
     expect(bundle.admitSig).toBe(out.admitSigHex);
 
-    // The grant: a member device (no admin scope), signed by the account key
-    // so `.com`'s verifyDeviceCapabilityGrant accepts it.
+    // The grant: a member device (no admin scope), signed by the admin root (every holder of the account key
+    // could sign one under that key), and the bundle names the root the joining device pins.
     expect(bundle.irkPubHex).toBe(toHex(deriveIRK({ seed }).publicKey));
     expect(bundle.grant).toMatchObject({
       grantId: GRANT_ID, username: "harry", deviceId: DEVICE_ID, devicePubHex: "ab".repeat(32),
       scopes: ["browse", "install-service", "vibe-code", "view-directory"],
-      issuedAt: 7000, expiresAt: 7000 + 90 * 86_400_000, signerRoot: "membership",
+      issuedAt: 7000, expiresAt: 7000 + 90 * 86_400_000, signerRoot: "admin-root",
     });
+    const rootPub = (await k.deriveAdminRootFromSeed(ADMIN_SEED)).publicKey;
+    expect(bundle.adminRootPubHex).toBe(toHex(rootPub));
     expect(verifyDeviceCapabilityGrant(
-      protocolGrant(bundle.grant), fromHex(bundle.grantSignature), deriveIRK({ seed }).publicKey,
+      protocolGrant(bundle.grant), fromHex(bundle.grantSignature), rootPub,
     )).toBe(true);
 
     // The admit signature verifies under the account IRK (protocol).
@@ -413,7 +415,8 @@ describe("crossDevicePairing — runAdminAddDevice (vouch + seal)", () => {
     expect(out.promotedAdmin).toBe(true);
     expect(bundle.grant.signerRoot).toBe("admin-root");
     expect(bundle.grant.scopes).toEqual(DEVICE_SCOPE_ORDER);
-    expect(bundle.wrappedAdminRoot).toBe(toHex(ADMIN_SEED));
+    // The root stays on this device: the new admin signs with its own key under this grant.
+    expect(bundle).not.toHaveProperty("wrappedAdminRoot");
     const adminPub = (await k.deriveAdminRootFromSeed(ADMIN_SEED)).publicKey;
     expect(verifyDeviceCapabilityGrant(
       protocolGrant(bundle.grant), fromHex(bundle.grantSignature), adminPub,
@@ -512,6 +515,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     promote?: boolean; passphrase?: string | undefined; badGrantSigner?: boolean;
     grantDevicePubHex?: string; admitPubHex?: string; admitSigner?: any; accountIrk?: any;
     grantPqSignature?: { suite: string; signature: string };
+    grantOnly?: boolean;
   } = {}) {
     const harryIrk = opts.accountIrk ?? deriveIRK({ seed: HARRY_SEED });
     const devicePubHex = k.bytesToHex((await k.deriveAdminRootFromSeed(DEVICE_SEED)).publicKey);
@@ -541,7 +545,8 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
       irkPubHex: k.bytesToHex(harryIrk.publicKey),
       grant,
       grantSignature: toHex(signDeviceCapabilityGrant(protocolGrant(grant), grantSigner)),
-      ...(promote ? { wrappedAdminRoot: k.bytesToHex(ADMIN_SEED) } : {}),
+      ...(promote && !opts.grantOnly ? { wrappedAdminRoot: k.bytesToHex(ADMIN_SEED) } : {}),
+      ...(promote && opts.grantOnly ? { adminRootPubHex: k.bytesToHex(adminKp.publicKey) } : {}),
       ...(opts.grantPqSignature ? { grantPqSignature: opts.grantPqSignature } : {}),
     });
     const fetchMock = vi.fn().mockResolvedValue(
@@ -732,6 +737,27 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     expect(Array.from((await k.loadAdminRootSeed(seed))!)).toEqual(Array.from(ADMIN_SEED));
   });
 
+  it("a grant-only promotion joins as an admin by grant, without the root, and pins the bundle's root", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin } = await loadPairing();
+    const f = await fixture(k, { promote: true, grantOnly: true, passphrase: "the-owner-chose-this" });
+    const out = await runIncomingJoin(f.deps);
+    expect(out.promotedAdmin).toBe(true);
+    expect(out.holdsAdminRoot).toBe(false);
+    const seed = await k.unlockUmk("the-owner-chose-this");
+    expect(await k.loadAdminRootSeed(seed)).toBeNull();
+    const adminPub = k.bytesToHex((await k.deriveAdminRootFromSeed(ADMIN_SEED)).publicKey);
+    expect(globalThis.localStorage.getItem("flagship.adminRootPin.harry")).toBe(adminPub);
+  });
+
+  it("a grant-only bundle whose grant another key signed is refused", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin } = await loadPairing();
+    const f = await fixture(k, { promote: true, grantOnly: true, badGrantSigner: true, passphrase: "the-owner-chose-this" });
+    await expect(runIncomingJoin(f.deps)).rejects.toThrow(/grant did not verify/);
+    expect(f.fetchMock).not.toHaveBeenCalled();
+  });
+
   it("a promoted bundle whose grant was NOT signed by the sealed admin root is refused", async () => {
     const k = await loadKeystore();
     const { runIncomingJoin } = await loadPairing();
@@ -770,7 +796,9 @@ describe("crossDevicePairing — packages/protocol/test-vectors/device-pairing",
       ["memberGrant", false, V.keys.irkPubHex], ["adminGrant", true, V.keys.adminRootPubHex],
     ] as const) {
       const g = P.buildDeviceGrant({ admit, promoted, grantId: V[name].grant.grantId });
-      expect(g).toEqual(V[name].grant);
+      // Member grants are now signed by the admin root; the vectors' membership-signed one is what older admins
+      // send, and joining still accepts it (the signature check below).
+      expect(g).toEqual({ ...V[name].grant, signerRoot: "admin-root" });
       expect(new TextDecoder().decode(P.deviceGrantCanonicalBytes(g))).toBe(V[name].canonical);
       expect(await k.verifyWithEd25519Pub(
         fromHex(pub), fromHex(V[name].signatureHex), P.deviceGrantCanonicalBytes(g),
@@ -801,8 +829,9 @@ describe("crossDevicePairing — packages/protocol/test-vectors/device-pairing",
     const required = (keys: string[]) => keys.filter((x) => !x.endsWith("?")).sort();
     const all = (keys: string[]) => keys.map((x) => x.replace("?", "")).sort();
     // The webapp signs no hybrid companion, so its bundle carries every key but grantPqSignature.
+    // No root in the bundle any more; it names the admin root's public key instead.
     expect(Object.keys(JSON.parse(new TextDecoder().decode(sealed!))).sort())
-      .toEqual(all(V.bundleKeys).filter((x) => x !== "grantPqSignature"));
+      .toEqual([...all(V.bundleKeys).filter((x) => x !== "grantPqSignature" && x !== "wrappedAdminRoot"), "adminRootPubHex"].sort());
     const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(200, {}));
     await postDeviceAdmit({
       username: "harry", admit: {}, admitSigHex: "a", grant: {}, grantSignatureHex: "b", profile: {},
