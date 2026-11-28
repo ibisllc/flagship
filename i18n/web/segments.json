@@ -7106,8 +7106,8 @@
       "security/hall-of-fame.html"
     ]
   },
-  "s2cb6ea1d4a": {
-    "en": "Every key is now decoded under the standard’s strict rules, and small-order and non-canonical keys are refused before any signature is checked. Our server refuses them wherever it stores or vouches for a key, and servers refuse them as share member keys.",
+  "s48f03d1960": {
+    "en": "Every key is now decoded under the standard’s strict rules, and small-order and non-canonical keys are refused before any signature is checked. Our server refuses them wherever it stores or vouches for a key, and servers refuse them too starting with their next release.",
     "kind": "text",
     "ctx": "p",
     "pages": [
