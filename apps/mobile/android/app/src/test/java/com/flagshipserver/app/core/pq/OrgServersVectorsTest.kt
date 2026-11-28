@@ -2,6 +2,7 @@ package com.flagshipserver.app.core.pq
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
@@ -37,7 +38,7 @@ class OrgServersVectorsTest {
     private fun utf8(b: ByteArray) = String(b, Charsets.UTF_8)
 
     private fun code(o: JsonObject) = OrgServerCode(o.s("orgId"), o.s("genesisHash"), o.s("serial"), o.s("serverName"), o.s("serverDomain"),
-        o.s("delegatedPubKeyHex"), o.l("issuedAt"), o.l("expiresAt"))
+        o.s("delegatedPubKeyHex"), o.s("enrolmentPubKeyHex"), o.l("issuedAt"), o.l("expiresAt"))
 
     private fun ring(o: JsonObject) = OrgKeyRing(o.s("orgId"), OrgKeyKind.of(o.s("kind")), o.s("scope"), o.l("version"), o.s("prevSha256"),
         o.s("keyCommitment"), o.s("recipientsHash"), o["retired"]!!.jsonArray.map { it.jsonPrimitive.content }, o.l("oarVersion"), o.l("issuedAt"))
@@ -82,6 +83,26 @@ class OrgServersVectorsTest {
             } catch (x: OrgAuthorityException) { x.code }
             assertEquals(c.s("name"), want, got)
         }
+    }
+
+    @Test
+    fun enrolmentSignature() {
+        val e = v["enrolment"]!!.jsonObject
+        assertEquals(e.s("pubKeyHex"), OrgServers.enrolmentPubKey(e.s("seedHex")))
+        val (seed, pub) = OrgServers.newEnrolmentKey()
+        assertEquals(pub, OrgServers.enrolmentPubKey(seed))
+        for (c in e["cases"]!!.jsonArray.map { it.jsonObject }) {
+            val r = c["request"]!!.jsonObject
+            val bytes = OrgServers.canonicalServerRegister(r.s("orgId"), r.s("serial"), r.s("serverDomain"), r.s("codeSha256"), r.s("serverIdentityPubKeyHex"), r.l("issuedAt"), r.s("nonceHex"))
+            val sig = c["enrolmentSignature"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content }
+            val code = code(c["code"]!!.jsonObject)
+            assertEquals(c.s("name"), c["expect"]!!.jsonPrimitive.boolean,
+                OrgServers.verifyEnrolment(r.s("orgId"), r.s("serial"), r.s("serverDomain"), r.s("codeSha256"), bytes, code, sig))
+        }
+        val first = e["cases"]!!.jsonArray[0].jsonObject
+        val r = first["request"]!!.jsonObject
+        val bytes = OrgServers.canonicalServerRegister(r.s("orgId"), r.s("serial"), r.s("serverDomain"), r.s("codeSha256"), r.s("serverIdentityPubKeyHex"), r.l("issuedAt"), r.s("nonceHex"))
+        assertEquals(first.s("enrolmentSignature"), OrgServers.signEnrolment(bytes, r.s("codeSha256"), code(first["code"]!!.jsonObject), e.s("seedHex")))
     }
 
     @Test

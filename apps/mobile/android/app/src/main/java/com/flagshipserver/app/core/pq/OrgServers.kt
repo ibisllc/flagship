@@ -11,7 +11,10 @@ import org.bouncycastle.crypto.params.HKDFParameters
  */
 data class OrgServerCode(
     val orgId: String, val genesisHash: String, val serial: String, val serverName: String, val serverDomain: String,
-    val delegatedPubKeyHex: String, val issuedAt: Long, val expiresAt: Long,
+    val delegatedPubKeyHex: String,
+    /** The enrolment key's Ed25519 public key; its seed travels only in the recipe (`enrolmentSeedHex`). */
+    val enrolmentPubKeyHex: String,
+    val issuedAt: Long, val expiresAt: Long,
 )
 
 enum class OrgKeyKind(val wire: String) {
@@ -30,7 +33,7 @@ data class OrgKeyRecipient(val recipient: String, val kemKeyId: String, val seal
 class OrgKemKey(val recipient: String, val kemPub: ByteArray, val kemKeyId: String)
 
 object OrgServers {
-    const val TAG_SERVER_CODE = "flagship/org-server-code/v1"
+    const val TAG_SERVER_CODE = "flagship/org-server-code/v2"
     const val TAG_SERVER_REGISTER = "flagship/org-server-register/v1"
     const val TAG_INSTALL_BLOB = "flagship/org-install-blob/v1"
     const val TAG_SEAT_KEM = "flagship/org-seat-kem/v1"
@@ -60,10 +63,11 @@ object OrgServers {
 
     fun canonicalServerCode(c: OrgServerCode): ByteArray {
         need(hex(c.orgId, 32) && hex(c.genesisHash, 64) && hex(c.delegatedPubKeyHex, 64), "malformed", "server code")
+        need(hex(c.enrolmentPubKeyHex, 64) && c.enrolmentPubKeyHex != c.delegatedPubKeyHex, "malformed", "enrolmentPubKeyHex")
         need(SERIAL.matches(c.serial) && LABEL.matches(c.serverName) && DOMAIN.matches(c.serverDomain), "malformed", "server code")
         need(c.serverDomain.startsWith("${c.serverName}."), "malformed", "serverDomain")
         need(c.issuedAt >= 0 && c.expiresAt > c.issuedAt && c.expiresAt - c.issuedAt <= SERVER_CODE_MAX_MS, "malformed", "expiresAt")
-        return join(TAG_SERVER_CODE, c.orgId, c.genesisHash, c.serial, c.serverName, c.serverDomain, c.delegatedPubKeyHex, c.issuedAt, c.expiresAt)
+        return join(TAG_SERVER_CODE, c.orgId, c.genesisHash, c.serial, c.serverName, c.serverDomain, c.delegatedPubKeyHex, c.enrolmentPubKeyHex, c.issuedAt, c.expiresAt)
     }
 
     fun serverCodeSha256(c: OrgServerCode) = sha(canonicalServerCode(c))
@@ -80,6 +84,36 @@ object OrgServers {
         need(hex(orgId, 32) && hex(codeSha256, 64) && hex(serverIdentityPubKeyHex, 64) && SERIAL.matches(serial), "malformed", "register")
         need(DOMAIN.matches(serverDomain) && NONCE.matches(nonceHex) && issuedAt >= 0, "malformed", "register")
         return join(TAG_SERVER_REGISTER, orgId, serial, serverDomain, codeSha256, serverIdentityPubKeyHex, issuedAt, nonceHex)
+    }
+
+    /**
+     * A fresh enrolment key for one server code (the admin's client makes it): the seed goes into the
+     * recipe only, the public key into the code, so only the box holding the recipe can redeem it.
+     */
+    fun newEnrolmentKey(): Pair<String, String> {
+        val seed = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+        return PqHex.encode(seed) to PqHex.encode(PqHybrid.ed25519PublicKey(seed))
+    }
+
+    fun enrolmentPubKey(seedHex: String): String {
+        need(hex(seedHex, 64), "malformed", "enrolmentSeedHex")
+        return PqHex.encode(PqHybrid.ed25519PublicKey(PqHex.decode(seedHex)!!))
+    }
+
+    /** The box's second signature over its registration (the same bytes the STK signs), by the recipe's enrolment key. */
+    fun signEnrolment(register: ByteArray, codeSha256: String, code: OrgServerCode, seedHex: String): String {
+        need(enrolmentPubKey(seedHex) == code.enrolmentPubKeyHex, "malformed", "enrolmentSeedHex")
+        need(serverCodeSha256(code) == codeSha256, "malformed", "codeSha256")
+        return PqHex.encode(PqHybrid.ed25519Sign(PqHex.decode(seedHex)!!, register))
+    }
+
+    /** `.com`'s check, mirrored: the registration names this code and the code's enrolment key signed it. */
+    fun verifyEnrolment(orgId: String, serial: String, serverDomain: String, codeSha256: String, register: ByteArray, code: OrgServerCode, signatureHex: String?): Boolean {
+        if (signatureHex == null || !hex(signatureHex, 128)) return false
+        return try {
+            if (serverCodeSha256(code) != codeSha256 || code.orgId != orgId || code.serial != serial || code.serverDomain != serverDomain) return false
+            PqHybrid.ed25519VerifyStrict(PqHex.decode(signatureHex)!!, register, PqHex.decode(code.enrolmentPubKeyHex)!!)
+        } catch (_: OrgAuthorityException) { false }
     }
 
     // ── the org recipe ───────────────────────────────────────────────────
