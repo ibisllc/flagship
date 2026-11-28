@@ -4457,5 +4457,11 @@
   "choose_name_held_pick_another": "Escolha outro nome ou volte para receber uma nova sugestão.",
   "choose_name_held_mail_subject": "Nome da conta: %1$s",
   "choose_name_held_mail_name": "Nome que eu quero: %1$s",
-  "choose_name_held_mail_why": "Por quê:"
+  "choose_name_held_mail_why": "Por quê:",
+  "org_codes_mismatch": "Os códigos não batem",
+  "org_codes_mismatch_explain": "Outra pessoa, que não a que você convidou, aceitou este convite. Retire-o e envie um novo.",
+  "org_invited_pending": "Convidado, ainda não aceito",
+  "org_invite_withdraw": "Retirar convite",
+  "org_invite_withdraw_explain": "O link para de funcionar, e ninguém que o aceitou entra.",
+  "org_invite_withdrawn": "Convite retirado."
 }

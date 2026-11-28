@@ -68,15 +68,20 @@ class OrgJoinViewModel(
     suspend fun load() {
         _phase.value = Phase.Loading
         try {
-            val r = client.inviteOffer(orgId, seatId)
+            // The link key derives the offer key and the invite key; `.com` serves the offer only on the invite key's proof.
+            val k = OrgAuthority.inviteKeys(PqHex.decode(keyHex)?.takeIf { it.size == 32 } ?: throw OrgAuthorityException("malformed"))
+            val r = try { client.inviteOffer(orgId, seatId, k.secret, now()) } catch (e: Exception) { k.wipe(); throw e }
+            val key = k.offerKey.copyOf()
+            val pub = k.inviteKeyPub
+            k.wipe()
             val sealed = str(r, "offerHex")?.let { PqHex.decode(it) } ?: throw OrgAuthorityException("malformed")
-            val key = PqHex.decode(keyHex) ?: throw OrgAuthorityException("malformed")
             val inv = r["invite"] as? JsonObject ?: throw OrgAuthorityException("malformed")
+            if (str(inv, "inviteKeyPub") != pub) throw OrgAuthorityException("malformed")
             if ((r["accepted"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true") {
                 _phase.value = Phase.Failed(FSStrings.get(R.string.org_join_already))
                 return
             }
-            val o = Json.parseToJsonElement(String(openOffer(sealed, key), Charsets.UTF_8)) as? JsonObject ?: throw OrgAuthorityException("malformed")
+            val o = try { Json.parseToJsonElement(String(openOffer(sealed, key), Charsets.UTF_8)) as? JsonObject } finally { key.fill(0) } ?: throw OrgAuthorityException("malformed")
             if (str(o, "orgId") != orgId || str(o, "seatId") != seatId) throw OrgAuthorityException("malformed")
             val genesis = str(o, "genesisHash") ?: throw OrgAuthorityException("malformed")
             // The org's chain must verify from the genesis the inviter sealed into the offer.
@@ -120,9 +125,13 @@ class OrgJoinViewModel(
                     num(invite, "oarVersion") ?: throw OrgAuthorityException("malformed"),
                     num(invite, "issuedAt") ?: throw OrgAuthorityException("malformed"),
                     num(invite, "expiresAt") ?: throw OrgAuthorityException("malformed"),
+                    str(invite, "inviteKeyPub") ?: throw OrgAuthorityException("malformed"),
                 ),
             )
             val msg = OrgAuthority.canonicalSeatAccept(orgId, seatId, inviteSha, memberKeyId, adminKeyId, t)
+            // The invite key signs the accept too: `.com` takes it only from someone holding the link.
+            val ik = OrgAuthority.inviteKeys(PqHex.decode(keyHex) ?: throw OrgAuthorityException("malformed"))
+            val inviteSig = try { OrgAuthority.inviteAcceptSignature(ik.secret, msg) } finally { ik.wipe() }
             val sig: ByteArray
             val kemSig: ByteArray
             try {
@@ -137,6 +146,7 @@ class OrgJoinViewModel(
                 put("memberBinding", memberBinding.toJson())
                 put("adminBinding", admin?.first?.toJson() ?: JsonNull)
                 put("signature", PqHex.encode(sig))
+                put("inviteSignature", inviteSig)
                 put("seatKem", buildJsonObject {
                     put("statement", buildJsonObject { put("orgId", orgId); put("seatId", seatId); put("kemKeyId", kemKeyId); put("issuedAt", t) })
                     put("kemPubHex", PqHex.encode(kem.publicKey))

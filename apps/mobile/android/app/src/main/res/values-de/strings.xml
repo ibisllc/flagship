@@ -4460,4 +4460,10 @@
     <string name="choose_name_held_mail_subject">Kontoname: %1$s</string>
     <string name="choose_name_held_mail_name">Gewünschter Name: %1$s</string>
     <string name="choose_name_held_mail_why">Grund:</string>
+    <string name="org_codes_mismatch">Die Codes stimmen nicht überein</string>
+    <string name="org_codes_mismatch_explain">Jemand anderes als die eingeladene Person hat diese Einladung angenommen. Zieh sie zurück und schick der Person eine neue.</string>
+    <string name="org_invited_pending">Eingeladen, noch nicht angenommen</string>
+    <string name="org_invite_withdraw">Einladung zurückziehen</string>
+    <string name="org_invite_withdraw_explain">Der Link funktioniert nicht mehr, und niemand, der ihn angenommen hat, wird hereingelassen.</string>
+    <string name="org_invite_withdrawn">Einladung zurückgezogen.</string>
 </resources>

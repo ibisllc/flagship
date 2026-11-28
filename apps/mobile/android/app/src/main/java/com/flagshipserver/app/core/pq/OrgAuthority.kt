@@ -108,6 +108,10 @@ object OrgAuthority {
     const val TAG_SEAT_SAS = "flagship/org-seat-sas/v1"
     const val TAG_SEAT_MEMBER_KDF = "flagship/org-seat-member/v1"
     const val TAG_SEAT_MEMBER_PQ_KDF = "flagship/org-seat-member-pq/v1"
+    const val TAG_INVITE_OFFER_KDF = "flagship/org-invite-offer/v1"
+    const val TAG_INVITE_KEY_KDF = "flagship/org-invite-key/v1"
+    const val TAG_INVITE_READ = "flagship/org-invite-read/v1"
+    const val TAG_INVITE_WITHDRAW = "flagship/org-invite-withdraw/v1"
 
     private const val HOUR = 3_600_000L
     private const val DAY = 24 * HOUR
@@ -221,11 +225,91 @@ object OrgAuthority {
     fun canonical(f: OrgSeatFreeze): ByteArray { need(hex(f.orgId, 32) && hex(f.seatId, 32), "malformed", "freeze"); return join(TAG_SEAT_FREEZE, f.orgId, f.seatId, f.untilMs, f.oarVersion, f.issuedAt) }
     fun canonical(o: OrgOverturn): ByteArray { need(hex(o.orgId, 32) && hex(o.freezeSha256, 64), "malformed", "overturn"); return join(TAG_OVERTURN, o.orgId, o.freezeSha256, o.oarVersion, o.issuedAt) }
 
-    fun canonicalSeatInvite(orgId: String, seatId: String, labelSha256: String, rolesHash: String, oarVersion: Long, issuedAt: Long, expiresAt: Long): ByteArray {
+    fun canonicalSeatInvite(orgId: String, seatId: String, labelSha256: String, rolesHash: String, oarVersion: Long, issuedAt: Long, expiresAt: Long, inviteKeyPub: String): ByteArray {
         need(hex(labelSha256, 64), "label-missing")
         need(hex(orgId, 32) && hex(seatId, 32) && hex(rolesHash, 64), "malformed", "invite")
         need(expiresAt > issuedAt && expiresAt - issuedAt <= INVITE_MAX_LIFETIME_MS, "malformed", "expiresAt")
-        return join(TAG_SEAT_INVITE, orgId, seatId, labelSha256, rolesHash, oarVersion, issuedAt, expiresAt)
+        need(hex(inviteKeyPub, 2 * INVITE_KEY_PUB_LEN), "malformed", "inviteKeyPub")
+        return join(TAG_SEAT_INVITE, orgId, seatId, labelSha256, rolesHash, oarVersion, issuedAt, expiresAt, inviteKeyPub)
+    }
+
+    /** An invite as served (`invite` of `GET /invites/<seat>` or `/seats`): its canonical bytes, or null when malformed. */
+    fun canonicalSeatInvite(invite: JsonObject): ByteArray? = runCatching {
+        fun s(k: String) = (invite[k] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: fail("malformed", k)
+        fun n(k: String) = wireNum(invite[k]) ?: fail("malformed", k)
+        canonicalSeatInvite(s("orgId"), s("seatId"), s("labelSha256"), s("rolesHash"), n("oarVersion"), n("issuedAt"), n("expiresAt"), s("inviteKeyPub"))
+    }.getOrNull()
+
+    // ── the invite link's keys (docs/enterprise-accounts.md §7) ──
+
+    private const val INVITE_KEY_PUB_LEN = 1984
+
+    private fun wireNum(e: JsonElement?): Long? {
+        val p = e as? JsonPrimitive ?: return null
+        if (p.isString) return null
+        val d = p.content.toDoubleOrNull() ?: return null
+        return if (d.isNaN() || d != Math.floor(d) || d < 0 || d > PqHybrid.MAX_SAFE_INTEGER) null else d.toLong()
+    }
+
+    /** What an invite link's key k derives: the offer key (AES-256-GCM) and the invite key (hybrid). Wipe after use. */
+    class InviteKeys(val offerKey: ByteArray, val secret: ByteArray, val publicKey: ByteArray) {
+        val inviteKeyPub: String get() = PqHex.encode(publicKey)
+        fun wipe() { offerKey.fill(0); secret.fill(0) }
+    }
+
+    fun inviteKeys(linkKey: ByteArray): InviteKeys {
+        need(linkKey.size == 32, "malformed", "link key")
+        fun derive(tag: String, n: Int): ByteArray {
+            val g = HKDFBytesGenerator(SHA256Digest())
+            g.init(HKDFParameters(linkKey, ByteArray(0), tag.toByteArray(Charsets.UTF_8)))
+            return ByteArray(n).also { g.generateBytes(it, 0, n) }
+        }
+        val seed = derive(TAG_INVITE_KEY_KDF, 64)
+        val kp = try { PqHybrid.hybridSigKeygen(seed.copyOfRange(0, 32), seed.copyOfRange(32, 64)) } finally { seed.fill(0) }
+        return InviteKeys(derive(TAG_INVITE_OFFER_KDF, 32), kp.secretKey, kp.publicKey)
+    }
+
+    fun canonicalInviteRead(orgId: String, seatId: String, issuedAt: Long): ByteArray {
+        need(hex(orgId, 32) && hex(seatId, 32) && issuedAt >= 0, "malformed", "invite read")
+        return join(TAG_INVITE_READ, orgId, seatId, issuedAt)
+    }
+
+    /** The invite-key proof `GET /api/orgs/<orgId>/invites/<seatId>` needs (hex), fresh for 5 minutes. */
+    fun inviteReadSignature(secret: ByteArray, orgId: String, seatId: String, issuedAt: Long, deterministic: Boolean = false): String =
+        PqHex.encode(PqHybrid.hybridSign(secret, TAG_INVITE_READ, canonicalInviteRead(orgId, seatId, issuedAt), deterministic))
+
+    private fun hybridOk(pubHex: String?, purpose: String, payload: ByteArray, sigHex: String?): Boolean {
+        val pub = pubHex?.takeIf { hex(it, 2 * INVITE_KEY_PUB_LEN) }?.let { PqHex.decode(it) } ?: return false
+        val sig = sigHex?.takeIf { hex(it, 6746) }?.let { PqHex.decode(it) } ?: return false
+        return runCatching { PqHybrid.hybridVerify(pub, purpose, payload, sig) }.isSuccess
+    }
+
+    fun verifyInviteRead(orgId: String, seatId: String, inviteKeyPub: String?, issuedAt: Long, signature: String?, now: Long): Boolean {
+        if (issuedAt < 0 || kotlin.math.abs(now - issuedAt) > MAX_SKEW_MS) return false
+        val msg = runCatching { canonicalInviteRead(orgId, seatId, issuedAt) }.getOrNull() ?: return false
+        return hybridOk(inviteKeyPub, TAG_INVITE_READ, msg, signature)
+    }
+
+    /** The invite key's signature over the accept's canonical bytes (hex): the joiner held the link. */
+    fun inviteAcceptSignature(secret: ByteArray, acceptBytes: ByteArray, deterministic: Boolean = false): String =
+        PqHex.encode(PqHybrid.hybridSign(secret, TAG_SEAT_ACCEPT, acceptBytes, deterministic))
+
+    /** True when the served accept names [invite] and [signature] is its invite key's signature over the accept. */
+    fun verifyInviteAccept(invite: JsonObject, accept: JsonObject, signature: String?): Boolean {
+        fun s(o: JsonObject, k: String) = (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val inv = canonicalSeatInvite(invite) ?: return false
+        if (s(accept, "orgId") != s(invite, "orgId") || s(accept, "seatId") != s(invite, "seatId") || s(accept, "inviteSha256") != sha256Hex(inv)) return false
+        val custody = when (s(accept, "custody")) { null, "hardware" -> OrgCustody.HARDWARE; "browser" -> OrgCustody.BROWSER; else -> return false }
+        val msg = runCatching {
+            canonicalSeatAccept(s(accept, "orgId")!!, s(accept, "seatId")!!, s(accept, "inviteSha256")!!, s(accept, "memberKeyId") ?: "", s(accept, "adminKeyId") ?: "", wireNum(accept["issuedAt"])!!, custody)
+        }.getOrNull() ?: return false
+        return hybridOk(s(invite, "inviteKeyPub"), TAG_SEAT_ACCEPT, msg, signature)
+    }
+
+    /** An admin's order withdrawing an invitation not yet admitted (one org admin, as the invite). */
+    fun canonicalInviteWithdraw(orgId: String, seatId: String, oarVersion: Long, issuedAt: Long): ByteArray {
+        need(hex(orgId, 32) && hex(seatId, 32) && oarVersion >= 0 && issuedAt >= 0, "malformed", "withdraw")
+        return join(TAG_INVITE_WITHDRAW, orgId, seatId, oarVersion, issuedAt)
     }
 
     fun canonicalSeatAccept(orgId: String, seatId: String, inviteSha256: String, memberKeyId: String, adminKeyId: String, issuedAt: Long, custody: OrgCustody = OrgCustody.HARDWARE): ByteArray {

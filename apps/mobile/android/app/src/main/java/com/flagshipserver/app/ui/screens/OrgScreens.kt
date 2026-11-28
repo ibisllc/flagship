@@ -164,6 +164,9 @@ fun OrgDetailScreen(seat: OrgSeatRecord, onOpenPlan: (() -> Unit)? = null) {
     val inviteLink by vm.inviteLink.collectAsState()
     var inviting by remember { mutableStateOf(false) }
     var freezeTarget by remember { mutableStateOf<String?>(null) }
+    var withdrawTarget by remember { mutableStateOf<String?>(null) }
+    var mismatchTarget by remember { mutableStateOf<String?>(null) }
+    val invited by vm.pendingInvites.collectAsState()
     fun label(id: String) = names.let { vm.name(seat, id) }
     OrgPage(seat.orgName) {
         if (onOpenPlan != null) OrgPlanEntry(seat, onOpenPlan)
@@ -184,6 +187,33 @@ fun OrgDetailScreen(seat: OrgSeatRecord, onOpenPlan: (() -> Unit)? = null) {
                                 j.sas?.let { Body(fsString(R.string.org_their_code, it.take(3), it.takeLast(3)), muted = true) }
                                 FSPrimaryButton(stringResource(R.string.org_admit), onClick = { scope.launch { vm.admit(seat, j) } },
                                     enabled = !busy && frozen == null, modifier = Modifier.testTag("org-admit-${j.seatId.take(8)}"))
+                                if (mismatchTarget == j.seatId) {
+                                    // A different code means the accept came from someone other than the invited person.
+                                    Body(stringResource(R.string.org_codes_mismatch_explain), danger = true)
+                                    FSPrimaryButton(stringResource(R.string.org_invite_withdraw), onClick = { scope.launch { vm.withdrawInvite(seat, j.seatId); mismatchTarget = null } },
+                                        enabled = !busy && frozen == null, modifier = Modifier.testTag("org-mismatch-withdraw-${j.seatId.take(8)}"))
+                                } else {
+                                    FSSecondaryButton(stringResource(R.string.org_codes_mismatch), onClick = { mismatchTarget = j.seatId },
+                                        modifier = Modifier.testTag("org-mismatch-${j.seatId.take(8)}"))
+                                }
+                            }
+                        }
+                    }
+                }
+                if (invited.isNotEmpty() && !seat.memberOnly) {
+                    FSSectionHeader(stringResource(R.string.org_invited_pending))
+                    invited.forEach { id ->
+                        FSCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                Body(label(id))
+                                if (withdrawTarget == id) {
+                                    Body(stringResource(R.string.org_invite_withdraw_explain), muted = true)
+                                    FSPrimaryButton(stringResource(R.string.org_invite_withdraw), onClick = { scope.launch { vm.withdrawInvite(seat, id); withdrawTarget = null } },
+                                        enabled = !busy && frozen == null, modifier = Modifier.testTag("org-withdraw-confirm-${id.take(8)}"))
+                                } else {
+                                    FSSecondaryButton(stringResource(R.string.org_invite_withdraw), onClick = { withdrawTarget = id },
+                                        modifier = Modifier.testTag("org-withdraw-${id.take(8)}"))
+                                }
                             }
                         }
                     }

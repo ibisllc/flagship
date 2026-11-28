@@ -88,6 +88,46 @@ class OrgJoinViewModelTest {
         assertTrue(w.accepts.isEmpty())
     }
 
+    @Test fun anAcceptServedWithoutTheInviteKeysSignatureIsNotOfferedToAdmit() = runTest {
+        val w = OrgTestWorld()
+        val seat = OrgTestWorld.hex(16)
+        val key = w.invite(seat, listOf(OrgSeatRole.Member), memberRoles)
+        joiner(w, seat, key).apply { load(); accept() }
+        // `.com` (or a squatter it let through) serves the accept with its invite-key signature dropped or another accept's.
+        val a = w.accepts.single()
+        w.accepts[0] = kotlinx.serialization.json.JsonObject(a - "inviteSignature")
+        val admin = OrgViewModel(OrgClient(w.http), w.founderSeats, { umk.copyOf() }, { w.now })
+        admin.load(w.founder)
+        assertTrue(admin.pendingJoins.value.isEmpty())
+        w.accepts[0] = a
+        admin.load(w.founder)
+        assertEquals(1, admin.pendingJoins.value.size)
+    }
+
+    @Test fun anAdminWithdrawsAnInvitationWhoseCodesDidNotMatch() = runTest {
+        val w = OrgTestWorld()
+        val seat = OrgTestWorld.hex(16)
+        val pending = OrgTestWorld.hex(16)
+        val key = w.invite(seat, listOf(OrgSeatRole.Member), memberRoles)
+        w.invite(pending, listOf(OrgSeatRole.Member), memberRoles, "Sam")
+        joiner(w, seat, key).apply { load(); accept() }
+        val admin = OrgViewModel(OrgClient(w.http), w.founderSeats, { umk.copyOf() }, { w.now })
+        admin.load(w.founder)
+        assertEquals(listOf(pending), admin.pendingInvites.value)
+        admin.withdrawInvite(w.founder, seat)
+        val order = w.withdrawn.single()
+        val body = order["withdraw"] as kotlinx.serialization.json.JsonObject
+        assertEquals(seat, (body["seatId"] as JsonPrimitive).content)
+        val approval = OrgAuthorityWire.approval((order["approvals"] as kotlinx.serialization.json.JsonArray).single())
+        val canonical = com.flagshipserver.app.core.pq.OrgAuthority.canonicalInviteWithdraw(w.orgId, seat, 0, w.now)
+        assertEquals(com.flagshipserver.app.core.pq.OrgAuthority.sha256Hex(canonical), approval.orderSha256)
+        assertTrue(admin.pendingJoins.value.isEmpty())
+        // The withdrawn link reads as no invitation.
+        val again = joiner(w, seat, key)
+        again.load()
+        assertTrue(again.phase.value is OrgJoinViewModel.Phase.Failed)
+    }
+
     @Test fun aChainThatDoesNotMatchTheOfferedGenesisIsRefused() = runTest {
         val w = OrgTestWorld()
         val seat = OrgTestWorld.hex(16)

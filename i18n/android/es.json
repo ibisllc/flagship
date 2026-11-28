@@ -4457,5 +4457,11 @@
   "choose_name_held_pick_another": "Elige otro nombre o vuelve atrás para obtener una nueva sugerencia.",
   "choose_name_held_mail_subject": "Nombre de cuenta: %1$s",
   "choose_name_held_mail_name": "Nombre que quiero: %1$s",
-  "choose_name_held_mail_why": "Motivo:"
+  "choose_name_held_mail_why": "Motivo:",
+  "org_codes_mismatch": "Los códigos no coinciden",
+  "org_codes_mismatch_explain": "Alguien distinto de la persona que invitaste aceptó esta invitación. Retírala y envíale una nueva.",
+  "org_invited_pending": "Invitado, aún sin aceptar",
+  "org_invite_withdraw": "Retirar la invitación",
+  "org_invite_withdraw_explain": "El enlace deja de funcionar y nadie que lo haya aceptado entra.",
+  "org_invite_withdrawn": "Invitación retirada."
 }

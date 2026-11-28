@@ -4460,4 +4460,10 @@
     <string name="choose_name_held_mail_subject">Nome da conta: %1$s</string>
     <string name="choose_name_held_mail_name">Nome que eu quero: %1$s</string>
     <string name="choose_name_held_mail_why">Por quê:</string>
+    <string name="org_codes_mismatch">Os códigos não batem</string>
+    <string name="org_codes_mismatch_explain">Outra pessoa, que não a que você convidou, aceitou este convite. Retire-o e envie um novo.</string>
+    <string name="org_invited_pending">Convidado, ainda não aceito</string>
+    <string name="org_invite_withdraw">Retirar convite</string>
+    <string name="org_invite_withdraw_explain">O link para de funcionar, e ninguém que o aceitou entra.</string>
+    <string name="org_invite_withdrawn">Convite retirado.</string>
 </resources>

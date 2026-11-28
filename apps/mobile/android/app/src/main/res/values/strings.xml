@@ -4467,4 +4467,10 @@
     <string name="choose_name_held_mail_subject">Account name: %1$s</string>
     <string name="choose_name_held_mail_name">Name I want: %1$s</string>
     <string name="choose_name_held_mail_why">Why:</string>
+    <string name="org_codes_mismatch">The codes don\'t match</string>
+    <string name="org_codes_mismatch_explain">Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.</string>
+    <string name="org_invited_pending">Invited, not accepted yet</string>
+    <string name="org_invite_withdraw">Withdraw invitation</string>
+    <string name="org_invite_withdraw_explain">The link stops working, and nobody who accepted it is let in.</string>
+    <string name="org_invite_withdrawn">Invitation withdrawn.</string>
 </resources>

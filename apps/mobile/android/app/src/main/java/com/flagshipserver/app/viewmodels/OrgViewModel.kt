@@ -70,6 +70,9 @@ class OrgViewModel(
     val snapshot: StateFlow<OrgSnapshot?> = _snapshot.asStateFlow()
     private val _pendingJoins = MutableStateFlow<List<OrgPendingJoin>>(emptyList())
     val pendingJoins: StateFlow<List<OrgPendingJoin>> = _pendingJoins.asStateFlow()
+    private val _pendingInvites = MutableStateFlow<List<String>>(emptyList())
+    /** Seat ids of invitations nobody has accepted yet (an admin may withdraw them). */
+    val pendingInvites: StateFlow<List<String>> = _pendingInvites.asStateFlow()
     private val _rotations = MutableStateFlow<List<com.flagshipserver.app.core.pq.OrgPendingRotation>>(emptyList())
     /** Departed seats whose keys still need rotating, as this phone verified them. */
     val rotations: StateFlow<List<com.flagshipserver.app.core.pq.OrgPendingRotation>> = _rotations.asStateFlow()
@@ -211,22 +214,30 @@ class OrgViewModel(
             val seatId = OrgAuthority.randomId()
             val t = now()
             val linkKey = ByteArray(32).also(java.security.SecureRandom()::nextBytes)
-            val sealedLabel = gcmSeal(linkKey, name.toByteArray(Charsets.UTF_8))
+            // The link key derives the offer key (seals the offer and the pseudonym) and the invite key, whose public
+            // half the invite names: reading the offer and accepting both need it (docs/enterprise-accounts.md §7).
+            val ik = OrgAuthority.inviteKeys(linkKey)
+            val inviteKeyPub = ik.inviteKeyPub
             val rolesJson = OrgJson.roles(roles)
-            val offer = gcmSeal(linkKey, buildJsonObject {
-                put("orgId", seat.orgId); put("orgName", seat.orgName); put("genesisHash", seat.genesisHash); put("seatId", seatId)
-                put("roles", rolesJson); put("pseudonym", name)
-            }.toString().toByteArray(Charsets.UTF_8))
+            val sealedLabel: ByteArray
+            val offer: ByteArray
+            try {
+                sealedLabel = gcmSeal(ik.offerKey, name.toByteArray(Charsets.UTF_8))
+                offer = gcmSeal(ik.offerKey, buildJsonObject {
+                    put("orgId", seat.orgId); put("orgName", seat.orgName); put("genesisHash", seat.genesisHash); put("seatId", seatId)
+                    put("roles", rolesJson); put("pseudonym", name)
+                }.toString().toByteArray(Charsets.UTF_8))
+            } finally { ik.wipe() }
             val rolesHash = OrgAuthority.rolesHash(roles)
             val labelSha = OrgAuthority.sha256Hex(sealedLabel)
             val v = s.state.current.version
             val expires = t + 7 * DAY
-            val order = OrgAuthority.canonicalSeatInvite(seat.orgId, seatId, labelSha, rolesHash, v, t, expires)
+            val order = OrgAuthority.canonicalSeatInvite(seat.orgId, seatId, labelSha, rolesHash, v, t, expires, inviteKeyPub)
             val a = approval(seat, order)
             client.createInvite(seat.orgId, buildJsonObject {
                 put("invite", buildJsonObject {
                     put("orgId", seat.orgId); put("seatId", seatId); put("labelSha256", labelSha); put("rolesHash", rolesHash)
-                    put("oarVersion", v); put("issuedAt", t); put("expiresAt", expires)
+                    put("oarVersion", v); put("issuedAt", t); put("expiresAt", expires); put("inviteKeyPub", inviteKeyPub)
                 })
                 put("roles", rolesJson)
                 put("approvals", buildJsonArray { add(OrgJson.approval(a)) })
@@ -331,6 +342,7 @@ class OrgViewModel(
         try {
             _snapshot.value = client.snapshot(seat.orgId, seat.genesisHash, now())
             _pendingJoins.value = runCatching { client.pendingJoins(seat.orgId) }.getOrDefault(emptyList())
+            _pendingInvites.value = if (isOrgAdmin(seat)) runCatching { client.pendingInvites(seat.orgId) }.getOrDefault(emptyList()) else emptyList()
             plan = if (seat.memberOnly) null else runCatching { client.rotationPlan(_snapshot.value!!, now()) }.getOrNull()
             _rotations.value = plan?.pending ?: emptyList()
             _phase.value = Phase.Loaded
@@ -406,6 +418,27 @@ class OrgViewModel(
                 client.openCeremony(seat.orgId, String(order, Charsets.UTF_8), JsonObject(body + ("kind" to kotlinx.serialization.json.JsonPrimitive("grant"))), a)
                 _message.value = FSStrings.get(R.string.org_needs_second_admin)
             }
+            load(seat)
+        } catch (e: Exception) {
+            failed(e)
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    /**
+     * Withdraws an invitation nobody was admitted on (one org admin): the link stops working and any accept is dropped.
+     * Also what the admin does when the codes don't match: someone other than the invited person accepted.
+     */
+    suspend fun withdrawInvite(seat: OrgSeatRecord, seatId: String) {
+        val s = _snapshot.value ?: return
+        _busy.value = true
+        try {
+            val t = now()
+            val v = s.state.current.version
+            val a = approval(seat, OrgAuthority.canonicalInviteWithdraw(seat.orgId, seatId, v, t))
+            client.withdrawInvite(seat.orgId, seatId, v, t, a)
+            _message.value = FSStrings.get(R.string.org_invite_withdrawn)
             load(seat)
         } catch (e: Exception) {
             failed(e)

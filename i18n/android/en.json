@@ -18296,5 +18296,29 @@
   "choose_name_held_mail_why": {
     "en": "Why:",
     "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
+  },
+  "org_codes_mismatch": {
+    "en": "The codes don't match",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_codes_mismatch_explain": {
+    "en": "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_invited_pending": {
+    "en": "Invited, not accepted yet",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_invite_withdraw": {
+    "en": "Withdraw invitation",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_invite_withdraw_explain": {
+    "en": "The link stops working, and nobody who accepted it is let in.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "org_invite_withdrawn": {
+    "en": "Invitation withdrawn.",
+    "ctx": "Organizations (docs/enterprise-accounts.md)"
   }
 }

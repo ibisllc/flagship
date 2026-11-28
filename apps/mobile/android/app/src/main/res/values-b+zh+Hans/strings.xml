@@ -4459,4 +4459,10 @@
     <string name="choose_name_held_mail_subject">账户名称：%1$s</string>
     <string name="choose_name_held_mail_name">我想要的名称：%1$s</string>
     <string name="choose_name_held_mail_why">原因：</string>
+    <string name="org_codes_mismatch">代码不一致</string>
+    <string name="org_codes_mismatch_explain">接受此邀请的不是你邀请的人。请撤回它，并给对方发送新的邀请。</string>
+    <string name="org_invited_pending">已邀请，尚未接受</string>
+    <string name="org_invite_withdraw">撤回邀请</string>
+    <string name="org_invite_withdraw_explain">链接将失效，已接受它的人也不会被允许加入。</string>
+    <string name="org_invite_withdrawn">邀请已撤回。</string>
 </resources>

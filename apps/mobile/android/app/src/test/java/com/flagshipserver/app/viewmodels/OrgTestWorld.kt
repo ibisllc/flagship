@@ -118,10 +118,11 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
     /** An invitation as an admin makes it; returns the link key. */
     fun invite(seatId: String, roles: List<OrgSeatRole>, rolesJson: JsonArray, pseudonym: String = "Pat"): String {
         val linkKey = ByteArray(32).also(SecureRandom()::nextBytes)
+        val ik = OrgAuthority.inviteKeys(linkKey)
         fun seal(b: ByteArray): ByteArray {
             val nonce = ByteArray(12).also(SecureRandom()::nextBytes)
             val c = Cipher.getInstance("AES/GCM/NoPadding")
-            c.init(Cipher.ENCRYPT_MODE, SecretKeySpec(linkKey, "AES"), GCMParameterSpec(128, nonce))
+            c.init(Cipher.ENCRYPT_MODE, SecretKeySpec(ik.offerKey, "AES"), GCMParameterSpec(128, nonce))
             return nonce + c.doFinal(b)
         }
         val label = seal(pseudonym.toByteArray())
@@ -132,7 +133,7 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
         invites[seatId] = buildJsonObject {
             put("invite", buildJsonObject {
                 put("orgId", orgId); put("seatId", seatId); put("labelSha256", OrgAuthority.sha256Hex(label)); put("rolesHash", OrgAuthority.rolesHash(roles))
-                put("oarVersion", 0); put("issuedAt", t); put("expiresAt", t + 7 * 86_400_000L)
+                put("oarVersion", 0); put("issuedAt", t); put("expiresAt", t + 7 * 86_400_000L); put("inviteKeyPub", ik.inviteKeyPub)
             })
             put("roles", rolesJson)
         }
@@ -142,10 +143,20 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
 
     private fun seatId(path: String) = path.split('/')[5]
 
-    val http = OrgHttp { method, path, body ->
+    /** As `.com`: an invite read needs a fresh invite-key proof, an accept the invite key's signature (else 404). */
+    val http = object : OrgHttp {
+        override suspend fun call(method: String, path: String, body: JsonObject?) = call(method, path, body, emptyMap())
+        override suspend fun call(method: String, path: String, body: JsonObject?, headers: Map<String, String>) = serve(method, path, body, headers)
+    }
+
+    val withdrawn = mutableListOf<JsonObject>()
+
+    private fun inviteOf(s: String) = invites[s]?.get("invite") as? JsonObject
+
+    private fun serve(method: String, path: String, body: JsonObject?, headers: Map<String, String>): Pair<Int, JsonObject> {
         calls += "$method $path"
         val base = "/api/orgs/$orgId"
-        when {
+        return when {
             method == "GET" && path == "$base/authority" -> 200 to buildJsonObject {
                 put("org", buildJsonObject { put("name", orgName) }); put("entries", JsonArray(entries)); put("freezes", JsonArray(emptyList()))
                 put("overturns", JsonArray(emptyList())); put("vetoes", JsonArray(emptyList()))
@@ -156,12 +167,26 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
             method == "GET" && path == "$base/ceremonies" -> 200 to buildJsonObject { put("ceremonies", JsonArray(ceremonies)) }
             method == "GET" && path.startsWith("$base/invites/") -> {
                 val s = seatId(path)
-                if (inviteExpired) 410 to buildJsonObject { put("code", "org-invite-expired") }
+                val inv = inviteOf(s)
+                val proven = inv != null && OrgAuthority.verifyInviteRead(orgId, s, (inv["inviteKeyPub"] as? JsonPrimitive)?.content,
+                    headers["x-flagship-issued-at"]?.toLongOrNull() ?: -1, headers["x-flagship-signature"], now)
+                if (!proven) 404 to JsonObject(emptyMap())
+                else if (inviteExpired) 410 to buildJsonObject { put("code", "org-invite-expired") }
                 else invites[s]?.let { inv ->
                     200 to JsonObject(inv + mapOf("offerHex" to JsonPrimitive(offers[s]), "accepted" to JsonPrimitive(accepts.any { (it["accept"] as JsonObject)["seatId"] == JsonPrimitive(s) })))
                 } ?: (404 to JsonObject(emptyMap()))
             }
-            method == "POST" && path.endsWith("/accept") -> { accepts += body!!; 200 to JsonObject(emptyMap()) }
+            method == "POST" && path.endsWith("/accept") -> {
+                val inv = inviteOf(seatId(path))
+                if (inv == null || !OrgAuthority.verifyInviteAccept(inv, body!!["accept"] as JsonObject, (body["inviteSignature"] as? JsonPrimitive)?.content)) 404 to JsonObject(emptyMap())
+                else { accepts += body; 200 to JsonObject(emptyMap()) }
+            }
+            method == "POST" && path.endsWith("/withdraw") -> {
+                val s = seatId(path)
+                withdrawn += body!!
+                invites.remove(s); accepts.removeAll { ((it["accept"] as JsonObject)["seatId"] as JsonPrimitive).content == s }
+                200 to JsonObject(emptyMap())
+            }
             method == "POST" && path == "$base/seats" -> {
                 grants += body!!
                 // As .com does: the KEM key a seat sent with its accept becomes its KEM key when the grant lands.

@@ -4457,5 +4457,11 @@
   "choose_name_held_pick_another": "Wähle einen anderen Namen oder geh zurück, um einen neuen Vorschlag zu bekommen.",
   "choose_name_held_mail_subject": "Kontoname: %1$s",
   "choose_name_held_mail_name": "Gewünschter Name: %1$s",
-  "choose_name_held_mail_why": "Grund:"
+  "choose_name_held_mail_why": "Grund:",
+  "org_codes_mismatch": "Die Codes stimmen nicht überein",
+  "org_codes_mismatch_explain": "Jemand anderes als die eingeladene Person hat diese Einladung angenommen. Zieh sie zurück und schick der Person eine neue.",
+  "org_invited_pending": "Eingeladen, noch nicht angenommen",
+  "org_invite_withdraw": "Einladung zurückziehen",
+  "org_invite_withdraw_explain": "Der Link funktioniert nicht mehr, und niemand, der ihn angenommen hat, wird hereingelassen.",
+  "org_invite_withdrawn": "Einladung zurückgezogen."
 }

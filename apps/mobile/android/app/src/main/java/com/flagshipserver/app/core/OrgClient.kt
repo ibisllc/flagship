@@ -32,14 +32,20 @@ class OrgClientException(val status: Int, val code: String) : Exception(code.ifE
 /** One HTTP exchange with `.com`: status and the JSON object it answered (empty when none). */
 fun interface OrgHttp {
     suspend fun call(method: String, path: String, body: JsonObject?): Pair<Int, JsonObject>
+
+    /** The same with extra request headers (the invite-key read proof). */
+    suspend fun call(method: String, path: String, body: JsonObject?, headers: Map<String, String>): Pair<Int, JsonObject> = call(method, path, body)
 }
 
 class LiveOrgHttp(private val transport: JsonHttpTransport, private val base: () -> String = { Endpoints.controlBaseUrl }) : OrgHttp {
-    override suspend fun call(method: String, path: String, body: JsonObject?): Pair<Int, JsonObject> {
+    override suspend fun call(method: String, path: String, body: JsonObject?): Pair<Int, JsonObject> = call(method, path, body, emptyMap())
+
+    override suspend fun call(method: String, path: String, body: JsonObject?, headers: Map<String, String>): Pair<Int, JsonObject> {
         val res = transport.execute(
             method, base().trimEnd('/') + path,
             body = body?.toString()?.toByteArray(Charsets.UTF_8),
             contentType = if (body != null) "application/json" else null,
+            extraHeaders = headers,
             accept = (100..599).toSet(),
         )
         val json = runCatching { Json.parseToJsonElement(String(res.body, Charsets.UTF_8)) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap())
@@ -81,8 +87,8 @@ internal fun str(o: JsonObject?, k: String): String? = (o?.get(k) as? JsonPrimit
 internal fun num(o: JsonObject?, k: String): Long? = (o?.get(k) as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toLongOrNull()
 
 class OrgClient(private val http: OrgHttp) {
-    private suspend fun call(method: String, path: String, body: JsonObject? = null): JsonObject {
-        val (status, json) = http.call(method, path, body)
+    private suspend fun call(method: String, path: String, body: JsonObject? = null, headers: Map<String, String> = emptyMap()): JsonObject {
+        val (status, json) = if (headers.isEmpty()) http.call(method, path, body) else http.call(method, path, body, headers)
         if (status !in 200..299) throw OrgClientException(status, str(json, "code") ?: str(json, "error") ?: "")
         return json
     }
@@ -112,8 +118,31 @@ class OrgClient(private val http: OrgHttp) {
         return OrgSnapshot(name, state, book, freezes, ceremonies, grants, revokes)
     }
 
-    /** The invitation behind a link: the invite, its roles and the offer sealed under the link key. */
-    suspend fun inviteOffer(orgId: String, seatId: String): JsonObject = call("GET", "/api/orgs/$orgId/invites/$seatId")
+    /**
+     * The invitation behind a link: the invite, its roles and the offer sealed under the offer key. `.com` serves it only
+     * with a fresh invite-key signature ([inviteSecret] comes from the link key); without one it reads as no invite.
+     */
+    suspend fun inviteOffer(orgId: String, seatId: String, inviteSecret: ByteArray, now: Long): JsonObject =
+        call("GET", "/api/orgs/$orgId/invites/$seatId", null, mapOf(
+            "x-flagship-issued-at" to now.toString(),
+            "x-flagship-signature" to OrgAuthority.inviteReadSignature(inviteSecret, orgId, seatId, now),
+        ))
+
+    /** Withdraws an invitation nobody was admitted on (one org admin's approval of the withdraw order). */
+    suspend fun withdrawInvite(orgId: String, seatId: String, oarVersion: Long, issuedAt: Long, approval: OrgApproval) {
+        call("POST", "/api/orgs/$orgId/invites/$seatId/withdraw", buildJsonObject {
+            put("withdraw", buildJsonObject { put("orgId", orgId); put("seatId", seatId); put("oarVersion", oarVersion); put("issuedAt", issuedAt) })
+            put("approvals", buildJsonArray { add(OrgJson.approval(approval)) })
+        })
+    }
+
+    /** Invitations nobody has accepted yet (an admin may withdraw them): seat ids. */
+    suspend fun pendingInvites(orgId: String): List<String> {
+        val s = call("GET", "/api/orgs/$orgId/seats")
+        val granted = arr(s, "grants").mapNotNull { str((it as? JsonObject)?.get("grant") as? JsonObject, "seatId") }.toSet()
+        val accepted = arr(s, "accepts").mapNotNull { str((it as? JsonObject)?.get("accept") as? JsonObject, "seatId") }.toSet()
+        return arr(s, "invites").mapNotNull { str((it as? JsonObject)?.get("invite") as? JsonObject, "seatId") }.filter { it !in granted && it !in accepted }
+    }
 
     /** The person's acceptance, signed with their seat member key. */
     suspend fun accept(orgId: String, seatId: String, body: JsonObject) { call("POST", "/api/orgs/$orgId/invites/$seatId/accept", body) }
@@ -133,6 +162,8 @@ class OrgClient(private val http: OrgHttp) {
             if (seatId in granted) return@mapNotNull null
             val inv = invites[seatId] ?: return@mapNotNull null
             val invite = inv["invite"] as? JsonObject ?: return@mapNotNull null
+            // Only an accept the invite key signed is offered: whoever accepted held the invitation link.
+            if (!OrgAuthority.verifyInviteAccept(invite, acc, str(a, "inviteSignature"))) return@mapNotNull null
             val member = runCatching { PqTrust.pqKeyBindingFromWire(a["memberBinding"]) }.getOrNull() ?: return@mapNotNull null
             val admin = (a["adminBinding"] as? JsonObject)?.let { runCatching { PqTrust.pqKeyBindingFromWire(it) }.getOrNull() }
             OrgPendingJoin(seatId, invite, (inv["roles"] as? JsonArray) ?: JsonArray(emptyList()), acc, member, admin)

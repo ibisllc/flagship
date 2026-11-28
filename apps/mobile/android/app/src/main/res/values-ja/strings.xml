@@ -4459,4 +4459,10 @@
     <string name="choose_name_held_mail_subject">アカウント名: %1$s</string>
     <string name="choose_name_held_mail_name">希望する名前: %1$s</string>
     <string name="choose_name_held_mail_why">理由:</string>
+    <string name="org_codes_mismatch">コードが一致しない</string>
+    <string name="org_codes_mismatch_explain">招待した人以外の誰かがこの招待を承諾しました。取り消して、新しい招待を送ってください。</string>
+    <string name="org_invited_pending">招待済み、まだ承諾されていません</string>
+    <string name="org_invite_withdraw">招待を取り消す</string>
+    <string name="org_invite_withdraw_explain">リンクは使えなくなり、承諾した人も参加できません。</string>
+    <string name="org_invite_withdrawn">招待を取り消しました。</string>
 </resources>
