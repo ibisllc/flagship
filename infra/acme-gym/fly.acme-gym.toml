@@ -3,7 +3,7 @@
 # the gym Worker fetch it. Gym only: production's `.com` never names this directory, and no production box trusts its
 # root (box trust is a seam on the `gym` branch).
 #
-# CREATE (owner, once; nothing here runs by itself), from this directory:
+# CREATED 2026-11-28 (shared v4 66.241.124.46, dedicated v6). To recreate, from this directory:
 #   flyctl apps create flagship-acme-gym
 #   flyctl ips allocate-v4 --shared -a flagship-acme-gym
 #   flyctl ips allocate-v6 -a flagship-acme-gym

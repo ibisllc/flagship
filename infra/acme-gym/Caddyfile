@@ -1,5 +1,5 @@
 # The only public door to Pebble. Fly ends TLS for flagship-acme-gym.fly.dev (publicly trusted, so the gym Worker can
-# fetch it) and hands plain HTTP to :8080. The Host header passes through, so Pebble's directory names this host.
+# fetch it) and hands plain HTTP to :8080. The ACME door sets Host and the scheme, so Pebble's directory names this host.
 {
 	auto_https off
 	admin off
@@ -20,6 +20,10 @@
 	@acme path /dir /nonce-plz /sign-me-up /order-plz /revoke-cert /rollover-account-key /my-account/* /my-order/* /finalize-order/* /authZ/* /chalZ/* /certZ/* /list-orderz/* /draft-ietf-acme-ari-03/renewalInfo/*
 	handle @acme {
 		reverse_proxy https://127.0.0.1:14000 {
+			# Pebble builds every URL in its answers from Host and X-Forwarded-Proto. Caddy would send the upstream's
+			# 127.0.0.1:14000 (an HTTPS upstream) and "http" (Fly hands it plain HTTP), so name the public door.
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
 			transport http {
 				tls_trust_pool file /pebble/certs/pebble.minica.pem
 				tls_server_name localhost

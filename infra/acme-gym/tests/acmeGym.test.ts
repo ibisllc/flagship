@@ -9,6 +9,8 @@ describe("the gym's Pebble app", () => {
     expect(caddy).toMatch(/@roots path \/roots\/0 \/intermediates\/0\n/);
     expect(caddy.replace(/^\s*#.*$/gm, "")).not.toMatch(/root-keys|intermediate-keys|set-renewal-info|add-revocation|cert-status/);
     expect(caddy).toMatch(/handle \{\n\t\trespond 404/);
+    // Pebble's directory and Location headers must name the public https door, not the loopback upstream.
+    expect(caddy).toMatch(/handle @acme \{[\s\S]*?header_up Host \{host\}[\s\S]*?header_up X-Forwarded-Proto https/);
     const cfg = JSON.parse(read("pebble-config.json")).pebble;
     expect(cfg.listenAddress).toMatch(/^127\.0\.0\.1:/);
     expect(cfg.managementListenAddress).toMatch(/^127\.0\.0\.1:/);
