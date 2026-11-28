@@ -42,8 +42,14 @@
           <p class="note">In the Flagship app on your phone, scan this code.</p>
           <div id="dock-qr" class="qr-box" style="background:#fff;padding:12px;border-radius:8px;display:flex;justify-content:center"></div>
           <div id="dock-code-step" class="hidden mt-2">
-            <p class="note">Check that your phone shows the same code, then approve there:</p>
             <p id="dock-code" class="mono" style="font-size:2rem;letter-spacing:0.15em;text-align:center"></p>
+            <div id="dock-confirm">
+              <p class="note">Does your phone show this code?</p>
+              <div class="row-2">
+                <button id="dock-code-yes" class="primary">Yes</button>
+                <button id="dock-code-no" class="secondary">No</button>
+              </div>
+            </div>
           </div>
           <button id="dock-copy" class="secondary full-width mt-2">Copy link for the phone</button>
         </div>

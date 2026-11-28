@@ -8271,10 +8271,6 @@
     "en": "In the Flagship app on your phone, scan this code.",
     "ctx": "webapp/index.html"
   },
-  "Check that your phone shows the same code, then approve there:": {
-    "en": "Check that your phone shows the same code, then approve there:",
-    "ctx": "webapp/index.html"
-  },
   "Copy link for the phone": {
     "en": "Copy link for the phone",
     "ctx": "webapp/index.html"
@@ -16385,5 +16381,37 @@
   "Your account is now {0}.": {
     "en": "Your account is now {0}.",
     "ctx": "webapp/views/choose-name.js:255"
+  },
+  "The code wasn't confirmed in time": {
+    "en": "The code wasn't confirmed in time",
+    "ctx": "webapp/lib/companionDockStart.js:114"
+  },
+  "The codes didn't match": {
+    "en": "The codes didn't match",
+    "ctx": "webapp/lib/companionDockStart.js:144"
+  },
+  "Nothing was connected because the codes didn't match. Scan this new code with your phone.": {
+    "en": "Nothing was connected because the codes didn't match. Scan this new code with your phone.",
+    "ctx": "webapp/views/companion-dock-start.js:61"
+  },
+  "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.": {
+    "en": "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.",
+    "ctx": "webapp/views/companion-dock-start.js:62"
+  },
+  "Compare the code with the one on your phone before you approve there.": {
+    "en": "Compare the code with the one on your phone before you approve there.",
+    "ctx": "webapp/views/companion-dock-start.js:79"
+  },
+  "Does your phone show this code?": {
+    "en": "Does your phone show this code?",
+    "ctx": "webapp/index.html"
+  },
+  "Yes": {
+    "en": "Yes",
+    "ctx": "webapp/index.html"
+  },
+  "No": {
+    "en": "No",
+    "ctx": "webapp/index.html"
   }
 }

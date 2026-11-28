@@ -13,6 +13,13 @@ export function initCompanionDockStartView({ onComplete } = {}) {
   onDocked = onComplete ?? null;
   $("dock-restart")?.addEventListener("click", () => void startRequest());
   $("dock-copy")?.addEventListener("click", copyApprovalLink);
+  $("dock-code-yes")?.addEventListener("click", () => {
+    if (!activeRequest) return;
+    $("dock-confirm")?.classList.add("hidden");
+    setMessage(tr("Waiting for approval on your phone…"));
+    void activeRequest.confirmCode();
+  });
+  $("dock-code-no")?.addEventListener("click", () => activeRequest?.rejectCode());
 }
 
 export function enterCompanionDockStart() {
@@ -21,13 +28,13 @@ export function enterCompanionDockStart() {
   void startRequest();
 }
 
-async function startRequest() {
+async function startRequest(note = "") {
   const myRun = ++runNumber;
   activeRequest?.close();
   activeRequest = null;
   $("dock-restart")?.classList.add("hidden");
   $("dock-code-step")?.classList.add("hidden");
-  setMessage("");
+  setMessage(note);
   let codeShown = false;
   try {
     const request = await openRemoteRequest({
@@ -49,6 +56,10 @@ async function startRequest() {
     await onDocked?.(persisted);
   } catch (error) {
     if (myRun !== runNumber) return;
+    // The person said the codes differ, or never said they match: whatever the phone
+    // sent was dropped unopened; start over with a new QR.
+    if (error?.declined) return void startRequest(tr("Nothing was connected because the codes didn't match. Scan this new code with your phone."));
+    if (error?.unconfirmed) return void startRequest(tr("Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone."));
     // A session that ran out before any phone joined just gets a fresh QR. Once a
     // phone showed its code, a silent swap would leave that phone comparing against
     // a code this page no longer shows (W19): say so and let the person start again.
@@ -64,7 +75,8 @@ async function startRequest() {
 function showCode(code) {
   $("dock-code").textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
   $("dock-code-step")?.classList.remove("hidden");
-  setMessage(tr("Waiting for approval on your phone…"));
+  $("dock-confirm")?.classList.remove("hidden");
+  setMessage(tr("Compare the code with the one on your phone before you approve there."));
 }
 
 async function renderQr(url) {

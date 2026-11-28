@@ -287,7 +287,6 @@
   "The phone sent an invalid ticket": "手机发送了无效的票据",
   "The phone sent an invalid account": "手机发送了无效的账户",
   "The phone named a server this page won't connect to": "手机指定了此页面不会连接的服务器",
-  "The server named another server this page won't connect to": "服务器指定了此页面不会连接的另一台服务器",
   "This code expired": "此代码已过期",
   "Relay: {0}": "中继：{0}",
   "Connection to the relay closed": "与中继的连接已关闭",
@@ -303,6 +302,7 @@
   "Error: {0}": "错误：{0}",
   "Owner approved — done": "所有者已批准：完成",
   "Request failed: {0}": "请求失败：{0}",
+  "The server named another server this page won't connect to": "服务器指定了此页面不会连接的另一台服务器",
   "Connect to an existing account": "连接到现有账户",
   "Sign in with your account name": "使用你的账户名登录",
   "The name you picked when you made the account.": "你创建账户时选择的名称。",
@@ -2027,7 +2027,6 @@
   "Use this browser as a remote": "将此浏览器用作遥控器",
   "This browser gets no account key. Your phone approves the connection\n          and remains responsible for protected actions.": "此浏览器不会获得任何账户密钥。你的手机批准连接，并继续负责受保护的操作。",
   "In the Flagship app on your phone, scan this code.": "在手机上的 Flagship 应用中扫描此代码。",
-  "Check that your phone shows the same code, then approve there:": "确认你的手机显示相同的代码，然后在手机上批准：",
   "Copy link for the phone": "复制手机用的链接",
   "Start again": "重新开始",
   "Get started": "开始使用",
@@ -4021,5 +4020,13 @@
   "Keep {0}": "保留 {0}",
   "Setting up your account name…": "正在设置你的账户名…",
   "Finishing your account name…": "正在完成你的账户名设置…",
-  "Your account is now {0}.": "你的账户现在是 {0}。"
+  "Your account is now {0}.": "你的账户现在是 {0}。",
+  "The code wasn't confirmed in time": "未及时确认代码",
+  "The codes didn't match": "代码不一致",
+  "Nothing was connected because the codes didn't match. Scan this new code with your phone.": "由于代码不一致，未进行任何连接。请用手机扫描这个新代码。",
+  "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.": "由于未及时确认代码，未进行任何连接。请用手机扫描这个新代码。",
+  "Compare the code with the one on your phone before you approve there.": "在手机上批准之前，请将此代码与手机上的代码进行比对。",
+  "Does your phone show this code?": "你的手机是否显示此代码？",
+  "Yes": "是",
+  "No": "否"
 }
