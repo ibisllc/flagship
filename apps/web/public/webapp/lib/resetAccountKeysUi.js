@@ -11,7 +11,7 @@ import { escapeHtml } from "./util.js";
 import { getSession, unlockSession } from "./state.js";
 import { startCountdown } from "./replaceDeviceCeremony.js";
 import { runWipeRestartCeremony } from "./wipeRestartCeremony.js";
-import { bootstrapFromExistingSeed, resetDevice, setCurrentIrkVersion } from "../keystore.js";
+import { bootstrapFromExistingSeed, keepRetiredUmk, resetDevice, setCurrentIrkVersion } from "../keystore.js";
 
 export const RESET_KEYS_COPY = Object.freeze({
   heading: tr("Reset account keys"),
@@ -117,10 +117,14 @@ export async function runResetAccountKeys({ progress = () => {} } = {}) {
   const result = await runWipeRestartCeremony({ username: session.username, umk: session.umk, adminRootSeed: session.adminRootSeed });
   progress(tr("Server accepted; installing locally…"));
   try {
+    const oldUmk = session.umk;
     await resetDevice();
     // A fresh account key starts its identity key at version 1.
     setCurrentIrkVersion(1);
     await bootstrapFromExistingSeed(newLocalPass, result.newUmk);
+    // The admin-root record (and the device's other local secrets) were sealed under the old account key:
+    // keep that key retired under the new one so they still open (the admin root is sealed again on first use).
+    await keepRetiredUmk(result.newUmk, oldUmk);
     await unlockSession(result.newUmk, session.username);
   } catch (e) {
     return {

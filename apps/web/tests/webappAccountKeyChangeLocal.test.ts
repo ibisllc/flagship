@@ -152,6 +152,44 @@ describe("the account key chain", () => {
   });
 });
 
+describe("Reset account keys keeps the admin root", () => {
+  async function resetTo(ks: any, oldUmk: Uint8Array, newUmk: Uint8Array, keep: boolean) {
+    // The local install of lib/resetAccountKeysUi.js runResetAccountKeys.
+    await ks.resetDevice();
+    ks.setCurrentIrkVersion(1);
+    await ks.bootstrapFromExistingSeed("the new passphrase", newUmk);
+    if (keep) await ks.keepRetiredUmk(newUmk, oldUmk);
+  }
+
+  it("still holds and signs with its admin root after a reload on the new key", async () => {
+    const ks = await imp("keystore.js");
+    const oldUmk = await ks.bootstrapNewIdentity("the old passphrase");
+    const root = await ks.generateAdminRoot(oldUmk);
+    await resetTo(ks, oldUmk, seed(21), true);
+    const fresh = await imp("keystore.js");
+    const umk = await fresh.unlockUmk("the new passphrase");
+    expect(hex(umk)).toBe(hex(seed(21)));
+    const got = await fresh.loadAdminRootSeed(umk);
+    expect(hex(got)).toBe(hex(root));
+    const msg = new TextEncoder().encode("flagship/test/v1|order");
+    const sig = await fresh.signWithAdminRoot(got, msg);
+    expect(ed25519.verify(sig, msg, ed25519.getPublicKey(root))).toBe(true);
+  }, 30_000);
+
+  it("lost it before: without the retired key the old record does not open", async () => {
+    const ks = await imp("keystore.js");
+    const oldUmk = await ks.bootstrapNewIdentity("the old passphrase");
+    await ks.generateAdminRoot(oldUmk);
+    await resetTo(ks, oldUmk, seed(22), false);
+    const fresh = await imp("keystore.js");
+    await expect(fresh.loadAdminRootSeed(await fresh.unlockUmk("the new passphrase"))).rejects.toThrow();
+  }, 30_000);
+
+  it("the reset keeps the old key retired under the new one", () => {
+    expect(src("lib/resetAccountKeysUi.js")).toContain("await keepRetiredUmk(result.newUmk, oldUmk);");
+  });
+});
+
 describe("a new account's device key", () => {
   it("is random and kept before the account exists", async () => {
     const { openAccount, resetPendingOpenAccountIdentities } = await imp("lib/openAccount.js");

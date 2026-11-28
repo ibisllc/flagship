@@ -966,6 +966,29 @@ export function umkSuccessorsRecordKey(profileId = activeProfileId()) {
   return `${UMK_SUCCESSORS_KEY}.${profileId}`;
 }
 
+const UMK_RETIRED_KEY = "umkRetired";
+const UMK_RETIRED_WRAP_INFO = "flagship.umk-retired-wrap.v1";
+
+export function umkRetiredRecordKey(profileId = activeProfileId()) {
+  return `${UMK_RETIRED_KEY}.${profileId}`;
+}
+
+/**
+ * Keep `oldUmk` retired under `currentUmk` when no link leads from one to the other (Reset account keys wraps
+ * the new key under a new passphrase). What the old key sealed here stays readable: the admin-root record
+ * (sealed again under the current key on first use), the device key, server pins.
+ */
+export async function keepRetiredUmk(currentUmk, oldUmk, epoch = 0, profileId = activeProfileId()) {
+  const recordKey = umkRetiredRecordKey(profileId);
+  const underFp = await umkFingerprint(currentUmk);
+  const record = (await dbGet(recordKey)) ?? { version: 1, keys: [] };
+  const sealed = await sealDeviceSecret(currentUmk, UMK_RETIRED_WRAP_INFO, `${recordKey}|${underFp}|${epoch}`, oldUmk);
+  const keys = (Array.isArray(record.keys) ? record.keys : []).filter((k) => !(k.underFp === underFp && k.epoch === epoch));
+  keys.push({ underFp, epoch, ...sealed });
+  await dbPut(recordKey, { version: 1, keys });
+  rememberRetired(currentUmk, [{ epoch, umk: oldUmk }, ...(retiredByUmk.get(bytesToHex(currentUmk)) ?? [])]);
+}
+
 export function umkPendingRecordKey(profileId = activeProfileId()) {
   return `${UMK_PENDING_KEY}.${profileId}`;
 }
@@ -1030,6 +1053,18 @@ export async function resolveUmkChain(seed, profileId = activeProfileId()) {
     umk = next;
     epoch = link.toEpoch;
   }
+  // Keys retired without a link (Reset account keys: a new passphrase wraps the new key) are kept sealed
+  // under the key that replaced them.
+  try {
+    const kept = typeof indexedDB === "undefined" ? null : await dbGet(umkRetiredRecordKey(profileId));
+    for (const r of Array.isArray(kept?.keys) ? kept.keys : []) {
+      if (r.underFp !== (await umkFingerprint(umk))) continue;
+      try {
+        const old = await openDeviceSecretWith(umk, UMK_RETIRED_WRAP_INFO, `${umkRetiredRecordKey(profileId)}|${r.underFp}|${r.epoch}`, r);
+        if (!retired.some((x) => bytesToHex(x.umk) === bytesToHex(old))) retired.push({ epoch: r.epoch, umk: old });
+      } catch { /* unreadable: skipped */ }
+    }
+  } catch { /* no record */ }
   // Keys this browser pulled forward through older links (a key restored from a backup) stay retired too.
   rememberRetired(umk, [...retired, ...(retiredByUmk.get(bytesToHex(umk)) ?? []).filter((r) => !retired.some((x) => bytesToHex(x.umk) === bytesToHex(r.umk)))]);
   return { umk, epoch, retired };
@@ -1179,6 +1214,7 @@ export async function resetDevice(profileId = activeProfileId()) {
   await dbDel(wrappedUmkRecordKey(profileId));
   await dbDel(umkSuccessorsRecordKey(profileId));
   await dbDel(umkPendingRecordKey(profileId));
+  await dbDel(umkRetiredRecordKey(profileId));
   // The serving renewal key belongs to this device's place in the account: a
   // reset device starts again with none (a new login delegates a new one).
   await dbDel(servingRenewalKeyRecordKey(profileId));
@@ -1274,7 +1310,7 @@ export async function adoptProfileKeys(cloudName) {
   if (adminRoot && !(await dbGet(adminRootRecordKey(profileId)))) {
     await dbPut(adminRootRecordKey(profileId), adminRoot);
   }
-  for (const key of [umkSuccessorsRecordKey, umkPendingRecordKey]) {
+  for (const key of [umkSuccessorsRecordKey, umkPendingRecordKey, umkRetiredRecordKey]) {
     const v = await dbGet(key(fromId));
     if (v && !(await dbGet(key(profileId)))) await dbPut(key(profileId), v);
   }
@@ -1299,6 +1335,7 @@ export async function moveProfileKeys(fromCloudName, toCloudName) {
     [`pinAttempts.${fromId}`, `pinAttempts.${toId}`],
     [umkSuccessorsRecordKey(fromId), umkSuccessorsRecordKey(toId)],
     [umkPendingRecordKey(fromId), umkPendingRecordKey(toId)],
+    [umkRetiredRecordKey(fromId), umkRetiredRecordKey(toId)],
   ];
   for (const [from, to] of pairs) {
     const v = await dbGet(from);
