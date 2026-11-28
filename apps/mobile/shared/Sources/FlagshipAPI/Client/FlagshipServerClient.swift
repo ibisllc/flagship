@@ -1848,10 +1848,8 @@ public struct UsernameClaimRequest: Codable, Equatable, Sendable {
     public let signature: String        // hex, IRK over canonical bytes
     /// Slice D (docs/device-admin-tier-spec.md §1.2) — the account's pinned
     /// ADMIN MASTER ROOT pubkey (hex). A TOP-LEVEL sibling of `request` +
-    /// `signature` (NOT inside `request`, NOT covered by the IRK claim
-    /// signature) — the Worker records it next to the IRK, exactly like
-    /// `aidPub`. Optional + additive: a malformed/absent value is ignored, never
-    /// rejected, so pre-D clients + the claim canonical bytes are unchanged.
+    /// `signature`, signed by the v2 claim (flagship/claim-username/v2; nil = the
+    /// empty field). The Worker records it next to the IRK.
     public let adminRootPub: String?
     public init(request: Inner, signature: String, adminRootPub: String? = nil) {
         self.request = request; self.signature = signature

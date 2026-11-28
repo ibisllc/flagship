@@ -186,10 +186,18 @@ public enum AuthCodeAdminError: Error, Equatable {
     case noAdminRoot
 }
 
+/// The IRK-signed username claim. v2 binds the AID and admin-root keys the body carries (an absent one is the empty
+/// field), so a captured claim can't be replayed with other keys. Pinned by
+/// packages/protocol/test-vectors/claim-username/vectors.json.
 public enum UsernameClaim {
-    public static let canonicalTag = "flagship/claim-username/v1"
-    public static func canonicalBytes(username: String, irkPubHex: String, issuedAt: Int64) -> Data {
-        Data([canonicalTag, username, irkPubHex, String(issuedAt)].joined(separator: "|").utf8)
+    public static let canonicalTag = "flagship/claim-username/v2"
+    public static func canonicalBytes(
+        username: String, irkPubHex: String, aidPubHex: String?, adminRootPubHex: String?, issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag, username, irkPubHex.lowercased(), aidPubHex?.lowercased() ?? "",
+            adminRootPubHex?.lowercased() ?? "", String(issuedAt),
+        ].joined(separator: "|").utf8)
     }
 }
 

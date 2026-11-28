@@ -214,7 +214,8 @@ public final class OpenAccountViewModel {
             }
 
             let claimBytes = UsernameClaim.canonicalBytes(
-                username: username, irkPubHex: irkPubHex, issuedAt: now
+                username: username, irkPubHex: irkPubHex, aidPubHex: HexUtil.encode(aidPub),
+                adminRootPubHex: adminRootPubHex, issuedAt: now
             )
             let claimSig = try irk.signature(for: claimBytes)
             let accountCiphertext = try AccountMetadata.encrypt(

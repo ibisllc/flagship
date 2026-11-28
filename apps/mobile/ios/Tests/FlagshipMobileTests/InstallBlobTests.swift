@@ -199,12 +199,17 @@ final class InstallBlobTests: XCTestCase {
         )
     }
 
-    func test_usernameClaimCanonicalBytes_followsV1Format() {
-        let s = String(
-            data: UsernameClaim.canonicalBytes(username: "harry", irkPubHex: "abcd", issuedAt: 42),
+    func test_usernameClaimCanonicalBytes_followsV2Format() {
+        let bare = String(
+            data: UsernameClaim.canonicalBytes(username: "harry", irkPubHex: "abcd", aidPubHex: nil, adminRootPubHex: nil, issuedAt: 42),
             encoding: .utf8
         )!
-        XCTAssertEqual(s, "flagship/claim-username/v1|harry|abcd|42")
+        XCTAssertEqual(bare, "flagship/claim-username/v2|harry|abcd|||42")
+        let keyed = String(
+            data: UsernameClaim.canonicalBytes(username: "harry", irkPubHex: "ABCD", aidPubHex: "EF", adminRootPubHex: "01", issuedAt: 42),
+            encoding: .utf8
+        )!
+        XCTAssertEqual(keyed, "flagship/claim-username/v2|harry|abcd|ef|01|42")
     }
 
     func test_pushTokenRegisterCanonicalBytes_followsV2Format() {
