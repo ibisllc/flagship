@@ -618,7 +618,7 @@
   "s823882162e": "O código fica vinculado à chave da sua conta, então ninguém mais pode reutilizá-lo.",
   "sb0e2258910": "um registro DNS <1>TXT</1> em <2>_flagship-claim.acme.com</2>, ou",
   "s9707196b94": "um arquivo de texto em <1>https://acme.com/.well-known/flagship-claim</1>.",
-  "se7c7857480": "<1>Vence a primeira prova.</1> Se duas contas comprovarem o mesmo domínio, a primeira reivindicação verificada fica com o nome. Não há processo de recurso.",
+  "s9c5967fdb3": "<1>A primeira prova vence.</1> Se duas contas provarem o mesmo domínio, o nome fica com a primeira prova verificada. Um caso especial? Escreva para <2>support@flagshipserver.com</2>.",
   "sdfdf549dbc": "Para todos os outros",
   "sc5b4238d69": "Você pode comprar qualquer nome livre que não esteja reservado para quem tem um <1>.com</1>, a qualquer momento, inclusive durante a janela. Quando o ano terminar, os nomes reservados ficam abertos a todos, por ordem de chegada.",
   "s36026106a3": "Por quê",

@@ -6294,8 +6294,8 @@
       "dibs.html"
     ]
   },
-  "se7c7857480": {
-    "en": "<1>First proof wins.</1> If two accounts prove the same domain, the first verified claim gets the name. There is no appeal process.",
+  "s9c5967fdb3": {
+    "en": "<1>First proof wins.</1> If two accounts prove the same domain, the first verified proof gets the name. A special case? Email <2>support@flagshipserver.com</2>.",
     "kind": "text",
     "ctx": "li",
     "pages": [
