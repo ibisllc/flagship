@@ -39,9 +39,14 @@ public final class OrgJoinViewModel {
     public func load() async {
         phase = .loading
         do {
-            let r = try await client.inviteOffer(orgId: orgId, seatId: seatId)
-            guard let offerHex = r["offerHex"] as? String, let sealed = OrgAuthority.bytes(hex: offerHex), let key = OrgAuthority.bytes(hex: keyHex),
-                  let inv = r["invite"] as? [String: Any] else { throw OrgAuthorityError("malformed") }
+            // The link key derives the offer key and the invite key; `.com` serves the offer only on the invite key's proof.
+            guard let link = OrgAuthority.bytes(hex: keyHex) else { throw OrgAuthorityError("malformed") }
+            var k = try OrgAuthority.inviteKeys(linkKey: link)
+            defer { for i in k.secret.indices { k.secret[i] = 0 } }
+            let r = try await client.inviteOffer(orgId: orgId, seatId: seatId, inviteSecret: k.secret, now: now())
+            let key = k.offerKey
+            guard let offerHex = r["offerHex"] as? String, let sealed = OrgAuthority.bytes(hex: offerHex),
+                  let inv = r["invite"] as? [String: Any], inv["inviteKeyPub"] as? String == k.inviteKeyPub else { throw OrgAuthorityError("malformed") }
             if (r["accepted"] as? Bool) == true {
                 phase = .failed(String(localized: "This invitation was already accepted."))
                 return
@@ -76,12 +81,17 @@ public final class OrgJoinViewModel {
             if OrgAuthority.rolesRaiseAdmin(roles) { admin = try keys.makeKey(orgId: orgId, seatId: seatId, now: t) }
             let adminKeyId = admin.map { OrgAuthority.keyIdHex(ed25519PubHex: $0.binding.ed25519PubHex, mldsaPubHex: $0.binding.mldsaPubHex) } ?? ""
             guard let labelSha = invite["labelSha256"] as? String, let rolesHash = invite["rolesHash"] as? String,
-                  let oar = OrgAuthority.int64(invite["oarVersion"]), let ia = OrgAuthority.int64(invite["issuedAt"]), let ea = OrgAuthority.int64(invite["expiresAt"]) else {
+                  let oar = OrgAuthority.int64(invite["oarVersion"]), let ia = OrgAuthority.int64(invite["issuedAt"]), let ea = OrgAuthority.int64(invite["expiresAt"]),
+                  let inviteKeyPub = invite["inviteKeyPub"] as? String, let link = OrgAuthority.bytes(hex: keyHex) else {
                 throw OrgAuthorityError("malformed")
             }
             let inviteSha = OrgAuthority.sha256Hex(try OrgAuthority.canonicalSeatInvite(orgId: orgId, seatId: seatId, labelSha256: labelSha, rolesHash: rolesHash,
-                                                                                        oarVersion: oar, issuedAt: ia, expiresAt: ea))
+                                                                                        oarVersion: oar, issuedAt: ia, expiresAt: ea, inviteKeyPub: inviteKeyPub))
             let msg = try OrgAuthority.canonicalSeatAccept(orgId: orgId, seatId: seatId, inviteSha256: inviteSha, memberKeyId: memberKeyId, adminKeyId: adminKeyId, issuedAt: t)
+            // The invite key signs the accept too: `.com` takes it only from someone holding the link.
+            var ik = try OrgAuthority.inviteKeys(linkKey: link)
+            defer { for i in ik.secret.indices { ik.secret[i] = 0 } }
+            let inviteSig = try OrgAuthority.inviteAcceptSignature(secret: ik.secret, acceptBytes: msg)
             let sig = try PqHybrid.hybridSign(secretKey: member.secret, purpose: OrgAuthority.tagSeatAccept, payload: msg)
             // The seat's X-Wing key rides with the accept; `.com` records it when the grant lands, so this
             // seat receives new key-ring versions without opening the org page first.
@@ -94,6 +104,7 @@ public final class OrgJoinViewModel {
                 "memberBinding": member.binding.jsonObject,
                 "adminBinding": admin.map { $0.binding.jsonObject as Any } ?? NSNull(),
                 "signature": OrgAuthority.hex(sig),
+                "inviteSignature": inviteSig,
                 "seatKem": [
                     "statement": ["orgId": orgId, "seatId": seatId, "kemKeyId": kemKeyId, "issuedAt": NSNumber(value: t)] as [String: Any],
                     "kemPubHex": OrgAuthority.hex(kem.publicKey),

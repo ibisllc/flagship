@@ -17653,5 +17653,33 @@
   "Why:": {
     "en": "Why:",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/SupportContact.swift"
+  },
+  "The codes don't match": {
+    "en": "The codes don't match",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Invited, not accepted yet": {
+    "en": "Invited, not accepted yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Withdraw invitation": {
+    "en": "Withdraw invitation",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Invitation withdrawn.": {
+    "en": "Invitation withdrawn.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/OrgViewModel.swift"
+  },
+  "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": {
+    "en": "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "Withdraw this invitation?": {
+    "en": "Withdraw this invitation?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "The link stops working, and nobody who accepted it is let in.": {
+    "en": "The link stops working, and nobody who accepted it is let in.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
   }
 }

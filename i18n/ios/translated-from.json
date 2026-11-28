@@ -4140,5 +4140,12 @@
   "Pick another name, or go back for a new suggestion.": "dd532a1777ef",
   "Account name: %@": "e1d5d31b77a3",
   "Name I want: %@": "3f74b5d1d9cc",
-  "Why:": "7cc53ea51885"
+  "Why:": "7cc53ea51885",
+  "The codes don't match": "b17436c44a82",
+  "Invited, not accepted yet": "622d05ab7857",
+  "Withdraw invitation": "83fd8f7f3595",
+  "Invitation withdrawn.": "f6f7ddbced93",
+  "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "f3032170820d",
+  "Withdraw this invitation?": "aaf35ca3d38d",
+  "The link stops working, and nobody who accepted it is let in.": "a12d1ba0cb39"
 }

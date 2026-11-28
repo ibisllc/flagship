@@ -4144,5 +4144,12 @@
   "Pick another name, or go back for a new suggestion.": "请选择其他名称，或返回获取新的建议。",
   "Account name: %@": "账户名称：%@",
   "Name I want: %@": "我想要的名称：%@",
-  "Why:": "原因："
+  "Why:": "原因：",
+  "The codes don't match": "代码不一致",
+  "Invited, not accepted yet": "已邀请，尚未接受",
+  "Withdraw invitation": "撤回邀请",
+  "Invitation withdrawn.": "邀请已撤回。",
+  "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "接受此邀请的不是你邀请的人。请撤回它，并给对方发送新的邀请。",
+  "Withdraw this invitation?": "撤回此邀请？",
+  "The link stops working, and nobody who accepted it is let in.": "链接将失效，已接受它的人也不会被允许加入。"
 }

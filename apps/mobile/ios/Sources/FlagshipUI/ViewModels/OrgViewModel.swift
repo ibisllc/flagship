@@ -31,6 +31,8 @@ public final class OrgViewModel {
     public private(set) var inviteLink: String?
     /// People who accepted an invitation and wait for an admin to compare the code and admit them.
     public private(set) var pendingJoins: [OrgPendingJoin] = []
+    /// Seat ids of invitations nobody has accepted yet (an admin may withdraw them).
+    public private(set) var pendingInvites: [String] = []
     /// Departed seats whose keys still need rotating, computed on this phone from what it verified.
     public private(set) var rotations: [OrgPendingRotation] = []
     private var plan: OrgRotationPlan?
@@ -108,6 +110,7 @@ public final class OrgViewModel {
         do {
             snapshot = try await client.snapshot(orgId: seat.orgId, genesisHash: seat.genesisHash, now: now())
             pendingJoins = (try? await client.pendingJoins(orgId: seat.orgId)) ?? []
+            pendingInvites = isOrgAdmin(seat) ? ((try? await client.pendingInvites(orgId: seat.orgId)) ?? []) : []
             plan = seat.memberOnly == true ? nil : try? await client.rotationPlan(snapshot!, now: now())
             rotations = plan?.pending ?? []
             phase = .loaded
@@ -282,6 +285,20 @@ public final class OrgViewModel {
         } catch { failed(error) }
     }
 
+    /// Withdraws an invitation nobody was admitted on (one org admin): the link stops working and any accept is dropped.
+    /// Also what the admin does when the codes don't match: someone other than the invited person accepted.
+    public func withdrawInvite(_ seat: OrgSeatKeys.Seat, seatId: String) async {
+        guard let s = snapshot else { return }
+        busy = true; defer { busy = false }
+        do {
+            let t = now(), v = s.state.current.version
+            let a = try approval(seat, order: try OrgAuthority.canonicalInviteWithdraw(orgId: seat.orgId, seatId: seatId, oarVersion: v, issuedAt: t))
+            try await client.withdrawInvite(orgId: seat.orgId, seatId: seatId, oarVersion: v, issuedAt: t, approval: a)
+            message = String(localized: "Invitation withdrawn.")
+            await load(seat)
+        } catch { failed(error) }
+    }
+
     // MARK: invite
 
     public enum InviteRole: String, CaseIterable, Identifiable {
@@ -311,20 +328,27 @@ public final class OrgViewModel {
         guard let s = snapshot else { throw OrgAuthorityError("stale-oar") }
         let seatId = OrgAuthority.randomId(), t = now()
         let linkKey = SymmetricKey(size: .bits256)
-        let sealedLabel = try AES.GCM.seal(Data(name.utf8), using: linkKey).combined!
+        // The link key derives the offer key (seals the offer and the pseudonym) and the invite key, whose public
+        // half the invite names: reading the offer and accepting both need it (docs/enterprise-accounts.md §7).
+        var ik = try OrgAuthority.inviteKeys(linkKey: linkKey.withUnsafeBytes { Array($0) })
+        for i in ik.secret.indices { ik.secret[i] = 0 }
+        let offerKey = SymmetricKey(data: ik.offerKey)
+        let sealedLabel = try AES.GCM.seal(Data(name.utf8), using: offerKey).combined!
         let offerJSON = try JSONSerialization.data(withJSONObject: [
             "orgId": seat.orgId, "orgName": seat.orgName, "genesisHash": seat.genesisHash, "seatId": seatId,
             "roles": OrgAuthorityWire.rolesJSON(roles), "pseudonym": name,
         ])
-        let offer = try AES.GCM.seal(offerJSON, using: linkKey).combined!
+        let offer = try AES.GCM.seal(offerJSON, using: offerKey).combined!
         let rolesHash = try OrgAuthority.rolesHash(roles)
         let labelSha = OrgAuthority.sha256Hex([UInt8](sealedLabel))
         let order = try OrgAuthority.canonicalSeatInvite(orgId: seat.orgId, seatId: seatId, labelSha256: labelSha, rolesHash: rolesHash,
-                                                         oarVersion: s.state.current.version, issuedAt: t, expiresAt: t + 7 * OrgAuthority.day)
+                                                         oarVersion: s.state.current.version, issuedAt: t, expiresAt: t + 7 * OrgAuthority.day,
+                                                         inviteKeyPub: ik.inviteKeyPub)
         let a = try approval(seat, order: order)
         try await client.createInvite(orgId: seat.orgId, body: [
             "invite": ["orgId": seat.orgId, "seatId": seatId, "labelSha256": labelSha, "rolesHash": rolesHash,
-                       "oarVersion": NSNumber(value: s.state.current.version), "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: t + 7 * OrgAuthority.day)],
+                       "oarVersion": NSNumber(value: s.state.current.version), "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: t + 7 * OrgAuthority.day),
+                       "inviteKeyPub": ik.inviteKeyPub],
             "roles": OrgAuthorityWire.rolesJSON(roles),
             "approvals": [a.jsonObject],
             "sealedLabelHex": OrgAuthority.hex([UInt8](sealedLabel)),

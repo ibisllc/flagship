@@ -22,6 +22,10 @@ public enum OrgAuthority {
     public static let tagSeatSas = "flagship/org-seat-sas/v1"
     public static let tagSeatMemberKdf = "flagship/org-seat-member/v1"
     public static let tagSeatMemberPqKdf = "flagship/org-seat-member-pq/v1"
+    public static let tagInviteOfferKdf = "flagship/org-invite-offer/v1"
+    public static let tagInviteKeyKdf = "flagship/org-invite-key/v1"
+    public static let tagInviteRead = "flagship/org-invite-read/v1"
+    public static let tagInviteWithdraw = "flagship/org-invite-withdraw/v1"
 
     public static let hour: Int64 = 3_600_000
     public static let day: Int64 = 24 * hour
@@ -283,11 +287,95 @@ extension OrgAuthority {
     }
 
     public static func canonicalSeatInvite(orgId: String, seatId: String, labelSha256: String, rolesHash: String, oarVersion: Int64,
-                                           issuedAt: Int64, expiresAt: Int64) throws -> [UInt8] {
+                                           issuedAt: Int64, expiresAt: Int64, inviteKeyPub: String) throws -> [UInt8] {
         try need(isHex(labelSha256, 64), "label-missing")
         try need(isHex(orgId, 32) && isHex(seatId, 32) && isHex(rolesHash, 64), "malformed", "invite")
         try need(expiresAt > issuedAt && expiresAt - issuedAt <= inviteMaxLifetimeMs, "malformed", "expiresAt")
-        return join([tagSeatInvite, orgId, seatId, labelSha256, rolesHash, String(oarVersion), String(issuedAt), String(expiresAt)])
+        try need(isHex(inviteKeyPub, 2 * inviteKeyPubLen), "malformed", "inviteKeyPub")
+        return join([tagSeatInvite, orgId, seatId, labelSha256, rolesHash, String(oarVersion), String(issuedAt), String(expiresAt), inviteKeyPub])
+    }
+
+    /// An invite as served (`invite` of `GET /invites/<seat>` or `/seats`): its canonical bytes, or nil when malformed.
+    public static func canonicalSeatInvite(_ inv: [String: Any]) -> [UInt8]? {
+        guard let orgId = inv["orgId"] as? String, let seatId = inv["seatId"] as? String, let label = inv["labelSha256"] as? String,
+              let rolesHash = inv["rolesHash"] as? String, let v = i64(inv["oarVersion"]), let ia = i64(inv["issuedAt"]),
+              let ea = i64(inv["expiresAt"]), let pub = inv["inviteKeyPub"] as? String else { return nil }
+        return try? canonicalSeatInvite(orgId: orgId, seatId: seatId, labelSha256: label, rolesHash: rolesHash, oarVersion: v, issuedAt: ia,
+                                        expiresAt: ea, inviteKeyPub: pub)
+    }
+
+    // MARK: the invite link's keys (docs/enterprise-accounts.md §7)
+
+    static let inviteKeyPubLen = 1984
+
+    /// What an invite link's key k derives: the offer key (AES-256-GCM) and the invite key (hybrid). Wipe `secret` after use.
+    public struct InviteKeys {
+        public let offerKey: [UInt8]
+        public var secret: [UInt8]
+        public let publicKey: [UInt8]
+        public var inviteKeyPub: String { PqBin.hex(publicKey) }
+    }
+
+    public static func inviteKeys(linkKey: [UInt8]) throws -> InviteKeys {
+        try need(linkKey.count == 32, "malformed", "link key")
+        func derive(_ tag: String, _ n: Int) -> [UInt8] {
+            HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: linkKey), salt: [UInt8](), info: Array(tag.utf8), outputByteCount: n)
+                .withUnsafeBytes { Array($0) }
+        }
+        var seed = derive(tagInviteKeyKdf, 64)
+        defer { for i in seed.indices { seed[i] = 0 } }
+        let kp = try PqHybrid.hybridSigKeygen(edSeed: Array(seed[0..<32]), mldsaSeed: Array(seed[32..<64]))
+        return InviteKeys(offerKey: derive(tagInviteOfferKdf, 32), secret: kp.secretKey, publicKey: kp.publicKey)
+    }
+
+    public static func canonicalInviteRead(orgId: String, seatId: String, issuedAt: Int64) throws -> [UInt8] {
+        try need(isHex(orgId, 32) && isHex(seatId, 32) && issuedAt >= 0, "malformed", "invite read")
+        return join([tagInviteRead, orgId, seatId, String(issuedAt)])
+    }
+
+    /// The invite-key proof `GET /api/orgs/<orgId>/invites/<seatId>` needs (hex), fresh for 5 minutes.
+    public static func inviteReadSignature(secret: [UInt8], orgId: String, seatId: String, issuedAt: Int64, deterministic: Bool = false) throws -> String {
+        PqBin.hex(try PqHybrid.hybridSign(secretKey: secret, purpose: tagInviteRead,
+                                          payload: try canonicalInviteRead(orgId: orgId, seatId: seatId, issuedAt: issuedAt), deterministic: deterministic))
+    }
+
+    static func hybridOk(_ pubHex: String?, _ purpose: String, _ payload: [UInt8], _ sigHex: String?) -> Bool {
+        guard let pubHex, isHex(pubHex, 2 * inviteKeyPubLen), let pub = PqBin.unhex(pubHex),
+              let sigHex, isHex(sigHex, 6746), let sig = PqBin.unhex(sigHex) else { return false }
+        return (try? PqHybrid.hybridVerify(publicKey: pub, purpose: purpose, payload: payload, signature: sig)) != nil
+    }
+
+    public static func verifyInviteRead(orgId: String, seatId: String, inviteKeyPub: String?, issuedAt: Int64, signature: String?, now: Int64) -> Bool {
+        guard issuedAt >= 0, abs(now - issuedAt) <= maxSkewMs,
+              let msg = try? canonicalInviteRead(orgId: orgId, seatId: seatId, issuedAt: issuedAt) else { return false }
+        return hybridOk(inviteKeyPub, tagInviteRead, msg, signature)
+    }
+
+    /// The invite key's signature over the accept's canonical bytes (hex): the joiner held the link.
+    public static func inviteAcceptSignature(secret: [UInt8], acceptBytes: [UInt8], deterministic: Bool = false) throws -> String {
+        PqBin.hex(try PqHybrid.hybridSign(secretKey: secret, purpose: tagSeatAccept, payload: acceptBytes, deterministic: deterministic))
+    }
+
+    /// True when the served accept names `invite` and `signature` is its invite key's signature over the accept.
+    public static func verifyInviteAccept(invite: [String: Any], accept: [String: Any], signature: String?) -> Bool {
+        guard let inv = canonicalSeatInvite(invite), let orgId = accept["orgId"] as? String, let seatId = accept["seatId"] as? String,
+              orgId == invite["orgId"] as? String, seatId == invite["seatId"] as? String,
+              let inviteSha = accept["inviteSha256"] as? String, inviteSha == sha256Hex(inv), let ia = i64(accept["issuedAt"]) else { return false }
+        let custody: OrgCustody
+        switch accept["custody"] as? String {
+        case nil, "hardware": custody = .hardware
+        case "browser": custody = .browser
+        default: return false
+        }
+        guard let msg = try? canonicalSeatAccept(orgId: orgId, seatId: seatId, inviteSha256: inviteSha, memberKeyId: (accept["memberKeyId"] as? String) ?? "",
+                                                 adminKeyId: (accept["adminKeyId"] as? String) ?? "", issuedAt: ia, custody: custody) else { return false }
+        return hybridOk(invite["inviteKeyPub"] as? String, tagSeatAccept, msg, signature)
+    }
+
+    /// An admin's order withdrawing an invitation not yet admitted (one org admin, as the invite).
+    public static func canonicalInviteWithdraw(orgId: String, seatId: String, oarVersion: Int64, issuedAt: Int64) throws -> [UInt8] {
+        try need(isHex(orgId, 32) && isHex(seatId, 32) && oarVersion >= 0 && issuedAt >= 0, "malformed", "withdraw")
+        return join([tagInviteWithdraw, orgId, seatId, String(oarVersion), String(issuedAt)])
     }
 
     public static func canonicalSeatAccept(orgId: String, seatId: String, inviteSha256: String, memberKeyId: String, adminKeyId: String,

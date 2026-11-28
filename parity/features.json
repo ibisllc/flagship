@@ -6647,6 +6647,64 @@
       }
     },
     {
+      "id": "org-invite-link-key",
+      "title": "Org invitations tied to their link (docs/enterprise-accounts.md §7): the link key derives the offer key and the hybrid invite key; the offer read sends a fresh flagship/org-invite-read/v1 proof, the accept carries the invite key's signature, admins see only accepts it signed, say when the codes don't match, and withdraw an invitation (flagship/org-invite-withdraw/v1); shared org-invite-key vectors",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/OrgAuthority.swift",
+              "flagship/org-invite-read/v1"
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift",
+              "org-withdraw-"
+            ],
+            [
+              "apps/mobile/shared/Tests/FlagshipSharedTests/OrgInviteKeyVectorTests.swift",
+              "org-invite-key"
+            ]
+          ]
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/pq/OrgAuthority.kt",
+              "flagship/org-invite-read/v1"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/OrgScreens.kt",
+              "org-withdraw-"
+            ],
+            [
+              "apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/pq/OrgInviteKeyVectorsTest.kt",
+              "org-invite-key"
+            ]
+          ]
+        },
+        "web": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/web/public/webapp/lib/orgJoin.js",
+              "x-flagship-signature"
+            ],
+            [
+              "apps/web/public/webapp/views/orgs.js",
+              "data-org-withdraw"
+            ],
+            [
+              "apps/web/tests/webappOrgJoin.test.ts",
+              "org-invite-key"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "id": "voucher-plan",
       "title": "Plan and vouchers (docs/payments-privacy-and-rails.md §5.11): the account's admin devices hold blind-signed $1 vouchers in a wallet sealed under the UMK (flagship/voucher-wallet/v1, synced via .com), spend them a little at a time ahead of need (POST /api/vouchers/redeem, no credential), buy prepaid overage blocks within the owner's cap, and show Settings → Plan with the balance in round dollars and the not-yet-on-sale shop",
       "ref": "ios",

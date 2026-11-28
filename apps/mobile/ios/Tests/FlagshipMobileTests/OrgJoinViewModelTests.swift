@@ -52,18 +52,21 @@ final class OrgFakeCom: @unchecked Sendable {
 
     /// An invitation as an admin makes it; returns the link key (hex).
     func invite(seatId: String, roles: [OrgSeatRole], pseudonym: String = "Pat") throws -> String {
-        let key = SymmetricKey(size: .bits256)
+        let linkKey = SymmetricKey(size: .bits256)
+        let ik = try OrgAuthority.inviteKeys(linkKey: linkKey.withUnsafeBytes { Array($0) })
+        let key = SymmetricKey(data: ik.offerKey)
         let label = try AES.GCM.seal(Data(pseudonym.utf8), using: key).combined!
         let offer = try JSONSerialization.data(withJSONObject: ["orgId": orgId, "orgName": orgName, "genesisHash": genesisHash, "seatId": seatId,
                                                                 "roles": OrgAuthorityWire.rolesJSON(roles), "pseudonym": pseudonym])
         let t = now - 60_000
         invites[seatId] = [
             "invite": ["orgId": orgId, "seatId": seatId, "labelSha256": OrgAuthority.sha256Hex([UInt8](label)), "rolesHash": try OrgAuthority.rolesHash(roles),
-                       "oarVersion": 0, "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: t + 7 * OrgAuthority.day)] as [String: Any],
+                       "oarVersion": 0, "issuedAt": NSNumber(value: t), "expiresAt": NSNumber(value: t + 7 * OrgAuthority.day),
+                       "inviteKeyPub": ik.inviteKeyPub] as [String: Any],
             "roles": OrgAuthorityWire.rolesJSON(roles),
         ]
         offers[seatId] = OrgAuthority.hex([UInt8](try AES.GCM.seal(offer, using: key).combined!))
-        return key.withUnsafeBytes { OrgAuthority.hex(Array($0)) }
+        return linkKey.withUnsafeBytes { OrgAuthority.hex(Array($0)) }
     }
 
     /// JSON as it crosses the wire (so numbers decode the way `.com`'s do).
@@ -71,7 +74,10 @@ final class OrgFakeCom: @unchecked Sendable {
         (try? JSONSerialization.jsonObject(with: JSONSerialization.data(withJSONObject: o))) as? [String: Any] ?? [:]
     }
 
-    lazy var client = OrgClient { [unowned self] method, path, body in
+    var withdrawn: [[String: Any]] = []
+
+    /// As `.com`: an invite read needs a fresh invite-key proof, an accept the invite key's signature (else 404).
+    lazy var client = OrgClient(headerTransport: { [unowned self] method, path, body, headers in
         let base = "/api/orgs/\(self.orgId)"
         switch (method, path) {
         case ("GET", "\(base)/authority"):
@@ -125,17 +131,33 @@ final class OrgFakeCom: @unchecked Sendable {
             return (200, [:])
         default:
             if method == "GET", path.hasPrefix("\(base)/invites/") {
-                if inviteExpired { return (410, ["code": "org-invite-expired"]) }
                 let seat = String(path.split(separator: "/").last!)
-                guard var inv = invites[seat] else { return (404, [:]) }
+                guard var inv = invites[seat], let i = inv["invite"] as? [String: Any],
+                      OrgAuthority.verifyInviteRead(orgId: orgId, seatId: seat, inviteKeyPub: i["inviteKeyPub"] as? String,
+                                                    issuedAt: Int64(headers["x-flagship-issued-at"] ?? "") ?? -1, signature: headers["x-flagship-signature"], now: now)
+                else { return (404, [:]) }
+                if inviteExpired { return (410, ["code": "org-invite-expired"]) }
                 inv["offerHex"] = offers[seat]
                 inv["accepted"] = accepts.contains { ($0["accept"] as? [String: Any])?["seatId"] as? String == seat }
                 return (200, wire(inv))
             }
-            if method == "POST", path.hasSuffix("/accept") { accepts.append(wire(body!)); return (200, [:]) }
+            if method == "POST", path.hasSuffix("/accept") {
+                let seat = String(path.split(separator: "/").dropLast().last!)
+                guard let i = invites[seat]?["invite"] as? [String: Any],
+                      OrgAuthority.verifyInviteAccept(invite: wire(i), accept: wire(body!["accept"] as! [String: Any]), signature: body!["inviteSignature"] as? String)
+                else { return (404, [:]) }
+                accepts.append(wire(body!)); return (200, [:])
+            }
+            if method == "POST", path.hasSuffix("/withdraw") {
+                let seat = String(path.split(separator: "/").dropLast().last!)
+                withdrawn.append(wire(body!))
+                invites[seat] = nil
+                accepts.removeAll { ($0["accept"] as? [String: Any])?["seatId"] as? String == seat }
+                return (200, [:])
+            }
             return (404, [:])
         }
-    }
+    })
 }
 
 @MainActor
@@ -174,6 +196,47 @@ final class OrgJoinViewModelTests: XCTestCase {
         let snap = try await com.client.snapshot(orgId: com.orgId, genesisHash: com.genesisHash, now: com.now)
         XCTAssertNotNil(snap.book.seats[seat])
         XCTAssertTrue(a.pendingJoins.isEmpty)
+    }
+
+    func testAnAcceptServedWithoutTheInviteKeysSignatureIsNotOfferedToAdmit() async throws {
+        let com = try OrgFakeCom()
+        let seat = OrgAuthority.randomId()
+        let key = try com.invite(seatId: seat, roles: [.member])
+        let vm = joiner(com, seat: seat, key: key)
+        await vm.load(); await vm.accept()
+        let a = admin(com)
+        let real = com.accepts[0]
+        var stripped = real
+        stripped["inviteSignature"] = nil
+        com.accepts[0] = stripped
+        await a.load(com.founder)
+        XCTAssertTrue(a.pendingJoins.isEmpty)
+        com.accepts[0] = real
+        await a.load(com.founder)
+        XCTAssertEqual(a.pendingJoins.count, 1)
+    }
+
+    func testAnAdminWithdrawsAnInvitationWhoseCodesDidNotMatch() async throws {
+        let com = try OrgFakeCom()
+        let seat = OrgAuthority.randomId(), pending = OrgAuthority.randomId()
+        let key = try com.invite(seatId: seat, roles: [.member])
+        _ = try com.invite(seatId: pending, roles: [.member], pseudonym: "Sam")
+        let vm = joiner(com, seat: seat, key: key)
+        await vm.load(); await vm.accept()
+        let a = admin(com)
+        await a.load(com.founder)
+        XCTAssertEqual(a.pendingInvites, [pending])
+        await a.withdrawInvite(com.founder, seatId: seat)
+        let w = try XCTUnwrap(com.withdrawn.first)
+        let body = try XCTUnwrap(w["withdraw"] as? [String: Any])
+        XCTAssertEqual(body["seatId"] as? String, seat)
+        let approval = try OrgAuthorityWire.approvals(w["approvals"]).first
+        let order = try OrgAuthority.canonicalInviteWithdraw(orgId: com.orgId, seatId: seat, oarVersion: 0, issuedAt: com.now)
+        XCTAssertEqual(approval?.orderSha256, OrgAuthority.sha256Hex(order))
+        XCTAssertTrue(a.pendingJoins.isEmpty)
+        let again = joiner(com, seat: seat, key: key)
+        await again.load()
+        guard case .failed = again.phase else { return XCTFail("\(again.phase)") }
     }
 
     func testTheAcceptCarriesTheSeatsKemKeySignedByItsMemberKey() async throws {
@@ -420,7 +483,7 @@ final class OrgDirectoryConsoleTests: XCTestCase {
         let inv = try XCTUnwrap(com.invites.values.first?["invite"] as? [String: Any])
         let invSha = OrgAuthority.sha256Hex(try OrgAuthority.canonicalSeatInvite(orgId: com.orgId, seatId: inv["seatId"] as! String, labelSha256: inv["labelSha256"] as! String,
             rolesHash: inv["rolesHash"] as! String, oarVersion: (inv["oarVersion"] as! NSNumber).int64Value, issuedAt: (inv["issuedAt"] as! NSNumber).int64Value,
-            expiresAt: (inv["expiresAt"] as! NSNumber).int64Value))
+            expiresAt: (inv["expiresAt"] as! NSNumber).int64Value, inviteKeyPub: inv["inviteKeyPub"] as! String))
         XCTAssertEqual(d["refSha256"] as? String, invSha)
         XCTAssertEqual(a.name(com.founder, inv["seatId"] as! String), "Ben Okafor")
         XCTAssertTrue(a.proposals.isEmpty)

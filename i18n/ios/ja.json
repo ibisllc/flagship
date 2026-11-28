@@ -4144,5 +4144,12 @@
   "Pick another name, or go back for a new suggestion.": "別の名前を選ぶか、戻って新しい候補を表示してください。",
   "Account name: %@": "アカウント名: %@",
   "Name I want: %@": "希望する名前: %@",
-  "Why:": "理由:"
+  "Why:": "理由:",
+  "The codes don't match": "コードが一致しない",
+  "Invited, not accepted yet": "招待済み、まだ承諾されていません",
+  "Withdraw invitation": "招待を取り消す",
+  "Invitation withdrawn.": "招待を取り消しました。",
+  "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "招待した人以外の誰かがこの招待を承諾しました。取り消して、新しい招待を送ってください。",
+  "Withdraw this invitation?": "この招待を取り消しますか？",
+  "The link stops working, and nobody who accepted it is let in.": "リンクは使えなくなり、承諾した人も参加できません。"
 }

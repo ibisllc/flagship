@@ -102,7 +102,9 @@ public final class OrgClient: @unchecked Sendable {
     private let baseUrl: URL
 
     public typealias Transport = (_ method: String, _ path: String, _ body: [String: Any]?) async throws -> (status: Int, json: [String: Any])
-    private let transport: Transport?
+    /// A transport that also sees the request's extra headers (the invite-key read proof).
+    public typealias HeaderTransport = (_ method: String, _ path: String, _ body: [String: Any]?, _ headers: [String: String]) async throws -> (status: Int, json: [String: Any])
+    private let transport: HeaderTransport?
 
     public init(urlSession: URLSession = .shared, baseUrl: URL = Endpoints.controlBaseUrl) {
         self.urlSession = urlSession; self.baseUrl = baseUrl; self.transport = nil
@@ -110,12 +112,17 @@ public final class OrgClient: @unchecked Sendable {
 
     /// Tests: answer every call from `transport` (a fake `.com`).
     public init(transport: @escaping Transport) {
-        self.urlSession = .shared; self.baseUrl = Endpoints.controlBaseUrl; self.transport = transport
+        self.urlSession = .shared; self.baseUrl = Endpoints.controlBaseUrl; self.transport = { m, p, b, _ in try await transport(m, p, b) }
     }
 
-    private func call(_ method: String, _ path: String, _ body: [String: Any]? = nil) async throws -> [String: Any] {
+    /// Tests: as `init(transport:)`, with the request's extra headers.
+    public init(headerTransport: @escaping HeaderTransport) {
+        self.urlSession = .shared; self.baseUrl = Endpoints.controlBaseUrl; self.transport = headerTransport
+    }
+
+    private func call(_ method: String, _ path: String, _ body: [String: Any]? = nil, headers: [String: String] = [:]) async throws -> [String: Any] {
         if let transport {
-            let (status, json) = try await transport(method, path, body)
+            let (status, json) = try await transport(method, path, body, headers)
             guard (200..<300).contains(status) else {
                 throw OrgClientError(status: status, code: (json["code"] as? String) ?? (json["error"] as? String) ?? "")
             }
@@ -124,6 +131,7 @@ public final class OrgClient: @unchecked Sendable {
         var req = URLRequest(url: baseUrl.appendingPathComponent(path))
         req.httpMethod = method
         req.cachePolicy = .reloadIgnoringLocalCacheData
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "content-type")
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -180,9 +188,28 @@ public final class OrgClient: @unchecked Sendable {
         _ = try await call("POST", "/api/orgs/\(orgId)/overturns", OrgJSON.overturn(o))
     }
 
-    /// The invitation behind a link: the invite, its roles and the offer sealed under the link key.
-    public func inviteOffer(orgId: String, seatId: String) async throws -> [String: Any] {
-        try await call("GET", "/api/orgs/\(orgId)/invites/\(seatId)")
+    /// The invitation behind a link: the invite, its roles and the offer sealed under the offer key. `.com` serves it
+    /// only with a fresh invite-key signature (`inviteSecret` comes from the link key); without one it reads as no invite.
+    public func inviteOffer(orgId: String, seatId: String, inviteSecret: [UInt8], now: Int64) async throws -> [String: Any] {
+        let sig = try OrgAuthority.inviteReadSignature(secret: inviteSecret, orgId: orgId, seatId: seatId, issuedAt: now)
+        return try await call("GET", "/api/orgs/\(orgId)/invites/\(seatId)", headers: ["x-flagship-issued-at": String(now), "x-flagship-signature": sig])
+    }
+
+    /// Withdraws an invitation nobody was admitted on (one org admin's approval of the withdraw order).
+    public func withdrawInvite(orgId: String, seatId: String, oarVersion: Int64, issuedAt: Int64, approval: OrgApproval) async throws {
+        _ = try await call("POST", "/api/orgs/\(orgId)/invites/\(seatId)/withdraw", [
+            "withdraw": ["orgId": orgId, "seatId": seatId, "oarVersion": NSNumber(value: oarVersion), "issuedAt": NSNumber(value: issuedAt)] as [String: Any],
+            "approvals": [approval.jsonObject],
+        ])
+    }
+
+    /// Invitations nobody has accepted yet (an admin may withdraw them): seat ids.
+    public func pendingInvites(orgId: String) async throws -> [String] {
+        let s = try await call("GET", "/api/orgs/\(orgId)/seats")
+        let granted = Set(((s["grants"] as? [[String: Any]]) ?? []).compactMap { ($0["grant"] as? [String: Any])?["seatId"] as? String })
+        let accepted = Set(((s["accepts"] as? [[String: Any]]) ?? []).compactMap { ($0["accept"] as? [String: Any])?["seatId"] as? String })
+        return ((s["invites"] as? [[String: Any]]) ?? []).compactMap { ($0["invite"] as? [String: Any])?["seatId"] as? String }
+            .filter { !granted.contains($0) && !accepted.contains($0) }
     }
 
     /// The person's acceptance, signed with their seat member key.
@@ -201,6 +228,8 @@ public final class OrgClient: @unchecked Sendable {
         return ((s["accepts"] as? [[String: Any]]) ?? []).compactMap { a in
             guard let acc = a["accept"] as? [String: Any], let seatId = acc["seatId"] as? String, !granted.contains(seatId),
                   let inv = invites[seatId], let invite = inv["invite"] as? [String: Any],
+                  // Only an accept the invite key signed is offered: whoever accepted held the invitation link.
+                  OrgAuthority.verifyInviteAccept(invite: invite, accept: acc, signature: a["inviteSignature"] as? String),
                   let member = try? PqTrust.pqKeyBindingFromWire(a["memberBinding"]) else { return nil }
             let admin = (a["adminBinding"] as? [String: Any]).flatMap { try? PqTrust.pqKeyBindingFromWire($0) }
             return OrgPendingJoin(seatId: seatId, invite: invite, roles: (inv["roles"] as? [Any]) ?? [], accept: acc, memberBinding: member, adminBinding: admin)

@@ -51,6 +51,8 @@ public struct OrgDetailScreen: View {
     let seat: OrgSeatKeys.Seat
     @State private var freezeTarget: String?
     @State private var inviting = false
+    @State private var withdrawTarget: String?
+    @State private var mismatchTarget: String?
 
     public init(vm: OrgViewModel, seat: OrgSeatKeys.Seat) { self.vm = vm; self.seat = seat }
 
@@ -93,6 +95,22 @@ public struct OrgDetailScreen: View {
         } message: {
             Text("They can't approve anything until it ends or the bylaws' signers lift it. You can freeze one admin once a week. Removing an admin takes more people.")
         }
+        .confirmationDialog("Withdraw this invitation?", isPresented: Binding(get: { withdrawTarget != nil }, set: { if !$0 { withdrawTarget = nil } }), titleVisibility: .visible) {
+            Button("Withdraw invitation", role: .destructive) {
+                if let t = withdrawTarget { Task { await vm.withdrawInvite(seat, seatId: t) } }
+                withdrawTarget = nil
+            }
+        } message: {
+            Text("The link stops working, and nobody who accepted it is let in.")
+        }
+        .confirmationDialog("The codes don't match", isPresented: Binding(get: { mismatchTarget != nil }, set: { if !$0 { mismatchTarget = nil } }), titleVisibility: .visible) {
+            Button("Withdraw invitation", role: .destructive) {
+                if let t = mismatchTarget { Task { await vm.withdrawInvite(seat, seatId: t) } }
+                mismatchTarget = nil
+            }
+        } message: {
+            Text("Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.")
+        }
     }
 
     @ViewBuilder
@@ -124,6 +142,22 @@ public struct OrgDetailScreen: View {
                         Button("Codes match: admit") { Task { await vm.admit(seat, j) } }
                             .disabled(vm.busy || vm.myFreeze(seat) != nil)
                             .accessibilityIdentifier("org-admit-\(j.seatId.prefix(8))")
+                        Button("The codes don't match", role: .destructive) { mismatchTarget = j.seatId }
+                            .disabled(vm.busy || vm.myFreeze(seat) != nil)
+                            .accessibilityIdentifier("org-mismatch-\(j.seatId.prefix(8))")
+                    }
+                }
+            }
+        }
+        if !vm.pendingInvites.isEmpty && seat.memberOnly != true {
+            Section("Invited, not accepted yet") {
+                ForEach(vm.pendingInvites, id: \.self) { id in
+                    HStack {
+                        Text(label(id)).font(FS.font.body()).foregroundColor(c.text)
+                        Spacer()
+                        Button("Withdraw invitation", role: .destructive) { withdrawTarget = id }
+                            .disabled(vm.busy || vm.myFreeze(seat) != nil)
+                            .accessibilityIdentifier("org-withdraw-\(id.prefix(8))")
                     }
                 }
             }
