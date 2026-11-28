@@ -1195,3 +1195,64 @@ is fresh per device, never derived from the UMK. Those edges are compatibility-o
 `crypto-graph.json`. The IRK's remaining classical uses (the LUKS deposit sealed to it, the boot gate
 and lock clear, SWK delivery, the RCK, the DNS broker, re-pair recovery, `.com`'s device admission)
 keep `key.irk` a classical source.
+
+## 21. Strict by default (0.5)
+
+Owner decision 2026-11-27: every server runs strict, with two labelled classical exceptions the owner can avoid:
+browsers (the webapp and Remote) and AI providers (Flagship Inference and the owner's own keys). DRAFT like the
+rest of this file; "quantum-safe" is a product term until the external review (Q01).
+
+- **The change.** `defaultStrictChange` (TS `assurancePolicy.ts`, Swift/Kotlin `QuantumSafety`): generation 1 from
+  genesis, `next: strict`, `acknowledgedLoss: [browser-without-pq-authentication]`, hybrid. AI connectors stay allowed
+  by never having their `<server>:ai-*` scope signed strict (§15). `defaultStrictEligible` allows it only for a scope at
+  generation 0, so a scope an owner ever changed (including leaving strict) is never moved again. The box and `.com`
+  apply it with the unchanged rules (§11.3 readiness, §15).
+- **Who signs, when.** No owner step. After each unlock's binding pass (Android `PqIdentityUpgrade.afterBind`, iOS
+  `PqIdentityBindingService.setAfterUpgrade` → `DefaultStrictSweep`) an admin phone runs `applyDefaults`: (1) the
+  grant companions below, (2) a fresh readiness check, (3) the change for each eligible, ready server, signed by the
+  admin root when this device holds its bound PQ half, else by this admin device's bound key, from keys the unlocked
+  session holds (no prompt), (4) with two or more servers, the server order again with its hybrid half and `pqKeyIds`
+  (§16.1), without which a strict box drops its siblings. iOS holds the admin root only when the session opened it, so
+  with several servers it waits for it; Settings → Quantum-safe protection → "Turn on now" runs the same pass with one
+  Face ID. Android also reruns when a server comes online, so a new server goes strict as soon as it registers its
+  keys. A server is not created strict from its recipe: the change needs the server's scope on `.com` and the box's own
+  STK and boot-key bindings, which exist only after it registers. The webapp does not run the pass.
+- **Readiness** (the app lists what is missing instead of forcing): this device admin and bound, every device bound,
+  every device's grant with its companion (`devicesWithoutRecord`), the server's STK binding and hybrid boot key, and a
+  signed recovery record that carries the passkey's key (`.com` `rolloutEvidence.recoveryChecked`): under strict only
+  the passkey path releases a recovery record, so without it strict would end cloud recovery.
+
+### 21.1 How an order arrived (`server-daemon/src/pqAuthority.ts` `TransportAuthority`)
+
+Almost every owner order (access modes, ranks, API keys, egress, copies, debug access, chat approvals …) reaches the
+box with only its classical signature, so a strict box would refuse them all. Under strict `gateSigner` now also
+accepts a classical-only order when the request that carries it came over a path that is itself quantum-safe for that
+signer, set per request by the runtime (`setTransportAuthority`, an AsyncLocalStorage the handlers run inside):
+
+| `kind` | when | may carry |
+|---|---|---|
+| `device` | the PQ channel (§13), whose handshake a live device of the device book signed hybrid | that device's key, the account key, and the admin root when the device is an admin device |
+| `sibling` | the PQ channel from a server the hybrid server order vouches for, and access-sync entries such servers relayed | any (each entry was admitted once by the box that took it from the owner) |
+| `browser` | a live paired browser session, no channel, while the strict change acknowledged the browser loss | any (the labelled classical path) |
+
+The classical signature is still checked first; a transport never stands in for it. A request that came any other
+way carries nothing. Orders that reach the box through a `.com` deposit carry their own hybrid half (`pqSignature`,
+relayed opaque by `.com`, stored inside the deposit's JSON): decommission (`serverDecommission.ts`), migration
+(`serverMigration.ts`) and an account's self-delete (`accountDeletion.ts`, in the carrier); iOS and Android sign it
+while any server is strict (`orderPqSignature`). App copies go through the relay while strict (`strictAwareLanFetch`),
+so the source sees the order over the channel. Open: the webapp signs no deposit's hybrid half, so a webapp-only
+owner's Delete or Migrate does not wipe a strict box; that owner's servers are not moved to strict either.
+
+### 21.2 Grant companions added later
+
+`POST /api/accounts/:u/device-grants/:grantId/pq-signature {pqSignature}` (rate budget `pq-binding-put`): `.com`
+verifies the companion under the stored binding of the root that signed the grant (`signerRoot` admin-root →
+`admin-root`, else `account-irk`) and stores it only when the grant has none, since a companion that fails makes a box
+drop the device (§20.2). The sweep signs one for every grant without, with whichever root's bound PQ half this
+device holds. A device no admin phone can sign for stays listed as missing.
+
+### 21.3 Labels
+
+Remote, the AI keys screens and Quantum-safe protection say plainly that browsers and AI providers are reached with
+classical protection, as labelled exceptions (webapp, iOS, Android; `i18n/`). Leaving strict stays possible for an
+admin, with the losses screen (§15).

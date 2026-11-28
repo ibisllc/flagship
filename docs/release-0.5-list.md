@@ -237,6 +237,22 @@ over once "let's start 0.5" is said.
   "Per-app identity"; vectors `test-vectors/app-account-id` (TS, webapp, Swift, Kotlin). Box unchanged. Members
   re-join through a fresh invite (release notes). Ships with the store builds and the webapp.
 
+- **Quantum-safe strict on for every server** (owner, 2026-11-27: "everything PQ-safe in 0.5"; "PQ" is a marketing
+  term until the external audit). **Built on `release/0.5` (2026-11-28)**, `docs/architecture-v2/pq-suites.md` §21.
+  Strict with two labelled classical exceptions the owner can avoid: browsers (webapp, Remote) and AI providers
+  (Flagship Inference, own keys). No owner step: after each unlock an admin phone backfills grant companions
+  (`.com` `POST /api/accounts/:u/device-grants/:grantId/pq-signature`), then signs the default strict change for every
+  server at generation 0 (never one an owner changed), and re-signs the server order hybrid. A new server goes strict
+  at the admin phone's next pass once it is up. Readiness (else the app explains): every device bound and with its
+  grant companion, the server's STK and boot-key bindings, and a signed recovery record **with the passkey path**
+  (strict releases recovery only through it). Honest paths strict broke, fixed: every box order without its own
+  hybrid half (now carried by how it arrived: a device's PQ channel, a vouched-for sibling, or the browser
+  exception on a live paired session; `pqAuthority.ts` `TransportAuthority`), `.com`-deposited decommission,
+  migration and account self-delete (now carry `pqSignature`), app copies over the LAN (strict copies use the relay),
+  devices admitted before grant companions. Left for the gym: a live run of all of it; webapp-only owners (no phone)
+  are not moved to strict; a webapp-signed deposit to a strict box is refused; iOS waits for the admin root when the
+  account has several servers. Store builds, a `.com` deploy (no migration) and an endorsed box release ship it.
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in
