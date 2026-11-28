@@ -237,6 +237,11 @@ export async function handleOrgAuthorityAppend(deps: OrgDeps, orgId: string, bod
   const now = nowOf(deps);
   const entry = (body as { entry?: OrgAuthorityEntry } | undefined)?.entry;
   if (!entry?.record) return malformed("entry required");
+  // The delayed changes (founder removal, recovery) wait for a notice that .com must observe before it can count;
+  // until that lands they are not taken at all. No app or box sends them yet.
+  if (entry.via === "founder-removal" || entry.via === "recovery") {
+    return { status: 400, body: { error: "delayed authority changes are not available yet", code: "delayed-change-unavailable" } };
+  }
   try {
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");

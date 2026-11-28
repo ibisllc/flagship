@@ -140,6 +140,17 @@ describe(".com org accounts", () => {
     expect((await handleOrgFreeze(d, ORG, { body: long, approvals: [approve(B, canonicalOrgSeatFreeze(long), 1, now)] })).status).toBe(403);
   });
 
+  it("takes no founder-removal or recovery entry until .com observes the notice itself", async () => {
+    const now = chain.entries[1].record.issuedAt + 3_600_000;
+    const d = await created(now);
+    for (const via of ["founder-removal", "recovery"] as const) {
+      const entry = { ...chain.entries[1], via } as unknown as typeof chain.entries[1];
+      const r = await handleOrgAuthorityAppend(d, ORG, { entry });
+      expect(r.status).toBe(400);
+      expect((r.body as { code: string }).code).toBe("delayed-change-unavailable");
+    }
+  });
+
   it("never opens a server code as a ceremony (ceremonies are readable by anyone with the org id)", async () => {
     const now = chain.entries[1].record.issuedAt + 3_600_000;
     const d = await created(now);
