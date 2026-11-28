@@ -2303,7 +2303,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         }
         let bundle = archiveBundle
         guard offset >= 0, offset <= Int64(bundle.count) else { throw Self.refusal(400, "bad offset") }
-        bundleReadsLock.lock(); bundleReadsStore.append(route); bundleReadsLock.unlock()
+        bundleReadsLock.withLock { bundleReadsStore.append(route) }
         let start = Int(offset)
         let data = bundle.subdata(in: start..<min(start + 4 * 1024 * 1024, bundle.count))
         if start + data.count >= bundle.count, case .saved(let id) = route { GymProbe.note("downloaded backup \(id)") }

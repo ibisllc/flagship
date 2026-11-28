@@ -81,9 +81,7 @@ public enum SecurityNoticeGym {
         }
 
         public func fetch() async -> NoticeFetchResult {
-            mutex.lock()
-            defer { mutex.unlock() }
-            return rest.isEmpty ? .none : rest.removeFirst()
+            mutex.withLock { () -> NoticeFetchResult in rest.isEmpty ? .none : rest.removeFirst() }
         }
     }
 

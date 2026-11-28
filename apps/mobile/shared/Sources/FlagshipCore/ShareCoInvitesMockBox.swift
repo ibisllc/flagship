@@ -55,9 +55,7 @@ public final class ShareCoInvitesMockBox: ServerShareTransport, @unchecked Senda
     public static let whyText: [String: String] = ShareCoInviteCopy.why
 
     public func send(_ r: URLRequest) async throws -> (status: Int, body: Data) {
-        lock.lock()
-        defer { lock.unlock() }
-        let (status, obj) = handle(r)
+        let (status, obj) = lock.withLock { handle(r) }
         return (status, try JSONSerialization.data(withJSONObject: obj))
     }
 

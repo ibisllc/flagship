@@ -52,7 +52,7 @@ public final class MockBoxClaimRadio: BoxClaimRadio, @unchecked Sendable {
     static let other = BoxClaimAdvert(peripheral: "mock-other", advertId: "fedcba9876543210", state: .unclaimed)
 
     public func startScan(onAdverts: @escaping @Sendable ([BoxClaimAdvert]) -> Void) async throws {
-        lock.lock(); scanning = true; self.onAdverts = onAdverts; lock.unlock()
+        lock.withLock { scanning = true; self.onAdverts = onAdverts }
         if scenario == .boxAlreadyNearby { onAdverts([Self.other]) }
         guard scenario != .noBox else { return }
         Task {

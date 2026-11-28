@@ -48,9 +48,7 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
     }
 
     public func send(_ r: URLRequest) async throws -> (status: Int, body: Data) {
-        lock.lock()
-        defer { lock.unlock() }
-        let (status, obj) = handle(r)
+        let (status, obj) = lock.withLock { handle(r) }
         return (status, try JSONSerialization.data(withJSONObject: obj))
     }
 

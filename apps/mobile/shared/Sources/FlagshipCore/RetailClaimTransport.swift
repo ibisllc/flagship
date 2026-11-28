@@ -108,18 +108,18 @@ public final class MailboxClaimLink: BoxClaimLink, @unchecked Sendable {
     public func receive() async throws -> [UInt8] {
         while true {
             if isClosed { throw BoxClaimRadioError.linkClosed }
-            lock.lock()
-            if !queued.isEmpty { let m = queued.removeFirst(); lock.unlock(); return m }
-            let cursor = after
-            lock.unlock()
-            let msgs = (try? await client.readBoxClaimMailbox(mailboxId: mailboxId, dir: "to-phone", after: cursor)) ?? []
-            lock.lock()
-            for m in msgs where m.seq > after {
-                after = m.seq
-                if let d = Data(base64Encoded: m.body) { queued.append(Array(d)) }
+            let (ready, cursor): ([UInt8]?, Int) = lock.withLock {
+                queued.isEmpty ? (nil, after) : (queued.removeFirst(), after)
             }
-            let empty = queued.isEmpty
-            lock.unlock()
+            if let ready { return ready }
+            let msgs = (try? await client.readBoxClaimMailbox(mailboxId: mailboxId, dir: "to-phone", after: cursor)) ?? []
+            let empty = lock.withLock {
+                for m in msgs where m.seq > after {
+                    after = m.seq
+                    if let d = Data(base64Encoded: m.body) { queued.append(Array(d)) }
+                }
+                return queued.isEmpty
+            }
             if empty { try await Task.sleep(nanoseconds: pollEvery * 1_000_000) }
         }
     }

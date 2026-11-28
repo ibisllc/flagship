@@ -49,7 +49,7 @@ final class RelayFallbackTests: XCTestCase {
         init(passes: Set<String>) { self.passes = passes }
         var calls: [String] { lock.lock(); defer { lock.unlock() }; return asked }
         func probe(sniHost: String, address: String, port: Int, certSha256: String) async -> Bool {
-            lock.lock(); asked.append("\(address)|\(sniHost)|\(port)|\(certSha256)"); lock.unlock()
+            lock.withLock { asked.append("\(address)|\(sniHost)|\(port)|\(certSha256)") }
             return passes.contains(address)
         }
     }

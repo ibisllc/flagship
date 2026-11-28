@@ -22,9 +22,7 @@ public enum AccountKeyRotationCheck {
     }
 
     public static func run() async {
-        lock.lock()
-        let fn = handler
-        lock.unlock()
+        let fn = lock.withLock { handler }
         await fn?()
     }
 }

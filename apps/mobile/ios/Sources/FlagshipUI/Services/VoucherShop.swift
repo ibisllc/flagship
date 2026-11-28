@@ -65,12 +65,12 @@ public final class StoreKitVoucherStore: VoucherStoreSource, @unchecked Sendable
 
     public func products(_ ids: [String]) async throws -> [ShopProduct] {
         let found = try await Product.products(for: ids).filter { $0.type == .consumable }
-        lock.lock(); for p in found { cache[p.id] = p }; lock.unlock()
+        lock.withLock { for p in found { cache[p.id] = p } }
         return found.map { ShopProduct(id: $0.id, displayPrice: $0.displayPrice) }
     }
 
     public func purchase(_ productId: String) async throws -> ShopPurchaseOutcome {
-        lock.lock(); let cached = cache[productId]; lock.unlock()
+        let cached = lock.withLock { cache[productId] }
         let found: Product?
         if let cached { found = cached } else { found = try await Product.products(for: [productId]).first }
         guard let product = found else { throw StoreKitError.notAvailableInStorefront }
