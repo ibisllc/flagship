@@ -134,8 +134,16 @@ data class PairingBundle(
      *  the relay never see it. Promote is offered ONLY here (high-assurance,
      *  admin-initiated, SAS-confirmed), never on an async approve-a-request
      *  join. The incoming device unwraps it → [Keystore.importAdminRoot] ⇒ it
-     *  becomes a bare-root admin. */
+     *  becomes a bare-root admin. Older admins only: current ones promote by an admin-root grant
+     *  (docs/account-key-rotation.md) and never send it. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
     val wrappedAdminRoot: String? = null,
+    /** The account's admin root PUBLIC key, lowercase hex: an admin-root grant verifies under it, and the
+     *  joining device pins it (SAS-authenticated) as the root it checks account-key changes under. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val adminRootPubHex: String? = null,
     /** The signing root's hybrid companion over the grant (pq-suites.md §20); null when the admin
      *  device holds no bound PQ half for that root. The joining device passes it to `.com`. */
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)

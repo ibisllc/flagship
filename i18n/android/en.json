@@ -18097,5 +18097,137 @@
   "reset_account_keys_confirm_message": {
     "en": "Makes new keys for your account. Every other device is removed and has to join again, and every server has to be paired again. Your servers keep their data, and the account stays on this device. This can't be undone.",
     "ctx": "ui/screens/AccountSecurityScreen.kt (dialog message)"
+  },
+  "akr_change_account_key": {
+    "en": "Change your account key",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_question_title": {
+    "en": "Could someone else unlock this device?",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_option_no": {
+    "en": "No: it's lost and locked, or I erased it",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_option_yes": {
+    "en": "Yes, or I'm not sure",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_browser_note": {
+    "en": "This was a browser. Someone with the computer could try to guess its passphrase, so changing your account key is safer.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_summary_others": {
+    "en": "Your other devices keep working. They get the new key the next time they open Flagship.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_summary_servers": {
+    "en": "Your servers switch to the new key by themselves. Nothing needs pairing again.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_summary_kept": {
+    "en": "These devices keep the account:",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_kept_row": {
+    "en": "%1$s, added %2$s",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_summary_readd": {
+    "en": "These devices must be added again:",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_excluded_derived": {
+    "en": "%1$s: its key came from the old account key",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_excluded_no_receive_key": {
+    "en": "%1$s: it can't receive the new key safely",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_summary_browsers": {
+    "en": "Browsers signed in to your servers will need to be approved again.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_summary_recovery": {
+    "en": "Set up cloud recovery again afterwards.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_summary_backups": {
+    "en": "Old backups still open with the old key, and so do copies on the removed device.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_admin_first": {
+    "en": "%1$s held the admin key, so the admin key changes first.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_confirm": {
+    "en": "Change account key",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_rotating": {
+    "en": "Changing the account key…",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_done": {
+    "en": "Account key changed",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_update_servers_first": {
+    "en": "Update every server first: %1$s can't follow an account key change yet.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_conflict": {
+    "en": "Another admin device changed the account key first. Open Flagship again to get the new key.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_failed_nothing_changed": {
+    "en": "The account key could not be changed. Nothing was changed. Try again.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_needs_admin_device": {
+    "en": "Ask an admin device to remove it.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_recovery_off": {
+    "en": "Cloud recovery is off since the account key changed. Set it up again.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_progress_title": {
+    "en": "Account key change",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_progress_devices": {
+    "en": "Devices updated: %1$d of %2$d",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_progress_servers": {
+    "en": "Servers on the new key: %1$d of %2$d",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_progress_waiting": {
+    "en": "Waiting for %1$s",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_progress_rekey": {
+    "en": "Still to do on %1$s: %2$s",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_banner_waiting": {
+    "en": "Your account key was changed. Unlock to continue.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_banner_done": {
+    "en": "This device has the new account key.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_banner_failed": {
+    "en": "This device couldn't check the new account key. Ask an admin device to add it again.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "akr_push_body": {
+    "en": "Your account key was changed. Open Flagship to keep using this device.",
+    "ctx": "account key rotation (docs/account-key-rotation.md)"
   }
 }

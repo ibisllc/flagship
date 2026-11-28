@@ -147,11 +147,12 @@ class LiveNameChoiceOps(
         val old = p.oldName.lowercase()
         val new = p.newName.lowercase()
         val umk = Keystore.currentUmkSeed()
-        // 1. The device key `.com` registered was derived from the old name: kept under the new one.
-        val seed = AccountMetadata.deriveAccountDeviceSeed(umk, old, p.deviceId)
+        // 1. The device key `.com` registered moves with the profile (a random one is stored; an older build's was
+        //    derived from the old name, so it is kept under the new one).
         Keystore.moveProfile(old, new)
         Keystore.setActiveProfile(new)
-        Keystore.storeAccountDeviceSeed(p.deviceId, seed)
+        val seed = Keystore.storedAccountDeviceSeed(p.deviceId)
+            ?: AccountMetadata.deriveAccountDeviceSeed(umk, old, p.deviceId).also { Keystore.storeAccountDeviceSeed(p.deviceId, it) }
         Keystore.storeAccountDeviceId(p.deviceId)
         AccountNameChoice.signUp?.let { AccountNameChoice.signUp = it.copy(username = new) }
         val device = Ed25519Sign(seed)

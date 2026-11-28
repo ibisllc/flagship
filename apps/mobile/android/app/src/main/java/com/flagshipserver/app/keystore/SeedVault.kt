@@ -32,12 +32,19 @@ object SeedVault {
     const val SEALED_PREFIX = "sealed."
     const val UMK = "umk.seed"
     const val ADMIN_ROOT = "admin.root.seed"
-    private val BASES = listOf(UMK, ADMIN_ROOT)
+    /** Account key rotation (docs/account-key-rotation.md): the rotator's new UMK and admin root until `.com`
+     *  accepted the hop, this device's X-Wing receive key, and the UMKs of earlier epochs (old backups). */
+    const val UMK_PENDING = "umk.pending"
+    const val ADMIN_ROOT_PENDING = "admin.root.pending"
+    const val RECEIVE_KEY = "receive.key.seed"
+    const val UMK_RETIRED_PREFIX = "umk.retired.e"
+    private val BASES = listOf(UMK, ADMIN_ROOT, UMK_PENDING, ADMIN_ROOT_PENDING, RECEIVE_KEY)
     private const val VERSION: Byte = 0x01
     private const val IV_LEN = 12
     private val rng = SecureRandom()
 
-    fun isSeedSlot(key: String): Boolean = BASES.any { key == it || key.startsWith("$it.") }
+    fun isSeedSlot(key: String): Boolean =
+        BASES.any { key == it || key.startsWith("$it.") } || Regex("^umk\\.retired\\.e\\d+(\\..+)?$").matches(key)
 
     fun sealedKey(slot: String): String = SEALED_PREFIX + slot
 

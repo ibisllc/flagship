@@ -116,6 +116,7 @@ class OpenAccountViewModel(
             //    holds it ⇒ it is admin by default. Its pubkey is published to
             //    `.com` in the claim below + pinned into every recipe AuthCode.
             val adminRootPubHex = Keystore.generateAdminRoot()
+            Keystore.setAdminRootPin(adminRootPubHex)
 
             // 2. Derive the IRK + standalone claim. Compute the public
             //    half from the just-derived versioned seed (the canonical
@@ -142,8 +143,14 @@ class OpenAccountViewModel(
                 ?: (AccountMetadata.generateDeviceId() to java.util.UUID.randomUUID().toString().lowercase())
             pendingIdentity = identity
             val deviceId = identity.first
-            val deviceKey = AccountMetadata.deriveAccountDeviceKey(umk, username, deviceId)
-            val devicePubHex = HexUtil.encode(AccountMetadata.deriveAccountDevicePub(umk, username, deviceId))
+            // A random device key (docs/account-key-rotation.md): one derived from the UMK would let anyone
+            // holding the account key sign as this admin device. Kept on the device before `.com` sees it, and
+            // the same one on a retry.
+            val deviceSeed = Keystore.loadOrCreateAccountDeviceSeed(deviceId)
+            Keystore.markAccountDeviceKeyRandom()
+            Keystore.setAccountKeyEpoch(0)
+            val deviceKey = Ed25519Sign(deviceSeed)
+            val devicePubHex = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(deviceSeed).publicKey)
             val adminRoot = Keystore.adminRootKey(FSStrings.get(R.string.authorize_your_private_account_name))
             val accountCiphertext = AccountMetadata.encrypt(
                 normalizedAccountName,

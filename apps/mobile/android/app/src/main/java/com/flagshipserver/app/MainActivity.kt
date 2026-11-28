@@ -241,6 +241,7 @@ class MainActivity : FragmentActivity() {
             com.flagshipserver.app.core.AccountGone.ownNames = { emptyList() }
             com.flagshipserver.app.core.AccountGone.onDeviceRemoved = null
             com.flagshipserver.app.core.DeviceRemovedCheck.check = null
+            com.flagshipserver.app.keystore.AccountKeyService.wake = null
             com.flagshipserver.app.core.AccountGone.clear()
         }
 
@@ -493,6 +494,13 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+        // docs/account-key-rotation.md: a new account key from an admin device, a staged hop of this device's own,
+        // the receive key and the random device key; none of it prompts.
+        if (useLive) com.flagshipserver.app.keystore.AccountKeyService.wake = {
+            if (!appState.isDemoAccountNow()) com.flagshipserver.app.keystore.AccountKeyService.onUnlockOrWake(
+                liveFlagshipServer, appState.currentUser.value, appState.activeProfile?.deviceId?.lowercase(), appState.activeProfile?.deviceDisplayName,
+            )
+        }
         BiometricAuthority.onSessionUnlocked = {
             // Keep the account device key at hand for silent read tokens once the unlock opened the
             // sealed account seed (iOS keeps it the same way, docs/account-read-token.md).
@@ -512,6 +520,7 @@ class MainActivity : FragmentActivity() {
             }
             com.flagshipserver.app.keystore.QuantumSafetyService.activate(appState.currentUser.value, appState.activeProfile?.deviceId)
             if (mocks == null) lifecycleScope.launch { repairDeviceId(liveFlagshipServer) }
+            com.flagshipserver.app.keystore.AccountKeyService.request(lifecycleScope)
         }
 
         // Push-token registration is inherently a real-backend operation
@@ -585,6 +594,7 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(effectiveMailbox, servingUser) {
                 com.flagshipserver.app.keystore.ServingRenewal.install(applicationContext, appState, effectiveMailbox, podClients)
                 com.flagshipserver.app.keystore.ServingRenewal.appOpened()
+        if (appState.isPaired.value) com.flagshipserver.app.keystore.AccountKeyService.request(lifecycleScope)
                 // The phone's bare name (docs/architecture-v2/phone-route.md): foreground only, live clients only.
                 if (mocks == null) {
                     com.flagshipserver.app.phoneroute.PhoneRouteController.install(applicationContext, appState, okHttp)
@@ -1335,6 +1345,8 @@ private fun AppRoot(
                 com.flagshipserver.app.ui.components.SecuritySliverBar()
                 // Android 10 to 12: this phone no longer gets security updates (calm, can be snoozed).
                 com.flagshipserver.app.ui.components.OutdatedAndroidSliver()
+                // The account key changed on another device: this one opens it at the next unlock.
+                com.flagshipserver.app.ui.screens.AccountKeyBanner()
                 RootShell(widthSizeClass = widthSizeClass, initialTab = initialTab)
             }
         } else {

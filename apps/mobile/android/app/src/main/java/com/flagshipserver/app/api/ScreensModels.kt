@@ -1358,6 +1358,20 @@ data class VerifyCustomDomainResponse(
 // window.
 
 @Serializable
+data class AccountKeyStatusResponse(val status: AccountKeyBoxStatus? = null)
+
+/** What a box verified about the account key (`accountKeyRotationConsumer.ts` `AccountKeyEpochStatus`). */
+@Serializable
+data class AccountKeyBoxStatus(
+    val trustedEpoch: Long? = null,
+    val hintedEpoch: Long? = null,
+    val holdingOwnerKey: Boolean = false,
+    val rekeyDue: List<String> = emptyList(),
+    val lastError: String? = null,
+    val capability: String = "",
+)
+
+@Serializable
 data class PostRecoveryStatusResponse(val report: PostRecoverySnapshot? = null)
 
 @Serializable

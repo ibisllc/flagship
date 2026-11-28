@@ -291,6 +291,9 @@ class LiveScreensClient(
     override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse =
         request("/api/screens/post-recovery/status", PostRecoveryStatusResponse.serializer())
 
+    override suspend fun accountKeyStatus(): AccountKeyStatusResponse =
+        request("/api/screens/account-key/status", AccountKeyStatusResponse.serializer())
+
     override suspend fun serviceEnvList(appId: String): ServiceEnvListResponse =
         request("/api/screens/services/$appId/env", ServiceEnvListResponse.serializer())
 

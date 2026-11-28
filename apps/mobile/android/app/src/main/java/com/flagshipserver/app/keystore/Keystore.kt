@@ -580,6 +580,14 @@ object Keystore {
         return HexUtil.encode(pair.publicKey)
     }
 
+    /** The current IRK's public half without a prompt: its on-disk copy, else derived while the session is open. */
+    fun irkPubHexIfKnown(): String? {
+        val version = currentIrkVersion()
+        requirePrefs().getString(irkPubCacheKey(version), null)?.let { return it }
+        if (umkSeedIfOpen()?.also { it.fill(0) } == null) return null
+        return runCatching { HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(irkSeed(version)).publicKey) }.getOrNull()
+    }
+
     /** C7 — the IRK seed for a specific version, for callers that need the
      *  raw seed (rotation ceremonies, the boot relay). Derived from the UMK
      *  when this session hasn't yet; throws [SessionLockedException] while the
@@ -951,6 +959,156 @@ object Keystore {
     suspend fun adminSigningKey(reason: String = FSStrings.get(R.string.authorize_a_sensitive_change)): Ed25519Sign =
         if (hasAdminRoot()) adminRootKey(reason) else deriveIRK(reason)
 
+    // ---- Account key rotation (docs/account-key-rotation.md) -------------
+    //
+    // The account's key epoch (how many account-key hops this device followed), the admin root this
+    // device trusts for hops (pinned at create/join, advanced only by a verified lane), this device's
+    // X-Wing receive key (sealed like the UMK), the rotator's pending new UMK until `.com` accepted the
+    // hop, and the UMKs of earlier epochs, kept with the same custody so old backups still open.
+
+    private const val KEY_ACCOUNT_KEY_EPOCH = "account.key.epoch"
+    private const val KEY_ADMIN_ROOT_PIN = "account.admin.root.pin"
+    private const val KEY_RECEIVE_PUB = "account.receive.pub"
+    private const val KEY_RECEIVE_PUBLISHED = "account.receive.published"
+    private const val KEY_PENDING_ROTATION = "account.key.pending"
+    private const val KEY_DEVICE_KEY_MIGRATED = "account.device.key.random"
+
+    fun accountKeyEpoch(): Long = requirePrefs().getString(pkey(KEY_ACCOUNT_KEY_EPOCH), null)?.toLongOrNull()?.takeIf { it >= 0 } ?: 0L
+
+    fun setAccountKeyEpoch(epoch: Long) {
+        require(epoch >= 0)
+        requirePrefs().edit().putString(pkey(KEY_ACCOUNT_KEY_EPOCH), epoch.toString()).commit()
+    }
+
+    /** The admin root this device checks account-key hops under: the pin, else its own root. */
+    fun adminRootPin(): String? = requirePrefs().getString(pkey(KEY_ADMIN_ROOT_PIN), null) ?: adminRootPubHex()
+
+    fun setAdminRootPin(pubHex: String?) {
+        val e = requirePrefs().edit()
+        if (pubHex == null) e.remove(pkey(KEY_ADMIN_ROOT_PIN)) else {
+            require(Regex("^[0-9a-f]{64}$").matches(pubHex))
+            e.putString(pkey(KEY_ADMIN_ROOT_PIN), pubHex)
+        }
+        e.commit()
+    }
+
+    /** This device's account device key seed when it is stored (random, or a derived one kept at an unlock). */
+    fun storedAccountDeviceSeed(deviceId: String): ByteArray? =
+        requirePrefs().getString(pkey("account.device.seed.$deviceId"), null)?.let(HexUtil::decode)?.takeIf { it.size == 32 }
+
+    /** A random account device key for a new device id (never derived from the UMK); the same one on a retry. */
+    fun loadOrCreateAccountDeviceSeed(deviceId: String): ByteArray {
+        storedAccountDeviceSeed(deviceId)?.let { return it }
+        val seed = ByteArray(32).also(rng::nextBytes)
+        require(deviceId.matches(Regex("^[0-9a-f]{32}$")))
+        check(requirePrefs().edit().putString(pkey("account.device.seed.$deviceId"), HexUtil.encode(seed)).commit()) { "device key write failed" }
+        return seed
+    }
+
+    /** Replace this device's stored account device key once `.com` accepted the new one. */
+    fun replaceAccountDeviceSeed(deviceId: String, seed: ByteArray) {
+        require(deviceId.matches(Regex("^[0-9a-f]{32}$")) && seed.size == 32)
+        check(requirePrefs().edit().putString(pkey("account.device.seed.$deviceId"), HexUtil.encode(seed))
+            .putString(pkey(KEY_DEVICE_KEY_MIGRATED), "1").commit()) { "device key write failed" }
+    }
+
+    /** True once this device's account device key is known to be random (made so, or migrated). */
+    fun accountDeviceKeyIsRandom(): Boolean = requirePrefs().getString(pkey(KEY_DEVICE_KEY_MIGRATED), null) == "1"
+
+    fun markAccountDeviceKeyRandom() {
+        requirePrefs().edit().putString(pkey(KEY_DEVICE_KEY_MIGRATED), "1").apply()
+    }
+
+    /** The X-Wing receive key's public half (hex), or null before one was made. Needs no unlock. */
+    fun receiveKeyPubHex(): String? = requirePrefs().getString(pkey(KEY_RECEIVE_PUB), null)
+
+    /** Make the receive key when the session is open (sealed like the UMK). Null while locked. */
+    fun ensureReceiveKey(): String? {
+        receiveKeyPubHex()?.let { if (SeedVault.has(requirePrefs(), pkey(SeedVault.RECEIVE_KEY))) return it }
+        if (umkSeedIfOpen()?.also { it.fill(0) } == null) return null
+        val seed = ByteArray(32).also(rng::nextBytes)
+        val pub = HexUtil.encode(com.flagshipserver.app.core.pq.PqHybrid.hybridSealKeygen(seed).publicKey)
+        writeSeed(pkey(SeedVault.RECEIVE_KEY), seed)
+        seed.fill(0)
+        requirePrefs().edit().putString(pkey(KEY_RECEIVE_PUB), pub).remove(pkey(KEY_RECEIVE_PUBLISHED)).commit()
+        return pub
+    }
+
+    /** The receive key's secret seed; throws while the session is locked. */
+    fun receiveKeySeed(): ByteArray? = readSeed(pkey(SeedVault.RECEIVE_KEY))
+
+    /** Which device key the receive key was last published under (so a new device key publishes again). */
+    fun receiveKeyPublishedFor(): String? = requirePrefs().getString(pkey(KEY_RECEIVE_PUBLISHED), null)
+
+    fun setReceiveKeyPublishedFor(devicePubHex: String?) {
+        val e = requirePrefs().edit()
+        if (devicePubHex == null) e.remove(pkey(KEY_RECEIVE_PUBLISHED)) else e.putString(pkey(KEY_RECEIVE_PUBLISHED), devicePubHex)
+        e.apply()
+    }
+
+    /** The rotator's staged hop: the new UMK (and admin root, when it changes too) sealed like the UMK, and
+     *  the request body, before it is posted. */
+    fun stagePendingRotation(newUmk: ByteArray, newAdminRoot: ByteArray?, bodyJson: String) {
+        require(newUmk.size == 32 && (newAdminRoot == null || newAdminRoot.size == 32))
+        writeSeed(pkey(SeedVault.UMK_PENDING), newUmk)
+        val e = requirePrefs().edit()
+        if (newAdminRoot == null) SeedVault.remove(e, pkey(SeedVault.ADMIN_ROOT_PENDING))
+        e.putString(pkey(KEY_PENDING_ROTATION), bodyJson)
+        check(e.commit()) { "pending rotation write failed" }
+        if (newAdminRoot != null) writeSeed(pkey(SeedVault.ADMIN_ROOT_PENDING), newAdminRoot)
+    }
+
+    fun pendingRotationBody(): String? =
+        requirePrefs().getString(pkey(KEY_PENDING_ROTATION), null)?.takeIf { SeedVault.has(requirePrefs(), pkey(SeedVault.UMK_PENDING)) }
+
+    fun pendingRotationUmk(): ByteArray? = readSeed(pkey(SeedVault.UMK_PENDING))?.takeIf { it.size == 32 }
+
+    fun pendingRotationAdminRoot(): ByteArray? = readSeed(pkey(SeedVault.ADMIN_ROOT_PENDING))?.takeIf { it.size == 32 }
+
+    fun clearPendingRotation() {
+        val e = requirePrefs().edit()
+        SeedVault.remove(e, pkey(SeedVault.UMK_PENDING))
+        SeedVault.remove(e, pkey(SeedVault.ADMIN_ROOT_PENDING))
+        e.remove(pkey(KEY_PENDING_ROTATION))
+        e.commit()
+    }
+
+    /**
+     * Install the UMK of a rotation that `.com` applied (the rotator promoting its pending key, or a kept device
+     * opening its delivery): the current UMK moves to the retired slot of its epoch with the same custody, the
+     * new one becomes current at [toEpoch], and the IRK starts again at version 1 in [scheme] (the rotator's
+     * derivation, which may be another client's).
+     */
+    fun installRotatedUmk(newUmk: ByteArray, scheme: IrkLineage.Scheme, toEpoch: Long) {
+        require(newUmk.size == 32 && toEpoch >= 1)
+        val p = requirePrefs()
+        readSeed(pkey(KEY_UMK_SEED))?.let { old ->
+            writeSeed(retiredSlot(toEpoch - 1), old)
+            old.fill(0)
+        }
+        writeSeed(pkey(KEY_UMK_SEED), newUmk)
+        val editor = p.edit()
+        editor.putString(pkey(KEY_IRK_VERSION), "1")
+        if (scheme == IrkLineage.OWN) editor.remove(pkey(KEY_IRK_SCHEME)) else editor.putString(pkey(KEY_IRK_SCHEME), scheme.name)
+        editor.remove(pkey(KEY_IRK_PENDING_VERSION))
+        editor.putString(pkey(KEY_ACCOUNT_KEY_EPOCH), toEpoch.toString())
+        sweepIrkCaches(p, editor)
+        check(editor.commit()) { "account key install failed" }
+        dropActiveIrkSeeds()
+    }
+
+    private fun retiredSlot(epoch: Long): String = pkey("${SeedVault.UMK_RETIRED_PREFIX}$epoch")
+
+    /** Epochs whose UMK this device keeps retired (newest first). */
+    fun retiredUmkEpochs(): List<Long> {
+        val re = Regex("^(?:" + Regex.escape(SeedVault.SEALED_PREFIX) + ")?umk\\.retired\\.e(\\d+)" +
+            (activeProfileId?.let { Regex.escape(".$it") } ?: "") + "$")
+        return requirePrefs().all.keys.mapNotNull { re.matchEntire(it)?.groupValues?.get(1)?.toLongOrNull() }.distinct().sortedDescending()
+    }
+
+    /** The UMK this account used in [epoch] (for backups made then); throws while the session is locked. */
+    fun retiredUmkSeed(epoch: Long): ByteArray? = readSeed(retiredSlot(epoch))
+
     // ---- ACME account key (#28, per-user-cert) -------------------------
     //
     // The ECDSA P-256 (ES256) account key that authorizes minting this
@@ -1075,6 +1233,9 @@ object Keystore {
         SeedVault.remove(editor, adminRootSeedKey())
         editor.remove(adminRootPubKey())
         editor.remove(pkey(KEY_ACCOUNT_DEVICE_ID))
+        for (slot in listOf(SeedVault.UMK_PENDING, SeedVault.ADMIN_ROOT_PENDING, SeedVault.RECEIVE_KEY)) SeedVault.remove(editor, pkey(slot))
+        for (epoch in retiredUmkEpochs()) SeedVault.remove(editor, retiredSlot(epoch))
+        for (k in listOf(KEY_ACCOUNT_KEY_EPOCH, KEY_ADMIN_ROOT_PIN, KEY_RECEIVE_PUB, KEY_RECEIVE_PUBLISHED, KEY_PENDING_ROTATION, KEY_DEVICE_KEY_MIGRATED)) editor.remove(pkey(k))
         val readTokenPrefix = "${pkey(KEY_READ_TOKEN)}.u."
         // This profile's kept account device key ("account.device.seed.<id>[.<profile>]").
         val deviceSeed = Regex("^account\\.device\\.seed\\.[0-9a-f]{32}" + (activeProfileId?.let { Regex.escape(".$it") } ?: "") + "$")
@@ -1134,10 +1295,14 @@ object Keystore {
             KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION, KEY_IRK_SCHEME,
             KEY_ACME_ACCOUNT_SCALAR, SeedVault.ADMIN_ROOT, KEY_READ_TOKEN, KEY_IRK_PUB, "admin.root.pub", "account.device.seed", KEY_ACCOUNT_DEVICE_ID,
             SeedVault.sealedKey(KEY_UMK_SEED), SeedVault.sealedKey(SeedVault.ADMIN_ROOT),
+            SeedVault.UMK_PENDING, SeedVault.ADMIN_ROOT_PENDING, SeedVault.RECEIVE_KEY,
+            SeedVault.sealedKey(SeedVault.UMK_PENDING), SeedVault.sealedKey(SeedVault.ADMIN_ROOT_PENDING), SeedVault.sealedKey(SeedVault.RECEIVE_KEY),
+            "account.key.epoch", "account.admin.root.pin", "account.receive.pub", "account.receive.published", "account.key.pending", "account.device.key.random",
         )
         for (key in p.all.keys) {
             if (key == KEY_ACTIVE_PROFILE) { editor.remove(key); continue }
             if (bases.any { key == it || key.startsWith("$it.") }) editor.remove(key)
+            if (key.removePrefix(SeedVault.SEALED_PREFIX).startsWith(SeedVault.UMK_RETIRED_PREFIX)) editor.remove(key)
         }
         editor.commit()
         activeProfileId = null

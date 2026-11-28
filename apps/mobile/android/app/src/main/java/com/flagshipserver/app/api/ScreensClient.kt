@@ -97,6 +97,10 @@ interface ScreensClient {
     // P1.23 post-recovery status — daemon's J.3/J.4 reattach snapshot
     suspend fun postRecoveryStatus(): PostRecoveryStatusResponse
 
+    /** GET /api/screens/account-key/status (docs/account-key-rotation.md): the account-key epoch this box
+     *  verified itself and whether it can follow a rotation. Null from a client that can't ask. */
+    suspend fun accountKeyStatus(): AccountKeyStatusResponse? = null
+
     // W10 — per-app env-var KV editor. Values flow ONLY through /set;
     // /list returns names only; /unset removes a name.
     suspend fun serviceEnvList(appId: String): ServiceEnvListResponse

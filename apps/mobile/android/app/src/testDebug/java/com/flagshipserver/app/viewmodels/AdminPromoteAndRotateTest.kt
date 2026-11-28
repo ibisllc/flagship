@@ -132,7 +132,7 @@ class AdminPromoteAndRotateTest {
         return incomingVm.phase.first()
     }
 
-    @Test fun promoteOn_incomingBecomesBareRootAdmin() = runTest {
+    @Test fun promoteOn_incomingBecomesAnAdminByGrantWithoutTheRoot() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
         val adminUmk = seedAdmin(server)
 
@@ -145,11 +145,11 @@ class AdminPromoteAndRotateTest {
         val joined = runJoin(server, adminUmk, promote = true, adminRootSeed = adminRootSeed)
         assertTrue("must join: $joined", joined is JoinDevicePhase.Joined)
 
-        // The joined (account) profile now holds the SAME admin root ⇒ admin.
+        // docs/account-key-rotation.md: the promoted device gets an admin grant to its own key; the bare root
+        // stays on the device that held it. The joiner pins the root's public key from the SAS-checked bundle.
         Keystore.setActiveProfile(account)
-        assertTrue("promoted device must hold the admin root", Keystore.hasAdminRoot())
-        assertEquals(expectedPub, Keystore.adminRootPubHex())
-        assertArrayEquals(adminRootSeed, Keystore.adminRootSeed())
+        assertFalse("the root no longer travels in the bundle", Keystore.hasAdminRoot())
+        assertEquals(expectedPub, Keystore.adminRootPin())
     }
 
     @Test fun promoteOff_incomingStaysNonAdmin() = runTest {
@@ -167,6 +167,7 @@ class AdminPromoteAndRotateTest {
         Keystore.setActiveProfile(account)
         assertFalse("a non-promoted join must NOT hold the admin root", Keystore.hasAdminRoot())
         assertNull(Keystore.adminRootSeed())
+        assertEquals(Keystore.run { setActiveProfile("$account-admin"); adminRootPubHex() }, Keystore.run { setActiveProfile(account); adminRootPin() })
     }
 
     @Test fun bundle_carriesWrappedAdminRoot_onlyWhenPresent() {
@@ -185,6 +186,12 @@ class AdminPromoteAndRotateTest {
         )
         val roundTripped = PairingBundle.fromJsonBytes(withRoot.toJsonBytes())
         assertEquals("33".repeat(32), roundTripped.wrappedAdminRoot)
+        // An old admin's bundle (sealed root) still parses; a current one carries only the root's public key and
+        // leaves the sealed-root field out of the JSON entirely.
+        val current = withRoot.copy(wrappedAdminRoot = null, adminRootPubHex = "55".repeat(32))
+        val json = current.toJsonBytes().decodeToString()
+        assertFalse(json, json.contains("wrappedAdminRoot"))
+        assertEquals("55".repeat(32), PairingBundle.fromJsonBytes(current.toJsonBytes()).adminRootPubHex)
 
         val withoutRoot = PairingBundle(
             umkSeedHex = "11".repeat(32),

@@ -182,13 +182,20 @@ class JoinDeviceViewModel(
                 _phase.value = JoinDevicePhase.Failed(FSStrings.get(R.string.the_device_permission_grant_was_malformed))
                 return
             }
+            // The admin root, from the SAS-checked bundle: an old admin's sealed root, else the root's public key
+            // a current admin sends. An admin-root grant verifies under it, and this device pins it as the root it
+            // checks account-key changes under (docs/account-key-rotation.md).
+            val bundleRoot = bundle.wrappedAdminRoot?.let(HexUtil::decode)?.let {
+                Ed25519Sign.KeyPair.newKeyPairFromSeed(it).publicKey
+            } ?: bundle.adminRootPubHex?.lowercase()?.takeIf { Regex("^[0-9a-f]{64}$").matches(it) }?.let(HexUtil::decode)
             val grantAuthority = when (grant.signerRoot) {
                 "membership" -> irkPub
-                "admin-root" -> bundle.wrappedAdminRoot?.let(HexUtil::decode)?.let {
-                    Ed25519Sign.KeyPair.newKeyPairFromSeed(it).publicKey
-                }
+                "admin-root" -> bundleRoot
                 else -> null
             }
+            // Never `.com`'s word alone: a bundle from before the root's public key rode along leaves the device
+            // unpinned, and it is added again when the account key changes.
+            val pinnedRoot = bundleRoot
             if (grantAuthority == null || !DeviceCapabilityGrant.verify(
                     grantSig, grantAuthority, grant.grantId, grant.username,
                     grant.deviceId, grant.devicePubHex, grant.scopes,
@@ -218,6 +225,8 @@ class JoinDeviceViewModel(
             com.flagshipserver.app.keystore.IrkLineage.findRegistered(umkSeed, HexUtil.encode(irkPub))
                 ?.let { Keystore.adoptRegisteredIrk(it) }
             Keystore.storeAccountDeviceSeed(deviceId, deviceKeyPair.privateKey)
+            Keystore.markAccountDeviceKeyRandom()
+            pinnedRoot?.let { Keystore.setAdminRootPin(HexUtil.encode(it)) }
 
             // 3b. Slice D (D-4) — if the admin PROMOTED this device (sealed the
             //     admin master root into the bundle), unwrap + store it

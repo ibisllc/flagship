@@ -22,6 +22,7 @@ import com.flagshipserver.app.core.JsonHttpTransport
 import com.flagshipserver.app.core.RateLimitedException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.decodeFromString
 
 interface FlagshipServerClient {
@@ -133,6 +134,23 @@ interface FlagshipServerClient {
     suspend fun putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest): Unit = error("account directory unavailable")
     suspend fun deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Long): Unit = error("account directory unavailable")
     suspend fun revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization): Unit = error("account directory unavailable")
+
+    // ---- Account key rotation (docs/account-key-rotation.md) -------------
+    /** POST /api/users/:u/account-key-rotation: apply one hop (the body carries its admin-root signature). */
+    suspend fun applyAccountKeyRotation(username: String, body: JsonObject): JsonObject = error("account key rotation unavailable")
+    /** GET /api/users/:u/account-key-rotations (account read token): `{ keyEpoch, lane }`. */
+    suspend fun accountKeyLane(username: String): JsonObject = error("account key rotation unavailable")
+    /** GET /api/accounts/:u/devices/:id/umk-rotation (device-signed): `{ keyEpoch, deliveries, lane }`. */
+    suspend fun umkRotationDeliveries(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization): JsonObject =
+        error("account key rotation unavailable")
+    suspend fun ackUmkRotation(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, toEpoch: Long): Unit =
+        error("account key rotation unavailable")
+    suspend fun putDeviceReceiveKey(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: JsonObject): Unit =
+        error("account key rotation unavailable")
+    /** POST /api/accounts/:u/devices/:id/key (`flagship/device-key-rotate/v1`; signed inside the body). */
+    suspend fun rotateDeviceKey(accountId: String, deviceId: String, body: JsonObject): Unit = error("account key rotation unavailable")
+    /** GET /api/username/:u: the IRK, admin root and key epoch `.com` holds. */
+    suspend fun accountKeyState(username: String): AccountKeyStateRecord = error("account key state unavailable")
 
     /** Account-level audit log surfaced via /api/users/:u/audit. Used
      *  by the Activity feed to render device-disconnect / device-
@@ -565,6 +583,9 @@ data class WipeRestartRequest(
     /** SEC-REPAIR-001: the new passkey's attestation object (base64url), for the credential the
      *  old IRK signs, so the new record keeps `.com`'s passkey check. */
     val newPasskeyAttestationObject: String? = null,
+    /** The admin root over the same flagship/wipe-restart/v1 bytes: `.com` needs it on an account that pins
+     *  one (every device can derive the old IRK, so it alone does not authorise replacing the account key). */
+    val adminRootSignature: String? = null,
 ) {
     @Serializable
     data class Inner(
@@ -867,7 +888,21 @@ data class AccountDirectoryResponse(
     val grants: List<AccountDirectoryGrant> = emptyList(),
     val selfProfiles: List<AccountDirectorySelfProfile> = emptyList(),
     val managedProfiles: List<AccountDirectoryManagedProfile> = emptyList(),
+    /** Each device's X-Wing receive key (`flagship/device-receive-key/v1`, signed by that device's key). */
+    val receiveKeys: List<AccountDirectoryReceiveKey> = emptyList(),
 )
+
+@Serializable
+data class AccountDirectoryReceiveKey(
+    val deviceId: String,
+    val devicePubHex: String,
+    val xwingPubHex: String,
+    val issuedAt: Long,
+    val signatureHex: String,
+)
+
+/** What `.com` holds for the account's keys (GET /api/username/:u). */
+data class AccountKeyStateRecord(val irkPubHex: String, val adminRootPubHex: String?, val keyEpoch: Long)
 
 /**
  * v1.2 Phase 4 — GET /api/users/:u response shape. Mirrors the iOS
@@ -1774,6 +1809,74 @@ class LiveFlagshipServerClient(
             transport.json.encodeToString(DirectoryDeleteRequest.serializer(), DirectoryDeleteRequest(0)).toByteArray(),
         )
     }
+
+    override suspend fun applyAccountKeyRotation(username: String, body: JsonObject): JsonObject {
+        val r = transport.execute(
+            "POST", "$base/api/users/${java.net.URLEncoder.encode(username.lowercase(), "UTF-8")}/account-key-rotation",
+            body.toString().toByteArray(), "application/json; charset=utf-8", accept = setOf(200),
+        )
+        return transport.json.parseToJsonElement(r.body.decodeToString()) as JsonObject
+    }
+
+    override suspend fun accountKeyLane(username: String): JsonObject {
+        val u = java.net.URLEncoder.encode(username.lowercase(), "UTF-8")
+        return AccountReadTokens.authorize(username) { auth ->
+            val r = transport.execute("GET", "$base/api/users/$u/account-key-rotations", extraHeaders = auth + ("cache-control" to "no-store"), accept = setOf(200))
+            transport.json.parseToJsonElement(r.body.decodeToString()) as JsonObject
+        }
+    }
+
+    override suspend fun umkRotationDeliveries(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization): JsonObject {
+        val r = directoryCall("GET", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/umk-rotation", authorization, null)
+        return transport.json.parseToJsonElement(r.decodeToString()) as JsonObject
+    }
+
+    override suspend fun ackUmkRotation(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, toEpoch: Long) {
+        directoryCall(
+            "POST", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/umk-rotation/ack", authorization,
+            """{"toEpoch":$toEpoch}""".toByteArray(),
+        )
+    }
+
+    override suspend fun putDeviceReceiveKey(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: JsonObject) {
+        directoryCall("PUT", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/receive-key", authorization, body.toString().toByteArray())
+    }
+
+    override suspend fun rotateDeviceKey(accountId: String, deviceId: String, body: JsonObject) {
+        transport.execute(
+            "POST", "$base/api/accounts/${java.net.URLEncoder.encode(accountId.lowercase(), "UTF-8")}/devices/${deviceId.lowercase()}/key",
+            body.toString().toByteArray(), "application/json; charset=utf-8", accept = setOf(200),
+        )
+    }
+
+    override suspend fun accountKeyState(username: String): AccountKeyStateRecord {
+        val encoded = java.net.URLEncoder.encode(username.lowercase(), "UTF-8")
+        val resp = transport.execute(method = "GET", url = "$base/api/username/$encoded", extraHeaders = mapOf("cache-control" to "no-store"), accept = setOf(200))
+        val o = transport.json.parseToJsonElement(resp.body.decodeToString()) as JsonObject
+        fun str(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+        return AccountKeyStateRecord(
+            irkPubHex = requireNotNull(str("irkPub")).lowercase(),
+            adminRootPubHex = str("adminRootPub")?.lowercase(),
+            keyEpoch = (o["keyEpoch"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: 0L,
+        )
+    }
+
+    private suspend fun directoryCall(method: String, path: String, authorization: AccountDirectoryAuthorization, body: ByteArray?): ByteArray =
+        transport.execute(
+            method = method,
+            url = "$base$path",
+            body = body,
+            contentType = body?.let { "application/json; charset=utf-8" },
+            extraHeaders = mapOf(
+                "x-flagship-device-id" to authorization.deviceId,
+                "x-flagship-device-pub" to authorization.signerPubHex,
+                "x-flagship-request-id" to authorization.requestId,
+                "x-flagship-issued-at" to authorization.issuedAt.toString(),
+                "x-flagship-signature" to authorization.signatureHex,
+                "cache-control" to "no-store",
+            ),
+            accept = setOf(200),
+        ).body
 
     private suspend fun directoryMutation(
         method: String,

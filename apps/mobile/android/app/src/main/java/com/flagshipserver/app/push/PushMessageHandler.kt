@@ -31,6 +31,15 @@ object PushMessageHandler {
             return
         }
 
+        // An admin device changed the account key (docs/account-key-rotation.md): fetch and check the new one
+        // now; the notice says to open Flagship (names no device or account).
+        if (com.flagshipserver.app.keystore.AccountKeyService.matchesPush(data)) {
+            com.flagshipserver.app.keystore.AccountKeyService.request()
+            data["title"] = "Flagship"
+            data["body"] = FSStrings.get(R.string.akr_push_body)
+            data.remove("deepLink")
+        }
+
         // Provisioning observability — a canonical `provision-status` push
         // (category=="provision-status") is WAKE-ONLY: the foregrounded
         // install-progress screen polls GET /api/order/<serial>/status to

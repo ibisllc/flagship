@@ -116,6 +116,9 @@ fun SettingsTab() {
         }
         composable("delete-account") { AccountDeletionScreen(nav) }
         composable("trusted-devices") { TrustedDevicesScreen(nav) }
+        composable("rotate-account-key/{deviceId}") { e ->
+            com.flagshipserver.app.ui.screens.RotateAccountKeyScreen(nav, e.arguments?.getString("deviceId").orEmpty())
+        }
         // H5 — Replace-device FINALIZE (24h grace countdown + Complete).
         // Reached when initiate returns Pending OR from the M4 banner's
         // "Finalize now"; carries the server-reported completesAt (Unix ms).

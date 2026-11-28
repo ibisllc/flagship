@@ -131,13 +131,19 @@ fun TrustedDevicesScreen(nav: NavController) {
     var sheetTarget by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
     var confirmRemove by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
     var removeFailure by remember { mutableStateOf<String?>(null) }
+    var askUnlock by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
+    val keyProgress = vm.keyProgress.collectAsState().value
     var snackbarMsg by remember { mutableStateOf<String?>(null) }
     var nameEditMode by remember { mutableStateOf<String?>(null) }
     var nameEditTarget by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
     var nameDraft by remember { mutableStateOf("") }
     var nameLocked by remember { mutableStateOf(false) }
     val canManageNames = Keystore.hasAdminRoot()
-    LaunchedEffect(Unit) { vm.load() }
+    val podClients = com.flagshipserver.app.core.LocalPodClients.current
+    LaunchedEffect(Unit) {
+        vm.load()
+        if (canManageNames) vm.loadKeyProgress(app.pods.value) { pod -> podClients.screens(pod) }
+    }
 
     FSScreen(
         title = stringResource(R.string.trusted_devices),
@@ -173,6 +179,9 @@ fun TrustedDevicesScreen(nav: NavController) {
             snapshot = pendingRePair,
             onFinalize = { completesAt -> nav.navigate("replace-finalize/$completesAt") },
         )
+        keyProgress?.takeIf { !it.complete }?.let { p ->
+            AccountKeyProgressCard(p, onRetry = { scope.launch { vm.loadKeyProgress(app.pods.value) { pod -> podClients.screens(pod) } } })
+        }
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             FSSectionHeader(stringResource(R.string.trusted_devices))
             Text(
@@ -303,7 +312,9 @@ fun TrustedDevicesScreen(nav: NavController) {
                         iconTint = MaterialTheme.colorScheme.error,
                         titleColor = MaterialTheme.colorScheme.error,
                         onClick = {
-                            confirmRemove = target
+                            // An admin device first asks whether someone else could unlock it: then the account
+                            // key changes with the removal (docs/account-key-rotation.md).
+                            if (canManageNames) askUnlock = target else confirmRemove = target
                             sheetTarget = null
                         },
                         modifier = Modifier.semantics { contentDescription = "trusted-device-remove" },
@@ -386,11 +397,48 @@ fun TrustedDevicesScreen(nav: NavController) {
         )
     }
 
+    askUnlock?.let { target ->
+        AlertDialog(
+            onDismissRequest = { askUnlock = null },
+            title = { Text(stringResource(R.string.akr_question_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    com.flagshipserver.app.ui.components.FSSecondaryButton(
+                        label = stringResource(R.string.akr_option_no),
+                        onClick = { askUnlock = null; confirmRemove = target },
+                        block = true,
+                        modifier = Modifier.testTag("akr-option-no"),
+                    )
+                    com.flagshipserver.app.ui.components.FSSecondaryButton(
+                        label = stringResource(R.string.akr_option_yes),
+                        onClick = { askUnlock = null; nav.navigate("rotate-account-key/${target.deviceId}") },
+                        block = true,
+                        modifier = Modifier.testTag("akr-option-yes"),
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { askUnlock = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
     confirmRemove?.let { target ->
         AlertDialog(
             onDismissRequest = { confirmRemove = null },
             title = { Text(fsString(R.string.remove_device_from_account_title, target.displayName)) },
-            text = { Text(stringResource(R.string.remove_device_from_account_message)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    Text(stringResource(R.string.remove_device_from_account_message))
+                    // A browser's account key sits under a passphrase that can be guessed offline.
+                    if (canManageNames && target.platformClass == "web") {
+                        Text(stringResource(R.string.akr_browser_note), modifier = Modifier.testTag("akr-browser-note"))
+                        com.flagshipserver.app.ui.components.FSSecondaryButton(
+                            label = stringResource(R.string.akr_change_account_key),
+                            onClick = { confirmRemove = null; nav.navigate("rotate-account-key/${target.deviceId}") },
+                            modifier = Modifier.testTag("akr-browser-rotate"),
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {

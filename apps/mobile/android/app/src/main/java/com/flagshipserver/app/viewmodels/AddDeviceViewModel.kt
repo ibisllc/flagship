@@ -224,22 +224,12 @@ class AddDeviceViewModel(
             val sig = signAdmit(admit)
             val seed = umkSeed()
             require(seed.size == 32) { "account UMK seed must be 32 bytes" }
-            // Slice D (D-4) — seal the admin master root into the bundle ONLY
-            // when the admin explicitly toggled promote ON in this ceremony AND
-            // this device actually holds the root. Off ⇒ the joining device is a
-            // plain non-admin member (the default). Sealed the same way the UMK
-            // is (rides inside the AEAD-sealed bundle).
-            val wrappedAdminRoot: String? =
-                if (_promoteToAdmin.value && canOfferPromote) {
-                    val rootSeed = adminRootSeed()
-                    require(rootSeed != null && rootSeed.size == 32) {
-                        "admin root seed must be 32 bytes to promote"
-                    }
-                    HexUtil.encode(rootSeed)
-                } else {
-                    null
-                }
-            val promoted = wrappedAdminRoot != null
+            // Owner decision 2026-11-27 (docs/account-key-rotation.md): a promoted device becomes an admin by an
+            // admin-root-signed grant with the `admin` scope to its own random key. The bare admin root no longer
+            // travels in the bundle, so it stays on the device that holds it (and the recovery escrow).
+            val promoted = _promoteToAdmin.value && canOfferPromote
+            if (promoted) require(adminRootSeed()?.size == 32) { "admin root seed must be 32 bytes to promote" }
+            val wrappedAdminRoot: String? = null
             val scopes = if (promoted) {
                 com.flagshipserver.app.core.DeviceCapabilityGrant.DEVICE_SCOPE_ORDER
             } else {
@@ -250,11 +240,16 @@ class AddDeviceViewModel(
             val grantBytes = com.flagshipserver.app.core.DeviceCapabilityGrant.canonicalBytes(
                 grantId, username, deviceId, devicePubHex, scopes, admit.issuedAt, expiresAt,
             )
-            val grantSigner = if (promoted) {
-                com.google.crypto.tink.subtle.Ed25519Sign(requireNotNull(adminRootSeed()))
+            // Every grant is signed by the admin root (members get member scopes): the account key that every
+            // device can derive signs only the admit. A device without the root keeps the account-key path.
+            val rootSeed = if (canPromote()) adminRootSeed()?.takeIf { it.size == 32 } else null
+            val byRoot = rootSeed != null
+            val grantSigner = if (rootSeed != null) {
+                com.google.crypto.tink.subtle.Ed25519Sign(rootSeed)
             } else {
                 Keystore.deriveIRK(FSStrings.get(R.string.authorize_the_new_device))
             }
+            val rootPubHex = rootSeed?.let { HexUtil.encode(com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(it).publicKey) }
             val bundle = PairingBundle(
                 umkSeedHex = HexUtil.encode(seed),
                 admit = admit,
@@ -267,13 +262,14 @@ class AddDeviceViewModel(
                     scopes = scopes,
                     issuedAt = admit.issuedAt,
                     expiresAt = expiresAt,
-                    signerRoot = if (promoted) "admin-root" else "membership",
+                    signerRoot = if (byRoot) "admin-root" else "membership",
                 ),
                 grantSignature = HexUtil.encode(grantSigner.sign(grantBytes)),
                 irkPubHex = irkPubHex(),
                 wrappedAdminRoot = wrappedAdminRoot,
-                grantPqSignature = (if (promoted) Keystore.adminRootPubHex() else irkPubHex())?.let { pub ->
-                    grantCompanion(if (promoted) "admin-root" else "account-irk", grantBytes, grantSigner, pub)
+                adminRootPubHex = rootPubHex,
+                grantPqSignature = (rootPubHex ?: irkPubHex())?.let { pub ->
+                    grantCompanion(if (byRoot) "admin-root" else "account-irk", grantBytes, grantSigner, pub)
                 },
             )
             val sealed = session.seal(bundle.toJsonBytes())

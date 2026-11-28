@@ -75,6 +75,18 @@ class TrustedDevicesViewModel(
     private val _pendingRePair = MutableStateFlow<PendingRePairSnapshot?>(null)
     val pendingRePair: StateFlow<PendingRePairSnapshot?> = _pendingRePair.asStateFlow()
 
+    private val _keyProgress = MutableStateFlow<RotateAccountKeyViewModel.Progress?>(null)
+    /** After an account key change: devices and servers that have the new key (admin devices only). */
+    val keyProgress: StateFlow<RotateAccountKeyViewModel.Progress?> = _keyProgress.asStateFlow()
+
+    suspend fun loadKeyProgress(pods: List<com.flagshipserver.app.core.PodInfo>, clientFor: (com.flagshipserver.app.core.PodInfo) -> com.flagshipserver.app.api.ScreensClient?) {
+        val user = username() ?: return
+        val active = profile() ?: return
+        val vm = RotateAccountKeyViewModel(server, user, active.deviceId, { null }, { pods }, clientFor)
+        vm.refreshProgress()
+        _keyProgress.value = vm.progress.value
+    }
+
     fun load() {
         viewModelScope.launch {
             val user = username()

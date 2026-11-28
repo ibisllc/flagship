@@ -43,6 +43,8 @@ class WipeRestartViewModel(
     private val webAuthn: WebAuthnProvider,
     private val username: () -> String?,
     private val rng: SecureRandom = SecureRandom(),
+    private val hasAdminRoot: () -> Boolean = { Keystore.hasAdminRoot() },
+    private val adminRootKey: suspend (String) -> Ed25519Sign = { r -> Keystore.adminRootKey(r) },
 ) : ViewModel() {
     private val _phase = MutableStateFlow<WipeRestartPhase>(WipeRestartPhase.Idle)
     val phase: StateFlow<WipeRestartPhase> = _phase.asStateFlow()
@@ -119,6 +121,12 @@ class WipeRestartViewModel(
             issuedAt = issuedAt,
         )
         val signature = oldIrkSign.sign(canonical)
+        val adminRootSignature = try {
+            if (hasAdminRoot()) HexUtil.encode(adminRootKey(FSStrings.get(R.string.authorize_wipe)).sign(canonical)) else null
+        } catch (e: Throwable) {
+            _phase.value = WipeRestartPhase.Failed(FSStrings.get(R.string.couldnt_access_your_current_key, UserErrorText.reason(e)))
+            return
+        }
 
         // 5 — POST.
         _phase.value = WipeRestartPhase.Posting
@@ -138,6 +146,7 @@ class WipeRestartViewModel(
                     signature = HexUtil.encode(signature),
                     idempotencyKey = idempotencyKey,
                     newPasskeyAttestationObject = webAuthn.attestationFor(credentialId),
+                    adminRootSignature = adminRootSignature,
                 ),
                 ifMatch = currentEtag,
             )
