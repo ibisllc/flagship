@@ -164,7 +164,14 @@ over once "let's start 0.5" is said.
   export and refuses server-code ceremonies, `e5197fd91`). Before any client issues org server codes: the admin
   client makes an enrolment key carried only in the recipe, `canonicalOrgServerCode` commits to its public key, and
   `handleOrgServerRegister` also needs its signature beside the box's STK (not `delegatedPubKeyHex`). Shared vectors
-  TS, Swift, Kotlin.
+  TS, Swift, Kotlin. **Built on `release/0.5` (2026-11-28).** `flagship/org-server-code/v2` names `enrolmentPubKeyHex`
+  (never the delegated key); the recipe carries `enrolmentSeedHex`; `install-helper sign-server-register` adds
+  `enrolmentSignature` (the same register bytes, by the enrolment key); `.com` answers 403 `org-enrolment-signature`
+  without it and leaves the code unused. Key makers and checks in TS, Swift, Kotlin; vectors `test-vectors/org-servers`
+  `enrolment` (good; none; another key; the STK in its place; a code from another org). Ceremonies refuse every
+  server-code version. Order: the endorsed box release (its install-helper signs) before org recipes are made; old
+  v1 codes are void. Open: no client issues org server codes yet (no screen builds an org recipe); the seed stays in
+  the box's `install-blob.json` after registration (harmless: a code registers once).
 - **Org reads need the org read token** (external report, 2026-11-27). **Built on `release/0.5` (2026-11-28).** `.com`
   refuses every tokenless org GET (401 `org-read-token-required`, no compatibility window, owner) except the public
   `plan` and the invite offer (invite-key proof alone; its answer now carries the org's `authority`, so a joiner
@@ -197,7 +204,18 @@ over once "let's start 0.5" is said.
   must count, an evaded freeze. One at a time (owner, 2026-11-27): while one delayed-change notice is open (observed,
   not yet executed, vetoed or withdrawn), `.com` refuses to open another for that org, and the protocol rule holds it
   in every verifier: a delayed change's observed open time must be at or after the previous one's execution. Vector:
-  two notices opened in parallel, the second is refused.
+  two notices opened in parallel, the second is refused. **Built on `release/0.5` (2026-11-28).** `.com` stamps a
+  notice ceremony (payload `{ record }`) and keeps it as a `notice` object; `GET …/authority` serves `noticeOpenedAt`;
+  every verifier takes it (TS, the box's org pin keeping the first time it saw, Swift, Kotlin, webapp bundle).
+  Codes `notice-unobserved`, `notice-backdated` (dated more than 5 minutes from `openedAt`), `notice-early` (before
+  `openedAt + wait`), `notice-overlap`; `.com` `409 org-notice-open`, `org-veto-late`. Pending approvals and vetoes
+  (`verifyOrgApprovers`, ported as `verifyApprovers`) test the freeze at the signed time or now; freezes within 5
+  minutes of arrival, records within 7 days. Vectors (`test-vectors/org-authority` chains and `approvers`, all four
+  ports): backdated, late veto that now counts, evaded freeze, parallel notices. The approvals inbox (webapp, iOS,
+  Android) shows when Flagship saw a notice. Main's temporary refusal is gone on this branch. Order: `.com` with the
+  box release and store builds (older clients cannot verify a chain holding a delayed change; none exist in
+  production). Open: no client builds or withdraws a notice yet (a notice closes when executed, vetoed, superseded or
+  lapsed).
 - **Per-app visitor identity scoped to the hosting account** (external report, 2026-11-27). App AID v2 =
   HKDF(UMK, `flagship/app-aid/v2|<accountZone>|<appRef>`) in all four twins, their consumers and vectors; a flag day
   (owner: breaking is fine). Settle the zone for fshp.app, custom domains and org zones first.
