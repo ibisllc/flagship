@@ -34,9 +34,9 @@ import {
   type UninstallServiceRequest,
   type UpdateOrder,
 } from "@flagship/protocol";
-import { classifyEgressProbe, isRefusal, rawHttps, sansConfined, signatureVariants, wsOutcome, ZERO_SIG, type SignatureVariant } from "../../lib/adversarial.js";
+import { classifyEgressProbe, classifyKeepAlivePair, isRefusal, rawHttps, sansConfined, signatureVariants, wsOutcome, ZERO_SIG, type SignatureVariant } from "../../lib/adversarial.js";
 import { pair, pods, type Account, type Box } from "../../lib/fleet.js";
-import { CONTROL, SERVICES, SkipError, assert, certInfo, http, postJson, short, tryHttp, type Resp } from "../../lib/harness.js";
+import { CONTROL, SERVICES, SkipError, assert, certInfo, http, postJson, short, sleep, tryHttp, type Resp } from "../../lib/harness.js";
 import { echoedFlagshipHeaders, installWhoami, setMode, waitServing } from "../gating.js";
 import { PY_APP } from "../runtimes.js";
 import type { Group } from "../types.js";
@@ -366,6 +366,44 @@ export const adversarial: Group = {
         }
         if (unclear === targets.length) throw new SkipError(`no probe answer could be read: ${seen.join(" ")}`);
         return seen.join(" ");
+      });
+
+      await rec.check("AT-LIVE-13b plain-HTTP keep-alive: after an allowed Host on one :80 connection, a denied Host on the SAME connection is refused by the gateway — catches a per-connection decision that splices later requests through (58f6f453b)", async () => {
+        const py = `https://${PY_APP}.${fqdn}`;
+        const serviceId = `${A.username}--${PY_APP}`;
+        const [allowed, denied] = ["example.com", "example.net"];
+        const probe = async () => (await tryHttp(`${py}/probe80?first=${allowed}&second=${denied}`, {}, 40_000));
+        const first = await probe();
+        if (first.status === 404) throw new SkipError("the python app on A1 has no /probe80 route (deployed before it existed)");
+        if (first.status !== 200) throw new SkipError(`the runtimes group's python app is not up on A1 (${first.status}; runtimes ${groupOk("runtimes") ? "passed" : "did not pass"})`);
+        const access = await http(`https://${fqdn}/api/screens/services/${encodeURIComponent(serviceId)}/access`, { headers: s });
+        const before = normalizeAccessList(String(access.json?.list ?? access.json?.access?.list ?? ""));
+        const send = (list: string) => {
+          const grant: AppAccessGrant = { serverDomain: fqdn, serviceId, listSha256: accessListSha256(list), issuedAt: Date.now() };
+          return postJson(`https://${fqdn}/api/screens/services/${encodeURIComponent(serviceId)}/access`, { list, grant, signature: hex(signAppAccessGrant(grant, adminRoot)) }, s);
+        };
+        const list = withRule(withRule(before, "allow", allowed), "deny", denied);
+        const set = await send(list);
+        assert(set.status === 200, `the owner's list allowing ${allowed} and denying ${denied}: ${set.status} ${short(set.text)}`);
+        try {
+          let p: Record<string, unknown> | null = null;
+          let v = classifyKeepAlivePair(null);
+          for (let i = 0; i < 12; i++) {
+            p = (await probe()).json;
+            v = classifyKeepAlivePair(p);
+            if (v !== "first-refused") break;
+            await sleep(5000);
+          }
+          assert(v !== "escaped", `the denied host answered on the allowed host's connection: ${short(p, 240)}`);
+          assert(v !== "first-refused", `${allowed} stayed refused after the owner allowed it: ${short(p, 200)}`);
+          if (v === "closed") throw new SkipError(`the connection closed after the first answer (${p?.firstStatus}), so no second request rode it: safe, not proven`);
+          if (v === "unclear") throw new SkipError(`no readable answer: ${short(p, 200)}`);
+          assert(p?.sameConnection === true, `the second request did not ride the first connection: ${short(p, 200)}`);
+          return `${allowed} ${p?.firstStatus}, then ${denied} on the same connection: ${p?.secondStatus} from the gateway`;
+        } finally {
+          await sleep(1100);
+          await send(before).catch(() => undefined);
+        }
       });
 
       // ── TLS and routing ─────────────────────────────────────────────────

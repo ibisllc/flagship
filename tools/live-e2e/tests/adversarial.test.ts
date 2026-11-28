@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyEgressProbe, flipSig, isRefusal, sansConfined, signatureVariants, statusOf, ZERO_SIG } from "../lib/adversarial.js";
+import { classifyEgressProbe, classifyKeepAlivePair, flipSig, isRefusal, sansConfined, signatureVariants, statusOf, ZERO_SIG } from "../lib/adversarial.js";
 
 const VALID = "a1".repeat(64);
 
@@ -34,6 +34,17 @@ describe("live adversarial helpers", () => {
     expect(classifyEgressProbe({ reached: false, error: "<urlopen error [Errno -2] Name or service not known>" })).toBe("fenced");
     expect(classifyEgressProbe({ reached: false, error: "something new" })).toBe("unclear");
     expect(classifyEgressProbe(null)).toBe("unclear");
+  });
+
+  it("reads a plain-HTTP keep-alive pair: only the gateway's own refusal of the second Host is fenced", () => {
+    const base = { first: "example.com", second: "example.net", firstStatus: 200, firstDenied: false, kept: true, sameConnection: true };
+    expect(classifyKeepAlivePair({ ...base, secondStatus: 403, secondDenied: true })).toBe("fenced");
+    expect(classifyKeepAlivePair({ ...base, secondStatus: 200, secondDenied: false })).toBe("escaped");
+    expect(classifyKeepAlivePair({ ...base, secondStatus: 403, secondDenied: false })).toBe("escaped");
+    expect(classifyKeepAlivePair({ ...base, kept: false })).toBe("closed");
+    expect(classifyKeepAlivePair({ ...base, firstStatus: 403, firstDenied: true })).toBe("first-refused");
+    expect(classifyKeepAlivePair({ first: "example.com", error: "timed out" })).toBe("unclear");
+    expect(classifyKeepAlivePair(null)).toBe("unclear");
   });
 
   it("keeps a certificate inside one account's names", () => {

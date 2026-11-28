@@ -63,6 +63,26 @@ export function classifyEgressProbe(p: { reached?: unknown; error?: unknown } | 
   return "unclear";
 }
 
+export type KeepAliveVerdict = "fenced" | "escaped" | "closed" | "first-refused" | "unclear";
+
+/**
+ * What the python app's `/probe80` answer means (AT-LIVE-13b): two plain-HTTP requests on one keep-alive connection,
+ * an allowed Host and then a denied one. `fenced`: the gateway refused the second request itself (its 403 and sentence)
+ * on the same connection. `escaped`: the second request got any answer that is not the gateway's refusal (the denied
+ * host was reached through the first host's connection, the pre-58f6f453b splice). `closed`: the connection was not
+ * kept after the first answer, so the pair could not be sent (safe, but proves nothing). `first-refused`: the allowed
+ * host was refused, so the access list did not take.
+ */
+export function classifyKeepAlivePair(p: Record<string, unknown> | null | undefined): KeepAliveVerdict {
+  if (!p || typeof p !== "object") return "unclear";
+  if (p.firstDenied === true || p.firstStatus === 403) return "first-refused";
+  if (typeof p.firstStatus !== "number") return "unclear";
+  if (p.kept !== true) return "closed";
+  if (typeof p.secondStatus !== "number") return "unclear";
+  if (p.secondDenied === true && p.secondStatus === 403) return "fenced";
+  return "escaped";
+}
+
 /** Every SAN is one of this account's names (`<x>.<user>.<apex>`, `*.<user>.<apex>` or deeper). */
 export function sansConfined(sans: readonly string[], user: string, apex: string): boolean {
   const suffix = `.${user}.${apex}`.toLowerCase();
