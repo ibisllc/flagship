@@ -568,7 +568,20 @@ How the binding decisions were built, and what is still open. Not deployed, not 
   threshold, max(k_gov, k_destroy, k_site, overturn k, ⌈2n/3⌉), to change the bylaws or move the founder role, plus the
   new founder's own approval), `founder-removal` (the founder's notice, exactly 7 days, removes one admin, thresholds
   clamped; vetoed by `vetoK` other admins or by the bylaws' overturn set), `recovery` (k_gov counting a recovery seat,
-  14 days, any other admin vetoes) and `overturn` (the bylaws' set restores an admin a founder-removal took out). Every
+  14 days, any other admin vetoes) and `overturn` (the bylaws' set restores an admin a founder-removal took out).
+  **Delayed changes are observed by `.com` (0.5, external report 2026-11-27).** A founder-removal or recovery notice is
+  opened as a ceremony keyed by its body hash (payload `{ record }`, the record it names); `.com` stamps `openedAt` on
+  its own clock and serves it as `noticeOpenedAt` (sha256 → ms) on `GET …/authority`. Every verifier takes it through
+  `OrgChainOptions.noticeOpenedAt` (TS, the box's org pin, which keeps the first time it saw, Swift, Kotlin, the
+  webapp bundle): the notice must be dated within 5 minutes of `openedAt` (`notice-backdated`; none observed:
+  `notice-unobserved`), its veto window is `[openedAt, openedAt + wait)`, it applies no earlier than
+  `openedAt + wait` (`notice-early`), and it must be observed at or after the previous delayed change took effect
+  (`notice-overlap`). One at a time: `.com` refuses a second notice while one is open (observed and not executed,
+  vetoed, superseded by a newer record, or lapsed 7 days after its wait; `409 org-notice-open`). Vetoes must name an
+  observed notice, be dated in its window and arrive before it closes (`org-veto-late`); freezes are dated within 5
+  minutes of arrival, records within 7 days. Pending approvals and vetoes (`verifyOrgApprovers`, ported as
+  `verifyApprovers`) count a freeze at the signed time or now. The approvals inbox shows when Flagship saw a notice.
+  Every
   new or re-keyed admin approves the record with its new key (consent). Freezes: one admin, at most 72 h, the second
   freeze by the same admin within 7 days is void, overturned by the bylaws' set ("Restore my access"; the frozen seat may
   open that one ceremony). Seats: invite (pseudonym digest mandatory) → accept (seat member key, UMK-derived per org) →
@@ -588,12 +601,19 @@ How the binding decisions were built, and what is still open. Not deployed, not 
 
 **Branch `0.4/enterprise-servers` (2026-11-15):**
 
-- **Org servers.** `flagship/org-server-code/v1` is the org's AuthCode: it names the org and its authority
+- **Org servers.** `flagship/org-server-code/v2` is the org's AuthCode (v2, 0.5: it also commits to an
+  enrolment key, below): it names the org and its authority
   genesis (what the box pins in place of `adminRootPub`), approved by one org admin or a `servers-add` seat
   (`verifyOrgServerCode`, the same predicate as the box). `.com`: `POST /api/orgs/<id>/servers/code`
   (domain `<server>.<orgName>.<apex>`, plan lapse stops new servers, refusal `org-add-server-refused`),
   `POST …/servers/register` (the box's STK signs `flagship/org-server-register/v1` over the code's hash; one
-  registration per code; the approver must still hold the right), `GET …/servers`. The server row goes into
+  registration per code; the approver must still hold the right), `GET …/servers`. **Enrolment key (0.5, external
+  report 2026-11-27):** the admin's client makes an Ed25519 enrolment key per code (`newOrgServerEnrolmentKey`,
+  Swift `newServerEnrolmentKey`, Kotlin `newEnrolmentKey`); the code carries its public key, its seed rides only in
+  the recipe (`enrolmentSeedHex`, never sent to `.com`), and the box signs the registration bytes with it beside the
+  STK (`install-helper sign-server-register` → `enrolmentSignature`); `.com` refuses a registration without it
+  (`org-enrolment-signature`; a refused attempt leaves the code unused), so a code or its serial alone registers no
+  box. No client issues org server codes yet (no screen builds an org recipe). The server row goes into
   `servers` under the org's name. No migration: new object kinds live in `org_objects` (0141).
 - **Key ring and offboarding rotations (E5).** `flagship/org-key-ring/v1`: each shared secret (CGK, directory
   key, archive keys per server, disk key per server) is a versioned random key hybrid-sealed (X-Wing,
