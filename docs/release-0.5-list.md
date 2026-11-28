@@ -140,6 +140,29 @@ over once "let's start 0.5" is said.
   learn to send the token through this very lane), then the `.com` that gates it; a box that never took that release
   stops seeing update orders and needs an owner action or a reburn.
 
+- **Org server codes bind to the real box** (external report, 2026-11-27; main keeps unredeemed codes out of the
+  export and refuses server-code ceremonies, `e5197fd91`). Before any client issues org server codes: the admin
+  client makes an enrolment key carried only in the recipe, `canonicalOrgServerCode` commits to its public key, and
+  `handleOrgServerRegister` also needs its signature beside the box's STK (not `delegatedPubKeyHex`). Shared vectors
+  TS, Swift, Kotlin.
+- **Org reads need the org read token** (external report, 2026-11-27). Main mints and accepts it (seat member key or
+  box STK) and requires it where no shipped client reads. In 0.5 the webapp (`orgSeat.js`), iOS, Android and the
+  daemon (`orgAuthorityPin.ts`, `orgBoxKeys.ts`, `directory/connector.ts`, plan attestation) send it; `/export` and
+  `/keys` need admin or servers-add; `.com` refuses every tokenless org read (no compatibility window, owner). Order:
+  the endorsed box release that sends it, then the enforcing `.com`. Shared token vectors. Branch
+  `feat/org-read-token-0.5`.
+- **Org founder-removal and recovery notices are observed by `.com`** (external report, 2026-11-27; main refuses
+  those entries until then, `6dd5a89b0`). The notice is a ceremony keyed by its body hash, opened at least `wait`
+  before the append by `.com`'s `openedAt`; the veto window is `[openedAt, openedAt + wait)`; a new `OrgChainOptions`
+  input carries the observed open time in every verifier (TS protocol, daemon pin, Swift, Kotlin, webapp bundle).
+  Pending approvals and vetoes refuse `notAfter < now` and test the freeze at the signed time or now (as
+  `authorizeOrgOrder` does); records get a two-sided `issuedAt` bound. Vectors: a backdated notice, a late veto that
+  must count, an evaded freeze. Owner to decide: may several removals run their windows at once, or one at a time
+  (recommended)?
+- **Per-app visitor identity scoped to the hosting account** (external report, 2026-11-27). App AID v2 =
+  HKDF(UMK, `flagship/app-aid/v2|<accountZone>|<appRef>`) in all four twins, their consumers and vectors; a flag day
+  (owner: breaking is fine). Settle the zone for fshp.app, custom domains and org zones first.
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in
