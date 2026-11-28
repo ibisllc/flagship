@@ -68,24 +68,27 @@ over once "let's start 0.5" is said.
   (backend, non-breaking) is on `main`: `edSync` refuses any key that is not canonical or is of small order
   (`isAcceptableEd25519PublicKey`) before the memo and the native path; `.com` never attests such a share key; the box
   refuses it as a share member key; shared vectors `packages/protocol/test-vectors/ed25519-low-order/` (TS, Rust).
-  Lenient verifiers remain on the clients: CryptoKit (iOS) accepts 10 of the 14 vector keys, the identity key for every
-  message; Tink 1.13 (Android) and the webapp's noble/WebCrypto do too. With 0.5:
-  1. iOS: one classical Ed25519 helper that refuses these keys before CryptoKit; voi.ci (`CanonicalJson.swift` verify)
-     on the strict `PqHybrid` verifier, as Android already is; refuse them at first-sight box-key pins
-     (`SecretRequestCoordinator`).
-  2. Android: guard every Tink `Ed25519Verify` (or move to BouncyCastle `ed25519VerifyStrict`); refuse at `FirstContact`.
-  3. Webapp and voi.ci site: the same rule in both `voiciCore.js` copies, `rescue.js` and every WebCrypto-only Ed25519
-     check (`keystore.js`, `serverShare(s).js`, `bootApproval.js`, `boxKeyPins.js`, `maintainerTrust.js`, the Firefox
-     extension's `daemonStatus.js`); new shell number, signed shell.
-  4. Go boot helper (`installer/unseal-helper`, `lease.go` and `v2.go` verifies): the same guard. Keys there are pinned,
-     so it is consistency only; it rides the initramfs, so test a real unlock first.
-  5. Swift, Kotlin and Go run the shared vectors.
+  Items 1-5 built 2026-11-28 on release/0.5; `npm run parity` is green (every port reads the vectors):
+  1. ~~iOS~~ done: `Ed25519Keys` + `isValidCheckedSignature` (FlagshipAPI, CFlagshipPQ's strict point decode) in front of
+     every CryptoKit verify; voi.ci `CanonicalJson.ed25519VerifyHex` on `PqHybrid.ed25519VerifyStrict`;
+     `SecretRequestCoordinator` never takes a refused key at first sight.
+  2. ~~Android~~ done: `CheckedEd25519Verify` (Bouncy Castle full validation, then Tink) at every verify;
+     `SecretRequestCoordinator` refuses such a key before `FirstContact.judge`.
+  3. ~~Webapp and voi.ci site~~ done: `lib/edKey.js` (`verifyEd25519`, `verifyEd25519Sync`) behind every verify
+     (`voiciCore.js` both copies, `rescue.js`, `keystore.js`, `serverShare(s).js`, `bootApproval.js`, `boxKeyPins.js`,
+     `maintainerTrust.js`, `accountKeyRotation.js`, `accountKeyChange.js`); the Firefox extension's `daemonStatus.js`
+     has the same rule on y alone. Shell **v264**: the owner signs it. The webapp's own first-sight pin
+     (`serverPins.js`) does not check the key (its tests pin placeholder keys); every verify under it fails anyway.
+  4. ~~Go boot helper~~ done (`internal/unseal/edkey.go`, `lease.go`, `v2.go`). It rides the initramfs: **a real
+     unlock on a box built from this tree before the box release ships**.
+  5. ~~Swift, Kotlin and Go run the shared vectors~~ done (also the webapp).
   6. Decide: full strict verify in `edSync` (noble `zip215: false`: canonical R, cofactorless; honest signatures pass),
      and proof of possession for the share-key attestation (low value: the request already needs the account's admin
      signature and the attestation names no account).
-  7. Hygiene: bind `aidPub` and `adminRootPub` into a v2 `ClaimUsername` signature (`usernameClaim.ts`). Not
+  7. Hygiene (open): bind `aidPub` and `adminRootPub` into a v2 `ClaimUsername` signature (`usernameClaim.ts`). Not
      exploitable today: `D1UsernameStorage.put` writes both only on the first insert, and swapping them would need the
-     victim's own request body (TLS) replayed with other keys inside its 5-minute window.
+     victim's own request body (TLS) replayed with other keys inside its 5-minute window. Needs vectors, `.com`
+     taking v1 and v2, and the webapp, iOS and Android signing v2.
 
 - **Shrink the phone apps** (owner, 2026-11-24). 0.4 added about 6 MB to each app's download: our libwebrtc build
   (`libwebrtc-157-44099203173` carries every video codec; Android arm64 `libjingle_peerconnection_so.so` 12.8 MB
