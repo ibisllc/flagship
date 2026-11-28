@@ -141,6 +141,16 @@ path's Deploy runs the same staged loop with the chat's files.
   is internal (no DNS at all) and each registry host is pinned to the build
   gateway with `--add-host`. AppRunner and `docker build` get these arguments
   automatically once the gateway enforces (`egress/sandboxNetworking.ts`).
+- **What the gateway judges** (`egress/proxy.ts`): on :443 only the
+  ClientHello's SNI, once per connection, and the TLS stream is then spliced
+  end to end. The gateway never sees inside it, so the Host (or `:authority`)
+  in the encrypted request is not judged: a server that answers for several
+  names behind one allowed SNI is reachable under any of them. On :80 the
+  gateway terminates HTTP/1.x and judges every request by its own Host
+  header: each allowed request goes to its own upstream connection, so a
+  keep-alive or pipelined socket can't reach a second host after an allowed
+  one. A missing or doubled Host, a Host on another port and CONNECT are
+  refused; an Upgrade (WebSocket) is judged by its Host, then spliced.
 - **Data stores**: Postgres binds 127.0.0.1 only, so the gateway forwards 5432
   from the apps and staging gateway IPs to it, and `host.flagship.internal`
   points at the bridge gateway instead of `host-gateway`. An app's files

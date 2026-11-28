@@ -1,4 +1,5 @@
 import { connect, createServer, type AddressInfo, type Server, type Socket } from "node:net";
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { connect as tlsConnect } from "node:tls";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseHttpHost, startProxyServer, startTcpForwarder, type ProxyDeps, type ProxyServerHandle } from "../../src/egress/proxy.js";
@@ -177,22 +178,60 @@ describe("upstream address checks", () => {
 });
 
 describe("HTTP proxy (Host)", () => {
-  it("forwards an allowed request head unchanged to the Host, port 80", async () => {
-    const up = await upstream();
+  it("forwards an allowed request to the Host, port 80, on its own upstream connection", async () => {
+    const got: string[] = [];
+    const origin: HttpServer = createHttpServer((q, r) => {
+      got.push(`${q.method} ${q.url} ${q.headers.host} ${q.headers.connection}`);
+      r.end("UPSTREAM-OK");
+    });
+    await new Promise<void>((r) => origin.listen(0, "127.0.0.1", () => r()));
+    cleanups.push(() => new Promise<void>((r) => origin.close(() => r())));
+    const upPort = (origin.address() as AddressInfo).port;
     const dialed: Array<[string, number]> = [];
     const port = await proxy("http", {
       allow: (_s, h) => h === "deb.debian.org",
       resolve: async () => ["151.101.2.132"],
       dial: (a, p) => {
         dialed.push([a, p]);
-        return connect({ host: "127.0.0.1", port: up.port });
+        return connect({ host: "127.0.0.1", port: upPort });
       },
     });
-    const head = "GET /debian/dists/trixie/InRelease HTTP/1.1\r\nHost: deb.debian.org\r\n\r\n";
-    const out = await rawExchange(port, head);
+    const out = await rawExchange(port, "GET /debian/dists/trixie/InRelease HTTP/1.1\r\nHost: deb.debian.org\r\nConnection: keep-alive\r\n\r\n");
+    expect(out).toMatch(/^HTTP\/1\.1 200/);
     expect(out).toContain("UPSTREAM-OK");
     expect(dialed).toEqual([["151.101.2.132", 80]]);
-    expect(up.received().toString()).toBe(head);
+    expect(got).toEqual(["GET /debian/dists/trixie/InRelease deb.debian.org close"]);
+  });
+
+  it("judges an Upgrade by its Host, then splices only that connection", async () => {
+    const up = await upstream("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\nUPSTREAM-OK");
+    const denied: Array<string | null> = [];
+    const port = await proxy("http", {
+      allow: (_s, h) => h === "ws.example.com",
+      resolve: async () => ["93.184.216.34"],
+      dial: () => connect({ host: "127.0.0.1", port: up.port }),
+      onDenied: (_s, h) => denied.push(h),
+    });
+    const ok = await rawExchange(port, "GET /chat HTTP/1.1\r\nHost: ws.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n");
+    expect(ok).toContain("101 Switching Protocols");
+    expect(up.received().toString()).toMatch(/^GET \/chat HTTP\/1\.1\r\n[\s\S]*Upgrade: websocket/);
+    const refused = await rawExchange(port, "GET /chat HTTP/1.1\r\nHost: evil.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n");
+    expect(refused).toMatch(/^HTTP\/1\.1 403 Forbidden/);
+    expect(denied).toEqual(["evil.example.com"]);
+  });
+
+  it("refuses CONNECT on the plain-HTTP port", async () => {
+    let dialed = 0;
+    const port = await proxy("http", {
+      allow: () => true,
+      dial: () => {
+        dialed++;
+        return connect({ host: "127.0.0.1", port: 9 });
+      },
+    });
+    const out = await rawExchange(port, "CONNECT deb.debian.org:443 HTTP/1.1\r\nHost: deb.debian.org\r\n\r\n");
+    expect(out).toMatch(/^HTTP\/1\.1 403 Forbidden/);
+    expect(dialed).toBe(0);
   });
 
   it("answers 403 for a denied Host and never dials", async () => {
