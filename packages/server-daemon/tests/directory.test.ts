@@ -21,6 +21,8 @@ import {
   verifyOrgProposal,
   type OrgConnector,
   type OrgConnectorMapping,
+  deriveOrgInviteKeys,
+  orgInviteAcceptSignature,
 } from "@flagship/protocol";
 import { verifyOrgPin, type OrgPinFile } from "../src/orgAuthorityPin.js";
 import { ConnectorRuntime } from "../src/directory/connector.js";
@@ -30,6 +32,8 @@ import { collectSnapshot, StaticDirectorySource, type DirectoryUser } from "../s
 import { LDAP_DEFAULTS, LdapDirectorySource, ldapConfigFrom } from "../src/directory/ldap.js";
 import { fakeLdapServer } from "./support-fakeLdap.js";
 
+// The invite key a fixed link key derives (test-vectors/org-invite-key).
+const IK = deriveOrgInviteKeys(new Uint8Array(32).fill(0x33));
 const fixtures = resolve(import.meta.dirname, "fixtures/scim");
 const TOKEN = "scim-token-0123456789abcdef0123456789";
 const TOKEN_SHA = createHash("sha256").update(TOKEN).digest("hex");
@@ -260,6 +264,7 @@ describe("the connector runtime", () => {
     const posted: any[] = [];
     let proposals: any[] = [];
     let invites: any[] = [];
+    let accepts: any[] = [];
     let planLive = false;
     const notes: string[] = [];
     const fetchImpl = (async (url: string, init?: RequestInit) => {
@@ -273,7 +278,7 @@ describe("the connector runtime", () => {
       if (path === "/servers") return ok({ servers: [{ serverDomain: HOST }] });
       if (path === "/keys") return ok({ seatKems, boxKems: [], rings: [] });
       if (path === "/proposals") return ok({ proposals });
-      if (path === "/seats") return ok({ invites });
+      if (path === "/seats") return ok({ invites, accepts });
       return new Response("{}", { status: 404 });
     }) as typeof fetch;
     const rt = new ConnectorRuntime({
@@ -309,7 +314,7 @@ describe("the connector runtime", () => {
 
     // The admin invited her (seat M of the vectors, already granted in the pinned seat book) and recorded it.
     const seatM = A.keys["M member"].seatId as string;
-    const invite = { orgId: A.orgId, seatId: seatM, labelSha256: "aa".repeat(32), rolesHash: orgSeatRolesHash([{ role: "member" }]), oarVersion: 1, issuedAt: NOW, expiresAt: NOW + 86_400_000 };
+    const invite = { orgId: A.orgId, seatId: seatM, labelSha256: "aa".repeat(32), rolesHash: orgSeatRolesHash([{ role: "member" }]), oarVersion: 1, issuedAt: NOW, expiresAt: NOW + 86_400_000, inviteKeyPub: IK.inviteKeyPub };
     const by = (order: Uint8Array) => [signOrgApproval({ orgId: A.orgId, oarVersion: 1, order, seatId: B.seatId, adminKeyId: B.keyId, issuedAt: NOW, notAfter: NOW + 86_400_000 }, B.secret)];
     const inviteOrder = canonicalOrgSeatInvite(invite);
     const statement = { orgId: A.orgId, proposalId: p.proposal.proposalId, decision: "done" as const, refSha256: orgSha256Hex(inviteOrder), issuedAt: NOW };
@@ -331,7 +336,19 @@ describe("the connector runtime", () => {
     proposals = [{ bundle: { ...p, proposal: { ...p.proposal, subject: "ee".repeat(16) } }, decision: { statement, approvals: decisionApprovals } }];
     expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
 
+    // The seat's accept must carry the invite key's signature (the person held the link), by the granted member key.
+    invites = [{ invite, approvals: by(inviteOrder) }];
     proposals = [{ bundle: p, decision: { statement, approvals: decisionApprovals } }];
+    const accept = { orgId: A.orgId, seatId: seatM, inviteSha256: orgSha256Hex(inviteOrder), memberKeyId: A.keys["M member"].keyId as string, adminKeyId: "", issuedAt: NOW };
+    expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
+    accepts = [{ accept }];
+    expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
+    accepts = [{ accept, inviteSignature: orgInviteAcceptSignature(deriveOrgInviteKeys(new Uint8Array(32).fill(0x34)).hybridSecret, accept) }];
+    expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
+    const squatter = { ...accept, memberKeyId: "77".repeat(32) };
+    accepts = [{ accept: squatter, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, squatter) }];
+    expect(await rt.sync(connector.connectorId, disabled)).toEqual([]);
+    accepts = [{ accept, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, accept) }];
     const gone = await rt.sync(connector.connectorId, disabled);
     expect(gone.map((i) => [i.kind, i.subject])).toEqual([["offboard", seatM]]);
   });
@@ -372,6 +389,7 @@ describe("review-cloud: the connector runtime links a seat only on evidence it v
     const posted: any[] = [];
     let proposals: any[] = [];
     let invites: any[] = [];
+    let accepts: any[] = [];
     const fetchImpl = (async (url: string, init?: RequestInit) => {
       const path = new URL(url).pathname.replace(`/api/orgs/${A.orgId}`, "");
       const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
@@ -383,7 +401,7 @@ describe("review-cloud: the connector runtime links a seat only on evidence it v
       if (path === "/servers") return ok({ servers: [{ serverDomain: HOST }] });
       if (path === "/keys") return ok({ seatKems, boxKems: [], rings: [] });
       if (path === "/proposals") return ok({ proposals });
-      if (path === "/seats") return ok({ invites });
+      if (path === "/seats") return ok({ invites, accepts });
       return new Response("{}", { status: 404 });
     }) as typeof fetch;
     const rt = new ConnectorRuntime({
@@ -412,7 +430,7 @@ describe("review-cloud: the connector runtime links a seat only on evidence it v
     // .com fabricates both halves: an invite naming an existing seat (M, someone else entirely) and a
     // "done" decision for Ana's proposal, neither carrying any org admin's approval.
     const target = A.keys["M member"].seatId as string;
-    const invite = { orgId: A.orgId, seatId: target, labelSha256: "aa".repeat(32), rolesHash: orgSeatRolesHash([{ role: "member" }]), oarVersion: 1, issuedAt: NOW, expiresAt: NOW + 86_400_000 };
+    const invite = { orgId: A.orgId, seatId: target, labelSha256: "aa".repeat(32), rolesHash: orgSeatRolesHash([{ role: "member" }]), oarVersion: 1, issuedAt: NOW, expiresAt: NOW + 86_400_000, inviteKeyPub: IK.inviteKeyPub };
     invites = [{ invite }];
     proposals = [{ bundle: p, decision: { statement: { orgId: A.orgId, proposalId: p.proposal.proposalId, decision: "done", refSha256: orgSha256Hex(canonicalOrgSeatInvite(invite)), issuedAt: NOW } } }];
     // Disabling Ana in the IdP must not turn into "offboard <that seat>".

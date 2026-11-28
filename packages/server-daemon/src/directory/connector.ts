@@ -16,6 +16,7 @@ import {
   buildOrgProposal,
   canonicalOrgProposalDecision,
   canonicalOrgSeatInvite,
+  verifyOrgInviteAccept,
   canonicalOrgDirectoryEntryBody,
   hybridSigKeygen,
   orgKemKeyPair,
@@ -36,6 +37,7 @@ import {
   type OrgProposalDecisionStatement,
   type OrgSeatRole,
   type OrgSeatInvite,
+  type OrgSeatAccept,
   type OrgSeatKemBundle,
 } from "@flagship/protocol";
 import { readStateFile, writeFileDurable } from "../durableFile.js";
@@ -269,9 +271,9 @@ export class ConnectorRuntime {
     const c = this.active.get(connectorId);
     const pin = this.deps.pin();
     if (!c || !pin) return state;
-    const [{ proposals }, { invites }] = await Promise.all([
+    const [{ proposals }, { invites, accepts }] = await Promise.all([
       this.get<{ proposals: Array<{ bundle: OrgProposalBundle; decision: { statement: OrgProposalDecisionStatement; approvals?: unknown[] } | null }> }>("/proposals"),
-      this.get<{ invites: Array<{ invite: OrgSeatInvite; approvals?: unknown[] }> }>("/seats"),
+      this.get<{ invites: Array<{ invite: OrgSeatInvite; approvals?: unknown[] }>; accepts?: Array<{ accept?: OrgSeatAccept; inviteSignature?: unknown }> }>("/seats"),
     ]);
     const now = this.now();
     const approved = (order: Uint8Array, wire: unknown): boolean => {
@@ -287,12 +289,20 @@ export class ConnectorRuntime {
         return false;
       }
     };
+    // The seat's accept must carry its invite key's signature, by the member key the seat was granted to: whoever
+    // accepted held the invitation link, not just the orgId.
+    const acceptOf = new Map<string, { accept: OrgSeatAccept; inviteSignature: unknown }>();
+    for (const a of Array.isArray(accepts) ? accepts : []) if (a?.accept && typeof a.accept.seatId === "string") acceptOf.set(a.accept.seatId, { accept: a.accept, inviteSignature: a.inviteSignature });
     const bySha = new Map<string, string>();
     for (const i of Array.isArray(invites) ? invites : []) {
       try {
         if (i?.invite?.orgId !== this.deps.orgId) continue;
         const order = canonicalOrgSeatInvite(i.invite);
         if (!approved(order, i.approvals)) continue;
+        const acc = acceptOf.get(i.invite.seatId);
+        const seat = pin.book.seats.get(i.invite.seatId);
+        if (!acc || !seat || acc.accept.memberKeyId !== seat.grant.memberKeyId) continue;
+        if (!verifyOrgInviteAccept(i.invite, acc.accept, acc.inviteSignature)) continue;
         bySha.set(orgSha256Hex(order), i.invite.seatId);
       } catch {
         /* malformed */
