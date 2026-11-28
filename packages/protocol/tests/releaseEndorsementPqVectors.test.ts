@@ -15,6 +15,7 @@ import {
   verifyReleasePqBindings,
   type ReleasePqPin,
 } from "../src/index.js";
+import { BOX_ARTIFACT_PQ_PIN } from "../src/boxArtifactPq.js";
 
 const V = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../test-vectors/release-endorsement-v2/vectors.json"), "utf8"),
@@ -100,7 +101,9 @@ describe("release-endorsement v2 vectors", () => {
 
   it("ships with the release key pinned; dbdf2e08 (the last release signed before it) is the marker", () => {
     expect(releasePqPinConfigured(RELEASE_PQ_PIN)).toBe(true);
-    expect([...RELEASE_PQ_PIN.keyIds]).toEqual(["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]);
+    // GYM BRANCH: the gym's own key (scripts/gym-pq-release-key.mjs), the one pinned for box artifacts too; production's marker.
+    expect([...RELEASE_PQ_PIN.keyIds]).toEqual([...BOX_ARTIFACT_PQ_PIN.keyIds]);
+    expect(RELEASE_PQ_PIN.keyIds).toHaveLength(1);
     expect(RELEASE_PQ_PIN.requirePqAfter).toEqual({ releaseId: "978ca58f-a29a-4857-8afc-6dd6238ed223", commitHash: "dbdf2e08875ae55d9b575f390a29810670f9a54d" });
   });
 

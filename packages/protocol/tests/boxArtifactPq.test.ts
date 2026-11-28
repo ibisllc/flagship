@@ -28,7 +28,12 @@ describe("the box artifact's PQ companion", () => {
 
   it("ships with the release key pinned (the 2026-10-26 ceremony)", () => {
     expect(boxArtifactPqPinConfigured(BOX_ARTIFACT_PQ_PIN)).toBe(true);
-    expect([...BOX_ARTIFACT_PQ_PIN.keyIds]).toEqual(["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]);
+    // GYM BRANCH: the gym's own PQ release key (scripts/gym-pq-release-key.mjs), bound to the gym artifact key.
+    const trust = JSON.parse(readFileSync(join(__dirname, "../../../release/box-artifact-trust.json"), "utf8"));
+    expect([...BOX_ARTIFACT_PQ_PIN.keyIds]).toEqual(trust.pq.keyIds);
+    expect(BOX_ARTIFACT_PQ_PIN.keyIds).toHaveLength(1);
+    const binding = JSON.parse(readFileSync(join(__dirname, `../../../.maintainers/release-pq/bindings/${BOX_ARTIFACT_PQ_PIN.keyIds[0]!.slice(0, 16)}.json`), "utf8"));
+    expect(binding.ed25519PubHex).toBe(trust.keys[0]);
   });
 });
 
