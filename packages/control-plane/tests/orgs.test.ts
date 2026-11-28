@@ -16,6 +16,10 @@ import {
   orgSha256Hex,
   signOrgApproval,
   type OrgSeatRole,
+  deriveOrgInviteKeys,
+  orgInviteAcceptSignature,
+  orgInviteReadSignature,
+  canonicalOrgInviteWithdraw,
 } from "@flagship/protocol";
 import { InMemoryOrgStorage, InMemoryStorage } from "@flagship/storage";
 import {
@@ -30,6 +34,9 @@ import {
   handleOrgFreeze,
   handleOrgInviteAccept,
   handleOrgInviteCreate,
+  handleOrgInviteGet,
+  handleOrgInviteWithdraw,
+  handleOrgSeatsGet,
   handleOrgLog,
   handleOrgOverturn,
   handleOrgSeatGrant,
@@ -37,6 +44,8 @@ import {
 } from "../src/orgs.js";
 import { handleOrgKeysGet } from "../src/orgServers.js";
 
+// The invite key a fixed link key derives (test-vectors/org-invite-key).
+const IK = deriveOrgInviteKeys(new Uint8Array(32).fill(0x33));
 const V = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../protocol/test-vectors/org-authority/vectors.json"), "utf8"));
 const resolveRefs = (v: unknown): any => {
   if (Array.isArray(v)) return v.map(resolveRefs);
@@ -101,7 +110,7 @@ describe(".com org accounts", () => {
     const d = await created(now);
     const roles: OrgSeatRole[] = [{ role: "member" }];
     const sealedLabelHex = "aa".repeat(40);
-    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY };
+    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY, inviteKeyPub: IK.inviteKeyPub };
     const noLabel = await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [], sealedLabelHex: "", offerHex: "00" });
     expect((noLabel.body as { code: string }).code).toBe("org-label-missing");
     const inv = await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite), 1, now)], sealedLabelHex, offerHex: "0102" });
@@ -109,7 +118,7 @@ describe(".com org accounts", () => {
 
     const accept = { orgId: ORG, seatId: MM.seatId, inviteSha256: orgSha256Hex(canonicalOrgSeatInvite(invite)), memberKeyId: MM.keyId, adminKeyId: "", issuedAt: now };
     const signature = Buffer.from(hybridSign(MM.secret, "flagship/org-seat-accept/v1", canonicalOrgSeatAccept(accept))).toString("hex");
-    const acc = await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature });
+    const acc = await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, accept) });
     expect(acc.status).toBe(200);
 
     const grant = { orgId: ORG, seatId: MM.seatId, labelSha256: invite.labelSha256, memberKeyId: MM.keyId, adminKeyId: "", rolesHash: invite.rolesHash, oarVersion: 1, issuedAt: now, expiresAt: now + 300 * DAY };
@@ -123,7 +132,7 @@ describe(".com org accounts", () => {
     const d = await created(now);
     await d.store.setPlan(ORG, { planTier: "business", seatLimit: 0, paidUntil: null });
     const roles: OrgSeatRole[] = [{ role: "member" }];
-    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from("aa", "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY };
+    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from("aa", "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY, inviteKeyPub: IK.inviteKeyPub };
     const r = await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite), 1, now)], sealedLabelHex: "aa", offerHex: "01" });
     expect((r.body as { code: string }).code).toBe("org-seat-limit");
   });
@@ -180,7 +189,7 @@ describe("org directory and joining", () => {
     const d = await created(now);
     const roles: OrgSeatRole[] = [{ role: "member" }];
     const sealedLabelHex = "aa".repeat(40);
-    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY };
+    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY, inviteKeyPub: IK.inviteKeyPub };
     expect((await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite), 1, now)], sealedLabelHex, offerHex: "0102" })).status).toBe(200);
     const kem = orgKemKeyPair(new Uint8Array(32).fill(0x71));
     const statement = { orgId: ORG, seatId: MM.seatId, kemKeyId: kem.kemKeyId, issuedAt: now };
@@ -189,8 +198,8 @@ describe("org directory and joining", () => {
     const signature = Buffer.from(hybridSign(MM.secret, "flagship/org-seat-accept/v1", canonicalOrgSeatAccept(accept))).toString("hex");
     // A statement signed by another key is refused with the accept.
     const forged = { ...seatKem, signature: signOrgSeatKem(statement, A.secret) };
-    expect((await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, seatKem: forged })).status).toBe(403);
-    expect((await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, seatKem })).status).toBe(200);
+    expect((await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, accept), seatKem: forged })).status).toBe(403);
+    expect((await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, accept), seatKem })).status).toBe(200);
     const deps2 = { ...d, servers: new InMemoryStorage().servers };
     const before = (await handleOrgKeysGet(deps2, ORG)).body as { seatKems: unknown[] };
     expect(before.seatKems).toHaveLength(0);
@@ -218,5 +227,121 @@ describe("org directory and joining", () => {
     // Nothing a name could be read from reaches storage: only the sealed bytes and the header.
     const raw = JSON.stringify(await d.store.listObjects(ORG, "directory"));
     expect(raw).not.toContain("Ana");
+  });
+});
+
+describe("the invite link's key (no squatting on an orgId)", () => {
+  const roles: OrgSeatRole[] = [{ role: "member" }];
+  const sealedLabelHex = "aa".repeat(40);
+  async function invited(now: number) {
+    const d = await created(now);
+    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY, inviteKeyPub: IK.inviteKeyPub };
+    expect((await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite), 1, now)], sealedLabelHex, offerHex: "0102" })).status).toBe(200);
+    const accept = { orgId: ORG, seatId: MM.seatId, inviteSha256: orgSha256Hex(canonicalOrgSeatInvite(invite)), memberKeyId: MM.keyId, adminKeyId: "", issuedAt: now };
+    const signature = Buffer.from(hybridSign(MM.secret, "flagship/org-seat-accept/v1", canonicalOrgSeatAccept(accept))).toString("hex");
+    return { d, invite, accept, signature };
+  }
+  const now = chain.entries[1].record.issuedAt + 3_600_000;
+  const OTHER = deriveOrgInviteKeys(new Uint8Array(32).fill(0x34));
+
+  it("refuses an invite without an invite key", async () => {
+    const d = await created(now);
+    const invite = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY };
+    const r = await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [], sealedLabelHex, offerHex: "0102" });
+    expect(r.status).toBe(403);
+    expect((r.body as { code: string }).code).toBe("org-malformed");
+  });
+
+  it("reads the offer only with a fresh invite-key proof; otherwise it is an unknown invite", async () => {
+    const { d } = await invited(now);
+    const unknown = await handleOrgInviteGet(d, ORG, "ef".repeat(16), { issuedAt: String(now), signature: orgInviteReadSignature(IK.hybridSecret, ORG, "ef".repeat(16), now) });
+    expect(unknown.status).toBe(404);
+    const proof = (secret: Uint8Array, seat: string, at: number) => ({ issuedAt: String(at), signature: orgInviteReadSignature(secret, ORG, seat, at) });
+    for (const p of [
+      { issuedAt: null, signature: null },
+      proof(OTHER.hybridSecret, MM.seatId, now),
+      proof(IK.hybridSecret, "ef".repeat(16), now),
+      proof(IK.hybridSecret, MM.seatId, now - 6 * 60_000),
+      { issuedAt: String(now + 1), signature: proof(IK.hybridSecret, MM.seatId, now).signature },
+    ]) {
+      const r = await handleOrgInviteGet(d, ORG, MM.seatId, p);
+      expect(r.status).toBe(404);
+      expect(r.body).toEqual(unknown.body);
+    }
+    const good = await handleOrgInviteGet(d, ORG, MM.seatId, proof(IK.hybridSecret, MM.seatId, now - 60_000));
+    expect(good.status).toBe(200);
+    expect((good.body as { offerHex: string; accepted: boolean })).toMatchObject({ offerHex: "0102", accepted: false });
+  });
+
+  it("an accept without the invite key's signature is refused, so knowing the orgId cannot claim the seat", async () => {
+    const { d, accept, signature } = await invited(now);
+    const squat = [
+      { accept, memberBinding: MM.binding, adminBinding: null, signature },
+      { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: "" },
+      { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: orgInviteAcceptSignature(OTHER.hybridSecret, accept) },
+      { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: signature },
+    ];
+    for (const body of squat) {
+      const r = await handleOrgInviteAccept(d, ORG, MM.seatId, body);
+      expect(r.status).toBe(404);
+    }
+    const seats = (await handleOrgSeatsGet(d, ORG)).body as { accepts: unknown[] };
+    expect(seats.accepts).toHaveLength(0);
+    // The real invitee, holding the link, still gets in first.
+    const ok = await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, accept) });
+    expect(ok.status).toBe(200);
+    const after = (await handleOrgSeatsGet(d, ORG)).body as { accepts: Array<{ inviteSignature: string }> };
+    expect(after.accepts).toHaveLength(1);
+    expect(after.accepts[0]!.inviteSignature).toMatch(/^[0-9a-f]{6746}$/);
+  });
+
+  it("an admin cannot admit a seat whose accept lacks the invite-key proof (an accept stored before the fix)", async () => {
+    const { d, invite, accept, signature } = await invited(now);
+    await d.store.putObject(ORG, { kind: "accept", key: MM.seatId, bodyJson: JSON.stringify({ accept, memberBinding: MM.binding, adminBinding: null, signature, seatKem: null }), issuedAt: now, storedAt: now });
+    const grant = { orgId: ORG, seatId: MM.seatId, labelSha256: invite.labelSha256, memberKeyId: MM.keyId, adminKeyId: "", rolesHash: invite.rolesHash, oarVersion: 1, issuedAt: now, expiresAt: now + 300 * DAY };
+    const g = await handleOrgSeatGrant(d, ORG, { grant, roles, memberBinding: MM.binding, adminBinding: null, approvals: [approve(A, canonicalOrgSeatGrant(grant), 1, now)] });
+    expect(g.status).toBe(403);
+    expect((g.body as { code: string }).code).toBe("org-invite-proof");
+  });
+
+  it("invites stored before the invite key are not served and cannot be read or accepted", async () => {
+    const d = await created(now);
+    const old = { orgId: ORG, seatId: MM.seatId, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY };
+    await d.store.putObject(ORG, { kind: "invite", key: MM.seatId, bodyJson: JSON.stringify({ invite: old, roles, approvals: [], sealedLabelHex, offerHex: "01" }), issuedAt: now, storedAt: now });
+    expect((await handleOrgInviteGet(d, ORG, MM.seatId, { issuedAt: String(now), signature: orgInviteReadSignature(IK.hybridSecret, ORG, MM.seatId, now) })).status).toBe(404);
+    expect(((await handleOrgSeatsGet(d, ORG)).body as { invites: unknown[] }).invites).toHaveLength(0);
+  });
+
+  it("an admin withdraws an invite: the invite and its accept go, the seat id is never invited again", async () => {
+    const { d, invite, accept, signature } = await invited(now);
+    expect((await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, accept) })).status).toBe(200);
+    const withdraw = { orgId: ORG, seatId: MM.seatId, oarVersion: 1, issuedAt: now };
+    const order = canonicalOrgInviteWithdraw(withdraw);
+    const outsider = await handleOrgInviteWithdraw(d, ORG, MM.seatId, { withdraw, approvals: [approve(key("X outsider"), order, 1, now)] });
+    expect(outsider.status).toBe(403);
+    const board = await handleOrgInviteWithdraw(d, ORG, MM.seatId, { withdraw, approvals: [approve(key("D board"), order, 1, now)] });
+    expect(board.status).toBe(403);
+    const otherSeat = await handleOrgInviteWithdraw(d, ORG, "ef".repeat(16), { withdraw, approvals: [approve(B, order, 1, now)] });
+    expect(otherSeat.status).toBe(400);
+    const r = await handleOrgInviteWithdraw(d, ORG, MM.seatId, { withdraw, approvals: [approve(B, order, 1, now)] });
+    expect(r.status).toBe(200);
+    const seats = (await handleOrgSeatsGet(d, ORG)).body as { accepts: unknown[]; invites: unknown[] };
+    expect(seats.accepts).toHaveLength(0);
+    expect(seats.invites).toHaveLength(0);
+    expect((await handleOrgInviteGet(d, ORG, MM.seatId, { issuedAt: String(now), signature: orgInviteReadSignature(IK.hybridSecret, ORG, MM.seatId, now) })).status).toBe(404);
+    const again = await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite), 1, now)], sealedLabelHex, offerHex: "0102" });
+    expect(again.status).toBe(409);
+    const log = (await handleOrgLog(d, ORG, 0)).body as { entries: Array<{ kind: string; refSha256: string }> };
+    expect(log.entries.at(-1)).toMatchObject({ kind: "invite-withdraw", refSha256: orgSha256Hex(order) });
+  });
+
+  it("refuses to withdraw an invite once its seat is admitted", async () => {
+    const { d, invite, accept, signature } = await invited(now);
+    expect((await handleOrgInviteAccept(d, ORG, MM.seatId, { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, accept) })).status).toBe(200);
+    const grant = { orgId: ORG, seatId: MM.seatId, labelSha256: invite.labelSha256, memberKeyId: MM.keyId, adminKeyId: "", rolesHash: invite.rolesHash, oarVersion: 1, issuedAt: now, expiresAt: now + 300 * DAY };
+    expect((await handleOrgSeatGrant(d, ORG, { grant, roles, memberBinding: MM.binding, adminBinding: null, approvals: [approve(A, canonicalOrgSeatGrant(grant), 1, now)] })).status).toBe(200);
+    const withdraw = { orgId: ORG, seatId: MM.seatId, oarVersion: 1, issuedAt: now };
+    const r = await handleOrgInviteWithdraw(d, ORG, MM.seatId, { withdraw, approvals: [approve(B, canonicalOrgInviteWithdraw(withdraw), 1, now)] });
+    expect((r.body as { code: string }).code).toBe("org-seat-admitted");
   });
 });

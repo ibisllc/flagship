@@ -11,6 +11,12 @@ import {
   canonicalOrgOverturn,
   canonicalOrgSeatRevoke,
   canonicalOrgVeto,
+  canonicalOrgInviteWithdraw,
+  parseHybridSigPublicKey,
+  verifyOrgInviteAccept,
+  verifyOrgInviteRead,
+  type OrgInviteWithdraw,
+  type OrgSeatAccept,
   canonicalOrgDirectoryWrite,
   canonicalOrgDirectorySliceWrite,
   type OrgDirectorySlice,
@@ -65,8 +71,10 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  *   GET  /api/orgs/:orgId/authority                                            chain + freezes/overturns/vetoes
  *   POST /api/orgs/:orgId/authority                 { entry }                  append a version
  *   POST /api/orgs/:orgId/invites                   { invite, roles, approvals, sealedLabelHex, offerHex }
- *   GET  /api/orgs/:orgId/invites/:seatId                                      the sealed offer (link fragment opens it)
- *   POST /api/orgs/:orgId/invites/:seatId/accept    { accept, memberBinding, adminBinding, signature }
+ *   GET  /api/orgs/:orgId/invites/:seatId          x-flagship-issued-at, x-flagship-signature (invite-key read proof)
+ *                                                                              the sealed offer (the link key opens it)
+ *   POST /api/orgs/:orgId/invites/:seatId/accept    { accept, memberBinding, adminBinding, signature, inviteSignature }
+ *   POST /api/orgs/:orgId/invites/:seatId/withdraw  { withdraw, approvals }    an admin withdraws an invite not yet admitted
  *   GET  /api/orgs/:orgId/seats                                                grants, revokes, freezes, overturns, accepts
  *   POST /api/orgs/:orgId/seats                     grant bundle               admit or change a seat
  *   POST /api/orgs/:orgId/revokes | freezes | overturns | vetoes
@@ -84,6 +92,11 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  *
  * The orgId (128 random bits) is the read capability for the GET routes; nothing they return is
  * secret (labels are sealed, keys are public), but it does show the org's structure.
+ *
+ * An invite names its invite key (`inviteKeyPub`, derived from the link key k, which only the link
+ * holds). Reading the offer needs a fresh invite-key signature, and an accept needs the invite key's
+ * signature over the accept, so knowing the orgId and seatId is not enough to read or claim an
+ * invite; a missing or wrong proof answers 404, as an unknown invite does.
  */
 export interface OrgDeps {
   orgs: OrgStorage;
@@ -284,9 +297,15 @@ export async function handleOrgInviteCreate(deps: OrgDeps, orgId: string, body: 
     if (orgSha256Hex(hexBytes(b.sealedLabelHex)) !== b.invite.labelSha256) return malformed("labelSha256 does not match the sealed label");
     if (orgSeatRolesHash(b.roles) !== b.invite.rolesHash) return malformed("rolesHash");
     if (b.invite.orgId !== orgId || b.invite.expiresAt <= now) return malformed("invite");
+    try {
+      parseHybridSigPublicKey(hexBytes(b.invite.inviteKeyPub));
+    } catch {
+      return malformed("inviteKeyPub");
+    }
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
     if (v.book.revoked.has(b.invite.seatId) || v.book.seats.has(b.invite.seatId)) return conflict("seat exists");
+    if (await deps.orgs.getObject(orgId, "invite-withdraw", b.invite.seatId)) return conflict("invite withdrawn");
     const gate = planGate(deps, v, now, b.invite.seatId, b.roles);
     if (gate) return { status: 403, body: { error: gate, code: gate } };
     authorizeOrgOrder({ state: v.state, book: v.book, action: { kind: "seat-invite" }, order, approvals: b.approvals.map(orgApprovalFromWire), now });
@@ -305,12 +324,36 @@ export async function handleOrgInviteCreate(deps: OrgDeps, orgId: string, body: 
   }
 }
 
-export async function handleOrgInviteGet(deps: OrgDeps, orgId: string, seatId: string): Promise<HandlerResponseWithHeaders> {
-  if (!ORG_ID.test(orgId) || !SEAT_ID.test(seatId)) return malformed("ids");
+/** The invite-key proof a read of the offer carries (`x-flagship-issued-at`, `x-flagship-signature`). */
+export interface OrgInviteReadProof {
+  issuedAt: string | null;
+  signature: string | null;
+}
+
+const NO_INVITE = (): HandlerResponseWithHeaders => notFound("invite not found");
+
+/** A stored invite with a well-formed invite key (invites from before the invite key are not served). */
+async function storedInvite(deps: OrgDeps, orgId: string, seatId: string) {
   const o = await deps.orgs.getObject(orgId, "invite", seatId);
-  if (!o) return notFound("invite not found");
+  if (!o) return null;
   const inv = parse<{ invite: OrgSeatInvite; offerHex: string; roles: OrgSeatRole[] }>(o.bodyJson);
-  if (inv.invite.expiresAt <= nowOf(deps)) return { status: 410, body: { error: "invite expired", code: "org-invite-expired" } };
+  try {
+    canonicalOrgSeatInvite(inv.invite);
+  } catch {
+    return null;
+  }
+  return inv;
+}
+
+export async function handleOrgInviteGet(deps: OrgDeps, orgId: string, seatId: string, proof: OrgInviteReadProof = { issuedAt: null, signature: null }): Promise<HandlerResponseWithHeaders> {
+  if (!ORG_ID.test(orgId) || !SEAT_ID.test(seatId)) return malformed("ids");
+  const now = nowOf(deps);
+  const inv = await storedInvite(deps, orgId, seatId);
+  if (!inv) return NO_INVITE();
+  const at = proof.issuedAt !== null && /^[0-9]{1,16}$/.test(proof.issuedAt) ? Number(proof.issuedAt) : NaN;
+  // No proof, a stale one or one by another key reads as no invite at all (no existence oracle).
+  if (!verifyOrgInviteRead(inv.invite, at, proof.signature, now)) return NO_INVITE();
+  if (inv.invite.expiresAt <= now) return { status: 410, body: { error: "invite expired", code: "org-invite-expired" } };
   const accepted = await deps.orgs.getObject(orgId, "accept", seatId);
   return ok({ invite: inv.invite, roles: inv.roles, offerHex: inv.offerHex, accepted: accepted !== null });
 }
@@ -318,21 +361,23 @@ export async function handleOrgInviteGet(deps: OrgDeps, orgId: string, seatId: s
 export async function handleOrgInviteAccept(deps: OrgDeps, orgId: string, seatId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
   const b = body as {
-    accept?: { orgId: string; seatId: string; inviteSha256: string; memberKeyId: string; adminKeyId: string; issuedAt: number; custody?: "hardware" | "browser" };
+    accept?: OrgSeatAccept;
     memberBinding?: unknown;
     adminBinding?: unknown;
     signature?: unknown;
+    inviteSignature?: unknown;
     seatKem?: OrgSeatKemBundle;
   } | undefined;
-  if (!b?.accept || typeof b.signature !== "string") return malformed("accept and signature required");
-  const o = await deps.orgs.getObject(orgId, "invite", seatId);
-  if (!o) return notFound("invite not found");
-  const inv = parse<{ invite: OrgSeatInvite }>(o.bodyJson);
+  if (!ORG_ID.test(orgId) || !SEAT_ID.test(seatId)) return malformed("ids");
+  if (!b?.accept || typeof b.accept !== "object" || typeof b.signature !== "string") return malformed("accept and signature required");
+  const inv = await storedInvite(deps, orgId, seatId);
+  if (!inv) return NO_INVITE();
+  // Only someone holding the link key can sign with the invite key; without it the invite stays unknown.
+  if (!verifyOrgInviteAccept(inv.invite, b.accept, b.inviteSignature)) return NO_INVITE();
   if (inv.invite.expiresAt <= now) return { status: 410, body: { error: "invite expired", code: "org-invite-expired" } };
   try {
     const a = b.accept;
     const msg = canonicalOrgSeatAccept(a);
-    if (a.orgId !== orgId || a.seatId !== seatId || a.inviteSha256 !== orgSha256Hex(canonicalOrgSeatInvite(inv.invite))) return malformed("accept does not name this invite");
     if (Math.abs(now - a.issuedAt) > 10 * 60_000) return malformed("stale accept");
     const subject = orgSeatSubject(orgId, seatId);
     const mw = pqKeyBindingFromWire(b.memberBinding);
@@ -355,7 +400,14 @@ export async function handleOrgInviteAccept(deps: OrgDeps, orgId: string, seatId
     const stored = await deps.orgs.putObject(orgId, {
       kind: "accept",
       key: seatId,
-      bodyJson: JSON.stringify({ accept: a, memberBinding: b.memberBinding, adminBinding: b.adminBinding ?? null, signature: b.signature, seatKem: b.seatKem ?? null }),
+      bodyJson: JSON.stringify({
+        accept: a,
+        memberBinding: b.memberBinding,
+        adminBinding: b.adminBinding ?? null,
+        signature: b.signature,
+        inviteSignature: b.inviteSignature,
+        seatKem: b.seatKem ?? null,
+      }),
       issuedAt: a.issuedAt,
       storedAt: now,
     });
@@ -364,6 +416,36 @@ export async function handleOrgInviteAccept(deps: OrgDeps, orgId: string, seatId
     return ok({ accepted: true });
   } catch (e) {
     if (e instanceof PqTrustError) return { status: 403, body: { error: e.message, code: "org-binding" } };
+    return refuse(e);
+  }
+}
+
+/**
+ * Withdraws an invitation no one has been admitted to: one org admin's approval of the withdraw order (the
+ * invite's own authority level). Deletes the invite and any accept, keeps the withdrawal (the seat id is never
+ * invited again) and logs it.
+ */
+export async function handleOrgInviteWithdraw(deps: OrgDeps, orgId: string, seatId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
+  const now = nowOf(deps);
+  const b = body as { withdraw?: OrgInviteWithdraw; approvals?: unknown[] } | undefined;
+  if (!ORG_ID.test(orgId) || !SEAT_ID.test(seatId)) return malformed("ids");
+  if (!b?.withdraw || !Array.isArray(b.approvals)) return malformed("withdraw and approvals required");
+  try {
+    const order = canonicalOrgInviteWithdraw(b.withdraw);
+    if (b.withdraw.orgId !== orgId || b.withdraw.seatId !== seatId) return malformed("withdraw does not name this invite");
+    if (Math.abs(now - b.withdraw.issuedAt) > 10 * 60_000) return malformed("stale withdraw");
+    const v = await loadOrg(deps, orgId, now);
+    if (!v) return notFound("org not found");
+    authorizeOrgOrder({ state: v.state, book: v.book, action: { kind: "seat-invite" }, order, approvals: b.approvals.map(orgApprovalFromWire), now });
+    if (v.book.seats.has(seatId) || v.book.revoked.has(seatId)) return { status: 409, body: { error: "the seat was already admitted", code: "org-seat-admitted" } };
+    if (!(await deps.orgs.getObject(orgId, "invite", seatId))) return NO_INVITE();
+    const sha = orgSha256Hex(order);
+    await deps.orgs.putObject(orgId, { kind: "invite-withdraw", key: seatId, bodyJson: JSON.stringify({ withdraw: b.withdraw, approvals: b.approvals }), issuedAt: b.withdraw.issuedAt, storedAt: now }, true);
+    await deps.orgs.deleteObject(orgId, "accept", seatId);
+    await deps.orgs.deleteObject(orgId, "invite", seatId);
+    await logged(deps, orgId, "invite-withdraw", sha, now);
+    return ok({ withdrawn: seatId });
+  } catch (e) {
     return refuse(e);
   }
 }
@@ -381,8 +463,18 @@ export async function handleOrgSeatsGet(deps: OrgDeps, orgId: string): Promise<H
     list<{ invite: OrgSeatInvite; roles: OrgSeatRole[]; approvals?: unknown[]; sealedLabelHex: string }>(deps, orgId, "invite"),
   ]);
   // The approvals travel with each invite: a connector box links a directory person to a seat only on an invite
-  // it verified itself (05c review F3).
-  return ok({ grants, revokes, freezes, overturns, accepts, invites: invites.map((i) => ({ invite: i.invite, roles: i.roles, approvals: i.approvals ?? [], sealedLabelHex: i.sealedLabelHex })) });
+  // it verified itself (05c review F3). Invites from before the invite key, and accepts without its signature,
+  // are no longer served: they can never be admitted.
+  const current = invites.filter((i) => {
+    try {
+      canonicalOrgSeatInvite(i.invite);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  const proven = (accepts as Array<{ inviteSignature?: unknown }>).filter((a) => typeof a.inviteSignature === "string");
+  return ok({ grants, revokes, freezes, overturns, accepts: proven, invites: current.map((i) => ({ invite: i.invite, roles: i.roles, approvals: i.approvals ?? [], sealedLabelHex: i.sealedLabelHex })) });
 }
 
 export async function handleOrgSeatGrant(deps: OrgDeps, orgId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
@@ -402,7 +494,12 @@ export async function handleOrgSeatGrant(deps: OrgDeps, orgId: string, body: unk
       if (inv.invite.labelSha256 !== g.grant.labelSha256) return malformed("the grant's pseudonym differs from the invite's");
       const acc = await deps.orgs.getObject(orgId, "accept", g.grant.seatId);
       if (!acc) return { status: 403, body: { error: "the person has not accepted yet", code: "org-not-accepted" } };
-      const a = parse<{ accept: { memberKeyId: string; adminKeyId: string; custody?: string } }>(acc.bodyJson).accept;
+      const stored = parse<{ accept: OrgSeatAccept; inviteSignature?: unknown }>(acc.bodyJson);
+      // The accept must carry the invite key's signature: someone who held the link accepted (not just the orgId).
+      if (!verifyOrgInviteAccept(inv.invite, stored.accept, stored.inviteSignature)) {
+        return { status: 403, body: { error: "the acceptance does not prove the invitation link", code: "org-invite-proof" } };
+      }
+      const a = stored.accept;
       if (a.memberKeyId !== g.grant.memberKeyId || a.adminKeyId !== g.grant.adminKeyId) return malformed("the grant's keys differ from the accepted ones");
       // The custody the person's accept signed is the custody the grant shows (docs/webapp-key-custody.md item 1).
       if ((a.custody ?? "hardware") !== (g.grant.custody ?? "hardware")) return malformed("the grant's custody differs from the accepted one");

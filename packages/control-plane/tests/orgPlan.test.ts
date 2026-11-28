@@ -21,6 +21,7 @@ import {
   signOrgApproval,
   type OrgSeatRole,
   type Voucher,
+  deriveOrgInviteKeys,
 } from "@flagship/protocol";
 import { InMemoryBlindVoucherStorage, InMemoryMeterStorage, InMemoryOrgStorage, InMemoryStorage, InMemoryTierStorage } from "@flagship/storage";
 import { ed } from "../../protocol/src/edSync.js";
@@ -30,6 +31,8 @@ import { isOhttpTargetAllowed } from "../src/ohttpGateway.js";
 import { handleOrgPlanAttestation, handleOrgPlanGet, handleOrgWalletGet, handleOrgWalletPut, orgEgressBytesFor, orgPlanGate } from "../src/orgPlan.js";
 import { handleOrgAuthorityAppend, handleOrgCreate, handleOrgInviteCreate, type OrgDeps } from "../src/orgs.js";
 
+// The invite key a fixed link key derives (test-vectors/org-invite-key).
+const IK = deriveOrgInviteKeys(new Uint8Array(32).fill(0x33));
 const V = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../protocol/test-vectors/org-authority/vectors.json"), "utf8"));
 const resolveRefs = (v: unknown): any => {
   if (Array.isArray(v)) return v.map(resolveRefs);
@@ -94,7 +97,7 @@ const spend = (w: World, vouchers: Voucher[], seats: unknown = 3, what = "busine
 const code = (r: { body: unknown }) => (r.body as { code?: string }).code;
 const inviteFor = (seatId: string, now: number) => {
   const roles: OrgSeatRole[] = [{ role: "member" }];
-  const invite = { orgId: ORG, seatId, labelSha256: orgSha256Hex(Buffer.from("aa", "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY };
+  const invite = { orgId: ORG, seatId, labelSha256: orgSha256Hex(Buffer.from("aa", "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: now, expiresAt: now + DAY, inviteKeyPub: IK.inviteKeyPub };
   return { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite), 1, now)], sealedLabelHex: "aa", offerHex: "01" };
 };
 

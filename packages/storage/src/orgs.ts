@@ -34,6 +34,8 @@ export interface OrgPlanUpdate {
 export type OrgObjectKind =
   | "authority"
   | "invite"
+  /** An admin's withdrawal of an invite, keyed by seat id (the seat is never invited again). */
+  | "invite-withdraw"
   | "accept"
   | "grant"
   | "revoke"

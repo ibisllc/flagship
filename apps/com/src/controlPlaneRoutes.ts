@@ -342,6 +342,7 @@ import {
   handleOrgInviteAccept,
   handleOrgInviteCreate,
   handleOrgInviteGet,
+  handleOrgInviteWithdraw,
   handleOrgLog,
   handleOrgServerCode,
   handleOrgServerRegister,
@@ -799,7 +800,7 @@ const ROUTE_RE = {
   BOX_CLAIM_KEY: /^\/api\/box-claim\/key$/,
   ORGS: /^\/api\/orgs$/,
   ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|box-log-heads|keys|export|directory|directory\/slices|connectors|proposals|proposals\/decisions|plan|plan-attestation|voucher-wallet)$/,
-  ORG_INVITE: /^\/api\/orgs\/([0-9a-f]{32})\/invites\/([0-9a-f]{32})(\/accept)?$/,
+  ORG_INVITE: /^\/api\/orgs\/([0-9a-f]{32})\/invites\/([0-9a-f]{32})(?:\/(accept|withdraw))?$/,
   ORG_CEREMONY_APPROVE: /^\/api\/orgs\/([0-9a-f]{32})\/ceremonies\/([0-9a-f]{64})\/approvals$/,
   BOX_CLAIM_MAILBOX: /^\/api\/box-claim\/mailbox\/([0-9a-f]{64})\/(to-box|to-phone)$/,
   SERVER_RELEASE: /^\/api\/server\/release$/,
@@ -1639,8 +1640,12 @@ export async function tryControlPlane(
       return finish(await handleOrgCeremonyApprove(od, m[1]!, m[2]!, await readJson(request)));
     }
     if ((m = path.match(ROUTE_RE.ORG_INVITE))) {
-      if (m[3] && method === "POST") return finish(await handleOrgInviteAccept(od, m[1]!, m[2]!, await readJson(request)));
-      if (!m[3] && method === "GET") return finish(await handleOrgInviteGet(od, m[1]!, m[2]!));
+      if (m[3] === "accept" && method === "POST") return finish(await handleOrgInviteAccept(od, m[1]!, m[2]!, await readJson(request)));
+      if (m[3] === "withdraw" && method === "POST") return finish(await handleOrgInviteWithdraw(od, m[1]!, m[2]!, await readJson(request)));
+      if (!m[3] && method === "GET") {
+        const proof = { issuedAt: request.headers.get("x-flagship-issued-at"), signature: request.headers.get("x-flagship-signature") };
+        return finish(await handleOrgInviteGet(od, m[1]!, m[2]!, proof));
+      }
     }
     if ((m = path.match(ROUTE_RE.ORG_SUB))) {
       const [, orgId, sub] = m as unknown as [string, string, string];
