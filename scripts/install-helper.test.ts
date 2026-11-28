@@ -12,6 +12,10 @@ import {
   verifyServerRegister,
   verifyServiceEntitlement,
   verifiedBootKey,
+  orgServerCodeSha256,
+  verifyOrgServerEnrolment,
+  verifyOrgServerRegister,
+  type OrgServerRegister,
   type AuthCode,
   type ServerRegisterRequest,
 } from "@flagship/protocol";
@@ -182,6 +186,22 @@ describe("install-helper", () => {
     expect(env.request.sealedKey).toBe(sealedHex);
     expect(env.request.issuedAt).toBe(parseInt(issuedAt, 10));
     expect(env.signature).toMatch(/^[0-9a-f]{128}$/);
+  });
+
+  it("sign-server-register signs an org registration with the STK and the recipe's enrolment key", () => {
+    const V = JSON.parse(readFileSync(join(__dirname, "../packages/protocol/test-vectors/org-servers/vectors.json"), "utf8"));
+    const blob = V.installBlobs[0].blob;
+    const blobPath = join(dir, "install-blob.json");
+    writeFileSync(blobPath, JSON.stringify(blob));
+    const { stdout } = run(["sign-server-register", "--priv-hex", V.register.stkSeedHex, "--auth-code-blob", blobPath]);
+    const env = JSON.parse(stdout) as { request: OrgServerRegister; signature: string; enrolmentSignature: string };
+    expect(env.request.codeSha256).toBe(orgServerCodeSha256(blob.code));
+    expect(verifyOrgServerRegister(env.request, env.signature)).toBe(true);
+    expect(verifyOrgServerEnrolment(env.request, blob.code, env.enrolmentSignature)).toBe(true);
+    // A recipe without its enrolment seed cannot register at all.
+    const { enrolmentSeedHex: _, ...bare } = blob;
+    writeFileSync(blobPath, JSON.stringify(bare));
+    expect(() => run(["sign-server-register", "--priv-hex", V.register.stkSeedHex, "--auth-code-blob", blobPath])).toThrow();
   });
 
   it("sign-server-register preserves the signed admin root in the forwarded auth code", () => {

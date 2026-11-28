@@ -58,6 +58,7 @@ import {
   signServerWildcardGrant,
   canonicalOrgServerRegister,
   orgServerCodeSha256,
+  signOrgServerEnrolment,
   type OrgServerCode,
   type AuthCode,
   type Keypair,
@@ -193,9 +194,11 @@ function pkcs8FromHex(argv: string[]): void {
 /**
  * An org server registers with its server code (docs/enterprise-accounts.md "Org servers"):
  * `flagship/org-server-register/v1` over the code's hash, signed with the box's STK, posted to
- * the recipe's registrationUrl (`/api/orgs/<orgId>/servers/register`).
+ * the recipe's registrationUrl (`/api/orgs/<orgId>/servers/register`), and signed again with the
+ * enrolment key whose seed only the recipe carries (the code names its public key).
  */
-async function signOrgRegister(argv: string[], blob: { orgId: string; serverDomain: string; code: OrgServerCode }, privHex: string | undefined): Promise<void> {
+async function signOrgRegister(argv: string[], blob: { orgId: string; serverDomain: string; code: OrgServerCode; enrolmentSeedHex?: string }, privHex: string | undefined): Promise<void> {
+  if (typeof blob.enrolmentSeedHex !== "string") throw new Error("the org recipe carries no enrolment key");
   const identity = await identityFor(argv, privHex);
   const nonce = new Uint8Array(16);
   crypto.getRandomValues(nonce);
@@ -209,7 +212,8 @@ async function signOrgRegister(argv: string[], blob: { orgId: string; serverDoma
     nonceHex: bytesToHex(nonce),
   };
   const signature = bytesToHex(ed.sign(canonicalOrgServerRegister(request), identity.privateKey));
-  process.stdout.write(JSON.stringify({ request, signature }));
+  const enrolmentSignature = signOrgServerEnrolment(request, blob.code, blob.enrolmentSeedHex);
+  process.stdout.write(JSON.stringify({ request, signature, enrolmentSignature }));
 }
 
 async function signRegister(argv: string[]): Promise<void> {
