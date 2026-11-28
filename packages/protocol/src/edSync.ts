@@ -96,23 +96,57 @@ function rememberRejected(key: string): void {
   REJECTED.set(key, true);
 }
 
-// Hardened verify: reject low-order / malformed pubkeys and NEVER throw on
-// bad input (a boolean verifier must return false, not crash the handler —
-// an unguarded throw surfaced as a Worker 500 / "service unavailable").
+// ── Strict verification ────────────────────────────────────────────────
+// noble's default verify follows ZIP-215: R may be a non-canonical encoding
+// (y >= p, or x = 0 with the sign bit) and the check is cofactored
+// ([8][S]B = [8]R + [8][k]A), so one signature has several byte forms and a
+// small-order component in R is ignored. Every signer we accept produces
+// RFC 8032 signatures, which also pass the strict rule used here and by
+// WebCrypto: S < L, R canonically encoded, A canonical and not of small order,
+// and the cofactorless equation [S]B = R + [k]A. So a signature verifies in
+// exactly one byte form and the same way as on the platform verifiers.
+const L = ed.CURVE.n;
+
+function leNumber(b: Uint8Array): bigint {
+  let n = 0n;
+  for (let i = b.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(b[i]!);
+  return n;
+}
+
+function strictVerify(sig: Uint8Array, msg: Uint8Array, pub: Uint8Array): boolean {
+  if (sig.length !== 64 || pub.length !== 32) return false;
+  try {
+    const A = ed.Point.fromHex(pub, false);
+    if (A.isSmallOrder()) return false;
+    const rBytes = sig.subarray(0, 32);
+    const R = ed.Point.fromHex(rBytes, false);
+    const S = leNumber(sig.subarray(32));
+    if (S >= L) return false;
+    const k = ed.etc.mod(leNumber(sha512(ed.etc.concatBytes(rBytes, pub, msg))), L);
+    const sB = S === 0n ? ed.Point.ZERO : ed.Point.BASE.multiply(S);
+    return sB.equals(R.add(A.multiply(k, false)));
+  } catch {
+    return false;
+  }
+}
+
+// Hardened verify: reject low-order / malformed pubkeys, verify strictly, and
+// NEVER throw on bad input (a boolean verifier must return false, not crash
+// the handler — an unguarded throw surfaced as a Worker 500).
 function safeVerify(
   sig: Uint8Array | string,
   msg: Uint8Array | string,
   pub: Uint8Array | string,
-  opts?: Parameters<typeof ed.verify>[3],
 ): boolean {
   try {
     const pubBytes = pubBytesOf(pub);
     if (!isAcceptableEd25519PublicKey(pubBytes)) return false;
-    if (opts !== undefined) return ed.verify(sig, msg, pub, opts);
-    const key = tripleKey(asBytes(sig), asBytes(msg), pubBytes);
+    const sigBytes = asBytes(sig);
+    const msgBytes = asBytes(msg);
+    const key = tripleKey(sigBytes, msgBytes, pubBytes);
     if (VERIFIED.has(key)) return true;
     if (REJECTED.has(key)) return false;
-    const ok = ed.verify(sig, msg, pub);
+    const ok = strictVerify(sigBytes, msgBytes, pubBytes);
     if (ok) remember(key);
     else rememberRejected(key);
     return ok;
@@ -125,10 +159,10 @@ function safeVerify(
 // @noble/ed25519 verifies in pure JavaScript, about 1.2 ms of CPU a signature
 // (the Workers Free plan allows 10 ms a request). Runtimes with WebCrypto
 // Ed25519 (workerd, Node 22+, browsers) check one in about 0.05 ms. The native
-// check only ever ACCEPTS: it is stricter than noble's ZIP-215 rules (it takes
-// the cofactorless equation and a canonical encoding of R and S), so whatever
-// it accepts noble accepts too. Anything it does not accept is handed to the
-// exact old check, which keeps the old verdict for every odd encoding.
+// check only ever ACCEPTS: it applies the same strict rule (cofactorless, canonical
+// R and S) to a key we already found canonical and of prime order, so whatever it
+// accepts the strict check accepts too. Anything it does not accept is handed to
+// the strict check, which decides alone where the runtime lacks Ed25519.
 type NativeKey = Awaited<ReturnType<typeof crypto.subtle.importKey>>;
 const nativeKeys = new Map<string, Promise<NativeKey>>();
 let nativeBroken = false;
@@ -193,8 +227,8 @@ const edHardened = new Proxy(ed, {
   get(target, prop, receiver) {
     if (prop === "verify") return safeVerify;
     if (prop === "verifyAsync") {
-      return async (sig: Uint8Array | string, msg: Uint8Array | string, pub: Uint8Array | string, opts?: Parameters<typeof ed.verify>[3]) =>
-        safeVerify(sig, msg, pub, opts);
+      return async (sig: Uint8Array | string, msg: Uint8Array | string, pub: Uint8Array | string) =>
+        safeVerify(sig, msg, pub);
     }
     if (prop === "sign") return opaqueSign;
     if (prop === "signAsync") return async (msg: Uint8Array | string, priv: Uint8Array | string) => opaqueSign(msg, priv);

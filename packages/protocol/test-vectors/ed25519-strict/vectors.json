@@ -1,0 +1,8 @@
+{
+  "description": "Strict Ed25519 verification (S < L, canonical R and A, A not of small order, cofactorless [S]B = R + [k]A). honestSignatureHex verifies under publicKeyHex for messageHex in every verifier. mixedOrderRSignatureHex is valid under ZIP-215's cofactored check (R = rB + T, T of order 8, S = r + k·a) and must be refused by a strict verifier.",
+  "publicKeyHex": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+  "messageHex": "666c6167736869702f656432353531392d7374726963742f76317c766563746f72",
+  "honestSignatureHex": "3b9f4f334c53fd2a3ecd496f6e1ecc694c42037dbac5a4ca0a437c1704f721722cb2283ac125dda31f0104e8a4aa71e3c5a142c4fd34450cc31530067b958409",
+  "mixedOrderRSignatureHex": "a1e8f5bcecdf755da70dbe573871eb67baf37c9ef194e8decdea00d7bd8f087aed4025dc51d49c03cd085b6eac17874b151882797a2c78385dcc01f72d27860d",
+  "torsionPointHex": "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05"
+}
