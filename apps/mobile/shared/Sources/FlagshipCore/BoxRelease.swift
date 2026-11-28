@@ -2,6 +2,6 @@
 
 /// The box release new servers install: the default `installerGitRef` is this exact commit.
 public enum BoxRelease {
-    public static let commit = "3079462b5e9d8a2a1768e774279db12bb3ee5bc8"
-    public static let sequence: Int64 = 4
+    public static let commit = "c9eb06aa44f6fb0ee10eacb618bae4bbb51d9101"
+    public static let sequence: Int64 = 6
 }

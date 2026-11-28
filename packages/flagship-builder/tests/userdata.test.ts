@@ -1336,7 +1336,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // names an outbound proxy.
       // Re-pinned 2026-11-15 (org servers + retail first boot): the bootstrap reads an org recipe's code serial, strips
       // the org registration route and writes an org config (orgId + genesis, no IRK).
-      "8df8c029174831119021538f027505c2367a3c7034ee8d85b45649976c621941",
+      "a27c4ab4e3e7eb7a18141fdd99e1e5d01083c7ce5b6e2789442e1cd040b97b73",
     );
   });
 
