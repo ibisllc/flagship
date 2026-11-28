@@ -4383,5 +4383,10 @@
   "org_invited_pending": "622d05ab7857",
   "org_invite_withdraw": "83fd8f7f3595",
   "org_invite_withdraw_explain": "a12d1ba0cb39",
-  "org_invite_withdrawn": "f6f7ddbced93"
+  "org_invite_withdrawn": "f6f7ddbced93",
+  "qs_default_strict_note": "06965509d67a",
+  "qs_ai_classical_exception": "536d77c23a13",
+  "qs_devices_need_record": "3fc0f56df033",
+  "qs_turn_on_now": "8ba1b9dc4218",
+  "qs_turned_on_default": "cc8dc0e74852"
 }

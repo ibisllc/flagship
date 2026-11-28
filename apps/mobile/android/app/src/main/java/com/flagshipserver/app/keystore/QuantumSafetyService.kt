@@ -105,6 +105,19 @@ object QuantumSafetyService {
     }
 
     /**
+     * The hybrid half of a sensitive order deposited through `.com` (decommission, migration, an
+     * account's self-delete), by [key]: the admin root when this phone holds it, else the account
+     * key. A `.com` deposit reaches a strict box no quantum-safe way, so it needs this (pq-suites.md §21.1).
+     */
+    fun orderPqSignature(username: String, canonical: ByteArray, key: Ed25519Sign): PqSignatureWire? {
+        if (!anyStrict(username)) return null
+        val root = runCatching { Keystore.adminRootPubHex() }.getOrNull()
+        if (runCatching { Keystore.hasAdminRoot() }.getOrDefault(false) && root != null) return pqSignature(username, "admin-root", canonical, key, root)
+        val irk = runCatching { Keystore.irkPubHexIfKnown() }.getOrNull() ?: return null
+        return pqSignature(username, "account-irk", canonical, key, irk)
+    }
+
+    /**
      * The hybrid signer of a root this phone holds ([role] `admin-root` or `account-irk`), only when
      * `.com` holds this phone's ML-DSA key for it: a companion under another device's key would make
      * a box drop what it signed. [requireBound] false is for the account's creation, where this phone

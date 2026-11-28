@@ -92,6 +92,8 @@ import com.flagshipserver.app.ui.shell.WindowWidthSizeClass
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FlagshipTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -479,6 +481,54 @@ class MainActivity : FragmentActivity() {
                 OkHttpJsonTransport(okHttp), { com.flagshipserver.app.core.Endpoints.controlBaseUrl },
             ),
         )
+        // Strict by default (pq-suites.md §21): after each unlock's binding pass, an admin phone moves
+        // every server no owner has changed to strict, with the browser and AI exceptions, quietly.
+        com.flagshipserver.app.keystore.PqIdentityUpgrade.afterBind = if (!useLive) null else { a ->
+            val user = a.username.lowercase()
+            val dev = a.deviceId?.lowercase()
+            if (!a.isDemo && dev != null) {
+                val vm = com.flagshipserver.app.viewmodels.QuantumSafetyViewModel(
+                    transport = OkHttpJsonTransport(okHttp),
+                    username = { user },
+                    deviceId = { dev },
+                    servers = { appState.pods.value.filter { !it.isRevoked && it.fqdn.isNotEmpty() }.map { it.fqdn to it.name } },
+                    adminKey = { reason -> Keystore.adminRootKey(reason) },
+                    deviceKey = { _ ->
+                        if (!com.flagshipserver.app.keystore.SessionIrkAccess.isSessionUnlocked() || !Keystore.hasUmkSeed()) null
+                        else Keystore.accountDeviceSigner(Keystore.currentUmkSeed(), user, dev)
+                    },
+                    irkKey = {
+                        val irk = com.flagshipserver.app.keystore.KeystoreIrkAccess().resolve(FSStrings.get(R.string.quantum_safe_protection))
+                        irk.signer to irk.pubHex
+                    },
+                )
+                val moved = vm.applyDefaults()
+                if (moved > 0 && Keystore.hasAdminRoot() && appState.pods.value.count(com.flagshipserver.app.core.ServerOrderProtocol::orderable) >= 2) {
+                    com.flagshipserver.app.core.ServerOrderSaver(
+                        app = appState,
+                        post = { u, wire -> liveMailbox.postServerOrder(u, wire) },
+                        fetchOrder = { u -> liveMailbox.fetchPods(u).serverOrder },
+                        signer = { reason -> Keystore.adminSigningKey(reason) },
+                        pqSigner = { canonical, key ->
+                            com.flagshipserver.app.keystore.QuantumSafetyService.pqSignature(user, "admin-root", canonical, key, Keystore.adminRootPubHex().orEmpty())
+                        },
+                        pqKeyIdFor = { u, pod ->
+                            com.flagshipserver.app.core.BoxKeyPins.shared.verifiedBoxPqBinding(u, pod.fqdn)
+                                ?.takeIf { it.ed25519PubHex == pod.identityPubKeyHex.lowercase() }?.keyIdHex
+                        },
+                        strict = { u -> com.flagshipserver.app.keystore.QuantumSafetyService.anyStrict(u) },
+                        isDemo = { appState.isDemoAccountNow() },
+                    ).reorder(appState.orderedPods.value.map { it.podId }, resign = true)
+                }
+            }
+        }
+        // A new server gets the same pass once it comes online (a change in which servers are up).
+        lifecycleScope.launch {
+            appState.pods
+                .map { pods -> pods.filter { !it.isRevoked && it.fqdn.isNotEmpty() }.map { it.fqdn.lowercase() to it.status }.toSet() }
+                .distinctUntilChanged()
+                .collect { up -> if (up.isNotEmpty()) com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger() }
+        }
         com.flagshipserver.app.keystore.PqIdentityUpgrade.account = {
             val p = appState.activeProfile
             val user = appState.currentUser.value

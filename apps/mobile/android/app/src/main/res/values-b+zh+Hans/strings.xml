@@ -4466,4 +4466,9 @@
     <string name="org_invite_withdraw">撤回邀请</string>
     <string name="org_invite_withdraw_explain">链接将失效，已接受它的人也不会被允许加入。</string>
     <string name="org_invite_withdrawn">邀请已撤回。</string>
+    <string name="qs_default_strict_note">每台服务器默认都使用抗量子保护。当所有设备和你的恢复方式都准备就绪后，管理员手机或平板电脑下次打开 Flagship 时，它会自动开启严格保护。浏览器和 AI 提供商作为已标明的例外，继续以传统保护访问。</string>
+    <string name="qs_ai_classical_exception">AI 提供商（Flagship Inference 和你自己的密钥）以传统保护连接，作为已标明的例外。</string>
+    <string name="qs_devices_need_record">你有 %1$s 台设备仍需要抗量子记录。请在持有管理员密钥的管理员手机或平板电脑上打开 Flagship。</string>
+    <string name="qs_turn_on_now">立即开启</string>
+    <string name="qs_turned_on_default">抗量子保护已开启。浏览器和 AI 提供商继续以传统保护访问。</string>
 </resources>

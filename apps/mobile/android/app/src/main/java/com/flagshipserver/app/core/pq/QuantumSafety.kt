@@ -114,6 +114,18 @@ object QuantumSafety {
     ) = AssurancePolicy.Change(account.lowercase(), scope, from.profile, "strict", from.generation + 1, from.headDigest, affectedPeersDigest(peers),
         if (browsersAllowed) listOf(BROWSER_LOSS) else emptyList(), reentry, signerKind, signerKeyId.lowercase(), PqTrust.SUITE_HYBRID, now)
 
+    /**
+     * Strict by default (pq-suites.md §21): a scope no owner has ever changed (generation 0) is
+     * moved to strict by an admin device on its own, with the browser exception signed in; AI
+     * connectors stay allowed by never being signed strict. Null for any scope an owner changed.
+     */
+    fun defaultStrictEligible(s: AssurancePolicy.PolicyState): Boolean = s.generation == 0L && s.profile == "compatibility" && !s.enforcedEver
+
+    fun defaultStrictChange(
+        account: String, scope: AssurancePolicy.Scope, from: AssurancePolicy.PolicyState,
+        peers: List<String>, signerKind: String, signerKeyId: String, now: Long,
+    ): AssurancePolicy.Change? = if (!defaultStrictEligible(from)) null else strictChange(account, scope, from, true, peers, signerKind, signerKeyId, now)
+
     fun compatibilityChange(
         account: String, scope: AssurancePolicy.Scope, from: AssurancePolicy.PolicyState, loss: List<String>,
         peers: List<String>, signerKind: String, signerKeyId: String, now: Long,
@@ -127,12 +139,15 @@ object QuantumSafety {
         val thisDeviceIsAdmin: Boolean,
         val recoveryChecked: Boolean,
         val serverBound: Boolean,
+        /** Devices whose grant carries no hybrid companion yet: a strict server would not count them (pq-suites.md §20.2). */
+        val devicesWithoutRecord: Int = 0,
     ) {
-        val ready: Boolean get() = thisDeviceIsAdmin && thisDeviceBound && devices > 0 && devicesBound == devices && recoveryChecked && serverBound
+        val ready: Boolean get() = thisDeviceIsAdmin && thisDeviceBound && devices > 0 && devicesBound == devices && devicesWithoutRecord == 0 && recoveryChecked && serverBound
         val missing: List<String> get() = buildList {
             if (!thisDeviceIsAdmin) add(FSStrings.get(R.string.only_an_admin_device_of_this_3))
             if (!thisDeviceBound) add(FSStrings.get(R.string.this_devices_post_quantum_key_isnt))
             if (devicesBound < devices) add(FSStrings.get(R.string.of_your_devices_have_no_post, devices - devicesBound))
+            if (devicesWithoutRecord > 0) add(FSStrings.get(R.string.qs_devices_need_record, devicesWithoutRecord))
             if (!recoveryChecked) add(FSStrings.get(R.string.save_and_test_your_account_recovery))
             if (!serverBound) add(FSStrings.get(R.string.this_server_hasnt_registered_its_post))
         }

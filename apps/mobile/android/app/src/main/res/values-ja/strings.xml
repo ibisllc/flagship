@@ -4466,4 +4466,9 @@
     <string name="org_invite_withdraw">招待を取り消す</string>
     <string name="org_invite_withdraw_explain">リンクは使えなくなり、承諾した人も参加できません。</string>
     <string name="org_invite_withdrawn">招待を取り消しました。</string>
+    <string name="qs_default_strict_note">すべてのサーバーは既定で耐量子保護を使います。すべてのデバイスと復旧の準備が整うと、管理者のスマートフォンまたはタブレットが次に Flagship を開いたときに、自動で厳格な保護になります。ブラウザーと AI プロバイダーは、明示された例外として従来型の保護で引き続き利用できます。</string>
+    <string name="qs_ai_classical_exception">AI プロバイダー（Flagship Inference とご自身のキー）へは、明示された例外として従来型の保護で接続します。</string>
+    <string name="qs_devices_need_record">%1$s 台のデバイスに、まだ耐量子の記録が必要です。管理者キーを持つ管理者のスマートフォンまたはタブレットで Flagship を開いてください。</string>
+    <string name="qs_turn_on_now">今すぐオンにする</string>
+    <string name="qs_turned_on_default">耐量子保護はオンです。ブラウザーと AI プロバイダーは従来型の保護で引き続き利用できます。</string>
 </resources>

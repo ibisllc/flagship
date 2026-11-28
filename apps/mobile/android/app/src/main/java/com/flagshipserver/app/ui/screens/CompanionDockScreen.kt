@@ -144,6 +144,8 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
         subtitle = fsString(R.string.open_on_your_computer_and_scan, Endpoints.remoteHost),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            // The browser exception of a quantum-safe server, said plainly (pq-suites.md §21).
+            com.flagshipserver.app.ui.components.FSNote(stringResource(R.string.browsers_can_reach_it_a_browsers))
             FSSectionHeader(stringResource(R.string.connect_a_browser))
             FSCard {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {

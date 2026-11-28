@@ -244,6 +244,8 @@ data class MigrationStartBody(
     val authSignature: String,
     val order: Order,
     val signature: String,
+    /** The order's hybrid half while a server is strict (pq-suites.md §21.1); `.com` relays it opaque. */
+    val pqSignature: PqSignatureWire? = null,
 ) {
     @Serializable
     data class Order(
@@ -310,6 +312,8 @@ data class DecommissionDepositBody(
     val authSignature: String,
     val order: Order,
     val signature: String,
+    /** The order's hybrid half while a server is strict (pq-suites.md §21.1); `.com` relays it opaque. */
+    val pqSignature: PqSignatureWire? = null,
 ) {
     @Serializable
     data class Order(

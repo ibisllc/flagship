@@ -149,6 +149,9 @@ fun AccountDeletionScreen(nav: NavController) {
                                     signature = HexUtil.encode(
                                         irk.sign(ServersSelfDeleteOrder.canonicalBytes(username, issuedAt)),
                                     ),
+                                    pqSignature = com.flagshipserver.app.keystore.QuantumSafetyService.orderPqSignature(
+                                        username, ServersSelfDeleteOrder.canonicalBytes(username, issuedAt), irk,
+                                    ),
                                 )
                             } else {
                                 null

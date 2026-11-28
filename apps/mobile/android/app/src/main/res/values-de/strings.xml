@@ -4467,4 +4467,9 @@
     <string name="org_invite_withdraw">Einladung zurückziehen</string>
     <string name="org_invite_withdraw_explain">Der Link funktioniert nicht mehr, und niemand, der ihn angenommen hat, wird hereingelassen.</string>
     <string name="org_invite_withdrawn">Einladung zurückgezogen.</string>
+    <string name="qs_default_strict_note">Jeder Server hat standardmäßig Post-Quanten-Schutz. Er schaltet den strikten Schutz von selbst ein, sobald ein Admin-Telefon oder -Tablet Flagship das nächste Mal öffnet und alle Geräte sowie deine Wiederherstellung bereit sind. Browser und KI-Anbieter bleiben als gekennzeichnete Ausnahmen mit klassischem Schutz erreichbar.</string>
+    <string name="qs_ai_classical_exception">KI-Anbieter (Flagship Inference und deine eigenen Schlüssel) werden mit klassischem Schutz erreicht, als gekennzeichnete Ausnahme.</string>
+    <string name="qs_devices_need_record">%1$s deiner Geräte brauchen noch ihren Post-Quanten-Eintrag. Öffne Flagship auf einem Admin-Telefon oder -Tablet, das deinen Admin-Schlüssel hat.</string>
+    <string name="qs_turn_on_now">Jetzt einschalten</string>
+    <string name="qs_turned_on_default">Der Post-Quanten-Schutz ist an. Browser und KI-Anbieter bleiben mit klassischem Schutz erreichbar.</string>
 </resources>

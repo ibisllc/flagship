@@ -467,6 +467,7 @@ fun AiKeysManagerScreen(
         onBack = { nav.popBackStack() },
         subtitle = REASSURANCE,
     ) {
+        FSNote(stringResource(R.string.qs_ai_classical_exception))
         FlagshipInferenceSettingsRow(
             state = freeAi,
             isDefault = activeId == AiKeyStore.FLAGSHIP_INFERENCE_ID,

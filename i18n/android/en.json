@@ -18324,5 +18324,26 @@
   "org_invite_withdrawn": {
     "en": "Invitation withdrawn.",
     "ctx": "Organizations (docs/enterprise-accounts.md)"
+  },
+  "qs_default_strict_note": {
+    "en": "Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt (prose)"
+  },
+  "qs_ai_classical_exception": {
+    "en": "AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt (prose)"
+  },
+  "qs_devices_need_record": {
+    "en": "%1$s of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt (prose)",
+    "args": 1
+  },
+  "qs_turn_on_now": {
+    "en": "Turn on now",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt (prose)"
+  },
+  "qs_turned_on_default": {
+    "en": "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt (prose)"
   }
 }

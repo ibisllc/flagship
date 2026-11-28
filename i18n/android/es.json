@@ -4464,5 +4464,10 @@
   "org_invited_pending": "Invitado, aún sin aceptar",
   "org_invite_withdraw": "Retirar la invitación",
   "org_invite_withdraw_explain": "El enlace deja de funcionar y nadie que lo haya aceptado entra.",
-  "org_invite_withdrawn": "Invitación retirada."
+  "org_invite_withdrawn": "Invitación retirada.",
+  "qs_default_strict_note": "Todos los servidores tienen protección poscuántica de forma predeterminada. Activan la protección estricta por sí solos la próxima vez que un teléfono o tableta de administrador abra Flagship, cuando todos los dispositivos y tu recuperación estén listos. Los navegadores y los proveedores de IA siguen accesibles como excepciones señaladas con protección clásica.",
+  "qs_ai_classical_exception": "Los proveedores de IA (Flagship Inference y tus propias claves) se alcanzan con protección clásica, como una excepción señalada.",
+  "qs_devices_need_record": "%1$s de tus dispositivos aún necesitan su registro poscuántico. Abre Flagship en un teléfono o tableta de administrador que tenga tu clave de administrador.",
+  "qs_turn_on_now": "Activar ahora",
+  "qs_turned_on_default": "La protección poscuántica está activada. Los navegadores y los proveedores de IA siguen accesibles con protección clásica."
 }

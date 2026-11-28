@@ -63,8 +63,12 @@ class ServerOrderSaver(
         return reorder(listOf(pod.podId) + ranked.filter { it.podId != podId }.map { it.podId })
     }
 
-    /** Save the servers in [podIds] order (pods it leaves out keep their rank after them). */
-    suspend fun reorder(podIds: List<String>): Outcome {
+    /**
+     * Save the servers in [podIds] order (pods it leaves out keep their rank after them). [resign]
+     * signs the same order again: once servers turn strict, it adds the hybrid half and each
+     * server's PQ key id, without which a strict box drops its siblings (pq-suites.md §16.1).
+     */
+    suspend fun reorder(podIds: List<String>, resign: Boolean = false): Outcome {
         val username = app.currentUser.value?.lowercase() ?: return Outcome.Unchanged
         val byId = app.pods.value.associateBy { it.podId }
         val named = podIds.mapNotNull { byId[it] } +
@@ -75,7 +79,7 @@ class ServerOrderSaver(
             .take(ServerOrderProtocol.MAX)
         if (stks.isEmpty()) return Outcome.Unchanged
         val current = app.orderedPods.value.filter(ServerOrderProtocol::orderable).map { it.identityPubKeyHex.lowercase() }
-        if (stks == current) return Outcome.Unchanged
+        if (stks == current && !resign) return Outcome.Unchanged
 
         val (previous, previousIssuedAt) = app.serverOrderSnapshot()
         val plain = ServerOrder(username, stks, now(), HexUtil.encode(randomBytes(32)))

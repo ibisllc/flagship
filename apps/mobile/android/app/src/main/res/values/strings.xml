@@ -4474,4 +4474,9 @@
     <string name="org_invite_withdraw">Withdraw invitation</string>
     <string name="org_invite_withdraw_explain">The link stops working, and nobody who accepted it is let in.</string>
     <string name="org_invite_withdrawn">Invitation withdrawn.</string>
+    <string name="qs_default_strict_note">Every server is quantum-safe by default. It turns strict protection on by itself the next time an admin phone or tablet opens Flagship, once every device and your recovery are ready. Browsers and AI providers stay reachable as labelled exceptions with classical protection.</string>
+    <string name="qs_ai_classical_exception">AI providers (Flagship Inference and your own keys) are reached with classical protection, as a labelled exception.</string>
+    <string name="qs_devices_need_record">%1$s of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.</string>
+    <string name="qs_turn_on_now">Turn on now</string>
+    <string name="qs_turned_on_default">Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.</string>
 </resources>

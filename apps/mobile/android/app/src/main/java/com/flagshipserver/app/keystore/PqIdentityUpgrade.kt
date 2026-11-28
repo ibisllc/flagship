@@ -25,6 +25,8 @@ object PqIdentityUpgrade {
     data class Account(val username: String, val deviceId: String?, val isDemo: Boolean)
 
     @Volatile var binder: PqIdentityBinder? = null
+    /** Runs after each pass while the session is still unlocked: strict by default (pq-suites.md §21). */
+    @Volatile var afterBind: (suspend (Account) -> Unit)? = null
     @Volatile var account: (() -> Account?)? = null
     @Volatile var sessionUnlocked: () -> Boolean = { SessionIrkAccess.isSessionUnlocked() }
     @Volatile var scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -48,7 +50,9 @@ object PqIdentityUpgrade {
         if (a.isDemo || !sessionUnlocked() || choosingName()) return null
         if (!running.compareAndSet(false, true)) return null
         return try {
-            b.bindAll(a.username, identities(a))
+            b.bindAll(a.username, identities(a)).also {
+                if (sessionUnlocked()) runCatching { afterBind?.invoke(a) }
+            }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Throwable) {

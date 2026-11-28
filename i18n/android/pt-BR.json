@@ -4464,5 +4464,10 @@
   "org_invited_pending": "Convidado, ainda não aceito",
   "org_invite_withdraw": "Retirar convite",
   "org_invite_withdraw_explain": "O link para de funcionar, e ninguém que o aceitou entra.",
-  "org_invite_withdrawn": "Convite retirado."
+  "org_invite_withdrawn": "Convite retirado.",
+  "qs_default_strict_note": "Todo servidor tem proteção pós-quântica por padrão. Ele ativa a proteção estrita sozinho na próxima vez que um celular ou tablet de administrador abrir o Flagship, quando todos os dispositivos e sua recuperação estiverem prontos. Navegadores e provedores de IA continuam acessíveis como exceções indicadas, com proteção clássica.",
+  "qs_ai_classical_exception": "Os provedores de IA (Flagship Inference e suas próprias chaves) são acessados com proteção clássica, como uma exceção indicada.",
+  "qs_devices_need_record": "%1$s dos seus dispositivos ainda precisam do registro pós-quântico. Abra o Flagship em um celular ou tablet de administrador que tenha sua chave de administrador.",
+  "qs_turn_on_now": "Ativar agora",
+  "qs_turned_on_default": "A proteção pós-quântica está ativada. Navegadores e provedores de IA continuam acessíveis com proteção clássica."
 }

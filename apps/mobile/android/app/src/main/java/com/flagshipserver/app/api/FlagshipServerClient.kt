@@ -1079,6 +1079,8 @@ data class AccountSelfDeleteBundleRequest(
     data class Order(
         val request: Inner,
         val signature: String,       // hex, IRK over canonical bytes
+        /** The servers' order's hybrid half while a server is strict (pq-suites.md §21.1). */
+        val pqSignature: PqSignatureWire? = null,
     )
     @Serializable
     data class Inner(

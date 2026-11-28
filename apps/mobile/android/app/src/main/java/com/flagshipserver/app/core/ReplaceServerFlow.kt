@@ -52,17 +52,16 @@ object ReplaceServerFlow {
     ): DecommissionDepositBody {
         val nonceHex = HexUtil.encode(nonce)
         val epoch = backupEpoch ?: issuedAt
-        val sig = (orderKey ?: irk).sign(
-            ServerDecommissionOrder.canonicalBytes(
-                podCanonical = serverFqdn,
-                retiredStkPubHex = retiredStkPubHex,
-                finalBackup = finalBackup,
-                diskDisposition = disposition.wire,
-                backupEpoch = epoch,
-                nonce = nonceHex,
-                issuedAt = issuedAt,
-            )
+        val canonical = ServerDecommissionOrder.canonicalBytes(
+            podCanonical = serverFqdn,
+            retiredStkPubHex = retiredStkPubHex,
+            finalBackup = finalBackup,
+            diskDisposition = disposition.wire,
+            backupEpoch = epoch,
+            nonce = nonceHex,
+            issuedAt = issuedAt,
         )
+        val sig = (orderKey ?: irk).sign(canonical)
         val auth = ServerTransferFlow.buildMailboxAuth(username, irk, irkPubHex, issuedAt, authNonce)
         return DecommissionDepositBody(
             auth = auth.auth,
@@ -80,6 +79,7 @@ object ReplaceServerFlow {
                 issuedAt = issuedAt,
             ),
             signature = HexUtil.encode(sig),
+            pqSignature = com.flagshipserver.app.keystore.QuantumSafetyService.orderPqSignature(username, canonical, orderKey ?: irk),
         )
     }
 }

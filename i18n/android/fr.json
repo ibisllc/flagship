@@ -4464,5 +4464,10 @@
   "org_invited_pending": "Invité, pas encore accepté",
   "org_invite_withdraw": "Retirer l'invitation",
   "org_invite_withdraw_explain": "Le lien cesse de fonctionner, et personne qui l'a accepté n'est admis.",
-  "org_invite_withdrawn": "Invitation retirée."
+  "org_invite_withdrawn": "Invitation retirée.",
+  "qs_default_strict_note": "Chaque serveur a une protection post-quantique par défaut. Il active la protection stricte de lui-même la prochaine fois qu’un téléphone ou une tablette administrateur ouvre Flagship, une fois tous les appareils et votre récupération prêts. Les navigateurs et les fournisseurs d’IA restent joignables comme exceptions signalées, avec une protection classique.",
+  "qs_ai_classical_exception": "Les fournisseurs d’IA (Flagship Inference et vos propres clés) sont joints avec une protection classique, comme exception signalée.",
+  "qs_devices_need_record": "%1$s de vos appareils ont encore besoin de leur enregistrement post-quantique. Ouvrez Flagship sur un téléphone ou une tablette administrateur qui détient votre clé administrateur.",
+  "qs_turn_on_now": "Activer maintenant",
+  "qs_turned_on_default": "La protection post-quantique est activée. Les navigateurs et les fournisseurs d’IA restent joignables avec une protection classique."
 }

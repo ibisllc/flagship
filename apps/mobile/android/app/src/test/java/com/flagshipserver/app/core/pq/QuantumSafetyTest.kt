@@ -66,4 +66,32 @@ class QuantumSafetyTest {
         assertEquals(listOf("ai-flagship-inference", "ai-openai"), QuantumSafety.connectors(listOf("openai")).filter { it.needsChoice }.map { it.id })
         assertEquals(QuantumSafety.affectedPeersDigest(listOf("B", "a")), QuantumSafety.affectedPeersDigest(listOf("a", "b", "b")))
     }
+
+    @Test
+    fun strictByDefaultOnlyForNeverChangedScopesWithTheBrowserException() {
+        val b = binding()
+        val scope = AssurancePolicy.Scope("installation", server)
+        val legacy = AssurancePolicy.legacyState(scope)
+        assertTrue(QuantumSafety.defaultStrictEligible(legacy))
+        val c = QuantumSafety.defaultStrictChange(account, scope, legacy, listOf(server), "admin-root", root, 100)!!
+        assertEquals(listOf(QuantumSafety.BROWSER_LOSS), c.acknowledgedLoss)
+        assertEquals(1, c.generation)
+        val trust: (AssurancePolicy.Change) -> Pair<String, PqTrust.VerifiedBinding?>? = { x -> if (x.signerKeyId == root) root to b else null }
+        val on = QuantumSafety.replay(scope, account, listOf(signed(c)), null, trust)
+        assertTrue(on.strict && on.browsersAllowed)
+        assertFalse(QuantumSafety.defaultStrictEligible(on.state))
+        assertNull(QuantumSafety.defaultStrictChange(account, scope, on.state, listOf(server), "admin-root", root, 200))
+        // The owner left strict: the default never puts it back.
+        val off = QuantumSafety.replay(scope, account, listOf(signed(c), signed(QuantumSafety.compatibilityChange(account, scope, on.state, QuantumSafety.LEAVING_STRICT_LOSS, listOf(server), "admin-root", root, 300))), on.state, trust)
+        assertFalse(off.strict)
+        assertFalse(QuantumSafety.defaultStrictEligible(off.state))
+    }
+
+    @Test
+    fun readinessWaitsForEveryDevicesRecord() {
+        val r = QuantumSafety.Readiness(2, 2, true, true, true, true, devicesWithoutRecord = 1)
+        assertFalse(r.ready)
+        assertEquals(1, r.missing.size)
+        assertTrue(r.copy(devicesWithoutRecord = 0).ready)
+    }
 }

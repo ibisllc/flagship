@@ -49,6 +49,8 @@ class QuantumSafetyViewModel(
     private val appsFor: suspend (fqdn: String) -> List<Pair<String, String>> = { emptyList() },
     /** This phone's account device key, while the session is unlocked (the admin-device signer). */
     private val deviceKey: suspend (reason: String) -> Ed25519Sign? = { null },
+    /** The account key (IRK) and its public half, for a grant companion it signs; null when not at hand. */
+    private val irkKey: suspend () -> Pair<Ed25519Sign, String>? = { null },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {
     data class Row(
@@ -116,6 +118,7 @@ class QuantumSafetyViewModel(
         val listed = grants?.get("grants")?.jsonArray?.map { it.jsonObject } ?: emptyList()
         val byDevice = listed.groupBy { it["deviceId"]?.jsonPrimitive?.contentOrNull.orEmpty() }.filterKeys { it.isNotEmpty() }
         val bound = byDevice.count { (_, gs) -> gs.any { it["pqKeyBinding"] is JsonObject } }
+        val withoutRecord = byDevice.count { (_, gs) -> gs.none { it["pqSignature"] is JsonObject } }
         val root = Keystore.adminRootPubHex()?.lowercase()
         val rootWire = grants?.get("pqKeyBindings")?.jsonObject?.get("adminRoot")
         val rootBinding = root?.let { r -> rootWire?.let { runCatching { PqTrust.verifyPqKeyBinding(it, PqTrust.Expectation("admin-root", user, r, now = now())) }.getOrNull() } }
@@ -153,7 +156,7 @@ class QuantumSafetyViewModel(
             val checked = body?.get("evidence")?.jsonObject?.get("recoveryChecked")?.jsonPrimitive?.booleanOrNull == true
             recovery[host] = checked
             val apps = if (replayed?.strict == true) loadApps(user, host, root, rootBinding) else emptyList()
-            out += Row(host, name, replayed, QuantumSafety.Readiness(bound, byDevice.size, thisBound, thisIsAdmin, checked, serverBound), apps)
+            out += Row(host, name, replayed, QuantumSafety.Readiness(bound, byDevice.size, thisBound, thisIsAdmin, checked, serverBound, withoutRecord), apps)
         }
         recoveryByServer = recovery
         _rows.value = out
@@ -204,6 +207,81 @@ class QuantumSafetyViewModel(
                 }
             }
             AppChoice(id, name, r)
+        }
+    }
+
+    /**
+     * Strict by default (pq-suites.md §21): gives every device grant that has none its hybrid
+     * companion (signed by the root that signed the grant, when this phone holds that root's bound
+     * PQ key), then moves each server no owner has ever changed to strict with the browser
+     * exception, where it is ready. Never prompts when the session is unlocked (the sweep passes
+     * keys the session holds). Returns how many servers it moved.
+     */
+    suspend fun applyDefaults(): Int {
+        val user = username()?.lowercase() ?: return 0
+        if (QuantumSafetyService.store == null) return 0
+        backfillGrantCompanions(user)
+        loadNow()
+        var moved = 0
+        for (r in _rows.value) {
+            if (r.readiness?.ready != true) continue
+            val scope = AssurancePolicy.Scope("installation", r.fqdn)
+            val state = r.replayed?.state ?: AssurancePolicy.legacyState(scope)
+            if (!QuantumSafety.defaultStrictEligible(state)) continue
+            try {
+                val sg = signer(user, FSStrings.get(R.string.turn_on_quantum_safe_protection_for, r.name))
+                val change = QuantumSafety.defaultStrictChange(user, scope, state, listOf(r.fqdn), sg.kind, sg.keyId, now()) ?: continue
+                post(user, change, sg)
+                moved++
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // Tried again at the next unlock; the screen shows what is missing.
+            }
+        }
+        if (moved > 0) {
+            _message.value = FSStrings.get(R.string.qs_turned_on_default)
+            loadNow()
+        }
+        return moved
+    }
+
+    /** The screen's "Turn on now": the same pass, on demand. */
+    fun applyDefaultsNow() {
+        viewModelScope.launch {
+            _busy.value = true
+            try { applyDefaults() } finally { _busy.value = false }
+        }
+    }
+
+    private suspend fun backfillGrantCompanions(user: String) {
+        val grants = getJson(user, "${base()}/api/users/${enc(user)}/device-grants") ?: return
+        val listed = grants["grants"]?.jsonArray?.map { it.jsonObject } ?: return
+        val root = Keystore.adminRootPubHex()?.lowercase()
+        for (g in listed) {
+            if (g["pqSignature"] is JsonObject) continue
+            val id = g["grantId"]?.jsonPrimitive?.contentOrNull ?: continue
+            val deviceId = g["deviceId"]?.jsonPrimitive?.contentOrNull ?: continue
+            val pub = g["devicePubHex"]?.jsonPrimitive?.contentOrNull?.lowercase() ?: continue
+            val scopes = g["scopes"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: continue
+            val issuedAt = g["issuedAt"]?.jsonPrimitive?.longOrNull ?: continue
+            val expiresAt = g["expiresAt"]?.jsonPrimitive?.longOrNull ?: continue
+            val bytes = DeviceCapabilityGrant.canonicalBytes(id, user, deviceId, pub, scopes, issuedAt, expiresAt)
+            val companion = runCatching {
+                if (g["signerRoot"]?.jsonPrimitive?.contentOrNull == "admin-root") {
+                    if (root == null || !Keystore.hasAdminRoot()) null
+                    else QuantumSafetyService.grantCompanion(user, "admin-root", bytes, adminKey(FSStrings.get(R.string.quantum_safe_protection)), root)
+                } else {
+                    irkKey()?.let { (k, irkPub) -> QuantumSafetyService.grantCompanion(user, "account-irk", bytes, k, irkPub) }
+                }
+            }.getOrNull() ?: continue
+            val body = buildJsonObject {
+                put("pqSignature", buildJsonObject { put("suite", companion.suite); put("signature", companion.signature) })
+            }
+            runCatching {
+                transport.execute("POST", "${base()}/api/accounts/${enc(user)}/device-grants/${enc(id)}/pq-signature", body = body.toString().toByteArray(),
+                    contentType = "application/json", accept = setOf(200, 400, 403, 404, 409))
+            }
         }
     }
 

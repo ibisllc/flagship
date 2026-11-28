@@ -46,15 +46,14 @@ object ServerMigrationFlow {
     ): MigrationStartBody {
         val nonceHex = HexUtil.encode(nonce)
         val loweredStk = oldStkPubHex.lowercase()
-        val sig = (orderKey ?: irk).sign(
-            ServerMigrationOrder.canonicalBytes(
-                serverDomain = serverFqdn,
-                oldStkPubHex = loweredStk,
-                diskDisposition = disposition.wire,
-                nonce = nonceHex,
-                issuedAt = issuedAt,
-            )
+        val canonical = ServerMigrationOrder.canonicalBytes(
+            serverDomain = serverFqdn,
+            oldStkPubHex = loweredStk,
+            diskDisposition = disposition.wire,
+            nonce = nonceHex,
+            issuedAt = issuedAt,
         )
+        val sig = (orderKey ?: irk).sign(canonical)
         val auth = ServerTransferFlow.buildMailboxAuth(username, irk, irkPubHex, issuedAt, authNonce)
         return MigrationStartBody(
             auth = auth.auth,
@@ -67,6 +66,7 @@ object ServerMigrationFlow {
                 issuedAt = issuedAt,
             ),
             signature = HexUtil.encode(sig),
+            pqSignature = com.flagshipserver.app.keystore.QuantumSafetyService.orderPqSignature(username, canonical, orderKey ?: irk),
         )
     }
 

@@ -63,6 +63,10 @@ fun QuantumSafetyScreen(nav: NavController) {
                         val client = pod?.let { podClients.screens(it) }
                         client?.appsList()?.apps?.map { it.serviceId to it.urlLabel.ifEmpty { it.slug } } ?: emptyList()
                     },
+                    irkKey = {
+                        val irk = com.flagshipserver.app.keystore.KeystoreIrkAccess().resolve(com.flagshipserver.app.core.FSStrings.get(R.string.quantum_safe_protection))
+                        irk.signer to irk.pubHex
+                    },
                     deviceKey = { _ ->
                         val user = app.currentUser.value?.lowercase()
                         val dev = app.activeProfile?.deviceId?.lowercase()
@@ -92,6 +96,7 @@ fun QuantumSafetyScreen(nav: NavController) {
         subtitle = stringResource(R.string.strict_quantum_resistant_protection_makes_a),
     ) {
         Text(stringResource(R.string.these_protections_are_new_and_pending), style = MaterialTheme.typography.bodySmall, color = FS.colors.textMuted)
+        Text(stringResource(R.string.qs_default_strict_note), style = MaterialTheme.typography.bodySmall, color = FS.colors.textMuted, modifier = Modifier.testTag("qs-default-note"))
         custody?.let { Text(fsString(R.string.this_devices_key, it), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("qs-custody")) }
         message?.let { FSCard { Text(it, style = MaterialTheme.typography.bodyMedium) } }
         when (val p = phase) {
@@ -112,6 +117,8 @@ fun QuantumSafetyScreen(nav: NavController) {
                                     else stringResource(R.string.only_the_flagship_app_reaches_it),
                                     style = MaterialTheme.typography.bodySmall, color = FS.colors.textMuted,
                                 )
+                                Text(stringResource(R.string.qs_ai_classical_exception), style = MaterialTheme.typography.bodySmall, color = FS.colors.textMuted,
+                                    modifier = Modifier.testTag("qs-ai-classical-${r.fqdn}"))
                                 if (r.apps.isNotEmpty()) {
                                     Text(stringResource(R.string.apps_on_this_server), style = MaterialTheme.typography.bodyMedium)
                                     Text(stringResource(R.string.choose_for_each_app_whether_browsers),
@@ -130,6 +137,10 @@ fun QuantumSafetyScreen(nav: NavController) {
                             } else if (r.readiness?.ready != true) {
                                 Text(stringResource(R.string.not_ready_yet), style = MaterialTheme.typography.bodyMedium)
                                 r.readiness?.missing?.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = FS.colors.textMuted) }
+                                if (r.replayed?.state?.let { QuantumSafety.defaultStrictEligible(it) } != false) {
+                                    FSPrimaryButton(stringResource(R.string.qs_turn_on_now), onClick = { vm.applyDefaultsNow() }, enabled = !busy,
+                                        modifier = Modifier.testTag("qs-turn-on-now-${r.fqdn}"))
+                                }
                             } else {
                                 Text(stringResource(R.string.can_browsers_still_reach_this_server), style = MaterialTheme.typography.bodyMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
