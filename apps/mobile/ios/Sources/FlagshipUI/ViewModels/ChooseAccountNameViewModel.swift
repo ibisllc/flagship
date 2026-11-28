@@ -210,6 +210,26 @@ public final class ChooseAccountNameViewModel {
         case done(name: String)
     }
 
+    /// What `.com` said about the name in the field while it was typed (the precheck).
+    public enum NameCheck: Equatable {
+        /// Nothing asked: an empty or badly formed name, or a new name not yet asked about.
+        case idle
+        case open(name: String)
+        /// Held for the holder of `domain` (`checked` false: its lookup failed). Pay stays off.
+        case held(name: String, domain: String, heldUntil: Int64?, checked: Bool)
+        /// Taken, offered, or a link that no longer works: the sentence.
+        case refused(name: String, message: String)
+        /// `.com` couldn't answer (an older `.com`, no network): Pay checks, as before.
+        case unknown(name: String)
+
+        var name: String? {
+            switch self {
+            case .idle: return nil
+            case .open(let n), .held(let n, _, _, _), .refused(let n, _), .unknown(let n): return n
+            }
+        }
+    }
+
     public var name: String = ""
     public var code: String = ""
     public var showsCode = false
@@ -220,6 +240,8 @@ public final class ChooseAccountNameViewModel {
     public private(set) var opened: OpenedAccountKeys?
     /// The name onboarding continues with, once decided (the chosen one, or the suggested one kept).
     public private(set) var completedName: String?
+    /// The precheck's answer for the name in the field.
+    public private(set) var check: NameCheck = .idle
 
     public let suggested: String
     /// A name the owner set aside for this person (a name-grant link), if any.
@@ -231,6 +253,8 @@ public final class ChooseAccountNameViewModel {
     @ObservationIgnored private let finisher: AccountRenameFinisher
     @ObservationIgnored private let bindPq: (OpenedAccountKeys, String) -> Void
     @ObservationIgnored private let now: () -> Int64
+    @ObservationIgnored private let debounce: Duration
+    @ObservationIgnored private var checkTask: Task<Void, Never>?
 
     public init(suggested: String,
                 grant: NameGrant? = nil,
@@ -241,7 +265,8 @@ public final class ChooseAccountNameViewModel {
                 store: any PendingAccountRenameStore = DefaultsPendingAccountRenameStore.shared,
                 local: AccountRenameFinisher.Local = .keystore,
                 bindPq: @escaping (OpenedAccountKeys, String) -> Void = { $0.bindPq(as: $1) },
-                now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+                now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+                debounce: Duration = .milliseconds(600)) {
         self.suggested = suggested.lowercased()
         self.grant = grant
         if let grant { name = grant.name }
@@ -252,6 +277,7 @@ public final class ChooseAccountNameViewModel {
         self.finisher = AccountRenameFinisher(client: client, server: server, store: store, wallet: wallet, local: local, now: now)
         self.bindPq = bindPq
         self.now = now
+        self.debounce = debounce
     }
 
     public var isWorking: Bool { phase == .working }
@@ -264,7 +290,88 @@ public final class ChooseAccountNameViewModel {
     }
 
     private var chosen: String { name.trimmingCharacters(in: .whitespaces).lowercased() }
-    public var canPay: Bool { !isWorking && completedName == nil && !chosen.isEmpty && nameProblem == nil }
+    public var canPay: Bool { !isWorking && completedName == nil && !chosen.isEmpty && nameProblem == nil && !isHeld }
+
+    /// The name in the field is held for a `.com` holder: nothing is opened or charged for it.
+    public var isHeld: Bool {
+        if case .held(let n, _, _, _) = check, n == chosen { return true }
+        return false
+    }
+
+    /// The status line under the field while the name is held.
+    public var heldStatus: String? {
+        guard case .held(let n, let domain, let until, let checked) = check, n == chosen else { return nil }
+        return HeldNameText.status(domain: domain, heldUntil: until, checked: checked)
+    }
+
+    /// "Why?" shows only for a hold `.com` could check.
+    public var showsWhy: Bool {
+        if case .held(let n, _, _, true) = check, n == chosen { return true }
+        return false
+    }
+
+    /// The domain and end date of the hold on the name in the field, for the "Why?" sheet.
+    public var heldDetails: (name: String, domain: String, heldUntil: Int64?)? {
+        guard case .held(let n, let domain, let until, _) = check, n == chosen else { return nil }
+        return (n, domain, until)
+    }
+
+    /// The precheck's refusal (taken, a link that no longer works) for the name in the field.
+    public var checkProblem: String? {
+        guard case .refused(let n, let m) = check, n == chosen else { return nil }
+        return m
+    }
+
+    /// The field changed: ask `.com` about the new name once typing pauses (the debounce), if it passes the local
+    /// rules. A name already answered is not asked again.
+    public func nameDidChange() {
+        checkTask?.cancel()
+        let n = chosen
+        if check.name != n, case .held = check { check = .idle }
+        guard !n.isEmpty, nameProblem == nil, completedName == nil else {
+            check = .idle
+            return
+        }
+        guard check.name != n else { return }
+        let wait = debounce
+        checkTask = Task { [weak self] in
+            try? await Task.sleep(for: wait)
+            guard !Task.isCancelled else { return }
+            await self?.checkNow()
+        }
+    }
+
+    /// Ask `.com` about the name in the field now (Done on the keyboard, Pay, or after the debounce).
+    public func checkNow() async {
+        let n = chosen
+        guard !n.isEmpty, nameProblem == nil else { return }
+        if let known = check.name, known == n {
+            // Asked already; only a hold whose lookup failed is worth asking again.
+            guard case .held(_, _, _, false) = check else { return }
+        }
+        let answer = await client.precheck(newUsername: n, grant: grant.flatMap { $0.name == n ? $0 : nil })
+        guard chosen == n else { return }
+        check = Self.check(for: n, answer)
+    }
+
+    static func check(for n: String, _ q: NameChangeQuote?) -> NameCheck {
+        guard let q else { return .unknown(name: n) }
+        if q.available { return .open(name: n) }
+        switch q.code {
+        case "dibs-held":
+            return .held(name: n, domain: HeldNameText.domain(q.domain, name: n), heldUntil: q.heldUntil, checked: q.checked)
+        case "taken", "offered", "reserved", "dibs-used":
+            return .refused(name: n, message: NameRuleText.taken)
+        case "invalid":
+            return .refused(name: n, message: NameRuleText.problem(code: q.problem))
+        case "grant-expired":
+            return .refused(name: n, message: NameGrantText.expired)
+        case "grant-invalid", "grant-used":
+            return .refused(name: n, message: NameGrantText.invalid)
+        default:
+            return .unknown(name: n)
+        }
+    }
     public var canUseCode: Bool { canPay && !code.trimmingCharacters(in: .whitespaces).isEmpty }
 
     /// The grant, while the field still holds its name.
@@ -331,6 +438,15 @@ public final class ChooseAccountNameViewModel {
             }
         }
 
+        // Nothing is opened or charged for a name `.com` already refuses: ask first (it waits for a check under way).
+        checkTask?.cancel()
+        await checkNow()
+        guard chosen == wanted else { return }
+        switch check {
+        case .held, .refused: return
+        default: break
+        }
+
         let keys: OpenedAccountKeys
         if let opened {
             keys = opened
@@ -355,7 +471,8 @@ public final class ChooseAccountNameViewModel {
             return
         }
         guard quote.available else {
-            message = refusalText(NameChangeRefusal(status: 409, code: quote.code ?? "taken", heldUntil: quote.heldUntil, problem: quote.problem),
+            message = refusalText(NameChangeRefusal(status: 409, code: quote.code ?? "taken", heldUntil: quote.heldUntil, problem: quote.problem,
+                                                    domain: quote.domain, checked: quote.checked),
                                   method: method, paid: false)
             return
         }
@@ -457,8 +574,12 @@ public final class ChooseAccountNameViewModel {
         case "invalid":
             return NameRuleText.problem(code: r.problem)
         case "dibs-held":
-            let until = r.heldUntil.map { Date(timeIntervalSince1970: Double($0) / 1000).formatted(date: .long, time: .omitted) } ?? ""
-            return String(localized: "This name is held for the owner of \(chosen).com until \(until).")
+            // The hold reads as the status line under the field, the same as the precheck's.
+            let n = chosen
+            check = .held(name: n, domain: HeldNameText.domain(r.domain, name: n), heldUntil: r.heldUntil, checked: r.checked)
+            return HeldNameText.status(domain: HeldNameText.domain(r.domain, name: n), heldUntil: r.heldUntil, checked: r.checked)
+        case "dibs-used":
+            return NameRuleText.taken
         case "code-invalid", "code-wrong-kind":
             return String(localized: "That voucher code isn't valid for an account name.")
         case "code-used":
@@ -479,6 +600,51 @@ public final class ChooseAccountNameViewModel {
                     : paymentFailed
             }
         }
+    }
+}
+
+/// A name held for a `.com` holder (control-plane nameDibs.ts): the status line under the field and the "Why?" sheet.
+public enum HeldNameText {
+    /// The `.com` `.com` named (maybe the de-hyphenated label), else `<name>.com`.
+    public static func domain(_ domain: String?, name: String) -> String {
+        let d = domain?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        return d.isEmpty ? "\(name.lowercased()).com" : d
+    }
+
+    static func date(_ ms: Int64) -> String {
+        Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .long, time: .omitted)
+    }
+
+    public static func status(domain: String, heldUntil: Int64?, checked: Bool) -> String {
+        if !checked { return String(localized: "Couldn't check \(domain) just now. Try again in a minute.") }
+        guard let heldUntil else { return String(localized: "Held for the owner of \(domain).") }
+        return String(localized: "Held for the owner of \(domain) until \(date(heldUntil)).")
+    }
+
+    public static var why: String { String(localized: "Why?") }
+    public static func whyLabel(name: String) -> String { String(localized: "Why is \(name) held?") }
+    public static var pickAnother: String { String(localized: "Pick another name, or go back for a new suggestion.") }
+
+    public static func rule(heldUntil: Int64?) -> String {
+        guard let heldUntil else {
+            return String(localized: "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.")
+        }
+        return String(localized: "Until \(date(heldUntil)), a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.")
+    }
+
+    public static var yoursTitle: String { String(localized: "Is this name yours?") }
+    public static func yours(domain: String) -> String {
+        String(localized: "If \(domain) is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.")
+    }
+
+    public static var emailUs: String { String(localized: "Email us") }
+    public static var howDibsWorks: String { String(localized: "How .com dibs works") }
+
+    /// The site's dibs page in the app's language (English at the root).
+    public static func dibsPageURL(language: String = Bundle.main.preferredLocalizations.first ?? "en") -> URL {
+        let paths = ["es": "es", "fr": "fr", "de": "de", "pt-BR": "pt-br", "ja": "ja", "zh-Hans": "zh-hans"]
+        let p = paths[language].map { "\($0)/" } ?? ""
+        return URL(string: "https://flagshipserver.com/\(p)dibs")!
     }
 }
 

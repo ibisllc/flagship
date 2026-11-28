@@ -261,9 +261,14 @@ public struct FSField: View {
     var keyboard: UIKeyboardType = .default
     /// Fixed text before the input (a URL prefix): shown, never edited, never part of the value.
     var prefix: String? = nil
-    @FocusState private var focused: Bool
+    @FocusState private var ownFocus: Bool
+    /// The screen's own focus state for the field (to close the keyboard on submit), or the field's.
+    private var externalFocus: FocusState<Bool>.Binding?
+    private var focus: FocusState<Bool>.Binding { externalFocus ?? $ownFocus }
+    private var focused: Bool { focus.wrappedValue }
 
-    public init(value: Binding<String>, label: String, placeholder: String = "", helper: String? = nil, error: String? = nil, secure: Bool = false, keyboard: UIKeyboardType = .default, prefix: String? = nil) {
+    public init(value: Binding<String>, label: String, placeholder: String = "", helper: String? = nil, error: String? = nil, secure: Bool = false, keyboard: UIKeyboardType = .default, prefix: String? = nil,
+                focus: FocusState<Bool>.Binding? = nil) {
         self._value = value
         self.label = label
         self.placeholder = placeholder
@@ -272,6 +277,7 @@ public struct FSField: View {
         self.secure = secure
         self.keyboard = keyboard
         self.prefix = prefix
+        self.externalFocus = focus
     }
     public var body: some View {
         let c = FSColors.scheme(scheme)
@@ -292,7 +298,7 @@ public struct FSField: View {
                 }
                 if secure {
                     SecureField(placeholder, text: $value)
-                        .focused($focused)
+                        .focused(focus)
                 } else {
                     TextField(placeholder, text: $value)
                         .keyboardType(keyboard)
@@ -300,7 +306,7 @@ public struct FSField: View {
                         .textInputAutocapitalization(.never)
                         .foregroundStyle(c.text)
                         .fontWeight(prefix != nil ? .medium : nil)
-                        .focused($focused)
+                        .focused(focus)
                 }
             }
             .environment(\.layoutDirection, prefix != nil ? .leftToRight : direction)
@@ -326,9 +332,11 @@ public struct FSField: View {
             }
 
             if let sub = error ?? helper {
+                // Never cut short: a long sentence or a large text size takes the lines it needs.
                 Text(sub)
                     .font(FS.font.bodySm())
                     .foregroundColor(error != nil ? c.danger : c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -166489,47 +166489,6 @@
         }
       }
     },
-    "This name is held for the owner of %@.com until %@.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Este nombre está reservado para quien tiene %@.com hasta el %@."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ce nom est réservé au propriétaire de %@.com jusqu'au %@."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dieser Name ist bis %2$@ für den Inhaber von %1$@.com reserviert."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Este nome está reservado para o dono de %@.com até %@."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "この名前は %2$@ まで %1$@.com の所有者のために確保されています。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此名称为 %1$@.com 的所有者保留，直到 %2$@。"
-          }
-        }
-      }
-    },
     "Setting up your account name…": {
       "extractionState": "manual",
       "localizations": {
@@ -169396,6 +169355,621 @@
           "stringUnit": {
             "state": "translated",
             "value": "无法更改账户密钥"
+          }
+        }
+      }
+    },
+    "Held for the owner of %@ until %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reservado para el titular de %1$@ hasta el %2$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réservé au titulaire de %1$@ jusqu’au %2$@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reserviert für den Inhaber von %1$@ bis %2$@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reservado para o titular de %1$@ até %2$@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$@まで %1$@ の所有者のために確保されています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已为 %1$@ 的所有者保留，直到 %2$@。"
+          }
+        }
+      }
+    },
+    "Held for the owner of %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reservado para el titular de %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réservé au titulaire de %@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reserviert für den Inhaber von %@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reservado para o titular de %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ の所有者のために確保されています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已为 %@ 的所有者保留。"
+          }
+        }
+      }
+    },
+    "Couldn't check %@ just now. Try again in a minute.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hemos podido comprobar %@ ahora mismo. Vuelve a intentarlo en un minuto."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de vérifier %@ pour l’instant. Réessayez dans une minute."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ konnte gerade nicht geprüft werden. Versuch es in einer Minute noch einmal."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível verificar %@ agora. Tente de novo em um minuto."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今は %@ を確認できませんでした。1 分後にもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂时无法检查 %@。请一分钟后再试。"
+          }
+        }
+      }
+    },
+    "Why?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Por qué?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pourquoi ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warum?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Por quê?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "なぜ？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为什么？"
+          }
+        }
+      }
+    },
+    "Why is %@ held?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Por qué está reservado %@?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pourquoi %@ est-il réservé ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warum ist %@ reserviert?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Por que %@ está reservado?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ が確保されている理由"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为什么 %@ 被保留？"
+          }
+        }
+      }
+    },
+    "Until %@, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hasta el %@, un nombre de Flagship que coincide con un .com registrado se reserva para quien controle ese dominio. Después queda libre para todos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jusqu’au %@, un nom Flagship qui correspond à un .com enregistré est gardé pour la personne qui contrôle ce domaine. Ensuite, il est ouvert à tous."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bis %@ wird ein Flagship-Name, der zu einer registrierten .com-Domain passt, für denjenigen freigehalten, der diese Domain kontrolliert. Danach steht er allen offen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Até %@, um nome do Flagship que corresponde a um .com registrado fica guardado para quem controla esse domínio. Depois, fica aberto a todos."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@までは、登録済みの .com と一致する Flagship の名前は、そのドメインを管理している人のために確保されます。その後は誰でも使えるようになります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 %@ 之前，与已注册 .com 相同的 Flagship 名称会为控制该域名的人保留。之后向所有人开放。"
+          }
+        }
+      }
+    },
+    "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durante un tiempo limitado, un nombre de Flagship que coincide con un .com registrado se reserva para quien controle ese dominio. Después queda libre para todos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendant une durée limitée, un nom Flagship qui correspond à un .com enregistré est gardé pour la personne qui contrôle ce domaine. Ensuite, il est ouvert à tous."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für begrenzte Zeit wird ein Flagship-Name, der zu einer registrierten .com-Domain passt, für denjenigen freigehalten, der diese Domain kontrolliert. Danach steht er allen offen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Por tempo limitado, um nome do Flagship que corresponde a um .com registrado fica guardado para quem controla esse domínio. Depois, fica aberto a todos."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "期間限定で、登録済みの .com と一致する Flagship の名前は、そのドメインを管理している人のために確保されます。その後は誰でも使えるようになります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在限定时间内，与已注册 .com 相同的 Flagship 名称会为控制该域名的人保留。之后向所有人开放。"
+          }
+        }
+      }
+    },
+    "Is this name yours?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Este nombre es tuyo?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce nom est-il le vôtre ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ist das dein Name?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este nome é seu?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この名前はあなたのものですか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个名称是你的吗？"
+          }
+        }
+      }
+    },
+    "If %@ is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si %@ es tuyo, es tu propio nombre o tienes otro buen motivo, escribe a support@flagshipserver.com antes de crear tu cuenta. Di qué nombre quieres y por qué. Si podemos, te enviaremos un enlace que lo reserva para ti."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si %@ vous appartient, si c’est votre propre nom ou si vous avez une autre bonne raison, écrivez à support@flagshipserver.com avant de créer votre compte. Indiquez le nom que vous voulez et pourquoi. Si nous le pouvons, nous vous enverrons un lien qui le met de côté pour vous."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn %@ dir gehört, es dein eigener Name ist oder du einen anderen guten Grund hast, schreib an support@flagshipserver.com, bevor du dein Konto erstellst. Sag, welchen Namen du möchtest und warum. Wenn wir können, schicken wir dir einen Link, der ihn für dich zurücklegt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se %@ é seu, se é o seu próprio nome ou se você tem outro bom motivo, escreva para support@flagshipserver.com antes de criar sua conta. Diga qual nome você quer e por quê. Se pudermos, enviaremos um link que o reserva para você."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ があなたのものである場合、あなた自身の名前である場合、またはほかに正当な理由がある場合は、アカウントを作成する前に support@flagshipserver.com までメールしてください。希望する名前と理由をお書きください。可能であれば、その名前をあなたのために確保するリンクをお送りします。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果 %@ 是你的、这是你自己的名字，或者你有其他正当理由，请在创建账户之前发邮件至 support@flagshipserver.com。说明你想要的名称和原因。如果可以，我们会发送一个为你保留该名称的链接。"
+          }
+        }
+      }
+    },
+    "Email us": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escríbenos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nous écrire"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schreib uns"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fale conosco"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メールで問い合わせる"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "给我们发邮件"
+          }
+        }
+      }
+    },
+    "How .com dibs works": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cómo funciona la reserva de .com"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comment fonctionne la réservation .com"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "So funktioniert der .com-Vorrang"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Como funciona a prioridade .com"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ".com 優先権の仕組み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "了解 .com 优先认领"
+          }
+        }
+      }
+    },
+    "Pick another name, or go back for a new suggestion.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige otro nombre o vuelve atrás para obtener una nueva sugerencia."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez un autre nom, ou revenez en arrière pour une nouvelle suggestion."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle einen anderen Namen oder geh zurück, um einen neuen Vorschlag zu bekommen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha outro nome ou volte para receber uma nova sugestão."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別の名前を選ぶか、戻って新しい候補を表示してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请选择其他名称，或返回获取新的建议。"
+          }
+        }
+      }
+    },
+    "Account name: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre de cuenta: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom de compte : %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontoname: %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome da conta: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウント名: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账户名称：%@"
+          }
+        }
+      }
+    },
+    "Name I want: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre que quiero: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom souhaité : %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gewünschter Name: %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome que eu quero: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "希望する名前: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我想要的名称：%@"
+          }
+        }
+      }
+    },
+    "Why:": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motivo:"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pourquoi :"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grund:"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Por quê:"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "理由:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原因："
           }
         }
       }

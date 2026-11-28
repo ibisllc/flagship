@@ -18,6 +18,7 @@
 		1CB9E011D4330E515C1B18AB /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0F66E9E7FBFDA0383ECDDDF9 /* Localizable.xcstrings */; };
 		227B03E0DE023D0460D103D9 /* GymNoticeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 778293C02E165AE3AE539BD9 /* GymNoticeTests.swift */; };
 		C0FFEE01A1B2C3D4E5F60701 /* GymVoucherLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE02A1B2C3D4E5F60702 /* GymVoucherLinkTests.swift */; };
+		D1B5C0DE0A1B2C3D4E5F6071 /* GymChooseNameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B5C0DE0A1B2C3D4E5F6072 /* GymChooseNameTests.swift */; };
 		25FF22502B5437B43895A9CB /* ProvisionPhaseComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */; };
 		2EB4DE1DD12A71BC2685A329 /* GymSweepHomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C6110E250356702A2AF24E3 /* GymSweepHomeTests.swift */; };
 		348FD2E20DDB83B215026A45 /* AppStoreScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */; };
@@ -193,6 +194,7 @@
 		6F5522F4368F6C5A87495ADB /* PodStatusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusWidget.swift; sourceTree = "<group>"; };
 		778293C02E165AE3AE539BD9 /* GymNoticeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymNoticeTests.swift; sourceTree = "<group>"; };
 		C0FFEE02A1B2C3D4E5F60702 /* GymVoucherLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymVoucherLinkTests.swift; sourceTree = "<group>"; };
+		D1B5C0DE0A1B2C3D4E5F6072 /* GymChooseNameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymChooseNameTests.swift; sourceTree = "<group>"; };
 		7B7C9D1BBEAA69286E163AF3 /* StoreCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreCaptureTests.swift; sourceTree = "<group>"; };
 		7EBCD448CF95A530F142BF43 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		8AB626C273D22599FB5455E5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -398,6 +400,7 @@
 				920E90123CC0BCEAAAC75B74 /* GymMessagesTests.swift */,
 				778293C02E165AE3AE539BD9 /* GymNoticeTests.swift */,
 				C0FFEE02A1B2C3D4E5F60702 /* GymVoucherLinkTests.swift */,
+				D1B5C0DE0A1B2C3D4E5F6072 /* GymChooseNameTests.swift */,
 				FD2441AEC552535EC74BF456 /* GymOctoberTests.swift */,
 				BF01DE4E402E7E4B630F6551 /* GymRelease03Tests.swift */,
 				B1C2D3E4F5061728394A5B6C /* GymProxyTests.swift */,
@@ -681,6 +684,7 @@
 				677AFE2622E9BB7DFC119484 /* GymMessagesTests.swift in Sources */,
 				227B03E0DE023D0460D103D9 /* GymNoticeTests.swift in Sources */,
 				C0FFEE01A1B2C3D4E5F60701 /* GymVoucherLinkTests.swift in Sources */,
+				D1B5C0DE0A1B2C3D4E5F6071 /* GymChooseNameTests.swift in Sources */,
 				D187D390DC7D5142B6143266 /* GymOctoberTests.swift in Sources */,
 				FC7A32B60913EC265EF082CE /* GymRelease03Tests.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* GymProxyTests.swift in Sources */,

@@ -16,11 +16,22 @@ public struct NameChangeQuote: Equatable, Sendable {
     public var problem: String?
     /// A free name grant pays for it: nothing to pay.
     public var paid: Bool
+    /// `dibs-held`: the `.com` that holds the name (maybe the de-hyphenated label); nil from an older `.com`.
+    public var domain: String?
+    /// `dibs-held`: false when `.com`'s lookup of that domain failed (the name is held until it answers).
+    public var checked: Bool
 
     public init(available: Bool, kind: String? = nil, units: Int = 10, code: String? = nil, heldUntil: Int64? = nil, problem: String? = nil,
-                paid: Bool = false) {
+                paid: Bool = false, domain: String? = nil, checked: Bool = true) {
         self.available = available; self.kind = kind; self.units = units; self.code = code; self.heldUntil = heldUntil; self.problem = problem
-        self.paid = paid
+        self.paid = paid; self.domain = domain; self.checked = checked
+    }
+
+    static func from(_ v: JSONValue?) -> NameChangeQuote {
+        NameChangeQuote(available: v?["available"] == .bool(true), kind: v?["kind"]?.string,
+                        units: Int(v?["units"]?.safeInt ?? v?["priceUsd"]?.safeInt ?? 10), code: v?["code"]?.string,
+                        heldUntil: v?["heldUntil"]?.safeInt, problem: v?["problem"]?.string, paid: v?["paid"] == .bool(true),
+                        domain: v?["domain"]?.string, checked: v?["checked"] != .bool(false))
     }
 }
 
@@ -55,15 +66,21 @@ public struct NameChangeRefusal: Error, Equatable, Sendable {
     public var problem: String?
     /// `voucher-spent`: the nullifiers already spent (drop them from the wallet).
     public var spent: [String]
+    /// `dibs-held`: the `.com` that holds the name, and whether its lookup answered (see `NameChangeQuote`).
+    public var domain: String?
+    public var checked: Bool
 
-    public init(status: Int, code: String, heldUntil: Int64? = nil, problem: String? = nil, spent: [String] = []) {
+    public init(status: Int, code: String, heldUntil: Int64? = nil, problem: String? = nil, spent: [String] = [],
+                domain: String? = nil, checked: Bool = true) {
         self.status = status; self.code = code; self.heldUntil = heldUntil; self.problem = problem; self.spent = spent
+        self.domain = domain; self.checked = checked
     }
 
     static func from(status: Int, data: Data) -> NameChangeRefusal {
         let v = JSONValue.parse(utf8: Array(data))
         return NameChangeRefusal(status: status, code: v?["code"]?.string ?? "http-\(status)", heldUntil: v?["heldUntil"]?.safeInt,
-                                 problem: v?["problem"]?.string, spent: (v?["spent"]?.array ?? []).compactMap(\.string))
+                                 problem: v?["problem"]?.string, spent: (v?["spent"]?.array ?? []).compactMap(\.string),
+                                 domain: v?["domain"]?.string, checked: v?["checked"] != .bool(false))
     }
 }
 
@@ -92,6 +109,9 @@ public enum RevokeDeviceCapabilityGrantEnvelope {
 public protocol AccountNameChangeClient: Sendable {
     /// `POST /api/account/name-change/quote` (public).
     func quote(username: String, newUsername: String, grant: NameGrant?) async throws -> NameChangeQuote
+    /// The same quote without a username: the choose-name screen's check while typing, before any account exists.
+    /// Nil when `.com` couldn't answer it (an older `.com` refuses the shape, or no network): Pay checks then.
+    func precheck(newUsername: String, grant: NameGrant?) async -> NameChangeQuote?
     /// `POST /api/account/name-change`; throws `NameChangeRefusal`.
     func rename(aidPubHex: String, oldUsername: String, newUsername: String, issuedAt: Int64, signatureHex: String,
                 payment: NameChangePayment, grant: NameGrant?) async throws -> NameChangeOutcome
@@ -101,6 +121,10 @@ public protocol AccountNameChangeClient: Sendable {
     func revokeDeviceGrant(username: String, grantId: String, reason: String, issuedAt: Int64, signatureHex: String) async throws
     /// The IRK `.com` holds for `username` (`GET /api/username/<u>`), lowercase hex; nil when no account has that name.
     func accountIrk(username: String) async throws -> String?
+}
+
+public extension AccountNameChangeClient {
+    func precheck(newUsername: String, grant: NameGrant?) async -> NameChangeQuote? { nil }
 }
 
 public final class LiveAccountNameChangeClient: AccountNameChangeClient, @unchecked Sendable {
@@ -137,10 +161,15 @@ public final class LiveAccountNameChangeClient: AccountNameChangeClient, @unchec
     public func quote(username: String, newUsername: String, grant: NameGrant?) async throws -> NameChangeQuote {
         var body: [String: JSONValue] = ["username": .string(username), "newUsername": .string(newUsername)]
         if let grant { body["nameGrant"] = grant.json }
-        let v = try await call("POST", "/api/account/name-change/quote", .object(body))
-        return NameChangeQuote(available: v?["available"] == .bool(true), kind: v?["kind"]?.string,
-                               units: Int(v?["units"]?.safeInt ?? v?["priceUsd"]?.safeInt ?? 10), code: v?["code"]?.string,
-                               heldUntil: v?["heldUntil"]?.safeInt, problem: v?["problem"]?.string, paid: v?["paid"] == .bool(true))
+        return NameChangeQuote.from(try await call("POST", "/api/account/name-change/quote", .object(body)))
+    }
+
+    public func precheck(newUsername: String, grant: NameGrant?) async -> NameChangeQuote? {
+        var body: [String: JSONValue] = ["newUsername": .string(newUsername)]
+        if let grant, grant.name == newUsername.lowercased() { body["nameGrant"] = grant.json }
+        guard let (status, data) = try? await send("POST", "/api/account/name-change/quote", .object(body)),
+              (200..<300).contains(status), let v = JSONValue.parse(utf8: Array(data)), v["available"] == .bool(true) || v["available"] == .bool(false) else { return nil }
+        return NameChangeQuote.from(v)
     }
 
     public func rename(aidPubHex: String, oldUsername: String, newUsername: String, issuedAt: Int64, signatureHex: String,

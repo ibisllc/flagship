@@ -23,6 +23,14 @@ final class ChooseAccountNameViewModelTests: XCTestCase {
         var minted: [DeviceCapabilityGrantEnvelope] = []
         var revoked: [(username: String, grantId: String)] = []
         var renameSignature: (bytes: Data, sig: String)?
+        /// The precheck's answer (nil: `.com` couldn't answer, as an older `.com`), and the grants it was sent.
+        var precheckAnswer: ((String, NameGrant?) -> NameChangeQuote?)?
+        var prechecks: [(String, NameGrant?)] = []
+
+        func precheck(newUsername: String, grant: NameGrant?) async -> NameChangeQuote? {
+            prechecks.append((newUsername, grant))
+            return precheckAnswer?(newUsername, grant)
+        }
 
         func quote(username: String, newUsername: String, grant: NameGrant?) async throws -> NameChangeQuote {
             log.append("quote \(username)->\(newUsername)")
@@ -93,7 +101,7 @@ final class ChooseAccountNameViewModelTests: XCTestCase {
         scopes: OpenAccountViewModel.foundingScopes, irk: .init(), adminRoot: .init(), deviceKey: .init(),
         umk: Data(repeating: 7, count: 32), accountDisplayName: "Plucky Avocet", deviceDisplayName: "Test iPhone")
 
-    private func makeVM(grant: NameGrant? = nil, now: Int64 = 1_800_000_000_000) -> ChooseAccountNameViewModel {
+    private func makeVM(grant: NameGrant? = nil, now: Int64 = 1_800_000_000_000, debounce: Duration = .milliseconds(600)) -> ChooseAccountNameViewModel {
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
         return ChooseAccountNameViewModel(
@@ -108,7 +116,7 @@ final class ChooseAccountNameViewModelTests: XCTestCase {
             local: .init(moveSlot: { [unowned self] in moves.append(($0, $1)) },
                          keepDeviceKey: { [unowned self] old, new, _, _ in keptKeys.append((old, new)) }),
             bindPq: { [unowned self] _, name in bound.append(name) },
-            now: { now })
+            now: { now }, debounce: debounce)
     }
 
     // MARK: success
@@ -196,7 +204,10 @@ final class ChooseAccountNameViewModelTests: XCTestCase {
         vm.name = "acme"
         await vm.pay()
         let msg = try! XCTUnwrap(vm.message)
-        XCTAssertTrue(msg.hasPrefix("This name is held for the owner of acme.com until "), msg)
+        XCTAssertTrue(msg.hasPrefix("Held for the owner of acme.com until "), msg)
+        // An older .com, found only at Pay: the hold still shows under the field and Pay goes off.
+        XCTAssertEqual(vm.heldStatus, msg)
+        XCTAssertFalse(vm.canPay)
         XCTAssertTrue(msg.contains("2027"), msg)
     }
 
@@ -434,5 +445,152 @@ final class ChooseAccountNameViewModelTests: XCTestCase {
         XCTAssertEqual(VoiciAddress.stripPrefix("john"), "john")
         XCTAssertEqual(VoiciAddress.stripPrefix("https://example.com/john"), "https://example.com/john")
         XCTAssertEqual(VoiciAddress.stripPrefix("voici"), "voici")
+    }
+
+    // MARK: the held-name precheck (before anything is opened or paid)
+
+    private let heldUntil: Int64 = 1_823_558_400_000
+
+    func test_precheck_heldName_disablesPay_andNothingIsOpenedOrCharged() async {
+        client.precheckAnswer = { n, _ in
+            n == "clou-dflare" ? NameChangeQuote(available: false, code: "dibs-held", heldUntil: self.heldUntil, domain: "cloudflare.com")
+                               : NameChangeQuote(available: true, kind: "name-change", units: 10)
+        }
+        let vm = makeVM()
+        vm.name = "clou-dflare"
+        await vm.checkNow()
+        XCTAssertTrue(vm.isHeld)
+        let status = try! XCTUnwrap(vm.heldStatus)
+        XCTAssertTrue(status.hasPrefix("Held for the owner of cloudflare.com until "), status)
+        XCTAssertTrue(status.contains("2027"), status)
+        XCTAssertTrue(vm.showsWhy)
+        XCTAssertEqual(vm.heldDetails?.domain, "cloudflare.com")
+        XCTAssertFalse(vm.canPay)
+        vm.showsCode = true
+        vm.code = "FRIEND-CODE"
+        XCTAssertFalse(vm.canUseCode)
+        await vm.pay()
+        await vm.useCode()
+        XCTAssertEqual(opens, 0, "a held name never opens the account")
+        XCTAssertTrue(client.log.isEmpty, "no quote, no rename")
+        XCTAssertEqual(wallet.buys, 0)
+        XCTAssertEqual(client.prechecks.map(\.0), ["clou-dflare"], "asked once, without the account")
+        // Another name: the hold goes and Pay works.
+        vm.name = "harry"
+        vm.nameDidChange()
+        XCTAssertFalse(vm.isHeld)
+        XCTAssertNil(vm.heldStatus)
+        await vm.pay()
+        XCTAssertEqual(vm.completedName, "harry")
+        XCTAssertEqual(opens, 1)
+    }
+
+    func test_precheck_afterTheDebounce() async throws {
+        client.precheckAnswer = { _, _ in NameChangeQuote(available: false, code: "dibs-held", heldUntil: self.heldUntil, domain: "acme.com") }
+        let vm = makeVM(debounce: .milliseconds(20))
+        vm.name = "acm"
+        vm.nameDidChange()
+        vm.name = "acme"
+        vm.nameDidChange()
+        XCTAssertFalse(vm.isHeld, "nothing until typing pauses")
+        for _ in 0..<100 where !vm.isHeld { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertTrue(vm.isHeld)
+        XCTAssertEqual(client.prechecks.map(\.0), ["acme"], "only the name typing paused on")
+        // A badly formed name is never asked.
+        vm.name = "a-"
+        vm.nameDidChange()
+        try await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(client.prechecks.count, 1)
+    }
+
+    func test_precheck_lookupFailed_saysCouldNotCheck_noWhy_andAsksAgain() async {
+        var failing = true
+        client.precheckAnswer = { _, _ in
+            failing ? NameChangeQuote(available: false, code: "dibs-held", heldUntil: self.heldUntil, domain: "acme.com", checked: false)
+                    : NameChangeQuote(available: true, kind: "name-change", units: 10)
+        }
+        let vm = makeVM()
+        vm.name = "acme"
+        await vm.checkNow()
+        XCTAssertEqual(vm.heldStatus, "Couldn't check acme.com just now. Try again in a minute.")
+        XCTAssertFalse(vm.showsWhy)
+        XCTAssertFalse(vm.canPay)
+        failing = false
+        await vm.checkNow()
+        XCTAssertFalse(vm.isHeld)
+        XCTAssertTrue(vm.canPay)
+    }
+
+    func test_precheck_grantLiftsTheHoldOfItsName() async {
+        let grant = NameGrant(name: "acme", code: "FLAG-G", expiresAt: 1_900_000_000_000, free: false)
+        client.precheckAnswer = { _, g in
+            g == nil ? NameChangeQuote(available: false, code: "dibs-held", heldUntil: self.heldUntil, domain: "acme.com")
+                     : NameChangeQuote(available: true, kind: "name-change", units: 10)
+        }
+        let vm = makeVM(grant: grant)
+        XCTAssertEqual(vm.name, "acme")
+        await vm.checkNow()
+        XCTAssertFalse(vm.isHeld)
+        XCTAssertTrue(vm.canPay)
+        XCTAssertEqual(client.prechecks.first?.1, grant)
+        vm.name = "acmy"
+        await vm.checkNow()
+        XCTAssertTrue(vm.isHeld, "the grant opens only its own name")
+        XCTAssertNil(client.prechecks.last?.1)
+    }
+
+    func test_precheck_takenName_showsUnderTheField_andPayOpensNothing() async {
+        client.precheckAnswer = { _, _ in NameChangeQuote(available: false, code: "taken") }
+        let vm = makeVM()
+        vm.name = "rapid-bison"
+        await vm.pay()
+        XCTAssertEqual(vm.checkProblem, "Taken or too similar to an existing name")
+        XCTAssertEqual(opens, 0)
+        XCTAssertTrue(client.log.isEmpty)
+    }
+
+    func test_precheck_unreachable_fallsBackToTheCheckAtPay() async {
+        client.precheckAnswer = { _, _ in nil }
+        let vm = makeVM()
+        vm.name = "harry"
+        await vm.pay()
+        XCTAssertEqual(vm.completedName, "harry")
+        XCTAssertEqual(client.log.first, "quote plucky-avocet->harry")
+    }
+
+    func test_heldWithoutAnEndDate_andTheWhySentences() async {
+        client.precheckAnswer = { _, _ in NameChangeQuote(available: false, code: "dibs-held") }
+        let vm = makeVM()
+        vm.name = "acme"
+        await vm.checkNow()
+        XCTAssertEqual(vm.heldStatus, "Held for the owner of acme.com.", "no date: no 'until .'")
+        XCTAssertTrue(HeldNameText.rule(heldUntil: nil).hasPrefix("For a limited time,"))
+        XCTAssertTrue(HeldNameText.rule(heldUntil: heldUntil).hasPrefix("Until "))
+        XCTAssertEqual(HeldNameText.whyLabel(name: "acme"), "Why is acme held?")
+        XCTAssertTrue(HeldNameText.yours(domain: "acme.com").hasPrefix("If acme.com is yours"))
+        XCTAssertEqual(HeldNameText.dibsPageURL(language: "en").absoluteString, "https://flagshipserver.com/dibs")
+        XCTAssertEqual(HeldNameText.dibsPageURL(language: "pt-BR").absoluteString, "https://flagshipserver.com/pt-br/dibs")
+        let mail = try! XCTUnwrap(SupportContact.heldNameURL(name: "acme"))
+        let parts = try! XCTUnwrap(URLComponents(url: mail, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(parts.path, "support@flagshipserver.com")
+        XCTAssertEqual(parts.queryItems?.first { $0.name == "subject" }?.value, "Account name: acme")
+        XCTAssertEqual(parts.queryItems?.first { $0.name == "body" }?.value, "Name I want: acme\nWhy:\n")
+    }
+
+    func test_dibsUsed_readsAsTaken_notAPaymentFailure() async {
+        client.quote = NameChangeQuote(available: false, code: "dibs-used")
+        let vm = makeVM()
+        vm.name = "acme"
+        await vm.pay()
+        XCTAssertEqual(vm.message, "Taken or too similar to an existing name")
+        XCTAssertEqual(wallet.buys, 0)
+    }
+
+    func test_dibsHeldAtPay_withoutHeldUntil_hasNoEmptyDate() async {
+        client.quote = NameChangeQuote(available: false, code: "dibs-held", domain: "cloudflare.com")
+        let vm = makeVM()
+        vm.name = "clou-dflare"
+        await vm.pay()
+        XCTAssertEqual(vm.message, "Held for the owner of cloudflare.com.")
     }
 }

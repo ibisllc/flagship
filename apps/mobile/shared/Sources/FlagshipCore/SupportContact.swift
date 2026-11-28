@@ -17,4 +17,11 @@ public enum SupportContact {
         let b = TrademarkClaim.encodeURIComponent(body(serial: serial, step: step))
         return URL(string: "mailto:\(email)?subject=\(s)&body=\(b)")
     }
+
+    /// "Email us" from "Why is {name} held?": the name in the subject, and a body to fill in.
+    public static func heldNameURL(name: String) -> URL? {
+        let s = TrademarkClaim.encodeURIComponent(String(localized: "Account name: \(name)"))
+        let b = TrademarkClaim.encodeURIComponent(String(localized: "Name I want: \(name)") + "\n" + String(localized: "Why:") + "\n")
+        return URL(string: "mailto:\(email)?subject=\(s)&body=\(b)")
+    }
 }
