@@ -145,7 +145,15 @@ sealed interface NameChoicePayment {
 sealed interface NameQuote {
     /** [paid]: a free name grant already pays for it. */
     data class Available(val units: Int, val paid: Boolean = false) : NameQuote
-    data class Refused(val code: String, val problem: String? = null, val heldUntil: Long? = null) : NameQuote
+    /** `dibs-held`: [domain] is the `.com` that holds the name (maybe the de-hyphenated label; null from an older
+     *  `.com`), [checked] false when `.com`'s lookup of it failed. */
+    data class Refused(
+        val code: String,
+        val problem: String? = null,
+        val heldUntil: Long? = null,
+        val domain: String? = null,
+        val checked: Boolean = true,
+    ) : NameQuote
 }
 
 sealed interface PackOutcome {
@@ -155,13 +163,40 @@ sealed interface PackOutcome {
 }
 
 /** `.com` refused the rename (or a step of paying for it) with [code]. */
-class NameChangeRefused(val code: String, val problem: String? = null, val heldUntil: Long? = null) : Exception(code)
+class NameChangeRefused(
+    val code: String,
+    val problem: String? = null,
+    val heldUntil: Long? = null,
+    val domain: String? = null,
+    val checked: Boolean = true,
+) : Exception(code)
+
+/** What `.com` said about the name in the field while it was typed (the precheck). */
+sealed interface NameCheck {
+    val name: String?
+
+    /** Nothing asked: an empty or badly formed name, or one not yet asked about. */
+    data object Idle : NameCheck { override val name: String? = null }
+    data class Open(override val name: String) : NameCheck
+    /** Held for the holder of [domain] ([checked] false: its lookup failed). Pay and Use a voucher stay off. */
+    data class Held(override val name: String, val domain: String, val until: Long?, val checked: Boolean) : NameCheck
+    /** Taken, or a link that no longer works. */
+    data class Refused(override val name: String, val notice: NameChoiceNotice) : NameCheck
+    /** `.com` couldn't answer (an older `.com`, no network): Pay checks, as before. */
+    data class Unknown(override val name: String) : NameCheck
+
+    companion object {
+        /** The `.com` `.com` named, else `<name>.com`. */
+        fun domain(domain: String?, name: String): String =
+            domain?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: "${name.lowercase()}.com"
+    }
+}
 
 /** What the screen says (NameChoiceCopy turns it into a sentence). */
 sealed interface NameChoiceNotice {
     data class Problem(val problem: VoiciName.Problem) : NameChoiceNotice
     data object Taken : NameChoiceNotice
-    data class Held(val name: String, val until: Long) : NameChoiceNotice
+    data class Held(val name: String, val domain: String, val until: Long?, val checked: Boolean = true) : NameChoiceNotice
     data object CodeInvalid : NameChoiceNotice
     data object CodeUsed : NameChoiceNotice
     data class PaymentCancelled(val kept: String) : NameChoiceNotice
@@ -180,6 +215,9 @@ interface NameChoiceOps {
     suspend fun createAccount(suggested: String): CreatedAccount
     /** [grant]: the owner's grant for exactly [newName], when the person came with one. */
     suspend fun quote(oldName: String, newName: String, grant: NameGrant?): NameQuote
+    /** The quote without an account: the check while typing, before anything is opened. Null when `.com` couldn't
+     *  answer (an older `.com` refuses the shape, or no network): Pay checks then. */
+    suspend fun precheck(newName: String, grant: NameGrant?): NameQuote? = null
     /** Vouchers in the account's wallet now. */
     suspend fun walletBalance(): Int
     suspend fun buyPack(units: Int): PackOutcome
@@ -224,6 +262,9 @@ class ChooseNameFlow(
     val phase: StateFlow<Phase> = _phase.asStateFlow()
     private val _notice = MutableStateFlow<NameChoiceNotice?>(null)
     val notice: StateFlow<NameChoiceNotice?> = _notice.asStateFlow()
+    private val _check = MutableStateFlow<NameCheck>(NameCheck.Idle)
+    /** The precheck's answer for the name in the field. */
+    val check: StateFlow<NameCheck> = _check.asStateFlow()
     private val _account = MutableStateFlow<CreatedAccount?>(null)
     /** The account once it exists (under the suggested name until a rename goes through). */
     val account: StateFlow<CreatedAccount?> = _account.asStateFlow()
@@ -231,11 +272,43 @@ class ChooseNameFlow(
     /** The local check while typing (`.com` has the last word on submit). */
     fun problem(typed: String): VoiciName.Problem? = typed.trim().takeIf { it.isNotEmpty() }?.let { VoiciName.problem(it) }
 
+    /** The hold on [typed], when `.com` said it is held: nothing may be opened or charged for it. */
+    fun heldFor(typed: String): NameCheck.Held? = (_check.value as? NameCheck.Held)?.takeIf { it.name == typed.trim().lowercase() }
+
+    /** The precheck's refusal (taken, a link that no longer works) for [typed]. */
+    fun refusedFor(typed: String): NameChoiceNotice? = (_check.value as? NameCheck.Refused)?.takeIf { it.name == typed.trim().lowercase() }?.notice
+
+    /**
+     * Ask `.com` about [typed] (after the screen's debounce, Done on the keyboard, or Pay). A name already answered
+     * is not asked again, except a hold whose lookup failed.
+     */
+    suspend fun check(typed: String) {
+        val n = typed.trim().lowercase()
+        if (n.isEmpty() || VoiciName.problem(n) != null) { _check.value = NameCheck.Idle; return }
+        val known = _check.value
+        if (known.name == n && !(known is NameCheck.Held && !known.checked)) return
+        if (known.name != n && known is NameCheck.Held) _check.value = NameCheck.Idle
+        asking = n
+        val answer = try {
+            ops.precheck(n, grant?.takeIf { it.name == n })
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+        // A later name was asked about meanwhile: this answer is stale.
+        if (asking != n) return
+        _check.value = checkFor(n, answer)
+    }
+
+    private var asking: String? = null
+
     suspend fun submit(typed: String, payment: NameChoicePayment) {
         if (_phase.value != Phase.Editing) return
         val wanted = typed.trim().lowercase()
         VoiciName.problem(wanted)?.let { _notice.value = NameChoiceNotice.Problem(it); return }
         if (payment is NameChoicePayment.Code && payment.code.isBlank()) return
+        if (heldFor(wanted) != null) return
         _notice.value = null
         _phase.value = Phase.Working
         try {
@@ -253,6 +326,12 @@ class ChooseNameFlow(
     }
 
     private suspend fun run(wanted: String, payment: NameChoicePayment) {
+        // Nothing is opened or charged for a name `.com` already refuses.
+        check(wanted)
+        when (_check.value.takeIf { it.name == wanted }) {
+            is NameCheck.Held, is NameCheck.Refused -> return
+            else -> Unit
+        }
         val account = _account.value ?: try {
             ops.createAccount(suggested).also { _account.value = it }
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -265,7 +344,7 @@ class ChooseNameFlow(
         if (wanted == kept) return settled(account, null)
         val g = grant?.takeIf { it.name == wanted }
         val q = ops.quote(kept, wanted, g)
-        if (q is NameQuote.Refused) { _notice.value = refusal(q.code, q.problem, q.heldUntil, wanted, kept, payment); return }
+        if (q is NameQuote.Refused) { _notice.value = refused(q.code, q.problem, q.heldUntil, q.domain, q.checked, wanted, kept, payment); return }
         q as NameQuote.Available
         // A free grant pays (and only it): the screen then offers only Continue.
         val pay = if (q.paid) NameChoicePayment.Granted else payment
@@ -287,7 +366,7 @@ class ChooseNameFlow(
             ops.rename(kept, wanted, if (pay is NameChoicePayment.Code) pay.copy(code = pay.code.trim()) else pay, units, g)
         } catch (e: NameChangeRefused) {
             store.clear()
-            _notice.value = refusal(e.code, e.problem, e.heldUntil, wanted, kept, pay)
+            _notice.value = refused(e.code, e.problem, e.heldUntil, e.domain, e.checked, wanted, kept, pay)
             return
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -312,6 +391,19 @@ class ChooseNameFlow(
         } catch (_: Throwable) {
             // Continue (or the next unlock) settles it: the record says RENAMED.
         }
+    }
+
+    /** A refusal's sentence; a hold shows as the status line under the field instead (the precheck's). */
+    private fun refused(
+        code: String, problem: String?, heldUntil: Long?, domain: String?, checked: Boolean,
+        wanted: String, kept: String, payment: NameChoicePayment,
+    ): NameChoiceNotice? {
+        val n = refusal(code, problem, heldUntil, wanted, kept, payment, domain, checked)
+        if (n is NameChoiceNotice.Held) {
+            _check.value = NameCheck.Held(wanted, n.domain, n.until, n.checked)
+            return null
+        }
+        return n
     }
 
     private fun settled(account: CreatedAccount, p: PendingNameChoice?) {
@@ -355,11 +447,24 @@ class ChooseNameFlow(
         /** "Bob" for bob, "Mary Ann" for mary-ann: the account's display name until the owner changes it. */
         fun displayName(name: String) = name.split("-").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
 
-        fun refusal(code: String, problem: String?, heldUntil: Long?, wanted: String, kept: String, payment: NameChoicePayment): NameChoiceNotice =
+        /** The precheck's answer as the screen shows it. */
+        fun checkFor(n: String, q: NameQuote?): NameCheck = when {
+            q == null -> NameCheck.Unknown(n)
+            q is NameQuote.Available -> NameCheck.Open(n)
+            q is NameQuote.Refused && q.code == "dibs-held" -> NameCheck.Held(n, NameCheck.domain(q.domain, n), q.heldUntil, q.checked)
+            q is NameQuote.Refused && q.code in setOf("taken", "offered", "reserved", "dibs-used", "invalid", "grant-expired", "grant-invalid", "grant-used") ->
+                NameCheck.Refused(n, refusal(q.code, q.problem, q.heldUntil, n, n, NameChoicePayment.Card))
+            else -> NameCheck.Unknown(n)
+        }
+
+        fun refusal(
+            code: String, problem: String?, heldUntil: Long?, wanted: String, kept: String, payment: NameChoicePayment,
+            domain: String? = null, checked: Boolean = true,
+        ): NameChoiceNotice =
             when (code) {
                 "invalid" -> VoiciName.Problem.of(problem)?.let { NameChoiceNotice.Problem(it) } ?: NameChoiceNotice.Taken
-                "taken", "offered", "same-name" -> NameChoiceNotice.Taken
-                "dibs-held", "dibs-used" -> if (heldUntil != null) NameChoiceNotice.Held(wanted, heldUntil) else NameChoiceNotice.Taken
+                "taken", "offered", "same-name", "reserved", "dibs-used" -> NameChoiceNotice.Taken
+                "dibs-held" -> NameChoiceNotice.Held(wanted, NameCheck.domain(domain, wanted), heldUntil, checked)
                 "code-invalid", "code-wrong-kind", "code-needs-dibs" -> NameChoiceNotice.CodeInvalid
                 "code-used" -> NameChoiceNotice.CodeUsed
                 "grant-expired" -> NameChoiceNotice.GrantExpired

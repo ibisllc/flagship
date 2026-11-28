@@ -4393,7 +4393,6 @@
     <string name="choose_name_use_voucher">Use a voucher</string>
     <string name="choose_name_voucher_code">Voucher code</string>
     <string name="choose_name_use_voucher_button">Use voucher</string>
-    <string name="choose_name_held">This name is held for the owner of %1$s.com until %2$s.</string>
     <string name="choose_name_working">Setting up your account name…</string>
     <string name="choose_name_done">Your account is now %1$s.</string>
     <string name="choose_name_keep">Keep %1$s</string>
@@ -4452,4 +4451,20 @@
     <string name="akr_banner_done">This device has the new account key.</string>
     <string name="akr_banner_failed">This device couldn\'t check the new account key. Ask an admin device to add it again.</string>
     <string name="akr_push_body">Your account key was changed. Open Flagship to keep using this device.</string>
+    <string name="choose_name_held_until">Held for the owner of %1$s until %2$s.</string>
+    <string name="choose_name_held_no_date">Held for the owner of %1$s.</string>
+    <string name="choose_name_held_unchecked">Couldn\'t check %1$s just now. Try again in a minute.</string>
+    <string name="choose_name_held_why">Why?</string>
+    <string name="choose_name_held_why_title">Why is %1$s held?</string>
+    <string name="choose_name_held_rule_until">Until %1$s, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.</string>
+    <string name="choose_name_held_rule">For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.</string>
+    <string name="choose_name_held_yours_title">Is this name yours?</string>
+    <string name="choose_name_held_yours">If %1$s is yours, it\'s your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we\'ll send a link that sets it aside for you.</string>
+    <string name="choose_name_held_email_us">Email us</string>
+    <string name="choose_name_held_how_dibs">How .com dibs works</string>
+    <string name="choose_name_held_ok">OK</string>
+    <string name="choose_name_held_pick_another">Pick another name, or go back for a new suggestion.</string>
+    <string name="choose_name_held_mail_subject">Account name: %1$s</string>
+    <string name="choose_name_held_mail_name">Name I want: %1$s</string>
+    <string name="choose_name_held_mail_why">Why:</string>
 </resources>

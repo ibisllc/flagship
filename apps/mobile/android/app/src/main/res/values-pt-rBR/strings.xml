@@ -4386,7 +4386,6 @@
     <string name="choose_name_use_voucher">Usar um vale</string>
     <string name="choose_name_voucher_code">Código do vale</string>
     <string name="choose_name_use_voucher_button">Usar vale</string>
-    <string name="choose_name_held">Este nome está reservado para o titular de %1$s.com até %2$s.</string>
     <string name="choose_name_working">Configurando seu nome de conta…</string>
     <string name="choose_name_done">Sua conta agora é %1$s.</string>
     <string name="choose_name_keep">Ficar com %1$s</string>
@@ -4445,4 +4444,20 @@
     <string name="akr_banner_done">Este dispositivo tem a nova chave da conta.</string>
     <string name="akr_banner_failed">Este dispositivo não conseguiu verificar a nova chave da conta. Peça a um dispositivo administrador para adicioná-lo de novo.</string>
     <string name="akr_push_body">A chave da sua conta foi trocada. Abra o Flagship para continuar usando este dispositivo.</string>
+    <string name="choose_name_held_until">Reservado para o titular de %1$s até %2$s.</string>
+    <string name="choose_name_held_no_date">Reservado para o titular de %1$s.</string>
+    <string name="choose_name_held_unchecked">Não foi possível verificar %1$s agora. Tente de novo em um minuto.</string>
+    <string name="choose_name_held_why">Por quê?</string>
+    <string name="choose_name_held_why_title">Por que %1$s está reservado?</string>
+    <string name="choose_name_held_rule_until">Até %1$s, um nome do Flagship que corresponde a um .com registrado fica guardado para quem controla esse domínio. Depois, fica aberto a todos.</string>
+    <string name="choose_name_held_rule">Por tempo limitado, um nome do Flagship que corresponde a um .com registrado fica guardado para quem controla esse domínio. Depois, fica aberto a todos.</string>
+    <string name="choose_name_held_yours_title">Este nome é seu?</string>
+    <string name="choose_name_held_yours">Se %1$s é seu, se é o seu próprio nome ou se você tem outro bom motivo, escreva para support@flagshipserver.com antes de criar sua conta. Diga qual nome você quer e por quê. Se pudermos, enviaremos um link que o reserva para você.</string>
+    <string name="choose_name_held_email_us">Fale conosco</string>
+    <string name="choose_name_held_how_dibs">Como funciona a prioridade .com</string>
+    <string name="choose_name_held_ok">OK</string>
+    <string name="choose_name_held_pick_another">Escolha outro nome ou volte para receber uma nova sugestão.</string>
+    <string name="choose_name_held_mail_subject">Nome da conta: %1$s</string>
+    <string name="choose_name_held_mail_name">Nome que eu quero: %1$s</string>
+    <string name="choose_name_held_mail_why">Por quê:</string>
 </resources>

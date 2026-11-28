@@ -54,7 +54,22 @@ class LiveNameChoiceOps(
 
     private fun refused(e: PaymentsHttpError) = NameChangeRefused(
         e.code ?: "rename-failed", e.body.str("problem"), (e.body["heldUntil"] as? JsonPrimitive)?.longOrNull,
+        e.body.str("domain"), e.body.str("checked") != "false",
     )
+
+    /** A quote answer: available, or refused with its code (and, for a hold, the `.com` and whether it was checked). */
+    private fun quoteOf(o: JsonObject): NameQuote {
+        if ((o["available"] as? JsonPrimitive)?.contentOrNull == "true") {
+            return NameQuote.Available(
+                ((o["units"] as? JsonPrimitive)?.longOrNull ?: AccountNameChoice.PACK_UNITS.toLong()).toInt(),
+                paid = (o["paid"] as? JsonPrimitive)?.contentOrNull == "true",
+            )
+        }
+        return NameQuote.Refused(
+            o.str("code") ?: "rename-failed", o.str("problem"), (o["heldUntil"] as? JsonPrimitive)?.longOrNull,
+            o.str("domain"), o.str("checked") != "false",
+        )
+    }
 
     override suspend fun createAccount(suggested: String): CreatedAccount {
         val vm = opener?.takeIf { it.username == suggested } ?: OpenAccountViewModel(server, app, suggested).also { opener = it }
@@ -75,13 +90,23 @@ class LiveNameChoiceOps(
         } catch (e: PaymentsHttpError) {
             return NameQuote.Refused(e.code ?: "rename-failed")
         }
-        if ((o["available"] as? JsonPrimitive)?.contentOrNull == "true") {
-            return NameQuote.Available(
-                ((o["units"] as? JsonPrimitive)?.longOrNull ?: AccountNameChoice.PACK_UNITS.toLong()).toInt(),
-                paid = (o["paid"] as? JsonPrimitive)?.contentOrNull == "true",
-            )
+        return quoteOf(o)
+    }
+
+    override suspend fun precheck(newName: String, grant: NameGrant?): NameQuote? {
+        val body = JsonObject(
+            linkedMapOf<String, JsonElement>("newUsername" to JsonPrimitive(newName))
+                .apply { grant?.takeIf { it.name == newName }?.let { put("nameGrant", grantJson(it)) } },
+        )
+        val o = try {
+            post("/api/account/name-change/quote", body).second
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            return null
         }
-        return NameQuote.Refused(o.str("code") ?: "rename-failed", o.str("problem"), (o["heldUntil"] as? JsonPrimitive)?.longOrNull)
+        if (o["available"] !is JsonPrimitive) return null
+        return quoteOf(o)
     }
 
     override suspend fun walletBalance(): Int {
