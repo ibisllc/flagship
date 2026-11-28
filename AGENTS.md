@@ -309,8 +309,8 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   a `.com` deploy, an endorsed box release, store builds; per-server re-keys are Phase 5.
 - 2026-11-27, org read tokens (external report 2): `POST /api/orgs/<id>/read-token` (seat key or org server STK,
   `ACCOUNT_READ_TOKEN_SECRET`, budget `org-read-token`); `/log` and `/export` require one (org admin or servers-add);
-  other org GETs accept it. The clients and the refusal of every untokened org GET are 0.5 (`docs/account-read-token.md`
-  "Org routes").
+  other org GETs accept it. On `release/0.5` (2026-11-28): `.com` refuses every untokened org GET but the plan and the
+  invite offer, and the webapp, iOS and Android send it (`docs/account-read-token.md` "Org routes"; 0.5 list).
 - Shrink the phone apps (0.5 list): merged into `release/0.5` 2026-11-27 (VP8-only libwebrtc build config, Android
   WebP welcome art), pinned there to `libwebrtc-157-45414303796` (main keeps the old one). Before 0.5 ships, the
   device call matrix in `docs/runbooks/pre-0.5-call-codec-tests.md` must pass: the release gate refuses 0.5 while it is

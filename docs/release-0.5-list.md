@@ -165,12 +165,19 @@ over once "let's start 0.5" is said.
   client makes an enrolment key carried only in the recipe, `canonicalOrgServerCode` commits to its public key, and
   `handleOrgServerRegister` also needs its signature beside the box's STK (not `delegatedPubKeyHex`). Shared vectors
   TS, Swift, Kotlin.
-- **Org reads need the org read token** (external report, 2026-11-27). Main mints and accepts it (seat member key or
-  box STK) and requires it where no shipped client reads. In 0.5 the webapp (`orgSeat.js`), iOS, Android and the
-  daemon (`orgAuthorityPin.ts`, `orgBoxKeys.ts`, `directory/connector.ts`, plan attestation) send it; `/export` and
-  `/keys` need admin or servers-add; `.com` refuses every tokenless org read (no compatibility window, owner). Order:
-  the endorsed box release that sends it, then the enforcing `.com`. Shared token vectors. Branch
-  `feat/org-read-token-0.5`.
+- **Org reads need the org read token** (external report, 2026-11-27). **Built on `release/0.5` (2026-11-28).** `.com`
+  refuses every tokenless org GET (401 `org-read-token-required`, no compatibility window, owner) except the public
+  `plan` and the invite offer (invite-key proof alone; its answer now carries the org's `authority`, so a joiner
+  verifies the chain before accepting). Scopes (`orgReadScope`, docs/account-read-token.md "Org routes"): `/log`,
+  `/export` admin (org admin or servers-add); `/keys` admin or one of the org's boxes; `authority`, `seats`,
+  `ceremonies` also a seat waiting for an admin (it mints with the member key it accepted with); the rest any live
+  seat or box. An org admin's seat reads as admin with its member key too (reads only). The box sends it since main
+  `73df9f8cd`; the webapp (`lib/orgReadToken.js`, shell v263), iOS and Android (`OrgReadTokens`) mint without a prompt
+  (admin seat key while unlocked on the phones, else the seat member key from the session's UMK), keep it until 10
+  minutes before expiry and mint again after a 401. Vectors `test-vectors/org-read-token` (TS, Swift, Kotlin,
+  webapp). Order: the endorsed box release that sends it, then the enforcing `.com`, with the store builds. Open: a
+  phone member seat whose session holds no UMK reads nothing until unlocked; the webapp keeps tokens in memory only
+  (a reload mints again).
   - **Org invite: link-key proof for read + accept, and withdraw** (found 2026-11-27). Today only the offer is
     encrypted under the link key `k`, so an accept needs no proof that the joiner holds the link. Derive
     `offerKey = HKDF(k, "flagship/org-invite-offer/v1")` and an invite key from `HKDF(k, "flagship/org-invite-key/v1")`
