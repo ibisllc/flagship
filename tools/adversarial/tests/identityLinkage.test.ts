@@ -54,19 +54,24 @@ describe("per-app visitor identity", () => {
   it("AT-LNK-01 one person's key toward app A, app B, their account id, IRK and contact id are all different; another person's key toward A differs; derivation is deterministic (catches: a shared long-lived id across apps)", () => {
     const umk = generateUMK();
     const other = generateUMK();
-    const a = hex(deriveAppAccountId(umk, "alice--chess").publicKey);
-    const b = hex(deriveAppAccountId(umk, "alice--notes").publicKey);
-    const sameAppOtherServerOwner = hex(deriveAppAccountId(umk, "carol--chess").publicKey);
-    const keys = [a, b, sameAppOtherServerOwner, hex(deriveAccountId(umk).publicKey), hex(deriveIRK(umk).publicKey), hex(deriveContactAccountId(umk, deriveAccountId(other).publicKey).publicKey), hex(deriveAppAccountId(other, "alice--chess").publicKey)];
+    const a = hex(deriveAppAccountId(umk, "alice.flagship.services", "alice--chess").publicKey);
+    const b = hex(deriveAppAccountId(umk, "alice.flagship.services", "alice--notes").publicKey);
+    const sameAppOtherServerOwner = hex(deriveAppAccountId(umk, "carol.flagship.services", "carol--chess").publicKey);
+    // A marketplace app keeps its creator's id on every account that installs it: the host account still separates them.
+    const sameRefOtherHost = hex(deriveAppAccountId(umk, "carol.flagship.services", "alice--chess").publicKey);
+    const keys = [a, b, sameAppOtherServerOwner, sameRefOtherHost, hex(deriveAccountId(umk).publicKey), hex(deriveIRK(umk).publicKey), hex(deriveContactAccountId(umk, deriveAccountId(other).publicKey).publicKey), hex(deriveAppAccountId(other, "alice.flagship.services", "alice--chess").publicKey)];
     expect(new Set(keys).size).toBe(keys.length);
     // Whoever invited them, the person presents the same key to one app (owner rule: the owner may link two grants of ONE app).
-    expect(hex(deriveAppAccountId(umk, "alice--chess").publicKey)).toBe(a);
+    expect(hex(deriveAppAccountId(umk, "alice.flagship.services", "alice--chess").publicKey)).toBe(a);
   });
 
-  it("AT-LNK-02 an app ref with a separator, upper case, spaces or empty is refused before derivation (catches: info-string injection aliasing another app's key)", () => {
+  it("AT-LNK-02 an app ref or account zone with a separator, upper case, spaces or empty is refused before derivation (catches: info-string injection aliasing another app's key)", () => {
     const umk = generateUMK();
     for (const bad of ["alice--chess|x", "ALICE--CHESS", "alice chess", "", "-alice", "alice--chess-", "a".repeat(200), "alice--chess\n"]) {
-      expect(() => deriveAppAccountId(umk, bad), JSON.stringify(bad)).toThrow();
+      expect(() => deriveAppAccountId(umk, "alice.flagship.services", bad), JSON.stringify(bad)).toThrow();
+    }
+    for (const bad of ["alice.flagship.services|alice--chess", "ALICE.flagship.services", "alice", "", "alice .flagship.services"]) {
+      expect(() => deriveAppAccountId(umk, bad, "alice--chess"), JSON.stringify(bad)).toThrow();
     }
   });
 
@@ -181,7 +186,7 @@ describe("what an app is told about its visitor", () => {
 describe("proofs a visitor's phone signs", () => {
   it("AT-LNK-08 a visit proof or knock for app A on server S verifies only for A, S and that page (catches: replaying one app's sign-in into another app, server or browser)", () => {
     const umk = generateUMK();
-    const key = deriveAppAccountId(umk, "alice--chess");
+    const key = deriveAppAccountId(umk, "alice.flagship.services", "alice--chess");
     const v: ServiceVisitProof = { serverId: "home.alice.flagship.services", serviceRef: "alice--chess", visitorAID: key.publicKey, issuedAt: 1 };
     const vs = signServiceVisitProof(v, key);
     expect(verifyServiceVisitProof(v, vs, key.publicKey)).toBe(true);
@@ -189,7 +194,7 @@ describe("proofs a visitor's phone signs", () => {
     expect(verifyServiceVisitProof({ ...v, serverId: "home2.alice.flagship.services" }, vs, key.publicKey)).toBe(false);
     expect(verifyServiceVisitProof({ ...v, issuedAt: 2 }, vs, key.publicKey)).toBe(false);
     // A key derived for another app never verifies this app's proof.
-    expect(verifyServiceVisitProof(v, vs, deriveAppAccountId(umk, "alice--notes").publicKey)).toBe(false);
+    expect(verifyServiceVisitProof(v, vs, deriveAppAccountId(umk, "alice.flagship.services", "alice--notes").publicKey)).toBe(false);
     const k: KnockAuthorization = { serverId: v.serverId, serviceRef: v.serviceRef, pageId: "p".repeat(32), visitorAID: key.publicKey, issuedAt: 1 };
     const ks = signKnockAuthorization(k, key);
     expect(verifyKnockAuthorization(k, ks, key.publicKey)).toBe(true);

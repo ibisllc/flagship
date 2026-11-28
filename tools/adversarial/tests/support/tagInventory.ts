@@ -163,7 +163,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   // ---- not signatures
   "flagship/account-device-key/v1": "kdf account device key info",
   "flagship/account-id/v1": "kdf account id derivation",
-  "flagship/app-aid/v1": "kdf per-app visitor identity (linkage fork tests unlinkability)",
+  "flagship/app-aid/v2": "kdf per-app visitor identity, scoped to the hosting account (linkage fork tests unlinkability)",
   "flagship/contact-aid/v1": "kdf legacy contact AID",
   "flagship/household-key/v1": "kdf household key",
   "flagship/server-archive/v1": "kdf server archive key",

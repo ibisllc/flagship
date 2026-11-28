@@ -766,39 +766,83 @@ Built on `feat/marketplace` in `packages/protocol/src/appListScope.ts`,
 `packages/server-daemon/src/accessScope.ts`, `accessScopeHttp.ts` and
 `accessSync.ts`; tests `packages/server-daemon/tests/accessScope.test.ts`.
 
-## Per-app identity (owner rule, 2026-10-13)
+## Per-app identity (owner rule, 2026-10-13; v2 scoped to the hosting account, 0.5)
 
-A visitor's identity toward an app is derived from their account root and that
-app only:
+A visitor's identity toward an app is derived from their account root, the
+account that hosts the app, and that app:
 
-    seed = HKDF-SHA256(UMK, salt = "", info = "flagship/app-aid/v1|<appRef>")
+    seed = HKDF-SHA256(UMK, salt = "", info = "flagship/app-aid/v2|<accountZone>|<appRef>")
 
 `appRef` is the app's **service id** (`<creator>--<slug>`). It is the same on
 every one of the owner's servers (a copy or a move keeps it, and the box's
 allow-list state travels with the copy), and it is the same whoever sends the
 invite, so the owner's invite and a co-manager's invite to one app bind the
-same id. Consequences:
+same id.
+
+**Why the zone (v2, external report, 2026-11-27).** v1 used the app ref alone
+(`flagship/app-aid/v1|<appRef>`). The app ref is not unique to one owner: a
+marketplace app keeps its creator's id (`<creator>--<slug>`) on every account
+that installs it, and the ref reaches the visitor's client from the link
+(`s=`, the knock's `ref=`), which the link's maker writes. Two unrelated owners
+hosting an app with the same ref saw the same visitor under the same id and
+could link them.
+
+**`accountZone` (decided 2026-11-28).** The hosting account's zone,
+`<account>.<data apex>` (`alice.flagship.services`; `alice.gym.flagship.services`
+in the gym), computed by `appAccountZone(serverId, dataApex)` in all four
+clients:
+
+- **From the box name the client signs for and sends to, never from a link
+  parameter.** Knock links carry `server=<box>` and the authorization is posted
+  to that box (which refuses a `serverId` other than its own); invites are
+  redeemed on the box that issued the link (`https://<box>/invite#…`, or the app
+  link's `server=`). TLS proves that name, so an owner can only ever collect ids
+  for their own zone: pointing a link at someone else's box sends the id to that
+  box, not to the link's maker. The label just left of the data apex is the
+  account: `<server>.<account>.<apex>`, an app host below it, and the account's
+  own `<account>.<apex>` (a phone-hosted app) all give the same zone.
+- **One zone whichever domain the visitor used.** Knock and invite pages put the
+  box's own `<server>.<account>.flagship.services` name in their links even when
+  the app was reached on a direct `fshp.app` name, a voi.ci link or a custom
+  domain, and `appAccountZone` refuses any name outside the data apex (no
+  identity is presented; the client says it isn't one of the boxes it knows). So
+  one app never splits into several ids.
+- **Organisations.** An org's servers are `<server>.<org>.<apex>`, so an
+  org-hosted app scopes to the org.
+- **The name, not a key, by necessity.** A stable account id would survive a
+  rename, but the only candidates are the owner's AID (it rotates with account key
+  rotation in 0.5, so it is no more stable) and `.com`'s rows (not something the
+  visitor can check without asking `.com` which apps they visit). The zone is the
+  one value the visitor's client can verify itself, over TLS. A rename of an
+  account that has servers (refused today, `has-servers`) moves every box to the
+  new name and so gives its visitors new ids: that feature must ask them to join
+  again, as §5b of `naming-recovery-and-name-change.md` already flags every
+  grantee for a new link. A server transferred to another account, or a backup
+  restored into another account, likewise starts with no members.
+
+Consequences:
 
 - The owner can tell that two grants of the SAME app ("John" and the "Chess
   Club" group) are one person — acceptable — but never link a visitor across
-  two apps or servers: no long-lived id is shared between apps, and none
-  depends on who invited them. It replaces the per-author contact AID
-  (`flagship/contact-aid/v1`), which linked a visitor across all of one
-  owner's apps.
+  two apps, or across two accounts hosting the same app id: no long-lived id is
+  shared between contexts, and none depends on who invited them. It replaces
+  the per-author contact AID (`flagship/contact-aid/v1`), which linked a visitor
+  across all of one owner's apps.
 - `.com`'s invite records hold per-app ids only (`boundAID` is whatever the
   redeemer signs with). The owner is still recognised by the owner AID.
 - Invite links name the app: `…/invite#<secret>&a=<ownerAID>[&i=<inviteId>]&s=<serviceRef>`
-  (`flagship://invite?…&s=` for the app hand-off). A link without `s=` (made
-  before this rule) can't be redeemed: the friend is asked for a new one.
+  (the app link adds `server=<box>`). A link without `s=` (made before this
+  rule) can't be redeemed: the friend is asked for a new one.
 - Redeem, visit proofs, knock sign-in and manual-approve acceptances all sign
-  with the id for the app in question (the knock deeplink's `ref=`); the box
-  is unchanged (it verifies whatever AID is on the allow-list).
-- Existing grants bound to old contact AIDs keep working only until the
-  person's next sign-in from an updated app (which presents the per-app id the
-  box doesn't know): re-invite them. Fine before launch.
-- Vectors: `packages/protocol/test-vectors/app-account-id/` (a different app ⇒
-  a different id; a different inviter, same app ⇒ the same id; refused app
-  refs) and `appAid`/`acceptApp` in
+  with the id for the app in question on that box's zone; the box is unchanged
+  (it verifies whatever AID is on the allow-list).
+- **Flag day (0.5).** Grants bound to v1 ids stop matching once the visitor's
+  app is updated: members join again through a fresh invite. No compatibility
+  path (owner: breaking is fine before v1).
+- Vectors: `packages/protocol/test-vectors/app-account-id/` (a different app, or
+  the same app on another account ⇒ a different id; a different inviter, same
+  app ⇒ the same id; the zone of each kind of box name; refused app refs and
+  zones) and `appAid`/`acceptApp` in
   `packages/protocol/tests/fixtures/serviceAccessGating.vectors.json`.
 
 ## Notes

@@ -54,6 +54,8 @@ export const invites: Group = {
     const fqdn = b.fqdn;
     const slug = "club";
     const serviceRef = `${A.username}--${slug}`;
+    // The visitor's id is scoped to the hosting account's zone, <user>.<apex> (keys.ts appAccountZone).
+    const accountZone = fqdn.slice(fqdn.indexOf(".") + 1);
     const app = `https://${slug}.${fqdn}`;
     const { irk, aid, adminRoot, primaryDevice } = A.keys;
     const household = deriveHouseholdKey({ seed: A.keys.umk });
@@ -61,9 +63,9 @@ export const invites: Group = {
     const phoneId = randomBytes(16).toString("hex");
     const phoneSeed = deriveAccountDeviceKeySeed(A.keys.umk, A.username, phoneId);
     const phone: Keypair = { privateKey: phoneSeed, publicKey: ed.getPublicKey(phoneSeed) };
-    const friendA = deriveAppAccountId({ seed: new Uint8Array(32).fill(0xa1) }, serviceRef);
-    const friendB = deriveAppAccountId({ seed: new Uint8Array(32).fill(0xb2) }, serviceRef);
-    const friendC = deriveAppAccountId({ seed: new Uint8Array(32).fill(0xc3) }, serviceRef);
+    const friendA = deriveAppAccountId({ seed: new Uint8Array(32).fill(0xa1) }, accountZone, serviceRef);
+    const friendB = deriveAppAccountId({ seed: new Uint8Array(32).fill(0xb2) }, accountZone, serviceRef);
+    const friendC = deriveAppAccountId({ seed: new Uint8Array(32).fill(0xc3) }, accountZone, serviceRef);
     const session = await pair(A, b);
     // A run on a kept box starts from nothing.
     await uninstall(A, b, slug);

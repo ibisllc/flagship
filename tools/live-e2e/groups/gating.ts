@@ -101,11 +101,13 @@ export const gating: Group = {
     const fqdn = b.fqdn;
     const slug = "gate";
     const serviceRef = `${A.username}--${slug}`;
+    // The visitor's id is scoped to the hosting account's zone, <user>.<apex> (keys.ts appAccountZone).
+    const accountZone = fqdn.slice(fqdn.indexOf(".") + 1);
     const app = `https://${slug}.${fqdn}`;
     const { irk, aid: ownerAid, adminRoot } = A.keys;
     const household = deriveHouseholdKey({ seed: A.keys.umk });
     const friendUmk = { seed: new Uint8Array(32).fill(0xf2) };
-    const friend = deriveAppAccountId(friendUmk, serviceRef);
+    const friend = deriveAppAccountId(friendUmk, accountZone, serviceRef);
     const friendHex = bytesToHex(friend.publicKey);
     const get = (path: string, headers: Record<string, string> = {}) =>
       tryHttp(`${app}${path}`, { headers: { accept: "text/html", ...headers } }, 45_000);
@@ -198,7 +200,7 @@ export const gating: Group = {
       return `link: https://${fqdn}/invite#<secret>&a=${bytesToHex(ownerAid.publicKey).slice(0, 8)}…&i=${inviteId.slice(0, 8)}…&s=${serviceRef}`;
     });
     let memberCookie = "";
-    const redeemed = created && (await rec.check("friend redeems under their PER-APP id (deriveAppAccountId(umk, serviceRef))", async () => {
+    const redeemed = created && (await rec.check("friend redeems under their PER-APP id (deriveAppAccountId(umk, accountZone, serviceRef))", async () => {
       const redeemedAt = Date.now();
       const aidSig = bytesToHex(signRedeemServiceInvite({ secretHash, visitorAID: friend.publicKey, redeemedAt }, friend));
       const r = await postJson(`https://${fqdn}/api/service-invites/redeem`, { secret: bytesToHex(secret), visitorAID: friendHex, aidSig, redeemedAt });
@@ -207,7 +209,7 @@ export const gating: Group = {
       return `bound ${friendHex.slice(0, 10)}…`;
     }));
     await rec.check("[deterministic] the friend's id differs per app (no cross-app linking)", () => {
-      const other = deriveAppAccountId(friendUmk, `${A.username}--other`);
+      const other = deriveAppAccountId(friendUmk, accountZone, `${A.username}--other`);
       assert(bytesToHex(other.publicKey) !== friendHex, "same id for two apps");
       return "distinct";
     });

@@ -398,9 +398,9 @@ describe("v2 — pairwise contact AID (deriveContactAccountId)", () => {
 describe("per-app identity — the acceptance is signed by the friend's id for the app", () => {
   const V = JSON.parse(
     readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures/serviceAccessGating.vectors.json"), "utf8"),
-  ) as { appAid: { serviceRef: string; appAidPubHex: string }; acceptApp: { inviteId: string; serviceRef: string; acceptedAt: number; sigHex: string } };
+  ) as { appAid: { accountZone: string; serviceRef: string; appAidPubHex: string }; acceptApp: { inviteId: string; serviceRef: string; acceptedAt: number; sigHex: string } };
   it("reproduces the pinned appAid + acceptApp vectors", () => {
-    const app = deriveAppAccountId(friendUmk, V.appAid.serviceRef);
+    const app = deriveAppAccountId(friendUmk, V.appAid.accountZone, V.appAid.serviceRef);
     expect(hexOf(app.publicKey)).toBe(V.appAid.appAidPubHex);
     const accept: AcceptServiceInvite = {
       inviteId: V.acceptApp.inviteId,

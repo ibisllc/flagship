@@ -1,42 +1,139 @@
 {
-  "about": "Per-app account id (docs/service-access-gating.md, Per-app identity): seed = HKDF-SHA256(UMK, salt empty, info 'flagship/app-aid/v1|<appRef>'), Ed25519 from that seed. appRef = the app's service id. Depends on the visitor's UMK and the app only: a different app gives a different id; who invited them doesn't enter it.",
-  "info": "flagship/app-aid/v1",
+  "about": "Per-app account id v2 (docs/service-access-gating.md, Per-app identity): seed = HKDF-SHA256(UMK, salt empty, info 'flagship/app-aid/v2|<accountZone>|<appRef>'), Ed25519 from that seed. accountZone = the HOSTING account's zone '<account>.<data apex>', computed by the client from the box name it signs for and talks to (appAccountZone(serverId, dataApex)), never from a link parameter. appRef = the app's service id. A different app, or the same app id hosted by another account (a marketplace app keeps its creator's id), gives a different id; who invited them doesn't enter it.",
+  "info": "flagship/app-aid/v2",
   "cases": [
     {
       "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "accountZone": "alice.flagship.services",
       "appRef": "bright-maple--plants",
-      "pubHex": "1feffb40bcef5e16f378ec69f0929466fb7ec24788c0ad225e4570ac1678aae9"
+      "pubHex": "722bcfb3528dcfaa05296c768b0baf7419b37720568975e226716d8ba9d6498a"
     },
     {
       "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "accountZone": "carol.flagship.services",
+      "appRef": "bright-maple--plants",
+      "pubHex": "e9ece712c5f6b522ef9dd27d43d2911bd7509dfce6222c7a01c663e92c6cfd41"
+    },
+    {
+      "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "accountZone": "alice.flagship.services",
       "appRef": "bright-maple--chess-club",
-      "pubHex": "f7d015c316e73cacea5d66bcd1e1539c6a980fbc517fb7d32ffa74914886d803"
+      "pubHex": "310e76c82bd4992e8da9ab0cfd75b38216bfa668dfe2b8580dc75b39a2e14c11"
     },
     {
       "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "accountZone": "alice.flagship.services",
       "appRef": "alice-notes",
-      "pubHex": "6b95f7a720fe5f255567bf38f642194d1a84ad36124207e51afa86aa3450ed74"
+      "pubHex": "feb744e8061199c749baa3e71ad611c8bf0387ddf921bfc6b1efa38dcb8ae2e8"
+    },
+    {
+      "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "accountZone": "acme-org.flagship.services",
+      "appRef": "bright-maple--plants",
+      "pubHex": "cf98fe7adef2544be6f65ceda64da2ae9a926a19cc78046cfa550bf386ce44fd"
+    },
+    {
+      "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "accountZone": "alice.gym.flagship.services",
+      "appRef": "bright-maple--plants",
+      "pubHex": "3137d326555612791a9bf14d1bd9d467674373ca9b668f775d36d3148be5c975"
     },
     {
       "umkSeedHex": "3333333333333333333333333333333333333333333333333333333333333333",
+      "accountZone": "alice.flagship.services",
       "appRef": "bright-maple--plants",
-      "pubHex": "81656ecb53a34fd6fb6be7d87e95a9a82aad407dafa4a8880101633bc9908bc7"
+      "pubHex": "3fbd9a3b9922cc1f13db6e589c173e699c7d9ee90f30fcecd659b4ae4f3f4bba"
     }
   ],
   "sameAppAnyInviter": {
     "note": "The owner's invite and a co-manager's invite to the same app bind the same id: the inviter is not an input. The old per-author contact ids for these two inviters differ, for contrast.",
     "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+    "accountZone": "alice.flagship.services",
     "appRef": "bright-maple--plants",
     "inviterAidHexes": [
       "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
       "3d87eede8ed65dd9e9eea8e1325d594a8f635fdec9369fa8e4cfb8a8a28180ba"
     ],
-    "pubHex": "1feffb40bcef5e16f378ec69f0929466fb7ec24788c0ad225e4570ac1678aae9",
+    "pubHex": "722bcfb3528dcfaa05296c768b0baf7419b37720568975e226716d8ba9d6498a",
     "oldContactAidHexes": [
       "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
       "32c908c9f406be1550ec930e9caaf6f4029ca9633cb65f1a80a683d674fb9c8d"
     ]
   },
+  "sameAppOtherHost": {
+    "note": "The same app id on two accounts' servers: unrelated ids, so the two owners can't link the visitor.",
+    "pubHexes": [
+      "722bcfb3528dcfaa05296c768b0baf7419b37720568975e226716d8ba9d6498a",
+      "e9ece712c5f6b522ef9dd27d43d2911bd7509dfce6222c7a01c663e92c6cfd41"
+    ]
+  },
+  "accountZones": [
+    {
+      "serverId": "home.alice.flagship.services",
+      "dataApex": "flagship.services",
+      "zone": "alice.flagship.services"
+    },
+    {
+      "serverId": "HOME.Alice.flagship.services.",
+      "dataApex": "flagship.services",
+      "zone": "alice.flagship.services"
+    },
+    {
+      "serverId": "notes.home.alice.flagship.services",
+      "dataApex": "flagship.services",
+      "zone": "alice.flagship.services"
+    },
+    {
+      "serverId": "alice.flagship.services",
+      "dataApex": "flagship.services",
+      "zone": "alice.flagship.services"
+    },
+    {
+      "serverId": "office.acme-org.flagship.services",
+      "dataApex": "flagship.services",
+      "zone": "acme-org.flagship.services"
+    },
+    {
+      "serverId": "home.alice.gym.flagship.services",
+      "dataApex": "gym.flagship.services",
+      "zone": "alice.gym.flagship.services"
+    },
+    {
+      "serverId": "game--john-doe.fshp.app",
+      "dataApex": "flagship.services",
+      "zone": null
+    },
+    {
+      "serverId": "chess.example.com",
+      "dataApex": "flagship.services",
+      "zone": null
+    },
+    {
+      "serverId": "flagship.services",
+      "dataApex": "flagship.services",
+      "zone": null
+    },
+    {
+      "serverId": "home.alice.flagship.services.evil.example",
+      "dataApex": "flagship.services",
+      "zone": null
+    },
+    {
+      "serverId": "home..flagship.services",
+      "dataApex": "flagship.services",
+      "zone": null
+    },
+    {
+      "serverId": "home.al_ice.flagship.services",
+      "dataApex": "flagship.services",
+      "zone": null
+    },
+    {
+      "serverId": "home.alice-flagship.services",
+      "dataApex": "flagship.services",
+      "zone": null
+    }
+  ],
   "invalidAppRefs": [
     "",
     "Bright-Maple--plants",
@@ -45,5 +142,14 @@
     "plants-",
     "a b",
     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ],
+  "invalidAccountZones": [
+    "",
+    "alice",
+    "Alice.flagship.services",
+    "alice.flagship.services|x",
+    "a|b.flagship.services",
+    ".flagship.services",
+    "alice..services"
   ]
 }

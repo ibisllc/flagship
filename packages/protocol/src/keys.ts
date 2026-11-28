@@ -12,7 +12,7 @@ const INFO_APP_SECRET = "flagship.app-secret.v1";
 const INFO_APP_MEMBER = "flagship.app-member.v1";
 const INFO_ACCOUNT_ID = "flagship/account-id/v1";
 const INFO_CONTACT_ID = "flagship/contact-aid/v1";
-const INFO_APP_ACCOUNT_ID = "flagship/app-aid/v1";
+const INFO_APP_ACCOUNT_ID = "flagship/app-aid/v2";
 const INFO_HOUSEHOLD_KEY = "flagship/household-key/v1";
 const INFO_SERVER_ARCHIVE = "flagship/server-archive/v1";
 
@@ -85,27 +85,53 @@ export function deriveContactAccountId(umk: UserMasterKey, authorAidPub: Bytes):
 
 /**
  * App Account Id — the identity a visitor presents to ONE app (redeeming its
- * invites, visiting it, signing in to it), derived from their UMK and that
- * app's stable id only:
+ * invites, visiting it, signing in to it), derived from their UMK, the account
+ * that HOSTS the app and that app's id:
  *
- *   seed = HKDF-SHA256(UMK, salt = "", info = "flagship/app-aid/v1|<appRef>")
+ *   seed = HKDF-SHA256(UMK, salt = "", info = "flagship/app-aid/v2|<accountZone>|<appRef>")
  *
- * `appRef` is the app's service id, `<creator>--<slug>`: the same on every one
- * of the owner's servers (a copy or a move keeps it) and whoever sends the
- * invite. So a co-manager's invite and the owner's invite to the same app
- * bind the same identity (the owner may link two grants of ONE app), while two
- * apps see unrelated ids: nothing a visitor presents is shared between apps,
- * and nothing depends on who invited them. Replaces the per-author contact
- * AID for everything a visitor does (docs/service-access-gating.md, "Per-app
- * identity"). The owner is still recognised by their own AID.
+ * `accountZone` is the hosting account's zone, `<account>.<data apex>`
+ * ({@link appAccountZone}), taken from the box name the client signs for and
+ * sends to over TLS, never from a link parameter: an owner can only collect ids
+ * for their own zone. `appRef` is the app's service id, `<creator>--<slug>`:
+ * the same on every one of the account's servers and whoever sends the invite.
+ * So the owner's invite and a co-manager's invite to one app bind the same id
+ * (the owner may link two grants of ONE app), while two apps, or the same app
+ * (a marketplace app keeps its creator's id) hosted by two accounts, see
+ * unrelated ids (docs/service-access-gating.md, "Per-app identity").
  */
-export function deriveAppAccountId(umk: UserMasterKey, appRef: string): Keypair {
+export function deriveAppAccountId(umk: UserMasterKey, accountZone: string, appRef: string): Keypair {
+  if (!ACCOUNT_ZONE_RE.test(accountZone)) throw new Error("account zone must be <account>.<data apex>, lowercase");
   if (!APP_REF_RE.test(appRef)) throw new Error("app ref must be a service id (lowercase, digits, dashes)");
-  return seedToKeypair(derive(umk, `${INFO_APP_ACCOUNT_ID}|${appRef}`));
+  return seedToKeypair(derive(umk, `${INFO_APP_ACCOUNT_ID}|${accountZone}|${appRef}`));
 }
 
 /** A service id as apps are named (`<creator>--<slug>`; dashes, lowercase, digits). */
 const APP_REF_RE = /^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/;
+const DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const DNS_LABEL_RE = new RegExp(`^${DNS_LABEL}$`);
+const ACCOUNT_ZONE_RE = new RegExp(`^(?=.{3,253}$)${DNS_LABEL}(?:\\.${DNS_LABEL})+$`);
+
+/**
+ * The hosting account's zone for a box name: `<server>.<account>.<apex>` (or an
+ * app host below it, or the account's own `<account>.<apex>`) gives
+ * `<account>.<apex>`. Null for any name not under `dataApex` (a direct
+ * `fshp.app` name, a custom domain): the box name is what the knock and invite
+ * links carry and what the client talks to, so every way of reaching an app
+ * lands on one zone. An org's servers sit under the org's name, so an
+ * org-hosted app scopes to the org.
+ */
+export function appAccountZone(serverId: string, dataApex: string): string | null {
+  if (typeof serverId !== "string" || typeof dataApex !== "string") return null;
+  const host = serverId.trim().toLowerCase().replace(/\.$/, "");
+  const apex = dataApex.trim().toLowerCase().replace(/^\./, "").replace(/\.$/, "");
+  if (!apex || !host.endsWith(`.${apex}`)) return null;
+  const labels = host.slice(0, host.length - apex.length - 1).split(".");
+  const account = labels[labels.length - 1]!;
+  if (!labels.every((l) => DNS_LABEL_RE.test(l))) return null;
+  const zone = `${account}.${apex}`;
+  return ACCOUNT_ZONE_RE.test(zone) ? zone : null;
+}
 
 function hexOf(b: Bytes): string {
   let s = "";
