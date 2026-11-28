@@ -421,8 +421,8 @@ export async function runUpdateConsumer(
     /* an unreadable marker is treated as "none pending" */
   }
 
-  // 1. Claim the deposit (public consume-once — the carrier is a PUBLIC
-  //    admin-signed order; `.com` holds nothing forgeable).
+  // 1. Claim the deposit (consume-once, with this box's read token: the order is public and re-verified here, but
+  //    a read uses it up, so only the box itself may read it).
   const base = opts.controlPlaneBaseUrl.replace(/\/+$/, "");
   const url = `${base}/api/server/${encodeURIComponent(opts.serverDomain)}/update`;
   let sealedHex: string | undefined;

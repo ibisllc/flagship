@@ -6348,7 +6348,18 @@ async function wireOwnerHandlers(deps: {
         ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
         username: cfg.userId,
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-        ...bellFetch(),
+        // Its own read token on the update lane too (with or without the doorbell): .com gates that read next.
+        fetchImpl:
+          bellFetch().fetchImpl ??
+          ownDepositFetch(
+            new BoxReadToken({
+              comBaseUrl: env.controlPlaneBaseUrl,
+              username: cfg.userId,
+              serverFqdn: env.serverFqdn,
+              boxPublicKey: () => identityKeypair.publicKey,
+              signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+            }),
+          ),
         swapper: artifactSwapper,
         currentCommit: buildCurrentCommitProvider(dataDir),
         usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),

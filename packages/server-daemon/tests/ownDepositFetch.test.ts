@@ -4,7 +4,7 @@ import { ownDepositFetch } from "../src/boxReadToken.js";
 const BASE = "https://flagshipserver.com/api/server/home.ada.flagship.services";
 
 describe("the box's own deposit reads", () => {
-  it("send each of the four consume-once deposits with the box's read token and nothing else", async () => {
+  it("send each of the five consume-once lanes (four deposits and the update order) with the box's read token and nothing else", async () => {
     const viaToken: string[] = [];
     const plain: string[] = [];
     const f = ownDepositFetch(
@@ -15,8 +15,8 @@ describe("the box's own deposit reads", () => {
     await f(`${BASE}/update`, { method: "GET" });
     await f(`${BASE}/self-delete?stk=ab`, { method: "GET" });
     await f(`${BASE}/swk-deposit-extra`, { method: "GET" });
-    expect(viaToken).toEqual(["swk", "cgk", "pairing", "entitlement"].map((l) => `${BASE}/${l}-deposit`));
-    expect(plain).toEqual([`${BASE}/update`, `${BASE}/self-delete?stk=ab`, `${BASE}/swk-deposit-extra`]);
+    expect(viaToken).toEqual([...["swk", "cgk", "pairing", "entitlement"].map((l) => `${BASE}/${l}-deposit`), `${BASE}/update`]);
+    expect(plain).toEqual([`${BASE}/self-delete?stk=ab`, `${BASE}/swk-deposit-extra`]);
   });
 
   it("falls back to a plain read when no token can be minted (a demo account is let in, a real one gets 401)", async () => {

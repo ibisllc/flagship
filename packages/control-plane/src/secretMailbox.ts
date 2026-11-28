@@ -730,7 +730,7 @@ export async function handleListBoxSealedLeases(
 // Authenticated EXACTLY like the unlock-reply (`handlePostSecretResponse`):
 // the IRK-signed mailbox-auth (`authPhoneMailbox`) proves the phone owns the
 // account's mailbox. `.com` stores the OPAQUE sealed blob — it never sees the
-// token (I1). The box does a public, consume-once read (6b) at startup.
+// token (I1). The box reads it once (6b) at startup, with its own read token.
 // ──────────────────────────────────────────────────────────────────────
 
 export async function handlePostPairingDeposit(
@@ -816,7 +816,7 @@ export async function handlePostPairingDeposit(
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// 6b. GET /api/server/:domain/pairing-deposit  (box, public consume-once)
+// 6b. GET /api/server/:domain/pairing-deposit  (box, consume-once, the box's own read token)
 //
 // PUBLIC + domain-scoped + consume-once — the IDENTICAL security posture as
 // `handleReleaseBoxSealedLease`: the box has no session at boot, and the blob
@@ -851,7 +851,7 @@ export async function handleConsumePairingDeposit(
 
 // ──────────────────────────────────────────────────────────────────────
 // 6c. POST /api/server/:domain/entitlement-deposit  (phone, IRK mailbox-auth)
-//     GET  /api/server/:domain/entitlement-deposit  (box, public consume-once)
+//     GET  /api/server/:domain/entitlement-deposit  (box, consume-once, the box's own read token)
 //
 // Fold "authorize it to serve" INTO the first-boot unlock approval: when the
 // phone unseals the LUKS key it ALSO mints an owner-IRK-signed RootEntitlement
@@ -956,7 +956,7 @@ export async function handleConsumeEntitlementDeposit(
 
 // ──────────────────────────────────────────────────────────────────────
 // 6c-bis. POST /api/server/:domain/swk-deposit  (phone, IRK mailbox-auth)
-//         GET  /api/server/:domain/swk-deposit  (box, public consume-once)
+//         GET  /api/server/:domain/swk-deposit  (box, consume-once, the box's own read token)
 //
 // Secret-free-recipe SWK delivery (docs/recipe-delivery-and-remote-install.md).
 // The recipe carries NO SWK; the box boots platform-less, registers, and the
@@ -1062,7 +1062,7 @@ export async function handleConsumeSwkDeposit(
 
 // ──────────────────────────────────────────────────────────────────────
 // 6c-ter. POST /api/server/:domain/cgk-deposit  (phone, IRK mailbox-auth)
-//         GET  /api/server/:domain/cgk-deposit  (box, public consume-once)
+//         GET  /api/server/:domain/cgk-deposit  (box, consume-once, the box's own read token)
 //
 // Post-boot CGK (Cloud Gossip Key) delivery (Phase 6) — the recipe carries NO
 // CGK, so per-service leadership gossip stays DISABLED until the phone seals the
@@ -1171,7 +1171,7 @@ const HEX_SIG = /^[0-9a-f]{128}$/;
 // ──────────────────────────────────────────────────────────────────────
 // 6c-quinquies. POST /api/server/:domain/update  (phone, IRK mailbox-auth +
 //               ADMIN-authority signature verify — the sensitive-op gate)
-//               GET  /api/server/:domain/update  (box, public consume-once)
+//               GET  /api/server/:domain/update  (box, consume-once, the box's own read token)
 //
 // Admin-authorized in-place server-update order delivery
 // (docs/server-update-mechanism.md). The AUTHORIZATION half of the 2-of-2 gate:
@@ -1186,8 +1186,8 @@ const HEX_SIG = /^[0-9a-f]{128}$/;
 // the Slice-D admin gate (`authorizeSensitiveComOp`): with an admin master root
 // pinned, ONLY the admin root / an admin-root-signed `admin` grant can authorize;
 // the bare membership IRK cannot. The order is PUBLIC (like the server order), verified
-// at deposit AND re-verified box-side, so the consume GET is a public consume-once
-// read (mirrors the other deposits).
+// at deposit AND re-verified box-side. The consume GET is still open (a stranger could use it up); it takes the
+// box's own read token like the other deposits once every box sends it there (docs/release-0.5-list.md).
 // ──────────────────────────────────────────────────────────────────────
 
 export async function handlePostUpdateDeposit(
@@ -1363,7 +1363,7 @@ function bytesToHexLocal(b: Uint8Array): string {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// 6d. GET /api/server/:domain/self-delete  (box, public consume-once)
+// 6d. GET /api/server/:domain/self-delete  (box, consume-once, the box's own read token)
 //
 // Account-death content-wipe delivery. `.com` deposited the owner-IRK-signed
 // `servers-self-delete` order into the `self-delete` lane during the

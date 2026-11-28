@@ -132,6 +132,14 @@ over once "let's start 0.5" is said.
   credits line with a plural), then recapture slide 08 (`capture-ios.sh --only 08`): the 0.5 art shows the English
   title on iPhone and iPad in every language, and its chat has no credits line for that reason.
 
+- **The box's update-order read takes its own read token** (external report, 2026-11-27). The other four consume-once
+  deposit reads already need the box's token; `GET /api/server/<d>/update` does not, so anyone with a box's name can
+  use up a pending update order. Main already makes the box send its token there (`boxReadToken.ts` OWN_DEPOSIT,
+  the update poller's fetch). In 0.5, `.com` gates that read like its siblings (`gateServerRead`; the route test
+  `apps/com/test/depositReadGates.test.ts` then expects 401 anonymous). Order: the endorsed box release first (boxes
+  learn to send the token through this very lane), then the `.com` that gates it; a box that never took that release
+  stops seeing update orders and needs an owner action or a reburn.
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in

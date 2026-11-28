@@ -113,7 +113,8 @@ export class BoxReadToken {
   }
 }
 
-const OWN_DEPOSIT = /\/api\/server\/[^/]+\/(?:swk|cgk|pairing|entitlement)-deposit$/;
+// The update order lane too: .com gates it once every box sends its token there (docs/release-0.5-list.md).
+const OWN_DEPOSIT = /\/api\/server\/[^/]+\/(?:(?:swk|cgk|pairing|entitlement)-deposit|update)$/;
 
 /**
  * A fetch for the box's pollers: reads of its own consume-once deposits carry its read token
