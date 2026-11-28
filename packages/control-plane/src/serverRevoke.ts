@@ -5,6 +5,7 @@ import {
   type ServerRevokeBySelf,
 } from "@flagship/protocol";
 import type {
+  AcmeAccountKeyDeliveryStorage,
   AuthCodeStorage,
   DeviceCapabilityGrantStorage,
   LuksKeyStorage,
@@ -37,6 +38,8 @@ import {
  */
 export interface RevokeBySelfDeps {
   servers: ServerStorage;
+  /** When wired, the box's pending ACME account-key delivery is dropped as its authority ends. */
+  acmeAccountKeyDelivery?: Pick<AcmeAccountKeyDeliveryStorage, "deleteByDomain">;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -95,6 +98,7 @@ export async function handleServerRevokeBySelf(
   if (!revoked) {
     return { status: 500, body: { error: "revoke failed (server vanished?)" } };
   }
+  await deps.acmeAccountKeyDelivery?.deleteByDomain(host);
   return { status: 200, body: { ok: true, revokedAt, reason: r.reason } };
 }
 
@@ -134,6 +138,8 @@ export interface ServerReleaseDeps {
   luksKeys?: LuksKeyStorage;
   /** Optional. When wired, the box's last health report is dropped too. */
   serverHealth?: Pick<ServerHealthStorage, "delete">;
+  /** When wired, the box's pending ACME account-key delivery is dropped as its authority ends. */
+  acmeAccountKeyDelivery?: Pick<AcmeAccountKeyDeliveryStorage, "deleteByDomain">;
   /** Slice D — device-grant store for the master-admin authority gate (§2 row
    *  30). Optional: absent ⇒ only the bare admin root satisfies the open gate. */
   grants?: DeviceCapabilityGrantStorage;
@@ -263,6 +269,7 @@ export async function handleServerReleaseName(
   if (deps.serverHealth) {
     await deps.serverHealth.delete(r.serverDomain);
   }
+  await deps.acmeAccountKeyDelivery?.deleteByDomain(r.serverDomain);
 
   return ok({
     ok: true,

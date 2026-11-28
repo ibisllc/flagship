@@ -218,7 +218,9 @@ export async function handleDepositAcmeAccountKey(
 // GET /api/server/:domain/acme-account-key  — box RELEASES on boot
 //
 // PUBLIC read (the box has no session at boot). Returns the SEALED key + its
-// public references when a non-revoked, non-expired slot exists; else 404. The
+// public references when the server is registered and not revoked and a
+// non-revoked, non-expired slot sealed to its registered STK exists; else
+// 404 (403 for a revoked server). The
 // blob is sealed to the box STK, so a captured GET cannot open it (I1) — the
 // same posture as the box-sealed-lease release.
 // ──────────────────────────────────────────────────────────────────────
@@ -228,8 +230,11 @@ export async function handleReleaseAcmeAccountKey(
   serverDomain: string,
 ): Promise<HandlerResponse> {
   const now = (deps.now ?? (() => Date.now()))();
+  const reg = await deps.servers.get(serverDomain);
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
   const row = await deps.delivery.getByDomain(serverDomain);
-  if (!row || row.revokedAt !== null || row.expiresAt <= now) {
+  if (!row || row.revokedAt !== null || row.expiresAt <= now || !equalHex(row.recipientPubHex, reg.identityPubKeyHex)) {
     return notFound("no acme account key ready");
   }
   return {

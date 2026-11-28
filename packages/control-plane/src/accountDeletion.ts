@@ -32,6 +32,7 @@ import type {
   AuditEventStorage,
   AutoUnlockLeaseStorage,
   BoxSealedLeaseStorage,
+  AcmeAccountKeyDeliveryStorage,
   DeviceCapabilityGrantStorage,
   DeviceIdentityStorage,
   LuksKeyStorage,
@@ -78,6 +79,8 @@ export interface AccountDeletionDeps {
   autoUnlockLeases?: AutoUnlockLeaseStorage;
   boxSealedLeases?: BoxSealedLeaseStorage;
   luksKeys?: LuksKeyStorage;
+  /** When wired, the box's pending ACME account-key delivery is dropped as its authority ends. */
+  acmeAccountKeyDelivery?: Pick<AcmeAccountKeyDeliveryStorage, "deleteByDomain">;
   serverHealth?: Pick<ServerHealthStorage, "delete">;
   webauthnRecovery?: WebauthnRecoveryStorage;
   pushTokens?: PushTokenStorage;
@@ -152,6 +155,11 @@ async function teardownServer(
   }
   try {
     await deps.servers.revoke(domain, "account-deleted", now);
+  } catch {
+    /* swallow */
+  }
+  try {
+    await deps.acmeAccountKeyDelivery?.deleteByDomain(domain);
   } catch {
     /* swallow */
   }

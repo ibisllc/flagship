@@ -1706,6 +1706,7 @@ export async function tryControlPlane(
           servers: storage.servers,
           luksKeys: storage.luksKeys,
           serverHealth: storage.serverHealth,
+          acmeAccountKeyDelivery: storage.acmeAccountKeyDelivery,
           grants: storage.deviceCapabilityGrants,
           apex: env.SERVICES_APEX,
         },
@@ -1724,7 +1725,7 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_REVOKE_BY_SELF))) {
     return finishPlain(
       await handleServerRevokeBySelf(
-        { servers: storage.servers },
+        { servers: storage.servers, acmeAccountKeyDelivery: storage.acmeAccountKeyDelivery, },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
@@ -1756,6 +1757,7 @@ export async function tryControlPlane(
           auditEvents: storage.auditEvents,
           autoUnlockLeases: storage.autoUnlockLeases,
           boxSealedLeases: storage.boxSealedLeases,
+          acmeAccountKeyDelivery: storage.acmeAccountKeyDelivery,
           // Device-authorized revocation: a 2nd device holding a
           // `revoke-others`/`admin` DeviceCapabilityGrant may revoke a server
           // by passing `signerPubHex`. Same grant storage the device-grant
@@ -1825,6 +1827,7 @@ export async function tryControlPlane(
           boxSealedLeases: storage.boxSealedLeases,
           luksKeys: storage.luksKeys,
           serverHealth: storage.serverHealth,
+          acmeAccountKeyDelivery: storage.acmeAccountKeyDelivery,
           webauthnRecovery: storage.webauthnRecovery,
           pushTokens: storage.pushTokens,
           serverOrders: storage.serverOrders,
@@ -1871,6 +1874,7 @@ export async function tryControlPlane(
           boxSealedLeases: storage.boxSealedLeases,
           luksKeys: storage.luksKeys,
           serverHealth: storage.serverHealth,
+          acmeAccountKeyDelivery: storage.acmeAccountKeyDelivery,
           webauthnRecovery: storage.webauthnRecovery,
           pushTokens: storage.pushTokens,
           serverOrders: storage.serverOrders,
@@ -2722,6 +2726,7 @@ export async function tryControlPlane(
         routing: storage.routing,
         serverTransfers: storage.serverTransfers,
         auditEvents: storage.auditEvents,
+        acmeAccountKeyDelivery: storage.acmeAccountKeyDelivery,
         grants: storage.deviceCapabilityGrants,
         ...(xferDns ? { dns: xferDns } : {}),
         ...(xferCf ? { dnsCleanup: xferCf } : {}),
