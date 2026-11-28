@@ -274,6 +274,12 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             completionHandler([.list])
             return
         }
+        // The account key changed: fetch and check this device's delivery now.
+        if AccountKeyRotationCheck.isPush(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
+            Task { await AccountKeyRotationCheck.run() }
+            completionHandler([.list])
+            return
+        }
         // A call while the app is open rings on its own screen, not as a banner.
         if let call = Self.voiciCall(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
             Task { @MainActor in VoiciCallEvents.post(call) }
@@ -311,6 +317,11 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             if Self.isAbuseNotice(userInfo, categoryIdentifier: category) { AbuseNoticeEvents.post() }
             if DeviceRemovedCheck.isPush(userInfo, categoryIdentifier: category) {
                 await DeviceRemovedCheck.run()
+                completionHandler()
+                return
+            }
+            if AccountKeyRotationCheck.isPush(userInfo, categoryIdentifier: category) {
+                await AccountKeyRotationCheck.run()
                 completionHandler()
                 return
             }

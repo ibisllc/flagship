@@ -137,6 +137,7 @@ public protocol FlagshipServerClient: Sendable {
     func putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) async throws
     func deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Int64) async throws
     func revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) async throws
+    func accountKeyCall(method: String, path: String, authorization: AccountDirectoryAuthorization?, body: Data?) async throws -> (status: Int, data: Data)
     /// Watch delegate keys — opt-in "quick approve a box boot from the Watch".
     /// The phone mints an IRK-signed `WatchDelegateKey` (scoped boot-approval,
     /// 7-day TTL) and registers it; the boot worker then accepts the delegate
@@ -441,6 +442,14 @@ public extension FlagshipServerClient {
     func revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) async throws { throw ScreensClientError.http(status: 501, message: String(localized: "account directory unavailable")) }
 }
 
+public extension FlagshipServerClient {
+    /// The account key rotation routes (AccountKeyRotationWire.swift): one JSON call, signed as a directory
+    /// request when `authorization` is set. Returns the status and body whatever the status.
+    func accountKeyCall(method: String, path: String, authorization: AccountDirectoryAuthorization?, body: Data?) async throws -> (status: Int, data: Data) {
+        throw ScreensClientError.http(status: 501, message: String(localized: "account key change unavailable"))
+    }
+}
+
 /// Slice D §5 — the `POST /api/users/:username/admin-root-rotation` body:
 /// `{ rotation: { username, oldAdminRootPub, newAdminRootPub, issuedAt },
 /// signatureHex }`. `signatureHex` is the OLD admin root's Ed25519 signature
@@ -705,11 +714,16 @@ public struct WipeRestartRequest: Encodable, Sendable {
     /// SEC-REPAIR-001: the NEW credential's attestation object (base64url), beside the signed request,
     /// so `.com` keeps checking the new recovery passkey. Bound by the credential id the old IRK signs.
     public let newPasskeyAttestationObject: String?
+    /// The admin root's signature over the same canonical bytes: required on accounts that pin an admin root,
+    /// since every device of the account can derive the old IRK.
+    public let adminRootSignature: String?
 
-    public init(request: Inner, signature: String, idempotencyKey: String, newPasskeyAttestationObject: String? = nil) {
+    public init(request: Inner, signature: String, idempotencyKey: String, newPasskeyAttestationObject: String? = nil,
+                adminRootSignature: String? = nil) {
         self.request = request; self.signature = signature
         self.idempotencyKey = idempotencyKey
         self.newPasskeyAttestationObject = newPasskeyAttestationObject
+        self.adminRootSignature = adminRootSignature
     }
 }
 
@@ -1054,6 +1068,8 @@ public struct AccountDirectoryResponse: Codable, Equatable, Sendable {
     public let grants: [AccountDirectoryGrant]
     public let selfProfiles: [AccountDirectorySelfProfile]
     public let managedProfiles: [AccountDirectoryManagedProfile]
+    /// Each device's X-Wing receive key (docs/account-key-rotation.md); nil from a `.com` that predates them.
+    public let receiveKeys: [DeviceReceiveKeyRecord]?
 
     public init(
         accountId: String,
@@ -1061,7 +1077,8 @@ public struct AccountDirectoryResponse: Codable, Equatable, Sendable {
         devices: [AccountDirectoryDevice],
         grants: [AccountDirectoryGrant],
         selfProfiles: [AccountDirectorySelfProfile],
-        managedProfiles: [AccountDirectoryManagedProfile]
+        managedProfiles: [AccountDirectoryManagedProfile],
+        receiveKeys: [DeviceReceiveKeyRecord]? = nil
     ) {
         self.accountId = accountId
         self.accountProfile = accountProfile
@@ -1069,6 +1086,7 @@ public struct AccountDirectoryResponse: Codable, Equatable, Sendable {
         self.grants = grants
         self.selfProfiles = selfProfiles
         self.managedProfiles = managedProfiles
+        self.receiveKeys = receiveKeys
     }
 }
 
@@ -1086,19 +1104,27 @@ public struct UsernameLookupResponse: Codable, Equatable, Sendable {
     public let accountType: String
     /// Wall-clock ms of the successful TOTP enroll-confirm, or nil.
     public let totpEnrolledAt: Int64?
+    /// The admin root `.com` pins (nil: none yet, or an older `.com`).
+    public let adminRootPub: String?
+    /// The account key epoch (docs/account-key-rotation.md); nil from an older `.com` (= 0).
+    public let keyEpoch: Int64?
 
     public init(
         username: String,
         irkPub: String,
         claimedAt: Int64,
         accountType: String,
-        totpEnrolledAt: Int64?
+        totpEnrolledAt: Int64?,
+        adminRootPub: String? = nil,
+        keyEpoch: Int64? = nil
     ) {
         self.username = username
         self.irkPub = irkPub
         self.claimedAt = claimedAt
         self.accountType = accountType
         self.totpEnrolledAt = totpEnrolledAt
+        self.adminRootPub = adminRootPub
+        self.keyEpoch = keyEpoch
     }
 }
 
@@ -3214,6 +3240,18 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public var installEventScripts: [String: [(eventName: String, detail: String, postedAt: Int64)]] = [:]
 
     public var accountDirectories: [String: AccountDirectoryResponse] = [:]
+    /// Answers `accountKeyCall` (method, path, body) → (status, JSON body); nil answers 501.
+    public var accountKeyHandler: (@Sendable (String, String, Data?) -> (Int, Data))?
+    public private(set) var accountKeyCalls: [(method: String, path: String, body: Data?)] = []
+
+    public func accountKeyCall(method: String, path: String, authorization: AccountDirectoryAuthorization?, body: Data?) async throws -> (status: Int, data: Data) {
+        try await tick()
+        accountKeyCalls.append((method, path, body))
+        GymProbe.note("account key \(method) \(path)")
+        guard let accountKeyHandler else { throw ScreensClientError.http(status: 501, message: String(localized: "account key change unavailable")) }
+        let (status, data) = accountKeyHandler(method, path, body)
+        return (status, data)
+    }
 
     // Account-directory writes: accepted and noted for the gym; a device
     // revoke drops it from the scripted directory.
@@ -3451,6 +3489,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         lastWipeRestart = (username, body, ifMatch)
         if body.newPasskeyAttestationObject != nil { GymProbe.note("wipe-restart new passkey attested") }
+        if body.adminRootSignature != nil { GymProbe.note("wipe-restart admin signed") }
         switch wipeRestartBehavior {
         case .ok:
             return WipeRestartResponse(
@@ -4330,6 +4369,25 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             authorization: authorization,
             body: DirectoryDeleteRequest(expectedRevision: 0)
         )
+    }
+
+    public func accountKeyCall(method: String, path: String, authorization: AccountDirectoryAuthorization?, body: Data?) async throws -> (status: Int, data: Data) {
+        var req = URLRequest(url: baseUrl.appendingPathComponent(path))
+        req.httpMethod = method
+        if let body {
+            req.setValue("application/json", forHTTPHeaderField: "content-type")
+            req.httpBody = body
+        }
+        if let authorization {
+            req.setValue(authorization.deviceId, forHTTPHeaderField: "x-flagship-device-id")
+            req.setValue(authorization.signerPubHex, forHTTPHeaderField: "x-flagship-device-pub")
+            req.setValue(authorization.requestId, forHTTPHeaderField: "x-flagship-request-id")
+            req.setValue(String(authorization.issuedAt), forHTTPHeaderField: "x-flagship-issued-at")
+            req.setValue(authorization.signatureHex, forHTTPHeaderField: "x-flagship-signature")
+        }
+        req.setValue("no-store", forHTTPHeaderField: "cache-control")
+        let (data, response) = try await send(req)
+        return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
     }
 
     private func directoryMutation<Body: Encodable>(

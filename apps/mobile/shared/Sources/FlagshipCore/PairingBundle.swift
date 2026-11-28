@@ -45,6 +45,11 @@ public struct PairingBundle: Codable, Equatable, Sendable {
     /// The signing root's hybrid companion over the grant (pq-suites.md §20); absent when the admin
     /// device holds no bound PQ half for that root. The incoming device passes it to `.com`.
     public let grantPqSignature: PqSignatureWire?
+    /// The account's admin root PUBLIC key (hex). An admin promotes a new device by an admin-root-signed grant
+    /// with the `admin` scope to the new device's own key (the root itself stays where it is), and signs a
+    /// member's grant with the root too; the incoming device verifies the grant under this key and pins it for
+    /// account key rotations (docs/account-key-rotation.md). Absent in bundles from older admins.
+    public let adminRootPubHex: String?
 
     public struct AdmitFields: Codable, Equatable, Sendable {
         public let username: String
@@ -84,7 +89,8 @@ public struct PairingBundle: Codable, Equatable, Sendable {
         grant: GrantFields,
         grantSignature: String,
         wrappedAdminRoot: String? = nil,
-        grantPqSignature: PqSignatureWire? = nil
+        grantPqSignature: PqSignatureWire? = nil,
+        adminRootPubHex: String? = nil
     ) {
         self.umkSeedHex = umkSeedHex
         self.admit = admit
@@ -94,6 +100,7 @@ public struct PairingBundle: Codable, Equatable, Sendable {
         self.grantSignature = grantSignature
         self.wrappedAdminRoot = wrappedAdminRoot
         self.grantPqSignature = grantPqSignature
+        self.adminRootPubHex = adminRootPubHex
     }
 
     public func encoded() throws -> Data {

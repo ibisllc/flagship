@@ -1642,6 +1642,15 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return PostRecoveryStatusResponse(report: postRecoveryReport)
     }
 
+    /// `GET /api/screens/account-key/status`: a box that can follow a rotation, at epoch 0, by default.
+    public var mockAccountKeyStatus: AccountKeyBoxStatus? = AccountKeyBoxStatus(
+        trustedEpoch: 0, hintedEpoch: 0, holdingOwnerKey: false, rekeyDue: [], lastError: nil, capability: AccountKeyBoxStatus.capabilityV1)
+
+    public func accountKeyStatus() async throws -> AccountKeyBoxStatusResponse {
+        try await tick()
+        return AccountKeyBoxStatusResponse(status: mockAccountKeyStatus)
+    }
+
     /// The box's own activity log (`GET /api/screens/activity`), newest first.
     public var mockBoxActivity: [BoxActivityEntry] = []
 

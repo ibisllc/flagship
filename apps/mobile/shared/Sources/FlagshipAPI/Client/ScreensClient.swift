@@ -89,6 +89,9 @@ public protocol ScreensClient: Sendable {
     // walk so the phone's recovery confirmation screen can render
     // per-app re-anchoring counts + the undo deadline.
     func postRecoveryStatus() async throws -> PostRecoveryStatusResponse
+    /// What the box verified itself about the account key (docs/account-key-rotation.md); a box that predates
+    /// the rotation answers 404.
+    func accountKeyStatus() async throws -> AccountKeyBoxStatusResponse
 
     // W10 — per-app env-var KV editor. Values flow ONLY through /set;
     // /list returns names only; /unset removes a name.
@@ -543,6 +546,10 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
 }
 
 public extension ScreensClient {
+    func accountKeyStatus() async throws -> AccountKeyBoxStatusResponse {
+        throw ScreensClientError.http(status: 404, message: "")
+    }
+
     func companionMintExtensionTicket() async throws -> CompanionMintExtensionTicketResponse {
         throw ScreensClientError.notImplemented("extension tickets")
     }

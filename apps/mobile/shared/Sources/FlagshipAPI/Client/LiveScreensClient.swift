@@ -390,6 +390,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         try await request("/api/screens/post-recovery/status")
     }
 
+    public func accountKeyStatus() async throws -> AccountKeyBoxStatusResponse {
+        try await request("/api/screens/account-key/status")
+    }
+
     public func serviceEnvList(appId: String) async throws -> ServiceEnvListResponse {
         try await request("/api/screens/services/\(appId)/env")
     }
