@@ -17986,11 +17986,6 @@
     "en": "Use voucher",
     "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
   },
-  "choose_name_held": {
-    "en": "This name is held for the owner of %1$s.com until %2$s.",
-    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)",
-    "args": 2
-  },
   "choose_name_working": {
     "en": "Setting up your account name…",
     "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up)"
@@ -18229,5 +18224,77 @@
   "akr_push_body": {
     "en": "Your account key was changed. Open Flagship to keep using this device.",
     "ctx": "account key rotation (docs/account-key-rotation.md)"
+  },
+  "choose_name_held_until": {
+    "en": "Held for the owner of %1$s until %2$s.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)",
+    "args": 2
+  },
+  "choose_name_held_no_date": {
+    "en": "Held for the owner of %1$s.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)",
+    "args": 1
+  },
+  "choose_name_held_unchecked": {
+    "en": "Couldn't check %1$s just now. Try again in a minute.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)",
+    "args": 1
+  },
+  "choose_name_held_why": {
+    "en": "Why?",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
+  },
+  "choose_name_held_why_title": {
+    "en": "Why is %1$s held?",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)",
+    "args": 1
+  },
+  "choose_name_held_rule_until": {
+    "en": "Until %1$s, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)",
+    "args": 1
+  },
+  "choose_name_held_rule": {
+    "en": "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
+  },
+  "choose_name_held_yours_title": {
+    "en": "Is this name yours?",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
+  },
+  "choose_name_held_yours": {
+    "en": "If %1$s is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)",
+    "args": 1
+  },
+  "choose_name_held_email_us": {
+    "en": "Email us",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
+  },
+  "choose_name_held_how_dibs": {
+    "en": "How .com dibs works",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
+  },
+  "choose_name_held_ok": {
+    "en": "OK",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
+  },
+  "choose_name_held_pick_another": {
+    "en": "Pick another name, or go back for a new suggestion.",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
+  },
+  "choose_name_held_mail_subject": {
+    "en": "Account name: %1$s",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)",
+    "args": 1
+  },
+  "choose_name_held_mail_name": {
+    "en": "Name I want: %1$s",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)",
+    "args": 1
+  },
+  "choose_name_held_mail_why": {
+    "en": "Why:",
+    "ctx": "ui/screens/ChooseOwnNameScreen.kt (\"Choose your own account name\" at sign-up: a name held for a .com holder)"
   }
 }

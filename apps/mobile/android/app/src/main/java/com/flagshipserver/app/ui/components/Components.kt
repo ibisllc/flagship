@@ -221,6 +221,9 @@ fun FSField(
     // Fixed text before the input (a URL prefix such as `voi.ci/`): always shown, never edited, never in the value.
     // The field then reads left to right; at large font scales the prefix sits above the field instead.
     prefix: String? = null,
+    // The keyboard's action key (Done) and what it does; the default leaves the keyboard's own.
+    imeAction: androidx.compose.ui.text.input.ImeAction = androidx.compose.ui.text.input.ImeAction.Default,
+    onImeAction: (() -> Unit)? = null,
 ) {
     val sub = error ?: helper
     val prefixAbove = prefix != null && androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.5f
@@ -251,9 +254,14 @@ fun FSField(
         // autocorrects or appends a space to a passphrase, so the two
         // entries differ and the backup stays disabled (M14).
         keyboardOptions = if (visualTransformation is androidx.compose.ui.text.input.PasswordVisualTransformation) {
-            KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false)
+            KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = imeAction)
         } else {
-            KeyboardOptions(keyboardType = keyboardType)
+            KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction)
+        },
+        keyboardActions = if (onImeAction != null) {
+            androidx.compose.foundation.text.KeyboardActions(onAny = { onImeAction() })
+        } else {
+            androidx.compose.foundation.text.KeyboardActions.Default
         },
         visualTransformation = visualTransformation,
         shape = MaterialTheme.shapes.small,

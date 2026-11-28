@@ -4386,7 +4386,6 @@
     <string name="choose_name_use_voucher">Usar un vale</string>
     <string name="choose_name_voucher_code">Código del vale</string>
     <string name="choose_name_use_voucher_button">Usar vale</string>
-    <string name="choose_name_held">Este nombre está reservado para el titular de %1$s.com hasta el %2$s.</string>
     <string name="choose_name_working">Configurando tu nombre de cuenta…</string>
     <string name="choose_name_done">Tu cuenta ahora es %1$s.</string>
     <string name="choose_name_keep">Quedarme con %1$s</string>
@@ -4445,4 +4444,20 @@
     <string name="akr_banner_done">Este dispositivo tiene la nueva clave de la cuenta.</string>
     <string name="akr_banner_failed">Este dispositivo no pudo comprobar la nueva clave de la cuenta. Pide a un dispositivo administrador que lo vuelva a añadir.</string>
     <string name="akr_push_body">Se cambió la clave de tu cuenta. Abre Flagship para seguir usando este dispositivo.</string>
+    <string name="choose_name_held_until">Reservado para el titular de %1$s hasta el %2$s.</string>
+    <string name="choose_name_held_no_date">Reservado para el titular de %1$s.</string>
+    <string name="choose_name_held_unchecked">No hemos podido comprobar %1$s ahora mismo. Vuelve a intentarlo en un minuto.</string>
+    <string name="choose_name_held_why">¿Por qué?</string>
+    <string name="choose_name_held_why_title">¿Por qué está reservado %1$s?</string>
+    <string name="choose_name_held_rule_until">Hasta el %1$s, un nombre de Flagship que coincide con un .com registrado se reserva para quien controle ese dominio. Después queda libre para todos.</string>
+    <string name="choose_name_held_rule">Durante un tiempo limitado, un nombre de Flagship que coincide con un .com registrado se reserva para quien controle ese dominio. Después queda libre para todos.</string>
+    <string name="choose_name_held_yours_title">¿Este nombre es tuyo?</string>
+    <string name="choose_name_held_yours">Si %1$s es tuyo, es tu propio nombre o tienes otro buen motivo, escribe a support@flagshipserver.com antes de crear tu cuenta. Di qué nombre quieres y por qué. Si podemos, te enviaremos un enlace que lo reserva para ti.</string>
+    <string name="choose_name_held_email_us">Escríbenos</string>
+    <string name="choose_name_held_how_dibs">Cómo funciona la reserva de .com</string>
+    <string name="choose_name_held_ok">OK</string>
+    <string name="choose_name_held_pick_another">Elige otro nombre o vuelve atrás para obtener una nueva sugerencia.</string>
+    <string name="choose_name_held_mail_subject">Nombre de cuenta: %1$s</string>
+    <string name="choose_name_held_mail_name">Nombre que quiero: %1$s</string>
+    <string name="choose_name_held_mail_why">Motivo:</string>
 </resources>

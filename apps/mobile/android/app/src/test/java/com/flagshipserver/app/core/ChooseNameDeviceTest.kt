@@ -86,7 +86,17 @@ class ChooseNameDeviceTest {
             "The name change didn't go through. Your account keeps the name plucky-avocet, and your voucher code still works.",
             NameChoiceCopy.text(NameChoiceNotice.FailedCode("plucky-avocet")),
         )
-        assertTrue(NameChoiceCopy.text(NameChoiceNotice.Held("google", 1_800_000_000_000)).startsWith("This name is held for the owner of google.com until "))
+        assertTrue(NameChoiceCopy.text(NameChoiceNotice.Held("google", "google.com", 1_800_000_000_000)).startsWith("Held for the owner of google.com until "))
+        assertEquals("Held for the owner of cloudflare.com.", NameChoiceCopy.text(NameChoiceNotice.Held("clou-dflare", "cloudflare.com", null)))
+        assertEquals(
+            "Couldn't check acme.com just now. Try again in a minute.",
+            NameChoiceCopy.held("acme.com", 1_800_000_000_000, checked = false),
+        )
+        assertTrue(NameChoiceCopy.rule(null).startsWith("For a limited time, a Flagship name that matches a registered .com"))
+        assertTrue(NameChoiceCopy.rule(1_800_000_000_000).startsWith("Until "))
+        assertEquals("https://flagshipserver.com/dibs", NameChoiceCopy.dibsPage(java.util.Locale.ENGLISH))
+        assertEquals("https://flagshipserver.com/pt-br/dibs", NameChoiceCopy.dibsPage(java.util.Locale.forLanguageTag("pt-BR")))
+        assertEquals("https://flagshipserver.com/zh-hans/dibs", NameChoiceCopy.dibsPage(java.util.Locale.forLanguageTag("zh-Hans-CN")))
         assertEquals("This link has expired. Ask for a new one.", NameChoiceCopy.text(NameChoiceNotice.GrantExpired))
         assertEquals("This link doesn't work any more. Ask for a new one.", NameChoiceCopy.text(NameChoiceNotice.GrantInvalid))
         // An existing account opening a name-grant link (RootShell).
