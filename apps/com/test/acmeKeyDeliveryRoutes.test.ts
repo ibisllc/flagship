@@ -38,7 +38,7 @@ describe("seal-to-box ACME delivery routes — dispatch", () => {
     expect(r).not.toBeNull();
     expect(r!.status).toBe(404);
     const body = (await r!.json()) as { error: string };
-    expect(body.error).toMatch(/no acme account key ready/);
+    expect(body.error).toMatch(/unknown server/);
   });
 
   it("POST deposit reaches the handler → 400 on a malformed body", async () => {

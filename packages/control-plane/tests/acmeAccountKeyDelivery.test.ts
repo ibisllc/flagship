@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import {
   ed,
   signAcmeAccountKeyGrant,
+  signServerRevokeBySelf,
   signRevokeAcmeAccountKey,
   type AccountKeyRevokeReason,
   type AcmeAccountKeyGrant,
@@ -32,6 +33,7 @@ import {
   handleRevokeAcmeAccountKeyDelivery,
   type AcmeAccountKeyDeliveryDeps,
 } from "../src/acmeAccountKeyDelivery.js";
+import { handleServerRevokeBySelf } from "../src/serverRevoke.js";
 
 const HOST = "nas.dani.flagship.services";
 const USERNAME = "dani";
@@ -344,6 +346,48 @@ describe("handleReleaseAcmeAccountKey", () => {
     const slot = await h.storage.acmeAccountKeyDelivery.getByDomain(HOST);
     await h.storage.acmeAccountKeyDelivery.put({ ...slot!, revokedAt: 1_000_100 });
     expect((await handleReleaseAcmeAccountKey(h.deps, HOST)).status).toBe(404);
+  });
+});
+
+describe("handleReleaseAcmeAccountKey: the box's authority", () => {
+  async function deposited() {
+    const h = await mkHarness();
+    await handleDepositAcmeAccountKey(h.deps, HOST, depositBody({ userIrk: h.userIrk, recipientPub: h.boxStk.publicKey }).body);
+    return h;
+  }
+
+  it("refuses a revoked box's release with 403", async () => {
+    const h = await deposited();
+    await h.storage.servers.revoke(HOST, "owner-revoked", 1_000_100);
+    const res = await handleReleaseAcmeAccountKey(h.deps, HOST);
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty("sealedAccountKeyHex");
+  });
+
+  it("404s for an unknown server even when a slot exists", async () => {
+    const h = await deposited();
+    const slot = await h.storage.acmeAccountKeyDelivery.getByDomain(HOST);
+    await h.storage.acmeAccountKeyDelivery.put({ ...slot!, serverDomain: "ghost.dani.flagship.services" });
+    expect((await handleReleaseAcmeAccountKey(h.deps, "ghost.dani.flagship.services")).status).toBe(404);
+  });
+
+  it("404s once the name is registered to a different box key", async () => {
+    const h = await deposited();
+    await h.storage.servers.put({ serverDomain: HOST, username: USERNAME, identityPubKeyHex: hex(makeKey().publicKey), registeredAt: 3 });
+    expect((await handleReleaseAcmeAccountKey(h.deps, HOST)).status).toBe(404);
+  });
+
+  it("a box's own revoke drops its pending delivery", async () => {
+    const h = await deposited();
+    const request = { serverId: HOST, reason: "decommissioned", issuedAt: h.clock.now };
+    const signature = hex(signServerRevokeBySelf(request, h.boxStk));
+    const res = await handleServerRevokeBySelf(
+      { servers: h.storage.servers, acmeAccountKeyDelivery: h.storage.acmeAccountKeyDelivery, now: () => h.clock.now },
+      HOST,
+      { request, signature },
+    );
+    expect(res.status).toBe(200);
+    expect(await h.storage.acmeAccountKeyDelivery.getByDomain(HOST)).toBeUndefined();
   });
 });
 

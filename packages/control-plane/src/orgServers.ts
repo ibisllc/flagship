@@ -375,10 +375,14 @@ export async function handleOrgExport(deps: OrgServerDeps, orgId: string): Promi
       grants: v.grants,
       revokes: v.revokes,
       keyRings: rings,
-      serverCodes: codes.filter((o) => !o.key.endsWith(":used")).map((o) => {
-        const c = parse<StoredCode>(o.bodyJson);
-        return { code: c.code, approvals: c.approvals };
-      }),
+      // Only codes already used: a registered server's code is what the audit checks against, and it can never
+      // register again. An unused code is a secret until its box redeems it, so the export never carries one.
+      serverCodes: codes
+        .filter((o) => !o.key.endsWith(":used") && codes.some((u) => u.key === `${o.key}:used`))
+        .map((o) => {
+          const c = parse<StoredCode>(o.bodyJson);
+          return { code: c.code, approvals: c.approvals };
+        }),
       log: log.map((e) => ({ seq: e.seq, prevHash: e.prevHash, entryHash: e.entryHash, kind: e.kind, refSha256: e.refSha256, at: e.at })),
       servers: servers.map((s) => ({ serverDomain: s.serverDomain, serial: s.serial, identityPubKeyHex: s.identityPubKeyHex })),
       boxLogHeads: lastLoggedHeads(log, heads, seen),

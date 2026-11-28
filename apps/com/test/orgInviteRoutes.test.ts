@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
 import type { D1Database } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
@@ -22,6 +23,7 @@ import {
   orgSeatRolesHash,
   orgSha256Hex,
   signOrgApproval,
+  signOrgReadTokenRequest,
 } from "@flagship/protocol";
 
 const ORIGIN = "https://flagshipserver.com";
@@ -53,10 +55,17 @@ const call = async (env: ControlPlaneEnv, method: string, path: string, body?: u
   return { status: r.status, body: (await r.json()) as any };
 };
 const approve = (order: Uint8Array) => signOrgApproval({ orgId: ORG, oarVersion: 1, order, seatId: A.seatId, adminKeyId: A.keyId, issuedAt: T0, notAfter: T0 + DAY }, A.secret);
+async function adminToken(env: ControlPlaneEnv): Promise<string> {
+  const request = { orgId: ORG, subject: `seat:${A.seatId}`, pubHex: A.binding.ed25519PubHex, issuedAt: Date.now(), nonceHex: "01".repeat(16) };
+  const signature = signOrgReadTokenRequest(request, (m) => ed25519.sign(m, Buffer.from(A.edSeedHex, "hex")));
+  const r = await call(env, "POST", `/api/orgs/${ORG}/read-token`, { request, signature });
+  expect(r.status).toBe(200);
+  return r.body.token as string;
+}
 const readProof = (secret: Uint8Array, seat: string, at = T0) => ({ "x-flagship-issued-at": String(at), "x-flagship-signature": orgInviteReadSignature(secret, ORG, seat, at) });
 
 async function world() {
-  const env: ControlPlaneEnv = { DB: createSqliteD1() as unknown as D1Database };
+  const env: ControlPlaneEnv = { DB: createSqliteD1() as unknown as D1Database, ACCOUNT_READ_TOKEN_SECRET: "k".repeat(64) };
   expect((await call(env, "POST", "/api/orgs", { name: "acme", entry: chain.entries[0] })).status).toBe(200);
   expect((await call(env, "POST", `/api/orgs/${ORG}/authority`, { entry: chain.entries[1] })).status).toBe(200);
   const roles = [{ role: "member" }];
@@ -119,7 +128,7 @@ describe("org invitation routes", () => {
     const grant = { orgId: ORG, seatId: MM.seatId, labelSha256: invite.labelSha256, memberKeyId: MM.keyId, adminKeyId: "", rolesHash: invite.rolesHash, oarVersion: 1, issuedAt: T0, expiresAt: T0 + 300 * DAY };
     const g = await call(env, "POST", `/api/orgs/${ORG}/seats`, { grant, roles, memberBinding: MM.binding, adminBinding: null, approvals: [approve(canonicalOrgSeatGrant(grant))] });
     expect(g.status).toBe(403);
-    const log = (await call(env, "GET", `/api/orgs/${ORG}/log`)).body.entries as Array<{ kind: string }>;
+    const log = (await call(env, "GET", `/api/orgs/${ORG}/log`, undefined, { authorization: `Bearer ${await adminToken(env)}` })).body.entries as Array<{ kind: string }>;
     expect(log.map((e) => e.kind)).toContain("invite-withdraw");
   });
 });

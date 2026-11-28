@@ -17681,5 +17681,17 @@
   "The link stops working, and nobody who accepted it is let in.": {
     "en": "The link stops working, and nobody who accepted it is let in.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
+  "%@ GB": {
+    "en": "%@ GB",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ByteText.swift (a size: the number is already in the reader’s locale)"
+  },
+  "%@ MB": {
+    "en": "%@ MB",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ByteText.swift (a size: the number is already in the reader’s locale)"
+  },
+  "%@ KB": {
+    "en": "%@ KB",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ByteText.swift (a size: the number is already in the reader’s locale)"
   }
 }

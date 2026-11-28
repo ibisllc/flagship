@@ -287,6 +287,7 @@
   "The phone sent an invalid ticket": "Das Telefon hat ein ungültiges Ticket gesendet",
   "The phone sent an invalid account": "Das Telefon hat ein ungültiges Konto gesendet",
   "The phone named a server this page won't connect to": "Das Telefon hat einen Server genannt, mit dem sich diese Seite nicht verbindet",
+  "The server named another server this page won't connect to": "Der Server hat einen anderen Server genannt, mit dem sich diese Seite nicht verbindet",
   "This code expired": "Dieser Code ist abgelaufen",
   "Relay: {0}": "Relay: {0}",
   "Connection to the relay closed": "Die Verbindung zum Relay wurde geschlossen",

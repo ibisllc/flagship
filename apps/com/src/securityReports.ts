@@ -204,8 +204,12 @@ export function parseReport(text: string): Parsed {
   }
   if (!b || typeof b !== "object" || Array.isArray(b)) return bad("malformed", "The report could not be read.");
   const r = b as Record<string, unknown>;
+  // Turnstile puts its token in a hidden `cf-turnstile-response` input; a page that posts its whole form sends it.
+  if (r.turnstileToken === undefined && typeof r["cf-turnstile-response"] === "string") r.turnstileToken = r["cf-turnstile-response"];
   for (const k of Object.keys(r)) {
-    if (!["email", "severity", "component", "summary", "details", "turnstileToken", "website"].includes(k)) return bad("malformed", "The report could not be read.");
+    if (!["email", "severity", "component", "summary", "details", "turnstileToken", "website", "cf-turnstile-response"].includes(k)) {
+      return bad("malformed", "The report could not be read.");
+    }
   }
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : v === undefined || v === null ? "" : null);
   const summary = str(r.summary);

@@ -256,6 +256,14 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
 - Store approval, then the owner releases; then the old-app update notice (signed `security-notice.mjs`), and the
   0.3 leftovers: runtime manifest re-sign before ~2026-12-20, the demo server (journal P items).
 - Reporter emails for security reports F1, F3, F4 (drafts were in the session; F4's hall-of-fame credit pending).
+- **Boxes stayed on `05905b23` from 2026-11-23 to 2026-11-28 (found 2026-11-27).** The 0.4 endorsement of
+  `4272f928` (catalog entry `3079462b`) had no PQ companion (`release.sh` committed only `.maintainers/endorsements`), so
+  every box refused it with `pq-signature-required`. So no 0.4-era box-side fix was on boxes, even where we said
+  "fixed": the F3/F4 box parts (re-pair read token, per-invite cap in `bindJoin`), the 0.4 box changes, and the
+  24 Nov low-order ShareStore refusal. Fixed by `80c0c1c94` (companions for `4272f928` and `52f62981`; the box
+  verifier now names `52f62981`) and `c9eb06aa4` (release.sh commits the companion and fails when a box would refuse
+  it). With the companion, the live catalog's `3079462b` entry is now takeable. `52f62981` supersedes it once catalog
+  step 8 publishes it (security version 4); `3079462b` needs no republish.
 - Not yet live-verified: an app-placed call through the new system-trust certificate verifier (iOS and Android),
   iOS ringing from a TestFlight/App Store build, the photo picker and onboarding on real devices.
 - Switched off on purpose at launch: `STRIPE_BANK_TRANSFER` (Business batches by bank transfer; sandbox test first),
@@ -299,6 +307,10 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   IRK-signed (no admin-signed form on `.com`), devices joined before this build have no admin-root pin (they are
   re-added after a rotation), retired UMKs are not yet tried on old backups, no device/real-push run. Needs D1 0164,
   a `.com` deploy, an endorsed box release, store builds; per-server re-keys are Phase 5.
+- 2026-11-27, org read tokens (external report 2): `POST /api/orgs/<id>/read-token` (seat key or org server STK,
+  `ACCOUNT_READ_TOKEN_SECRET`, budget `org-read-token`); `/log` and `/export` require one (org admin or servers-add);
+  other org GETs accept it. The clients and the refusal of every untokened org GET are 0.5 (`docs/account-read-token.md`
+  "Org routes").
 - Shrink the phone apps (0.5 list): merged into `release/0.5` 2026-11-27 (VP8-only libwebrtc build config, Android
   WebP welcome art), pinned there to `libwebrtc-157-45414303796` (main keeps the old one). Before 0.5 ships, the
   device call matrix in `docs/runbooks/pre-0.5-call-codec-tests.md` must pass: the release gate refuses 0.5 while it is

@@ -2,7 +2,7 @@
 // build server: a python-3.13 app on Postgres 18 + the /data files folder, a
 // node-24 app on /data, and a static app — each under gVisor — then a backup of
 // the python app's data. The python app stays installed: later groups use its
-// /probe route (access lists) and its data (app copy).
+// /probe route (access lists), its /probe80 keep-alive pair (adversarial AT-LIVE-13b) and its data (app copy).
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,6 +84,35 @@ class H(BaseHTTPRequestHandler):
                         return self.send(200, {"host": host, "reached": True, "status": r.status})
                 except Exception as e:
                     return self.send(200, {"host": host, "reached": False, "error": str(e)[:200]})
+            if u.path == "/probe80":
+                # Two plain-HTTP requests on ONE keep-alive connection: Host first, then Host second (adversarial
+                # AT-LIVE-13b). The egress gateway must judge each request by its own Host, not the connection once.
+                import http.client
+                first = q.get("first", ["example.com"])[0]
+                second = q.get("second", ["example.net"])[0]
+                out = {"first": first, "second": second}
+                mark = b"not allowed from this Flagship sandbox"
+                c = http.client.HTTPConnection(first, 80, timeout=8)
+                try:
+                    c.request("GET", "/", headers={"Host": first})
+                    r1 = c.getresponse()
+                    b1 = r1.read()
+                    out["firstStatus"] = r1.status
+                    out["firstDenied"] = mark in b1
+                    s1 = c.sock
+                    out["kept"] = (not r1.will_close) and s1 is not None
+                    if out["kept"]:
+                        c.request("GET", "/", headers={"Host": second})
+                        out["sameConnection"] = c.sock is s1
+                        r2 = c.getresponse()
+                        b2 = r2.read()
+                        out["secondStatus"] = r2.status
+                        out["secondDenied"] = mark in b2
+                except Exception as e:
+                    out["error"] = str(e)[:200]
+                finally:
+                    c.close()
+                return self.send(200, out)
             return self.send(404, {"error": "not found"})
         except Exception as e:
             return self.send(500, {"error": str(e)[:300]})

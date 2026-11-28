@@ -317,7 +317,7 @@ node scripts/latest-endorsed-release.mjs
 git diff --stat <endorsed>..<PIN> -- packages/server-daemon installer packages/boot-core packages/protocol packages/tunnel-protocol packages/llm-providers package.json package-lock.json
 node scripts/endorse-release.mjs --to <PIN> --from <endorsed>            (preview: no signature, no write)
 node scripts/endorse-release.mjs --to <PIN> --from <endorsed> --sign     (YubiKey PIN + touch)
-git add -- .maintainers/endorsements && git commit -m "Endorse <sha> on the ca track"
+git add -- .maintainers/endorsements .maintainers/release-pq/endorsements && git commit -m "Endorse <sha> on the ca track"
 git push origin HEAD:main            (then the pin moves to the endorsement commit)
 node scripts/latest-endorsed-release.mjs                                 (must now print <PIN>)
 EOF
@@ -1173,12 +1173,12 @@ run_endorse() {
   confirm "Sign the endorsement of $(short "$PIN") now? (YubiKey PIN and touch)" || return 10
   with_maintainers XA "$WT" node scripts/endorse-release.mjs --to "$PIN" --from "$from" --sign
   local endorsed=$PIN
-  commit_paths "Endorse $(short "$endorsed") on the ca track" .maintainers/endorsements
+  commit_paths "Endorse $(short "$endorsed") on the ca track" .maintainers/endorsements $( [ -d "$WT/.maintainers/release-pq/endorsements" ] && echo .maintainers/release-pq/endorsements)
   land_commits || return $?
   st_w set endorsed "$endorsed"
   st_w set endorsedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   local now; now=$(latest_endorsed)
-  if [ "$now" = "$endorsed" ]; then ok "latest-endorsed-release prints $(short "$now")"; else warn "latest-endorsed-release prints '${now:-nothing}', expected $(short "$endorsed")"; fi
+  if [ "$now" = "$endorsed" ]; then ok "latest-endorsed-release prints $(short "$now")"; else fail "latest-endorsed-release prints '${now:-nothing}', expected $(short "$endorsed"): a box would not accept this endorsement (a missing PQ companion? node scripts/endorse-release.mjs --pq-only <releaseId> --sign)"; fi
 }
 
 set_dibs_window() { # set_dibs_window YYYY-MM-DD: name dibs open that day for six months

@@ -72,7 +72,7 @@ object ServerArchive {
         n < 0 -> ""
         n < 1024 * 1024 -> FSStrings.get(R.string.kb, maxOf(1L, Math.round(n / 1024.0)))
         n < 1024L * 1024 * 1024 ->
-            if (n < 10L * 1024 * 1024) "%.1f MB".format(Locale.US, n / (1024.0 * 1024)) else FSStrings.get(R.string.mb, Math.round(n / (1024.0 * 1024)))
-        else -> "%.1f GB".format(Locale.US, n / (1024.0 * 1024 * 1024))
+            if (n < 10L * 1024 * 1024) ByteSize.mb(n, 1) else FSStrings.get(R.string.mb, Math.round(n / (1024.0 * 1024)))
+        else -> ByteSize.gb(n, 1)
     }
 }

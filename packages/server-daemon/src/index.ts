@@ -434,6 +434,7 @@ import { AccessJournal, type AccessEntry } from "./accessJournal.js";
 import { accessSyncKeyFromOps, buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers, peerSiblings, type PodsPeers } from "./accessPeers.js";
 import { BoxReadToken, ownDepositFetch } from "./boxReadToken.js";
+import { OrgReadToken } from "./orgReadToken.js";
 import { TrustedClock, setTrustedClock, trustedNow } from "./trustedClock.js";
 import { warnIfSharedApplianceDiskKey } from "./applianceDiskKey.js";
 import { AccessScopes, PlanCheck, type ProState } from "./accessScope.js";
@@ -1736,13 +1737,25 @@ async function main(): Promise<void> {
     activityLog.note("authority.revoked", `${e.grants} grant${e.grants === 1 ? "" : "s"} revoked (${e.kinds.join(", ")}), epoch ${e.epoch}: ${e.reason}${e.stuckWork ? `; ${e.stuckWork} job(s) did not stop` : ""}`, { ok: e.stuckWork === 0 });
   authorityHub.ops.onTransition = (op) =>
     activityLog.note("authority.operation", `${op.kind} ${op.state}${op.reason ? ` (${op.reason})` : ""}, id ${op.id.slice(0, 8)}, payload ${op.payloadHash.slice(0, 12)}${op.resultDigest ? `, result ${op.resultDigest.slice(0, 12)}` : ""}`, { ok: op.state !== "failed" && op.state !== "outcome-unknown" });
+  // Every org read the box makes carries its org read token (orgReadToken.ts), minted with the STK.
+  const orgReadFetch: typeof fetch =
+    cfg?.orgId && env.controlPlaneBaseUrl
+      ? new OrgReadToken({
+          comBaseUrl: env.controlPlaneBaseUrl,
+          orgId: cfg.orgId,
+          serverDomain: cfg.serverId,
+          boxPublicKey: () => identityKeypair.publicKey,
+          signAsBox: (m) => custodian.signAsBox(m),
+          log: (m) => console.warn(m),
+        }).fetchFor()
+      : (...a) => fetch(...a);
   // ---- Enterprise org authority (docs/enterprise-accounts.md §6, §8) ----
   // An org server pins its org's genesis and replays the chain and seat book itself. A departed
   // seat's rotations stay pending (named once in Activity) until the org key ring holds, for every
   // key the seat could open here, a version since it left that leaves it out (orgBoxKeys.ts); the
   // box opens the newest version sealed to it and keeps it in org-keys.json.
   if (cfg?.orgId && cfg.orgGenesisHash && env.controlPlaneBaseUrl) {
-    const orgKeyDeps = { dataDir, orgId: cfg.orgId, serverDomain: cfg.serverId, signAsBox: (m: Uint8Array) => custodian.signAsBox(m), controlPlaneBaseUrl: env.controlPlaneBaseUrl };
+    const orgKeyDeps = { dataDir, orgId: cfg.orgId, serverDomain: cfg.serverId, signAsBox: (m: Uint8Array) => custodian.signAsBox(m), controlPlaneBaseUrl: env.controlPlaneBaseUrl, fetchImpl: orgReadFetch };
     void announceOrgBoxKem(orgKeyDeps).catch((e) => console.warn(`[org] box KEM key not announced: ${(e as Error).message}`));
     let ringsCache: { at: number; rings: OrgKeyRings } | null = null;
     let keydOrgCgkTried = keyd && !keyd.hasCgk ? 0 : (orgCgk?.version ?? 0);
@@ -1815,7 +1828,7 @@ async function main(): Promise<void> {
         }
       },
       fetchAttestation: async () => {
-        const r = await fetch(`${(env.controlPlaneBaseUrl ?? "").replace(/\/+$/, "")}/api/orgs/${cfg.orgId}/plan-attestation`, { signal: AbortSignal.timeout(20_000) });
+        const r = await orgReadFetch(`${(env.controlPlaneBaseUrl ?? "").replace(/\/+$/, "")}/api/orgs/${cfg.orgId}/plan-attestation`, { signal: AbortSignal.timeout(20_000) });
         return r.ok ? await r.json() : null;
       },
       log: (m) => console.warn(m),
@@ -1829,6 +1842,7 @@ async function main(): Promise<void> {
       genesisHash: cfg.orgGenesisHash,
       serverDomain: cfg.serverId,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      fetchImpl: orgReadFetch,
       pinPath: join(dataDir, "org-authority-pin.json"),
       hooks: {
         closeSessions: async (seat) => void (await authorityHub.revokeService(`org-seat:${seat}`, "org seat ended")),
@@ -2673,6 +2687,7 @@ async function main(): Promise<void> {
           controlPlaneBaseUrl: env.controlPlaneBaseUrl,
           pin: currentOrgPin,
           boxKemSeed: () => orgBoxKemSeed(dataDir),
+          fetchImpl: orgReadFetch,
           log: (m) => console.warn(m),
           note: (kind, text, ok) => activityLog.note(kind, text, { ok }),
           newPeopleAllowed: () => currentOrgPlan()?.allowsNewPeople() ?? true,
@@ -6465,7 +6480,18 @@ async function wireOwnerHandlers(deps: {
         ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
         username: cfg.userId,
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-        ...bellFetch(),
+        // Its own read token on the update lane too (with or without the doorbell): .com gates that read next.
+        fetchImpl:
+          bellFetch().fetchImpl ??
+          ownDepositFetch(
+            new BoxReadToken({
+              comBaseUrl: env.controlPlaneBaseUrl,
+              username: cfg.userId,
+              serverFqdn: env.serverFqdn,
+              boxPublicKey: () => identityKeypair.publicKey,
+              signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+            }),
+          ),
         swapper: artifactSwapper,
         currentCommit: buildCurrentCommitProvider(dataDir),
         usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),

@@ -57,7 +57,7 @@ import {
 import type { OrgObjectKind, OrgRecord, OrgStorage, UsernameStorage } from "@flagship/storage";
 import { DEFAULT_PAYMENTS_CONFIG, orgTrialTerms, type PaymentsConfig } from "@flagship/protocol";
 import { isReservedName, validateUserLabel } from "./labels.js";
-import { orgPlanGate } from "./orgPlan.js";
+import { orgPlanGate, orgPlanOf } from "./orgPlan.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
 /**
@@ -90,8 +90,8 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  * accepts with); `.com` keeps it with the accept and records it as the seat's KEM key when the grant
  * lands, so a member receives key-ring versions without opening the org page first.
  *
- * The orgId (128 random bits) is the read capability for the GET routes; nothing they return is
- * secret (labels are sealed, keys are public), but it does show the org's structure.
+ * Reads take an org read token (`orgReadToken.ts`, docs/account-read-token.md "Org routes"); the
+ * audit reads (`log`, `export`) require one from an org admin or a servers-add seat.
  *
  * An invite names its invite key (`inviteKeyPub`, derived from the link key k, which only the link
  * holds). Reading the offer needs a fresh invite-key signature, and an accept needs the invite key's
@@ -106,6 +106,8 @@ export interface OrgDeps {
   trialSeatLimit?: number | null;
   /** The payment numbers (`PAYMENTS_CONFIG`); the Business plan's trial, seats and prices come from here. */
   payments?: PaymentsConfig;
+  /** One request's verified views, so a gated read verifies the chain once (`orgReadToken.ts`). Reads only. */
+  views?: Map<string, Promise<OrgView | null>>;
 }
 
 const ORG_ID = /^[0-9a-f]{32}$/;
@@ -149,6 +151,16 @@ async function list<T>(deps: OrgDeps, orgId: string, kind: OrgObjectKind): Promi
 
 /** The org as `.com` holds it, every object re-verified from the recorded genesis. */
 export async function loadOrg(deps: OrgDeps, orgId: string, now: number): Promise<OrgView | null> {
+  if (!deps.views) return loadOrgUncached(deps, orgId, now);
+  let v = deps.views.get(orgId);
+  if (!v) {
+    v = loadOrgUncached(deps, orgId, now);
+    deps.views.set(orgId, v);
+  }
+  return v;
+}
+
+async function loadOrgUncached(deps: OrgDeps, orgId: string, now: number): Promise<OrgView | null> {
   const org = await deps.orgs.getOrg(orgId);
   if (!org) return null;
   const entries = (await deps.orgs.listObjects(orgId, "authority")).sort((a, b) => (a.key < b.key ? -1 : 1)).map((o) => parse<OrgAuthorityEntry>(o.bodyJson));
@@ -250,6 +262,11 @@ export async function handleOrgAuthorityAppend(deps: OrgDeps, orgId: string, bod
   const now = nowOf(deps);
   const entry = (body as { entry?: OrgAuthorityEntry } | undefined)?.entry;
   if (!entry?.record) return malformed("entry required");
+  // The delayed changes (founder removal, recovery) wait for a notice that .com must observe before it can count;
+  // until that lands they are not taken at all. No app or box sends them yet.
+  if (entry.via === "founder-removal" || entry.via === "recovery") {
+    return { status: 400, body: { error: "delayed authority changes are not available yet", code: "delayed-change-unavailable" } };
+  }
   try {
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
@@ -284,6 +301,13 @@ function planGate(deps: OrgDeps, v: OrgView, now: number, seatId: string, roles:
   return null;
 }
 
+/** The limit a new seat's write must hold itself (parallel writes can't pass a stale count); null for a live seat. */
+function newSeatLimit(deps: OrgDeps, v: OrgView, now: number, seatId: string): number | null {
+  return v.book.seats.has(seatId) ? null : orgPlanOf(deps.payments ?? DEFAULT_PAYMENTS_CONFIG, v.org, now).seatLimit;
+}
+
+const SEAT_LIMIT = { status: 403, body: { error: "org-seat-limit", code: "org-seat-limit" } } as const;
+
 export async function handleOrgInviteCreate(deps: OrgDeps, orgId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
   const b = body as { invite?: OrgSeatInvite; roles?: OrgSeatRole[]; approvals?: unknown[]; sealedLabelHex?: unknown; offerHex?: unknown } | undefined;
@@ -309,13 +333,20 @@ export async function handleOrgInviteCreate(deps: OrgDeps, orgId: string, body: 
     const gate = planGate(deps, v, now, b.invite.seatId, b.roles);
     if (gate) return { status: 403, body: { error: gate, code: gate } };
     authorizeOrgOrder({ state: v.state, book: v.book, action: { kind: "seat-invite" }, order, approvals: b.approvals.map(orgApprovalFromWire), now });
-    const stored = await deps.orgs.putObject(orgId, {
-      kind: "invite",
-      key: b.invite.seatId,
-      bodyJson: JSON.stringify({ invite: b.invite, roles: b.roles, approvals: b.approvals, sealedLabelHex: b.sealedLabelHex, offerHex: b.offerHex }),
-      issuedAt: b.invite.issuedAt,
-      storedAt: now,
-    });
+    const stored = await deps.orgs.putSeatObject(
+      orgId,
+      {
+        kind: "invite",
+        key: b.invite.seatId,
+        bodyJson: JSON.stringify({ invite: b.invite, roles: b.roles, approvals: b.approvals, sealedLabelHex: b.sealedLabelHex, offerHex: b.offerHex }),
+        issuedAt: b.invite.issuedAt,
+        storedAt: now,
+      },
+      b.invite.seatId,
+      newSeatLimit(deps, v, now, b.invite.seatId),
+      now,
+    );
+    if (stored === "full") return SEAT_LIMIT;
     if (!stored) return conflict("invite exists");
     await logged(deps, orgId, "invite", orgSha256Hex(order), now);
     return ok({ seatId: b.invite.seatId, inviteSha256: orgSha256Hex(order) });
@@ -507,7 +538,15 @@ export async function handleOrgSeatGrant(deps: OrgDeps, orgId: string, body: unk
     const frozen = (s: string, t: number) => v.book.freezes.some((f) => f.seatId === s && f.issuedAt <= t && t < f.untilMs);
     verifyOrgSeatGrant(v.state, g, frozen, now);
     const order = canonicalOrgSeatGrant(g.grant);
-    await deps.orgs.putObject(orgId, { kind: "grant", key: `${g.grant.seatId}:${pad(g.grant.issuedAt)}`, bodyJson: JSON.stringify(g), issuedAt: g.grant.issuedAt, storedAt: now });
+    const stored = await deps.orgs.putSeatObject(
+      orgId,
+      { kind: "grant", key: `${g.grant.seatId}:${pad(g.grant.issuedAt)}`, bodyJson: JSON.stringify(g), issuedAt: g.grant.issuedAt, storedAt: now },
+      g.grant.seatId,
+      newSeatLimit(deps, v, now, g.grant.seatId),
+      now,
+    );
+    if (stored === "full") return SEAT_LIMIT;
+    if (!stored) return ok({ seatId: g.grant.seatId });
     await logged(deps, orgId, "grant", orgSha256Hex(order), now);
     await deps.orgs.deleteObject(orgId, "ceremony", orgSha256Hex(order));
     await recordJoinSeatKem(deps, v, g, now);
@@ -618,6 +657,9 @@ export async function handleOrgCeremonyOpen(deps: OrgDeps, orgId: string, body: 
     const approvals = b.approvals.map(orgApprovalFromWire);
     // "Restore my access": the frozen seat itself may open the overturn of its own freeze (§ owner decisions).
     const parts = b.order.split("|");
+    // A server code is a secret until its box redeems it; ceremonies are readable by anyone with the org id, so a
+    // server code never goes through one (it is issued by POST …/servers/code).
+    if (parts[0] === "flagship/org-server-code/v1") return malformed("server codes are not ceremonies");
     const own = parts[0] === "flagship/org-overturn/v1" ? v.book.freezes.find((f) => f.sha256 === parts[2])?.seatId : undefined;
     verifyOrgApprovers(v.state, v.book, order, approvals, now, own ? { allowFrozenSeat: own } : {});
     const sha = orgSha256Hex(order);

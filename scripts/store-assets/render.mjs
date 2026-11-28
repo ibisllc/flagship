@@ -137,6 +137,50 @@ async function browser() {
   return chromium.launch();
 }
 
+const headers = new Map();
+/** Where the ringing screen's header (avatar, name, status, the encryption line) ends and its buttons start, as
+ *  fractions of the capture, and how far right the header reaches: slide 01's browser frame is placed so it covers
+ *  none of them (store review: "end-to-end encrypted · quantum-safe" was half hidden). Read from the pixels, so it
+ *  follows each device's and language's own layout. */
+async function headerOf(page, file) {
+  if (!headers.has(file)) {
+    const png = fs.readFileSync(file).toString("base64");
+    headers.set(file, await page.evaluate(async (png) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${png}`;
+      await img.decode();
+      const { width: w, height: h } = img;
+      const c = new OffscreenCanvas(w, h);
+      const g = c.getContext("2d");
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, w, h).data;
+      const at = (x, y) => (y * w + x) * 4;
+      const bg = at(4, h >> 1); // the screen's edge, mid-height: never text (the centre can be the status line)
+      const ink = (y) => {
+        let left = -1, right = -1;
+        for (let x = 0; x < w; x += 2) {
+          const i = at(x, y);
+          if (Math.abs(d[i] - d[bg]) + Math.abs(d[i + 1] - d[bg + 1]) + Math.abs(d[i + 2] - d[bg + 2]) > 36) { if (left < 0) left = x; right = x; }
+        }
+        return left < 0 ? null : [left, right];
+      };
+      // below the status bar: the header is the first block of ink, the buttons the next after a long empty run
+      const gap = Math.round(h * 0.08);
+      let y = Math.round(h * 0.07), top = -1, bottom = -1, right = 0, empty = 0;
+      for (; y < h; y++) {
+        const r = ink(y);
+        if (r) {
+          if (top < 0) top = y;
+          else if (empty >= gap) break;
+          bottom = y; right = Math.max(right, r[1]); empty = 0;
+        } else if (top >= 0) empty++;
+      }
+      return y < h ? { bottom: bottom / h, buttons: y / h, right: right / w } : null; // no gap found: the default place
+    }, png));
+  }
+  return headers.get(file);
+}
+
 /** Lay out (and with `shoot`, screenshot) every job; returns the per-job fit. */
 async function run(jobs, { shoot }) {
   const b = await browser();
@@ -151,7 +195,9 @@ async function run(jobs, { shoot }) {
         pages.set(job.template, page);
       }
       await page.setViewportSize({ width: job.w, height: job.h });
-      const r = await page.evaluate((spec) => window.renderSlide(spec), specOf(job));
+      const spec = specOf(job);
+      if (spec.inset && spec.capture) spec.capture.header = await headerOf(page, job.capture.file);
+      const r = await page.evaluate((spec) => window.renderSlide(spec), spec);
       if (r.broken.length) throw new Error(`${rel(job.file)}: image failed to load: ${r.broken.join(", ")}`);
       if (r.fonts.length) throw new Error(`${rel(job.file)}: font failed to load: ${r.fonts.join(", ")}`);
       if (shoot) {

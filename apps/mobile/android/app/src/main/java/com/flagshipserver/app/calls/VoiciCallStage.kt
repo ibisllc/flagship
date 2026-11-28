@@ -245,18 +245,21 @@ private fun Header(state: CallStageState, compact: Boolean, tag: String) {
             modifier = Modifier.semantics { heading() },
         )
         StatusLine(state, compact, tag)
-        if (!compact) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                Icon(Icons.Filled.Lock, contentDescription = null, tint = CallInk.copy(alpha = 0.55f), modifier = Modifier.size(14.dp))
-                Text(stringResource(R.string.voici_call_e2e), color = CallInk.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
-            }
-        }
+        if (!compact) E2eLine(Modifier.padding(top = 4.dp))
         if (state.remoteCameraPaused) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Filled.VideocamOff, contentDescription = null, tint = CallInk.copy(alpha = 0.75f), modifier = Modifier.size(16.dp))
                 Text(stringResource(R.string.voici_call_camera_paused), color = CallInk.copy(alpha = 0.75f), style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+@Composable
+private fun E2eLine(modifier: Modifier = Modifier) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
+        Icon(Icons.Filled.Lock, contentDescription = null, tint = CallInk.copy(alpha = 0.55f), modifier = Modifier.size(14.dp))
+        Text(stringResource(R.string.voici_call_e2e), color = CallInk.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
     }
 }
 
@@ -505,6 +508,8 @@ fun VoiciRingingStage(name: String, status: String, onDecline: () -> Unit, onAns
             Text(name, color = CallInk, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(12.dp))
             Text(status, color = CallInk.copy(alpha = 0.75f), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.testTag("voici-call-status").semantics { liveRegion = LiveRegionMode.Polite })
+            Spacer(Modifier.height(16.dp))
+            E2eLine()
             Spacer(Modifier.weight(1f))
             Row(Modifier.fillMaxWidth().padding(bottom = 32.dp), verticalAlignment = Alignment.Top) {
                 CallRoundButton(Icons.Filled.CallEnd, stringResource(R.string.voici_call_decline), CallButtonStyle.End, onDecline, Modifier.weight(1f).testTag("voici-call-decline"))

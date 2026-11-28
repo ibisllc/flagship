@@ -98,3 +98,30 @@ Pre-release, `.com` enforces this from the first deploy: builds that don't
 send tokens lose live status for real accounts (demo accounts are
 unaffected). Set the secret before deploying:
 `openssl rand -hex 32 | wrangler secret put ACCOUNT_READ_TOKEN_SECRET`.
+
+## Org routes
+
+An org's reads (`/api/orgs/<orgId>/...`, `docs/enterprise-accounts.md`) take an **org read token**:
+`POST /api/orgs/<orgId>/read-token` with body `{request, signature}`, where `request` is a
+`flagship/org-read-token-request/v1` (`orgId`, `subject`, `pubHex`, `issuedAt`, 16-byte `nonceHex`;
+canonical bytes `TAG|orgId|subject|pubHex|issuedAt|nonceHex`, `packages/protocol/src/orgReadToken.ts`)
+signed with Ed25519 by the key named in `subject`:
+
+| Signer | `subject` | Key | Lifetime |
+|---|---|---|---|
+| A live seat | `seat:<seatId>` | its seat member key or seat admin key (an org admin holds only the admin key) | 7 days |
+| One of the org's servers | `box:<serverDomain>` | its STK, as registered at `servers/register` | 24 hours |
+
+The token is `ort1.<claims>.<HMAC>`, under the same `ACCOUNT_READ_TOKEN_SECRET` with its own MAC
+context (`flagship/org-read-token/v1`), so an account token never passes as an org token or the
+other way round. Same 5-minute freshness and single use as above; the mint has its own rate budget
+(`org-read-token`: per source and per org). Every read re-checks the signer against the org as `.com`
+verifies it from genesis: a revoked, frozen or lapsed seat, an admin no longer in the record, or a
+server that was revoked or re-registered under another key stops reading on its next request.
+
+| Route | Who (on `main`) |
+|---|---|
+| `GET /api/orgs/<id>/export`, `GET /api/orgs/<id>/log` | required: an org admin (kind `admin`) or a `servers-add` seat |
+| every other org GET | the token is accepted, not yet required (shipped clients and boxes read them without one) |
+
+The rest are gated together with the clients that send the token (0.5).

@@ -117,7 +117,7 @@ public enum PeerBackupText {
     public static func formatSize(_ n: Int64) -> String {
         if n < 0 { return "" }
         let gb: Int64 = 1 << 30
-        if n >= gb { return String(format: n < 10 * gb ? "%.1f GB" : "%.0f GB", Double(n) / Double(gb)) }
+        if n >= gb { return ByteText.gbAuto(n) }
         if n >= 1 << 20 { return String(localized: "\(Int((Double(n) / Double(1 << 20)).rounded())) MB") }
         return String(localized: "\(max(0, Int((Double(n) / 1024).rounded()))) KB")
     }

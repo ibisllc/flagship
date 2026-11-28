@@ -12,6 +12,8 @@
 #   4. secrets  every secret name prod's Worker has must exist on the gym
 #               Worker (values are the gym's own, from .gym-secrets.env or
 #               generated; never copied from prod). Same for the gym Fly app.
+#   4b. artifact the gym box release, signed with the gym key and its PQ companion; then a check that fails when the
+#               published release (or update target) lacks the companion (scripts/gym-pq-release-key.mjs check)
 #   5. deploy   the gym Worker FROM THE GYM BRANCH (clean build + predeploy gates,
 #               pointed at the gym D1, then `wrangler deploy --config wrangler.gym.toml`),
 #               then the gym Fly app, scaled to one machine. It NEVER runs `npm run
@@ -56,7 +58,7 @@ for arg in "$@"; do
     --skip-fly-deploy) fly_deploy=0 ;;
     --skip-deploy) deploy=0; fly_deploy=0 ;;
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -316,6 +318,18 @@ else
     bash "$REPO/scripts/gym-update-target.sh" build --flavor broken --worktree "$WT" $([ "$push" = "1" ] || echo --no-push) \
       || say "no rollback target built (the live update-rollback group will skip)"
   fi
+fi
+# The gym pins its own PQ release key as production pins its (scripts/gym-pq-release-key.mjs): fail here, not on a box,
+# when the gym branch lost the pin or a published box release (or the update target built on it) has no companion.
+if [ "$DRY" = "1" ]; then
+  say "DRY-RUN would: node scripts/gym-pq-release-key.mjs check --worktree $WT"
+elif [ "${GYM_SKIP_BOX_ARTIFACT:-0}" = "1" ]; then
+  # Nothing was built, so the release may predate the gym's PQ pin: report it, and let a Worker-only refresh go on.
+  node "$REPO/scripts/gym-pq-release-key.mjs" check --worktree "$WT" --arch "${GYM_ARTIFACT_ARCHES:-amd64}" 2>&1 | sed 's/^/  /' \
+    || say "WARNING: the gym's box release has no PQ companion (GYM_SKIP_BOX_ARTIFACT=1, so nothing was rebuilt); gym boxes will refuse it"
+else
+  node "$REPO/scripts/gym-pq-release-key.mjs" check --worktree "$WT" --arch "${GYM_ARTIFACT_ARCHES:-amd64}" | sed 's/^/  /' \
+    || die "the gym's box release lacks its PQ companion (or the gym branch pins no PQ key): rebuild it with scripts/gym-box-artifact.sh"
 fi
 # Demo boxes install the gym's own box release, named by its exact commit (a branch name is refused).
 if [ -z "$GYM_INSTALLER_GIT_REF" ] && [ "$DRY" != "1" ]; then

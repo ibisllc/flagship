@@ -57,10 +57,46 @@
       <p class="muted">Les chercheurs qui nous ont signalé une vulnérabilité, avec les commits qui l’ont corrigée. Chacun est crédité sous la forme qu’il demande : nom, pseudonyme ou anonymat, avec un lien s’il le souhaite. Ils figurent sans attribution tant qu’ils ne nous ont pas indiqué leur préférence ; nous ne publions jamais un nom qu’on ne nous a pas donné.</p>
   
       <div>
+      <h2>Un ancien lien du navigateur distant pouvait connecter l’app web à un autre serveur</h2>
+      <p class="hof-meta">Moyenne · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a> · crédit : Huzaifa Jawaid</p>
+      <p>L’app web acceptait encore un ancien lien de démarrage pour le navigateur distant. Il ouvrait une session auprès du serveur nommé par le lien et enregistrait le serveur nommé par la réponse, sans vérifier que l’un ou l’autre appartenait au domaine de service de Flagship. Un lien forgé pouvait installer une session pour le serveur d’un attaquant.</p>
+      <p>L’ancien lien a disparu : le navigateur distant ne démarre plus qu’à partir du code QR que le téléphone approuve, et chaque réponse de session doit nommer un serveur sous le domaine de service de Flagship. Le correctif est arrivé avec la version 260 de l’app web.</p>
+
+      <h2>Des attributions simultanées pouvaient dépasser la limite de sièges d’une organisation</h2>
+      <p class="hof-meta">Faible · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/4fa472d9">4fa472d9</a> · crédit : Huzaifa Jawaid</p>
+      <p>Des attributions de sièges ou des invitations envoyées au même moment pouvaient chacune passer la limite de sièges de l’offre et, ensemble, donner à une organisation plus de sièges que son offre n’en permettait. Une attribution était aussi journalisée même quand rien n’avait été enregistré.</p>
+      <p>La limite est désormais tenue dans l’écriture même qui enregistre l’attribution, et l’entrée du journal n’est écrite qu’une fois cette écriture réussie.</p>
+
+      <h2>Des offres de partage simultanées pouvaient dépasser la limite de co-gestionnaires</h2>
+      <p class="hof-meta">Faible · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/25a97cc5">25a97cc5</a> · crédit : Huzaifa Jawaid</p>
+      <p>Lors du partage d’un serveur, des requêtes envoyées au même moment pouvaient chacune passer la limite de co-gestionnaires de l’offre, et la limite ne comptait que les 500 partages les plus récents.</p>
+      <p>Le décompte couvre désormais chaque partage actif et il est tenu dans l’écriture même qui crée le partage.</p>
+
+      <h2>Des requêtes simultanées pouvaient obtenir plus de jetons de sauvegarde entre pairs que permis</h2>
+      <p class="hof-meta">Faible · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/79ca995e">79ca995e</a> · crédit : Huzaifa Jawaid</p>
+      <p>Chaque serveur ne peut recevoir qu’un nombre limité de jetons de sauvegarde entre pairs. Deux requêtes au même moment pouvaient chacune passer cette limite et, ensemble, obtenir plus de jetons qu’elle n’en permettait.</p>
+      <p>La limite est désormais comptée et réservée en une seule écriture avant que quoi que ce soit ne soit signé.</p>
+
+      <h2>Le fondateur d’une organisation pouvait antidater un avis de retrait du fondateur ou de récupération</h2>
+      <p class="hof-meta">Moyenne · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/6dd5a89b">6dd5a89b</a> · crédit : Huzaifa Jawaid</p>
+      <p>L’avis de retrait du fondateur ou de récupération de compte d’une organisation prenait son délai d’attente à partir d’une date indiquée par la requête elle-même : un fondateur pouvait donc l’antidater et sauter à la fois le délai et la possibilité pour les autres administrateurs de s’y opposer. La faille était dormante : aucune app ni aucun serveur n’envoyait ces requêtes.</p>
+      <p>Notre serveur refuse désormais ces deux types de changement jusqu’à ce que la prochaine version apporte le vrai correctif, dans lequel le délai d’attente commence quand notre serveur voit l’avis.</p>
+
+      <h2>Des codes d’inscription de serveur inutilisés étaient lisibles par quiconque connaissait l’identifiant d’une organisation</h2>
+      <p class="hof-meta">Moyenne · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/e5197fd9">e5197fd9</a> · crédit : Huzaifa Jawaid</p>
+      <p>L’export d’une organisation et sa liste de cérémonies pouvaient remettre des codes d’inscription de serveur pas encore utilisés à quiconque connaissait l’identifiant de l’organisation, et un code suffisait à lui seul pour inscrire n’importe quelle clé comme serveur de cette organisation. Aucun code de ce type n’existait en production : rien n’a été exposé.</p>
+      <p>L’export ne contient plus que des codes déjà utilisés, et un code ne peut plus être envoyé comme cérémonie. Le lien de chaque code à la clé propre du vrai serveur suivra dans la prochaine version.</p>
+
       <h2>Les signalements envoyés avec le formulaire de vulnérabilités étaient perdus</h2>
       <p class="hof-meta">Faible · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/7221dfb1">7221dfb1</a> · crédit : Huzaifa Jawaid</p>
       <p>Le formulaire de signalement de notre page sécurité envoyait chaque signalement à une adresse à laquelle notre serveur ne répondait plus : tous les signalements envoyés avec le formulaire étaient perdus et la personne qui signalait voyait une erreur. Les signalements envoyés par e-mail n'étaient pas concernés, et rien n'a été exposé.</p>
       <p>Le formulaire fonctionne de nouveau. Chaque signalement est chiffré avec notre clé de sécurité dès son arrivée : notre serveur ne le conserve que sous une forme lisible par les seuls détenteurs de la clé, et la personne qui signale reçoit une référence. Nous sommes avertis de chaque nouveau signalement, et la page garde l'adresse e-mail et la clé en solution de repli.</p>
+      <p>Après ce correctif, le formulaire refusait encore chaque signalement envoyé depuis un navigateur dès que sa vérification anti-spam était activée, car la vérification ajoutait un champ que notre serveur n’attendait pas. Huzaifa Jawaid l’a trouvé aussi ; corrigé dans <a href="https://github.com/ibisllc/flagship/commit/309516e9">309516e9</a>.</p>
+
+      <h2>Les vérifications de signature acceptaient trois clés publiques d’ordre faible, si bien qu’une signature falsifiée pouvait être valide sous ces clés</h2>
+      <p class="hof-meta">Faible · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/8fd77a2b">8fd77a2b</a> · crédit : <a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a></p>
+      <p>Nos vérifications de signature refusaient la plupart des clés publiques Ed25519 de petit ordre grâce à une liste fixe, mais il manquait trois de ces clés à la liste, et les vérifications acceptaient aussi des clés écrites sous une forme non canonique. Sous une telle clé, n’importe qui peut falsifier une signature valide pour n’importe quel message : une signature sous cette clé ne prouve donc rien. Aucune app n’envoie une telle clé, et un examen de nos données de production n’en a trouvé aucune enregistrée.</p>
+      <p>Chaque clé est désormais décodée selon les règles strictes de la norme, et les clés de petit ordre et non canoniques sont refusées avant toute vérification de signature. Notre serveur les refuse partout où il enregistre une clé ou s’en porte garant, et les serveurs les refusent aussi à partir de leur prochaine version.</p>
 
       <h2>Un endpoint d’identité inutilisé faisait confiance aux signataires nommés par chaque requête</h2>
       <p class="hof-meta">Moyenne · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · crédit : rakimans</p>

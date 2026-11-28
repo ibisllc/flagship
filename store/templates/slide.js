@@ -157,10 +157,19 @@ function browserFrame(spec, root, d) {
   const H = bar + imgH;
   const floor = spec.h * 0.95 - spec.h * 0.02;
   const left = wide ? Math.min(d.right - IW * 0.3, spec.w - spec.w * 0.06 - IW) : spec.w * 0.04;
-  // between the caller's name (top third of the ringing screen) and Decline / Answer (bottom sixth)
-  const band = d.height * (wide ? 0.6 : 0.47);
+  // Between the ringing screen's header and Decline / Answer, so the caller's name, the status and "end-to-end
+  // encrypted · quantum-safe" all stay in view (render.mjs reads where they end from the capture). A wide frame
+  // that starts right of the header may sit higher, beside it.
+  const hd = spec.capture?.header;
+  const bz = d.width * DEVICES[spec.device].bezel;
+  const sTop = d.top + bz, sH = d.height - 2 * bz;
+  let top0 = d.top + d.height * (wide ? 0.34 : 0.37), band = d.height * (wide ? 0.6 : 0.47);
+  if (hd && !(wide && left > d.left + bz + (d.width - 2 * bz) * hd.right + IW * 0.04)) {
+    const t = sTop + sH * (hd.bottom + 0.025), b = sTop + sH * (hd.buttons - 0.02) - t;
+    if (b > 0) { top0 = t; band = b; }
+  }
   if (H > band) return browserFrame({ ...spec, inset: { ...ins, scale: (ins.scale ?? 1) * band / H } }, root, d);
-  const top = Math.min(d.top + d.height * (wide ? 0.34 : 0.37), floor - H);
+  const top = Math.min(top0, floor - H);
   const f = el("div", "browser", root, { left: px(left), top: px(top), width: px(IW), height: px(H), borderRadius: px(IW * 0.045), "--ring": px(Math.max(4, IW * 0.022)) });
   const b = el("div", "bar", f, { height: px(bar) });
   const addr = el("div", "addr", b, { height: px(bar * 0.6), fontSize: px(bar * 0.3), borderRadius: px(bar * 0.3) });

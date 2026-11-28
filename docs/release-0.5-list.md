@@ -132,6 +132,69 @@ over once "let's start 0.5" is said.
   credits line with a plural), then recapture slide 08 (`capture-ios.sh --only 08`): the 0.5 art shows the English
   title on iPhone and iPad in every language, and its chat has no credits line for that reason.
 
+- **Store art: an iPhone Duo set** (asked 2026-11-27 by the store session). App Store 1.4 still carries five
+  English 0.3-era `APP_IPHONE_DUO` shots, and the pack has no Duo class. Add `appstore/iphone-duo/<locale>/` at the
+  Duo's screenshot size, in all 7 languages, to the capture plan and `render.mjs`; the uploader maps it to
+  `APP_IPHONE_DUO` (03c91d730). Render it with the 0.5 build, together with slide 08's title.
+
+- **SHIP BLOCKER: a real-device call matrix on the VP8/Opus-only libwebrtc.** release/0.5 pins
+  `libwebrtc-157-45414303796` (`d1f7bbbbdc`, the app-shrink build), but no device call has run on it. Before 0.5 ships:
+  iPhone ↔ Android, each ↔ a browser (voi.ci), over Wi-Fi and cellular, audio both ways, plus video offered and
+  declined. If any fails, re-pin `libwebrtc-157-44099203173` for 0.5.
+- **`/remote` and `/join` carry their relay parameters in the fragment** (external report, 2026-11-28; main makes the
+  remote browser confirm the 6-digit code before it takes a ticket). `buildRemoteApprovalUrl` and the `/join` link
+  (`crossDevicePairing.js`) still put `s`/`k` and `sid`/`pk` in the query, while `/share`, `/invite-accept` and
+  `/access` use `appLinkFragmentUrl`. Move both to the fragment; the webapp, iOS (`DeepLink.swift`, which reads `/join`
+  only from `queryItems`) and Android parsers read the fragment and still accept the query for a while. Tests or vectors
+  for both forms.
+- **The envelope-forgery tag inventory hangs on release/0.5** (found 2026-11-27).
+  `tools/adversarial/tests/envelopeForgery.test.ts` (AT-ENV-10) never finishes: its driver spins on
+  `signRekey`/`verifyRekey` from the account key rotation (`4bd18c514`). Give them a seed or a classification in
+  `tools/adversarial/tests/support/seeds.ts`, then run the harness green before the release.
+
+- ~~**The box's update-order read takes its own read token**~~ done on main 2026-11-28, after box release c9eb06aa went live (owner: break the boxes left behind; production had one live box). (external report, 2026-11-27). The other four consume-once
+  deposit reads already need the box's token; `GET /api/server/<d>/update` does not, so anyone with a box's name can
+  use up a pending update order. Main already makes the box send its token there (`boxReadToken.ts` OWN_DEPOSIT,
+  the update poller's fetch). In 0.5, `.com` gates that read like its siblings (`gateServerRead`; the route test
+  `apps/com/test/depositReadGates.test.ts` then expects 401 anonymous). Order: the endorsed box release first (boxes
+  learn to send the token through this very lane), then the `.com` that gates it; a box that never took that release
+  stops seeing update orders and needs an owner action or a reburn.
+
+- **Org server codes bind to the real box** (external report, 2026-11-27; main keeps unredeemed codes out of the
+  export and refuses server-code ceremonies, `e5197fd91`). Before any client issues org server codes: the admin
+  client makes an enrolment key carried only in the recipe, `canonicalOrgServerCode` commits to its public key, and
+  `handleOrgServerRegister` also needs its signature beside the box's STK (not `delegatedPubKeyHex`). Shared vectors
+  TS, Swift, Kotlin.
+- **Org reads need the org read token** (external report, 2026-11-27). Main mints and accepts it (seat member key or
+  box STK) and requires it where no shipped client reads. In 0.5 the webapp (`orgSeat.js`), iOS, Android and the
+  daemon (`orgAuthorityPin.ts`, `orgBoxKeys.ts`, `directory/connector.ts`, plan attestation) send it; `/export` and
+  `/keys` need admin or servers-add; `.com` refuses every tokenless org read (no compatibility window, owner). Order:
+  the endorsed box release that sends it, then the enforcing `.com`. Shared token vectors. Branch
+  `feat/org-read-token-0.5`.
+  - **Org invite: link-key proof for read + accept, and withdraw** (found 2026-11-27). Today only the offer is
+    encrypted under the link key `k`, so an accept needs no proof that the joiner holds the link. Derive
+    `offerKey = HKDF(k, "flagship/org-invite-offer/v1")` and an invite key from `HKDF(k, "flagship/org-invite-key/v1")`
+    (Ed25519 plus an ML-DSA half, as accepts are hybrid); `inviteKeyPub` joins `OrgSeatInvite`'s canonical bytes.
+    `GET invites/<seat>` needs a fresh invite-key signature over `flagship/org-invite-read/v1|orgId|seatId|issuedAt`
+    (±5 min; missing or wrong → 404, as for no invite). The accept carries an invite-key signature over
+    `canonicalOrgSeatAccept`, stored and shown in `/seats` so admin clients and connector boxes verify it too. Keep
+    the SAS code. New admin-signed withdraw (deletes the invite and any unadmitted accept, logged). Vectors TS, Swift,
+    Kotlin, webapp (derivation, read proof, accept proof, negatives); clients webapp `orgJoin`/`orgSeat`, iOS and
+    Android `OrgClient`/join/org view models. Pending invites are re-sent after 0.5.
+- **Org founder-removal and recovery notices are observed by `.com`** (external report, 2026-11-27; main refuses
+  those entries until then, `6dd5a89b0`). The notice is a ceremony keyed by its body hash, opened at least `wait`
+  before the append by `.com`'s `openedAt`; the veto window is `[openedAt, openedAt + wait)`; a new `OrgChainOptions`
+  input carries the observed open time in every verifier (TS protocol, daemon pin, Swift, Kotlin, webapp bundle).
+  Pending approvals and vetoes refuse `notAfter < now` and test the freeze at the signed time or now (as
+  `authorizeOrgOrder` does); records get a two-sided `issuedAt` bound. Vectors: a backdated notice, a late veto that
+  must count, an evaded freeze. One at a time (owner, 2026-11-27): while one delayed-change notice is open (observed,
+  not yet executed, vetoed or withdrawn), `.com` refuses to open another for that org, and the protocol rule holds it
+  in every verifier: a delayed change's observed open time must be at or after the previous one's execution. Vector:
+  two notices opened in parallel, the second is refused.
+- **Per-app visitor identity scoped to the hosting account** (external report, 2026-11-27). App AID v2 =
+  HKDF(UMK, `flagship/app-aid/v2|<accountZone>|<appRef>`) in all four twins, their consumers and vectors; a flag day
+  (owner: breaking is fine). Settle the zone for fshp.app, custom domains and org zones first.
+
 ## Carried over from 0.4
 
 - **Turn on bank transfer for Business batches** (owner, 2026-11-22: launch 0.4 with it off). Built in 0.4; steps in

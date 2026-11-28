@@ -23,7 +23,8 @@
 # only after the update target of the same gym tip exists, and publish refuses one built from another.
 #
 # Usage: bash scripts/gym-update-target.sh build|publish|unpublish --worktree <gym worktree> [--no-push] [--flavor normal|broken]
-# Env: the same keys and bucket as scripts/gym-box-artifact.sh. Never touches production.
+# Env: the same keys and bucket as scripts/gym-box-artifact.sh (the PQ companion too: scripts/gym-pq-release-key.mjs).
+# Never touches production.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MODE="${1:-}"; shift || true
@@ -86,6 +87,7 @@ if [ "$MODE" = "build" ] && [ "$FLAVOR" = "broken" ]; then
   bash "$HERE/box-artifact-vm.sh" --repo "$WT" --commit "$TO" --sequence "$SEQ" --out "$OUT/a" || die "the VM build failed"
   NAME="flagship-box-${TO:0:12}-amd64"
   (cd "$WT" && npx tsx tools/box-artifact/build.ts sign --manifest "$OUT/a/$NAME.manifest.unsigned.json" --out "$OUT/a/$NAME.manifest.json" --key-file "$KEY_FILE") || die "signing failed"
+  node "$HERE/gym-pq-release-key.mjs" sign-box-artifact --manifest "$OUT/a/$NAME.manifest.json" --out "$OUT/a/$NAME.manifest.json" >/dev/null || die "the PQ companion was not added"
   (cd "$WT" && npx tsx tools/box-artifact/build.ts verify --manifest "$OUT/a/$NAME.manifest.json" --artifact "$OUT/a/$NAME.tar.gz" --commit "$TO" --arch amd64 --trust release/box-artifact-trust.json) || die "the signed manifest does not verify against the gym trust file"
   rm -f "$OUT/a/$NAME.manifest.unsigned.json"
   for f in "$OUT/a"/*; do
@@ -124,6 +126,7 @@ if [ "$MODE" = "build" ]; then
   bash "$HERE/box-artifact-vm.sh" --repo "$WT" --commit "$TO" --sequence "$SEQ" --out "$OUT/a" || die "the VM build failed"
   NAME="flagship-box-${TO:0:12}-amd64"
   (cd "$WT" && npx tsx tools/box-artifact/build.ts sign --manifest "$OUT/a/$NAME.manifest.unsigned.json" --out "$OUT/a/$NAME.manifest.json" --key-file "$KEY_FILE") || die "signing failed"
+  node "$HERE/gym-pq-release-key.mjs" sign-box-artifact --manifest "$OUT/a/$NAME.manifest.json" --out "$OUT/a/$NAME.manifest.json" >/dev/null || die "the PQ companion was not added"
   (cd "$WT" && npx tsx tools/box-artifact/build.ts verify --manifest "$OUT/a/$NAME.manifest.json" --artifact "$OUT/a/$NAME.tar.gz" --commit "$TO" --arch amd64 --trust release/box-artifact-trust.json) || die "the signed manifest does not verify against the gym trust file"
   rm -f "$OUT/a/$NAME.manifest.unsigned.json"
   for f in "$OUT/a"/*; do

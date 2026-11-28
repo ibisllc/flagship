@@ -142,6 +142,20 @@ describe(".com org servers", () => {
     expect((await handleOrgServerCode(d, ORG, { code: c, approvals: [approve(A, canonicalOrgServerCode(c), AT)] })).status).toBe(409);
   });
 
+  it("never exports a server code its box has not redeemed (an unused code is a secret)", async () => {
+    const d = await orgWithSeats();
+    d.set(AT + MIN);
+    const c = serverCode();
+    expect((await handleOrgServerCode(d, ORG, { code: c, approvals: [approve(B, canonicalOrgServerCode(c), AT)] })).status).toBe(200);
+    const pending = JSON.stringify((await handleOrgExport(d, ORG)).body);
+    expect(pending).not.toContain(c.serial);
+    expect((JSON.parse(pending) as { serverCodes: unknown[] }).serverCodes).toEqual([]);
+    // Once its box has registered, the (now useless) code travels with the server, as the audit needs.
+    const { d: d2, c: used } = await registered();
+    const exp = (await handleOrgExport(d2, ORG)).body as { serverCodes: Array<{ code: { serial: string } }> };
+    expect(exp.serverCodes.map((x) => x.code.serial)).toEqual([used.serial]);
+  });
+
   it("finds the org behind a server code's serial, for the install timeline", async () => {
     const { d, c } = await registered();
     expect(await d.orgs.findServerCodeOrg(c.serial)).toBe(ORG);

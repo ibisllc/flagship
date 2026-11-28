@@ -4153,5 +4153,8 @@
   "Invitation withdrawn.": "Einladung zurückgezogen.",
   "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "Jemand anderes als die eingeladene Person hat diese Einladung angenommen. Zieh sie zurück und schick der Person eine neue.",
   "Withdraw this invitation?": "Diese Einladung zurückziehen?",
-  "The link stops working, and nobody who accepted it is let in.": "Der Link funktioniert nicht mehr, und niemand, der ihn angenommen hat, wird hereingelassen."
+  "The link stops working, and nobody who accepted it is let in.": "Der Link funktioniert nicht mehr, und niemand, der ihn angenommen hat, wird hereingelassen.",
+  "%@ GB": "%@ GB",
+  "%@ MB": "%@ MB",
+  "%@ KB": "%@ KB"
 }

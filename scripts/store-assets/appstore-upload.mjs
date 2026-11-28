@@ -1,10 +1,12 @@
 // App Store part of store-upload.mjs (docs/runbooks/post-0.4-store-listing.md §1, §4).
 //
-//   node scripts/store-assets/store-upload.mjs appstore [--apply] [--images <pack-dir>]
+//   node scripts/store-assets/store-upload.mjs appstore [--apply] [--images <pack-dir>] [--create-version <x.y>]
 //
 // Key: ~/.appstoreconnect/flagship-listing.p8.asc (encrypted to the owner's YubiKey; decrypted into memory only,
 // so the key must be unlocked: `gpg -d <file> > /dev/null` once in a terminal) or a plain .p8 under
 // ~/.appstoreconnect/private_keys/, plus ~/.appstoreconnect/flagship.json {keyId, issuerId}. Role: App Manager.
+//
+// --prune <TYPE[,TYPE]> empties screenshot sets the pack does not manage (e.g. APP_IPHONE_61), on the editable version only.
 //
 // Texts: name and subtitle go on the editable app info, description / keywords / whatsNew / promotionalText on the
 // editable version ("Prepare for Submission"). With no editable version only promotionalText is written (it can change
@@ -34,7 +36,7 @@ function privateKey() {
   return fs.readFileSync(path.join(dir, "private_keys", plain), "utf8");
 }
 
-export async function appstore({ root, apply, imagesAt }) {
+export async function appstore({ root, apply, imagesAt, createVersion, prune = [] }) {
   const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".appstoreconnect/flagship.json"), "utf8"));
   const pem = privateKey();
   const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -43,8 +45,13 @@ export async function appstore({ root, apply, imagesAt }) {
   const jwt = `${unsigned}.${crypto.sign("sha256", Buffer.from(unsigned), { key: pem, dsaEncoding: "ieee-p1363" }).toString("base64url")}`;
 
   async function call(method, p, body) {
-    const r = await fetch(p.startsWith("http") ? p : API + p, { method, headers: { authorization: `Bearer ${jwt}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
-    const text = await r.text();
+    let r, text;
+    for (let attempt = 0; ; attempt++) { // retry only reads and idempotent writes: a repeated POST would reserve twice
+      r = await fetch(p.startsWith("http") ? p : API + p, { method, headers: { authorization: `Bearer ${jwt}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      text = await r.text();
+      if (method === "POST" || (r.status !== 429 && r.status < 500) || attempt === 4) break;
+      await new Promise((ok) => setTimeout(ok, 2000 * 2 ** attempt));
+    }
     if (!r.ok) throw new Error(`${method} ${p}: ${r.status} ${text.slice(0, 600)}`);
     return text ? JSON.parse(text) : {};
   }
@@ -54,9 +61,14 @@ export async function appstore({ root, apply, imagesAt }) {
   if (!app) throw new Error(`no app ${BUNDLE_ID} for this key`);
   const versions = (await all(`/v1/apps/${app.id}/appStoreVersions?filter[platform]=IOS&limit=20`));
   const state = (v) => v.attributes.appVersionState ?? v.attributes.appStoreState;
-  const editable = versions.find((v) => EDITABLE.has(state(v)));
+  let editable = versions.find((v) => EDITABLE.has(state(v)));
+  if (!editable && createVersion) { // a new draft version ("Prepare for Submission"); Apple copies the live version's texts and screenshots into it
+    console.log(`no editable version: ${apply ? "creating" : "would create"} ${createVersion}`);
+    if (!apply) return console.log("\ndry run: nothing written. Run again with --apply.");
+    editable = (await call("POST", "/v1/appStoreVersions", { data: { type: "appStoreVersions", attributes: { platform: "IOS", versionString: createVersion }, relationships: { app: { data: { type: "apps", id: app.id } } } } })).data;
+  }
   const live = versions.find((v) => ["READY_FOR_DISTRIBUTION", "READY_FOR_SALE"].includes(state(v)));
-  const infos = await all(`/v1/apps/${app.id}/appInfos`);
+  const infos = await all(`/v1/apps/${app.id}/appInfos`); // a new version opens a new editable app info
   const info = infos.find((i) => !["READY_FOR_DISTRIBUTION", "READY_FOR_SALE"].includes(i.attributes.appStoreState ?? i.attributes.state)) ?? null;
   console.log(`App Store: ${app.attributes.name} (${app.id}); versions: ${versions.map((v) => `${v.attributes.versionString} ${state(v)}`).join(", ")}`);
   console.log(editable ? `editable version: ${editable.attributes.versionString}` : "no editable version: only promotional text can change (create the next version in App Store Connect for the rest)");
@@ -84,6 +96,7 @@ export async function appstore({ root, apply, imagesAt }) {
       } else console.log(`${loc}: version texts unchanged`);
       if (info) {
         const iWant = { name: a.name, subtitle: a.subtitle };
+        if (!iLocs[loc] && apply) Object.assign(iLocs, Object.fromEntries((await all(`/v1/appInfos/${info.id}/appInfoLocalizations`)).map((l) => [l.attributes.locale, l]))); // Apple adds it with a new version locale
         const ih = iLocs[loc]?.attributes ?? {};
         const idiff = Object.keys(iWant).filter((k) => (ih[k] ?? "") !== iWant[k]);
         if (idiff.length) {
@@ -107,12 +120,25 @@ export async function appstore({ root, apply, imagesAt }) {
       const vl = vLocs[loc];
       if (!vl) { console.log(`  ${loc}: no version localization yet (run once with --apply for the texts first)`); continue; }
       const sets = Object.fromEntries((await all(`/v1/appStoreVersionLocalizations/${vl.id}/appScreenshotSets`)).map((s) => [s.attributes.screenshotDisplayType, s]));
+      for (const [type, set] of Object.entries(sets)) { // sets this pack does not manage still show on their devices
+        if (Object.values(DISPLAY_TYPE).includes(type)) continue;
+        const old = await all(`/v1/appScreenshotSets/${set.id}/appScreenshots`);
+        if (!old.length) continue;
+        if (!prune.includes(type)) { console.log(`  ${loc}: also has ${old.length} screenshot(s) in ${type} (not in the pack; --prune ${type} removes them)`); continue; }
+        changes++;
+        console.log(`  ${loc}: remove ${old.length} screenshot(s) in ${type} (--prune)`);
+        if (apply) for (const o of old) await call("DELETE", `/v1/appScreenshots/${o.id}`);
+      }
       for (const [cls, type] of Object.entries(DISPLAY_TYPE)) {
         const dir = path.join(imagesAt, "appstore", cls, PACK_DIR_FOR[loc] ?? loc);
         const pngs = fs.readdirSync(dir).filter((n) => n.endsWith(".png")).sort();
         const want = pngs.map((n) => crypto.createHash("md5").update(fs.readFileSync(path.join(dir, n))).digest("hex"));
         const shots = sets[type] ? await all(`/v1/appScreenshotSets/${sets[type].id}/appScreenshots`) : [];
-        if (shots.map((s) => s.attributes.sourceFileChecksum).join() === want.join()) { console.log(`  ${cls}/${loc}: unchanged`); continue; }
+        if (shots.map((s) => s.attributes.sourceFileChecksum).join() === want.join()) {
+          const stuck = shots.filter((s) => s.attributes.assetDeliveryState?.state !== "COMPLETE");
+          console.log(`  ${cls}/${loc}: unchanged${stuck.length ? ` (${stuck.length} not processed yet: ${[...new Set(stuck.map((s) => s.attributes.assetDeliveryState?.state))].join(", ")})` : ""}`);
+          continue;
+        }
         changes++;
         console.log(`  ${cls}/${loc}: replace ${shots.length} with ${pngs.length} (${type})`);
         if (!apply) continue;

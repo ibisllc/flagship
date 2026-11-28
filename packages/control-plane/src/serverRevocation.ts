@@ -41,6 +41,7 @@ import {
   type ServerUnrevocation,
 } from "@flagship/protocol";
 import type {
+  AcmeAccountKeyDeliveryStorage,
   AuditEventStorage,
   AutoUnlockLeaseStorage,
   BoxSealedLeaseStorage,
@@ -85,6 +86,8 @@ export interface ServerRevocationDeps {
    */
   autoUnlockLeases?: AutoUnlockLeaseStorage;
   boxSealedLeases?: BoxSealedLeaseStorage;
+  /** When wired, the box's pending ACME account-key delivery is dropped as its authority ends. */
+  acmeAccountKeyDelivery?: Pick<AcmeAccountKeyDeliveryStorage, "deleteByDomain">;
   /**
    * Optional. When wired, any per-box A/AAAA/CAA an older layout published
    * for the revoked server is deleted: a record at the box name would stop the
@@ -287,6 +290,11 @@ export async function handleRevokeServer(
   const marked = await deps.servers.revoke(r.revokedServerId, r.reason, now);
   if (!marked) {
     return { status: 500, body: { error: "revoke failed (server vanished?)" } };
+  }
+  try {
+    await deps.acmeAccountKeyDelivery?.deleteByDomain(r.revokedServerId);
+  } catch {
+    // Best-effort like the lease cascade: release refuses a revoked server anyway.
   }
 
   // Cascade: tear down every active boot-unlock lease on the server so

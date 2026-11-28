@@ -4147,5 +4147,8 @@
   "Invitation withdrawn.": "f6f7ddbced93",
   "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "f3032170820d",
   "Withdraw this invitation?": "aaf35ca3d38d",
-  "The link stops working, and nobody who accepted it is let in.": "a12d1ba0cb39"
+  "The link stops working, and nobody who accepted it is let in.": "a12d1ba0cb39",
+  "%@ GB": "7004a87d84a7",
+  "%@ MB": "9e9af87c271d",
+  "%@ KB": "ea8442eee332"
 }

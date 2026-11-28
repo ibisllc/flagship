@@ -72,10 +72,7 @@ object BackupsText {
         FSStrings.get(R.string.youll_need_this_passcode_to_import)
 
     /** The box's own `formatGb`: one decimal under 10 GB, none above. */
-    fun gb(n: Long): String {
-        val v = n.toDouble() / GB
-        return if (n < 10 * GB) "%.1f GB".format(Locale.US, v) else "%.0f GB".format(Locale.US, v)
-    }
+    fun gb(n: Long): String = ByteSize.gbAuto(n)
 
     fun whenText(ms: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
 

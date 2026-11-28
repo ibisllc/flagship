@@ -71,6 +71,113 @@
       </p>
   
       <div>
+      <h2>An old browser-remote link could connect the webapp to another server</h2>
+      <p class="hof-meta">
+        Medium &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        The webapp still accepted an old start-up link for the browser
+        remote. It redeemed a session at whatever server the link named, and
+        stored the server the answer named, without checking that either
+        belonged to Flagship&rsquo;s service domain. A crafted link could
+        install a session for an attacker&rsquo;s server.
+      </p>
+      <p>
+        The old link is gone: the browser remote now starts only from the QR
+        code the phone approves, and every session answer must name a server
+        under Flagship&rsquo;s service domain. The fix shipped in webapp
+        version 260.
+      </p>
+
+      <h2>Simultaneous grants could pass an organization&rsquo;s seat limit</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/4fa472d9">4fa472d9</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        Seat grants or invites sent at the same moment could each pass the
+        plan&rsquo;s seat limit, so together they could give an organization
+        more seats than its plan allowed. A grant was also logged even when
+        nothing had been stored.
+      </p>
+      <p>
+        The limit is now held in the same write that stores the grant, and
+        the log entry is written only after that write succeeds.
+      </p>
+
+      <h2>Simultaneous share offers could pass the co-manager limit</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/25a97cc5">25a97cc5</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        When sharing a server, requests sent at the same moment could each
+        pass the plan&rsquo;s co-manager limit, and the limit counted only
+        the newest 500 shares.
+      </p>
+      <p>
+        The count now covers every live share and is held in the same write
+        that creates the share.
+      </p>
+
+      <h2>Simultaneous requests could get more peer-backup tokens than allowed</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/79ca995e">79ca995e</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        Each server may be issued only so many peer-backup tokens. Two
+        requests at the same moment could each pass that limit and together
+        get more tokens than it allowed.
+      </p>
+      <p>
+        The limit is now counted and reserved in one write before anything
+        is signed.
+      </p>
+
+      <h2>An organization&rsquo;s founder could backdate a founder-removal or recovery notice</h2>
+      <p class="hof-meta">
+        Medium &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/6dd5a89b">6dd5a89b</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        An organization&rsquo;s founder-removal or account-recovery notice
+        took its waiting period from a date the request itself stated, so a
+        founder could backdate it and skip both the waiting period and the
+        other admins&rsquo; chance to object. This was dormant: no app or
+        server sent these requests.
+      </p>
+      <p>
+        Our server now refuses both kinds of change until the next release
+        ships the real fix, in which the waiting period starts when our
+        server sees the notice.
+      </p>
+
+      <h2>Unused server enrollment codes could be read by anyone who knew an organization&rsquo;s id</h2>
+      <p class="hof-meta">
+        Medium &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/e5197fd9">e5197fd9</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        An organization&rsquo;s export and its list of ceremonies could hand
+        out server enrollment codes that had not been used yet to anyone who
+        knew the organization&rsquo;s id, and a code alone was enough to
+        enroll any key as that organization&rsquo;s server. No such codes
+        existed in production, so nothing was exposed.
+      </p>
+      <p>
+        The export now carries only codes that have already been used, and a
+        code can no longer be posted as a ceremony. Binding each code to the
+        real server&rsquo;s own key follows in the next release.
+      </p>
+
       <h2>Reports sent with the vulnerability form were lost</h2>
       <p class="hof-meta">
         Low &middot; reported and fixed November 2026 &middot; fix
@@ -89,6 +196,35 @@
         key&rsquo;s holders can read, and the reporter gets a reference. We
         are notified of each new report, and the page keeps the email address
         and key as a fallback.
+      </p>
+      <p>
+        After that fix, the form still refused every report sent from a
+        browser once its spam check was turned on, because the check added a
+        field our server did not expect. Huzaifa Jawaid found this too; it was
+        fixed in
+        <a href="https://github.com/ibisllc/flagship/commit/309516e9">309516e9</a>.
+      </p>
+
+      <h2>Signature checks accepted three low-order public keys, so a forged signature could verify under them</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/8fd77a2b">8fd77a2b</a>
+        &middot; credit:
+        <a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a>
+      </p>
+      <p>
+        Our signature checks refused most small-order Ed25519 public keys by
+        a fixed list, but the list missed three of them, and the checks also
+        accepted keys written in a non-canonical form. Under such a key
+        anyone can forge a signature that verifies for any message, so a
+        signature under it proves nothing. No app sends such a key, and a
+        scan of our production data found none stored.
+      </p>
+      <p>
+        Every key is now decoded under the standard&rsquo;s strict rules, and
+        small-order and non-canonical keys are refused before any signature
+        is checked. Our server refuses them wherever it stores or vouches for
+        a key, and servers refuse them too starting with their next release.
       </p>
 
       <h2>An unused identity-record endpoint trusted the signers each request named</h2>

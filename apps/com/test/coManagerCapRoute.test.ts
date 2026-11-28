@@ -30,7 +30,7 @@ async function setup(tier?: "hobby") {
   await storage.servers.put({ serverDomain: S, username: "alice", identityPubKeyHex: "cd".repeat(32), registeredAt: 1 });
   if (tier) await storage.tiers.put({ username: "alice", tier, currentPeriodEnd: Date.now() + 1e9, updatedAt: Date.now() });
   const env: ControlPlaneEnv = { DB: sqlite as unknown as D1Database, ACCOUNT_READ_TOKEN_SECRET: "route-secret" };
-  return { env, close: () => sqlite.close() };
+  return { env, sqlite, close: () => sqlite.close() };
 }
 
 async function offer(env: ControlPlaneEnv, i: number) {
@@ -76,6 +76,38 @@ describe("co-manager cap on the share-offer route", () => {
     try {
       for (let i = 1; i <= 10; i++) expect((await offer(env, i)).status).toBe(200);
       expect((await offer(env, 11)).body).toMatchObject({ code: "co-manager-cap", cap: 10, plan: "hobby" });
+    } finally {
+      close();
+    }
+  });
+
+  it("holds the cap when the offers arrive in parallel", async () => {
+    const { env, sqlite, close } = await setup();
+    try {
+      const res = await Promise.all(Array.from({ length: 20 }, (_, i) => offer(env, i + 1)));
+      expect(res.filter((r) => r.status === 200).length).toBe(5);
+      const refused = res.filter((r) => r.status === 403);
+      expect(refused.length).toBe(15);
+      for (const r of refused) expect(r.body).toMatchObject({ code: "co-manager-cap", cap: 5, plan: "free" });
+      const live = sqlite.raw.prepare("SELECT COUNT(*) AS n FROM server_shares WHERE owner_username = 'alice'").get() as { n: number };
+      expect(Number(live.n)).toBe(5);
+    } finally {
+      close();
+    }
+  });
+
+  it("counts live shares behind 500 newer ended ones", async () => {
+    const { env, sqlite, close } = await setup();
+    try {
+      for (let i = 1; i <= 5; i++) expect((await offer(env, i)).status).toBe(200);
+      sqlite.raw.exec("UPDATE server_shares SET created_at = 1");
+      const ins = sqlite.raw.prepare(
+        "INSERT INTO server_shares (share_id, owner_username, server_domain, token_hash, offer_hex, owner_hex, ended_at, end_kind, created_at, expires_at) VALUES (?, 'alice', ?, ?, '00', '00', 2, 'revoke', ?, ?)",
+      );
+      for (let i = 0; i < 500; i++) ins.run(`e${i.toString(16).padStart(31, "0")}`, S, `t${i}`, 1_000 + i, Date.now() + 1e9);
+      const r = await offer(env, 6);
+      expect(r.status).toBe(403);
+      expect(r.body).toMatchObject({ code: "co-manager-cap", count: 5, cap: 5 });
     } finally {
       close();
     }

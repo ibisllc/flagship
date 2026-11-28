@@ -10,6 +10,7 @@ import { InMemoryStorage } from "@flagship/storage";
 import {
   allocateDibsName,
   dibsWindowState,
+  dotComHold,
   handleNameDibsInitiate,
   handleNameDibsVerify,
   handleNameDibsWindow,
@@ -149,6 +150,42 @@ describe("reservedForDotComHolder", () => {
     await reservedForDotComHolder({ window: WINDOW, fetch, now: () => NOW }, "acme");
     expect(signals.length).toBeGreaterThan(0);
     expect(signals.every((s) => s instanceof AbortSignal)).toBe(true);
+  });
+});
+
+describe("dotComHold", () => {
+  const at = { window: WINDOW, now: () => NOW };
+
+  it("names the .com that holds the name, de-hyphenated when that is the registered one", async () => {
+    const { fetch } = net({ registered: ["cloudflare.com", "acme.com"] });
+    expect(await dotComHold({ ...at, fetch }, "acme")).toEqual({ domain: "acme.com", checked: true });
+    expect(await dotComHold({ ...at, fetch }, "clou-dflare")).toEqual({ domain: "cloudflare.com", checked: true });
+    expect(await dotComHold({ ...at, fetch }, "free-name")).toBeNull();
+  });
+
+  it("prefers the name as typed when both it and the de-hyphenated .com are registered", async () => {
+    const { fetch } = net({ registered: ["acme-tools.com", "acmetools.com"] });
+    expect(await dotComHold({ ...at, fetch }, "acme-tools")).toEqual({ domain: "acme-tools.com", checked: true });
+  });
+
+  it("holds with checked:false when the lookup failed", async () => {
+    const { fetch } = net({ failDns: true });
+    expect(await dotComHold({ ...at, fetch }, "acme")).toEqual({ domain: "acme.com", checked: false });
+    expect(await dotComHold({ ...at, fetch }, "clou-dflare")).toEqual({ domain: "clou-dflare.com", checked: false });
+  });
+
+  it("a registered label wins over another label's failed lookup", async () => {
+    const fetch: DibsFetch = async (url) => {
+      const name = new URL(url).searchParams.get("name");
+      if (name === "clou-dflare.com") return { ok: false, status: 502, json: async () => ({}), text: async () => "" };
+      return { ok: true, status: 200, text: async () => "", json: async () => ({ Status: 0, Answer: [{ type: 2, data: "ns1." }] }) };
+    };
+    expect(await dotComHold({ ...at, fetch }, "clou-dflare")).toEqual({ domain: "cloudflare.com", checked: true });
+  });
+
+  it("holds nothing outside the window", async () => {
+    const { fetch } = net({ failDns: true });
+    expect(await dotComHold({ window: WINDOW, fetch, now: () => WINDOW.end }, "acme")).toBeNull();
   });
 });
 

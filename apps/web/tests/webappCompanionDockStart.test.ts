@@ -133,6 +133,21 @@ describe("remote: ticket validation", () => {
     expect(parse(TICKET).podBaseUrl).toBe("https://home.alice.flagship.services");
   });
 
+  it("round-trips a sealed ticket into exactly the fields the redeem needs", () => {
+    expect(parseRemoteTicket(JSON.stringify(TICKET), { apex: APEX })).toEqual({
+      ticketId: TICKET.ticketId,
+      ticketSecret: TICKET.ticketSecret,
+      podBaseUrl: "https://home.alice.flagship.services",
+      username: "alice",
+    });
+  });
+
+  it("refuses garbage and a ticket missing its fields", () => {
+    for (const text of ["", "not json at all!@#$", "null", JSON.stringify({ kind: REMOTE_TICKET_KIND, ticketId: "x" })]) {
+      expect(() => parseRemoteTicket(text, { apex: APEX }), text).toThrow();
+    }
+  });
+
   it.each([
     ["another kind", { ...TICKET, kind: "flagship/recipe/v1" }],
     ["a server off the data apex", { ...TICKET, podBaseUrl: "https://evil.example" }],

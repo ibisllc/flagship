@@ -1261,6 +1261,10 @@
     "ctx": "webapp/lib/companionReceiver.js:63",
     "translatable": false
   },
+  "The server named another server this page won't connect to": {
+    "en": "The server named another server this page won't connect to",
+    "ctx": "webapp/lib/companionReceiver.js:59"
+  },
   "Connect to an existing account": {
     "en": "Connect to an existing account",
     "ctx": "webapp/index.html"

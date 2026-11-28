@@ -122,19 +122,17 @@ async function liveServerOf(deps: ServerShareDeps, username: string, serverDomai
 /**
  * The backstop for the co-manager cap (packages/protocol/src/coManagerCap.ts):
  * the boxes enforce it when a share goes live; here a new link is refused once
- * the account's open links and live shares reach the plan's cap. It counts
- * only this account's own rows, which name a server and an opaque id: nothing
- * about who the shares are with. An account already over its cap keeps every
- * share; only new links wait until it is under.
+ * the account's open links and live shares reach the plan's cap, counted in
+ * the same write that stores the link. It counts only this account's own
+ * rows, which name a server and an opaque id: nothing about who the shares
+ * are with. An account already over its cap keeps every share; only new links
+ * wait until it is under.
  */
-async function coManagerCapReached(deps: ServerShareDeps, username: string, now: number): Promise<Res | null> {
+async function coManagerCapOf(deps: ServerShareDeps, username: string, now: number) {
   if (!deps.tiers) return null;
   const plan = coManagerPlanOf(await effectiveTierOf(deps.tiers, username, now));
   const cap = coManagerCapFor(plan);
-  if (cap === null) return null;
-  const rows = await deps.shares.listForOwner(username);
-  const count = rows.filter((r) => r.endedAt === null && (r.acceptHex !== null || r.expiresAt > now)).length;
-  return count >= cap ? { status: 403, body: coManagerCapRefusal({ count, cap, plan }) } : null;
+  return cap === null ? null : { cap, plan };
 }
 
 // POST /api/users/:u/server-shares — the owner offers a share.
@@ -157,8 +155,7 @@ export async function handleCreateServerShare(deps: ServerShareDeps, username: s
   const denied = await ownerAuthorized(deps, u.label, (pub) => verifyServerShareOffer(offer, s, hexToBytes(pub)));
   if (denied) return denied;
   if (!(await liveServerOf(deps, u.label, offer.serverDomain))) return notFound("no such server on this account");
-  const full = await coManagerCapReached(deps, u.label, now);
-  if (full) return full;
+  const limit = await coManagerCapOf(deps, u.label, now);
   const res = await deps.shares.create({
     shareId: offer.shareId,
     ownerUsername: u.label,
@@ -168,7 +165,10 @@ export async function handleCreateServerShare(deps: ServerShareDeps, username: s
     ownerHex,
     createdAt: now,
     expiresAt: offer.expiresAt,
-  });
+  }, limit?.cap ?? null);
+  if (!res.ok && res.reason === "cap" && limit) {
+    return { status: 403, body: coManagerCapRefusal({ count: res.count, cap: limit.cap, plan: limit.plan }) };
+  }
   if (!res.ok) return conflict("share id already used");
   return ok({ ok: true, shareId: offer.shareId });
 }

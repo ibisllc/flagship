@@ -1,17 +1,21 @@
 /**
- * The egress gateway's transparent TCP proxies. The firewall redirects a
- * container's outbound :443 to the TLS proxy and :80 to the HTTP proxy; each
- * reads just enough of the stream to learn the host (the ClientHello's SNI,
- * the request's Host header), asks the policy, and, if allowed, connects to
- * THAT host by name from the host network and splices the two sockets. TLS
- * stays end to end; the gateway never terminates it. The original destination
- * IP is ignored on purpose: an allowed name can't be pointed at another
- * server, and the name must resolve to a public address that is not one of
- * the box's own (a name pointed at the box's public IP must not reach its
- * own listeners from inside a sandbox).
+ * The egress gateway's transparent proxies. The firewall redirects a
+ * container's outbound :443 to the TLS proxy and :80 to the HTTP proxy.
+ * The TLS proxy reads the ClientHello's SNI, asks the policy once, and, if
+ * allowed, splices the connection to THAT host; TLS stays end to end, so the
+ * Host inside it is never seen or judged. The HTTP proxy terminates HTTP/1.x
+ * and judges EVERY request by its own Host header, forwarding each allowed
+ * request to its own upstream connection, so a keep-alive or pipelined
+ * socket cannot reach a second host after a first allowed one. The original
+ * destination IP is ignored on purpose: an allowed name can't be pointed at
+ * another server, and the name must resolve to a public address that is not
+ * one of the box's own (a name pointed at the box's public IP must not reach
+ * its own listeners from inside a sandbox).
  */
 import { lookup } from "node:dns/promises";
-import { connect, createServer, type Server, type Socket } from "node:net";
+import { createServer as createHttpServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
+import { connect, createServer, Socket, type Server } from "node:net";
+import type { Duplex } from "node:stream";
 import { networkInterfaces } from "node:os";
 import { parseClientHelloSni } from "@flagship/tunnel-protocol";
 import { isPublicAddress } from "./policy.js";
@@ -56,11 +60,25 @@ export function parseHttpHost(head: string): string | null {
     if (host !== null) return null;
     host = m[1]!;
   }
-  if (!host) return null;
-  const v = /^([^:\s]+)(?::(\d+))?$/.exec(host);
+  return host ? hostWithoutPort(host) : null;
+}
+
+function hostWithoutPort(host: string): string | null {
+  const v = /^([^:\s]+)(?::(\d+))?$/.exec(host.trim());
   if (!v) return null;
   if (v[2] && v[2] !== "80") return null;
   return v[1]!;
+}
+
+/** The one Host of a parsed request, or null for none, a doubled one or another port. */
+function requestHost(req: IncomingMessage): string | null {
+  let host: string | null = null;
+  for (let i = 0; i < req.rawHeaders.length; i += 2) {
+    if (req.rawHeaders[i]!.toLowerCase() !== "host") continue;
+    if (host !== null) return null;
+    host = req.rawHeaders[i + 1]!;
+  }
+  return host ? hostWithoutPort(host) : null;
 }
 
 /** Every address on this host's interfaces, lower-cased, without a zone. */
@@ -73,8 +91,12 @@ export async function defaultResolve(host: string): Promise<string[]> {
   return all.map((a) => a.address);
 }
 
-export function handleProxyConnection(deps: ProxyDeps, kind: ProxyKind, client: Socket): void {
-  const src = (client.remoteAddress ?? "").replace(/^::ffff:/i, "");
+function sourceOf(sock: { remoteAddress?: string | undefined }): string {
+  return (sock.remoteAddress ?? "").replace(/^::ffff:/i, "");
+}
+
+export function handleProxyConnection(deps: ProxyDeps, client: Socket): void {
+  const src = sourceOf(client);
   let buf = Buffer.alloc(0);
   let decided = false;
   client.on("error", () => {});
@@ -83,59 +105,46 @@ export function handleProxyConnection(deps: ProxyDeps, kind: ProxyKind, client: 
   const deny = (host: string | null) => {
     decided = true;
     clearTimeout(headTimer);
-    deps.onDenied?.(src, host, kind);
-    if (kind === "http") {
-      client.end("HTTP/1.1 403 Forbidden\r\ncontent-type: text/plain\r\nconnection: close\r\ncontent-length: 52\r\n\r\nThis host is not allowed from this Flagship sandbox.");
-    } else {
-      client.destroy();
-    }
+    deps.onDenied?.(src, host, "tls");
+    client.destroy();
   };
 
   const onData = (d: Buffer) => {
     if (decided) return;
     buf = Buffer.concat([buf, d]);
-    let host: string | null | undefined;
-    if (kind === "tls") {
-      const r = parseClientHelloSni(buf);
-      if (r.kind === "incomplete") {
-        if (r.needAtLeast > MAX_HEAD + 5) return deny(null);
-        return;
-      }
-      host = r.kind === "ok" ? r.sni : null;
-    } else {
-      const end = buf.indexOf("\r\n\r\n");
-      if (end < 0) {
-        if (buf.length > MAX_HEAD) return deny(null);
-        return;
-      }
-      host = parseHttpHost(buf.subarray(0, end).toString("latin1"));
+    const r = parseClientHelloSni(buf);
+    if (r.kind === "incomplete") {
+      if (r.needAtLeast > MAX_HEAD + 5) return deny(null);
+      return;
     }
+    const host = r.kind === "ok" ? r.sni : null;
     if (!host) return deny(null);
     decided = true;
     client.pause();
     client.off("data", onData);
-    const name = host;
     const head = buf;
     void Promise.resolve()
-      .then(() => deps.allow(src, name))
+      .then(() => deps.allow(src, host))
       .catch(() => false)
-      .then((ok) => {
+      .then(async (ok) => {
         clearTimeout(headTimer);
-        if (!ok) return deny(name);
-        return splice(deps, kind, client, name, head);
+        if (!ok) return deny(host);
+        const upstream = await openUpstream(deps, "tls", src, host);
+        if (!upstream) return void client.destroy();
+        splice(deps, client, upstream, src, host, head);
       });
   };
   client.on("data", onData);
 }
 
-async function splice(deps: ProxyDeps, kind: ProxyKind, client: Socket, host: string, head: Buffer): Promise<void> {
+/** A socket to the allowed host on the kind's port, or null (onDenied already told) when there is none to use. */
+async function openUpstream(deps: ProxyDeps, kind: ProxyKind, src: string, host: string): Promise<Socket | null> {
   const port = kind === "tls" ? 443 : 80;
   let addrs: string[];
   try {
     addrs = await (deps.resolve ?? defaultResolve)(host);
   } catch {
-    client.destroy();
-    return;
+    return null;
   }
   if (deps.publicOnly !== false) {
     const own = new Set([...(deps.ownAddresses ?? hostOwnAddresses)()].map((a) => a.toLowerCase().replace(/^::ffff:/, "")));
@@ -144,31 +153,42 @@ async function splice(deps: ProxyDeps, kind: ProxyKind, client: Socket, host: st
   const v4 = addrs.filter((a) => !a.includes(":"));
   const addr = v4[0] ?? addrs[0];
   if (!addr) {
-    deps.onDenied?.(client.remoteAddress ?? "", host, kind);
-    client.destroy();
-    return;
+    deps.onDenied?.(src, host, kind);
+    return null;
   }
   const proxied = deps.dialViaProxy?.(host, port) ?? null;
-  let upstream: Socket;
   if (proxied) {
     try {
-      upstream = await proxied;
+      return await proxied;
     } catch {
-      client.destroy();
-      return;
+      return null;
     }
-  } else {
-    upstream = (deps.dial ?? ((a, p) => connect({ host: a, port: p })))(addr, port);
   }
+  const upstream = (deps.dial ?? ((a, p) => connect({ host: a, port: p })))(addr, port);
+  upstream.on("error", () => {});
+  if (upstream.connecting) {
+    const ok = await new Promise<boolean>((resolve) => {
+      upstream.once("connect", () => resolve(true));
+      upstream.once("error", () => resolve(false));
+    });
+    if (!ok) {
+      upstream.destroy();
+      return null;
+    }
+  }
+  return upstream;
+}
+
+function splice(deps: ProxyDeps, client: Duplex, upstream: Socket, src: string, host: string, head: Buffer): void {
   const idle = deps.idleMs ?? 10 * 60_000;
   upstream.setTimeout(idle, () => upstream.destroy());
-  client.setTimeout(idle, () => client.destroy());
+  if (client instanceof Socket) client.setTimeout(idle, () => client.destroy());
   upstream.on("error", () => client.destroy());
   client.on("error", () => upstream.destroy());
   client.on("close", () => upstream.destroy());
   upstream.on("close", () => client.destroy());
   const untrack = deps.track?.({
-    src: (client.remoteAddress ?? "").replace(/^::ffff:/i, ""),
+    src,
     host,
     close: () => {
       client.destroy();
@@ -176,15 +196,128 @@ async function splice(deps: ProxyDeps, kind: ProxyKind, client: Socket, host: st
     },
   });
   if (untrack) client.once("close", untrack);
-  const start = () => {
-    upstream.write(head);
-    client.pipe(upstream);
-    upstream.pipe(client);
-    client.resume();
-    upstream.resume();
+  if (head.length) upstream.write(head);
+  client.pipe(upstream);
+  upstream.pipe(client);
+  client.resume();
+  upstream.resume();
+}
+
+const HOP_BY_HOP = new Set(["connection", "keep-alive", "proxy-connection", "proxy-authorization", "te", "trailer", "upgrade"]);
+
+/** The request's headers for the upstream, hop-by-hop ones dropped (and those `Connection` names). */
+function forwardHeaders(raw: string[], keepUpgrade: boolean): string[] {
+  const named = new Set<string>();
+  for (let i = 0; i < raw.length; i += 2) {
+    if (raw[i]!.toLowerCase() === "connection") for (const t of raw[i + 1]!.split(",")) named.add(t.trim().toLowerCase());
+  }
+  const out: string[] = [];
+  for (let i = 0; i < raw.length; i += 2) {
+    const k = raw[i]!.toLowerCase();
+    const upgradeHeader = keepUpgrade && (k === "upgrade" || k === "connection");
+    if (!upgradeHeader && (HOP_BY_HOP.has(k) || named.has(k))) continue;
+    out.push(raw[i]!, raw[i + 1]!);
+  }
+  return out;
+}
+
+const DENIED_BODY = "This host is not allowed from this Flagship sandbox.";
+
+function refuse(res: ServerResponse, status: number): void {
+  res.shouldKeepAlive = false;
+  res.writeHead(status, { "content-type": "text/plain", connection: "close", "content-length": Buffer.byteLength(DENIED_BODY) });
+  res.end(DENIED_BODY);
+}
+
+async function judge(deps: ProxyDeps, src: string, req: IncomingMessage): Promise<string | null> {
+  const host = requestHost(req);
+  if (!host) {
+    deps.onDenied?.(src, null, "http");
+    return null;
+  }
+  const ok = await Promise.resolve()
+    .then(() => deps.allow(src, host))
+    .catch(() => false);
+  if (!ok) {
+    deps.onDenied?.(src, host, "http");
+    return null;
+  }
+  return host;
+}
+
+async function forwardRequest(deps: ProxyDeps, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const src = sourceOf(req.socket);
+  req.pause();
+  const host = await judge(deps, src, req);
+  if (!host) return refuse(res, 403);
+  const socket = await openUpstream(deps, "http", src, host);
+  if (!socket) return refuse(res, 502);
+  const headers = forwardHeaders(req.rawHeaders, false);
+  headers.push("Connection", "close");
+  const up = httpRequest({ method: req.method, path: req.url, headers, createConnection: () => socket, setHost: false }, (r) => {
+    const back: string[] = [];
+    for (let i = 0; i < r.rawHeaders.length; i += 2) {
+      const k = r.rawHeaders[i]!.toLowerCase();
+      if (k === "connection" || k === "keep-alive" || k === "proxy-connection") continue;
+      back.push(r.rawHeaders[i]!, r.rawHeaders[i + 1]!);
+    }
+    res.writeHead(r.statusCode ?? 502, r.statusMessage, back);
+    r.pipe(res);
+  });
+  const idle = deps.idleMs ?? 10 * 60_000;
+  socket.setTimeout(idle, () => socket.destroy());
+  const untrack = deps.track?.({
+    src,
+    host,
+    close: () => {
+      socket.destroy();
+      req.socket.destroy();
+    },
+  });
+  const done = () => {
+    untrack?.();
+    socket.destroy();
   };
-  if (proxied) start();
-  else upstream.once("connect", start);
+  res.once("close", done);
+  up.on("error", () => (res.headersSent ? res.destroy() : refuse(res, 502)));
+  req.pipe(up);
+  req.resume();
+}
+
+async function forwardUpgrade(deps: ProxyDeps, req: IncomingMessage, client: Duplex, head: Buffer): Promise<void> {
+  const src = sourceOf(req.socket);
+  client.on("error", () => {});
+  const fail = (status: number) => {
+    client.end(`HTTP/1.1 ${status} ${status === 403 ? "Forbidden" : "Bad Gateway"}\r\ncontent-type: text/plain\r\nconnection: close\r\ncontent-length: ${Buffer.byteLength(DENIED_BODY)}\r\n\r\n${DENIED_BODY}`);
+  };
+  const host = await judge(deps, src, req);
+  if (!host) return fail(403);
+  const upstream = await openUpstream(deps, "http", src, host);
+  if (!upstream) return fail(502);
+  const headers = forwardHeaders(req.rawHeaders, true);
+  let lines = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
+  for (let i = 0; i < headers.length; i += 2) lines += `${headers[i]}: ${headers[i + 1]}\r\n`;
+  splice(deps, client, upstream, src, host, Buffer.concat([Buffer.from(lines + "\r\n", "latin1"), head]));
+}
+
+function startHttpProxy(deps: ProxyDeps): Server {
+  const server = createHttpServer({ requireHostHeader: false, maxHeaderSize: MAX_HEAD });
+  server.headersTimeout = HEAD_TIMEOUT_MS;
+  server.requestTimeout = 0;
+  server.timeout = deps.idleMs ?? 10 * 60_000;
+  server.on("request", (req, res) => void forwardRequest(deps, req, res).catch(() => res.destroy()));
+  server.on("upgrade", (req, sock, head) => void forwardUpgrade(deps, req, sock, head).catch(() => sock.destroy()));
+  server.on("connect", (req: IncomingMessage, sock: Duplex) => {
+    sock.on("error", () => {});
+    deps.onDenied?.(sourceOf(req.socket), null, "http");
+    sock.end("HTTP/1.1 403 Forbidden\r\nconnection: close\r\ncontent-length: 0\r\n\r\n");
+  });
+  server.on("clientError", (err: NodeJS.ErrnoException, sock: Duplex) => {
+    if (!sock.writable || err.code === "ECONNRESET" || err.code === "ERR_HTTP_REQUEST_TIMEOUT") return void sock.destroy();
+    deps.onDenied?.(sourceOf(sock as Socket), null, "http");
+    sock.end("HTTP/1.1 400 Bad Request\r\nconnection: close\r\ncontent-length: 0\r\n\r\n");
+  });
+  return server;
 }
 
 export interface ProxyServerHandle {
@@ -197,7 +330,7 @@ export async function startProxyServer(
   host: string,
   port: number,
 ): Promise<ProxyServerHandle> {
-  const server: Server = createServer((sock) => handleProxyConnection(deps, kind, sock));
+  const server: Server = kind === "http" ? startHttpProxy(deps) : createServer((sock) => handleProxyConnection(deps, sock));
   server.maxConnections = 1024;
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

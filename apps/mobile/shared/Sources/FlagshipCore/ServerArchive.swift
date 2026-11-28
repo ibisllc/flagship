@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// "Backup/clone server" (docs/server-backup-and-clone.md): the account's key
 /// for a backup (the KEK of its account slot), the backup's file name, and
@@ -58,8 +59,8 @@ public enum ServerArchive {
         if n < 1024 * 1024 { return String(localized: "\(max(1, Int((Double(n) / 1024).rounded()))) KB") }
         if n < 1024 * 1024 * 1024 {
             let mb = Double(n) / (1024 * 1024)
-            return n < 10 * 1024 * 1024 ? String(format: "%.1f MB", mb) : String(localized: "\(Int(mb.rounded())) MB")
+            return n < 10 * 1024 * 1024 ? ByteText.mb(n, decimals: 1) : String(localized: "\(Int(mb.rounded())) MB")
         }
-        return String(format: "%.1f GB", Double(n) / (1024 * 1024 * 1024))
+        return ByteText.gb(n, decimals: 1)
     }
 }

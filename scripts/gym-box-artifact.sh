@@ -11,7 +11,8 @@
 #                box-artifact.yml, with the Rust binaries a box on the arch-v2 stack runs; arm64 cross-built), never
 #                in GitHub Actions; --local builds here instead, without the Rust binaries (such a box
 #                falls back to the TS path, so the arch-v2 gym pass would not test the Rust stack)
-#   3. signs     tools/box-artifact/build.ts sign with the gym key, then verifies against the trust file
+#   3. signs     tools/box-artifact/build.ts sign with the gym key, adds the PQ companion (scripts/gym-pq-release-key.mjs,
+#                pinned on the gym branch like production's release key), then verifies against the trust file
 #   4. uploads   to the gym's artifact bucket (flagship-iso-gym), served at gym.flagshipserver.com/build/iso
 #   5. records   writes release/box-release.json, regenerates the compiled constants, commits on the gym
 #                branch and pushes (the gym Worker deployed next compiles them in)
@@ -72,13 +73,6 @@ if [ -f "$CATALOG_KEY" ]; then
   fi
 fi
 
-PLAN="$(node "$HERE/gym-box-release.mjs" plan --worktree "$WT")"
-ACTION="$(node -e 'console.log(JSON.parse(process.argv[1]).action)' "$PLAN")"
-COMMIT="$(node -e 'console.log(JSON.parse(process.argv[1]).commit)' "$PLAN")"
-SEQ="$(node -e 'console.log(JSON.parse(process.argv[1]).sequence)' "$PLAN")"
-say "plan: $PLAN"
-if [ "$ACTION" = "skip" ]; then say "nothing to build"; exit 0; fi
-
 if [ ! -f "$KEY_FILE" ]; then
   [ "$DRY" = "1" ] && { say "DRY-RUN would create the gym signing key at $KEY_FILE"; } || {
     mkdir -p "$(dirname "$KEY_FILE")"; umask 077
@@ -93,14 +87,38 @@ fi
 
 # The gym branch trusts exactly its own key.
 TRUST="$WT/release/box-artifact-trust.json"
-# It also has no PQ half: the gym key is a classical-only test key, so the gym's trust file pins no PQ key (the real
-# release key is pinned on release/0.3 and would refuse every gym-signed artifact).
-if [ -n "$PUB" ] && ! node -e 'const t=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); process.exit(t.threshold===1&&t.keys.length===1&&t.keys[0]===process.argv[2]&&(t.pq?.keyIds??[]).length===0?0:1)' "$TRUST" "$PUB"; then
+if [ -n "$PUB" ] && ! node -e 'const t=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); process.exit(t.threshold===1&&t.keys.length===1&&t.keys[0]===process.argv[2]?0:1)' "$TRUST" "$PUB"; then
   if [ "$DRY" = "1" ]; then say "DRY-RUN would set $TRUST to threshold 1 and the gym key $PUB"; else
+    # A new Ed25519 key also voids the PQ pin (its key id names the Ed25519 half): the pin step below makes it again.
     node -e 'const f=process.argv[1],t=JSON.parse(require("node:fs").readFileSync(f,"utf8")); t.threshold=1; t.keys=[process.argv[2]]; t.pq={keyIds:[],legacyManifests:[]}; require("node:fs").writeFileSync(f, JSON.stringify(t,null,2)+"\n")' "$TRUST" "$PUB"
     say "gym trust file now names the gym key"
   fi
 fi
+
+# Its PQ half, as production has one (scripts/gym-pq-release-key.mjs: the gym artifact key + an ML-DSA-65 seed in
+# ~/.config/flagship/gym-release-pq-key.json). The gym branch pins it in RELEASE_PQ_PIN and the trust file's "pq", so
+# a gym box refuses an artifact without its companion exactly as a production box does. The pin commit lands before the
+# plan, like the catalog root, so the artifact carries it.
+PQ_TOOL="$HERE/gym-pq-release-key.mjs"
+if [ "$DRY" = "1" ]; then
+  say "DRY-RUN would make the gym PQ release key if missing and pin it on the gym branch"
+else
+  PQ_ID="$(node "$PQ_TOOL" init)" || die "could not make or read the gym PQ release key"
+  if ! node -e 'const fs=require("node:fs");const [wt,id]=process.argv.slice(1);const t=JSON.parse(fs.readFileSync(wt+"/release/box-artifact-trust.json","utf8"));const s=fs.readFileSync(wt+"/packages/protocol/src/releasePqPin.ts","utf8");const b=/BEGIN RELEASE_PQ_PIN[\s\S]*?END RELEASE_PQ_PIN/.exec(s)?.[0]??"";process.exit((t.pq?.keyIds??[]).join()===id&&(b.match(/[0-9a-f]{64}/g)??[]).join()===id&&/requirePqAfter: \{/.test(b)?0:1)' "$WT" "$PQ_ID"; then
+    node "$PQ_TOOL" pin --worktree "$WT" || die "could not pin the gym PQ release key"
+    (cd "$WT" && git add release packages/protocol/src packages/flagship-builder/src packages/control-plane/src apps/mobile apps/web/public/webapp/lib .maintainers/release-pq/bindings 2>/dev/null; \
+      git -c user.name="flagship-gym" -c user.email="gym@flagshipserver.com" commit -q -m "gym: pin the gym's PQ release key (${PQ_ID:0:16})" -m "Gym boxes need the hybrid companion on every box artifact and release endorsement, as production boxes do. Pinned by scripts/gym-pq-release-key.mjs; manifests the gym published before are listed as signed before the cut-over.") \
+      || die "could not commit the gym PQ pin"
+    say "gym PQ release key ${PQ_ID:0:16} pinned"
+  fi
+fi
+
+PLAN="$(node "$HERE/gym-box-release.mjs" plan --worktree "$WT")"
+ACTION="$(node -e 'console.log(JSON.parse(process.argv[1]).action)' "$PLAN")"
+COMMIT="$(node -e 'console.log(JSON.parse(process.argv[1]).commit)' "$PLAN")"
+SEQ="$(node -e 'console.log(JSON.parse(process.argv[1]).sequence)' "$PLAN")"
+say "plan: $PLAN"
+if [ "$ACTION" = "skip" ]; then say "nothing to build"; exit 0; fi
 
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
@@ -117,6 +135,7 @@ for ARCH in ${ARCHES//,/ }; do
   fi
   [ -f "$OUT/$NAME.manifest.unsigned.json" ] || die "no $NAME artifact from the build"
   (cd "$WT" && npx tsx tools/box-artifact/build.ts sign --manifest "$OUT/$NAME.manifest.unsigned.json" --out "$OUT/$NAME.manifest.json" --key-file "$KEY_FILE") || die "signing failed for $ARCH"
+  node "$PQ_TOOL" sign-box-artifact --manifest "$OUT/$NAME.manifest.json" --out "$OUT/$NAME.manifest.json" >/dev/null || die "the PQ companion was not added for $ARCH"
   (cd "$WT" && npx tsx tools/box-artifact/build.ts verify --manifest "$OUT/$NAME.manifest.json" --artifact "$OUT/$NAME.tar.gz" --commit "$COMMIT" --arch "$ARCH" --trust release/box-artifact-trust.json) || die "the signed manifest does not verify against the gym trust file"
   rm -f "$OUT/$NAME.manifest.unsigned.json"
 done

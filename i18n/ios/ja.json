@@ -4151,5 +4151,8 @@
   "Invitation withdrawn.": "招待を取り消しました。",
   "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "招待した人以外の誰かがこの招待を承諾しました。取り消して、新しい招待を送ってください。",
   "Withdraw this invitation?": "この招待を取り消しますか？",
-  "The link stops working, and nobody who accepted it is let in.": "リンクは使えなくなり、承諾した人も参加できません。"
+  "The link stops working, and nobody who accepted it is let in.": "リンクは使えなくなり、承諾した人も参加できません。",
+  "%@ GB": "%@ GB",
+  "%@ MB": "%@ MB",
+  "%@ KB": "%@ KB"
 }

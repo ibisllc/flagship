@@ -19,6 +19,7 @@ import { migrate } from "./migrate.js";
 import { namedLinks } from "./namedLinks.js";
 import { chooseName } from "./chooseName.js";
 import { oneList } from "./oneList.js";
+import { orgRead } from "./orgRead.js";
 import { ohttpFailure } from "./ohttpFailure.js";
 import { outboundProxy } from "./outboundProxy.js";
 import { quota } from "./quota.js";
@@ -60,6 +61,7 @@ export const GROUPS: Group[] = [
   oneList,
   namedLinks,
   chooseName,
+  orgRead,
   directAccess,
   vouchers,
   outboundProxy,

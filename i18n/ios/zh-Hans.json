@@ -4151,5 +4151,8 @@
   "Invitation withdrawn.": "邀请已撤回。",
   "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "接受此邀请的不是你邀请的人。请撤回它，并给对方发送新的邀请。",
   "Withdraw this invitation?": "撤回此邀请？",
-  "The link stops working, and nobody who accepted it is let in.": "链接将失效，已接受它的人也不会被允许加入。"
+  "The link stops working, and nobody who accepted it is let in.": "链接将失效，已接受它的人也不会被允许加入。",
+  "%@ GB": "%@ GB",
+  "%@ MB": "%@ MB",
+  "%@ KB": "%@ KB"
 }

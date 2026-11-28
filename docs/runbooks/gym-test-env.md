@@ -74,6 +74,19 @@ bash scripts/gym-relays.sh off                                # after a hand run
   conflict stops it: resolve on the gym branch by hand (keep main's behaviour
   plus the gym seams), then `git push --force-with-lease origin gym`.
   `GYM_BASE_REF=<branch>` deploys the gym on unlanded work (never pushed).
+- **The gym's test CA (2026-11-28, `docs/gym-test-acme.md`).** The gym Worker issues from the private Pebble
+  `flagship-acme-gym` (Fly, `infra/acme-gym/`; `ISSUANCE_ACME_DIRECTORY` in `wrangler.gym.toml` on the gym branch),
+  not Let's Encrypt. Only the ACME paths and `/roots/0`, `/intermediates/0` answer; `/root-keys` and
+  `/intermediate-keys` are 404. `gym-refresh.sh` 5b restarts it (fresh root); the runner trusts that root, gym boxes
+  add it with the gym-branch seam `gymAcmeTrust.ts`. The real-LE lane: deploy the gym Worker with
+  `--var ISSUANCE_ACME_DIRECTORY:` and run `issuance` + `core` on one box.
+- **The gym's PQ release key (2026-11-28).** `~/.config/flagship/gym-release-pq-key.json` (mode 600, never in the
+  repo): an ML-DSA-65 seed whose Ed25519 half is `~/.config/flagship/gym-artifact-key`. The gym branch pins it in
+  `RELEASE_PQ_PIN` (production's `requirePqAfter` marker) and in `release/box-artifact-trust.json` `pq`, so gym boxes
+  refuse an artifact without its companion as production boxes do. `gym-box-artifact.sh` makes and pins it if missing
+  and signs every artifact's companion (`gym-update-target.sh` too); `gym-refresh.sh` 4b ends with
+  `node scripts/gym-pq-release-key.mjs check`, which fails when the published box release or its update target has
+  none. Lose the key file and the next refresh makes a new one and re-pins (older gym artifacts then need rebuilding).
 - **The fleet**: account A (`ga…`) gets `home` through the demo flow and
   `home2` through `/api/gym/provision` (signed with A's demo keys, including the
   admin root, since demo accounts are admin-pinned); account B (`gb…`) gets

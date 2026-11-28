@@ -116,9 +116,9 @@ final class StoreCaptureTests: XCTestCase {
         return names[lang] ?? names["en"] ?? ""
     }
 
-    /// The tablet slides whose page is a narrow column (Social, Access control) draw a size larger, so the column
-    /// fills more of the wide screen (store review: "a narrow centred column, small text").
-    private var tabletType: [String] { isPad ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXL"] : [] }
+    /// The tablet slides with a sparse page (Social, Access control) draw two sizes larger, so the page fills the
+    /// wide screen like the other slides (store review: "a narrow centred column, small text"; then "use the full width").
+    private var tabletType: [String] { isPad ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL"] : [] }
 
     private func want(_ id: String) -> Bool { only?.contains(id) ?? true }
 

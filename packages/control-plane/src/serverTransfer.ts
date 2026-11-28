@@ -52,6 +52,7 @@ import {
   type ServerTransferClaim,
 } from "@flagship/protocol";
 import type {
+  AcmeAccountKeyDeliveryStorage,
   AuditEventStorage,
   DeviceCapabilityGrantStorage,
   RoutingStorage,
@@ -79,6 +80,8 @@ export interface ServerTransferDeps {
   routing: RoutingStorage;
   serverTransfers: ServerTransferStorage;
   auditEvents?: AuditEventStorage;
+  /** When wired, the box's pending ACME account-key delivery is dropped as its authority ends. */
+  acmeAccountKeyDelivery?: Pick<AcmeAccountKeyDeliveryStorage, "deleteByDomain">;
   /** Slice D — device-grant store for the master-admin authority gate (§2 rows
    *  28 [giver] + 29 [acquirer's admin root]). Optional: absent ⇒ only the bare
    *  admin root satisfies the open gate. */
@@ -461,6 +464,13 @@ export async function handlePostTransferClaim(
     if (claimed.reason === "expired") return gone("offer expired");
     if (claimed.reason === "no offer") return notFound("no live transfer offer");
     return forbidden(claimed.reason);
+  }
+
+  // The giver's ACME account key goes with the giver's authority over the box.
+  try {
+    await deps.acmeAccountKeyDelivery?.deleteByDomain(host);
+  } catch {
+    /* swallow */
   }
 
   // ── NAMESPACE MIGRATION (`.com` half) ────────────────────────────────

@@ -36,6 +36,8 @@ describe("rateLimit — endpoint detection", () => {
     expect(endpointFor("POST", "/api/username/claim")).toBe("username-claim");
     expect(endpointFor("POST", "/api/auth-code/issue")).toBe("auth-code-issue");
     expect(endpointFor("POST", "/api/server/register")).toBe("server-register");
+    expect(endpointFor("POST", "/api/account/name-change")).toBe("name-dibs");
+    expect(endpointFor("POST", "/api/account/name-change/quote")).toBe("name-change-quote");
     expect(endpointFor("GET", "/api/recovery/by-username/abc123")).toBe("recovery-by-username");
     expect(endpointFor("DELETE", "/api/recovery/by-username/abc123")).toBe("recovery-by-username");
     // SEC-REPAIR-001: the passkey challenge has its own budget, keyed by the same account.

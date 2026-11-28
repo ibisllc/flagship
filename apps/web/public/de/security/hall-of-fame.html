@@ -57,10 +57,46 @@
       <p class="muted">Forschende, die uns eine Sicherheitslücke gemeldet haben, mit den Commits, die sie geschlossen haben. Genannt in der Form, die sich jede meldende Person wünscht: Name, Handle oder anonym, auf Wunsch mit Link. Ohne Namensnennung aufgeführt, bis sie uns ihre Wahl mitgeteilt haben; wir veröffentlichen nie einen Namen, den wir nicht bekommen haben.</p>
   
       <div>
+      <h2>Ein alter Link der Browser-Fernbedienung konnte die Web-App mit einem fremden Server verbinden</h2>
+      <p class="hof-meta">Mittel · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Die Web-App nahm noch einen alten Startlink für die Browser-Fernbedienung an. Er löste eine Sitzung bei dem Server ein, den der Link nannte, und speicherte den Server, den die Antwort nannte, ohne zu prüfen, ob einer von beiden zur Dienstdomain von Flagship gehörte. Ein präparierter Link konnte eine Sitzung für den Server eines Angreifers einrichten.</p>
+      <p>Der alte Link ist entfernt: Die Browser-Fernbedienung startet jetzt nur noch über den QR-Code, den das Telefon bestätigt, und jede Sitzungsantwort muss einen Server unter der Dienstdomain von Flagship nennen. Der Fix ist in Web-App-Version 260 enthalten.</p>
+
+      <h2>Gleichzeitige Zuteilungen konnten das Platzlimit einer Organisation überschreiten</h2>
+      <p class="hof-meta">Niedrig · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/4fa472d9">4fa472d9</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Platzzuteilungen oder Einladungen, die im selben Moment gesendet wurden, konnten jeweils das Platzlimit des Tarifs passieren und einer Organisation so zusammen mehr Plätze geben, als ihr Tarif erlaubte. Außerdem wurde eine Zuteilung protokolliert, selbst wenn nichts gespeichert worden war.</p>
+      <p>Das Limit wird jetzt im selben Schreibvorgang gehalten, der die Zuteilung speichert, und der Protokolleintrag wird erst geschrieben, wenn dieser Schreibvorgang gelungen ist.</p>
+
+      <h2>Gleichzeitige Freigabeangebote konnten das Limit für Mitverwaltende überschreiten</h2>
+      <p class="hof-meta">Niedrig · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/25a97cc5">25a97cc5</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Beim Teilen eines Servers konnten Anfragen, die im selben Moment gesendet wurden, jeweils das Limit des Tarifs für Mitverwaltende passieren, und das Limit zählte nur die neuesten 500 Freigaben.</p>
+      <p>Die Zählung umfasst jetzt jede aktive Freigabe und wird im selben Schreibvorgang gehalten, der die Freigabe anlegt.</p>
+
+      <h2>Gleichzeitige Anfragen konnten mehr Peer-Backup-Tokens erhalten als erlaubt</h2>
+      <p class="hof-meta">Niedrig · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/79ca995e">79ca995e</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Jeder Server darf nur eine begrenzte Zahl von Peer-Backup-Tokens erhalten. Zwei Anfragen im selben Moment konnten jeweils dieses Limit passieren und zusammen mehr Tokens bekommen, als es erlaubte.</p>
+      <p>Das Limit wird jetzt in einem einzigen Schreibvorgang gezählt und reserviert, bevor irgendetwas signiert wird.</p>
+
+      <h2>Die Gründungsperson einer Organisation konnte eine Mitteilung zur Gründerentfernung oder Wiederherstellung rückdatieren</h2>
+      <p class="hof-meta">Mittel · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/6dd5a89b">6dd5a89b</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Eine Mitteilung zur Entfernung der Gründungsperson oder zur Kontowiederherstellung einer Organisation nahm ihre Wartefrist von einem Datum, das die Anfrage selbst angab. So konnte die Gründungsperson sie rückdatieren und sowohl die Wartefrist als auch die Möglichkeit der anderen Admins zum Widerspruch überspringen. Die Lücke war ungenutzt: Keine App und kein Server sandte solche Anfragen.</p>
+      <p>Unser Server lehnt beide Arten von Änderung jetzt ab, bis die nächste Version die eigentliche Lösung bringt, bei der die Wartefrist beginnt, wenn unser Server die Mitteilung sieht.</p>
+
+      <h2>Unbenutzte Server-Registrierungscodes waren für jeden lesbar, der die ID einer Organisation kannte</h2>
+      <p class="hof-meta">Mittel · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/e5197fd9">e5197fd9</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Der Export einer Organisation und ihre Liste der Zeremonien konnten noch unbenutzte Server-Registrierungscodes an jeden herausgeben, der die ID der Organisation kannte, und ein Code allein reichte, um einen beliebigen Schlüssel als Server dieser Organisation zu registrieren. In der Produktion gab es keine solchen Codes, also wurde nichts offengelegt.</p>
+      <p>Der Export enthält jetzt nur Codes, die bereits benutzt wurden, und ein Code kann nicht mehr als Zeremonie eingereicht werden. Die Bindung jedes Codes an den eigenen Schlüssel des echten Servers folgt in der nächsten Version.</p>
+
       <h2>Über das Schwachstellen-Formular gesendete Meldungen gingen verloren</h2>
       <p class="hof-meta">Niedrig · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/7221dfb1">7221dfb1</a> · Dank an: Huzaifa Jawaid</p>
       <p>Das Meldeformular auf unserer Sicherheitsseite schickte jede Meldung an eine Adresse, auf die unser Server nicht mehr antwortete. Alle über das Formular gesendeten Meldungen gingen verloren, und die meldende Person sah einen Fehler. Meldungen per E-Mail waren nicht betroffen, und nichts wurde offengelegt.</p>
       <p>Das Formular funktioniert wieder. Jede Meldung wird beim Eingang mit unserem Sicherheitsschlüssel verschlüsselt, sodass unser Server sie nur in einer Form speichert, die allein die Inhaber des Schlüssels lesen können, und die meldende Person erhält eine Referenz. Wir werden über jede neue Meldung benachrichtigt, und die Seite behält die E-Mail-Adresse und den Schlüssel als Ausweichweg.</p>
+      <p>Nach diesem Fix lehnte das Formular dennoch jede aus einem Browser gesendete Meldung ab, sobald seine Spam-Prüfung eingeschaltet war, weil die Prüfung ein Feld hinzufügte, das unser Server nicht erwartete. Auch das fand Huzaifa Jawaid; behoben in <a href="https://github.com/ibisllc/flagship/commit/309516e9">309516e9</a>.</p>
+
+      <h2>Signaturprüfungen akzeptierten drei öffentliche Schlüssel niedriger Ordnung, sodass eine gefälschte Signatur unter ihnen gültig sein konnte</h2>
+      <p class="hof-meta">Niedrig · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/8fd77a2b">8fd77a2b</a> · Dank an: <a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a></p>
+      <p>Unsere Signaturprüfungen lehnten die meisten Ed25519-Schlüssel kleiner Ordnung anhand einer festen Liste ab, doch der Liste fehlten drei davon, und die Prüfungen akzeptierten auch Schlüssel in nicht kanonischer Schreibweise. Unter einem solchen Schlüssel kann jeder eine Signatur fälschen, die für jede beliebige Nachricht gültig ist, sodass eine Signatur darunter nichts beweist. Keine App sendet einen solchen Schlüssel, und eine Prüfung unserer Produktionsdaten fand keinen gespeicherten.</p>
+      <p>Jeder Schlüssel wird jetzt nach den strengen Regeln des Standards dekodiert, und Schlüssel kleiner Ordnung sowie nicht kanonische Schlüssel werden abgelehnt, bevor irgendeine Signatur geprüft wird. Unser Server lehnt sie überall ab, wo er einen Schlüssel speichert oder für ihn bürgt, und ab ihrer nächsten Version lehnen auch die Server sie ab.</p>
 
       <h2>Ein ungenutzter Identitäts-Endpoint vertraute den Signierern, die jede Anfrage selbst nannte</h2>
       <p class="hof-meta">Mittel · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · Dank an: rakimans</p>

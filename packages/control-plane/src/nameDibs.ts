@@ -154,24 +154,39 @@ export function dotComLabels(name: string): string[] {
   return [...new Set([n, n.replace(/-/g, "")])].filter((l) => l.length > 0);
 }
 
+/** Why a name is held: the `.com` that holds it, and whether its lookup answered (false = it failed, held anyway). */
+export interface DotComHold {
+  domain: string;
+  checked: boolean;
+}
+
 /**
- * Is `name` reserved for its `.com` holder right now? True only while the dibs
- * window is open AND `<name>.com` is registered — or the lookup failed, which
- * counts as reserved so an outage can't hand out a brand's name.
+ * Is `name` held for a `.com` holder right now, and by which `.com`? Null only while the dibs window is closed or
+ * no `.com` the name stands for is registered. A registered label wins over a failed lookup of another label; a
+ * failed lookup alone still holds the name (`checked: false`), so an outage can't hand out a brand's name.
  */
+export async function dotComHold(
+  deps: Pick<NameDibsDeps, "window" | "fetch" | "now">,
+  name: string,
+): Promise<DotComHold | null> {
+  if (!dibsWindowState(deps.window, nowOf(deps)).open) return null;
+  let failed: DotComHold | null = null;
+  for (const label of dotComLabels(name)) {
+    try {
+      if (await dotComRegistered(label, deps.fetch)) return { domain: `${label}.com`, checked: true };
+    } catch {
+      failed ??= { domain: `${label}.com`, checked: false };
+    }
+  }
+  return failed;
+}
+
+/** True iff `name` is held for its `.com` holder right now (see `dotComHold`). */
 export async function reservedForDotComHolder(
   deps: Pick<NameDibsDeps, "window" | "fetch" | "now">,
   name: string,
 ): Promise<boolean> {
-  if (!dibsWindowState(deps.window, nowOf(deps)).open) return false;
-  for (const label of dotComLabels(name)) {
-    try {
-      if (await dotComRegistered(label, deps.fetch)) return true;
-    } catch {
-      return true;
-    }
-  }
-  return false;
+  return (await dotComHold(deps, name)) !== null;
 }
 
 /** Join a DoH TXT answer's quoted segments (`"abc" "def"` → `abcdef`). */

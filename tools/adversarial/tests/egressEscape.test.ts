@@ -10,7 +10,8 @@
  *   AT-EGR-03  egress gateway: an allowed NAME that resolves internal is never dialed
  *   AT-EGR-04  egress gateway: IP literals and junk in SNI/Host never pass the policy
  *   AT-EGR-05  access-list wildcards stop at DNS label boundaries
- *   AT-EGR-06  HTTP proxy: duplicate Host, a non-80 port in Host, or no Host is refused
+ *   AT-EGR-06  HTTP proxy: duplicate Host, a non-80 port in Host, or no Host is refused, and every request on a
+ *              keep-alive or pipelined socket is judged by its own Host (was a finding; fixed)
  *   AT-EGR-07  app browser judge: numeric URL spellings, rebinding answers, private space
  *   AT-EGR-08  app browser judge: the server's own name with a trailing dot (was a finding; fixed)
  *   AT-EGR-09  app browser: production wiring tells the judge this server's names (was a finding; fixed)
@@ -141,6 +142,43 @@ describe("egress gateway (live app containers)", () => {
     });
   }
 
+  async function hostJudgedProxy(allowed = ["allowed.example"]) {
+    const seen: string[] = [];
+    const denied: Array<string | null> = [];
+    const allowAsked: string[] = [];
+    let dials = 0;
+    const origin: HttpServer = createHttpServer((q, r) => {
+      seen.push(`${q.headers.host} ${q.url}`);
+      r.end(`from ${q.headers.host} ${q.url}`);
+    });
+    await new Promise<void>((r) => origin.listen(0, "127.0.0.1", r));
+    const upPort = (origin.address() as { port: number }).port;
+    servers.push({ close: () => new Promise<void>((r) => origin.close(() => r())) });
+    const probe: Server = createServer();
+    await new Promise<void>((r) => probe.listen(0, "127.0.0.1", r));
+    const port = (probe.address() as { port: number }).port;
+    await new Promise<void>((r) => probe.close(() => r()));
+    const h = await startProxyServer(
+      {
+        allow: (_s, host) => {
+          allowAsked.push(host);
+          return allowed.includes(host);
+        },
+        resolve: async () => ["93.184.216.34"],
+        dial: () => {
+          dials++;
+          return connect(upPort, "127.0.0.1");
+        },
+        onDenied: (_s, host) => denied.push(host),
+      },
+      "http",
+      "127.0.0.1",
+      port,
+    );
+    servers.push(h);
+    return { port, seen, denied, allowAsked, dials: () => dials };
+  }
+
   it("AT-EGR-03 an allowed NAME whose every answer is loopback, ULA, link-local or metadata is never dialed; a mixed answer dials only the public address (catches: DNS answer trusted at dial time)", async () => {
     const internal = await proxyOn(["127.0.0.1", "::1", "10.0.0.7", "169.254.169.254", "fd00:ec2::254", "::ffff:127.0.0.1"]);
     await send(internal.port, "GET / HTTP/1.1\r\nHost: allowed.example\r\n\r\n");
@@ -175,12 +213,43 @@ describe("egress gateway (live app containers)", () => {
     }
   });
 
-  it("AT-EGR-06 the HTTP proxy refuses duplicate Host, a Host on another port, and a request with no Host (catches: steering the splice to a second host or port)", () => {
+  it("AT-EGR-06 the HTTP proxy refuses duplicate Host, a Host on another port, and a request with no Host (catches: steering the splice to a second host or port)", async () => {
     expect(parseHttpHost("GET / HTTP/1.1\r\nHost: a.example\r\nHost: b.example")).toBeNull();
     expect(parseHttpHost("GET / HTTP/1.1\r\nHost: a.example:8080")).toBeNull();
     expect(parseHttpHost("GET / HTTP/1.1\r\nX: y")).toBeNull();
     expect(parseHttpHost("GET http://internal.example/ HTTP/1.1\r\nHost: a.example")).toBe("a.example");
     expect(parseHttpHost("GARBAGE\r\nHost: a.example")).toBeNull();
+
+    const w = await hostJudgedProxy();
+    expect(await send(w.port, "GET / HTTP/1.1\r\nHost: allowed.example\r\nHost: denied.example\r\n\r\n")).toMatch(/^HTTP\/1\.1 403/);
+    expect(await send(w.port, "GET / HTTP/1.1\r\nHost: allowed.example:8080\r\n\r\n")).toMatch(/^HTTP\/1\.1 403/);
+    expect(await send(w.port, "GET / HTTP/1.0\r\n\r\n")).toMatch(/^HTTP\/1\.1 403/);
+    expect(w.seen).toEqual([]);
+  });
+
+  it("AT-EGR-06 a pipelined socket whose first request is allowed cannot carry a second request to a denied host (catches: judging the first Host only, then splicing the socket)", async () => {
+    const w = await hostJudgedProxy();
+    const reply = await send(
+      w.port,
+      "GET /one HTTP/1.1\r\nHost: allowed.example\r\n\r\n" + "GET /two HTTP/1.1\r\nHost: denied.example\r\n\r\n",
+    );
+    expect(reply).toContain("from allowed.example /one");
+    expect(reply).not.toContain("/two");
+    expect(reply).toMatch(/HTTP\/1\.1 403 Forbidden[\s\S]*not allowed/);
+    expect(w.seen).toEqual(["allowed.example /one"]);
+    expect(w.denied).toEqual(["denied.example"]);
+  });
+
+  it("AT-EGR-06 keep-alive requests to allowed hosts are each judged and each get their own upstream connection", async () => {
+    const w = await hostJudgedProxy(["allowed.example", "also.example"]);
+    const reply = await send(
+      w.port,
+      "GET /a HTTP/1.1\r\nHost: allowed.example\r\n\r\n" + "GET /b HTTP/1.1\r\nHost: also.example\r\n\r\n",
+    );
+    expect(reply).toContain("from allowed.example /a");
+    expect(reply).toContain("from also.example /b");
+    expect(w.allowAsked).toEqual(["allowed.example", "also.example"]);
+    expect(w.dials()).toBe(2);
   });
 });
 

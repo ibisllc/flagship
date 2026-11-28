@@ -164,18 +164,7 @@ internal object MonitoringRows {
     fun percent(used: Long, total: Long): Double =
         if (total <= 0) 0.0 else (used.toDouble() / total).coerceIn(0.0, 1.0)
 
-    fun formatBytes(bytes: Long): String {
-        val kb = 1024.0
-        val mb = kb * 1024
-        val gb = mb * 1024
-        val b = bytes.toDouble()
-        return when {
-            b >= gb -> "%.1f GB".format(b / gb)
-            b >= mb -> "%.0f MB".format(b / mb)
-            b >= kb -> "%.0f KB".format(b / kb)
-            else -> "$bytes B"
-        }
-    }
+    fun formatBytes(bytes: Long): String = com.flagshipserver.app.core.ByteSize.meter(bytes)
 
     fun formatRate(bytesPerSec: Double): String {
         val kb = 1024.0

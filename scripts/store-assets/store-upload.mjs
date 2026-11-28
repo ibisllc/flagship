@@ -31,10 +31,14 @@ const apply = rest.includes("--apply");
 const imagesAt = rest.includes("--images") ? rest[rest.indexOf("--images") + 1] : null;
 if (store === "appstore") {
   const { appstore } = await import("./appstore-upload.mjs");
-  await appstore({ root: ROOT, apply, imagesAt });
+  const createVersion = rest.includes("--create-version") ? rest[rest.indexOf("--create-version") + 1] : undefined;
+  if (createVersion !== undefined && !/^\d+\.\d+(\.\d+)?$/.test(createVersion ?? "")) { console.error("--create-version needs a version like 1.4"); process.exit(2); }
+  const prune = rest.includes("--prune") ? (rest[rest.indexOf("--prune") + 1] ?? "").split(",").filter(Boolean) : [];
+  if (prune.some((t) => !/^APP_[A-Z0-9_]+$/.test(t))) { console.error("--prune needs display types like APP_IPHONE_61"); process.exit(2); }
+  await appstore({ root: ROOT, apply, imagesAt, createVersion, prune });
   process.exit(0);
 }
-if (store !== "play") { console.error("usage: store-upload.mjs play|appstore [--apply] [--images <pack-dir>]"); process.exit(2); }
+if (store !== "play") { console.error("usage: store-upload.mjs play|appstore [--apply] [--images <pack-dir>] [--create-version <x.y>] [--prune <APP_TYPE,...>] (appstore)"); process.exit(2); }
 
 if (imagesAt) { // a pack missing any class or language is refused whole, before anything on Play is touched
   const missing = Object.keys(IMAGE_TYPE).flatMap((cls) => Object.values(PLAY_LOCALE).map((loc) => path.join(imagesAt, "playstore", cls, loc)))
@@ -58,8 +62,13 @@ async function token() {
 
 const auth = await token();
 async function call(method, url, body, type = "application/json") {
-  const r = await fetch(url, { method, headers: { authorization: `Bearer ${auth}`, ...(body !== undefined ? { "content-type": type } : {}) }, body: body === undefined ? undefined : type === "application/json" ? JSON.stringify(body) : body });
-  const text = await r.text();
+  let r, text;
+  for (let attempt = 0; ; attempt++) { // Play answers 429/5xx now and then; a repeated POST could upload an image twice
+    r = await fetch(url, { method, headers: { authorization: `Bearer ${auth}`, ...(body !== undefined ? { "content-type": type } : {}) }, body: body === undefined ? undefined : type === "application/json" ? JSON.stringify(body) : body });
+    text = await r.text();
+    if (method === "POST" || (r.status !== 429 && r.status < 500) || attempt === 4) break;
+    await new Promise((ok) => setTimeout(ok, 2000 * 2 ** attempt));
+  }
   if (!r.ok) { const e = new Error(`${method} ${url.replace(API, "").replace(UPLOAD, "")}: ${r.status} ${text}`); e.status = r.status; e.body = text; throw e; }
   return text ? JSON.parse(text) : {};
 }
