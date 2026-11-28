@@ -11,6 +11,7 @@ import {
   canonicalOrgOverturn,
   canonicalOrgSeatRevoke,
   canonicalOrgVeto,
+  canonicalOrgDelayedChange,
   canonicalOrgInviteWithdraw,
   parseHybridSigPublicKey,
   verifyOrgInviteAccept,
@@ -39,6 +40,14 @@ import {
   verifyOrgAuthorityChain,
   verifyOrgSeatGrant,
   verifyPqKeyBinding,
+  orgDelayedChangeFromCanonical,
+  orgDelayedChangeWait,
+  orgPendingNoticeVetoed,
+  ORG_APPROVAL_MAX_LIFETIME_MS,
+  ORG_MAX_SKEW_MS,
+  TAG_ORG_DELAYED_CHANGE,
+  type OrgAuthorityRecord,
+  type OrgDelayedChange,
   type OrgAction,
   type OrgApproval,
   type OrgAuthorityEntry,
@@ -79,6 +88,7 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  *   POST /api/orgs/:orgId/seats                     grant bundle               admit or change a seat
  *   POST /api/orgs/:orgId/revokes | freezes | overturns | vetoes
  *   GET/POST /api/orgs/:orgId/ceremonies            { order, payload, approvals }   the approvals inbox
+ *                                                   (a delayed-change notice: payload { record }, one open at a time)
  *   POST /api/orgs/:orgId/ceremonies/:sha/approvals { approval }
  *   GET  /api/orgs/:orgId/log                                                  the org's audit hash chain
  *   GET  /api/orgs/:orgId/directory                                            sealed directory entries
@@ -133,6 +143,20 @@ const refuse = (e: unknown): HandlerResponseWithHeaders => {
 const pad = (v: number) => String(v).padStart(10, "0");
 const parse = <T>(json: string): T => JSON.parse(json) as T;
 
+/**
+ * A delayed-change notice as `.com` observed it (docs/enterprise-accounts.md "Delayed changes"): opened as a
+ * ceremony keyed by its body hash, stamped with `.com`'s clock. Every verifier takes `openedAt` through
+ * `OrgChainOptions.noticeOpenedAt`, so the veto window is the time it was really visible.
+ */
+export interface OrgNotice {
+  sha256: string;
+  openedAt: number;
+  notice: OrgDelayedChange;
+  /** The record the notice names (its hash is `nextRecordSha256`). */
+  record: OrgAuthorityRecord;
+  executedAt?: number;
+}
+
 export interface OrgView {
   org: OrgRecord;
   entries: OrgAuthorityEntry[];
@@ -141,6 +165,9 @@ export interface OrgView {
   vetoes: OrgSigned<OrgVeto>[];
   grants: OrgSeatGrantBundle[];
   revokes: OrgSeatRevokeBundle[];
+  notices: OrgNotice[];
+  /** Each observed notice's open time by its sha256, for `OrgChainOptions.noticeOpenedAt`. */
+  noticeOpenedAt: Record<string, number>;
   state: OrgAuthorityState;
   book: OrgSeatBook;
 }
@@ -164,16 +191,18 @@ async function loadOrgUncached(deps: OrgDeps, orgId: string, now: number): Promi
   const org = await deps.orgs.getOrg(orgId);
   if (!org) return null;
   const entries = (await deps.orgs.listObjects(orgId, "authority")).sort((a, b) => (a.key < b.key ? -1 : 1)).map((o) => parse<OrgAuthorityEntry>(o.bodyJson));
-  const [freezes, overturns, vetoes, grants, revokes] = await Promise.all([
+  const [freezes, overturns, vetoes, grants, revokes, notices] = await Promise.all([
     list<OrgSigned<OrgSeatFreeze>>(deps, orgId, "freeze"),
     list<OrgSigned<OrgOverturn>>(deps, orgId, "overturn"),
     list<OrgSigned<OrgVeto>>(deps, orgId, "veto"),
     list<OrgSeatGrantBundle>(deps, orgId, "grant"),
     list<OrgSeatRevokeBundle>(deps, orgId, "revoke"),
+    list<OrgNotice>(deps, orgId, "notice"),
   ]);
-  const state = verifyOrgAuthorityChain(entries, { genesisHash: org.genesisHash, now, freezes, overturns, vetoes });
+  const noticeOpenedAt = Object.fromEntries(notices.map((n) => [n.sha256, n.openedAt]));
+  const state = verifyOrgAuthorityChain(entries, { genesisHash: org.genesisHash, now, freezes, overturns, vetoes, noticeOpenedAt });
   const book = buildOrgSeatBook(state, { grants, revokes, freezes, overturns, now });
-  return { org, entries, freezes, overturns, vetoes, grants, revokes, state, book };
+  return { org, entries, freezes, overturns, vetoes, grants, revokes, notices, noticeOpenedAt, state, book };
 }
 
 async function logged(deps: OrgDeps, orgId: string, kind: string, ref: string, now: number) {
@@ -250,6 +279,7 @@ export async function handleOrgAuthorityGet(deps: OrgDeps, orgId: string): Promi
       freezes: v.freezes,
       overturns: v.overturns,
       vetoes: v.vetoes,
+      noticeOpenedAt: v.noticeOpenedAt,
       currentVersion: v.state.current.version,
       currentHash: v.state.currentHash,
     });
@@ -262,15 +292,18 @@ export async function handleOrgAuthorityAppend(deps: OrgDeps, orgId: string, bod
   const now = nowOf(deps);
   const entry = (body as { entry?: OrgAuthorityEntry } | undefined)?.entry;
   if (!entry?.record) return malformed("entry required");
-  // The delayed changes (founder removal, recovery) wait for a notice that .com must observe before it can count;
-  // until that lands they are not taken at all. No app or box sends them yet.
-  if (entry.via === "founder-removal" || entry.via === "recovery") {
-    return { status: 400, body: { error: "delayed authority changes are not available yet", code: "delayed-change-unavailable" } };
-  }
+  // Two-sided: a record dated ahead is refused by the chain; one older than any approval can stay alive is stale.
+  if (typeof entry.record.issuedAt === "number" && now - entry.record.issuedAt > ORG_APPROVAL_MAX_LIFETIME_MS) return malformed("stale record");
   try {
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
-    const st = verifyOrgAuthorityChain([...v.entries, entry], { genesisHash: v.org.genesisHash, now, freezes: v.freezes, overturns: v.overturns, vetoes: v.vetoes });
+    const delayed = entry.via === "founder-removal" || entry.via === "recovery";
+    // A delayed change applies only through the notice .com observed (the chain checks its window and wait).
+    const noticeSha = delayed && entry.notice?.body ? noticeShaOf(entry.notice.body) : null;
+    if (delayed && (!noticeSha || !v.notices.some((n) => n.sha256 === noticeSha && n.executedAt === undefined))) {
+      return { status: 403, body: { error: "the notice of this change was never observed", code: "org-notice-unobserved" } };
+    }
+    const st = verifyOrgAuthorityChain([...v.entries, entry], { genesisHash: v.org.genesisHash, now, freezes: v.freezes, overturns: v.overturns, vetoes: v.vetoes, noticeOpenedAt: v.noticeOpenedAt });
     // A lapsed org may remove, freeze, recover and overturn, but adds no new admin (docs/plans-and-backup-offer.md §3.4).
     if (entry.via === "direct" && st.current.admins.some((a) => !v.state.records.some((r) => r.admins.some((x) => x.seatId === a.seatId)))) {
       const gate = orgPlanGate(deps.payments ?? DEFAULT_PAYMENTS_CONFIG, v.org, now, "add-admin");
@@ -281,10 +314,42 @@ export async function handleOrgAuthorityAppend(deps: OrgDeps, orgId: string, bod
     if (!stored) return conflict("version already recorded");
     await logged(deps, orgId, `authority-${entry.via}`, st.currentHash, now);
     await deps.orgs.deleteObject(orgId, "ceremony", orgSha256Hex(canonicalOrgAuthority(entry.record)));
+    if (noticeSha) {
+      const n = v.notices.find((x) => x.sha256 === noticeSha)!;
+      await deps.orgs.putObject(orgId, { kind: "notice", key: noticeSha, bodyJson: JSON.stringify({ ...n, executedAt: now }), issuedAt: n.openedAt, storedAt: now }, true);
+      await deps.orgs.deleteObject(orgId, "ceremony", noticeSha);
+    }
     return ok({ version, hash: st.currentHash });
   } catch (e) {
     return refuse(e);
   }
+}
+
+const noticeShaOf = (b: OrgDelayedChange): string | null => {
+  try {
+    return orgSha256Hex(canonicalOrgDelayedChange(b));
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The delayed-change notice still open, if any (one at a time, owner decision 2026-11-27): observed and not yet
+ * executed, vetoed, withdrawn (the chain moved past the record it changes) or lapsed (not applied within an
+ * approval's lifetime after its wait ended).
+ */
+async function openNotice(deps: OrgDeps, v: OrgView, now: number): Promise<OrgNotice | null> {
+  for (const n of v.notices) {
+    if (n.executedAt !== undefined) continue;
+    if (n.notice.oarVersion !== v.state.current.version) continue;
+    const wait = orgDelayedChangeWait(n.notice.kind);
+    if (now > Math.max(n.notice.effectiveAt, n.openedAt + wait) + ORG_APPROVAL_MAX_LIFETIME_MS) continue;
+    const c = await deps.orgs.getObject(v.org.orgId, "ceremony", n.sha256);
+    const approvals = c ? parse<Ceremony>(c.bodyJson).approvals : [];
+    if (orgPendingNoticeVetoed(v.state, { body: n.notice, approvals }, n.record, n.openedAt, { now, vetoes: v.vetoes, freezes: v.freezes, overturns: v.overturns })) continue;
+    return n;
+  }
+  return null;
 }
 
 /** Seats that count toward the plan's limit: live grants not revoked. */
@@ -584,6 +649,8 @@ export async function handleOrgFreeze(deps: OrgDeps, orgId: string, body: unknow
   try {
     const order = canonicalOrgSeatFreeze(f.body);
     const sha = orgSha256Hex(order);
+    // A freeze starts when it is sent: backdated, it would reach back over approvals made before it.
+    if (Math.abs(now - f.body.issuedAt) > ORG_MAX_SKEW_MS) return malformed("stale freeze");
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
     const all = verifiedOrgFreezes(v.state, { freezes: [...v.freezes, f], overturns: v.overturns, now });
@@ -628,6 +695,12 @@ export async function handleOrgVeto(deps: OrgDeps, orgId: string, body: unknown)
     const order = canonicalOrgVeto(x.body);
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");
+    // A veto counts inside the window .com observed: dated in it, and here before it closes (no backdating in).
+    const n = v.notices.find((y) => y.sha256 === x.body.noticeSha256);
+    if (!n) return { status: 403, body: { error: "no observed notice to veto", code: "org-notice-unobserved" } };
+    const end = n.openedAt + orgDelayedChangeWait(n.notice.kind);
+    if (x.body.issuedAt < n.openedAt || x.body.issuedAt > now + ORG_MAX_SKEW_MS) return malformed("veto issuedAt");
+    if (now >= end + ORG_MAX_SKEW_MS || n.executedAt !== undefined) return { status: 403, body: { error: "the notice period has ended", code: "org-veto-late" } };
     verifyOrgApprovers(v.state, v.book, order, x.approvals.map(orgApprovalFromWire), now);
     const sha = orgSha256Hex(order);
     await deps.orgs.putObject(orgId, { kind: "veto", key: `${sha}:${x.approvals.map((a) => (a as OrgApproval).seatId).sort().join(",")}`, bodyJson: JSON.stringify(x), issuedAt: x.body.issuedAt, storedAt: now });
@@ -666,14 +739,57 @@ export async function handleOrgCeremonyOpen(deps: OrgDeps, orgId: string, body: 
     const own = parts[0] === "flagship/org-overturn/v1" ? v.book.freezes.find((f) => f.sha256 === parts[2])?.seatId : undefined;
     verifyOrgApprovers(v.state, v.book, order, approvals, now, own ? { allowFrozenSeat: own } : {});
     const sha = orgSha256Hex(order);
+    let notice: OrgNotice | null = null;
+    if (parts[0] === TAG_ORG_DELAYED_CHANGE) {
+      const r = await delayedNotice(deps, v, b.order, b.payload, sha, now);
+      if ("refused" in r) return r.refused;
+      notice = r.notice;
+    }
     const c: Ceremony = { sha256: sha, order: b.order, payload: b.payload ?? null, approvals, openedAt: now };
     const stored = await deps.orgs.putObject(orgId, { kind: "ceremony", key: sha, bodyJson: JSON.stringify(c), issuedAt: now, storedAt: now });
     if (!stored) return conflict("ceremony open");
+    if (notice) {
+      if (!(await deps.orgs.putObject(orgId, { kind: "notice", key: sha, bodyJson: JSON.stringify(notice), issuedAt: now, storedAt: now }))) return conflict("notice already observed");
+      await logged(deps, orgId, "notice-open", sha, now);
+    }
     await logged(deps, orgId, "ceremony-open", sha, now);
-    return ok({ sha256: sha });
+    return ok({ sha256: sha, ...(notice ? { openedAt: notice.openedAt } : {}) });
   } catch (e) {
     return refuse(e);
   }
+}
+
+/**
+ * A delayed-change notice opened as a ceremony: `.com` stamps `openedAt` itself, refuses one dated away from
+ * that time, one for a record other than the next after the current one, and a second while one is open.
+ */
+async function delayedNotice(
+  deps: OrgDeps,
+  v: OrgView,
+  text: string,
+  payload: unknown,
+  sha: string,
+  now: number,
+): Promise<{ notice: OrgNotice } | { refused: HandlerResponseWithHeaders }> {
+  const body = orgDelayedChangeFromCanonical(text);
+  const cur = v.state.current;
+  if (body.orgId !== v.org.orgId || body.oarVersion !== cur.version) return { refused: { status: 403, body: { error: "the notice names another record", code: "org-stale-oar" } } };
+  if (Math.abs(now - body.issuedAt) > ORG_MAX_SKEW_MS) return { refused: { status: 403, body: { error: "the notice is not dated now", code: "org-notice-backdated" } } };
+  if (body.effectiveAt !== body.issuedAt + orgDelayedChangeWait(body.kind)) return { refused: malformed("notice period") };
+  const record = (payload as { record?: OrgAuthorityRecord } | null)?.record;
+  if (!record || typeof record !== "object") return { refused: malformed("payload.record required") };
+  try {
+    if (orgAuthorityHash(record) !== body.nextRecordSha256 || record.version !== cur.version + 1 || record.prevHash !== v.state.currentHash) {
+      return { refused: malformed("payload.record is not the record the notice names") };
+    }
+  } catch {
+    return { refused: malformed("payload.record") };
+  }
+  if (v.notices.some((n) => n.sha256 === sha)) return { refused: conflict("notice already observed") };
+  if (await openNotice(deps, v, now)) {
+    return { refused: { status: 409, body: { error: "another delayed change is still open for this org", code: "org-notice-open" } } };
+  }
+  return { notice: { sha256: sha, openedAt: now, notice: body, record } };
 }
 
 export async function handleOrgCeremonyApprove(deps: OrgDeps, orgId: string, sha: string, body: unknown): Promise<HandlerResponseWithHeaders> {

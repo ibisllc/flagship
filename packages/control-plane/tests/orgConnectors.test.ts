@@ -95,10 +95,16 @@ describe(".com connector standing and members' slices", () => {
     const base = new InMemoryStorage();
     const d = { orgs: store, usernames: base.usernames, servers: base.servers, now: () => t };
     expect((await handleOrgCreate(d, { name: "acme", entry: chain.entries[0] })).status).toBe(200);
-    expect((await handleOrgAuthorityAppend(d, ORG, { entry: chain.entries[1] })).status).toBe(200);
-    // .com refuses a founder-removal at append until it can observe the notice itself, so the vector's is stored as is.
+    // The vector's records are dated long before this test's clock, so they are stored as .com had taken them,
+    // with the removal's notice as .com observed it (org-authority chains[0].noticeOpenedAt).
+    for (const e of chain.entries.slice(1, 3)) {
+      await store.putObject(ORG, { kind: "authority", key: String(e.record.version).padStart(10, "0"), bodyJson: JSON.stringify(e), issuedAt: e.record.issuedAt, storedAt: 0 });
+    }
     const removal = chain.entries[2];
-    await store.putObject(ORG, { kind: "authority", key: String(removal.record.version).padStart(10, "0"), bodyJson: JSON.stringify(removal), issuedAt: removal.record.issuedAt, storedAt: 0 });
+    for (const [sha, openedAt] of Object.entries(A.chains[0].noticeOpenedAt as Record<string, number>)) {
+      const notice = { sha256: sha, openedAt, notice: removal.notice.body, record: removal.record, executedAt: removal.record.issuedAt };
+      await store.putObject(ORG, { kind: "notice", key: sha, bodyJson: JSON.stringify(notice), issuedAt: openedAt, storedAt: 0 });
+    }
     await store.putObject(ORG, { kind: "connector", key: c.bundle.connector.connectorId, bodyJson: JSON.stringify(c.bundle), issuedAt: c.bundle.connector.issuedAt, storedAt: 0 });
     const got = (await handleOrgConnectorsGet(d, ORG)).body as { connectors: Array<{ standing: { state: string } }>; toReapprove: unknown[] };
     expect(got.connectors[0]!.standing.state).toBe("needs-reapproval");

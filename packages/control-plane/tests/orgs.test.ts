@@ -20,6 +20,13 @@ import {
   orgInviteAcceptSignature,
   orgInviteReadSignature,
   canonicalOrgInviteWithdraw,
+  canonicalOrgDelayedChange,
+  canonicalOrgVeto,
+  orgAuthorityHash,
+  orgFounderRemovalOf,
+  ORG_FOUNDER_NOTICE_MS,
+  type OrgAuthorityRecord,
+  type OrgDelayedChange,
 } from "@flagship/protocol";
 import { InMemoryOrgStorage, InMemoryStorage } from "@flagship/storage";
 import {
@@ -40,6 +47,7 @@ import {
   handleOrgLog,
   handleOrgOverturn,
   handleOrgSeatGrant,
+  handleOrgVeto,
   type OrgDeps,
 } from "../src/orgs.js";
 import { handleOrgKeysGet } from "../src/orgServers.js";
@@ -147,17 +155,6 @@ describe(".com org accounts", () => {
     expect((second.body as { code: string }).code).toBe("org-freeze-refused");
     const long = { orgId: ORG, seatId: A.seatId, untilMs: now + 73 * 3_600_000, oarVersion: 1, issuedAt: now };
     expect((await handleOrgFreeze(d, ORG, { body: long, approvals: [approve(B, canonicalOrgSeatFreeze(long), 1, now)] })).status).toBe(403);
-  });
-
-  it("takes no founder-removal or recovery entry until .com observes the notice itself", async () => {
-    const now = chain.entries[1].record.issuedAt + 3_600_000;
-    const d = await created(now);
-    for (const via of ["founder-removal", "recovery"] as const) {
-      const entry = { ...chain.entries[1], via } as unknown as typeof chain.entries[1];
-      const r = await handleOrgAuthorityAppend(d, ORG, { entry });
-      expect(r.status).toBe(400);
-      expect((r.body as { code: string }).code).toBe("delayed-change-unavailable");
-    }
   });
 
   it("never opens a server code as a ceremony (ceremonies are readable by anyone with the org id)", async () => {
@@ -363,5 +360,98 @@ describe("the invite link's key (no squatting on an orgId)", () => {
     const withdraw = { orgId: ORG, seatId: MM.seatId, oarVersion: 1, issuedAt: now };
     const r = await handleOrgInviteWithdraw(d, ORG, MM.seatId, { withdraw, approvals: [approve(B, canonicalOrgInviteWithdraw(withdraw), 1, now)] });
     expect((r.body as { code: string }).code).toBe("org-seat-admitted");
+  });
+});
+
+describe("delayed changes observed by .com (founder removal, recovery)", () => {
+  const MIN = 60_000;
+  const v1: OrgAuthorityRecord = chain.entries[1].record;
+  const t0 = v1.issuedAt + 3_600_000;
+  const td = new TextDecoder();
+
+  async function org() {
+    let t = t0;
+    const store = new InMemoryOrgStorage();
+    const d: OrgDeps & { set: (x: number) => void } = { orgs: store, usernames: new InMemoryStorage().usernames, now: () => t, set: (x) => (t = x) };
+    expect((await handleOrgCreate(d, { name: "acme", entry: chain.entries[0] })).status).toBe(200);
+    expect((await handleOrgAuthorityAppend(d, ORG, { entry: chain.entries[1] })).status).toBe(200);
+    return d;
+  }
+
+  /** The founder's notice that removes `target` from v1, signed at `at`. */
+  function removal(target: typeof B, at: number, oarVersion = 1, prev: OrgAuthorityRecord = v1) {
+    const record = orgFounderRemovalOf(prev, target.seatId, at + ORG_FOUNDER_NOTICE_MS);
+    const body: OrgDelayedChange = { orgId: ORG, oarVersion, kind: "founder-removal", nextRecordSha256: orgAuthorityHash(record), effectiveAt: record.issuedAt, issuedAt: at };
+    const order = canonicalOrgDelayedChange(body);
+    const approvals = [approve(A, order, oarVersion, at)];
+    const open = { order: td.decode(order), payload: { record }, approvals };
+    const entry = { record, via: "founder-removal", approvals: [], notice: { body, approvals } };
+    return { record, body, order, open, entry, sha: orgSha256Hex(order) };
+  }
+  const code = (r: { body: unknown }) => (r.body as { code?: string }).code;
+
+  it("stamps the notice's open time, applies it only after its wait, and serves the observed time", async () => {
+    const d = await org();
+    const n = removal(C, t0);
+    // Never opened: the change has no observed notice.
+    d.set(t0 + ORG_FOUNDER_NOTICE_MS + MIN);
+    expect(code(await handleOrgAuthorityAppend(d, ORG, { entry: n.entry }))).toBe("org-notice-unobserved");
+    d.set(t0 + MIN);
+    const opened = await handleOrgCeremonyOpen(d, ORG, n.open);
+    expect(opened.status).toBe(200);
+    expect((opened.body as { openedAt: number }).openedAt).toBe(t0 + MIN);
+    const got = (await handleOrgAuthorityGet(d, ORG)).body as { noticeOpenedAt: Record<string, number> };
+    expect(got.noticeOpenedAt).toEqual({ [n.sha]: t0 + MIN });
+    // Past its signed effectiveAt but not yet 7 days since .com saw it.
+    d.set(n.body.effectiveAt + 30_000);
+    expect(code(await handleOrgAuthorityAppend(d, ORG, { entry: n.entry }))).toBe("org-notice-early");
+    d.set(t0 + MIN + ORG_FOUNDER_NOTICE_MS);
+    expect((await handleOrgAuthorityAppend(d, ORG, { entry: n.entry })).status).toBe(200);
+    // Executed: a veto now is late, and the next delayed change may open.
+    const veto = { orgId: ORG, noticeSha256: n.sha, issuedAt: t0 + MIN + ORG_FOUNDER_NOTICE_MS };
+    expect(code(await handleOrgVeto(d, ORG, { body: veto, approvals: [approve(B, canonicalOrgVeto(veto), 2, veto.issuedAt)] }))).toBe("org-veto-late");
+    const next = removal(B, t0 + MIN + ORG_FOUNDER_NOTICE_MS, 2, n.record);
+    expect((await handleOrgCeremonyOpen(d, ORG, next.open)).status).toBe(200);
+  });
+
+  it("refuses a backdated notice and a second notice while one is open", async () => {
+    const d = await org();
+    d.set(t0 + 3 * DAY);
+    const backdated = removal(C, t0);
+    // Dated 3 days ago, approved now: the notice would leave the others 4 days to veto, not 7.
+    const fresh = { ...backdated.open, approvals: [approve(A, backdated.order, 1, t0 + 3 * DAY)] };
+    expect(code(await handleOrgCeremonyOpen(d, ORG, fresh))).toBe("org-notice-backdated");
+    const first = removal(C, t0 + 3 * DAY);
+    expect((await handleOrgCeremonyOpen(d, ORG, first.open)).status).toBe(200);
+    // Another removal from the same record, opened in parallel.
+    d.set(t0 + 3 * DAY + MIN);
+    const second = removal(B, t0 + 3 * DAY + MIN);
+    expect(code(await handleOrgCeremonyOpen(d, ORG, second.open))).toBe("org-notice-open");
+    // A notice signed in advance for the record the first would make names a record that does not exist yet.
+    const ahead = removal(B, t0 + 3 * DAY + MIN, 2, first.record);
+    expect(code(await handleOrgCeremonyOpen(d, ORG, ahead.open))).toBe("org-stale-oar");
+    // The record the notice names must ride along, and be the one it names.
+    expect((await handleOrgCeremonyOpen(d, ORG, { ...second.open, payload: { record: first.record } })).status).toBe(400);
+  });
+
+  it("counts a veto inside the observed window, and a vetoed notice frees the slot", async () => {
+    const d = await org();
+    const n = removal(C, t0);
+    expect((await handleOrgCeremonyOpen(d, ORG, n.open)).status).toBe(200);
+    d.set(t0 + DAY);
+    const early = { orgId: ORG, noticeSha256: n.sha, issuedAt: t0 - MIN };
+    expect((await handleOrgVeto(d, ORG, { body: early, approvals: [approve(B, canonicalOrgVeto(early), 1, t0 + DAY)] })).status).toBe(400);
+    const veto = { orgId: ORG, noticeSha256: n.sha, issuedAt: t0 + DAY };
+    expect((await handleOrgVeto(d, ORG, { body: veto, approvals: [approve(B, canonicalOrgVeto(veto), 1, t0 + DAY)] })).status).toBe(200);
+    d.set(t0 + ORG_FOUNDER_NOTICE_MS + MIN);
+    expect(code(await handleOrgAuthorityAppend(d, ORG, { entry: n.entry }))).toBe("org-notice-vetoed");
+    const again = removal(B, t0 + ORG_FOUNDER_NOTICE_MS + MIN);
+    expect((await handleOrgCeremonyOpen(d, ORG, again.open)).status).toBe(200);
+  });
+
+  it("refuses a freeze dated away from now", async () => {
+    const d = await org();
+    const f = { orgId: ORG, seatId: B.seatId, untilMs: t0 + 3_600_000, oarVersion: 1, issuedAt: t0 - DAY };
+    expect((await handleOrgFreeze(d, ORG, { body: f, approvals: [approve(C, canonicalOrgSeatFreeze(f), 1, t0 - DAY)] })).status).toBe(400);
   });
 });

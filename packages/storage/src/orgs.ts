@@ -43,6 +43,11 @@ export type OrgObjectKind =
   | "overturn"
   | "veto"
   | "ceremony"
+  /**
+   * A delayed-change notice (founder removal, recovery) as `.com` observed it open, keyed by the notice body's
+   * sha256: `openedAt` is `.com`'s own clock, never the client's; `executedAt` is set once its record lands.
+   */
+  | "notice"
   /** A server code (the org's AuthCode), keyed by serial; `usedAt` is set in the body once a box registered with it. */
   | "server-code"
   /** A registered org server, keyed by its domain. */
