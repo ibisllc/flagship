@@ -4104,5 +4104,8 @@
   "Compare the code with the one on your phone before you approve there.": "Compare o código com o do seu celular antes de aprovar nele.",
   "Does your phone show this code?": "Seu celular mostra este código?",
   "Yes": "Sim",
-  "No": "Não"
+  "No": "Não",
+  "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": "Um navegador acessa seus servidores com proteção clássica: servidores com proteção pós-quântica aceitam navegadores como uma exceção indicada. O app Flagship tem proteção pós-quântica.",
+  "AI providers are reached with classical protection: quantum-safe servers allow them as a labelled exception.": "Os provedores de IA são acessados com proteção clássica: servidores com proteção pós-quântica os aceitam como uma exceção indicada.",
+  "Every server is quantum-safe by default: it turns strict on the next time an admin phone or tablet opens the Flagship app, once every device and your recovery are ready.": "Todo servidor tem proteção pós-quântica por padrão: ele ativa o modo estrito na próxima vez que um celular ou tablet de administrador abrir o app Flagship, quando todos os dispositivos e sua recuperação estiverem prontos."
 }

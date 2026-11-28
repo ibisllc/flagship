@@ -19,7 +19,20 @@ describe("web ed25519-strict", () => {
     expect(await verifyEd25519(b(v.publicKeyHex), b(v.honestSignatureHex), b(v.messageHex))).toBe(true);
   });
 
-  it("the noble sync path verifies the honest signature", () => {
+  it("the noble sync path is strict too: honest signature yes, mixed-order R no", () => {
     expect(verifyEd25519Sync(b(v.publicKeyHex), b(v.honestSignatureHex), b(v.messageHex))).toBe(true);
+    expect(verifyEd25519Sync(v.publicKeyHex, v.honestSignatureHex, b(v.messageHex))).toBe(true);
+    expect(verifyEd25519Sync(b(v.publicKeyHex), b(v.mixedOrderRSignatureHex), b(v.messageHex))).toBe(false);
+  });
+
+  it("the sync path refuses S >= L, a non-canonical R and a small-order key", () => {
+    const sig = b(v.honestSignatureHex);
+    const big = Uint8Array.from(sig);
+    big.set(Uint8Array.from(Buffer.from("edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010", "hex")), 32);
+    expect(verifyEd25519Sync(b(v.publicKeyHex), big, b(v.messageHex))).toBe(false);
+    const nonCanonR = Uint8Array.from(sig);
+    nonCanonR.set(Uint8Array.from(Buffer.from("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", "hex")), 0);
+    expect(verifyEd25519Sync(b(v.publicKeyHex), nonCanonR, b(v.messageHex))).toBe(false);
+    expect(verifyEd25519Sync(new Uint8Array(32).fill(0).map((_, i) => (i === 0 ? 1 : 0)), sig, b(v.messageHex))).toBe(false);
   });
 });

@@ -4104,5 +4104,8 @@
   "Compare the code with the one on your phone before you approve there.": "承認する前に、このコードをスマートフォンのコードと見比べてください。",
   "Does your phone show this code?": "スマートフォンにこのコードが表示されていますか？",
   "Yes": "はい",
-  "No": "いいえ"
+  "No": "いいえ",
+  "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": "ブラウザーは従来型の保護でサーバーに接続します。耐量子のサーバーは、明示された例外としてブラウザーを許可します。Flagship アプリは耐量子です。",
+  "AI providers are reached with classical protection: quantum-safe servers allow them as a labelled exception.": "AI プロバイダーへは従来型の保護で接続します。耐量子のサーバーは、明示された例外としてそれらを許可します。",
+  "Every server is quantum-safe by default: it turns strict on the next time an admin phone or tablet opens the Flagship app, once every device and your recovery are ready.": "すべてのサーバーは既定で耐量子です。すべてのデバイスと復旧の準備が整うと、管理者のスマートフォンまたはタブレットが次に Flagship アプリを開いたときに厳格モードになります。"
 }

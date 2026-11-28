@@ -3,7 +3,7 @@
 // WebCrypto and noble's default (ZIP-215) verify accept small-order keys, under which R = identity, S = 0
 // verifies for every message, so the verifier alone is no guard. Every Ed25519 verify in the webapp goes
 // through verifyEd25519 / verifyEd25519Sync.
-import { ed25519 } from "../vendor/noble-post-quantum/pq-seal.js";
+import { ed25519, sha512 } from "../vendor/noble-post-quantum/pq-seal.js";
 
 const VERDICT = new Map();
 const VERDICT_MAX = 512;
@@ -54,13 +54,54 @@ export async function verifyEd25519(pub, signature, message) {
   }
 }
 
-/** noble Ed25519 verify behind the key check (`opts` as noble's, e.g. { zip215: false }). Never throws. */
-export function verifyEd25519Sync(pub, signature, message, opts) {
+// noble's default verify follows ZIP-215 (non-canonical R, cofactored check), so a signature with a
+// mixed-order R verifies there and nowhere else. The sync path uses the same strict rule as `.com`'s edSync
+// and WebCrypto (test-vectors/ed25519-strict): S < L, R and A canonical, A not of small order, and the
+// cofactorless equation [S]B = R + [k]A.
+const L = ed25519.Point.Fn.ORDER;
+
+function leNumber(b) {
+  let n = 0n;
+  for (let i = b.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(b[i]);
+  return n;
+}
+
+function canonicalPoint(b) {
+  const p = ed25519.Point.fromBytes(b, false);
+  return toHex(p.toBytes()) === toHex(b) ? p : null;
+}
+
+function concat(...parts) {
+  const out = new Uint8Array(parts.reduce((n, x) => n + x.length, 0));
+  let o = 0;
+  for (const x of parts) {
+    out.set(x, o);
+    o += x.length;
+  }
+  return out;
+}
+
+function strictVerify(sig, msg, pub) {
+  const A = canonicalPoint(pub);
+  if (!A || A.isSmallOrder()) return false;
+  const rBytes = sig.subarray(0, 32);
+  const R = canonicalPoint(rBytes);
+  if (!R) return false;
+  const S = leNumber(sig.subarray(32));
+  if (S >= L) return false;
+  const k = leNumber(sha512(concat(rBytes, pub, msg))) % L;
+  const sB = S === 0n ? ed25519.Point.ZERO : ed25519.Point.BASE.multiply(S);
+  return sB.equals(R.add(A.multiplyUnsafe(k)));
+}
+
+/** Strict Ed25519 verify behind the key check. Bytes or hex; never throws. */
+export function verifyEd25519Sync(pub, signature, message) {
   try {
     const p = bytesOf(pub);
     const s = bytesOf(signature);
-    if (!p || !s || s.length !== 64 || !isAcceptableEd25519PublicKey(p)) return false;
-    return opts === undefined ? ed25519.verify(s, message, p) : ed25519.verify(s, message, p, opts);
+    const m = bytesOf(message);
+    if (!p || !s || !m || s.length !== 64 || !isAcceptableEd25519PublicKey(p)) return false;
+    return strictVerify(s, m, p);
   } catch {
     return false;
   }

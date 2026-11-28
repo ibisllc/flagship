@@ -274,7 +274,7 @@ export function verifyLaneForDevice({ username, lane, pinnedRoot, irkPubHex, aid
       let ok = false;
       try {
         const msg = adminRootRotationCanonicalBytes({ username: r.username, oldAdminRootPub: lower(r.oldAdminRootPubHex), newAdminRootPub: lower(r.newAdminRootPubHex), issuedAt: r.issuedAt });
-        ok = lower(r.username) === username && verifyEd25519Sync(unhex(root), unhex(lower(ev.signatureHex)), msg, { zip215: false });
+        ok = lower(r.username) === username && verifyEd25519Sync(unhex(root), unhex(lower(ev.signatureHex)), msg);
       } catch {
         ok = false;
       }

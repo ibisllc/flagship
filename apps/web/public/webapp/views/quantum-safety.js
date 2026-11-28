@@ -25,6 +25,7 @@ import { LEAVING_STRICT_LOSS, compatibilityChange, policyRefusalText, policySign
 registerView("view-quantum-safety");
 
 export const BROWSER_LOSS = "browser-without-pq-authentication";
+export const BROWSER_CLASSICAL = tr("A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.");
 export const WEB_CAN_CHANGE = tr("This browser's admin key has its quantum-safe half on record, so it can turn strict protection on or off. Each change asks for your passkey.");
 export const WEB_CANNOT_CHANGE =
   tr("This browser signs admin orders quantum-safe when its admin key's quantum-safe half is the one on record, but it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.");
@@ -99,7 +100,7 @@ async function render() {
     return;
   }
   const canSign = policySignerProblem(s?.adminRootSeed) === null;
-  host.innerHTML = `<p class="note">${escapeHtml(canSign ? WEB_CAN_CHANGE : WEB_CANNOT_CHANGE)}</p><p class="note">${tr("These protections are new and pending an external review.")}</p><div id="qs-rows"><p class="note">${tr("Loading…")}</p></div>`;
+  host.innerHTML = `<p class="note">${escapeHtml(canSign ? WEB_CAN_CHANGE : WEB_CANNOT_CHANGE)}</p><p class="note">${tr("Every server is quantum-safe by default: it turns strict on the next time an admin phone or tablet opens the Flagship app, once every device and your recovery are ready.")}</p><p class="note">${escapeHtml(BROWSER_CLASSICAL)}</p><p class="note">${tr("These protections are new and pending an external review.")}</p><div id="qs-rows"><p class="note">${tr("Loading…")}</p></div>`;
   const base = controlApex();
   const rootHex = s?.adminRootSeed ? (await adminRootPubHex(s.adminRootSeed)).toLowerCase() : null;
   const grants = await getJson(`${base}/api/users/${encodeURIComponent(user)}/device-grants`).catch(() => null);

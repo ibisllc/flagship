@@ -83,7 +83,7 @@ export function isAcceptableEd25519Key(pubHex) {
 
 function verifyEd(sigHex, msg, pubHex) {
   if (typeof sigHex !== "string" || !/^[0-9a-f]{128}$/.test(sigHex) || !isAcceptableEd25519Key(pubHex)) return false;
-  return verifyEd25519Sync(bytes(pubHex), bytes(sigHex), msg, { zip215: false });
+  return verifyEd25519Sync(bytes(pubHex), bytes(sigHex), msg);
 }
 const signEd = (seed, msg) => hex(ed25519.sign(msg, seed));
 const pubOf = (seed) => hex(ed25519.getPublicKey(seed));

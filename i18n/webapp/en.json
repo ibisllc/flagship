@@ -16717,5 +16717,17 @@
   "No": {
     "en": "No",
     "ctx": "webapp/index.html"
+  },
+  "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.": {
+    "en": "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.",
+    "ctx": "webapp/index.html"
+  },
+  "Every server is quantum-safe by default: it turns strict on the next time an admin phone or tablet opens the Flagship app, once every device and your recovery are ready.": {
+    "en": "Every server is quantum-safe by default: it turns strict on the next time an admin phone or tablet opens the Flagship app, once every device and your recovery are ready.",
+    "ctx": "webapp/views/quantum-safety.js:103"
+  },
+  "AI providers are reached with classical protection: quantum-safe servers allow them as a labelled exception.": {
+    "en": "AI providers are reached with classical protection: quantum-safe servers allow them as a labelled exception.",
+    "ctx": "webapp/index.html"
   }
 }
