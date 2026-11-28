@@ -18,7 +18,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 
 /** Canonical scope ordering shared by the capability/delegate envelopes.
  *
@@ -91,7 +90,7 @@ object WatchDelegateKey {
         issuedAt: Long,
         expiresAt: Long,
     ): Boolean = try {
-        Ed25519Verify(irkPub).verify(
+        CheckedEd25519Verify(irkPub).verify(
             signature,
             canonicalBytes(grantId, username, delegatePubKeyHex, scopes, issuedAt, expiresAt),
         )
@@ -118,7 +117,7 @@ object RevokeWatchDelegate {
         username: String,
         issuedAt: Long,
     ): Boolean = try {
-        Ed25519Verify(irkPub).verify(signature, canonicalBytes(grantId, username, issuedAt))
+        CheckedEd25519Verify(irkPub).verify(signature, canonicalBytes(grantId, username, issuedAt))
         true
     } catch (_: Throwable) {
         false
@@ -186,7 +185,7 @@ object DeviceCapabilityGrant {
         issuedAt: Long,
         expiresAt: Long,
     ): Boolean = try {
-        Ed25519Verify(irkPub).verify(
+        CheckedEd25519Verify(irkPub).verify(
             signature,
             canonicalBytes(grantId, username, deviceId, devicePubKeyHex, scopes, issuedAt, expiresAt),
         )

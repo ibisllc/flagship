@@ -16,7 +16,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import com.google.crypto.tink.subtle.X25519
 import java.math.BigInteger
 import java.security.MessageDigest
@@ -91,7 +90,7 @@ object DeviceEndpointClaim {
         expiresAt: Long,
         nonceHex: String,
     ): Boolean = try {
-        Ed25519Verify(irkPub).verify(
+        CheckedEd25519Verify(irkPub).verify(
             signature,
             canonicalBytes(username, endpointLabel, phoneIrkPubHex, issuedAt, expiresAt, nonceHex),
         )
@@ -128,7 +127,7 @@ object SecretRequest {
         nonceHex: String,
         issuedAt: Long,
     ): Boolean = try {
-        Ed25519Verify(stkPub).verify(
+        CheckedEd25519Verify(stkPub).verify(
             signature,
             canonicalBytes(serverDomain, stkPubHex, purpose, nonceHex, issuedAt),
         )
@@ -189,7 +188,7 @@ object RootEntitlement {
         podCanonical: String,
         issuedAt: Long,
     ): Boolean = try {
-        Ed25519Verify(irkPub).verify(signature, canonicalBytes(username, podPubKeyHex, podCanonical, issuedAt))
+        CheckedEd25519Verify(irkPub).verify(signature, canonicalBytes(username, podPubKeyHex, podCanonical, issuedAt))
         true
     } catch (_: Throwable) { false }
 }

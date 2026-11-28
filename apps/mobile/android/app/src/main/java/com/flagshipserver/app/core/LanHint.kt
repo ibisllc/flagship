@@ -6,7 +6,6 @@
 
 package com.flagshipserver.app.core
 
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 
 object LanHint {
@@ -70,7 +69,7 @@ object LanHint {
         nowMs: Long,
     ): String? {
         val sigOk = try {
-            Ed25519Verify(stkPub).verify(signature, canonical(h))
+            CheckedEd25519Verify(stkPub).verify(signature, canonical(h))
             true
         } catch (_: Throwable) {
             false

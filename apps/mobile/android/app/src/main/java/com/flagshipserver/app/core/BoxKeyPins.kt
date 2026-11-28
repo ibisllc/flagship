@@ -2,7 +2,6 @@ package com.flagshipserver.app.core
 
 import com.flagshipserver.app.R
 import com.flagshipserver.app.api.PodDirectoryEntry
-import com.google.crypto.tink.subtle.Ed25519Verify
 
 /**
  * Box key pins (packages/protocol/src/boxKeyPin.ts; shared vectors in
@@ -64,7 +63,7 @@ class BoxKeyPins(private val store: ServerKeyPins? = null, private val now: () -
             if (bindingDomain.lowercase() != forServer.lowercase()) return false
             val msg = canonicalBootKeyBinding(bindingDomain, bootPubHex, issuedAt) ?: return false
             return try {
-                Ed25519Verify(pinnedStkPub).verify(signature, msg)
+                CheckedEd25519Verify(pinnedStkPub).verify(signature, msg)
                 true
             } catch (_: Exception) {
                 false

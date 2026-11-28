@@ -23,7 +23,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 
 /** Mirror of the TS `AdminRootRotation` interface. The pubkeys are lowercased
@@ -64,7 +63,7 @@ object AdminRootRotationClaim {
      *  Never throws — matches the TS try/catch verifier. */
     fun verify(r: AdminRootRotation, signature: ByteArray, oldAdminRootPub: ByteArray): Boolean =
         try {
-            Ed25519Verify(oldAdminRootPub).verify(signature, canonicalBytes(r))
+            CheckedEd25519Verify(oldAdminRootPub).verify(signature, canonicalBytes(r))
             true
         } catch (_: Throwable) {
             false

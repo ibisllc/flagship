@@ -15,7 +15,7 @@ import com.flagshipserver.app.core.pq.PqTrust
 import com.flagshipserver.app.core.pq.QuantumSafety
 import com.flagshipserver.app.core.pq.StrictReentry
 import com.flagshipserver.app.core.DeviceCapabilityGrant
-import com.google.crypto.tink.subtle.Ed25519Verify
+import com.flagshipserver.app.core.CheckedEd25519Verify
 import kotlinx.serialization.json.longOrNull
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.QuantumSafetyService
@@ -181,7 +181,7 @@ class QuantumSafetyViewModel(
                 g["grantId"]?.jsonPrimitive?.contentOrNull ?: continue, user, id, pub, scopes,
                 g["issuedAt"]?.jsonPrimitive?.longOrNull ?: continue, g["expiresAt"]?.jsonPrimitive?.longOrNull ?: continue,
             )
-            if (runCatching { Ed25519Verify(rootKey).verify(sig, bytes) }.isFailure) continue
+            if (runCatching { CheckedEd25519Verify(rootKey).verify(sig, bytes) }.isFailure) continue
             val w = g["pqKeyBinding"] as? JsonObject ?: continue
             val b = runCatching { PqTrust.verifyPqKeyBinding(w, PqTrust.Expectation("device", id, pub, now = now())) }.getOrNull() ?: continue
             out[pub] = AdminDevice(id, b)

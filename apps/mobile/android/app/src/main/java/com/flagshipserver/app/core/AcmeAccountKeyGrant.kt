@@ -22,7 +22,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 
 object AcmeAccountKeyGrant {
     const val CANONICAL_TAG = "flagship/acme-account-key-grant/v1"
@@ -111,7 +110,7 @@ object AcmeAccountKeyGrant {
         issuedAt: Long,
         expiresAt: Long,
     ): Boolean = try {
-        Ed25519Verify(irkPub).verify(
+        CheckedEd25519Verify(irkPub).verify(
             signature,
             canonicalBytes(grantId, username, accountKeyId, recipientPubKey, sealedAccountKey, issuedAt, expiresAt),
         )

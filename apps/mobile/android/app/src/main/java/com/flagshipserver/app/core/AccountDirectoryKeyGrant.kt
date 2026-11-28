@@ -17,7 +17,6 @@
 
 package com.flagshipserver.app.core
 
-import com.google.crypto.tink.subtle.Ed25519Verify
 
 object AccountDirectoryKeyGrant {
     const val CANONICAL_TAG = "flagship/account-directory-key-grant/v1"
@@ -86,7 +85,7 @@ object AccountDirectoryKeyGrant {
         expiresAt: Long,
         signerPubHex: String,
     ): Boolean = try {
-        Ed25519Verify(adminRootPub).verify(
+        CheckedEd25519Verify(adminRootPub).verify(
             signature,
             canonicalBytes(accountId, recipientDeviceId, keyKind, sealedKeyHex, issuedAt, expiresAt, signerPubHex),
         )

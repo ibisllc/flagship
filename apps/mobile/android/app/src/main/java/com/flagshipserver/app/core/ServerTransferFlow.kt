@@ -16,7 +16,6 @@ import com.flagshipserver.app.api.TransferOfferBody
 import com.flagshipserver.app.api.TransferOfferWire
 import com.flagshipserver.app.api.TransferRehomeAuthBody
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.security.SecureRandom
@@ -136,7 +135,7 @@ object ServerTransferFlow {
         if (pub.size != 32) return false
         val sig = HexUtil.decode(qr.offerSignature) ?: return false
         return runCatching {
-            Ed25519Verify(pub).verify(
+            CheckedEd25519Verify(pub).verify(
                 sig,
                 ServerTransferOfferOrder.canonicalBytes(
                     qr.serverDomain, qr.transferNonce, qr.issuedAt, qr.expiresAt,

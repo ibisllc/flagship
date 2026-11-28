@@ -14,7 +14,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import com.google.crypto.tink.subtle.EllipticCurves
 import kotlinx.serialization.Serializable
 import java.math.BigInteger
@@ -166,7 +165,7 @@ object ServingAuthority {
 
     fun verifyEd25519(canonical: ByteArray, signatureHex: String, publicKeyHex: String): Boolean = runCatching {
         if (signatureHex.length != 128 || !HEX64.matches(publicKeyHex)) return false
-        Ed25519Verify(HexUtil.decode(publicKeyHex)!!).verify(HexUtil.decode(signatureHex)!!, canonical)
+        CheckedEd25519Verify(HexUtil.decode(publicKeyHex)!!).verify(HexUtil.decode(signatureHex)!!, canonical)
         true
     }.getOrDefault(false)
 

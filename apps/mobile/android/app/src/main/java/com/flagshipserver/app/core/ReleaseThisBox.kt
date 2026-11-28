@@ -11,7 +11,6 @@ package com.flagshipserver.app.core
 import com.flagshipserver.app.R
 import com.flagshipserver.app.core.pq.PqHybrid
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -49,7 +48,7 @@ object ReleaseThisBox {
     fun sign(o: Order, adminRoot: Ed25519Sign): String = HexUtil.encode(adminRoot.sign(canonicalBytes(o)))
 
     fun verify(o: Order, signatureHex: String, adminRootPub: ByteArray): Boolean = runCatching {
-        Ed25519Verify(adminRootPub).verify(HexUtil.decode(signatureHex)!!, canonicalBytes(o))
+        CheckedEd25519Verify(adminRootPub).verify(HexUtil.decode(signatureHex)!!, canonicalBytes(o))
         true
     }.getOrDefault(false)
 

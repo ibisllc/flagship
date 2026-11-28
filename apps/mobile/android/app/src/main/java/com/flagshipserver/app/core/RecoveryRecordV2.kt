@@ -9,7 +9,6 @@
 
 package com.flagshipserver.app.core
 
-import com.google.crypto.tink.subtle.Ed25519Verify
 import java.security.MessageDigest
 import java.security.SecureRandom
 import kotlinx.serialization.EncodeDefault
@@ -98,7 +97,7 @@ data class RecoveryRecordV2(
 
     fun verify(signatureHex: String, irkPub: ByteArray): Boolean = try {
         HexUtil.encode(irkPub) == irkPubHex &&
-            run { Ed25519Verify(irkPub).verify(HexUtil.decode(signatureHex) ?: return false, canonicalBytes()); true }
+            run { CheckedEd25519Verify(irkPub).verify(HexUtil.decode(signatureHex) ?: return false, canonicalBytes()); true }
     } catch (_: Throwable) {
         false
     }

@@ -20,7 +20,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 
 /** Mirror of the Worker `DeviceAdmit` interface. `newDevicePubHex` is
@@ -55,7 +54,7 @@ object DeviceAdmitClaim {
      *  matching the Worker's try/catch verifier. */
     fun verify(admit: DeviceAdmit, signature: ByteArray, irkPubKey: ByteArray): Boolean =
         try {
-            Ed25519Verify(irkPubKey).verify(signature, canonicalBytes(admit))
+            CheckedEd25519Verify(irkPubKey).verify(signature, canonicalBytes(admit))
             true
         } catch (_: Throwable) {
             false

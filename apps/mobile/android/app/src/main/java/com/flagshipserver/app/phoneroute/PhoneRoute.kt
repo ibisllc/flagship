@@ -101,7 +101,7 @@ object PhoneRoute {
 
     fun verify(bytes: ByteArray, signatureHex: String, publicKeyHex: String): Boolean = runCatching {
         if (signatureHex.length != 128 || !HEX64.matches(publicKeyHex)) return false
-        com.google.crypto.tink.subtle.Ed25519Verify(HexUtil.decode(publicKeyHex)!!).verify(HexUtil.decode(signatureHex)!!, bytes)
+        com.flagshipserver.app.core.CheckedEd25519Verify(HexUtil.decode(publicKeyHex)!!).verify(HexUtil.decode(signatureHex)!!, bytes)
         true
     }.getOrDefault(false)
 

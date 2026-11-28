@@ -220,7 +220,8 @@ class SecretRequestCoordinator(
                 // Under the key that signed: the named STK, or the boot key it vouches for.
                 verifySignature = { key, keyHex ->
                     val bootSigned = signerHex != keyHex.lowercase()
-                    SecretRequest.verify(
+                    // The named STK is what a first sight pins: never one that could sign anything.
+                    Ed25519Keys.isAcceptable(key) && SecretRequest.verify(
                         signature = sig,
                         stkPub = if (bootSigned) signerPub else key,
                         serverDomain = pending.serverDomain,

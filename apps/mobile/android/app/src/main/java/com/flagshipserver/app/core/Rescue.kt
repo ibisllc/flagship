@@ -2,7 +2,6 @@ package com.flagshipserver.app.core
 
 import com.flagshipserver.app.core.pq.PqHex
 import com.flagshipserver.app.core.pq.PqHybrid
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 import java.security.SecureRandom
 import javax.crypto.Mac
@@ -60,7 +59,7 @@ object Rescue {
     fun clean(s: String): Boolean = s.none { it == '|' || it.code <= 0x1f || it.code == 0x7f }
 
     fun verifyEd25519(pub: ByteArray, sig: ByteArray, msg: ByteArray): Boolean = try {
-        pub.size == 32 && sig.size == 64 && run { Ed25519Verify(pub).verify(sig, msg); true }
+        pub.size == 32 && sig.size == 64 && run { CheckedEd25519Verify(pub).verify(sig, msg); true }
     } catch (_: Exception) {
         false
     }

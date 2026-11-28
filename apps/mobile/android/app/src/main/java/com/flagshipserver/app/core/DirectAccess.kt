@@ -7,7 +7,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 import java.security.MessageDigest
 
@@ -210,7 +209,7 @@ object DirectAccess {
     }
 
     private fun ed25519Valid(sig: ByteArray, msg: ByteArray, pub: ByteArray): Boolean = try {
-        Ed25519Verify(pub).verify(sig, msg)
+        CheckedEd25519Verify(pub).verify(sig, msg)
         true
     } catch (_: Throwable) {
         false

@@ -6,7 +6,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 
 object DirectName {
@@ -100,7 +99,7 @@ object DirectName {
         if (problem(o) != null) return false
         val sig = HexUtil.decode(signatureHex) ?: return false
         return try {
-            Ed25519Verify(pub).verify(sig, canonical(o))
+            CheckedEd25519Verify(pub).verify(sig, canonical(o))
             true
         } catch (_: Throwable) {
             false

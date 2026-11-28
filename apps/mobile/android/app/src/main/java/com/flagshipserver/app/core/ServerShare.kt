@@ -11,7 +11,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -712,7 +711,7 @@ object ServerShare {
 
     /** False for an invalid envelope, a bad key or a bad signature; never throws. */
     fun verify(envelope: Envelope, signature: ByteArray, pub: ByteArray): Boolean = try {
-        Ed25519Verify(pub).verify(signature, envelope.canonicalBytes())
+        CheckedEd25519Verify(pub).verify(signature, envelope.canonicalBytes())
         true
     } catch (_: Exception) {
         false

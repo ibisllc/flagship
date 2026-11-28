@@ -23,7 +23,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -323,7 +322,7 @@ object ServiceInvite {
 
     fun verify(sig: ByteArray, bytes: ByteArray, pub: ByteArray): Boolean =
         try {
-            Ed25519Verify(pub).verify(sig, bytes)
+            CheckedEd25519Verify(pub).verify(sig, bytes)
             true
         } catch (_: Throwable) {
             false

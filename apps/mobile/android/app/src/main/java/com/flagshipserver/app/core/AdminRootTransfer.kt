@@ -21,7 +21,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 
 /** Mirror of the TS `AdminRootTransfer` interface. The pub hexes are lowercased
@@ -74,7 +73,7 @@ object AdminRootTransferClaim {
      *  Never throws — matches the TS try/catch verifier. */
     fun verify(t: AdminRootTransfer, signature: ByteArray, giverAdminRootPub: ByteArray): Boolean =
         try {
-            Ed25519Verify(giverAdminRootPub).verify(signature, canonicalBytes(t))
+            CheckedEd25519Verify(giverAdminRootPub).verify(signature, canonicalBytes(t))
             true
         } catch (_: Throwable) {
             false

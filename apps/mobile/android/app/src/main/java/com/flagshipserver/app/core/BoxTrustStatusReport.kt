@@ -19,7 +19,6 @@
 
 package com.flagshipserver.app.core
 
-import com.google.crypto.tink.subtle.Ed25519Verify
 
 object BoxTrustStatusReport {
     const val CANONICAL_TAG = "flagship/box-trust-status/v1"
@@ -66,7 +65,7 @@ object BoxTrustStatusReport {
     /** Verify the box's signature under its (locally derived) STK pubkey.
      *  Returns false — never throws — on malformed input. */
     fun verify(r: Report, signature: ByteArray, stkPub: ByteArray): Boolean = try {
-        Ed25519Verify(stkPub).verify(signature, canonicalBytes(r))
+        CheckedEd25519Verify(stkPub).verify(signature, canonicalBytes(r))
         true
     } catch (_: Throwable) {
         false

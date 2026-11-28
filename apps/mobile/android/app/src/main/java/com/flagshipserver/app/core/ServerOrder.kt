@@ -9,7 +9,6 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -69,7 +68,7 @@ object ServerOrderProtocol {
 
     fun verify(o: ServerOrder, signatureHex: String, pub: ByteArray): Boolean = runCatching {
         if (!HEX128.matches(signatureHex)) return false
-        Ed25519Verify(pub).verify(HexUtil.decode(signatureHex)!!, canonicalBytes(o))
+        CheckedEd25519Verify(pub).verify(HexUtil.decode(signatureHex)!!, canonicalBytes(o))
         true
     }.getOrDefault(false)
 

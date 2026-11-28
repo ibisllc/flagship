@@ -10,7 +10,6 @@ package com.flagshipserver.app.core
 
 import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 import java.security.SecureRandom
 
@@ -119,7 +118,7 @@ object BoxProxyProtocol {
 
     fun verify(p: BoxProxy, signatureHex: String, pub: ByteArray): Boolean = runCatching {
         if (!HEX128.matches(signatureHex)) return false
-        Ed25519Verify(pub).verify(HexUtil.decode(signatureHex)!!, canonicalBytes(p))
+        CheckedEd25519Verify(pub).verify(HexUtil.decode(signatureHex)!!, canonicalBytes(p))
         true
     }.getOrDefault(false)
 

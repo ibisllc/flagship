@@ -2,7 +2,6 @@ package com.flagshipserver.app.core
 
 import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
-import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -129,7 +128,7 @@ object DebugAccess {
     private fun verifyBytes(bytes: ByteArray, signatureHex: String, pub: ByteArray): Boolean {
         val sig = HexUtil.decode(signatureHex) ?: return false
         return try {
-            Ed25519Verify(pub).verify(sig, bytes)
+            CheckedEd25519Verify(pub).verify(sig, bytes)
             true
         } catch (_: Throwable) {
             false

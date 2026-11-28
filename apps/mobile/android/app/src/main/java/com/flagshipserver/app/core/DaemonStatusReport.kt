@@ -18,7 +18,6 @@
 
 package com.flagshipserver.app.core
 
-import com.google.crypto.tink.subtle.Ed25519Verify
 
 object DaemonStatusReport {
     const val CANONICAL_TAG = "flagship/daemon-status/v1"
@@ -55,7 +54,7 @@ object DaemonStatusReport {
      *  Returns false — never throws — on malformed input, mirroring the TS
      *  verifyDaemonStatusReport. */
     fun verify(r: Report, signature: ByteArray, stkPub: ByteArray): Boolean = try {
-        Ed25519Verify(stkPub).verify(signature, canonicalBytes(r))
+        CheckedEd25519Verify(stkPub).verify(signature, canonicalBytes(r))
         true
     } catch (_: Throwable) {
         false

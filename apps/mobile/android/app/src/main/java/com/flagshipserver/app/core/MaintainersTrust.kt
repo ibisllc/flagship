@@ -10,10 +10,10 @@
 // there is no privileged self-renewal."
 //
 // Crypto reuses the project's existing deps only (no new Gradle dep):
-// Ed25519 via `com.google.crypto.tink.subtle.Ed25519Verify` over the
+// Ed25519 via `CheckedEd25519Verify` (Tink behind the low-order key check) over the
 // canonical UTF-8 bytes, SHA-256 (lower-hex) via `java.security.
 // MessageDigest` for the pin. PIV-Ed25519 == standard Ed25519, so
-// verification is plain Tink Ed25519Verify.
+// verification is Tink Ed25519Verify behind CheckedEd25519Verify.
 //
 // Every public entry point is TOTAL: it never throws on adversarial
 // input. A field that fails canonicalization, an unparseable timestamp,
@@ -22,7 +22,6 @@
 
 package com.flagshipserver.app.core
 
-import com.google.crypto.tink.subtle.Ed25519Verify
 import java.security.MessageDigest
 
 object MaintainersTrust {
@@ -335,14 +334,14 @@ internal object MaintainersEd25519 {
     /** Verify an Ed25519 signature (hex) over `message` under
      *  `pubKeyHex`. Total: any malformed hex / bad key length / bad sig ⇒
      *  false (never throws). Mirrors crypto.ts `verify` (try/catch ⇒
-     *  false). Tink `Ed25519Verify.verify` throws GeneralSecurityException
+     *  false). `CheckedEd25519Verify.verify` throws GeneralSecurityException
      *  on an invalid signature; we treat any throw as `false`. */
     fun verify(sigHex: String, message: ByteArray, pubKeyHex: String): Boolean {
         val sig = MaintainersHex.toBytes(sigHex) ?: return false
         val pub = MaintainersHex.toBytes(pubKeyHex) ?: return false
         if (pub.size != 32) return false
         return try {
-            Ed25519Verify(pub).verify(sig, message)
+            CheckedEd25519Verify(pub).verify(sig, message)
             true
         } catch (_: Throwable) {
             false
