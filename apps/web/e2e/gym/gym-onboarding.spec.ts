@@ -104,7 +104,7 @@ async function verifyOpenBody(page: Page, body: unknown) {
     const claimOk = await ks.verifyWithEd25519Pub(
       hex(r.irkPub),
       hex(body.claim.signature),
-      enc(`flagship/claim-username/v1|${r.username}|${r.irkPub}|${r.issuedAt}`),
+      enc(`flagship/claim-username/v2|${r.username}|${r.irkPub}|${body.aidPub}|${body.adminRootPub}|${r.issuedAt}`),
     );
     const { signatureHex: aSig, ...aUnsigned } = body.accountProfile;
     const accountOk = await ks.verifyWithEd25519Pub(hex(body.adminRootPub), hex(aSig), meta.canonicalAccountProfile(aUnsigned));

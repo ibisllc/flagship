@@ -79,7 +79,7 @@ export function isValidServerName(name) {
     && SERVER_NAME_RE.test(name)
     && !RESERVED_SERVER_LABELS.has(name);
 }
-const TAG_CLAIM = "flagship/claim-username/v1";
+const TAG_CLAIM = "flagship/claim-username/v2";
 const TAG_AUTH_CODE = "flagship/auth-code/v1";
 const TAG_AUTH_CODE_ADMIN = "flagship/auth-code-admin/v1";
 const TAG_RCK_REGISTER = "flagship/rck-register/v1";
@@ -693,7 +693,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   // stays 409-tolerant.
   if (!opts.skipClaim) {
     const claimIssuedAt = Date.now();
-    const claimMsg = canonical([TAG_CLAIM, username, irkPubHex, claimIssuedAt]);
+    const claimMsg = canonical([TAG_CLAIM, username, irkPubHex, "", adminRootPubHex ? adminRootPubHex.toLowerCase() : "", claimIssuedAt]);
     const claimSig = await signWithIrk(session.umk, claimMsg);
     // Absolute control-plane URL — a relative POST hits the webapp origin
     // (web.<apex>, GET/HEAD-only assets) and 405s. Matches the sibling

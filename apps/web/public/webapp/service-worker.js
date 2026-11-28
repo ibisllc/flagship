@@ -609,6 +609,7 @@
 //       public keys first (test-vectors/ed25519-low-order; WebCrypto and noble's default verify accept them).
 //       A visitor's id for an app is scoped to the hosting account (flagship/app-aid/v2|<accountZone>|<appRef>,
 //       the zone from the box name we post to), so two accounts hosting one app id can't link a visitor.
+//       The username claim signs flagship/claim-username/v2, which binds the AID and admin-root keys it carries.
 const SHELL_VERSION = "v264";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 

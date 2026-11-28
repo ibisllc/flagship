@@ -4,7 +4,7 @@
 // An account is an IDENTITY, not a server (docs/login-and-account-
 // redesign.md, principle 1 + Phase 2). Opening an account =
 //   1. reserve a username (the standalone, idempotent
-//      `flagship/claim-username/v1` claim — no server needed), bound to
+//      `flagship/claim-username/v2` claim — no server needed), bound to
 //   2. this device's IRK (the device key generated at bootstrap), then
 //   3. land in the normal app shell with ZERO servers.
 //
@@ -48,7 +48,7 @@ import { isValidName, nameRefusalText } from "./nameRules.js";
 
 /** Canonical-bytes tag for the standalone username claim. MUST match
  *  `views/create-server.js` (TAG_CLAIM) and the Worker. */
-export const TAG_CLAIM = "flagship/claim-username/v1";
+export const TAG_CLAIM = "flagship/claim-username/v2";
 
 /** Encode canonical-bytes parts the same way every signed message does:
  *  `|`-joined, UTF-8. Mirror of create-server.js `canonical()`. */
@@ -79,16 +79,15 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
   const toHex = deps.bytesToHex || defaultBytesToHex;
   const irkPubHex = toHex(irkPub);
   const issuedAt = Date.now();
-  const sig = await sign(canonical([TAG_CLAIM, username, irkPubHex, issuedAt]));
   // Slice D (docs/device-admin-tier-spec.md §8.1) — publish the account's pinned
   // admin master-root pubkey alongside the claim. `.com` stores it on the
-  // usernames row (`admin_root_pub_hex`); the claim signature covers only the
-  // membership fields (the admin root rides the body like `.com` already
-  // accepts). Omitted → a legacy claim with no admin root (byte-identical body).
+  // usernames row (`admin_root_pub_hex`); the v2 claim signature covers it (an
+  // absent root is signed as the empty field), so it can't be swapped in transit.
   const adminRootPubHex =
     typeof deps.adminRootPubHex === "string" && deps.adminRootPubHex
       ? deps.adminRootPubHex.toLowerCase()
       : null;
+  const sig = await sign(canonical([TAG_CLAIM, username, irkPubHex, "", adminRootPubHex ?? "", issuedAt]));
   // ABSOLUTE control-plane URL (controlApex), not a relative path: the webapp is
   // served from web.<apex>, whose origin only serves GET/HEAD static assets — a
   // relative POST 405s there (and never reaches the control plane). Mirrors the
@@ -202,7 +201,9 @@ export async function openAccount(username, deps) {
     issuedAt,
     expiresAt: issuedAt + 90 * 24 * 3_600_000,
   };
-  const claimSig = await sign(canonical([TAG_CLAIM, username, toHex(session.irk.publicKey), issuedAt]));
+  const claimSig = await sign(canonical([
+    TAG_CLAIM, username, toHex(session.irk.publicKey), toHex(aid.publicKey).toLowerCase(), adminRootPubHex.toLowerCase(), issuedAt,
+  ]));
   const accountEncrypted = await encryptProfile(accountDisplayName, await deriveAccountProfileKey(session.umk), {
     accountId: username,
     recordType: "account-profile",
