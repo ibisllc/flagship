@@ -13,6 +13,12 @@ import {
   resumeNameChoice,
   saveNameChoice,
   stripAddressPrefix,
+  dibsPageUrl,
+  heldDomain,
+  heldMailto,
+  heldStatusText,
+  heldWhyText,
+  precheckName,
 } from "../public/webapp/lib/chooseName.js";
 
 function memStorage() {
@@ -115,7 +121,7 @@ describe("claimChosenName", () => {
     expect(taken.io.buyPack).not.toHaveBeenCalled();
     const held = harness({ quote: { available: false, code: "dibs-held", heldUntil: Date.UTC(2027, 4, 5) } });
     const r = await claimChosenName({ ...base, wanted: "acme", method: "pay" }, held.io);
-    expect(r.refusal).toMatch(/^This name is held for the owner of acme\.com until .*2027/);
+    expect(r.refusal).toMatch(/^Held for the owner of acme\.com until .*2027\.$/);
   });
 
   it("a bad or used code says so and keeps the suggested name", async () => {
@@ -254,5 +260,81 @@ describe("the voi.ci/ prefix", () => {
     expect(modal).toContain('tr("Your page address, if you turn it on.")');
     const view = fs.readFileSync(new URL("../public/webapp/views/choose-name.js", import.meta.url), "utf8");
     expect(view).toMatch(/<span class="input-prefix" aria-hidden="true">\$\{ADDRESS_PREFIX\}<\/span>\s*<input id="choose-name-input"/);
+  });
+});
+
+describe("the held-name precheck", () => {
+  const io = (answer: (body: any) => Response | Promise<Response>) => {
+    const sent: any[] = [];
+    return {
+      sent,
+      io: {
+        apex: "https://flagshipserver.com",
+        fetch: vi.fn(async (url: string, init: RequestInit = {}) => {
+          expect(new URL(url).pathname).toBe("/api/account/name-change/quote");
+          const body = JSON.parse(String(init.body));
+          sent.push(body);
+          return answer(body);
+        }),
+      },
+    };
+  };
+  const HELD_UNTIL = Date.UTC(2027, 9, 15);
+
+  it("asks without a username, and reads a hold on the de-hyphenated domain", async () => {
+    const h = io(() => json(200, { available: false, code: "dibs-held", heldUntil: HELD_UNTIL, domain: "cloudflare.com" }));
+    const r = await precheckName("clou-dflare", h.io);
+    expect(h.sent).toEqual([{ newUsername: "clou-dflare" }]);
+    expect(r.state).toBe("held");
+    expect(heldStatusText("clou-dflare", r.body)).toMatch(/^Held for the owner of cloudflare\.com until .*2027\.$/);
+  });
+
+  it("a failed lookup is its own line, without Why?", async () => {
+    const h = io(() => json(200, { available: false, code: "dibs-held", heldUntil: HELD_UNTIL, domain: "acme.com", checked: false }));
+    const r = await precheckName("acme", h.io);
+    expect(r.state).toBe("held");
+    expect(heldStatusText("acme", r.body)).toBe("Couldn't check acme.com just now. Try again in a minute.");
+  });
+
+  it("an open name, a taken one, and a .com that can't answer (old shape, offline)", async () => {
+    expect((await precheckName("acme-tools", io(() => json(200, { available: true, kind: "name-change", priceUsd: 10 })).io)).state).toBe("open");
+    expect((await precheckName("rapid-bison", io(() => json(200, { available: false, code: "taken" })).io)).state).toBe("refused");
+    expect((await precheckName("acme", io(() => json(400, { error: "username and newUsername are required" })).io)).state).toBe("unknown");
+    expect((await precheckName("acme", io(() => Promise.reject(new TypeError("offline"))).io)).state).toBe("unknown");
+  });
+
+  it("sends a name grant only for its own name, which lifts the hold", async () => {
+    const grant = { name: "acme", code: "FLAG-G", expiresAt: 5_000 };
+    const h = io((b) => json(200, b.nameGrant ? { available: true, kind: "name-change", priceUsd: 10 } : { available: false, code: "dibs-held", heldUntil: HELD_UNTIL }));
+    expect((await precheckName("acme", h.io, grant)).state).toBe("open");
+    expect((await precheckName("acmy", h.io, grant)).state).toBe("held");
+    expect(h.sent).toEqual([{ newUsername: "acme", nameGrant: { code: "FLAG-G", expiresAt: 5_000 } }, { newUsername: "acmy" }]);
+  });
+
+  it("falls back to <name>.com, and copes with no end date", () => {
+    expect(heldDomain("acme", {})).toBe("acme.com");
+    expect(heldStatusText("acme", { code: "dibs-held" })).toBe("Held for the owner of acme.com.");
+    expect(heldWhyText("acme", {}).rule).toMatch(/^For a limited time,/);
+    expect(heldWhyText("acme", { heldUntil: HELD_UNTIL, domain: "acme.com" })).toMatchObject({
+      title: "Why is acme held?",
+      rule: expect.stringMatching(/^Until .*2027, a Flagship name that matches a registered \.com/),
+      yours: expect.stringContaining("If acme.com is yours"),
+    });
+  });
+
+  it("the refusal at Pay names the server's domain; dibs-used reads as taken", () => {
+    expect(nameChoiceRefusalText({ code: "dibs-held", heldUntil: HELD_UNTIL, domain: "cloudflare.com" }, { wanted: "clou-dflare" })).toMatch(/cloudflare\.com/);
+    expect(nameChoiceRefusalText({ code: "dibs-used" }, { wanted: "acme" })).toBe("Taken or too similar to an existing name");
+  });
+
+  it("Email us and How .com dibs works", () => {
+    const m = new URL(heldMailto("acme"));
+    expect(m.protocol).toBe("mailto:");
+    expect(m.pathname).toBe("support@flagshipserver.com");
+    expect(m.searchParams.get("subject")).toBe("Account name: acme");
+    expect(m.searchParams.get("body")).toBe("Name I want: acme\nWhy:\n");
+    expect(dibsPageUrl("en")).toBe("https://flagshipserver.com/dibs");
+    expect(dibsPageUrl("pt-BR")).toBe("https://flagshipserver.com/pt-br/dibs");
+    expect(dibsPageUrl("zh-Hans")).toBe("https://flagshipserver.com/zh-hans/dibs");
   });
 });

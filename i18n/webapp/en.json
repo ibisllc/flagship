@@ -16593,5 +16593,65 @@
   "Changed the account key": {
     "en": "Changed the account key",
     "ctx": "webapp/lib/auditLog.js:51"
+  },
+  "Couldn't check {0} just now. Try again in a minute.": {
+    "en": "Couldn't check {0} just now. Try again in a minute.",
+    "ctx": "webapp/lib/chooseName.js:217"
+  },
+  "Held for the owner of {0} until {1}.": {
+    "en": "Held for the owner of {0} until {1}.",
+    "ctx": "webapp/lib/chooseName.js:219"
+  },
+  "Held for the owner of {0}.": {
+    "en": "Held for the owner of {0}.",
+    "ctx": "webapp/lib/chooseName.js:220"
+  },
+  "Why is {0} held?": {
+    "en": "Why is {0} held?",
+    "ctx": "webapp/lib/chooseName.js:227"
+  },
+  "Until {0}, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": {
+    "en": "Until {0}, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.",
+    "ctx": "webapp/lib/chooseName.js:229"
+  },
+  "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": {
+    "en": "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.",
+    "ctx": "webapp/lib/chooseName.js:230"
+  },
+  "Is this name yours?": {
+    "en": "Is this name yours?",
+    "ctx": "webapp/lib/chooseName.js:231"
+  },
+  "If {0} is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.": {
+    "en": "If {0} is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.",
+    "ctx": "webapp/lib/chooseName.js:232"
+  },
+  "Account name: {0}": {
+    "en": "Account name: {0}",
+    "ctx": "webapp/lib/chooseName.js:238"
+  },
+  "Name I want: {0}": {
+    "en": "Name I want: {0}",
+    "ctx": "webapp/lib/chooseName.js:239"
+  },
+  "Why:": {
+    "en": "Why:",
+    "ctx": "webapp/lib/chooseName.js:239"
+  },
+  "Email us": {
+    "en": "Email us",
+    "ctx": "webapp/views/choose-name.js:62"
+  },
+  "How .com dibs works": {
+    "en": "How .com dibs works",
+    "ctx": "webapp/views/choose-name.js:63"
+  },
+  "Why?": {
+    "en": "Why?",
+    "ctx": "webapp/views/choose-name.js:111"
+  },
+  "Pick another name, or go back for a new suggestion.": {
+    "en": "Pick another name, or go back for a new suggestion.",
+    "ctx": "webapp/views/choose-name.js:113"
   }
 }

@@ -4073,5 +4073,20 @@
   "Cloud recovery is off since the account key changed. Set it up again.": "La récupération dans le cloud est désactivée depuis le changement de clé du compte. Configurez-la à nouveau.",
   "Your account key was changed. Open Flagship to keep using this device.": "La clé de votre compte a été changée. Ouvrez Flagship pour continuer à utiliser cet appareil.",
   "Give this browser its own device key": "Donner à ce navigateur sa propre clé d’appareil",
-  "Changed the account key": "A changé la clé du compte"
+  "Changed the account key": "A changé la clé du compte",
+  "Held for the owner of {0} until {1}.": "Réservé au titulaire de {0} jusqu’au {1}.",
+  "Held for the owner of {0}.": "Réservé au titulaire de {0}.",
+  "Couldn't check {0} just now. Try again in a minute.": "Impossible de vérifier {0} pour l’instant. Réessayez dans une minute.",
+  "Why?": "Pourquoi ?",
+  "Why is {0} held?": "Pourquoi {0} est-il réservé ?",
+  "Until {0}, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "Jusqu’au {0}, un nom Flagship qui correspond à un .com enregistré est gardé pour la personne qui contrôle ce domaine. Ensuite, il est ouvert à tous.",
+  "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "Pendant une durée limitée, un nom Flagship qui correspond à un .com enregistré est gardé pour la personne qui contrôle ce domaine. Ensuite, il est ouvert à tous.",
+  "Is this name yours?": "Ce nom est-il le vôtre ?",
+  "If {0} is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.": "Si {0} vous appartient, si c’est votre propre nom ou si vous avez une autre bonne raison, écrivez à support@flagshipserver.com avant de créer votre compte. Indiquez le nom que vous voulez et pourquoi. Si nous le pouvons, nous vous enverrons un lien qui le met de côté pour vous.",
+  "Email us": "Nous écrire",
+  "How .com dibs works": "Comment fonctionne la réservation .com",
+  "Pick another name, or go back for a new suggestion.": "Choisissez un autre nom, ou revenez en arrière pour une nouvelle suggestion.",
+  "Account name: {0}": "Nom de compte : {0}",
+  "Name I want: {0}": "Nom souhaité : {0}",
+  "Why:": "Pourquoi :"
 }

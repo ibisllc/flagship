@@ -4073,5 +4073,20 @@
   "Cloud recovery is off since the account key changed. Set it up again.": "アカウントのキーが変更されたため、クラウド復元はオフになっています。もう一度設定してください。",
   "Your account key was changed. Open Flagship to keep using this device.": "アカウントのキーが変更されました。このデバイスを引き続き使うには Flagship を開いてください。",
   "Give this browser its own device key": "このブラウザに専用のデバイスキーを持たせる",
-  "Changed the account key": "アカウントのキーを変更"
+  "Changed the account key": "アカウントのキーを変更",
+  "Held for the owner of {0} until {1}.": "{1}まで {0} の所有者のために確保されています。",
+  "Held for the owner of {0}.": "{0} の所有者のために確保されています。",
+  "Couldn't check {0} just now. Try again in a minute.": "今は {0} を確認できませんでした。1 分後にもう一度お試しください。",
+  "Why?": "なぜ？",
+  "Why is {0} held?": "{0} が確保されている理由",
+  "Until {0}, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "{0}までは、登録済みの .com と一致する Flagship の名前は、そのドメインを管理している人のために確保されます。その後は誰でも使えるようになります。",
+  "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "期間限定で、登録済みの .com と一致する Flagship の名前は、そのドメインを管理している人のために確保されます。その後は誰でも使えるようになります。",
+  "Is this name yours?": "この名前はあなたのものですか？",
+  "If {0} is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.": "{0} があなたのものである場合、あなた自身の名前である場合、またはほかに正当な理由がある場合は、アカウントを作成する前に support@flagshipserver.com までメールしてください。希望する名前と理由をお書きください。可能であれば、その名前をあなたのために確保するリンクをお送りします。",
+  "Email us": "メールで問い合わせる",
+  "How .com dibs works": ".com 優先権の仕組み",
+  "Pick another name, or go back for a new suggestion.": "別の名前を選ぶか、戻って新しい候補を表示してください。",
+  "Account name: {0}": "アカウント名: {0}",
+  "Name I want: {0}": "希望する名前: {0}",
+  "Why:": "理由:"
 }

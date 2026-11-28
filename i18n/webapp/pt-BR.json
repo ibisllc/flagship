@@ -4073,5 +4073,20 @@
   "Cloud recovery is off since the account key changed. Set it up again.": "A recuperação na nuvem está desativada desde que a chave da conta foi trocada. Configure-a de novo.",
   "Your account key was changed. Open Flagship to keep using this device.": "A chave da sua conta foi trocada. Abra o Flagship para continuar usando este dispositivo.",
   "Give this browser its own device key": "Dar a este navegador a própria chave de dispositivo",
-  "Changed the account key": "Trocou a chave da conta"
+  "Changed the account key": "Trocou a chave da conta",
+  "Held for the owner of {0} until {1}.": "Reservado para o titular de {0} até {1}.",
+  "Held for the owner of {0}.": "Reservado para o titular de {0}.",
+  "Couldn't check {0} just now. Try again in a minute.": "Não foi possível verificar {0} agora. Tente de novo em um minuto.",
+  "Why?": "Por quê?",
+  "Why is {0} held?": "Por que {0} está reservado?",
+  "Until {0}, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "Até {0}, um nome do Flagship que corresponde a um .com registrado fica guardado para quem controla esse domínio. Depois, fica aberto a todos.",
+  "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "Por tempo limitado, um nome do Flagship que corresponde a um .com registrado fica guardado para quem controla esse domínio. Depois, fica aberto a todos.",
+  "Is this name yours?": "Este nome é seu?",
+  "If {0} is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.": "Se {0} é seu, se é o seu próprio nome ou se você tem outro bom motivo, escreva para support@flagshipserver.com antes de criar sua conta. Diga qual nome você quer e por quê. Se pudermos, enviaremos um link que o reserva para você.",
+  "Email us": "Fale conosco",
+  "How .com dibs works": "Como funciona a prioridade .com",
+  "Pick another name, or go back for a new suggestion.": "Escolha outro nome ou volte para receber uma nova sugestão.",
+  "Account name: {0}": "Nome da conta: {0}",
+  "Name I want: {0}": "Nome que eu quero: {0}",
+  "Why:": "Por quê:"
 }

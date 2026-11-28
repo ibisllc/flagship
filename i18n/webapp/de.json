@@ -4073,5 +4073,20 @@
   "Cloud recovery is off since the account key changed. Set it up again.": "Die Cloud-Wiederherstellung ist aus, seit der Kontoschlüssel geändert wurde. Richte sie erneut ein.",
   "Your account key was changed. Open Flagship to keep using this device.": "Der Schlüssel deines Kontos wurde geändert. Öffne Flagship, um dieses Gerät weiter zu nutzen.",
   "Give this browser its own device key": "Diesem Browser einen eigenen Geräteschlüssel geben",
-  "Changed the account key": "Kontoschlüssel geändert"
+  "Changed the account key": "Kontoschlüssel geändert",
+  "Held for the owner of {0} until {1}.": "Reserviert für den Inhaber von {0} bis {1}.",
+  "Held for the owner of {0}.": "Reserviert für den Inhaber von {0}.",
+  "Couldn't check {0} just now. Try again in a minute.": "{0} konnte gerade nicht geprüft werden. Versuch es in einer Minute noch einmal.",
+  "Why?": "Warum?",
+  "Why is {0} held?": "Warum ist {0} reserviert?",
+  "Until {0}, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "Bis {0} wird ein Flagship-Name, der zu einer registrierten .com-Domain passt, für denjenigen freigehalten, der diese Domain kontrolliert. Danach steht er allen offen.",
+  "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "Für begrenzte Zeit wird ein Flagship-Name, der zu einer registrierten .com-Domain passt, für denjenigen freigehalten, der diese Domain kontrolliert. Danach steht er allen offen.",
+  "Is this name yours?": "Ist das dein Name?",
+  "If {0} is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.": "Wenn {0} dir gehört, es dein eigener Name ist oder du einen anderen guten Grund hast, schreib an support@flagshipserver.com, bevor du dein Konto erstellst. Sag, welchen Namen du möchtest und warum. Wenn wir können, schicken wir dir einen Link, der ihn für dich zurücklegt.",
+  "Email us": "Schreib uns",
+  "How .com dibs works": "So funktioniert der .com-Vorrang",
+  "Pick another name, or go back for a new suggestion.": "Wähle einen anderen Namen oder geh zurück, um einen neuen Vorschlag zu bekommen.",
+  "Account name: {0}": "Kontoname: {0}",
+  "Name I want: {0}": "Gewünschter Name: {0}",
+  "Why:": "Grund:"
 }

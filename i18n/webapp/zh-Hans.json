@@ -4073,5 +4073,20 @@
   "Cloud recovery is off since the account key changed. Set it up again.": "自账户密钥更改后，云端恢复已关闭。请重新设置。",
   "Your account key was changed. Open Flagship to keep using this device.": "你的账户密钥已更改。打开 Flagship 以继续使用此设备。",
   "Give this browser its own device key": "为此浏览器生成它自己的设备密钥",
-  "Changed the account key": "更改了账户密钥"
+  "Changed the account key": "更改了账户密钥",
+  "Held for the owner of {0} until {1}.": "已为 {0} 的所有者保留，直到 {1}。",
+  "Held for the owner of {0}.": "已为 {0} 的所有者保留。",
+  "Couldn't check {0} just now. Try again in a minute.": "暂时无法检查 {0}。请一分钟后再试。",
+  "Why?": "为什么？",
+  "Why is {0} held?": "为什么 {0} 被保留？",
+  "Until {0}, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "在 {0} 之前，与已注册 .com 相同的 Flagship 名称会为控制该域名的人保留。之后向所有人开放。",
+  "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": "在限定时间内，与已注册 .com 相同的 Flagship 名称会为控制该域名的人保留。之后向所有人开放。",
+  "Is this name yours?": "这个名称是你的吗？",
+  "If {0} is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.": "如果 {0} 是你的、这是你自己的名字，或者你有其他正当理由，请在创建账户之前发邮件至 support@flagshipserver.com。说明你想要的名称和原因。如果可以，我们会发送一个为你保留该名称的链接。",
+  "Email us": "给我们发邮件",
+  "How .com dibs works": "了解 .com 优先认领",
+  "Pick another name, or go back for a new suggestion.": "请选择其他名称，或返回获取新的建议。",
+  "Account name: {0}": "账户名称：{0}",
+  "Name I want: {0}": "我想要的名称：{0}",
+  "Why:": "原因："
 }
