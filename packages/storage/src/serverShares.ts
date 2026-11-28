@@ -67,9 +67,17 @@ export type ShareAcceptResult =
   | { ok: true }
   | { ok: false; reason: "unknown" | "ended" | "expired" | "already-accepted" };
 
+export type ShareCreateResult = { ok: true } | { ok: false; reason: "taken" } | { ok: false; reason: "cap"; count: number };
+
+export type NewServerShare = Omit<ServerShareRecord, "acceptHex" | "acceptedAt" | "endKind" | "endJson" | "endedAt">;
+
 export interface ServerShareStorage {
-  /** `{ok:false}` when the id or the token hash is already taken. */
-  create(rec: Omit<ServerShareRecord, "acceptHex" | "acceptedAt" | "endKind" | "endJson" | "endedAt">): Promise<{ ok: boolean }>;
+  /**
+   * `taken` when the id or the token hash is already used. With a `cap`, the
+   * insert holds it in the same write: `cap` when the owner's open links and
+   * live shares (at `rec.createdAt`) already number `cap` or more.
+   */
+  create(rec: NewServerShare, cap?: number | null): Promise<ShareCreateResult>;
   get(shareId: string): Promise<ServerShareRecord | null>;
   listForOwner(username: string): Promise<ServerShareRecord[]>;
   /** First acceptance wins. */
@@ -183,16 +191,23 @@ function unlockFromRow(r: UnlockRow): ServerShareUnlockRecord {
 export class D1ServerShareStorage implements ServerShareStorage {
   constructor(private readonly db: D1Database) {}
 
-  async create(rec: Omit<ServerShareRecord, "acceptHex" | "acceptedAt" | "endKind" | "endJson" | "endedAt">): Promise<{ ok: boolean }> {
-    const res = await this.db
-      .prepare(
-        `INSERT OR IGNORE INTO server_shares
-           (share_id, owner_username, server_domain, token_hash, offer_hex, owner_hex, created_at, expires_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-      )
-      .bind(rec.shareId, rec.ownerUsername, rec.serverDomain, rec.tokenHash, rec.offerHex, rec.ownerHex, rec.createdAt, rec.expiresAt)
-      .run();
-    return { ok: (res.meta.changes ?? 0) > 0 };
+  async create(rec: NewServerShare, cap?: number | null): Promise<ShareCreateResult> {
+    const live = (owner: string, at: string) =>
+      `SELECT COUNT(*) AS n FROM server_shares WHERE owner_username = ${owner} AND ended_at IS NULL AND (accept_hex IS NOT NULL OR expires_at > ${at})`;
+    const [ins, counted] = await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT OR IGNORE INTO server_shares
+             (share_id, owner_username, server_domain, token_hash, offer_hex, owner_hex, created_at, expires_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+            WHERE ?9 IS NULL OR (${live("?2", "?7")}) < ?9`,
+        )
+        .bind(rec.shareId, rec.ownerUsername, rec.serverDomain, rec.tokenHash, rec.offerHex, rec.ownerHex, rec.createdAt, rec.expiresAt, cap ?? null),
+      this.db.prepare(live("?1", "?2")).bind(rec.ownerUsername, rec.createdAt),
+    ]);
+    if ((ins?.meta.changes ?? 0) > 0) return { ok: true };
+    const count = Number((counted?.results?.[0] as { n?: number } | undefined)?.n ?? 0);
+    return cap != null && count >= cap ? { ok: false, reason: "cap", count } : { ok: false, reason: "taken" };
   }
 
   async get(shareId: string): Promise<ServerShareRecord | null> {
@@ -362,9 +377,16 @@ export class InMemoryServerShareStorage implements ServerShareStorage {
   private readonly inbox = new Map<string, ShareInboxRecord>();
   private readonly pushes = new Map<string, ServerSharePushRecord>();
 
-  async create(rec: Omit<ServerShareRecord, "acceptHex" | "acceptedAt" | "endKind" | "endJson" | "endedAt">): Promise<{ ok: boolean }> {
-    if (this.shares.has(rec.shareId)) return { ok: false };
-    for (const s of this.shares.values()) if (s.tokenHash === rec.tokenHash) return { ok: false };
+  async create(rec: NewServerShare, cap?: number | null): Promise<ShareCreateResult> {
+    if (cap != null) {
+      let count = 0;
+      for (const s of this.shares.values()) {
+        if (s.ownerUsername === rec.ownerUsername && s.endedAt === null && (s.acceptHex !== null || s.expiresAt > rec.createdAt)) count++;
+      }
+      if (count >= cap) return { ok: false, reason: "cap", count };
+    }
+    if (this.shares.has(rec.shareId)) return { ok: false, reason: "taken" };
+    for (const s of this.shares.values()) if (s.tokenHash === rec.tokenHash) return { ok: false, reason: "taken" };
     this.shares.set(rec.shareId, { ...rec, acceptHex: null, acceptedAt: null, endKind: null, endJson: null, endedAt: null });
     return { ok: true };
   }
