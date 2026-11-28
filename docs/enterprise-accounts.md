@@ -230,13 +230,38 @@ enforced by `.com` and the box, not the apps.
 ## 7. Joining
 
 1. An org admin creates a seat invite in the org console: label (sealed under the org directory key), roles, scopes.
-   This is a seat grant awaiting its member key, plus a link `https://flagshipserver.com/org-join#<secret>` (the
-   fragment never reaches `.com`), the same link machinery as a share (offer sealed under a link key, one acceptance).
-2. The person opens it on an **admin device** of their personal account. The app derives the seat member key, and, if
-   the seat has an admin role, makes a fresh seat admin key and its binding. It shows a 6-digit SAS.
-3. The org admin compares the SAS (it defeats a leaked link, as for shares), then approves; for roles above member
-   the ceremony collects k_grant approvals.
-4. `.com` stores the grant and its approvals; boxes pick it up from the seat book.
+   This is a seat grant awaiting its member key, plus a link `https://flagshipserver.com/org-join#o=<orgId>&s=<seatId>&k=<k>`
+   (the fragment never reaches `.com`). The 32-byte link key `k` derives two keys:
+   - the **offer key** `HKDF-SHA256(k, info "flagship/org-invite-offer/v1", 32)`, which seals the offer (org name,
+     genesis, roles, pseudonym) and the pseudonym's label under AES-256-GCM;
+   - the **invite key**, a hybrid Ed25519 + ML-DSA-65 key whose 64-byte secret is
+     `HKDF-SHA256(k, info "flagship/org-invite-key/v1", 64)` (Ed25519 seed, then ML-DSA seed). Its public half,
+     `inviteKeyPub`, is part of the invite's canonical bytes (`flagship/org-seat-invite/v1|…|<expiresAt>|<inviteKeyPub>`),
+     which the inviting admin approves and `.com` stores.
+2. The person opens it on an **admin device** of their personal account. Reading the offer
+   (`GET /api/orgs/<orgId>/invites/<seatId>`) needs a fresh invite-key signature over
+   `flagship/org-invite-read/v1|<orgId>|<seatId>|<issuedAt>` (headers `x-flagship-issued-at`, `x-flagship-signature`;
+   within 5 minutes of `.com`'s clock). A missing, stale or wrong proof answers 404, exactly as an unknown invite, so
+   the orgId and seatId alone reveal nothing. The app checks the invite names the invite key its link derives, derives
+   the seat member key, and, if the seat has an admin role, makes a fresh seat admin key and its binding.
+3. The accept is signed twice: by the seat member key (as before) and by the invite key, over the same
+   `canonicalOrgSeatAccept` bytes. `.com` refuses an accept without a valid invite-key signature (404 again), keeps the
+   signature with the accept and serves it in `/seats`. So only someone holding the link can accept; knowing the orgId
+   is not enough to squat on a pending invite. Admin apps and a directory connector's box verify the invite-key
+   signature themselves before offering "admit" or linking a person to the seat; `.com` also refuses a grant whose
+   accept lacks it.
+4. Both phones show a 6-digit SAS. The org admin compares it (it still defeats a leaked link, as for shares), then
+   approves; for roles above member the ceremony collects k_grant approvals. If the codes differ, the admin app says
+   plainly that someone other than the invited person accepted, and offers to withdraw the invitation.
+5. **Withdraw.** An org admin (the invite's own authority level, one admin) signs
+   `flagship/org-invite-withdraw/v1|<orgId>|<seatId>|<oarVersion>|<issuedAt>` as an org approval and posts it to
+   `POST /api/orgs/<orgId>/invites/<seatId>/withdraw`. `.com` deletes the invite and any accept not yet admitted, keeps
+   the withdrawal (that seat id is never invited again, so the old signed invite cannot be replayed) and logs
+   `invite-withdraw`. An admitted seat is offboarded with a seat revoke instead (409 `org-seat-admitted`).
+6. `.com` stores the grant and its approvals; boxes pick it up from the seat book.
+
+Invites made before 0.5 have no invite key: `.com` no longer serves them, and they cannot be accepted or admitted.
+Admins send those invitations again (release notes 0.5).
 
 **What `.com` learns.** That org `acme` has a seat with these public keys and roles. It does **not** learn which
 personal account holds the seat: the acceptance is signed by the seat keys only, and the person's app talks to the

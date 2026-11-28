@@ -179,3 +179,12 @@ over once "let's start 0.5" is said.
 - Push registration race: two rows for the same device and token, 13 ms apart (FCM onNewToken and the Settings switch registering together). Dedupe on (device, platform, token) in `.com` (`handlePushRegister`) or serialise in the app.
 - From the Play session (2026-11-21): restrict the Gemini API keys Google Cloud flagged; decide whether to exclude Android TV again; look at Play's bundle size warning. (New screenshots and the store name: `docs/runbooks/post-0.4-store-listing.md`.)
 - Release testing gap: no test answered a call on a RELEASE build (R8 stripped org.jni_zero: every answer crashed). Add a release-build call smoke to the native gym, and a check that the dex keeps every class the AAR's native code looks up.
+- **Org invite: link-key proof for read + accept, and withdraw** (found 2026-11-27). **Built on `release/0.5`.** The
+  link key `k` derives `offerKey = HKDF(k, "flagship/org-invite-offer/v1")` and a hybrid invite key from
+  `HKDF(k, "flagship/org-invite-key/v1")`; `inviteKeyPub` is in `OrgSeatInvite`'s canonical bytes. `GET invites/<seat>`
+  needs a fresh invite-key signature (`flagship/org-invite-read/v1`, ±5 min; else 404 as for no invite); the accept
+  carries an invite-key signature over `canonicalOrgSeatAccept`, stored and served in `/seats`, checked by `.com`
+  (accept and grant), admin clients and the connector box. SAS kept; a mismatch says someone else accepted. New
+  admin-signed withdraw (`flagship/org-invite-withdraw/v1`, deletes the invite and any unadmitted accept, logged).
+  Vectors `test-vectors/org-invite-key` (TS, Swift, Kotlin, webapp). Pending invites from before 0.5 stop working:
+  re-send after 0.5 (release notes).
