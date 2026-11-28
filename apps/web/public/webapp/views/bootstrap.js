@@ -254,7 +254,7 @@ async function createAccount() {
   let retryAfterMs = first.retryAfterMs;
   // Opened from a link where the owner set a name aside (lib/chooseName.js parseNameGrantLink): that name first.
   const grant = peekNameGrant();
-  if (grant) wanted = await inlineChooseOwnName({ initialName: grant.name, setAside: true, free: grant.paid });
+  if (grant) wanted = await inlineChooseOwnName({ initialName: grant.name, setAside: true, free: grant.paid, grant });
   while (!wanted) {
     const pick = await inlineSuggestUsername({
       initialName: chosen,
@@ -270,7 +270,7 @@ async function createAccount() {
     }
     chosen = pick.suggested;
     retryAfterMs = 0;
-    wanted = await inlineChooseOwnName({ initialName: "" });
+    wanted = await inlineChooseOwnName({ initialName: "", grant });
   }
   const shownName = wanted?.name ?? chosen;
 

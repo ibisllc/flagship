@@ -20,7 +20,7 @@
 import { controlApex } from "./apex.js";
 import { canonicalNameChangeBytes } from "./nameChange.js";
 import { nameProblemText, nameTakenText, voiciNameProblem } from "./nameRules.js";
-import { tr } from "./i18n.js";
+import { currentLanguage, dateLocale, tr } from "./i18n.js";
 
 export const NAME_PACK_UNITS = 10;
 export const NAME_CHOICE_KEY = "flagship.nameChoice.v1";
@@ -150,9 +150,9 @@ export function localNameProblem(raw) {
   return p ? nameProblemText(p) : null;
 }
 
-function heldDate(ms) {
+export function heldDate(ms) {
   try {
-    return new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+    return new Date(ms).toLocaleDateString(dateLocale(), { year: "numeric", month: "long", day: "numeric" });
   } catch {
     return new Date(ms).toISOString().slice(0, 10);
   }
@@ -180,10 +180,9 @@ export function nameChoiceRefusalText(body, { wanted = "", kept = "", paidWith =
     case "same-name":
       return nameTakenText();
     case "dibs-held":
+      return heldStatusText(wanted, body);
     case "dibs-used":
-      return typeof body?.heldUntil === "number"
-        ? tr("This name is held for the owner of {0}.com until {1}.", wanted, heldDate(body.heldUntil))
-        : nameTakenText();
+      return nameTakenText();
     case "code-invalid":
     case "code-wrong-kind":
     case "code-needs-dibs":
@@ -198,6 +197,81 @@ export function nameChoiceRefusalText(body, { wanted = "", kept = "", paidWith =
       return paidWith === "vouchers"
         ? tr("The name change didn't go through. Your account keeps the name {0}, and your $10 stays in your account as vouchers.", kept)
         : tr("The name change didn't go through. Your account keeps the name {0}, and your voucher code still works.", kept);
+  }
+}
+
+// ── the held-name status line and its "Why?" (a name held for a .com holder: nameDibs.ts) ────────────────────
+
+/** Where people write about a held name. */
+export const SUPPORT_EMAIL = "support@flagshipserver.com";
+
+/** The `.com` that holds `name`: the one `.com` named (maybe the de-hyphenated label), else `<name>.com`. */
+export function heldDomain(name, body) {
+  const d = typeof body?.domain === "string" ? body.domain.trim().toLowerCase() : "";
+  return d || `${String(name ?? "").toLowerCase()}.com`;
+}
+
+/** The status line under the field for a held name (a `dibs-held` answer). */
+export function heldStatusText(name, body) {
+  const domain = heldDomain(name, body);
+  if (body?.checked === false) return tr("Couldn't check {0} just now. Try again in a minute.", domain);
+  return typeof body?.heldUntil === "number"
+    ? tr("Held for the owner of {0} until {1}.", domain, heldDate(body.heldUntil))
+    : tr("Held for the owner of {0}.", domain);
+}
+
+/** The "Why is {name} held?" sheet's sentences. */
+export function heldWhyText(name, body) {
+  const domain = heldDomain(name, body);
+  return {
+    title: tr("Why is {0} held?", name),
+    rule: typeof body?.heldUntil === "number"
+      ? tr("Until {0}, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.", heldDate(body.heldUntil))
+      : tr("For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone."),
+    yoursTitle: tr("Is this name yours?"),
+    yours: tr("If {0} is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.", domain),
+  };
+}
+
+/** `mailto:` for "Email us", subject and body in the person's language. */
+export function heldMailto(name) {
+  const subject = tr("Account name: {0}", name);
+  const body = tr("Name I want: {0}", name) + "\n" + tr("Why:") + "\n";
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+const SITE_PATHS = { es: "es", fr: "fr", de: "de", "pt-BR": "pt-br", ja: "ja", "zh-Hans": "zh-hans" };
+
+/** The site's ".com dibs" page in the person's language (English at the root). */
+export function dibsPageUrl(lang = currentLanguage()) {
+  const p = SITE_PATHS[lang];
+  return `https://flagshipserver.com/${p ? `${p}/` : ""}dibs`;
+}
+
+/**
+ * The precheck while typing: `.com`'s quote without a username (control-plane nameChange.ts). Resolves to
+ * `{state: "open"}`, `{state: "held", body}` (a `dibs-held` answer, `body.checked === false` when its lookup failed),
+ * `{state: "refused", body}` (taken, invalid, a bad link …) or `{state: "unknown"}` when `.com` couldn't answer it (an
+ * older `.com` refuses the shape, or the network is down): the name is then checked at Pay, as before.
+ */
+export async function precheckName(name, io, grant = null) {
+  try {
+    const r = await io.fetch(`${io.apex ?? controlApex()}/api/account/name-change/quote`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newUsername: name, ...grantWire(grant && grant.name === name ? grant : null) }),
+      signal: io.signal,
+    });
+    if (!r.ok) return { state: "unknown" };
+    const body = await json(r);
+    if (body?.available === true) return { state: "open", body };
+    if (body?.available !== false) return { state: "unknown" };
+    if (body.code === "dibs-held") return { state: "held", body };
+    if (body.code === "has-servers" || body.code === "same-name") return { state: "unknown" };
+    return { state: "refused", body };
+  } catch {
+    return { state: "unknown" };
   }
 }
 

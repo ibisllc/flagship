@@ -17,11 +17,16 @@ import { clearAccountReadTokens, mintAccountReadToken } from "../lib/accountRead
 import {
   claimChosenName,
   clearNameChoice,
+  dibsPageUrl,
   forgetNameGrant,
+  heldMailto,
+  heldStatusText,
+  heldWhyText,
   loadNameChoice,
   ADDRESS_PREFIX,
   localNameProblem,
   nameChoiceRefusalText,
+  precheckName,
   resumeNameChoice,
   saveNameChoice,
   stripAddressPrefix,
@@ -37,11 +42,59 @@ import { escapeHtml } from "../lib/util.js";
 import { markVouchersSpent, takeVouchers, voucherNullifier } from "../lib/vouchers.js";
 import { tr } from "../lib/i18n.js";
 
+const PRECHECK_DEBOUNCE_MS = 600;
+
+/**
+ * "Why is {name} held?": a second dialog over the screen. The keyboard is closed first (the caller blurs the field);
+ * focus returns to the Why? button that opened it.
+ */
+function openHeldWhy(name, body, back) {
+  const host = ensureHost();
+  const overlay = buildOverlay();
+  const t = heldWhyText(name, body);
+  overlay.innerHTML = `
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="held-why-title" data-held-why>
+      <h3 class="modal-title" id="held-why-title">${escapeHtml(t.title)}</h3>
+      <p class="modal-message">${escapeHtml(t.rule)}</p>
+      <h4 class="held-why-sub">${escapeHtml(t.yoursTitle)}</h4>
+      <p class="modal-message">${escapeHtml(t.yours)}</p>
+      <div class="held-why-actions mt-3">
+        <a class="btn" data-held-email href="${escapeHtml(heldMailto(name))}">${tr("Email us")}</a>
+        <a class="btn secondary" data-held-dibs href="${escapeHtml(dibsPageUrl())}" target="_blank" rel="noopener">${tr("How .com dibs works")}</a>
+        <button class="secondary" data-held-ok>${tr("OK")}</button>
+      </div>
+    </div>
+  `;
+  host.appendChild(overlay);
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey, true);
+    back?.focus({ preventScroll: true });
+  };
+  const onKey = (ev) => {
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      close();
+    }
+  };
+  overlay.querySelector("[data-held-ok]").addEventListener("click", close);
+  document.addEventListener("keydown", onKey, true);
+  queueMicrotask(() => overlay.querySelector("[data-held-ok]").focus({ preventScroll: true }));
+  return overlay;
+}
+
 /**
  * The screen. Resolves to `{name, method: "pay"}`, `{name, method: "code", code}`, `{keep: true}` (only when
  * `keepName` is given: the account exists already) or null (Back).
+ *
+ * As the person types, a name that passes the local check is asked of `.com` (lib/chooseName.js precheckName). A
+ * name held for a `.com` holder shows one status line under the field, with "Why?", and Pay / Use voucher stay off
+ * until another name is typed: nothing is opened or charged for it. When `.com` can't answer the precheck, the name is
+ * checked at Pay as before (claimChosenName). `grant` (a name set aside by the owner) goes with the precheck of its
+ * own name, so that name shows as free.
  */
-export function inlineChooseOwnName({ initialName = "", error = "", keepName = "", setAside = false, free = false } = {}) {
+export function inlineChooseOwnName({ initialName = "", error = "", keepName = "", setAside = false, free = false, grant = null, precheck = null } = {}) {
   return new Promise((resolve) => {
     const host = ensureHost();
     const overlay = buildOverlay();
@@ -51,8 +104,13 @@ export function inlineChooseOwnName({ initialName = "", error = "", keepName = "
         <label class="label" for="choose-name-input">${tr("Account name")}</label>
         <div class="input-prefixed" dir="ltr">
           <span class="input-prefix" aria-hidden="true">${ADDRESS_PREFIX}</span>
-          <input id="choose-name-input" type="text" data-choose-name autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" value="${escapeHtml(initialName)}" ${free ? "readonly" : ""} />
+          <input id="choose-name-input" type="text" data-choose-name autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" enterkeyhint="done" value="${escapeHtml(initialName)}" ${free ? "readonly" : ""} />
         </div>
+        <div class="choose-status mt-2" data-choose-status-row hidden>
+          <p class="note choose-status-text" data-choose-status role="status" aria-live="polite"></p>
+          <button type="button" class="linklike choose-why" data-choose-why hidden>${tr("Why?")}</button>
+        </div>
+        <p class="note mt-2" data-choose-held-hint hidden>${tr("Pick another name, or go back for a new suggestion.")}</p>
         ${setAside ? `<p class="note mt-2">${tr("This name has been set aside for you.")}</p>` : ""}
         <p class="warn-text mt-2" data-choose-problem role="alert" ${error ? "" : "hidden"}>${escapeHtml(error)}</p>
         ${free
@@ -64,7 +122,7 @@ export function inlineChooseOwnName({ initialName = "", error = "", keepName = "
         </div>`}
         <div class="mt-3" data-choose-code-row hidden>
           <label class="label" for="choose-name-code">${tr("Voucher code")}</label>
-          <input id="choose-name-code" data-choose-code autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <input id="choose-name-code" data-choose-code autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done" />
           <button class="full-width mt-2" data-choose-use>${tr("Use voucher")}</button>
         </div>
         <div class="row-2 mt-3">
@@ -78,23 +136,93 @@ export function inlineChooseOwnName({ initialName = "", error = "", keepName = "
     document.body.classList.add("modal-open");
     const nameEl = overlay.querySelector("[data-choose-name]");
     const problemEl = overlay.querySelector("[data-choose-problem]");
+    const statusRow = overlay.querySelector("[data-choose-status-row]");
+    const statusEl = overlay.querySelector("[data-choose-status]");
+    const whyEl = overlay.querySelector("[data-choose-why]");
+    const hintEl = overlay.querySelector("[data-choose-held-hint]");
     const codeRow = overlay.querySelector("[data-choose-code-row]");
     const codeEl = overlay.querySelector("[data-choose-code]");
+    const payButtons = [...overlay.querySelectorAll("[data-choose-pay], [data-choose-voucher], [data-choose-use], [data-choose-free]")];
+    const ask = precheck ?? ((n) => precheckName(n, { fetch: (...a) => globalThis.fetch(...a) }, grant));
+    // The answer for one name (name → promise), so Pay right after typing waits for the check already under way.
+    const answers = new Map();
+    let shownFor = null;
+    let held = null;
+    let timer = null;
+    let whyOpen = null;
+    // A refusal handed in (after a failed rename) stays until the name it is about changes.
+    let errorFor = error ? String(initialName).trim().toLowerCase() : null;
     const close = (v) => {
+      clearTimeout(timer);
+      whyOpen?.remove();
       overlay.remove();
       document.body.classList.remove("modal-open");
       document.removeEventListener("keydown", onKey);
       resolve(v);
     };
     const onKey = (ev) => {
-      if (ev.key === "Escape") { ev.preventDefault(); close(keepName ? { keep: true } : null); }
+      if (ev.key === "Escape" && !whyOpen?.isConnected) { ev.preventDefault(); close(keepName ? { keep: true } : null); }
     };
     const name = () => String(nameEl.value ?? "").trim().toLowerCase();
+    const setHeld = (n, body) => {
+      held = body ? { name: n, body } : null;
+      statusRow.hidden = !held;
+      hintEl.hidden = !held || !!keepName;
+      statusEl.textContent = held ? heldStatusText(n, body) : "";
+      whyEl.hidden = !held || body.checked === false;
+      if (held) whyEl.setAttribute("aria-label", tr("Why is {0} held?", n));
+      for (const b of payButtons) b.disabled = !!held;
+    };
+    const showProblem = (text) => {
+      problemEl.textContent = text ?? "";
+      problemEl.hidden = !text;
+    };
     const check = () => {
-      const p = name() ? localNameProblem(name()) : null;
-      problemEl.textContent = p ?? "";
-      problemEl.hidden = !p;
-      return !p && !!name();
+      const n = name();
+      const p = n ? localNameProblem(n) : null;
+      if (errorFor !== null && n !== errorFor) errorFor = null;
+      if (errorFor === null) showProblem(p);
+      return !p && !!n;
+    };
+    const answerFor = (n) => {
+      if (!answers.has(n)) answers.set(n, Promise.resolve(ask(n)).catch(() => ({ state: "unknown" })));
+      return answers.get(n);
+    };
+    /** Show `.com`'s answer for the name in the field (stale answers, for a name since changed, are dropped). */
+    const show = async (n) => {
+      const a = await answerFor(n);
+      if (n !== name()) return a;
+      shownFor = n;
+      if (a.state === "held") {
+        const wasHeld = held?.name === n;
+        setHeld(n, a.body);
+        if (!wasHeld) errorFor = null;
+        if (errorFor === null) showProblem(null);
+      } else {
+        setHeld(n, null);
+        if (a.state === "refused" && errorFor === null) showProblem(nameChoiceRefusalText(a.body, { wanted: n }));
+      }
+      return a;
+    };
+    const schedule = () => {
+      clearTimeout(timer);
+      const n = name();
+      if (held && held.name !== n) setHeld(n, null);
+      if (!check()) return;
+      if (shownFor === n) return;
+      timer = setTimeout(() => void show(n), PRECHECK_DEBOUNCE_MS);
+    };
+    /** Close the keyboard, then go on only when `.com` didn't refuse the name (an unreachable precheck lets Pay decide). */
+    const submit = async (result) => {
+      nameEl.blur();
+      codeEl?.blur();
+      if (!check()) return;
+      clearTimeout(timer);
+      const n = name();
+      const a = await show(n);
+      if (n !== name()) return;
+      if (a.state === "held" || a.state === "refused") return;
+      close(result(n));
     };
     // A pasted address keeps only the name (the prefix is shown, never typed). maxlength would cut a long paste
     // before this sees it, so a paste is read whole.
@@ -109,30 +237,52 @@ export function inlineChooseOwnName({ initialName = "", error = "", keepName = "
       const start = nameEl.selectionStart ?? nameEl.value.length;
       const end = nameEl.selectionEnd ?? start;
       setName(nameEl.value.slice(0, start) + stripAddressPrefix(text.trim()) + nameEl.value.slice(end));
-      check();
+      schedule();
     });
     nameEl.addEventListener("input", () => {
       setName(nameEl.value);
-      check();
+      schedule();
     });
-    overlay.querySelector("[data-choose-free]")?.addEventListener("click", () => {
-      if (check()) close({ name: name(), method: "grant" });
+    nameEl.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      nameEl.blur();
+      if (check()) {
+        clearTimeout(timer);
+        void show(name());
+      }
     });
-    overlay.querySelector("[data-choose-pay]")?.addEventListener("click", () => {
-      if (check()) close({ name: name(), method: "pay" });
+    codeEl?.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      overlay.querySelector("[data-choose-use]").click();
     });
+    whyEl.addEventListener("click", () => {
+      if (!held) return;
+      nameEl.blur();
+      whyOpen = openHeldWhy(held.name, held.body, whyEl);
+    });
+    overlay.querySelector("[data-choose-free]")?.addEventListener("click", () => void submit((n) => ({ name: n, method: "grant" })));
+    overlay.querySelector("[data-choose-pay]")?.addEventListener("click", () => void submit((n) => ({ name: n, method: "pay" })));
     overlay.querySelector("[data-choose-voucher]")?.addEventListener("click", () => {
+      if (held) return;
       codeRow.hidden = false;
       codeEl.focus();
     });
     overlay.querySelector("[data-choose-use]").addEventListener("click", () => {
       const code = String(codeEl.value ?? "").trim();
-      if (check() && code) close({ name: name(), method: "code", code });
+      if (code) void submit((n) => ({ name: n, method: "code", code }));
     });
     overlay.querySelector("[data-choose-keep]")?.addEventListener("click", () => close({ keep: true }));
     overlay.querySelector("[data-choose-back]")?.addEventListener("click", () => close(null));
     document.addEventListener("keydown", onKey);
-    queueMicrotask(() => nameEl.focus({ preventScroll: true }));
+    // Only an empty field takes focus (and so the keyboard): a name handed in is checked at once instead, so a
+    // returned refusal or a hold stays in view.
+    if (name()) {
+      if (check()) void show(name());
+    } else {
+      queueMicrotask(() => nameEl.focus({ preventScroll: true }));
+    }
   });
 }
 
@@ -294,7 +444,7 @@ export async function finishChosenName(rec) {
     }
     if (out.fixable) {
       const free = !!rec.grant?.paid && rec.grant.name === rec.wanted;
-      const again = await inlineChooseOwnName({ initialName: rec.wanted, error: out.refusal, keepName: kept, setAside: !!rec.grant, free });
+      const again = await inlineChooseOwnName({ initialName: rec.wanted, error: out.refusal, keepName: kept, setAside: !!rec.grant, free, grant: rec.grant ?? null });
       if (again && !again.keep) {
         rec = { ...rec, wanted: again.name, method: again.method, code: again.code, stage: "quote" };
         saveNameChoice(rec);
@@ -335,7 +485,7 @@ export async function enterNameGrantForAccount(grant) {
   } catch {
     return elsewhere();
   }
-  const choice = await inlineChooseOwnName({ initialName: grant.name, setAside: true, free: grant.paid, keepName: current });
+  const choice = await inlineChooseOwnName({ initialName: grant.name, setAside: true, free: grant.paid, keepName: current, grant });
   if (!choice || choice.keep) return;
   const done = await finishChosenName({
     suggested: current, wanted: choice.name, method: choice.method, code: choice.code, grant,

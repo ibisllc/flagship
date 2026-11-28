@@ -566,4 +566,32 @@ export const WEB_UX: readonly Scenario[] = [
       dimension: "D4",
     },
   ),
+  web(
+    "web-ux-held-name-precheck",
+    "Choose your own account name at 390x844: a name held for a .com holder shows one whole status line under the focused field as it is typed (the de-hyphenated .com), Pay and Use a voucher stay off, Done closes the keyboard, Why? opens the dialog (Email us, How .com dibs works, OK back to Why?), and another name pays with nothing else sent.",
+    "gym ux held name the precheck shows the hold under the field while typing, Pay stays off and Why explains",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the screen on the sign-up page; .com holds clou-dflare for cloudflare.com." },
+        { kind: "tap", describe: "Type clou-dflare, press Done, open Why?, OK, then type acme-tools and Pay.", handle: "[data-choose-why]" },
+      ],
+      assertions: [
+        { describe: "Status line", handle: "[data-choose-status]", expect: "present" },
+        { describe: "Why?", handle: "[data-choose-why]", expect: "present" },
+      ],
+      screenshots: [shot("held-name-typing", "The hold under the field while typing."), shot("held-name-why", "The Why dialog.")],
+      dimension: "D3",
+    },
+  ),
+  web(
+    "web-ux-held-name-pay-fallback",
+    "Pay on a held name closes the keyboard, waits for the check and stays (a failed lookup reads Couldn't check, no Why?); a .com that refuses the precheck shape lets Pay go on as before.",
+    "gym ux held name Pay on a held name closes the keyboard and stays; an old .com falls back to the check at Pay",
+    {
+      steps: [{ kind: "launch", describe: "Open the screen; type acme and Pay at once; then an old .com, acmy and Pay." }],
+      assertions: [{ describe: "Status line", handle: "[data-choose-status]", expect: "present" }],
+      screenshots: [shot("held-name-unchecked", "The lookup failed line.")],
+      dimension: "D3",
+    },
+  ),
 ];

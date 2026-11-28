@@ -480,6 +480,112 @@ test.describe("gym ux dibs", () => {
   });
 });
 
+// ───────────────────────────── a held name at sign-up ─────────────────────────────
+
+/** Opens "Choose your own account name" on the sign-up page; the screen's answer lands in `window.__chosen`. */
+async function openChooseName(page: Page): Promise<void> {
+  await page.goto("/index.html");
+  await expect(page.locator("#view-bootstrap")).toBeVisible();
+  await page.evaluate(async () => {
+    const w = window as unknown as { __chosen?: unknown };
+    const m = await import("/views/choose-name.js");
+    void m.inlineChooseOwnName({ initialName: "" }).then((v: unknown) => (w.__chosen = v ?? "back"));
+  });
+  await expect(page.locator("#choose-name-input")).toBeFocused();
+}
+
+/** The element is entirely inside the window and its text isn't cut (no overflow, no clipping by the card). */
+async function fullyVisible(page: Page, selector: string): Promise<boolean> {
+  return page.evaluate((sel) => {
+    const el = document.querySelector(sel) as HTMLElement | null;
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const card = el.closest(".modal-card")!.getBoundingClientRect();
+    return r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight && r.top >= card.top && r.bottom <= card.bottom
+      && el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1;
+  }, selector);
+}
+
+const HELD_UNTIL = Date.UTC(2027, 9, 15);
+/** `.com`'s quote: the precheck has no `username` (control-plane nameChange.ts handleNameChangeQuote). */
+function quotes(m: Mock, answer: (name: string, body: any) => unknown): void {
+  m.post("/api/account/name-change/quote", (c: Call) => ({ json: answer(String(c.body?.newUsername), c.body) }));
+}
+const heldAnswer = (domain: string) => ({ available: false, code: "dibs-held", heldUntil: HELD_UNTIL, domain, reason: "held" });
+
+test.describe("gym ux held name", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("gym ux held name the precheck shows the hold under the field while typing, Pay stays off and Why explains", async ({ page }, testInfo) => {
+    const m = await mock(page);
+    quotes(m, (n) => (n === "clou-dflare" ? heldAnswer("cloudflare.com") : { available: true, kind: "name-change", priceUsd: 10, units: 10 }));
+    await openChooseName(page);
+    await page.locator("#choose-name-input").pressSequentially("clou-dflare", { delay: 30 });
+    const status = page.locator("[data-choose-status]");
+    await expect(status).toHaveText(/^Held for the owner of cloudflare\.com until .*2027\.$/, { timeout: 10_000 });
+    // Still typing: the field keeps focus (the keyboard stays up) and the line shows whole under it.
+    await expect(page.locator("#choose-name-input")).toBeFocused();
+    expect(await fullyVisible(page, "[data-choose-status]")).toBe(true);
+    await expect(status).toHaveAttribute("role", "status");
+    await expect(status).toHaveAttribute("aria-live", "polite");
+    await expect(page.locator("[data-choose-pay]")).toBeDisabled();
+    await expect(page.locator("[data-choose-voucher]")).toBeDisabled();
+    await expect(page.locator("[data-choose-held-hint]")).toHaveText("Pick another name, or go back for a new suggestion.");
+    expect(m.sent("/api/account/name-change/quote").every((c) => c.body.username === undefined)).toBe(true);
+    await shot(page, testInfo, "held-name-typing");
+
+    // Done on the keyboard closes it; the line is still whole.
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#choose-name-input")).not.toBeFocused();
+    expect(await fullyVisible(page, "[data-choose-status]")).toBe(true);
+
+    const why = page.getByRole("button", { name: "Why is clou-dflare held?" });
+    await why.click();
+    const sheet = page.getByRole("dialog", { name: "Why is clou-dflare held?" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toContainText("a Flagship name that matches a registered .com is kept for whoever controls that domain");
+    await expect(sheet).toContainText("If cloudflare.com is yours");
+    const mail = new URL((await sheet.locator("[data-held-email]").getAttribute("href"))!);
+    expect(mail.pathname).toBe("support@flagshipserver.com");
+    expect(mail.searchParams.get("subject")).toBe("Account name: clou-dflare");
+    await expect(sheet.locator("[data-held-dibs]")).toHaveAttribute("href", "https://flagshipserver.com/dibs");
+    await shot(page, testInfo, "held-name-why");
+    await sheet.getByRole("button", { name: "OK" }).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(why).toBeFocused();
+
+    // Another name: Pay works and only the precheck went to .com (nothing opened or paid for the held one).
+    await page.locator("#choose-name-input").fill("acme-tools");
+    await expect(status).toBeHidden({ timeout: 10_000 });
+    await expect(page.locator("[data-choose-pay]")).toBeEnabled();
+    await page.locator("[data-choose-pay]").click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __chosen?: unknown }).__chosen)).toEqual({ name: "acme-tools", method: "pay" });
+    expect(m.calls.filter((c) => c.method === "POST" && !c.url.pathname.endsWith("/name-change/quote"))).toEqual([]);
+  });
+
+  test("gym ux held name Pay on a held name closes the keyboard and stays; an old .com falls back to the check at Pay", async ({ page }, testInfo) => {
+    const m = await mock(page);
+    let old = false;
+    m.post("/api/account/name-change/quote", (c: Call) =>
+      old ? { status: 400, json: { error: "username and newUsername are required" } } : { json: String(c.body?.newUsername) === "acme" ? { ...heldAnswer("acme.com"), checked: false } : { available: true } });
+    await openChooseName(page);
+    // Pay straight after typing, before the debounce: it waits for the answer and stays on the screen.
+    await page.locator("#choose-name-input").fill("acme");
+    await page.locator("[data-choose-pay]").click();
+    await expect(page.locator("#choose-name-input")).not.toBeFocused();
+    await expect(page.locator("[data-choose-status]")).toHaveText("Couldn't check acme.com just now. Try again in a minute.", { timeout: 10_000 });
+    await expect(page.locator("[data-choose-why]")).toBeHidden();
+    expect(await fullyVisible(page, "[data-choose-status]")).toBe(true);
+    await shot(page, testInfo, "held-name-unchecked");
+    expect(await page.evaluate(() => (window as unknown as { __chosen?: unknown }).__chosen)).toBeUndefined();
+
+    old = true;
+    await page.locator("#choose-name-input").fill("acmy");
+    await page.locator("[data-choose-pay]").click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __chosen?: unknown }).__chosen)).toEqual({ name: "acmy", method: "pay" });
+  });
+});
+
 // ───────────────────────────── owner UI round ─────────────────────────────
 
 test.describe("gym ux owner round", () => {
