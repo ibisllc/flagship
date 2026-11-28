@@ -132,6 +132,11 @@ over once "let's start 0.5" is said.
   credits line with a plural), then recapture slide 08 (`capture-ios.sh --only 08`): the 0.5 art shows the English
   title on iPhone and iPad in every language, and its chat has no credits line for that reason.
 
+- **Store art: an iPhone Duo set** (asked 2026-11-27 by the store session). App Store 1.4 still carries five
+  English 0.3-era `APP_IPHONE_DUO` shots, and the pack has no Duo class. Add `appstore/iphone-duo/<locale>/` at the
+  Duo's screenshot size, in all 7 languages, to the capture plan and `render.mjs`; the uploader maps it to
+  `APP_IPHONE_DUO` (03c91d730). Render it with the 0.5 build, together with slide 08's title.
+
 - **The box's update-order read takes its own read token** (external report, 2026-11-27). The other four consume-once
   deposit reads already need the box's token; `GET /api/server/<d>/update` does not, so anyone with a box's name can
   use up a pending update order. Main already makes the box send its token there (`boxReadToken.ts` OWN_DEPOSIT,
