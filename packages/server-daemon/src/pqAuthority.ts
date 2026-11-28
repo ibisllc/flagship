@@ -5,6 +5,7 @@
  * from the device book. While strict is in force, `authorizeSensitiveOrder` refuses an order
  * that carries no hybrid signature by a bound key, whatever its classical signature says.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   PqTrustError,
   messagePurpose,
@@ -41,17 +42,56 @@ export function pqAuthority(): PqAuthorityContext | null {
 }
 
 /**
+ * How the request that carries an order reached the box, when that path itself is quantum-safe
+ * or is one of the owner's labelled classical exceptions (pq-suites.md §21.1):
+ *
+ *   device   over the PQ channel (`pqChannel.ts`), whose handshake a device of the account signed
+ *            hybrid under its bound key. `actsFor` lists the keys whose classical orders that
+ *            device may carry: its own key, the account key it holds, and the admin root when the
+ *            device book holds it as an admin device.
+ *   sibling  over the PQ channel from a server the account's hybrid-signed order vouches for, or
+ *            entries such a server relayed (access sync). Each entry was admitted once by the box
+ *            that took it from the owner, under the same rules.
+ *   browser  a live paired browser session while the owner's strict change allowed browsers
+ *            (`browser-without-pq-authentication`): the labelled classical path.
+ *
+ * A request that came any other way (a `.com` deposit, a box poll) carries no authority, and
+ * under strict its order needs its own hybrid signature.
+ */
+export type TransportAuthority =
+  | { kind: "device"; actsFor: ReadonlySet<string> }
+  | { kind: "sibling" }
+  | { kind: "browser" };
+
+const transport = new AsyncLocalStorage<TransportAuthority | null>();
+
+export function withTransportAuthority<T>(a: TransportAuthority | null, fn: () => T): T {
+  return transport.run(a, fn);
+}
+
+export function currentTransportAuthority(): TransportAuthority | null {
+  return transport.getStore() ?? null;
+}
+
+function carriedBy(a: TransportAuthority | null, signerPubHex: string): boolean {
+  if (!a) return false;
+  if (a.kind === "device") return a.actsFor.has(signerPubHex.toLowerCase());
+  return true;
+}
+
+/**
  * The gate for a signer the classical check already identified. Outside strict it accepts (the
  * classical check stands); a hybrid signature that is sent must still verify. Under strict a
- * hybrid signature by the signer's bound key is required. Returns null when accepted, else the
- * refusal code.
+ * hybrid signature by the signer's bound key is required, unless the order came over a path
+ * that is itself quantum-safe for that signer, or the owner's browser exception
+ * (`TransportAuthority`). Returns null when accepted, else the refusal code.
  */
 export function gateSigner(ctx: PqAuthorityContext | null, signerPubHex: string, hybrid: HybridOrderSignature | undefined): string | null {
   if (!ctx) return null;
   const policy = ctx.policy();
   // The classical signature was already checked by the caller; without a hybrid one the only
   // question left is whether this scope still accepts classical-only orders.
-  if (!hybrid) return strictInForce(policy) ? "strict-requires-hybrid" : null;
+  if (!hybrid) return strictInForce(policy) && !carriedBy(currentTransportAuthority(), signerPubHex) ? "strict-requires-hybrid" : null;
   try {
     verifyCriticalSignature({
       message: hybrid.message,

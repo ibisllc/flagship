@@ -1,12 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { removeDurable, writeFileDurable } from "./durableFile.js";
 import {
+  canonicalServerDecommission,
   verifyServerDecommission,
   type AdminGrantView,
   type DiskDisposition,
   type ServerDecommission,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { hybridOrderSignature } from "./pqAuthority.js";
 
 /**
  * Box-side consumer of the graceful-decommission order
@@ -128,6 +130,9 @@ export function decodeAndVerifyDecommissionOrder(args: {
       adminRootPub: args.adminRootPub,
       username: args.username ?? "",
       activeGrants: args.activeGrants,
+      // The owner's hybrid signature rides in the carrier (pq-suites.md §21.1): a `.com` deposit
+      // reaches the box no quantum-safe way, so a strict box needs it.
+      hybrid: hybridOrderSignature(canonicalServerDecommission(order), (parsed as { pqSignature?: unknown }).pqSignature),
     })
   ) {
     throw new Error("decommission signature is not authorized (admin root / owner IRK)");

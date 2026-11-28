@@ -645,14 +645,14 @@ function canonicalAccountSelfDelete(c: AccountSelfDelete): Bytes {
   );
 }
 
-function canonicalServersSelfDelete(c: ServersSelfDelete): Bytes {
+export function canonicalServersSelfDelete(c: ServersSelfDelete): Bytes {
   legacyFieldGuard("username", c.username);
   return new TextEncoder().encode(
     [TAG_SERVERS_SELF_DELETE, c.username.toLowerCase(), c.issuedAt].join("|"),
   );
 }
 
-function canonicalServerDecommission(c: ServerDecommission): Bytes {
+export function canonicalServerDecommission(c: ServerDecommission): Bytes {
   legacyFieldGuard("podCanonical", c.podCanonical);
   legacyFieldGuard("retiredStkPubHex", c.retiredStkPubHex);
   legacyFieldGuard("diskDisposition", c.diskDisposition);

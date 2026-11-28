@@ -299,6 +299,7 @@ import { keydCallerFor, keydCustody, type KeydArchiveCustody } from "./serverArc
 import { buildAppCopySource } from "./appCopy/source.js";
 import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
+import { strictAwareLanFetch, type SiblingFetchRef } from "./appCopy/lanFetch.js";
 import { buildServerArchiveService } from "./serverArchive/service.js";
 import { buildRestoreMergeService, restoringPage } from "./serverArchive/merge/service.js";
 import { SAVED_DATA_FILE, SavedBackups } from "./serverArchive/saved.js";
@@ -422,7 +423,8 @@ import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { accessAuthorityMode, accessAuthorityStatus, buildAccessAuthority } from "./accessAuthority.js";
 import { AccessWrites, type AccessAnchors } from "./accessWrites.js";
 import { AssurancePolicySync, ScopedPolicies } from "./assurancePolicySync.js";
-import { pqAuthority, setPqAuthority } from "./pqAuthority.js";
+import { pqAuthority, setPqAuthority, withTransportAuthority } from "./pqAuthority.js";
+import { extractPairedSessionToken } from "./pairedSessionStore.js";
 
 /** What a hybrid admin-root rotation hop is checked against, once the policy is wired. */
 function rotationPq(): RotationPq | null {
@@ -2055,6 +2057,8 @@ async function main(): Promise<void> {
   // wired by wireOwnerHandlers, and learns where the app's other servers are
   // once gossip is up (below).
   const accessSyncRef: { current: AccessSync | null } = { current: null };
+  // Box-to-box requests over the PQ channel while strict (wireOwnerHandlers fills it in).
+  const siblingFetchRef: SiblingFetchRef = { current: null };
   const accessPeersRef: { current: AccessPeers | null } = { current: null };
   // The co-manager cap counts across the account's servers once the hand-over and the plan check are up.
   const coManagerCapSourceRef: { current: CoManagerCapSource | null } = { current: null };
@@ -2732,6 +2736,7 @@ async function main(): Promise<void> {
       accessPrincipals,
       coManagerCapSourceRef,
       accessSyncRef,
+      siblingFetchRef,
       listScopeRef,
       runtime,
       cfg,
@@ -2782,6 +2787,7 @@ async function main(): Promise<void> {
   // starts the serving lock (it does nothing unless the owner's verified
   // policy says lock-server).
   await wireOwnerHandlers({
+    pairedSessions,
     servingStore,
     servingLockRef,
     publisherPins,
@@ -2797,6 +2803,7 @@ async function main(): Promise<void> {
     accessPrincipals,
     coManagerCapSourceRef,
     accessSyncRef,
+    siblingFetchRef,
     accessPeersRef,
     runtime,
     cfg,
@@ -3814,6 +3821,7 @@ async function wireRuntimeSurfaces(deps: {
   accessPrincipals: AccessPrincipals;
   coManagerCapSourceRef: { current: CoManagerCapSource | null };
   accessSyncRef: { current: AccessSync | null };
+  siblingFetchRef: SiblingFetchRef;
   listScopeRef: ListScopeRef;
   serverOrder: ServerOrderHolder | null;
   runtime: DaemonRuntime;
@@ -4646,9 +4654,15 @@ async function wireRuntimeSurfaces(deps: {
       },
       egress: { noteCopied: (id, list, declared) => runtime.egress.noteCopied(id, list, declared) },
       ledger: new DbWriteLedger(join(dataDir, "data", "app-copy-orders.json"), undefined, 60 * 60_000),
+      // While strict the source takes the owner's order only over the PQ channel (pqAuthority.ts),
+      // which runs through the relay: a copy then skips the local network.
+      fetch: (u, i) => (deps.siblingFetchRef.current?.fetch ?? fetch)(u, i),
       // A box kept relay-only (FLAGSHIP_LAN_DIRECT=0) fetches through the relay too.
       ...(runtime.lan
-        ? { ownLanAddresses: () => [...(runtime.lan?.endpoints().map((e) => e.address) ?? []), ...hostAddresses()] }
+        ? {
+            ownLanAddresses: () => [...(runtime.lan?.endpoints().map((e) => e.address) ?? []), ...hostAddresses()],
+            lanFetch: strictAwareLanFetch(() => deps.siblingFetchRef.current?.strict() ?? false),
+          }
         : { lanFetch: null }),
       log: (m) => console.log(m),
     });
@@ -5736,6 +5750,8 @@ async function wireRuntimeSurfaces(deps: {
  * SIGTERM/SIGINT stop hooks. No-op (and no behavior change) when cfg is null.
  */
 async function wireOwnerHandlers(deps: {
+  /** Live paired browser sessions, for the strict gate's browser exception. */
+  pairedSessions: FilePairedSessionStore;
   servingStore: ServingStore | null;
   servingLockRef: { current: ServingLockController | null };
   publisherPins: PublisherPins;
@@ -5751,6 +5767,7 @@ async function wireOwnerHandlers(deps: {
   accessPrincipals: AccessPrincipals;
   coManagerCapSourceRef: { current: CoManagerCapSource | null };
   accessSyncRef: { current: AccessSync | null };
+  siblingFetchRef: SiblingFetchRef;
   accessPeersRef: { current: AccessPeers | null };
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
@@ -5992,6 +6009,23 @@ async function wireOwnerHandlers(deps: {
     dispatch: (req) => runtime.dispatchHttp(req),
     log: (m) => console.log(m),
   });
+  // How each request reached the box (pqAuthority.ts `TransportAuthority`): an order a device sends
+  // over the channel is carried hybrid by its handshake; a sibling's over its own; a browser's only
+  // under the owner's browser exception, and only on a live paired session.
+  const irkHex = bytesToHexStr(cfg.irkPublicKey).toLowerCase();
+  runtime.setTransportAuthority((req) => {
+    const peer = pqServer.channelOf(req);
+    if (peer?.role === "box-stk") return { kind: "sibling" };
+    if (peer?.role === "device") {
+      const b = deviceBook.pqBindingForDevice(peer.subject, peer.keyIdHex);
+      const d = b ? deviceBook.classify(b.ed25519PubHex) : null;
+      if (!b || !d) return null;
+      const root = cfg.adminRootPub && cfg.adminRootPub.length === 32 ? bytesToHexStr(cfg.adminRootPub).toLowerCase() : null;
+      return { kind: "device", actsFor: new Set([b.ed25519PubHex.toLowerCase(), irkHex, ...(d.tier === "admin" && root ? [root] : [])]) };
+    }
+    if (!peer && extractPairedSessionToken(req) && assurance.browsersAllowed() && deps.pairedSessions.check(req) === null) return { kind: "browser" };
+    return null;
+  });
   runtime.addGuard(pqStrictGuard({ strict: () => strictInForce(assurance.policy()), browsersAllowed: () => assurance.browsersAllowed(), channelOf: (r) => pqServer.channelOf(r) }));
   runtime.addGuard((req) => pqServer.handle(req));
   const pqBoxFetch = pqSessionFetch({ identity: () => deps.readStkPqIdentity(), responder: siblingBinding });
@@ -6025,6 +6059,7 @@ async function wireOwnerHandlers(deps: {
     return { status: 403, headers: { "content-type": "text/plain; charset=utf-8" }, body: "This app only accepts quantum-safe connections from the Flagship app." };
   });
   const accessSyncFetch: typeof fetch = (input, init) => (strictInForce(assurance.policy()) ? pqBoxFetch(input, init) : fetch(input, init));
+  deps.siblingFetchRef.current = { fetch: accessSyncFetch, strict: () => strictInForce(assurance.policy()) };
   void primeSiblings().catch(() => {});
   void deviceBook.refresh().then(() => assurance.refresh());
   {
@@ -6229,11 +6264,13 @@ async function wireOwnerHandlers(deps: {
       selfFqdn: env.serverFqdn,
       journal,
       store: accessStore,
-      apply: async (ref, e) => {
+      // Entries the account's other servers relayed (over the PQ channel while strict), each admitted
+      // once by the box that took it from the owner: carried as a sibling's (pqAuthority.ts).
+      apply: async (ref, e) => withTransportAuthority({ kind: "sibling" }, async () => {
         const ts = () => (e.kind === "rank" ? applyRank(ref, e) : access.applyEntry(ref, e));
         if (!accessWrites) return ts();
         return accessWrites.apply(ref, e, appFacts(ref), accessStore, ts, () => accessStore.refreshAccountPeople());
-      },
+      }),
       peers: () => deps.accessPeersRef.current,
       key: deps.custodian.hasCgk ? accessSyncKeyFromOps(deps.custodian) : null,
       installed: (ref) => installedIds().includes(ref),

@@ -4,11 +4,13 @@ import { readFile } from "node:fs/promises";
 import { writeFileDurable } from "./durableFile.js";
 import { promisify } from "node:util";
 import {
+  canonicalServersSelfDelete,
   verifyServersSelfDelete,
   type AdminGrantView,
   type ServersSelfDelete,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { hybridOrderSignature } from "./pqAuthority.js";
 import { isFilesVolume } from "./dataLayer/naming.js";
 import { LoopVolumes } from "./appQuota/loopVolumes.js";
 import { routePrivileged } from "./privileged.js";
@@ -98,6 +100,7 @@ export function decodeAndVerifySelfDeleteCarrier(args: {
   const p = parsed as {
     request?: { username?: unknown; issuedAt?: unknown };
     signature?: unknown;
+    pqSignature?: unknown;
   };
   if (
     !p.request ||
@@ -140,6 +143,7 @@ export function decodeAndVerifySelfDeleteCarrier(args: {
       adminRootPub: args.adminRootPub,
       username: args.username,
       activeGrants: args.activeGrants,
+      hybrid: hybridOrderSignature(canonicalServersSelfDelete(order), p.pqSignature),
     })
   ) {
     throw new Error("self-delete signature is not authorized (admin root / owner IRK)");

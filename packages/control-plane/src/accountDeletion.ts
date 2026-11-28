@@ -20,6 +20,7 @@
  * ZERO active (`revokedAt === null`) device grants for the account.
  */
 
+import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { releaseAccountLinks, type VoiciNamesDeps } from "./voiciNames.js";
 import {
   verifyAccountSelfDelete,
@@ -464,8 +465,13 @@ export async function handleAccountDeletionBundle(
   //    is recorded/forwarded). ──────────────────────────────────────────────
   let serversOrder: ServersSelfDelete | null = null;
   let serversSigHex: string | null = null;
+  let serversPq: string | undefined;
   const sd = body?.serversSelfDelete;
   if (sd !== undefined) {
+    // The owner's hybrid signature, relayed opaque for a strict box (pq-suites.md §21.1).
+    const pq = grantPqSignatureJson((sd as { pqSignature?: unknown } | null)?.pqSignature);
+    if (pq === null) return malformed("malformed serversSelfDelete");
+    serversPq = pq;
     if (
       !sd.request ||
       typeof sd.request.username !== "string" ||
@@ -525,6 +531,7 @@ export async function handleAccountDeletionBundle(
       JSON.stringify({
         request: { username, issuedAt: serversOrder.issuedAt },
         signature: serversSigHex,
+        ...(serversPq ? { pqSignature: JSON.parse(serversPq) } : {}),
       }),
     );
     const nonceHex = serversSigHex.slice(0, 64);

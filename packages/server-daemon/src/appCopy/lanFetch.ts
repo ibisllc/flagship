@@ -76,3 +76,15 @@ export function makeLanFetch(o: { connectTimeoutMs?: number; idleTimeoutMs?: num
       req.end(init.body);
     });
 }
+
+/**
+ * The local-network fetch, except while this box is strict: the source then takes the owner's
+ * order only over the PQ channel, which runs through the relay (pq-suites.md §21.1), so the copy
+ * falls back to it at once.
+ */
+export function strictAwareLanFetch(strict: () => boolean, lan: LanFetch = makeLanFetch()): LanFetch {
+  return (ep, url, init) => (strict() ? Promise.reject(new Error("quantum-safe copies go through the relay")) : lan(ep, url, init));
+}
+
+/** The account's other servers over the PQ channel while strict, else plain fetch (index.ts fills it in). */
+export type SiblingFetchRef = { current: { fetch: typeof fetch; strict: () => boolean } | null };

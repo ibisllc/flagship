@@ -94,7 +94,7 @@ export interface ServerMigrationAck {
   issuedAt: number;
 }
 
-function canonicalServerMigrationOrder(o: ServerMigrationOrder): Bytes {
+export function canonicalServerMigrationOrder(o: ServerMigrationOrder): Bytes {
   legacyFieldGuard("serverDomain", o.serverDomain);
   legacyFieldGuard("oldStkPubHex", o.oldStkPubHex);
   legacyFieldGuard("diskDisposition", o.diskDisposition);

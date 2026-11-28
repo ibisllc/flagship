@@ -26,6 +26,7 @@
  *     public + non-destructive (they only advance GC / the §9 barrier).
  */
 
+import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import { verifyServerDecommission, type ServerDecommission } from "@flagship/protocol";
 import type {
   DeviceCapabilityGrantStorage,
@@ -83,8 +84,11 @@ export async function handlePostDecommission(
     return forbidden("server belongs to a different account");
   }
 
-  const b = body as { order?: Record<string, unknown>; signature?: unknown };
+  const b = body as { order?: Record<string, unknown>; signature?: unknown; pqSignature?: unknown };
   const o = b?.order ?? {};
+  // The owner's hybrid signature, relayed opaque for a strict box (pq-suites.md §21.1).
+  const pq = grantPqSignatureJson(b?.pqSignature);
+  if (pq === null) return malformed("pqSignature must be { suite, signature }");
   if (
     typeof o.podCanonical !== "string" ||
     typeof o.retiredStkPubHex !== "string" ||
@@ -150,7 +154,7 @@ export async function handlePostDecommission(
   await deps.serverEvictions.recordEviction({
     podCanonical: host.toLowerCase(),
     retiredStkPubHex: o.retiredStkPubHex.toLowerCase(),
-    orderJson: JSON.stringify(order),
+    orderJson: JSON.stringify(pq ? { ...order, pqSignature: JSON.parse(pq) } : order),
     orderSignatureHex: b.signature.toLowerCase(),
     issuedAt: o.issuedAt,
     oldAckedAt: null,

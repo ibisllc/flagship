@@ -75,6 +75,7 @@ import { bootEgress, type EgressRuntime } from "./egress/boot.js";
 import { ensureUnfencedNetworks } from "./egress/networks.js";
 import { checkpointingStore } from "./archV2Boot.js";
 import { AppQuotaManager, LoopVolumes, RealPgQuota, buildDiskWatcher, hostDiskUse } from "./appQuota/index.js";
+import { withTransportAuthority, type TransportAuthority } from "./pqAuthority.js";
 
 export interface OpaqueTlsOptions {
   /** Unix socket the frontend forwards decrypted connections to. */
@@ -654,6 +655,12 @@ export interface DaemonRuntime {
    * non-null response wins and no handler sees the request.
    */
   addGuard(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
+  /**
+   * How each request reached the box, for the strict gate (pqAuthority.ts `TransportAuthority`):
+   * handlers run inside it, so an order a phone sends over the PQ channel needs no second hybrid
+   * signature of its own.
+   */
+  setTransportAuthority(fn: (req: HttpRequest) => TransportAuthority | null): void;
   /** Runs a request through the guards and the handler chain (the PQ channel's inner requests). */
   dispatchHttp(req: HttpRequest): Promise<HttpResponse>;
   /**
@@ -1017,7 +1024,12 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // falling through to the built-in sibling-handshake path.
   const extraUpgrades: Array<(args: UpgradeRequest) => boolean> = [];
   const guards: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [];
-  const handleHttp: (req: HttpRequest) => Promise<HttpResponse> = async (req) => {
+  let transportOf: ((req: HttpRequest) => TransportAuthority | null) | null = null;
+  const handleHttp: (req: HttpRequest) => Promise<HttpResponse> = (req) => {
+    const a = transportOf?.(req) ?? null;
+    return a ? withTransportAuthority(a, () => chainHttp(req)) : chainHttp(req);
+  };
+  const chainHttp: (req: HttpRequest) => Promise<HttpResponse> = async (req) => {
     for (const g of guards) {
       const r = await g(req);
       if (r) return r;
@@ -1979,6 +1991,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     serviceActivity,
     addHandler(h) {
       extras.push(h);
+    },
+    setTransportAuthority(fn) {
+      transportOf = fn;
     },
     addGuard(h) {
       guards.push(h);

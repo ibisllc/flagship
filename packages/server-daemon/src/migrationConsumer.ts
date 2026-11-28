@@ -4,6 +4,7 @@ import {
   isMigrationDisposition,
   signServerMigrationAck,
   signServerMigrationAttach,
+  canonicalServerMigrationOrder,
   verifyServerMigrationOrder,
   type AdminGrantView,
   type Keypair,
@@ -12,6 +13,7 @@ import {
   type ServerMigrationOrder,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { hybridOrderSignature } from "./pqAuthority.js";
 import type { AuthorityHub } from "./authority/hub.js";
 import { digestOf, runOrderOperation, type OrderOperationContext } from "./authority/orderOperation.js";
 
@@ -111,6 +113,7 @@ export function decodeAndVerifyMigrationOrder(args: {
       adminRootPub: args.adminRootPub,
       username: args.username ?? "",
       activeGrants: args.activeGrants,
+      hybrid: hybridOrderSignature(canonicalServerMigrationOrder(order), (p as { pqSignature?: unknown }).pqSignature),
     })
   ) {
     throw new Error("migration order is not authorized (admin root / owner IRK)");

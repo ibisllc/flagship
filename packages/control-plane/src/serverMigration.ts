@@ -37,6 +37,7 @@
  * order under their config-pinned authority before acting.
  */
 
+import { grantPqSignatureJson } from "./deviceCapabilityGrants.js";
 import {
   isMigrationDisposition,
   verifyServerMigrationAck,
@@ -153,7 +154,10 @@ export async function handlePostMigrationStart(
     return forbidden("server belongs to a different account");
   }
 
-  const b = body as { order?: Record<string, unknown>; signature?: unknown };
+  const b = body as { order?: Record<string, unknown>; signature?: unknown; pqSignature?: unknown };
+  // The owner's hybrid signature, relayed opaque for a strict box (pq-suites.md §21.1).
+  const pq = grantPqSignatureJson(b?.pqSignature);
+  if (pq === null) return malformed("pqSignature must be { suite, signature }");
   const o = b?.order ?? {};
   if (
     typeof o.serverDomain !== "string" ||
@@ -228,7 +232,7 @@ export async function handlePostMigrationStart(
     serverDomain: host.toLowerCase(),
     username: reg.username.toLowerCase(),
     oldStkPubHex: order.oldStkPubHex.toLowerCase(),
-    orderJson: JSON.stringify(order),
+    orderJson: JSON.stringify(pq ? { ...order, pqSignature: JSON.parse(pq) } : order),
     orderSignatureHex: b.signature.toLowerCase(),
     disposition: order.diskDisposition,
     phase: "initiated",
