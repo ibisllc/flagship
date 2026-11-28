@@ -141,6 +141,12 @@ over once "let's start 0.5" is said.
   `libwebrtc-157-45414303796` (`d1f7bbbbdc`, the app-shrink build), but no device call has run on it. Before 0.5 ships:
   iPhone ↔ Android, each ↔ a browser (voi.ci), over Wi-Fi and cellular, audio both ways, plus video offered and
   declined. If any fails, re-pin `libwebrtc-157-44099203173` for 0.5.
+- **`/remote` and `/join` carry their relay parameters in the fragment** (external report, 2026-11-28; main makes the
+  remote browser confirm the 6-digit code before it takes a ticket). `buildRemoteApprovalUrl` and the `/join` link
+  (`crossDevicePairing.js`) still put `s`/`k` and `sid`/`pk` in the query, while `/share`, `/invite-accept` and
+  `/access` use `appLinkFragmentUrl`. Move both to the fragment; the webapp, iOS (`DeepLink.swift`, which reads `/join`
+  only from `queryItems`) and Android parsers read the fragment and still accept the query for a while. Tests or vectors
+  for both forms.
 - **The envelope-forgery tag inventory hangs on release/0.5** (found 2026-11-27).
   `tools/adversarial/tests/envelopeForgery.test.ts` (AT-ENV-10) never finishes: its driver spins on
   `signRekey`/`verifyRekey` from the account key rotation (`4bd18c514`). Give them a seed or a classification in
