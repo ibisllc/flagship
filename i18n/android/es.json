@@ -4011,6 +4011,7 @@
   "org_freeze_explain": "No podrá aprobar nada hasta que termine o lo levanten los firmantes de los estatutos. Puedes congelar a un administrador una vez por semana. Quitar a un administrador requiere más personas.",
   "org_freeze_refused": "Puedes congelar a un administrador hasta 72 horas, una vez por semana.",
   "org_frozen_done": "Congelado durante 72 horas. Los firmantes de los estatutos pueden levantarlo antes.",
+  "org_notice_seen": "Flagship vio este aviso el %1$s. Su periodo de espera cuenta desde entonces.",
   "org_frozen_until_short": "Congelado hasta el %1$s",
   "org_invite": "Invitar a una persona",
   "org_invite_title": "Invitar a una persona",

@@ -16521,6 +16521,10 @@
     "en": "Frozen for 72 hours. The bylaws' signers can lift it sooner.",
     "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
   },
+  "org_notice_seen": {
+    "en": "Flagship saw this notice on %1$s. Its waiting period counts from then.",
+    "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"
+  },
   "org_frozen_until_short": {
     "en": "Frozen until %1$s",
     "ctx": "Organizations (docs/enterprise-accounts.md, docs/org-directory.md)"

@@ -4011,6 +4011,7 @@
   "org_freeze_explain": "Il ne pourra rien approuver jusqu’à la fin du gel ou sa levée par les signataires des statuts. Vous pouvez geler un administrateur une fois par semaine. Retirer un administrateur demande plus de personnes.",
   "org_freeze_refused": "Vous pouvez geler un administrateur jusqu’à 72 heures, une fois par semaine.",
   "org_frozen_done": "Gelé pendant 72 heures. Les signataires des statuts peuvent le lever plus tôt.",
+  "org_notice_seen": "Flagship a vu cet avis le %1$s. Son délai d’attente court à partir de ce moment.",
   "org_frozen_until_short": "Gelé jusqu’au %1$s",
   "org_invite": "Inviter une personne",
   "org_invite_title": "Inviter une personne",

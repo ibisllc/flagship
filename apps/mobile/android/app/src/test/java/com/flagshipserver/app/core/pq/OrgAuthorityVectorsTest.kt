@@ -42,6 +42,7 @@ class OrgAuthorityVectorsTest {
             entries, (c["genesisHash"] as? JsonPrimitive)?.content ?: v.s("genesisHash"), c["now"]!!.jsonPrimitive.long,
             list(c, "freezes").map { OrgAuthorityWire.freeze(it) }, list(c, "overturns").map { OrgAuthorityWire.overturn(it) },
             list(c, "vetoes").map { OrgAuthorityWire.veto(it) },
+            OrgAuthorityWire.noticeOpenedAt(c["noticeOpenedAt"]),
         )
     }
 
@@ -122,6 +123,23 @@ class OrgAuthorityVectorsTest {
             }
             assertEquals(c.s("name"), expected(c), got)
             if (got == "ok") assertEquals(c.s("name"), (c["expect"]!!.jsonObject["scopedSeat"] as? JsonPrimitive)?.takeIf { it.isString }?.content, scoped)
+        }
+    }
+
+    /** Pending approvals and vetoes (`verifyOrgApprovers`): a freeze counts at the signed time or now. */
+    @Test
+    fun pendingApprovers() {
+        val st = base()
+        val g = resolve(v["seatBooks"]!!.jsonArray[0])!!.jsonObject
+        for (raw in v["approvers"]!!.jsonArray) {
+            val c = resolve(raw)!!.jsonObject
+            val now = c["now"]!!.jsonPrimitive.long
+            val b = OrgAuthority.buildSeatBook(st, g["grants"]!!.jsonArray.map { OrgAuthorityWire.grantBundle(it) },
+                g["revokes"]!!.jsonArray.map { OrgAuthorityWire.revokeBundle(it) }, list(c, "freezes").map { OrgAuthorityWire.freeze(it) }, now = now)
+            var signers: List<String> = emptyList()
+            val got = code { signers = OrgAuthority.verifyApprovers(st, b, c.s("order").toByteArray(Charsets.UTF_8), OrgAuthorityWire.approvals(c["approvals"]), now) }
+            assertEquals(c.s("name"), expected(c), got)
+            if (got == "ok") assertEquals(c.s("name"), c["expect"]!!.jsonObject["signers"]!!.jsonArray.map { it.jsonPrimitive.content }, signers)
         }
     }
 }

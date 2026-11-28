@@ -4013,6 +4013,7 @@
     <string name="org_freeze_explain">終了するか規約の承認者が解除するまで、この人は何も承認できません。凍結できるのは週に1回、管理者1人までです。管理者を外すにはさらに多くの人が必要です。</string>
     <string name="org_freeze_refused">凍結できるのは管理者1人につき最長72時間、週に1回までです。</string>
     <string name="org_frozen_done">72時間凍結しました。規約で定めた承認者はそれより早く解除できます。</string>
+    <string name="org_notice_seen">Flagship はこの通知を %1$s に確認しました。待機期間はそのときから数えます。</string>
     <string name="org_frozen_until_short">%1$s まで凍結</string>
     <string name="org_invite">人を招待</string>
     <string name="org_invite_title">人を招待</string>

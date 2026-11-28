@@ -478,10 +478,14 @@ object OrgAuthority {
         entries: List<OrgAuthorityEntry>, genesisHash: String, now: Long,
         freezes: List<OrgSigned<OrgSeatFreeze>> = emptyList(), overturns: List<OrgSigned<OrgOverturn>> = emptyList(),
         vetoes: List<OrgSigned<OrgVeto>> = emptyList(),
+        /** When `.com` observed each delayed-change notice open, by its sha256 (`noticeOpenedAt` on the authority read). */
+        noticeOpenedAt: Map<String, Long> = emptyMap(),
     ): OrgAuthorityState {
         need(entries.isNotEmpty(), "malformed", "empty chain")
         val records = mutableListOf<OrgAuthorityRecord>()
         val bindings = mutableMapOf<String, PqTrust.VerifiedBinding>()
+        // One delayed change at a time: each is observed only after the one before it took effect.
+        var lastDelayedAt = -1L
         for (e in entries) {
             val r = e.record
             checkShape(r)
@@ -501,7 +505,8 @@ object OrgAuthority {
                 need(r.issuedAt > p.issuedAt, "not-after-previous")
                 val fs = verifiedFreezes(records, bindings, r.orgId, freezes, overturns, now)
                 val frozen = { s: String, t: Long -> fs.any { it.seatId == s && it.issuedAt <= t && t < it.untilMs } }
-                transition(e, p, records, bindings, verified, frozen, vetoes, now)
+                transition(e, p, records, bindings, verified, frozen, vetoes, now, noticeOpenedAt, lastDelayedAt)
+                if (e.via == "founder-removal" || e.via == "recovery") lastDelayedAt = r.issuedAt
             }
             records += r
             verified.forEach { (s, b) -> bindings["${r.version}:$s"] = b }
@@ -512,6 +517,7 @@ object OrgAuthority {
     private fun transition(
         e: OrgAuthorityEntry, p: OrgAuthorityRecord, records: List<OrgAuthorityRecord>, bindings: Map<String, PqTrust.VerifiedBinding>,
         verified: Map<String, PqTrust.VerifiedBinding>, frozen: (String, Long) -> Boolean, vetoes: List<OrgSigned<OrgVeto>>, now: Long,
+        noticeOpenedAt: Map<String, Long>, lastDelayedAt: Long,
     ) {
         val r = e.record
         val order = canonicalAuthority(r)
@@ -530,21 +536,28 @@ object OrgAuthority {
         newcomers.forEach { need(it in consenting, "consent-missing", it) }
         if (founderMoved && r.founderSeatId !in newcomers) need(ordinary.any { it.seatId == r.founderSeatId }, "consent-missing", "new founder")
 
-        fun vetoSigners(v: OrgSigned<OrgVeto>, noticeHash: String, n: OrgDelayedChange): List<String>? = try {
-            if (v.body.orgId != p.orgId || v.body.noticeSha256 != noticeHash || v.body.issuedAt >= n.effectiveAt || v.body.issuedAt < n.issuedAt) null
+        // A veto counts inside the window `.com` observed: [openedAt, openedAt + wait).
+        fun vetoSigners(v: OrgSigned<OrgVeto>, noticeHash: String, openedAt: Long, wait: Long): List<String>? = try {
+            if (v.body.orgId != p.orgId || v.body.noticeSha256 != noticeHash || v.body.issuedAt < openedAt || v.body.issuedAt >= openedAt + wait) null
             else checkApprovals(v.approvals, p.orgId, p.version, canonical(v.body), now, prevKey, frozen)
         } catch (ex: Exception) {
             null
         }
-        fun checkNotice(n: OrgSigned<OrgDelayedChange>, wait: Long) {
+        // The notice is dated near when `.com` saw it, seen after the previous delayed change took effect, and
+        // applies only once `wait` has passed since then. Returns the observed open time.
+        fun checkNotice(n: OrgSigned<OrgDelayedChange>, wait: Long): Long {
             val b = n.body
-            canonical(b)
+            val hash = sha256Hex(canonical(b))
             need(b.orgId == p.orgId && b.oarVersion == p.version, "notice-invalid", "version")
             need(r.issuedAt == b.effectiveAt, "notice-invalid", "date")
             need(b.nextRecordSha256 == authorityHash(r), "notice-invalid", "names another record")
             need(b.effectiveAt == b.issuedAt + wait, "notice-invalid", "period")
             need(b.issuedAt >= p.issuedAt, "notice-invalid", "older")
-            need(now >= b.effectiveAt, "notice-early")
+            val openedAt = noticeOpenedAt[hash]?.takeIf { it >= 0 } ?: fail("notice-unobserved")
+            need(openedAt >= lastDelayedAt, "notice-overlap")
+            need(kotlin.math.abs(b.issuedAt - openedAt) <= MAX_SKEW_MS, "notice-backdated")
+            need(now >= maxOf(b.effectiveAt, openedAt + wait), "notice-early")
+            return openedAt
         }
         when (e.via) {
             "direct" -> {
@@ -561,14 +574,14 @@ object OrgAuthority {
                 val n = e.notice?.takeIf { it.body.kind == "founder-removal" } ?: fail("notice-invalid")
                 need(removed.size == 1, "notice-invalid", "exactly one admin")
                 need(authorityHash(founderRemovalOf(p, removed[0], r.issuedAt)) == authorityHash(r), "notice-invalid", "record is not the removal")
-                checkNotice(n, FOUNDER_NOTICE_MS)
+                val openedAt = checkNotice(n, FOUNDER_NOTICE_MS)
                 val signers = checkApprovals(n.approvals, p.orgId, p.version, canonical(n.body), now, prevKey, frozen)
                 need(signers == listOf(p.founderSeatId), "notice-invalid", "only the founder")
                 val noticeHash = sha256Hex(canonical(n.body))
                 val eligible = p.admins.filter { it.kind == OrgAdminKind.ADMIN && it.seatId != p.founderSeatId && it.seatId != removed[0] }.map { it.seatId }.toSet()
                 val set = overturnSet(p).filter { it != removed[0] }.toSet()
                 for (v in vetoes) {
-                    val c = vetoSigners(v, noticeHash, n.body) ?: continue
+                    val c = vetoSigners(v, noticeHash, openedAt, FOUNDER_NOTICE_MS) ?: continue
                     if (c.count { it in eligible } >= p.bylaws.vetoK) fail("notice-vetoed")
                     if (c.count { it in set } >= overturnThreshold(p)) fail("notice-vetoed")
                 }
@@ -576,7 +589,7 @@ object OrgAuthority {
             }
             "recovery" -> {
                 val n = e.notice?.takeIf { it.body.kind == "recovery" } ?: fail("notice-invalid")
-                checkNotice(n, RECOVERY_NOTICE_MS)
+                val openedAt = checkNotice(n, RECOVERY_NOTICE_MS)
                 val signers = checkApprovals(n.approvals, p.orgId, p.version, canonical(n.body), now, prevKey, frozen)
                 signers.forEach { need(kindOf(it) == OrgAdminKind.ADMIN || kindOf(it) == OrgAdminKind.RECOVERY, "not-an-admin", it) }
                 need(signers.any { kindOf(it) == OrgAdminKind.RECOVERY }, "notice-invalid", "no recovery seat")
@@ -585,7 +598,7 @@ object OrgAuthority {
                 checkQuorumCustody(p, k, signers, adminCustody(p))
                 val noticeHash = sha256Hex(canonical(n.body))
                 val eligible = p.admins.filter { it.kind == OrgAdminKind.ADMIN && it.seatId !in signers }.map { it.seatId }.toSet()
-                for (v in vetoes) if (vetoSigners(v, noticeHash, n.body)?.any { it in eligible } == true) fail("notice-vetoed")
+                for (v in vetoes) if (vetoSigners(v, noticeHash, openedAt, RECOVERY_NOTICE_MS)?.any { it in eligible } == true) fail("notice-vetoed")
                 need(e.approvals.size == consent.size, "malformed", "stray approvals")
             }
             "overturn" -> {
@@ -742,6 +755,31 @@ object OrgAuthority {
             }
         }
     }
+
+    /**
+     * The seats whose pending approvals of [order] verify (a ceremony's approvals, a veto, as `.com` takes them):
+     * anyone in the current record or a seat with an admin key, each approval unexpired, not frozen when it signed
+     * nor now, under the current record (or the previous one within 24 h). Counts nothing (`verifyOrgApprovers`).
+     */
+    fun verifyApprovers(state: OrgAuthorityState, book: OrgSeatBook, order: ByteArray, approvals: List<OrgApproval>, now: Long, allowFrozenSeat: String? = null): List<String> {
+        val cur = state.current
+        val first = approvals.firstOrNull() ?: fail("threshold", "no approvals")
+        val prev = state.record(cur.version - 1)
+        val version = first.oarVersion
+        need(version == cur.version || (prev != null && version == prev.version && now - cur.issuedAt <= PREVIOUS_OAR_GRACE_MS), "stale-oar")
+        val at = if (version == cur.version) cur else prev!!
+        approvals.forEach { need(it.notAfter >= now, "expired", it.seatId) }
+        val keyOf = { s: String ->
+            val here = at.admins.firstOrNull { it.seatId == s }
+            if (here != null) {
+                if (cur.admins.any { it.seatId == s && it.kind == here.kind && it.binding.ed25519PubHex == here.binding.ed25519PubHex && it.binding.mldsaPubHex == here.binding.mldsaPubHex }) state.binding(at.version, s) else null
+            } else if (s in book.revoked) null else book.seats[s]?.admin
+        }
+        val frozen = { s: String, t: Long ->
+            s != allowFrozenSeat && book.freezes.any { it.seatId == s && ((it.issuedAt <= t && t < it.untilMs) || (it.issuedAt <= now && now < it.untilMs)) }
+        }
+        return checkApprovals(approvals, state.orgId, version, order, now, keyOf, frozen)
+    }
 }
 
 /** JSON (kotlinx) into the org authority types, as `.com` serves them and the vectors hold them. */
@@ -813,6 +851,10 @@ object OrgAuthorityWire {
         val o = obj(e, "overturn"); val b = obj(o["body"], "overturn")
         return OrgSigned(OrgOverturn(b.s("orgId"), b.s("freezeSha256"), b.n("oarVersion"), b.n("issuedAt")), approvals(o["approvals"]))
     }
+
+    /** `.com`'s observed open time of each delayed-change notice (`noticeOpenedAt`); anything malformed is left out. */
+    fun noticeOpenedAt(e: JsonElement?): Map<String, Long> =
+        (e as? JsonObject)?.entries?.mapNotNull { (k, v) -> num(v)?.takeIf { k.length == 64 && PqHex.isHex(k) && k == k.lowercase() }?.let { k to it } }?.toMap() ?: emptyMap()
 
     fun veto(e: JsonElement?): OrgSigned<OrgVeto> {
         val o = obj(e, "veto"); val b = obj(o["body"], "veto")

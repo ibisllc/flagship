@@ -97,7 +97,8 @@ class OrgDirectoryVectorsTest {
     }
     private fun stateAndBook(n: Int, now: Long): Pair<OrgAuthorityState, OrgSeatBook> {
         val chain = resolve(a["chains"]!!.jsonArray[0])!!.jsonObject
-        val st = OrgAuthority.verifyChain(chain["entries"]!!.jsonArray.take(n).map { OrgAuthorityWire.entry(it) }, a.s("genesisHash"), now)
+        val st = OrgAuthority.verifyChain(chain["entries"]!!.jsonArray.take(n).map { OrgAuthorityWire.entry(it) }, a.s("genesisHash"), now,
+            noticeOpenedAt = OrgAuthorityWire.noticeOpenedAt(chain["noticeOpenedAt"]))
         val grants = resolve(a["seatBooks"]!!.jsonArray[0])!!.jsonObject["grants"]!!.jsonArray.map { OrgAuthorityWire.grantBundle(it) }
         return st to OrgAuthority.buildSeatBook(st, grants, emptyList(), emptyList(), emptyList(), now)
     }

@@ -4018,6 +4018,7 @@
     <string name="org_freeze_explain">They can\'t approve anything until it ends or the bylaws\' signers lift it. You can freeze one admin once a week. Removing an admin takes more people.</string>
     <string name="org_freeze_refused">You can freeze one admin for up to 72 hours, once a week.</string>
     <string name="org_frozen_done">Frozen for 72 hours. The bylaws\' signers can lift it sooner.</string>
+    <string name="org_notice_seen">Flagship saw this notice on %1$s. Its waiting period counts from then.</string>
     <string name="org_frozen_until_short">Frozen until %1$s</string>
     <string name="org_invite">Invite a person</string>
     <string name="org_invite_title">Invite a person</string>

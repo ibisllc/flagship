@@ -4011,6 +4011,7 @@
   "org_freeze_explain": "在冻结结束或章程签署人解除之前，此人无法批准任何操作。你每周可以冻结一位管理员一次。移除管理员需要更多人参与。",
   "org_freeze_refused": "你每周可以冻结一位管理员一次，最长 72 小时。",
   "org_frozen_done": "已冻结 72 小时。章程指定的签署人可以提前解除。",
+  "org_notice_seen": "Flagship 于 %1$s 看到了这条通知。等待期从那时开始计算。",
   "org_frozen_until_short": "冻结至 %1$s",
   "org_invite": "邀请他人",
   "org_invite_title": "邀请他人",

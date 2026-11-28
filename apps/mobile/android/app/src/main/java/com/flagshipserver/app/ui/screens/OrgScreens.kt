@@ -255,6 +255,9 @@ fun OrgDetailScreen(seat: OrgSeatRecord, onOpenPlan: (() -> Unit)? = null) {
                         FSCard {
                             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                                 Body(OrgViewModel.purposeText(c.purpose))
+                                if (c.isDelayedChange && c.openedAt != null) {
+                                    Body(fsString(R.string.org_notice_seen, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(c.openedAt))), muted = true)
+                                }
                                 Body(fsString(R.string.org_approved_by, c.approvals.size), muted = true)
                                 if (vm.hasApproved(seat, c)) {
                                     Body(stringResource(R.string.org_you_approved), muted = true)

@@ -53,8 +53,13 @@ class LiveOrgHttp(private val transport: JsonHttpTransport, private val base: ()
     }
 }
 
-data class OrgCeremony(val sha256: String, val order: String, val payload: JsonObject, val approvals: List<OrgApproval>) {
+data class OrgCeremony(
+    val sha256: String, val order: String, val payload: JsonObject, val approvals: List<OrgApproval>,
+    /** When `.com` opened it, on its own clock: a delayed change's waiting period counts from here. */
+    val openedAt: Long? = null,
+) {
     val purpose: String get() = order.substringBefore('|')
+    val isDelayedChange: Boolean get() = purpose == OrgAuthority.TAG_DELAYED_CHANGE
 }
 
 class OrgSnapshot(
@@ -120,6 +125,7 @@ class OrgClient(
             arr(a, "entries").map { OrgAuthorityWire.entry(it) }, genesisHash, now,
             arr(a, "freezes").map { OrgAuthorityWire.freeze(it) }, arr(a, "overturns").map { OrgAuthorityWire.overturn(it) },
             arr(a, "vetoes").map { OrgAuthorityWire.veto(it) },
+            OrgAuthorityWire.noticeOpenedAt(a["noticeOpenedAt"]),
         )
 
     /** Fetches and verifies the org from the genesis hash this phone pinned when it joined. */
@@ -136,7 +142,8 @@ class OrgClient(
         val ceremonies = arr(c, "ceremonies").mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             runCatching {
-                OrgCeremony(str(o, "sha256")!!, str(o, "order")!!, (o["payload"] as? JsonObject) ?: JsonObject(emptyMap()), OrgAuthorityWire.approvals(o["approvals"]))
+                OrgCeremony(str(o, "sha256")!!, str(o, "order")!!, (o["payload"] as? JsonObject) ?: JsonObject(emptyMap()), OrgAuthorityWire.approvals(o["approvals"]),
+                    (o["openedAt"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull())
             }.getOrNull()
         }
         val name = str(a["org"] as? JsonObject, "name") ?: ""

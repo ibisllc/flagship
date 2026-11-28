@@ -4011,6 +4011,7 @@
   "org_freeze_explain": "Bis die Sperre endet oder die Unterzeichner laut Satzung sie aufheben, kann diese Person nichts zustimmen. Du kannst einmal pro Woche einen Admin sperren. Einen Admin zu entfernen braucht mehr Personen.",
   "org_freeze_refused": "Du kannst einen Admin bis zu 72 Stunden sperren, einmal pro Woche.",
   "org_frozen_done": "Für 72 Stunden gesperrt. Die in der Satzung genannten Unterzeichner können die Sperre früher aufheben.",
+  "org_notice_seen": "Flagship hat diese Mitteilung am %1$s gesehen. Ihre Wartezeit zählt ab dann.",
   "org_frozen_until_short": "Gesperrt bis %1$s",
   "org_invite": "Person einladen",
   "org_invite_title": "Person einladen",
