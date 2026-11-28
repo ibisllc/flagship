@@ -31,12 +31,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as P from "../../../packages/protocol/src/index.js";
 import { drive, driveSeeded, getPath, mutate, newKey, setPath, toHex, type DriveFailure, type Family, type TestKey } from "./support/envelopeDriver.js";
-import { SEEDS } from "./support/seeds.js";
+import { NOT_DRIVEN, SEEDS } from "./support/seeds.js";
 import { CLASSIFIED_TAGS } from "./support/tagInventory.js";
 
 const api = P as unknown as Record<string, unknown>;
 const signNames = Object.keys(api)
   .filter((k) => k.startsWith("sign") && typeof api[k] === "function" && typeof api[`verify${k.slice(4)}`] === "function")
+  .filter((k) => !(k.slice(4) in NOT_DRIVEN))
   .sort();
 
 const families: Family[] = [];

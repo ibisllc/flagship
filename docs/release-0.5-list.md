@@ -147,10 +147,13 @@ over once "let's start 0.5" is said.
   `/access` use `appLinkFragmentUrl`. Move both to the fragment; the webapp, iOS (`DeepLink.swift`, which reads `/join`
   only from `queryItems`) and Android parsers read the fragment and still accept the query for a while. Tests or vectors
   for both forms.
-- **The envelope-forgery tag inventory hangs on release/0.5** (found 2026-11-27).
-  `tools/adversarial/tests/envelopeForgery.test.ts` (AT-ENV-10) never finishes: its driver spins on
-  `signRekey`/`verifyRekey` from the account key rotation (`4bd18c514`). Give them a seed or a classification in
-  `tools/adversarial/tests/support/seeds.ts`, then run the harness green before the release.
+- ~~**The envelope-forgery tag inventory hangs on release/0.5**~~ done 2026-11-28 (found 2026-11-27).
+  `tools/adversarial/tests/envelopeForgery.test.ts` (AT-ENV-10) never finished: its driver spun on
+  `signRekey`/`verifyRekey` from the account key rotation (`4bd18c514`). Now `NOT_DRIVEN` in
+  `tools/adversarial/tests/support/seeds.ts` names the pairs that are not object envelopes (Rekey, AccountKeyRotation,
+  AccountKeyRotationPq, DeviceKeyRotate; covered by test-vectors/account-key-rotation), `OrgReadTokenRequest` and
+  `DeviceReceiveKey` have seeds and are driven, the rotation tags are classified and the duplicate org entries merged.
+  The file runs green in about 40 s.
 
 - ~~**The box's update-order read takes its own read token**~~ done on main 2026-11-28, after box release c9eb06aa went live (owner: break the boxes left behind; production had one live box). (external report, 2026-11-27). The other four consume-once
   deposit reads already need the box's token; `GET /api/server/<d>/update` does not, so anyone with a box's name can

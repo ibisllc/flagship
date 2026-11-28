@@ -3,10 +3,28 @@
  * validation, nested shapes, fixed-length ids). Each is a valid input taken from the family's type;
  * the same generic attacks (AT-ENV-01..09) then run against the production verifier.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 const NOW = Date.now();
 const DAY = 86_400_000;
 const h = (bytes: number, c = "07") => c.repeat(bytes);
 const b = (n: number, fill = 7) => new Uint8Array(n).fill(fill);
+
+/**
+ * signX/verifyX pairs that are not object envelopes, so the driver must not try them (its inference
+ * spins on them). Each names where its forgery tests live.
+ */
+export const NOT_DRIVEN: Record<string, string> = {
+  AccountKeyRotation:
+    "three signers (admin root, new IRK, new AID) and a verifier that takes the account's pinned state: test-vectors/account-key-rotation hopCases/chainCases (accountKeyRotation.test.ts, and the Swift/Kotlin/webapp ports)",
+  AccountKeyRotationPq:
+    "hybrid ML-DSA companion over the v2 bytes, checked against the new IRK's PQ binding: test-vectors/account-key-rotation pqCases (accountKeyRotation.test.ts)",
+  DeviceKeyRotate:
+    "two signers (new device key and admin root) in one result: test-vectors/account-key-rotation deviceKeyRotate (accountKeyRotation.test.ts: wrong signer, field change)",
+  Rekey:
+    "signRekey(canonicalBytes) / verifyRekey(build, sig, pub) take prebuilt bytes, not an object: the CGK/SWK re-key and LUKS re-key confirmation encoders are covered by test-vectors/account-key-rotation (accountKeyRotation.test.ts: field change, wrong signer, malformed fields)",
+};
 
 export const SEEDS: Record<string, Record<string, unknown>> = {
   MarketplaceList: {
@@ -228,6 +246,25 @@ export const SEEDS: Record<string, Record<string, unknown>> = {
     serial: "retail-serial-0001",
     serverDomain: "home.alice.flagship.services",
     stkPubHex: h(32, "0d"),
+    issuedAt: NOW,
+  },
+  OrgReadTokenRequest: {
+    orgId: h(16, "0e"),
+    subject: `seat:${h(16, "0f")}`,
+    pubHex: h(32, "10"),
+    issuedAt: NOW,
+    nonceHex: h(16, "11"),
+  },
+  // A real X-Wing key: the encoder parses it, so a filler of one byte is refused.
+  DeviceReceiveKey: {
+    username: "alice",
+    deviceId: h(16, "12"),
+    devicePubHex: h(32, "13"),
+    xwingPubHex: (
+      JSON.parse(readFileSync(join(import.meta.dirname, "../../../../packages/protocol/test-vectors/account-key-rotation/vectors.json"), "utf8")) as {
+        deviceReceiveKey: { fields: { xwingPubHex: string } };
+      }
+    ).deviceReceiveKey.fields.xwingPubHex,
     issuedAt: NOW,
   },
 };
