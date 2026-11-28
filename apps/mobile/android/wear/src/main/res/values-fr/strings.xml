@@ -7,7 +7,7 @@
     <string name="couldnt_reach_your_phone">Impossible de joindre votre téléphone : %1$s</string>
     <string name="new_server">Nouveau serveur</string>
     <string name="waiting_for_you">Vous attend</string>
-    <string name="waiting_to_unlock">En attente de déverrouillage</string>
+    <string name="waiting_to_unlock">À déverrouiller</string>
     <string name="servers">Serveurs</string>
     <string name="recent_activity">Activité récente</string>
     <string name="open_flagship_on_your_phone_to">Ouvrez Flagship sur votre téléphone pour voir vos serveurs ici.</string>
