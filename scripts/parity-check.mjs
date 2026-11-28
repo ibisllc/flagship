@@ -498,10 +498,14 @@ const PUSH_HANDLERS = {
     "apps/mobile/shared/Sources/FlagshipCore/ProvisionPhaseBridge.swift",
     "apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift",
     "apps/mobile/shared/Sources/FlagshipCore/DeviceRemovedCheck.swift",
+    "apps/mobile/shared/Sources/FlagshipCore/AccountKeyRotationCheck.swift",
   ],
   android: "apps/mobile/android/app/src/main/java/com/flagshipserver/app/push",
-  /** Handlers outside the push folder (the device-removed check lives with the account-gone detector). */
-  androidFiles: ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountGone.kt"],
+  /** Handlers outside the push folder (the device-removed check lives with the account-gone detector, the account-key check with the key service). */
+  androidFiles: [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountGone.kt",
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/AccountKeyService.kt",
+  ],
   web: ["apps/web/public/webapp/service-worker.js"],
 };
 

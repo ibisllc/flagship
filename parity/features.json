@@ -3670,56 +3670,102 @@
       "ref": "ios",
       "surfaces": {
         "ios": {
-          "status": "partial",
-          "reason": "Protocol (Phase 1: canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation) and the server side (.com: POST /api/users/:u/account-key-rotation, the lane, deliveries, receive keys, device key rotate; box: lane replay under the pinned admin root, no re-pair, epoch gate, /api/screens/account-key/status) are built. The rotator and receiver screens are Phase 4.",
+          "status": "present",
           "anchors": [
             [
               "apps/mobile/shared/Sources/FlagshipCore/AccountKeyRotation.swift",
               "flagship/account-key-rotation/v1"
             ],
             [
-              "apps/mobile/shared/Sources/FlagshipCore/AccountKeyRotation.swift",
-              "public static func open\\("
+              "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RotateAccountKeyViewModel.swift",
+              "public func rotate\\("
             ],
             [
-              "apps/mobile/shared/Sources/FlagshipCore/AccountKeyRotation.swift",
-              "public static func verifyPq\\("
+              "apps/mobile/ios/Sources/FlagshipUI/Services/AccountKeyRotationService.swift",
+              "public static func receive\\("
+            ],
+            [
+              "apps/mobile/ios/Sources/FlagshipUI/Services/AccountKeyRotationService.swift",
+              "public static func publishReceiveKey\\("
+            ]
+          ],
+          "note": "Protocol, .com and box sides plus the clients: the Remove sheet asks whether someone else could unlock the device; 'Yes, or not sure' opens the Change your account key summary and the rotator (new UMK in a pending slot, kept set = the devices that get a delivery, the others revoked in the hop and named, admin-root grants, profiles re-encrypted, old recovery record deleted and set up again, promote on 200 or on resume); the receiver replays the lane from the pinned admin root, opens its delivery, installs the new UMK in the rotator's IRK scheme and keeps the old one retired; receive keys published, random device keys with a one-time migration of derived ones, progress card. Per-server re-keys are Phase 5."
+        },
+        "android": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountKeyRotation.kt",
+              "flagship/account-key-rotation/v1"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/RotateAccountKeyViewModel.kt",
+              "class RotateAccountKeyViewModel"
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/AccountKeyService.kt",
+              "suspend fun receive\\("
+            ],
+            [
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/AccountKeyService.kt",
+              "suspend fun publishReceiveKey\\("
+            ]
+          ],
+          "note": "Protocol, .com and box sides plus the clients: the Remove sheet asks whether someone else could unlock the device; 'Yes, or not sure' opens the Change your account key summary and the rotator (new UMK in a pending slot, kept set = the devices that get a delivery, the others revoked in the hop and named, admin-root grants, profiles re-encrypted, old recovery record deleted and set up again, promote on 200 or on resume); the receiver replays the lane from the pinned admin root, opens its delivery, installs the new UMK in the rotator's IRK scheme and keeps the old one retired; receive keys published, random device keys with a one-time migration of derived ones, progress card. Per-server re-keys are Phase 5."
+        },
+        "web": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/web/public/webapp/lib/accountKeyRotation.js",
+              "flagship/account-key-rotation/v1"
+            ],
+            [
+              "apps/web/public/webapp/lib/accountKeyChange.js",
+              "export async function runRotation"
+            ],
+            [
+              "apps/web/public/webapp/lib/accountKeyChange.js",
+              "export function verifyLaneForDevice"
+            ],
+            [
+              "apps/web/public/webapp/lib/accountKeyChange.js",
+              "export async function ensureReceiveKey"
+            ]
+          ],
+          "note": "Protocol, .com and box sides plus the clients: the Remove sheet asks whether someone else could unlock the device; 'Yes, or not sure' opens the Change your account key summary and the rotator (new UMK in a pending slot, kept set = the devices that get a delivery, the others revoked in the hop and named, admin-root grants, profiles re-encrypted, old recovery record deleted and set up again, promote on 200 or on resume); the receiver replays the lane from the pinned admin root, opens its delivery, installs the new UMK in the rotator's IRK scheme and keeps the old one retired; receive keys published, random device keys with a one-time migration of derived ones, progress card. Per-server re-keys are Phase 5. The browser never signs a hybrid companion (keyless-web rule), so under strict it does not rotate and says to use the iPhone or Android app."
+        }
+      }
+    },
+    {
+      "id": "admin-by-grant-join",
+      "title": "Add a device promotes an admin by an admin-root-signed grant with the admin scope to the new device's own random key; the join bundle names the admin root's public key (adminRootPubHex) and never carries the bare root; join still accepts an older bundle with the sealed root; the joining device pins that root (SAS-authenticated) for account-key changes",
+      "ref": "ios",
+      "surfaces": {
+        "ios": {
+          "status": "present",
+          "anchors": [
+            [
+              "apps/mobile/shared/Sources/FlagshipCore/PairingBundle.swift",
+              "public let adminRootPubHex: String\\?"
             ]
           ]
         },
         "android": {
-          "status": "partial",
-          "reason": "Protocol (Phase 1: canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation) and the server side (.com: POST /api/users/:u/account-key-rotation, the lane, deliveries, receive keys, device key rotate; box: lane replay under the pinned admin root, no re-pair, epoch gate, /api/screens/account-key/status) are built. The rotator and receiver screens are Phase 4.",
+          "status": "present",
           "anchors": [
             [
-              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountKeyRotation.kt",
-              "flagship/account-key-rotation/v1"
-            ],
-            [
-              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountKeyRotation.kt",
-              "fun open\\("
-            ],
-            [
-              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountKeyRotation.kt",
-              "fun verifyPq\\("
+              "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DevicePairing.kt",
+              "val adminRootPubHex: String\\? = null"
             ]
           ]
         },
         "web": {
-          "status": "partial",
-          "reason": "Protocol (Phase 1: canonical bytes, hop verify, hybrid companion, kept-device digest, delivery seal/open, derived-key check, shared vectors test-vectors/account-key-rotation) and the server side (.com: POST /api/users/:u/account-key-rotation, the lane, deliveries, receive keys, device key rotate; box: lane replay under the pinned admin root, no re-pair, epoch gate, /api/screens/account-key/status) are built. The rotator and receiver screens are Phase 4. The browser verifies the hybrid companion but never signs one (keyless-web rule).",
+          "status": "present",
           "anchors": [
             [
-              "apps/web/public/webapp/lib/accountKeyRotation.js",
-              "flagship/account-key-rotation/v1"
-            ],
-            [
-              "apps/web/public/webapp/lib/accountKeyRotation.js",
-              "export function openUmkRotationDelivery"
-            ],
-            [
-              "apps/web/public/webapp/lib/accountKeyRotation.js",
-              "export function verifyAccountKeyRotationPq"
+              "apps/web/public/webapp/lib/crossDevicePairing.js",
+              "adminRootPubHex: adminRootPubHexForBundle"
             ]
           ]
         }

@@ -228,7 +228,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-11-24**.
+> Last updated **2026-11-27**.
 
 ### ⚠ Post 0.4 / pre 0.5 / next release: do the store listing runbook first
 
@@ -290,8 +290,15 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   under their pinned admin root (`accountKeyRotationConsumer.ts`, pin `account-key-pin.json`), adopt the new key
   without a re-pair, end all owner sessions, discard unused backup keys, flag re-keys; a lost pin or a higher hinted
   epoch holds account-key-signed traffic; admin-pinned boxes no longer take the old-IRK re-pair proof. Under strict:
-  hybrid companion and X-Wing deliveries only. Needs D1 0164, a `.com` deploy, an endorsed box release; clients and
-  per-server re-keys are Phases 4-5.
+  hybrid companion and X-Wing deliveries only. Phase 4 clients built (iOS, Android, webapp; docs/account-key-rotation.md
+  "Clients"): Remove asks "Could someone else unlock this device?", rotator + receiver + progress card, random device
+  keys with a one-time migration of derived ones, X-Wing receive keys, admins promoted by an admin-root grant (the join
+  bundle names `adminRootPubHex`, never the bare root), wipe-restart carries `adminRootSignature`. Every kept device
+  gets a delivery or is revoked and named. Open: grant-only admins act as non-admins wherever the bare root is still
+  required (~30-60 places per app; box/.com grant-admin paths not opened), recovery writes/re-pair/admit stay
+  IRK-signed (no admin-signed form on `.com`), devices joined before this build have no admin-root pin (they are
+  re-added after a rotation), retired UMKs are not yet tried on old backups, no device/real-push run. Needs D1 0164,
+  a `.com` deploy, an endorsed box release, store builds; per-server re-keys are Phase 5.
 - Shrink the phone apps (0.5 list): merged into `release/0.5` 2026-11-27 (VP8-only libwebrtc build config, Android
   WebP welcome art), pinned there to `libwebrtc-157-45414303796` (main keeps the old one). Before 0.5 ships, the
   device call matrix in `docs/runbooks/pre-0.5-call-codec-tests.md` must pass: the release gate refuses 0.5 while it is
