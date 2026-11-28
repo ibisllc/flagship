@@ -82,13 +82,16 @@ over once "let's start 0.5" is said.
   4. ~~Go boot helper~~ done (`internal/unseal/edkey.go`, `lease.go`, `v2.go`). It rides the initramfs: **a real
      unlock on a box built from this tree before the box release ships**.
   5. ~~Swift, Kotlin and Go run the shared vectors~~ done (also the webapp).
-  6. Decide: full strict verify in `edSync` (noble `zip215: false`: canonical R, cofactorless; honest signatures pass),
-     and proof of possession for the share-key attestation (low value: the request already needs the account's admin
-     signature and the attestation names no account).
-  7. Hygiene (open): bind `aidPub` and `adminRootPub` into a v2 `ClaimUsername` signature (`usernameClaim.ts`). Not
-     exploitable today: `D1UsernameStorage.put` writes both only on the first insert, and swapping them would need the
-     victim's own request body (TLS) replayed with other keys inside its 5-minute window. Needs vectors, `.com`
-     taking v1 and v2, and the webapp, iOS and Android signing v2.
+  6. ~~Strict verify in `edSync`~~ done (owner's default): S < L, canonical R and A, A not of small order, the
+     cofactorless equation (noble's `zip215: false` is still cofactored, so `edSync` checks it itself; WebCrypto stays
+     the fast path). Vector `test-vectors/ed25519-strict/` (`tools/ed25519-strict-vectors.ts`): a mixed-order R that
+     ZIP-215 accepts and the strict rule refuses. Proof of possession for the share-key attestation: skipped (low
+     value: the request already needs the account's admin signature and the attestation names no account).
+  7. ~~v2 `ClaimUsername`~~ done: `flagship/claim-username/v2|<username>|<irkPub>|<aidPub or empty>|<adminRootPub or
+     empty>|<issuedAt>` (`usernameClaim.ts`, the claim in `POST /api/accounts`). `.com` takes v2 only (every 0.5
+     client signs it; old store builds can no longer create an account), and a key present in the body must be well
+     formed. Vectors `test-vectors/claim-username/` (`tools/claim-username-vectors.ts`; swapped AID, swapped or
+     stripped admin root, v1 bytes as v2), read by TS, the webapp, Swift and Kotlin. Webapp shell v264 (unsigned).
 
 - **Shrink the phone apps** (owner, 2026-11-24). 0.4 added about 6 MB to each app's download: our libwebrtc build
   (`libwebrtc-157-44099203173` carries every video codec; Android arm64 `libjingle_peerconnection_so.so` 12.8 MB
