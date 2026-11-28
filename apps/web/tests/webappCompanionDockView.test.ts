@@ -6,8 +6,8 @@
  *   1. Static-surface gates: the view file + client file + index.html
  *      changes are reachable as static assets and contain the expected
  *      symbols.
- *   2. companionClient: mint/list/revoke call shapes, buildCompanionReceiverUrl
- *      + parseCompanionPayload round-trip.
+ *   2. companionClient: mint/list/revoke call shapes (the ticket's own
+ *      checks live with the remote page: webappCompanionDockStart.test.ts).
  *   3. The view reads every documented field on the BFF response.
  *   4. The view speaks the empty state.
  *   5. Settings tab strip carries the entry button.
@@ -85,37 +85,6 @@ describe("companionClient.js — endpoint shapes", () => {
     expect(body).toContain("/api/screens/companion/mint-ticket");
     expect(body).toContain("/api/screens/companion/list");
     expect(body).toContain("/api/screens/companion/revoke");
-  });
-
-  it("buildCompanionReceiverUrl round-trips through parseCompanionPayload", async () => {
-    // Load the module directly (Node ESM) — no fetch wrapping needed.
-    const path = resolve(__dirname, "..", "public", "webapp", "lib", "companionClient.js");
-    const mod = await import(pathToFileURL(path).href);
-    const url = mod.buildCompanionReceiverUrl({
-      ticketId: "deadbeef".repeat(4),
-      ticketSecret: "ab".repeat(32),
-      podBaseUrl: "https://home.alice.flagship.services",
-      username: "alice",
-    });
-    expect(url).toMatch(/^https:\/\/webapp\.flagshipserver\.com\/\?companion=/);
-    const b64 = new URL(url).searchParams.get("companion")!;
-    const parsed = mod.parseCompanionPayload(b64);
-    expect(parsed).toEqual({
-      ticketId: "deadbeef".repeat(4),
-      ticketSecret: "ab".repeat(32),
-      podBaseUrl: "https://home.alice.flagship.services",
-      username: "alice",
-    });
-  });
-
-  it("parseCompanionPayload returns null on garbage", async () => {
-    const path = resolve(__dirname, "..", "public", "webapp", "lib", "companionClient.js");
-    const mod = await import(pathToFileURL(path).href);
-    expect(mod.parseCompanionPayload("")).toBeNull();
-    expect(mod.parseCompanionPayload("not-base64-at-all!@#$")).toBeNull();
-    // valid base64url of '{"ticketId":"x"}' — missing required fields.
-    const bad = Buffer.from(JSON.stringify({ ticketId: "x" })).toString("base64url");
-    expect(mod.parseCompanionPayload(bad)).toBeNull();
   });
 
   it("companionRevoke rejects short prefixes locally before any network call", async () => {

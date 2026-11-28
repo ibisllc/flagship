@@ -1,21 +1,23 @@
 /**
- * P14 — Companion receiver flow (apps/web/public/webapp/lib/companionReceiver.js).
+ * The remote browser's redeem + session store (apps/web/public/webapp/lib/companionReceiver.js).
  *
  * Coverage:
- *   1. companionPayloadFromLocation parses ?companion=… into the documented shape.
+ *   1. A `?companion=` URL does nothing: no boot entry reads it any more.
  *   2. redeemCompanionAndPersist hits the pod's /api/companion/redeem with
  *      the right body shape.
  *   3. On 200, persists a NEW profile slot with kind:"companion" + the
- *      session-token/expiresAt/podBaseUrl/username, sets it active, and
- *      strips ?companion=… from the URL via history.replaceState.
- *   4. On non-2xx surfaces a friendly error (no profile mutation).
- *   5. The companion-profile write-gate (requireOwnerProfile) THROWS
+ *      session-token/expiresAt/podBaseUrl/username and sets it active.
+ *   4. A redeem response (or a ticket) naming a server off the data apex is refused.
+ *   5. On non-2xx surfaces a friendly error (no profile mutation).
+ *   6. The companion-profile write-gate (requireOwnerProfile) THROWS
  *      when the active profile is kind:"companion".
- *   6. cloudName is deterministic per (podBaseUrl, tokenPrefix).
+ *   7. cloudName is deterministic per (podBaseUrl, tokenPrefix).
+ *   8. Expired remote profiles are retired.
  */
 
 import { describe, expect, it, beforeEach } from "vitest";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 class MemStorage implements Storage {
@@ -100,24 +102,36 @@ beforeEach(() => {
   (globalThis as { localStorage?: Storage }).localStorage = new MemStorage();
 });
 
-describe("companionPayloadFromLocation", () => {
-  it("parses a ?companion=<b64> URL", async () => {
-    const { receiver } = await loadReceiverModule();
-    const url = new URL(`https://webapp.flagshipserver.com/?companion=${payloadB64(VALID_PAYLOAD)}`);
-    const parsed = receiver.companionPayloadFromLocation({ search: url.search });
-    expect(parsed).toEqual(VALID_PAYLOAD);
+describe("the ?companion= entry point is gone", () => {
+  const webapp = resolve(__dirname, "..", "public", "webapp");
+  const allJs = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return e.name === "vendor" || e.name === "i18n" ? [] : allJs(p);
+      return e.name.endsWith(".js") ? [p] : [];
+    });
+
+  it("no webapp code reads a companion query parameter, so a ?companion= URL does nothing", () => {
+    for (const file of allJs(webapp)) {
+      const src = readFileSync(file, "utf8");
+      expect(src, file).not.toMatch(/\.get\(\s*["']companion["']\s*\)/);
+      expect(src, file).not.toMatch(/[?&]companion=/);
+    }
   });
 
-  it("returns null when no companion param", async () => {
-    const { receiver } = await loadReceiverModule();
-    expect(receiver.companionPayloadFromLocation({ search: "" })).toBeNull();
-    expect(receiver.companionPayloadFromLocation({ search: "?foo=bar" })).toBeNull();
+  it("the receiver no longer exports the URL parser, and the client no longer builds receiver URLs", async () => {
+    const { receiver, client } = await loadReceiverModule();
+    expect(receiver.companionPayloadFromLocation).toBeUndefined();
+    expect(client.buildCompanionReceiverUrl).toBeUndefined();
+    expect(client.parseCompanionPayload).toBeUndefined();
   });
 
-  it("returns null on malformed payload (missing required fields)", async () => {
-    const { receiver } = await loadReceiverModule();
-    const bad = payloadB64({ ticketId: "x" });
-    expect(receiver.companionPayloadFromLocation({ search: `?companion=${bad}` })).toBeNull();
+  it("booting with ?companion= in the address bar creates no profile", async () => {
+    const { profilesStore } = await loadReceiverModule();
+    const app = readFileSync(join(webapp, "app.js"), "utf8");
+    expect(app).not.toContain("redeemCompanionAndPersist");
+    expect(profilesStore.getActiveCloudName()).toBeNull();
+    expect(profilesStore.listCloudNames()).toEqual([]);
   });
 });
 
@@ -161,8 +175,6 @@ describe("redeemCompanionAndPersist", () => {
 
     const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe(
@@ -195,8 +207,6 @@ describe("redeemCompanionAndPersist", () => {
 
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
 
     // The new cloudName is the deterministic companion-<host>-<prefix>.
@@ -215,27 +225,58 @@ describe("redeemCompanionAndPersist", () => {
     expect(api.getSessionToken()).toMatch(/^abcd1234ef56/);
   });
 
-  it("strips ?companion=… from the URL via history.replaceState on success", async () => {
+  it("refuses a redeem response that names a server on another apex, and stores nothing", async () => {
+    const { receiver, profilesStore, api } = await loadReceiverModule();
+    for (const other of [
+      "https://home.alice.evil.example",
+      "https://home.alice.evilflagship.services",
+      "http://home.alice.flagship.services",
+      "https://home.alice.flagship.services:8443",
+      "https://home.alice.flagship.services/x",
+    ]) {
+      const fetchImpl = async () =>
+        new Response(
+          JSON.stringify({ companionSessionToken: "e".repeat(64), expiresAt: 9_999, podBaseUrl: other, username: "alice" }),
+          { status: 200 },
+        );
+      const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, { fetchImpl });
+      expect(result.error, other).toMatch(/won't connect/);
+      expect(profilesStore.getActiveCloudName(), other).toBeNull();
+      expect(profilesStore.listCloudNames(), other).toEqual([]);
+    }
+    expect(api.getSessionToken()).not.toMatch(/^e+$/);
+  });
+
+  it("never redeems a ticket whose server is off the data apex", async () => {
     const { receiver } = await loadReceiverModule();
-    const fetchImpl = async () =>
-      new Response(
-        JSON.stringify({
-          companionSessionToken: "x".repeat(64),
-          expiresAt: 1,
-          podBaseUrl: "https://home.alice.flagship.services",
-          username: "alice",
-        }),
-        { status: 200 },
-      );
-    const replaced: string[] = [];
-    await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
-      fetchImpl,
-      historyReplaceState: (u: string) => replaced.push(u),
-      locationHref: "https://webapp.flagshipserver.com/some/page?companion=abc&foo=bar",
+    let called = 0;
+    const fetchImpl = async () => {
+      called++;
+      return new Response("{}", { status: 200 });
+    };
+    const result = await receiver.redeemCompanionAndPersist(
+      { ...VALID_PAYLOAD, podBaseUrl: "https://home.alice.evil.example" },
+      { fetchImpl },
+    );
+    expect(result.error).toMatch(/won't connect/);
+    expect(called).toBe(0);
+  });
+
+  it("persistCompanionSession applies the apex pin by itself", async () => {
+    const { receiver, profilesStore } = await loadReceiverModule();
+    const out = receiver.persistCompanionSession({
+      companionSessionToken: "a".repeat(64),
+      expiresAt: 1,
+      podBaseUrl: "https://home.alice.evil.example",
+      username: "alice",
     });
-    expect(replaced).toHaveLength(1);
-    expect(replaced[0]).not.toContain("companion=");
-    expect(replaced[0]).toContain("foo=bar");
+    expect(out.error).toMatch(/won't connect/);
+    expect(profilesStore.listCloudNames()).toEqual([]);
+    const gym = receiver.persistCompanionSession(
+      { companionSessionToken: "a".repeat(64), expiresAt: 1, podBaseUrl: "https://Home.Alice.gym.flagship.services", username: "alice" },
+      { apex: "gym.flagship.services" },
+    );
+    expect(gym.podBaseUrl).toBe("https://home.alice.gym.flagship.services");
   });
 
   it("returns { error } and does NOT mutate the active profile on a non-2xx response", async () => {
@@ -244,8 +285,6 @@ describe("redeemCompanionAndPersist", () => {
       new Response(JSON.stringify({ error: "ticket expired" }), { status: 410 });
     const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(result.error).toMatch(/ticket expired/);
     expect(result.status).toBe(410);
@@ -258,8 +297,6 @@ describe("redeemCompanionAndPersist", () => {
     const fetchImpl = async () => new Response("upstream exploded", { status: 500 });
     const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(result.status).toBe(500);
     // No raw `HTTP <code>` or stack text reaches the user.
@@ -275,11 +312,38 @@ describe("redeemCompanionAndPersist", () => {
       new Response(JSON.stringify({ companionSessionToken: 42 }), { status: 200 });
     const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(result.error).toMatch(/missing/);
     expect(profilesStore.getActiveCloudName()).toBeNull();
+  });
+});
+
+describe("retireExpiredCompanionProfiles", () => {
+  it("drops expired remote profiles, keeps live ones and owner profiles", async () => {
+    const { receiver, profilesStore } = await loadReceiverModule();
+    const ok = (token: string, expiresAt: number) => async () =>
+      new Response(
+        JSON.stringify({ companionSessionToken: token, expiresAt, podBaseUrl: VALID_PAYLOAD.podBaseUrl, username: "alice" }),
+        { status: 200 },
+      );
+    await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, { fetchImpl: ok("live00000000" + "0".repeat(52), 2_000) });
+    await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, { fetchImpl: ok("dead00000000" + "0".repeat(52), 1_000) });
+    profilesStore.ensureProfile("alice");
+    profilesStore.ensureProfile("companion-broken");
+    profilesStore.setActiveCloudName("companion-broken");
+    profilesStore.set("kind", "companion");
+    profilesStore.setActiveCloudName("companion-home.alice.flagship.services-dead00000000");
+
+    const retired = receiver.retireExpiredCompanionProfiles(1_500);
+    expect(retired.sort()).toEqual(["companion-broken", "companion-home.alice.flagship.services-dead00000000"]);
+    expect(profilesStore.listCloudNames().sort()).toEqual(["alice", "companion-home.alice.flagship.services-live00000000"]);
+    expect(profilesStore.getActiveCloudName()).not.toBe("companion-home.alice.flagship.services-dead00000000");
+    expect(receiver.retireExpiredCompanionProfiles(1_500)).toEqual([]);
+  });
+
+  it("runs at boot", () => {
+    const app = readFileSync(resolve(__dirname, "..", "public", "webapp", "app.js"), "utf8");
+    expect(app).toMatch(/retireExpiredCompanionProfiles\(\)/);
   });
 });
 
@@ -298,8 +362,6 @@ describe("companionGuard.requireOwnerProfile()", () => {
       );
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(guard.isCompanionProfile()).toBe(true);
     expect(() => guard.requireOwnerProfile()).toThrow(/remote browser/i);
@@ -364,8 +426,6 @@ describe("companionGuard.requireOwnerProfile()", () => {
       );
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(guard.isCompanionProfile()).toBe(true);
     guard.applyCompanionUiRestrictions(doc);
@@ -387,8 +447,6 @@ describe("companionGuard.requireOwnerProfile()", () => {
       );
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
 
     // replaceDeviceCeremony — outside the v1 relayable set; throws.
@@ -446,8 +504,6 @@ describe("companionGuard.requireOwnerProfile()", () => {
       );
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
-      historyReplaceState: () => {},
-      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
 
     // releaseServerName under a companion profile now forwards to the

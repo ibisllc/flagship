@@ -162,10 +162,7 @@ import {
   cleanupLegacyKeys as cleanupProfilesLegacyKeys,
   set as profileSet,
 } from "./lib/profilesStore.js";
-import {
-  companionPayloadFromLocation,
-  redeemCompanionAndPersist,
-} from "./lib/companionReceiver.js";
+import { retireExpiredCompanionProfiles } from "./lib/companionReceiver.js";
 
 import { tr } from "./lib/i18n.js";
 import { installAdminRootBinding } from "./lib/adminSigning.js";
@@ -572,6 +569,7 @@ async function boot() {
   // `flagship.profiles.legacy.cleaned.v2`). Excludes device-wide-or-pre-
   // profile slots (wizardState, username) which keep their legacy mirror.
   try { cleanupProfilesLegacyKeys(); } catch { /* swallow — best-effort */ }
+  try { retireExpiredCompanionProfiles(); } catch { /* best-effort */ }
   initBootstrapView();
   initUnlockView();
   initPinViews();
@@ -882,33 +880,6 @@ async function boot() {
     setSubtitle(tr("join"));
     enterJoin(joinLink);
     return;
-  }
-
-  // P14 — remote receiver flow. `?companion=<base64url JSON>` means a
-  // regular browser is being connected as a read-only remote. We
-  // redeem the ticket against the owner's pod, mint a new profile slot
-  // flagged kind:"companion", and continue normal boot under that
-  // profile. UMK seed + IRK private key are NOT present on this device
-  // — that's the marker for "this profile can't sign".
-  const companionPayload = companionPayloadFromLocation();
-  if (companionPayload) {
-    setSubtitle(tr("connecting"));
-    const result = await redeemCompanionAndPersist(companionPayload);
-    if (result.error) {
-      toast(result.error, "err");
-      // Fall through to normal boot — the URL has not been stripped
-      // (we only strip on success), but the user can still navigate
-      // around the existing webapp if they had a prior profile.
-    } else {
-      toast(tr("connected as a remote ({0})", result.label ?? "no label"));
-      // Remote sessions skip the unlock view entirely — there's no UMK
-      // to unwrap. Render the home tab so they land somewhere
-      // meaningful.
-      setSubtitle(tr("remote"));
-      show("view-home");
-      await enterHome();
-      return;
-    }
   }
 
   // Demo usernames are public, passwordless capabilities. Their local key is

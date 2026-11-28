@@ -1,41 +1,33 @@
-// P14 — Companion receiver flow.
-//
-// On webapp boot we look for `?companion=<base64url JSON>` in the URL.
-// If present, this is a docking handoff — a regular browser is being
-// turned into a 4-hour companion to the user's pod. We:
-//
-//   1. Parse the payload (ticketId, ticketSecret, podBaseUrl, username).
-//   2. POST `${podBaseUrl}/api/companion/redeem` with the ticket creds.
-//   3. On 200, persist a NEW profile slot in `flagship.profiles.v2`
-//      flagged `kind: "companion"`. The slot records the
-//      companionSessionToken, podBaseUrl, username, and expiresAt;
-//      the UMK seed + IRK private key are NOT present — that's how
-//      the rest of the webapp knows this is a read-only session.
-//   4. Set the new profile active.
-//   5. Strip `?companion=…` from the URL via history.replaceState.
-//
-// The signing helpers elsewhere (releaseServer, revokeServer, …) call
-// `requireOwnerProfile()` from `companionGuard.js` BEFORE pulling the
-// UMK from session — that throws a tagged error → router catches →
-// shows a toast. v1 is read-only; wave 9 will add the write-relay.
+// The remote browser's session store. After the phone approves a remote
+// (lib/companionDockStart.js), the page redeems the one-use ticket on the
+// server the phone named and keeps the answer as a profile slot flagged
+// `kind: "companion"`: session token, server, username, expiry, and no UMK
+// seed or IRK key. Signing helpers refuse such a profile
+// (companionGuard.js requireOwnerProfile).
 
 import {
   ensureProfile,
+  getProfileSlot,
+  listCloudNames,
+  removeProfileRecord,
   set as profileSet,
   setActiveCloudName,
 } from "./profilesStore.js";
-import { parseCompanionPayload } from "./companionClient.js";
 import { setPodBaseUrl, setSessionToken } from "./api.js";
+import { dataApex } from "./apex.js";
 import { humanError } from "./humanError.js";
 
 import { tr } from "./i18n.js";
-/** Where to find the dock payload on the current document. Test seam. */
-export function companionPayloadFromLocation(loc = globalThis.location) {
-  if (!loc || typeof loc.search !== "string") return null;
-  const sp = new URLSearchParams(loc.search);
-  const b64 = sp.get("companion");
-  if (!b64) return null;
-  return parseCompanionPayload(b64);
+
+/** `https://<host>` for a server on the data apex, or null for anything else
+ *  (another apex, a look-alike, http, a port, a path or a query). */
+export function serverOriginOnApex(value, apex = dataApex()) {
+  let url;
+  try { url = new URL(String(value ?? "")); } catch { return null; }
+  if (url.protocol !== "https:" || url.pathname !== "/" || url.search || url.hash || url.port || url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  if (!host.endsWith(`.${apex}`)) return null;
+  return `https://${host}`;
 }
 
 /**
@@ -54,15 +46,17 @@ export function companionCloudName(podBaseUrl, tokenPrefix) {
 export function persistCompanionSession({
   companionSessionToken,
   expiresAt,
-  podBaseUrl,
+  podBaseUrl: namedServer,
   username,
-}) {
+}, { apex } = {}) {
   if (typeof companionSessionToken !== "string" || typeof expiresAt !== "number") {
     return { error: tr("missing companionSessionToken/expiresAt in response") };
   }
-  if (typeof podBaseUrl !== "string" || !podBaseUrl || typeof username !== "string" || !username) {
+  if (typeof namedServer !== "string" || !namedServer || typeof username !== "string" || !username) {
     return { error: tr("missing companion server or username") };
   }
+  const podBaseUrl = serverOriginOnApex(namedServer, apex);
+  if (!podBaseUrl) return { error: tr("The server named another server this page won't connect to") };
   const tokenPrefix = companionSessionToken.slice(0, 12);
   const cloudName = companionCloudName(podBaseUrl, tokenPrefix);
   ensureProfile(cloudName);
@@ -84,6 +78,22 @@ export function persistCompanionSession({
   };
 }
 
+/** Drop every remote profile whose session has run out (or whose expiry is
+ *  unreadable). The server stops honouring the token at the same moment, so
+ *  the slot only holds a dead token and a server name. */
+export function retireExpiredCompanionProfiles(now = Date.now(), storage) {
+  const retired = [];
+  for (const cloudName of listCloudNames(storage)) {
+    const slot = getProfileSlot(cloudName, storage);
+    if (slot?.kind !== "companion") continue;
+    const expiresAt = Number(slot.companionExpiresAt);
+    if (Number.isFinite(expiresAt) && expiresAt > now) continue;
+    removeProfileRecord(cloudName, storage);
+    retired.push(cloudName);
+  }
+  return retired;
+}
+
 /**
  * The shape of the dependency block the receiver flow needs. Tests
  * inject `fetchImpl`; production uses the global fetch.
@@ -91,25 +101,24 @@ export function persistCompanionSession({
 export function defaultReceiverDeps() {
   return {
     fetchImpl: globalThis.fetch ? globalThis.fetch.bind(globalThis) : null,
-    historyReplaceState: (url) => {
-      try { globalThis.history?.replaceState?.({}, "", url); } catch { /* ignore */ }
-    },
-    locationHref: globalThis.location?.href ?? "",
   };
 }
 
 /**
- * Redeem a `?companion=…` payload. Returns the persisted profile slot
- * (incl. session token + expiresAt) on success, or an `{error}` shape
- * on any failure so the caller can render a toast without throwing.
+ * Redeem a remote ticket the phone sealed to this browser. Returns the
+ * persisted profile slot (incl. session token + expiresAt) on success, or an
+ * `{error}` shape on any failure so the caller can render a toast without
+ * throwing.
  */
 export async function redeemCompanionAndPersist(payload, deps = defaultReceiverDeps()) {
   if (!payload) return { error: "no payload" };
   const fetchImpl = deps.fetchImpl;
   if (!fetchImpl) return { error: "no fetch" };
+  const server = serverOriginOnApex(payload.podBaseUrl, deps.apex);
+  if (!server) return { error: tr("The phone named a server this page won't connect to") };
   let r;
   try {
-    r = await fetchImpl(`${payload.podBaseUrl.replace(/\/+$/, "")}/api/companion/redeem`, {
+    r = await fetchImpl(`${server}/api/companion/redeem`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -148,23 +157,10 @@ export async function redeemCompanionAndPersist(payload, deps = defaultReceiverD
     podBaseUrl,
     username,
   } = body ?? {};
-  const persisted = persistCompanionSession({
+  return persistCompanionSession({
     companionSessionToken,
     expiresAt,
-    podBaseUrl: podBaseUrl ?? payload.podBaseUrl,
+    podBaseUrl: podBaseUrl ?? server,
     username: username ?? payload.username,
-  });
-  if (persisted.error) return persisted;
-
-  // Strip the query string from the URL so a reload doesn't try to
-  // re-redeem an already-consumed ticket (replay = 409).
-  try {
-    const u = new URL(deps.locationHref || "");
-    u.searchParams.delete("companion");
-    deps.historyReplaceState(u.pathname + (u.search ? `?${u.searchParams}` : "") + u.hash);
-  } catch {
-    /* ignore */
-  }
-
-  return persisted;
+  }, { apex: deps.apex });
 }

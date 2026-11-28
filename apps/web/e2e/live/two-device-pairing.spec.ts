@@ -9,11 +9,13 @@
  *   - Device-1 (owner via the gym __gymAdopt seam) pairs to the pod
  *     (IRK-signed add-paired-session → owner paired-session token), then MINTS a
  *     companion ticket (POST <pod>/api/screens/companion/mint-ticket) and builds
- *     the receiver URL `webapp.gym.flagshipserver.com/?companion=<base64url JSON>`.
+ *     the `flagship/remote-ticket/v1` a phone seals to a browser over /qr-pipe.
  *   - Device-2 (a fresh context) bootstraps its OWN device key (proving it is a
- *     distinct device), then OPENS that companion URL. The webapp boot path
- *     (app.js) redeems the ticket against the pod (POST /api/companion/redeem,
- *     public, CORS-allowed) → a 4-HOUR companion paired-session to the SAME box.
+ *     distinct device), then takes that ticket through the remote page's own
+ *     checks and redeem (lib/companionDockStart.js: parseRemoteTicket +
+ *     redeemRemoteTicket, POST /api/companion/redeem, public, CORS-allowed) →
+ *     a 4-HOUR companion paired-session to the SAME box. The relay hop itself
+ *     is covered by the remote page's unit tests.
  *   - Device-2 then READS the same box cross-origin (server-detail + services
  *     screens-BFF over the companion token) — i.e. it genuinely reaches the
  *     SAME cloud, not just renders pairing UI.
@@ -183,73 +185,34 @@ test("two devices, one cloud: companion-pair a fresh device into the owner's box
         // fall back to the known box username (the receiver only uses it as a hint —
         // the daemon's redeem response carries the authoritative username anyway).
         const username = profileGet("username") || boxUsername;
-        let url = "";
-        let buildErr: string | null = null;
-        if (ticket?.ticketId && ticket?.ticketSecret) {
-          try {
-            url = cc.buildCompanionReceiverUrl({
-              ticketId: ticket.ticketId,
-              ticketSecret: ticket.ticketSecret,
-              podBaseUrl,
-              username,
-            });
-          } catch (e) {
-            buildErr = String((e && (e as any).message) || e);
-          }
-        }
+        const sealed = ticket?.ticketId && ticket?.ticketSecret
+          ? JSON.stringify({
+            kind: "flagship/remote-ticket/v1",
+            ticketId: ticket.ticketId,
+            ticketSecret: ticket.ticketSecret,
+            podBaseUrl,
+            username,
+          })
+          : "";
         return {
           ticketId: ticket?.ticketId ? String(ticket.ticketId).slice(0, 10) : null,
           expiresAt: ticket?.expiresAt ?? 0,
           podBaseUrl,
           username,
-          url,
+          sealed,
           mintErr,
-          buildErr,
         };
       }, { boxUsername: BOX.username, lbl: label });
 
     const mint = await mintArtifact("device-2-companion-demo");
     record({
-      step: "device-1 GENERATES the pairing artifact (companion link)",
-      grade: mint?.url?.includes("?companion=") ? "A" : "FAIL",
-      detail: mint?.url?.includes("?companion=")
-        ? `ticket=${mint.ticketId}… ttl≈${Math.round((mint.expiresAt - Date.now()) / 1000)}s; podBase=${mint.podBaseUrl}; url=${mint.url.slice(0, 80)}…`
-        : `mint FAILED: mintErr=${mint?.mintErr}; buildErr=${mint?.buildErr}; ticketId=${mint?.ticketId}; podBase=${mint?.podBaseUrl}; username=${mint?.username}`,
+      step: "device-1 GENERATES the pairing artifact (remote ticket)",
+      grade: mint?.sealed ? "A" : "FAIL",
+      detail: mint?.sealed
+        ? `ticket=${mint.ticketId}… ttl≈${Math.round((mint.expiresAt - Date.now()) / 1000)}s; podBase=${mint.podBaseUrl}`
+        : `mint FAILED: mintErr=${mint?.mintErr}; ticketId=${mint?.ticketId}; podBase=${mint?.podBaseUrl}; username=${mint?.username}`,
     });
-    expect(mint.url, "companion receiver URL must be built").toContain("?companion=");
-
-    // Also exercise the REAL UI path so we screenshot the actual "Dock a browser"
-    // QR dialog the owner would show. The companion-dock UI's runMint reads the
-    // username from the active profile (profileGet("username")); the gym
-    // __gymAdopt seam populates the in-memory session username but does NOT
-    // mirror it to the profile store, so mirror it here (completing the gym
-    // adopt shortcut) to drive the REAL UI against the currently-deployed seam.
-    await d1.evaluate(async (uname) => {
-      const { set: profileSet } = await import("/lib/profilesStore.js");
-      profileSet("username", uname);
-    }, BOX.username);
-    await d1.evaluate(async () => {
-      const m = await import("/views/companion-dock.js");
-      await m.enterCompanionDock();
-    });
-    await expect(d1.locator("#view-companion-dock")).toBeVisible();
-    await d1.waitForTimeout(800);
-    await d1.click("#companion-mint-btn").catch(() => undefined);
-    // The QR dialog renders AFTER the mint-ticket network round-trip, so wait for
-    // the URL element to appear rather than a fixed sleep.
-    await d1.locator("#companion-qr-url").waitFor({ state: "visible", timeout: 12_000 }).catch(() => undefined);
-    const qrUrlInUi = await d1.locator("#companion-qr-url").innerText().catch(() => "");
-    const qrDialogOpen = await d1.locator("#companion-qr-dialog[open]").isVisible().catch(() => false);
-    record({
-      step: "device-1 'Dock a browser' QR dialog (real UI)",
-      grade: qrUrlInUi.includes("?companion=") ? "A" : "C",
-      detail: qrUrlInUi.includes("?companion=")
-        ? `QR dialog (open=${qrDialogOpen}) rendered a companion URL (${qrUrlInUi.slice(0, 70)}…)`
-        : "QR dialog did not surface a companion URL",
-    });
-    await shot(d1, "d1-companion-qr-dialog");
-    // Close the dialog so it doesn't overlay later device-1 screenshots.
-    await d1.locator("#companion-qr-close").click().catch(() => undefined);
+    expect(mint.sealed, "remote ticket must be built").toBeTruthy();
 
     // ── DEVICE 2 — a SEPARATE context (its OWN storage). ──────────────────────
     ctx2 = await browser.newContext({ baseURL: ORIGIN });
@@ -295,9 +258,10 @@ test("two devices, one cloud: companion-pair a fresh device into the owner's box
       detail: `fresh device key minted (hasSeed=${d2DeviceKey?.hasSeed}; devicePub=${d2DeviceKey?.devicePub || "n/a"}…) — distinct from owner ${BOX.irkPubHex.slice(0, 16)}…`,
     });
 
-    // REDEEM the pairing artifact — navigate device-2 to the companion URL. The
-    // app.js boot path parses ?companion=, POSTs /api/companion/redeem to the
-    // pod (cross-origin, CORS-allowed), and persists a companion profile.
+    // REDEEM the pairing artifact on device-2 the way the remote page does once
+    // the phone's seal is open: parseRemoteTicket, then redeemRemoteTicket POSTs
+    // /api/companion/redeem to the pod (cross-origin, CORS-allowed) and persists
+    // a companion profile.
     //
     // Mint the ticket device-2 will redeem FRESH here (the 60s TTL means a ticket
     // minted at the top of the test would expire during the device-2 setup). This
@@ -306,10 +270,10 @@ test("two devices, one cloud: companion-pair a fresh device into the owner's box
     const liveMint = await mintArtifact("device-2-companion");
     record({
       step: "device-1 mints the fresh ticket device-2 will redeem",
-      grade: liveMint?.url?.includes("?companion=") ? "A" : "FAIL",
+      grade: liveMint?.sealed ? "A" : "FAIL",
       detail: `ticket=${liveMint.ticketId}… ttl≈${Math.round((liveMint.expiresAt - Date.now()) / 1000)}s`,
     });
-    expect(liveMint.url, "fresh companion receiver URL must be built").toContain("?companion=");
+    expect(liveMint.sealed, "fresh remote ticket must be built").toBeTruthy();
 
     let redeemStatus: number | "none" = "none";
     let redeemAcao: string | null = null;
@@ -319,9 +283,11 @@ test("two devices, one cloud: companion-pair a fresh device into the owner's box
         redeemAcao = r.headers()["access-control-allow-origin"] ?? null;
       }
     });
-    const companionPath = liveMint.url.replace(ORIGIN, "");
-    await d2.goto(companionPath);
-    await d2.waitForTimeout(4_000);
+    await d2.evaluate(async (sealed) => {
+      const m = await import("/lib/companionDockStart.js");
+      await m.redeemRemoteTicket(m.parseRemoteTicket(sealed));
+    }, liveMint.sealed);
+    await d2.waitForTimeout(1_000);
 
     // Inspect the persisted companion profile on device-2.
     const d2Profile = await d2.evaluate(async () => {
