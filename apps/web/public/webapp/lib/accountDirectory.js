@@ -119,6 +119,7 @@ export async function fetchDecryptedDirectory(deps = {}) {
     devices,
     selfProfiles: body.selfProfiles ?? [],
     managedProfiles: body.managedProfiles ?? [],
+    receiveKeys: body.receiveKeys ?? [],
   };
 }
 

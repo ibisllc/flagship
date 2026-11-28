@@ -16445,5 +16445,153 @@
   "Device removed": {
     "en": "Device removed",
     "ctx": "webapp/views/trusted-devices.js:307"
+  },
+  "Could someone else unlock this device?": {
+    "en": "Could someone else unlock this device?",
+    "ctx": "webapp/lib/accountKeyChange.js:41"
+  },
+  "No: it's lost and locked, or I erased it": {
+    "en": "No: it's lost and locked, or I erased it",
+    "ctx": "webapp/lib/accountKeyChange.js:42"
+  },
+  "Yes, or I'm not sure": {
+    "en": "Yes, or I'm not sure",
+    "ctx": "webapp/lib/accountKeyChange.js:43"
+  },
+  "This was a browser. Someone with the computer could try to guess its passphrase, so changing your account key is safer.": {
+    "en": "This was a browser. Someone with the computer could try to guess its passphrase, so changing your account key is safer.",
+    "ctx": "webapp/lib/accountKeyChange.js:44"
+  },
+  "Change your account key": {
+    "en": "Change your account key",
+    "ctx": "webapp/lib/accountKeyChange.js:45"
+  },
+  "Your other devices keep working. They get the new key the next time they open Flagship.": {
+    "en": "Your other devices keep working. They get the new key the next time they open Flagship.",
+    "ctx": "webapp/lib/accountKeyChange.js:46"
+  },
+  "Your servers switch to the new key by themselves. Nothing needs pairing again.": {
+    "en": "Your servers switch to the new key by themselves. Nothing needs pairing again.",
+    "ctx": "webapp/lib/accountKeyChange.js:47"
+  },
+  "These devices must be added again:": {
+    "en": "These devices must be added again:",
+    "ctx": "webapp/lib/accountKeyChange.js:48"
+  },
+  "{0}: its key came from the old account key": {
+    "en": "{0}: its key came from the old account key",
+    "ctx": "webapp/lib/accountKeyChange.js:49"
+  },
+  "{0}: it can't receive the new key safely": {
+    "en": "{0}: it can't receive the new key safely",
+    "ctx": "webapp/lib/accountKeyChange.js:50"
+  },
+  "Browsers signed in to your servers will need to be approved again.": {
+    "en": "Browsers signed in to your servers will need to be approved again.",
+    "ctx": "webapp/lib/accountKeyChange.js:51"
+  },
+  "Set up cloud recovery again afterwards.": {
+    "en": "Set up cloud recovery again afterwards.",
+    "ctx": "webapp/lib/accountKeyChange.js:52"
+  },
+  "Old backups still open with the old key, and so do copies on the removed device.": {
+    "en": "Old backups still open with the old key, and so do copies on the removed device.",
+    "ctx": "webapp/lib/accountKeyChange.js:53"
+  },
+  "{0} held the admin key, so the admin key changes first.": {
+    "en": "{0} held the admin key, so the admin key changes first.",
+    "ctx": "webapp/lib/accountKeyChange.js:54"
+  },
+  "{0}, added {1}": {
+    "en": "{0}, added {1}",
+    "ctx": "webapp/lib/accountKeyChange.js:55"
+  },
+  "These devices keep the account:": {
+    "en": "These devices keep the account:",
+    "ctx": "webapp/lib/accountKeyChange.js:56"
+  },
+  "Change account key": {
+    "en": "Change account key",
+    "ctx": "webapp/lib/accountKeyChange.js:57"
+  },
+  "Changing the account key…": {
+    "en": "Changing the account key…",
+    "ctx": "webapp/lib/accountKeyChange.js:59"
+  },
+  "Account key changed": {
+    "en": "Account key changed",
+    "ctx": "webapp/lib/accountKeyChange.js:60"
+  },
+  "Update every server first: {0} can't follow an account key change yet.": {
+    "en": "Update every server first: {0} can't follow an account key change yet.",
+    "ctx": "webapp/lib/accountKeyChange.js:61"
+  },
+  "Under quantum-safe protection, change the account key from the iPhone or Android app.": {
+    "en": "Under quantum-safe protection, change the account key from the iPhone or Android app.",
+    "ctx": "webapp/lib/accountKeyChange.js:62"
+  },
+  "Another admin device changed the account key first. Open Flagship again to get the new key.": {
+    "en": "Another admin device changed the account key first. Open Flagship again to get the new key.",
+    "ctx": "webapp/lib/accountKeyChange.js:63"
+  },
+  "The account key could not be changed. Nothing was changed. Try again.": {
+    "en": "The account key could not be changed. Nothing was changed. Try again.",
+    "ctx": "webapp/lib/accountKeyChange.js:64"
+  },
+  "Only an admin device of this account can change the account key.": {
+    "en": "Only an admin device of this account can change the account key.",
+    "ctx": "webapp/lib/accountKeyChange.js:65"
+  },
+  "Your account key was changed. Unlock to continue.": {
+    "en": "Your account key was changed. Unlock to continue.",
+    "ctx": "webapp/lib/accountKeyChange.js:66"
+  },
+  "This device has the new account key.": {
+    "en": "This device has the new account key.",
+    "ctx": "webapp/lib/accountKeyChange.js:67"
+  },
+  "This device couldn't check the new account key. Ask an admin device to add it again.": {
+    "en": "This device couldn't check the new account key. Ask an admin device to add it again.",
+    "ctx": "webapp/lib/accountKeyChange.js:68"
+  },
+  "Account key change": {
+    "en": "Account key change",
+    "ctx": "webapp/lib/accountKeyChange.js:69"
+  },
+  "Devices updated: {0} of {1}": {
+    "en": "Devices updated: {0} of {1}",
+    "ctx": "webapp/lib/accountKeyChange.js:70"
+  },
+  "Servers on the new key: {0} of {1}": {
+    "en": "Servers on the new key: {0} of {1}",
+    "ctx": "webapp/lib/accountKeyChange.js:71"
+  },
+  "Waiting for {0}": {
+    "en": "Waiting for {0}",
+    "ctx": "webapp/lib/accountKeyChange.js:72"
+  },
+  "Still to do on {0}: {1}": {
+    "en": "Still to do on {0}: {1}",
+    "ctx": "webapp/lib/accountKeyChange.js:73"
+  },
+  "Retry": {
+    "en": "Retry",
+    "ctx": "webapp/lib/accountKeyChange.js:74"
+  },
+  "Cloud recovery is off since the account key changed. Set it up again.": {
+    "en": "Cloud recovery is off since the account key changed. Set it up again.",
+    "ctx": "webapp/lib/accountKeyChange.js:75"
+  },
+  "Your account key was changed. Open Flagship to keep using this device.": {
+    "en": "Your account key was changed. Open Flagship to keep using this device.",
+    "ctx": "webapp/lib/accountKeyChange.js:77"
+  },
+  "Give this browser its own device key": {
+    "en": "Give this browser its own device key",
+    "ctx": "webapp/lib/accountKeyChange.js:462"
+  },
+  "Changed the account key": {
+    "en": "Changed the account key",
+    "ctx": "webapp/lib/auditLog.js:51"
   }
 }

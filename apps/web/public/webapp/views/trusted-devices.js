@@ -212,7 +212,10 @@ async function renderTrustedDevices() {
         <div class="note small">${tr("@{0} · public routing address", escapeHtml(state.username))}</div>
         ${getSession().adminRootSeed ? `<button class="secondary mt-2" id="edit-account-display-name">${tr("Edit account name")}</button>` : ""}
       </div>`;
-    root.innerHTML = bannerHtml + accountHeader + state.devices.map(renderDeviceCard).join("");
+    const keyChange = await import("./rotateAccountKey.js");
+    const progressCard = await keyChange.renderAccountKeyProgress().catch(() => "");
+    root.innerHTML = bannerHtml + progressCard + accountHeader + state.devices.filter((d) => d.revokedAt == null).map(renderDeviceCard).join("");
+    keyChange.bindAccountKeyProgress(root, () => renderTrustedDevices());
     bindPrivateNameActions(root);
     bindRemoveDevice(root);
     bindPendingBanner();
@@ -316,12 +319,33 @@ export function removeDeviceErrorText(e) {
 }
 
 /**
- * Ask, then remove the device. The steps are a list so a later one (e.g. "Could someone else unlock this
- * device?") slots in between asking and removing without touching the rest.
+ * Ask, then remove the device. An admin device first asks "Could someone else unlock this device?": "Yes, or
+ * I'm not sure" changes the account key (views/rotateAccountKey.js), which removes the device with it; "No"
+ * removes it as before (a browser gets the advice to change the key anyway). Resolves true when it was removed.
  */
 export async function removeDeviceFlow(device, deps = {}) {
   const modal = deps.modal ?? (await import("../lib/modal.js"));
   const name = deviceName(device);
+  const admin = deps.isAdmin ?? isAdminDevice(getSession());
+  if (admin && typeof modal.inlineChoice === "function") {
+    const keyChange = deps.keyChange ?? (await import("./rotateAccountKey.js"));
+    const answer = await keyChange.askCouldSomeoneUnlock(modal);
+    if (answer === null || answer === undefined) return false;
+    let change = answer === "yes";
+    if (!change && device.platformClass === "web") {
+      const next = await modal.inlineChoice({
+        title: REMOVE_DEVICE_COPY.title(name),
+        message: keyChange.BROWSER_ADVICE ?? "",
+        choices: [
+          { id: "remove", label: REMOVE_DEVICE_COPY.action, secondary: true },
+          { id: "change", label: keyChange.CHANGE_LABEL ?? "", danger: true },
+        ],
+      });
+      if (next === null || next === undefined) return false;
+      change = next === "change";
+    }
+    if (change) return keyChange.startAccountKeyChange(device, { nameOf: deviceName, modal });
+  }
   const ok = await modal.inlineConfirm({
     title: REMOVE_DEVICE_COPY.title(name),
     message: REMOVE_DEVICE_COPY.message,

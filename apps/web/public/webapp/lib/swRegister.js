@@ -92,6 +92,11 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("message", (ev) => {
       const data = ev.data;
       // A device-removed push (docs/revocation-ui.md): ask `.com`; only its answer erases anything.
+      // An account-key-rotated push: fetch and check this browser's new key (lib/accountKeyUpkeep.js).
+      if (data && data.type === "ACCOUNT_KEY_CHECK") {
+        void import("./accountKeyUpkeep.js").then((m) => m.onAccountKeyRotatedPush()).catch(() => {});
+        return;
+      }
       if (data && data.type === "DEVICE_REMOVED_CHECK") {
         void import("./accountGoneUi.js").then((m) => m.checkStillOnAccount()).catch(() => {});
         return;

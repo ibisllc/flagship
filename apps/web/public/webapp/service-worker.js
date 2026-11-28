@@ -592,6 +592,9 @@
 //       Wipe & restart moved to Account security as "Reset account keys" (precaches lib/resetAccountKeysUi.js) and
 //       Replace device is gone from the list; a `403 device-removed` from `.com` erases the account's keys and shows
 //       "This browser was removed from your account"; a device-removed push asks open tabs to check with `.com`.
+//       Also (docs/account-key-rotation.md): "Could someone else unlock this device?" in Remove from account and
+//       "Change your account key"; a kept browser takes the new key (an `account-key-rotated` push asks open tabs
+//       to check, its notice in the page's language); new accounts get a random device key; an X-Wing receive key.
 const SHELL_VERSION = "v259";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
@@ -1052,6 +1055,19 @@ async function checkAgainstManifest(cache) {
   }
 }
 
+// Notification sentences in the person's language: the page keeps each one here (lib/accountKeyUpkeep.js), since
+// a worker can't read the webapp's catalog by itself. A missing or unreadable entry falls back to English.
+const PUSH_TEXT_CACHE = "flagship-push-text-v1";
+async function pushText(kind, english) {
+  try {
+    const hit = await (await caches.open(PUSH_TEXT_CACHE)).match(`/__flagship/push-text/${kind}`);
+    const text = hit ? (await hit.text()).trim() : "";
+    return text && text.length <= 300 ? text : english;
+  } catch {
+    return english;
+  }
+}
+
 self.addEventListener("activate", (event) => {
   // NOTE: no clients.claim(). The new SW only takes over once existing
   // controlled clients have all gone away (close + reopen, or user
@@ -1348,6 +1364,27 @@ self.addEventListener("push", (event) => {
           requireInteraction: false,
           icon: "/icon.svg",
           data: { kind: "device-removed", deepLink: "/" },
+        });
+      }),
+    );
+    return;
+  }
+
+  // An admin device changed the account key (docs/account-key-rotation.md). Content-free, and it proves nothing:
+  // open tabs fetch this browser's delivery from `.com` and check it themselves. With no tab in view a notice
+  // opens the webapp; its sentence is the one the page left in its own language (PUSH_TEXT_CACHE), else English.
+  if (data && (data.category === "account-key-rotated" || data.kind === "account-key-rotated")) {
+    event.waitUntil(
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (cs) => {
+        cs.forEach((c) => c.postMessage({ type: "ACCOUNT_KEY_CHECK" }));
+        if (cs.some((c) => c.visibilityState === "visible")) return undefined;
+        return self.registration.showNotification("Flagship", {
+          body: await pushText("account-key-rotated", "Your account key was changed. Open Flagship to keep using this device."),
+          tag: "flagship-account-key-rotated",
+          renotify: true,
+          requireInteraction: false,
+          icon: "/icon.svg",
+          data: { kind: "account-key-rotated", deepLink: "/" },
         });
       }),
     );

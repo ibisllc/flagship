@@ -557,6 +557,10 @@ async function boot() {
   // "This account was removed" (docs/account-gone.md): when .com says this
   // browser's own account no longer exists, a full-screen state takes over.
   try { initAccountGoneUi(); } catch { /* best-effort */ }
+  // Account key changes (docs/account-key-rotation.md): finish one this browser started, take one another
+  // admin device made, keep the receive key published. Loaded on demand; never blocks the start.
+  void import("./lib/accountKeyUpkeep.js").then((m) => m.initAccountKeyUpkeep()).catch(() => {});
+  void import("./views/rotateAccountKey.js").then((m) => m.initAccountKeyBanner()).catch(() => {});
   // Back from a Stripe purchase (?shop=stripe|cancel, lib/plan.js): note it for after the unlock, tidy the address bar.
   let shopBack = null;
   try { shopBack = takeShopReturn(); } catch { /* best-effort */ }
