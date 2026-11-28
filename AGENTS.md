@@ -274,6 +274,10 @@ Open after 0.4 (journal resume point and 2026-11-21/23 entries):
   second recipient), D1 **0162**, Resend notice (id/severity/time only), Turnstile + honeypot, `npm run
   security-reports` (YubiKey; `--triage`). Resend notices go to security@ from `mail.flagshipserver.com`.
   Owner steps left (deploy sheet 3c): Turnstile widget, optional triage key.
+- 2026-11-27, org read tokens (external report 2): `POST /api/orgs/<id>/read-token` (seat key or org server STK,
+  `ACCOUNT_READ_TOKEN_SECRET`, budget `org-read-token`); `/log` and `/export` require one (org admin or servers-add);
+  other org GETs accept it. The clients and the refusal of every untokened org GET are 0.5 (`docs/account-read-token.md`
+  "Org routes").
 - Shrink the phone apps (0.5 list): branch `claude/friendly-goldberg-f0jbky` (VP8-only libwebrtc, Android WebP
   welcome art; Android download -3.0 MB on arm64). Waits for the iOS libwebrtc build, device calls, the owner's go.
 

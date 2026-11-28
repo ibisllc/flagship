@@ -82,8 +82,8 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  * accepts with); `.com` keeps it with the accept and records it as the seat's KEM key when the grant
  * lands, so a member receives key-ring versions without opening the org page first.
  *
- * The orgId (128 random bits) is the read capability for the GET routes; nothing they return is
- * secret (labels are sealed, keys are public), but it does show the org's structure.
+ * Reads take an org read token (`orgReadToken.ts`, docs/account-read-token.md "Org routes"); the
+ * audit reads (`log`, `export`) require one from an org admin or a servers-add seat.
  */
 export interface OrgDeps {
   orgs: OrgStorage;
@@ -93,6 +93,8 @@ export interface OrgDeps {
   trialSeatLimit?: number | null;
   /** The payment numbers (`PAYMENTS_CONFIG`); the Business plan's trial, seats and prices come from here. */
   payments?: PaymentsConfig;
+  /** One request's verified views, so a gated read verifies the chain once (`orgReadToken.ts`). Reads only. */
+  views?: Map<string, Promise<OrgView | null>>;
 }
 
 const ORG_ID = /^[0-9a-f]{32}$/;
@@ -136,6 +138,16 @@ async function list<T>(deps: OrgDeps, orgId: string, kind: OrgObjectKind): Promi
 
 /** The org as `.com` holds it, every object re-verified from the recorded genesis. */
 export async function loadOrg(deps: OrgDeps, orgId: string, now: number): Promise<OrgView | null> {
+  if (!deps.views) return loadOrgUncached(deps, orgId, now);
+  let v = deps.views.get(orgId);
+  if (!v) {
+    v = loadOrgUncached(deps, orgId, now);
+    deps.views.set(orgId, v);
+  }
+  return v;
+}
+
+async function loadOrgUncached(deps: OrgDeps, orgId: string, now: number): Promise<OrgView | null> {
   const org = await deps.orgs.getOrg(orgId);
   if (!org) return null;
   const entries = (await deps.orgs.listObjects(orgId, "authority")).sort((a, b) => (a.key < b.key ? -1 : 1)).map((o) => parse<OrgAuthorityEntry>(o.bodyJson));

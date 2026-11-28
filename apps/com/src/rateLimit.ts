@@ -81,6 +81,8 @@ export type RateLimitEndpoint =
   // so writes are bounded per source and per org; reads are cheaper but re-verify the chain too.
   | "org-write"
   | "org-read"
+  // Minting an org read token (orgReadToken.ts): signed by a seat key or an org server's STK.
+  | "org-read-token"
   | "box-claim-mailbox-post"
   | "box-claim-mailbox-read"
   | "recovery-by-username"
@@ -371,6 +373,13 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "org-read": [
     { axis: "ip", limit: 60, windowSec: 60 },
     { axis: "ip", limit: 1200, windowSec: 3600 },
+  ],
+  // A seat's token lasts 7 days and a server's 24 h, so an honest org mints a few a day per seat and
+  // box; per source, and per org so one org's mint can't be hammered from rotating addresses.
+  "org-read-token": [
+    { axis: "ip", limit: 20, windowSec: 60 },
+    { axis: "ip", limit: 300, windowSec: 3600 },
+    { axis: "subject", limit: 600, windowSec: 3600 },
   ],
   "box-claim-mailbox-post": [
     { axis: "ip", limit: 30, windowSec: 60 },
@@ -879,6 +888,10 @@ export function retryAfterPhrase(sec: number): string {
 /** The server or account a PQ binding or policy write (or a re-pair veto) is about (its rate-limit subject). */
 export function bindingSubject(endpoint: RateLimitEndpoint, pathname: string): string | undefined {
   if (endpoint === "security-report") return SECURITY_REPORT_SUBJECT;
+  if (endpoint === "org-read-token") {
+    const o = /^\/api\/orgs\/([0-9a-f]{32})\/read-token$/.exec(pathname);
+    return o ? `orgs:${o[1]}` : undefined;
+  }
   if (endpoint === "re-pair-veto") {
     const v = /^\/api\/users\/([^/]+)\/re-pair\/veto$/.exec(pathname);
     if (!v) return undefined;
@@ -900,6 +913,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/assurance-policy$/.test(pathname)) return "assurance-policy-post";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/serving-leases$/.test(pathname)) return "serving-lease";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/(?:serving-policy|renewal-delegations)$/.test(pathname)) return "serving-signed";
+  if (m === "POST" && /^\/api\/orgs\/[0-9a-f]{32}\/read-token$/.test(pathname)) return "org-read-token";
   if (/^\/api\/orgs(?:\/|$)/.test(pathname)) return m === "GET" ? "org-read" : "org-write";
   if (m === "POST" && pathname === "/api/certificates/orders") return "issuance-order";
   if (m === "GET" && /^\/api\/certificates\/orders\/[0-9a-f]{32}$/.test(pathname)) return "issuance-poll";

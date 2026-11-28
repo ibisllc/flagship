@@ -267,8 +267,13 @@ async function signerStillCurrent(deps: AccountReadTokenDeps, c: AccountReadToke
 export const ACCOUNT_READ_HEADERS: Readonly<Record<string, string>> = READ_HEADERS;
 
 async function encode(claims: AccountReadTokenClaims, secret: string): Promise<string> {
+  return encodeReadToken(PREFIX, MAC_CONTEXT, claims, secret);
+}
+
+/** `<prefix>.<b64url(claims)>.<b64url(HMAC-SHA256(secret, context|payload))>`: one shape for every read token. */
+export async function encodeReadToken(prefix: string, context: string, claims: object, secret: string): Promise<string> {
   const payload = b64urlEncode(new TextEncoder().encode(JSON.stringify(claims)));
-  return `${PREFIX}.${payload}.${b64urlEncode(await hmac(secret, `${MAC_CONTEXT}|${payload}`))}`;
+  return `${prefix}.${payload}.${b64urlEncode(await hmac(secret, `${context}|${payload}`))}`;
 }
 
 // A token whose MAC checked out is remembered, keyed by the whole token string
@@ -278,23 +283,35 @@ async function encode(claims: AccountReadTokenClaims, secret: string): Promise<s
 // signer is still current are judged on every call, so a revoked device or a
 // rotated root loses access on its next request exactly as before. A token the
 // secret does not vouch for is never stored.
-const VERIFIED_TOKENS = new Map<string, { secret: string; claims: AccountReadTokenClaims }>();
+const VERIFIED_TOKENS = new Map<string, { secret: string; context: string; claims: unknown }>();
 const VERIFIED_TOKENS_MAX = 512;
 
 async function decode(token: string, secret: string): Promise<AccountReadTokenClaims | null> {
+  return decodeReadToken(PREFIX, MAC_CONTEXT, token, secret, (c): c is AccountReadTokenClaims => {
+    const x = c as Partial<AccountReadTokenClaims>;
+    return typeof x.u === "string" && typeof x.sub === "string" && typeof x.k === "string" && typeof x.exp === "number";
+  });
+}
+
+/** The claims of a token whose MAC verifies under `secret` and `context` and whose shape `valid` accepts, else null. */
+export async function decodeReadToken<T>(
+  prefix: string,
+  context: string,
+  token: string,
+  secret: string,
+  valid: (c: unknown) => c is T,
+): Promise<T | null> {
   const seen = VERIFIED_TOKENS.get(token);
-  if (seen && seen.secret === secret) return seen.claims;
+  if (seen && seen.secret === secret && seen.context === context) return seen.claims as T;
   const parts = token.split(".");
-  if (parts.length !== 3 || parts[0] !== PREFIX) return null;
+  if (parts.length !== 3 || parts[0] !== prefix) return null;
   try {
-    const expected = await hmac(secret, `${MAC_CONTEXT}|${parts[1]}`);
+    const expected = await hmac(secret, `${context}|${parts[1]}`);
     if (!timingSafeEqual(expected, b64urlDecode(parts[2]!))) return null;
-    const c = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[1]!))) as AccountReadTokenClaims;
-    if (typeof c.u !== "string" || typeof c.sub !== "string" || typeof c.k !== "string" || typeof c.exp !== "number") {
-      return null;
-    }
+    const c: unknown = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[1]!)));
+    if (!valid(c)) return null;
     if (VERIFIED_TOKENS.size >= VERIFIED_TOKENS_MAX) VERIFIED_TOKENS.delete(VERIFIED_TOKENS.keys().next().value!);
-    VERIFIED_TOKENS.set(token, { secret, claims: c });
+    VERIFIED_TOKENS.set(token, { secret, context, claims: c });
     return c;
   } catch {
     return null;

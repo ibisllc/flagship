@@ -173,6 +173,8 @@ import {
   handleUsernameLookup,
   handleGetUserPods,
   handleMintAccountReadToken,
+  handleMintOrgReadToken,
+  requireOrgRead,
   handleGetOrderHealth,
   requireAccountRead,
   requireServerRead,
@@ -790,7 +792,7 @@ const ROUTE_RE = {
   SERVER_REGISTER: /^\/api\/server\/register$/,
   BOX_CLAIM_KEY: /^\/api\/box-claim\/key$/,
   ORGS: /^\/api\/orgs$/,
-  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|box-log-heads|keys|export|directory|directory\/slices|connectors|proposals|proposals\/decisions|plan|plan-attestation|voucher-wallet)$/,
+  ORG_SUB: /^\/api\/orgs\/([0-9a-f]{32})\/(authority|invites|seats|revokes|freezes|overturns|vetoes|ceremonies|log|servers|servers\/code|servers\/register|seat-kems|box-kems|box-log-heads|keys|export|directory|directory\/slices|connectors|proposals|proposals\/decisions|plan|plan-attestation|voucher-wallet|read-token)$/,
   ORG_INVITE: /^\/api\/orgs\/([0-9a-f]{32})\/invites\/([0-9a-f]{32})(\/accept)?$/,
   ORG_CEREMONY_APPROVE: /^\/api\/orgs\/([0-9a-f]{32})\/ceremonies\/([0-9a-f]{64})\/approvals$/,
   BOX_CLAIM_MAILBOX: /^\/api\/box-claim\/mailbox\/([0-9a-f]{64})\/(to-box|to-phone)$/,
@@ -1623,6 +1625,9 @@ export async function tryControlPlane(
     }
     if ((m = path.match(ROUTE_RE.ORG_SUB))) {
       const [, orgId, sub] = m as unknown as [string, string, string];
+      // Org read tokens (orgReadToken.ts): minted by a seat key or an org server's STK.
+      const rtd = { ...osd, secret: env.ACCOUNT_READ_TOKEN_SECRET, nonces: new D1NonceStore(env.DB), views: new Map() };
+      if (sub === "read-token" && method === "POST") return finish(await handleMintOrgReadToken(rtd, orgId, await readJson(request)));
       // The Business plan (orgPlan.ts): its state, the CA-signed attestation for the org's boxes, the sealed wallet.
       if (sub === "voucher-wallet") {
         const wd = { ...od, wallets: new D1BlindVoucherStorage(env.DB) };
@@ -1635,10 +1640,15 @@ export async function tryControlPlane(
         if (sub === "authority") return finish(await handleOrgAuthorityGet(od, orgId));
         if (sub === "seats") return finish(await handleOrgSeatsGet(od, orgId));
         if (sub === "ceremonies") return finish(await handleOrgCeremonies(od, orgId));
-        if (sub === "log") return finish(await handleOrgLog(od, orgId, Number(url.searchParams.get("after") ?? "0")));
+        if (sub === "log" || sub === "export") {
+          // Read by no shipped client or box yet, so these require the token now (admin or servers-add).
+          const check = await requireOrgRead(rtd, orgId, request.headers.get("authorization"), "admin");
+          if (!check.ok) return finish(check.response);
+          if (sub === "log") return finishRead(await handleOrgLog(rtd, orgId, Number(url.searchParams.get("after") ?? "0")));
+          return finishRead(await handleOrgExport(rtd, orgId));
+        }
         if (sub === "servers") return finish(await handleOrgServersList(osd, orgId));
         if (sub === "keys") return finish(await handleOrgKeysGet(osd, orgId));
-        if (sub === "export") return finish(await handleOrgExport(osd, orgId));
         if (sub === "directory") return finish(await handleOrgDirectoryGet(od, orgId));
         if (sub === "directory/slices") return finish(await handleOrgDirectorySlicesGet(od, orgId));
         if (sub === "connectors") return finish(await handleOrgConnectorsGet(od, orgId));
