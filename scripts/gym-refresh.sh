@@ -323,6 +323,10 @@ fi
 # when the gym branch lost the pin or a published box release (or the update target built on it) has no companion.
 if [ "$DRY" = "1" ]; then
   say "DRY-RUN would: node scripts/gym-pq-release-key.mjs check --worktree $WT"
+elif [ "${GYM_SKIP_BOX_ARTIFACT:-0}" = "1" ]; then
+  # Nothing was built, so the release may predate the gym's PQ pin: report it, and let a Worker-only refresh go on.
+  node "$REPO/scripts/gym-pq-release-key.mjs" check --worktree "$WT" --arch "${GYM_ARTIFACT_ARCHES:-amd64}" 2>&1 | sed 's/^/  /' \
+    || say "WARNING: the gym's box release has no PQ companion (GYM_SKIP_BOX_ARTIFACT=1, so nothing was rebuilt); gym boxes will refuse it"
 else
   node "$REPO/scripts/gym-pq-release-key.mjs" check --worktree "$WT" --arch "${GYM_ARTIFACT_ARCHES:-amd64}" | sed 's/^/  /' \
     || die "the gym's box release lacks its PQ companion (or the gym branch pins no PQ key): rebuild it with scripts/gym-box-artifact.sh"
