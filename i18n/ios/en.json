@@ -17292,10 +17292,6 @@
     "en": "Use voucher",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChooseAccountNameScreen.swift:106"
   },
-  "This name is held for the owner of %@.com until %@.": {
-    "en": "This name is held for the owner of %@.com until %@.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
-  },
   "Setting up your account name…": {
     "en": "Setting up your account name…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChooseAccountNameScreen.swift:119"
@@ -17597,5 +17593,65 @@
   "account key change unavailable": {
     "en": "account key change unavailable",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:449"
+  },
+  "Held for the owner of %@ until %@.": {
+    "en": "Held for the owner of %@ until %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Held for the owner of %@.": {
+    "en": "Held for the owner of %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Couldn't check %@ just now. Try again in a minute.": {
+    "en": "Couldn't check %@ just now. Try again in a minute.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Why?": {
+    "en": "Why?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Why is %@ held?": {
+    "en": "Why is %@ held?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Until %@, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": {
+    "en": "Until %@, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.": {
+    "en": "For a limited time, a Flagship name that matches a registered .com is kept for whoever controls that domain. Then it opens to everyone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Is this name yours?": {
+    "en": "Is this name yours?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "If %@ is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.": {
+    "en": "If %@ is yours, it's your own name, or you have another good reason, email support@flagshipserver.com before you create your account. Say which name you want and why. If we can, we'll send a link that sets it aside for you.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Email us": {
+    "en": "Email us",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "How .com dibs works": {
+    "en": "How .com dibs works",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Pick another name, or go back for a new suggestion.": {
+    "en": "Pick another name, or go back for a new suggestion.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "Account name: %@": {
+    "en": "Account name: %@",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/SupportContact.swift"
+  },
+  "Name I want: %@": {
+    "en": "Name I want: %@",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/SupportContact.swift"
+  },
+  "Why:": {
+    "en": "Why:",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/SupportContact.swift"
   }
 }
