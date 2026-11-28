@@ -4088,5 +4088,12 @@
   "Pick another name, or go back for a new suggestion.": "Wähle einen anderen Namen oder geh zurück, um einen neuen Vorschlag zu bekommen.",
   "Account name: {0}": "Kontoname: {0}",
   "Name I want: {0}": "Gewünschter Name: {0}",
-  "Why:": "Grund:"
+  "Why:": "Grund:",
+  "The codes don't match": "Die Codes stimmen nicht überein",
+  "Invited, not accepted yet": "Eingeladen, noch nicht angenommen",
+  "Withdraw invitation": "Einladung zurückziehen",
+  "Invitation withdrawn.": "Einladung zurückgezogen.",
+  "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "Jemand anderes als die eingeladene Person hat diese Einladung angenommen. Zieh sie zurück und schick der Person eine neue.",
+  "Withdraw this invitation?": "Diese Einladung zurückziehen?",
+  "The link stops working, and nobody who accepted it is let in.": "Der Link funktioniert nicht mehr, und niemand, der ihn angenommen hat, wird hereingelassen."
 }

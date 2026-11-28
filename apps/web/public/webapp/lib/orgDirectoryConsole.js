@@ -142,7 +142,12 @@ async function recordEntry(seat, snap, c, entry, secret, call, now) {
 async function makeInvite(seat, snap, c, name, roles, entry, secret, call, now) {
   const seatId = randomId();
   const linkKey = crypto.getRandomValues(new Uint8Array(32));
-  const k = await crypto.subtle.importKey("raw", linkKey, "AES-GCM", false, ["encrypt"]);
+  // The link key derives the offer key (seals the offer and the pseudonym) and the invite key, whose public
+  // half the invite names: reading the offer and accepting both need it (docs/enterprise-accounts.md §7).
+  const ik = org.deriveOrgInviteKeys(linkKey);
+  ik.hybridSecret.fill(0);
+  const k = await crypto.subtle.importKey("raw", ik.offerKey, "AES-GCM", false, ["encrypt"]);
+  ik.offerKey.fill(0);
   const sealGcm = async (bytes) => {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     return new Uint8Array([...iv, ...new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, bytes))]);
@@ -150,7 +155,7 @@ async function makeInvite(seat, snap, c, name, roles, entry, secret, call, now) 
   const sealedLabel = await sealGcm(enc.encode(name));
   const offer = await sealGcm(enc.encode(JSON.stringify({ orgId: seat.orgId, orgName: seat.orgName, genesisHash: seat.genesisHash, seatId, roles, pseudonym: name })));
   const v = snap.state.current.version;
-  const invite = { orgId: seat.orgId, seatId, labelSha256: org.orgSha256Hex(sealedLabel), rolesHash: org.orgSeatRolesHash(roles), oarVersion: v, issuedAt: now, expiresAt: now + 7 * DAY };
+  const invite = { orgId: seat.orgId, seatId, labelSha256: org.orgSha256Hex(sealedLabel), rolesHash: org.orgSeatRolesHash(roles), oarVersion: v, issuedAt: now, expiresAt: now + 7 * DAY, inviteKeyPub: ik.inviteKeyPub };
   const order = org.canonicalOrgSeatInvite(invite);
   await call("POST", `/api/orgs/${seat.orgId}/invites`, { invite, roles, approvals: [approvalBy(seat, secret, order, v, now)], sealedLabelHex: hex(sealedLabel), offerHex: hex(offer) });
   try {

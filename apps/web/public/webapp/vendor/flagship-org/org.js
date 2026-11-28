@@ -8242,6 +8242,10 @@ var TAG_ORG_OVERTURN = "flagship/org-overturn/v1";
 var TAG_ORG_SEAT_SAS = "flagship/org-seat-sas/v1";
 var TAG_ORG_SEAT_MEMBER_KDF = "flagship/org-seat-member/v1";
 var TAG_ORG_SEAT_MEMBER_PQ_KDF = "flagship/org-seat-member-pq/v1";
+var TAG_ORG_INVITE_OFFER_KDF = "flagship/org-invite-offer/v1";
+var TAG_ORG_INVITE_KEY_KDF = "flagship/org-invite-key/v1";
+var TAG_ORG_INVITE_READ = "flagship/org-invite-read/v1";
+var TAG_ORG_INVITE_WITHDRAW = "flagship/org-invite-withdraw/v1";
 var HOUR = 36e5;
 var DAY = 24 * HOUR;
 var ORG_FREEZE_MAX_MS = 72 * HOUR;
@@ -8281,6 +8285,8 @@ var enc = (s) => new TextEncoder().encode(s);
 var orgSha256Hex = (b) => hex(sha2562(b));
 var HEX16 = /^[0-9a-f]{32}$/;
 var HEX322 = /^[0-9a-f]{64}$/;
+var INVITE_KEY_PUB = new RegExp(`^[0-9a-f]{${2 * HYBRID_SIG_PUBLIC_KEY_LEN}}$`);
+var HYBRID_SIG_HEX = /^[0-9a-f]{6746}$/;
 var SERVER = /^[a-z0-9][a-z0-9.-]{0,252}$/;
 var SERVICE_REF = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 var REASON = /^[a-z0-9][a-z0-9-]{0,47}$/;
@@ -8819,7 +8825,8 @@ function canonicalOrgSeatInvite(i) {
   match("rolesHash", HEX322, i.rolesHash);
   for (const [k, v] of Object.entries({ oarVersion: i.oarVersion, issuedAt: i.issuedAt, expiresAt: i.expiresAt })) uint(k, v);
   if (i.expiresAt <= i.issuedAt || i.expiresAt - i.issuedAt > ORG_INVITE_MAX_LIFETIME_MS) fail3("malformed", "expiresAt");
-  return enc([TAG_ORG_SEAT_INVITE, i.orgId, i.seatId, i.labelSha256, i.rolesHash, i.oarVersion, i.issuedAt, i.expiresAt].join("|"));
+  match("inviteKeyPub", INVITE_KEY_PUB, i.inviteKeyPub);
+  return enc([TAG_ORG_SEAT_INVITE, i.orgId, i.seatId, i.labelSha256, i.rolesHash, i.oarVersion, i.issuedAt, i.expiresAt, i.inviteKeyPub].join("|"));
 }
 function canonicalOrgSeatAccept(a) {
   match("orgId", HEX16, a.orgId);
@@ -8838,6 +8845,70 @@ function orgSeatSas(inviteSha256, memberKeyId, adminKeyId) {
   const d = sha2562(enc([TAG_ORG_SEAT_SAS, inviteSha256, memberKeyId, adminKeyId].join("|")));
   const n = (d[0] << 24 | d[1] << 16 | d[2] << 8 | d[3]) >>> 0;
   return String(n % 1e6).padStart(6, "0");
+}
+function deriveOrgInviteKeys(linkKey) {
+  if (!(linkKey instanceof Uint8Array) || linkKey.length !== 32) fail3("malformed", "link key");
+  const offerKey = hkdf(sha2562, linkKey, new Uint8Array(0), enc(TAG_ORG_INVITE_OFFER_KDF), 32);
+  const seed = hkdf(sha2562, linkKey, new Uint8Array(0), enc(TAG_ORG_INVITE_KEY_KDF), 64);
+  const { publicKey, secretKey } = hybridSigKeygen(seed.subarray(0, 32), seed.subarray(32));
+  seed.fill(0);
+  return { offerKey, hybridSecret: secretKey, publicKey, inviteKeyPub: hex(publicKey) };
+}
+function canonicalOrgInviteRead(orgId, seatId, issuedAt) {
+  match("orgId", HEX16, orgId);
+  match("seatId", HEX16, seatId);
+  uint("issuedAt", issuedAt);
+  return enc([TAG_ORG_INVITE_READ, orgId, seatId, issuedAt].join("|"));
+}
+function orgInviteReadSignature(inviteSecret, orgId, seatId, issuedAt, opts2 = {}) {
+  return hex(hybridSign(inviteSecret, TAG_ORG_INVITE_READ, canonicalOrgInviteRead(orgId, seatId, issuedAt), opts2));
+}
+function unhexOrNull(h2, re) {
+  if (typeof h2 !== "string" || !re.test(h2)) return null;
+  const out = new Uint8Array(h2.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h2.slice(2 * i, 2 * i + 2), 16);
+  return out;
+}
+function hybridOk(pubHex, purpose, payload, sigHex) {
+  const pub = unhexOrNull(pubHex, INVITE_KEY_PUB);
+  const sig = unhexOrNull(sigHex, HYBRID_SIG_HEX);
+  if (!pub || !sig) return false;
+  try {
+    hybridVerify(pub, purpose, payload, sig);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function verifyOrgInviteRead(invite, issuedAt, signature, now) {
+  if (!isUint2(issuedAt) || Math.abs(now - issuedAt) > ORG_MAX_SKEW_MS) return false;
+  let msg;
+  try {
+    msg = canonicalOrgInviteRead(invite.orgId, invite.seatId, issuedAt);
+  } catch {
+    return false;
+  }
+  return hybridOk(invite.inviteKeyPub, TAG_ORG_INVITE_READ, msg, signature);
+}
+function orgInviteAcceptSignature(inviteSecret, a, opts2 = {}) {
+  return hex(hybridSign(inviteSecret, TAG_ORG_SEAT_ACCEPT, canonicalOrgSeatAccept(a), opts2));
+}
+function verifyOrgInviteAccept(invite, a, signature) {
+  let msg;
+  try {
+    if (a.orgId !== invite.orgId || a.seatId !== invite.seatId) return false;
+    if (a.inviteSha256 !== orgSha256Hex(canonicalOrgSeatInvite(invite))) return false;
+    msg = canonicalOrgSeatAccept(a);
+  } catch {
+    return false;
+  }
+  return hybridOk(invite.inviteKeyPub, TAG_ORG_SEAT_ACCEPT, msg, signature);
+}
+function canonicalOrgInviteWithdraw(w) {
+  match("orgId", HEX16, w.orgId);
+  match("seatId", HEX16, w.seatId);
+  for (const [k, x] of Object.entries({ oarVersion: w.oarVersion, issuedAt: w.issuedAt })) uint(k, x);
+  return enc([TAG_ORG_INVITE_WITHDRAW, w.orgId, w.seatId, w.oarVersion, w.issuedAt].join("|"));
 }
 function canonicalOrgSeatGrant(g) {
   match("orgId", HEX16, g.orgId);
@@ -10842,6 +10913,10 @@ export {
   TAG_ORG_DELAYED_CHANGE,
   TAG_ORG_DIRECTORY_ENTRY,
   TAG_ORG_DIRECTORY_SLICE,
+  TAG_ORG_INVITE_KEY_KDF,
+  TAG_ORG_INVITE_OFFER_KDF,
+  TAG_ORG_INVITE_READ,
+  TAG_ORG_INVITE_WITHDRAW,
   TAG_ORG_KEY_COMMIT,
   TAG_ORG_KEY_RECIPIENTS,
   TAG_ORG_KEY_RING,
@@ -10887,6 +10962,8 @@ export {
   canonicalOrgDirectorySlicePayload,
   canonicalOrgDirectorySliceWrite,
   canonicalOrgDirectoryWrite,
+  canonicalOrgInviteRead,
+  canonicalOrgInviteWithdraw,
   canonicalOrgKeyRing,
   canonicalOrgOverturn,
   canonicalOrgPlanAttestation,
@@ -10904,6 +10981,7 @@ export {
   checkOrgAuthorityShape,
   checkOrgDirectoryEntry,
   checkOrgQuorumCustody,
+  deriveOrgInviteKeys,
   deriveOrgSeatKemSeed,
   deriveOrgSeatMemberSeeds,
   deriveOrgWalletKey,
@@ -10944,6 +11022,8 @@ export {
   orgEgressGb,
   orgFounderRemovalOf,
   orgGrantThreshold,
+  orgInviteAcceptSignature,
+  orgInviteReadSignature,
   orgKemKeyIdHex,
   orgKemKeyPair,
   orgKeyChainId,
@@ -11005,6 +11085,8 @@ export {
   verifyOrgBoxKem,
   verifyOrgConnector,
   verifyOrgDirectorySliceApproval,
+  verifyOrgInviteAccept,
+  verifyOrgInviteRead,
   verifyOrgKeyRing,
   verifyOrgProposal,
   verifyOrgRecordedApprovals,

@@ -53,10 +53,11 @@ const adminRecordKey = (orgId, seatId) => `flagship.orgSeatAdmin.v1.${activeProf
 export function orgApi(deps = {}) {
   const f = deps.fetch ?? fetch;
   const base = (deps.apex ?? controlApex()).replace(/\/+$/, "");
-  return async (method, path, body) => {
+  return async (method, path, body, headers) => {
     const res = await f(`${base}${path}`, {
       method,
-      ...(body ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}),
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(body || headers ? { headers: { ...(body ? { "content-type": "application/json" } : {}), ...(headers ?? {}) } } : {}),
       cache: "no-store",
     });
     let json = {};
@@ -95,16 +96,21 @@ export async function acceptOrgInvite(link, { umk, now = Date.now(), userName = 
   if (!(umk instanceof Uint8Array) || umk.length !== 32) throw fail("custody-locked");
   const call = orgApi(deps);
   const { orgId, seatId } = link;
-  const r = await call("GET", `/api/orgs/${orgId}/invites/${seatId}`);
+  const { openOrgOffer, inviteReadHeaders, inviteKeys } = await import("./orgJoin.js");
+  const r = await call("GET", `/api/orgs/${orgId}/invites/${seatId}`, undefined, inviteReadHeaders(link, now));
   if (r.accepted === true) throw fail("org-invite-accepted");
-  const { openOrgOffer } = await import("./orgJoin.js");
   const offer = await openOrgOffer(r.offerHex, link.keyHex);
   if (offer.orgId !== orgId || offer.seatId !== seatId || typeof offer.genesisHash !== "string") throw fail("org-offer");
+  const ik = inviteKeys(link.keyHex);
+  ik.offerKey.fill(0);
   // The org's chain must verify from the genesis the inviter sealed into the offer.
   await orgSnapshot(call, orgId, offer.genesisHash, now);
   const inv = r.invite;
   const roles = r.roles ?? [];
-  if (org.orgSeatRolesHash(roles) !== inv.rolesHash) throw fail("org-offer");
+  if (org.orgSeatRolesHash(roles) !== inv.rolesHash || inv.inviteKeyPub !== ik.inviteKeyPub) {
+    ik.hybridSecret.fill(0);
+    throw fail("org-offer");
+  }
   const inviteSha256 = org.orgSha256Hex(org.canonicalOrgSeatInvite(inv));
   const subject = org.orgSeatSubject(orgId, seatId);
 
@@ -136,11 +142,14 @@ export async function acceptOrgInvite(link, { umk, now = Date.now(), userName = 
 
   const accept = { orgId, seatId, inviteSha256, memberKeyId, adminKeyId, issuedAt: now, ...(adminKeyId ? { custody: "browser" } : {}) };
   const signature = hex(memberSign(org.canonicalOrgSeatAccept(accept)));
+  // The invite key signs the accept too: `.com` takes it only from someone holding the link.
+  const inviteSignature = org.orgInviteAcceptSignature(ik.hybridSecret, accept);
+  ik.hybridSecret.fill(0);
   const kem = org.orgKemKeyPair(org.deriveOrgSeatKemSeed(umk, orgId));
   const kemStatement = { orgId, seatId, kemKeyId: kem.kemKeyId, issuedAt: now };
   const seatKem = { statement: kemStatement, kemPubHex: hex(kem.kemPub), signature: hex(memberSign(org.canonicalOrgSeatKem(kemStatement))) };
   kem.kemSecret.fill(0);
-  await call("POST", `/api/orgs/${orgId}/invites/${seatId}/accept`, { accept, memberBinding, adminBinding, signature, seatKem });
+  await call("POST", `/api/orgs/${orgId}/invites/${seatId}/accept`, { accept, memberBinding, adminBinding, signature, inviteSignature, seatKem });
 
   const code = org.orgSeatSas(inviteSha256, memberKeyId, adminKeyId);
   const seat = { orgId, seatId, orgName: String(offer.orgName ?? ""), pseudonym: String(offer.pseudonym ?? ""), genesisHash: offer.genesisHash, memberBinding, adminBinding, custody: adminKeyId ? "browser" : null, joinedAt: now, code };
@@ -196,7 +205,10 @@ export async function approveCeremony(seat, snap, ceremony, { umk, now = Date.no
   return "approved";
 }
 
-/** Accepts and admissions waiting for an admin (compare the code, then admit). */
+/**
+ * Accepts and admissions waiting for an admin (compare the code, then admit). Only accepts the invite
+ * key signed are offered: whoever accepted held the invitation link.
+ */
 export function pendingJoins(snap) {
   const granted = new Set((snap.seats.grants ?? []).map((g) => g.grant?.seatId));
   const invites = new Map((snap.seats.invites ?? []).map((i) => [i.invite?.seatId, i]));
@@ -205,10 +217,31 @@ export function pendingJoins(snap) {
     const acc = a.accept;
     if (!acc || granted.has(acc.seatId)) continue;
     const inv = invites.get(acc.seatId);
-    if (!inv) continue;
+    if (!inv || !org.verifyOrgInviteAccept(inv.invite, acc, a.inviteSignature)) continue;
     out.push({ seatId: acc.seatId, invite: inv.invite, roles: inv.roles ?? [], accept: acc, memberBinding: a.memberBinding, adminBinding: a.adminBinding ?? null, custody: acc.custody === "browser" ? "browser" : "hardware" });
   }
   return out;
+}
+
+/** Invitations nobody has accepted yet (an admin may withdraw them). */
+export function pendingInvites(snap) {
+  const granted = new Set((snap.seats.grants ?? []).map((g) => g.grant?.seatId));
+  const accepted = new Set((snap.seats.accepts ?? []).map((a) => a.accept?.seatId));
+  return (snap.seats.invites ?? []).filter((i) => i.invite?.seatId && !granted.has(i.invite.seatId) && !accepted.has(i.invite.seatId)).map((i) => ({ seatId: i.invite.seatId, invite: i.invite }));
+}
+
+/**
+ * Withdraws an invitation not yet admitted (one org admin): `.com` deletes it and any accept, so the link
+ * stops working. Used when the codes did not match, too.
+ */
+export async function withdrawInvite(seat, snap, seatId, { umk, now = Date.now(), deps = {} } = {}) {
+  const call = orgApi(deps);
+  const version = snap.state.current.version;
+  const withdraw = { orgId: seat.orgId, seatId, oarVersion: version, issuedAt: now };
+  const order = org.canonicalOrgInviteWithdraw(withdraw);
+  const a = await withSeatAdminKey(seat, umk, async (secret) => approvalBy(seat, secret, order, version, now));
+  await call("POST", `/api/orgs/${seat.orgId}/invites/${seatId}/withdraw`, { withdraw, approvals: [a] });
+  return "withdrawn";
 }
 
 /** The code the joining person's screen shows, for the admin to compare. */

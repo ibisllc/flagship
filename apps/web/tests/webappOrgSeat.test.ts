@@ -14,6 +14,8 @@ import {
   orgSha256Hex,
   signOrgApproval,
   type OrgSeatRole,
+  canonicalOrgInviteWithdraw,
+  deriveOrgInviteKeys,
 } from "@flagship/protocol";
 import { InMemoryOrgStorage, InMemoryStorage } from "@flagship/storage";
 import {
@@ -24,6 +26,7 @@ import {
   handleOrgInviteAccept,
   handleOrgInviteCreate,
   handleOrgInviteGet,
+  handleOrgInviteWithdraw,
   handleOrgSeatGrant,
   handleOrgSeatsGet,
   type OrgDeps,
@@ -64,7 +67,11 @@ function fakeCom(d: OrgDeps) {
     else if ((x = m(/^\/api\/orgs\/([0-9a-f]+)\/seats$/))) r = init.method === "POST" ? await handleOrgSeatGrant(d, x[1]!, body) : await handleOrgSeatsGet(d, x[1]!);
     else if ((x = m(/^\/api\/orgs\/([0-9a-f]+)\/ceremonies$/))) r = await handleOrgCeremonies(d, x[1]!);
     else if ((x = m(/^\/api\/orgs\/([0-9a-f]+)\/invites\/([0-9a-f]+)\/accept$/))) r = await handleOrgInviteAccept(d, x[1]!, x[2]!, body);
-    else if ((x = m(/^\/api\/orgs\/([0-9a-f]+)\/invites\/([0-9a-f]+)$/))) r = await handleOrgInviteGet(d, x[1]!, x[2]!);
+    else if ((x = m(/^\/api\/orgs\/([0-9a-f]+)\/invites\/([0-9a-f]+)\/withdraw$/))) r = await handleOrgInviteWithdraw(d, x[1]!, x[2]!, body);
+    else if ((x = m(/^\/api\/orgs\/([0-9a-f]+)\/invites\/([0-9a-f]+)$/))) {
+      const h = new Headers(init.headers);
+      r = await handleOrgInviteGet(d, x[1]!, x[2]!, { issuedAt: h.get("x-flagship-issued-at"), signature: h.get("x-flagship-signature") });
+    }
     else throw new Error(`unrouted ${path}`);
     return new Response(JSON.stringify(r.body), { status: r.status });
   };
@@ -105,11 +112,12 @@ describe("webapp org seat", () => {
     expect((await handleOrgAuthorityAppend(d, ORG, { entry: chain.entries[1] })).status).toBe(200);
     const linkKey = crypto.getRandomValues(new Uint8Array(32));
     const offer = { orgId: ORG, seatId: SEAT, orgName: "acme", pseudonym: "Ops lead", genesisHash: V.genesisHash };
-    const k = await crypto.subtle.importKey("raw", linkKey, "AES-GCM", false, ["encrypt"]);
+    const ik = deriveOrgInviteKeys(linkKey);
+    const k = await crypto.subtle.importKey("raw", ik.offerKey, "AES-GCM", false, ["encrypt"]);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, new TextEncoder().encode(JSON.stringify(offer))));
     const sealedLabelHex = "ab".repeat(24);
-    const invite = { orgId: ORG, seatId: SEAT, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: NOW, expiresAt: NOW + DAY };
+    const invite = { orgId: ORG, seatId: SEAT, labelSha256: orgSha256Hex(Buffer.from(sealedLabelHex, "hex")), rolesHash: orgSeatRolesHash(roles), oarVersion: 1, issuedAt: NOW, expiresAt: NOW + DAY, inviteKeyPub: ik.inviteKeyPub };
     const offerHex = Buffer.from(new Uint8Array([...iv, ...ct])).toString("hex");
     const r = await handleOrgInviteCreate(d, ORG, { invite, roles, approvals: [approve(A, canonicalOrgSeatInvite(invite))], sealedLabelHex, offerHex });
     expect(r.status).toBe(200);
@@ -161,10 +169,48 @@ describe("webapp org seat", () => {
     await expect(os.withSeatAdminKey(seat, UMK, async () => 1)).rejects.toMatchObject({ code: "not-admin" });
   });
 
-  it("refuses an invitation whose chain doesn't verify from the sealed genesis", async () => {
+  it("without the link's key the invitation does not exist for the browser", async () => {
     const { d, link } = await orgWithInvite([{ role: "member" }]);
     const bad = { ...link, keyHex: "00".repeat(32) };
-    await expect(os.acceptOrgInvite(bad, { umk: UMK, now: NOW, deps: { fetch: fakeCom(d), apex: "https://x" } })).rejects.toMatchObject({ code: "org-offer" });
+    await expect(os.acceptOrgInvite(bad, { umk: UMK, now: NOW, deps: { fetch: fakeCom(d), apex: "https://x" } })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("offers to admit only accepts the invite key signed, and an admin withdraws an invitation", async () => {
+    const roles: OrgSeatRole[] = [{ role: "member" }];
+    const { d, link } = await orgWithInvite(roles);
+    const deps = { fetch: fakeCom(d), apex: "https://x" };
+    const before = await os.orgSnapshot(os.orgApi(deps), ORG, V.genesisHash, NOW);
+    expect(os.pendingInvites(before).map((i: any) => i.seatId)).toEqual([SEAT]);
+    await os.acceptOrgInvite(link, { umk: UMK, now: NOW, deps });
+    const snap = await os.orgSnapshot(os.orgApi(deps), ORG, V.genesisHash, NOW);
+    expect(os.pendingInvites(snap)).toEqual([]);
+    expect(os.pendingJoins(snap)).toHaveLength(1);
+    // A served accept whose invite-key signature is missing or wrong is not offered.
+    const tampered = { ...snap, seats: { ...snap.seats, accepts: snap.seats.accepts.map((a: any) => ({ ...a, inviteSignature: undefined })) } };
+    expect(os.pendingJoins(tampered)).toEqual([]);
+    const swapped = { ...snap, seats: { ...snap.seats, accepts: snap.seats.accepts.map((a: any) => ({ ...a, accept: { ...a.accept, memberKeyId: "77".repeat(32) } })) } };
+    expect(os.pendingJoins(swapped)).toEqual([]);
+
+    // The codes did not match: an org admin (A of the vectors) withdraws the invitation.
+    const withdraw = { orgId: ORG, seatId: SEAT, oarVersion: 1, issuedAt: NOW };
+    const r = await handleOrgInviteWithdraw(d, ORG, SEAT, { withdraw, approvals: [approve(A, canonicalOrgInviteWithdraw(withdraw))] });
+    expect(r.status).toBe(200);
+    const after = await os.orgSnapshot(os.orgApi(deps), ORG, V.genesisHash, NOW);
+    expect(os.pendingJoins(after)).toEqual([]);
+    expect(os.pendingInvites(after)).toEqual([]);
+  });
+
+  it("withdrawInvite signs the withdraw order with the seat's admin key", async () => {
+    const roles: OrgSeatRole[] = [{ role: "server-admin", servers: ["home.acme.flagship.services"] }];
+    const { d, link } = await orgWithInvite(roles);
+    const fake = fakeAuth();
+    kc.setCustodyAuthenticatorForTests(fake.auth);
+    const deps = { fetch: fakeCom(d), apex: "https://x" };
+    const { seat } = await os.acceptOrgInvite(link, { umk: UMK, now: NOW, deps });
+    const snap = await os.orgSnapshot(os.orgApi(deps), ORG, V.genesisHash, NOW);
+    // This browser seat is not admitted, so .com refuses its withdraw: only an org admin may.
+    await expect(os.withdrawInvite(seat, snap, SEAT, { umk: UMK, now: NOW, deps })).rejects.toMatchObject({ status: 403 });
+    expect(fake.calls.get).toBe(1);
   });
 
   it("the bundled org protocol is built from this tree (vendor/flagship-org/org.js)", () => {

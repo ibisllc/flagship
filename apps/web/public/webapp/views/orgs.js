@@ -58,6 +58,7 @@ async function renderSeat(seat, host) {
     ? snap.ceremonies.filter((c) => !(c.approvals ?? []).some((a) => a.seatId === seat.seatId))
     : [];
   const joins = isAdminSeat ? os.pendingJoins(snap) : [];
+  const invited = isAdminSeat ? os.pendingInvites(snap) : [];
   const people = names ? [...names.values()].filter(Boolean) : [];
   const isOrgAdmin = granted && !!seat.adminBinding && snap.state.current.admins.some((a) => a.seatId === seat.seatId && a.kind === "admin");
   host.innerHTML = `
@@ -66,7 +67,8 @@ async function renderSeat(seat, host) {
     ${seat.custody === "browser" ? `<p class="note">${escapeHtml(tr("This seat's admin key: {0}", CUSTODY_BROWSER_LABEL))}</p>` : ""}
     <p class="fs-detail-label">${escapeHtml(tr("Admins"))}</p><ul>${admins}</ul>
     ${ceremonies.length ? `<p class="fs-detail-label">${escapeHtml(tr("Waiting for your approval"))}</p>` + ceremonies.map((c) => `<div class="stack-sm"><p class="note">${escapeHtml(c.order.split("|")[0])}</p><button data-org-approve="${escapeHtml(c.sha256)}">${escapeHtml(tr("Approve"))}</button></div>`).join("") : ""}
-    ${joins.length ? `<p class="fs-detail-label">${escapeHtml(tr("Waiting to join"))}</p>` + joins.map((j) => `<div class="stack-sm"><p class="note">${escapeHtml(tr("Code {0}", os.joinCode(j)))}${j.custody === "browser" ? " · " + escapeHtml(CUSTODY_BROWSER_LABEL) : ""}</p><button data-org-admit="${escapeHtml(j.seatId)}">${escapeHtml(tr("The codes match: let them in"))}</button></div>`).join("") : ""}
+    ${joins.length ? `<p class="fs-detail-label">${escapeHtml(tr("Waiting to join"))}</p>` + joins.map((j) => `<div class="stack-sm"><p class="note">${escapeHtml(tr("Code {0}", os.joinCode(j)))}${j.custody === "browser" ? " · " + escapeHtml(CUSTODY_BROWSER_LABEL) : ""}</p><button data-org-admit="${escapeHtml(j.seatId)}">${escapeHtml(tr("The codes match: let them in"))}</button><button class="secondary" data-org-mismatch="${escapeHtml(j.seatId)}">${escapeHtml(tr("The codes don't match"))}</button></div>`).join("") : ""}
+    ${invited.length ? `<p class="fs-detail-label">${escapeHtml(tr("Invited, not accepted yet"))}</p>` + invited.map((i) => `<div class="stack-sm"><p class="note">${escapeHtml(names?.get?.(i.seatId) || tr("Seat {0}", i.seatId.slice(0, 6)))}</p><button class="secondary" data-org-withdraw="${escapeHtml(i.seatId)}">${escapeHtml(tr("Withdraw invitation"))}</button></div>`).join("") : ""}
     ${isAdminSeat ? `<button class="secondary" data-org-rotate>${escapeHtml(tr("Rotate keys"))}</button>` : ""}
     ${people.length ? `<p class="fs-detail-label">${escapeHtml(tr("People"))}</p><ul>${people.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : ""}
     <div data-org-plan></div>
@@ -92,6 +94,16 @@ async function renderSeat(seat, host) {
       const ok = await inlineConfirm({ title: tr("Let them in?"), message: tr("Only if the code on their screen is {0}.", os.joinCode(j)), okLabel: tr("Let them in") });
       if (ok) await act(() => os.admit(seat, snap, j, { umk: getSession().umk }), (r) => (r === "admitted" ? tr("Admitted.") : tr("Another admin needs to approve this before it takes effect.")));
     });
+  }
+  const withdraw = (seatId, title, message) => async () => {
+    const ok = await inlineConfirm({ title, message, okLabel: tr("Withdraw invitation"), danger: true });
+    if (ok) await act(() => os.withdrawInvite(seat, snap, seatId, { umk: getSession().umk }), tr("Invitation withdrawn."));
+  };
+  for (const b of host.querySelectorAll("[data-org-mismatch]")) {
+    b.addEventListener("click", withdraw(b.dataset.orgMismatch, tr("The codes don't match"), tr("Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.")));
+  }
+  for (const b of host.querySelectorAll("[data-org-withdraw]")) {
+    b.addEventListener("click", withdraw(b.dataset.orgWithdraw, tr("Withdraw this invitation?"), tr("The link stops working, and nobody who accepted it is let in.")));
   }
   host.querySelector("[data-org-rotate]")?.addEventListener("click", () =>
     act(() => os.rotatePending(seat, snap, { umk: getSession().umk }), (n) => (n ? tr("Rotated {0} keys.", n) : tr("Nothing to rotate."))),

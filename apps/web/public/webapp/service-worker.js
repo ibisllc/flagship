@@ -595,7 +595,10 @@
 //       Also (docs/account-key-rotation.md): "Could someone else unlock this device?" in Remove from account and
 //       "Change your account key"; a kept browser takes the new key (an `account-key-rotated` push asks open tabs
 //       to check, its notice in the page's language); new accounts get a random device key; an X-Wing receive key.
-const SHELL_VERSION = "v259";
+//  v260: org invitations (docs/enterprise-accounts.md §7): the link key derives an offer key and an invite key; the
+//       offer read and the accept carry the invite key's signature; admins see only accepts it signed, can say
+//       the codes don't match, and withdraw an invitation (bundled org protocol rebuilt).
+const SHELL_VERSION = "v260";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

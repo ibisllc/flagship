@@ -16653,5 +16653,33 @@
   "Pick another name, or go back for a new suggestion.": {
     "en": "Pick another name, or go back for a new suggestion.",
     "ctx": "webapp/views/choose-name.js:113"
+  },
+  "The codes don't match": {
+    "en": "The codes don't match",
+    "ctx": "webapp/views/orgs.js:70"
+  },
+  "Invited, not accepted yet": {
+    "en": "Invited, not accepted yet",
+    "ctx": "webapp/views/orgs.js:71"
+  },
+  "Withdraw invitation": {
+    "en": "Withdraw invitation",
+    "ctx": "webapp/views/orgs.js:71"
+  },
+  "Invitation withdrawn.": {
+    "en": "Invitation withdrawn.",
+    "ctx": "webapp/views/orgs.js:100"
+  },
+  "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": {
+    "en": "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.",
+    "ctx": "webapp/views/orgs.js:103"
+  },
+  "Withdraw this invitation?": {
+    "en": "Withdraw this invitation?",
+    "ctx": "webapp/views/orgs.js:106"
+  },
+  "The link stops working, and nobody who accepted it is let in.": {
+    "en": "The link stops working, and nobody who accepted it is let in.",
+    "ctx": "webapp/views/orgs.js:106"
   }
 }
