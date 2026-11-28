@@ -44,6 +44,9 @@ function worktree(name: string, commit: string, pq: string[]) {
     mkdirSync(dirname(join(wt, f)), { recursive: true });
     copyFileSync(join(root, f), join(wt, f));
   }
+  // Start from an empty pin whatever the checkout pins (production's key on main, the gym's on the gym branch).
+  const pinFile = join(wt, "packages/protocol/src/releasePqPin.ts");
+  writeFileSync(pinFile, readFileSync(pinFile, "utf8").replace(/keyIds: Object\.freeze\(\[[^\]]*\]\)/, "keyIds: Object.freeze([])").replace(/requirePqAfter: \{[^}]*\}/, "requirePqAfter: null"));
   mkdirSync(join(wt, "release"), { recursive: true });
   writeFileSync(join(wt, "release/box-artifact-trust.json"), JSON.stringify({ schema: 1, threshold: 1, keys: [edPub], pq: { keyIds: pq, legacyManifests: [] } }));
   writeFileSync(join(wt, "release/box-release.json"), JSON.stringify({ commit }));
