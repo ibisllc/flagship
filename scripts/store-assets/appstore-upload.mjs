@@ -2,9 +2,9 @@
 //
 //   node scripts/store-assets/store-upload.mjs appstore [--apply] [--images <pack-dir>] [--create-version <x.y>]
 //
-// Key: ~/.appstoreconnect/flagship-listing.p8.asc (encrypted to the owner's YubiKey; decrypted into memory only,
-// so the key must be unlocked: `gpg -d <file> > /dev/null` once in a terminal) or a plain .p8 under
-// ~/.appstoreconnect/private_keys/, plus ~/.appstoreconnect/flagship.json {keyId, issuerId}. Role: App Manager.
+// Key: a plain .p8 under ~/.appstoreconnect/private_keys/ (owner-only, outside the repo; owner decision 2026-11-28),
+// else ~/.appstoreconnect/flagship-listing.p8.asc (encrypted to the owner's YubiKey; unlock it first with
+// `gpg -d <file> > /dev/null` in a terminal), plus ~/.appstoreconnect/flagship.json {keyId, issuerId}. Role: App Manager.
 //
 // --prune <TYPE[,TYPE]> empties screenshot sets the pack does not manage (e.g. APP_IPHONE_61), on the editable version only.
 //
@@ -27,13 +27,12 @@ const EDITABLE = new Set(["PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJEC
 
 function privateKey() {
   const dir = path.join(os.homedir(), ".appstoreconnect");
+  const keys = path.join(dir, "private_keys");
+  const plain = fs.existsSync(keys) && fs.readdirSync(keys).find((n) => n.endsWith(".p8"));
+  if (plain) return fs.readFileSync(path.join(keys, plain), "utf8");
   const asc = path.join(dir, "flagship-listing.p8.asc");
-  if (fs.existsSync(asc)) {
-    try { return execFileSync("gpg", ["--batch", "-q", "--decrypt", asc], { stdio: ["ignore", "pipe", "pipe"] }).toString(); }
-    catch { throw new Error(`could not open ${asc}: unlock the YubiKey first (in a terminal: gpg -d ${asc} > /dev/null)`); }
-  }
-  const plain = fs.readdirSync(path.join(dir, "private_keys")).find((n) => n.endsWith(".p8"));
-  return fs.readFileSync(path.join(dir, "private_keys", plain), "utf8");
+  try { return execFileSync("gpg", ["--batch", "-q", "--decrypt", asc], { stdio: ["ignore", "pipe", "pipe"] }).toString(); }
+  catch { throw new Error(`no key in ${keys}, and could not open ${asc}: unlock the YubiKey first (in a terminal: gpg -d ${asc} > /dev/null)`); }
 }
 
 export async function appstore({ root, apply, imagesAt, createVersion, prune = [] }) {
