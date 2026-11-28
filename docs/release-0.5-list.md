@@ -137,6 +137,10 @@ over once "let's start 0.5" is said.
   Duo's screenshot size, in all 7 languages, to the capture plan and `render.mjs`; the uploader maps it to
   `APP_IPHONE_DUO` (03c91d730). Render it with the 0.5 build, together with slide 08's title.
 
+- **SHIP BLOCKER: a real-device call matrix on the VP8/Opus-only libwebrtc.** release/0.5 pins
+  `libwebrtc-157-45414303796` (`d1f7bbbbdc`, the app-shrink build), but no device call has run on it. Before 0.5 ships:
+  iPhone ↔ Android, each ↔ a browser (voi.ci), over Wi-Fi and cellular, audio both ways, plus video offered and
+  declined. If any fails, re-pin `libwebrtc-157-44099203173` for 0.5.
 - **The envelope-forgery tag inventory hangs on release/0.5** (found 2026-11-27).
   `tools/adversarial/tests/envelopeForgery.test.ts` (AT-ENV-10) never finishes: its driver spins on
   `signRekey`/`verifyRekey` from the account key rotation (`4bd18c514`). Give them a seed or a classification in
