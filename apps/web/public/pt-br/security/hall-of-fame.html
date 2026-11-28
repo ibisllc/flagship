@@ -57,6 +57,21 @@
       <p class="muted">Pesquisadores que nos relataram uma vulnerabilidade, com os commits que a corrigiram. Cada um recebe o crédito da forma que pedir: nome, apelido ou anônimo, com um link se quiser. Aparecem sem atribuição até nos dizerem sua preferência; nunca publicamos um nome que não recebemos.</p>
   
       <div>
+      <h2>A aprovação do controle remoto do navegador aceitava uma sessão antes de o código de 6 dígitos ser confirmado</h2>
+      <p class="hof-meta">Baixa · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/1b123ed0">1b123ed0</a> · crédito: <a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a></p>
+      <p>O relay do QR dava o lugar do telefone ao primeiro dispositivo que se conectasse, e a página do controle remoto aceitava a primeira aprovação que recebesse. Quem tivesse o link do QR dentro dos seus cinco minutos podia conectar o navegador em espera ao próprio servidor. A conta da pessoa nunca ficou ao alcance.</p>
+      <p>Agora o navegador pergunta “Seu telefone mostra este código?” e só aceita a aprovação depois de Sim. Tirar os códigos do link da consulta do endereço vem na próxima versão do app.</p>
+
+      <h2>Quem soubesse o nome de um servidor podia ler e anular a ordem de atualização pendente dele</h2>
+      <p class="hof-meta">Média · relatada e corrigida em novembro de 2026 · correções <a href="https://github.com/ibisllc/flagship/commit/1837ac01">1837ac01</a> e <a href="https://github.com/ibisllc/flagship/commit/8913cbb5">8913cbb5</a> · crédito: Huzaifa Jawaid</p>
+      <p>Uma ordem de atualização aprovada pelo proprietário esperava no nosso servidor até o servidor do proprietário lê-la, e essa leitura a consumia. Diferente das outras entregas de uso único para o servidor, ela não exigia o token próprio dele, então um estranho podia consumi-la e o servidor pulava a atualização sem avisar.</p>
+      <p>Agora o servidor envia o token dele ali, e o nosso servidor passou a exigi-lo.</p>
+
+      <h2>A barreira de saída dos apps avaliava só a primeira requisição HTTP sem criptografia de cada conexão</h2>
+      <p class="hof-meta">Baixa · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/58f6f453">58f6f453</a> · crédito: Huzaifa Jawaid</p>
+      <p>Em HTTP sem criptografia, a barreira que limita um app aos hosts aprovados verificava só a primeira requisição de uma conexão, então as requisições seguintes na mesma conexão podiam chegar a qualquer host.</p>
+      <p>Agora cada requisição é avaliada pelo próprio host. A correção chega a cada servidor com a próxima atualização dele.</p>
+
       <h2>Um link antigo do controle remoto do navegador podia conectar o app web a outro servidor</h2>
       <p class="hof-meta">Média · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a> · crédito: Huzaifa Jawaid</p>
       <p>O app web ainda aceitava um link de início antigo para o controle remoto do navegador. Ele resgatava uma sessão no servidor que o link indicasse e guardava o servidor que a resposta indicasse, sem verificar se algum dos dois pertencia ao domínio de serviço do Flagship. Um link forjado podia instalar uma sessão para o servidor de um atacante.</p>

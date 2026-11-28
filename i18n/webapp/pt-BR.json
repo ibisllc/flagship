@@ -2027,7 +2027,6 @@
   "Use this browser as a remote": "Usar este navegador como controle remoto",
   "This browser gets no account key. Your phone approves the connection\n          and remains responsible for protected actions.": "Este navegador não recebe nenhuma chave de conta. Seu celular aprova a conexão e continua responsável pelas ações protegidas.",
   "In the Flagship app on your phone, scan this code.": "No app Flagship do seu celular, escaneie este código.",
-  "Check that your phone shows the same code, then approve there:": "Confira se o seu celular mostra o mesmo código e aprove lá:",
   "Copy link for the phone": "Copiar o link para o celular",
   "Start again": "Recomeçar",
   "Get started": "Começar",
@@ -4096,5 +4095,13 @@
   "Invitation withdrawn.": "Convite retirado.",
   "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "Outra pessoa, que não a que você convidou, aceitou este convite. Retire-o e envie um novo.",
   "Withdraw this invitation?": "Retirar este convite?",
-  "The link stops working, and nobody who accepted it is let in.": "O link para de funcionar, e ninguém que o aceitou entra."
+  "The link stops working, and nobody who accepted it is let in.": "O link para de funcionar, e ninguém que o aceitou entra.",
+  "The code wasn't confirmed in time": "O código não foi confirmado a tempo",
+  "The codes didn't match": "Os códigos não coincidiam",
+  "Nothing was connected because the codes didn't match. Scan this new code with your phone.": "Nada foi conectado porque os códigos não coincidiam. Escaneie este novo código com seu celular.",
+  "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.": "Nada foi conectado porque o código não foi confirmado a tempo. Escaneie este novo código com seu celular.",
+  "Compare the code with the one on your phone before you approve there.": "Compare o código com o do seu celular antes de aprovar nele.",
+  "Does your phone show this code?": "Seu celular mostra este código?",
+  "Yes": "Sim",
+  "No": "Não"
 }

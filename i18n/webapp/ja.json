@@ -2027,7 +2027,6 @@
   "Use this browser as a remote": "このブラウザーをリモートとして使う",
   "This browser gets no account key. Your phone approves the connection\n          and remains responsible for protected actions.": "このブラウザーにはアカウントキーが渡されません。接続はスマートフォンが承認し、保護された操作の責任もスマートフォンが引き続き負います。",
   "In the Flagship app on your phone, scan this code.": "スマートフォンの Flagship アプリで、このコードをスキャンしてください。",
-  "Check that your phone shows the same code, then approve there:": "スマートフォンに同じコードが表示されていることを確認し、そちらで承認してください：",
   "Copy link for the phone": "スマートフォン用のリンクをコピー",
   "Start again": "最初からやり直す",
   "Get started": "はじめる",
@@ -4096,5 +4095,13 @@
   "Invitation withdrawn.": "招待を取り消しました。",
   "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "招待した人以外の誰かがこの招待を承諾しました。取り消して、新しい招待を送ってください。",
   "Withdraw this invitation?": "この招待を取り消しますか？",
-  "The link stops working, and nobody who accepted it is let in.": "リンクは使えなくなり、承諾した人も参加できません。"
+  "The link stops working, and nobody who accepted it is let in.": "リンクは使えなくなり、承諾した人も参加できません。",
+  "The code wasn't confirmed in time": "コードが時間内に確認されませんでした",
+  "The codes didn't match": "コードが一致しませんでした",
+  "Nothing was connected because the codes didn't match. Scan this new code with your phone.": "コードが一致しなかったため、何も接続されていません。スマートフォンでこの新しいコードをスキャンしてください。",
+  "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.": "コードが時間内に確認されなかったため、何も接続されていません。スマートフォンでこの新しいコードをスキャンしてください。",
+  "Compare the code with the one on your phone before you approve there.": "承認する前に、このコードをスマートフォンのコードと見比べてください。",
+  "Does your phone show this code?": "スマートフォンにこのコードが表示されていますか？",
+  "Yes": "はい",
+  "No": "いいえ"
 }

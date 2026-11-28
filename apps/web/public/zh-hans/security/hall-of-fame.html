@@ -57,6 +57,21 @@
       <p class="muted">向我们报告漏洞的研究人员，以及修复漏洞的提交。按每位报告者希望的方式致谢：真名、昵称或匿名，如有需要可附链接。在他们告诉我们偏好之前，条目不署名；我们从不公开未获提供的名字。</p>
   
       <div>
+      <h2>浏览器远程的批准在 6 位代码确认之前就接受了会话</h2>
+      <p class="hof-meta">低 · 2026 年 11 月报告并修复 · 修复 <a href="https://github.com/ibisllc/flagship/commit/1b123ed0">1b123ed0</a> · 致谢：<a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a></p>
+      <p>二维码中继把手机的位置交给最先连接的设备，远程页面则接受它收到的第一个批准。在五分钟有效期内拿到二维码链接的人，可以让等待中的浏览器连接到自己的服务器。此人的账户始终无法被触及。</p>
+      <p>浏览器现在会询问“你的手机显示的是这个代码吗？”，只有选择“是”之后才接受批准。把链接中的代码移出地址查询部分，将在下一个应用版本中完成。</p>
+
+      <h2>任何知道服务器名称的人都能读取并作废它待处理的更新指令</h2>
+      <p class="hof-meta">中等 · 2026 年 11 月报告并修复 · 修复 <a href="https://github.com/ibisllc/flagship/commit/1837ac01">1837ac01</a> 和 <a href="https://github.com/ibisllc/flagship/commit/8913cbb5">8913cbb5</a> · 致谢：Huzaifa Jawaid</p>
+      <p>所有者批准的更新指令会在我们的服务器上等待，直到所有者的服务器读取它，而这次读取会将其用掉。与发给服务器的其他一次性投递不同，它不需要服务器自己的令牌，因此陌生人可以把它用掉，服务器就会悄无声息地跳过这次更新。</p>
+      <p>服务器现在会在那里发送自己的令牌，我们的服务器也要求必须提供。</p>
+
+      <h2>应用的出站限制只判断每个连接上的第一个明文 HTTP 请求</h2>
+      <p class="hof-meta">低 · 2026 年 11 月报告并修复 · 修复 <a href="https://github.com/ibisllc/flagship/commit/58f6f453">58f6f453</a> · 致谢：Huzaifa Jawaid</p>
+      <p>在明文 HTTP 上，把应用限制在已批准主机内的出站限制只检查一个连接的第一个请求，因此同一连接上的后续请求可以访问任何主机。</p>
+      <p>现在每个请求都按其自身的主机来判断。此修复会随每台服务器的下一次更新送达。</p>
+
       <h2>浏览器远程的旧链接可以让网页应用连接到其他服务器</h2>
       <p class="hof-meta">中等 · 2026 年 11 月报告并修复 · 修复 <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a> · 致谢：Huzaifa Jawaid</p>
       <p>网页应用仍然接受浏览器远程的一种旧启动链接。它会在链接指定的任意服务器上兑换会话，并保存应答中指定的服务器，却不检查两者是否属于 Flagship 的服务域名。精心构造的链接可以为攻击者的服务器装入一个会话。</p>

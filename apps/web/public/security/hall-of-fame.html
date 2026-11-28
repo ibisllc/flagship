@@ -71,6 +71,60 @@
       </p>
   
       <div>
+      <h2>The browser-remote approval accepted a session before its 6-digit code was confirmed</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/1b123ed0">1b123ed0</a>
+        &middot; credit:
+        <a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a>
+      </p>
+      <p>
+        The QR relay gave the phone&rsquo;s place to the first device that
+        connected, and the remote page took the first approval it received.
+        Someone holding the QR link within its five minutes could connect the
+        waiting browser to their own server. The person&rsquo;s account was
+        never reachable.
+      </p>
+      <p>
+        The browser now asks &ldquo;Does your phone show this code?&rdquo; and
+        takes the approval only after Yes. Moving the link&rsquo;s codes out of
+        the address query follows in the next app release.
+      </p>
+
+      <h2>Anyone who knew a server&rsquo;s name could read and cancel its pending update order</h2>
+      <p class="hof-meta">
+        Medium &middot; reported and fixed November 2026 &middot; fixes
+        <a href="https://github.com/ibisllc/flagship/commit/1837ac01">1837ac01</a>
+        and
+        <a href="https://github.com/ibisllc/flagship/commit/8913cbb5">8913cbb5</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        An owner-approved update order waited on our server until the box read
+        it, and that read used it up. Unlike the box&rsquo;s other one-time
+        deliveries, it didn&rsquo;t need the box&rsquo;s own token, so a
+        stranger could use it up and the box would silently skip the update.
+      </p>
+      <p>
+        The box now sends its token there, and our server now requires it.
+      </p>
+
+      <h2>The app egress fence judged only the first plain-HTTP request on each connection</h2>
+      <p class="hof-meta">
+        Low &middot; reported and fixed November 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/58f6f453">58f6f453</a>
+        &middot; credit: Huzaifa Jawaid
+      </p>
+      <p>
+        On plain HTTP, the fence that holds an app to its approved hosts
+        checked only the first request of a connection, so later requests on
+        the same connection could reach any host.
+      </p>
+      <p>
+        Each request is now judged by its own host. The fix reaches each
+        server with its next update.
+      </p>
+
       <h2>An old browser-remote link could connect the webapp to another server</h2>
       <p class="hof-meta">
         Medium &middot; reported and fixed November 2026 &middot; fix

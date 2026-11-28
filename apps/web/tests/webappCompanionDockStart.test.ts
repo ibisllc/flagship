@@ -73,9 +73,10 @@ async function deriveEncryptKey(sk: CryptoKey, peerPkB64u: string) {
   return crypto.subtle.importKey("raw", k, "AES-GCM", false, ["encrypt"]);
 }
 
-async function open() {
+async function open(opts: { confirmTimeoutMs?: number } = {}) {
   const codes: string[] = [];
   const request = await openRemoteRequest({
+    ...opts,
     onCode: (c: string) => codes.push(c),
     WebSocketImpl: FakeSocket as never,
     relayHost: "flagshipserver.com",
@@ -97,12 +98,13 @@ describe("remote: QR first", () => {
     await request.delivered.catch(() => {});
   });
 
-  it("shows the phone's code and opens the sealed ticket", async () => {
+  it("shows the phone's code and opens the sealed ticket once the person confirms it", async () => {
     const { request, ws, codes, pk } = await open();
     await ws.frame({ kind: "accepted" });
     const sealed = await phoneSeal(pk, TICKET);
     await ws.frame({ kind: "peer-hello", phonePk: sealed.phonePk });
     expect(codes).toEqual([sealed.sas]);
+    await request.confirmCode();
     await ws.frame({ kind: "peer-deliver", ciphertext: sealed.ciphertext, nonce: sealed.nonce });
     await expect(request.delivered).resolves.toEqual({
       ticketId: TICKET.ticketId,
@@ -110,6 +112,92 @@ describe("remote: QR first", () => {
       podBaseUrl: TICKET.podBaseUrl,
       username: "alice",
     });
+  });
+
+  const settledState = async (p: Promise<unknown>) => {
+    let state = "pending";
+    p.then(() => { state = "resolved"; }, () => { state = "rejected"; });
+    await new Promise((r) => setTimeout(r, 20));
+    return state;
+  };
+
+  it("never opens a ticket delivered before the code is confirmed", async () => {
+    const { request, ws, pk } = await open();
+    await ws.frame({ kind: "accepted" });
+    const sealed = await phoneSeal(pk, TICKET);
+    await ws.frame({ kind: "peer-hello", phonePk: sealed.phonePk });
+    await ws.frame({ kind: "peer-deliver", ciphertext: sealed.ciphertext, nonce: sealed.nonce });
+    expect(await settledState(request.delivered)).toBe("pending");
+    expect(ws.closed).toBe(false);
+    request.close();
+    await expect(request.delivered).rejects.toMatchObject({ restart: true });
+  });
+
+  it("drops a held ticket and restarts when the codes differ", async () => {
+    const { request, ws, pk } = await open();
+    await ws.frame({ kind: "accepted" });
+    const sealed = await phoneSeal(pk, TICKET);
+    await ws.frame({ kind: "peer-hello", phonePk: sealed.phonePk });
+    await ws.frame({ kind: "peer-deliver", ciphertext: sealed.ciphertext, nonce: sealed.nonce });
+    request.rejectCode();
+    await expect(request.delivered).rejects.toMatchObject({ restart: true, declined: true });
+    expect(ws.closed).toBe(true);
+    await request.confirmCode();
+    await expect(request.delivered).rejects.toMatchObject({ declined: true });
+  });
+
+  it("drops a held ticket and restarts when nobody confirms in time", async () => {
+    const { request, ws, pk } = await open({ confirmTimeoutMs: 30 });
+    await ws.frame({ kind: "accepted" });
+    const sealed = await phoneSeal(pk, TICKET);
+    await ws.frame({ kind: "peer-hello", phonePk: sealed.phonePk });
+    await ws.frame({ kind: "peer-deliver", ciphertext: sealed.ciphertext, nonce: sealed.nonce });
+    await expect(request.delivered).rejects.toMatchObject({ restart: true, unconfirmed: true });
+    expect(ws.closed).toBe(true);
+  });
+
+  it("opens an early ticket exactly once when the person confirms after it arrived", async () => {
+    const { request, ws, pk } = await open();
+    await ws.frame({ kind: "accepted" });
+    const sealed = await phoneSeal(pk, TICKET);
+    await ws.frame({ kind: "peer-hello", phonePk: sealed.phonePk });
+    await ws.frame({ kind: "peer-deliver", ciphertext: sealed.ciphertext, nonce: sealed.nonce });
+    let resolutions = 0;
+    const seen = request.delivered.then((t: unknown) => { resolutions++; return t; });
+    await request.confirmCode();
+    await request.confirmCode();
+    await ws.frame({ kind: "peer-deliver", ciphertext: sealed.ciphertext, nonce: sealed.nonce });
+    await expect(seen).resolves.toMatchObject({ ticketId: TICKET.ticketId, podBaseUrl: TICKET.podBaseUrl });
+    expect(resolutions).toBe(1);
+    expect(ws.closed).toBe(true);
+  });
+
+  it("asks again when a different phone key replaces the confirmed one", async () => {
+    const { request, ws, codes, pk } = await open();
+    await ws.frame({ kind: "accepted" });
+    const first = await phoneSeal(pk, TICKET);
+    await ws.frame({ kind: "peer-hello", phonePk: first.phonePk });
+    await request.confirmCode();
+    const second = await phoneSeal(pk, { ...TICKET, podBaseUrl: "https://home.mallory.flagship.services", username: "mallory" });
+    await ws.frame({ kind: "peer-hello", phonePk: second.phonePk });
+    expect(codes).toEqual([first.sas, second.sas]);
+    await ws.frame({ kind: "peer-deliver", ciphertext: second.ciphertext, nonce: second.nonce });
+    expect(await settledState(request.delivered)).toBe("pending");
+    request.rejectCode();
+    await expect(request.delivered).rejects.toMatchObject({ declined: true });
+  });
+
+  it("the page redeems only after Yes and restarts on No", () => {
+    const view = readFileSync(resolve(__dirname, "..", "public", "webapp", "views", "companion-dock-start.js"), "utf8");
+    expect(view).toContain('$("dock-code-yes")');
+    expect(view).toMatch(/dock-code-yes[\s\S]*confirmCode\(\)/);
+    expect(view).toMatch(/dock-code-no[\s\S]*rejectCode\(\)/);
+    expect(view).toMatch(/error\?\.declined\) return void startRequest\(/);
+    expect(view).toMatch(/error\?\.unconfirmed\) return void startRequest\(/);
+    const html = readFileSync(resolve(__dirname, "..", "public", "webapp", "index.html"), "utf8");
+    expect(html).toContain("Does your phone show this code?");
+    expect(html).toMatch(/id="dock-code-yes"/);
+    expect(html).toMatch(/id="dock-code-no"/);
   });
 
   it("asks for a fresh QR when the session runs out", async () => {

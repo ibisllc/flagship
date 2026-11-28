@@ -37,12 +37,19 @@ export function parseRemoteTicket(text, { apex = dataApex() } = {}) {
   return { ticketId, ticketSecret, podBaseUrl, username };
 }
 
+/** How long the page waits for the person to say the codes match. */
+export const REMOTE_CONFIRM_TIMEOUT_MS = 2 * 60 * 1000;
+
 /**
  * Open a relay session and wait for the phone.
  *   onCode(code) fires each time a phone joins (the code to compare).
+ * The relay gives the phone slot to whoever connects first, so the code is the
+ * only thing that tells the real phone from someone else holding the QR. A
+ * ticket is opened only after confirmCode(): one that arrives earlier is held,
+ * and rejectCode() or REMOTE_CONFIRM_TIMEOUT_MS without an answer drops it.
  * Resolves `delivered` with the validated ticket; rejects with
  * `{ restart: true }` when the session simply ran out, so the caller can show
- * a fresh QR without an error.
+ * a fresh QR without an error (`declined` / `unconfirmed` say why).
  */
 export async function openRemoteRequest({
   onCode,
@@ -50,44 +57,68 @@ export async function openRemoteRequest({
   relayHost = controlHost(),
   secure = globalThis.location?.protocol !== "http:",
   apex,
+  confirmTimeoutMs = REMOTE_CONFIRM_TIMEOUT_MS,
 } = {}) {
   const sid = freshSid();
   const { sk, pkB64u } = await freshKeypair();
   const ws = new WebSocketImpl(`${secure ? "wss" : "ws"}://${relayHost}/qr-pipe/${encodeURIComponent(sid)}?role=browser`);
   let key = null;
+  let phonePk = null;
+  let confirmed = false;
+  let held = null;
+  let confirmTimer = null;
   let accepted = false;
   let settled = false;
   let resolveDelivered;
   let rejectDelivered;
   const delivered = new Promise((res, rej) => { resolveDelivered = res; rejectDelivered = rej; });
   delivered.catch(() => {});
+  const stopTimer = () => {
+    if (confirmTimer !== null) clearTimeout(confirmTimer);
+    confirmTimer = null;
+  };
   const finish = (fn, arg) => {
     if (settled) return;
     settled = true;
+    stopTimer();
+    held = null;
     try { ws.close(1000, "done"); } catch { /* ignore */ }
     fn(arg);
   };
-  const restart = (message) => Object.assign(new Error(message), { restart: true });
+  const restart = (message, extra = {}) => Object.assign(new Error(message), { restart: true }, extra);
+  const openTicket = async (frame) => {
+    try {
+      const plain = await aeadOpen(frame.key, frame.ciphertext, frame.nonce);
+      finish(resolveDelivered, parseRemoteTicket(new TextDecoder().decode(plain), apex ? { apex } : {}));
+    } catch (error) {
+      finish(rejectDelivered, error instanceof Error ? error : new Error(String(error)));
+    }
+  };
   ws.addEventListener("message", async (ev) => {
     let m;
     try { m = JSON.parse(ev.data); } catch { return; }
-    if (!m || typeof m.kind !== "string") return;
+    if (!m || typeof m.kind !== "string" || settled) return;
     if (m.kind === "accepted") {
       accepted = true;
     } else if (m.kind === "peer-hello") {
+      if (phonePk !== null && m.phonePk === phonePk) return;
       try {
         const mat = await deriveMaterial(sk, m.phonePk);
+        if (settled) return;
+        // A new phone key means a new code: anything said about the old one no longer counts.
+        phonePk = m.phonePk;
         key = mat.kEncDecrypt;
+        confirmed = false;
+        held = null;
+        stopTimer();
+        confirmTimer = setTimeout(() => finish(rejectDelivered, restart(tr("The code wasn't confirmed in time"), { unconfirmed: true })), confirmTimeoutMs);
         onCode?.(mat.sas);
       } catch { /* a malformed hello; wait for a real phone */ }
     } else if (m.kind === "peer-deliver") {
       if (!key) return;
-      try {
-        const plain = await aeadOpen(key, m.ciphertext, m.nonce);
-        finish(resolveDelivered, parseRemoteTicket(new TextDecoder().decode(plain), apex ? { apex } : {}));
-      } catch (error) {
-        finish(rejectDelivered, error instanceof Error ? error : new Error(String(error)));
-      }
+      const frame = { key, ciphertext: m.ciphertext, nonce: m.nonce };
+      if (confirmed) await openTicket(frame);
+      else held = frame;
     } else if (m.kind === "rebind" || m.kind === "expired") {
       finish(rejectDelivered, restart(tr("This code expired")));
     } else if (m.kind === "error") {
@@ -100,6 +131,17 @@ export async function openRemoteRequest({
   return {
     approvalUrl: buildRemoteApprovalUrl({ sid, pkB64u }),
     delivered,
+    /** The person says the phone shows the same code. */
+    confirmCode: async () => {
+      if (settled || !key || confirmed) return;
+      confirmed = true;
+      stopTimer();
+      const frame = held;
+      held = null;
+      if (frame) await openTicket(frame);
+    },
+    /** The person says the codes differ: drop anything the phone sent and end the session. */
+    rejectCode: () => finish(rejectDelivered, restart(tr("The codes didn't match"), { declined: true })),
     close: () => finish(rejectDelivered, restart("closed")),
   };
 }

@@ -2027,7 +2027,6 @@
   "Use this browser as a remote": "Usar este navegador como mando a distancia",
   "This browser gets no account key. Your phone approves the connection\n          and remains responsible for protected actions.": "Este navegador no recibe ninguna clave de cuenta. Tu teléfono aprueba la conexión y sigue siendo responsable de las acciones protegidas.",
   "In the Flagship app on your phone, scan this code.": "En la app de Flagship de tu teléfono, escanea este código.",
-  "Check that your phone shows the same code, then approve there:": "Comprueba que tu teléfono muestra el mismo código y aprueba allí:",
   "Copy link for the phone": "Copiar el enlace para el teléfono",
   "Start again": "Empezar de nuevo",
   "Get started": "Empezar",
@@ -4096,5 +4095,13 @@
   "Invitation withdrawn.": "Invitación retirada.",
   "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "Alguien distinto de la persona que invitaste aceptó esta invitación. Retírala y envíale una nueva.",
   "Withdraw this invitation?": "¿Retirar esta invitación?",
-  "The link stops working, and nobody who accepted it is let in.": "El enlace deja de funcionar y nadie que lo haya aceptado entra."
+  "The link stops working, and nobody who accepted it is let in.": "El enlace deja de funcionar y nadie que lo haya aceptado entra.",
+  "The code wasn't confirmed in time": "El código no se confirmó a tiempo",
+  "The codes didn't match": "Los códigos no coincidían",
+  "Nothing was connected because the codes didn't match. Scan this new code with your phone.": "No se conectó nada porque los códigos no coincidían. Escanea este código nuevo con tu teléfono.",
+  "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.": "No se conectó nada porque el código no se confirmó a tiempo. Escanea este código nuevo con tu teléfono.",
+  "Compare the code with the one on your phone before you approve there.": "Compara el código con el de tu teléfono antes de aprobar allí.",
+  "Does your phone show this code?": "¿Tu teléfono muestra este código?",
+  "Yes": "Sí",
+  "No": "No"
 }

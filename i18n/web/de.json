@@ -1006,5 +1006,17 @@
   "sb7cc76a988": "Signaturprüfungen akzeptierten drei öffentliche Schlüssel niedriger Ordnung, sodass eine gefälschte Signatur unter ihnen gültig sein konnte",
   "sf0eff11ae9": "Niedrig · gemeldet und behoben im November 2026 · Fix <1>8fd77a2b</1> · Dank an: <2>Atharva Savji Lokhande</2>",
   "s1eb6bffa32": "Unsere Signaturprüfungen lehnten die meisten Ed25519-Schlüssel kleiner Ordnung anhand einer festen Liste ab, doch der Liste fehlten drei davon, und die Prüfungen akzeptierten auch Schlüssel in nicht kanonischer Schreibweise. Unter einem solchen Schlüssel kann jeder eine Signatur fälschen, die für jede beliebige Nachricht gültig ist, sodass eine Signatur darunter nichts beweist. Keine App sendet einen solchen Schlüssel, und eine Prüfung unserer Produktionsdaten fand keinen gespeicherten.",
-  "s48f03d1960": "Jeder Schlüssel wird jetzt nach den strengen Regeln des Standards dekodiert, und Schlüssel kleiner Ordnung sowie nicht kanonische Schlüssel werden abgelehnt, bevor irgendeine Signatur geprüft wird. Unser Server lehnt sie überall ab, wo er einen Schlüssel speichert oder für ihn bürgt, und ab ihrer nächsten Version lehnen auch die Server sie ab."
+  "s48f03d1960": "Jeder Schlüssel wird jetzt nach den strengen Regeln des Standards dekodiert, und Schlüssel kleiner Ordnung sowie nicht kanonische Schlüssel werden abgelehnt, bevor irgendeine Signatur geprüft wird. Unser Server lehnt sie überall ab, wo er einen Schlüssel speichert oder für ihn bürgt, und ab ihrer nächsten Version lehnen auch die Server sie ab.",
+  "s9262191c24": "Die Freigabe der Browser-Fernbedienung nahm eine Sitzung an, bevor ihr 6-stelliger Code bestätigt war",
+  "s7a39d705f5": "Niedrig · gemeldet und behoben im November 2026 · Fix <1>1b123ed0</1> · Dank an: <2>Atharva Savji Lokhande</2>",
+  "s166d76fe86": "Das QR-Relay gab den Platz des Telefons dem ersten Gerät, das sich verband, und die Fernbedienungsseite nahm die erste Freigabe an, die sie erhielt. Wer den QR-Link innerhalb seiner fünf Minuten hatte, konnte den wartenden Browser mit seinem eigenen Server verbinden. Das Konto der Person war nie erreichbar.",
+  "s6f664153dc": "Der Browser fragt jetzt „Zeigt Ihr Telefon diesen Code?“ und nimmt die Freigabe erst nach Ja an. Dass die Codes des Links aus der Adressabfrage verschwinden, folgt mit der nächsten App-Version.",
+  "sc3ed9ea720": "Wer den Namen eines Servers kannte, konnte dessen ausstehenden Update-Auftrag lesen und verwerfen",
+  "s10961d2da1": "Mittel · gemeldet und behoben im November 2026 · Fixes <1>1837ac01</1> und <2>8913cbb5</2> · Dank an: Huzaifa Jawaid",
+  "sfb9fe8b5ba": "Ein vom Besitzer freigegebener Update-Auftrag wartete auf unserem Server, bis der Server des Besitzers ihn las, und dieses Lesen verbrauchte ihn. Anders als die übrigen einmaligen Zustellungen an den Server brauchte er nicht dessen eigenes Token, sodass ein Fremder ihn verbrauchen konnte und der Server das Update stillschweigend ausließ.",
+  "s6f5ee51ec7": "Der Server sendet dort jetzt sein Token, und unser Server verlangt es jetzt.",
+  "s2576f928ad": "Die Egress-Sperre für Apps prüfte nur die erste unverschlüsselte HTTP-Anfrage jeder Verbindung",
+  "s103a5552c7": "Niedrig · gemeldet und behoben im November 2026 · Fix <1>58f6f453</1> · Dank an: Huzaifa Jawaid",
+  "s7249cf6e3f": "Bei unverschlüsseltem HTTP prüfte die Sperre, die eine App auf ihre freigegebenen Hosts beschränkt, nur die erste Anfrage einer Verbindung, sodass spätere Anfragen über dieselbe Verbindung jeden Host erreichen konnten.",
+  "s0da0c1af33": "Jede Anfrage wird jetzt anhand ihres eigenen Hosts geprüft. Der Fix erreicht jeden Server mit seinem nächsten Update."
 }

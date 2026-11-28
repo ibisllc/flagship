@@ -1006,5 +1006,17 @@
   "sb7cc76a988": "As verificações de assinatura aceitavam três chaves públicas de ordem baixa, então uma assinatura forjada podia ser validada com elas",
   "sf0eff11ae9": "Baixa · relatada e corrigida em novembro de 2026 · correção <1>8fd77a2b</1> · crédito: <2>Atharva Savji Lokhande</2>",
   "s1eb6bffa32": "Nossas verificações de assinatura recusavam a maioria das chaves públicas Ed25519 de ordem pequena por meio de uma lista fixa, mas faltavam três na lista, e as verificações também aceitavam chaves escritas de forma não canônica. Com uma chave assim, qualquer um pode forjar uma assinatura que é validada para qualquer mensagem, então uma assinatura com ela não prova nada. Nenhum app envia uma chave assim, e uma verificação dos nossos dados de produção não encontrou nenhuma guardada.",
-  "s48f03d1960": "Agora toda chave é decodificada pelas regras estritas do padrão, e chaves de ordem pequena e não canônicas são recusadas antes de qualquer assinatura ser verificada. Nosso servidor as recusa onde quer que guarde uma chave ou responda por ela, e os servidores também passam a recusá-las a partir da próxima versão deles."
+  "s48f03d1960": "Agora toda chave é decodificada pelas regras estritas do padrão, e chaves de ordem pequena e não canônicas são recusadas antes de qualquer assinatura ser verificada. Nosso servidor as recusa onde quer que guarde uma chave ou responda por ela, e os servidores também passam a recusá-las a partir da próxima versão deles.",
+  "s9262191c24": "A aprovação do controle remoto do navegador aceitava uma sessão antes de o código de 6 dígitos ser confirmado",
+  "s7a39d705f5": "Baixa · relatada e corrigida em novembro de 2026 · correção <1>1b123ed0</1> · crédito: <2>Atharva Savji Lokhande</2>",
+  "s166d76fe86": "O relay do QR dava o lugar do telefone ao primeiro dispositivo que se conectasse, e a página do controle remoto aceitava a primeira aprovação que recebesse. Quem tivesse o link do QR dentro dos seus cinco minutos podia conectar o navegador em espera ao próprio servidor. A conta da pessoa nunca ficou ao alcance.",
+  "s6f664153dc": "Agora o navegador pergunta “Seu telefone mostra este código?” e só aceita a aprovação depois de Sim. Tirar os códigos do link da consulta do endereço vem na próxima versão do app.",
+  "sc3ed9ea720": "Quem soubesse o nome de um servidor podia ler e anular a ordem de atualização pendente dele",
+  "s10961d2da1": "Média · relatada e corrigida em novembro de 2026 · correções <1>1837ac01</1> e <2>8913cbb5</2> · crédito: Huzaifa Jawaid",
+  "sfb9fe8b5ba": "Uma ordem de atualização aprovada pelo proprietário esperava no nosso servidor até o servidor do proprietário lê-la, e essa leitura a consumia. Diferente das outras entregas de uso único para o servidor, ela não exigia o token próprio dele, então um estranho podia consumi-la e o servidor pulava a atualização sem avisar.",
+  "s6f5ee51ec7": "Agora o servidor envia o token dele ali, e o nosso servidor passou a exigi-lo.",
+  "s2576f928ad": "A barreira de saída dos apps avaliava só a primeira requisição HTTP sem criptografia de cada conexão",
+  "s103a5552c7": "Baixa · relatada e corrigida em novembro de 2026 · correção <1>58f6f453</1> · crédito: Huzaifa Jawaid",
+  "s7249cf6e3f": "Em HTTP sem criptografia, a barreira que limita um app aos hosts aprovados verificava só a primeira requisição de uma conexão, então as requisições seguintes na mesma conexão podiam chegar a qualquer host.",
+  "s0da0c1af33": "Agora cada requisição é avaliada pelo próprio host. A correção chega a cada servidor com a próxima atualização dele."
 }

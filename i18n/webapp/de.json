@@ -2027,7 +2027,6 @@
   "Use this browser as a remote": "Diesen Browser als Fernbedienung verwenden",
   "This browser gets no account key. Your phone approves the connection\n          and remains responsible for protected actions.": "Dieser Browser erhält keinen Kontoschlüssel. Dein Telefon genehmigt die Verbindung und bleibt für geschützte Aktionen zuständig.",
   "In the Flagship app on your phone, scan this code.": "Scanne diesen Code in der Flagship-App auf deinem Telefon.",
-  "Check that your phone shows the same code, then approve there:": "Prüfe, dass dein Telefon denselben Code zeigt, und genehmige dort:",
   "Copy link for the phone": "Link für das Telefon kopieren",
   "Start again": "Von vorn beginnen",
   "Get started": "Loslegen",
@@ -4096,5 +4095,13 @@
   "Invitation withdrawn.": "Einladung zurückgezogen.",
   "Someone other than the person you invited accepted this invitation. Withdraw it and send them a new one.": "Jemand anderes als die eingeladene Person hat diese Einladung angenommen. Zieh sie zurück und schick der Person eine neue.",
   "Withdraw this invitation?": "Diese Einladung zurückziehen?",
-  "The link stops working, and nobody who accepted it is let in.": "Der Link funktioniert nicht mehr, und niemand, der ihn angenommen hat, wird hereingelassen."
+  "The link stops working, and nobody who accepted it is let in.": "Der Link funktioniert nicht mehr, und niemand, der ihn angenommen hat, wird hereingelassen.",
+  "The code wasn't confirmed in time": "Der Code wurde nicht rechtzeitig bestätigt",
+  "The codes didn't match": "Die Codes stimmten nicht überein",
+  "Nothing was connected because the codes didn't match. Scan this new code with your phone.": "Es wurde nichts verbunden, weil die Codes nicht übereinstimmten. Scanne diesen neuen Code mit deinem Telefon.",
+  "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.": "Es wurde nichts verbunden, weil der Code nicht rechtzeitig bestätigt wurde. Scanne diesen neuen Code mit deinem Telefon.",
+  "Compare the code with the one on your phone before you approve there.": "Vergleiche den Code mit dem auf deinem Telefon, bevor du dort genehmigst.",
+  "Does your phone show this code?": "Zeigt dein Telefon diesen Code?",
+  "Yes": "Ja",
+  "No": "Nein"
 }

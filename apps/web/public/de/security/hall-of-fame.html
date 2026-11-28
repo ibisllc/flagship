@@ -57,6 +57,21 @@
       <p class="muted">Forschende, die uns eine Sicherheitslücke gemeldet haben, mit den Commits, die sie geschlossen haben. Genannt in der Form, die sich jede meldende Person wünscht: Name, Handle oder anonym, auf Wunsch mit Link. Ohne Namensnennung aufgeführt, bis sie uns ihre Wahl mitgeteilt haben; wir veröffentlichen nie einen Namen, den wir nicht bekommen haben.</p>
   
       <div>
+      <h2>Die Freigabe der Browser-Fernbedienung nahm eine Sitzung an, bevor ihr 6-stelliger Code bestätigt war</h2>
+      <p class="hof-meta">Niedrig · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/1b123ed0">1b123ed0</a> · Dank an: <a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a></p>
+      <p>Das QR-Relay gab den Platz des Telefons dem ersten Gerät, das sich verband, und die Fernbedienungsseite nahm die erste Freigabe an, die sie erhielt. Wer den QR-Link innerhalb seiner fünf Minuten hatte, konnte den wartenden Browser mit seinem eigenen Server verbinden. Das Konto der Person war nie erreichbar.</p>
+      <p>Der Browser fragt jetzt „Zeigt Ihr Telefon diesen Code?“ und nimmt die Freigabe erst nach Ja an. Dass die Codes des Links aus der Adressabfrage verschwinden, folgt mit der nächsten App-Version.</p>
+
+      <h2>Wer den Namen eines Servers kannte, konnte dessen ausstehenden Update-Auftrag lesen und verwerfen</h2>
+      <p class="hof-meta">Mittel · gemeldet und behoben im November 2026 · Fixes <a href="https://github.com/ibisllc/flagship/commit/1837ac01">1837ac01</a> und <a href="https://github.com/ibisllc/flagship/commit/8913cbb5">8913cbb5</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Ein vom Besitzer freigegebener Update-Auftrag wartete auf unserem Server, bis der Server des Besitzers ihn las, und dieses Lesen verbrauchte ihn. Anders als die übrigen einmaligen Zustellungen an den Server brauchte er nicht dessen eigenes Token, sodass ein Fremder ihn verbrauchen konnte und der Server das Update stillschweigend ausließ.</p>
+      <p>Der Server sendet dort jetzt sein Token, und unser Server verlangt es jetzt.</p>
+
+      <h2>Die Egress-Sperre für Apps prüfte nur die erste unverschlüsselte HTTP-Anfrage jeder Verbindung</h2>
+      <p class="hof-meta">Niedrig · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/58f6f453">58f6f453</a> · Dank an: Huzaifa Jawaid</p>
+      <p>Bei unverschlüsseltem HTTP prüfte die Sperre, die eine App auf ihre freigegebenen Hosts beschränkt, nur die erste Anfrage einer Verbindung, sodass spätere Anfragen über dieselbe Verbindung jeden Host erreichen konnten.</p>
+      <p>Jede Anfrage wird jetzt anhand ihres eigenen Hosts geprüft. Der Fix erreicht jeden Server mit seinem nächsten Update.</p>
+
       <h2>Ein alter Link der Browser-Fernbedienung konnte die Web-App mit einem fremden Server verbinden</h2>
       <p class="hof-meta">Mittel · gemeldet und behoben im November 2026 · Fix <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a> · Dank an: Huzaifa Jawaid</p>
       <p>Die Web-App nahm noch einen alten Startlink für die Browser-Fernbedienung an. Er löste eine Sitzung bei dem Server ein, den der Link nannte, und speicherte den Server, den die Antwort nannte, ohne zu prüfen, ob einer von beiden zur Dienstdomain von Flagship gehörte. Ein präparierter Link konnte eine Sitzung für den Server eines Angreifers einrichten.</p>

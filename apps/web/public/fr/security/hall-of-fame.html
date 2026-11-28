@@ -57,6 +57,21 @@
       <p class="muted">Les chercheurs qui nous ont signalé une vulnérabilité, avec les commits qui l’ont corrigée. Chacun est crédité sous la forme qu’il demande : nom, pseudonyme ou anonymat, avec un lien s’il le souhaite. Ils figurent sans attribution tant qu’ils ne nous ont pas indiqué leur préférence ; nous ne publions jamais un nom qu’on ne nous a pas donné.</p>
   
       <div>
+      <h2>L’approbation du navigateur distant acceptait une session avant que son code à 6 chiffres soit confirmé</h2>
+      <p class="hof-meta">Faible · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/1b123ed0">1b123ed0</a> · crédit : <a href="https://www.linkedin.com/in/atharva-lokhande-49396041b" rel="noopener noreferrer nofollow" target="_blank">Atharva Savji Lokhande</a></p>
+      <p>Le relais du QR donnait la place du téléphone au premier appareil qui se connectait, et la page du navigateur distant acceptait la première approbation reçue. Quiconque détenait le lien du QR pendant ses cinq minutes pouvait connecter le navigateur en attente à son propre serveur. Le compte de la personne n’a jamais été accessible.</p>
+      <p>Le navigateur demande maintenant « Votre téléphone affiche-t-il ce code ? » et n’accepte l’approbation qu’après Oui. Le retrait des codes du lien de la requête de l’adresse suivra dans la prochaine version de l’app.</p>
+
+      <h2>Quiconque connaissait le nom d’un serveur pouvait lire et annuler son ordre de mise à jour en attente</h2>
+      <p class="hof-meta">Moyenne · signalé et corrigé en novembre 2026 · correctifs <a href="https://github.com/ibisllc/flagship/commit/1837ac01">1837ac01</a> et <a href="https://github.com/ibisllc/flagship/commit/8913cbb5">8913cbb5</a> · crédit : Huzaifa Jawaid</p>
+      <p>Un ordre de mise à jour approuvé par le propriétaire attendait sur notre serveur jusqu’à ce que le serveur du propriétaire le lise, et cette lecture le consommait. Contrairement aux autres livraisons à usage unique destinées au serveur, il n’exigeait pas son propre jeton : un inconnu pouvait donc le consommer, et le serveur sautait la mise à jour sans rien signaler.</p>
+      <p>Le serveur envoie maintenant son jeton à cet endroit, et notre serveur l’exige désormais.</p>
+
+      <h2>La barrière de sortie des apps ne jugeait que la première requête HTTP en clair de chaque connexion</h2>
+      <p class="hof-meta">Faible · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/58f6f453">58f6f453</a> · crédit : Huzaifa Jawaid</p>
+      <p>En HTTP en clair, la barrière qui limite une app à ses hôtes approuvés ne vérifiait que la première requête d’une connexion, si bien que les requêtes suivantes sur la même connexion pouvaient atteindre n’importe quel hôte.</p>
+      <p>Chaque requête est maintenant jugée d’après son propre hôte. Le correctif atteint chaque serveur avec sa prochaine mise à jour.</p>
+
       <h2>Un ancien lien du navigateur distant pouvait connecter l’app web à un autre serveur</h2>
       <p class="hof-meta">Moyenne · signalé et corrigé en novembre 2026 · correctif <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a> · crédit : Huzaifa Jawaid</p>
       <p>L’app web acceptait encore un ancien lien de démarrage pour le navigateur distant. Il ouvrait une session auprès du serveur nommé par le lien et enregistrait le serveur nommé par la réponse, sans vérifier que l’un ou l’autre appartenait au domaine de service de Flagship. Un lien forgé pouvait installer une session pour le serveur d’un attaquant.</p>

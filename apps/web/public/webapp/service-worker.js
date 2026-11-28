@@ -597,6 +597,8 @@
 //       to check, its notice in the page's language); new accounts get a random device key; an X-Wing receive key.
 //  v260: the companion-link boot entry is gone (a remote connects only through the QR relay); a redeem answer naming a
 //       server off the data apex is refused; expired remote profiles are retired at start-up.
+//  v262: the remote page asks "Does your phone show this code?" and opens a ticket the phone sent only after Yes; No or
+//       no answer in time drops it unopened and shows a fresh QR.
 //  v263: org invitations (docs/enterprise-accounts.md §7): the link key derives an offer key and an invite key; the
 //       offer read and the accept carry the invite key's signature; admins see only accepts it signed, can say
 //       the codes don't match, and withdraw an invitation (bundled org protocol rebuilt).
