@@ -9,6 +9,7 @@
 // init) (A's own session on the box) and openDiskKey(serverDomain).
 
 import { isAdminRootKey } from "./keyCustody.js";
+import { verifyEd25519 } from "./edKey.js";
 import { noteKeyChanged, pinnedStk } from "./serverPins.js";
 import * as ss from "./serverShare.js";
 import * as si from "./serviceInvite.js";
@@ -1000,8 +1001,7 @@ async function verifyRequest(r, stkPubHex) {
       nonceHex: r.request.nonce,
       issuedAt: r.request.issuedAt,
     });
-    const key = await crypto.subtle.importKey("raw", hexToBytes(stkPubHex), { name: "Ed25519" }, false, ["verify"]);
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, hexToBytes(r.signature), bytes);
+    return await verifyEd25519(hexToBytes(stkPubHex), hexToBytes(r.signature), bytes);
   } catch {
     return false;
   }

@@ -14,7 +14,8 @@
 // MIRRORS: iOS FlagshipCore/Rescue.swift, Android core/Rescue.kt. Verify-only: no key is made,
 // imported or held here (the vendored verifier does the Ed25519 check).
 
-import { ed25519, sha256 } from "../vendor/noble-post-quantum/pq-verify.js";
+import { sha256 } from "../vendor/noble-post-quantum/pq-verify.js";
+import { verifyEd25519Sync } from "./edKey.js";
 
 export const TAG_RESCUE_HELLO = "flagship/rescue-hello/v1";
 export const TAG_RESCUE_SESSION = "flagship/rescue-session/v1";
@@ -70,7 +71,7 @@ export function offlineControlCanonical(o) {
 /** Ed25519 check of one of the messages above; never throws. */
 export function verifyRescueSignature(canonical, sig, pub) {
   try {
-    return sig.length === 64 && pub.length === 32 && ed25519.verify(sig, canonical, pub);
+    return sig.length === 64 && pub.length === 32 && verifyEd25519Sync(pub, sig, canonical);
   } catch {
     return false;
   }

@@ -15,6 +15,7 @@
 // hybrid signature too, so stripping it cannot downgrade this server back to classical.
 
 import { verifyBootKeyBindingV2, verifyPqKeyBinding } from "./pqBinding.js";
+import { verifyEd25519 } from "./edKey.js";
 import { strictInForce } from "./assurancePolicy.js";
 import {
   KEY_CHANGED_CODE,
@@ -117,8 +118,7 @@ export function canonicalBootKeyBinding({ serverDomain, bootPubHex, issuedAt }) 
 export async function verifyBootKeyBinding(binding, signature, pinnedStkPub, serverDomain) {
   try {
     if (String(binding.serverDomain).toLowerCase() !== String(serverDomain).toLowerCase()) return false;
-    const key = await crypto.subtle.importKey("raw", pinnedStkPub, { name: "Ed25519" }, false, ["verify"]);
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, signature, canonicalBootKeyBinding(binding));
+    return await verifyEd25519(pinnedStkPub, signature, canonicalBootKeyBinding(binding));
   } catch {
     return false;
   }

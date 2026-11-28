@@ -12,9 +12,9 @@ import { describe, expect, it } from "vitest";
  */
 const KNOWN: Record<string, string> = {
   "keystore.js": "account key, admin root and device key custody in the browser: to move to the phone",
+  "lib/edKey.js": "imports Ed25519 public keys only, to verify behind the low-order key check (no key material)",
   "lib/leases.js": "boot-lease keys: to move to the phone",
   "lib/bootApproval.js": "boot approval signing: to move to the phone",
-  "lib/boxKeyPins.js": "box key pins: public keys and a verify-only boot-key binding",
   "lib/pairingRelay.js": "ephemeral pairing keys for the QR relay: native-assisted flow needed",
   "lib/buildDraft.js": "sealing a draft to the box: no signing key",
   "lib/watchBootDelegate.js": "opens/seals the boot-only disk-key copy for a watch: no signing key (the account signature comes from the caller)",
@@ -34,7 +34,6 @@ const KNOWN: Record<string, string> = {
   "lib/keyfile.js": "keyfile export/import: to move to the phone",
   "lib/serviceInvite.js": "invite envelopes",
   "lib/peerBackup.js": "peer-backup key derivation",
-  "lib/maintainerTrust.js": "verification keys only",
   "lib/orgDirectoryConsole.js": "an org invitation's one-time link key (AES-GCM over the offer and the pseudonym, the same as the phones'); seat keys stay in lib/orgSeat.js and the passkey vault",
   "lib/voiciCallOut.js": "a one-time P-256 visitor session key for a call handed to a voi.ci tab (lives at most 9 minutes; no account key)",
   "lib/accountKeyRotation.js": "account master-key rotation (Phase 1 protocol, not wired to any screen yet): a web admin signs the hop with the admin root it already holds, seals the new UMK to kept devices with a one-shot X25519 key, and a kept browser opens its delivery; owner sign-off pending (2026-11-27)",

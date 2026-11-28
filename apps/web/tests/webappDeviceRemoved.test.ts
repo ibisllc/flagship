@@ -250,7 +250,7 @@ describe("the service worker's device-removed push", () => {
     const sw = src("service-worker.js");
     const branch = sw.slice(sw.indexOf('data.category === "device-removed"'), sw.indexOf("An operator's notice to the account"));
     expect(branch).not.toMatch(/indexedDB|deleteDatabase|localStorage|caches\.delete/);
-    expect(sw).toContain('SHELL_VERSION = "v263"');
+    expect(sw).toContain('SHELL_VERSION = "v264"');
     expect(sw).toContain('"/lib/resetAccountKeysUi.js"');
   });
 });

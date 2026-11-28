@@ -36,6 +36,7 @@ import {
   hexToBytes,
 } from "../keystore.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
+import { verifyEd25519 } from "./edKey.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex, bootOrigin } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
@@ -325,14 +326,7 @@ export async function fetchVerifiedRequests(deps = {}) {
       nonceHex: req.requestNonceHex,
       issuedAt: req.issuedAt,
     });
-    let verified = false;
-    try {
-      const key = await crypto.subtle.importKey("raw", stkPub, { name: "Ed25519" }, false, ["verify"]);
-      verified = await crypto.subtle.verify({ name: "Ed25519" }, key, sig, canonical);
-    } catch {
-      verified = false;
-    }
-    if (!verified) continue;
+    if (!(await verifyEd25519(stkPub, sig, canonical))) continue;
     // Before a pin, the directory must name the same key (the relay can't splice one in); after it,
     // the pin decides and a request under any other key is shown refused.
     if (!pin && entry.stk !== stkHex) continue;

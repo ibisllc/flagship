@@ -16,6 +16,7 @@
 
 import { ed25519 } from "../vendor/noble-post-quantum/pq-seal.js";
 import * as rot from "./accountKeyRotation.js";
+import { verifyEd25519Sync } from "./edKey.js";
 import { hybridSealKeygen } from "./voiciCore.js";
 import { controlApex } from "./apex.js";
 import {
@@ -273,7 +274,7 @@ export function verifyLaneForDevice({ username, lane, pinnedRoot, irkPubHex, aid
       let ok = false;
       try {
         const msg = adminRootRotationCanonicalBytes({ username: r.username, oldAdminRootPub: lower(r.oldAdminRootPubHex), newAdminRootPub: lower(r.newAdminRootPubHex), issuedAt: r.issuedAt });
-        ok = lower(r.username) === username && ed25519.verify(unhex(lower(ev.signatureHex)), msg, unhex(root), { zip215: false });
+        ok = lower(r.username) === username && verifyEd25519Sync(unhex(root), unhex(lower(ev.signatureHex)), msg, { zip215: false });
       } catch {
         ok = false;
       }

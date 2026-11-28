@@ -25,6 +25,7 @@
 import { tr } from "./i18n.js";
 
 import { hybridVerify, verifyPqKeyBinding } from "./pqBinding.js";
+import { verifyEd25519 } from "./edKey.js";
 
 const SEP = "|";
 const TAG_PREFIX = "maintainers";
@@ -69,14 +70,7 @@ export async function edVerify(sigHex, msg, pubHex) {
     return false;
   }
   try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      hexToBytes(pubHex),
-      { name: "Ed25519" },
-      false,
-      ["verify"],
-    );
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, hexToBytes(sigHex), msg);
+    return await verifyEd25519(hexToBytes(pubHex), hexToBytes(sigHex), msg);
   } catch {
     return false;
   }

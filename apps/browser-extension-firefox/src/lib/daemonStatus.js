@@ -37,11 +37,28 @@ export function hexToBytes(hex) {
   return out;
 }
 
+// Ed25519 keys refused before any verify (test-vectors/ed25519-low-order; edSync.isAcceptableEd25519PublicKey):
+// WebCrypto accepts a small-order key, under which R = identity, S = 0 verifies for every message. Without a curve
+// library here the rule is on y alone: y must be below p (canonical) and not the y of a small-order point (0, 1,
+// p - 1, and the two order-8 values), which also covers x = 0 with the sign bit (y = 1 or p - 1). A key off the
+// curve is refused by WebCrypto itself.
+const P = (1n << 255n) - 19n;
+const ORDER_8_Y = 0x7a03ac9277fdc74ec6cc392cfa53202a0f67100d760b3cba4fd84d3d706a17c7n;
+const SMALL_ORDER_Y = new Set([0n, 1n, P - 1n, ORDER_8_Y, P - ORDER_8_Y]);
+
+export function isAcceptableEd25519PublicKey(pubHex) {
+  if (typeof pubHex !== "string" || !/^[0-9a-f]{64}$/.test(pubHex)) return false;
+  let y = 0n;
+  for (let i = 31; i >= 0; i--) y = (y << 8n) | BigInt(parseInt(pubHex.slice(i * 2, i * 2 + 2), 16));
+  y &= (1n << 255n) - 1n;
+  return y < P && !SMALL_ORDER_Y.has(y);
+}
+
 /** True when `signatureHex` is the server key's Ed25519 signature over the report. Never throws. */
 export async function verifyDaemonStatus(report, signatureHex, stkPubHex, subtle = globalThis.crypto.subtle) {
   try {
     if (!/^[0-9a-f]{128}$/.test(String(signatureHex).toLowerCase())) return false;
-    if (!/^[0-9a-f]{64}$/.test(String(stkPubHex))) return false;
+    if (!isAcceptableEd25519PublicKey(String(stkPubHex))) return false;
     const msg = canonicalDaemonStatus(report);
     const key = await subtle.importKey("raw", hexToBytes(stkPubHex), { name: "Ed25519" }, false, ["verify"]);
     return await subtle.verify({ name: "Ed25519" }, key, hexToBytes(signatureHex.toLowerCase()), msg);

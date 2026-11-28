@@ -17,6 +17,7 @@ const to = join(here, "..", "src", "proto");
 /** Relative paths under webapp/ and under src/proto/ (the same layout, so the imports stay untouched). */
 export const PROTOCOL_FILES = [
   "lib/voiciCore.js",
+  "lib/edKey.js",
   "lib/voiciText.js",
   "lib/voiciPage.js",
   "lib/voiciMessages.js",

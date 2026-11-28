@@ -17,6 +17,7 @@
 import { ed25519, hkdf, sha256, x25519, gcm } from "../vendor/noble-post-quantum/pq-seal.js";
 import { hybridOpen, hybridSeal, hybridSealWithRandomness, parseHybridSealPublicKey, pqKeyId } from "./voiciCore.js";
 import { PqBindingError, verifyCriticalSignature, verifyPqKeyBinding } from "./pqBinding.js";
+import { isAcceptableEd25519PublicKey, verifyEd25519Sync } from "./edKey.js";
 
 export const TAG_ACCOUNT_KEY_ROTATION = "flagship/account-key-rotation/v1";
 export const TAG_ACCOUNT_KEY_ROTATION_V2 = "flagship/account-key-rotation/v2";
@@ -77,23 +78,12 @@ const sealedHex = (v) => (need(typeof v === "string" && HEX.test(v), "sealedHex"
 
 /** 32 bytes, canonically encoded, not of small order (edSync.isAcceptableEd25519PublicKey). */
 export function isAcceptableEd25519Key(pubHex) {
-  if (typeof pubHex !== "string" || !HEX32.test(pubHex)) return false;
-  try {
-    const b = bytes(pubHex);
-    const p = ed25519.Point.fromBytes(b, false);
-    return hex(p.toBytes()) === pubHex && !p.isSmallOrder();
-  } catch {
-    return false;
-  }
+  return typeof pubHex === "string" && HEX32.test(pubHex) && isAcceptableEd25519PublicKey(pubHex);
 }
 
 function verifyEd(sigHex, msg, pubHex) {
   if (typeof sigHex !== "string" || !/^[0-9a-f]{128}$/.test(sigHex) || !isAcceptableEd25519Key(pubHex)) return false;
-  try {
-    return ed25519.verify(bytes(sigHex), msg, bytes(pubHex), { zip215: false });
-  } catch {
-    return false;
-  }
+  return verifyEd25519Sync(bytes(pubHex), bytes(sigHex), msg, { zip215: false });
 }
 const signEd = (seed, msg) => hex(ed25519.sign(msg, seed));
 const pubOf = (seed) => hex(ed25519.getPublicKey(seed));

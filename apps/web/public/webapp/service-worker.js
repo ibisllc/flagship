@@ -605,7 +605,9 @@
 //       token (precaches lib/orgReadToken.js; docs/account-read-token.md "Org routes"), minted with the seat member
 //       key and minted again after a 401; the join verifies the chain the invite answer carries. The chain is
 //       verified with .com's observed open time of each delayed-change notice (noticeOpenedAt).
-const SHELL_VERSION = "v263";
+//  v264: every Ed25519 verify goes through lib/edKey.js (precached), which refuses small-order and non-canonical
+//       public keys first (test-vectors/ed25519-low-order; WebCrypto and noble's default verify accept them).
+const SHELL_VERSION = "v264";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -674,6 +676,7 @@ const OPTIONAL_SHELL = [
   "/lib/boxProxy.js",
   "/lib/totp.js",
   "/lib/rePairRefusal.js",
+  "/lib/edKey.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
   "/lib/boxKeyPins.js",

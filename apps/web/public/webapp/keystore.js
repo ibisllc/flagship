@@ -24,6 +24,7 @@
 // to scope an op without touching localStorage.
 
 import * as profilesStore from "./lib/profilesStore.js";
+import { verifyEd25519 } from "./lib/edKey.js";
 
 import { tr } from "./lib/i18n.js";
 const DB_NAME = "flagship-webapp";
@@ -772,18 +773,7 @@ export async function signWithIrkVersioned(umkSeed, version, canonicalBytes) {
  * @returns {Promise<boolean>}
  */
 export async function verifyWithEd25519Pub(pub, signature, canonicalBytes) {
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      pub,
-      { name: "Ed25519" },
-      false,
-      ["verify"],
-    );
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, signature, canonicalBytes);
-  } catch {
-    return false;
-  }
+  return verifyEd25519(pub, signature, canonicalBytes);
 }
 
 /**

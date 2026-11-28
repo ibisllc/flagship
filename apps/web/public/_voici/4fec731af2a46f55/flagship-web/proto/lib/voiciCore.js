@@ -17,6 +17,7 @@
 // webapp is a full account device for Messages, spec §9.5); nothing here fetches or stores a key.
 
 import { ed25519, gcm, hkdf, ml_kem768_x25519, p256, sha256, sha512, x25519 } from "../vendor/noble-post-quantum/pq-seal.js";
+import { verifyEd25519Sync } from "./edKey.js";
 
 const te = new TextEncoder();
 const utf8 = (s) => te.encode(s);
@@ -125,20 +126,6 @@ export function canonicalJsonBytes(v) {
 
 // ── signatures ────────────────────────────────────────────────────────────
 
-// The libsodium small-order / non-canonical blocklist the protocol package's `ed` refuses (edSync.ts).
-const LOW_ORDER_PUBKEYS = new Set([
-  "0100000000000000000000000000000000000000000000000000000000000000",
-  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-  "0000000000000000000000000000000000000000000000000000000000000000",
-  "0000000000000000000000000000000000000000000000000000000000000080",
-  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
-  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
-  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
-  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
-  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-]);
 
 export function ed25519PublicKey(seed) {
   return ed25519.getPublicKey(seed);
@@ -150,12 +137,8 @@ export function ed25519SignHex(msg, seed) {
 }
 
 export function ed25519VerifyHex(sigHex, msg, pubHex) {
-  if (!isLowerHex(sigHex, 64) || !isLowerHex(pubHex, 32) || LOW_ORDER_PUBKEYS.has(pubHex)) return false;
-  try {
-    return ed25519.verify(hexToBytes(sigHex), msg, hexToBytes(pubHex));
-  } catch {
-    return false;
-  }
+  if (!isLowerHex(sigHex, 64) || !isLowerHex(pubHex, 32)) return false;
+  return verifyEd25519Sync(hexToBytes(pubHex), hexToBytes(sigHex), msg);
 }
 
 /** ECDSA P-256 / SHA-256, IEEE P1363 signature (hex 128), uncompressed SEC1 key (hex 130). High-S accepted. */

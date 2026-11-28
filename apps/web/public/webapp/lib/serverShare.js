@@ -19,6 +19,7 @@
 //
 // Must pass packages/protocol/test-vectors/server-share/vectors.json.
 import { tr } from "./i18n.js";
+import { verifyEd25519 } from "./edKey.js";
 
 export const TAG_SERVER_SHARE = "flagship/server-share/v1";
 export const TAG_SERVER_SHARE_REVOKE = "flagship/server-share-revoke/v1";
@@ -132,12 +133,7 @@ async function edSign(seed, msg) {
 }
 
 async function edVerify(sig, msg, pub) {
-  try {
-    const key = await crypto.subtle.importKey("raw", pub, { name: "Ed25519" }, false, ["verify"]);
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, sig, msg);
-  } catch {
-    return false;
-  }
+  return verifyEd25519(pub, sig, msg);
 }
 
 async function keypair(seed) {
