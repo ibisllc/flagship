@@ -25,6 +25,7 @@ import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InviteLink
 import com.flagshipserver.app.core.InviteOwnerBook
 import com.flagshipserver.app.core.InviteOwners
+import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.ServerKeys
 import com.flagshipserver.app.core.ServiceInvite
 import com.flagshipserver.app.keystore.Keystore
@@ -61,11 +62,13 @@ class InviteRedeemViewModel(
     /** The app the invite is for (the link's `s=`): selects the friend's id. */
     private val serviceRef: String? = null,
     private val client: ServiceAccessClient = ServiceAccessClient(),
-    /** The friend's id for an app (the redemption identity). */
-    private val appAidSigner: suspend (serviceRef: String, reason: String) -> Ed25519Sign =
-        { s, r -> Keystore.deriveAppAccountId(s, r) },
-    private val appAidPubHex: suspend (serviceRef: String, reason: String) -> String =
-        { s, r -> Keystore.appAccountIdPubHex(s, r) },
+    /** The friend's id for an app on the box's account (the redemption identity). */
+    private val appAidSigner: suspend (accountZone: String, serviceRef: String, reason: String) -> Ed25519Sign =
+        { z, s, r -> Keystore.deriveAppAccountId(z, s, r) },
+    private val appAidPubHex: suspend (accountZone: String, serviceRef: String, reason: String) -> String =
+        { z, s, r -> Keystore.appAccountIdPubHex(z, s, r) },
+    /** The data apex the box name must sit under (its account zone scopes the id). */
+    private val dataApex: () -> String = { Endpoints.dataApex },
     private val now: () -> Long = { System.currentTimeMillis() },
     /** Where a redeem records the box (and its owner AID), so a later knock on
      *  it can sign with the friend's id for the knock's app. */
@@ -90,11 +93,17 @@ class InviteRedeemViewModel(
             _phase.value = InviteRedeemPhase.Failed(OLD_LINK)
             return
         }
+        // The id is scoped to the account of the box we redeem on (TLS proves
+        // the name), never to anything the link says.
+        val zone = ServerKeys.appAccountZone(serverDomain, dataApex()) ?: run {
+            _phase.value = InviteRedeemPhase.Failed(FSStrings.get(R.string.this_invite_link_is_unknown_or))
+            return
+        }
         _phase.value = InviteRedeemPhase.Redeeming
         try {
             val reason = "Accept this invite"
-            val redeemPub = HexUtil.decode(appAidPubHex(ref, reason))!!
-            val redeemSigner = appAidSigner(ref, reason)
+            val redeemPub = HexUtil.decode(appAidPubHex(zone, ref, reason))!!
+            val redeemSigner = appAidSigner(zone, ref, reason)
             val secretBytes = HexUtil.decode(secret) ?: run {
                 _phase.value = InviteRedeemPhase.Failed(FSStrings.get(R.string.this_invite_link_is_malformed)); return
             }

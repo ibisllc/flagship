@@ -613,19 +613,20 @@ object Keystore {
         return HexUtil.encode(ServerKeys.deriveAccountIdPub(loadOrCreateUmkSeed()))
     }
 
-    /** The visitor's id for ONE app (`deriveAppAccountId(UMK, serviceRef)`,
+    /** The visitor's id for ONE app on the hosting account
+     *  (`deriveAppAccountId(UMK, accountZone, serviceRef)`,
      *  docs/service-access-gating.md "Per-app identity"): the redeem / visit /
      *  knock / acceptance signer they present to that app, never the global
      *  AID. Biometric-gated. */
-    suspend fun deriveAppAccountId(appRef: String, reason: String = FSStrings.get(R.string.authorize_flagship)): Ed25519Sign {
+    suspend fun deriveAppAccountId(accountZone: String, appRef: String, reason: String = FSStrings.get(R.string.authorize_flagship)): Ed25519Sign {
         openSession(FSStrings.get(R.string.authorize_flagship), reason)
-        return ServerKeys.deriveAppAccountId(loadOrCreateUmkSeed(), appRef)
+        return ServerKeys.deriveAppAccountId(loadOrCreateUmkSeed(), accountZone, appRef)
     }
 
     /** The per-app id's PUBLIC key (hex). Biometric-gated. */
-    suspend fun appAccountIdPubHex(appRef: String, reason: String = FSStrings.get(R.string.authorize_flagship)): String {
+    suspend fun appAccountIdPubHex(accountZone: String, appRef: String, reason: String = FSStrings.get(R.string.authorize_flagship)): String {
         openSession(FSStrings.get(R.string.authorize_flagship), reason)
-        return HexUtil.encode(ServerKeys.deriveAppAccountIdPub(loadOrCreateUmkSeed(), appRef))
+        return HexUtil.encode(ServerKeys.deriveAppAccountIdPub(loadOrCreateUmkSeed(), accountZone, appRef))
     }
 
     /** The household AEAD key (32 bytes) that seals the {name, photo?} invite

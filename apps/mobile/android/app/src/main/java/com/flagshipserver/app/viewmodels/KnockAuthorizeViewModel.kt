@@ -10,7 +10,8 @@
 // key (so the box knows which device, and its rank, signed in); a server
 // shared WITH this account gets that share's member key; a box we were
 // invited to (remembered at redeem, InviteOwnerBook) gets
-// deriveAppAccountId(UMK, serviceRef) for the knock's app. Neither the device
+// deriveAppAccountId(UMK, appAccountZone(box), serviceRef) for the knock's app
+// on that box's account (the zone comes from the box we post to). Neither the device
 // key nor a share key is ever shown to any other box. A record naming our own
 // AID is ignored: the invite's author wrote it. A box found nowhere triggers
 // one fresh pods load and one share-inbox read (a cold start from a deep link
@@ -60,11 +61,13 @@ class KnockAuthorizeViewModel(
     /** The user's GLOBAL AID signer + pub (biometric-gated by default). */
     private val aidSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveAccountId(r) },
     private val aidPubHex: suspend (reason: String) -> String = { r -> Keystore.accountIdPubHex(r) },
-    /** The user's id for an app, signer + pub (biometric-gated by default). */
-    private val appAidSigner: suspend (serviceRef: String, reason: String) -> Ed25519Sign =
-        { s, r -> Keystore.deriveAppAccountId(s, r) },
-    private val appAidPubHex: suspend (serviceRef: String, reason: String) -> String =
-        { s, r -> Keystore.appAccountIdPubHex(s, r) },
+    /** The user's id for an app on the box's account, signer + pub (biometric-gated by default). */
+    private val appAidSigner: suspend (accountZone: String, serviceRef: String, reason: String) -> Ed25519Sign =
+        { z, s, r -> Keystore.deriveAppAccountId(z, s, r) },
+    private val appAidPubHex: suspend (accountZone: String, serviceRef: String, reason: String) -> String =
+        { z, s, r -> Keystore.appAccountIdPubHex(z, s, r) },
+    /** The data apex the box name must sit under (its account zone scopes the id). */
+    private val dataApex: () -> String = { com.flagshipserver.app.core.Endpoints.dataApex },
     /** This device's account device key (signer + pub), which signs in on the
      *  account's own servers; null when the device has no device id yet (the
      *  global AID signs then, which the box counts as a non-admin device). */
@@ -129,8 +132,9 @@ class KnockAuthorizeViewModel(
             // with us" only from our own share inbox.
             suspend fun invitedKey(): Pair<Ed25519Sign, ByteArray>? {
                 if (!ServerKeys.isAppRef(serviceRef)) return null
+                val zone = ServerKeys.appAccountZone(serverId, dataApex()) ?: return null
                 owners.ownerFor(serverId)?.takeIf { it != aidPubHex(reason).lowercase() } ?: return null
-                return appAidSigner(serviceRef, reason) to HexUtil.decode(appAidPubHex(serviceRef, reason))!!
+                return appAidSigner(zone, serviceRef, reason) to HexUtil.decode(appAidPubHex(zone, serviceRef, reason))!!
             }
             val identity: Pair<Ed25519Sign, ByteArray>? =
                 if (ownServers().hasBox()) {

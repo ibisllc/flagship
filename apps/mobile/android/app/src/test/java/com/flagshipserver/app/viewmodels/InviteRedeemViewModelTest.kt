@@ -35,7 +35,8 @@ class InviteRedeemViewModelTest {
     private val authorAidPub = ServerKeys.deriveAccountIdPub(authorUmk)
     private val authorAidHex = HexUtil.encode(authorAidPub)
     // The friend's id for the invite's app (the redemption identity).
-    private val contactPub = ServerKeys.deriveAppAccountIdPub(friendUmk, "alice--notes")
+    private val zone = "alice.flagship.services"
+    private val contactPub = ServerKeys.deriveAppAccountIdPub(friendUmk, zone, "alice--notes")
     private val globalPub = ServerKeys.deriveAccountIdPub(friendUmk)
 
     private val owners = InMemoryInviteOwnerBook()
@@ -45,8 +46,9 @@ class InviteRedeemViewModelTest {
             serverDomain = serverDomain, secretHex = secretHex, authorAidHex = authorHex, inviteIdHex = inviteIdHex,
             serviceRef = serviceRef,
             client = ServiceAccessClient(boxTransport = t, comTransport = t),
-            appAidSigner = { ref, _ -> ServerKeys.deriveAppAccountId(friendUmk, ref) },
-            appAidPubHex = { ref, _ -> HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk, ref)) },
+            appAidSigner = { z, ref, _ -> ServerKeys.deriveAppAccountId(friendUmk, z, ref) },
+            appAidPubHex = { z, ref, _ -> HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk, z, ref)) },
+            dataApex = { "flagship.services" },
             now = now,
             owners = owners,
         )
@@ -87,9 +89,26 @@ class InviteRedeemViewModelTest {
         val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--chess","firstBind":true}""")
         makeVM(t, serviceRef = "alice--chess").redeem()
         assertEquals(
-            HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk, "alice--chess")),
+            HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk, zone, "alice--chess")),
             t.lastBodyJson()!!["visitorAID"]!!.jsonPrimitive.content,
         )
+    }
+
+    @Test fun redeem_scopesTheIdToTheBoxsAccount() = runTest {
+        // One app id (a marketplace app keeps its creator's id) on another account's box: another id.
+        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","firstBind":true}""")
+        makeVM(t, serverDomain = "home.carol.flagship.services").redeem()
+        val carol = HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk, "carol.flagship.services", "alice--notes"))
+        assertEquals(carol, t.lastBodyJson()!!["visitorAID"]!!.jsonPrimitive.content)
+        assertTrue(carol != HexUtil.encode(contactPub))
+    }
+
+    @Test fun redeem_boxOffTheDataApex_isRefusedBeforeNetwork() = runTest {
+        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","firstBind":true}""")
+        val vm = makeVM(t, serverDomain = "game--john-doe.fshp.app")
+        vm.redeem()
+        assertTrue(vm.phase.value is InviteRedeemPhase.Failed)
+        assertNull(t.lastUrl)
     }
 
     @Test fun redeem_manualPending_emitsAcceptanceReply() = runTest {

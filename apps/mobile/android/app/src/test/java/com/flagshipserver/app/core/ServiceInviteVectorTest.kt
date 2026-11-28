@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -69,7 +70,7 @@ class ServiceInviteVectorTest {
     private fun authorAid(r: JsonObject) = ServerKeys.deriveAccountId(authorUmk(r))
     private fun authorAidPub(r: JsonObject) = ServerKeys.deriveAccountIdPub(authorUmk(r))
     private fun friendAppAid(r: JsonObject) =
-        ServerKeys.deriveAppAccountId(friendUmk(r), r.obj("appAid").s("serviceRef"))
+        ServerKeys.deriveAppAccountId(friendUmk(r), r.obj("appAid").s("accountZone"), r.obj("appAid").s("serviceRef"))
 
     @Test fun derivedKeysMatchFixture() {
         val r = root()
@@ -230,24 +231,35 @@ class ServiceInviteVectorTest {
     // ── v2 Wave 3 ─────────────────────────────────────────────────────────
 
     @Test fun appAccountIdMatchesFixtures() {
-        // appAid = deriveAppAccountId(friendUmk, serviceRef) — the friend's id for
-        // one app (never the global AID), plus every test-vectors/app-account-id case.
+        // appAid = deriveAppAccountId(friendUmk, accountZone, serviceRef) — the
+        // friend's id for one app on its hosting account (never the global AID),
+        // plus every test-vectors/app-account-id case.
         val r = root()
         val app = r.obj("appAid")
-        assertEquals(app.s("appAidPubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk(r), app.s("serviceRef"))))
+        assertEquals(app.s("accountZone"), ServerKeys.appAccountZone(app.s("serverId"), "flagship.services"))
+        assertEquals(app.s("appAidPubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk(r), app.s("accountZone"), app.s("serviceRef"))))
         val f = File(vectorsFile().parentFile!!.parentFile!!.parentFile, "test-vectors/app-account-id/vectors.json")
         val v = Json.parseToJsonElement(f.readText()).jsonObject
+        assertEquals("flagship/app-aid/v2", v.s("info"))
         val cases = v["cases"]!!.jsonArray.map { it.jsonObject }
         assertTrue(cases.isNotEmpty())
         for (c in cases) {
-            assertEquals(c.s("pubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(seed(c.s("umkSeedHex")), c.s("appRef"))))
+            assertEquals(c.s("pubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(seed(c.s("umkSeedHex")), c.s("accountZone"), c.s("appRef"))))
         }
         val same = v["sameAppAnyInviter"]!!.jsonObject
-        assertEquals(same.s("pubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(seed(same.s("umkSeedHex")), same.s("appRef"))))
-        for (bad in v["invalidAppRefs"]!!.jsonArray.map { it.jsonPrimitive.content }) {
-            assertTrue("should refuse $bad", runCatching { ServerKeys.deriveAppAccountIdSeed(friendUmk(r), bad) }.isFailure)
+        assertEquals(same.s("pubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(seed(same.s("umkSeedHex")), same.s("accountZone"), same.s("appRef"))))
+        for (z in v["accountZones"]!!.jsonArray.map { it.jsonObject }) {
+            val want = z["zone"]!!.jsonPrimitive.contentOrNull
+            assertEquals("zone of ${z.s("serverId")}", want, ServerKeys.appAccountZone(z.s("serverId"), z.s("dataApex")))
         }
-        assertTrue(!HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk(r), app.s("serviceRef")))
+        val zone = app.s("accountZone")
+        for (bad in v["invalidAppRefs"]!!.jsonArray.map { it.jsonPrimitive.content }) {
+            assertTrue("should refuse $bad", runCatching { ServerKeys.deriveAppAccountIdSeed(friendUmk(r), zone, bad) }.isFailure)
+        }
+        for (bad in v["invalidAccountZones"]!!.jsonArray.map { it.jsonPrimitive.content }) {
+            assertTrue("should refuse zone $bad", runCatching { ServerKeys.deriveAppAccountIdSeed(friendUmk(r), bad, app.s("serviceRef")) }.isFailure)
+        }
+        assertTrue(!HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk(r), zone, app.s("serviceRef")))
             .equals(HexUtil.encode(ServerKeys.deriveAccountIdPub(friendUmk(r)))))
     }
 
@@ -277,7 +289,7 @@ class ServiceInviteVectorTest {
         // over { inviteId, serviceRef, contactAID, acceptedAt }.
         val r = root()
         val a = r.obj("acceptApp")
-        val contactPub = ServerKeys.deriveAppAccountIdPub(friendUmk(r), r.obj("appAid").s("serviceRef"))
+        val contactPub = ServerKeys.deriveAppAccountIdPub(friendUmk(r), r.obj("appAid").s("accountZone"), r.obj("appAid").s("serviceRef"))
         val bytes = ServiceInvite.canonicalAccept(a.s("inviteId"), a.s("serviceRef"), contactPub, a.l("acceptedAt"))
         assertTrue(ServiceInvite.verify(HexUtil.decode(a.s("sigHex"))!!, bytes, contactPub))
         assertEquals(

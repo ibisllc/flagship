@@ -2,8 +2,9 @@
 // (docs/service-access-gating.md §v2 hardening). Two artifacts:
 //
 //  1. The INVITE link the author shares. It names the app (`s=<serviceRef>`):
-//     the friend redeems with their id for THAT app (deriveAppAccountId(UMK,
-//     serviceRef), "Per-app identity"), never the global AID; the author's AID
+//     the friend redeems with their id for THAT app on the box's account
+//     (deriveAppAccountId(UMK, accountZone, serviceRef), "Per-app identity"),
+//     never the global AID; the author's AID
 //     (`a=`) marks the box as one they were invited to. The capability secret
 //     stays in the URL FRAGMENT (never sent to a server):
 //     `#<secret>&a=<authorAID>[&i=<inviteId>]&s=<serviceRef>`. Older box pages'

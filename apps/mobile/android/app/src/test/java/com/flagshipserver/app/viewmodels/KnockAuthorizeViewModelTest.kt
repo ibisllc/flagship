@@ -42,7 +42,8 @@ class KnockAuthorizeViewModelTest {
     // The author (UMK 0x0b) from packages/protocol/tests/fixtures/serviceAccessGating.vectors.json;
     // the friend (UMK 0x16) signs with their id for the knock's app.
     private val ownerAidHex = "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640"
-    private val contactAidHex = HexUtil.encode(ServerKeys.deriveAppAccountIdPub(umkSeed, serviceRef))
+    private val zone = "alice.flagship.services"
+    private val contactAidHex = HexUtil.encode(ServerKeys.deriveAppAccountIdPub(umkSeed, zone, serviceRef))
 
     private val persisted = ArrayList<SecuredSession>()
     private val signerCalls = ArrayList<String>()
@@ -66,8 +67,9 @@ class KnockAuthorizeViewModelTest {
             client = ServiceAccessClient(boxTransport = t, comTransport = t),
             aidSigner = { signerCalls.add("global"); Ed25519Sign(aidKp.privateKey) },
             aidPubHex = { HexUtil.encode(aidPub) },
-            appAidSigner = { ref, _ -> signerCalls.add("app"); ServerKeys.deriveAppAccountId(umkSeed, ref) },
-            appAidPubHex = { ref, _ -> HexUtil.encode(ServerKeys.deriveAppAccountIdPub(umkSeed, ref)) },
+            appAidSigner = { z, ref, _ -> signerCalls.add("app"); ServerKeys.deriveAppAccountId(umkSeed, z, ref) },
+            appAidPubHex = { z, ref, _ -> HexUtil.encode(ServerKeys.deriveAppAccountIdPub(umkSeed, z, ref)) },
+            dataApex = { "flagship.services" },
             deviceKey = {
                 if (!withDeviceKey) null
                 else { signerCalls.add("device"); Ed25519Sign(deviceKp.privateKey) to deviceKp.publicKey }

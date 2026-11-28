@@ -15,7 +15,7 @@ object ServerKeys {
     private const val INFO_SWK = "flagship.swk.v1"
     private const val INFO_IRK = "flagship.irk.v1"
     private const val INFO_ACCOUNT_ID = "flagship/account-id/v1"
-    private const val INFO_APP_ID = "flagship/app-aid/v1"
+    private const val INFO_APP_ID = "flagship/app-aid/v2"
     private const val INFO_HOUSEHOLD_KEY = "flagship/household-key/v1"
 
     /** Stable Account Identity Key (AID) SEED (32 bytes) — the NON-rotating
@@ -43,26 +43,50 @@ object ServerKeys {
     /** Whether [ref] is a service id (`<creator>--<slug>`: lowercase, digits, dashes). */
     fun isAppRef(ref: String?): Boolean = ref != null && APP_REF.matches(ref)
 
+    private const val DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    private val DNS_LABEL_RE = Regex("^$DNS_LABEL$")
+    private val ACCOUNT_ZONE = Regex("^(?=.{3,253}$)$DNS_LABEL(?:\\.$DNS_LABEL)+$")
+
+    /** Whether [zone] is an account zone (`<account>.<data apex>`, lowercase). */
+    fun isAccountZone(zone: String?): Boolean = zone != null && ACCOUNT_ZONE.matches(zone)
+
+    /** The hosting account's zone for a box name: the label just left of
+     *  [dataApex] plus the apex (`home.alice.flagship.services` →
+     *  `alice.flagship.services`), or null for a name outside the data apex
+     *  (a direct `fshp.app` name, a custom domain). Mirrors protocol keys.ts
+     *  `appAccountZone`. */
+    fun appAccountZone(serverId: String, dataApex: String): String? {
+        val host = serverId.trim().lowercase().removeSuffix(".")
+        val apex = dataApex.trim().lowercase().removePrefix(".").removeSuffix(".")
+        if (apex.isEmpty() || !host.endsWith(".$apex")) return null
+        val labels = host.dropLast(apex.length + 1).split(".")
+        if (!labels.all { DNS_LABEL_RE.matches(it) }) return null
+        val zone = "${labels.last()}.$apex"
+        return zone.takeIf { isAccountZone(it) }
+    }
+
     /** App Account Id SEED (32 bytes) — the identity a visitor presents to ONE
-     *  app (redeem, visit, knock, acceptance): HKDF-SHA256(umkSeed, salt=empty,
-     *  info="flagship/app-aid/v1|<appRef>"), appRef = the app's service id.
-     *  Depends on the account and the app only: two apps see unrelated ids, and
-     *  the owner's and a co-manager's invites to one app bind the same id
-     *  (docs/service-access-gating.md, "Per-app identity"). Mirrors protocol
-     *  keys.ts `deriveAppAccountId`. */
-    fun deriveAppAccountIdSeed(umkSeed: ByteArray, appRef: String): ByteArray {
+     *  app on ONE hosting account (redeem, visit, knock, acceptance):
+     *  HKDF-SHA256(umkSeed, salt=empty, info="flagship/app-aid/v2|<accountZone>|<appRef>").
+     *  accountZone = [appAccountZone] of the box we sign for and post to (never
+     *  a link parameter); appRef = the app's service id. Two apps, or one app id
+     *  on two accounts, see unrelated ids, and the owner's and a co-manager's
+     *  invites to one app bind the same id (docs/service-access-gating.md,
+     *  "Per-app identity"). Mirrors protocol keys.ts `deriveAppAccountId`. */
+    fun deriveAppAccountIdSeed(umkSeed: ByteArray, accountZone: String, appRef: String): ByteArray {
         require(umkSeed.size == 32) { "UMK seed must be 32 bytes" }
+        require(isAccountZone(accountZone)) { "account zone must be <account>.<data apex>" }
         require(isAppRef(appRef)) { "app ref must be a service id" }
-        return hkdfSha256(umkSeed, "$INFO_APP_ID|$appRef".toByteArray(Charsets.UTF_8))
+        return hkdfSha256(umkSeed, "$INFO_APP_ID|$accountZone|$appRef".toByteArray(Charsets.UTF_8))
     }
 
     /** A Tink Ed25519 signer over the per-app id seed. */
-    fun deriveAppAccountId(umkSeed: ByteArray, appRef: String): Ed25519Sign =
-        Ed25519Sign(deriveAppAccountIdSeed(umkSeed, appRef))
+    fun deriveAppAccountId(umkSeed: ByteArray, accountZone: String, appRef: String): Ed25519Sign =
+        Ed25519Sign(deriveAppAccountIdSeed(umkSeed, accountZone, appRef))
 
     /** The per-app id's PUBLIC key (32 bytes) — what the app's allow-list binds. */
-    fun deriveAppAccountIdPub(umkSeed: ByteArray, appRef: String): ByteArray =
-        Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveAppAccountIdSeed(umkSeed, appRef)).publicKey
+    fun deriveAppAccountIdPub(umkSeed: ByteArray, accountZone: String, appRef: String): ByteArray =
+        Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveAppAccountIdSeed(umkSeed, accountZone, appRef)).publicKey
 
     /** The household AEAD key (32 bytes) — HKDF-SHA256(umkSeed, salt=empty,
      *  info="flagship/household-key/v1"). Every device of the account derives

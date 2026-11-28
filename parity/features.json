@@ -1271,7 +1271,7 @@
           "anchors": [
             [
               "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerKeys.kt",
-              "flagship/app-aid/v1"
+              "flagship/app-aid/v2"
             ]
           ]
         },
