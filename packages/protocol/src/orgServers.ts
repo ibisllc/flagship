@@ -1,7 +1,7 @@
 /**
  * Org servers (docs/enterprise-accounts.md §6, §18 E2/E3, "Org servers"): adding a server to an org.
  *
- *   flagship/org-server-code/v1|<orgId>|<genesisHash>|<serial>|<serverName>|<serverDomain>|<delegatedPubKeyHex>|<issuedAt>|<expiresAt>
+ *   flagship/org-server-code/v2|<orgId>|<genesisHash>|<serial>|<serverName>|<serverDomain>|<delegatedPubKeyHex>|<enrolmentPubKeyHex>|<issuedAt>|<expiresAt>
  *   flagship/org-server-register/v1|<orgId>|<serial>|<serverDomain>|<codeSha256>|<serverIdentityPubKeyHex>|<issuedAt>|<nonceHex>
  *
  * The server code is the org's AuthCode: an org has no IRK and no admin root, so instead of the
@@ -11,6 +11,11 @@
  * `adminRootPub`, so the box anchors exactly the org the admins approved. The box registers with its
  * server identity key (STK, Ed25519 proof of possession, as `flagship/server-register/v1` does) over
  * the code's hash; `.com` admits only the code it stored at issue.
+ *
+ * The code also names an enrolment key (Ed25519) the admin's client makes for this one server; its
+ * seed travels only in the recipe (`enrolmentSeedHex`), never to `.com`. The registration carries a
+ * second signature over the same bytes by that key, so only the box that holds the recipe can redeem
+ * the code: knowing the serial, or the code itself, is not enough to register another box under it.
  */
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hex } from "./canonicalBase.js";
@@ -18,7 +23,7 @@ import { OrgAuthorityError, authorizeOrgOrder, orgSha256Hex, verifyOrgRecordedAp
 import { ed25519VerifyStrict } from "./pqHybrid.js";
 import type { Bytes } from "./types.js";
 
-export const TAG_ORG_SERVER_CODE = "flagship/org-server-code/v1";
+export const TAG_ORG_SERVER_CODE = "flagship/org-server-code/v2";
 export const TAG_ORG_SERVER_REGISTER = "flagship/org-server-register/v1";
 
 /** A server code lives at most a day, like an AuthCode (`RECIPE_TTL_MAX_MS`). */
@@ -55,6 +60,8 @@ export interface OrgServerCode {
   /** `<serverName>.<orgName>.<apex>`; `.com` checks it against the org's current name. */
   serverDomain: string;
   delegatedPubKeyHex: string;
+  /** The enrolment key's Ed25519 public key; its seed is only in the recipe. */
+  enrolmentPubKeyHex: string;
   issuedAt: number;
   expiresAt: number;
 }
@@ -67,11 +74,13 @@ export function canonicalOrgServerCode(c: OrgServerCode): Bytes {
   match("serverDomain", DOMAIN, c.serverDomain);
   if (!c.serverDomain.startsWith(`${c.serverName}.`)) fail("serverDomain");
   match("delegatedPubKeyHex", HEX32, c.delegatedPubKeyHex);
+  match("enrolmentPubKeyHex", HEX32, c.enrolmentPubKeyHex);
+  if (c.enrolmentPubKeyHex === c.delegatedPubKeyHex) fail("enrolmentPubKeyHex");
   uint("issuedAt", c.issuedAt);
   uint("expiresAt", c.expiresAt);
   if (c.expiresAt <= c.issuedAt || c.expiresAt - c.issuedAt > ORG_SERVER_CODE_MAX_MS) fail("expiresAt");
   return enc(
-    [TAG_ORG_SERVER_CODE, c.orgId, c.genesisHash, c.serial, c.serverName, c.serverDomain, c.delegatedPubKeyHex, c.issuedAt, c.expiresAt].join("|"),
+    [TAG_ORG_SERVER_CODE, c.orgId, c.genesisHash, c.serial, c.serverName, c.serverDomain, c.delegatedPubKeyHex, c.enrolmentPubKeyHex, c.issuedAt, c.expiresAt].join("|"),
   );
 }
 
@@ -133,6 +142,36 @@ export function verifyOrgServerRegister(r: OrgServerRegister, signatureHex: stri
   }
 }
 
+/** A fresh enrolment key for one server code: the seed goes into the recipe, the public key into the code. */
+export function newOrgServerEnrolmentKey(): { seedHex: string; pubKeyHex: string } {
+  const seed = ed25519.utils.randomSecretKey();
+  return { seedHex: hex(seed), pubKeyHex: hex(ed25519.getPublicKey(seed)) };
+}
+
+/** The enrolment key's public key from the seed a recipe carries. */
+export function orgServerEnrolmentPubKey(seedHex: string): string {
+  match("enrolmentSeedHex", HEX32, seedHex);
+  return hex(ed25519.getPublicKey(fromHex(seedHex)));
+}
+
+/** The box's second signature over its registration, by the enrolment key from its recipe. */
+export function signOrgServerEnrolment(r: OrgServerRegister, code: OrgServerCode, enrolmentSeedHex: string): string {
+  if (orgServerEnrolmentPubKey(enrolmentSeedHex) !== code.enrolmentPubKeyHex) fail("enrolmentSeedHex is not the code's enrolment key");
+  if (orgServerCodeSha256(code) !== r.codeSha256) fail("codeSha256");
+  return hex(ed25519.sign(canonicalOrgServerRegister(r), fromHex(enrolmentSeedHex)));
+}
+
+/** Checks the enrolment signature of a registration under the enrolment key the code names. */
+export function verifyOrgServerEnrolment(r: OrgServerRegister, code: OrgServerCode, signatureHex: unknown): boolean {
+  if (typeof signatureHex !== "string" || !/^[0-9a-f]{128}$/.test(signatureHex)) return false;
+  try {
+    if (orgServerCodeSha256(code) !== r.codeSha256 || code.orgId !== r.orgId || code.serial !== r.serial || code.serverDomain !== r.serverDomain) return false;
+    return ed25519VerifyStrict(fromHex(signatureHex), canonicalOrgServerRegister(r), fromHex(code.enrolmentPubKeyHex));
+  } catch {
+    return false;
+  }
+}
+
 export const TAG_ORG_INSTALL_BLOB = "flagship/org-install-blob/v1";
 
 /**
@@ -162,12 +201,14 @@ export interface OrgInstallBlob {
   code: OrgServerCode;
   codeApprovals: OrgApproval[];
   approvals: OrgApproval[];
+  /** The enrolment key's seed (secret, not in the signed bytes): the box signs its registration with it. */
+  enrolmentSeedHex: string;
 }
 
 const URL_RE = /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?\/api\/orgs\/[0-9a-f]{32}\/servers\/register$/;
 const GIT_REF = /^[0-9a-f]{40}$/;
 
-export function canonicalOrgInstallBlob(b: Omit<OrgInstallBlob, "approvals" | "codeApprovals">): Bytes {
+export function canonicalOrgInstallBlob(b: Omit<OrgInstallBlob, "approvals" | "codeApprovals" | "enrolmentSeedHex">): Bytes {
   if (b.kind !== "org" || b.version !== 1) fail("kind");
   match("orgId", HEX16, b.orgId);
   match("genesisHash", HEX32, b.genesisHash);

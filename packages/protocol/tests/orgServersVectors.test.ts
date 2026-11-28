@@ -24,6 +24,9 @@ import {
   verifyOrgSeatKem,
   verifyOrgServerCode,
   verifyOrgServerRegister,
+  verifyOrgServerEnrolment,
+  orgServerEnrolmentPubKey,
+  signOrgServerEnrolment,
   verifyOrgInstallBlob,
   canonicalOrgInstallBlob,
   type OrgKeyKind,
@@ -115,6 +118,14 @@ describe("org servers, key ring and audit vectors", () => {
     expect(verifyOrgServerRegister(V.register.request, V.register.signature)).toBe(true);
     expect(verifyOrgServerRegister(V.register.request, V.register.flipped)).toBe(false);
     expect(verifyOrgServerRegister({ ...V.register.request, serverDomain: "other.acme.flagship.services" }, V.register.signature)).toBe(false);
+  });
+
+  it("registration is also signed by the code's enrolment key (only in the recipe)", () => {
+    expect(orgServerEnrolmentPubKey(V.enrolment.seedHex)).toBe(V.enrolment.pubKeyHex);
+    expect(V.serverCodes[0].code.enrolmentPubKeyHex).toBe(V.enrolment.pubKeyHex);
+    expect(V.installBlobs[0].blob.enrolmentSeedHex).toBe(V.enrolment.seedHex);
+    expect(signOrgServerEnrolment(V.register.request, V.serverCodes[0].code, V.enrolment.seedHex)).toBe(V.enrolment.cases[0].enrolmentSignature);
+    for (const c of V.enrolment.cases) expect(verifyOrgServerEnrolment(c.request, c.code, c.enrolmentSignature), c.name).toBe(c.expect);
   });
 
   it("the seat's X-Wing seed derives from the UMK per org", () => {

@@ -25,6 +25,8 @@ import {
   signOrgApproval,
   signOrgReadTokenRequest,
   signOrgServerRegister,
+  signOrgServerEnrolment,
+  newOrgServerEnrolmentKey,
   signServerRevokeBySelf,
 } from "@flagship/protocol";
 import { OrgReadToken } from "../../../packages/server-daemon/src/orgReadToken.js";
@@ -171,10 +173,11 @@ export function orgReadFlow(o: OrgReadFlowOptions) {
     /** An org admin approves a server code; the stand-in box registers with it under its STK. */
     async registerBox(): Promise<string> {
       const at = now();
-      const code = { orgId, genesisHash, serial: `gymorg-${rand(8)}`, serverName: "home", serverDomain, delegatedPubKeyHex: rand(32), issuedAt: at, expiresAt: at + 6 * 60 * MIN };
+      const enrolment = newOrgServerEnrolmentKey();
+      const code = { orgId, genesisHash, serial: `gymorg-${rand(8)}`, serverName: "home", serverDomain, delegatedPubKeyHex: rand(32), enrolmentPubKeyHex: enrolment.pubKeyHex, issuedAt: at, expiresAt: at + 6 * 60 * MIN };
       expect(await call("POST", orgPath("servers/code"), { code, approvals: [approve(B, canonicalOrgServerCode(code as never), at)] }), 200, "issue the server code");
       const request = { orgId, serial: code.serial, serverDomain, codeSha256: orgServerCodeSha256(code as never), serverIdentityPubKeyHex: hex(stkPub), issuedAt: now(), nonceHex: rand(16) };
-      expect(await call("POST", orgPath("servers/register"), { request, signature: signOrgServerRegister(request as never, stkSeed) }), 200, "register the box");
+      expect(await call("POST", orgPath("servers/register"), { request, signature: signOrgServerRegister(request as never, stkSeed), enrolmentSignature: signOrgServerEnrolment(request as never, code as never, enrolment.seedHex) }), 200, "register the box");
       return serverDomain;
     },
 

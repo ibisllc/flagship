@@ -723,7 +723,7 @@
     },
     {
       "check": "signed-tags",
-      "key": "web:flagship/org-server-code/v1",
+      "key": "web:flagship/org-server-code/v2",
       "reason": "Org servers, key ring and audit export (docs/enterprise-accounts.md §5.4, §11, §18 E4): the webapp is keyless (no seat admin ML-DSA seed, no seat X-Wing key), so it can neither approve a server code or a rotation nor open a key-ring copy; phones (iOS OrgServers.swift, Android OrgServers.kt) and the TS shared code (rotateOrgKey) build and post them. The webapp shows the seat invitation only."
     },
     {

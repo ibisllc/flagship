@@ -41,7 +41,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/org-invite-withdraw/v1": "vectors: test-vectors/org-invite-key canonical; an org-approval order (seat-invite authority), forgery covered by org-approval",
   "flagship/org-seat-member/v1": "kdf: the seat member key's Ed25519 seed from the UMK, per org",
   "flagship/org-seat-member-pq/v1": "kdf: the seat member key's ML-DSA seed from the UMK, per org",
-  "flagship/org-server-code/v1": "bespoke AT-ENV-40 (orgForgery.test.ts: domain splice, another org's genesis, outsider, scoped seat without servers-add); vectors test-vectors/org-servers",
+  "flagship/org-server-code/v2": "bespoke AT-ENV-40 (orgForgery.test.ts: domain splice, another org's genesis, outsider, scoped seat without servers-add); vectors test-vectors/org-servers",
   "flagship/org-server-register/v1": "bespoke AT-ENV-41 (orgForgery.test.ts: another STK, domain swap, code-hash swap, bit flip); vectors test-vectors/org-servers",
   "flagship/org-seat-kem/v1": "bespoke AT-ENV-42 (orgForgery.test.ts: statement moved to another seat, KEM key swapped, departed seat); vectors test-vectors/org-servers",
   "flagship/org-box-kem/v1": "bespoke AT-ENV-42 (orgForgery.test.ts: another STK, KEM key swapped); vectors test-vectors/org-servers",
@@ -248,7 +248,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/messages-thread/v1": "kdf per-page thread X-Wing seed T",
   "flagship/voici-conv/v1": "hash conversation id H(pageId|Ppub)",
   // ---- enterprise org servers, key ring and audit (docs/enterprise-accounts.md; orgServersVectors.test.ts + test-vectors/org-servers)
-  "flagship/org-server-code/v1": "bespoke AT-ENV-32 (every field, separator shift, flipped or missing approval); vectors org-servers serverCodes (scope, outsider, another genesis, expired, approval of another code)",
+  "flagship/org-server-code/v2": "bespoke AT-ENV-32 (every field, separator shift, flipped or missing approval); vectors org-servers serverCodes (scope, outsider, another genesis, expired, approval of another code)",
   "flagship/org-server-register/v1": "bespoke AT-ENV-33 (flip, truncation, another box key, signer must be the named key, every field, separator shift)",
   "flagship/org-seat-kem/v1": "bespoke AT-ENV-34 (flip either hybrid half, every field, KEM key swapped); vectors: a statement under another seat's name",
   "flagship/org-box-kem/v1": "bespoke AT-ENV-34 (flip, another STK, another org, every field, KEM key swapped)",

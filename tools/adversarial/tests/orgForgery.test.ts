@@ -4,7 +4,7 @@
  * changes one thing an attacker controls (a field after approval, the signer, a spliced recipient),
  * then checks the verifier refuses it.
  *
- *   AT-ENV-40  org-server-code/v1: domain splice, another org's genesis, outsider, scoped seat
+ *   AT-ENV-40  org-server-code/v2: domain splice, another org's genesis, outsider, scoped seat
  *   AT-ENV-41  org-server-register/v1: another STK, domain swap, code-hash swap, bit flip
  *   AT-ENV-42  org-seat-kem/v1 and org-box-kem/v1: moved to another seat, KEM key swapped, another STK
  *   AT-ENV-43  org-key-ring/v1: recipient spliced after approval, retired seat dropped, commitment and scope swap
@@ -56,7 +56,7 @@ function ctx(now: number, revokes: unknown[] = []) {
   return { state, book, kems: P.newestOrgKems(keys), servers: new Set<string>(V.servers), now };
 }
 
-describe("AT-ENV-40 org-server-code/v1", () => {
+describe("AT-ENV-40 org-server-code/v2", () => {
   const good = V.serverCodes[0];
   const run = (code: P.OrgServerCode, approvals = good.approvals) => {
     const c = ctx(good.now);

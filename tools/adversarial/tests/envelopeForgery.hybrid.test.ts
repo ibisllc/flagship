@@ -19,7 +19,7 @@
  *   AT-ENV-29  rotate-rck/v1: either of the two signatures missing or swapped
  *   AT-ENV-30  MAC proofs (gossip/v2, enrollment-proof/v1, server-code-seen/v1): wrong key, truncated, case
  *   AT-ENV-31  box-claim-receipt/v1: flipped, spliced, relabelled, re-signed by another box key, any field changed
- *   AT-ENV-32  org-server-code/v1: any field changed, a separator shifted, a flipped approval, approval of another code
+ *   AT-ENV-32  org-server-code/v2: any field changed, a separator shifted, a flipped approval, approval of another code
  *   AT-ENV-33  org-server-register/v1: flipped, another box key, any field changed, a separator shifted
  *   AT-ENV-34  org-seat-kem/v1 and org-box-kem/v1: flipped, another signer, any field changed
  *   AT-ENV-35  org-key-ring/v1: any ring field changed, a flipped approval, a rolled-back version
@@ -611,7 +611,7 @@ describe("AT-ENV-32..36 enterprise org servers, key rings and audit export", () 
   const flipHex = (h: string, i = 0) => h.slice(0, i) + (h[i] === "0" ? "1" : "0") + h.slice(i + 1);
   const H32 = (c: string) => c.repeat(64);
 
-  describe("AT-ENV-32 org-server-code/v1 (the org's AuthCode, authorized by org approvals)", () => {
+  describe("AT-ENV-32 org-server-code/v2 (the org's AuthCode, authorized by org approvals)", () => {
     const c = V.serverCodes[0];
     const { state, book } = at(c.now);
     const verify = (code: unknown, approvals = c.approvals) => !throws(() => P.verifyOrgServerCode(state, book, code as never, approvals, c.now));
@@ -626,6 +626,7 @@ describe("AT-ENV-32..36 enterprise org servers, key rings and audit export", () 
         serverName: "work",
         serverDomain: "home.other.flagship.services",
         delegatedPubKeyHex: H32("e"),
+        enrolmentPubKeyHex: H32("f"),
         issuedAt: c.code.issuedAt + 1,
         expiresAt: c.code.expiresAt - 1,
       };
@@ -638,6 +639,7 @@ describe("AT-ENV-32..36 enterprise org servers, key rings and audit export", () 
         { ...c.code, serial: `${c.code.serial}|${c.code.serverName}` },
         { ...c.code, serverName: `${c.code.serverName}|x` },
         { ...c.code, serverDomain: `${c.code.serverDomain}|${c.code.delegatedPubKeyHex}` },
+        { ...c.code, delegatedPubKeyHex: `${c.code.delegatedPubKeyHex}|${c.code.enrolmentPubKeyHex}` },
       ];
       for (const x of shifted) expect(throws(() => P.canonicalOrgServerCode(x))).toBe(true);
     });

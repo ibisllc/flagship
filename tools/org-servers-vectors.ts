@@ -30,6 +30,8 @@ import {
   canonicalOrgServerRegister,
   orgServerCodeSha256,
   signOrgServerRegister,
+  signOrgServerEnrolment,
+  orgServerEnrolmentPubKey,
   type OrgServerCode,
 } from "../packages/protocol/src/orgServers.js";
 import {
@@ -119,6 +121,8 @@ const revokeS: OrgSeatRevokeBundle = (() => {
 void canonicalOrgSeatGrant;
 
 // ── server codes ─────────────────────────────────────────────────────────
+// The enrolment key the admin's client makes for the code; its seed rides only in the recipe.
+const enrolmentSeedHex = hex(fill(32, 0x6e));
 const code: OrgServerCode = {
   orgId: ORG,
   genesisHash: GENESIS,
@@ -126,6 +130,7 @@ const code: OrgServerCode = {
   serverName: "home",
   serverDomain: SERVER,
   delegatedPubKeyHex: "d1".repeat(32),
+  enrolmentPubKeyHex: orgServerEnrolmentPubKey(enrolmentSeedHex),
   issuedAt: AT,
   expiresAt: AT + 12 * HOUR,
 };
@@ -160,7 +165,7 @@ const blobBase = {
   code,
 };
 const blobOrder = canonicalOrgInstallBlob(blobBase);
-const installBlob = { ...blobBase, codeApprovals: serverCodes[0]!.approvals, approvals: [approve(B, blobOrder, 1, AT)] };
+const installBlob = { ...blobBase, codeApprovals: serverCodes[0]!.approvals, approvals: [approve(B, blobOrder, 1, AT)], enrolmentSeedHex };
 const installBlobs = [
   { name: "the recipe and its code, each approved by an org admin", blob: installBlob, now: AT + 3 * DAY, expect: { ok: true } },
   { name: "the installer commit changed after approval", blob: { ...installBlob, installerGitRef: "c1".repeat(20) }, now: AT + MIN, expect: no("order-mismatch") },
@@ -172,6 +177,18 @@ const stkSeed = fill(32, 0x5e);
 const stkPub = hex(ed25519.getPublicKey(stkSeed));
 const register = { orgId: ORG, serial: code.serial, serverDomain: SERVER, codeSha256: orgServerCodeSha256(code), serverIdentityPubKeyHex: stkPub, issuedAt: AT + 30 * MIN, nonceHex: "ab".repeat(16) };
 const registerSig = signOrgServerRegister(register, stkSeed);
+const enrolmentSig = signOrgServerEnrolment(register, code, enrolmentSeedHex);
+// The same registration signed by a key that is not the enrolment key (anyone who only saw the code).
+const wrongKeySig = hex(ed25519.sign(canonicalOrgServerRegister(register), fill(32, 0x6f)));
+// A code from another org with the same enrolment key: the registration names this org's code, so it fails.
+const otherOrgCode: OrgServerCode = { ...code, orgId: "0b".repeat(16) };
+const enrolment = [
+  { name: "the box signs with the recipe's enrolment key", code, request: register, enrolmentSignature: enrolmentSig, expect: true },
+  { name: "no enrolment signature", code, request: register, enrolmentSignature: null, expect: false },
+  { name: "signed by another key", code, request: register, enrolmentSignature: wrongKeySig, expect: false },
+  { name: "the STK's own signature in its place", code, request: register, enrolmentSignature: registerSig, expect: false },
+  { name: "a code from another org", code: otherOrgCode, request: register, enrolmentSignature: enrolmentSig, expect: false },
+];
 
 // ── KEM keys ─────────────────────────────────────────────────────────────
 const umk = fill(32, 0x42);
@@ -325,7 +342,7 @@ const canonical = [
 
 const doc = {
   description:
-    "Org servers, the org key ring and the audit export (docs/enterprise-accounts.md). Uses org-authority/vectors.json: its keys, chains[0].entries[0..1] (v0, v1) and seatBooks[0]'s grants [M, S]. serverCodes: verifyOrgServerCode(state, book, code, approvals, now). installBlobs: verifyOrgInstallBlob(state, book, blob, now). register: verifyOrgServerRegister(request, signature) with an Ed25519 STK from seed 5e*32. kems: verifyOrgSeatKem / verifyOrgBoxKem (STK above). keyRings: verifyOrgKeyRing(ctx, bundle, prev, {fresh}) with ctx = state, seat book (grants [M, S] + revokes), newest KEM keys, servers [home, other] at now. rotations: orgRotationDone over buildOrgKeyRings(ctx with revokes [revokeS]). opens: openOrgKeyRing(ring, recipient, X-Wing secret from kemSeedHex) returns keyHex. audit: verifyOrgAuditExport(export, {genesisHash, now}); box log head: the box's Activity chain (orgBoxLogEntryHash over each line's sha256) signed with the STK above.",
+    "Org servers, the org key ring and the audit export (docs/enterprise-accounts.md). Uses org-authority/vectors.json: its keys, chains[0].entries[0..1] (v0, v1) and seatBooks[0]'s grants [M, S]. serverCodes: verifyOrgServerCode(state, book, code, approvals, now). installBlobs: verifyOrgInstallBlob(state, book, blob, now). register: verifyOrgServerRegister(request, signature) with an Ed25519 STK from seed 5e*32. enrolment: the code's enrolmentPubKeyHex is Ed25519 from seedHex (6e*32, only in the recipe as enrolmentSeedHex); each case is verifyOrgServerEnrolment(request, code, enrolmentSignature) (an Ed25519 signature over the register bytes under code.enrolmentPubKeyHex, the code's sha256, org, serial and domain matching the request) === expect. kems: verifyOrgSeatKem / verifyOrgBoxKem (STK above). keyRings: verifyOrgKeyRing(ctx, bundle, prev, {fresh}) with ctx = state, seat book (grants [M, S] + revokes), newest KEM keys, servers [home, other] at now. rotations: orgRotationDone over buildOrgKeyRings(ctx with revokes [revokeS]). opens: openOrgKeyRing(ring, recipient, X-Wing secret from kemSeedHex) returns keyHex. audit: verifyOrgAuditExport(export, {genesisHash, now}); box log head: the box's Activity chain (orgBoxLogEntryHash over each line's sha256) signed with the STK above.",
   orgId: ORG,
   genesisHash: GENESIS,
   servers: [SERVER, OTHER],
@@ -334,6 +351,7 @@ const doc = {
   serverCodes,
   installBlobs,
   register: { request: register, signature: registerSig, stkSeedHex: hex(stkSeed), flipped: registerSig.slice(0, 127) + (registerSig[127] === "0" ? "1" : "0") },
+  enrolment: { seedHex: enrolmentSeedHex, pubKeyHex: code.enrolmentPubKeyHex, cases: enrolment },
   seatKemSeed: { umkHex: hex(umk), seedHex: hex(seatKemSeed), kemKeyId: orgKemKeyPair(seatKemSeed).kemKeyId },
   kems: { seat: seatKems, box: boxKems },
   keyRings,
