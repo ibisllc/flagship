@@ -491,7 +491,7 @@ describe("a connector whose approver left", () => {
     const v2At: number = entries[2].record.issuedAt;
     const pinAt = (now: number) =>
       verifyOrgPin(
-        { v: 1, orgId: A.orgId, genesisHash: A.genesisHash, entries, freezes: [], overturns: [], vetoes: [], grants: R(A.seatBooks[0]).grants, revokes: [], rotationsPending: [], syncedAt: now },
+        { v: 1, orgId: A.orgId, genesisHash: A.genesisHash, entries, freezes: [], overturns: [], vetoes: [], grants: R(A.seatBooks[0]).grants, revokes: [], noticeOpenedAt: chain.noticeOpenedAt, rotationsPending: [], syncedAt: now },
         { orgId: A.orgId, genesisHash: A.genesisHash },
         now,
       );
