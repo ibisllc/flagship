@@ -157,8 +157,10 @@ over once "let's start 0.5" is said.
   input carries the observed open time in every verifier (TS protocol, daemon pin, Swift, Kotlin, webapp bundle).
   Pending approvals and vetoes refuse `notAfter < now` and test the freeze at the signed time or now (as
   `authorizeOrgOrder` does); records get a two-sided `issuedAt` bound. Vectors: a backdated notice, a late veto that
-  must count, an evaded freeze. Owner to decide: may several removals run their windows at once, or one at a time
-  (recommended)?
+  must count, an evaded freeze. One at a time (owner, 2026-11-27): while one delayed-change notice is open (observed,
+  not yet executed, vetoed or withdrawn), `.com` refuses to open another for that org, and the protocol rule holds it
+  in every verifier: a delayed change's observed open time must be at or after the previous one's execution. Vector:
+  two notices opened in parallel, the second is refused.
 - **Per-app visitor identity scoped to the hosting account** (external report, 2026-11-27). App AID v2 =
   HKDF(UMK, `flagship/app-aid/v2|<accountZone>|<appRef>`) in all four twins, their consumers and vectors; a flag day
   (owner: breaking is fine). Settle the zone for fshp.app, custom domains and org zones first.
