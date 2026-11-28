@@ -81,6 +81,20 @@ describe("org authority pin on the box", () => {
     expect(() => mergeOrgServed(first, served({ entries: forked.entries }), expected, NOW)).toThrow(/differs at version 1/);
   });
 
+  it("takes a founder removal only with the notice time .com observed, and keeps the first one it saw", () => {
+    const first = mergeOrgServed(null, served(), expected, NOW).pinned;
+    // Served without its observed open time, the removal is not adopted: the box keeps v1.
+    const unobserved = mergeOrgServed(first, served({ entries: chain.entries.slice(0, 3) }), expected, NOW).pinned;
+    expect(unobserved.state.current.version).toBe(1);
+    const observed = mergeOrgServed(first, served({ entries: chain.entries.slice(0, 3), noticeOpenedAt: chain.noticeOpenedAt }), expected, NOW).pinned;
+    expect(observed.state.current.version).toBe(2);
+    // A later answer moving the open time cannot shift the window the box already holds.
+    const [sha, at] = Object.entries(chain.noticeOpenedAt as Record<string, number>)[0]!;
+    const moved = mergeOrgServed(observed, served({ entries: chain.entries.slice(0, 3), noticeOpenedAt: { [sha]: at + 3 * 86_400_000 } }), expected, NOW).pinned;
+    expect(moved.file.noticeOpenedAt).toEqual({ [sha]: at });
+    expect(moved.state.current.version).toBe(2);
+  });
+
   it("keeps a revoke .com later drops", () => {
     const first = mergeOrgServed(null, served({ revokes: books[3].revokes }), expected, NOW).pinned;
     expect(first.book.seats.size).toBe(0);

@@ -39,6 +39,8 @@ export interface OrgPinFile {
   vetoes: OrgSigned<OrgVeto>[];
   grants: OrgSeatGrantBundle[];
   revokes: OrgSeatRevokeBundle[];
+  /** When `.com` observed each delayed-change notice open, by its sha256 (the first time this box saw wins). */
+  noticeOpenedAt?: Record<string, number>;
   /** Seats whose departure still needs a rotation, and what is left to rotate. */
   rotationsPending: OrgRotationPending[];
   syncedAt: number;
@@ -77,6 +79,7 @@ export function verifyOrgPin(file: OrgPinFile, expected: { orgId: string; genesi
     freezes: file.freezes,
     overturns: file.overturns,
     vetoes: file.vetoes,
+    noticeOpenedAt: file.noticeOpenedAt ?? {},
   });
   if (state.orgId !== expected.orgId) throw new OrgPinError("wrong-org", "the chain names another org");
   const book = buildOrgSeatBook(state, { grants: file.grants, revokes: file.revokes, freezes: file.freezes, overturns: file.overturns, now });
@@ -117,6 +120,7 @@ export interface OrgServed {
   vetoes: OrgSigned<OrgVeto>[];
   grants: OrgSeatGrantBundle[];
   revokes: OrgSeatRevokeBundle[];
+  noticeOpenedAt?: Record<string, number>;
 }
 
 export interface OrgSyncResult {
@@ -131,6 +135,13 @@ const keyOf = (o: unknown) => JSON.stringify(o);
 function union<T>(a: readonly T[], b: readonly T[]): T[] {
   const seen = new Set(a.map(keyOf));
   return [...a, ...b.filter((x) => !seen.has(keyOf(x)))];
+}
+
+function observedTimes(m: unknown): Record<string, number> {
+  if (!m || typeof m !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(m as Record<string, unknown>).filter(([k, v]) => /^[0-9a-f]{64}$/.test(k) && typeof v === "number" && Number.isSafeInteger(v) && v >= 0),
+  ) as Record<string, number>;
 }
 
 /**
@@ -180,6 +191,8 @@ export function mergeOrgServed(
     vetoes: union(old?.vetoes ?? [], served.vetoes),
     grants: union(old?.grants ?? [], served.grants),
     revokes: union(old?.revokes ?? [], served.revokes),
+    // An observed open time this box already holds stays: a `.com` that later serves another cannot move a window.
+    noticeOpenedAt: { ...observedTimes(served.noticeOpenedAt), ...(old?.noticeOpenedAt ?? {}) },
     rotationsPending: old?.rotationsPending ?? [],
     syncedAt: now,
   };
@@ -383,6 +396,7 @@ export async function startOrgAuthoritySync(opts: {
               vetoes: (a.vetoes ?? []) as OrgServed["vetoes"],
               grants: (s.grants ?? []) as OrgServed["grants"],
               revokes: (s.revokes ?? []) as OrgServed["revokes"],
+              noticeOpenedAt: (a.noticeOpenedAt ?? {}) as Record<string, number>,
             };
           },
         },
