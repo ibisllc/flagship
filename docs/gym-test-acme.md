@@ -27,6 +27,14 @@ Option D, code side; nothing deployed. Where the build differs from the plan bel
 - **Item 8**: `gym-refresh.sh` step 5b restarts Pebble when `wrangler.gym.toml` names it; the D1 row deletion is not
   needed (item 1).
 
+**Deployed 2026-11-28:** `flagship-acme-gym` is live on Fly (one `shared-cpu-1x` 256 MB machine, iad; shared v4
+`66.241.124.46`, dedicated v6). Checked publicly: `/dir`, `/nonce-plz`, `/roots/0`, `/intermediates/0` answer;
+`/root-keys/0`, `/intermediate-keys/0`, `/`, dot-segment and percent-encoded paths are 404. The first deploy found
+Pebble naming `http://127.0.0.1:14000` in its directory (Caddy sent the upstream's Host and `http`): the ACME door now
+sets `Host {host}` and `X-Forwarded-Proto https`, and the issuance client made an account and an order against it. The
+gym branch names it in `wrangler.gym.toml` and carries the box seam (`gymAcmeTrust.ts`); the gym Worker picks it up at
+the next `gym-refresh.sh`.
+
 ## What exists today (and makes this cheap)
 
 - In 0.3 only `.com` talks to the CA. The box makes a key and a CSR and polls `.com` (`packages/server-daemon/src/acme/serviceIssuer.ts:5-11`, `runtime.ts:1343-1363`). The box-side `acmeEnvironment` / `FLAGSHIP_ACME_STAGING` (`index.ts:494`) and the keyd LE host allowlist (`packages/keyd/src/acme.ts:17`, `rust/crates/flagship-keyd/src/acme.rs:22`) belong to the old box-side ACME path, which nothing on that path calls any more. The change therefore sits in one place.
