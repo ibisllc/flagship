@@ -5,7 +5,7 @@
 // `getSession()` to read; the bootstrap/unlock flow calls `unlock()`
 // to populate; `lock()` clears.
 
-import { deriveIrkFromSeed } from "../keystore.js";
+import { deriveIrkFromSeed, resolveUmkChain } from "../keystore.js";
 import { loadAdminRootKey } from "./keyCustody.js";
 import {
   get as storeGet,
@@ -34,6 +34,11 @@ export function getSession() {
 }
 
 export async function unlockSession(seed, username) {
+  // A PIN or an imported key may open an account key this browser has since replaced: follow its links to the
+  // current one (keystore.js resolveUmkChain), so nothing signs with a retired key.
+  try {
+    seed = (await resolveUmkChain(seed)).umk;
+  } catch { /* no keystore: the key as given */ }
   _session.umk = seed;
   _session.irk = await deriveIrkFromSeed(seed);
   // Per-profile resolution: prefer the explicit arg, then the active

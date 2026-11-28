@@ -32,7 +32,8 @@
 // mismatched local + server keys (this matches the iOS conservative
 // install pattern: keystore swap happens AFTER server-success only).
 
-import { OWN_IRK_SCHEME, bytesToHex, deriveIrkFromSeed, deriveIrkInScheme, hkdf32 } from "../keystore.js";
+import { OWN_IRK_SCHEME, bytesToHex, deriveIrkFromSeed, deriveIrkInScheme, hkdf32, signWithAdminRoot } from "../keystore.js";
+import { isAdminRootKey } from "./keyCustody.js";
 import { requireOwnerProfile } from "./companionGuard.js";
 import { controlApex } from "./apex.js";
 
@@ -175,6 +176,11 @@ export async function runWipeRestartCeremony(args, deps = {}) {
   const sigBytes = new Uint8Array(
     await crypto.subtle.sign({ name: "Ed25519" }, oldIrk.privateKey, canonical),
   );
+  // Every device of the account can derive the old IRK, so on an account that pins an admin root `.com` also
+  // needs the admin root's signature over the same bytes (adminRootSignature).
+  const adminSig = isAdminRootKey(args.adminRootSeed)
+    ? await (deps.signWithAdminRoot || signWithAdminRoot)(args.adminRootSeed, canonical)
+    : null;
 
   // 4 — POST.
   const idempotencyKey = (deps.newIdempotencyKey || newIdempotencyKey)();
@@ -193,6 +199,7 @@ export async function runWipeRestartCeremony(args, deps = {}) {
       issuedAt,
     },
     signature: bytesToHex(sigBytes),
+    ...(adminSig ? { adminRootSignature: bytesToHex(adminSig) } : {}),
     idempotencyKey,
     // SEC-REPAIR-001: the new passkey's public key, bound by the credential id the old key signed, so
     // the new recovery record keeps `.com`'s passkey check.

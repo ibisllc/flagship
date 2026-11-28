@@ -15,7 +15,7 @@
 // "Browser: software key, unlocked with a passkey".
 
 import { tr } from "./i18n.js";
-import { adminRootRecordKey, activeProfileId, hkdf32, kvGet, kvPut, loadAdminRootSeed, adminRootPubHex, bytesToHex, hexToBytes } from "../keystore.js";
+import { adminRootRecordKey, activeProfileId, hkdf32, kvGet, kvPut, loadAdminRootSeed, adminRootPubHex, bytesToHex, hexToBytes, retiredUmksFor } from "../keystore.js";
 
 // Loaded on first use, so the unlock path stays light.
 const mldsaPublicKey = async (seed) => (await import("./mldsaWasm.js")).mldsaPublicKey(seed);
@@ -171,6 +171,20 @@ async function unseal(record, prf, umk) {
   return { edSeed, mldsaSeed };
 }
 
+/** `unseal` under the current account key, else under a retired one (`resealed: true`: seal it again). */
+async function unsealAnyEpoch(record, prf, umk) {
+  try {
+    return await unseal(record, prf, umk);
+  } catch (first) {
+    for (const old of retiredUmksFor(umk)) {
+      try {
+        return { ...(await unseal(record, prf, old)), resealed: true };
+      } catch { /* an older key */ }
+    }
+    throw first;
+  }
+}
+
 /** True for a version 2 (passkey-sealed) admin-root record. */
 export function isCustodyRecord(r) {
   return !!r && r.version === RECORD_VERSION && r.custody === CUSTODY_BROWSER && typeof r.credentialId === "string";
@@ -288,7 +302,13 @@ export async function loadAdminRootKey(umkGetter, { profileId, userName = "Flags
           throw normalize(e);
         }
         try {
-          const seeds = await unseal(record, got.prf, umk);
+          const seeds = await unsealAnyEpoch(record, got.prf, umk);
+          if (seeds.resealed) {
+            // Sealed under an account key that has since been replaced: seal it again under the current one.
+            record = await seal(record, got.prf, umk, seeds.edSeed, seeds.mldsaSeed);
+            await kvPut(recordKey, record);
+          }
+          delete seeds.resealed;
           if (record.pqBound !== true && record.pqBound !== false) {
             const bound = await bind(record, seeds);
             if (bound !== null) {
@@ -409,9 +429,12 @@ export async function openUnderPasskey({ recordKey, umk }) {
     throw normalize(e);
   }
   try {
-    const key = await kek(got.prf, umk);
-    return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: hexToBytes(r.nonce), additionalData: new TextEncoder().encode(`${KEK_INFO}|${r.label}`) }, key, hexToBytes(r.ciphertext)));
-  } catch {
+    for (const k of [umk, ...retiredUmksFor(umk)]) {
+      try {
+        const key = await kek(got.prf, k);
+        return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: hexToBytes(r.nonce), additionalData: new TextEncoder().encode(`${KEK_INFO}|${r.label}`) }, key, hexToBytes(r.ciphertext)));
+      } catch { /* an older account key */ }
+    }
     throw fail("custody-wrong-passkey");
   } finally {
     got.prf.fill(0);

@@ -56,6 +56,7 @@ export const TAKEOVER_IRK_VERSION = 2;
  *  a normal `ukey.dkey`. Reach enforcement is Phase 4+ / server-side —
  *  here we record the label on the local profile. */
 import { generateDeviceId } from "./accountMetadata.js";
+import { ensureRandomAccountDeviceSeed } from "../keystore.js";
 import { askLocalPassphrase, isLocalPassphrase } from "./localPassphrase.js";
 
 import { tr } from "./i18n.js";
@@ -417,8 +418,10 @@ export async function runTakeover(resolution, deps) {
     rePair = await initiateRePair({ ...initiateArgs, totpProof: proof });
   }
 
-  // 5 — mint an account-scoped opaque identity for this membership.
+  // 5 — mint an account-scoped opaque identity for this membership, with a random device key.
   const deviceId = generateDeviceId();
+  if (typeof deps.ensureDeviceSeed === "function") await deps.ensureDeviceSeed(seed, username, deviceId);
+  else await ensureRandomAccountDeviceSeed(seed, username, deviceId);
   if (typeof deps.addProfile === "function") {
     deps.addProfile({
       cloudName: username,

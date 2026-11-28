@@ -26,6 +26,7 @@
 
 import { initiateRePair, isCredentialRequiredError } from "./loginTakeover.js";
 import { generateDeviceId } from "./accountMetadata.js";
+import { ensureRandomAccountDeviceSeed } from "../keystore.js";
 import { controlApex } from "./apex.js";
 import {
   OWN_IRK_SCHEME,
@@ -171,6 +172,8 @@ export async function runKeyfileImportTakeover(args) {
   }
 
   const deviceId = generateDeviceId();
+  if (typeof args.ensureDeviceSeed === "function") await args.ensureDeviceSeed(seed, username, deviceId);
+  else await ensureRandomAccountDeviceSeed(seed, username, deviceId);
   const profile = {
     cloudName: username,
     cloudRootPubHex: oldIrk.pubHex,

@@ -38,6 +38,8 @@ import {
 import {
   deriveAccountDeviceKeyFromSeed,
   deriveAccountIdFromSeed,
+  deriveAdminRootFromSeed,
+  persistAccountDeviceSeed,
   signWithAdminRoot,
 } from "../keystore.js";
 
@@ -171,12 +173,21 @@ export async function openAccount(username, deps) {
   const identity = pendingIdentityFor(username, toHex(session.irk.publicKey), () => ({
     deviceId: (deps.generateDeviceId || generateDeviceId)(),
     grantId: (deps.randomUUID || crypto.randomUUID.bind(crypto))(),
+    // The account device key is random (docs/account-key-rotation.md): one derived from the account key would
+    // be known to every holder of that key, and an account key change could not keep this device.
+    deviceSeed: crypto.getRandomValues(new Uint8Array(32)),
   }));
   const deviceId = identity.deviceId;
-  const deriveDeviceKey = deps.deriveAccountDeviceKeyFromSeed || deriveAccountDeviceKeyFromSeed;
   const deriveAid = deps.deriveAccountIdFromSeed || deriveAccountIdFromSeed;
   const signAdmin = deps.signWithAdminRoot || signWithAdminRoot;
-  const deviceKey = await deriveDeviceKey(session.umk, username, deviceId);
+  let deviceKey;
+  if (deps.deriveAccountDeviceKeyFromSeed) {
+    deviceKey = await deps.deriveAccountDeviceKeyFromSeed(session.umk, username, deviceId);
+  } else {
+    // Kept (wrapped under the account key) before `.com` hears of it, so a retry or a reload signs with it.
+    await (deps.persistAccountDeviceSeed || persistAccountDeviceSeed)(session.umk, username, deviceId, identity.deviceSeed);
+    deviceKey = await deriveAdminRootFromSeed(identity.deviceSeed);
+  }
   const aid = await deriveAid(session.umk);
   const issuedAt = Date.now();
   const grant = {

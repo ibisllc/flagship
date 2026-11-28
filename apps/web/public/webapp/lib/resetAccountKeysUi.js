@@ -114,7 +114,7 @@ export async function runResetAccountKeys({ progress = () => {} } = {}) {
   if (!newLocalPass) return { done: false };
 
   progress(tr("Registering new passkey…"));
-  const result = await runWipeRestartCeremony({ username: session.username, umk: session.umk });
+  const result = await runWipeRestartCeremony({ username: session.username, umk: session.umk, adminRootSeed: session.adminRootSeed });
   progress(tr("Server accepted; installing locally…"));
   try {
     await resetDevice();

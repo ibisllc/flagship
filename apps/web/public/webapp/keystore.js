@@ -560,10 +560,9 @@ async function loadAccountDeviceSeed(umkSeed, accountId, deviceId) {
       accountDeviceSeedCache.set(recordKey, { umkHex, seed: null });
       return null;
     }
-    const kek = await accountDeviceSeedWrapKey(umkSeed);
-    const seed = new Uint8Array(await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: hexToBytes(blob.nonce) }, kek, hexToBytes(blob.ciphertext),
-    ));
+    const seed = await withRetiredUmks(umkSeed, async (k) => new Uint8Array(await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: hexToBytes(blob.nonce) }, await accountDeviceSeedWrapKey(k), hexToBytes(blob.ciphertext),
+    )));
     accountDeviceSeedCache.set(recordKey, { umkHex, seed: seed.slice() });
     return seed;
   } catch {
@@ -582,13 +581,19 @@ export async function sealDeviceSecret(umkSeed, info, recordKey, plaintext) {
   return { version: 1, nonce: bytesToHex(nonce), ciphertext: bytesToHex(ct) };
 }
 
-export async function openDeviceSecret(umkSeed, info, recordKey, blob) {
+async function openDeviceSecretWith(umkSeed, info, recordKey, blob) {
   const kek = await crypto.subtle.importKey("raw", await hkdf32(umkSeed, info), { name: "AES-GCM" }, false, ["decrypt"]);
   return new Uint8Array(await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: hexToBytes(blob.nonce), additionalData: new TextEncoder().encode(recordKey) },
     kek,
     hexToBytes(blob.ciphertext),
   ));
+}
+
+/** Opens what {@link sealDeviceSecret} sealed: under `umkSeed`, else under one of its retired account keys
+ *  (a secret kept before the account key changed stays readable). */
+export async function openDeviceSecret(umkSeed, info, recordKey, blob) {
+  return withRetiredUmks(umkSeed, (k) => openDeviceSecretWith(k, info, recordKey, blob));
 }
 
 /** Sign canonical-bytes with this device's account device key. */
@@ -880,13 +885,11 @@ export async function loadAdminRootSeed(umkSeed, profileId = activeProfileId()) 
     // Sealed under a passkey: only lib/keyCustody.js opens it, for one action.
     throw Object.assign(new Error("admin root is sealed under a passkey"), { code: "custody-sealed" });
   }
-  const kek = await adminRootWrapKey(umkSeed);
   const nonce = hexToBytes(blob.nonce);
   const ct = hexToBytes(blob.ciphertext);
-  const pt = new Uint8Array(
-    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, kek, ct),
-  );
-  return pt;
+  return withRetiredUmks(umkSeed, async (k) => new Uint8Array(
+    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, await adminRootWrapKey(k), ct),
+  ));
 }
 
 /** Derive the admin master-root Ed25519 keypair from its raw 32-byte seed. The
@@ -943,6 +946,195 @@ export async function signWithAdminRoot(adminSeed, canonicalBytes) {
   );
 }
 
+/* ---------- account key epochs (docs/account-key-rotation.md) ----------
+ *
+ * The passphrase (and a PIN) keep wrapping the account key this browser first held. When an admin device
+ * changes the account key, the new key is kept as a link from the old one: AES-GCM under a key derived from
+ * the old account key, in one record per profile. Every unlock follows the links to the current key, so the
+ * passphrase, a PIN and the old key's local secrets keep working, and the old keys stay reachable (retired,
+ * same custody) for what they sealed before: device secrets, server pins, old backups.
+ */
+const UMK_SUCCESSORS_KEY = "umkSuccessors";
+const UMK_SUCCESSOR_WRAP_INFO = "flagship.umk-successor-wrap.v1";
+const UMK_FINGERPRINT_INFO = "flagship.umk-fingerprint.v1";
+const UMK_PENDING_KEY = "umkPendingRotation";
+const UMK_PENDING_WRAP_INFO = "flagship.umk-pending-wrap.v1";
+const MAX_UMK_LINKS = 64;
+const retiredByUmk = new Map();
+
+export function umkSuccessorsRecordKey(profileId = activeProfileId()) {
+  return `${UMK_SUCCESSORS_KEY}.${profileId}`;
+}
+
+export function umkPendingRecordKey(profileId = activeProfileId()) {
+  return `${UMK_PENDING_KEY}.${profileId}`;
+}
+
+/** A public name for an account key (never the key): which link starts from it. */
+export async function umkFingerprint(umkSeed) {
+  return bytesToHex((await hkdf32(umkSeed, UMK_FINGERPRINT_INFO)).slice(0, 16));
+}
+
+/** The account keys this one replaced, newest first (empty for a key that never changed here). */
+export function retiredUmksFor(umkSeed) {
+  if (!(umkSeed instanceof Uint8Array)) return [];
+  return (retiredByUmk.get(bytesToHex(umkSeed)) ?? []).map((r) => r.umk.slice());
+}
+
+/** `fn(key)` with the current account key, then with each retired one; the first that does not throw wins. */
+async function withRetiredUmks(umkSeed, fn) {
+  try {
+    return await fn(umkSeed);
+  } catch (first) {
+    for (const old of retiredUmksFor(umkSeed)) {
+      try {
+        return await fn(old);
+      } catch { /* the next older key */ }
+    }
+    throw first;
+  }
+}
+
+function rememberRetired(current, retired) {
+  retiredByUmk.set(bytesToHex(current), retired.map((r) => ({ epoch: r.epoch, umk: r.umk.slice() })));
+}
+
+/**
+ * Follows the links from `seed` to the profile's current account key. Returns `{ umk, epoch, retired }`:
+ * `epoch` is the key epoch of the last link followed (0 when there is none), `retired` the keys passed on
+ * the way, newest first, each with its epoch.
+ */
+export async function resolveUmkChain(seed, profileId = activeProfileId()) {
+  if (!(seed instanceof Uint8Array) || seed.length !== 32) throw new Error("seed must be a 32-byte Uint8Array");
+  let record = null;
+  try {
+    record = typeof indexedDB === "undefined" ? null : await dbGet(umkSuccessorsRecordKey(profileId));
+  } catch {
+    record = null;
+  }
+  const links = Array.isArray(record?.links) ? record.links : [];
+  let umk = seed;
+  let epoch = 0;
+  const retired = [];
+  for (let i = 0; i < MAX_UMK_LINKS; i++) {
+    const fp = await umkFingerprint(umk);
+    const link = links.find((l) => l.fromFp === fp);
+    if (!link) break;
+    let next;
+    try {
+      next = await openDeviceSecretWith(umk, UMK_SUCCESSOR_WRAP_INFO, `${umkSuccessorsRecordKey(profileId)}|${fp}`, link);
+    } catch {
+      break;
+    }
+    retired.unshift({ epoch: link.toEpoch - 1, umk });
+    umk = next;
+    epoch = link.toEpoch;
+  }
+  // Keys this browser pulled forward through older links (a key restored from a backup) stay retired too.
+  rememberRetired(umk, [...retired, ...(retiredByUmk.get(bytesToHex(umk)) ?? []).filter((r) => !retired.some((x) => bytesToHex(x.umk) === bytesToHex(r.umk)))]);
+  return { umk, epoch, retired };
+}
+
+/** The profile's current key epoch as this browser knows it (the last link's), or 0. */
+export async function localKeyEpoch(profileId = activeProfileId()) {
+  try {
+    const record = await dbGet(umkSuccessorsRecordKey(profileId));
+    const links = Array.isArray(record?.links) ? record.links : [];
+    return links.reduce((m, l) => Math.max(m, Number(l.toEpoch) || 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Makes `newUmk` the profile's current account key: a link from `oldUmk` (which becomes retired, reachable
+ * only through the same passphrase or PIN). Idempotent for the same pair.
+ */
+export async function installSuccessorUmk(oldUmk, newUmk, toEpoch, profileId = activeProfileId()) {
+  if (!(newUmk instanceof Uint8Array) || newUmk.length !== 32) throw new Error("new account key must be 32 bytes");
+  if (!Number.isSafeInteger(toEpoch) || toEpoch < 1) throw new Error("bad key epoch");
+  const recordKey = umkSuccessorsRecordKey(profileId);
+  const record = (await dbGet(recordKey)) ?? { version: 1, links: [] };
+  const fp = await umkFingerprint(oldUmk);
+  const links = (Array.isArray(record.links) ? record.links : []).filter((l) => l.fromFp !== fp);
+  const sealed = await sealDeviceSecret(oldUmk, UMK_SUCCESSOR_WRAP_INFO, `${recordKey}|${fp}`, newUmk);
+  links.push({ fromFp: fp, toEpoch, ...sealed });
+  await dbPut(recordKey, { version: 1, links });
+  rememberRetired(newUmk, [{ epoch: toEpoch - 1, umk: oldUmk }, ...(retiredByUmk.get(bytesToHex(oldUmk)) ?? [])]);
+}
+
+/**
+ * The rotator's pending slot: the new account key (sealed under the current one) and the exact request body,
+ * kept until `.com` answered, so a crash after `.com` applied it still ends on the new key.
+ */
+export async function putPendingRotation(umkSeed, { newUmk, toEpoch, body, issuedAt }, profileId = activeProfileId()) {
+  const recordKey = umkPendingRecordKey(profileId);
+  const sealed = await sealDeviceSecret(umkSeed, UMK_PENDING_WRAP_INFO, recordKey, newUmk);
+  await dbPut(recordKey, { version: 1, fromFp: await umkFingerprint(umkSeed), toEpoch, issuedAt, body: JSON.stringify(body), ...sealed });
+}
+
+/** `{ newUmk, toEpoch, issuedAt, body }`, or null when no rotation is pending from this key. */
+export async function loadPendingRotation(umkSeed, profileId = activeProfileId()) {
+  const recordKey = umkPendingRecordKey(profileId);
+  const record = await dbGet(recordKey);
+  if (!record || record.fromFp !== (await umkFingerprint(umkSeed))) return null;
+  try {
+    const newUmk = await openDeviceSecretWith(umkSeed, UMK_PENDING_WRAP_INFO, recordKey, record);
+    return { newUmk, toEpoch: record.toEpoch, issuedAt: record.issuedAt, body: JSON.parse(record.body) };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearPendingRotation(profileId = activeProfileId()) {
+  await dbDel(umkPendingRecordKey(profileId));
+}
+
+/* ---------- the receive key (flagship/device-receive-key/v1) ---------- */
+
+const RECEIVE_KEY_RECORD = "receiveKey";
+const RECEIVE_KEY_WRAP_INFO = "flagship.receive-key-wrap.v1";
+
+function receiveKeyRecordKey(accountId, deviceId) {
+  return `${RECEIVE_KEY_RECORD}.${String(accountId).toLowerCase()}|${deviceId}`;
+}
+
+/** This device's X-Wing receive-key seed for the account (32 bytes), sealed like its other local secrets, or null. */
+export async function loadReceiveKeySeed(umkSeed, accountId, deviceId) {
+  const recordKey = receiveKeyRecordKey(accountId, deviceId);
+  const blob = await dbGet(recordKey);
+  if (!blob) return null;
+  try {
+    return { seed: await openDeviceSecret(umkSeed, RECEIVE_KEY_WRAP_INFO, recordKey, blob), publishedFor: blob.publishedFor ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/** Keep the receive-key seed; `publishedFor` records the device key `.com` last accepted it under. */
+export async function persistReceiveKeySeed(umkSeed, accountId, deviceId, seed, publishedFor = null) {
+  const recordKey = receiveKeyRecordKey(accountId, deviceId);
+  await dbPut(recordKey, { ...(await sealDeviceSecret(umkSeed, RECEIVE_KEY_WRAP_INFO, recordKey, seed)), publishedFor });
+}
+
+/** Give a device id made on this browser a random account device key before anything signs with it (a recovered
+ *  or imported account), unless one is stored already. Best-effort: without storage the old derivation stays. */
+export async function ensureRandomAccountDeviceSeed(umkSeed, accountId, deviceId) {
+  try {
+    if (await loadAccountDeviceSeed(umkSeed, accountId, deviceId)) return false;
+    await persistAccountDeviceSeed(umkSeed, accountId, deviceId, randomBytes(32));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** True when this device keeps its account device key as a stored seed (random, or carried over), rather than
+ *  deriving it from the account key. */
+export async function accountDeviceSeedIsStored(umkSeed, accountId, deviceId) {
+  return (await loadAccountDeviceSeed(umkSeed, accountId, deviceId)) !== null;
+}
+
 /* ---------- public surface ---------- */
 
 export async function hasWrappedUmk(profileId = activeProfileId()) {
@@ -978,11 +1170,15 @@ export async function bootstrapFromExistingSeed(passphrase, seed, profileId = ac
 export async function unlockUmk(passphrase, profileId = activeProfileId()) {
   const blob = await dbGet(wrappedUmkRecordKey(profileId));
   if (!blob) throw new Error("no identity on this device");
-  return unwrapUmk(passphrase, blob);
+  // The passphrase (and a PIN) wrap the key this browser first held; an account key change since then is a
+  // link from it to its successor (resolveUmkChain), so every way of unlocking ends at the current key.
+  return (await resolveUmkChain(await unwrapUmk(passphrase, blob), profileId)).umk;
 }
 
 export async function resetDevice(profileId = activeProfileId()) {
   await dbDel(wrappedUmkRecordKey(profileId));
+  await dbDel(umkSuccessorsRecordKey(profileId));
+  await dbDel(umkPendingRecordKey(profileId));
   // The serving renewal key belongs to this device's place in the account: a
   // reset device starts again with none (a new login delegates a new one).
   await dbDel(servingRenewalKeyRecordKey(profileId));
@@ -1078,6 +1274,10 @@ export async function adoptProfileKeys(cloudName) {
   if (adminRoot && !(await dbGet(adminRootRecordKey(profileId)))) {
     await dbPut(adminRootRecordKey(profileId), adminRoot);
   }
+  for (const key of [umkSuccessorsRecordKey, umkPendingRecordKey]) {
+    const v = await dbGet(key(fromId));
+    if (v && !(await dbGet(key(profileId)))) await dbPut(key(profileId), v);
+  }
   return profileId;
 }
 
@@ -1097,6 +1297,8 @@ export async function moveProfileKeys(fromCloudName, toCloudName) {
     [servingRenewalKeyRecordKey(fromId), servingRenewalKeyRecordKey(toId)],
     [`pinWrap.${fromId}`, `pinWrap.${toId}`],
     [`pinAttempts.${fromId}`, `pinAttempts.${toId}`],
+    [umkSuccessorsRecordKey(fromId), umkSuccessorsRecordKey(toId)],
+    [umkPendingRecordKey(fromId), umkPendingRecordKey(toId)],
   ];
   for (const [from, to] of pairs) {
     const v = await dbGet(from);
