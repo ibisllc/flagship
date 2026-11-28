@@ -380,7 +380,7 @@
   "now": 1795018200000
  },
  "standing": {
-  "description": "orgConnectorStanding over org-authority chains[0].entries[0..2] (C removed at v2) and seatBooks[0] grants",
+  "description": "orgConnectorStanding over org-authority chains[0].entries[0..2] (C removed at v2; the chain verified with chains[0].noticeOpenedAt) and seatBooks[0] grants",
   "entries": 3,
   "cases": [
    {

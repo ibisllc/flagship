@@ -1,5 +1,5 @@
 {
- "description": "Enterprise org authority (docs/enterprise-accounts.md). Keys are hybrid Ed25519 + ML-DSA-65 from fixed seeds; signatures deterministic. chains: verifyOrgAuthorityChain(entries, {genesisHash ?? top-level genesisHash, now, freezes, overturns, vetoes}). seatBooks and authorize run on the state of chains[0].entries[0..1] (v0, v1) with no freezes. authorize uses seatBooks[0]'s book.",
+ "description": "Enterprise org authority (docs/enterprise-accounts.md). Keys are hybrid Ed25519 + ML-DSA-65 from fixed seeds; signatures deterministic. chains: verifyOrgAuthorityChain(entries, {genesisHash ?? top-level genesisHash, now, freezes, overturns, vetoes, noticeOpenedAt}); noticeOpenedAt maps a delayed-change notice's sha256 to the time .com observed it open (absent = none observed). seatBooks and authorize run on the state of chains[0].entries[0..1] (v0, v1) with no freezes. authorize uses seatBooks[0]'s book. approvers: verifyOrgApprovers(state, book, order, approvals, now) on that state, the book built from seatBooks[0]'s grants with the case's freezes; ok returns signers.",
  "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
  "keys": {
   "A founder": {
@@ -585,6 +585,9 @@
     }
    ],
    "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000
+   },
    "expect": {
     "ok": true
    },
@@ -2961,6 +2964,9 @@
     }
    ],
    "now": 1795691140000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000
+   },
    "expect": {
     "ok": false,
     "code": "notice-early"
@@ -3177,6 +3183,9 @@
     }
    ],
    "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000
+   },
    "vetoes": [
     {
      "body": {
@@ -3407,6 +3416,9 @@
     }
    ],
    "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000
+   },
    "vetoes": [
     {
      "body": {
@@ -3427,7 +3439,7 @@
    "currentVersion": 2
   },
   {
-   "name": "a veto after the notice ran out is late",
+   "name": "a veto after the observed notice ran out is late",
    "entries": [
     {
      "record": {
@@ -3637,6 +3649,9 @@
     }
    ],
    "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000
+   },
    "vetoes": [
     {
      "body": {
@@ -3655,6 +3670,1453 @@
     "ok": true
    },
    "currentVersion": 2
+  },
+  {
+   "name": "a veto past the signed effectiveAt counts while the observed window is still open",
+   "entries": [
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 0,
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795000000000
+     },
+     "via": "genesis",
+     "approvals": [
+      {
+       "$approval": 0
+      },
+      {
+       "$approval": 1
+      },
+      {
+       "$approval": 2
+      },
+      {
+       "$approval": 3
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 1,
+      "prevHash": "99e760218bbfa27a63924fd21e045ea96f67fdd425b7e34d9f145a4bb174ca5d",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795003600000
+     },
+     "via": "direct",
+     "approvals": [
+      {
+       "$approval": 4
+      },
+      {
+       "$approval": 5
+      },
+      {
+       "$approval": 6
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 2,
+      "prevHash": "804463c26ee8219107036a16ac153e3f9b3bf127d4ac67785b6447c11683ee46",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 2,
+      "issuedAt": 1795691200000
+     },
+     "via": "founder-removal",
+     "approvals": [],
+     "notice": {
+      "body": {
+       "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+       "oarVersion": 1,
+       "kind": "founder-removal",
+       "nextRecordSha256": "77fb33e10698fbc3fff171612d10e4d280ba577b4a2f26a70aa4d215c1fb214f",
+       "effectiveAt": 1795691200000,
+       "issuedAt": 1795086400000
+      },
+      "approvals": [
+       {
+        "$approval": 7
+       }
+      ]
+     }
+    }
+   ],
+   "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086640000
+   },
+   "vetoes": [
+    {
+     "body": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "noticeSha256": "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960",
+      "issuedAt": 1795691260000
+     },
+     "approvals": [
+      {
+       "$approval": 21
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "ok": false,
+    "code": "notice-vetoed"
+   }
+  },
+  {
+   "name": "the removal applied after its signed date but before 7 days since it was observed",
+   "entries": [
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 0,
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795000000000
+     },
+     "via": "genesis",
+     "approvals": [
+      {
+       "$approval": 0
+      },
+      {
+       "$approval": 1
+      },
+      {
+       "$approval": 2
+      },
+      {
+       "$approval": 3
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 1,
+      "prevHash": "99e760218bbfa27a63924fd21e045ea96f67fdd425b7e34d9f145a4bb174ca5d",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795003600000
+     },
+     "via": "direct",
+     "approvals": [
+      {
+       "$approval": 4
+      },
+      {
+       "$approval": 5
+      },
+      {
+       "$approval": 6
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 2,
+      "prevHash": "804463c26ee8219107036a16ac153e3f9b3bf127d4ac67785b6447c11683ee46",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 2,
+      "issuedAt": 1795691200000
+     },
+     "via": "founder-removal",
+     "approvals": [],
+     "notice": {
+      "body": {
+       "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+       "oarVersion": 1,
+       "kind": "founder-removal",
+       "nextRecordSha256": "77fb33e10698fbc3fff171612d10e4d280ba577b4a2f26a70aa4d215c1fb214f",
+       "effectiveAt": 1795691200000,
+       "issuedAt": 1795086400000
+      },
+      "approvals": [
+       {
+        "$approval": 7
+       }
+      ]
+     }
+    }
+   ],
+   "now": 1795691260000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086640000
+   },
+   "expect": {
+    "ok": false,
+    "code": "notice-early"
+   }
+  },
+  {
+   "name": "a founder removal whose notice .com never observed",
+   "entries": [
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 0,
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795000000000
+     },
+     "via": "genesis",
+     "approvals": [
+      {
+       "$approval": 0
+      },
+      {
+       "$approval": 1
+      },
+      {
+       "$approval": 2
+      },
+      {
+       "$approval": 3
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 1,
+      "prevHash": "99e760218bbfa27a63924fd21e045ea96f67fdd425b7e34d9f145a4bb174ca5d",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795003600000
+     },
+     "via": "direct",
+     "approvals": [
+      {
+       "$approval": 4
+      },
+      {
+       "$approval": 5
+      },
+      {
+       "$approval": 6
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 2,
+      "prevHash": "804463c26ee8219107036a16ac153e3f9b3bf127d4ac67785b6447c11683ee46",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 2,
+      "issuedAt": 1795691200000
+     },
+     "via": "founder-removal",
+     "approvals": [],
+     "notice": {
+      "body": {
+       "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+       "oarVersion": 1,
+       "kind": "founder-removal",
+       "nextRecordSha256": "77fb33e10698fbc3fff171612d10e4d280ba577b4a2f26a70aa4d215c1fb214f",
+       "effectiveAt": 1795691200000,
+       "issuedAt": 1795086400000
+      },
+      "approvals": [
+       {
+        "$approval": 7
+       }
+      ]
+     }
+    }
+   ],
+   "now": 1795698400000,
+   "expect": {
+    "ok": false,
+    "code": "notice-unobserved"
+   }
+  },
+  {
+   "name": "a backdated notice (shown 3 days after its signed date)",
+   "entries": [
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 0,
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795000000000
+     },
+     "via": "genesis",
+     "approvals": [
+      {
+       "$approval": 0
+      },
+      {
+       "$approval": 1
+      },
+      {
+       "$approval": 2
+      },
+      {
+       "$approval": 3
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 1,
+      "prevHash": "99e760218bbfa27a63924fd21e045ea96f67fdd425b7e34d9f145a4bb174ca5d",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795003600000
+     },
+     "via": "direct",
+     "approvals": [
+      {
+       "$approval": 4
+      },
+      {
+       "$approval": 5
+      },
+      {
+       "$approval": 6
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 2,
+      "prevHash": "804463c26ee8219107036a16ac153e3f9b3bf127d4ac67785b6447c11683ee46",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 2,
+      "issuedAt": 1795691200000
+     },
+     "via": "founder-removal",
+     "approvals": [],
+     "notice": {
+      "body": {
+       "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+       "oarVersion": 1,
+       "kind": "founder-removal",
+       "nextRecordSha256": "77fb33e10698fbc3fff171612d10e4d280ba577b4a2f26a70aa4d215c1fb214f",
+       "effectiveAt": 1795691200000,
+       "issuedAt": 1795086400000
+      },
+      "approvals": [
+       {
+        "$approval": 7
+       }
+      ]
+     }
+    }
+   ],
+   "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795345600000
+   },
+   "expect": {
+    "ok": false,
+    "code": "notice-backdated"
+   }
+  },
+  {
+   "name": "a second removal opened in parallel with the first is refused",
+   "entries": [
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 0,
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795000000000
+     },
+     "via": "genesis",
+     "approvals": [
+      {
+       "$approval": 0
+      },
+      {
+       "$approval": 1
+      },
+      {
+       "$approval": 2
+      },
+      {
+       "$approval": 3
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 1,
+      "prevHash": "99e760218bbfa27a63924fd21e045ea96f67fdd425b7e34d9f145a4bb174ca5d",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795003600000
+     },
+     "via": "direct",
+     "approvals": [
+      {
+       "$approval": 4
+      },
+      {
+       "$approval": 5
+      },
+      {
+       "$approval": 6
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 2,
+      "prevHash": "804463c26ee8219107036a16ac153e3f9b3bf127d4ac67785b6447c11683ee46",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 2,
+      "issuedAt": 1795691200000
+     },
+     "via": "founder-removal",
+     "approvals": [],
+     "notice": {
+      "body": {
+       "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+       "oarVersion": 1,
+       "kind": "founder-removal",
+       "nextRecordSha256": "77fb33e10698fbc3fff171612d10e4d280ba577b4a2f26a70aa4d215c1fb214f",
+       "effectiveAt": 1795691200000,
+       "issuedAt": 1795086400000
+      },
+      "approvals": [
+       {
+        "$approval": 7
+       }
+      ]
+     }
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 3,
+      "prevHash": "77fb33e10698fbc3fff171612d10e4d280ba577b4a2f26a70aa4d215c1fb214f",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 1,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 1,
+      "kGrant": 1,
+      "kDestroy": 1,
+      "kSite": 1,
+      "issuedAt": 1796299600000
+     },
+     "via": "founder-removal",
+     "approvals": [],
+     "notice": {
+      "body": {
+       "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+       "oarVersion": 2,
+       "kind": "founder-removal",
+       "nextRecordSha256": "268ec9d8c216fe95c5cafaae375c581eb2ac7800510662095c85110ad8e81dd2",
+       "effectiveAt": 1796299600000,
+       "issuedAt": 1795694800000
+      },
+      "approvals": [
+       {
+        "$approval": 22
+       }
+      ]
+     }
+    }
+   ],
+   "now": 1796303200000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000,
+    "18b9a156508d963cceee4b7b7de581014abe20d942fce07edb1c52e79a5685fe": 1795090000000
+   },
+   "expect": {
+    "ok": false,
+    "code": "notice-overlap"
+   }
+  },
+  {
+   "name": "a second removal opened after the first took effect",
+   "entries": [
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 0,
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795000000000
+     },
+     "via": "genesis",
+     "approvals": [
+      {
+       "$approval": 0
+      },
+      {
+       "$approval": 1
+      },
+      {
+       "$approval": 2
+      },
+      {
+       "$approval": 3
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 1,
+      "prevHash": "99e760218bbfa27a63924fd21e045ea96f67fdd425b7e34d9f145a4bb174ca5d",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "kind": "admin",
+        "binding": {
+         "$key": "C admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 3,
+      "issuedAt": 1795003600000
+     },
+     "via": "direct",
+     "approvals": [
+      {
+       "$approval": 4
+      },
+      {
+       "$approval": 5
+      },
+      {
+       "$approval": 6
+      }
+     ]
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 2,
+      "prevHash": "804463c26ee8219107036a16ac153e3f9b3bf127d4ac67785b6447c11683ee46",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "kind": "admin",
+        "binding": {
+         "$key": "B admin"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 2,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 2,
+      "kGrant": 1,
+      "kDestroy": 2,
+      "kSite": 2,
+      "issuedAt": 1795691200000
+     },
+     "via": "founder-removal",
+     "approvals": [],
+     "notice": {
+      "body": {
+       "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+       "oarVersion": 1,
+       "kind": "founder-removal",
+       "nextRecordSha256": "77fb33e10698fbc3fff171612d10e4d280ba577b4a2f26a70aa4d215c1fb214f",
+       "effectiveAt": 1795691200000,
+       "issuedAt": 1795086400000
+      },
+      "approvals": [
+       {
+        "$approval": 7
+       }
+      ]
+     }
+    },
+    {
+     "record": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "version": 3,
+      "prevHash": "77fb33e10698fbc3fff171612d10e4d280ba577b4a2f26a70aa4d215c1fb214f",
+      "admins": [
+       {
+        "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "kind": "admin",
+        "binding": {
+         "$key": "A founder"
+        }
+       },
+       {
+        "seatId": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "kind": "board",
+        "binding": {
+         "$key": "D board"
+        }
+       },
+       {
+        "seatId": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "recovery",
+        "binding": {
+         "$key": "R recovery"
+        }
+       }
+      ],
+      "bylaws": {
+       "overturnSeats": [
+        "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+       ],
+       "overturnK": 1,
+       "vetoK": 1
+      },
+      "founderSeatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "kGov": 1,
+      "kGrant": 1,
+      "kDestroy": 1,
+      "kSite": 1,
+      "issuedAt": 1796299600000
+     },
+     "via": "founder-removal",
+     "approvals": [],
+     "notice": {
+      "body": {
+       "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+       "oarVersion": 2,
+       "kind": "founder-removal",
+       "nextRecordSha256": "268ec9d8c216fe95c5cafaae375c581eb2ac7800510662095c85110ad8e81dd2",
+       "effectiveAt": 1796299600000,
+       "issuedAt": 1795694800000
+      },
+      "approvals": [
+       {
+        "$approval": 22
+       }
+      ]
+     }
+    }
+   ],
+   "now": 1796303200000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000,
+    "18b9a156508d963cceee4b7b7de581014abe20d942fce07edb1c52e79a5685fe": 1795694800000
+   },
+   "expect": {
+    "ok": true
+   },
+   "currentVersion": 3
   },
   {
    "name": "a removal notice signed by an admin who is not the founder",
@@ -3860,13 +5322,16 @@
       },
       "approvals": [
        {
-        "$approval": 22
+        "$approval": 23
        }
       ]
      }
     }
    ],
    "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000
+   },
    "expect": {
     "ok": false,
     "code": "notice-invalid"
@@ -4151,6 +5616,9 @@
     }
    ],
    "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000
+   },
    "expect": {
     "ok": false,
     "code": "threshold"
@@ -4435,6 +5903,9 @@
     }
    ],
    "now": 1795698400000,
+   "noticeOpenedAt": {
+    "ebeb9cdd8594a6838ae96b2221a1f302aa1ab95c71597a7cb75d1b081e620960": 1795086400000
+   },
    "expect": {
     "ok": false,
     "code": "consent-missing"
@@ -4560,10 +6031,10 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 23
+       "$approval": 24
       },
       {
-       "$approval": 24
+       "$approval": 25
       }
      ]
     }
@@ -4694,13 +6165,13 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 23
-      },
-      {
        "$approval": 24
       },
       {
        "$approval": 25
+      },
+      {
+       "$approval": 26
       }
      ]
     }
@@ -4851,9 +6322,6 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 26
-      },
-      {
        "$approval": 27
       },
       {
@@ -4861,6 +6329,9 @@
       },
       {
        "$approval": 29
+      },
+      {
+       "$approval": 30
       }
      ]
     }
@@ -5011,9 +6482,6 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 26
-      },
-      {
        "$approval": 27
       },
       {
@@ -5021,6 +6489,9 @@
       },
       {
        "$approval": 29
+      },
+      {
+       "$approval": 30
       }
      ]
     },
@@ -5094,10 +6565,10 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 30
+       "$approval": 31
       },
       {
-       "$approval": 31
+       "$approval": 32
       }
      ]
     }
@@ -5248,9 +6719,6 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 26
-      },
-      {
        "$approval": 27
       },
       {
@@ -5258,6 +6726,9 @@
       },
       {
        "$approval": 29
+      },
+      {
+       "$approval": 30
       }
      ]
     },
@@ -5331,10 +6802,10 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 30
+       "$approval": 31
       },
       {
-       "$approval": 32
+       "$approval": 33
       }
      ]
     }
@@ -5403,9 +6874,6 @@
      "via": "genesis",
      "approvals": [
       {
-       "$approval": 33
-      },
-      {
        "$approval": 34
       },
       {
@@ -5413,6 +6881,9 @@
       },
       {
        "$approval": 36
+      },
+      {
+       "$approval": 37
       }
      ]
     },
@@ -5487,9 +6958,6 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 37
-      },
-      {
        "$approval": 38
       },
       {
@@ -5497,6 +6965,9 @@
       },
       {
        "$approval": 40
+      },
+      {
+       "$approval": 41
       }
      ]
     },
@@ -5571,10 +7042,10 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 41
+       "$approval": 42
       },
       {
-       "$approval": 42
+       "$approval": 43
       }
      ]
     }
@@ -5644,9 +7115,6 @@
      "via": "genesis",
      "approvals": [
       {
-       "$approval": 43
-      },
-      {
        "$approval": 44
       },
       {
@@ -5654,6 +7122,9 @@
       },
       {
        "$approval": 46
+      },
+      {
+       "$approval": 47
       }
      ]
     },
@@ -5720,13 +7191,13 @@
      "via": "direct",
      "approvals": [
       {
-       "$approval": 47
-      },
-      {
        "$approval": 48
       },
       {
        "$approval": 49
+      },
+      {
+       "$approval": 50
       }
      ]
     }
@@ -5766,7 +7237,7 @@
      "adminBinding": null,
      "approvals": [
       {
-       "$approval": 50
+       "$approval": 51
       }
      ]
     },
@@ -5804,10 +7275,10 @@
      },
      "approvals": [
       {
-       "$approval": 51
+       "$approval": 52
       },
       {
-       "$approval": 52
+       "$approval": 53
       }
      ]
     }
@@ -5845,7 +7316,7 @@
      "adminBinding": null,
      "approvals": [
       {
-       "$approval": 50
+       "$approval": 51
       }
      ]
     },
@@ -5883,7 +7354,7 @@
      },
      "approvals": [
       {
-       "$approval": 51
+       "$approval": 52
       }
      ]
     }
@@ -5925,7 +7396,7 @@
      "adminBinding": null,
      "approvals": [
       {
-       "$approval": 53
+       "$approval": 54
       }
      ]
     }
@@ -5965,7 +7436,7 @@
      "adminBinding": null,
      "approvals": [
       {
-       "$approval": 50
+       "$approval": 51
       }
      ]
     },
@@ -6003,10 +7474,10 @@
      },
      "approvals": [
       {
-       "$approval": 51
+       "$approval": 52
       },
       {
-       "$approval": 52
+       "$approval": 53
       }
      ]
     }
@@ -6033,7 +7504,7 @@
      },
      "approvals": [
       {
-       "$approval": 54
+       "$approval": 55
       }
      ]
     }
@@ -6088,10 +7559,10 @@
      },
      "approvals": [
       {
-       "$approval": 55
+       "$approval": 56
       },
       {
-       "$approval": 56
+       "$approval": 57
       }
      ]
     }
@@ -6128,7 +7599,7 @@
      "adminBinding": null,
      "approvals": [
       {
-       "$approval": 50
+       "$approval": 51
       }
      ]
     }
@@ -6144,7 +7615,7 @@
      },
      "approvals": [
       {
-       "$approval": 57
+       "$approval": 58
       }
      ]
     }
@@ -6170,7 +7641,7 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 58
+     "$approval": 59
     }
    ],
    "now": 1795014460000,
@@ -6188,7 +7659,7 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 58
+     "$approval": 59
     }
    ],
    "now": 1795014460000,
@@ -6207,7 +7678,7 @@
    "order": "flagship/app-rank/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 59
+     "$approval": 60
     }
    ],
    "now": 1795014460000,
@@ -6226,7 +7697,7 @@
    "order": "flagship/app-rank/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 59
+     "$approval": 60
     }
    ],
    "now": 1795014460000,
@@ -6244,7 +7715,7 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 60
+     "$approval": 61
     }
    ],
    "now": 1795014460000,
@@ -6261,7 +7732,7 @@
    "order": "flagship/servers-self-delete/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 61
+     "$approval": 62
     }
    ],
    "now": 1795014460000,
@@ -6278,10 +7749,10 @@
    "order": "flagship/servers-self-delete/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 61
+     "$approval": 62
     },
     {
-     "$approval": 62
+     "$approval": 63
     }
    ],
    "now": 1795014460000,
@@ -6298,10 +7769,10 @@
    "order": "flagship/servers-self-delete/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 61
+     "$approval": 62
     },
     {
-     "$approval": 63
+     "$approval": 64
     }
    ],
    "now": 1795014460000,
@@ -6319,7 +7790,7 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 64
+     "$approval": 65
     }
    ],
    "now": 1795014460000,
@@ -6337,7 +7808,7 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 65
+     "$approval": 66
     }
    ],
    "now": 1795014460000,
@@ -6355,7 +7826,7 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 66
+     "$approval": 67
     }
    ],
    "now": 1795014460000,
@@ -6373,7 +7844,7 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 60
+     "$approval": 61
     }
    ],
    "now": 1795360000000,
@@ -6390,7 +7861,7 @@
    "order": "flagship/auth-code-admin/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 67
+     "$approval": 68
     }
    ],
    "now": 1795014460000,
@@ -6408,7 +7879,7 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 68
+     "$approval": 69
     }
    ],
    "now": 1795172800000,
@@ -6426,13 +7897,122 @@
    "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
    "approvals": [
     {
-     "$approval": 69
+     "$approval": 70
     }
    ],
    "now": 1795007200000,
    "expect": {
     "ok": true,
     "scopedSeat": null
+   }
+  }
+ ],
+ "approvers": [
+  {
+   "name": "an approval signed after the freeze ran out",
+   "freezes": [
+    {
+     "body": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+      "untilMs": 1795277200000,
+      "oarVersion": 1,
+      "issuedAt": 1795018000000
+     },
+     "approvals": [
+      {
+       "$approval": 71
+      }
+     ]
+    }
+   ],
+   "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
+   "approvals": [
+    {
+     "$approval": 72
+    }
+   ],
+   "now": 1795279000000,
+   "expect": {
+    "ok": true,
+    "signers": [
+     "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+    ]
+   }
+  },
+  {
+   "name": "an approval signed while frozen, sent once the freeze ran out (an evaded freeze)",
+   "freezes": [
+    {
+     "body": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+      "untilMs": 1795277200000,
+      "oarVersion": 1,
+      "issuedAt": 1795018000000
+     },
+     "approvals": [
+      {
+       "$approval": 71
+      }
+     ]
+    }
+   ],
+   "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
+   "approvals": [
+    {
+     "$approval": 73
+    }
+   ],
+   "now": 1795279000000,
+   "expect": {
+    "ok": false,
+    "code": "frozen-signer"
+   }
+  },
+  {
+   "name": "an approval dated before the freeze, sent during it",
+   "freezes": [
+    {
+     "body": {
+      "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+      "untilMs": 1795277200000,
+      "oarVersion": 1,
+      "issuedAt": 1795018000000
+     },
+     "approvals": [
+      {
+       "$approval": 71
+      }
+     ]
+    }
+   ],
+   "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
+   "approvals": [
+    {
+     "$approval": 61
+    }
+   ],
+   "now": 1795021600000,
+   "expect": {
+    "ok": false,
+    "code": "frozen-signer"
+   }
+  },
+  {
+   "name": "a pending approval past its notAfter",
+   "freezes": [],
+   "order": "flagship/server-update/v1|home.acme.flagship.services|1795000000000",
+   "approvals": [
+    {
+     "$approval": 74
+    }
+   ],
+   "now": 1795025200000,
+   "expect": {
+    "ok": false,
+    "code": "expired"
    }
   }
  ],
@@ -6678,6 +8258,17 @@
    "notAfter": 1795950460000,
    "issuedAt": 1795691260000,
    "signature": "a699b6c92b9d7766e8d378fb7804fcbf66913a4c111f08080bd7b39e8a7cdf17ace55e50987ab6f112d54990d04cbc24183eda5b042a9ab87e2c7bad09e2dd0f5c79eb72cd04986d7919770d9adeea6e4e208625d940e246ebdbdfd5192e644b01917acaf0d3a6a2eb8f22fb664bb26bdd48c7f9f0786f6d237614df57264868ffcba654359c6a9037302c180767cd43ea9d97c21a73dbcc3c26186cd9c9a371a0cd9fb09477270e9695206af2df9a26990bd155b155531b86997d390ba72d09c61399738e9bdd1055144270d2ad9ba2ec4d71a4ab4fbfbd3cd20ccd666eb7efcba06ccb275f0e38e514f71fa67624821c5a87f47bf8857295eae2054181782fc0787677d023c4c52ea4ab2ac9384968ac5b97ac7fc9d30996247d41dc87f236be74f6ba567f35940a77930e6724f519ca73685df2b152e44580d258207bf95af4b7f24828f1c8cb40c97a1a7440246f1b03027c66bb1ff2b1cac77e939219060c0f8e8bd87653031316d3c7810884bb2f944e5b12598b832aa8b4dae4a383a41fa9f58783fcad677e86dac334daa6dd53d13eb36584259107e48472592e215c579572c88c45fd3e03d12a61dfb780ab86cc444238962ca10a76c2dc33915fdf99fe5b91f865da8aa66cddc68e44aea6f83661ca1c8b31f87010f5084e4edd030dc6a5d8d472c649bf1e9ec356eb853aec3d30a62252fdd9289e4745e8fa88439206c37503368cedd0d1f30bdb0c0e823873ed0ff09b721d2baf26d305f3b6db51ebe4a2b9339343624ab848c29f08dc5e63a14ff3888864a8dad73e84530824e0dfe80424c636ca632972ea0aec3f2f000e84e7aec5896fc9803a5c3c7a5ade04bf6913f463f431c59ad691db34cfa86a1d3c1b7ab7d1be0c57c73d706810fbbe5c8842772abdb88f2cd7715e4d38c027cc6c0dad44f68ef8249aadb92c1b993a928fda98fb7f74835563fa62340102ba06cd4ba43f083d4456168daf01fced402d8a8387d63e4cff6772ce4590daa8bd49402ebcdc5da8ee902c74515d766317862ed4be1856483f753812e9d73d4c2b524ec7097254f717ac4f7f526805a49a4ce28d3ef11b556d7aa065cd383663c0f2eb39574538c48cbb4e7672bc5291d402ab52bcd4643f4f0369c256fb4501c9d184f583abc7adfa775a9f8225416dd63ceb3f4a41db9c6e13411bdeeca5aabcfa8f759871e2fc5f9d1f7a15f31a8eea2abcb04a6f8613921d1bc720597b9965464ff50034ee443126c0c0fa0b113f619bc922693416ae4ba2d7fc62b87943c9a9472d14443da2a0d6d01cc6ec1732fe67ad0ed3159e89dad96f6b41072cf4c6973711b1eb7ef39227f5ac9bd1fe79f0f43aed60c375d07613ff6d5eebb03e2ef6216d1ce6e567da8d9706a1a439fee2cc3422b9cf960042687dd1812dfd2229e30b943fe58d5f18244c08bdd1f6fa57d02c9ddeb2757c1c471a9e13ff9a7f8d039f8959efd4c1e0c882d530bdf4e0c6c5c3443496f1a781204331865180050a37f094c1be9a29721b0bcb8dda3270cd6a33f1569fb4bf7a87f5e3248f218d4a3cd7eb448f08712d349ed4d793f748a4bf1978b6b03c5c56249210b1d7474c7ad6246dbd2b991a49e093f7799d69c1dc6212867563853c56b9a7e9576e233b2fd07e8e88eac8cdf4148595027782abf706673fdd9bcd9a1fa364d29416e8f3fc988fd94d33b9e0a9909922a3b0da7f9293cb8b71742299c34161282cdc48a944ff19abe870f2fce9b10d5c3d6bf92f4c79e2a7fea10af9b2930281251bf85e99cd1563a758f08cc29b83191a9279a5300490482bbc0e97f741a59ba592ac22fc77cfb1af20e033d405c475449942281ad5b87bfc9a06e645c5e41f55cd3b6f4e190cc7628755bb0d4ffaa130d8424602906df4897f6c1a7dd87a0a60d0fdafcb18f38f2c6c76818531604848acd4566e6982af109b46fea4547120eeab86dc1021d253378b0253dbcbe596ef7f1bc5689ff4fbaf8bdbb9103d7266f1bbe92f5f460421a1170b38b71d87b047f8d14cc0ae99b8b853db088f3dcbc1c299e11a9b342d79ba0e8ee3a1c093b89e6404a429f8f8f5c3225fe7f1c3c5b0074d4c553d0f5ebfcb62ca997d23c7994013750a2cddef6c530fa19788a0375badd1f62cd4a9bdd84f2bf632475d09cb323da29eceb2e67408e1f864d850247cebcb15294db34c111fb92bdde65521cdde2a166dfe28f6b6d90d6d00586e88339b85347109a9ac454c58a19ba749bb76eed6c204e56c7c4b9a1b66f04e6c48d08d62e87c8ca40ff04dfd3c0d6f74c89852907a26fdade77300fa050dc15e0261ae99dd0442ff239ffe57beffbe7667c38cd7f05baae8fccf0ea6cac667f704884eb0b5bba6c8e8945e176b48b85762dacd4d4b6ecc9da643c0976319cebdca7940eeb556f8cd264005170bfcd9cdd9fa0b292022ac923e4918fb1460ab1006ec93fea0464e807040557cfdd8e13b0141a63951295bc7c8ac922d66dfb01b03ae844c8f5e8c574f45395350ad212f06f63d17b1871cbb2d2ec2fa96258dbb49cf2f2528897c9ed248004bb4f5d0d284e609214f3faf9cb08190fcc6f561fcdc34405c1d624c667dac309410f3810f393f1189aba2c96fb058a69ed241226ab94a882e76af263de9b6f3b01b7facd1b3a9afadaf8ceb977b447149fe9baa098e2de6c8a4026b237a21e94d7b028783f3acdf11d9a2675a592e251f1e4a3913859400146551b51fb4137abe8c650b82360e1c6eee764fff99f54d129384f376e1c1ac3945d0178fe69769063d5aea0a2a3860981b2b0aac67d9e4eb27201d6e46574e485c8a7352968bc1e3173b7d31d1df8fe90d7e4f746c310efec825d0393acf7ebea76a3868f07b12c59564fa24446fccb39f1493d39d4f0e57e549c3b8cbce228b50349e0eafa4454ba20e4378b6ed835eff5cbe4a78e62fd193e5c18167ca5d8b00e402a264fbc193f6e15dbf4a5c985285a3f7fa45b097ee854de0b66d95f19d4f659cb209d60287a85303ea6c3c2dd583ada8ddd061a9bf32dd4f1ab37a21a8c598c98ee20b82d56fcbd3bc75a8b32af807d65966d6a7890e7442a1c12f476ee2add98420c66628bbf0b12299d0a157c7594b37e695448aabd091b7fa11e3fdd817fd98cf2c70c190017c3e746bbae2af4f0e1a4473c712863dab6a5a2e6361ad86a1b462cff7fa9a858885248874d63ba8567665c44353aac1eba28b1817b172b3a0f4b399e7db25c5de960e005137b700377fe0b85728f25c61b8b823c20314cf2f3df58321f5c8c7f83433db2f2ccf7c553f59dc8d675d2b274dd5adf0db6c90bb5321074b8ba13915434f42b4459289eba85dc7b7de639100d00da36b5b0344988b545964513241cfbeba64fde966dea30d1f50501c02623b68608a65949f4c7506625eed41fbb1dc0e9eb3bdcdc6036b23f5495b8f33a901774743d04743157c147b6c56b036cb1f99774d95412796475a0a6c07aefa03e7809661dfe245ae872ff7b334cf9fbbfc2e4cea21b21891d20ad433c182d75976819d050610bb3fd37f44377d247551f0e4032d2fcb320ed6e117df53d6872f970510b7c763a6db6a0e30cd6bdf9ebf68734a4fa317ee1dc4762ef718f126c72751204c8855a437cc5a24873eb965eeb0b6d705acf746955b38706b0d24fc1f83f3fad6d366f39b9dea56a31b2664495301c1c4a32577fedc36a62f0be896a7869b622c19343ff878c29af398c94cd0ecbdabe3b68223581543305f4ef408cc354b01af6f456ee9311a5776daf50ca170b1064eed3644ae7169a522742fd5dd121e8da996a9c0dbbe6f8ce33a57c82205573128541d526f5185b477e1811f20f17417b20ad0de1d8ebec298f978d3de43237dedb68a3bc2d54999c68a93ab5740e80c1385ece6627387d97dd79c95f3520d1f1d2d7b7691ee8db2bde0064491e7fc752f903ff1b3acc9eb50580f6dc2f7e4912a7a11003511754a848ce9acb5d4e831df0cfc2290925f9c5366fd5ba44e01b748977d9454ab0f0685e7eb9ecf9637afa2da49a36b0fbe308cd66512abb7d078bda916c20a047eb8c061a70b4536faa5e4cb96512fed7919c0e6f8a8747818e636c38ed80accd689d5e494ad7d45cdcaf99eae9cb20be307ecb2fa9b571c845fae66ae79edb4360495aa47ff3727098e1ced7901c17e82d31efff266fb90f4811bf6e090f8cc515e374afe1a54e09a4100689a62589b8f81928f5bedc89e1e30ae40df7c5f1aca1c3a5f571f8db8a8c222260bd3b638e25f9d983e80c3d6cd9f8585877d46e1b911b8d2dfd311362ee925ba0dcb1fbb84df0fca2ffe8076629809ee915fbc868fa7b4594fce867e84a4170cb4bae5aa6a646ad730c250534c5ed2aac757c306bad432503f10d1c51a1d4b3a4807290fd5855215c1736e72e7355c9c7c3f66a912d658a0f1387922912f076cbd7f58948d947fdd7d8131e92995db7a13d17e957d879d67bb8333642cd31a226170aac46006ac9e1f52c000d231e7767894a25ca9f96d2c5ab0e24b5738b5d325898e80d86fb2e78495ce1a3ebeb156040a7559ed650dbc1ee232a7850bef7cec7671742f1544449a0f0fb9ac876676b7b03b7e2e62880327f00f3b5eec9676fc6f145d109aaac4d94c1f1e01fb3af28a4241c7cf443aa869a2e1751bcdd9903cc6743c417696c8e7e9fe17353c40818cc3ebfc15565ca7d6263b444a6fabb5ff3f4d71f2fc5e6987d9000000000000000000000000000000000811161e2327"
+  },
+  {
+   "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "oarVersion": 2,
+   "purposeTag": "flagship/org-delayed-change/v1",
+   "orderSha256": "18b9a156508d963cceee4b7b7de581014abe20d942fce07edb1c52e79a5685fe",
+   "seatId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+   "adminKeyId": "60c0494a0350549632b7381ed7b94b2bb2706598de3ab9da1f623878777c37de",
+   "notAfter": 1795954000000,
+   "issuedAt": 1795694800000,
+   "signature": "d61d0871111195b558049ac80f543aca37fe84455c8f12a281e0bf37606b23c12f47131748c122c1d0324d39a8c3c259e5bef3d9f4def9524f9d6631bfe3e40bbdc4b500e826deaa47fdf825950585b6f690d621ccc39d4743a17024054502f51699f98abe40b06d68b51efb9ac84be04af05153aa63065cfe369e3421c0b76fc2a3704588fe7ed0b37459dcb41584a3b0fb7fe2a9bc7f40112d5f831569acbb5795136b411a3f38b797293109d6226fcde6a9a7f4ee98c1b0920114a8a7b20f036e5faf34efeb2599f9684e1312006aa167ed8a9bb14ee82ca1f644cf2361acbfccfbbbaeeb5e4b71540f1bd10fad78ded0a365f4e387ee6f0835eb919a5d9a041e3a123ddda570941c299581d076faf715c7f1609bba2671bd9dcd8bf0405297220bdd04a21ec75ee2f130db4b603b7fcbfa8e4305425e7fd66c6b262059b17ecb2cf2898a4646c813abcad59e66d83959ff9cd5d36a215f58c3ef9625e1af84b876d210d57893c0cc43bc8d756fab911040af119b6a2d5fe68ce06e5808699b108b674f418493b353b22a55748daa7d269f115a1d4cd13aa1d53f5f09e52dc67cecf19c6d3c525522b69c7e25992f65d10e5a32bc6c300a44d47872f067e759ee0e69a7ac3b7dd069b70c8bf1cfbe6d1e37ba0e1a2fd2f5d3974476e82f8ced5a6dbeb81a8dfbb34c9a0ac9d661a419a6487487d496a4dd231d40b0ee4a343c7694db731b417e6ef7a8d7451ac6177f225176342ae0dca1c12288a335ec2c1faca9796c806e552d946ff62dd4ec47084315841f92451d399b0855814b9fd0fdcefca6a2b0abb1246f3cc57c578da326e4997918b21e445a69343bd6815bf9618c1d838eaaeeb6af5fd58b7ca0768ec3167091db77652c7a4f8e20953e3c7a336546c01bf49195a76d9eb38da7055e72d3feb662a661d1692a7e4147d924d0f42895ee1b8b5ca9f56a625bdf8dbe45e144b54c5cf1355a8f40c4a914a99c7008b4d49c6d9b965c5024f330756d1b2b5cfcac0477972ee16e81726a24e9879d6bf9ffea09a6d5fd2d4d1cde2dd95c6a081cade2eae8fbfb2a77cd6a72ff296487d6d69a5893a8335a0a7dbed7a1603c6b65f96fff3ab1eba9ea791e3e6553de2c52451738aecf109a2c536a6800985da06930f73c2085e1a4ff06427dd3a6aeb37e3df525df7a0e512b8b3e7cdecfe3436a77689d18fc320d2be9ce6f4a1822c77c102a26296c85fd0cf0b91d25139e10fa3bd3a6b822c40556fb0188feb0ee2fb262801c45b0b6c2d7ebdbf7567bf9ffcdb33d920c4278d61d79449acb447d74af08148ef13051d30b4fba62b5b21d968a45327bf0291625a4501a19a4340c54b913e7921a8310bc9b0c6ec0df01761f7f7adfc73736858af4d074e46d859c2672ce5c6ddf5f0f7089ea81a62640c605e7131c4ffc5bf96d489e92d95bcc85e3ec2b22263fc19e7dc32c3829d099efff21c21313b7988de6d5c32c862dac162024a37cedec65e2075530ee44ee7faf665b3631785215c2cf6a8b6934fe11039e2bd489569773318063d8719b80863775692eb54263c2682c21577fb84c110f956e88a7c5737af2a1bcefb0ad496d2ac915984c589e11aff86621e85ef0186a3e37bc64e97be2a304b8979861cbfa85bdf47974041e728af3deb338e9055403e80ce7829d96d1abcc85955a1bcb6458bb46bbf05defbad9003825609bfe208f4ff13a7dd2e4b8a432ff0e600bdbf74ac3f8f1250cb79f7fff13459983a6b41879b0203f9cacdea4c1d77176cd0f204d4c6e53ca99f0d74dd50dab29cb45d11bb61243c568280433eaeae4f6a2bee452bcebccaeb3da89dbeaa6ada5b3ace67dfc3b91b87f55a12af424a31b16b867cbee982a6e9abe8d6a1523eef2aef9798ff324a3fbb85c47e0845c95e953e9effadd1b203b315a3f80eb7ddd4dbd32100ba0fc93bbc5e2217e6d9a64d86bed917738d02d53652dbd1e0b7d9128d04f383a6715a51fa9086539c086ce2e3ac0119ed6b2eb34d2570659cf71c80a4013e88a712cfb685a812fad5ec129e13a65acd2f7d1deb3da1134ba07a532111685d3ea2a500ecda02a9186ace1844e8d620ea68f9292731f96811a3f6c4b09b6ae374045955ce944f7bd69cfcd4a5493ea26e560896b49b0c54a47a015dc2d7a71c75f934b66cadf6b170f094fc193e87add72deb8c1bb43c119122d5aa4ca2e5cabec747b70feff58a30312a69c5448122723d4b0425891d57373c452225e52f04612c4f4dc00e9334989e8f8ac5e796bf139387bb350889f6839ecfd74df8c1f1399c8b7d1191bec9c71b3515b5f5f27c1344bea794cbfd9d8dec9d8dbe326c31f79c3f92a9ec82bd9e05b65233f9143d5e622d01b8a988e7938e8f997c11e4a2abd79e8caf3c6ab9eb840e41753191fc9c2a9737145349cf6c6190426afb13381339fd47278db46c0bd52faa02efee2d3d9121d608f9953c2ed81d72448042e4c3191db58bf6e51905d471b2269ed9d702bc79211a6d92d1682a169ba3e255e3d13cc9361856d716ea10d8d68cbfd34b71c1f9928f49f1948dda670611dfbf5c284108918894c98062e55c22d5752311ad03c51e29185c172086fb35e727e6c32403facde7a0297daaa30abfaab01461cef6259b31275e74094445c570c613706ccf158129e7540d3fce20d1f7f6c03ce9f3646cf06d33af33fe60e3481602dfdfc3eb5fc6605a50f4f63541e7b347115e2343d485ed1f7c0a5e19a5800b656349eaa7913cc1c5db91296b90f59937dd615f7fb476fd52dfd16289a3f7bfec03631a5e8ed67a296e8d7bdd1877f4fa74302f62f63168370e230b2da010580b22fe3e0d441b8afd09c804fc7beddce84b7daec24ff50fc1b71f2b34444fc745944a4f884276984d879ca3cf8edf92847d8b0797e1ea7e8e253d54b06cc358f3dcfc574391c76c268d803e94c5d76a9b0aa2b597433b9a0db6efb758eae9193af98a5bb9a09550d057f69556d706f43ee7fb8c3a0c156b51bbda2283b6bc2e7dc762c516a7e9ec9c56a22630cd5c6602e7641b735bde6a6ee87b71a3df5c0120f55a0f01b7897841f9007f0281cc22efb465ed775d656fd98bc4ef65c02a5d0723d5d7c5ffe2ede35777d4c654bf91db876404d80d24cf7bde1ec037c34e49876c91abbbf2102b1ef1d7d2c7ca3c52388ca163526aeaef13cc3255b95b7a2c4d01295e2da84ad19b4d0b667c68ed2e9c06a53735bdb4db60e85f13738471a21c6472ebe2d45b6502b45b273498be3cfa8592d31b15a6cf5f6ad090b60f6ba8188c97d14da123e5c020cc878aa9e5f9510ce067ed0ad45f0d468c22e4b01ca6f5bb42f91c59d3e6e9c14a6379e6f5a9a3e774ad77e33d4776c14ecb28950a94ea909fc276d48077dac2e90530ffd90474d2af6a5a5d9c624034bd66da44ea8f1dc8c596ecff3c1fe47f7b1c38c39c8d1d44efb1c6ae3cb8dbd20ad4ba5a77e0f8c915fd185708848a26a1d51fdc0abc1cde09a21b641ca61aa31ea28d3f23c402dc73490503b8fa6f0a8f8e230de7038ae583a905920c0157abb22bdd213de860c24b73db7f0acafd360c30519d01569561944594928074901b3cb9c16e4fa83927f11d56ad4c4ada70122d843d3e8bb1ba7c11fad92ec9aa2322d7fc98d86182e829577c93021bff4f0f0e1fd169c4630b01828e392ec5c5214c104ee35a81e95935d6c400919b8f35b95b72b697932d5aa8f94ac4fd27ac34e55df4336e3318637a7d21139ae43df37cc292df3e4304613a2810e7ef55b63af15d25b04bb43465424f2225953a8a1331cbafaec29f611d281f10e3fb0352306b437f20f4be7779fa92c4aa74d9dd738f46fb883b5a5896b1ea46edeb42cb3ca12f34e9fcb5e6e4be0aad327ce5bb437dd74c0365b0b2fa9729f03b923866a3c27796e4c95c634f842501b927c94c2e6e979d47e64990f73e49469819146738b894006fe41346722017aa87e6354fdb3fca239a066d810ab99a07e51ecc0142aa98b91b03eb503e85eca07d782780a9298ac863ae44588f35791c9ded7004ad02ae2e0a3c41fb55b007faeacd2ebc95318d8f42219d02399cc1d30c5cd5715c4e4c27df352344bf3b5bf73bdd47dd2503170acd721427fea8a002ad78a37214647f4b79b55e2a5bb2db20e03a94bba481f690bebcb529ee5bdcf1e7df23219c9110f8090983d460ec77da6b11ce87ba97ec69919677af15ebe159b1c1fd3e2dd48ab59401891611582a480d9be965c7e2ab6bf7bb21a2f9f6ceeafe87531d94e7f856a19920a5c8efb3956e2e2864876fac01a6ed46c37bea071836cc0ffb2dc98f5c10cb3d9bf7238cd7776ff6f02749a96f51718b8dd6f09b60ca73499f96263ca3d842327c9bdca6162580bff2c1f5bb8541022aea3c531a2bd03b47f62d2271abe7f6e764dde24881fc93e5dae654967a0a468549b2d5e606f8bffe5d1cb35ae343ebc2b0cddd83a365ac1ff9a864d5fd4e1185fedd88c597f7ec34f97f69e92537489aac8ea37c246ad356e0c8911b18da750c3c9e9dbd442b5f5cf27544cb52105a861e587e364618fd06c809023b3b35550bd59cc5e3e7dc4bd8a850e4c793c50a715f2283279594f4df61a03765a60883c01fb794a82e75090a860faf031272f5f233214e4d81ea2e4d24b5b8f9568c984000d079a1581a3d4f10a9ebccce9ec1d375985b6d0ed1e3e404c526b7385dadc313c3eebedbcdc0000000000000000000000000000000000000000050b121c2123"
   },
   {
    "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
@@ -7206,6 +8797,50 @@
    "notAfter": 1795266400000,
    "issuedAt": 1795007200000,
    "signature": "2e957c818ef32bf8a31d05b5e26486b0b38a408488a9a99575486c7d61e5c4a7785420da897a3c063bca50c1754eeae40d95e217a1e85a451f001280dd0e0805ace677efa7699d47199fdda9269761c7fd9defbd3f1473d2eef4d9a06ff3ccc74a6fc1f2d209de6e82cebb28dc586e731c309a9a2301cce96cb6fad9bbec66ac6b5b7181d862a6a4892d937f128eb02fca552c9f04ce661f872ae023690a34208ad638a5ee9377f57f212ee6797e1d929d9e6eb043024a9e94a4cf3323b216a91cd67ea4a8e0e132c9f348e8bad521a247212138605b7ed2066b77e45a2a8be0dad69f2d43635cc806bbce81f5e3044c47d9fb9f0d40fc662d67ded96199b28bd7cc237c9e979d51d6cbb726927035ed5ff91885fb0920b3cfd53bd5b7d7a344f6552c7b3dcabd4aa838b0556d502acf8a108b5ed37111633098e74709072fdf0ec1ec21722826c1d2526abb6af713e9989468d800c81c0fd74e3f39a411d447d808b70bd636bd1c71c3a8aecabc54549e98da2f46c680f6b7d073fdec759c6f0b72523d880b4c4c9d96925e87c664f54c2162141f64f6acf261db373c84dd8ba94d12e674d428cdfb1025bdf639b82db3ea5a90f4ee664ad1e7f45432a9f5dbf425cf4dac93d93b4998d5a766426ec55003834d6e358cbd21070fdebd2d4f94b3b40ef9dd8f8916cc1a200ed412b03478f47a088e8533d617d509f14a92673a09055b5652b1db6f7f0b08300d0dd72620543b1c359617b3973a933fd1e2a82d36a827ea2269fd6a736f20403190bca426b1bc4159c4da3a64376d462450d5d1496374095775537c50ae53eb14e229ea14d181fbf9a69fa7314069510bdca88c96e31eb620a4bd6414fcc2c3649a015d1c0f24559eb8f9484a713eada6544886df0300682227a4abb8a27468bb5dac0b6459c343604a53844131dfda9b5b4558b0f0f5bea227ee910b1e143dfe10fc1214775b7010eb8511e8d4d8027c3cc2a7c0394b262c8eb204d73ce8f13ea470bac88bc6e9a306c01d652882ca6cbbb6df123f6fd7738909b17cc5d964a4522823e6ec12f38b7f21a66e11fdf6b10dbc20aaf4b56991f95c5e10fcfece8dcaa55cf444f8e409bf3e7f5bc4bebab8b8fee59482ad6093395a4e37242097b6d20faf1e61d022f0bf8e464a059572f4fc4b93853776020e7bfd3fcba39eced688c7ded1bc372e93ff9611b2416c98b6222545ab11365694795abdc196df7c4d9174232a6186a8b1c7d6016e23c4cd6f4556f26b6c06e5892c41a51b6e4c75b79453bffdf48bd0cfb4115eca0eb511889dd5c9e260dd7e1afc5e74a34e581551fe653b2be23932f90c125ba9c3ebfaa4c60bb74389e3f3f8c6c30d533f4577c4fbc4eec380d014da9602986adf4b24a35b2352a848b13a236e04b44c24308fdf6f273b2d934051be8e05eed66d546f855b353bdadcfd642e4015db57102eed5e58ed6580278d3461695f6a4302f86452091daf04ad1ce2a30d6dd92cd5d7ea73c2d56985f19d46e02464f2fdd6e3a46346880fc7e82a536556416462907a07546b64343d80b7bc3fb536eea2811c6e40db855468be7dffa163839f2f6ea14193642c9af6863e58ffd9bab40edafe199669b3c4d567b03e8ebf50fb3d47c90c97f52d2592055475956a121fc32e8a875f257efba1e96a13252a1bb5091608523c716cc7b334d3b57a94827c6f47f65404a5f6ca3c0eb26d678f6fb7d7826ba02467ef34b0f417ee43119d7043e7a99145c6ffd9d5aa978345f3f93f94915f3e097b8ac8d87013954a5cec510f4bb6c644b6e391a5b70a157d737edbb88c8d8fd33049ca9691b29ae5e3541b9ae3d32c83ef6f85d18362c77416ad69658c84a124ed8e198da3be31008c88254d737b1de54c9173a4f998747d0bd070952345161021b5806ec8f054832e32c1480a5fe057280df7a9b19466f7e0345943859c807d4a00d99115e5049548c9eb435e1851e9dda649be6179d6cf12a3a04dcb4ef2e76a0a52a0c40e01e7297e16a92b1f50a60465ebaee694379dd31f46a651603fe94c9250706be676a9da3c3ba91bc7767869ba1fc57a5b4f667719857a2f92fbad955b11415e3406820a34bbf49ac7744d4281b6dceef0203b9d7471df146e998ca4f0d8b278daf30263837f20a1620b4ebbc9b821cb9d94d9d79766be6fc6694e1f4ad48427642014c04ebbaf8c60ff874a13c487dd81230728cc6d5912986e92a51950f6f8ee86adfe44880f1a1e4a13360ec12128033da7a81ff033afeb022aac08df71d290ce31513dae5df19ad4a3c14632844c5c02ca1ef8d75fe86006949480d8831e349d7a4c3ab2c5bfc32b7b7376ece38412d234e0ac3a118a082fe467566a5e4ee42e636073c6c37bdac005cf3853a7d73c9fa73d8cb2b2454181bc53300ce690903ebb88bc3e365304f44c435cb2e842653aa8d5a5243ec8d5e77b04504cee2b5fe0597e15dcf553ce72dac5ce623306c5b4a0e149bc37da5147a4b6aabf3403e6473ac3d8000f98208653df7efae7994dec73c1229a28f8f142d2ece506118d4fd31e097874924beed1c51757400bb46ca1e935bed99177107125da90e29df9c027d0564ae4db0f277a080f03f9c63d2b174f3bf822a78ee78fb0e95035acf2995d2ab85e440660d5d0e82670fc6cdeb1f702529d3a3bc21d28e412401dd8ee19cf3c63dc848328a22808e83361e0227ef5436eade881559dfbcad8fcda7780b3b28296bf7d953df7b949d28520ba2a0aca26051ee25d1a0942177ba9cd219aae0ee88d52ca03b5197f6b24bcdb902dab01e96e74dbeeec8e2926642691899e6b9a1407c24fd8cb3a1d0bda5c2bf355d8c43ee1fad8480523135872c3324ca196d0f8901b88b6090dce0e6fc51942cdc97d185c488fe5136412d5cf958287bfd6f41f5ae07e9ef78108fb9e7b6466e1bc87eb196142703cfa1f74ebf353649403408a795cab5427e45d9fa51311acc70c646eee3cab374928632084f264f6cc8d3a8fc403c6a93d7f686ee652c87742c9cd90d21b2ae342a44c3ba0166a2cc6a17cc2d243442d8c4a033c3d6862dfca7ae3c78ccd9e5f71ba38e4a9a8fe8271b9b276aebbefadc39d6c8ca49442f0746f90fdd1c6aed8d19aa6efa3d6060261f5117de03404556e7aebe89e0169a21cdcf032cd140a16cdcc768deb52311b37ececd78102b4a695eec6414c9b7fd4c74b9361e71916125bc3cb36d56f7a9ddeb80c7ef88120ec5d6dfaf2d47c84171d0643c8bbedaffc7c140180fa64f490b864697a4beddbd6f33c02786d931f9ce08fba81c515d97648e2144f9c6c89fd2a694039a518f2992cd16f767407aba36d1f7cc2672abc3045706ef91e17ba386eb3eaca9c91aed25eb1973e2e7e1625325e0b4dc3e913730e73e34fdd1819bb5a3715d68ec47ab18ab93c222843d8c9fbddbd5757c308f709f6eb0351fc1ec2fe53c3b2ad425fc34944b19cd6ef021264e5fbbb66d7fd681983e553cb8c8e7dcbb86d324b5b26cd5257250042382447c2ed482182211082e840fd9af3c75519a7b7d10b056ff189f04ac1652f353bceb0f5a72e1a9557d08795ed3b382b8922fb67c8cf17cb109fb288b6bba459885d509d48d4682a1dc19caad2d41ecc73fe6ab2eaaf61f1672a191e025db3d192c4b1b3c8949261c7cebbb233ea47a95c5080c081c16fd173fd8b7ac2628c1babc79a59e56f859bc46a8798f5030eb8fa30c251a7ba4d017aaaaff580130a8abc464be4369a71d1b5764dbb86b3028784c54ed2feca78c54c5a502523944d1e5d40ae7cd24f8627c5919de00fbee2f7c9d59fdb79fdc9836bce96a1cf652cb66e7be6f1bbb94d729bb05ca22b7de3f7b8f77d18da78444a9c3f8cf4ab2f45383762f9e1649f6926b5db2806d24aca6e83d2cc6c8e452b5d03f8a7f791caf58511da3dbf86ec4ebe7752db73213bfd978e6a611d22fff57da7e4d45b858422d0483556b5ce246029392c5b9dba2899b35187a424d9a41cca4de5f80de5000cad7ff5728fb3b1a14ede74619ad6d8bab4000c5f7a5322d1835e45d114ddcf367ba97e1ba38e9bea735e065f9a60aa2030d0f033cbe49896594a84184a380b4cd2b8c19857a706d3400c171a52702cb11c88af2d7b4725839f90c5707b6f8750ba6c08b7346c99215efd499a42569becae5e25333fd6af2f3fa3fc1271ce7b3300e3159076209e1f76314867b70fc6dcee450160061db0819f8c7a47745d9312fa65805fa838e0a0aff4fb979ab80a4de7df2b2a2b7d13c47a39013badecff5832b43bfac7f866a488533a219dd6be1788140393797e10d808bb9e06488b80c47d496146b57162c09741a18a62889e45e455c55ad3034d8505b3c5323292298fbb2fcabaf40e190c85b8f72997732f083c7919534414363e58fe7b1f445ec8736d55a1594b6599756ba8d6e0b1d9b8e657909457b4b61f910dfdd0aedabbbec1b99481a9ddccb9350a12139b39c5c524f7fb8c7003268bdfe26049966dd20fca5ee90eeae915d9dcbe517cf9d477918a78a5052fc9bca231b8a56aaf7276ca1dadce1272cedf9ab4f77b90e90632dfb26e69f6d1d25a2472b790742d2f5fdb17b6b438ea5d56c634eb5eb4572d98af900df9179dbb9ad0e68018780d203ea7699f79c3e1f23606b1ddcb68223934b1cae21109247a7b80920b28738e97f20206525a7694abc8262d7375869c0c6b7d9aa7cfd2e2f2f7424f5d5fb8f200000000000000000000000000060c141a242a"
+  },
+  {
+   "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "oarVersion": 1,
+   "purposeTag": "flagship/org-seat-freeze/v1",
+   "orderSha256": "d0e32c3678ffc369cbaa19c15e1762a981aa4e3ab11a7c6deb5a622cfe40f853",
+   "seatId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+   "adminKeyId": "6922032f36e6a21722a3a14a843192ab73bd4851d411bcb2c10228c968ab2fd2",
+   "notAfter": 1795277200000,
+   "issuedAt": 1795018000000,
+   "signature": "8f5199505fc21823129ef0bf68f84d13765996648c7f27b9ca9619654a395bbe81c8c4e0e5212e9e024609cea8b1a5244ee94b70a3d0c77319750ebd87f9440891ab68efad3a5850d78d8c24ff2d9331bebfa7251a074785c6d35fb22899cc6963a6b4d8eb8fdc375b3edba5bb3beb34882fe66a7fe0c7d20ca38009eefb3bd35a5a2202cf82d5911f50a2125ffbd222096f9062483767a7ffd0871c43f6a07b173e72ffe5f0dc86a76bd1ef1f70195be30a64257e4c749012e9e316f625001cd2a0bd807f2aa167addcc1fd0bff4cf82793989916b5bccc48d30900e54d2e0af3c33caa6e115b46ec9b40034bb152fca6e9a35d4f50add35cbe37aef35eaa58cb09015619f0a18fbbc0e88631f62b4a6a820a8738d548536dcf0167a72d35854fcb8f7918d83b488e9b9e3aca1fc82c7a8992861f09ac8aa0f0dece60341c1d843f3153fd1ff66532cfbe8df6d6368e97db166232f2be6a0e29376d6503001dee43b2b11321a20236e689584bf7cff88c30e434dd448ce481eecb77e157af2199b54ab1def8a66e19fcbb0e8f062cc3781741486e56514c73f43d4585377da1fad0f021145446f5f0e9b47316d8e04bf5de73104b6227279213900fb0dbbdd90ddc6d7a7bff5af0b65853ed951c13f724c81480ddd197e0ffe453eb8d1d092af5e040774ce484113c4a4f6f6a80398c5176bb7a84857fe1062d4eb4419fcc11741b6d7748404dfc50422c90d0ad79d04d1fb1f58d21f522f31fe415780457fe0d0bf71ec6081df43aff9f02efdd7f92f14658e03e5ad207b992e30ee1650bbe5cd674a46b9427477abb60bf2509f255ea93353778456b9ffd1dcd552df187d3595a5a7476b7cc9600e747bdc5e9a0c2937bfff13754d37792ac672f642abfbe9d3a28fbfcdc566222f6d6562aba559bbe0565ed51d852fa6d17af4a88741584b17bb07c002721a87f6dac974a411600e7b0e8ca090e96a439dc3085aa9935bfef6913fb651e4acbda3204f60b568210e8bda1f493d37190c88d19be3b9c36f95fdb72b9bd6bc140b1b1b03c62bd7e141499c0ba9a3f457ece8ff8d7234100ad12c4543f6c0c349953c6c6d47a394a84aa35c55b3c8afaabd2c130443092f10a8bf36023bea3cab19a16ca76a42d4b18a0d4c7338fa8a1df28f986447254e8d0dea1e02e71e7a20bce3ada7513647c97c1b64ad76b8ab88a314a39f712d69d405040493ac9c887ab492d5840e0ba12399ae459f0a8a10b2efd505300dae0b71a9f6883f1b09a09daa7afbc3828745d07dec5d62e9e452870a61ef1a51cf3d4d7931a4db3c71e09b59926af524928bdeab5f2a2b0e2925ded95ece2f807deaa67ed1e77f645f78e26a5a7ca72bda6897063d51b5e7717e529ba5eac3df1faaa74397fee23f2c7fa6d02d8a93dff7c9c6be5063d6ded5c6a0422828a5ac8fc516d734da0fdc3e3532333084b38bf8edc9c8b953c0789c2de121428ffa44154954b6fc0c27c1ffbd2d4735302212910c29cee9b3a1b02c30966f4f9420204b40db3d90fb1fe04022992d52f1a6b946e247ca4a6e1a5731a6cd08e75489426702bcd580ca7cd2202d3e8f13e234c424217280c7378655bb4dcd4049957fa65626aeb9bb942f6301e5867fd29b82ef57e5b995f6a3995e556ce716c34f4801cbde0104eb09c35c57356876da0c774c8e198c974c82d1c397ac4d6f48aac7df5c89644f76265b4476a538642fa50a4712301ca6c07f0853c1f84a4ef8306683d708399b1ea3783cfeaefb00d7cf82d6d846ebb142a90b2a7952e5272aafe7bbaf559ab1b43dee85375b7c355c87e317a02187559d4781a47394a6d8c11150459a8e696be5c8ff9b9c3d4a6fb4be8ef7919f60eb9cc7b456b095e297d451e184043c82ae35e75b2cff88d18b8c468cdac9258fd137eea05b2d586fd12253be21a00fc0f22b438980e523ce8ed595dbdccac6b98949e47a7d709811e135434a8c11b138751c9e76f445607c90359858e9f52eb0792cadb0a6111f716c8d125b01dcc421dcc82b986d5bab4be52414bbf67f657ed8bca7698fbb6126d942c099350ed7714d1c3d4ec7d4832b39927be6045a141d3e71cf65977da4d1012d89e0528c8df31d9cdb46729b6f5cee746529af80ef29e2cd15fd3856a94b66ef97624ebe53ffa5db92efa5aad33f521899f785fce4f92788c38cebec165d99949b897094d2010030a9818b3a0abddc23e8a140889531300ded0243ea514f0417a226515d76d906eedeecb0ce09adf6c86f19adbbe90d4c53d801a98f38cc06441ffee61b015fec032ca5cf912c37155311b19bc8cb8ed3a4d26bb6d294b7c7f70d932b1106f9c7804539de4c2eaffed1325ef137c7b7cb46582b869a53d0ade9d77f5341dfe7ff30a873899de687d48ad5051968b8af634d6a29609a3e7b6e8219cc7313313de53832344695083cb93c2c4017c58f839828b4f8ba1861402a49fdd8530772722355fd8492c5e44f55335048e5361f2df748d8ace98bf929b565cb3775406e241bf08d58a7769a6ab7f606d9c634bf76b8c6814b598a0f474447e0eda6ee854760a17980c85792fc8ed76e2dd4b0e9a6846e260fbd74bd5113593b1e3efd62b91948a3a8b8b041f0688802e09b2563a5723ec02a2438d759e94e2c92d86e6d2e7a86c0559a41a3d89c795629cd407e085a12ff526c91d796e48bf8e8838c7806ef62000e41df79bc2ed936674a9d83f17c4df795594ef729914a336913713891dbce60e5ee9fcbd175829dff455fdfca0552574c171f73ee7953cd65856719b0bbcbfbc56fa219ade728eaafca067e42c54308e9753cb0b5a9dafa8066aafc70ce80483d67313fadbaa1c96e342ec37bbd824a159672e6873f5617dcb08ed9ea8044bb5c4227161fbf20a70aebb800c3a0168a7e0f463ff9566c4fb54181dfa71ee59ac81c285993ccab7d4cd4054e510baa4d43fb10ccf3c7ab446a5168a3f711860d6ce065d46a709424da52436495e70a1b7827b959dc73ebbf2a946d736e44e42fe430314a080a1e91dce3baae3ac7e77b773d41f7dbf0435113bf18d8cf9a1fa00268a4fd0ae1976f1d0a443b55641e74f688ceb030afc43f27798a9669993d89223c0d6b11b29c21ebc9715af3cec4268ff69c9dea068a043e587323b37dfb6a9d182ea0509e4332ed8c5ca7eb6fa37d226437eef3c8cff804cbd0923b565a84b9e4d0cd179571ab099b61dcdf0509fc89487122bfadf92614ba155abecc72f714c0468e035a516789d76cfbb12b2ab275c209ab4a991f331bf7fc95fa1c0ab40d1cbaab0f291bc6dbdb02ac5336804cda6ef0b57c8bf24006bfa5ed67e0e2a5687cb6756a098dc59ee7e05046c89ca9e20eaeb4807cbb33e86f417f4d7c82ab5f4207226ed38ba2caa7737bf9692314bdf88d23529d7af519faeb03fd738f2f83059aaf162afaf034e493827c9d8ef93453be9e0d5260c14bb5806e10981e0117bf3f5bae6e66bed345db2291c4dd526569d3e40dc519520bdb6f239936322ac65cbdaba0fcadc5e45c4f7e6e985e1e34297a11afc6b3513de1804ab72d2e96310f11959f0de500c78f19f41ce5516ebbae8ec5b894071c8f9a554c9966aedc39bc4c70101c50d1bdad6d6532213bf2a1b648b06e8edc0753da967949dda22ecbb817ea01048afbf7e139913ffa1ee9b2bbbba03c5e2aa9c56a1be96b7707168a61bf8d41657bcdad314c1ade06ac56ef3ec18d4abf5b6dc9f3391cb1d5e2ea9ba1181743eb903626e2f0df977ad247a751f3ec2e0ecc48928806791ddf7604846512d5bbb53ded001baa4225c0196ffd011667ec5d0efa508ad9385fc9f74a506166d1006fac116a2f6a7c9dbd92d8e2f803c91ded5f16a8e0eed17eb4446d9964ba6f9dfd86c95379935a612aeaca7bdb8e5b55d1fa9400c17f8da86a820f4c2102c46b5d90acd866725b7deea74c040eed459f7c0ac10239adfee12043ee2663746e4d2949ad424a7880bc83518be9bab320ecc03b759086492e74eb8e0839f2858e90405ba8b2dd0d81998a228def5eb04cb9cec8b458659d59f2ef92f37d641ba0ecbdf697dec2408f27c3da6a50827b1eba6dab1ca4cf0d888b7fa6cbeab641785f84bcb30a3bc39498d59871d2baf463a921acb614b24d8801d6d195ce246a6d8e9d5ba96531b1d530ce326984a1577616ff2e86ce3f6a1859eb021e4889ba1fc08838fea57900c7ed02ce18ecf2f870daed6bb85c503161f4944323442f09afc501c734a02b91f4b0cb380596b432c64b0b2eec7b586d4f4dfba3372a683e08c3cc8ea08d8e62319eaadd00694af9099419f608429a0af1b4b524a3bcec9be7cb98a52e79587e00590c1a4a6debe2a8bce5537b14a2922fd30c40afa4fbabcc6b19225f75bf211fab709721cc94e7a0872349d82a561960184e831eb3caa89bc47f836bbd10654f3c1cd8b0cf89cb92efdb7beedcae62c38083562316f88afccf2b2a6da5351eae97eca3725218fb1643be9bacca74fa914b615adee5a63da4914f33368d60c40b158fe3fefa25e79421c1a28c664c928ccbe4c8734563b52adcc5f3d434881adceff500c6ada3462e3e19b2f3b68c1df5cb24b8c45fabf4ec1138983b6e7724efea8d4f3a91e854cc1b00a63adac200b529cacedd9c70fb13f91b4e4bd0d66df12fa0d3c3e6972748ab8d8dde30e165e7b9a1f5263c8edfa5da5cdcf0a3966b4c83b45506d70759200000000000000000000000000000000000b10161a1f26"
+  },
+  {
+   "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "oarVersion": 1,
+   "purposeTag": "flagship/server-update/v1",
+   "orderSha256": "17f2971a171b1512d154e2c9b44edf6c3ce86ce6d0d3da3549bce7457aafdc71",
+   "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+   "adminKeyId": "78cd9130c2f08c26fd83aaf70ff5586e4ef1bafb64495915fc6bd225af1a88f7",
+   "notAfter": 1795536460000,
+   "issuedAt": 1795277260000,
+   "signature": "4bb4be9c693b4576bcfc2736176d1c03b283aa9905989a275c8ce0aab73a1b2b0c6b87d616e680f7c24fe35c0eea4433918b912090618dcf734b30a51714170794ef8f9d0f75691c2fcd014f85f09e60eaefb5743a9f67e8e0fc941c5a7bd3f0e79d6a852dd22a71384cfc4d4f648dc58a80b71ee0859d3ed05141d238cd298e05cad89241b2ff7fa988d7fae3fbd6854c638087f564e9d5222523208c357d56992ce640796075e14b0195bafd35a7dc0c56a092b019d76856c7380cd21b82f40d3d77eb458661f57927b4ee62419da14a72d810f13e355e7ace7c3a908405acaa094e0c1a7491835f582f9bd6140efe628fdd24c307fd1f53d3992d0eba0f1d00885fbda757a5ba6685a19f0b72d7b7103b6ff0bf407742085563cb35febe905741d9a9430ce17540eceaafd5e7974639764ad8dc31515ef7a851eac025ce492d9d519c7baf9abcf4773e265aaf76659536f507922cd66109f5dbb2e54de983f7d05fc6b1e2e459f98fcc43f0dad3f2a0050b693752addde1ae034cbe478d8567d1d8326576e8875cd3bbac4b1ed4da79b034439a479a05ea9eaa22b082a6f2f5bdcc2d84088a96e3370f3e40d11ca5b0f561d86fceb1f01e79af48e221537fc71a1e22617f6129f0f900430b8def930f54f2ff9bc23cef9c0eff5768d6da64d7b2e2f344fe2e342b88054d8a10698c27eeb6684e78c7861df3410e37d0760fe7b7b79359e45578224753a16a63b00170f8c103d3f389539b11ae2cf6d354543505996d11455d997910d311c9006ffdbfc8c15002d00aeaaf89c4e644d9f58448578c124e4faa9b171210bc3dd33336a1c6ea6a2175db999f48ef3c6de6ca81ac1429d31791591b807e56a3962c66ae7f7a553ec032c4e33dd4f80d1d64e5fed7c96fad9594f358defa78b7621416384c47e45e9c17e9c17f02ebdddbe60328c69ee2613e8c2a1d8e7749a97457b85feb2f6857bb9f3616e5921d5430c2135a6c04f41a80142a381726f22c0bfcfef5d87e99900c4f5a7d9391fbb56c65ee1c550d40be9fe9daa33c38216fb59aaba042baf6f0fb300248131c55fcc09f444054d435ab98bc7dc12cf3481506461fb0c2a2b7a704e1dc22cb52627eb261f563d3bc3a2545f0c1ff2c86874f251f214b2f0a5a91d1c76262e2c8d8b7d0e55e7e6bd56bdd6ec6a53a65a464e2eb47260d9f2175a11ada130e8bddd189a30419c12e18329ec0d9a5a70a78eb75c90d821da46a5a1293d10d624d10a187902396bdf0a4822c5fc199dcc3dcc8d0b28a1d97bd3a2329cc891d78865e48538b6992a8263000994ac53189b89e887c57e51529e897003af1dcf979782e80224a8ef9afdd7466e6462fb620b5250c5bde952ca6736d480b9b1820b557ced35ce77d8df179b431d7e87f38293cdfa2c56594edc81953bf4f1ce7f447c0150a5cd02cf27cc1b3216769b23d9b5a5bfa27bb504922911b166022e6914d6f6737ac122723968981a943e58f4d7d812874d8b7ff986dfd2072f65d5f38cd205906d95bb29705d2216ba6c88ea8aa825fa9173401e6660171837691ea27b5efad1f0276053d7ba376a450be6f6636b26e21f3b9cc1feba6ec970257b48b0bbfe092042d121993725f8036a10fd84b4dc6c4c4e7343d5f3a33881b303cc41420a9df0f58bfc5e2e4e42054a9f63e95b589d88a4eedab55e9626000449e1310fdc094bca7cf619704e7faf13117446aec23feab373d95cb315b03632c3c55a455047411a3527b6a1b9ad4030678e2b9dd0d64d976274f11a631eef2f4406a500665cb79090272da3e111dae57aff643a2a34803eca53b3acb821c814cb21f38e060c42d2f16b696aa44240c51854b4cdce01bbeb8601f02f9145878c59285174877218dcbdd725f035016d49bc665ca51aa2a987038287dde13c17ddb636ba900372fd63bdfea4c57ab393d0f5f56c9323f68a5208450177f229731e7aa910a904465162983ac850be281a24758b6053164040fddbefcd0f048c77b97b5b3828c0975961f36a25abf73d81c527b7a523d95eda13a550af74fc5059842b59d23eed376fb1ffb1098c4d023dac23be873cc4985aa0caa71eb945e08cb10d45fd0634a848a5341d8b88c75fdc3c0de97b5f60dbf75a9db0a343df794eaed0ff661a5479b154a9655b19753f6bdd90be27949147cb311c3b9e8f1da920f353c34ecbe4379986b088876a7f8b733d5278489e17e16f8e9d7effd76a55596f4076844d12d7185824984819402795ae741de17cbb5413851a273dcaee891f32f110becc332c139257442cc4c3b4386f08b1e85b2a5e10aa08427f235bfa81164e4aa075fc67362bc75e5455a7d0b3bf80b62991d9e09f3f7a5b9652486f54292e9427de0f09c23a4f66145a8840548bf85fdd4cd8e91fa3528c845878fd92af2d2ee447ac4d280e2ef049f38bc027f0a6bcdc57ecc970f105b6b70f38dc12dedc53bff087e47895206b223b5cd6e3fcc732220666821d8c2d6c35a52a519b498aa4b54400d9abab7db518d44e382d02ce26893c23d151fda48c41d317ef8d2deab89c9b3d0b408ebe27fbb5b60284272bddd9b1efb8ca278cb080d9a314c2313b6fe3161ec498b29bd345ed107615232bbad7744ede6a0e534d1c3964865e73846e9ecc1a2687f646308058c5bc770e9e08625e0883163a41f6b60269616998487f72bc7a3853846a8f233c6f1a056a5fa40dc304e273e6b6e40ec32cd3b9fa69b8c2edc8440db704c184c8eca5dad845f47267e98083c97e88e5fe17201b4e7898b1f57abd3995f6598b69f52d7d4b308fde08c90ff4fab77e3c9175648af63afbd50abe7fafc87a60361276f6d49b554aa333eb03a4dec29a89ae3b573b22a4848077bc3d8b74f12183add42501d175e1b0eb8677ef00e09c8700dd980e9bc7496688584cb60404fcfed496291d1c9689b512d48f7397586bc3311ceb75886dfb7c94bb75e5e52f507ac3319bcdf655b072e3c26cfbb9269b5b90511f59a43b9f3bed0541986ad097ae22e9fd9584a35559bd710d06897f2e2d993e7544fc44bd410e5fd1a87afa05732260ef2d5c055a06238afbb3488fe0b5f00fa900959b1f6ad25a285e8cd8f8b1dc299a1fcc0a8e0ac356b6073e5babb51cc3ad0b7a226c5d667485193c7294a7402f49828d35a77d39553b9cf437a9acfd153fcf1c417126e665d7bc3b5bfee5c357e92ad480dbdd7dfbd4340082ed5ccb585822ba33c36929ba85d3289ea4b18cf3bf581182186b6a32fc53781c76a2adc0f8e51bf8ab373a936918b26e22852d5fa4fc7df8f5638fd82abafd0438640b91f8012ab4eb67c3395e7391482319d4be2ab72477e6e0726d5ebaf64c4a98bcc75ccef90f40a67a4af0cb8b29a05ff332d0e9cb5b30071088db0dacc3d33107a168938b8f42359ea54d24f29e260d8f746a72526db78c2975a42e86eb866e0f7e5f58e54e487a28807939aad52c763f8776e652edc8ca2af607964e66744e7db5ca89ea5223dc0a09ef49d469d7050bf93733500cb899f21f8901bbec675990d2ef03855fe4a2803dd8ce63b28e515e1b3b1e550fe1da640530376c8d770dc568cee7b4cc1fb6245943593ec876f9e2a838130428f74bb11f0258be9bcff724e4e1ef35cc9752e5ad38edc3a055011632196a3f42fd4c10b3e36541e992bfbc850dfaf911372822897ab646869a1e97e90c6764849685d282b802ec766c6702113df84fdbf7697ecc408143790602be73bff593febc1ed1f0cc3f45fd9b21ce4872835dfc15576dcd855b3794a8d5712c9eb55a8810528e182446328a8e1cda209b22f25813ae9442560c828356b3a86d4d60c6584b0d72918de1d917cbbb935b0f9425d40e21912ed37d74f3da72fd15404b43d9e71964482b250772bc9b857e1c814b6aa1228f33717e614c172a7b9253c9267498c8484378fd833871eb758287b01843dc1097a8448033262b51a8a5be7768f674af5329b0597317e875494c6e54e7fac7dd71a6d19440264a9600ec2ad731d53c327cecae1dfe1b356221e96e84d6cf6fa842c064323d052f6444d22b0c506ba26dc6e885de5a93caf85226e5029de74b1e464d18b8e3bda0aaaab01f1d16755b658fdfc1dcea9b934bfb23f94b3f55063165e9dfbdc02d633727419176021048e9abda8e5237aa0b76333fe9d8f50eaba045e6caa5969182e7ba1884c3ad4de1b6540ee2c40c383b12afb7244e7f77996ac18f5706cdbea7cdf29edcda430d2a17f4cd50df4ff3a57a04c6ef5bbf777c53b8b59c700b02b5223377096d812662e366f5b0dcb9cb1011262e9145dbe5222c48bca72721da1a9dd7182bf72c90ca9e3f94f248f65b94f78168a03e065454ceed476ce18fb1cecdc0b6d6855f8d44175b7e83d5389e31d2258c6af8d312a109afbad10996c86a4d3750a2f8263f445e7ff58e898ccd3d0541d278ebc1dfa5dd35ab9ee209d682d40e52165dfe255278d578d481fe5be454d92d533332d5cd0c9c5b96574d19a2590e43ad45785b39a4f60e21bfd245fd31fb625fde4df79ee0cd886b08a4311cb76cdf1a4ce2e7bdd95a737338420f25a13903f9aa638f09a84a81d44a28271af20af9720126c5e3ccd75fc4b82f1df76d61bac089a519f02d3e499f19d245da8a05c95a08b43c6c53e00cc2f8c03f3b676010c2183ce3e404864a0cada3e6581fd1b2829728696b3b6bed6f5193e4a505871def1fc3550646b77eb00000000000000000000000000050c101b242a"
+  },
+  {
+   "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "oarVersion": 1,
+   "purposeTag": "flagship/server-update/v1",
+   "orderSha256": "17f2971a171b1512d154e2c9b44edf6c3ce86ce6d0d3da3549bce7457aafdc71",
+   "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+   "adminKeyId": "78cd9130c2f08c26fd83aaf70ff5586e4ef1bafb64495915fc6bd225af1a88f7",
+   "notAfter": 1795280800000,
+   "issuedAt": 1795021600000,
+   "signature": "461b649a735383f8e7f128b1b9fed75901c83a1a0a6213bba0b363e8deda63640f07b35568968b076d0a9b133de34d7c4193d1a8560cdfdbbdd6d716aaffb8086605799f0344845879fa0d4b7b89030614c7cda2bb972698a90b89ef78857f325a29b0c3bec44247544a82337df2879fb5a84bd7c23fc097c03addb5e7e7261ed62d09963978d57ee75f0263296fdb2a6b7977523096c6531ab65f7858a34fc4acd0de19a064a7748dcc7b2bbc240e9b14c54b00cfa3a15b6b15ae1d9d9e86ca19bcb11b7f0da3e9413063b47be0a3cb4c0f25f077d3fb523ab9eaf67a06c907c4d2bc06bacc68262aceed138725798d1ff09b879fab680e178e21ba8cf98ed44b8b14c7b3181886432b38a0f804bd1a56657a2381395fb7146d92d9eb4ed9a83896645b3b305f63ac4aae89ce053935fdaa79402f68396fa4565686f30d575a340d5629c18ab894a402f8b053574d4c4e93ec9c8db81aaaeb5602661b47d65079883ec1e6715673a9954e6a54e39ca3a49cd1423c16e91b5e589a9f19558058d2ff5caefc87c478e793131919d7b169b02e6b97452ab435217eb16b275079677c0067687e5257a257b7f1065555a06121e30ab5c2e19742b578938d95ef0932d4d45c2ea57356dee4ca059efe160097bc1915f777c1641257f61f2d1e878b05af3fc62b8378557571c22ae1000e01888b4ae14e33c2ccd7088dc4aa3f51b6d2b237b2e231d3de93bb2918d3e13418beca22de833a89ed9f5d48361dc93654d78f066250cb8d88d5d6f1b63c2bac774b413c00fd35559058219ff8dce707caa573cdb932fb75b00b40f373ca4cc2fa8d2ce73db8f56f7f70682ccb23b74ff7c848238672304d7b10aab786771c41add3474a8638456fe11d27477218a27bcffbae77d6fdcb4555c6a6fe35973f806cee5f4c6de2daf6724470cf232afd1a2177653a90ae60f06cea208e5a219f265bfeef73dd907a22787ee2d0da3e36a4805cb2741050247e7e9191744e8d52d0be6d84bae92ecd44677c28b80628f1c9930a49cc700ee70974861c74a88022ce5a370e2709c821f3e25c3ce2c7de3020322e4b7ad8fd712ae47c371acaba46f1c86e7d2f00e9283729bf155a1f34f177086b81ed1f668a85a5220143d2fbee5ff0c37ed015e8a353c0a6a1cae7aae33c8123d64a61a1312252b881a47314be3ca5e0597eb10d1188c329f422e2711c415e914f23ef41680f9b46431ec86733040ca9c7e983a396a08da93a059fa21c38c3e09efc7982173ef856aa6d28a584da2b5fa40deda37add0fc01ea2dfb58351d781bc1385823e5317051d4128a1af1015142cc1972f4000e88ee975220cbaa306fcac958b778d50afef66d30f8198fc5cd4aa7cede43b6238d6fb6fbd95f8f2aea081451eebd7b0fbdb9f2082670d63480299c506668499d7aada4de47b937c35814a4e0fbe02d6decd8a51340d9c4e573767d19e67902fbcc299b7989e2054dece0906f24710f72eda3fedf4521296486c19968299c326cb9e02de321b4e170888ada95a2eb1d1c6a1a27417c6e34d408b2839ff33b9c85ef105ae15974b35ab1e88dc894cc547ebb2823660d074a93def0dc639bee2b6b2e7d39dbe01e540569383f069a9f25bbf0048599ba61f67bc6d93750f2f1cea8a3632078ff0c7c5928e040eee144db114f6435116933547b2f12f351ef91e996dba4ff046002432c946b0be8690477acdf7e407234ec5b04e6a6c96c282eeb91c7510fa971695f7cf116ff8f0fb49a25be4f8b8dde95af005ca8f9ce6460cd81e34dd51a6440553cf335360a715f386c67feb5dbebb70b603024d6634b45c286b4ca526a2d3815395396bc418c0964350faa0613d845885f446d2faef10c0a02fe0c1db0ef09c06800761f420c72331a46eea6f6d533f72ed67b3143760b9ec01defdbcddc2da63e760aa67daed111f5533efc3afe1913796fe61a418350ad8443bf88e9092d8cd780006d76b4a35a87883764628a621a307c610ee6e8ada5f6f18cc48bb7dd78d1af95cf29aa6c88e9ac242d9c741e3bb1b21dae7ee45793d7d85c9972972a35c04524881a97875ef345ccc648394d283db2a8957003d48e610af83f0a6ed9c4080e1272dcbebc21ac5a12fc1149eb033a5402381988c0e21a89d9d6278993f0d980e7d5bb15963d8fea3fca0a3adc2f9a2f464e3afe2ee0a26a330487740ecc9cab4e7dc1c1ce05cd878035336a2c33883bde1e22bf7a0c3533e4d23ecddfe0882ead8d676504739c2fe556879986e7f0368de5084ec13e7eb46247633b17a4fbef4956d5a12de4f3d5f116afadec2117bfaaffdd00f63bdf231d0083af0929ee4ad0f69b16bdd0f26a7718fc654727cae62a3496bed967b20a25f36f99f7f3ba30abe149a79b18b7f59bcd68a3bcefa75cfa71edb36f6aed3c5fb8b5bec7b98e5ed1b692272c3f014a3c8e01496625f54c3530b4d66785a30a4cfd2db8d508dd51e248f7ae499d0c884f6fe4af296901997535855de0b1df5fb30bed1ec31b66f3e4a1aa39c9e572c81df9d5ecc6ed889444dca3a83c8b114c4a446d42a87824a9a039a90c3c41d2a4ebf3ffca74cb8b8b5ff7ec3e58b9cc518520a9719c1bb6bfd90b5460c1316b22c54c6737fe5c9396133f7818be83c654991b476534292b5494652ddd48e33c5d55aa0766c49d11aa27d55ca944b657598dd0e06bb60edfcd547c8e3bf11d729ad2ca0e63ae7b9f04b7610dcbc033f68f49a61fc3ff9cb452750c10e16d4d4d7d8cf55d90182283fd6de3061b6744e9ad9d78d3c2f5b1099c2635da4585773ea24e09c67464c9b7f7f8078225f13bd710494553a5994dfaee5daeee2d34d61c9a16bd919a3f0587e6247d42d69896aacb1cee76d5e7d13aa281dfc0aed273b130bcccf872efe5c6edf63147d0703d31e72fd18c3e8ee6afaa1bd772992c195ef91aad126e62cbb76c0aa795a7ab344e2558de6018c9794a8ad58969f9d3bea8a2aa4e2a96e414e35e672d3135f2af65ec266f9ad53548ce3790a5a345b1a2f26e2a867ffc119c3bcde7ba9e534e86aecab6785c649fcc2a2e19317049d20d3f1c2b7f7717300dbd9ec239c186d8477957e36eea669f97570bd05f0ce936aad12f2be35db1b9d3a166f35f6c17947978d7edd7be7bc41a9614287315af599880631c436c2a72b7e487cefdd5a10fe8e954aeeae7ec09e4bd0ed8d5d8996f99aa60f7cd51a376a663b69585185d690b1ec9679d323a4c170f3c43b9a58b52a6d5488b06fa9feb032d4668f236764581e44993d305d116d8bfde87553437c17eac6e05505daa2ea20d40aec25c1e4eb60153a0dbc0d89faaaff49ec12f0fa8b7b6f2b123949be235120c74fc778da15f3c1302b2dfcacea9d626dfe62b605bff8bfcaac7c08dd20521f8644b05afa05029aed53eb4d9369e70fba22be83aad69e37f40e6c388961e45d48928f44f456479fd55bd9558e16d5de6042903ae5b9116b03f0e43ed6b492abbeb6c81fb380e41786518bb163dcb22b87d2306e9101079f9d0ff65f086d9e6b3971eddaa3a2de0bea40e67baf50bb8760f707b21c684e8f291047e49a5aca0ce2f56c351c8c09152afa228bcf5edc4906d436526f5f4b38b0d499cdd148e8356b9b072dd9f751aa30f598bd634896b69b2e863df7bb54ce14aae0d10fb4116c4fda3a3577fb2e74363b9ce2ecfa562a42b583f45b606730e09ffa5c5bcf82793a8ceeee04195473f96937bc9e4d021db9945467f844cd255980c48d22835faccd20e6ff6cbd04dcf1794f305dd0324ea51031adb132e774a97ce20899e888ec10391dfe0884c590d00e35e849aef49bbd0427efe353f484349c18e0fa8a243a4c13ce1fd255a8871d2afbe3cbfa0037bf6e331c173efefebcb73023c9c2d623b68ffe1324327b3fbd65b432cef37a5ce4efa3ecbbee07c834436390e6d2adf6b22091b4a16bbfe7147a13256d9feb31d7eda5625caf9a76f8d21ea1a80ec728b7cb8d365692f85fc615bd1988cb8fb3a6e22485b1174d1ffd34323760f6488f875797880299bffc1b33141a66e544a60f99e816aede8bfa7ec211d8dda81836c604c3ef7387b16910c490ba224f0d77e0dd6e9121eca8e62c22f50c4ef8f4a318c72b169dbc6929b36379c4852b361334e6caa70dcb28799aee995d77532accc794f2488fc8bb1eba8fc58ea1c4ed4bf97a974494bc6a32d21b7f48728617f83a25023e1f67fd34937fff21ef0fc5dc576803fce7dd4b52ee41423de687c6d9bdb365ef158dea8b84765e02a2f201307d1189a67e64c1791670320e6f1b80f005ec857b4e449c2a68221fe72da5786db5ac37fbd6916d9d3506cd99eed19bfbdd00a1d4122d808f46c691fb0dc1dedc6201b2d5fc4b00072983a722fb90be01e50ffd4b8437caf53989467596fac6dffed7ad7c8651afa9a19296d67297ffd38691d8db9aeeae219edf15aab3dc21fe2fad58dd3e458337fe4972cdf39591615d621014870092486d10d9ee3941a634a9e6a86d64a6dcac0b205cdab69babe7ae11e19e2bf646cbb11cff863d7af473fe68688fb0f992e253d1149f49f36c14496e11a87e344fe4077c495c95129a452d504c79f02e7ea04259a261a82fd2dab1b2139862bc1f171fe2a2803ea8c0e2f41504cab1ddbd8d01e60ef16ec6acdaed2f3a486db0ee3241696e8bb6c3011023283f6c7f919ea8cfd8edf41f4a5267818dda05245aa0b4bddc052b7b88a7c4f600000000000000060d1b222930"
+  },
+  {
+   "orgId": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "oarVersion": 1,
+   "purposeTag": "flagship/server-update/v1",
+   "orderSha256": "17f2971a171b1512d154e2c9b44edf6c3ce86ce6d0d3da3549bce7457aafdc71",
+   "seatId": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+   "adminKeyId": "78cd9130c2f08c26fd83aaf70ff5586e4ef1bafb64495915fc6bd225af1a88f7",
+   "notAfter": 1795021600000,
+   "issuedAt": 1795018000000,
+   "signature": "309bb1bb24228b855489c3255b07f4904e124f388aa404a7418d85e6d531f784be9f80b687d2187846669f335cf365b047dcadfd39e7ad5f560bae2584e1af0d38b8ee231f365009b6f9d022a255652cc26b9be9fab064b67cc0210532a9fb0c248e00889e7a296d2859ad8d5a81dc7f86359d951f0d9ed5b30a4f0ab8f52b4b147a9c8b4dfd8c44ed90b082b9873235bcd030f263459c38223e0981548a7c5ffc899be3b848b4bf2c1ba90ed6b9a04549fecd4015c74242d568a9ec3467b541148d6d0a79617e48dfd7ddb13d2a9556c489980f90b7a8b5b6090561f98ef1668c47a440409fd079ed0a7a0bf8c66f2c855f65ee87073ccd81bcbf43cb3fd5dfdb2c4c82f5435977e58804479dfc16718eac4851e3b3304b36d47422b0c187650e4eda0da8d43aa18e29487a2b87b08fb47ec273b1657b4c25594ff5ca29db5e130a577167b716734f74e8a57f0a1a6dc569ad41cf4e048adb1f937ba1ad83c06fae4b0e8a44720a34f4f7d9a4ed8ba8930f5999c9a3c6acac58bc3514f023a2ba6be8b29e60e83c55adcf946363a1eb16cd9f1c88bed76a4efa4ea26201af9d13ecefb3cedc82f261d5749ce3323022b1a30106231a82d39406b717c61f768d355794b220041eea59759aef0aa5e6e65f66a861405b7c2fff56f40373430e30e62103614d2b0e295b58ced0357f5d419af785f41a77b5b912eed0c7ebd86f4fdd2ba130752387c69139fc4e3d330b4ad019b1d8929713e0869581a9bba71527c97c89ea03a79435ea8a1c1606fcd9675d8259fb283d76b479471aaf2e99a0253374681a519fa95908c6997ddbb67456baac7c4a75e196b9afa4f6c10b462a86832912c032c6900e90ac4865b9b4f39ea6ebbea3f213460bfac72fd2928e0efb65c9b1a1a69248fbe36e9970a8bf4f7be012bffac977302adcf81b33af97a2009485ccd4fb7efd6c462394abb62961a08a07b76c6f951cb576f28c018d26b5a8c3ff69ef70f88959d941f9ca1464ea0cc30f31fe1b7a86871b56d6b15959c7bebd2ab64986b3355f36c0385208da5808e3ee5421518d633cc24fb403ce5b67baa7ba3093f5e199170f065ae76c4922f2ef38379a22147d41b10d0dbf1169f705e66a316f6827a9b6b5df46db93b58d1fd427fd9e561ef9e1887ed4bc7d505fff10d9f2016624a5c99eee2f30f59f6ef00964d8bfb4d3850bb4725e0897abf4fcb465715c39800583490d46d4b9176bb76ae467c391bdc4558192802d20f5970e203b9dadd93b9cb0db4867683167d100e5c9255f6ed7d2761e8fecfe249e5386c00f2a066f2eefff22b1417fc5df2eef126930dc7266fc4ff149de8cf1b203b525a05c75851df4f1faaa1ee62d0e9c542255507b90da369bd2523192ea907a161c0b82b50f20f8b9197a7c8ec26532cba8e373903c0e88bce0ffdbb32f71b9409a18f83b8addd8fcb42a1de8b2549fe3db781ece0ee9bc724d2740d6e21e3ed9f70e773b553b1a479916d582890f9e3f192e156da0a4b1c3beccddb4e54bcd6a6ed0537fabf0b1f4d28f148a6b790bbeb972631bd5a97506a0bd1e8a8c1933f1fe0be4527b1e251d38bc442fddf70b43c4bd1c0c0aabba92ab16d326e016e60cf3ad2477ded713597d0a8a5ab32f6caf1793e6a2107fc4fad45388c5e1c0affc47d806e01c1dc6a7387a90412d144526c676a882eff6c3b6f9a850d6dd73c9aada9b627cf4da1376b128fdd06e0b620221a83c4cd1f2ef1cba5ffec45f064d0e42613c8f18a1363ba968d78809f7ccfb8e4094d63948c17af82ad8c8e06dc7df5ba720ec7be6b553ff4c91e81e6c9070f55710569c7f9d08d80bf9dc3c777b6ae3c58ef3414da2f28788ff7f2e0e130c41bfdc09ee88102406f23e0951e6e00ba903231993ffed4cbb98dc3a81ed7fee95a1323cc262eb5ae68cd695b41aa0f093ec0bf57218186ee2b8be50b3d7d5878ffcd15d43ab682f3784feb7ea8a14d9b01caad53a39533f77c0559d8f54305742c5ee0a213cefa7a2577a090382c9b63dfb9cf93d3e30c51f93310169b3337f5366ad935771bfb9069fbc94ed1600bbd72dc43d7a645aa3ef91949a578a8a353b685268df46cd98e71c48c760389c66e6506a83096649352fc1f4066eaf8d805932447dc59dc25d5ef057a25e31fa8bcbfa6784c572a77a622832a3a9250a6af1d523baa2e375ae1d92a471160754c5081467e1c64503b878e0938c6c461d1f9723e59d6f295de44a58414f4983978b52290ac9c737e12f6cc3ad7974a7b3e3f44d59f8737c1d091353d0c28677cad492bc1d617bb5ed7f9f7053f96dba9fb4dcd173fef1919ac98a3af691bed421d90daa65a82e6aa4a754d8c6f3f2b32f3f3c9adac4991363b3767d7c03acbe8303c60b0bf1a0b2becbbb1841dd767f15f5460e4dd3f6a198cae97317264090e4d21255dd069bbd5ee93d0041156e088f4018c7f8278cd609ec1c126b68ae811d8d420c0c4b6fdc6c624a4ea249e4ddc5ea25d68d44d162d213dcd175d4fa6c14826a12981f6e6f725e79d3d120e41dc45b326c2dcf1df67ac5fcaac0aee223ba8418f05f107815b2fa57ec79084573b2067de6ae9135089b197c638e9b23876ebc8a227f9de15e1a9ad7644dacb0a3a46668fe0c4c18816f3fd2a3f8298f87e83b8228bca17a06913b9551196092b08633949079500aaaa262574c1b480c48dda3e0879098f1103e749fb91c9448495c6cdbce915d13285f88e5ef6df813685b12cec7f9b1ce55c50f39d53963ee6d19453935e8bdf7a46470729c53fbfe7e88e3f3b8a3fd29bb01e06a2b039ff64ca4551b8523edb5e186f4245798470a273b973a48597ab1fb5d28bf5bbcbeb2dfe2a84c3128f818a358123dc8de890f44d4a76abb4319b1f9dc67bbe98bcc3d8ea857a9d1eb55c47e4c0884c1454786bfb9622b4f1fc26ca7936cbc29ba53bcf538a0b4df945c19ea80830772ad0ffd3a0481bb2bb4bcb80a0206c6456c17dd2fcedc679e366da4f2077fd443616cfd591b01906885d863fc39e1ee229805e6a729bf5d4c0436ee9f190f2caf3e892de84b6287d0d7bbc248be8b878a98dc087bd6b0247d06554bf9dd983f4eb2f1ca72a8ae8eedce9847ab69f2f15fcfe106f4b3701a1cfa3f276a5c4538248d3457b140a22b688cf5fcfcbd2334181122089aefcef21239f105e67255850bead2500960eaf8f3993d40f5754f1b85b75d4752c92cb01d696eb480c03484b72f8b5e2c6acd737135404669307456b2be2836ea49cc04d2f217054245e955ea801dd7a535d8ec5a73c98451b6f302e7e4d28cd2d7125f918198c8621a0b6aec0391e49558ccc1a9c5a4dd524f5ffa36e3279f5e5e1e2be0edd3e5cd9913edb31a2a336b2e2e6a5b495d0f2a2f4791e6ae0e3c53519a51c3114562b2610a4842f5752fb62af45e9045d4e170d01cf8a9356acaaed1389161f1dd8befd250859cc05a3f430ce75af362e2848a74e79342e11011801f8f0d1855c91b4a1e240c85f1758cc8c3550c192fbacca4bb60397017b5257448fd0c38e78f3884efc7e69d8e5f3a2d562874b2f93f3c094f53e58aad15117999c71fad44e8f9adadbae9cb52c5eeda27fe4820bc0ccc2085cff87bd8207ef3a0f6868694d8fe4e43b510ce682ed022f69633ab8c52336d9d3b05c9932921a5b55b2e36811455123151984b7f8fd582dfeae27187f00721ee1107951149223b2c5b75b6dd8a5fd11337b5c65d947f69b17c5cf3e1d086018d909d9614b6d0e9c70742dd6ba941e38e8d1b3a61fc1e0078dea14b5ae352acbe8ec917308241b9a42bfab58434a7e63eedc70f83a147f5dbedbaf40d278cab0b413bdad989baaa529ce8b9834f297a029b452882b6d3ca234348345539f17b0bb69f187899d1c9ad290be4fd8da665c7d4e9735a1c7a3705cab05449fa098b50c66885641c6b301ee6fc5b4a9aed5e478a68a8b9aa8e7a2b8b985e95c92d6906348027f3fa12c31428bc5de8b6b98deea65f2446516322a93b4ef775494d188eea65003e908ac12e26448263d0a27cb23db15c342abfca4c0285416574c1e094ac503100994f4cf18062e484631b679541ad57f03eee5d705f68e79ae04f9d925a9a02427dc13bfc29399615b72dd170cf8ff644aaac1dd30e5111adb9a478f61b4278790c8e006334fb4bff8bd79ba7a9f74ef7b1ce4604c95cb56f1a9a241461878a7ef3d604b44c282662ffef8075ee0c9b4a35c7d121f6585e629750f10be27b94d0e38433b841701bd57a514172080f949a7b0f4b0849111508345a8d563793ee0576ae7f1674cfd990c03d5c535ae9ba1ab926b3aceb06a9cd4a5c71b5df0bda5da7a912e5e07c6eadcd5b735d775e7612db577bea8534c9f0da8ff12a333e2f5fd76f1bad3646febe452b4c54193c2f5a66093de021097f0249f8083c72bd03222817dcf4e8e83b8a79cbc8b51307f34876a9a7d3fc7a8cdc030d211dcd677336af444fe16b56386d8096e3e4679974a0972edca99febce190f2f61f408e9cfaf6b81652a375232009f190350205f2cfda4223cfcfafeae9470f9d76c157ec41bfedc9126cbe0f1594be9422aba1ab647511cb971a36b25229a10d8874ebce1c82edad556b98c36b4f6b9ffe6ee72e0946b0e2964884f05925750b0b7bd6af3e25780aff6c31c2935b6cae3264f659ea3c6fafe3b3e6d98a8bac8cdf1002526585e617da8e41c294684aef823687c97b6000000000000000000000000060e1720262b"
   }
  ]
 }

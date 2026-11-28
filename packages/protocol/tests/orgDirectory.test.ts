@@ -170,7 +170,7 @@ describe("connector standing vectors (an approver who left)", () => {
   const grants = refs(A.seatBooks[0]).grants;
   for (const c of V.standing.cases) {
     it(c.name, () => {
-      const state = verifyOrgAuthorityChain(all.slice(0, c.entries), { genesisHash: A.genesisHash, now: c.now });
+      const state = verifyOrgAuthorityChain(all.slice(0, c.entries), { genesisHash: A.genesisHash, now: c.now, noticeOpenedAt: A.chains[0].noticeOpenedAt });
       const book = buildOrgSeatBook(state, { grants, revokes: [], now: c.now });
       const s = orgConnectorStanding(state, book, c.bundle, c.now);
       expect({ state: s.state, leftAt: s.leftAt, ...(c.expect.suspendAt ? { suspendAt: s.suspendAt } : {}) }).toEqual(c.expect);

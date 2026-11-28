@@ -10,6 +10,7 @@ import {
   orgSeatSas,
   orgSha256Hex,
   verifyOrgAuthorityChain,
+  verifyOrgApprovers,
   type OrgAction,
   type OrgAuthorityEntry,
   type OrgAuthorityState,
@@ -69,6 +70,7 @@ describe("org authority vectors", () => {
           freezes: c.freezes,
           overturns: c.overturns,
           vetoes: c.vetoes,
+          noticeOpenedAt: c.noticeOpenedAt,
         });
       });
       expect(got).toBe(c.expect.ok ? "ok" : c.expect.code);
@@ -100,6 +102,21 @@ describe("org authority vectors", () => {
       });
       expect(got).toBe(c.expect.ok ? "ok" : c.expect.code);
       if (c.expect.ok) expect(result!.scopedSeat).toBe(c.expect.scopedSeat);
+    });
+  }
+
+  for (const raw of V.approvers) {
+    it(`pending approvals: ${raw.name}`, () => {
+      const c = resolveRefs(raw);
+      const st = baseState();
+      const g = resolveRefs(V.seatBooks[0]);
+      const b = buildOrgSeatBook(st, { grants: g.grants, revokes: g.revokes, freezes: c.freezes, now: c.now });
+      let signers: string[] = [];
+      const got = code(() => {
+        signers = verifyOrgApprovers(st, b, enc(c.order), c.approvals, c.now);
+      });
+      expect(got).toBe(c.expect.ok ? "ok" : c.expect.code);
+      if (c.expect.ok) expect(signers).toEqual(c.expect.signers);
     });
   }
 });

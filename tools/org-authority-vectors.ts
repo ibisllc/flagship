@@ -148,6 +148,22 @@ const e3: OrgAuthorityEntry = {
 };
 
 const NOW = v3.issuedAt + HOUR;
+const noticeSha = orgSha256Hex(noticeOrder);
+// `.com` observed the notice open when it was signed: its veto window is [noticeAt, noticeAt + 7 days).
+const observed = { [noticeSha]: noticeAt };
+// Observed 4 minutes after its signed date (inside the clock skew): the window runs 4 minutes past effectiveAt.
+const observedLate = { [noticeSha]: noticeAt + 4 * MIN };
+// Shown for the first time 3 days after the date it carries: a backdated notice.
+const observedBackdated = { [noticeSha]: noticeAt + 3 * DAY };
+
+// A second founder removal (B from v2), signed in advance and opened while the first was still running.
+const v4At = v2.issuedAt + HOUR;
+const v4 = orgFounderRemovalOf(v2, B.seatId, v4At + ORG_FOUNDER_NOTICE_MS);
+const notice2: OrgDelayedChange = { orgId: ORG, oarVersion: 2, kind: "founder-removal", nextRecordSha256: orgAuthorityHash(v4), effectiveAt: v4.issuedAt, issuedAt: v4At };
+const notice2Order = canonicalOrgDelayedChange(notice2);
+const e4: OrgAuthorityEntry = { record: v4, via: "founder-removal", approvals: [], notice: { body: notice2, approvals: [approve(A, notice2Order, 2, v4At)] } };
+const NOW4 = v4.issuedAt + HOUR;
+const notice2Sha = orgSha256Hex(notice2Order);
 
 const veto: OrgSigned<OrgVeto> = (() => {
   const body: OrgVeto = { orgId: ORG, noticeSha256: orgSha256Hex(noticeOrder), issuedAt: noticeAt + DAY };
@@ -157,6 +173,8 @@ const vetoByBoard: OrgSigned<OrgVeto> = (() => {
   const body: OrgVeto = { orgId: ORG, noticeSha256: orgSha256Hex(noticeOrder), issuedAt: noticeAt + DAY };
   return { body, approvals: [approve(D, canonicalOrgVeto(body), 1, noticeAt + DAY)] };
 })();
+// B's veto dated 1 minute past the notice's signed effectiveAt: late for a notice observed when it was signed,
+// inside the window of one observed 4 minutes later.
 const lateVeto: OrgSigned<OrgVeto> = (() => {
   const body: OrgVeto = { orgId: ORG, noticeSha256: orgSha256Hex(noticeOrder), issuedAt: v2.issuedAt + MIN };
   return { body, approvals: [approve(B, canonicalOrgVeto(body), 1, v2.issuedAt + MIN)] };
@@ -223,7 +241,7 @@ const ok = { ok: true };
 const no = (code: string) => ({ ok: false, code });
 
 const chains = [
-  { name: "genesis, recovery seat added, founder removes C after 7 days, the bylaws' set restores C", entries: [e0, e1, e2, e3], now: NOW, expect: ok, currentVersion: 3 },
+  { name: "genesis, recovery seat added, founder removes C after 7 days, the bylaws' set restores C", entries: [e0, e1, e2, e3], now: NOW, noticeOpenedAt: observed, expect: ok, currentVersion: 3 },
   { name: "genesis alone", entries: [e0], now: NOW, expect: ok, currentVersion: 0 },
   { name: "genesis hash pinned is another", entries: [e0], now: NOW, genesisHash: "11".repeat(32), expect: no("prev-hash") },
   { name: "genesis without the board seat's consent", entries: [{ ...e0, approvals: e0.approvals.slice(0, 3) }], now: NOW, expect: no("consent-missing") },
@@ -239,18 +257,31 @@ const chains = [
   { name: "a second freeze by the same admin within 7 days is void", entries: [e0, e1], now: NOW, freezes: [freezeB, freezeAInCooldown], overturns: [overturnB], expect: ok, currentVersion: 1 },
   { name: "a freeze longer than 72 h is void", entries: [e0, e1], now: NOW, freezes: [freezeTooLong], expect: ok, currentVersion: 1 },
   { name: "a board seat cannot freeze", entries: [e0, e1], now: NOW, freezes: [freezeByBoard], expect: ok, currentVersion: 1 },
-  { name: "the founder's removal applied before its 7 days", entries: [e0, e1, e2], now: v2.issuedAt - MIN, expect: no("notice-early") },
-  { name: "the founder's removal vetoed by another admin", entries: [e0, e1, e2], now: NOW, vetoes: [veto], expect: no("notice-vetoed") },
-  { name: "a board seat alone is not the overturn set's two", entries: [e0, e1, e2], now: NOW, vetoes: [vetoByBoard], expect: ok, currentVersion: 2 },
-  { name: "a veto after the notice ran out is late", entries: [e0, e1, e2], now: NOW, vetoes: [lateVeto], expect: ok, currentVersion: 2 },
+  { name: "the founder's removal applied before its 7 days", entries: [e0, e1, e2], now: v2.issuedAt - MIN, noticeOpenedAt: observed, expect: no("notice-early") },
+  { name: "the founder's removal vetoed by another admin", entries: [e0, e1, e2], now: NOW, noticeOpenedAt: observed, vetoes: [veto], expect: no("notice-vetoed") },
+  { name: "a board seat alone is not the overturn set's two", entries: [e0, e1, e2], now: NOW, noticeOpenedAt: observed, vetoes: [vetoByBoard], expect: ok, currentVersion: 2 },
+  { name: "a veto after the observed notice ran out is late", entries: [e0, e1, e2], now: NOW, noticeOpenedAt: observed, vetoes: [lateVeto], expect: ok, currentVersion: 2 },
+  { name: "a veto past the signed effectiveAt counts while the observed window is still open", entries: [e0, e1, e2], now: NOW, noticeOpenedAt: observedLate, vetoes: [lateVeto], expect: no("notice-vetoed") },
+  { name: "the removal applied after its signed date but before 7 days since it was observed", entries: [e0, e1, e2], now: v2.issuedAt + MIN, noticeOpenedAt: observedLate, expect: no("notice-early") },
+  { name: "a founder removal whose notice .com never observed", entries: [e0, e1, e2], now: NOW, expect: no("notice-unobserved") },
+  { name: "a backdated notice (shown 3 days after its signed date)", entries: [e0, e1, e2], now: NOW, noticeOpenedAt: observedBackdated, expect: no("notice-backdated") },
+  {
+    name: "a second removal opened in parallel with the first is refused",
+    entries: [e0, e1, e2, e4],
+    now: NOW4,
+    noticeOpenedAt: { ...observed, [notice2Sha]: noticeAt + HOUR },
+    expect: no("notice-overlap"),
+  },
+  { name: "a second removal opened after the first took effect", entries: [e0, e1, e2, e4], now: NOW4, noticeOpenedAt: { ...observed, [notice2Sha]: v4At }, expect: ok, currentVersion: 3 },
   {
     name: "a removal notice signed by an admin who is not the founder",
     entries: [e0, e1, { ...e2, notice: { body: notice, approvals: [approve(B, noticeOrder, 1, noticeAt)] } }],
     now: NOW,
+    noticeOpenedAt: observed,
     expect: no("notice-invalid"),
   },
-  { name: "the restore approved by one of the overturn set", entries: [e0, e1, e2, { ...e3, approvals: [e3.approvals[0]!, e3.approvals[2]!] }], now: NOW, expect: no("threshold") },
-  { name: "the restore without the restored seat's consent", entries: [e0, e1, e2, { ...e3, approvals: e3.approvals.slice(0, 2) }], now: NOW, expect: no("consent-missing") },
+  { name: "the restore approved by one of the overturn set", entries: [e0, e1, e2, { ...e3, approvals: [e3.approvals[0]!, e3.approvals[2]!] }], now: NOW, noticeOpenedAt: observed, expect: no("threshold") },
+  { name: "the restore without the restored seat's consent", entries: [e0, e1, e2, { ...e3, approvals: e3.approvals.slice(0, 2) }], now: NOW, noticeOpenedAt: observed, expect: no("consent-missing") },
   { name: "changing the bylaws with k_gov only", entries: [e0, e1bTwo], now: NOW, expect: no("threshold") },
   { name: "changing the bylaws with the strictest ceremony", entries: [e0, e1bThree], now: NOW, expect: ok, currentVersion: 1 },
   { name: "two browser admins join, each consenting", entries: [e0, ew1], now: NOW, expect: ok, currentVersion: 1 },
@@ -336,6 +367,20 @@ const authorize = [
   { name: "approvals under v0 within 24 h of v1", action: { kind: "operate", server: SERVER }, order: utf8(UPDATE), approvals: [ap(B, UPDATE, 0, T0 + 2 * HOUR)], now: T0 + 2 * HOUR, expect: { ok: true, scopedSeat: null } },
 ];
 
+// ── pending approvals (verifyOrgApprovers: a ceremony's approvals and vetoes as they arrive) ──────
+// C freezes B under v1 for 72 h; an approval counts only if B was frozen neither when it signed nor now.
+const F = T0 + 5 * HOUR;
+const freezeB1: OrgSigned<OrgSeatFreeze> = (() => {
+  const body: OrgSeatFreeze = { orgId: ORG, seatId: B.seatId, untilMs: F + 72 * HOUR, oarVersion: 1, issuedAt: F };
+  return { body, approvals: [approve(C, canonicalOrgSeatFreeze(body), 1, F)] };
+})();
+const approvers = [
+  { name: "an approval signed after the freeze ran out", freezes: [freezeB1], order: utf8(UPDATE), approvals: [approve(B, UPDATE, 1, F + 72 * HOUR + MIN)], now: F + 72 * HOUR + 30 * MIN, expect: { ok: true, signers: [B.seatId] } },
+  { name: "an approval signed while frozen, sent once the freeze ran out (an evaded freeze)", freezes: [freezeB1], order: utf8(UPDATE), approvals: [approve(B, UPDATE, 1, F + HOUR)], now: F + 72 * HOUR + 30 * MIN, expect: no("frozen-signer") },
+  { name: "an approval dated before the freeze, sent during it", freezes: [freezeB1], order: utf8(UPDATE), approvals: [approve(B, UPDATE, 1, F - HOUR)], now: F + HOUR, expect: no("frozen-signer") },
+  { name: "a pending approval past its notAfter", freezes: [], order: utf8(UPDATE), approvals: [approve(B, UPDATE, 1, F, F + HOUR)], now: F + 2 * HOUR, expect: no("expired") },
+];
+
 // ── canonical forms ──────────────────────────────────────────────────────
 // The invite key from a fixed link key (test-vectors/org-invite-key has the derivation and its proofs).
 const inviteKeyPub = deriveOrgInviteKeys(fill(32, 0x33)).inviteKeyPub;
@@ -371,7 +416,7 @@ const seeds = deriveOrgSeatMemberSeeds(umk, ORG);
 
 const doc = {
   description:
-    "Enterprise org authority (docs/enterprise-accounts.md). Keys are hybrid Ed25519 + ML-DSA-65 from fixed seeds; signatures deterministic. chains: verifyOrgAuthorityChain(entries, {genesisHash ?? top-level genesisHash, now, freezes, overturns, vetoes}). seatBooks and authorize run on the state of chains[0].entries[0..1] (v0, v1) with no freezes. authorize uses seatBooks[0]'s book.",
+    "Enterprise org authority (docs/enterprise-accounts.md). Keys are hybrid Ed25519 + ML-DSA-65 from fixed seeds; signatures deterministic. chains: verifyOrgAuthorityChain(entries, {genesisHash ?? top-level genesisHash, now, freezes, overturns, vetoes, noticeOpenedAt}); noticeOpenedAt maps a delayed-change notice's sha256 to the time .com observed it open (absent = none observed). seatBooks and authorize run on the state of chains[0].entries[0..1] (v0, v1) with no freezes. authorize uses seatBooks[0]'s book. approvers: verifyOrgApprovers(state, book, order, approvals, now) on that state, the book built from seatBooks[0]'s grants with the case's freezes; ok returns signers.",
   orgId: ORG,
   keys: Object.fromEntries(
     [A, B, C, D, R, S, SM, MM, X, W, V].map((k) => [k.name, { seatId: k.seatId, edSeedHex: k.edSeedHex, mldsaSeedHex: k.mldsaSeedHex, keyId: k.keyId, binding: k.binding }]),
@@ -388,6 +433,7 @@ const doc = {
   chains,
   seatBooks,
   authorize,
+  approvers,
 };
 
 // Bindings become {"$key": name} (see `keys`) and approvals {"$approval": i} (see `approvals`), so the

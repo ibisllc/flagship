@@ -251,7 +251,7 @@ const reBundle = {
   approvals: [signOrgApproval({ orgId: ORG, oarVersion: 2, order: canonicalOrgConnector(reapproved), seatId: B.seatId, adminKeyId: B.keyId, issuedAt: reAt, notAfter: reAt + 86_400_000 }, B.secret, { deterministic: true })],
 };
 const standing = {
-  description: "orgConnectorStanding over org-authority chains[0].entries[0..2] (C removed at v2) and seatBooks[0] grants",
+  description: "orgConnectorStanding over org-authority chains[0].entries[0..2] (C removed at v2; the chain verified with chains[0].noticeOpenedAt) and seatBooks[0] grants",
   entries: 3,
   cases: [
     { name: "approved by C, C still an admin (v1 only)", entries: 2, bundle: byCBundle, now: cAt + 60_000, expect: { state: "ok", leftAt: null } },

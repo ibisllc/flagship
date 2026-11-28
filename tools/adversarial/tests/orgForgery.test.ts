@@ -364,7 +364,7 @@ describe("AT-ENV-50 org-directory-slice/v1 (a member's sealed slice) and connect
   it("AT-ENV-50d a connector whose last approver left more than 7 days ago is suspended on the box (stored mode)", () => {
     const all = refs(A.chains[0]).entries;
     const c = D.standing.cases[2];
-    const st = P.verifyOrgAuthorityChain(all.slice(0, c.entries), { genesisHash: A.genesisHash, now: c.now });
+    const st = P.verifyOrgAuthorityChain(all.slice(0, c.entries), { genesisHash: A.genesisHash, now: c.now, noticeOpenedAt: A.chains[0].noticeOpenedAt });
     const bk = P.buildOrgSeatBook(st, { grants, revokes: [], now: c.now });
     expect(() => P.verifyOrgConnector({ state: st, book: bk, servers: new Set(["home.acme.flagship.services"]), now: c.now }, clone(c.bundle), null, { stored: true })).toThrow(/suspended/);
   });

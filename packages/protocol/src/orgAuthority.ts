@@ -123,6 +123,12 @@ export type OrgErrorCode =
   | "notice-early"
   | "notice-vetoed"
   | "notice-invalid"
+  /** A delayed change whose notice `.com` never observed (no open time in `noticeOpenedAt`). */
+  | "notice-unobserved"
+  /** A notice whose signed time is not its observed open time (backdated or dated ahead). */
+  | "notice-backdated"
+  /** A delayed change observed before the previous one was executed (one at a time). */
+  | "notice-overlap"
   | "overturn-invalid"
   | "freeze-too-long"
   | "freeze-cooldown"
@@ -644,6 +650,18 @@ export interface OrgChainOptions {
   overturns?: readonly OrgSigned<OrgOverturn>[];
   /** Signed vetoes known to the verifier. */
   vetoes?: readonly OrgSigned<OrgVeto>[];
+  /**
+   * When `.com` observed each delayed-change notice open (its server-stamped `openedAt`), by the notice
+   * body's sha256. A founder removal or recovery counts only for a notice observed here: its veto window
+   * is `[openedAt, openedAt + wait)` and its record cannot take effect before `openedAt + wait`, so a
+   * notice signed with an earlier date than it was shown gives nobody less time to veto it.
+   */
+  noticeOpenedAt?: Readonly<Record<string, number>>;
+}
+
+/** The notice period of a delayed change. */
+export function orgDelayedChangeWait(kind: OrgDelayedKind): number {
+  return kind === "founder-removal" ? ORG_FOUNDER_NOTICE_MS : ORG_RECOVERY_NOTICE_MS;
 }
 
 /** Verifies the chain from genesis. Throws `OrgAuthorityError`. */
@@ -659,6 +677,8 @@ export function verifyOrgAuthorityChain(entries: readonly OrgAuthorityEntry[], o
     current: records[records.length - 1]!,
     currentHash: orgAuthorityHash(records[records.length - 1]!),
   });
+  // One delayed change at a time: each is observed only after the one before it took effect.
+  let lastDelayedAt = -1;
   for (const e of entries) {
     const r = e.record;
     checkOrgAuthorityShape(r);
@@ -678,7 +698,8 @@ export function verifyOrgAuthorityChain(entries: readonly OrgAuthorityEntry[], o
       if (r.issuedAt <= p.issuedAt) fail("not-after-previous");
       const st = state();
       const frozen = frozenPredicate(st, opts);
-      verifyTransition(e, p, r, st, verified, frozen, opts);
+      verifyTransition(e, p, r, st, verified, frozen, opts, lastDelayedAt);
+      if (e.via === "founder-removal" || e.via === "recovery") lastDelayedAt = r.issuedAt;
     }
     records.push(r);
     for (const [seat, b] of verified) bindings.set(bindingKey(r.version, seat), b);
@@ -694,6 +715,7 @@ function verifyTransition(
   verified: Map<string, VerifiedPqKeyBinding>,
   frozen: (seatId: string, t: number) => boolean,
   opts: OrgChainOptions,
+  lastDelayedAt: number,
 ): void {
   const order = canonicalOrgAuthority(r);
   const prevKey = (s: string) => st.bindings.get(bindingKey(p.version, s));
@@ -733,37 +755,24 @@ function verifyTransition(
       if (removed.length !== 1) fail("notice-invalid", "exactly one admin");
       const expected = orgFounderRemovalOf(p, removed[0]!, r.issuedAt);
       if (orgAuthorityHash(expected) !== orgAuthorityHash(r)) fail("notice-invalid", "record is not the removal");
-      checkNotice(n!, p, r, ORG_FOUNDER_NOTICE_MS, opts);
+      const openedAt = checkNotice(n!, p, r, ORG_FOUNDER_NOTICE_MS, opts, lastDelayedAt);
       const signers = checkApprovals(n!.approvals, { orgId: p.orgId, oarVersion: p.version, order: canonicalOrgDelayedChange(n!.body), now: opts.now }, prevKey, frozen);
       if (signers.length !== 1 || signers[0] !== p.founderSeatId) fail("notice-invalid", "only the founder");
-      const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(n!.body));
-      const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && a.seatId !== p.founderSeatId && a.seatId !== removed[0]).map((a) => a.seatId));
-      const set = new Set(orgOverturnSet(p).filter((s) => s !== removed[0]));
-      for (const v of opts.vetoes ?? []) {
-        const count = vetoSigners(v, noticeHash, n!.body, p, prevKey, frozen, opts);
-        if (count === null) continue;
-        if (count.filter((s) => eligible.has(s)).length >= p.bylaws.vetoK) fail("notice-vetoed");
-        if (count.filter((s) => set.has(s)).length >= orgOverturnThreshold(p)) fail("notice-vetoed");
-      }
+      if (founderRemovalVetoed(p, removed[0]!, n!.body, openedAt, prevKey, frozen, opts)) fail("notice-vetoed");
       if (e.approvals.length !== consent.length) fail("malformed", "stray approvals");
       return;
     }
     case "recovery": {
       const n = e.notice;
       if (!n || n.body.kind !== "recovery") fail("notice-invalid");
-      checkNotice(n!, p, r, ORG_RECOVERY_NOTICE_MS, opts);
+      const openedAt = checkNotice(n!, p, r, ORG_RECOVERY_NOTICE_MS, opts, lastDelayedAt);
       const signers = checkApprovals(n!.approvals, { orgId: p.orgId, oarVersion: p.version, order: canonicalOrgDelayedChange(n!.body), now: opts.now }, prevKey, frozen);
       for (const s of signers) if (kindOf(s) !== "admin" && kindOf(s) !== "recovery") fail("not-an-admin", s);
       if (!signers.some((s) => kindOf(s) === "recovery")) fail("notice-invalid", "no recovery seat");
       const k = bylawsChanged || founderMoved ? orgBylawsThreshold(p) : p.kGov;
       if (signers.length < k) fail("threshold", `${signers.length} of ${k}`);
       checkOrgQuorumCustody(p, k, signers, adminCustody(p));
-      const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(n!.body));
-      const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && !signers.includes(a.seatId)).map((a) => a.seatId));
-      for (const v of opts.vetoes ?? []) {
-        const count = vetoSigners(v, noticeHash, n!.body, p, prevKey, frozen, opts);
-        if (count !== null && count.some((s) => eligible.has(s))) fail("notice-vetoed");
-      }
+      if (recoveryVetoed(p, signers, n!.body, openedAt, prevKey, frozen, opts)) fail("notice-vetoed");
       if (e.approvals.length !== consent.length) fail("malformed", "stray approvals");
       return;
     }
@@ -799,33 +808,132 @@ function verifyTransition(
   }
 }
 
-function checkNotice(n: OrgSigned<OrgDelayedChange>, p: OrgAuthorityRecord, r: OrgAuthorityRecord, wait: number, opts: OrgChainOptions): void {
+/**
+ * Checks a delayed change's notice against `.com`'s observed open time and returns that time. The notice is
+ * dated within the clock skew of when it was observed (a backdated or forward-dated one is refused), it was
+ * observed no earlier than the previous delayed change took effect (one at a time), and it applies only once
+ * `wait` has passed since it was observed, whatever its signed dates say.
+ */
+function checkNotice(n: OrgSigned<OrgDelayedChange>, p: OrgAuthorityRecord, r: OrgAuthorityRecord, wait: number, opts: OrgChainOptions, lastDelayedAt: number): number {
   const b = n.body;
-  canonicalOrgDelayedChange(b);
+  const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(b));
   if (b.orgId !== p.orgId || b.oarVersion !== p.version) fail("notice-invalid", "version");
   if (r.issuedAt !== b.effectiveAt) fail("notice-invalid", "record must be dated at effectiveAt");
   if (b.nextRecordSha256 !== orgAuthorityHash(r)) fail("notice-invalid", "names another record");
   if (b.effectiveAt !== b.issuedAt + wait) fail("notice-invalid", "notice period");
   if (b.issuedAt < p.issuedAt) fail("notice-invalid", "older than the record it changes");
-  if (opts.now < b.effectiveAt) fail("notice-early");
+  const openedAt = opts.noticeOpenedAt?.[noticeHash];
+  if (!isUint(openedAt)) fail("notice-unobserved");
+  if (openedAt! < lastDelayedAt) fail("notice-overlap", "observed before the previous delayed change took effect");
+  if (Math.abs(b.issuedAt - openedAt!) > ORG_MAX_SKEW_MS) fail("notice-backdated");
+  if (opts.now < Math.max(b.effectiveAt, openedAt! + wait)) fail("notice-early");
+  return openedAt!;
 }
 
+/** The signers of a veto that counts: over this notice, issued inside the observed window `[openedAt, openedAt + wait)`. */
 function vetoSigners(
   v: OrgSigned<OrgVeto>,
   noticeHash: string,
-  notice: OrgDelayedChange,
+  openedAt: number,
+  wait: number,
   p: OrgAuthorityRecord,
   keyOf: (s: string) => VerifiedPqKeyBinding | undefined,
   frozen: (seatId: string, t: number) => boolean,
-  opts: OrgChainOptions,
+  opts: Pick<OrgChainOptions, "now">,
 ): string[] | null {
   try {
     if (v.body.orgId !== p.orgId || v.body.noticeSha256 !== noticeHash) return null;
-    if (v.body.issuedAt >= notice.effectiveAt || v.body.issuedAt < notice.issuedAt) return null;
+    if (v.body.issuedAt < openedAt || v.body.issuedAt >= openedAt + wait) return null;
     return checkApprovals(v.approvals, { orgId: p.orgId, oarVersion: p.version, order: canonicalOrgVeto(v.body), now: opts.now }, keyOf, frozen);
   } catch {
     return null;
   }
+}
+
+function founderRemovalVetoed(
+  p: OrgAuthorityRecord,
+  target: string,
+  notice: OrgDelayedChange,
+  openedAt: number,
+  keyOf: (s: string) => VerifiedPqKeyBinding | undefined,
+  frozen: (seatId: string, t: number) => boolean,
+  opts: Pick<OrgChainOptions, "now" | "vetoes">,
+): boolean {
+  const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(notice));
+  const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && a.seatId !== p.founderSeatId && a.seatId !== target).map((a) => a.seatId));
+  const set = new Set(orgOverturnSet(p).filter((s) => s !== target));
+  for (const v of opts.vetoes ?? []) {
+    const count = vetoSigners(v, noticeHash, openedAt, ORG_FOUNDER_NOTICE_MS, p, keyOf, frozen, opts);
+    if (count === null) continue;
+    if (count.filter((s) => eligible.has(s)).length >= p.bylaws.vetoK) return true;
+    if (count.filter((s) => set.has(s)).length >= orgOverturnThreshold(p)) return true;
+  }
+  return false;
+}
+
+function recoveryVetoed(
+  p: OrgAuthorityRecord,
+  signers: readonly string[],
+  notice: OrgDelayedChange,
+  openedAt: number,
+  keyOf: (s: string) => VerifiedPqKeyBinding | undefined,
+  frozen: (seatId: string, t: number) => boolean,
+  opts: Pick<OrgChainOptions, "now" | "vetoes">,
+): boolean {
+  const noticeHash = orgSha256Hex(canonicalOrgDelayedChange(notice));
+  const eligible = new Set(p.admins.filter((a) => a.kind === "admin" && !signers.includes(a.seatId)).map((a) => a.seatId));
+  for (const v of opts.vetoes ?? []) {
+    const count = vetoSigners(v, noticeHash, openedAt, ORG_RECOVERY_NOTICE_MS, p, keyOf, frozen, opts);
+    if (count !== null && count.some((s) => eligible.has(s))) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a pending delayed change, observed at `openedAt` against the chain's current record, has been
+ * vetoed by the vetoes known so far (the same count the chain applies when it is appended). `record` is the
+ * record the notice names. For `.com`, which keeps one delayed change open at a time.
+ */
+export function orgPendingNoticeVetoed(
+  st: OrgAuthorityState,
+  notice: OrgSigned<OrgDelayedChange>,
+  record: OrgAuthorityRecord,
+  openedAt: number,
+  opts: Pick<OrgChainOptions, "now" | "vetoes" | "freezes" | "overturns">,
+): boolean {
+  const p = st.current;
+  if (notice.body.oarVersion !== p.version || orgAuthorityHash(record) !== notice.body.nextRecordSha256) return false;
+  const keyOf = (s: string) => st.bindings.get(bindingKey(p.version, s));
+  const frozen = frozenPredicate(st, opts);
+  if (notice.body.kind === "founder-removal") {
+    const removed = p.admins.filter((a) => !record.admins.some((x) => x.seatId === a.seatId)).map((a) => a.seatId);
+    if (removed.length !== 1) return false;
+    return founderRemovalVetoed(p, removed[0]!, notice.body, openedAt, keyOf, frozen, opts);
+  }
+  let signers: string[];
+  try {
+    signers = checkApprovals(notice.approvals, { orgId: p.orgId, oarVersion: p.version, order: canonicalOrgDelayedChange(notice.body), now: opts.now }, keyOf, frozen);
+  } catch {
+    return false;
+  }
+  return recoveryVetoed(p, signers, notice.body, openedAt, keyOf, frozen, opts);
+}
+
+/** Reads a delayed change back from its canonical text (a ceremony's order). Throws `OrgAuthorityError`. */
+export function orgDelayedChangeFromCanonical(text: string): OrgDelayedChange {
+  const parts = text.split("|");
+  if (parts.length !== 7 || parts[0] !== TAG_ORG_DELAYED_CHANGE) fail("malformed", "delayed change");
+  const num = (x: string) => (/^(0|[1-9][0-9]{0,15})$/.test(x) ? Number(x) : NaN);
+  const c: OrgDelayedChange = {
+    orgId: parts[1]!,
+    oarVersion: num(parts[2]!),
+    kind: parts[3] as OrgDelayedKind,
+    nextRecordSha256: parts[4]!,
+    effectiveAt: num(parts[5]!),
+    issuedAt: num(parts[6]!),
+  };
+  if (new TextDecoder().decode(canonicalOrgDelayedChange(c)) !== text) fail("malformed", "delayed change");
+  return c;
 }
 
 // ── freezes ──────────────────────────────────────────────────────────────
@@ -1448,7 +1556,8 @@ export function authorizeOrgOrder(input: OrgAuthorizeInput): OrgAuthorizeResult 
 
 /**
  * The seats whose approvals of `order` verify: anyone in the current record (any kind) or a seat with
- * an admin key, not frozen now, under the current record (or the previous one within 24 h). Counts
+ * an admin key, not frozen when it signed nor now, each approval unexpired now, under the current record
+ * (or the previous one within 24 h). Counts
  * nothing: for collecting a ceremony and for vetoes, whose weight the chain decides.
  */
 export function verifyOrgApprovers(
@@ -1472,8 +1581,11 @@ export function verifyOrgApprovers(
     if (book.revoked.has(s)) return undefined;
     return book.seats.get(s)?.admin ?? undefined;
   };
-  const frozenNow = (s: string) => s !== opts.allowFrozenSeat && book.freezes.some((f) => f.seatId === s && f.issuedAt <= now && now < f.untilMs);
-  return checkApprovals(approvals, { orgId: state.orgId, oarVersion: version, order, now }, keyOf, (s) => frozenNow(s));
+  // Frozen at the time it signed or now, as `authorizeOrgOrder` tests: an approval signed while frozen does not
+  // count once the freeze has run out, and backdating one to before a freeze does not get it past it either.
+  const frozen = (s: string, t: number) =>
+    s !== opts.allowFrozenSeat && book.freezes.some((f) => f.seatId === s && ((f.issuedAt <= t && t < f.untilMs) || (f.issuedAt <= now && now < f.untilMs)));
+  return checkApprovals(approvals, { orgId: state.orgId, oarVersion: version, order, now }, keyOf, frozen);
 }
 
 /** The seat a sign-in key belongs to (member or admin key), for the box's sign-in classes. */
