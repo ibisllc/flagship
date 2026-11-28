@@ -8,13 +8,13 @@ export const BOX_RELEASE = {
   trust: {
     threshold: 1,
     keys: [
-  "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+  "b78652d5b438fbc33c9beb0d611c91fdab27af2b4324d1d65876a1dca20b1f89",
     ],
     /** The hybrid PQ pin (boxArtifactPq.ts): signers' key ids, and manifests from before the cut-over. */
-    pq: { keyIds: ["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"] as readonly string[], legacyManifests: [] as readonly string[] },
+    pq: { keyIds: ["53627a4671a4ec0e2386f0bdc2e6b6b7f9017bb1302dffbb0a307ac8a4b90d62"] as readonly string[], legacyManifests: ["524ae4e794ea44328abfb6d6074a5798b2cb18360d1000140367bbdf385dcc76", "81e3b25a441bbb2f11d6cd163b3307e5ba00b74003f7c54a260b109f75393aea", "964445f64ca7c16b16c38620fd66420e99039a043970de5d9395b43f2ee24835", "c0055109fad626d3c6adf769af9d0ae111bc38d37a17d1579f6b38226122d69c", "ebf01ad139331e56c8491660abf9151b957dabaff4c4b44db274c990c0576af6"] as readonly string[] },
   },
   /** The installer's arguments for the PQ pin; empty while the pin names no key. */
-  pqInstallerArgs: " --pq-key-ids \"1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434\"",
+  pqInstallerArgs: " --pq-key-ids \"53627a4671a4ec0e2386f0bdc2e6b6b7f9017bb1302dffbb0a307ac8a4b90d62\" --legacy-manifests \"524ae4e794ea44328abfb6d6074a5798b2cb18360d1000140367bbdf385dcc76,81e3b25a441bbb2f11d6cd163b3307e5ba00b74003f7c54a260b109f75393aea,964445f64ca7c16b16c38620fd66420e99039a043970de5d9395b43f2ee24835,c0055109fad626d3c6adf769af9d0ae111bc38d37a17d1579f6b38226122d69c,ebf01ad139331e56c8491660abf9151b957dabaff4c4b44db274c990c0576af6\"",
   /** The lowest Node a box may run. */
   nodeFloor: "24.22.1",
   /** What a new box is built on: Podman + the Rust path, or Docker + TS (the release gym decides). */
