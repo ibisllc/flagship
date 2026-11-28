@@ -183,6 +183,11 @@ new_sqlite_classes = ["VoiciCallRoom"]
 # `<server>.<user>.gym.flagship.services`.
 SERVICES_APEX = "gym.flagship.services"
 CONTROL_APEX = "gym.flagshipserver.com"
+# gym: certificates come from the gym's private Pebble (docs/gym-test-acme.md option D; infra/acme-gym/, Fly app
+# flagship-acme-gym), never Let's Encrypt: no CT entries, no rate limits. gym-refresh.sh 5b restarts it before a run (a
+# fresh root); the live runner trusts that run's root. The real-LE lane deploys with
+# `--var ISSUANCE_ACME_DIRECTORY:` (empty = Let's Encrypt production). Production's wrangler.toml never names this.
+ISSUANCE_ACME_DIRECTORY = "https://flagship-acme-gym.fly.dev/dir"
 # voi.ci pages and Messages: the gym's site origin (the delegation origin, CORS and the page host) and the voi.ci
 # brake (on = normal, as in production).
 VOICI_WEB_ORIGIN = "https://gym.voi.ci"
