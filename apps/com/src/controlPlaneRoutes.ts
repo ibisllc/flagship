@@ -2460,9 +2460,10 @@ export async function tryControlPlane(
       );
     }
     if (method === "GET" && (m = path.match(ROUTE_RE.UPDATE_DEPOSIT))) {
-      return finishPlain(
-        await handleConsumeUpdateDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
-      );
+      const host = decodeURIComponent(m[1]!);
+      const refused = await gateServerRead(storage, env, request, host);
+      if (refused) return refused;
+      return finishPlain(await handleConsumeUpdateDeposit(buildSecretMailboxDeps(), host));
     }
     // Account-death content-wipe — the box's read of the owner-IRK-signed
     // servers-self-delete order .com deposited at the last-device deletion:

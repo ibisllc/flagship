@@ -146,7 +146,7 @@ over once "let's start 0.5" is said.
   `signRekey`/`verifyRekey` from the account key rotation (`4bd18c514`). Give them a seed or a classification in
   `tools/adversarial/tests/support/seeds.ts`, then run the harness green before the release.
 
-- **The box's update-order read takes its own read token** (external report, 2026-11-27). The other four consume-once
+- ~~**The box's update-order read takes its own read token**~~ done on main 2026-11-28, after box release c9eb06aa went live (owner: break the boxes left behind; production had one live box). (external report, 2026-11-27). The other four consume-once
   deposit reads already need the box's token; `GET /api/server/<d>/update` does not, so anyone with a box's name can
   use up a pending update order. Main already makes the box send its token there (`boxReadToken.ts` OWN_DEPOSIT,
   the update poller's fetch). In 0.5, `.com` gates that read like its siblings (`gateServerRead`; the route test
