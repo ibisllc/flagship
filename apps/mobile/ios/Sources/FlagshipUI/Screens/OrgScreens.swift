@@ -210,6 +210,11 @@ public struct OrgDetailScreen: View {
             ForEach(list) { cer in
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text(OrgCopy.purpose(cer.purpose)).font(FS.font.body()).foregroundColor(c.text)
+                    if cer.isDelayedChange, let seen = cer.openedAt {
+                        // A delayed change counts from when Flagship saw its notice, not from the date it carries.
+                        Text("Flagship saw this notice on \(Date(timeIntervalSince1970: TimeInterval(seen) / 1000).formatted(date: .abbreviated, time: .shortened)). Its waiting period counts from then.")
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
                     Text("Approved by \(cer.approvals.count)").font(FS.font.caption()).foregroundColor(c.textMuted)
                     if vm.hasApproved(seat, cer) {
                         Text("You approved this.").font(FS.font.caption()).foregroundColor(c.textMuted)

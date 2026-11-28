@@ -3603,6 +3603,7 @@
   "Approved by %lld": "%lld 人が承認",
   "You approved this.": "承認済みです。",
   "People who can approve": "承認できる人",
+  "Flagship saw this notice on %@. Its waiting period counts from then.": "Flagship はこの通知を %@ に確認しました。待機期間はそのときから数えます。",
   "Frozen until %@": "%@ まで凍結",
   "Freeze": "凍結",
   "Seat %@": "シート %@",

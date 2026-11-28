@@ -15440,6 +15440,10 @@
     "en": "People who can approve",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
   },
+  "Flagship saw this notice on %@. Its waiting period counts from then.": {
+    "en": "Flagship saw this notice on %@. Its waiting period counts from then.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"
+  },
   "Frozen until %@": {
     "en": "Frozen until %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/OrgScreens.swift"

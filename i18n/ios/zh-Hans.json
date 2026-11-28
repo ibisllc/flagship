@@ -3603,6 +3603,7 @@
   "Approved by %lld": "已有 %lld 人批准",
   "You approved this.": "你已批准。",
   "People who can approve": "可以批准的人",
+  "Flagship saw this notice on %@. Its waiting period counts from then.": "Flagship 于 %@ 看到了这条通知。等待期从那时开始计算。",
   "Frozen until %@": "冻结至 %@",
   "Freeze": "冻结",
   "Seat %@": "席位 %@",

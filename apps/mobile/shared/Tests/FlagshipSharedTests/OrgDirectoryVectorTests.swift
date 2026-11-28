@@ -115,7 +115,8 @@ extension OrgDirectoryVectorTests {
     private func stateAndBook(_ A: [String: Any], entries n: Int, now: Int64) throws -> (OrgAuthorityState, OrgSeatBook) {
         let chain = resolve((A["chains"] as! [Any])[0], A) as! [String: Any]
         let entries = try (chain["entries"] as! [Any]).prefix(n).map { try OrgAuthorityWire.entry($0) }
-        let st = try OrgAuthority.verifyChain(Array(entries), genesisHash: A["genesisHash"] as! String, now: now, freezes: [], overturns: [], vetoes: [])
+        let st = try OrgAuthority.verifyChain(Array(entries), genesisHash: A["genesisHash"] as! String, now: now, freezes: [], overturns: [], vetoes: [],
+                                              noticeOpenedAt: OrgAuthorityWire.noticeOpenedAt(chain["noticeOpenedAt"]))
         let book = resolve((A["seatBooks"] as! [Any])[0], A) as! [String: Any]
         return (st, OrgAuthority.buildSeatBook(st, grants: try (book["grants"] as! [Any]).map { try OrgAuthorityWire.grantBundle($0) }, revokes: [], now: now))
     }

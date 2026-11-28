@@ -147793,6 +147793,47 @@
         }
       }
     },
+    "Flagship saw this notice on %@. Its waiting period counts from then.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship vio este aviso el %@. Su periodo de espera cuenta desde entonces."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship a vu cet avis le %@. Son délai d’attente court à partir de ce moment."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship hat diese Mitteilung am %@ gesehen. Ihre Wartezeit zählt ab dann."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship viu este aviso em %@. O período de espera conta a partir daí."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship はこの通知を %@ に確認しました。待機期間はそのときから数えます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 于 %@ 看到了这条通知。等待期从那时开始计算。"
+          }
+        }
+      }
+    },
     "Frozen until %@": {
       "extractionState": "manual",
       "localizations": {

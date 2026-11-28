@@ -43,7 +43,8 @@ final class OrgAuthorityVectorTests: XCTestCase {
         return try OrgAuthority.verifyChain(entries, genesisHash: (c["genesisHash"] as? String) ?? V["genesisHash"] as! String, now: i64(c["now"]),
                                             freezes: try ((c["freezes"] as? [Any]) ?? []).map { try OrgAuthorityWire.freeze($0) },
                                             overturns: try ((c["overturns"] as? [Any]) ?? []).map { try OrgAuthorityWire.overturn($0) },
-                                            vetoes: try ((c["vetoes"] as? [Any]) ?? []).map { try OrgAuthorityWire.veto($0) })
+                                            vetoes: try ((c["vetoes"] as? [Any]) ?? []).map { try OrgAuthorityWire.veto($0) },
+                                            noticeOpenedAt: OrgAuthorityWire.noticeOpenedAt(c["noticeOpenedAt"]))
     }
 
     func testCanonicalSasAndSeeds() throws {
@@ -124,6 +125,25 @@ final class OrgAuthorityVectorTests: XCTestCase {
             }
             XCTAssertEqual(got, expected(c), name)
             if got == "ok" { XCTAssertEqual(scoped!, (c["expect"] as! [String: Any])["scopedSeat"] as? String, name) }
+        }
+    }
+
+    /// Pending approvals and vetoes (`verifyOrgApprovers`): a freeze counts at the signed time or now.
+    func testPendingApprovers() throws {
+        let st = try base()
+        let g = resolve((V["seatBooks"] as! [Any])[0]) as! [String: Any]
+        for raw in V["approvers"] as! [Any] {
+            let c = resolve(raw) as! [String: Any], name = c["name"] as! String, now = i64(c["now"])
+            let b = OrgAuthority.buildSeatBook(st, grants: try (g["grants"] as! [Any]).map { try OrgAuthorityWire.grantBundle($0) },
+                                               revokes: try (g["revokes"] as! [Any]).map { try OrgAuthorityWire.revokeBundle($0) },
+                                               freezes: try ((c["freezes"] as? [Any]) ?? []).map { try OrgAuthorityWire.freeze($0) }, now: now)
+            var signers: [String] = []
+            let got = code {
+                signers = try OrgAuthority.verifyApprovers(state: st, book: b, order: Array((c["order"] as! String).utf8),
+                                                           approvals: try OrgAuthorityWire.approvals(c["approvals"]), now: now)
+            }
+            XCTAssertEqual(got, expected(c), name)
+            if got == "ok" { XCTAssertEqual(signers, (c["expect"] as! [String: Any])["signers"] as? [String], name) }
         }
     }
 }

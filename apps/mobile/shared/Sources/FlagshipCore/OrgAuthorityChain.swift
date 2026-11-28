@@ -273,10 +273,13 @@ extension OrgAuthority {
 
     public static func verifyChain(_ entries: [OrgAuthorityEntry], genesisHash: String, now: Int64,
                                    freezes: [OrgSigned<OrgSeatFreeze>] = [], overturns: [OrgSigned<OrgOverturn>] = [],
-                                   vetoes: [OrgSigned<OrgVeto>] = []) throws -> OrgAuthorityState {
+                                   vetoes: [OrgSigned<OrgVeto>] = [],
+                                   noticeOpenedAt: [String: Int64] = [:]) throws -> OrgAuthorityState {
         try need(!entries.isEmpty, "malformed", "empty chain")
         var records: [OrgAuthorityRecord] = []
         var bindings: [String: VerifiedPqKeyBinding] = [:]
+        // One delayed change at a time: each is observed only after the one before it took effect.
+        var lastDelayedAt: Int64 = -1
         for e in entries {
             let r = e.record
             try checkShape(r)
@@ -293,7 +296,9 @@ extension OrgAuthority {
                 try need(r.issuedAt > p.issuedAt, "not-after-previous")
                 let fs = verifiedFreezes(records: records, bindings: bindings, orgId: r.orgId, freezes: freezes, overturns: overturns, now: now)
                 let frozen: (String, Int64) -> Bool = { s, t in fs.contains { $0.seatId == s && $0.issuedAt <= t && t < $0.untilMs } }
-                try verifyTransition(e, p: p, records: records, bindings: bindings, verified: verified, frozen: frozen, vetoes: vetoes, now: now)
+                try verifyTransition(e, p: p, records: records, bindings: bindings, verified: verified, frozen: frozen, vetoes: vetoes, now: now,
+                                     noticeOpenedAt: noticeOpenedAt, lastDelayedAt: lastDelayedAt)
+                if e.via == "founder-removal" || e.via == "recovery" { lastDelayedAt = r.issuedAt }
             } else {
                 try need(e.via == "genesis" && r.version == 0 && r.prevHash == genesisPrev, "version-gap", "genesis")
                 try need((try authorityHash(r)) == genesisHash, "prev-hash", "genesis hash")
@@ -309,7 +314,8 @@ extension OrgAuthority {
 
     static func verifyTransition(_ e: OrgAuthorityEntry, p: OrgAuthorityRecord, records: [OrgAuthorityRecord],
                                  bindings: [String: VerifiedPqKeyBinding], verified: [String: VerifiedPqKeyBinding],
-                                 frozen: @escaping (String, Int64) -> Bool, vetoes: [OrgSigned<OrgVeto>], now: Int64) throws {
+                                 frozen: @escaping (String, Int64) -> Bool, vetoes: [OrgSigned<OrgVeto>], now: Int64,
+                                 noticeOpenedAt: [String: Int64] = [:], lastDelayedAt: Int64 = -1) throws {
         let r = e.record, order = try canonicalAuthority(r)
         let prevKey: (String) -> VerifiedPqKeyBinding? = { bindings["\(p.version):\($0)"] }
         let kindOf: (String) -> OrgAdminKind? = { s in p.admins.first { $0.seatId == s }?.kind }
@@ -328,20 +334,27 @@ extension OrgAuthority {
         if founderMoved && !newcomers.contains(r.founderSeatId) {
             try need(ordinary.contains { $0.seatId == r.founderSeatId }, "consent-missing", "new founder")
         }
-        func vetoSigners(_ v: OrgSigned<OrgVeto>, _ noticeHash: String, _ n: OrgDelayedChange) -> [String]? {
-            guard v.body.orgId == p.orgId, v.body.noticeSha256 == noticeHash, v.body.issuedAt < n.effectiveAt, v.body.issuedAt >= n.issuedAt,
+        // A veto counts inside the window `.com` observed: [openedAt, openedAt + wait).
+        func vetoSigners(_ v: OrgSigned<OrgVeto>, _ noticeHash: String, openedAt: Int64, wait: Int64) -> [String]? {
+            guard v.body.orgId == p.orgId, v.body.noticeSha256 == noticeHash, v.body.issuedAt >= openedAt, v.body.issuedAt < openedAt + wait,
                   let o = try? v.body.canonical() else { return nil }
             return try? checkApprovals(v.approvals, orgId: p.orgId, oarVersion: p.version, order: o, now: now, keyOf: prevKey, frozenAt: frozen)
         }
-        func checkNotice(_ n: OrgSigned<OrgDelayedChange>, wait: Int64) throws {
+        // The notice is dated near when `.com` saw it, seen after the previous delayed change took effect, and applies
+        // only once `wait` has passed since then. Returns the observed open time.
+        func checkNotice(_ n: OrgSigned<OrgDelayedChange>, wait: Int64) throws -> Int64 {
             let b = n.body
-            _ = try b.canonical()
+            let hash = sha256Hex(try b.canonical())
             try need(b.orgId == p.orgId && b.oarVersion == p.version, "notice-invalid", "version")
             try need(r.issuedAt == b.effectiveAt, "notice-invalid", "date")
             try need(b.nextRecordSha256 == (try authorityHash(r)), "notice-invalid", "names another record")
             try need(b.effectiveAt == b.issuedAt + wait, "notice-invalid", "period")
             try need(b.issuedAt >= p.issuedAt, "notice-invalid", "older")
-            try need(now >= b.effectiveAt, "notice-early")
+            guard let openedAt = noticeOpenedAt[hash], openedAt >= 0 else { throw OrgAuthorityError("notice-unobserved") }
+            try need(openedAt >= lastDelayedAt, "notice-overlap")
+            try need(abs(b.issuedAt - openedAt) <= maxSkewMs, "notice-backdated")
+            try need(now >= max(b.effectiveAt, openedAt + wait), "notice-early")
+            return openedAt
         }
         switch e.via {
         case "direct":
@@ -358,7 +371,7 @@ extension OrgAuthority {
             try need(removed.count == 1, "notice-invalid", "exactly one admin")
             try need((try authorityHash(try founderRemovalOf(p, target: removed[0], issuedAt: r.issuedAt))) == (try authorityHash(r)),
                      "notice-invalid", "record is not the removal")
-            try checkNotice(n, wait: founderNoticeMs)
+            let openedAt = try checkNotice(n, wait: founderNoticeMs)
             let signers = try checkApprovals(n.approvals, orgId: p.orgId, oarVersion: p.version, order: try n.body.canonical(), now: now,
                                              keyOf: prevKey, frozenAt: frozen)
             try need(signers == [p.founderSeatId], "notice-invalid", "only the founder")
@@ -366,14 +379,14 @@ extension OrgAuthority {
             let eligible = Set(p.admins.filter { $0.kind == .admin && $0.seatId != p.founderSeatId && $0.seatId != removed[0] }.map(\.seatId))
             let set = Set(overturnSet(p).filter { $0 != removed[0] })
             for v in vetoes {
-                guard let c = vetoSigners(v, noticeHash, n.body) else { continue }
+                guard let c = vetoSigners(v, noticeHash, openedAt: openedAt, wait: founderNoticeMs) else { continue }
                 if c.filter({ eligible.contains($0) }).count >= p.bylaws.vetoK { throw OrgAuthorityError("notice-vetoed") }
                 if c.filter({ set.contains($0) }).count >= overturnThreshold(p) { throw OrgAuthorityError("notice-vetoed") }
             }
             try need(e.approvals.count == consent.count, "malformed", "stray approvals")
         case "recovery":
             guard let n = e.notice, n.body.kind == "recovery" else { throw OrgAuthorityError("notice-invalid") }
-            try checkNotice(n, wait: recoveryNoticeMs)
+            let openedAt = try checkNotice(n, wait: recoveryNoticeMs)
             let signers = try checkApprovals(n.approvals, orgId: p.orgId, oarVersion: p.version, order: try n.body.canonical(), now: now,
                                              keyOf: prevKey, frozenAt: frozen)
             for s in signers { try need(kindOf(s) == .admin || kindOf(s) == .recovery, "not-an-admin", s) }
@@ -383,7 +396,7 @@ extension OrgAuthority {
             try checkQuorumCustody(p, k: k, signers: signers, custodyOf: adminCustody(p))
             let noticeHash = sha256Hex(try n.body.canonical())
             let eligible = Set(p.admins.filter { $0.kind == .admin && !signers.contains($0.seatId) }.map(\.seatId))
-            for v in vetoes { if let c = vetoSigners(v, noticeHash, n.body), c.contains(where: { eligible.contains($0) }) { throw OrgAuthorityError("notice-vetoed") } }
+            for v in vetoes { if let c = vetoSigners(v, noticeHash, openedAt: openedAt, wait: recoveryNoticeMs), c.contains(where: { eligible.contains($0) }) { throw OrgAuthorityError("notice-vetoed") } }
             try need(e.approvals.count == consent.count, "malformed", "stray approvals")
         case "overturn":
             guard let at = e.overturnOf, at >= 1, at <= p.version, let idx = records.firstIndex(where: { $0.version == at }), idx >= 1
@@ -549,5 +562,32 @@ extension OrgAuthority {
             try need(covers(seat, action), "scope")
             return (signers, seat.seatId)
         }
+    }
+
+    /// The seats whose pending approvals of `order` verify (a ceremony's approvals, a veto, as `.com` takes them):
+    /// anyone in the current record or a seat with an admin key, each approval unexpired, not frozen when it signed
+    /// nor now, under the current record (or the previous one within 24 h). Counts nothing (`verifyOrgApprovers`).
+    public static func verifyApprovers(state: OrgAuthorityState, book: OrgSeatBook, order: [UInt8], approvals: [OrgApproval], now: Int64,
+                                       allowFrozenSeat: String? = nil) throws -> [String] {
+        let cur = state.current
+        guard let first = approvals.first else { throw OrgAuthorityError("threshold", "no approvals") }
+        let prev = state.record(cur.version - 1)
+        let version = first.oarVersion
+        try need(version == cur.version || (prev != nil && version == prev!.version && now - cur.issuedAt <= previousOarGraceMs), "stale-oar")
+        let at = version == cur.version ? cur : prev!
+        for a in approvals { try need(a.notAfter >= now, "expired", a.seatId) }
+        let keyOf: (String) -> VerifiedPqKeyBinding? = { s in
+            if let here = at.admins.first(where: { $0.seatId == s }) {
+                let still = cur.admins.contains { $0.seatId == s && $0.kind == here.kind && $0.binding.ed25519PubHex == here.binding.ed25519PubHex
+                    && $0.binding.mldsaPubHex == here.binding.mldsaPubHex }
+                return still ? state.binding(at.version, s) : nil
+            }
+            if book.revoked.contains(s) { return nil }
+            return book.seats[s]?.admin
+        }
+        let frozen: (String, Int64) -> Bool = { s, t in
+            s != allowFrozenSeat && book.freezes.contains { $0.seatId == s && (($0.issuedAt <= t && t < $0.untilMs) || ($0.issuedAt <= now && now < $0.untilMs)) }
+        }
+        return try checkApprovals(approvals, orgId: state.orgId, oarVersion: version, order: order, now: now, keyOf: keyOf, frozenAt: frozen)
     }
 }

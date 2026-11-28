@@ -83,6 +83,16 @@ public enum OrgAuthorityWire {
                          approvals: try approvals(o["approvals"]))
     }
 
+    /// `.com`'s observed open time of each delayed-change notice (`noticeOpenedAt`); anything malformed is left out.
+    public static func noticeOpenedAt(_ v: Any?) -> [String: Int64] {
+        guard let o = v as? [String: Any] else { return [:] }
+        var out: [String: Int64] = [:]
+        for (k, x) in o where k.utf8.count == 64 && PqBin.isLowerHex(k) {
+            if let t = OrgAuthority.i64(x), t >= 0 { out[k] = t }
+        }
+        return out
+    }
+
     public static func veto(_ v: Any?) throws -> OrgSigned<OrgVeto> {
         let o = try obj(v, "veto"), b = try obj(o["body"], "veto")
         return OrgSigned(body: OrgVeto(orgId: try str(b, "orgId"), noticeSha256: try str(b, "noticeSha256"), issuedAt: try num(b, "issuedAt")),

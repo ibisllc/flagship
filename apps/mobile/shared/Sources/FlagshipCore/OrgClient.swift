@@ -86,9 +86,12 @@ public struct OrgCeremony: Identifiable {
     public let order: String
     public let payload: [String: Any]
     public let approvals: [OrgApproval]
+    /// When `.com` opened it, on its own clock: a delayed change's waiting period counts from here.
+    public var openedAt: Int64? = nil
     public var id: String { sha256 }
     /// The purpose tag of the order (`flagship/<purpose>/v1`).
     public var purpose: String { String(order.split(separator: "|").first ?? "") }
+    public var isDelayedChange: Bool { purpose == OrgAuthority.tagDelayedChange }
 }
 
 public struct OrgClientError: Error, Equatable, CustomStringConvertible {
@@ -176,7 +179,8 @@ public final class OrgClient: @unchecked Sendable {
         let freezes = try ((a["freezes"] as? [Any]) ?? []).map { try OrgAuthorityWire.freeze($0) }
         let overturns = try ((a["overturns"] as? [Any]) ?? []).map { try OrgAuthorityWire.overturn($0) }
         let vetoes = try ((a["vetoes"] as? [Any]) ?? []).map { try OrgAuthorityWire.veto($0) }
-        let state = try OrgAuthority.verifyChain(entries, genesisHash: genesisHash, now: now, freezes: freezes, overturns: overturns, vetoes: vetoes)
+        let state = try OrgAuthority.verifyChain(entries, genesisHash: genesisHash, now: now, freezes: freezes, overturns: overturns, vetoes: vetoes,
+                                                 noticeOpenedAt: OrgAuthorityWire.noticeOpenedAt(a["noticeOpenedAt"]))
         return (state, freezes, overturns)
     }
 
@@ -191,7 +195,8 @@ public final class OrgClient: @unchecked Sendable {
         let ceremonies: [OrgCeremony] = ((c["ceremonies"] as? [[String: Any]]) ?? []).compactMap { o in
             guard let sha = o["sha256"] as? String, let order = o["order"] as? String,
                   let approvals = try? OrgAuthorityWire.approvals(o["approvals"]) else { return nil }
-            return OrgCeremony(sha256: sha, order: order, payload: (o["payload"] as? [String: Any]) ?? [:], approvals: approvals)
+            return OrgCeremony(sha256: sha, order: order, payload: (o["payload"] as? [String: Any]) ?? [:], approvals: approvals,
+                               openedAt: OrgAuthority.i64(o["openedAt"]))
         }
         return OrgSnapshot(name: ((a["org"] as? [String: Any])?["name"] as? String) ?? "", state: state, book: book, freezes: freezes, ceremonies: ceremonies,
                            grants: grants, revokes: revokes)
