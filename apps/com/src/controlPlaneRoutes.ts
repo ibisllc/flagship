@@ -175,6 +175,7 @@ import {
   handleMintAccountReadToken,
   handleMintOrgReadToken,
   requireOrgRead,
+  type OrgReadScope,
   handleGetOrderHealth,
   requireAccountRead,
   requireServerRead,
@@ -1654,31 +1655,29 @@ export async function tryControlPlane(
       // Org read tokens (orgReadToken.ts): minted by a seat key or an org server's STK.
       const rtd = { ...osd, secret: env.ACCOUNT_READ_TOKEN_SECRET, nonces: new D1NonceStore(env.DB), views: new Map() };
       if (sub === "read-token" && method === "POST") return finish(await handleMintOrgReadToken(rtd, orgId, await readJson(request)));
-      // The Business plan (orgPlan.ts): its state, the CA-signed attestation for the org's boxes, the sealed wallet.
-      if (sub === "voucher-wallet") {
-        const wd = { ...od, wallets: new D1BlindVoucherStorage(env.DB) };
-        if (method === "GET") return finish(await handleOrgWalletGet(wd, orgId));
-        if (method === "PUT") return finish(await handleOrgWalletPut(wd, orgId, await request.text()));
-      }
+      // The Business plan (orgPlan.ts) is public by design; every other org read takes a token
+      // (docs/account-read-token.md "Org routes"), the sealed wallet and the boxes' plan attestation included.
       if (method === "GET" && sub === "plan") return finish(await handleOrgPlanGet(od, orgId));
-      if (method === "GET" && sub === "plan-attestation") return finishRead(await handleOrgPlanAttestation({ ...od, ca }, orgId));
       if (method === "GET") {
-        if (sub === "authority") return finish(await handleOrgAuthorityGet(od, orgId));
-        if (sub === "seats") return finish(await handleOrgSeatsGet(od, orgId));
-        if (sub === "ceremonies") return finish(await handleOrgCeremonies(od, orgId));
-        if (sub === "log" || sub === "export") {
-          // Read by no shipped client or box yet, so these require the token now (admin or servers-add).
-          const check = await requireOrgRead(rtd, orgId, request.headers.get("authorization"), "admin");
-          if (!check.ok) return finish(check.response);
-          if (sub === "log") return finishRead(await handleOrgLog(rtd, orgId, Number(url.searchParams.get("after") ?? "0")));
-          return finishRead(await handleOrgExport(rtd, orgId));
-        }
-        if (sub === "servers") return finish(await handleOrgServersList(osd, orgId));
-        if (sub === "keys") return finish(await handleOrgKeysGet(osd, orgId));
-        if (sub === "directory") return finish(await handleOrgDirectoryGet(od, orgId));
-        if (sub === "directory/slices") return finish(await handleOrgDirectorySlicesGet(od, orgId));
-        if (sub === "connectors") return finish(await handleOrgConnectorsGet(od, orgId));
-        if (sub === "proposals") return finish(await handleOrgProposalsGet(od, orgId));
+        const scope = orgReadScope(sub);
+        const check = await requireOrgRead(rtd, orgId, request.headers.get("authorization"), scope);
+        if (!check.ok) return finish(check.response);
+        if (sub === "voucher-wallet") return finishRead(await handleOrgWalletGet({ ...od, wallets: new D1BlindVoucherStorage(env.DB) }, orgId));
+        if (sub === "plan-attestation") return finishRead(await handleOrgPlanAttestation({ ...od, ca }, orgId));
+        if (sub === "authority") return finishRead(await handleOrgAuthorityGet(rtd, orgId));
+        if (sub === "seats") return finishRead(await handleOrgSeatsGet(rtd, orgId));
+        if (sub === "ceremonies") return finishRead(await handleOrgCeremonies(rtd, orgId));
+        if (sub === "log") return finishRead(await handleOrgLog(rtd, orgId, Number(url.searchParams.get("after") ?? "0")));
+        if (sub === "export") return finishRead(await handleOrgExport(rtd, orgId));
+        if (sub === "servers") return finishRead(await handleOrgServersList({ ...osd, views: rtd.views }, orgId));
+        if (sub === "keys") return finishRead(await handleOrgKeysGet({ ...osd, views: rtd.views }, orgId));
+        if (sub === "directory") return finishRead(await handleOrgDirectoryGet(rtd, orgId));
+        if (sub === "directory/slices") return finishRead(await handleOrgDirectorySlicesGet(rtd, orgId));
+        if (sub === "connectors") return finishRead(await handleOrgConnectorsGet(rtd, orgId));
+        if (sub === "proposals") return finishRead(await handleOrgProposalsGet(rtd, orgId));
+      }
+      if (sub === "voucher-wallet" && method === "PUT") {
+        return finish(await handleOrgWalletPut({ ...od, wallets: new D1BlindVoucherStorage(env.DB) }, orgId, await request.text()));
       }
       if (method === "POST") {
         const body = await readJson(request);
@@ -5094,6 +5093,14 @@ function voiciNamesDeps(storage: D1Storage, env: ControlPlaneEnv) {
 async function deleteAccountPagesAndWallet(env: ControlPlaneEnv, storage: D1Storage, username: string): Promise<void> {
   await deleteVoiciAccount(env, storage, username);
   await new D1BlindVoucherStorage(env.DB).deleteWallet(username.toLowerCase());
+}
+
+/** Who may read each org GET (docs/account-read-token.md "Org routes"); `plan` and the invite offer are not gated. */
+export function orgReadScope(sub: string): OrgReadScope {
+  if (sub === "log" || sub === "export") return "admin";
+  if (sub === "keys") return "admin-or-box";
+  if (sub === "authority" || sub === "seats" || sub === "ceremonies") return "joining";
+  return "any";
 }
 
 function accountReadTokenDeps(storage: D1Storage, env: ControlPlaneEnv) {

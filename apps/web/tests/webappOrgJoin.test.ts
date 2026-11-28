@@ -34,9 +34,9 @@ function fakeFetch(offerHex: string, opts: { status?: number; genesis?: string; 
       const invite = { orgId: ORG, seatId: SEAT, inviteKeyPub: opts.pub ?? IK.inviteKeyPub, expiresAt: 1_900_000_000_000 };
       if (!verifyOrgInviteRead({ ...invite, inviteKeyPub: IK.inviteKeyPub }, Number(h.get("x-flagship-issued-at")), h.get("x-flagship-signature"), Date.now())) return new Response("{}", { status: 404 });
       if (opts.status) return new Response("{}", { status: opts.status });
-      return Response.json({ invite, roles: [{ role: "member" }], offerHex, accepted: false });
+      // The chain rides with the offer (the joiner has no seat to mint an org read token with).
+      return Response.json({ invite, roles: [{ role: "member" }], offerHex, accepted: false, authority: { org: { orgId: ORG, name: "acme", genesisHash: opts.genesis ?? GENESIS } } });
     }
-    if (url.endsWith("/authority")) return Response.json({ org: { orgId: ORG, name: "acme", genesisHash: opts.genesis ?? GENESIS } });
     return new Response("", { status: 404 });
   }) as unknown as typeof fetch;
 }

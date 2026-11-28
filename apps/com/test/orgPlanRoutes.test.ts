@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
 import { endpointFor } from "../src/rateLimit.js";
 import type { D1Database } from "@flagship/storage";
@@ -22,6 +23,7 @@ import {
   parseOrgPlanAttestation,
   sealOrgVoucherWallet,
   signOrgApproval,
+  signOrgReadTokenRequest,
   DEFAULT_PAYMENTS_CONFIG,
 } from "@flagship/protocol";
 import { voucherSigningKeysFromEnv } from "@flagship/control-plane";
@@ -51,12 +53,20 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const req = (method: string, path: string, body?: unknown) =>
-  new Request(`${ORIGIN}${path}`, { method, headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-const call = async (env: ControlPlaneEnv, method: string, path: string, body?: unknown) => {
-  const r = (await tryControlPlane(req(method, path, body), env))!;
+const req = (method: string, path: string, body?: unknown, token?: string) =>
+  new Request(`${ORIGIN}${path}`, { method, headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+const call = async (env: ControlPlaneEnv, method: string, path: string, body?: unknown, token?: string) => {
+  const r = (await tryControlPlane(req(method, path, body, token), env))!;
   return { status: r.status, body: (await r.json()) as any };
 };
+/** The founder's org read token (every org GET but the plan takes one). */
+let nonce = 0;
+async function founderToken(env: ControlPlaneEnv): Promise<string> {
+  const request = { orgId: ORG, subject: `seat:${A.seatId}`, pubHex: A.binding.ed25519PubHex, issuedAt: Date.now(), nonceHex: (++nonce).toString(16).padStart(32, "0") };
+  const r = await call(env, "POST", `/api/orgs/${ORG}/read-token`, { request, signature: signOrgReadTokenRequest(request, (m) => ed25519.sign(m, Buffer.from(A.edSeedHex, "hex"))) });
+  expect(r.status).toBe(200);
+  return r.body.token as string;
+}
 
 describe("Business routes", () => {
   it("trial, an org spend, the plan, the attestation and the org wallet", async () => {
@@ -64,7 +74,7 @@ describe("Business routes", () => {
     vi.setSystemTime(T0);
     const sqlite = createSqliteD1();
     try {
-      const env: ControlPlaneEnv = { DB: sqlite as unknown as D1Database, VOUCHER_SIGNING_KEYS: JSON.stringify([{ jwk }]), VOUCHER_TEST_ISSUE: "1" };
+      const env: ControlPlaneEnv = { DB: sqlite as unknown as D1Database, VOUCHER_SIGNING_KEYS: JSON.stringify([{ jwk }]), VOUCHER_TEST_ISSUE: "1", ACCOUNT_READ_TOKEN_SECRET: "k".repeat(64) };
       expect((await call(env, "POST", "/api/orgs", { name: "acme", entry: chain.entries[0] })).status).toBe(200);
       expect((await call(env, "POST", `/api/orgs/${ORG}/authority`, { entry: chain.entries[1] })).status).toBe(200);
 
@@ -81,16 +91,16 @@ describe("Business routes", () => {
       const row = sqlite.raw.prepare("SELECT * FROM voucher_nullifiers LIMIT 1").get() as Record<string, unknown>;
       expect(Object.keys(row).sort()).toEqual(["key_id", "nullifier", "spent_day"]);
 
-      const att = parseOrgPlanAttestation((await call(env, "GET", `/api/orgs/${ORG}/plan-attestation`)).body);
+      const att = parseOrgPlanAttestation((await call(env, "GET", `/api/orgs/${ORG}/plan-attestation`, undefined, await founderToken(env))).body);
       expect(att).toMatchObject({ orgId: ORG, status: "trial", paidSeats: 3 });
 
-      expect((await call(env, "GET", `/api/orgs/${ORG}/voucher-wallet`)).status).toBe(404);
+      expect((await call(env, "GET", `/api/orgs/${ORG}/voucher-wallet`, undefined, await founderToken(env))).status).toBe(404);
       const blob = sealOrgVoucherWallet(new Uint8Array(32).fill(5), ORG, 1, 1, emptyOrgVoucherWallet(3, 10));
       const write = orgWalletWriteFor(ORG, blob, T0);
       const approval = signOrgApproval({ orgId: ORG, oarVersion: 1, order: canonicalOrgWalletWrite(write), seatId: A.seatId, adminKeyId: A.keyId, issuedAt: T0, notAfter: T0 + DAY }, aSecret);
       const put = await call(env, "PUT", `/api/orgs/${ORG}/voucher-wallet`, { blob, write, approvals: [approval] });
       expect(put.body).toMatchObject({ ok: true, version: 1 });
-      expect((await call(env, "GET", `/api/orgs/${ORG}/voucher-wallet`)).body).toEqual(blob);
+      expect((await call(env, "GET", `/api/orgs/${ORG}/voucher-wallet`, undefined, await founderToken(env))).body).toEqual(blob);
       expect((await call(env, "PUT", `/api/orgs/${ORG}/voucher-wallet`, { blob, write, approvals: [approval] })).status).toBe(409);
 
       vi.setSystemTime(T0 + 30 * DAY + 3 * orgSeatUnitMs(DEFAULT_PAYMENTS_CONFIG, 3) + 4 * DAY);

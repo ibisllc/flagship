@@ -110,18 +110,33 @@ signed with Ed25519 by the key named in `subject`:
 | Signer | `subject` | Key | Lifetime |
 |---|---|---|---|
 | A live seat | `seat:<seatId>` | its seat member key or seat admin key (an org admin holds only the admin key) | 7 days |
+| A seat waiting for an admin | `seat:<seatId>` | the member key it accepted with (its accept on a live, unexpired invitation) | 7 days |
 | One of the org's servers | `box:<serverDomain>` | its STK, as registered at `servers/register` | 24 hours |
 
 The token is `ort1.<claims>.<HMAC>`, under the same `ACCOUNT_READ_TOKEN_SECRET` with its own MAC
 context (`flagship/org-read-token/v1`), so an account token never passes as an org token or the
 other way round. Same 5-minute freshness and single use as above; the mint has its own rate budget
 (`org-read-token`: per source and per org). Every read re-checks the signer against the org as `.com`
-verifies it from genesis: a revoked, frozen or lapsed seat, an admin no longer in the record, or a
-server that was revoked or re-registered under another key stops reading on its next request.
+verifies it from genesis: a revoked, frozen or lapsed seat, an admin no longer in the record, a
+withdrawn or expired invitation, or a server that was revoked or re-registered under another key
+stops reading on its next request.
 
-| Route | Who (on `main`) |
-|---|---|
-| `GET /api/orgs/<id>/export`, `GET /api/orgs/<id>/log` | required: an org admin (kind `admin`) or a `servers-add` seat |
-| every other org GET | the token is accepted, not yet required (shipped clients and boxes read them without one) |
+From 0.5 every org GET needs a token, with no compatibility window (old clients and boxes that send
+none are refused, 401 `org-read-token-required`). The scope of each route (`orgReadScope` in
+`apps/com/src/controlPlaneRoutes.ts`, checked by `requireOrgRead`):
 
-The rest are gated together with the clients that send the token (0.5).
+| Route | Scope | Who |
+|---|---|---|
+| `GET /api/orgs/<id>/plan` | none | public by design (the Business plan's state) |
+| `GET /api/orgs/<id>/invites/<seatId>` (the offer) | none | the invite-key proof alone (the joiner has no seat yet); the answer carries the org's `authority` (as `GET .../authority`), so the joiner verifies the chain before it accepts |
+| `GET .../export`, `GET .../log` | `admin` | an org admin of the current record (kind `admin`) or a `servers-add` seat |
+| `GET .../keys` | `admin-or-box` | as `admin`, or one of the org's servers; ordinary members are refused |
+| `GET .../authority`, `.../seats`, `.../ceremonies` | `joining` | a live seat, one of the org's servers, or a seat waiting for an admin |
+| every other org GET (`servers`, `directory`, `directory/slices`, `connectors`, `proposals`, `plan-attestation`, `voucher-wallet`) | `any` | a live seat or one of the org's servers |
+
+For `admin`, an org admin's own seat counts with any of its keys (its member key too): a token only
+reads, and every write still takes the admin key. Clients (webapp `lib/orgReadToken.js`, iOS and
+Android `OrgReadTokens`) mint with the seat member key (an admin seat on a phone with its admin key),
+keep the token until 10 minutes before it expires, and mint again once after a 401. Boxes do the same
+with the STK (`packages/server-daemon/src/orgReadToken.ts`). Shared vectors:
+`packages/protocol/test-vectors/org-read-token`.

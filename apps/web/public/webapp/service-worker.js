@@ -601,7 +601,9 @@
 //       no answer in time drops it unopened and shows a fresh QR.
 //  v263: org invitations (docs/enterprise-accounts.md §7): the link key derives an offer key and an invite key; the
 //       offer read and the accept carry the invite key's signature; admins see only accepts it signed, can say
-//       the codes don't match, and withdraw an invitation (bundled org protocol rebuilt).
+//       the codes don't match, and withdraw an invitation (bundled org protocol rebuilt). Org reads carry the org read
+//       token (precaches lib/orgReadToken.js; docs/account-read-token.md "Org routes"), minted with the seat member
+//       key and minted again after a 401; the join verifies the chain the invite answer carries.
 const SHELL_VERSION = "v263";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
@@ -680,6 +682,7 @@ const OPTIONAL_SHELL = [
   "/lib/adminSigning.js",
   "/lib/policySigning.js",
   "/lib/orgSeat.js",
+  "/lib/orgReadToken.js",
   "/lib/orgDirectoryConsole.js",
   "/views/orgs.js",
   "/lib/orgPlan.js",

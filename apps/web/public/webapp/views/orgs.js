@@ -33,7 +33,7 @@ function failText(e) {
 }
 
 async function renderSeat(seat, host) {
-  const call = os.orgApi();
+  const call = os.orgApi({ seat });
   const umk = getSession()?.umk;
   let snap;
   try {

@@ -1,14 +1,14 @@
 /**
- * Org read tokens through the Worker's routes on a real D1 schema: minted by a seat key, required
- * (admin or servers-add) by the org routes no shipped client reads yet, and accepted but not
- * required by the rest.
+ * Org read tokens through the Worker's routes on a real D1 schema: minted by a seat key or an org
+ * server's STK and required by every org GET but the public plan (docs/account-read-token.md "Org
+ * routes"): `/log` and `/export` for admins (or servers-add), `/keys` for admins and boxes.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
+import { orgReadScope, tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
 import { bindingSubject, endpointFor, LIMITS } from "../src/rateLimit.js";
 import type { D1Database } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
@@ -69,22 +69,47 @@ describe("org read token routes", () => {
       const member = await mint(env, "M member");
       const scoped = await mint(env, "S scoped admin");
 
-      for (const sub of ["export", "log"]) {
+      const DOMAIN = "home.acme.flagship.services";
+      const stk = new Uint8Array(32).fill(9);
+      const stkPubHex = Buffer.from(ed25519.getPublicKey(stk)).toString("hex");
+      sqlite.raw.prepare("INSERT INTO org_objects (org_id, kind, object_key, body_json, issued_at, stored_at) VALUES (?, 'server', ?, ?, ?, 0)")
+        .run(ORG, DOMAIN, JSON.stringify({ serverDomain: DOMAIN, identityPubKeyHex: stkPubHex }), T0 - 1000);
+      sqlite.raw.prepare("INSERT INTO servers (server_domain, username, identity_pubkey_hex, registered_at) VALUES (?, ?, ?, ?)")
+        .run(DOMAIN, `org-${ORG}`, stkPubHex, T0 - 1000);
+      const boxRequest: OrgReadTokenRequest = { orgId: ORG, subject: `box:${DOMAIN}`, pubHex: stkPubHex, issuedAt: T0, nonceHex: "b".repeat(32) };
+      const boxMint = await call(env, "POST", `/api/orgs/${ORG}/read-token`, { request: boxRequest, signature: signOrgReadTokenRequest(boxRequest, (m) => ed25519.sign(m, stk)) });
+      expect(boxMint.status).toBe(200);
+      const box = boxMint.body.token as string;
+
+      // Every gated org GET refuses a missing or forged token.
+      const gated = ["authority", "seats", "ceremonies", "log", "export", "servers", "keys", "directory", "directory/slices", "connectors", "proposals", "plan-attestation", "voucher-wallet"];
+      for (const sub of gated) {
         const none = await call(env, "GET", `/api/orgs/${ORG}/${sub}`);
         expect(none.status, sub).toBe(401);
-        expect(none.body.code).toBe("org-read-token-required");
+        expect(none.body.code, sub).toBe("org-read-token-required");
+        expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, "ort1.bogus.bogus")).status, sub).toBe(401);
+      }
+      for (const sub of gated) expect(orgReadScope(sub), sub).toBe(
+        sub === "log" || sub === "export" ? "admin" : sub === "keys" ? "admin-or-box" : ["authority", "seats", "ceremonies"].includes(sub) ? "joining" : "any",
+      );
+
+      // Admin reads: an org admin (or a servers-add seat), never a member; /keys also a box.
+      for (const sub of ["export", "log", "keys"]) {
         expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, member)).status, sub).toBe(401);
         expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, scoped)).status, sub).toBe(401);
-        expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, "ort1.bogus.bogus")).status, sub).toBe(401);
         expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, admin)).status, sub).toBe(200);
       }
+      for (const sub of ["export", "log"]) expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, box)).status, sub).toBe(401);
+      expect((await call(env, "GET", `/api/orgs/${ORG}/keys`, undefined, box)).status).toBe(200);
       const log = await call(env, "GET", `/api/orgs/${ORG}/log`, undefined, admin);
       expect(log.body.entries.length).toBeGreaterThan(0);
 
-      for (const sub of ["authority", "seats", "ceremonies", "servers", "keys", "directory", "directory/slices", "connectors", "proposals", "plan"]) {
-        expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`)).status, sub).toBe(200);
+      for (const sub of ["authority", "seats", "ceremonies", "servers", "directory", "directory/slices", "connectors", "proposals"]) {
         expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, member)).status, sub).toBe(200);
+        expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, box)).status, sub).toBe(200);
       }
+      // The plan stays public.
+      expect((await call(env, "GET", `/api/orgs/${ORG}/plan`)).status).toBe(200);
     } finally {
       sqlite.close();
     }

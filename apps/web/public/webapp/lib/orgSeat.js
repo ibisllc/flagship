@@ -11,6 +11,8 @@ import * as org from "../vendor/flagship-org/org.js";
 import { controlApex } from "./apex.js";
 import { activeProfileId } from "../keystore.js";
 import { openUnderPasskey, sealUnderPasskey } from "./keyCustody.js";
+import { getSession } from "./state.js";
+import { orgReadPathOrg, orgReadToken } from "./orgReadToken.js";
 
 const enc = new TextEncoder();
 const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -50,16 +52,40 @@ const adminRecordKey = (orgId, seatId) => `flagship.orgSeatAdmin.v1.${activeProf
 
 /* ---------- talking to .com ---------- */
 
+/**
+ * The org API on `.com`. Every org GET but the plan and the invite offer carries the org read token
+ * (lib/orgReadToken.js), minted as this browser's seat in that org (`deps.seat`, else the seat it
+ * holds there) with the account key (`deps.umk`, else the unlocked session's); a 401 mints again once.
+ */
 export function orgApi(deps = {}) {
   const f = deps.fetch ?? fetch;
   const base = (deps.apex ?? controlApex()).replace(/\/+$/, "");
-  return async (method, path, body, headers) => {
-    const res = await f(`${base}${path}`, {
+  const send = (method, path, body, headers) =>
+    f(`${base}${path}`, {
       method,
       ...(body ? { body: JSON.stringify(body) } : {}),
       ...(body || headers ? { headers: { ...(body ? { "content-type": "application/json" } : {}), ...(headers ?? {}) } } : {}),
       cache: "no-store",
     });
+  const tokenFor = async (orgId, fresh) => {
+    const seat = deps.seat?.orgId === orgId ? deps.seat : listSeats(deps.storage).find((s) => s.orgId === orgId);
+    if (!seat) return null;
+    const umk = deps.umk ?? getSession()?.umk;
+    try {
+      return await orgReadToken({ base, fetch: f, umk, orgId, seatId: seat.seatId, now: deps.now?.() ?? Date.now(), fresh });
+    } catch {
+      return null;
+    }
+  };
+  return async (method, path, body, headers) => {
+    const orgId = method === "GET" ? orgReadPathOrg(path) : null;
+    let token = orgId ? await tokenFor(orgId, false) : null;
+    const withToken = (t) => (t ? { ...(headers ?? {}), authorization: `Bearer ${t}` } : headers);
+    let res = await send(method, path, body, withToken(token));
+    if (orgId && token && res.status === 401) {
+      token = await tokenFor(orgId, true);
+      if (token) res = await send(method, path, body, withToken(token));
+    }
     let json = {};
     try {
       json = await res.json();
@@ -71,6 +97,11 @@ export function orgApi(deps = {}) {
   };
 }
 
+/** The org's chain as `GET /authority` (or the invite offer's `authority`) serves it, verified from `genesisHash`. */
+export function verifyServedChain(a, genesisHash, now = Date.now()) {
+  return org.verifyOrgAuthorityChain(a?.entries ?? [], { genesisHash, now, freezes: a?.freezes ?? [], overturns: a?.overturns ?? [], vetoes: a?.vetoes ?? [] });
+}
+
 /** Fetches the org and verifies it from the pinned genesis: chain, seat book, ceremonies. */
 export async function orgSnapshot(call, orgId, genesisHash, now = Date.now()) {
   const a = await call("GET", `/api/orgs/${orgId}/authority`);
@@ -78,7 +109,7 @@ export async function orgSnapshot(call, orgId, genesisHash, now = Date.now()) {
   const c = await call("GET", `/api/orgs/${orgId}/ceremonies`);
   const freezes = a.freezes ?? [];
   const overturns = a.overturns ?? [];
-  const state = org.verifyOrgAuthorityChain(a.entries ?? [], { genesisHash, now, freezes, overturns, vetoes: a.vetoes ?? [] });
+  const state = verifyServedChain(a, genesisHash, now);
   const grants = s.grants ?? [];
   const revokes = s.revokes ?? [];
   const book = org.buildOrgSeatBook(state, { grants, revokes, freezes, overturns, now });
@@ -103,8 +134,9 @@ export async function acceptOrgInvite(link, { umk, now = Date.now(), userName = 
   if (offer.orgId !== orgId || offer.seatId !== seatId || typeof offer.genesisHash !== "string") throw fail("org-offer");
   const ik = inviteKeys(link.keyHex);
   ik.offerKey.fill(0);
-  // The org's chain must verify from the genesis the inviter sealed into the offer.
-  await orgSnapshot(call, orgId, offer.genesisHash, now);
+  // The org's chain must verify from the genesis the inviter sealed into the offer (it rides with the
+  // offer: a joiner holds no seat to mint a read token with yet).
+  verifyServedChain(r.authority, offer.genesisHash, now);
   const inv = r.invite;
   const roles = r.roles ?? [];
   if (org.orgSeatRolesHash(roles) !== inv.rolesHash || inv.inviteKeyPub !== ik.inviteKeyPub) {

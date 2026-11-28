@@ -386,7 +386,10 @@ export async function handleOrgInviteGet(deps: OrgDeps, orgId: string, seatId: s
   if (!verifyOrgInviteRead(inv.invite, at, proof.signature, now)) return NO_INVITE();
   if (inv.invite.expiresAt <= now) return { status: 410, body: { error: "invite expired", code: "org-invite-expired" } };
   const accepted = await deps.orgs.getObject(orgId, "accept", seatId);
-  return ok({ invite: inv.invite, roles: inv.roles, offerHex: inv.offerHex, accepted: accepted !== null });
+  // The joiner holds no seat yet, so no read token: the chain it verifies before accepting rides here.
+  const authority = await handleOrgAuthorityGet(deps, orgId);
+  if (authority.status !== 200) return authority;
+  return ok({ invite: inv.invite, roles: inv.roles, offerHex: inv.offerHex, accepted: accepted !== null, authority: authority.body });
 }
 
 export async function handleOrgInviteAccept(deps: OrgDeps, orgId: string, seatId: string, body: unknown): Promise<HandlerResponseWithHeaders> {

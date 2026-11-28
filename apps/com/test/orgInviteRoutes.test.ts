@@ -55,12 +55,17 @@ const call = async (env: ControlPlaneEnv, method: string, path: string, body?: u
   return { status: r.status, body: (await r.json()) as any };
 };
 const approve = (order: Uint8Array) => signOrgApproval({ orgId: ORG, oarVersion: 1, order, seatId: A.seatId, adminKeyId: A.keyId, issuedAt: T0, notAfter: T0 + DAY }, A.secret);
-async function adminToken(env: ControlPlaneEnv): Promise<string> {
-  const request = { orgId: ORG, subject: `seat:${A.seatId}`, pubHex: A.binding.ed25519PubHex, issuedAt: Date.now(), nonceHex: "01".repeat(16) };
-  const signature = signOrgReadTokenRequest(request, (m) => ed25519.sign(m, Buffer.from(A.edSeedHex, "hex")));
+let nonce = 0;
+async function mintAs(env: ControlPlaneEnv, k: typeof A): Promise<{ status: number; token: string }> {
+  const request = { orgId: ORG, subject: `seat:${k.seatId}`, pubHex: k.binding.ed25519PubHex, issuedAt: Date.now(), nonceHex: (++nonce).toString(16).padStart(32, "0") };
+  const signature = signOrgReadTokenRequest(request, (m) => ed25519.sign(m, Buffer.from(k.edSeedHex, "hex")));
   const r = await call(env, "POST", `/api/orgs/${ORG}/read-token`, { request, signature });
+  return { status: r.status, token: r.body.token as string };
+}
+async function adminToken(env: ControlPlaneEnv): Promise<string> {
+  const r = await mintAs(env, A);
   expect(r.status).toBe(200);
-  return r.body.token as string;
+  return r.token;
 }
 const readProof = (secret: Uint8Array, seat: string, at = T0) => ({ "x-flagship-issued-at": String(at), "x-flagship-signature": orgInviteReadSignature(secret, ORG, seat, at) });
 
@@ -92,6 +97,27 @@ describe("org invitation routes", () => {
     const ok = await call(env, "GET", path, undefined, readProof(IK.hybridSecret, MM.seatId));
     expect(ok.status).toBe(200);
     expect(ok.body).toMatchObject({ offerHex: "0102", accepted: false });
+    // The joiner has no seat to mint with, so the chain it verifies before accepting rides with the offer.
+    const authority = (await call(env, "GET", `/api/orgs/${ORG}/authority`, undefined, { authorization: `Bearer ${await adminToken(env)}` })).body;
+    expect(ok.body.authority).toEqual(authority);
+  });
+
+  it("a seat waiting for an admin reads only the chain, with the member key it accepted with", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T0);
+    const { env, accept, signature } = await world();
+    expect((await mintAs(env, MM)).status).toBe(403);
+    expect((await call(env, "POST", `/api/orgs/${ORG}/invites/${MM.seatId}/accept`, { accept, memberBinding: MM.binding, adminBinding: null, signature, inviteSignature: orgInviteAcceptSignature(IK.hybridSecret, accept) })).status).toBe(200);
+    expect((await mintAs(env, key("S member"))).status).toBe(403);
+    const pending = await mintAs(env, MM);
+    expect(pending.status).toBe(200);
+    const auth = { authorization: `Bearer ${pending.token}` };
+    for (const sub of ["authority", "seats", "ceremonies"]) expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, auth)).status, sub).toBe(200);
+    for (const sub of ["servers", "keys", "directory", "directory/slices", "connectors", "proposals", "voucher-wallet", "log"]) {
+      expect((await call(env, "GET", `/api/orgs/${ORG}/${sub}`, undefined, auth)).status, sub).toBe(401);
+    }
+    vi.setSystemTime(T0 + DAY + 1);
+    expect((await call(env, "GET", `/api/orgs/${ORG}/seats`, undefined, auth)).status).toBe(401);
   });
 
   it("refuses an accept without the invite-key signature: a squatter with only the orgId cannot claim the seat", async () => {
@@ -102,11 +128,11 @@ describe("org invitation routes", () => {
     const base = { accept, memberBinding: MM.binding, adminBinding: null, signature };
     expect((await call(env, "POST", path, base)).status).toBe(404);
     expect((await call(env, "POST", path, { ...base, inviteSignature: orgInviteAcceptSignature(SQUAT.hybridSecret, accept) })).status).toBe(404);
-    expect((await call(env, "GET", `/api/orgs/${ORG}/seats`)).body.accepts).toEqual([]);
+    expect((await call(env, "GET", `/api/orgs/${ORG}/seats`, undefined, { authorization: `Bearer ${await adminToken(env)}` })).body.accepts).toEqual([]);
     const inviteSignature = orgInviteAcceptSignature(IK.hybridSecret, accept);
     const real = await call(env, "POST", path, { ...base, inviteSignature });
     expect(real.status).toBe(200);
-    const seats = (await call(env, "GET", `/api/orgs/${ORG}/seats`)).body;
+    const seats = (await call(env, "GET", `/api/orgs/${ORG}/seats`, undefined, { authorization: `Bearer ${await adminToken(env)}` })).body;
     expect(seats.accepts).toHaveLength(1);
     expect(seats.accepts[0].inviteSignature).toBe(inviteSignature);
   });
@@ -119,7 +145,7 @@ describe("org invitation routes", () => {
     const withdraw = { orgId: ORG, seatId: MM.seatId, oarVersion: 1, issuedAt: T0 };
     const r = await call(env, "POST", `/api/orgs/${ORG}/invites/${MM.seatId}/withdraw`, { withdraw, approvals: [approve(canonicalOrgInviteWithdraw(withdraw))] });
     expect(r).toMatchObject({ status: 200, body: { withdrawn: MM.seatId } });
-    const seats = (await call(env, "GET", `/api/orgs/${ORG}/seats`)).body;
+    const seats = (await call(env, "GET", `/api/orgs/${ORG}/seats`, undefined, { authorization: `Bearer ${await adminToken(env)}` })).body;
     expect(seats.invites).toEqual([]);
     expect(seats.accepts).toEqual([]);
     expect((await call(env, "GET", `/api/orgs/${ORG}/invites/${MM.seatId}`, undefined, readProof(IK.hybridSecret, MM.seatId))).status).toBe(404);

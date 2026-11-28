@@ -64,7 +64,7 @@ export function inviteReadHeaders(link, now = Date.now()) {
 }
 
 /**
- * Fetches the invitation and the org's authority, opens the offer and checks it names this org,
+ * Fetches the invitation (its answer carries the org's authority), opens the offer and checks it names this org,
  * this seat and the genesis `.com` recorded. `fetchImpl` is a test seam.
  */
 export async function loadOrgInvite(link, fetchImpl = fetch) {
@@ -74,9 +74,9 @@ export async function loadOrgInvite(link, fetchImpl = fetch) {
   if (!r.ok) throw Object.assign(new Error("invite"), { code: "org-invite-missing" });
   const inv = await r.json();
   const offer = await openOrgOffer(inv.offerHex, link.keyHex);
-  const a = await fetchImpl(`${base}/authority`);
-  if (!a.ok) throw Object.assign(new Error("authority"), { code: "org-invite-missing" });
-  const auth = await a.json();
+  // The joiner holds no seat to mint an org read token with, so the authority rides with the offer.
+  const auth = inv.authority;
+  if (!auth || typeof auth !== "object") throw Object.assign(new Error("authority"), { code: "org-invite-missing" });
   const pub = inviteKeys(link.keyHex);
   pub.hybridSecret.fill(0);
   pub.offerKey.fill(0);

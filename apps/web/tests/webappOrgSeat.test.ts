@@ -31,6 +31,7 @@ import {
   handleOrgSeatsGet,
   type OrgDeps,
 } from "../../../packages/control-plane/src/orgs.js";
+import { handleMintOrgReadToken, requireOrgRead, type OrgReadTokenDeps } from "../../../packages/control-plane/src/orgReadToken.js";
 import { DATABASES, makeIndexedDBShim, makeLocalStorage } from "./support/idbShim";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -75,6 +76,35 @@ function fakeCom(d: OrgDeps) {
     else throw new Error(`unrouted ${path}`);
     return new Response(JSON.stringify(r.body), { status: r.status });
   };
+}
+
+/** As `fakeCom`, with `.com`'s org read token: minted at `read-token`, required on the chain reads. */
+function gatedCom(d: OrgDeps, seen: Array<{ path: string; auth: string | null }>) {
+  const seenNonces = new Set<string>();
+  const rt: OrgReadTokenDeps & { secret: string } = {
+    ...d,
+    servers: new InMemoryStorage().servers,
+    secret: "s".repeat(64),
+    nonces: { claim: async (k: string) => (seenNonces.has(k) ? false : (seenNonces.add(k), true)) },
+  } as OrgReadTokenDeps & { secret: string };
+  const inner = fakeCom(d);
+  const f = async (url: string, init: any = {}) => {
+    const path = new URL(url).pathname;
+    const auth = new Headers(init.headers).get("authorization");
+    seen.push({ path, auth });
+    let x: RegExpMatchArray | null;
+    if ((x = path.match(/^\/api\/orgs\/([0-9a-f]+)\/read-token$/))) {
+      const r = await handleMintOrgReadToken(rt, x[1]!, JSON.parse(init.body));
+      return new Response(JSON.stringify(r.body), { status: r.status });
+    }
+    if ((init.method ?? "GET") === "GET" && (x = path.match(/^\/api\/orgs\/([0-9a-f]+)\/(authority|seats|ceremonies|directory)$/))) {
+      const check = await requireOrgRead(rt, x[1]!, auth, x[2] === "directory" ? "any" : "joining");
+      if (!check.ok) return new Response(JSON.stringify(check.response.body), { status: check.response.status });
+      if (x[2] === "directory") return Response.json({ entries: [] });
+    }
+    return inner(url, init);
+  };
+  return { f, rt };
 }
 
 function fakeAuth() {
@@ -167,6 +197,50 @@ describe("webapp org seat", () => {
     expect(seat.custody).toBeNull();
     expect(fake.calls).toEqual({ create: 0, get: 0 });
     await expect(os.withSeatAdminKey(seat, UMK, async () => 1)).rejects.toMatchObject({ code: "not-admin" });
+  });
+
+  it("reads the org with the org read token: the join without one, a waiting seat only the chain, a 401 mints again", async () => {
+    const { d, link, invite } = await orgWithInvite([{ role: "member" }]);
+    const seen: Array<{ path: string; auth: string | null }> = [];
+    const com = gatedCom(d, seen);
+    const deps = { fetch: com.f, apex: "https://x", now: () => NOW };
+    const { seat } = await os.acceptOrgInvite(link, { umk: UMK, now: NOW, deps });
+    // The join reads the offer (and the chain it carries) on the invite-key proof alone.
+    expect(seen.filter((r) => r.path.endsWith("/read-token"))).toEqual([]);
+    expect(seen.every((r) => r.auth === null)).toBe(true);
+
+    seen.length = 0;
+    const call = os.orgApi({ ...deps, seat, umk: UMK });
+    const snap = await os.orgSnapshot(call, ORG, V.genesisHash, NOW);
+    expect(os.pendingJoins(snap)).toHaveLength(1);
+    const reads = seen.filter((r) => !r.path.endsWith("/read-token"));
+    expect(reads.map((r) => r.path.split("/").pop())).toEqual(["authority", "seats", "ceremonies"]);
+    expect(reads.every((r) => r.auth !== null && r.auth === reads[0]!.auth)).toBe(true);
+    expect(seen.filter((r) => r.path.endsWith("/read-token"))).toHaveLength(1);
+    // Waiting for an admin, the seat reads only the chain.
+    await expect(call("GET", `/api/orgs/${ORG}/directory`)).rejects.toMatchObject({ status: 401 });
+
+    // Admitted, the same member key reads the rest; a token `.com` no longer takes is minted again once.
+    const j = os.pendingJoins(snap)[0];
+    const grant = { orgId: ORG, seatId: SEAT, labelSha256: invite.labelSha256, memberKeyId: j.accept.memberKeyId, adminKeyId: "", rolesHash: invite.rolesHash, oarVersion: 1, issuedAt: NOW, expiresAt: NOW + 300 * DAY };
+    expect((await handleOrgSeatGrant(d, ORG, { grant, roles: [{ role: "member" }], memberBinding: j.memberBinding, adminBinding: null, approvals: [approve(A, canonicalOrgSeatGrant(grant))] })).status).toBe(200);
+    expect(await call("GET", `/api/orgs/${ORG}/directory`)).toEqual({ entries: [] });
+    com.rt.secret = "t".repeat(64);
+    seen.length = 0;
+    expect(await call("GET", `/api/orgs/${ORG}/directory`)).toEqual({ entries: [] });
+    expect(seen.map((r) => `${r.path.split("/").pop()}:${r.auth ? "token" : "none"}`)).toEqual(["directory:token", "read-token:none", "directory:token"]);
+    expect(seen[0]!.auth).not.toBe(seen[2]!.auth);
+  });
+
+  it("builds the mint request the shared vectors name (test-vectors/org-read-token)", async () => {
+    const v = JSON.parse(readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/org-read-token/vectors.json"), "utf8"));
+    const rt = await import("../public/webapp/lib/orgReadToken.js");
+    const nonce = Uint8Array.from(Buffer.from(v.seat.request.nonceHex, "hex"));
+    const body = rt.orgSeatReadTokenRequest(Uint8Array.from(Buffer.from(v.keys.umkSeedHex, "hex")), v.keys.orgId, v.keys.seatId, v.seat.request.issuedAt, nonce);
+    expect(body).toEqual({ request: v.seat.request, signature: v.seat.signatureHex });
+    expect(rt.orgReadPathOrg(`/api/orgs/${v.keys.orgId}/plan`)).toBeNull();
+    expect(rt.orgReadPathOrg(`/api/orgs/${v.keys.orgId}/invites/${v.keys.seatId}`)).toBeNull();
+    expect(rt.orgReadPathOrg(`/api/orgs/${v.keys.orgId}/directory/slices`)).toBe(v.keys.orgId);
   });
 
   it("without the link's key the invitation does not exist for the browser", async () => {

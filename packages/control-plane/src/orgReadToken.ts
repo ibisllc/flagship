@@ -4,7 +4,8 @@
  * An org's private reads are served only to a bearer of a read token for that org, minted at
  * `POST /api/orgs/<orgId>/read-token` with an `OrgReadTokenRequest` signed by a live seat's
  * member key or seat admin key (subject `seat:<seatId>`), or by the STK of one of the org's
- * servers (subject `box:<serverDomain>`).
+ * servers (subject `box:<serverDomain>`). A seat that accepted its invitation and waits for an
+ * admin mints with the member key it accepted with, and reads only the chain (`joining`).
  *
  * The token is `ort1.<b64url(claims)>.<b64url(HMAC-SHA256)>`, keyed by the same Worker secret as
  * account read tokens (`ACCOUNT_READ_TOKEN_SECRET`) under its own context string, so neither kind
@@ -49,10 +50,13 @@ export interface OrgReadTokenDeps extends OrgDeps {
 }
 
 /**
- * Who may read: `any` = a live seat or one of the org's servers; `people` = a live seat;
- * `admin` = an org admin of the current record or a seat with the `servers-add` role.
+ * Who may read (docs/account-read-token.md "Org routes"):
+ * `joining` = as `any`, or a seat whose accept waits for an admin (the chain reads it verifies itself);
+ * `any` = a live seat or one of the org's servers;
+ * `admin` = an org admin of the current record or a seat with the `servers-add` role (with any of its keys);
+ * `admin-or-box` = as `admin`, or one of the org's servers.
  */
-export type OrgReadScope = "any" | "people" | "admin";
+export type OrgReadScope = "joining" | "any" | "admin" | "admin-or-box";
 
 export type OrgReadCheck =
   | { ok: true; claims: OrgReadTokenClaims }
@@ -86,7 +90,7 @@ export async function handleMintOrgReadToken(deps: OrgReadTokenDeps, orgId: stri
   const request = r as OrgReadTokenRequest;
   if (!(await verifyOrgReadTokenRequestFast(request, b.signature, hexToBytes(request.pubHex)))) return forbidden("not authorized");
   const claims: OrgReadTokenClaims = { o: orgId, sub: request.subject, k: request.pubHex, iat: now, exp: 0 };
-  if (!(await signerStillCurrent(deps, claims, now))) return forbidden("not authorized");
+  if (!(await signerStillCurrent(deps, claims, now, "joining"))) return forbidden("not authorized");
   if (!(await deps.nonces.claim(`org-read-token|${orgId}|${request.subject}|${request.nonceHex}`, now + FRESHNESS_MS, now))) {
     return forbidden("not authorized");
   }
@@ -113,26 +117,28 @@ export async function requireOrgRead(
   const claims = await peekOrgReadToken(deps.secret, authorization);
   const now = nowOf(deps);
   if (!claims || claims.o !== orgId || now >= claims.exp) return denied;
-  if (scope !== "any" && !claims.sub.startsWith("seat:")) return denied;
-  if (!(await signerStillCurrent(deps, claims, now, scope === "admin"))) return denied;
+  if (!(await signerStillCurrent(deps, claims, now, scope))) return denied;
   return { ok: true, claims };
 }
 
-async function signerStillCurrent(deps: OrgReadTokenDeps, c: OrgReadTokenClaims, now: number, wantAdmin = false): Promise<boolean> {
-  if (c.sub.startsWith("box:")) return !wantAdmin && (await boxStillCurrent(deps, c.o, c.sub.slice(4), c.k));
+async function signerStillCurrent(deps: OrgReadTokenDeps, c: OrgReadTokenClaims, now: number, scope: OrgReadScope): Promise<boolean> {
+  if (c.sub.startsWith("box:")) return scope !== "admin" && (await boxStillCurrent(deps, c.o, c.sub.slice(4), c.k));
   if (!c.sub.startsWith("seat:")) return false;
   const seatId = c.sub.slice(5);
+  if (!/^[0-9a-f]{32}$/.test(seatId)) return false;
   let v: OrgView | null;
   try {
     v = await loadOrg(deps, c.o, now);
   } catch {
     return false;
   }
-  return !!v && seatStillCurrent(v, seatId, c.k, now, wantAdmin);
+  if (!v) return false;
+  const wantAdmin = scope === "admin" || scope === "admin-or-box";
+  if (seatStillCurrent(v, seatId, c.k, now, wantAdmin)) return true;
+  return scope === "joining" && (await seatWaitingForAdmin(deps, v, seatId, c.k, now));
 }
 
 function seatStillCurrent(v: OrgView, seatId: string, key: string, now: number, wantAdmin: boolean): boolean {
-  if (!/^[0-9a-f]{32}$/.test(seatId)) return false;
   if (v.book.freezes.some((f) => f.seatId === seatId && f.issuedAt <= now && now < f.untilMs)) return false;
   const admin = v.state.current.admins.find((a) => a.seatId === seatId);
   if (admin) {
@@ -144,7 +150,24 @@ function seatStillCurrent(v: OrgView, seatId: string, key: string, now: number, 
   if (!seat || seat.grant.expiresAt <= now) return false;
   const keys = [seat.member.ed25519PubHex, seat.admin?.ed25519PubHex].filter((k): k is string => typeof k === "string");
   if (!keys.some((k) => k.toLowerCase() === key)) return false;
-  return !wantAdmin || seat.roles.some((r: OrgSeatRole) => r.role === "servers-add");
+  // An org admin's own seat reads as admin with its member key too (reads only; every write still takes the admin key).
+  return !wantAdmin || seat.roles.some((r: OrgSeatRole) => r.role === "servers-add") || admin?.kind === "admin";
+}
+
+/** A seat not yet in the book whose accept (by `key`'s member binding) waits on a live, unexpired invitation. */
+async function seatWaitingForAdmin(deps: OrgReadTokenDeps, v: OrgView, seatId: string, key: string, now: number): Promise<boolean> {
+  if (v.book.seats.has(seatId) || v.book.revoked.has(seatId)) return false;
+  if (v.book.freezes.some((f) => f.seatId === seatId && f.issuedAt <= now && now < f.untilMs)) return false;
+  const [inv, acc] = await Promise.all([deps.orgs.getObject(v.org.orgId, "invite", seatId), deps.orgs.getObject(v.org.orgId, "accept", seatId)]);
+  if (!inv || !acc) return false;
+  try {
+    const invite = (JSON.parse(inv.bodyJson) as { invite?: { expiresAt?: unknown } }).invite;
+    const member = (JSON.parse(acc.bodyJson) as { memberBinding?: { ed25519PubHex?: unknown } }).memberBinding;
+    return typeof invite?.expiresAt === "number" && invite.expiresAt > now
+      && typeof member?.ed25519PubHex === "string" && member.ed25519PubHex.toLowerCase() === key;
+  } catch {
+    return false;
+  }
 }
 
 async function boxStillCurrent(deps: OrgReadTokenDeps, orgId: string, domain: string, key: string): Promise<boolean> {

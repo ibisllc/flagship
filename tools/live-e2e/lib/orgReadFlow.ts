@@ -214,7 +214,8 @@ export function orgReadFlow(o: OrgReadFlowOptions) {
       const request = { serverId: serverDomain, reason: "gym org-read check", issuedAt: now() };
       const sig = signServerRevokeBySelf(request, { publicKey: stkPub, privateKey: stkSeed });
       expect(await call("POST", `/api/server/by-domain/${encodeURIComponent(serverDomain)}/revoke`, { request, signature: hex(sig) }), 200, "the box's revoke-self");
-      const listed = expect(await call("GET", orgPath("servers")), 200, "the org's servers");
+      const seat = expect(await mintSeat(A), 200, "an org admin's seat token");
+      const listed = expect(await call("GET", orgPath("servers"), undefined, seat.body.token), 200, "the org's servers");
       const me = (listed.body?.servers ?? []).find((s: { serverDomain?: string }) => s.serverDomain === serverDomain);
       if (!me?.revoked) throw new Error(`the org's server list does not show ${serverDomain} revoked`);
       const mint = await mintBox();

@@ -202,13 +202,13 @@ describe("org read tokens", () => {
     expect((await requireOrgRead(d2, ORG, bearer(t2))).ok).toBe(false);
   });
 
-  it("the admin scope refuses members, scoped admins and servers; people scope refuses servers", async () => {
+  it("the admin scope refuses members, scoped admins and servers; admin-or-box takes servers too", async () => {
     const d = await withServer();
     const tokens = { A: await mint(d, seat(A, T0)), M: await mint(d, seat(M, T0)), S: await mint(d, seat(S, T0)), box: await mint(d, box(T0)) };
     expect((await requireOrgRead(d, ORG, bearer(tokens.A), "admin")).ok).toBe(true);
     for (const t of [tokens.M, tokens.S, tokens.box]) expect((await requireOrgRead(d, ORG, bearer(t), "admin")).ok).toBe(false);
-    expect((await requireOrgRead(d, ORG, bearer(tokens.box), "people")).ok).toBe(false);
-    expect((await requireOrgRead(d, ORG, bearer(tokens.M), "people")).ok).toBe(true);
+    for (const t of [tokens.A, tokens.box]) expect((await requireOrgRead(d, ORG, bearer(t), "admin-or-box")).ok).toBe(true);
+    for (const t of [tokens.M, tokens.S]) expect((await requireOrgRead(d, ORG, bearer(t), "admin-or-box")).ok).toBe(false);
   });
 
   it("refuses no token, another org's token, an expired token and an account read token's shape", async () => {

@@ -1,0 +1,42 @@
+{
+  "about": "Org read tokens (docs/account-read-token.md \"Org routes\"). Every client platform must reproduce `seat`: derive the seat member key from `keys.umkSeedHex` and `keys.orgId` (deriveOrgSeatMemberSeeds, its Ed25519 half), build `canonical` from `request` byte for byte, and reproduce the Ed25519 signature; `box` is the server's (STK). The body POSTed to `path` is `{request, signature}`. Every `reject` signature must fail to verify.",
+  "keys": {
+    "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "orgId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "seatId": "61616161616161616161616161616161",
+    "memberEdSeedHex": "63be6070ea54185a1aa829c7f16860ade9b915bac3418730e02c4d1230baac90",
+    "memberPubHex": "d58c88218d6967c100a6172865e1b357a2397ba705b952d9aa79091454563287",
+    "stkSeedHex": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
+    "stkPubHex": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b"
+  },
+  "seat": {
+    "path": "/api/orgs/0f1e2d3c4b5a69788796a5b4c3d2e1f0/read-token",
+    "request": {
+      "orgId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "subject": "seat:61616161616161616161616161616161",
+      "pubHex": "d58c88218d6967c100a6172865e1b357a2397ba705b952d9aa79091454563287",
+      "issuedAt": 1760000000000,
+      "nonceHex": "00112233445566778899aabbccddeeff"
+    },
+    "canonical": "flagship/org-read-token-request/v1|0f1e2d3c4b5a69788796a5b4c3d2e1f0|seat:61616161616161616161616161616161|d58c88218d6967c100a6172865e1b357a2397ba705b952d9aa79091454563287|1760000000000|00112233445566778899aabbccddeeff",
+    "signatureHex": "662baa60ff8950b7e75c31d78861b4b9bff0bd24124e42e150817959bfe114860bc38569063b6fd7430cf9ee9711155c2e27a8678d2af0dc36548835219a0908",
+    "reject": {
+      "signatureHex": "062baa60ff8950b7e75c31d78861b4b9bff0bd24124e42e150817959bfe114860bc38569063b6fd7430cf9ee9711155c2e27a8678d2af0dc36548835219a0908"
+    }
+  },
+  "box": {
+    "path": "/api/orgs/0f1e2d3c4b5a69788796a5b4c3d2e1f0/read-token",
+    "request": {
+      "orgId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "subject": "box:home.acme.flagship.services",
+      "pubHex": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+      "issuedAt": 1760000000000,
+      "nonceHex": "fedcba98765432100123456789abcdef"
+    },
+    "canonical": "flagship/org-read-token-request/v1|0f1e2d3c4b5a69788796a5b4c3d2e1f0|box:home.acme.flagship.services|6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b|1760000000000|fedcba98765432100123456789abcdef",
+    "signatureHex": "3a715cd47e269e2d50042a63cd076b4cd211dbd3985b9c08189a309713af61353b953e8e808163089f8d412fe2f352c6cfcb4c0dec6a1a542267fd65f746d003",
+    "reject": {
+      "signatureHex": "0a715cd47e269e2d50042a63cd076b4cd211dbd3985b9c08189a309713af61353b953e8e808163089f8d412fe2f352c6cfcb4c0dec6a1a542267fd65f746d003"
+    }
+  }
+}
