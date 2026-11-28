@@ -1080,9 +1080,10 @@ org-write 18 from 2 and account-read-token 18 from 1 source; budgets left as the
   non-admin device keys are UMK-derived, so one non-admin device's rank
   versus another's isn't enforceable against a hostile device of the same
   person.
-- **Per-app visitor identity (2026-10-13).** A visitor signs redeem / visit /
-  knock / acceptance with `deriveAppAccountId(UMK, serviceRef)`
-  (`flagship/app-aid/v1|<serviceRef>`), replacing the per-author contact AID;
+- **Per-app visitor identity (2026-10-13; v2 on `release/0.5`).** A visitor signs redeem / visit /
+  knock / acceptance with `deriveAppAccountId(UMK, accountZone, serviceRef)`
+  (`flagship/app-aid/v2|<account>.<apex>|<serviceRef>`, the zone from the box name; was v1 without the
+  zone, which let two accounts hosting one app id link a visitor), replacing the per-author contact AID;
   invite links carry `&s=<serviceRef>` (links without it are refused). Client
   change only (webapp, iOS, Android); the box is unchanged. Existing invites
   bound to old contact AIDs need re-inviting (acceptable before launch).

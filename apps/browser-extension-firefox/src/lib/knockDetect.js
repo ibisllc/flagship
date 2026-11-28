@@ -6,7 +6,7 @@
 // names that site: `<svc>.<server>`, or `<server>` itself. A page that shows a sign-in link for ANOTHER site is
 // the QR-login relay trick (someone wants your phone to sign their browser in as you), so it gets a warning and
 // no sign-in offer. The extension never signs anything: the phone (or the webapp) signs the knock with the
-// person's identity for that one app (`flagship/app-aid/v1`).
+// person's identity for that one app on its host account (`flagship/app-aid/v2`).
 (function (root) {
   "use strict";
   // Keep in step with src/lib/config.js (a classic script can't import it).

@@ -224,7 +224,13 @@ over once "let's start 0.5" is said.
   lapsed).
 - **Per-app visitor identity scoped to the hosting account** (external report, 2026-11-27). App AID v2 =
   HKDF(UMK, `flagship/app-aid/v2|<accountZone>|<appRef>`) in all four twins, their consumers and vectors; a flag day
-  (owner: breaking is fine). Settle the zone for fshp.app, custom domains and org zones first.
+  (owner: breaking is fine). **Built on `release/0.5` (2026-11-28).** `accountZone` = `<account>.<data apex>` of the
+  box name the client signs for and posts to (`appAccountZone`; TLS proves it, never a link parameter): knock and
+  invite links always name the box's `flagship.services` name, so fshp.app, voi.ci and custom domains land on one zone
+  and an org app scopes to the org; a name off the data apex gets no id. A stable key isn't possible (the AID rotates
+  in 0.5); a rename with servers (not built) must re-invite. Decision and rationale: `docs/service-access-gating.md`
+  "Per-app identity"; vectors `test-vectors/app-account-id` (TS, webapp, Swift, Kotlin). Box unchanged. Members
+  re-join through a fresh invite (release notes). Ships with the store builds and the webapp.
 
 ## Carried over from 0.4
 

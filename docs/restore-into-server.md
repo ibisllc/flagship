@@ -55,7 +55,8 @@ Principles:
 
 An app's id is `<creator>--<slug>` (immutable). Restore already rewrites the creator to the importing
 account (`localServiceId`: `harry--notes` from another account becomes `sam--notes`). The per-app
-visitor id (`flagship/app-aid/v1|<serviceRef>`) and the voi.ci name are keyed on that id.
+visitor id (`flagship/app-aid/v2|<accountZone>|<serviceRef>`, also keyed on the hosting account) and the voi.ci
+name are keyed on that id.
 
 The id alone can't tell "same app" from "different app that took the same slug" (two accounts' `notes`,
 or an app deleted and recreated under the same slug). So each app gets an **origin**:

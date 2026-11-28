@@ -308,7 +308,7 @@ Follows the per-app identity rule (Conventions, `service-access-gating.md`):
 | Visitor | Key toward this app | What the owner sees |
 |---|---|---|
 | Not signed in | a non-extractable WebCrypto key made by `flagship-app.js` and kept in this origin's IndexedDB | "Visitor 4F3A" (renameable), stable while that browser keeps it |
-| Signed in with Flagship | `deriveAppAccountId(UMK, serviceRef)` (`flagship/app-aid/v1|<serviceRef>`) through a web delegation to a browser key (`voici-and-messages.md` §6.4), attested by `.com` without naming the account | the same pseudonym on every device of that person, unlinkable to their pseudonym in any other app |
+| Signed in with Flagship | `deriveAppAccountId(UMK, accountZone, serviceRef)` (`flagship/app-aid/v2|<accountZone>|<serviceRef>`, the zone being the phone's own `<account>.<apex>`) through a web delegation to a browser key (`voici-and-messages.md` §6.4), attested by `.com` without naming the account | the same pseudonym on every device of that person, unlinkable to their pseudonym in any other app |
 | Member (members-only apps) | the per-app key the invite named | their name from the invite, and their rank |
 
 Ranks: the owning account's admin devices are master, its other devices and co-managers manager, invited people

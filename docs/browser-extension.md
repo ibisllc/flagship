@@ -52,7 +52,7 @@ this is Firefox-only). Firefox's own validation runs first: the pin only narrows
 
 The content script looks for the box's access link (`https://flagshipserver.com/access#server=&svc=&ref=&page=`) on
 Flagship pages. A link for this very site gets a bar (green when the pin matched, otherwise informational) whose
-button opens the link, so the phone signs the knock with the visitor's per-app identity (`flagship/app-aid/v1`). A
+button opens the link, so the phone signs the knock with the visitor's per-app identity (`flagship/app-aid/v2`, scoped to the hosting account). A
 link for another site, a look-alike host, or two different sign-ins on one page get a red "Don't scan this sign-in
 code" bar and no button. The bar lives in a closed shadow root.
 
