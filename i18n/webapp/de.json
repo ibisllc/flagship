@@ -287,7 +287,6 @@
   "The phone sent an invalid ticket": "Das Telefon hat ein ungültiges Ticket gesendet",
   "The phone sent an invalid account": "Das Telefon hat ein ungültiges Konto gesendet",
   "The phone named a server this page won't connect to": "Das Telefon hat einen Server genannt, mit dem sich diese Seite nicht verbindet",
-  "The server named another server this page won't connect to": "Der Server hat einen anderen Server genannt, mit dem sich diese Seite nicht verbindet",
   "This code expired": "Dieser Code ist abgelaufen",
   "Relay: {0}": "Relay: {0}",
   "Connection to the relay closed": "Die Verbindung zum Relay wurde geschlossen",
@@ -303,6 +302,7 @@
   "Error: {0}": "Fehler: {0}",
   "Owner approved — done": "Der Eigentümer hat genehmigt – erledigt",
   "Request failed: {0}": "Anfrage fehlgeschlagen: {0}",
+  "The server named another server this page won't connect to": "Der Server hat einen anderen Server genannt, mit dem sich diese Seite nicht verbindet",
   "Connect to an existing account": "Mit einem bestehenden Konto verbinden",
   "Sign in with your account name": "Mit deinem Kontonamen anmelden",
   "The name you picked when you made the account.": "Der Name, den du beim Erstellen des Kontos gewählt hast.",
@@ -2027,7 +2027,6 @@
   "Use this browser as a remote": "Diesen Browser als Fernbedienung verwenden",
   "This browser gets no account key. Your phone approves the connection\n          and remains responsible for protected actions.": "Dieser Browser erhält keinen Kontoschlüssel. Dein Telefon genehmigt die Verbindung und bleibt für geschützte Aktionen zuständig.",
   "In the Flagship app on your phone, scan this code.": "Scanne diesen Code in der Flagship-App auf deinem Telefon.",
-  "Check that your phone shows the same code, then approve there:": "Prüfe, dass dein Telefon denselben Code zeigt, und genehmige dort:",
   "Copy link for the phone": "Link für das Telefon kopieren",
   "Start again": "Von vorn beginnen",
   "Get started": "Loslegen",
@@ -4021,5 +4020,13 @@
   "Keep {0}": "{0} behalten",
   "Setting up your account name…": "Dein Kontoname wird eingerichtet …",
   "Finishing your account name…": "Dein Kontoname wird abgeschlossen …",
-  "Your account is now {0}.": "Dein Konto heißt jetzt {0}."
+  "Your account is now {0}.": "Dein Konto heißt jetzt {0}.",
+  "The code wasn't confirmed in time": "Der Code wurde nicht rechtzeitig bestätigt",
+  "The codes didn't match": "Die Codes stimmten nicht überein",
+  "Nothing was connected because the codes didn't match. Scan this new code with your phone.": "Es wurde nichts verbunden, weil die Codes nicht übereinstimmten. Scanne diesen neuen Code mit deinem Telefon.",
+  "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.": "Es wurde nichts verbunden, weil der Code nicht rechtzeitig bestätigt wurde. Scanne diesen neuen Code mit deinem Telefon.",
+  "Compare the code with the one on your phone before you approve there.": "Vergleiche den Code mit dem auf deinem Telefon, bevor du dort genehmigst.",
+  "Does your phone show this code?": "Zeigt dein Telefon diesen Code?",
+  "Yes": "Ja",
+  "No": "Nein"
 }

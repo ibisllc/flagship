@@ -373,7 +373,7 @@ describe("webapp plan: wiring", () => {
     expect(read("index.html")).toContain('id="plan-lists-warning"');
     const sw = read("service-worker.js");
     for (const f of ["/lib/vouchers.js", "/lib/plan.js", "/views/plan.js"]) expect(sw).toContain(`"${f}"`);
-    expect(sw).toContain('SHELL_VERSION = "v260"');
+    expect(sw).toContain('SHELL_VERSION = "v262"');
   });
 });
 

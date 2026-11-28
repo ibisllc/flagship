@@ -287,7 +287,6 @@
   "The phone sent an invalid ticket": "スマートフォンから無効なチケットが送られました",
   "The phone sent an invalid account": "スマートフォンから無効なアカウントが送られました",
   "The phone named a server this page won't connect to": "スマートフォンが、このページが接続しないサーバーを指定しました",
-  "The server named another server this page won't connect to": "サーバーが、このページが接続しない別のサーバーを指定しました",
   "This code expired": "このコードは期限切れです",
   "Relay: {0}": "リレー：{0}",
   "Connection to the relay closed": "リレーとの接続が閉じました",
@@ -303,6 +302,7 @@
   "Error: {0}": "エラー：{0}",
   "Owner approved — done": "所有者が承認 — 完了",
   "Request failed: {0}": "リクエストに失敗しました：{0}",
+  "The server named another server this page won't connect to": "サーバーが、このページが接続しない別のサーバーを指定しました",
   "Connect to an existing account": "既存のアカウントに接続",
   "Sign in with your account name": "アカウント名でサインイン",
   "The name you picked when you made the account.": "アカウント作成時に選んだ名前です。",
@@ -2027,7 +2027,6 @@
   "Use this browser as a remote": "このブラウザーをリモートとして使う",
   "This browser gets no account key. Your phone approves the connection\n          and remains responsible for protected actions.": "このブラウザーにはアカウントキーが渡されません。接続はスマートフォンが承認し、保護された操作の責任もスマートフォンが引き続き負います。",
   "In the Flagship app on your phone, scan this code.": "スマートフォンの Flagship アプリで、このコードをスキャンしてください。",
-  "Check that your phone shows the same code, then approve there:": "スマートフォンに同じコードが表示されていることを確認し、そちらで承認してください：",
   "Copy link for the phone": "スマートフォン用のリンクをコピー",
   "Start again": "最初からやり直す",
   "Get started": "はじめる",
@@ -4021,5 +4020,13 @@
   "Keep {0}": "{0} のままにする",
   "Setting up your account name…": "アカウント名を設定しています…",
   "Finishing your account name…": "アカウント名の設定を完了しています…",
-  "Your account is now {0}.": "アカウント名が {0} になりました。"
+  "Your account is now {0}.": "アカウント名が {0} になりました。",
+  "The code wasn't confirmed in time": "コードが時間内に確認されませんでした",
+  "The codes didn't match": "コードが一致しませんでした",
+  "Nothing was connected because the codes didn't match. Scan this new code with your phone.": "コードが一致しなかったため、何も接続されていません。スマートフォンでこの新しいコードをスキャンしてください。",
+  "Nothing was connected because the code wasn't confirmed in time. Scan this new code with your phone.": "コードが時間内に確認されなかったため、何も接続されていません。スマートフォンでこの新しいコードをスキャンしてください。",
+  "Compare the code with the one on your phone before you approve there.": "承認する前に、このコードをスマートフォンのコードと見比べてください。",
+  "Does your phone show this code?": "スマートフォンにこのコードが表示されていますか？",
+  "Yes": "はい",
+  "No": "いいえ"
 }
