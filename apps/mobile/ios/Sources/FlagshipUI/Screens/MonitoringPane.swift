@@ -404,16 +404,7 @@ struct MonitoringPane: View {
     }
 }
 
-fileprivate func formatBytes(_ bytes: Int64) -> String {
-    let kb = 1024.0
-    let mb = kb * 1024
-    let gb = mb * 1024
-    let b = Double(bytes)
-    if b >= gb { return String(format: "%.1f GB", b / gb) }
-    if b >= mb { return String(format: "%.0f MB", b / mb) }
-    if b >= kb { return String(format: "%.0f KB", b / kb) }
-    return "\(bytes) B"
-}
+fileprivate func formatBytes(_ bytes: Int64) -> String { ByteText.meter(bytes) }
 
 fileprivate func formatRate(_ bytesPerSec: Double) -> String {
     let kb = 1024.0

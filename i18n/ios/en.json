@@ -17355,5 +17355,17 @@
   "Open this link when you create your account.": {
     "en": "Open this link when you create your account.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChooseAccountNameViewModel.swift"
+  },
+  "%@ GB": {
+    "en": "%@ GB",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ByteText.swift (a size: the number is already in the reader’s locale)"
+  },
+  "%@ MB": {
+    "en": "%@ MB",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ByteText.swift (a size: the number is already in the reader’s locale)"
+  },
+  "%@ KB": {
+    "en": "%@ KB",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/ByteText.swift (a size: the number is already in the reader’s locale)"
   }
 }

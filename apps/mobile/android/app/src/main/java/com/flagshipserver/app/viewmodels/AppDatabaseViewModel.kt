@@ -108,8 +108,8 @@ class AppDatabaseViewModel(
             return when {
                 b < 1024 -> "${b.toLong()} B"
                 b < 1024 * 1024 -> FSStrings.get(R.string.kb, (b / 1024).toLong())
-                b < 1024.0 * 1024 * 1024 -> String.format(Locale.US, "%.1f MB", b / (1024 * 1024))
-                else -> String.format(Locale.US, "%.1f GB", b / (1024.0 * 1024 * 1024))
+                b < 1024.0 * 1024 * 1024 -> com.flagshipserver.app.core.ByteSize.mb(b.toLong(), 1)
+                else -> com.flagshipserver.app.core.ByteSize.gb(b.toLong(), 1)
             }
         }
 

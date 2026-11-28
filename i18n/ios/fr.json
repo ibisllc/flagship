@@ -4076,5 +4076,8 @@
   "This name has been set aside for you.": "Ce nom a été réservé pour vous.",
   "This link has expired. Ask for a new one.": "Ce lien a expiré. Demandez-en un nouveau.",
   "This link doesn't work any more. Ask for a new one.": "Ce lien ne fonctionne plus. Demandez-en un nouveau.",
-  "Open this link when you create your account.": "Ouvrez ce lien quand vous créez votre compte."
+  "Open this link when you create your account.": "Ouvrez ce lien quand vous créez votre compte.",
+  "%@ GB": "%@ Go",
+  "%@ MB": "%@ Mo",
+  "%@ KB": "%@ Ko"
 }

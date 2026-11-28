@@ -4070,5 +4070,8 @@
   "This name has been set aside for you.": "d3968944f051",
   "This link has expired. Ask for a new one.": "fc4a8907eaa2",
   "This link doesn't work any more. Ask for a new one.": "14fa0ab82a00",
-  "Open this link when you create your account.": "f787b6205ff6"
+  "Open this link when you create your account.": "f787b6205ff6",
+  "%@ GB": "7004a87d84a7",
+  "%@ MB": "9e9af87c271d",
+  "%@ KB": "ea8442eee332"
 }

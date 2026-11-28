@@ -135,7 +135,7 @@ object PeerBackup {
         if (n < 0) return ""
         val gb = 1024.0 * 1024 * 1024
         return when {
-            n >= gb -> if (n < 10 * gb) "%.1f GB".format(java.util.Locale.US, n / gb) else FSStrings.get(R.string.gb, Math.round(n / gb))
+            n >= gb -> ByteSize.gbAuto(n)
             n >= 1024L * 1024 -> FSStrings.get(R.string.mb, Math.round(n / (1024.0 * 1024)))
             else -> FSStrings.get(R.string.kb, maxOf(0L, Math.round(n / 1024.0)))
         }

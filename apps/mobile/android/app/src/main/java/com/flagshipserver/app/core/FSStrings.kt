@@ -2,6 +2,7 @@ package com.flagshipserver.app.core
 
 import android.content.Context
 import androidx.annotation.StringRes
+import java.util.Locale
 
 /**
  * Looks up a string resource from code that has no Composable or Context at hand (view models, text
@@ -22,6 +23,9 @@ object FSStrings {
         val ctx = app ?: return JvmTestStrings.get(id, args)
         return if (args.isEmpty()) ctx.getString(id) else ctx.getString(id, *args)
     }
+
+    /** The language the app's text is in, for numbers formatted beside it. */
+    fun locale(): Locale = app?.resources?.configuration?.locales?.get(0) ?: Locale.getDefault()
 
     fun plural(id: Int, count: Int, vararg args: Any?): String {
         val ctx = app ?: return JvmTestStrings.plural(id, count, args)

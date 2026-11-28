@@ -4074,5 +4074,8 @@
   "This name has been set aside for you.": "この名前はあなたのために確保されています。",
   "This link has expired. Ask for a new one.": "このリンクは期限切れです。新しいリンクを頼んでください。",
   "This link doesn't work any more. Ask for a new one.": "このリンクはもう使えません。新しいリンクを頼んでください。",
-  "Open this link when you create your account.": "このリンクはアカウントを作成するときに開いてください。"
+  "Open this link when you create your account.": "このリンクはアカウントを作成するときに開いてください。",
+  "%@ GB": "%@ GB",
+  "%@ MB": "%@ MB",
+  "%@ KB": "%@ KB"
 }

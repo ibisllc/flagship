@@ -80,10 +80,7 @@ public enum AppStorageText {
 
     private static let gib: Int64 = 1_073_741_824
 
-    static func gb(_ n: Int64) -> String {
-        let v = Double(n) / Double(gib)
-        return n < 10 * gib ? String(format: "%.1f GB", v) : String(format: "%.0f GB", v)
-    }
+    static func gb(_ n: Int64) -> String { ByteText.gbAuto(n) }
 
     static func size(_ n: Int64) -> String {
         if n >= gib { return gb(n) }

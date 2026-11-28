@@ -1034,15 +1034,11 @@ private fun uptime(ms: Long): String {
     }
 }
 
-private fun bytes(b: Long): String {
-    val units = listOf("B", "KB", "MB", "GB", "TB")
-    var v = b.toDouble()
-    var i = 0
-    while (v >= 1024 && i < units.size - 1) {
-        v /= 1024
-        i++
-    }
-    return if (i == 0) "$b B" else "%.1f %s".format(v, units[i])
+private fun bytes(b: Long): String = when {
+    b >= 1L shl 30 -> com.flagshipserver.app.core.ByteSize.gb(b, 1)
+    b >= 1L shl 20 -> com.flagshipserver.app.core.ByteSize.mb(b, 1)
+    b >= 1L shl 10 -> com.flagshipserver.app.core.ByteSize.kb(b, 1)
+    else -> "$b B"
 }
 
 @Composable
