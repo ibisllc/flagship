@@ -77,7 +77,7 @@ final class WipeRestartViewModelTests: XCTestCase {
         await vm.run(currentEtag: nil)
 
         if case .failed(let msg) = vm.phase {
-            XCTAssertTrue(msg.lowercased().contains("rate"))
+            XCTAssertTrue(msg.lowercased().contains("once an hour"), msg)
         } else {
             XCTFail("expected .failed, got \(vm.phase)")
         }
