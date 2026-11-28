@@ -85,7 +85,9 @@ over once "let's start 0.5" is said.
   6. ~~Strict verify in `edSync`~~ done (owner's default): S < L, canonical R and A, A not of small order, the
      cofactorless equation (noble's `zip215: false` is still cofactored, so `edSync` checks it itself; WebCrypto stays
      the fast path). Vector `test-vectors/ed25519-strict/` (`tools/ed25519-strict-vectors.ts`): a mixed-order R that
-     ZIP-215 accepts and the strict rule refuses. Proof of possession for the share-key attestation: skipped (low
+     ZIP-215 accepts and the strict rule refuses; iOS (CryptoKit), Android (Tink) and the webapp's WebCrypto
+     `verifyEd25519` refuse it too (tests). Open: the webapp's noble sync path (`verifyEd25519Sync`, used by
+     `accountKeyRotation.js`, `accountKeyChange.js`, `rescue.js`, `voiciCore.js`) still accepts it. Proof of possession for the share-key attestation: skipped (low
      value: the request already needs the account's admin signature and the attestation names no account).
   7. ~~v2 `ClaimUsername`~~ done: `flagship/claim-username/v2|<username>|<irkPub>|<aidPub or empty>|<adminRootPub or
      empty>|<issuedAt>` (`usernameClaim.ts`, the claim in `POST /api/accounts`). `.com` takes v2 only (every 0.5
