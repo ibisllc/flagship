@@ -231,6 +231,26 @@ describe("POST /api/security/report", () => {
     );
 
     it(
+      "takes the token from a whole posted form (Turnstile's hidden cf-turnstile-response input)",
+      withDb(async (db, raw) => {
+        const pass = siteverify(async () => Response.json({ success: true, action: "security-report" }));
+        const form = report({ "cf-turnstile-response": "tok-form" });
+        const ok = await handleSecurityReportRoute(post(form), { DB: db, ...tsEnv }, deps({ fetchFn: pass.fetchFn }));
+        expect(ok.status).toBe(200);
+        expect(new URLSearchParams(pass.calls[0]!.body).get("response")).toBe("tok-form");
+        // Both present (the fixed page sends turnstileToken; an old cached page sends both): turnstileToken wins.
+        const both = await handleSecurityReportRoute(
+          post(report({ turnstileToken: "tok-js", "cf-turnstile-response": "tok-form" })),
+          { DB: db, ...tsEnv },
+          deps({ fetchFn: pass.fetchFn }),
+        );
+        expect(both.status).toBe(200);
+        expect(new URLSearchParams(pass.calls[1]!.body).get("response")).toBe("tok-js");
+        expect(raw.raw.prepare("SELECT COUNT(*) AS n FROM security_reports").get()).toEqual({ n: 2 });
+      }),
+    );
+
+    it(
       "stores a report only after Siteverify passes its token",
       withDb(async (db, raw) => {
         const pass = siteverify(async () => Response.json({ success: true, action: "security-report" }));

@@ -425,7 +425,8 @@
         if (code === "challenge-failed") return msg("challenge");
         if (code === "challenge-unavailable") return msg("unavailable");
         if (KNOWN.has(code)) return msg(code);
-        return msg("failed", status);
+        // An unnamed refusal still carries its code (an id, not a sentence) so a reporter can quote it.
+        return msg("failed", code ? `${status}, ${code}` : status);
       };
 
       // Cloudflare Turnstile, only when the server has it switched on (it then checks every token).
@@ -441,7 +442,7 @@
           s.async = true;
           s.onload = () => {
             turnstile = window.turnstile;
-            widgetId = turnstile.render("#ts-widget", { sitekey: turnstileSiteKey, action: "security-report" });
+            widgetId = turnstile.render("#ts-widget", { sitekey: turnstileSiteKey, action: "security-report", "response-field": false });
           };
           document.head.appendChild(s);
         } catch {}
@@ -449,7 +450,11 @@
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const data = Object.fromEntries(new FormData(form).entries());
+        // Only the fields the route takes: anything else in the form (Turnstile's own hidden input, a password
+        // manager's) would make it refuse the whole report.
+        const all = new FormData(form);
+        const data = {};
+        for (const k of ["email", "severity", "component", "summary", "details", "website"]) data[k] = String(all.get(k) ?? "");
         if (turnstile && widgetId !== null) {
           const token = turnstile.getResponse(widgetId);
           if (!token) {
