@@ -32,6 +32,26 @@ interface OrgSeatStore {
     fun rememberMember(orgId: String, seatId: String, orgName: String, genesisHash: String, memberBinding: PqTrust.Wire)
     /** Signs with the seat admin key; null when the session is locked (the caller asks to unlock). */
     fun sign(seat: OrgSeatRecord, purpose: String, payload: ByteArray): ByteArray?
+    /** The Ed25519 seed of the seat admin key, for an org read token; null when locked or a member seat. The caller wipes it. */
+    fun adminEdSeed(seat: OrgSeatRecord): ByteArray? = null
+}
+
+/**
+ * The keys this phone can mint [orgId]'s read token with, never prompting (docs/account-read-token.md "Org routes"):
+ * an admin seat's own key while the session is open, then the seat member key from the open session's UMK.
+ */
+fun OrgSeatStore.readTokenCredentials(orgId: String, umkIfOpen: () -> ByteArray?): List<com.flagshipserver.app.core.OrgReadTokenCredential> {
+    val out = mutableListOf<com.flagshipserver.app.core.OrgReadTokenCredential>()
+    val umk = umkIfOpen()
+    try {
+        for (seat in seats().filter { it.orgId == orgId }) {
+            if (!seat.memberOnly) adminEdSeed(seat)?.let { ed ->
+                try { out += com.flagshipserver.app.core.OrgReadTokenCredential.ofSeed(seat.seatId, ed) } finally { ed.fill(0) }
+            }
+            if (umk != null) runCatching { com.flagshipserver.app.core.OrgReadTokenCredential.member(umk, orgId, seat.seatId) }.getOrNull()?.let { out += it }
+        }
+    } finally { umk?.fill(0) }
+    return out
 }
 
 /**
@@ -100,6 +120,12 @@ class KeystoreOrgSeatKeys(
         try {
             return PqHybrid.hybridSign(secret, purpose, payload)
         } finally { ed.fill(0); ml.fill(0); secret.fill(0) }
+    }
+
+    override fun adminEdSeed(seat: OrgSeatRecord): ByteArray? {
+        if (seat.memberOnly) return null
+        val s = persistence.load(slot(seat.orgId, seat.seatId))?.let { runCatching { json.decodeFromString(Stored.serializer(), it) }.getOrNull() } ?: return null
+        return runCatching { wrapper.unwrap(PqHex.decode(s.edWrappedHex)!!) }.getOrNull()
     }
 }
 

@@ -84,8 +84,9 @@ class OrgJoinViewModel(
             val o = try { Json.parseToJsonElement(String(openOffer(sealed, key), Charsets.UTF_8)) as? JsonObject } finally { key.fill(0) } ?: throw OrgAuthorityException("malformed")
             if (str(o, "orgId") != orgId || str(o, "seatId") != seatId) throw OrgAuthorityException("malformed")
             val genesis = str(o, "genesisHash") ?: throw OrgAuthorityException("malformed")
-            // The org's chain must verify from the genesis the inviter sealed into the offer.
-            client.snapshot(orgId, genesis, now())
+            // The org's chain must verify from the genesis the inviter sealed into the offer. It rides with the offer:
+            // this phone holds no seat to mint an org read token with yet.
+            client.verifyServedChain(r["authority"] as? JsonObject ?: throw OrgAuthorityException("malformed"), genesis, now())
             offer = o; invite = inv
             roles = OrgAuthorityWire.roles(r["roles"])
             _phase.value = Phase.Ready(str(o, "orgName") ?: "", str(o, "pseudonym") ?: "", roles.any { it.raisesAdmin })

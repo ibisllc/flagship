@@ -86,25 +86,50 @@ class OrgPendingJoin(
 internal fun str(o: JsonObject?, k: String): String? = (o?.get(k) as? JsonPrimitive)?.takeIf { it.isString }?.content
 internal fun num(o: JsonObject?, k: String): Long? = (o?.get(k) as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toLongOrNull()
 
-class OrgClient(private val http: OrgHttp) {
+class OrgClient(
+    private val http: OrgHttp,
+    private val readTokens: OrgReadTokens = OrgReadTokens.shared,
+    private val now: () -> Long = { System.currentTimeMillis() },
+) {
+    /** Every org GET but the plan and the invite offer carries the org read token; a 401 mints it again once. */
+    private suspend fun exchange(method: String, path: String, body: JsonObject?, headers: Map<String, String>): Pair<Int, JsonObject> {
+        val orgId = if (method == "GET") OrgReadToken.gatedOrg(path) else null
+        val mint: suspend (String, JsonObject) -> Pair<Int, JsonObject> = { p, b -> http.call("POST", p, b) }
+        suspend fun send(token: String?): Pair<Int, JsonObject> {
+            val h = if (token != null) headers + ("authorization" to "Bearer $token") else headers
+            return if (h.isEmpty()) http.call(method, path, body) else http.call(method, path, body, h)
+        }
+        val token = orgId?.let { readTokens.token(it, false, now(), mint) }
+        val first = send(token)
+        if (orgId == null || token == null || first.first != 401) return first
+        val again = readTokens.token(orgId, true, now(), mint) ?: return first
+        return send(again)
+    }
+
     private suspend fun call(method: String, path: String, body: JsonObject? = null, headers: Map<String, String> = emptyMap()): JsonObject {
-        val (status, json) = if (headers.isEmpty()) http.call(method, path, body) else http.call(method, path, body, headers)
+        val (status, json) = exchange(method, path, body, headers)
         if (status !in 200..299) throw OrgClientException(status, str(json, "code") ?: str(json, "error") ?: "")
         return json
     }
 
     private fun arr(o: JsonObject, k: String): List<JsonElement> = (o[k] as? JsonArray)?.toList() ?: emptyList()
 
+    /** The chain as `GET /authority` (or the invite offer's `authority`) serves it, verified from [genesisHash]. */
+    fun verifyServedChain(a: JsonObject, genesisHash: String, now: Long): OrgAuthorityState =
+        OrgAuthority.verifyChain(
+            arr(a, "entries").map { OrgAuthorityWire.entry(it) }, genesisHash, now,
+            arr(a, "freezes").map { OrgAuthorityWire.freeze(it) }, arr(a, "overturns").map { OrgAuthorityWire.overturn(it) },
+            arr(a, "vetoes").map { OrgAuthorityWire.veto(it) },
+        )
+
     /** Fetches and verifies the org from the genesis hash this phone pinned when it joined. */
     suspend fun snapshot(orgId: String, genesisHash: String, now: Long): OrgSnapshot {
         val a = call("GET", "/api/orgs/$orgId/authority")
         val s = call("GET", "/api/orgs/$orgId/seats")
         val c = call("GET", "/api/orgs/$orgId/ceremonies")
-        val entries = arr(a, "entries").map { OrgAuthorityWire.entry(it) }
         val freezes = arr(a, "freezes").map { OrgAuthorityWire.freeze(it) }
         val overturns = arr(a, "overturns").map { OrgAuthorityWire.overturn(it) }
-        val vetoes = arr(a, "vetoes").map { OrgAuthorityWire.veto(it) }
-        val state = OrgAuthority.verifyChain(entries, genesisHash, now, freezes, overturns, vetoes)
+        val state = verifyServedChain(a, genesisHash, now)
         val grants = arr(s, "grants").mapNotNull { runCatching { OrgAuthorityWire.grantBundle(it) }.getOrNull() }
         val revokes = arr(s, "revokes").mapNotNull { runCatching { OrgAuthorityWire.revokeBundle(it) }.getOrNull() }
         val book = OrgAuthority.buildSeatBook(state, grants, revokes, freezes, overturns, now)
@@ -237,7 +262,7 @@ class OrgClient(private val http: OrgHttp) {
 
     /** The org's sealed voucher wallet, or null before the first write. */
     suspend fun voucherWallet(orgId: String): JsonObject? {
-        val (status, json) = http.call("GET", "/api/orgs/$orgId/voucher-wallet", null)
+        val (status, json) = exchange("GET", "/api/orgs/$orgId/voucher-wallet", null, emptyMap())
         if (status == 404) return null
         if (status !in 200..299) throw OrgClientException(status, str(json, "code") ?: "")
         return json

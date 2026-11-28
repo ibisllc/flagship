@@ -153,14 +153,16 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
 
     private fun inviteOf(s: String) = invites[s]?.get("invite") as? JsonObject
 
+    private fun authority() = buildJsonObject {
+        put("org", buildJsonObject { put("name", orgName) }); put("entries", JsonArray(entries)); put("freezes", JsonArray(emptyList()))
+        put("overturns", JsonArray(emptyList())); put("vetoes", JsonArray(emptyList()))
+    }
+
     private fun serve(method: String, path: String, body: JsonObject?, headers: Map<String, String>): Pair<Int, JsonObject> {
         calls += "$method $path"
         val base = "/api/orgs/$orgId"
         return when {
-            method == "GET" && path == "$base/authority" -> 200 to buildJsonObject {
-                put("org", buildJsonObject { put("name", orgName) }); put("entries", JsonArray(entries)); put("freezes", JsonArray(emptyList()))
-                put("overturns", JsonArray(emptyList())); put("vetoes", JsonArray(emptyList()))
-            }
+            method == "GET" && path == "$base/authority" -> 200 to authority()
             method == "GET" && path == "$base/seats" -> 200 to buildJsonObject {
                 put("grants", JsonArray(grants)); put("revokes", JsonArray(revokes)); put("invites", JsonArray(invites.values.toList())); put("accepts", JsonArray(accepts))
             }
@@ -173,7 +175,9 @@ class OrgTestWorld(val now: Long = 1_800_000_000_000L) {
                 if (!proven) 404 to JsonObject(emptyMap())
                 else if (inviteExpired) 410 to buildJsonObject { put("code", "org-invite-expired") }
                 else invites[s]?.let { inv ->
-                    200 to JsonObject(inv + mapOf("offerHex" to JsonPrimitive(offers[s]), "accepted" to JsonPrimitive(accepts.any { (it["accept"] as JsonObject)["seatId"] == JsonPrimitive(s) })))
+                    // As .com: the chain rides with the offer (a joiner holds no seat to mint an org read token with).
+                    200 to JsonObject(inv + mapOf("offerHex" to JsonPrimitive(offers[s]), "accepted" to JsonPrimitive(accepts.any { (it["accept"] as JsonObject)["seatId"] == JsonPrimitive(s) }),
+                        "authority" to authority()))
                 } ?: (404 to JsonObject(emptyMap()))
             }
             method == "POST" && path.endsWith("/accept") -> {

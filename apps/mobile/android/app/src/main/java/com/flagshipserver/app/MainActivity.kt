@@ -78,6 +78,7 @@ import com.flagshipserver.app.core.QrRelayClient
 import com.flagshipserver.app.core.ToastCenter
 import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.Keystore
+import com.flagshipserver.app.keystore.readTokenCredentials
 import androidx.lifecycle.lifecycleScope
 import com.flagshipserver.app.push.FlagshipFcmService
 import com.flagshipserver.app.push.PushHolder
@@ -318,9 +319,14 @@ class MainActivity : FragmentActivity() {
             },
         ) { trustCenter.isServerTrusted }
         // Organizations (docs/enterprise-accounts.md): `.com` org routes; seats and their keys on this phone.
+        val orgSeatKeys = com.flagshipserver.app.keystore.KeystoreOrgSeatKeys(appContext)
+        // Org reads carry an org read token minted with a key at hand (docs/account-read-token.md "Org routes").
+        com.flagshipserver.app.core.OrgReadTokens.shared.credentials = { orgId ->
+            orgSeatKeys.readTokenCredentials(orgId) { com.flagshipserver.app.keystore.Keystore.umkSeedIfOpen() }
+        }
         val liveOrgs = com.flagshipserver.app.viewmodels.OrgRuntime(
             com.flagshipserver.app.core.OrgClient(com.flagshipserver.app.core.LiveOrgHttp(OkHttpJsonTransport(okHttp))),
-            com.flagshipserver.app.keystore.KeystoreOrgSeatKeys(appContext),
+            orgSeatKeys,
         ) { reason ->
             com.flagshipserver.app.keystore.Keystore.ensureUnlocked(reason)
             com.flagshipserver.app.keystore.Keystore.loadOrCreateUmkSeed()
