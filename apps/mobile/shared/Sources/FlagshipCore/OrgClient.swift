@@ -106,28 +106,28 @@ public final class OrgClient: @unchecked Sendable {
     public typealias HeaderTransport = (_ method: String, _ path: String, _ body: [String: Any]?, _ headers: [String: String]) async throws -> (status: Int, json: [String: Any])
     private let transport: HeaderTransport?
 
-    public init(urlSession: URLSession = .shared, baseUrl: URL = Endpoints.controlBaseUrl) {
-        self.urlSession = urlSession; self.baseUrl = baseUrl; self.transport = nil
+    private let readTokens: OrgReadTokens
+    private let clock: () -> Int64
+
+    public init(urlSession: URLSession = .shared, baseUrl: URL = Endpoints.controlBaseUrl, readTokens: OrgReadTokens = .shared,
+                now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+        self.urlSession = urlSession; self.baseUrl = baseUrl; self.transport = nil; self.readTokens = readTokens; self.clock = now
     }
 
     /// Tests: answer every call from `transport` (a fake `.com`).
-    public init(transport: @escaping Transport) {
+    public init(transport: @escaping Transport, readTokens: OrgReadTokens = OrgReadTokens(), now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.urlSession = .shared; self.baseUrl = Endpoints.controlBaseUrl; self.transport = { m, p, b, _ in try await transport(m, p, b) }
+        self.readTokens = readTokens; self.clock = now
     }
 
     /// Tests: as `init(transport:)`, with the request's extra headers.
-    public init(headerTransport: @escaping HeaderTransport) {
+    public init(headerTransport: @escaping HeaderTransport, readTokens: OrgReadTokens = OrgReadTokens(), now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.urlSession = .shared; self.baseUrl = Endpoints.controlBaseUrl; self.transport = headerTransport
+        self.readTokens = readTokens; self.clock = now
     }
 
-    private func call(_ method: String, _ path: String, _ body: [String: Any]? = nil, headers: [String: String] = [:]) async throws -> [String: Any] {
-        if let transport {
-            let (status, json) = try await transport(method, path, body, headers)
-            guard (200..<300).contains(status) else {
-                throw OrgClientError(status: status, code: (json["code"] as? String) ?? (json["error"] as? String) ?? "")
-            }
-            return json
-        }
+    private func send(_ method: String, _ path: String, _ body: [String: Any]?, _ headers: [String: String]) async throws -> (status: Int, json: [String: Any]) {
+        if let transport { return try await transport(method, path, body, headers) }
         var req = URLRequest(url: baseUrl.appendingPathComponent(path))
         req.httpMethod = method
         req.cachePolicy = .reloadIgnoringLocalCacheData
@@ -139,6 +139,25 @@ public final class OrgClient: @unchecked Sendable {
         let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        return (status, json)
+    }
+
+    /// Every org GET but the plan and the invite offer carries the org read token (docs/account-read-token.md
+    /// "Org routes"); a 401 mints it again once.
+    private func call(_ method: String, _ path: String, _ body: [String: Any]? = nil, headers: [String: String] = [:]) async throws -> [String: Any] {
+        let orgId = method == "GET" ? OrgReadToken.gatedOrg(path: path) : nil
+        let mint: OrgReadTokens.Post = { [self] p, b in try await send("POST", p, b, [:]) }
+        func withToken(_ t: String?) -> [String: String] {
+            var h = headers
+            if let t { h["authorization"] = "Bearer \(t)" }
+            return h
+        }
+        var token: String? = nil
+        if let orgId { token = await readTokens.token(orgId: orgId, fresh: false, now: clock(), post: mint) }
+        var (status, json) = try await send(method, path, body, withToken(token))
+        if let orgId, token != nil, status == 401, let again = await readTokens.token(orgId: orgId, fresh: true, now: clock(), post: mint) {
+            (status, json) = try await send(method, path, body, withToken(again))
+        }
         guard (200..<300).contains(status) else {
             throw OrgClientError(status: status, code: (json["code"] as? String) ?? (json["error"] as? String) ?? "")
         }
@@ -151,15 +170,21 @@ public final class OrgClient: @unchecked Sendable {
     }
 
     /// Fetches and verifies the org from the genesis hash this phone pinned when it joined or created it.
-    public func snapshot(orgId: String, genesisHash: String, now: Int64) async throws -> OrgSnapshot {
-        let a = try await call("GET", "/api/orgs/\(orgId)/authority")
-        let s = try await call("GET", "/api/orgs/\(orgId)/seats")
-        let c = try await call("GET", "/api/orgs/\(orgId)/ceremonies")
+    /// The chain as `GET /authority` (or the invite offer's `authority`) serves it, verified from `genesisHash`.
+    public static func verifyServedChain(_ a: [String: Any], genesisHash: String, now: Int64) throws -> (OrgAuthorityState, [OrgSigned<OrgSeatFreeze>], [OrgSigned<OrgOverturn>]) {
         let entries = try ((a["entries"] as? [Any]) ?? []).map { try OrgAuthorityWire.entry($0) }
         let freezes = try ((a["freezes"] as? [Any]) ?? []).map { try OrgAuthorityWire.freeze($0) }
         let overturns = try ((a["overturns"] as? [Any]) ?? []).map { try OrgAuthorityWire.overturn($0) }
         let vetoes = try ((a["vetoes"] as? [Any]) ?? []).map { try OrgAuthorityWire.veto($0) }
         let state = try OrgAuthority.verifyChain(entries, genesisHash: genesisHash, now: now, freezes: freezes, overturns: overturns, vetoes: vetoes)
+        return (state, freezes, overturns)
+    }
+
+    public func snapshot(orgId: String, genesisHash: String, now: Int64) async throws -> OrgSnapshot {
+        let a = try await call("GET", "/api/orgs/\(orgId)/authority")
+        let s = try await call("GET", "/api/orgs/\(orgId)/seats")
+        let c = try await call("GET", "/api/orgs/\(orgId)/ceremonies")
+        let (state, freezes, overturns) = try Self.verifyServedChain(a, genesisHash: genesisHash, now: now)
         let grants = ((s["grants"] as? [Any]) ?? []).compactMap { try? OrgAuthorityWire.grantBundle($0) }
         let revokes = ((s["revokes"] as? [Any]) ?? []).compactMap { try? OrgAuthorityWire.revokeBundle($0) }
         let book = OrgAuthority.buildSeatBook(state, grants: grants, revokes: revokes, freezes: freezes, overturns: overturns, now: now)

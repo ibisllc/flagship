@@ -139,6 +139,8 @@ final class OrgFakeCom: @unchecked Sendable {
                 if inviteExpired { return (410, ["code": "org-invite-expired"]) }
                 inv["offerHex"] = offers[seat]
                 inv["accepted"] = accepts.contains { ($0["accept"] as? [String: Any])?["seatId"] as? String == seat }
+                // As .com: the chain rides with the offer (a joiner holds no seat to mint an org read token with).
+                inv["authority"] = ["org": ["name": orgName], "entries": entries, "freezes": [], "overturns": [], "vetoes": []] as [String: Any]
                 return (200, wire(inv))
             }
             if method == "POST", path.hasSuffix("/accept") {

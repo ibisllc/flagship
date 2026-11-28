@@ -54,8 +54,10 @@ public final class OrgJoinViewModel {
             let plain = try AES.GCM.open(try AES.GCM.SealedBox(combined: Data(sealed)), using: SymmetricKey(data: key))
             guard let o = try JSONSerialization.jsonObject(with: plain) as? [String: Any], o["orgId"] as? String == orgId, o["seatId"] as? String == seatId,
                   let genesis = o["genesisHash"] as? String else { throw OrgAuthorityError("malformed") }
-            // The org's chain must verify from the genesis the inviter sealed into the offer.
-            _ = try await client.snapshot(orgId: orgId, genesisHash: genesis, now: now())
+            // The org's chain must verify from the genesis the inviter sealed into the offer. It rides with the
+            // offer: this phone holds no seat to mint an org read token with yet.
+            guard let authority = r["authority"] as? [String: Any] else { throw OrgAuthorityError("malformed") }
+            _ = try OrgClient.verifyServedChain(authority, genesisHash: genesis, now: now())
             offer = o; invite = inv
             roles = try OrgAuthorityWire.roles(r["roles"])
             phase = .ready(orgName: (o["orgName"] as? String) ?? "", pseudonym: (o["pseudonym"] as? String) ?? "", isAdminRole: OrgAuthority.rolesRaiseAdmin(roles))

@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import FlagshipCore
 
 /// This phone's org seats (docs/enterprise-accounts.md §2, §7). A seat admin key is RANDOM (never
@@ -6,7 +7,12 @@ import FlagshipCore
 /// sealed to the Secure Enclave wrapping key that seals the UMK ("PQ, hardware-wrapped"), and opened
 /// only in an unlocked session. It is bound by a `pq-key-binding` of role `org-seat-admin`.
 open class OrgSeatKeys: @unchecked Sendable {
-    public static let shared = OrgSeatKeys()
+    public static let shared: OrgSeatKeys = {
+        let keys = OrgSeatKeys()
+        // Org reads carry an org read token minted with a key at hand (docs/account-read-token.md "Org routes").
+        OrgReadTokens.shared.setCredentials { orgId in keys.readTokenCredentials(orgId: orgId) }
+        return keys
+    }()
 
     public struct Seat: Codable, Equatable, Identifiable {
         public let orgId: String
@@ -82,4 +88,32 @@ open class OrgSeatKeys: @unchecked Sendable {
     }
 
     open func forget(_ seat: Seat) { Keystore.pqRecordDelete(slot(seat.orgId, seat.seatId)) }
+
+    /// The keys this phone can mint `orgId`'s read token with, never prompting: an admin seat's own key while the
+    /// session is unlocked, then the seat member key from the UMK this session already holds.
+    open func readTokenCredentials(orgId: String) -> [OrgReadTokenCredential] {
+        var out: [OrgReadTokenCredential] = []
+        let umk = Keystore.sessionUMKIfCached().map { [UInt8]($0) }
+        for seat in seats() where seat.orgId == orgId {
+            if seat.memberOnly != true, let key = adminEdKey(seat) {
+                out.append(OrgReadTokenCredential(seatId: seat.seatId, pubHex: OrgAuthority.hex(Array(key.publicKey.rawRepresentation))) { m in
+                    Array(try key.signature(for: m))
+                })
+            }
+            if let umk, let c = try? OrgReadTokenCredential.member(umk: umk, orgId: orgId, seatId: seat.seatId) { out.append(c) }
+        }
+        return out
+    }
+
+    /// The Ed25519 half of the seat admin key, or nil when the session is locked or the key is not on this phone.
+    private func adminEdKey(_ seat: Seat) -> Curve25519.Signing.PrivateKey? {
+        guard let raw = Keystore.pqRecordRead(slot(seat.orgId, seat.seatId)),
+              let rec = try? JSONDecoder().decode(Record.self, from: raw), !rec.sealed.isEmpty,
+              let ctx = Keystore.sessionAuthContext,
+              let secret = try? Keystore.pqOpenSeed(rec.sealed, ephemeralPub: rec.ephemeralPub, aad: aad(seat.orgId, seat.seatId), context: ctx)
+        else { return nil }
+        var s = [UInt8](secret)
+        defer { for i in s.indices { s[i] = 0 } }
+        return try? Curve25519.Signing.PrivateKey(rawRepresentation: s.prefix(32))
+    }
 }

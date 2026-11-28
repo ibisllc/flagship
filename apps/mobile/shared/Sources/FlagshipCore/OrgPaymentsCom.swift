@@ -99,27 +99,47 @@ public final class LiveOrgPaymentsComClient: OrgPaymentsComClient, @unchecked Se
     private let base: URL
     private let payments: LivePaymentsComClient
 
-    public init(session: URLSession = .shared, base: URL = Endpoints.controlBaseUrl) {
+    private let readTokens: OrgReadTokens
+
+    public init(session: URLSession = .shared, base: URL = Endpoints.controlBaseUrl, readTokens: OrgReadTokens = .shared) {
         self.session = session
         self.base = base
         self.payments = LivePaymentsComClient(session: session, base: base, readTokens: nil)
+        self.readTokens = readTokens
     }
 
     private func url(_ path: String) -> URL { URL(string: base.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path)! }
 
     private static func seg(_ orgId: String) -> String { orgId.filter { $0.isHexDigit }.lowercased() }
 
-    private func call(_ method: String, _ path: String, _ body: JSONValue? = nil, notFoundIsNil: Bool = false) async throws -> JSONValue? {
+    private func send(_ method: String, _ path: String, body: Data?, token: String?) async throws -> (Data, Int) {
         var r = URLRequest(url: url(path), timeoutInterval: 20)
         r.httpMethod = method
         r.cachePolicy = .reloadIgnoringLocalCacheData
         r.httpShouldHandleCookies = false
         if let body {
             r.setValue("application/json", forHTTPHeaderField: "content-type")
-            r.httpBody = Data(try CanonicalJson.canonicalJson(body).utf8)
+            r.httpBody = body
         }
+        if let token { r.setValue("Bearer \(token)", forHTTPHeaderField: "authorization") }
         let (data, res) = try await session.gatedData(for: r)
-        let status = (res as? HTTPURLResponse)?.statusCode ?? 0
+        return (data, (res as? HTTPURLResponse)?.statusCode ?? 0)
+    }
+
+    /// The org's private reads carry the org read token (docs/account-read-token.md "Org routes"); a 401 mints it again once.
+    private func call(_ method: String, _ path: String, _ body: JSONValue? = nil, notFoundIsNil: Bool = false) async throws -> JSONValue? {
+        let payload = try body.map { Data(try CanonicalJson.canonicalJson($0).utf8) }
+        let orgId = method == "GET" ? OrgReadToken.gatedOrg(path: path) : nil
+        let mint: OrgReadTokens.Post = { [self] p, b in
+            let (d, st) = try await send("POST", p, body: try JSONSerialization.data(withJSONObject: b), token: nil)
+            return (st, (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] ?? [:])
+        }
+        let now = { Int64(Date().timeIntervalSince1970 * 1000) }
+        let token = orgId == nil ? nil : await readTokens.token(orgId: orgId!, fresh: false, now: now(), post: mint)
+        var (data, status) = try await send(method, path, body: payload, token: token)
+        if let orgId, token != nil, status == 401, let again = await readTokens.token(orgId: orgId, fresh: true, now: now(), post: mint) {
+            (data, status) = try await send(method, path, body: payload, token: again)
+        }
         if status == 404, notFoundIsNil { return nil }
         guard (200..<300).contains(status) else { throw PaymentsComError.from(status: status, data: data) }
         return data.isEmpty ? nil : JSONValue.parse(utf8: Array(data))
