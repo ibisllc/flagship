@@ -117,7 +117,9 @@ export interface PbNetStore {
   /** False when the serial was already spent. */
   spendSerial(serialSha256Hex: string, pikPubHex: string, at: number): Promise<boolean>;
   tokensIssuedSince(serverDomain: string, since: number): Promise<number>;
-  recordIssue(serverDomain: string, at: number, count: number): Promise<void>;
+  /** Record `count` tokens issued at `at` only if the total since `since` stays within `cap`, in one write.
+   *  The window's new total, or null when refused. */
+  recordIssue(serverDomain: string, at: number, count: number, since: number, cap: number): Promise<number | null>;
   latestRoot(serverDomain: string): Promise<PbRootRow | null>;
   listRoots(serverDomain: string): Promise<PbRootRow[]>;
   /** Insert, then keep the newest `keep` for that server. */
@@ -158,11 +160,17 @@ export class InMemoryPbNetStore implements PbNetStore {
     this.serials.set(h, pik);
     return true;
   }
-  async tokensIssuedSince(d: string, since: number) {
+  private issuedSince(d: string, since: number) {
     return this.issues.filter((i) => i.serverDomain === d && i.at >= since).reduce((n, i) => n + i.count, 0);
   }
-  async recordIssue(d: string, at: number, count: number) {
+  async tokensIssuedSince(d: string, since: number) {
+    return this.issuedSince(d, since);
+  }
+  async recordIssue(d: string, at: number, count: number, since: number, cap: number) {
+    const used = this.issuedSince(d, since);
+    if (used + count > cap) return null;
     this.issues.push({ serverDomain: d, at, count });
+    return used + count;
   }
   async latestRoot(d: string) {
     const r = (await this.listRoots(d))[0];
@@ -594,6 +602,7 @@ export async function handlePbTokens(d: PbNetDeps, body: PbTokensBody): Promise<
     return malformed(`send 1 to ${PB_TOKENS_PER_CALL} blinded tokens`);
   }
   const blinded = b.blindedHex as string[];
+  if (blinded.some((x) => BigInt(`0x${x}`) >= d.tokenKey.n)) return malformed("a blinded token is out of range");
   const v = await verifyServer(d, b.serverDomain, b.signatureHex, b.issuedAt, () =>
     canonicalPbTokens(b.serverDomain as string, blinded.length, pbBlindedDigest(blinded), b.issuedAt as number),
   );
@@ -602,14 +611,15 @@ export async function handlePbTokens(d: PbNetDeps, body: PbTokensBody): Promise<
   if (!row) return forbidden("only a server that holds bricks for others gets space on theirs");
   const now = nowOf(d);
   const allowance = 3 * (await pbProvenSlots(d, row, now)) + PB_TOKEN_STARTER;
-  const used = await d.store.tokensIssuedSince(v.serverDomain, now - PB_TOKEN_WINDOW_MS);
-  if (used + blinded.length > allowance) {
+  const since = now - PB_TOKEN_WINDOW_MS;
+  const used = await d.store.recordIssue(v.serverDomain, now, blinded.length, since, allowance);
+  if (used === null) {
     return {
       status: 429,
       body: {
         error: "This server has used the space it has earned on other servers for now. It earns more as it holds more for others.",
         allowance,
-        used,
+        used: await d.store.tokensIssuedSince(v.serverDomain, since),
       },
     };
   }
@@ -621,8 +631,7 @@ export async function handlePbTokens(d: PbNetDeps, body: PbTokensBody): Promise<
       return malformed("a blinded token is out of range");
     }
   }
-  await d.store.recordIssue(v.serverDomain, now, blinded.length);
-  return ok({ signatures, allowance, used: used + blinded.length });
+  return ok({ signatures, allowance, used });
 }
 
 export interface PbRedeemBody {

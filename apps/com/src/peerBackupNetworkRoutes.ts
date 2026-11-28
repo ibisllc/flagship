@@ -92,11 +92,19 @@ export class D1PbNetStore implements PbNetStore {
     const r = await this.db.prepare("SELECT COALESCE(SUM(count), 0) AS n FROM pb_token_issue WHERE server_domain = ? AND issued_at >= ?").bind(serverDomain, since).first<{ n: number }>();
     return Number(r?.n ?? 0);
   }
-  async recordIssue(serverDomain: string, at: number, count: number) {
-    await this.db.batch([
-      this.db.prepare("INSERT INTO pb_token_issue (server_domain, issued_at, count) VALUES (?, ?, ?)").bind(serverDomain, at, count),
+  async recordIssue(serverDomain: string, at: number, count: number, since: number, cap: number) {
+    const [ins, sum] = await this.db.batch([
+      this.db
+        .prepare(
+          "INSERT INTO pb_token_issue (server_domain, issued_at, count) SELECT ?1, ?2, ?3 " +
+            "WHERE (SELECT COALESCE(SUM(count), 0) FROM pb_token_issue WHERE server_domain = ?1 AND issued_at >= ?4) + ?3 <= ?5",
+        )
+        .bind(serverDomain, at, count, since, cap),
+      this.db.prepare("SELECT COALESCE(SUM(count), 0) AS n FROM pb_token_issue WHERE server_domain = ? AND issued_at >= ?").bind(serverDomain, since),
       this.db.prepare("DELETE FROM pb_token_issue WHERE issued_at < ?").bind(at - 32 * 24 * 60 * 60_000),
     ]);
+    if (Number(ins?.meta?.changes ?? 0) === 0) return null;
+    return Number((sum?.results?.[0] as { n?: number } | undefined)?.n ?? 0);
   }
   private static rootRow(r: {
     server_domain: string;
