@@ -521,6 +521,9 @@ export async function handleOrgCeremonyOpen(deps: OrgDeps, orgId: string, body: 
     const approvals = b.approvals.map(orgApprovalFromWire);
     // "Restore my access": the frozen seat itself may open the overturn of its own freeze (§ owner decisions).
     const parts = b.order.split("|");
+    // A server code is a secret until its box redeems it; ceremonies are readable by anyone with the org id, so a
+    // server code never goes through one (it is issued by POST …/servers/code).
+    if (parts[0] === "flagship/org-server-code/v1") return malformed("server codes are not ceremonies");
     const own = parts[0] === "flagship/org-overturn/v1" ? v.book.freezes.find((f) => f.sha256 === parts[2])?.seatId : undefined;
     verifyOrgApprovers(v.state, v.book, order, approvals, now, own ? { allowFrozenSeat: own } : {});
     const sha = orgSha256Hex(order);
