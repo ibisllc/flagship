@@ -138,3 +138,11 @@ counts`.
   chips (app changes; the first is in docs/release-0.5-list.md with teal Wear chips and wide tablet layouts), and the
   iOS build chat's English title (release-0.5-list). Pack `flagship-store-art-0.4.zip` (309 images, appstore/ and
   playstore/), sha256 f1756b65…c07cc204.
+- 2026-11-28: draft2 pack from the Mac (sha256 73ecedb3…855f, 309 images, sources on main): slide 01's frame no
+  longer covers the encryption line, locale-aware sizes ("3,4 Go"), French Wear 07b "À déverrouiller", iPad 03 and 05
+  at full width (#6 done). App Store: version **1.4** created by API in "Prepare for Submission"
+  (`store-upload.mjs appstore --create-version`); names, subtitles, texts and screenshots (iPhone 6.9", iPad 13",
+  Watch Ultra) written in all 8 locales, es-MX new; the old 6.1" iPhone sets removed (`--prune APP_IPHONE_61`); the
+  English iPhone Duo set (5 old shots) kept until the pack has a Duo size. Not submitted: the owner attaches the 0.5
+  build and submits. Play: dry run with draft2 = texts in 7 locales + 40 image sets; staged once the batch in review
+  is published. Still open: slide 08's English title on iOS (0.5 build), a Duo capture, §3.3 native review.

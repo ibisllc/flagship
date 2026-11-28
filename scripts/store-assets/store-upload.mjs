@@ -31,10 +31,14 @@ const apply = rest.includes("--apply");
 const imagesAt = rest.includes("--images") ? rest[rest.indexOf("--images") + 1] : null;
 if (store === "appstore") {
   const { appstore } = await import("./appstore-upload.mjs");
-  await appstore({ root: ROOT, apply, imagesAt });
+  const createVersion = rest.includes("--create-version") ? rest[rest.indexOf("--create-version") + 1] : undefined;
+  if (createVersion !== undefined && !/^\d+\.\d+(\.\d+)?$/.test(createVersion ?? "")) { console.error("--create-version needs a version like 1.4"); process.exit(2); }
+  const prune = rest.includes("--prune") ? (rest[rest.indexOf("--prune") + 1] ?? "").split(",").filter(Boolean) : [];
+  if (prune.some((t) => !/^APP_[A-Z0-9_]+$/.test(t))) { console.error("--prune needs display types like APP_IPHONE_61"); process.exit(2); }
+  await appstore({ root: ROOT, apply, imagesAt, createVersion, prune });
   process.exit(0);
 }
-if (store !== "play") { console.error("usage: store-upload.mjs play|appstore [--apply] [--images <pack-dir>]"); process.exit(2); }
+if (store !== "play") { console.error("usage: store-upload.mjs play|appstore [--apply] [--images <pack-dir>] [--create-version <x.y>] [--prune <APP_TYPE,...>] (appstore)"); process.exit(2); }
 
 if (imagesAt) { // a pack missing any class or language is refused whole, before anything on Play is touched
   const missing = Object.keys(IMAGE_TYPE).flatMap((cls) => Object.values(PLAY_LOCALE).map((loc) => path.join(imagesAt, "playstore", cls, loc)))
