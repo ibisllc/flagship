@@ -310,3 +310,43 @@ export function classicalExchangeAllowed(
     );
   return covered(a) && covered(b);
 }
+
+/**
+ * Strict by default (owner decision 2026-11-27; pq-suites.md §21). Every server runs strict, with
+ * two labelled classical exceptions the owner can avoid: browsers (the webapp and Remote) and AI
+ * providers (Flagship Inference and the owner's own keys). In the signed change the browser
+ * exception is the loss code below; AI connectors stay allowed by never having their own scope
+ * signed strict. An app moves a scope to strict on its own only while no owner has ever changed
+ * it (generation 0), so an owner who left strict is never put back.
+ */
+export const DEFAULT_STRICT_ACKNOWLEDGED_LOSS: readonly ProtectionLossCode[] = ["browser-without-pq-authentication"];
+
+export function defaultStrictEligible(s: PolicyState): boolean {
+  return s.generation === 0 && s.profile === "compatibility" && !s.enforcedEver;
+}
+
+/** The unsigned change an admin device signs to put a never-changed scope on strict by default. */
+export function defaultStrictChange(args: {
+  account: string;
+  state: PolicyState;
+  affectedPeersDigest: string;
+  signerKind: "admin-device" | "admin-root";
+  signerKeyId: string;
+  issuedAt: number;
+}): AssurancePolicyChange | null {
+  if (!defaultStrictEligible(args.state)) return null;
+  return {
+    account: args.account.toLowerCase(),
+    scope: args.state.scope,
+    prior: "compatibility",
+    next: "strict",
+    generation: 1,
+    prevDigest: GENESIS_DIGEST,
+    affectedPeersDigest: args.affectedPeersDigest,
+    acknowledgedLoss: [...DEFAULT_STRICT_ACKNOWLEDGED_LOSS],
+    signerKind: args.signerKind,
+    signerKeyId: args.signerKeyId.toLowerCase(),
+    suite: "hybrid-ed25519-mldsa65/v1",
+    issuedAt: args.issuedAt,
+  };
+}
