@@ -19,6 +19,8 @@ import {
   signOrgBoxKem,
   signOrgSeatKem,
   signOrgServerRegister,
+  signOrgServerEnrolment,
+  orgServerEnrolmentPubKey,
   signOrgBoxLogHead,
   verifyOrgAuditExport,
   verifyOrgAuthorityChain,
@@ -101,6 +103,8 @@ async function orgWithSeats() {
   return d;
 }
 
+// The enrolment key's seed: in the recipe only, never sent to .com.
+const ENROL = "6e".repeat(32);
 const serverCode = (over: Partial<OrgServerCode> = {}): OrgServerCode => ({
   orgId: ORG,
   genesisHash: V.genesisHash,
@@ -108,10 +112,12 @@ const serverCode = (over: Partial<OrgServerCode> = {}): OrgServerCode => ({
   serverName: "home",
   serverDomain: SERVER,
   delegatedPubKeyHex: "d1".repeat(32),
+  enrolmentPubKeyHex: orgServerEnrolmentPubKey(ENROL),
   issuedAt: AT,
   expiresAt: AT + 12 * HOUR,
   ...over,
 });
+const enrol = (request: Parameters<typeof signOrgServerRegister>[0], c: OrgServerCode, seed = ENROL) => signOrgServerEnrolment(request, c, seed);
 const stkSeed = new Uint8Array(32).fill(0x5e);
 const stkPub = Buffer.from(ed25519.getPublicKey(stkSeed)).toString("hex");
 
@@ -123,7 +129,7 @@ async function registered() {
   expect(issued.status).toBe(200);
   d.set(AT + 30 * MIN);
   const request = { orgId: ORG, serial: c.serial, serverDomain: SERVER, codeSha256: orgServerCodeSha256(c), serverIdentityPubKeyHex: stkPub, issuedAt: AT + 30 * MIN, nonceHex: "ab".repeat(16) };
-  const reg = await handleOrgServerRegister(d, ORG, { request, signature: signOrgServerRegister(request, stkSeed) });
+  const reg = await handleOrgServerRegister(d, ORG, { request, signature: signOrgServerRegister(request, stkSeed), enrolmentSignature: enrol(request, c) });
   expect(reg.status).toBe(200);
   return { d, c, request };
 }
@@ -207,10 +213,10 @@ describe(".com org servers", () => {
   });
 
   it("registers the box once, with the code it admitted, under the org's name", async () => {
-    const { d, request } = await registered();
+    const { d, c, request } = await registered();
     expect((await d.base.servers.get(SERVER))?.username).toBe("acme");
     expect((await d.base.servers.get(SERVER))?.identityPubKeyHex).toBe(stkPub);
-    const again = await handleOrgServerRegister(d, ORG, { request, signature: signOrgServerRegister(request, stkSeed) });
+    const again = await handleOrgServerRegister(d, ORG, { request, signature: signOrgServerRegister(request, stkSeed), enrolmentSignature: enrol(request, c) });
     expect(again.status).toBe(409);
     const list = await handleOrgServersList(d, ORG);
     expect((list.body as { servers: Array<{ serverDomain: string }> }).servers.map((s) => s.serverDomain)).toEqual([SERVER]);
@@ -226,7 +232,34 @@ describe(".com org servers", () => {
     expect((await handleOrgServerRegister(d, ORG, { request, signature: signOrgServerRegister(request, stkSeed) })).status).toBe(403);
     const good = { ...request, codeSha256: orgServerCodeSha256(c) };
     const sig = signOrgServerRegister(good, stkSeed);
-    expect((await handleOrgServerRegister(d, ORG, { request: good, signature: sig.slice(0, 127) + (sig[127] === "0" ? "1" : "0") })).status).toBe(403);
+    expect((await handleOrgServerRegister(d, ORG, { request: good, signature: sig.slice(0, 127) + (sig[127] === "0" ? "1" : "0"), enrolmentSignature: enrol(good, c) })).status).toBe(403);
+  });
+
+  it("registers only the box holding the recipe's enrolment key", async () => {
+    const d = await orgWithSeats();
+    d.set(AT + MIN);
+    const c = serverCode();
+    expect((await handleOrgServerCode(d, ORG, { code: c, approvals: [approve(B, canonicalOrgServerCode(c), AT)] })).status).toBe(200);
+    d.set(AT + 2 * MIN);
+    // A box that knows the code (its serial, its hash) but not the recipe's seed signs only with its own STK.
+    const request = { orgId: ORG, serial: c.serial, serverDomain: SERVER, codeSha256: orgServerCodeSha256(c), serverIdentityPubKeyHex: stkPub, issuedAt: AT + 2 * MIN, nonceHex: "ef".repeat(16) };
+    const stk = signOrgServerRegister(request, stkSeed);
+    const missing = await handleOrgServerRegister(d, ORG, { request, signature: stk });
+    expect(missing.status).toBe(403);
+    expect((missing.body as { code: string }).code).toBe("org-enrolment-signature");
+    // The STK's signature in the enrolment slot, or a key that is not the code's, does not count either.
+    expect(((await handleOrgServerRegister(d, ORG, { request, signature: stk, enrolmentSignature: stk })).body as { code: string }).code).toBe("org-enrolment-signature");
+    const other = Buffer.from(ed25519.sign(new TextEncoder().encode("x"), new Uint8Array(32).fill(0x6f))).toString("hex");
+    expect(((await handleOrgServerRegister(d, ORG, { request, signature: stk, enrolmentSignature: other })).body as { code: string }).code).toBe("org-enrolment-signature");
+    // A refused attempt does not use the code up: the real box still registers.
+    expect((await handleOrgServerRegister(d, ORG, { request, signature: stk, enrolmentSignature: enrol(request, c) })).status).toBe(200);
+  });
+
+  it("refuses a code whose enrolment key is the phone's delegated key", async () => {
+    const d = await orgWithSeats();
+    d.set(AT + MIN);
+    const c = serverCode({ enrolmentPubKeyHex: "d1".repeat(32) });
+    expect(((await handleOrgServerCode(d, ORG, { code: c, approvals: [] })).body as { code: string }).code).toBe("org-malformed");
   });
 });
 

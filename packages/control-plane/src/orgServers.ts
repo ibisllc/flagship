@@ -16,6 +16,7 @@ import {
   verifyOrgSeatKem,
   verifyOrgServerCode,
   verifyOrgServerRegister,
+  verifyOrgServerEnrolment,
   orgConnectorsToReapprove,
   type OrgConnectorBundle,
   type OrgApproval,
@@ -41,7 +42,9 @@ import { conflict, forbidden, malformed, notFound, ok, type HandlerResponseWithH
  * "Org servers", §5.4, §8, §11). Routes:
  *
  *   POST /api/orgs/:orgId/servers/code      { code, approvals }     issue a server code (the org's AuthCode)
- *   POST /api/orgs/:orgId/servers/register  { request, signature }  the box registers with it (its STK)
+ *   POST /api/orgs/:orgId/servers/register  { request, signature, enrolmentSignature }
+ *                                                                   the box registers with it (its STK, and the
+ *                                                                   enrolment key from its recipe, which the code names)
  *   GET  /api/orgs/:orgId/servers                                   the org's servers
  *   POST /api/orgs/:orgId/seat-kems         seat KEM bundle         a seat's X-Wing key (signed by the seat)
  *   POST /api/orgs/:orgId/box-kems          box KEM bundle          a box's X-Wing key (signed by its STK)
@@ -165,7 +168,7 @@ export async function handleOrgServerCode(deps: OrgServerDeps, orgId: string, bo
 
 export async function handleOrgServerRegister(deps: OrgServerDeps, orgId: string, body: unknown): Promise<HandlerResponseWithHeaders> {
   const now = nowOf(deps);
-  const b = body as { request?: OrgServerRegister; signature?: unknown } | undefined;
+  const b = body as { request?: OrgServerRegister; signature?: unknown; enrolmentSignature?: unknown } | undefined;
   if (!b?.request || typeof b.signature !== "string") return malformed("request and signature required");
   const r = b.request;
   try {
@@ -177,6 +180,10 @@ export async function handleOrgServerRegister(deps: OrgServerDeps, orgId: string
     if (!o) return notFound("unknown serial");
     const c = parse<StoredCode>(o.bodyJson);
     if (orgServerCodeSha256(c.code) !== r.codeSha256 || c.code.serverDomain !== r.serverDomain) return forbidden("the code does not match the one issued");
+    // Only the box holding the recipe holds the enrolment key: the code alone (or its serial) registers nothing.
+    if (!verifyOrgServerEnrolment(r, c.code, b.enrolmentSignature)) {
+      return { status: 403, body: { error: "the registration is not signed by the code's enrolment key", code: "org-enrolment-signature" } };
+    }
     if (c.code.expiresAt < now) return conflict("expired");
     const v = await loadOrg(deps, orgId, now);
     if (!v) return notFound("org not found");

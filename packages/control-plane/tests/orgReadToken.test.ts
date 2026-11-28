@@ -11,6 +11,8 @@ import {
   signOrgApproval,
   signOrgReadTokenRequest,
   signOrgServerRegister,
+  signOrgServerEnrolment,
+  orgServerEnrolmentPubKey,
   type OrgReadTokenRequest,
   type OrgServerCode,
 } from "@flagship/protocol";
@@ -117,13 +119,13 @@ async function withServer() {
   d.set(at);
   const c: OrgServerCode = {
     orgId: ORG, genesisHash: V.genesisHash, serial: "orgsrv-test-0001", serverName: "home", serverDomain: SERVER,
-    delegatedPubKeyHex: "d1".repeat(32), issuedAt: at, expiresAt: at + 12 * HOUR,
+    delegatedPubKeyHex: "d1".repeat(32), enrolmentPubKeyHex: orgServerEnrolmentPubKey("6e".repeat(32)), issuedAt: at, expiresAt: at + 12 * HOUR,
   };
   const approval = signOrgApproval({ orgId: ORG, oarVersion: 1, order: canonicalOrgServerCode(c), seatId: B.seatId, adminKeyId: B.keyId, issuedAt: at, notAfter: at + DAY }, B.secret);
   expect((await handleOrgServerCode(d, ORG, { code: c, approvals: [approval] })).status).toBe(200);
   const request = { orgId: ORG, serial: c.serial, serverDomain: SERVER, codeSha256: orgServerCodeSha256(c), serverIdentityPubKeyHex: stkPub, issuedAt: at + MIN, nonceHex: "ab".repeat(16) };
   d.set(at + MIN);
-  expect((await handleOrgServerRegister(d, ORG, { request, signature: signOrgServerRegister(request, stkSeed) })).status).toBe(200);
+  expect((await handleOrgServerRegister(d, ORG, { request, signature: signOrgServerRegister(request, stkSeed), enrolmentSignature: signOrgServerEnrolment(request, c, "6e".repeat(32)) })).status).toBe(200);
   d.set(T0);
   return d;
 }
