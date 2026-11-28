@@ -2763,7 +2763,7 @@
   "protect_your_account_keys": "2aac96d18c91",
   "pq_seed_does_not_match_its": "dc102891e12f",
   "quantum_safe_protection": "a7e86f0b9435",
-  "strict_quantum_resistant_protection_makes_a": "2e3409fde4ac",
+  "strict_quantum_resistant_protection_makes_a": "034b626af344",
   "these_protections_are_new_and_pending": "cda97c8518e6",
   "this_devices_key": "bd1f51f8123e",
   "you_have_no_servers_yet": "d8aecc6834f6",
@@ -4388,5 +4388,6 @@
   "qs_ai_classical_exception": "536d77c23a13",
   "qs_devices_need_record": "3fc0f56df033",
   "qs_turn_on_now": "8ba1b9dc4218",
-  "qs_turned_on_default": "cc8dc0e74852"
+  "qs_turned_on_default": "cc8dc0e74852",
+  "qs_browser_classical_exception": "97769040e8e0"
 }

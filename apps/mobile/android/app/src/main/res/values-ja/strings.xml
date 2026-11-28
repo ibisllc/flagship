@@ -2825,7 +2825,7 @@
     <string name="protect_your_account_keys">アカウントの鍵を保護する</string>
     <string name="pq_seed_does_not_match_its">耐量子シードが対応する鍵と一致しません</string>
     <string name="quantum_safe_protection">耐量子保護</string>
-    <string name="strict_quantum_resistant_protection_makes_a">厳格な耐量子保護をオンにすると、サーバーは現在の従来型の暗号だけで署名または送信されたものをすべて拒否します。サーバーごとにオンにするまでオフのままです。</string>
+    <string name="strict_quantum_resistant_protection_makes_a">厳格な耐量子保護をオンにすると、サーバーは現在の従来型の暗号だけで署名または送信されたものをすべて拒否します。</string>
     <string name="these_protections_are_new_and_pending">これらの保護は新しく、外部レビューを待っています。</string>
     <string name="this_devices_key">このデバイスの鍵：%1$s</string>
     <string name="you_have_no_servers_yet">まだサーバーがありません。</string>
@@ -4471,4 +4471,5 @@
     <string name="qs_devices_need_record">%1$s 台のデバイスに、まだ耐量子の記録が必要です。管理者キーを持つ管理者のスマートフォンまたはタブレットで Flagship を開いてください。</string>
     <string name="qs_turn_on_now">今すぐオンにする</string>
     <string name="qs_turned_on_default">耐量子保護はオンです。ブラウザーと AI プロバイダーは従来型の保護で引き続き利用できます。</string>
+    <string name="qs_browser_classical_exception">ブラウザーは従来型の保護でサーバーに接続します。耐量子のサーバーは、明示された例外としてブラウザーを許可します。Flagship アプリは耐量子です。</string>
 </resources>

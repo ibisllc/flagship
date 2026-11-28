@@ -2823,7 +2823,7 @@
   "protect_your_account_keys": "アカウントの鍵を保護する",
   "pq_seed_does_not_match_its": "耐量子シードが対応する鍵と一致しません",
   "quantum_safe_protection": "耐量子保護",
-  "strict_quantum_resistant_protection_makes_a": "厳格な耐量子保護をオンにすると、サーバーは現在の従来型の暗号だけで署名または送信されたものをすべて拒否します。サーバーごとにオンにするまでオフのままです。",
+  "strict_quantum_resistant_protection_makes_a": "厳格な耐量子保護をオンにすると、サーバーは現在の従来型の暗号だけで署名または送信されたものをすべて拒否します。",
   "these_protections_are_new_and_pending": "これらの保護は新しく、外部レビューを待っています。",
   "this_devices_key": "このデバイスの鍵：%1$s",
   "you_have_no_servers_yet": "まだサーバーがありません。",
@@ -4468,5 +4468,6 @@
   "qs_ai_classical_exception": "AI プロバイダー（Flagship Inference とご自身のキー）へは、明示された例外として従来型の保護で接続します。",
   "qs_devices_need_record": "%1$s 台のデバイスに、まだ耐量子の記録が必要です。管理者キーを持つ管理者のスマートフォンまたはタブレットで Flagship を開いてください。",
   "qs_turn_on_now": "今すぐオンにする",
-  "qs_turned_on_default": "耐量子保護はオンです。ブラウザーと AI プロバイダーは従来型の保護で引き続き利用できます。"
+  "qs_turned_on_default": "耐量子保護はオンです。ブラウザーと AI プロバイダーは従来型の保護で引き続き利用できます。",
+  "qs_browser_classical_exception": "ブラウザーは従来型の保護でサーバーに接続します。耐量子のサーバーは、明示された例外としてブラウザーを許可します。Flagship アプリは耐量子です。"
 }

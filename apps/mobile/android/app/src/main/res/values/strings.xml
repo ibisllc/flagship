@@ -2829,7 +2829,7 @@
     <string name="protect_your_account_keys">Protect your account keys</string>
     <string name="pq_seed_does_not_match_its">PQ seed does not match its key</string>
     <string name="quantum_safe_protection">Quantum-safe protection</string>
-    <string name="strict_quantum_resistant_protection_makes_a">Strict quantum-resistant protection makes a server refuse anything signed or sent with today\'s classical cryptography alone. It is off until you turn it on, one server at a time.</string>
+    <string name="strict_quantum_resistant_protection_makes_a">Strict quantum-resistant protection makes a server refuse anything signed or sent with today\'s classical cryptography alone.</string>
     <string name="these_protections_are_new_and_pending">These protections are new and pending an external review.</string>
     <string name="this_devices_key">This device\'s key: %1$s</string>
     <string name="you_have_no_servers_yet">You have no servers yet.</string>
@@ -4479,4 +4479,5 @@
     <string name="qs_devices_need_record">%1$s of your devices still need their quantum-safe record. Open Flagship on an admin phone or tablet that holds your admin key.</string>
     <string name="qs_turn_on_now">Turn on now</string>
     <string name="qs_turned_on_default">Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.</string>
+    <string name="qs_browser_classical_exception">A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.</string>
 </resources>

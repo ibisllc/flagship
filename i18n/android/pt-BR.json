@@ -2823,7 +2823,7 @@
   "protect_your_account_keys": "Proteja as chaves da sua conta",
   "pq_seed_does_not_match_its": "A semente pós-quântica não corresponde à chave dela",
   "quantum_safe_protection": "Proteção pós-quântica",
-  "strict_quantum_resistant_protection_makes_a": "A proteção pós-quântica estrita faz o servidor recusar tudo o que for assinado ou enviado apenas com a criptografia clássica atual. Ela fica desligada até você ligá-la, um servidor de cada vez.",
+  "strict_quantum_resistant_protection_makes_a": "A proteção pós-quântica estrita faz o servidor recusar tudo o que for assinado ou enviado apenas com a criptografia clássica atual.",
   "these_protections_are_new_and_pending": "Estas proteções são novas e aguardam uma revisão externa.",
   "this_devices_key": "Chave deste dispositivo: %1$s",
   "you_have_no_servers_yet": "Você ainda não tem servidores.",
@@ -4469,5 +4469,6 @@
   "qs_ai_classical_exception": "Os provedores de IA (Flagship Inference e suas próprias chaves) são acessados com proteção clássica, como uma exceção indicada.",
   "qs_devices_need_record": "%1$s dos seus dispositivos ainda precisam do registro pós-quântico. Abra o Flagship em um celular ou tablet de administrador que tenha sua chave de administrador.",
   "qs_turn_on_now": "Ativar agora",
-  "qs_turned_on_default": "A proteção pós-quântica está ativada. Navegadores e provedores de IA continuam acessíveis com proteção clássica."
+  "qs_turned_on_default": "A proteção pós-quântica está ativada. Navegadores e provedores de IA continuam acessíveis com proteção clássica.",
+  "qs_browser_classical_exception": "Um navegador acessa seus servidores com proteção clássica: servidores com proteção pós-quântica aceitam navegadores como uma exceção indicada. O app Flagship tem proteção pós-quântica."
 }

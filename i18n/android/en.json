@@ -11664,7 +11664,7 @@
     "ctx": "ui/screens/QuantumSafetyScreen.kt:87 (title=)"
   },
   "strict_quantum_resistant_protection_makes_a": {
-    "en": "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone. It is off until you turn it on, one server at a time.",
+    "en": "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone.",
     "ctx": "ui/screens/QuantumSafetyScreen.kt:89 (subtitle=)"
   },
   "these_protections_are_new_and_pending": {
@@ -18345,5 +18345,9 @@
   "qs_turned_on_default": {
     "en": "Quantum-safe protection is on. Browsers and AI providers stay reachable with classical protection.",
     "ctx": "ui/screens/QuantumSafetyScreen.kt (prose)"
+  },
+  "qs_browser_classical_exception": {
+    "en": "A browser reaches your servers with classical protection: quantum-safe servers allow browsers as a labelled exception. The Flagship app is quantum-safe.",
+    "ctx": "ui/screens/CompanionDockScreen.kt (prose)"
   }
 }

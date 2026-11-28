@@ -2823,7 +2823,7 @@
   "protect_your_account_keys": "保护你的账户密钥",
   "pq_seed_does_not_match_its": "抗量子种子与其密钥不匹配",
   "quantum_safe_protection": "抗量子保护",
-  "strict_quantum_resistant_protection_makes_a": "严格的抗量子保护会让服务器拒绝所有仅用当今传统密码学签名或发送的内容。在你逐台服务器开启之前，它保持关闭。",
+  "strict_quantum_resistant_protection_makes_a": "严格的抗量子保护会让服务器拒绝所有仅用当今传统密码学签名或发送的内容。",
   "these_protections_are_new_and_pending": "这些保护是新的，正在等待外部审查。",
   "this_devices_key": "此设备的密钥：%1$s",
   "you_have_no_servers_yet": "你还没有服务器。",
@@ -4468,5 +4468,6 @@
   "qs_ai_classical_exception": "AI 提供商（Flagship Inference 和你自己的密钥）以传统保护连接，作为已标明的例外。",
   "qs_devices_need_record": "你有 %1$s 台设备仍需要抗量子记录。请在持有管理员密钥的管理员手机或平板电脑上打开 Flagship。",
   "qs_turn_on_now": "立即开启",
-  "qs_turned_on_default": "抗量子保护已开启。浏览器和 AI 提供商继续以传统保护访问。"
+  "qs_turned_on_default": "抗量子保护已开启。浏览器和 AI 提供商继续以传统保护访问。",
+  "qs_browser_classical_exception": "浏览器以传统保护连接你的服务器：抗量子服务器将浏览器作为已标明的例外允许。Flagship 应用是抗量子的。"
 }

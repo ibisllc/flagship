@@ -2823,7 +2823,7 @@
   "protect_your_account_keys": "Protégez les clés de votre compte",
   "pq_seed_does_not_match_its": "La graine post-quantique ne correspond pas à sa clé",
   "quantum_safe_protection": "Protection post-quantique",
-  "strict_quantum_resistant_protection_makes_a": "La protection post-quantique stricte fait refuser à un serveur tout ce qui est signé ou envoyé avec la seule cryptographie classique actuelle. Elle reste désactivée jusqu’à ce que vous l’activiez, un serveur à la fois.",
+  "strict_quantum_resistant_protection_makes_a": "La protection post-quantique stricte fait refuser à un serveur tout ce qui est signé ou envoyé avec la seule cryptographie classique actuelle.",
   "these_protections_are_new_and_pending": "Ces protections sont nouvelles et attendent un audit externe.",
   "this_devices_key": "Clé de cet appareil : %1$s",
   "you_have_no_servers_yet": "Vous n’avez encore aucun serveur.",
@@ -4469,5 +4469,6 @@
   "qs_ai_classical_exception": "Les fournisseurs d’IA (Flagship Inference et vos propres clés) sont joints avec une protection classique, comme exception signalée.",
   "qs_devices_need_record": "%1$s de vos appareils ont encore besoin de leur enregistrement post-quantique. Ouvrez Flagship sur un téléphone ou une tablette administrateur qui détient votre clé administrateur.",
   "qs_turn_on_now": "Activer maintenant",
-  "qs_turned_on_default": "La protection post-quantique est activée. Les navigateurs et les fournisseurs d’IA restent joignables avec une protection classique."
+  "qs_turned_on_default": "La protection post-quantique est activée. Les navigateurs et les fournisseurs d’IA restent joignables avec une protection classique.",
+  "qs_browser_classical_exception": "Un navigateur atteint vos serveurs avec une protection classique : les serveurs à protection post-quantique acceptent les navigateurs comme exception signalée. L'app Flagship a une protection post-quantique."
 }

@@ -2825,7 +2825,7 @@
     <string name="protect_your_account_keys">Protege las claves de tu cuenta</string>
     <string name="pq_seed_does_not_match_its">La semilla poscuántica no coincide con su clave</string>
     <string name="quantum_safe_protection">Protección poscuántica</string>
-    <string name="strict_quantum_resistant_protection_makes_a">La protección poscuántica estricta hace que un servidor rechace todo lo firmado o enviado solo con la criptografía clásica actual. Está desactivada hasta que la actives, servidor por servidor.</string>
+    <string name="strict_quantum_resistant_protection_makes_a">La protección poscuántica estricta hace que un servidor rechace todo lo firmado o enviado solo con la criptografía clásica actual.</string>
     <string name="these_protections_are_new_and_pending">Estas protecciones son nuevas y están pendientes de una revisión externa.</string>
     <string name="this_devices_key">Clave de este dispositivo: %1$s</string>
     <string name="you_have_no_servers_yet">Aún no tienes servidores.</string>
@@ -4472,4 +4472,5 @@
     <string name="qs_devices_need_record">%1$s de tus dispositivos aún necesitan su registro poscuántico. Abre Flagship en un teléfono o tableta de administrador que tenga tu clave de administrador.</string>
     <string name="qs_turn_on_now">Activar ahora</string>
     <string name="qs_turned_on_default">La protección poscuántica está activada. Los navegadores y los proveedores de IA siguen accesibles con protección clásica.</string>
+    <string name="qs_browser_classical_exception">Un navegador llega a tus servidores con protección clásica: los servidores con protección poscuántica admiten los navegadores como una excepción señalada. La app Flagship tiene protección poscuántica.</string>
 </resources>

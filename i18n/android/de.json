@@ -2823,7 +2823,7 @@
   "protect_your_account_keys": "Schütze die Schlüssel deines Kontos",
   "pq_seed_does_not_match_its": "Der Post-Quanten-Seed passt nicht zu seinem Schlüssel",
   "quantum_safe_protection": "Post-Quanten-Schutz",
-  "strict_quantum_resistant_protection_makes_a": "Strikter Post-Quanten-Schutz lässt einen Server alles ablehnen, was nur mit heutiger klassischer Kryptografie signiert oder gesendet wurde. Er ist aus, bis du ihn einschaltest, Server für Server.",
+  "strict_quantum_resistant_protection_makes_a": "Strikter Post-Quanten-Schutz lässt einen Server alles ablehnen, was nur mit heutiger klassischer Kryptografie signiert oder gesendet wurde.",
   "these_protections_are_new_and_pending": "Diese Schutzmaßnahmen sind neu und warten auf eine externe Prüfung.",
   "this_devices_key": "Schlüssel dieses Geräts: %1$s",
   "you_have_no_servers_yet": "Du hast noch keine Server.",
@@ -4469,5 +4469,6 @@
   "qs_ai_classical_exception": "KI-Anbieter (Flagship Inference und deine eigenen Schlüssel) werden mit klassischem Schutz erreicht, als gekennzeichnete Ausnahme.",
   "qs_devices_need_record": "%1$s deiner Geräte brauchen noch ihren Post-Quanten-Eintrag. Öffne Flagship auf einem Admin-Telefon oder -Tablet, das deinen Admin-Schlüssel hat.",
   "qs_turn_on_now": "Jetzt einschalten",
-  "qs_turned_on_default": "Der Post-Quanten-Schutz ist an. Browser und KI-Anbieter bleiben mit klassischem Schutz erreichbar."
+  "qs_turned_on_default": "Der Post-Quanten-Schutz ist an. Browser und KI-Anbieter bleiben mit klassischem Schutz erreichbar.",
+  "qs_browser_classical_exception": "Ein Browser erreicht deine Server mit klassischem Schutz: Server mit Post-Quanten-Schutz lassen Browser als gekennzeichnete Ausnahme zu. Die Flagship-App hat Post-Quanten-Schutz."
 }
