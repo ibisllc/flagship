@@ -90,6 +90,27 @@ final class OrgServersVectorTests: XCTestCase {
         }
     }
 
+    func testEnrolmentSignature() throws {
+        let e = V["enrolment"] as! [String: Any]
+        XCTAssertEqual(try OrgAuthority.serverEnrolmentPubKey(seedHex: e["seedHex"] as! String), e["pubKeyHex"] as? String)
+        let fresh = OrgAuthority.newServerEnrolmentKey()
+        XCTAssertEqual(try OrgAuthority.serverEnrolmentPubKey(seedHex: fresh.seedHex), fresh.pubKeyHex)
+        for c in e["cases"] as! [[String: Any]] {
+            let r = c["request"] as! [String: Any]
+            let bytes = try OrgAuthority.canonicalServerRegister(orgId: r["orgId"] as! String, serial: r["serial"] as! String, serverDomain: r["serverDomain"] as! String,
+                codeSha256: r["codeSha256"] as! String, serverIdentityPubKeyHex: r["serverIdentityPubKeyHex"] as! String, issuedAt: i64(r["issuedAt"]), nonceHex: r["nonceHex"] as! String)
+            let code = try OrgServerCode.fromWire(c["code"])
+            XCTAssertEqual(OrgAuthority.verifyServerEnrolment(orgId: r["orgId"] as! String, serial: r["serial"] as! String, serverDomain: r["serverDomain"] as! String,
+                codeSha256: r["codeSha256"] as! String, register: bytes, code: code, signatureHex: c["enrolmentSignature"] as? String), c["expect"] as? Bool, c["name"] as! String)
+            if c["expect"] as? Bool == true {
+                // CryptoKit signs randomized: check the fresh signature verifies, never compare bytes.
+                let mine = try OrgAuthority.signServerEnrolment(register: bytes, codeSha256: r["codeSha256"] as! String, code: code, seedHex: e["seedHex"] as! String)
+                XCTAssertTrue(OrgAuthority.verifyServerEnrolment(orgId: r["orgId"] as! String, serial: r["serial"] as! String, serverDomain: r["serverDomain"] as! String,
+                    codeSha256: r["codeSha256"] as! String, register: bytes, code: code, signatureHex: mine))
+            }
+        }
+    }
+
     func testRecipeCanonicalRefusals() throws {
         let blobs = V["installBlobs"] as! [[String: Any]]
         XCTAssertThrowsError(try installBlob(blobs[3]["blob"] as! [String: Any]), "a recipe whose code names another server")

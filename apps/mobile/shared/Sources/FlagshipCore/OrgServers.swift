@@ -6,20 +6,27 @@ import CryptoKit
 /// the TypeScript canonical forms, pinned by test-vectors/org-servers.
 public struct OrgServerCode: Equatable {
     public var orgId: String, genesisHash: String, serial: String, serverName: String, serverDomain: String, delegatedPubKeyHex: String
+    /// The enrolment key's Ed25519 public key; its seed travels only in the recipe (`enrolmentSeedHex`).
+    public var enrolmentPubKeyHex: String
     public var issuedAt: Int64, expiresAt: Int64
-    public init(orgId: String, genesisHash: String, serial: String, serverName: String, serverDomain: String, delegatedPubKeyHex: String, issuedAt: Int64, expiresAt: Int64) {
+    public init(orgId: String, genesisHash: String, serial: String, serverName: String, serverDomain: String, delegatedPubKeyHex: String,
+                enrolmentPubKeyHex: String, issuedAt: Int64, expiresAt: Int64) {
         self.orgId = orgId; self.genesisHash = genesisHash; self.serial = serial; self.serverName = serverName
-        self.serverDomain = serverDomain; self.delegatedPubKeyHex = delegatedPubKeyHex; self.issuedAt = issuedAt; self.expiresAt = expiresAt
+        self.serverDomain = serverDomain; self.delegatedPubKeyHex = delegatedPubKeyHex; self.enrolmentPubKeyHex = enrolmentPubKeyHex
+        self.issuedAt = issuedAt; self.expiresAt = expiresAt
     }
     public var json: [String: Any] {
         ["orgId": orgId, "genesisHash": genesisHash, "serial": serial, "serverName": serverName, "serverDomain": serverDomain,
-         "delegatedPubKeyHex": delegatedPubKeyHex, "issuedAt": NSNumber(value: issuedAt), "expiresAt": NSNumber(value: expiresAt)]
+         "delegatedPubKeyHex": delegatedPubKeyHex, "enrolmentPubKeyHex": enrolmentPubKeyHex,
+         "issuedAt": NSNumber(value: issuedAt), "expiresAt": NSNumber(value: expiresAt)]
     }
     public static func fromWire(_ w: Any?) throws -> OrgServerCode {
         guard let o = w as? [String: Any], let orgId = o["orgId"] as? String, let g = o["genesisHash"] as? String, let serial = o["serial"] as? String,
               let name = o["serverName"] as? String, let domain = o["serverDomain"] as? String, let d = o["delegatedPubKeyHex"] as? String,
+              let e = o["enrolmentPubKeyHex"] as? String,
               let ia = OrgAuthority.i64(o["issuedAt"]), let ea = OrgAuthority.i64(o["expiresAt"]) else { throw OrgAuthorityError("malformed", "server code") }
-        return OrgServerCode(orgId: orgId, genesisHash: g, serial: serial, serverName: name, serverDomain: domain, delegatedPubKeyHex: d, issuedAt: ia, expiresAt: ea)
+        return OrgServerCode(orgId: orgId, genesisHash: g, serial: serial, serverName: name, serverDomain: domain, delegatedPubKeyHex: d,
+                             enrolmentPubKeyHex: e, issuedAt: ia, expiresAt: ea)
     }
 }
 
@@ -50,7 +57,7 @@ public struct OrgKeyRecipient: Equatable {
 public struct OrgKemKey { public let recipient: String; public let kemPub: [UInt8]; public let kemKeyId: String }
 
 extension OrgAuthority {
-    public static let tagServerCode = "flagship/org-server-code/v1"
+    public static let tagServerCode = "flagship/org-server-code/v2"
     public static let tagServerRegister = "flagship/org-server-register/v1"
     public static let tagInstallBlob = "flagship/org-install-blob/v1"
     public static let tagSeatKem = "flagship/org-seat-kem/v1"
@@ -71,10 +78,12 @@ extension OrgAuthority {
 
     public static func canonicalServerCode(_ c: OrgServerCode) throws -> [UInt8] {
         try need(isHex(c.orgId, 32) && isHex(c.genesisHash, 64) && isHex(c.delegatedPubKeyHex, 64), "malformed", "server code")
+        try need(isHex(c.enrolmentPubKeyHex, 64) && c.enrolmentPubKeyHex != c.delegatedPubKeyHex, "malformed", "enrolmentPubKeyHex")
         try need(token(c.serial, "^[A-Za-z0-9_-]{8,64}$") && token(c.serverName, labelPattern) && token(c.serverDomain, domainPattern), "malformed", "server code")
         try need(c.serverDomain.hasPrefix("\(c.serverName)."), "malformed", "serverDomain")
         try need(c.issuedAt >= 0 && c.expiresAt > c.issuedAt && c.expiresAt - c.issuedAt <= serverCodeMaxMs, "malformed", "expiresAt")
-        return join([tagServerCode, c.orgId, c.genesisHash, c.serial, c.serverName, c.serverDomain, c.delegatedPubKeyHex, String(c.issuedAt), String(c.expiresAt)])
+        return join([tagServerCode, c.orgId, c.genesisHash, c.serial, c.serverName, c.serverDomain, c.delegatedPubKeyHex, c.enrolmentPubKeyHex,
+                     String(c.issuedAt), String(c.expiresAt)])
     }
 
     public static func serverCodeSha256(_ c: OrgServerCode) throws -> String { sha256Hex(try canonicalServerCode(c)) }
@@ -92,6 +101,36 @@ extension OrgAuthority {
         try need(isHex(orgId, 32) && isHex(codeSha256, 64) && isHex(serverIdentityPubKeyHex, 64) && token(serial, "^[A-Za-z0-9_-]{8,64}$"), "malformed", "register")
         try need(token(serverDomain, domainPattern) && token(nonceHex, "^[0-9a-f]{16,128}$") && issuedAt >= 0, "malformed", "register")
         return join([tagServerRegister, orgId, serial, serverDomain, codeSha256, serverIdentityPubKeyHex, String(issuedAt), nonceHex])
+    }
+
+    /// A fresh enrolment key for one server code (the admin's client makes it): the seed goes into the recipe
+    /// only, the public key into the code, so only the box holding the recipe can redeem it.
+    public static func newServerEnrolmentKey() -> (seedHex: String, pubKeyHex: String) {
+        let key = Curve25519.Signing.PrivateKey()
+        return (hex(Array(key.rawRepresentation)), hex(Array(key.publicKey.rawRepresentation)))
+    }
+
+    public static func serverEnrolmentPubKey(seedHex: String) throws -> String {
+        try need(isHex(seedHex, 64), "malformed", "enrolmentSeedHex")
+        guard let seed = PqBin.unhex(seedHex), let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: seed) else { throw OrgAuthorityError("malformed", "enrolmentSeedHex") }
+        return hex(Array(key.publicKey.rawRepresentation))
+    }
+
+    /// The box's second signature over its registration (the same bytes the STK signs), by the recipe's enrolment key.
+    public static func signServerEnrolment(register: [UInt8], codeSha256: String, code: OrgServerCode, seedHex: String) throws -> String {
+        try need(try serverEnrolmentPubKey(seedHex: seedHex) == code.enrolmentPubKeyHex, "malformed", "enrolmentSeedHex")
+        try need(try serverCodeSha256(code) == codeSha256, "malformed", "codeSha256")
+        guard let seed = PqBin.unhex(seedHex), let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: seed),
+              let sig = try? key.signature(for: register) else { throw OrgAuthorityError("malformed", "enrolmentSeedHex") }
+        return hex(Array(sig))
+    }
+
+    /// `.com`'s check, mirrored: the registration names this code and the code's enrolment key signed it.
+    public static func verifyServerEnrolment(orgId: String, serial: String, serverDomain: String, codeSha256: String, register: [UInt8],
+                                             code: OrgServerCode, signatureHex: String?) -> Bool {
+        guard let s = signatureHex, isHex(s, 128), let sig = PqBin.unhex(s), let pub = PqBin.unhex(code.enrolmentPubKeyHex),
+              let sha = try? serverCodeSha256(code), sha == codeSha256, code.orgId == orgId, code.serial == serial, code.serverDomain == serverDomain else { return false }
+        return PqHybrid.ed25519VerifyStrict(signature: sig, message: register, publicKey: pub)
     }
 
     // MARK: the org recipe
