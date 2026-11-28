@@ -6850,6 +6850,198 @@
       "security/hall-of-fame.html"
     ]
   },
+  "sb2b34c9535": {
+    "en": "An old browser-remote link could connect the webapp to another server",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sb516ea03d2": {
+    "en": "Medium · reported and fixed November 2026 · fix <1>1f37c6c6</1> · credit: Huzaifa Jawaid",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s65088f7cb8": {
+    "en": "The webapp still accepted an old start-up link for the browser remote. It redeemed a session at whatever server the link named, and stored the server the answer named, without checking that either belonged to Flagship’s service domain. A crafted link could install a session for an attacker’s server.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s804869904b": {
+    "en": "The old link is gone: the browser remote now starts only from the QR code the phone approves, and every session answer must name a server under Flagship’s service domain. The fix shipped in webapp version 260.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s3da1cb2186": {
+    "en": "Simultaneous grants could pass an organization’s seat limit",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sed8b9550df": {
+    "en": "Low · reported and fixed November 2026 · fix <1>4fa472d9</1> · credit: Huzaifa Jawaid",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s9e5c74ae0f": {
+    "en": "Seat grants or invites sent at the same moment could each pass the plan’s seat limit, so together they could give an organization more seats than its plan allowed. A grant was also logged even when nothing had been stored.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s4ea4e4e192": {
+    "en": "The limit is now held in the same write that stores the grant, and the log entry is written only after that write succeeds.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s1c86ee7cde": {
+    "en": "Simultaneous share offers could pass the co-manager limit",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s7fefe5ff00": {
+    "en": "Low · reported and fixed November 2026 · fix <1>25a97cc5</1> · credit: Huzaifa Jawaid",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s315df2deb9": {
+    "en": "When sharing a server, requests sent at the same moment could each pass the plan’s co-manager limit, and the limit counted only the newest 500 shares.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s26b954de50": {
+    "en": "The count now covers every live share and is held in the same write that creates the share.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s06f2a054d7": {
+    "en": "Simultaneous requests could get more peer-backup tokens than allowed",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sf560527b69": {
+    "en": "Low · reported and fixed November 2026 · fix <1>79ca995e</1> · credit: Huzaifa Jawaid",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s59983ba064": {
+    "en": "Each server may be issued only so many peer-backup tokens. Two requests at the same moment could each pass that limit and together get more tokens than it allowed.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s81ba06d75c": {
+    "en": "The limit is now counted and reserved in one write before anything is signed.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s8c6d826110": {
+    "en": "An organization’s founder could backdate a founder-removal or recovery notice",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sfdeddc54c5": {
+    "en": "Medium · reported and fixed November 2026 · fix <1>6dd5a89b</1> · credit: Huzaifa Jawaid",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s27a35648fd": {
+    "en": "An organization’s founder-removal or account-recovery notice took its waiting period from a date the request itself stated, so a founder could backdate it and skip both the waiting period and the other admins’ chance to object. This was dormant: no app or server sent these requests.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s3265560862": {
+    "en": "Our server now refuses both kinds of change until the next release ships the real fix, in which the waiting period starts when our server sees the notice.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s5665df69f0": {
+    "en": "Unused server enrollment codes could be read by anyone who knew an organization’s id",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s0d20a0358b": {
+    "en": "Medium · reported and fixed November 2026 · fix <1>e5197fd9</1> · credit: Huzaifa Jawaid",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sb7ede6961d": {
+    "en": "An organization’s export and its list of ceremonies could hand out server enrollment codes that had not been used yet to anyone who knew the organization’s id, and a code alone was enough to enroll any key as that organization’s server. No such codes existed in production, so nothing was exposed.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s597a8f64cc": {
+    "en": "The export now carries only codes that have already been used, and a code can no longer be posted as a ceremony. Binding each code to the real server’s own key follows in the next release.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
   "s0cea2d9a29": {
     "en": "Reports sent with the vulnerability form were lost",
     "kind": "text",
@@ -6876,6 +7068,14 @@
   },
   "sfb41f9b094": {
     "en": "The form works again. Each report is encrypted to our security key as soon as it arrives, so our server keeps it only in a form the key’s holders can read, and the reporter gets a reference. We are notified of each new report, and the page keeps the email address and key as a fallback.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s867665835c": {
+    "en": "After that fix, the form still refused every report sent from a browser once its spam check was turned on, because the check added a field our server did not expect. Huzaifa Jawaid found this too; it was fixed in <1>309516e9</1>.",
     "kind": "text",
     "ctx": "p",
     "pages": [

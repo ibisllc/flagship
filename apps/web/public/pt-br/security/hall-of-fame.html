@@ -57,10 +57,41 @@
       <p class="muted">Pesquisadores que nos relataram uma vulnerabilidade, com os commits que a corrigiram. Cada um recebe o crédito da forma que pedir: nome, apelido ou anônimo, com um link se quiser. Aparecem sem atribuição até nos dizerem sua preferência; nunca publicamos um nome que não recebemos.</p>
   
       <div>
+      <h2>Um link antigo do controle remoto do navegador podia conectar o app web a outro servidor</h2>
+      <p class="hof-meta">Média · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a> · crédito: Huzaifa Jawaid</p>
+      <p>O app web ainda aceitava um link de início antigo para o controle remoto do navegador. Ele resgatava uma sessão no servidor que o link indicasse e guardava o servidor que a resposta indicasse, sem verificar se algum dos dois pertencia ao domínio de serviço do Flagship. Um link forjado podia instalar uma sessão para o servidor de um atacante.</p>
+      <p>O link antigo não existe mais: o controle remoto do navegador agora só começa pelo código QR que o telefone aprova, e toda resposta de sessão precisa indicar um servidor sob o domínio de serviço do Flagship. A correção saiu na versão 260 do app web.</p>
+
+      <h2>Concessões simultâneas podiam passar do limite de vagas de uma organização</h2>
+      <p class="hof-meta">Baixa · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/4fa472d9">4fa472d9</a> · crédito: Huzaifa Jawaid</p>
+      <p>Concessões de vagas ou convites enviados no mesmo momento podiam passar, cada um, pelo limite de vagas do plano e, juntos, dar a uma organização mais vagas do que o plano permitia. Além disso, uma concessão era registrada mesmo quando nada tinha sido guardado.</p>
+      <p>O limite agora é mantido na mesma escrita que guarda a concessão, e a entrada do registro só é escrita depois que essa escrita dá certo.</p>
+
+      <h2>Ofertas de compartilhamento simultâneas podiam passar do limite de coadministradores</h2>
+      <p class="hof-meta">Baixa · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/25a97cc5">25a97cc5</a> · crédito: Huzaifa Jawaid</p>
+      <p>Ao compartilhar um servidor, pedidos enviados no mesmo momento podiam passar, cada um, pelo limite de coadministradores do plano, e o limite só contava os 500 compartilhamentos mais recentes.</p>
+      <p>A contagem agora abrange todo compartilhamento ativo e é mantida na mesma escrita que cria o compartilhamento.</p>
+
+      <h2>Pedidos simultâneos podiam obter mais tokens de backup entre pares do que o permitido</h2>
+      <p class="hof-meta">Baixa · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/79ca995e">79ca995e</a> · crédito: Huzaifa Jawaid</p>
+      <p>Cada servidor só pode receber um número limitado de tokens de backup entre pares. Dois pedidos no mesmo momento podiam passar, cada um, por esse limite e, juntos, obter mais tokens do que ele permitia.</p>
+      <p>O limite agora é contado e reservado numa única escrita antes de qualquer coisa ser assinada.</p>
+
+      <h2>O fundador de uma organização podia antedatar um aviso de remoção do fundador ou de recuperação</h2>
+      <p class="hof-meta">Média · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/6dd5a89b">6dd5a89b</a> · crédito: Huzaifa Jawaid</p>
+      <p>O aviso de remoção do fundador ou de recuperação de conta de uma organização contava o período de espera a partir de uma data informada pelo próprio pedido, então um fundador podia antedatá-lo e pular tanto a espera quanto a chance de os outros administradores se oporem. A falha estava dormente: nenhum app ou servidor enviava esses pedidos.</p>
+      <p>Nosso servidor agora recusa os dois tipos de mudança até a próxima versão trazer a correção definitiva, em que o período de espera começa quando nosso servidor vê o aviso.</p>
+
+      <h2>Códigos de cadastro de servidor não usados podiam ser lidos por qualquer um que soubesse o id de uma organização</h2>
+      <p class="hof-meta">Média · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/e5197fd9">e5197fd9</a> · crédito: Huzaifa Jawaid</p>
+      <p>A exportação de uma organização e sua lista de cerimônias podiam entregar códigos de cadastro de servidor ainda não usados a qualquer um que soubesse o id da organização, e um código sozinho bastava para cadastrar qualquer chave como servidor dessa organização. Não havia nenhum código assim em produção, então nada foi exposto.</p>
+      <p>A exportação agora só traz códigos já usados, e um código não pode mais ser enviado como cerimônia. Vincular cada código à própria chave do servidor real vem na próxima versão.</p>
+
       <h2>Os relatos enviados pelo formulário de vulnerabilidades se perdiam</h2>
       <p class="hof-meta">Baixa · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/7221dfb1">7221dfb1</a> · crédito: Huzaifa Jawaid</p>
       <p>O formulário de relatos da nossa página de segurança enviava cada relato para um endereço que nosso servidor não respondia mais, então todos os relatos enviados pelo formulário se perdiam e quem relatava via um erro. Os relatos enviados por e-mail não foram afetados, e nada foi exposto.</p>
       <p>O formulário voltou a funcionar. Cada relato é criptografado com nossa chave de segurança assim que chega, então nosso servidor só o guarda numa forma que apenas quem tem a chave pode ler, e quem relata recebe uma referência. Somos avisados de cada relato novo, e a página mantém o endereço de e-mail e a chave como alternativa.</p>
+      <p>Depois dessa correção, o formulário ainda recusava todo relato enviado de um navegador assim que sua verificação antispam foi ativada, porque a verificação acrescentava um campo que nosso servidor não esperava. Huzaifa Jawaid encontrou isso também; corrigido em <a href="https://github.com/ibisllc/flagship/commit/309516e9">309516e9</a>.</p>
 
       <h2>Um endpoint de identidade sem uso confiava nos signatários que cada requisição indicava</h2>
       <p class="hof-meta">Média · relatada e corrigida em novembro de 2026 · correção <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · crédito: rakimans</p>

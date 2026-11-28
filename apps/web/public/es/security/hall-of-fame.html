@@ -57,10 +57,41 @@
       <p class="muted">Investigadores que nos informaron de una vulnerabilidad, con los commits que la cerraron. Se les reconoce de la forma que cada uno pida: nombre, alias o anónimo, con un enlace si lo desean. Aparecen sin atribución hasta que nos indiquen su preferencia; nunca publicamos un nombre que no nos hayan dado.</p>
   
       <div>
+      <h2>Un enlace antiguo del control remoto del navegador podía conectar la app web con otro servidor</h2>
+      <p class="hof-meta">Media · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/1f37c6c6">1f37c6c6</a> · crédito: Huzaifa Jawaid</p>
+      <p>La app web todavía aceptaba un enlace de inicio antiguo para el control remoto del navegador. Canjeaba una sesión en el servidor que nombrara el enlace y guardaba el servidor que nombrara la respuesta, sin comprobar que ninguno de los dos perteneciera al dominio de servicio de Flagship. Un enlace manipulado podía instalar una sesión para el servidor de un atacante.</p>
+      <p>El enlace antiguo ya no existe: el control remoto del navegador solo se inicia desde el código QR que aprueba el teléfono, y cada respuesta de sesión debe nombrar un servidor bajo el dominio de servicio de Flagship. La corrección llegó con la versión 260 de la app web.</p>
+
+      <h2>Concesiones simultáneas podían superar el límite de puestos de una organización</h2>
+      <p class="hof-meta">Baja · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/4fa472d9">4fa472d9</a> · crédito: Huzaifa Jawaid</p>
+      <p>Las concesiones de puestos o las invitaciones enviadas en el mismo momento podían pasar cada una el límite de puestos del plan, y juntas dar a una organización más puestos de los que su plan permitía. Además, una concesión quedaba registrada aunque no se hubiera guardado nada.</p>
+      <p>Ahora el límite se mantiene en la misma escritura que guarda la concesión, y la entrada del registro solo se escribe después de que esa escritura tenga éxito.</p>
+
+      <h2>Ofertas de compartir simultáneas podían superar el límite de coadministradores</h2>
+      <p class="hof-meta">Baja · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/25a97cc5">25a97cc5</a> · crédito: Huzaifa Jawaid</p>
+      <p>Al compartir un servidor, las solicitudes enviadas en el mismo momento podían pasar cada una el límite de coadministradores del plan, y el límite solo contaba las 500 comparticiones más recientes.</p>
+      <p>El recuento ahora abarca todas las comparticiones activas y se mantiene en la misma escritura que crea la compartición.</p>
+
+      <h2>Solicitudes simultáneas podían obtener más tokens de copia entre pares de los permitidos</h2>
+      <p class="hof-meta">Baja · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/79ca995e">79ca995e</a> · crédito: Huzaifa Jawaid</p>
+      <p>Cada servidor solo puede recibir un número limitado de tokens de copia entre pares. Dos solicitudes en el mismo momento podían pasar cada una ese límite y, juntas, obtener más tokens de los que permitía.</p>
+      <p>Ahora el límite se cuenta y se reserva en una sola escritura antes de firmar nada.</p>
+
+      <h2>El fundador de una organización podía antedatar un aviso de retirada del fundador o de recuperación</h2>
+      <p class="hof-meta">Media · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/6dd5a89b">6dd5a89b</a> · crédito: Huzaifa Jawaid</p>
+      <p>El aviso de retirada del fundador o de recuperación de cuenta de una organización tomaba su periodo de espera de una fecha que indicaba la propia solicitud, así que un fundador podía antedatarlo y saltarse tanto el periodo de espera como la oportunidad de los demás administradores de oponerse. Estaba inactivo: ninguna app ni servidor enviaba estas solicitudes.</p>
+      <p>Ahora nuestro servidor rechaza ambos tipos de cambio hasta que la próxima versión traiga la corrección definitiva, en la que el periodo de espera empieza cuando nuestro servidor ve el aviso.</p>
+
+      <h2>Los códigos de alta de servidores sin usar podía leerlos cualquiera que conociera el id de una organización</h2>
+      <p class="hof-meta">Media · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/e5197fd9">e5197fd9</a> · crédito: Huzaifa Jawaid</p>
+      <p>La exportación de una organización y su lista de ceremonias podían entregar códigos de alta de servidores aún sin usar a cualquiera que conociera el id de la organización, y un código bastaba por sí solo para dar de alta cualquier clave como servidor de esa organización. No existía ningún código así en producción, así que no se expuso nada.</p>
+      <p>La exportación ahora solo lleva códigos ya usados, y un código ya no puede enviarse como ceremonia. Vincular cada código a la propia clave del servidor real llegará en la próxima versión.</p>
+
       <h2>Los informes enviados con el formulario de vulnerabilidades se perdían</h2>
       <p class="hof-meta">Baja · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/7221dfb1">7221dfb1</a> · crédito: Huzaifa Jawaid</p>
       <p>El formulario de informes de nuestra página de seguridad enviaba cada informe a una dirección a la que nuestro servidor ya no respondía, así que todos los informes enviados con el formulario se perdían y quien informaba veía un error. Los informes enviados por correo no se vieron afectados y no se expuso nada.</p>
       <p>El formulario vuelve a funcionar. Cada informe se cifra con nuestra clave de seguridad en cuanto llega, así que nuestro servidor solo lo guarda en una forma que pueden leer quienes tienen la clave, y quien informa recibe una referencia. Se nos avisa de cada informe nuevo, y la página conserva la dirección de correo y la clave como alternativa.</p>
+      <p>Después de esa corrección, el formulario seguía rechazando todos los informes enviados desde un navegador en cuanto se activó su comprobación antispam, porque la comprobación añadía un campo que nuestro servidor no esperaba. También lo encontró Huzaifa Jawaid; se corrigió en <a href="https://github.com/ibisllc/flagship/commit/309516e9">309516e9</a>.</p>
 
       <h2>Un endpoint de identidad sin uso confiaba en los firmantes que nombraba cada solicitud</h2>
       <p class="hof-meta">Media · reportada y corregida en noviembre de 2026 · corrección <a href="https://github.com/ibisllc/flagship/commit/caf3ce88">caf3ce88</a> · crédito: rakimans</p>
