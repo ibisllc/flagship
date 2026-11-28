@@ -136,7 +136,7 @@ async function mintBuildCode(
   // 1a — claim username
   const claimAt = clock();
   const claimSig = identity.signWithIrk(
-    claimCanonical(plan.username, irkPubHex, claimAt),
+    claimCanonical(plan.username, irkPubHex, claimAt, adminRootPubHex),
   );
   await expectOk(
     name,

@@ -367,7 +367,7 @@ describe.skip("runE2E orchestration core", () => {
   // The IRK signature the core sends must verify against the same
   // canonical bytes — proves we mirror the live wire format.
   it("mintBuildCode signs claim with a verifiable IRK signature", async () => {
-    let claimBody: { request: { username: string; irkPub: string; issuedAt: number }; signature: string } | undefined;
+    let claimBody: { request: { username: string; irkPub: string; issuedAt: number }; signature: string; adminRootPub?: string } | undefined;
     const http: HttpClient = {
       get: async (u) =>
         u.includes("/pods")
@@ -397,7 +397,7 @@ describe.skip("runE2E orchestration core", () => {
     expect(claimBody).toBeDefined();
     const c = claimBody!;
     const msg = new TextEncoder().encode(
-      ["flagship/claim-username/v1", c.request.username, c.request.irkPub, c.request.issuedAt].join("|"),
+      ["flagship/claim-username/v2", c.request.username, c.request.irkPub, "", c.adminRootPub ?? "", c.request.issuedAt].join("|"),
     );
     const sig = Uint8Array.from(
       c.signature.match(/.{2}/g)!.map((h) => parseInt(h, 16)),

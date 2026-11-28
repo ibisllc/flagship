@@ -38,6 +38,7 @@ async function setUpClaimedHarry() {
   const claim = {
     username: "harry",
     irkPub: harryIrk.publicKey,
+    adminRootPub: harryAdmin.publicKey,
     issuedAt: Date.now(),
   };
   const sig = signClaimUsername(claim, harryIrk);
@@ -293,7 +294,7 @@ describe("POST /api/routing/register-rck", () => {
           },
           signature: bytesToHex(
             signClaimUsername(
-              { username: "mallory", irkPub: malloryIrk.publicKey, issuedAt: Date.now() },
+              { username: "mallory", irkPub: malloryIrk.publicKey, adminRootPub: malloryAdmin.publicKey, issuedAt: Date.now() },
               malloryIrk,
             ),
           ),

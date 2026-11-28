@@ -1,0 +1,100 @@
+{
+  "about": "flagship/claim-username/v2: the IRK signs flagship/claim-username/v2|<username>|<irkPub hex>|<aidPub hex or empty>|<adminRootPub hex or empty>|<issuedAt ms>, lowercase hex, '|'-joined. The body's aidPub/adminRootPub (null = absent = empty field) are the keys signed. accept: verify under request.irkPub and canonical must equal the bytes built from the case. reject: build the canonical from the case's fields and the signature must NOT verify (keys swapped or stripped after signing, or a v1 signature presented as v2). Seeds are raw Ed25519 seeds.",
+  "keys": {
+    "irkSeedHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "irkPubHex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "aidPubHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "adminRootPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+    "otherAidPubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+    "otherAdminRootPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242"
+  },
+  "accept": [
+    {
+      "name": "aid-and-admin-root",
+      "request": {
+        "username": "plucky-avocet",
+        "irkPub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "issuedAt": 1790000000000
+      },
+      "aidPub": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "adminRootPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+      "canonical": "flagship/claim-username/v2|plucky-avocet|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1790000000000",
+      "signatureHex": "f1f58718925a2599b4b5c9e08868476baa71823b639b0533d6bd0e38e05328dc0395357221251c76d1009cbd9dbf4a3f1ec6207bb6c501304741797fe4ba5902"
+    },
+    {
+      "name": "admin-root-only",
+      "request": {
+        "username": "plucky-avocet",
+        "irkPub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "issuedAt": 1790000000000
+      },
+      "aidPub": null,
+      "adminRootPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+      "canonical": "flagship/claim-username/v2|plucky-avocet|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737||17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1790000000000",
+      "signatureHex": "9b96dd6f0f42b7ba306a489d0b0ba221186ef09060259c7056bc4a12d14ac1aa590a3a56de43141a688399c5cfefa75d88cb2d164f734ed1cd13255b225c8109"
+    },
+    {
+      "name": "no-keys",
+      "request": {
+        "username": "plucky-avocet",
+        "irkPub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "issuedAt": 1790000000000
+      },
+      "aidPub": null,
+      "adminRootPub": null,
+      "canonical": "flagship/claim-username/v2|plucky-avocet|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|||1790000000000",
+      "signatureHex": "d997b0f9ce35c500fb7e41d3999d743051379fbea17f6c202996b58f4c26288f0ec13c7debf88bad1c06438bd292b3634e4d55f6acab4ee98cd8b60436f5be0e"
+    }
+  ],
+  "reject": [
+    {
+      "name": "swapped-aid-pub",
+      "request": {
+        "username": "plucky-avocet",
+        "irkPub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "issuedAt": 1790000000000
+      },
+      "aidPub": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "adminRootPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+      "canonical": "flagship/claim-username/v2|plucky-avocet|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1790000000000",
+      "signatureHex": "f1f58718925a2599b4b5c9e08868476baa71823b639b0533d6bd0e38e05328dc0395357221251c76d1009cbd9dbf4a3f1ec6207bb6c501304741797fe4ba5902"
+    },
+    {
+      "name": "swapped-admin-root-pub",
+      "request": {
+        "username": "plucky-avocet",
+        "irkPub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "issuedAt": 1790000000000
+      },
+      "aidPub": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "adminRootPub": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+      "canonical": "flagship/claim-username/v2|plucky-avocet|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0|c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242|1790000000000",
+      "signatureHex": "f1f58718925a2599b4b5c9e08868476baa71823b639b0533d6bd0e38e05328dc0395357221251c76d1009cbd9dbf4a3f1ec6207bb6c501304741797fe4ba5902"
+    },
+    {
+      "name": "stripped-admin-root-pub",
+      "request": {
+        "username": "plucky-avocet",
+        "irkPub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "issuedAt": 1790000000000
+      },
+      "aidPub": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "adminRootPub": null,
+      "canonical": "flagship/claim-username/v2|plucky-avocet|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0||1790000000000",
+      "signatureHex": "f1f58718925a2599b4b5c9e08868476baa71823b639b0533d6bd0e38e05328dc0395357221251c76d1009cbd9dbf4a3f1ec6207bb6c501304741797fe4ba5902"
+    },
+    {
+      "name": "v1-bytes-as-v2",
+      "request": {
+        "username": "plucky-avocet",
+        "irkPub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "issuedAt": 1790000000000
+      },
+      "aidPub": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "adminRootPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+      "canonical": "flagship/claim-username/v2|plucky-avocet|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1790000000000",
+      "signatureHex": "e238c3304302e094cab7959827c2838375af86435f0c28376a5ca011c83ae99cad0b166e41be5259f60b969636af1d7c6f33d49941fa7fd466127ef46db22f04",
+      "v1Canonical": "flagship/claim-username/v1|plucky-avocet|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|1790000000000"
+    }
+  ]
+}

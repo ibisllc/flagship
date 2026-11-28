@@ -61,7 +61,7 @@ async function register(): Promise<{ serverDomain: string; identity: Keypair }> 
   // Adding a server is admin-only: the account pins an admin root at claim
   // time, and that root signs the RCK and approves the AuthCode.
   const adminRoot = makeKey();
-  const claim: ClaimUsername = { username, irkPub: irk.publicKey, issuedAt: Date.now() };
+  const claim: ClaimUsername = { username, irkPub: irk.publicKey, adminRootPub: adminRoot.publicKey, issuedAt: Date.now() };
   let r = await postJson("/api/username/claim", {
     request: { username, irkPub: bytesToHex(irk.publicKey), issuedAt: claim.issuedAt },
     signature: bytesToHex(signClaimUsername(claim, irk)),

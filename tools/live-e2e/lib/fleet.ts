@@ -177,7 +177,7 @@ export async function createRealAccount(): Promise<Account> {
   const issuedAt = Date.now();
   const c = await postJson(`https://${CONTROL}/api/username/claim`, {
     request: { username, irkPub: bytesToHex(keys.irk.publicKey), issuedAt },
-    signature: bytesToHex(signClaimUsername({ username, irkPub: keys.irk.publicKey, issuedAt }, keys.irk)),
+    signature: bytesToHex(signClaimUsername({ username, irkPub: keys.irk.publicKey, aidPub: keys.aid.publicKey, adminRootPub: keys.adminRoot.publicKey, issuedAt }, keys.irk)),
     adminRootPub: bytesToHex(keys.adminRoot.publicKey),
     aidPub: bytesToHex(keys.aid.publicKey),
   });

@@ -11,7 +11,7 @@
  * UTF-8 encoded, identical to the simulator.
  */
 
-export const TAG_CLAIM = "flagship/claim-username/v1";
+export const TAG_CLAIM = "flagship/claim-username/v2";
 export const TAG_AUTH_CODE = "flagship/auth-code/v1";
 export const TAG_AUTH_CODE_ADMIN = "flagship/auth-code-admin/v1";
 export const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
@@ -76,8 +76,9 @@ export function claimCanonical(
   username: string,
   irkPubHex: string,
   issuedAt: number,
+  adminRootPubHex?: string,
 ): Uint8Array {
-  return canonical([TAG_CLAIM, username, irkPubHex, issuedAt]);
+  return canonical([TAG_CLAIM, username, irkPubHex, "", adminRootPubHex ?? "", issuedAt]);
 }
 
 function authCodeParts(c: AuthCode): (string | number)[] {

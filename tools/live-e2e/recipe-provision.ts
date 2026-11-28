@@ -7,7 +7,7 @@
  * identity path:
  *
  *   1. Generate a FRESH app IRK from a random seed (the app's own device key).
- *   2. Claim a fresh username for that IRK (`flagship/claim-username/v1`).
+ *   2. Claim a fresh username for that IRK (`flagship/claim-username/v2`).
  *   3. Mint + self-sign an AuthCode (the inner IRK-signed credential).
  *   4. Build + self-sign an InstallBlob (the recipe) embedding the AuthCode.
  *   5. POST it to `POST /api/gym/provision` (the app composes the recipe; the
@@ -246,8 +246,8 @@ async function main(): Promise<void> {
   try {
     // ── 2. Claim the username for the app IRK ───────────────────────────────
     log("[compose recipe — app side]");
-    await check("claim username (flagship/claim-username/v1) for the app IRK", async () => {
-      const claim: ClaimUsername = { username: user, irkPub: irk.publicKey, issuedAt: Date.now() };
+    await check("claim username (flagship/claim-username/v2) for the app IRK", async () => {
+      const claim: ClaimUsername = { username: user, irkPub: irk.publicKey, adminRootPub: adminRoot.publicKey, issuedAt: Date.now() };
       const sig = bytesToHex(signClaimUsername(claim, irk));
       const r = await http(`https://${CONTROL}/api/username/claim`, {
         method: "POST",

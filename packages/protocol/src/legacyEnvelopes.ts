@@ -52,7 +52,7 @@ const TAG_BACKUP_TOGGLE = "flagship/backup-toggle/v1";
 const TAG_PUBLISH_SERVER_DNS = "flagship/publish-server-dns/v1";
 const TAG_DNS01_PUBLISH = "flagship/dns01-publish/v1";
 const TAG_DNS01_DELETE = "flagship/dns01-delete/v1";
-const TAG_CLAIM_USERNAME = "flagship/claim-username/v1";
+const TAG_CLAIM_USERNAME = "flagship/claim-username/v2";
 const TAG_ACCOUNT_SELF_DELETE = "flagship/account-self-delete/v1";
 const TAG_SERVERS_SELF_DELETE = "flagship/servers-self-delete/v1";
 const TAG_SERVER_DECOMMISSION = "flagship/server-decommission/v1";
@@ -168,13 +168,16 @@ export interface PublishServerDns {
 /**
  * IRK-signed claim of a username on flagshipserver.com. The control plane
  * stores `username → irkPub` keyed on the username; mutations require an
- * IRK signature that matches the existing pubkey. The signature commits to
- * (username, irkPub, issuedAt) so a captured signature can't be re-aimed
- * at a different name.
+ * IRK signature that matches the existing pubkey. The v2 signature commits to
+ * (username, irkPub, aidPub, adminRootPub, issuedAt), so a captured claim can't
+ * be re-aimed at another name nor replayed with other AID or admin-root keys.
+ * An absent key is signed as the empty field (so stripping one also fails).
  */
 export interface ClaimUsername {
   username: string;
   irkPub: Bytes;
+  aidPub?: Bytes;
+  adminRootPub?: Bytes;
   issuedAt: number;
 }
 
@@ -624,7 +627,14 @@ function canonicalDns01Delete(r: Dns01DeleteRequest): Bytes {
 function canonicalClaimUsername(c: ClaimUsername): Bytes {
   legacyFieldGuard("username", c.username);
   return new TextEncoder().encode(
-    [TAG_CLAIM_USERNAME, c.username, hex(c.irkPub), c.issuedAt].join("|"),
+    [
+      TAG_CLAIM_USERNAME,
+      c.username,
+      hex(c.irkPub),
+      c.aidPub ? hex(c.aidPub) : "",
+      c.adminRootPub ? hex(c.adminRootPub) : "",
+      c.issuedAt,
+    ].join("|"),
   );
 }
 

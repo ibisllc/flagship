@@ -35,7 +35,7 @@ function freshKeypair(seed = 0) {
 
 async function setUpClaimedHarry() {
   const storage = new InMemoryStorage();
-  const claim = { username: "harry", irkPub: harryIrk.publicKey, issuedAt: Date.now() };
+  const claim = { username: "harry", irkPub: harryIrk.publicKey, adminRootPub: harryAdmin.publicKey, issuedAt: Date.now() };
   const sig = signClaimUsername(claim, harryIrk);
   await handleUsernameClaim(
     { storage: storage.usernames },

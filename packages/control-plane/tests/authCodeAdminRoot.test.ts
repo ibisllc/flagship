@@ -44,7 +44,7 @@ describe("Slice D — AuthCode adminRootPubKey is persisted at issue", () => {
     const now = 1_000_000;
 
     // Register the account (issue verifies userPubKey == registered IRK).
-    const claim = { username: USER, irkPub: irk.publicKey, issuedAt: now };
+    const claim = { username: USER, irkPub: irk.publicKey, adminRootPub: adminRoot.publicKey, issuedAt: now };
     await handleUsernameClaim(
       { storage: s.usernames, bypassOfferGate: true, now: () => now },
       {

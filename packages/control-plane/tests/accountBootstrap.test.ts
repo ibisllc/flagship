@@ -29,7 +29,7 @@ const device = keypair(96);
 const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 function body() {
-  const claim = { username, irkPub: irk.publicKey, issuedAt: now };
+  const claim = { username, irkPub: irk.publicKey, aidPub: aid.publicKey, adminRootPub: admin.publicKey, issuedAt: now };
   const grant: DeviceCapabilityGrant = {
     grantId: "bootstrap-primary-grant",
     username,

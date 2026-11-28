@@ -78,7 +78,13 @@ export async function handleAccountBootstrap(
   if (await orgHoldsName(deps.orgs, username)) return { ...USERNAME_TAKEN };
 
   const irkPub = hexToBytes(request.irkPub);
-  const claim: ClaimUsername = { username, irkPub, issuedAt: request.issuedAt };
+  const claim: ClaimUsername = {
+    username,
+    irkPub,
+    issuedAt: request.issuedAt,
+    aidPub: hexToBytes(body.aidPub.toLowerCase()),
+    adminRootPub: hexToBytes(body.adminRootPub.toLowerCase()),
+  };
   if (!verifyClaimUsername(claim, hexToBytes(body.claim.signature), irkPub)) return forbidden("invalid signature");
 
   const device = body.device;

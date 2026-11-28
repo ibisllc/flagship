@@ -120,3 +120,44 @@ describe("username claim — roster gate", () => {
     expect(r.status).toBe(200);
   });
 });
+
+describe("username claim — v2 binds the AID and admin-root keys", () => {
+  const aid = deriveIRK({ seed: new Uint8Array(32).fill(21) }).publicKey;
+  const root = deriveIRK({ seed: new Uint8Array(32).fill(31) }).publicKey;
+  const otherRoot = deriveIRK({ seed: new Uint8Array(32).fill(41) }).publicKey;
+  const signedWithKeys = (at = Date.now()) => ({
+    request: { username: "keen-lark", irkPub: hex(harryIrk.publicKey), issuedAt: at },
+    signature: hex(signClaimUsername({ username: "keen-lark", irkPub: harryIrk.publicKey, aidPub: aid, adminRootPub: root, issuedAt: at }, harryIrk)),
+    aidPub: hex(aid),
+    adminRootPub: hex(root),
+  });
+
+  it("stores the keys it signed", async () => {
+    const s = new InMemoryStorage();
+    const r = await handleUsernameClaim({ storage: s.usernames, bypassOfferGate: true }, signedWithKeys());
+    expect(r.status).toBe(200);
+    const rec = await s.usernames.get("keen-lark");
+    expect(rec?.aidPubHex).toBe(hex(aid));
+    expect(rec?.adminRootPubHex).toBe(hex(root));
+  });
+
+  it("refuses the captured claim replayed with another admin root, a stripped one, or another AID", async () => {
+    const s = new InMemoryStorage();
+    const body = signedWithKeys();
+    for (const replay of [
+      { ...body, adminRootPub: hex(otherRoot) },
+      { ...body, adminRootPub: undefined },
+      { ...body, aidPub: hex(otherRoot) },
+    ]) {
+      const r = await handleUsernameClaim({ storage: s.usernames, bypassOfferGate: true }, replay);
+      expect(r.status).toBe(403);
+    }
+    expect(await s.usernames.get("keen-lark")).toBeUndefined();
+  });
+
+  it("refuses a malformed key the claim carries instead of dropping it", async () => {
+    const s = new InMemoryStorage();
+    const r = await handleUsernameClaim({ storage: s.usernames, bypassOfferGate: true }, { ...signedWithKeys(), aidPub: "zz" });
+    expect(r.status).toBe(400);
+  });
+});

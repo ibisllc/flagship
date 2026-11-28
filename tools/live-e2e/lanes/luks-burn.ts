@@ -159,7 +159,7 @@ async function main(): Promise<number> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       request: { username: user, irkPub: irkHex, issuedAt: claimAt },
-      signature: bytesToHex(signClaimUsername({ username: user, irkPub: irk.publicKey, issuedAt: claimAt }, irk)),
+      signature: bytesToHex(signClaimUsername({ username: user, irkPub: irk.publicKey, adminRootPub: adminRoot.publicKey, issuedAt: claimAt }, irk)),
       adminRootPub: adminHex,
     }),
   });

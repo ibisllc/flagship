@@ -72,7 +72,7 @@ async function openAccount(storage: InMemoryStorage): Promise<void> {
     {
       claim: {
         request: { username, irkPub: hex(irk.publicKey), issuedAt: NOW },
-        signature: hex(signClaimUsername({ username, irkPub: irk.publicKey, issuedAt: NOW }, irk)),
+        signature: hex(signClaimUsername({ username, irkPub: irk.publicKey, aidPub: aid.publicKey, adminRootPub: admin.publicKey, issuedAt: NOW }, irk)),
       },
       aidPub: hex(aid.publicKey),
       adminRootPub: hex(admin.publicKey),

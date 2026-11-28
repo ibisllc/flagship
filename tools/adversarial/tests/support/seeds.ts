@@ -27,6 +27,8 @@ export const NOT_DRIVEN: Record<string, string> = {
 };
 
 export const SEEDS: Record<string, Record<string, unknown>> = {
+  // v2 binds the optional AID and admin-root keys: seed both so the field attacks reach them.
+  ClaimUsername: { username: "alice", irkPub: b(32), aidPub: b(32, 8), adminRootPub: b(32, 9), issuedAt: NOW },
   MarketplaceList: {
     creator: "alice",
     slug: "notes",

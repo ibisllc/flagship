@@ -75,11 +75,11 @@ async function main(): Promise<void> {
   console.log(`[smoke] identity pub  = ${bytesToHex(identity.publicKey)}`);
 
   // 1. Claim username
-  const claim: ClaimUsername = { username, irkPub: irk.publicKey, issuedAt: Date.now() };
-  const claimSig = signClaimUsername(claim, irk);
   // Adding a server is admin-only: the account pins an admin root at claim
   // time, and that root signs the RCK and approves the AuthCode.
   const adminRoot = makeKey();
+  const claim: ClaimUsername = { username, irkPub: irk.publicKey, adminRootPub: adminRoot.publicKey, issuedAt: Date.now() };
+  const claimSig = signClaimUsername(claim, irk);
   let r = await post("/api/username/claim", {
     request: {
       username,

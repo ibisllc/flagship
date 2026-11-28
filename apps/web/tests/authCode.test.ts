@@ -38,6 +38,7 @@ async function claimHarry(app: ReturnType<typeof buildServer>): Promise<void> {
   const claim: ClaimUsername = {
     username: "harry",
     irkPub: harryIrk.publicKey,
+    adminRootPub: harryAdmin.publicKey,
     issuedAt: Date.now(),
   };
   const sig = signClaimUsername(claim, harryIrk);

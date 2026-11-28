@@ -48,22 +48,13 @@ export interface UsernameClaimBody {
   request?: { username?: string; irkPub?: string; issuedAt?: number };
   signature?: string;
   /**
-   * Service-access gating v2 — the account's STABLE AID pubkey (hex,
-   * `deriveAccountId(UMK)`). OPTIONAL + additive: it is NOT part of the
-   * IRK-signed claim canonical bytes (so existing client signing is unchanged),
-   * it is merely recorded next to the IRK so `.com` can later verify AID-signed
-   * service-invite create/revoke against it (dual-accept with the IRK). A
-   * malformed value is ignored, never rejected — it can't block a claim.
+   * The account's stable AID pubkey (hex, `deriveAccountId(UMK)`), recorded next to the IRK so `.com` can verify
+   * AID-signed service invites. Optional; when present it is signed (flagship/claim-username/v2).
    */
   aidPub?: string;
   /**
-   * Slice D (docs/device-admin-tier-spec.md §1.2) — the account's pinned ADMIN
-   * MASTER ROOT pubkey (hex). A fresh RANDOM Ed25519 keypair the FIRST device
-   * mints at account creation (NOT UMK-derived), recorded next to the IRK so
-   * `.com` can later serve unforgeable admin authority decisions. OPTIONAL +
-   * additive (like `aidPub`): NOT part of the IRK-signed claim canonical bytes,
-   * and a malformed value is ignored, never rejected. Phase 2 clients start
-   * sending it; Phase 0 keeps it optional so existing flows compile + pass.
+   * The account's pinned admin master root pubkey (hex; docs/device-admin-tier-spec.md §1.2). Optional; when
+   * present it is signed (flagship/claim-username/v2), so a captured claim can't be replayed with another root.
    */
   adminRootPub?: string;
 }
@@ -82,7 +73,9 @@ export async function handleUsernameClaim(
     !HEX64.test(r.irkPub) ||
     typeof r.issuedAt !== "number" ||
     typeof body?.signature !== "string" ||
-    !HEX128.test(body.signature)
+    !HEX128.test(body.signature) ||
+    (body.aidPub !== undefined && (typeof body.aidPub !== "string" || !HEX64.test(body.aidPub))) ||
+    (body.adminRootPub !== undefined && (typeof body.adminRootPub !== "string" || !HEX64.test(body.adminRootPub)))
   ) {
     return malformed("malformed body");
   }
@@ -96,7 +89,15 @@ export async function handleUsernameClaim(
     return malformed("invalid hex");
   }
 
-  const claim: ClaimUsername = { username: r.username, irkPub, issuedAt: r.issuedAt };
+  const aidPubHex = body.aidPub?.toLowerCase();
+  const adminRootPubHex = body.adminRootPub?.toLowerCase();
+  const claim: ClaimUsername = {
+    username: r.username,
+    irkPub,
+    issuedAt: r.issuedAt,
+    ...(aidPubHex ? { aidPub: hexToBytes(aidPubHex) } : {}),
+    ...(adminRootPubHex ? { adminRootPub: hexToBytes(adminRootPubHex) } : {}),
+  };
   if (!verifyClaimUsername(claim, sig, irkPub)) return forbidden("invalid signature");
   if (Math.abs(now - r.issuedAt) > freshnessMs) return forbidden("stale request");
 
@@ -124,20 +125,6 @@ export async function handleUsernameClaim(
     }
   }
 
-  // gating v2 — record the stable AID alongside the IRK when the client
-  // supplies a well-formed one. Ignored if absent/malformed (never blocks).
-  const aidPubHex =
-    typeof body.aidPub === "string" && HEX64.test(body.aidPub)
-      ? body.aidPub.toLowerCase()
-      : undefined;
-
-  // Slice D — record the pinned admin master root alongside the IRK when the
-  // client supplies a well-formed one. Ignored if absent/malformed (never
-  // blocks a claim), mirroring the AID.
-  const adminRootPubHex =
-    typeof body.adminRootPub === "string" && HEX64.test(body.adminRootPub)
-      ? body.adminRootPub.toLowerCase()
-      : undefined;
   const badKey = badEd25519Key(aidPubHex, adminRootPubHex);
   if (badKey) return badKey;
 

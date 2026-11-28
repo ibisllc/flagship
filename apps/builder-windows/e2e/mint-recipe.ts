@@ -7,7 +7,7 @@
  *
  *   1. POST /api/username/suggest        — names are claimable only if
  *      recently suggested (docs/username-suggestion-queue.md).
- *   2. Claim it for a FRESH IRK + admin root (flagship/claim-username/v1).
+ *   2. Claim it for a FRESH IRK + admin root (flagship/claim-username/v2).
  *   3. Mint + record an AuthCode, approved by the admin root
  *      (POST /api/auth-code/issue, flagship/auth-code-admin/v1).
  *   4. Register the RCK, admin-root-signed (flagship/rck-register/v1).
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
   // account pins an admin root at claim time, and that root approves the
   // AuthCode, signs the RCK and the debug grant, as the apps do.
   const adminRoot = keypairFromSeed(randomBytes(32));
-  const claim: ClaimUsername = { username, irkPub: irk.publicKey, issuedAt: Date.now() };
+  const claim: ClaimUsername = { username, irkPub: irk.publicKey, adminRootPub: adminRoot.publicKey, issuedAt: Date.now() };
   const claimRes = await post("/api/username/claim", {
     request: { username, irkPub: bytesToHex(irk.publicKey), issuedAt: claim.issuedAt },
     signature: bytesToHex(signClaimUsername(claim, irk)),
