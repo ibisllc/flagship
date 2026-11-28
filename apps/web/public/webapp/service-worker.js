@@ -607,6 +607,8 @@
 //       verified with .com's observed open time of each delayed-change notice (noticeOpenedAt).
 //  v264: every Ed25519 verify goes through lib/edKey.js (precached), which refuses small-order and non-canonical
 //       public keys first (test-vectors/ed25519-low-order; WebCrypto and noble's default verify accept them).
+//       A visitor's id for an app is scoped to the hosting account (flagship/app-aid/v2|<accountZone>|<appRef>,
+//       the zone from the box name we post to), so two accounts hosting one app id can't link a visitor.
 const SHELL_VERSION = "v264";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 

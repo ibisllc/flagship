@@ -1254,7 +1254,7 @@
     },
     {
       "id": "invite-per-app-id",
-      "title": "Invites carry &s=; per-app visitor id (app-aid/v1)",
+      "title": "Invites carry &s=; per-app visitor id scoped to the host account (app-aid/v2)",
       "ref": "ios",
       "surfaces": {
         "ios": {
@@ -1280,7 +1280,7 @@
           "anchors": [
             [
               "apps/web/public/webapp/keystore.js",
-              "flagship/app-aid/v1"
+              "flagship/app-aid/v2"
             ]
           ]
         }

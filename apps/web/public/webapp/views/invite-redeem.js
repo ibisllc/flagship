@@ -6,9 +6,11 @@
 //
 //   1. parse #k=<secret>&a=<authorAID>&i=<inviteId> from the URL fragment,
 //   2. ensure the friend is unlocked (their OWN UMK),
-//   3. derive their id for THAT app (deriveAppAccountId(UMK, serviceRef), the
-//      link's `s=`): nothing they present is shared between apps, and it is the
-//      same whoever invited them — NEVER the global AID,
+//   3. derive their id for THAT app on the box's account
+//      (deriveAppAccountId(UMK, appAccountZone(box), serviceRef), the link's
+//      `s=`; the zone comes from the box we redeem on, never the link): nothing
+//      they present is shared between apps or between two accounts hosting the
+//      same app, and it is the same whoever invited them — NEVER the global AID,
 //   4. sign the redeem with it + POST it to <box>/api/service-invites/redeem,
 //   5a. AUTO-approve → bound; the friend can open the restricted service.
 //   5b. MANUAL-approve {pending} → the friend EMITS an acceptance signed with
@@ -25,7 +27,8 @@
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { hasWrappedUmk } from "../keystore.js";
-import { deriveAppAccountIdFromSeed, signWithAppAccountId } from "../keystore.js";
+import { appAccountZone, deriveAppAccountIdFromSeed, signWithAppAccountId } from "../keystore.js";
+import { dataApex } from "../lib/apex.js";
 import { redeemInvite, signAcceptServiceInvite, buildAcceptReply } from "../lib/serviceInvite.js";
 import { rememberInviteOwner } from "../lib/knockIdentity.js";
 import { toast } from "../lib/toast.js";
@@ -130,6 +133,10 @@ async function renderInviteRedeem() {
   $("ir-accept")?.addEventListener("click", () => onAccept().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
 }
 
+/** Shown when the invite isn't on a Flagship server name (nothing is signed;
+ *  inviteContextFromLocation already refuses such a link). */
+export const NOT_A_SERVER_LINK = tr("This invite link is unknown or was withdrawn.");
+
 /** Shown for a link made before per-app ids (no `s=`). */
 export const OLD_INVITE_LINK = tr("This invite link is from an older version of Flagship. Ask the owner for a new link.");
 
@@ -144,8 +151,14 @@ async function redemptionIdentity(umk) {
     throw e;
   }
   const ref = pendingServiceRef;
-  const app = await deriveAppAccountIdFromSeed(umk, ref);
-  return { visitorAID: app.publicKey, sign: (u, bytes) => signWithAppAccountId(u, ref, bytes) };
+  const zone = appAccountZone(boxHost(), dataApex());
+  if (!zone) {
+    const e = new Error(NOT_A_SERVER_LINK);
+    e.code = "not-a-server";
+    throw e;
+  }
+  const app = await deriveAppAccountIdFromSeed(umk, zone, ref);
+  return { visitorAID: app.publicKey, zone, sign: (u, bytes) => signWithAppAccountId(u, zone, ref, bytes) };
 }
 
 async function onAccept() {
@@ -179,7 +192,7 @@ async function onAccept() {
       rememberInviteOwner({ serverId: boxHost(), ownerAidHex: pendingAuthorAidHex, serviceRef: r.serviceRef });
     }
     if (r.pending) {
-      await renderPendingAcceptance(r.serviceRef, ident.visitorAID, session.umk);
+      await renderPendingAcceptance(r.serviceRef, ident.visitorAID, session.umk, ident.zone);
     } else {
       renderGranted(r);
     }
@@ -227,7 +240,7 @@ function renderGranted(r) {
  * contact-AID-signed acceptance and shows the reply (link + QR + copy) to send
  * back to the author over the same private channel; the author finalizes it.
  */
-async function renderPendingAcceptance(serviceRef, contactAID, umk) {
+async function renderPendingAcceptance(serviceRef, contactAID, umk, zone) {
   const root = $("invite-redeem-content");
   if (!pendingInviteId || !pendingAuthorAidHex) {
     // A manual invite MUST be a v2 link (it carries the inviteId + author AID).
@@ -245,7 +258,7 @@ async function renderPendingAcceptance(serviceRef, contactAID, umk) {
   }
   const acceptedAt = Date.now();
   const accept = { inviteId: pendingInviteId, serviceRef, contactAID, acceptedAt, umk };
-  const sig = await signAcceptServiceInvite(accept, signWithAppAccountId);
+  const sig = await signAcceptServiceInvite(accept, (u, ref, bytes) => signWithAppAccountId(u, zone, ref, bytes));
   // Canonical deep-link reply carrying ONLY {accept, acceptSig} (the author's box
   // fetches the owner's create from .com). The box host is this /invite's origin.
   const replyHost = boxHost() || location.host;

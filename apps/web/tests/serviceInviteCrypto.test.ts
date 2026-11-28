@@ -154,18 +154,27 @@ describe("webapp keystore — AID + household interop with @flagship/protocol", 
     const k = await loadKeystore();
     const V = JSON.parse(
       readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/app-account-id/vectors.json"), "utf8"),
-    ) as { cases: Array<{ umkSeedHex: string; appRef: string; pubHex: string }>; invalidAppRefs: string[] };
+    ) as {
+      cases: Array<{ umkSeedHex: string; accountZone: string; appRef: string; pubHex: string }>;
+      accountZones: Array<{ serverId: string; dataApex: string; zone: string | null }>;
+      invalidAppRefs: string[];
+      invalidAccountZones: string[];
+    };
     for (const c of V.cases) {
-      const app = await k.deriveAppAccountIdFromSeed(hexToBytes(c.umkSeedHex), c.appRef);
+      const app = await k.deriveAppAccountIdFromSeed(hexToBytes(c.umkSeedHex), c.accountZone, c.appRef);
       expect(bytesToHex(app.publicKey)).toBe(c.pubHex);
-      expect(bytesToHex(deriveAppAccountId({ seed: hexToBytes(c.umkSeedHex) }, c.appRef).publicKey)).toBe(c.pubHex);
+      expect(bytesToHex(deriveAppAccountId({ seed: hexToBytes(c.umkSeedHex) }, c.accountZone, c.appRef).publicKey)).toBe(c.pubHex);
     }
+    for (const z of V.accountZones) expect(k.appAccountZone(z.serverId, z.dataApex)).toBe(z.zone);
     // Never the global AID.
-    const app = await k.deriveAppAccountIdFromSeed(friendUmk.seed, "alice-notes");
+    const app = await k.deriveAppAccountIdFromSeed(friendUmk.seed, "alice.flagship.services", "alice-notes");
     const globalAid = await k.deriveAccountIdFromSeed(friendUmk.seed);
     expect(bytesToHex(app.publicKey)).not.toBe(bytesToHex(globalAid.publicKey));
     for (const bad of V.invalidAppRefs) {
-      await expect(k.deriveAppAccountIdFromSeed(friendUmk.seed, bad)).rejects.toThrow();
+      await expect(k.deriveAppAccountIdFromSeed(friendUmk.seed, "alice.flagship.services", bad)).rejects.toThrow();
+    }
+    for (const bad of V.invalidAccountZones) {
+      await expect(k.deriveAppAccountIdFromSeed(friendUmk.seed, bad, "alice-notes")).rejects.toThrow();
     }
   });
 });
@@ -391,10 +400,11 @@ describe("webapp serviceInvite — canonical bytes + cross-platform signatures",
   it("accept: the friend's per-app acceptance reproduces the pinned acceptApp sig", async () => {
     const si = await loadServiceInvite();
     const k = await loadKeystore();
-    const app = await k.deriveAppAccountIdFromSeed(friendUmk.seed, VECTORS.appAid.serviceRef);
+    const zone = VECTORS.appAid.accountZone;
+    const app = await k.deriveAppAccountIdFromSeed(friendUmk.seed, zone, VECTORS.appAid.serviceRef);
     expect(bytesToHex(app.publicKey)).toBe(VECTORS.appAid.appAidPubHex);
     // The protocol derives the same id (and none from who invited).
-    const protoApp = deriveAppAccountId(friendUmk, VECTORS.appAid.serviceRef);
+    const protoApp = deriveAppAccountId(friendUmk, zone, VECTORS.appAid.serviceRef);
     expect(bytesToHex(protoApp.publicKey)).toBe(VECTORS.appAid.appAidPubHex);
     const accept: AcceptServiceInvite = {
       inviteId: VECTORS.acceptApp.inviteId,
@@ -406,11 +416,15 @@ describe("webapp serviceInvite — canonical bytes + cross-platform signatures",
     expect(bytesToHex(ed.sign(bytes, protoApp.privateKey))).toBe(VECTORS.acceptApp.sigHex);
     expect(verifyAcceptServiceInvite(accept, hexToBytes(VECTORS.acceptApp.sigHex), app.publicKey)).toBe(true);
     // The webapp helper signs with the id for the acceptance's app.
-    const sig = await si.signAcceptServiceInvite({ ...accept, umk: friendUmk.seed }, k.signWithAppAccountId);
+    const sig = await si.signAcceptServiceInvite({ ...accept, umk: friendUmk.seed }, (u: Uint8Array, ref: string, b: Uint8Array) =>
+      k.signWithAppAccountId(u, zone, ref, b),
+    );
     expect(bytesToHex(sig)).toBe(VECTORS.acceptApp.sigHex);
-    // A different app gives a different id.
-    const other = await k.deriveAppAccountIdFromSeed(friendUmk.seed, "alice-chess");
+    // A different app, or the same app on another account, gives a different id.
+    const other = await k.deriveAppAccountIdFromSeed(friendUmk.seed, zone, "alice-chess");
     expect(bytesToHex(other.publicKey)).not.toBe(VECTORS.appAid.appAidPubHex);
+    const otherHost = await k.deriveAppAccountIdFromSeed(friendUmk.seed, "carol.flagship.services", VECTORS.appAid.serviceRef);
+    expect(bytesToHex(otherHost.publicKey)).not.toBe(VECTORS.appAid.appAidPubHex);
   });
 
   it("randomServiceInviteId is a fresh 64-hex id each call", async () => {
@@ -864,11 +878,12 @@ describe("webapp serviceInvite — wire helpers", () => {
   it("MANUAL accept loop: friend emits the per-app acceptance reply; author parses + submits it", async () => {
     const si = await loadServiceInvite();
     const k = await loadKeystore();
-    const contact = await k.deriveAppAccountIdFromSeed(friendUmk.seed, VECTORS.acceptApp.serviceRef);
+    const zone = VECTORS.appAid.accountZone;
+    const contact = await k.deriveAppAccountIdFromSeed(friendUmk.seed, zone, VECTORS.acceptApp.serviceRef);
     // FRIEND emits the acceptance reply (signed with their id for the app).
     const acceptSig = await si.signAcceptServiceInvite(
       { inviteId: VECTORS.acceptApp.inviteId, serviceRef: VECTORS.acceptApp.serviceRef, contactAID: contact.publicKey, acceptedAt: VECTORS.acceptApp.acceptedAt, umk: friendUmk.seed },
-      k.signWithAppAccountId,
+      (u: Uint8Array, ref: string, b: Uint8Array) => k.signWithAppAccountId(u, zone, ref, b),
     );
     expect(bytesToHex(acceptSig)).toBe(VECTORS.acceptApp.sigHex);
     // Canonical reply = the `…/invite-accept?…` app link carrying ONLY

@@ -611,24 +611,55 @@ function accountDeviceInfo(accountId, deviceId) {
  * App Account Id — the identity a visitor presents to ONE app (redeem, visit,
  * sign-in, acceptance), mirroring `deriveAppAccountId` in @flagship/protocol
  * byte-for-byte: HKDF-SHA256 over the UMK seed under
- * `flagship/app-aid/v1|<appRef>`, appRef = the app's service id. It depends on
- * the visitor's account and the app only: two apps see unrelated ids, and the
- * owner's invite and a co-manager's invite to one app bind the same id
+ * `flagship/app-aid/v2|<accountZone>|<appRef>`. `accountZone` is the hosting
+ * account's `<account>.<data apex>` ({@link appAccountZone} of the box name we
+ * sign for and post to, never a link parameter); appRef = the app's service id.
+ * Two apps, or one app id on two accounts, see unrelated ids, and the owner's
+ * invite and a co-manager's invite to one app bind the same id
  * (docs/service-access-gating.md, "Per-app identity").
  *
  * @param {Uint8Array} umkSeed
+ * @param {string} accountZone  `<account>.<data apex>`
  * @param {string} appRef   the app's service id (`<creator>--<slug>`)
  */
-export async function deriveAppAccountIdFromSeed(umkSeed, appRef) {
+export async function deriveAppAccountIdFromSeed(umkSeed, accountZone, appRef) {
+  if (typeof accountZone !== "string" || !ACCOUNT_ZONE_RE.test(accountZone)) {
+    throw new Error("account zone must be <account>.<data apex>");
+  }
   if (typeof appRef !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/.test(appRef)) {
     throw new Error("app ref must be a service id");
   }
-  return irkFromInfoSeed(umkSeed, `flagship/app-aid/v1|${appRef}`);
+  return irkFromInfoSeed(umkSeed, `flagship/app-aid/v2|${accountZone}|${appRef}`);
+}
+
+const DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const DNS_LABEL_RE = new RegExp(`^${DNS_LABEL}$`);
+const ACCOUNT_ZONE_RE = new RegExp(`^(?=.{3,253}$)${DNS_LABEL}(?:\\.${DNS_LABEL})+$`);
+
+/**
+ * The hosting account's zone for a box name, mirroring `appAccountZone` in
+ * @flagship/protocol: the label just left of `dataApex` plus the apex
+ * (`home.alice.flagship.services` → `alice.flagship.services`), or null for a
+ * name outside the data apex.
+ *
+ * @param {string} serverId
+ * @param {string} dataApex
+ * @returns {string|null}
+ */
+export function appAccountZone(serverId, dataApex) {
+  if (typeof serverId !== "string" || typeof dataApex !== "string") return null;
+  const host = serverId.trim().toLowerCase().replace(/\.$/, "");
+  const apex = dataApex.trim().toLowerCase().replace(/^\./, "").replace(/\.$/, "");
+  if (!apex || !host.endsWith(`.${apex}`)) return null;
+  const labels = host.slice(0, host.length - apex.length - 1).split(".");
+  if (!labels.every((l) => DNS_LABEL_RE.test(l))) return null;
+  const zone = `${labels[labels.length - 1]}.${apex}`;
+  return ACCOUNT_ZONE_RE.test(zone) ? zone : null;
 }
 
 /** Sign canonical-bytes with the visitor's id for one app ({@link deriveAppAccountIdFromSeed}). */
-export async function signWithAppAccountId(umkSeed, appRef, canonicalBytes) {
-  const app = await deriveAppAccountIdFromSeed(umkSeed, appRef);
+export async function signWithAppAccountId(umkSeed, accountZone, appRef, canonicalBytes) {
+  const app = await deriveAppAccountIdFromSeed(umkSeed, accountZone, appRef);
   return new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, app.privateKey, canonicalBytes));
 }
 

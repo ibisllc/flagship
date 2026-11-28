@@ -5,8 +5,9 @@
 //  - on one of this account's own servers: this device's account device key
 //    (the box's device book says admin or not, and the rank follows);
 //  - on a server shared with this account: that share's member key;
-//  - on a box we redeemed an invite on: our id for THAT app,
-//    `deriveAppAccountId(UMK, serviceRef)` (the knock link's `ref=`).
+//  - on a box we redeemed an invite on: our id for THAT app on that box's
+//    account, `deriveAppAccountId(UMK, appAccountZone(box), serviceRef)` (the
+//    knock link's `server=` and `ref=`; the zone comes from the box we post to).
 // Any other box is refused rather than shown any key. The device key and a
 // share key are never presented to anyone else's box: they would link us
 // across owners. We remember which boxes we redeemed invites on (and their
@@ -16,6 +17,7 @@
 // secured-sessions handles.
 
 import {
+  appAccountZone,
   deriveAccountDeviceKeyFromSeed,
   deriveAccountIdFromSeed,
   deriveAppAccountIdFromSeed,
@@ -24,6 +26,7 @@ import {
 } from "../keystore.js";
 import { deriveShareMemberKey, signWithShareMemberKey } from "./serverShare.js";
 import { authorizeKnock } from "./serviceInvite.js";
+import { dataApex } from "./apex.js";
 
 import { tr } from "./i18n.js";
 const STORE_KEY = "flagship.inviteOwners.v1";
@@ -128,14 +131,15 @@ export function hostsFromPods(pods) {
  *    code "no-device" rather than fall back to a shared account key);
  *  - a server shared with us (`sharedServers`: `{serverDomain, shareId}`) →
  *    that share's member key;
- *  - a box we redeemed an invite on → our id for that app (a record naming our
- *    own AID is ignored: only `ownServers` makes a box ours);
+ *  - a box we redeemed an invite on → our id for that app on the box's account
+ *    zone (a record naming our own AID is ignored: only `ownServers` makes a
+ *    box ours; a box name outside the data apex gets no id);
  *  - anything else → null.
  *
  * @param {Uint8Array} umk
  * @param {string} serverId
  * @param {{ storage?: Storage, ownServers?: Iterable<string>, serviceRef?: string,
- *   device?: {accountId:string, deviceId:string}|null,
+ *   device?: {accountId:string, deviceId:string}|null, dataApex?: string,
  *   sharedServers?: Iterable<{serverDomain:string, shareId:string}> }} [opts]
  * @returns {Promise<null|{kind:"device"|"share"|"app", visitorAID:Uint8Array,
  *   sign:(umk:Uint8Array, bytes:Uint8Array)=>Promise<Uint8Array>}>}
@@ -176,11 +180,13 @@ export async function knockIdentity(umk, serverId, opts = {}) {
   if (!ownerHex || ownerHex === bytesToHex(global.publicKey)) return null;
   const ref = opts.serviceRef;
   if (typeof ref !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/.test(ref)) return null;
-  const app = await deriveAppAccountIdFromSeed(umk, ref);
+  const zone = appAccountZone(host, opts.dataApex ?? dataApex());
+  if (!zone) return null;
+  const app = await deriveAppAccountIdFromSeed(umk, zone, ref);
   return {
     kind: "app",
     visitorAID: app.publicKey,
-    sign: (u, bytes) => signWithAppAccountId(u, ref, bytes),
+    sign: (u, bytes) => signWithAppAccountId(u, zone, ref, bytes),
   };
 }
 

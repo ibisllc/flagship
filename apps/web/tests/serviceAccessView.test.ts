@@ -145,7 +145,7 @@ describe("service-access admin view", () => {
     // The fixed HKDF infos (byte-identical to @flagship/protocol).
     expect(r.body).toContain("flagship/account-id/v1");
     expect(r.body).toContain("flagship/household-key/v1");
-    expect(r.body).toContain("flagship/app-aid/v1");
+    expect(r.body).toContain("flagship/app-aid/v2");
   });
 });
 

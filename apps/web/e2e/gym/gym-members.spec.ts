@@ -573,12 +573,13 @@ test.describe("gym webapp members and app pages", () => {
     const redeem = m.last(onHome("/api/service-invites/redeem"))!;
     expect(redeem.body.secret).toBe(SECRET);
     const check = await page.evaluate(
-      async ({ body, ref }) => {
+      async ({ body, ref, host }) => {
         const ks = await import("/keystore.js");
+        const { dataApex } = await import("/lib/apex.js");
         const si = await import("/lib/serviceInvite.js");
         const { getSession } = await import("/lib/state.js");
         const umk = getSession().umk;
-        const app = await ks.deriveAppAccountIdFromSeed(umk, ref);
+        const app = await ks.deriveAppAccountIdFromSeed(umk, ks.appAccountZone(host, dataApex()), ref);
         const global = await ks.deriveAccountIdFromSeed(umk);
         const secretHash = await si.serviceInviteSecretHash(ks.hexToBytes(body.secret));
         const bytes = si.canonicalRedeemBytes({ secretHash, visitorAID: ks.hexToBytes(body.visitorAID), redeemedAt: body.redeemedAt });
@@ -588,7 +589,7 @@ test.describe("gym webapp members and app pages", () => {
           signed: await ks.verifyWithEd25519Pub(app.publicKey, ks.hexToBytes(body.aidSig), bytes),
         };
       },
-      { body: redeem.body, ref: SERVICE_ID },
+      { body: redeem.body, ref: SERVICE_ID, host: HOME },
     );
     expect(check).toEqual({ appId: true, notGlobal: true, signed: true });
     await shot(page, testInfo, "invite-in");

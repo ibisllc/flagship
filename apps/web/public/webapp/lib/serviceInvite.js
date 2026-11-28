@@ -52,9 +52,10 @@ export const ACCESS_MODES = ["open", "restricted"];
 
 // The visitor's identity toward one app. Re-exported from the keystore (where
 // the WebCrypto Ed25519 seed→keypair derivation lives) so the gating crypto
-// surface is complete in one import. `deriveAppAccountId(umkSeed, serviceRef)`
-// signs redeem / accept / visit / knock for that app only (docs "Per-app
-// identity"): nothing is shared between apps, nothing depends on the inviter.
+// surface is complete in one import. `deriveAppAccountId(umkSeed, accountZone,
+// serviceRef)` signs redeem / accept / visit / knock for that app on that
+// account only (docs "Per-app identity"): nothing is shared between apps or
+// host accounts, nothing depends on the inviter.
 export { deriveAppAccountIdFromSeed as deriveAppAccountId } from "../keystore.js";
 
 import { appLinkFragmentUrl, appLinkParams, dataApex, isAppLink } from "./apex.js";
@@ -320,7 +321,7 @@ export function canonicalAcceptBytes(a) {
  * Sign an `AcceptServiceInvite` with the friend's id for the app. Byte-exact
  * mirror of @flagship/protocol's `signAcceptServiceInvite`. `signWithAppAccountId`
  * is the injected `(umk, serviceRef, bytes) => Promise<Uint8Array>` signer
- * (keystore.js provides it).
+ * (keystore.js's `signWithAppAccountId` bound to the box's account zone).
  *
  * @param {object} args
  * @param {string} args.inviteId
@@ -458,7 +459,7 @@ function podBase(baseUrl) {
  * Build the friend share-link `https://<server>.<user>/invite#<secret>&a=<authorAID>&i=<inviteId>&s=<serviceRef>`.
  *
  * `s` names the app: the friend redeems with their id for THAT app
- * (`deriveAppAccountId(UMK, serviceRef)`, docs "Per-app identity"); a link
+ * (`deriveAppAccountId(UMK, accountZone, serviceRef)`, docs "Per-app identity"); a link
  * without it can't be redeemed any more (ask for a new one).
  *
  * Everything rides the FRAGMENT (never sent to .com): the `secret` is the bearer
@@ -888,8 +889,8 @@ export async function removeServiceAllow(args, deps = {}) {
  * then adds the bound AID to the service allow-list.
  *
  * `visitorAID` is the friend's id for the app (`deriveAppAccountId(friendUMK,
- * serviceRef)`, the link's `s=`), so nothing they present is shared between
- * apps; the caller supplies the matching app-bound `signWithAccountId` closure.
+ * accountZone, serviceRef)`: the box's zone and the link's `s=`), so nothing
+ * they present is shared between apps; the caller supplies the matching app-bound `signWithAccountId` closure.
  *
  * Returns `{ approvalMode, pending, serviceRef, boundAID, firstBind, body }`:
  *  - AUTO-approve → `{ approvalMode:"auto", pending:false, boundAID, firstBind }`.

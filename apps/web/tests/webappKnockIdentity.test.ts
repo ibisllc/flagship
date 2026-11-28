@@ -29,7 +29,7 @@ const VECTORS = JSON.parse(
   seeds: { authorUmkSeedHex: string; friendUmkSeedHex: string };
   derived: { authorAidPubHex: string; friendAidPubHex: string };
   contactAid: { authorAidPubHex: string; contactAidPubHex: string };
-  appAid: { serviceRef: string; appAidPubHex: string };
+  appAid: { accountZone: string; serviceRef: string; appAidPubHex: string };
 };
 
 class MemStorage implements Storage {
@@ -50,6 +50,7 @@ function hexToBytes(hex: string): Uint8Array {
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 
 const FQDN = "home.alice.flagship.services";
+const ZONE = "alice.flagship.services";
 const SERVICE = "alice-notes";
 const ownerUmk = { seed: hexToBytes(VECTORS.seeds.authorUmkSeedHex) };
 const friendUmk = { seed: hexToBytes(VECTORS.seeds.friendUmkSeedHex) };
@@ -61,7 +62,7 @@ const DEVICE = { accountId: ACCOUNT_ID, deviceId: DEVICE_ID };
 const devicePubHex = hex(ed.getPublicKey(deriveAccountDeviceKeySeed(ownerUmk.seed, ACCOUNT_ID, DEVICE_ID)));
 
 describe("knock identity — derivation matches @flagship/protocol", () => {
-  it("an invited box signs with deriveAppAccountId(UMK, serviceRef), byte-for-byte", async () => {
+  it("an invited box signs with deriveAppAccountId(UMK, box zone, serviceRef), byte-for-byte", async () => {
     const ki = await loadKnockIdentity();
     const storage = new MemStorage();
     expect(ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex: VECTORS.contactAid.authorAidPubHex, serviceRef: SERVICE }, storage)).toBe(true);
@@ -71,7 +72,8 @@ describe("knock identity — derivation matches @flagship/protocol", () => {
       serviceRef: VECTORS.appAid.serviceRef,
     });
     expect(ident.kind).toBe("app");
-    const proto = deriveAppAccountId(friendUmk, VECTORS.appAid.serviceRef);
+    expect(VECTORS.appAid.accountZone).toBe(ZONE);
+    const proto = deriveAppAccountId(friendUmk, ZONE, VECTORS.appAid.serviceRef);
     expect(hex(ident.visitorAID)).toBe(hex(proto.publicKey));
     expect(hex(ident.visitorAID)).toBe(VECTORS.appAid.appAidPubHex);
     const bytes = new TextEncoder().encode("flagship/test/v1|x");
@@ -85,7 +87,7 @@ describe("knock identity — derivation matches @flagship/protocol", () => {
     ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex: hex(deriveAccountId({ seed: new Uint8Array(32).fill(0x42) }).publicKey) }, storage);
     const a = await ki.knockIdentity(umk.seed, FQDN, { storage, serviceRef: "alice-notes" });
     const b = await ki.knockIdentity(umk.seed, FQDN, { storage, serviceRef: "alice-chess" });
-    expect(hex(a.visitorAID)).toBe(hex(deriveAppAccountId(umk, "alice-notes").publicKey));
+    expect(hex(a.visitorAID)).toBe(hex(deriveAppAccountId(umk, ZONE, "alice-notes").publicKey));
     expect(hex(b.visitorAID)).not.toBe(hex(a.visitorAID));
     expect(hex(a.visitorAID)).not.toBe(hex(deriveAccountId(umk).publicKey));
     // A different owner record for the box doesn't change the id for the app.
@@ -93,6 +95,22 @@ describe("knock identity — derivation matches @flagship/protocol", () => {
     const a2 = await ki.knockIdentity(umk.seed, FQDN, { storage, serviceRef: "alice-notes" });
     expect(hex(a2.visitorAID)).toBe(hex(a.visitorAID));
     expect(await ki.knockIdentity(umk.seed, FQDN, { storage })).toBeNull();
+  });
+
+  it("the same app id on another account's box gets another id; a box off the data apex gets none", async () => {
+    const ki = await loadKnockIdentity();
+    const storage = new MemStorage();
+    const umk = { seed: new Uint8Array(32).fill(0x16) };
+    const carol = "home.carol.flagship.services";
+    for (const serverId of [FQDN, carol, "game--john-doe.fshp.app"]) {
+      ki.rememberInviteOwner({ serverId, ownerAidHex: "ab".repeat(32), serviceRef: "bright-maple--plants" }, storage);
+    }
+    const a = await ki.knockIdentity(umk.seed, FQDN, { storage, serviceRef: "bright-maple--plants" });
+    const c = await ki.knockIdentity(umk.seed, carol, { storage, serviceRef: "bright-maple--plants" });
+    expect(hex(a.visitorAID)).toBe(hex(deriveAppAccountId(umk, ZONE, "bright-maple--plants").publicKey));
+    expect(hex(c.visitorAID)).toBe(hex(deriveAppAccountId(umk, "carol.flagship.services", "bright-maple--plants").publicKey));
+    expect(hex(c.visitorAID)).not.toBe(hex(a.visitorAID));
+    expect(await ki.knockIdentity(umk.seed, "game--john-doe.fshp.app", { storage, serviceRef: "bright-maple--plants" })).toBeNull();
   });
 });
 
@@ -245,7 +263,7 @@ describe("knock identity — against the box's knock handler", () => {
   it("an invited friend gets in with their id for the app; the global AID would have been refused", async () => {
     const ki = await loadKnockIdentity();
     const storage = new MemStorage();
-    const contactHex = hex(deriveAppAccountId(friendUmk, SERVICE).publicKey);
+    const contactHex = hex(deriveAppAccountId(friendUmk, ZONE, SERVICE).publicKey);
     // The invite bound the per-app id; the webapp remembered the box (and owner from `a=`).
     ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex, serviceRef: SERVICE }, storage);
     const b = await box(contactHex);
