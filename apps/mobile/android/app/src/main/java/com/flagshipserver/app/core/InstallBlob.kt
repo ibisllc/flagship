@@ -121,11 +121,22 @@ data class AuthCode(
     }
 }
 
+/** The IRK-signed username claim. v2 binds the AID and admin-root keys the body carries (an absent one is the empty
+ *  field), so a captured claim can't be replayed with other keys. Pinned by
+ *  packages/protocol/test-vectors/claim-username/vectors.json. */
 object UsernameClaim {
-    const val CANONICAL_TAG = "flagship/claim-username/v1"
-    fun canonicalBytes(username: String, irkPubHex: String, issuedAt: Long): ByteArray =
-        listOf(CANONICAL_TAG, username, irkPubHex, issuedAt.toString())
-            .joinToString("|").toByteArray()
+    const val CANONICAL_TAG = "flagship/claim-username/v2"
+    fun canonicalBytes(
+        username: String,
+        irkPubHex: String,
+        aidPubHex: String?,
+        adminRootPubHex: String?,
+        issuedAt: Long,
+    ): ByteArray =
+        listOf(
+            CANONICAL_TAG, username, irkPubHex.lowercase(), aidPubHex?.lowercase() ?: "",
+            adminRootPubHex?.lowercase() ?: "", issuedAt.toString(),
+        ).joinToString("|").toByteArray()
 }
 
 object RckRegister {

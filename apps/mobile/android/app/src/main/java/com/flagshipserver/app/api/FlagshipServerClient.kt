@@ -1006,9 +1006,8 @@ data class UsernameClaimRequest(
     val signature: String,           // hex, IRK over canonical bytes
     /** Slice D — the account's ADMIN MASTER ROOT pubkey (hex), a top-level
      *  sibling `.com` stores at `usernames.admin_root_pub_hex` (usernameClaim.ts).
-     *  NOT signature-covered (the claim sig is over username|irkPub|issuedAt);
-     *  the admin root's authority is anchored on the box via the signed AuthCode.
-     *  Omitted (null) on a legacy claim ⇒ `.com` stores no admin root. */
+     *  Signed by the v2 claim (flagship/claim-username/v2, null = the empty field).
+     *  Omitted (null) ⇒ `.com` stores no admin root. */
     val adminRootPub: String? = null,
 ) {
     @Serializable

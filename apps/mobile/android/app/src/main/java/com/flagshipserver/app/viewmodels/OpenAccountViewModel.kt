@@ -128,11 +128,14 @@ class OpenAccountViewModel(
             val irkPubHex = HexUtil.encode(
                 Ed25519Sign.KeyPair.newKeyPairFromSeed(irkSeed).publicKey,
             )
+            val aidPubHex = HexUtil.encode(com.flagshipserver.app.core.ServerKeys.deriveAccountIdPub(umk))
             val claimSig = HexUtil.encode(
                 irk.sign(
                     UsernameClaim.canonicalBytes(
                         username = username,
                         irkPubHex = irkPubHex,
+                        aidPubHex = aidPubHex,
+                        adminRootPubHex = adminRootPubHex,
                         issuedAt = issuedAt,
                     ),
                 ),
@@ -179,7 +182,7 @@ class OpenAccountViewModel(
                 claim = AccountBootstrapRequest.Claim(
                     UsernameClaimRequest.Inner(username, irkPubHex, issuedAt), claimSig,
                 ),
-                aidPub = HexUtil.encode(com.flagshipserver.app.core.ServerKeys.deriveAccountIdPub(umk)),
+                aidPub = aidPubHex,
                 adminRootPub = adminRootPubHex,
                 device = AccountBootstrapRequest.Device(deviceId, devicePubHex, "android"),
                 grant = AccountBootstrapRequest.Grant(

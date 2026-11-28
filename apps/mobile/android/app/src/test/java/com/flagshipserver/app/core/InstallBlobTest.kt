@@ -239,8 +239,8 @@ class InstallBlobTest {
     }
 
     @Test fun usernameClaim_canonicalBytes() {
-        val s = String(UsernameClaim.canonicalBytes("harry", "abcd", 42))
-        assertEquals("flagship/claim-username/v1|harry|abcd|42", s)
+        assertEquals("flagship/claim-username/v2|harry|abcd|||42", String(UsernameClaim.canonicalBytes("harry", "abcd", null, null, 42)))
+        assertEquals("flagship/claim-username/v2|harry|abcd|ef|01|42", String(UsernameClaim.canonicalBytes("harry", "ABCD", "EF", "01", 42)))
     }
 
     @Test fun pushTokenRegister_canonicalBytes() {
