@@ -128,7 +128,7 @@ func OpenAutoUnlockLease(leaseBody, seed []byte, serverDomain string, ownerPub [
 		strconv.FormatInt(*l.ExpiresAt, 10),
 		strconv.FormatInt(maxUses, 10),
 	}, "|")
-	if !ed25519.Verify(ownerPub, []byte(canonical), sig) {
+	if !verifyEd25519(ownerPub, []byte(canonical), sig) {
 		return nil, ErrLeaseSignature
 	}
 	if *l.ExpiresAt <= nowMs {

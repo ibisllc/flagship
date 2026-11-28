@@ -131,7 +131,7 @@ func HybridVerify(pk []byte, purpose string, payload, sig []byte) bool {
 	copy(raw[:], pk[32:])
 	mpk.Unpack(&raw)
 	m := hybridMessage(pk, purpose, payload)
-	edOK := ed25519.Verify(ed25519.PublicKey(pk[:32]), m, sig[:64])
+	edOK := verifyEd25519(pk[:32], m, sig[:64])
 	mlOK := mldsa65.Verify(&mpk, m, []byte(TagHybridSig), sig[64:])
 	return edOK && mlOK
 }
