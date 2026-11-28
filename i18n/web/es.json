@@ -1006,5 +1006,17 @@
   "sb7cc76a988": "Las comprobaciones de firma aceptaban tres claves públicas de orden bajo, así que una firma falsificada podía verificarse con ellas",
   "sf0eff11ae9": "Baja · reportada y corregida en noviembre de 2026 · corrección <1>8fd77a2b</1> · crédito: <2>Atharva Savji Lokhande</2>",
   "s1eb6bffa32": "Nuestras comprobaciones de firma rechazaban la mayoría de las claves públicas Ed25519 de orden pequeño mediante una lista fija, pero a la lista le faltaban tres, y las comprobaciones también aceptaban claves escritas de forma no canónica. Con una clave así, cualquiera puede falsificar una firma que se verifica para cualquier mensaje, así que una firma con ella no demuestra nada. Ninguna app envía una clave así, y una revisión de nuestros datos de producción no encontró ninguna guardada.",
-  "s48f03d1960": "Ahora cada clave se decodifica según las reglas estrictas del estándar, y las claves de orden pequeño y las no canónicas se rechazan antes de comprobar cualquier firma. Nuestro servidor las rechaza dondequiera que guarde una clave o responda por ella, y los servidores también las rechazan a partir de su próxima versión."
+  "s48f03d1960": "Ahora cada clave se decodifica según las reglas estrictas del estándar, y las claves de orden pequeño y las no canónicas se rechazan antes de comprobar cualquier firma. Nuestro servidor las rechaza dondequiera que guarde una clave o responda por ella, y los servidores también las rechazan a partir de su próxima versión.",
+  "s9262191c24": "La aprobación del control remoto del navegador aceptaba una sesión antes de confirmar su código de 6 dígitos",
+  "s7a39d705f5": "Baja · reportada y corregida en noviembre de 2026 · corrección <1>1b123ed0</1> · crédito: <2>Atharva Savji Lokhande</2>",
+  "s166d76fe86": "El relé del QR daba el lugar del teléfono al primer dispositivo que se conectaba, y la página del control remoto aceptaba la primera aprobación que recibía. Quien tuviera el enlace del QR dentro de sus cinco minutos podía conectar el navegador en espera a su propio servidor. La cuenta de la persona nunca quedó a su alcance.",
+  "s6f664153dc": "Ahora el navegador pregunta «¿Tu teléfono muestra este código?» y acepta la aprobación solo después de Sí. Sacar los códigos del enlace de la consulta de la dirección llegará en la próxima versión de la app.",
+  "sc3ed9ea720": "Cualquiera que conociera el nombre de un servidor podía leer y anular su orden de actualización pendiente",
+  "s10961d2da1": "Media · reportada y corregida en noviembre de 2026 · correcciones <1>1837ac01</1> y <2>8913cbb5</2> · crédito: Huzaifa Jawaid",
+  "sfb9fe8b5ba": "Una orden de actualización aprobada por el propietario esperaba en nuestro servidor hasta que el servidor del propietario la leía, y esa lectura la consumía. A diferencia de las demás entregas de un solo uso para el servidor, no necesitaba su propio token, así que un desconocido podía consumirla y el servidor se saltaba la actualización sin avisar.",
+  "s6f5ee51ec7": "Ahora el servidor envía su token ahí, y nuestro servidor lo exige.",
+  "s2576f928ad": "La barrera de salida de las apps solo evaluaba la primera solicitud HTTP sin cifrar de cada conexión",
+  "s103a5552c7": "Baja · reportada y corregida en noviembre de 2026 · corrección <1>58f6f453</1> · crédito: Huzaifa Jawaid",
+  "s7249cf6e3f": "Con HTTP sin cifrar, la barrera que limita una app a sus hosts aprobados solo revisaba la primera solicitud de una conexión, así que las solicitudes posteriores por la misma conexión podían llegar a cualquier host.",
+  "s0da0c1af33": "Ahora cada solicitud se evalúa por su propio host. La corrección llega a cada servidor con su próxima actualización."
 }

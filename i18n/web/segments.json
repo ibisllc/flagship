@@ -6850,6 +6850,102 @@
       "security/hall-of-fame.html"
     ]
   },
+  "s9262191c24": {
+    "en": "The browser-remote approval accepted a session before its 6-digit code was confirmed",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s7a39d705f5": {
+    "en": "Low · reported and fixed November 2026 · fix <1>1b123ed0</1> · credit: <2>Atharva Savji Lokhande</2>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s166d76fe86": {
+    "en": "The QR relay gave the phone’s place to the first device that connected, and the remote page took the first approval it received. Someone holding the QR link within its five minutes could connect the waiting browser to their own server. The person’s account was never reachable.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s6f664153dc": {
+    "en": "The browser now asks “Does your phone show this code?” and takes the approval only after Yes. Moving the link’s codes out of the address query follows in the next app release.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sc3ed9ea720": {
+    "en": "Anyone who knew a server’s name could read and cancel its pending update order",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s10961d2da1": {
+    "en": "Medium · reported and fixed November 2026 · fixes <1>1837ac01</1> and <2>8913cbb5</2> · credit: Huzaifa Jawaid",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sfb9fe8b5ba": {
+    "en": "An owner-approved update order waited on our server until the box read it, and that read used it up. Unlike the box’s other one-time deliveries, it didn’t need the box’s own token, so a stranger could use it up and the box would silently skip the update.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s6f5ee51ec7": {
+    "en": "The box now sends its token there, and our server now requires it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s2576f928ad": {
+    "en": "The app egress fence judged only the first plain-HTTP request on each connection",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s103a5552c7": {
+    "en": "Low · reported and fixed November 2026 · fix <1>58f6f453</1> · credit: Huzaifa Jawaid",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s7249cf6e3f": {
+    "en": "On plain HTTP, the fence that holds an app to its approved hosts checked only the first request of a connection, so later requests on the same connection could reach any host.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s0da0c1af33": {
+    "en": "Each request is now judged by its own host. The fix reaches each server with its next update.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
   "sb2b34c9535": {
     "en": "An old browser-remote link could connect the webapp to another server",
     "kind": "text",

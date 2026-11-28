@@ -1006,5 +1006,17 @@
   "sb7cc76a988": "Les vérifications de signature acceptaient trois clés publiques d’ordre faible, si bien qu’une signature falsifiée pouvait être valide sous ces clés",
   "sf0eff11ae9": "Faible · signalé et corrigé en novembre 2026 · correctif <1>8fd77a2b</1> · crédit : <2>Atharva Savji Lokhande</2>",
   "s1eb6bffa32": "Nos vérifications de signature refusaient la plupart des clés publiques Ed25519 de petit ordre grâce à une liste fixe, mais il manquait trois de ces clés à la liste, et les vérifications acceptaient aussi des clés écrites sous une forme non canonique. Sous une telle clé, n’importe qui peut falsifier une signature valide pour n’importe quel message : une signature sous cette clé ne prouve donc rien. Aucune app n’envoie une telle clé, et un examen de nos données de production n’en a trouvé aucune enregistrée.",
-  "s48f03d1960": "Chaque clé est désormais décodée selon les règles strictes de la norme, et les clés de petit ordre et non canoniques sont refusées avant toute vérification de signature. Notre serveur les refuse partout où il enregistre une clé ou s’en porte garant, et les serveurs les refusent aussi à partir de leur prochaine version."
+  "s48f03d1960": "Chaque clé est désormais décodée selon les règles strictes de la norme, et les clés de petit ordre et non canoniques sont refusées avant toute vérification de signature. Notre serveur les refuse partout où il enregistre une clé ou s’en porte garant, et les serveurs les refusent aussi à partir de leur prochaine version.",
+  "s9262191c24": "L’approbation du navigateur distant acceptait une session avant que son code à 6 chiffres soit confirmé",
+  "s7a39d705f5": "Faible · signalé et corrigé en novembre 2026 · correctif <1>1b123ed0</1> · crédit : <2>Atharva Savji Lokhande</2>",
+  "s166d76fe86": "Le relais du QR donnait la place du téléphone au premier appareil qui se connectait, et la page du navigateur distant acceptait la première approbation reçue. Quiconque détenait le lien du QR pendant ses cinq minutes pouvait connecter le navigateur en attente à son propre serveur. Le compte de la personne n’a jamais été accessible.",
+  "s6f664153dc": "Le navigateur demande maintenant « Votre téléphone affiche-t-il ce code ? » et n’accepte l’approbation qu’après Oui. Le retrait des codes du lien de la requête de l’adresse suivra dans la prochaine version de l’app.",
+  "sc3ed9ea720": "Quiconque connaissait le nom d’un serveur pouvait lire et annuler son ordre de mise à jour en attente",
+  "s10961d2da1": "Moyenne · signalé et corrigé en novembre 2026 · correctifs <1>1837ac01</1> et <2>8913cbb5</2> · crédit : Huzaifa Jawaid",
+  "sfb9fe8b5ba": "Un ordre de mise à jour approuvé par le propriétaire attendait sur notre serveur jusqu’à ce que le serveur du propriétaire le lise, et cette lecture le consommait. Contrairement aux autres livraisons à usage unique destinées au serveur, il n’exigeait pas son propre jeton : un inconnu pouvait donc le consommer, et le serveur sautait la mise à jour sans rien signaler.",
+  "s6f5ee51ec7": "Le serveur envoie maintenant son jeton à cet endroit, et notre serveur l’exige désormais.",
+  "s2576f928ad": "La barrière de sortie des apps ne jugeait que la première requête HTTP en clair de chaque connexion",
+  "s103a5552c7": "Faible · signalé et corrigé en novembre 2026 · correctif <1>58f6f453</1> · crédit : Huzaifa Jawaid",
+  "s7249cf6e3f": "En HTTP en clair, la barrière qui limite une app à ses hôtes approuvés ne vérifiait que la première requête d’une connexion, si bien que les requêtes suivantes sur la même connexion pouvaient atteindre n’importe quel hôte.",
+  "s0da0c1af33": "Chaque requête est maintenant jugée d’après son propre hôte. Le correctif atteint chaque serveur avec sa prochaine mise à jour."
 }
