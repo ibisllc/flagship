@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Owner debug access (docs/recipe-delivery-and-remote-install.md "Debug
 /// access"; Swift mirror of packages/protocol/src/debugAccess.ts): one SSH key
@@ -165,13 +166,13 @@ public enum DebugAccess {
     public static func verify(_ g: Grant, signatureHex: String, pub: Data) -> Bool {
         guard grantProblem(g) == nil, let sig = HexUtil.decode(signatureHex), let bytes = try? canonicalBytes(g),
               let pk = try? Curve25519.Signing.PublicKey(rawRepresentation: pub) else { return false }
-        return pk.isValidSignature(sig, for: bytes)
+        return pk.isValidCheckedSignature(sig, for: bytes)
     }
 
     public static func verify(_ r: Revoke, signatureHex: String, pub: Data) -> Bool {
         guard !r.serverDomain.isEmpty, let sig = HexUtil.decode(signatureHex), let bytes = try? canonicalBytes(r),
               let pk = try? Curve25519.Signing.PublicKey(rawRepresentation: pub) else { return false }
-        return pk.isValidSignature(sig, for: bytes)
+        return pk.isValidCheckedSignature(sig, for: bytes)
     }
 
     // MARK: - Wire

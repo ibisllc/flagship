@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Swift mirror of `@flagship/protocol`'s `serviceInvite.ts` + the AID /
 /// household-key derivations in `keys.ts` — the `flagship/service-invite/v1`
@@ -440,7 +441,7 @@ public enum ServiceInvite {
 
     public static func verify(_ sig: Data, _ bytes: Data, pub: Data) -> Bool {
         guard let pk = try? Curve25519.Signing.PublicKey(rawRepresentation: pub) else { return false }
-        return pk.isValidSignature(sig, for: bytes)
+        return pk.isValidCheckedSignature(sig, for: bytes)
     }
 
     /// Build the `x-flagship-visit` header value a restricted-service request

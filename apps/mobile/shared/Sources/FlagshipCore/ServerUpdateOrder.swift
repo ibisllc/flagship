@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Admin-authorized in-place server-update order — the Swift mirror of
 /// `packages/protocol/src/serverUpdate.ts` (docs/server-update-mechanism.md).
@@ -84,6 +85,6 @@ public struct ServerUpdateOrder: Equatable, Sendable {
     /// tampered / junk order is simply rejected.
     public func verify(_ signature: Data, with adminPub: Curve25519.Signing.PublicKey) -> Bool {
         guard let bytes = try? canonicalBytes() else { return false }
-        return adminPub.isValidSignature(signature, for: bytes)
+        return adminPub.isValidCheckedSignature(signature, for: bytes)
     }
 }

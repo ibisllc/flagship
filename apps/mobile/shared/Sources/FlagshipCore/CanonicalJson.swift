@@ -544,9 +544,10 @@ public enum CanonicalJson {
 
     public static func ed25519VerifyHex(_ sigHex: String, _ msg: [UInt8], _ pubHex: String) -> Bool {
         guard isLowerHex(sigHex, bytes: 64), isLowerHex(pubHex, bytes: 32),
-              let key = try? Curve25519.Signing.PublicKey(rawRepresentation: hexToBytes(pubHex)),
+              let pub = try? hexToBytes(pubHex),
               let sig = try? hexToBytes(sigHex) else { return false }
-        return key.isValidSignature(sig, for: msg)
+        // The strict profile (as Android's WebEnvelope): refuses small-order and non-canonical keys and R.
+        return PqHybrid.ed25519VerifyStrict(signature: sig, message: msg, publicKey: pub)
     }
 
     /// ECDSA P-256 / SHA-256, IEEE P1363 r||s (hex 128), uncompressed SEC1 key (hex 130). High-S accepted.

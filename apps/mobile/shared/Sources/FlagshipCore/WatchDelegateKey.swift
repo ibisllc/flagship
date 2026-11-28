@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Canonical scope ordering shared by the capability/delegate envelopes.
 ///
@@ -116,7 +117,7 @@ public struct WatchDelegateKeyEnvelope: Equatable, Sendable {
         guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: irkPub) else {
             return false
         }
-        return pub.isValidSignature(signature, for: canonicalBytes())
+        return pub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }
 
@@ -152,7 +153,7 @@ public struct RevokeWatchDelegateEnvelope: Equatable, Sendable {
         guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: irkPub) else {
             return false
         }
-        return pub.isValidSignature(signature, for: canonicalBytes())
+        return pub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }
 
@@ -246,6 +247,6 @@ public struct DeviceCapabilityGrantEnvelope: Equatable, Sendable {
         guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: irkPub) else {
             return false
         }
-        return pub.isValidSignature(signature, for: canonicalBytes())
+        return pub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }

@@ -134,7 +134,7 @@ public struct RecoveryRecordV2: Codable, Equatable, Sendable {
     public func verify(signatureHex: String, publicKey: Curve25519.Signing.PublicKey) -> Bool {
         guard let canon = try? canonicalBytes(), let sig = Self.unhex(signatureHex) else { return false }
         let pub = publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
-        return pub == irkPubHex && publicKey.isValidSignature(sig, for: canon)
+        return pub == irkPubHex && publicKey.isValidCheckedSignature(sig, for: canon)
     }
 
     static func unhex(_ h: String) -> Data? {

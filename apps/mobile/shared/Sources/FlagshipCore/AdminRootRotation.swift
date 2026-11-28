@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Slice D §5.1 — the admin master-root rotation proof. Swift mirror of
 /// `AdminRootRotation` / `signAdminRootRotation` / `verifyAdminRootRotation`
@@ -69,6 +70,6 @@ public struct AdminRootRotation: Equatable, Sendable {
         guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: oldAdminRootPub) else {
             return false
         }
-        return pub.isValidSignature(signature, for: canonicalBytes())
+        return pub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }

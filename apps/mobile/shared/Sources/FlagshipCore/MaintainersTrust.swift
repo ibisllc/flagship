@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Maintainers protocol — native Swift trust port (#10).
 ///
@@ -411,7 +412,7 @@ enum MaintainersEd25519 {
         guard let key = try? Curve25519.Signing.PublicKey(rawRepresentation: pub) else {
             return false
         }
-        return key.isValidSignature(sig, for: message)
+        return key.isValidCheckedSignature(sig, for: message)
     }
 }
 

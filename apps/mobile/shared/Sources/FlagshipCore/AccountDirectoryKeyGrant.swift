@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Swift mirror of the sealed directory/profile-key delivery in
 /// `packages/protocol/src/directoryKeyDelivery.ts` (+ the
@@ -104,7 +105,7 @@ public struct AccountDirectoryKeyGrant: Equatable, Sendable {
             let bytes = try? canonicalBytes(),
             let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: adminRootPub)
         else { return false }
-        return pub.isValidSignature(signature, for: bytes)
+        return pub.isValidCheckedSignature(signature, for: bytes)
     }
 }
 

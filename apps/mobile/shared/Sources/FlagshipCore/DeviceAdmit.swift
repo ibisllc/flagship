@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Phase 3b — vouched cross-device admit. Swift mirror of
 /// `DeviceAdmit` / `signDeviceAdmit` / `verifyDeviceAdmit` in
@@ -55,6 +56,6 @@ public struct DeviceAdmit: Equatable, Sendable {
         guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: irkPub) else {
             return false
         }
-        return pub.isValidSignature(signature, for: canonicalBytes())
+        return pub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }

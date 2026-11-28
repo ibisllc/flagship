@@ -51,7 +51,7 @@ public enum DaemonStatus {
         guard signature.count == 64,
               let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: stkPub)
         else { return false }
-        return pub.isValidSignature(signature, for: canonicalBytes(r))
+        return pub.isValidCheckedSignature(signature, for: canonicalBytes(r))
     }
 
     public static func verify(_ r: DaemonStatusReport, signatureHex: String, stkPub: Data) -> Bool {

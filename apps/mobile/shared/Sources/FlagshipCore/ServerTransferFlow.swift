@@ -209,7 +209,7 @@ public enum ServerTransferFlow {
             issuedAt: offer.issuedAt,
             expiresAt: offer.expiresAt
         )
-        guard pub.isValidSignature(sig, for: order.canonicalBytes()) else {
+        guard pub.isValidCheckedSignature(sig, for: order.canonicalBytes()) else {
             throw TransferError.badSignature
         }
         guard offer.expiresAt > now else { throw TransferError.expired }

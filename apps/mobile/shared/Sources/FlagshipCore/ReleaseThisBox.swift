@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// "Release this box" (docs/retail-box-setup.md §8.2; Swift mirror of packages/protocol/src/boxRelease.ts):
 /// the account's admin root orders a retail box wiped back to unclaimed. Releasing always wipes.
@@ -54,7 +55,7 @@ public enum ReleaseThisBox {
     public static func verify(_ o: Order, signatureHex: String, adminRootPub: Data) -> Bool {
         guard let sig = PqBin.unhex(signatureHex), let bytes = try? canonicalBytes(o),
               let pk = try? Curve25519.Signing.PublicKey(rawRepresentation: adminRootPub) else { return false }
-        return pk.isValidSignature(Data(sig), for: bytes)
+        return pk.isValidCheckedSignature(Data(sig), for: bytes)
     }
 
     public static func verifyHybrid(_ o: Order, signatureHex: String, hybridPub: [UInt8]) -> Bool {

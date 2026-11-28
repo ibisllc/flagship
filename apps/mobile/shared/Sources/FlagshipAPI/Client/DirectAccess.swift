@@ -224,7 +224,7 @@ public enum DirectAccess {
     public static func verify(_ o: Order, signatureHex: String, pub: Data) -> Bool {
         guard problem(o) == nil, let sig = LanHint.hexDecode(signatureHex), sig.count == 64,
               let key = try? Curve25519.Signing.PublicKey(rawRepresentation: pub) else { return false }
-        return key.isValidSignature(sig, for: canonical(o))
+        return key.isValidCheckedSignature(sig, for: canonical(o))
     }
 
     /// Verified under any of `authorityPubs` (the account's admin root, or its IRK when it pins none).
@@ -261,7 +261,7 @@ public enum DirectAccess {
     }
 
     private static func ed25519Valid(_ sig: Data, _ msg: Data, _ pub: Data) -> Bool {
-        (try? Curve25519.Signing.PublicKey(rawRepresentation: pub)).map { $0.isValidSignature(sig, for: msg) } ?? false
+        (try? Curve25519.Signing.PublicKey(rawRepresentation: pub)).map { $0.isValidCheckedSignature(sig, for: msg) } ?? false
     }
 
     private static func isHex64(_ s: String) -> Bool { s.count == 64 && s.allSatisfy { $0.isHexDigit && !$0.isUppercase } }

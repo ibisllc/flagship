@@ -117,6 +117,6 @@ public enum DirectName {
     public static func verify(_ o: Order, signatureHex: String, pub: Data) -> Bool {
         guard problem(o) == nil, let sig = LanHint.hexDecode(signatureHex), sig.count == 64,
               let key = try? Curve25519.Signing.PublicKey(rawRepresentation: pub) else { return false }
-        return key.isValidSignature(sig, for: canonical(o))
+        return key.isValidCheckedSignature(sig, for: canonical(o))
     }
 }

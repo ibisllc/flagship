@@ -137,7 +137,7 @@ public final class BoxKeyPins: @unchecked Sendable {
               let msg = canonicalBootKeyBinding(serverDomain: bindingDomain, bootPubHex: bootPubHex, issuedAt: issuedAt),
               let key = try? Curve25519.Signing.PublicKey(rawRepresentation: pinnedStkPub)
         else { return false }
-        return key.isValidSignature(signature, for: msg)
+        return key.isValidCheckedSignature(signature, for: msg)
     }
 
     /// Adopt a box's boot-only key only through a binding the PINNED STK

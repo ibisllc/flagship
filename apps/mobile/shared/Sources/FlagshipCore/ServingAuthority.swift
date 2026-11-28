@@ -80,7 +80,7 @@ public enum ServingAuthority {
         guard isHex(signatureHex, chars: 128), isHex64(publicKeyHex),
               let sig = HexUtil.decode(signatureHex), let pub = HexUtil.decode(publicKeyHex),
               let key = try? Curve25519.Signing.PublicKey(rawRepresentation: pub) else { return false }
-        return key.isValidSignature(sig, for: canonical)
+        return key.isValidCheckedSignature(sig, for: canonical)
     }
 
     // MARK: P-256 (the renewal key)

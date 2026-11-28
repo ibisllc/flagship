@@ -128,7 +128,7 @@ public struct BoxProxy: Equatable, Sendable {
         guard ServerOrder.isLowerHex(signatureHex, bytes: 64),
               let sig = HexUtil.decode(signatureHex),
               let bytes = try? canonicalBytes() else { return false }
-        return publicKey.isValidSignature(sig, for: bytes)
+        return publicKey.isValidCheckedSignature(sig, for: bytes)
     }
 
     // MARK: - Shared rules (same strings as boxProxy.ts)

@@ -63,7 +63,7 @@ public struct ServerMigrationOrder: Equatable, Sendable {
     }
 
     public func verify(_ signature: Data, with authorityPub: Curve25519.Signing.PublicKey) -> Bool {
-        authorityPub.isValidSignature(signature, for: canonicalBytes())
+        authorityPub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }
 
@@ -105,7 +105,7 @@ public struct ServerMigrationControl: Equatable, Sendable {
     }
 
     public func verify(_ signature: Data, with authorityPub: Curve25519.Signing.PublicKey) -> Bool {
-        authorityPub.isValidSignature(signature, for: canonicalBytes())
+        authorityPub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }
 

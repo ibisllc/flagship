@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Data rescue and basic offline control (docs/data-sovereignty.md): the messages the owner's phone
 /// and its box exchange on the local network with `.com` and the relay out of reach. Wire parity with
@@ -57,7 +58,7 @@ public enum Rescue {
     public static func checkHello(_ h: Exchange, signature: Data, stkPub: Data, serverDomain: String, clientNonce: String,
                                   seenCertSha256: String, now: Int64) -> String? {
         guard let bytes = try? h.helloCanonical(), let key = try? Curve25519.Signing.PublicKey(rawRepresentation: stkPub),
-              signature.count == 64, key.isValidSignature(signature, for: bytes)
+              signature.count == 64, key.isValidCheckedSignature(signature, for: bytes)
         else { return "bad-signature" }
         if h.serverDomain.lowercased() != serverDomain.lowercased() { return "wrong-server" }
         if h.clientNonce != clientNonce { return "wrong-nonce" }

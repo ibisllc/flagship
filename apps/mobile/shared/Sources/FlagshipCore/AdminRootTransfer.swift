@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Slice D §9.8 — the transfer-a-box admin-root hand-off proof. Swift mirror of
 /// the spine's `flagship/admin-root-transfer/v1` envelope; the canonical bytes
@@ -83,6 +84,6 @@ public struct AdminRootTransfer: Equatable, Sendable {
         guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: giverAdminRootPub) else {
             return false
         }
-        return pub.isValidSignature(signature, for: canonicalBytes())
+        return pub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }

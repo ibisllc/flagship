@@ -87,7 +87,7 @@ public enum LanHint {
         nowMs: Int64
     ) -> String? {
         let sigOk = (try? Curve25519.Signing.PublicKey(rawRepresentation: stkPub))
-            .map { $0.isValidSignature(signature, for: canonical(h)) } ?? false
+            .map { $0.isValidCheckedSignature(signature, for: canonical(h)) } ?? false
         let hex64 = h.certSha256.count == 64 && h.certSha256.allSatisfy { $0.isHexDigit && !$0.isUppercase }
         if !sigOk { return "bad-signature" }
         if h.serverDomain.lowercased() != serverDomain.lowercased() { return "wrong-server" }

@@ -45,6 +45,7 @@ let package = Package(
         ),
         .target(
             name: "FlagshipAPI",
+            dependencies: ["CFlagshipPQ"],
             path: "Sources/FlagshipAPI"
         ),
         .target(

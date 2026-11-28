@@ -266,8 +266,10 @@ public final class SecretRequestCoordinator {
                 nonce: nonce,
                 issuedAt: pending.issuedAt
             )
-            // RE-VERIFY the box's request under the key it names; the pin decides from there.
-            guard SecretRequest.verify(request, signature: sig, stkPub: echoKey) else { continue }
+            // RE-VERIFY the box's request under the key it names; the pin decides from there. A first
+            // sight never pins a key that could sign anything (test-vectors/ed25519-low-order).
+            guard Ed25519Keys.isAcceptableHex(stkHex),
+                  SecretRequest.verify(request, signature: sig, stkPub: echoKey) else { continue }
             var v = VerifiedRequest(
                 pending: pending,
                 stkPubHex: stkHex,

@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 import FlagshipCore
 
 /// #28 — Swift mirror of the `AcmeAccountKeyGrant` envelope in
@@ -127,7 +128,7 @@ public struct AcmeAccountKeyGrant: Equatable, Sendable {
             let bytes = try? canonicalBytes(),
             let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: irkPub)
         else { return false }
-        return pub.isValidSignature(signature, for: bytes)
+        return pub.isValidCheckedSignature(signature, for: bytes)
     }
 }
 

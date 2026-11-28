@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Server-decommission order — the Swift mirror of the `server-decommission`
 /// envelope in `packages/protocol/src/legacyEnvelopes.ts`
@@ -74,6 +75,6 @@ public struct ServerDecommissionOrder: Equatable, Sendable {
     }
 
     public func verify(_ signature: Data, with irkPub: Curve25519.Signing.PublicKey) -> Bool {
-        irkPub.isValidSignature(signature, for: canonicalBytes())
+        irkPub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }

@@ -69,7 +69,7 @@ public struct ServerOrder: Equatable, Sendable {
         guard Self.isLowerHex(signatureHex, bytes: 64),
               let sig = HexUtil.decode(signatureHex),
               let bytes = try? canonicalBytes() else { return false }
-        return publicKey.isValidSignature(sig, for: bytes)
+        return publicKey.isValidCheckedSignature(sig, for: bytes)
     }
 
     /// A fresh order over `stks` (normalized to lowercase), dropping repeats

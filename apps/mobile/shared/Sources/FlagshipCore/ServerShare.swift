@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Swift mirror of `@flagship/protocol`'s `serverShare.ts` (docs/share-a-server.md):
 /// sharing a server with another account. The twelve `|`-joined envelopes, the
@@ -383,7 +384,7 @@ extension ServerShareEnvelope {
         guard let msg = try? canonicalBytes(),
               let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: publicKey)
         else { return false }
-        return pub.isValidSignature(signature, for: msg)
+        return pub.isValidCheckedSignature(signature, for: msg)
     }
 
     /// Untrusted JSON → envelope (shape, then the canonical builder re-checks).

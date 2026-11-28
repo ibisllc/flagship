@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Transfer-a-box orders — the Swift mirror of the `server-transfer-offer` +
 /// `server-transfer-claim` envelopes in `packages/protocol/src/legacyEnvelopes.ts`
@@ -153,6 +154,6 @@ public struct RehomeAuthorizationOrder: Equatable, Sendable {
         guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: giverIrkPub) else {
             return false
         }
-        return pub.isValidSignature(signature, for: canonicalBytes())
+        return pub.isValidCheckedSignature(signature, for: canonicalBytes())
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Phone-as-unlock-endpoint RELAY model — the phone's half of the
 /// boot-secret handshake (docs/security-phone-as-unlock-endpoint.md).
@@ -79,7 +80,7 @@ public struct DeviceEndpointClaim: Equatable, Sendable {
         irkPub: Curve25519.Signing.PublicKey
     ) -> Bool {
         guard let bytes = try? claim.canonicalBytes() else { return false }
-        return irkPub.isValidSignature(signature, for: bytes)
+        return irkPub.isValidCheckedSignature(signature, for: bytes)
     }
 }
 
@@ -140,7 +141,7 @@ public struct SecretRequest: Equatable, Sendable {
         stkPub: Curve25519.Signing.PublicKey
     ) -> Bool {
         guard let bytes = try? request.canonicalBytes() else { return false }
-        return stkPub.isValidSignature(signature, for: bytes)
+        return stkPub.isValidCheckedSignature(signature, for: bytes)
     }
 }
 
@@ -262,7 +263,7 @@ public struct RootEntitlement: Equatable, Sendable {
         signature: Data,
         irkPub: Curve25519.Signing.PublicKey
     ) -> Bool {
-        irkPub.isValidSignature(signature, for: cert.canonicalBytes())
+        irkPub.isValidCheckedSignature(signature, for: cert.canonicalBytes())
     }
 }
 
