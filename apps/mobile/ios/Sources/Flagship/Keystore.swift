@@ -1259,6 +1259,7 @@ public struct Keystore {
                         account(KCKey.adminRootEphemeralPub, profile: id),
                         account(KCKey.adminRootPub, profile: id),
                         account(KCKey.accountDeviceId, profile: id)]
+        accounts += AccountKeyRotationSlots.all.map { account($0, profile: id) }
         if id == defaultProfileId {
             // Legacy parity: the default install owned the device push channel.
             accounts.append(KCKey.pushX25519Priv)
@@ -1296,7 +1297,7 @@ public struct Keystore {
                          KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId, KCKey.watchBootSeed,
                          KCKey.acmeAccountKeyScalar,
                          KCKey.adminRootWrapped, KCKey.adminRootEphemeralPub,
-                         KCKey.adminRootPub, KCKey.accountDeviceId] {
+                         KCKey.adminRootPub, KCKey.accountDeviceId] + AccountKeyRotationSlots.all {
                 keychainDelete(account: account(base, profile: id))
             }
             WrappingKeypair.deleteSEKeyIfExists(profile: id)
@@ -1485,6 +1486,20 @@ public struct Keystore {
             return try AES.GCM.open(AES.GCM.SealedBox(combined: sealed), using: hkdf(from: shared, info: pqSeedWrapInfo), authenticating: aad)
         } catch {
             throw KeystoreError.unwrapFailed("pq seed: \(error)")
+        }
+    }
+
+    /// `pqOpenSeed` with this session's unlock, else one prompt (`reason`).
+    static func pqOpenSeed(_ sealed: Data, ephemeralPub: Data, aad: Data, reason: String) async throws -> Data {
+        if let ctx = sessionAuthContext, let seed = try? pqOpenSeed(sealed, ephemeralPub: ephemeralPub, aad: aad, context: ctx) {
+            return seed
+        }
+        let eph = try P256.KeyAgreement.PublicKey(x963Representation: ephemeralPub)
+        let shared = try await WrappingKeypair.createOrLoad(reason: reason).ecdh(ephemeralPublic: eph)
+        do {
+            return try AES.GCM.open(AES.GCM.SealedBox(combined: sealed), using: hkdf(from: shared, info: pqSeedWrapInfo), authenticating: aad)
+        } catch {
+            throw KeystoreError.unwrapFailed("sealed seed: \(error)")
         }
     }
 

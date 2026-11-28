@@ -9,9 +9,9 @@ import CryptoKit
 /// D-4), recovery-restore of the admin root, and rotate-admin-root.
 ///
 /// Contract under test:
-///   - the add-device SAS bundle carries `wrappedAdminRoot` ONLY when the
-///     promote toggle is ON *and* this device holds the master root; the
-///     incoming side seals it → becomes admin.
+///   - the add-device SAS bundle never carries the root: a promoted device gets
+///     an admin-root-signed grant with the `admin` scope to its own key (the
+///     bundle names the root's public key), and the incoming side pins it.
 ///   - `RotateAdminRootViewModel` signs `old → new` under the OLD root (spine
 ///     canonical bytes) and POSTs the proof; rotation excludes other admins.
 ///   - the WebAuthn-PRF recovery round-trip re-establishes the escrowed root.
@@ -124,8 +124,9 @@ final class AdminRootPhase3Tests: XCTestCase {
         }
         XCTAssertEqual(acct, "acme")
         XCTAssertTrue(incomingVm.becameAdmin, "a promoted device reports becameAdmin")
-        XCTAssertEqual(importedSeed.get(), adminRoot.rawRepresentation,
-                       "the EXACT admin master root seed was sealed on the incoming device")
+        // Promotion is a grant with the `admin` scope under the root; the root itself never travels.
+        XCTAssertNil(importedSeed.get(), "the admin root is not sealed into the join bundle any more")
+        XCTAssertEqual(Keystore.accountKeyAdminRootPin(), HexUtil.encode(adminRoot.publicKey.rawRepresentation))
     }
 
     // MARK: - Promote OFF → no root carried; incoming stays non-admin
@@ -139,7 +140,8 @@ final class AdminRootPhase3Tests: XCTestCase {
             deriveIRK: { _ in Curve25519.Signing.PrivateKey() },
             currentUMKHex: { _ in HexUtil.encode(SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }) },
             canPromoteToAdmin: true,
-            adminRootSeedHex: { _ in XCTFail("must NOT read the admin root when promote is OFF"); return "" }
+            // A member's grant is signed by the root too (never sealed into the bundle).
+            adminRootSeedHex: { _ in HexUtil.encode(Curve25519.Signing.PrivateKey().rawRepresentation) }
         )
         adminVm.promoteNewDeviceToAdmin = false   // default OFF
 

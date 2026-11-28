@@ -199,7 +199,15 @@ public final class OpenAccountViewModel {
             let identity = try pendingIdentity ?? (AccountMetadata.generateDeviceId(), UUID().uuidString.lowercased())
             pendingIdentity = identity
             let deviceId = identity.deviceId
-            let deviceKey = try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: username, deviceId: deviceId)
+            // A random device key (docs/account-key-rotation.md): one derived from the UMK could be made by anyone
+            // holding the account key. Stored before it is registered, so a retry signs with the same key.
+            let deviceKey: Curve25519.Signing.PrivateKey
+            if let kept = Keystore.storedAccountDeviceSigningKey(accountId: username, deviceId: deviceId) {
+                deviceKey = kept
+            } else {
+                deviceKey = Curve25519.Signing.PrivateKey()
+                try Keystore.storeAccountDeviceSigningKey(deviceKey, accountId: username, deviceId: deviceId)
+            }
             let devicePubHex = HexUtil.encode(deviceKey.publicKey.rawRepresentation)
             guard let aidPub = ServiceInvite.deriveAccountIdPub(umkSeed: umk) else {
                 throw AccountMetadataError.invalidKey
@@ -281,7 +289,7 @@ public struct OpenedAccountKeys: Sendable {
     public let scopes: [String]
     public let irk: Curve25519.Signing.PrivateKey
     public let adminRoot: Curve25519.Signing.PrivateKey
-    /// Derived from (UMK, the name the account was opened under, deviceId): `.com` keeps it across a rename.
+    /// Random, stored on this device under the account's name (a rename moves it with the profile slot).
     public let deviceKey: Curve25519.Signing.PrivateKey
     public let umk: Data
     public let accountDisplayName: String

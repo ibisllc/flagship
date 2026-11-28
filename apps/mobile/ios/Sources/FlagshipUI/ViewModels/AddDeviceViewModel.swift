@@ -63,13 +63,13 @@ public final class AddDeviceViewModel {
     /// (`JoinAccountViewModel` incoming / secret-request approvals — story 3),
     /// which has no `AddDeviceViewModel` and thus no toggle at all: the gate
     /// is STRUCTURAL. When ON (and this device holds the master root), the
-    /// bundle carries `wrappedAdminRoot` so the new device becomes an admin.
+    /// admin root signs a grant with the `admin` scope to the new device's own
+    /// key; the root itself is never sealed into the bundle.
     public var promoteNewDeviceToAdmin: Bool = false
 
     /// True iff THIS device currently holds the admin master root — only such
-    /// a device can seal the root to another (§8.2). The screen hides / greys
-    /// the promote toggle when false, and `confirmMatch` refuses to attach
-    /// `wrappedAdminRoot` without it regardless of the toggle.
+    /// a device signs an admin grant (§8.2). The screen hides / greys the
+    /// promote toggle when false.
     public let canPromoteToAdmin: Bool
 
     private let account: String
@@ -83,8 +83,8 @@ public final class AddDeviceViewModel {
     /// active profile's UMK from the Keystore.
     private let currentUMKHex: @MainActor (String) async throws -> String
     /// Seam so tests can supply the ADMIN MASTER ROOT private seed (lowercased
-    /// hex) without piercing the Secure Enclave. Called ONLY when promote is
-    /// ON + `canPromoteToAdmin`. Defaults to unsealing the active profile's
+    /// hex) without piercing the Secure Enclave, to sign the new device's grant.
+    /// Called whenever `canPromoteToAdmin`. Defaults to unsealing the active profile's
     /// admin root (`Keystore.adminRootKey`) and hex-encoding its raw seed.
     private let adminRootSeedHex: @MainActor (String) async throws -> String
 
@@ -198,18 +198,15 @@ public final class AddDeviceViewModel {
             let admitSig = try admit.sign(with: irk)
             let umkHex = try await currentUMKHex(String(localized: "Share your account key with the new device"))
 
-            // D-4 promote-at-add: seal the admin master root INTO the bundle
-            // (carried like `umkSeedHex`, wrapped by the outer AEAD seal) ONLY
-            // when the admin flipped the toggle AND this device actually holds
-            // the master root. Absent otherwise ⇒ the new device joins as a
-            // non-admin peer.
-            var wrappedAdminRoot: String? = nil
-            if promoteNewDeviceToAdmin && canPromoteToAdmin {
-                wrappedAdminRoot = try await adminRootSeedHex(String(localized: "Make the new device an admin"))
+            // Promote-at-add by grant (docs/account-key-rotation.md): the admin root signs a grant with the
+            // `admin` scope to the new device's OWN key; the root itself never leaves this device. A member's grant
+            // is signed by the root too, so `.com` holds no grant the account key alone could have made.
+            var root: Curve25519.Signing.PrivateKey?
+            if canPromoteToAdmin, let seed = HexUtil.decode(try await adminRootSeedHex(String(localized: "Add a device to your Flagship account"))) {
+                root = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
             }
-
             let grantId = UUID().uuidString.lowercased()
-            let promoted = wrappedAdminRoot != nil
+            let promoted = promoteNewDeviceToAdmin && root != nil
             let scopes = promoted
                 ? DeviceCapabilityGrantEnvelope.deviceScopeOrder
                 : DeviceCapabilityGrantEnvelope.memberScopes
@@ -223,15 +220,10 @@ public final class AddDeviceViewModel {
                 issuedAt: issuedAt,
                 expiresAt: expiresAt
             )
-            let grantSigner: Curve25519.Signing.PrivateKey
-            if let wrappedAdminRoot, let rootSeed = HexUtil.decode(wrappedAdminRoot) {
-                grantSigner = try Curve25519.Signing.PrivateKey(rawRepresentation: rootSeed)
-            } else {
-                grantSigner = irk
-            }
+            let grantSigner = root ?? irk
             let grantSignature = try grantSigner.signature(for: grantEnvelope.canonicalBytes())
             let grantPq = await QuantumSafetyService.grantCompanion(
-                grantEnvelope, rootKey: grantSigner, role: promoted ? .adminRoot : .accountIrk, username: account)
+                grantEnvelope, rootKey: grantSigner, role: root != nil ? .adminRoot : .accountIrk, username: account)
 
             let bundle = PairingBundle(
                 umkSeedHex: umkHex,
@@ -251,11 +243,11 @@ public final class AddDeviceViewModel {
                     scopes: scopes,
                     issuedAt: issuedAt,
                     expiresAt: expiresAt,
-                    signerRoot: promoted ? "admin-root" : "membership"
+                    signerRoot: root != nil ? "admin-root" : "membership"
                 ),
                 grantSignature: HexUtil.encode(Data(grantSignature)),
-                wrappedAdminRoot: wrappedAdminRoot,
-                grantPqSignature: grantPq
+                grantPqSignature: grantPq,
+                adminRootPubHex: root.map { HexUtil.encode($0.publicKey.rawRepresentation) }
             )
             let payload = try bundle.encoded()
             let sealed = try QrRelay.seal(payload: payload, with: aeadKey)

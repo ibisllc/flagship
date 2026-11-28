@@ -268,10 +268,13 @@ public final class JoinAccountViewModel {
         case "membership":
             grantAuthority = irkPub
         case "admin-root":
+            // An older admin sealed the root itself; a current one names its public key and signs a grant.
             if let rootHex = bundle.wrappedAdminRoot,
                let rootSeed = HexUtil.decode(rootHex),
                let rootKey = try? Curve25519.Signing.PrivateKey(rawRepresentation: rootSeed) {
                 grantAuthority = rootKey.publicKey.rawRepresentation
+            } else if let pubHex = bundle.adminRootPubHex?.lowercased(), let pub = HexUtil.decode(pubHex), pub.count == 32 {
+                grantAuthority = pub
             } else {
                 grantAuthority = nil
             }
@@ -316,6 +319,11 @@ public final class JoinAccountViewModel {
                 accountId: account,
                 deviceId: deviceId
             )
+            // The admin root the SAS-confirmed bundle named: account key rotations replay from it.
+            if grant.signerRoot == "admin-root" {
+                Keystore.setAccountKeyAdminRootPin(HexUtil.encode(grantAuthority))
+            }
+            if grant.signerRoot == "admin-root", grant.scopes.contains("admin") { becameAdmin = true }
         } catch {
             phase = .failed(String(localized: "Couldn't install the account key. \(HumanError.humanize(error))"))
             return

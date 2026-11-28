@@ -549,7 +549,9 @@ public final class AccountRenameResume {
             let irk = try await Keystore.deriveIRK(reason: reason)
             let adminRoot: Curve25519.Signing.PrivateKey
             if let held = Keystore.sessionAdminRoot() { adminRoot = held } else { adminRoot = try await Keystore.adminRootKey(reason: reason) }
-            let deviceKey = try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: rec.oldName, deviceId: rec.deviceId)
+            let deviceKey = try Keystore.storedAccountDeviceSigningKey(accountId: rec.newName, deviceId: rec.deviceId)
+                ?? Keystore.storedAccountDeviceSigningKey(accountId: rec.oldName, deviceId: rec.deviceId)
+                ?? AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: rec.oldName, deviceId: rec.deviceId)
             try await AccountRenameFinisher(client: client, server: server, store: store, wallet: wallet)
                 .finish(rec, keys: AccountRenameKeys(irk: irk, adminRoot: adminRoot, deviceKey: deviceKey, umk: umk))
             needsFinish = false

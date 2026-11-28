@@ -53,15 +53,24 @@ public final class WipeRestartViewModel {
     private let server: FlagshipServerClient
     private let webAuthn: WebAuthnProvider
     private let username: () -> String?
+    private let hasAdminRoot: () -> Bool
+    private let adminRoot: (String) async throws -> Curve25519.Signing.PrivateKey
 
     public init(
         server: FlagshipServerClient,
         webAuthn: WebAuthnProvider? = nil,
-        username: @escaping () -> String?
+        username: @escaping () -> String?,
+        hasAdminRoot: @escaping () -> Bool = { Keystore.hasAdminRoot },
+        adminRoot: @escaping (String) async throws -> Curve25519.Signing.PrivateKey = { reason in
+            if let held = Keystore.sessionAdminRoot() { return held }
+            return try await Keystore.adminRootKey(reason: reason)
+        }
     ) {
         self.server = server
         self.webAuthn = webAuthn ?? DefaultClients.webAuthn()
         self.username = username
+        self.hasAdminRoot = hasAdminRoot
+        self.adminRoot = adminRoot
     }
 
     /// Run the ceremony. `currentEtag` is the value the caller
@@ -164,8 +173,13 @@ public final class WipeRestartViewModel {
             issuedAt: issuedAt,
         )
         let signature: Data
+        var adminSignature: String?
         do {
             signature = try oldIrk.signature(for: canonical)
+            // An account with an admin root needs it over the same bytes (the old IRK alone is any device's).
+            if hasAdminRoot() {
+                adminSignature = HexUtil.encode(try await adminRoot(String(localized: "Reset account keys")).signature(for: canonical))
+            }
         } catch {
             phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return
@@ -189,7 +203,8 @@ public final class WipeRestartViewModel {
                     signature: HexUtil.encode(signature),
                     idempotencyKey: idempotencyKey,
                     // SEC-REPAIR-001: the new passkey's public key, so the new record keeps `.com`'s check.
-                    newPasskeyAttestationObject: registration.attestationObject.map(RecoveryPasskey.attestationField)
+                    newPasskeyAttestationObject: registration.attestationObject.map(RecoveryPasskey.attestationField),
+                    adminRootSignature: adminSignature
                 ),
                 ifMatch: currentEtag,
             )
